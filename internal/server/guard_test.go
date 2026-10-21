@@ -209,14 +209,15 @@ func TestGuardDenied(t *testing.T) {
 }
 
 // TestHookGuard: the server judges the tool calls a session's hooks
-// report against its rules and records each refusal, but not an ask.
+// report against its rules and records each refusal, but not an ask; a
+// session without its record gets the unchecked refusal.
 func TestHookGuard(t *testing.T) {
 	testPaths(t)
 	p := newWatchProject(t)
 	wt := t.TempDir()
 	s := &Server{log: log.New(os.Stderr, "", 0), records: map[string]SessionRecord{}}
 	judge := s.hookGuardOf("s-2")
-	if d := judge("Bash", map[string]any{"command": "gh pr merge 1"}); d != nil {
+	if d := judge("Bash", map[string]any{"command": "gh pr merge 1"}); d == nil || d.Rule != guard.RuleUnchecked || d.Ask {
 		t.Fatalf("no record: %+v", d)
 	}
 	s.records["s-2"] = SessionRecord{ID: "s-2", Role: proto.RoleThread, Agent: "codex", Project: p.Slug, Thread: "t-0001", Cwd: wt}
@@ -279,6 +280,58 @@ func TestHookGuard(t *testing.T) {
 	}
 	if n != 1 {
 		t.Errorf("%d guard inbox items", n)
+	}
+}
+
+// TestHookGuardLimit: a call the server doesn't judge within judgeLimit
+// is refused (unchecked) and journaled, and the judging goes on alone.
+func TestHookGuardLimit(t *testing.T) {
+	testPaths(t)
+	p := newWatchProject(t)
+	s := &Server{log: log.New(os.Stderr, "", 0), records: map[string]SessionRecord{}}
+	s.records["s-2"] = SessionRecord{ID: "s-2", Role: proto.RoleThread, Agent: "claude", Project: p.Slug, Thread: "t-0001", Cwd: t.TempDir()}
+	release := make(chan struct{})
+	judgeLimit, judgeCall = 50*time.Millisecond, func(guard.Rules, string, map[string]any) *guard.Denial { <-release; return nil }
+	t.Cleanup(func() { close(release); judgeLimit, judgeCall = 1500*time.Millisecond, guard.Rules.Judge })
+	start := time.Now()
+	d := s.hookGuardOf("s-2")("Bash", map[string]any{"command": "ls"})
+	if d == nil || d.Rule != guard.RuleUnchecked || d.Ask || !strings.Contains(d.Message, "took too long") {
+		t.Fatalf("overrun: %+v", d)
+	}
+	if took := time.Since(start); took > time.Second {
+		t.Fatalf("waited %v for a judge past its limit", took)
+	}
+	lines, _, _ := p.JournalTail(5)
+	if !slices.ContainsFunc(lines, func(l string) bool { return strings.Contains(l, "guard.deny t-0001 unchecked Bash") }) {
+		t.Errorf("journal %q", lines)
+	}
+}
+
+// TestHookSettingsFloor: a session's .claude/settings.json and
+// settings.local.json, which could turn its hooks off, are the floor's:
+// no file tool or shell redirect writes them, whatever the rules.
+func TestHookSettingsFloor(t *testing.T) {
+	testPaths(t)
+	p := newWatchProject(t)
+	wt := t.TempDir()
+	s := &Server{log: log.New(os.Stderr, "", 0), records: map[string]SessionRecord{}}
+	s.records["s-2"] = SessionRecord{ID: "s-2", Role: proto.RoleThread, Agent: "claude", Project: p.Slug, Thread: "t-0001", Cwd: wt}
+	writeConfig(t, "[projects."+p.Slug+"]\nguard_off = [\"worktree-only\"]\n")
+	judge := s.hookGuardOf("s-2")
+	for _, c := range []struct {
+		tool  string
+		input map[string]any
+	}{
+		{"Write", map[string]any{"file_path": filepath.Join(wt, ".claude", "settings.json"), "content": `{"disableAllHooks": true}`}},
+		{"Edit", map[string]any{"file_path": filepath.Join(wt, ".claude", "settings.local.json")}},
+		{"Bash", map[string]any{"command": `echo '{"disableAllHooks":true}' > .claude/settings.local.json`}},
+	} {
+		if d := judge(c.tool, c.input); d == nil || d.Rule != guard.RuleTMFiles || !d.Floor {
+			t.Errorf("%s %v: %+v", c.tool, c.input, d)
+		}
+	}
+	if d := judge("Write", map[string]any{"file_path": filepath.Join(wt, ".claude", "agents", "x.md")}); d != nil {
+		t.Errorf("another .claude file: %+v", d)
 	}
 }
 
@@ -1093,5 +1146,26 @@ func TestLaunchRefusesUnpinned(t *testing.T) {
 	os.WriteFile(filepath.Join(repo, ".git", "worktrees", "wt", "gitdir"), []byte("/elsewhere/.git\n"), 0o644)
 	if _, perr := s.prepareLaunch(agentLaunch{rec: sr, kick: "Start."}, launchView{agents: reg}); perr == nil || perr.Code != proto.ErrRefused {
 		t.Fatalf("unpinned: %v", perr)
+	}
+}
+
+// TestDroppedGuardEvent: a PreToolUse the server drops (no such
+// session, another agent's) is refused as unchecked, never answered with
+// nothing; another dropped event is.
+func TestDroppedGuardEvent(t *testing.T) {
+	reg, err := agent.Load("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := &Server{log: log.New(io.Discard, "", 0), agents: reg, sessions: map[string]*session.Session{}, records: map[string]SessionRecord{}}
+	pre := map[string]any{"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": map[string]any{"command": "ls"}}
+	for _, name := range []string{"claude", "codex"} {
+		res := s.hookEvent(proto.HookEventParams{Session: "s-9", Agent: name, Event: "PreToolUse", Payload: pre})
+		if !strings.Contains(res.Stdout, `"permissionDecision":"deny"`) || !strings.Contains(res.Stdout, "tm couldn't check this call") {
+			t.Errorf("%s: %q", name, res.Stdout)
+		}
+	}
+	if res := s.hookEvent(proto.HookEventParams{Session: "s-9", Agent: "claude", Event: "Stop", Payload: map[string]any{"hook_event_name": "Stop"}}); res.Stdout != "" {
+		t.Errorf("Stop: %q", res.Stdout)
 	}
 }

@@ -11,11 +11,12 @@ import (
 	"github.com/theclifmeister/terminatr/internal/testwait"
 )
 
-// TestEscapeHook: the guard's "escape" ask on a
-// PreToolUse hook marks that call (tool_use_id) until its PostToolUse
-// or PermissionDenied; another ask doesn't mark, and another call's end
-// doesn't unmark. An agent whose every prompt is an escape
-// (PromptsEscape) marks each.
+// TestEscapeHook: a PreToolUse hook's call that asks to leave the
+// sandbox (dangerouslyDisableSandbox) is marked (tool_use_id) until its
+// PostToolUse or PermissionDenied, whatever the guard answers, and with
+// no verdict at all; the guard's "excluded" ask marks a call too, and
+// another call's end doesn't unmark. An agent whose every prompt is an
+// escape (PromptsEscape) marks each.
 func TestEscapeHook(t *testing.T) {
 	noGrace(t)
 	for _, c := range []struct {
@@ -26,7 +27,8 @@ func TestEscapeHook(t *testing.T) {
 	}{
 		{"escape", guard.RuleEscape, false, true},
 		{"excluded asks first", guard.RuleExcluded, false, true},
-		{"unknown", "unknown", false, false},
+		{"another ask", "unknown", false, true},
+		{"no verdict", "", false, true},
 		{"every prompt", "", true, true},
 	} {
 		t.Run(c.name, func(t *testing.T) {

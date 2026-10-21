@@ -18,6 +18,7 @@
 package guard
 
 import (
+	"fmt"
 	"path"
 	"regexp"
 	"slices"
@@ -221,6 +222,28 @@ const RuleEscape = "escape"
 // runs an excluded command that asks first (Rules.AskFirst).
 const RuleExcluded = "excluded"
 
+// RuleUnchecked is the rule of a refusal of a call nobody could judge:
+// tm hook got no verdict from the server, or the server ran out of
+// time judging it (docs/SPEC.md §8.6, Guard: the guard fails closed).
+const RuleUnchecked = "unchecked"
+
+// Unchecked is the refusal of a call tm couldn't check: the agent's
+// hook answers with it when the server's verdict doesn't come.
+func Unchecked() *Denial {
+	return &Denial{Rule: RuleUnchecked, Floor: true, Summary: "a call tm couldn't check",
+		Message: "terminatr guard: tm couldn't check this call (its server didn't answer in time), so it is refused; try again."}
+}
+
+// RuleUnreadable is the rule of the floor's refusal of a command line
+// past the guard's limits (MaxCommand, maxNesting, maxParse).
+const RuleUnreadable = "unreadable"
+
+// unreadable is the refusal of a command line past the guard's limits.
+func unreadable() *Denial {
+	return &Denial{Rule: RuleUnreadable, Floor: true, Summary: "a command too long or nested too deep to check",
+		Message: fmt.Sprintf("terminatr guard: this command is too long (over %d KiB) or nested too deep (substitutions, subshells or heredocs over %d levels) for the guard to check, so it is refused; split it into shorter commands, or put the script in a file in the worktree and run that.", MaxCommand>>10, maxNesting)}
+}
+
 // SyntaxPowerShell marks a shell tool whose command lines are PowerShell.
 const SyntaxPowerShell = "powershell"
 
@@ -292,6 +315,13 @@ func (r Rules) Judge(tool string, input map[string]any) *Denial {
 	}
 	switch t.Kind {
 	case KindShell:
+		// A line past the guard's limits is refused whole, whatever else
+		// is allowed: read in part, what it hides would run unjudged.
+		for _, c := range values {
+			if len(c) > MaxCommand || t.Syntax == "" && !readable(c) {
+				return unreadable()
+			}
+		}
 		var ask *Denial
 		for _, c := range values {
 			d := r.lifted(strings.TrimSpace(c), false, func(r Rules) *Denial {
@@ -680,9 +710,9 @@ func (r Rules) deny(rule, summary, target string) *Denial {
 		m = `merging is the coordinator's job in this project (merge = "coordinator"). Leave the PR open with CI green and say so in your report.`
 	case RuleTMFiles:
 		if r.Role == "thread" {
-			m = "a thread doesn't write tm's settings (config.toml) or the project folder. Write in your worktree, or say so in your report."
+			m = "a thread doesn't write tm's settings (config.toml), the project folder or the worktree's .claude/settings.json and settings.local.json (they could turn tm's hooks off). Write elsewhere in your worktree, or say so in your report."
 		} else {
-			m = "tm's settings (config.toml) and the parts of the project folder tm keeps (threads/, inbox/, tasks/, journal/, TASKS.md and the like) are written by tm only: use tm's commands, or ask the user."
+			m = "tm's settings (config.toml), the parts of the project folder tm keeps (threads/, inbox/, tasks/, journal/, TASKS.md and the like) and the folder's .claude/settings.json and settings.local.json (they could turn tm's hooks off) are written by tm or the user only: use tm's commands, or ask the user."
 		}
 	case RuleTempFolders:
 		m = "other threads' temp folders are not read or written here. Keep your files in your own temp folder ($TMPDIR) or your worktree, or " + tell + "."
@@ -2446,13 +2476,55 @@ type heredoc struct {
 // it; otherwise only what it substitutes is.
 func Commands(line string) [][]string { return readCommands(line, false, nil) }
 
-// commands is Commands; in arithmetic (arith) << is a shift, no heredoc.
-func commands(line string, arith bool) [][]string { return readCommands(line, arith, nil) }
-
-// readCommands is commands, where a shell given input that runs a
+// readCommands is Commands (in arithmetic, arith, << is a shift, no
+// heredoc), where a shell given input that runs a
 // script reads none of it if script says the file is the worktree's
 // (worktreeScript; nil: none is).
 func readCommands(line string, arith bool, script func(string) bool) [][]string {
+	return (&parse{}).read(line, arith, script, 0)
+}
+
+// Limits on what the guard reads of one command line (docs/SPEC.md
+// §8.6, Guard): MaxCommand bytes, substitutions, subshells, arithmetic
+// and heredocs nested maxNesting deep, and maxParse bytes read by the
+// parser in all, every nesting level counted (a heredoc's body is read
+// twice: as text the line expands and as a shell's input, so without a
+// bound nested heredocs double the work at each level). A line past
+// them is refused (Judge), not read in part.
+const (
+	MaxCommand = 64 << 10
+	maxNesting = 32
+	maxParse   = 4 << 20
+)
+
+// parse is one line's reading: what its parser has read, every nesting
+// level counted, and whether it went past the limits.
+type parse struct {
+	work int
+	over bool
+}
+
+// readable reports whether line is within the guard's limits: no longer
+// than MaxCommand, nested no deeper than maxNesting, read within
+// maxParse.
+func readable(line string) bool {
+	if len(line) > MaxCommand {
+		return false
+	}
+	p := &parse{}
+	p.read(line, false, nil, 0)
+	return !p.over
+}
+
+// read is readCommands of line at nesting depth; the commands of what
+// it substitutes or nests are read at depth+1, sharing p's budget. Past
+// the limits it reads nothing more and marks p over.
+func (p *parse) read(line string, arith bool, script func(string) bool, depth int) [][]string {
+	p.work += len(line)
+	if p.over || depth > maxNesting || p.work > maxParse {
+		p.over = true
+		return nil
+	}
 	var out, inner [][]string
 	var words []string
 	// word is the word as written; lit the same without its unquoted
@@ -2540,12 +2612,12 @@ func readCommands(line string, arith bool, script func(string) bool) [][]string 
 					j += 2
 				case s[j] == '$' && j+1 < len(s) && s[j+1] == '(':
 					end := closing(s, j+2, '(', ')')
-					out = append(out, Commands(string(s[j+2:end]))...)
+					out = append(out, p.read(string(s[j+2:end]), false, nil, depth+1)...)
 					q.WriteString(string(s[j:min(end+1, len(s))]))
 					j = end + 1
 				case s[j] == '`':
 					end := tickClose(s, j+1)
-					out = append(out, Commands(string(s[j+1:end]))...)
+					out = append(out, p.read(string(s[j+1:end]), false, nil, depth+1)...)
 					q.WriteString(string(s[j:min(end+1, len(s))]))
 					j = end + 1
 				default:
@@ -2568,13 +2640,13 @@ func readCommands(line string, arith bool, script func(string) bool) [][]string 
 			// on its own, as commands (bash takes ((a; b)) for subshells).
 			end := closing(s, i+1, '(', ')')
 			endCommand()
-			out = append(out, commands(string(s[i+2:min(end, len(s))]), true)...)
+			out = append(out, p.read(string(s[i+2:min(end, len(s))]), true, nil, depth+1)...)
 			i = end
 		case c == '$' && i+1 < len(s) && s[i+1] == '[' && closing(s, i+2, '[', ']') < len(s):
 			// Arithmetic, $[ … ], a part of its word: its inside read on
 			// its own, as commands.
 			end := closing(s, i+2, '[', ']')
-			inner = append(inner, commands(string(s[i+2:end]), true)...)
+			inner = append(inner, p.read(string(s[i+2:end]), true, nil, depth+1)...)
 			text(string(s[i : end+1]))
 			i = end
 		case c == '$' && i+2 < len(s) && s[i+1] == '{' && !strings.ContainsRune(" \t\n|", s[i+2]):
@@ -2583,20 +2655,20 @@ func readCommands(line string, arith bool, script func(string) bool) [][]string 
 			// or backtick in it still runs.
 			end := closing(s, i+2, '{', '}')
 			for _, in := range substitutions(string(s[i+2 : end])) {
-				out = append(out, Commands(in)...)
+				out = append(out, p.read(in, false, nil, depth+1)...)
 			}
 			text(string(s[i:min(end+1, len(s))]))
 			i = end
 		case c == '$' && i+1 < len(s) && s[i+1] == '(':
 			// A command substitution is a word of the command it is in.
 			end := closing(s, i+2, '(', ')')
-			inner = append(inner, Commands(string(s[i+2:end]))...)
+			inner = append(inner, p.read(string(s[i+2:end]), false, nil, depth+1)...)
 			word.WriteString(string(s[i:min(end+1, len(s))]))
 			inWord = true
 			i = end
 		case c == '`':
 			end := tickClose(s, i+1)
-			inner = append(inner, Commands(string(s[i+1:end]))...)
+			inner = append(inner, p.read(string(s[i+1:end]), false, nil, depth+1)...)
 			word.WriteString(string(s[i:min(end+1, len(s))]))
 			inWord = true
 			i = end
@@ -2637,7 +2709,7 @@ func readCommands(line string, arith bool, script func(string) bool) [][]string 
 			// command (cp <(x) f copies to f), its inside read as commands
 			// too.
 			end := closing(s, i+2, '(', ')')
-			inner = append(inner, Commands(string(s[i+2:end]))...)
+			inner = append(inner, p.read(string(s[i+2:end]), false, nil, depth+1)...)
 			word.WriteString(string(s[i:min(end+1, len(s))]))
 			inWord = true
 			i = end
@@ -2691,11 +2763,11 @@ func readCommands(line string, arith bool, script func(string) bool) [][]string 
 			if !h.quoted {
 				// The line's own shell expands it first.
 				for _, in := range substitutions(h.body) {
-					out = append(out, Commands(in)...)
+					out = append(out, p.read(in, false, nil, depth+1)...)
 				}
 			}
 			if shell || h.odd {
-				out = append(out, Commands(h.body)...)
+				out = append(out, p.read(h.body, false, nil, depth+1)...)
 			}
 		}
 	}

@@ -165,6 +165,60 @@ func TestHookIgnoresJunk(t *testing.T) {
 	}
 }
 
+// TestHookGuardFailsClosed: a PreToolUse (the guard's verdict, timeout
+// = "guard") that gets no verdict is refused, for Claude and Codex
+// alike: no server, a stale socket, a server past hookGuard, a payload
+// tm hook can't read or over its limit. A verdict, even an empty one
+// (allowed), is passed on; another event without an answer stays
+// silent.
+func TestHookGuardFailsClosed(t *testing.T) {
+	if hookGuard <= hookResponse || hookGuard > 4*time.Second {
+		t.Fatalf("hookGuard %v: past a plain response, inside the agents' 5 s", hookGuard)
+	}
+	old := hookGuard
+	hookGuard = 300 * time.Millisecond
+	t.Cleanup(func() { hookGuard = old })
+	pre := `{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"ls"}}`
+	big := `{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"` + strings.Repeat("a", maxHookPayload) + `"}}`
+	cases := []struct {
+		name    string
+		agent   string
+		payload string
+		setup   func(t *testing.T, sock string)
+		deny    bool
+	}{
+		{"server down", "claude", pre, func(*testing.T, string) {}, true},
+		{"stale socket", "claude", pre, func(t *testing.T, sock string) { clienttest.StaleSocket(t, sock) }, true},
+		{"wedged", "claude", pre, func(t *testing.T, sock string) { fakeServer(t, sock, 2*time.Second, "late", nil) }, true},
+		{"never says hello", "codex", pre, func(t *testing.T, sock string) { clienttest.Silent(t, sock) }, true},
+		{"not json", "claude", `{"hook_event_name":"PreToolUse","tool_input":`, func(t *testing.T, sock string) { fakeServer(t, sock, 0, "", nil) }, true},
+		{"over the limit", "claude", big, func(t *testing.T, sock string) { fakeServer(t, sock, 0, "", nil) }, true},
+		{"allowed", "claude", pre, func(t *testing.T, sock string) { fakeServer(t, sock, 0, "", nil) }, false},
+		{"another event", "claude", `{"hook_event_name":"PostToolUse"}`, func(*testing.T, string) {}, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			e, out, errb, sock := hookEnv(t, c.payload)
+			c.setup(t, sock)
+			if d := runHookTimed(t, e, "--agent", c.agent); d > hookGuard+time.Second {
+				t.Errorf("took %v", d)
+			}
+			var res struct {
+				Out struct {
+					Event    string `json:"hookEventName"`
+					Decision string `json:"permissionDecision"`
+					Reason   string `json:"permissionDecisionReason"`
+				} `json:"hookSpecificOutput"`
+			}
+			json.Unmarshal(out.Bytes(), &res)
+			denied := res.Out.Event == "PreToolUse" && res.Out.Decision == "deny" && strings.Contains(res.Out.Reason, "tm couldn't check this call")
+			if denied != c.deny || !c.deny && out.Len() != 0 || errb.Len() != 0 {
+				t.Errorf("stdout %q stderr %q, want deny %v", out, errb, c.deny)
+			}
+		})
+	}
+}
+
 // FuzzHookInput: whatever the agent writes on stdin, tm hook exits 0 and
 // stays silent on stderr.
 func FuzzHookInput(f *testing.F) {

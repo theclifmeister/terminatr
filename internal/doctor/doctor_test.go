@@ -699,7 +699,12 @@ func TestPlugins(t *testing.T) {
 		}
 		return "", errors.New("unexpected " + name)
 	}
-	if cs := Plugins(d); len(cs) != 1 || cs[0].Status != OK || !strings.Contains(cs[0].Detail, "worktrees@supermods") {
+	// The hooks check (claude hooks) reads this machine's settings: its
+	// own tests are the agent's.
+	plugins := func() []Check {
+		return slices.DeleteFunc(Plugins(d), func(c Check) bool { return c.Name == "claude hooks" })
+	}
+	if cs := plugins(); len(cs) != 1 || cs[0].Status != OK || !strings.Contains(cs[0].Detail, "worktrees@supermods") {
 		t.Fatalf("disabled: %+v", cs)
 	}
 	for _, l := range []string{
@@ -707,26 +712,26 @@ func TestPlugins(t *testing.T) {
 		`[{"id":"worktrees@supermods","enabled":false,"projectEnabled":true}]`,
 	} {
 		list = l
-		cs := Plugins(d)
+		cs := plugins()
 		if len(cs) != 1 || cs[0].Status != Warn || cs[0].Name != "worktrees@supermods" || cs[0].Fix != nil ||
 			!strings.Contains(cs[0].Detail, "no commits ahead") || !strings.Contains(cs[0].Detail, "claude plugin disable worktrees@supermods") {
 			t.Fatalf("enabled %s: %+v", l, cs)
 		}
 	}
 	list = `[{"id":"worktrees@other","enabled":true}]`
-	if cs := Plugins(d); len(cs) != 1 || cs[0].Status != OK {
+	if cs := plugins(); len(cs) != 1 || cs[0].Status != OK {
 		t.Fatalf("other marketplace: %+v", cs)
 	}
 	list = "not json"
-	if cs := Plugins(d); len(cs) != 1 || cs[0].Status != Warn || !strings.Contains(cs[0].Detail, "couldn't read") {
+	if cs := plugins(); len(cs) != 1 || cs[0].Status != Warn || !strings.Contains(cs[0].Detail, "couldn't read") {
 		t.Fatalf("bad json: %+v", cs)
 	}
 	list, listErr = "boom", errors.New("claude plugin list --json: boom")
-	if cs := Plugins(d); len(cs) != 1 || cs[0].Status != Warn || !strings.Contains(cs[0].Detail, "couldn't list") {
+	if cs := plugins(); len(cs) != 1 || cs[0].Status != Warn || !strings.Contains(cs[0].Detail, "couldn't list") {
 		t.Fatalf("list fails: %+v", cs)
 	}
 	d.LookPath = func(n string) (string, error) { return "", exec.ErrNotFound }
-	if cs := Plugins(d); len(cs) != 0 {
+	if cs := plugins(); len(cs) != 0 {
 		t.Fatalf("no claude: %+v", cs)
 	}
 }

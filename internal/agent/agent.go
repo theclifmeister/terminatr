@@ -433,6 +433,14 @@ type MCPClasher interface {
 	MCPClash(home, dir string, yolo bool) string
 }
 
+// HooksWarner is an Agent whose own settings can turn tm's hooks off
+// (docs/SPEC.md §8.6, Guard): HooksOff is what the launch and tm doctor
+// tell the human when they do, or try to, "" when none does. home is
+// the user's home directory, dir the session's folder ("" for none).
+type HooksWarner interface {
+	HooksOff(home, dir string) string
+}
+
 // Truster is an Agent that can mark a directory as trusted ahead of
 // launch, so its folder-trust screen never shows there (docs/SPEC.md
 // §8.6). The core calls it only for a thread's own worktree, which tm

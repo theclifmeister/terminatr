@@ -131,9 +131,9 @@ func questionLines(q *proto.Question) []string {
 	return out
 }
 
-// answerArgs are tm thread answer's thread id and flags: options by number (choices)
-// or label, free text, and which question of the menu (from 1; 0 is the
-// first one not yet answered).
+// answerArgs are tm thread answer's thread id and flags: options by
+// number (choices), free text, and which question of the menu (from 1; 0
+// is the first one not yet answered).
 type answerArgs struct {
 	id       string
 	choices  []int
@@ -145,8 +145,7 @@ type answerArgs struct {
 // threadAnswer relays the user's answer to a question menu on a thread
 // (docs/SPEC.md §11.2). A question tm itself asks (an approved command
 // that asks first) is open on the server (proto.SessionInfo.Question)
-// and is answered through it, by option number or label, or with free
-// text; an agent's own menu by keys on the screen, recognised by the
+// and is answered through it, by option number or with free text; an agent's own menu by keys on the screen, recognised by the
 // agent's own screen rule.
 func (e *Env) threadAnswer(p *project.Project, id string, a answerArgs) error {
 	if err := e.coordinatorOnly(p, "answering questions"); err != nil {

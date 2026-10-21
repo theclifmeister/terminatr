@@ -315,14 +315,18 @@ func ownExcluded(reg *agent.Registry, r SessionRecord, home string, lc launchCon
 
 // guardNoWrite are the files and folders no tool of session r writes,
 // whatever the rules (the guard's floor, T574 §3.1): tm's settings
-// (config.toml), and a thread's project folder, or the parts of it only
-// tm writes for the coordinator, whose folder it is. The sandbox and the
+// (config.toml), the settings in the session's folder that could turn
+// its hooks off (hookSettings), and a thread's project folder, or the
+// parts of it only tm writes for the coordinator, whose folder it is. The sandbox and the
 // agent's deny rules hold them too, where there are those (not under
 // yolo).
 func (s *Server) guardNoWrite(r SessionRecord) []string {
 	var out []string
 	if h := s.opts.Paths.Home; h != "" {
 		out = append(out, filepath.Join(h, "config.toml"))
+	}
+	if r.Cwd != "" && (r.Role == proto.RoleThread || r.Role == proto.RoleCoordinator) {
+		out = append(out, hookSettings(r.Cwd)...)
 	}
 	dir, err := project.Dir(r.Project)
 	if err != nil {
@@ -336,6 +340,14 @@ func (s *Server) guardNoWrite(r SessionRecord) []string {
 		out = append(append(out, dirs...), files...)
 	}
 	return withReal(out)
+}
+
+// hookSettings are the agent settings files in a session's folder dir
+// that could turn its hooks off (Claude's .claude/settings.json and
+// settings.local.json, disableAllHooks): refused whole, whatever they
+// would say, as a shell's write can't be read for what it writes.
+func hookSettings(dir string) []string {
+	return []string{filepath.Join(dir, ".claude", "settings.json"), filepath.Join(dir, ".claude", "settings.local.json")}
 }
 
 // guardMods are the guard rules the user's mods that run for session
@@ -449,23 +461,49 @@ func realTarget(p string) string {
 // refusal, or an ask) and records a refusal; an ask is not recorded. A
 // file tool's write is judged where it lands, through the links on its
 // path (realTarget).
+//
+// It fails closed: a session without its record (exiting) gets
+// guard.Unchecked, and so does a call not judged within judgeLimit
+// (the rules' config and git reads included), well inside what tm hook
+// waits for the verdict (agent.HookGuardWait); the judging goes on
+// alone, bounded by the guard's own limits (guard.MaxCommand).
 func (s *Server) hookGuardOf(id string) func(string, map[string]any) *guard.Denial {
 	return func(tool string, input map[string]any) *guard.Denial {
 		s.mu.Lock()
 		rec, ok := s.records[id]
 		s.mu.Unlock()
 		if !ok {
-			return nil
+			return guard.Unchecked()
 		}
-		rules := s.hookRules(rec)
-		rules.Resolve, rules.File = realTarget, regularFile
-		d := rules.Judge(tool, input)
+		done := make(chan *guard.Denial, 1)
+		judge, limit := judgeCall, judgeLimit
+		go func() {
+			rules := s.hookRules(rec)
+			rules.Resolve, rules.File = realTarget, regularFile
+			done <- judge(rules, tool, input)
+		}()
+		var d *guard.Denial
+		select {
+		case d = <-done:
+		case <-time.After(limit):
+			d = guard.Unchecked()
+			d.Message = "terminatr guard: checking this call took too long, so it is refused; try a shorter or simpler command."
+			s.log.Printf("session %s: the guard took over %v to judge a %s call: refused", id, limit, tool)
+		}
 		if d != nil && !d.Ask {
 			s.guardDenied(rec, GuardDenial{Rule: d.Rule, Tool: tool, Summary: d.Summary, Subject: d.Subject, Floor: d.Floor})
 		}
 		return d
 	}
 }
+
+// judgeLimit bounds how long the server judges one tool call; a
+// variable for tests.
+var judgeLimit = 1500 * time.Millisecond
+
+// judgeCall is how hookGuardOf judges a call: Rules.Judge (tests hold
+// it).
+var judgeCall = guard.Rules.Judge
 
 // hookRulesFor is how long a session's rules are kept for its hooks: a
 // tool call must not wait on config.toml and git each time, and a

@@ -405,13 +405,13 @@ type HookMap struct {
 	// ClearsContext says the event leaves the conversation's context
 	// empty or rewritten (/clear, a compaction): the server forgets the
 	// session's context use until the next request reports it
-	// (docs/SPEC.md §8.6, Context), as the mod's POST /v1/context/clear.
+	// (docs/SPEC.md §8.6, Context).
 	ClearsContext bool `toml:"clears_context"`
 	// Command names the session command the event stands for, when the
 	// user typed it: a slash command the agent offers without a mod of
 	// its own (CommandSaveClear, CommandAnswer). The server runs it and
 	// Respond's .Command is what came of it, "" when it didn't run (the
-	// mod runs it instead, or the session can't).
+	// session can't).
 	Command string `toml:"command"`
 	// Respond is a template printed back to the harness. It sees .Event,
 	// .Payload, .Context (rendered only when the template uses it) and
@@ -420,8 +420,10 @@ type HookMap struct {
 	Respond string `toml:"respond"`
 	// Timeout is how long tm hook waits for the response: "" (the
 	// default, 500 ms), "context" (3 s, for the event whose response
-	// carries the session's context) or "command" (3 s, sent once, for a
-	// Command's entry). See HookTimeout.
+	// carries the session's context), "command" (3 s, sent once, for a
+	// Command's entry) or "guard" (HookGuardWait, for the entry whose
+	// response is the guard's verdict: without one, tm hook answers with
+	// guard.Unchecked, FailClosed). See HookTimeout.
 	Timeout string `toml:"timeout"`
 }
 
@@ -448,8 +450,8 @@ func ClearsContext(a Agent, event string, payload map[string]any) bool {
 
 // Session commands a [[hooks]] entry may stand for (HookMap.Command):
 // a coordinator's save and clear (tm clear) and the opening of its
-// questions to the user (tm ask open), as the Claude mod's /saveclear
-// and /answer (docs/SPEC.md §8.6, Mods).
+// questions to the user (tm ask open): Claude's /saveclear and /answer
+// (docs/SPEC.md §8.6).
 const (
 	CommandSaveClear = "saveclear"
 	CommandAnswer    = "answer"
@@ -460,7 +462,15 @@ const (
 	HookTimeoutResponse = "response"
 	HookTimeoutContext  = "context"
 	HookTimeoutCommand  = "command"
+	HookTimeoutGuard    = "guard"
 )
+
+// HookGuardWait is how long tm hook waits, in all, for the guard's
+// verdict on a tool call (timeout = "guard"): longer than a plain
+// response, as the server judges the call first, and well inside the
+// agents' 5 s hook timeout, so the refusal tm hook gives without a
+// verdict is always read.
+const HookGuardWait = 3 * time.Second
 
 // HookContextWait is how long tm hook waits, in all, for the response to
 // an event whose entry has timeout = "context": the server counts a
@@ -602,12 +612,12 @@ func (m *Manifest) validate() error {
 			errs = append(errs, fmt.Errorf("hooks[%d]: counter must be +name or -name, with counter_key", i))
 		}
 		switch h.Timeout {
-		case "", HookTimeoutResponse, HookTimeoutContext, HookTimeoutCommand:
+		case "", HookTimeoutResponse, HookTimeoutContext, HookTimeoutCommand, HookTimeoutGuard:
 			if h.Timeout != "" && h.Respond == "" {
 				errs = append(errs, fmt.Errorf("hooks[%d]: timeout needs respond", i))
 			}
 		default:
-			errs = append(errs, fmt.Errorf("hooks[%d]: timeout %q is not response|context|command", i, h.Timeout))
+			errs = append(errs, fmt.Errorf("hooks[%d]: timeout %q is not response|context|command|guard", i, h.Timeout))
 		}
 	}
 	for i, t := range m.Todos {
@@ -925,6 +935,43 @@ func (a *manifestAgent) Hook(ev HookEvent, env HookEnv) ([]Signal, HookResult, e
 		break
 	}
 	return sigs, res, nil
+}
+
+// GuardEvent reports whether agent a's manifest has the guard answer
+// event (an entry with timeout = "guard").
+func GuardEvent(a Agent, event string) bool {
+	m := ManifestOf(a)
+	if m == nil {
+		return false
+	}
+	return slices.ContainsFunc(m.Hooks, func(h HookMap) bool { return h.Event == event && h.Timeout == HookTimeoutGuard })
+}
+
+// FailClosed is what agent a's hook answers to event when the guard's
+// verdict didn't come (no server, a timeout, a refusal, a payload tm
+// hook couldn't read): its own response with guard.Unchecked as the
+// verdict, so the call is refused, never let through unjudged; nil for
+// an event the guard doesn't answer. payload may be nil.
+func FailClosed(a Agent, event string, payload map[string]any) []byte {
+	if !GuardEvent(a, event) {
+		return nil
+	}
+	m := ManifestOf(a)
+	p := maps.Clone(payload)
+	if p == nil {
+		p = map[string]any{}
+	}
+	// A payload tm hook couldn't read names no tool: the verdict is
+	// asked for all the same.
+	if t, _ := p[m.Hook.ToolField()].(string); t == "" {
+		p[m.Hook.ToolField()] = "unknown"
+	}
+	_, res, err := a.Hook(HookEvent{Agent: a.Name(), Event: event, Payload: p},
+		HookEnv{Guard: func(string, map[string]any) *guard.Denial { return guard.Unchecked() }})
+	if err != nil {
+		return nil
+	}
+	return res.Stdout
 }
 
 func (a *manifestAgent) Sources() *Sources { return &a.m.Sources }

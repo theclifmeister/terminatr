@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 // vectors are the guard's test vectors (testdata/vectors.json): what
@@ -262,6 +263,47 @@ func TestPatchPaths(t *testing.T) {
 }
 
 // FuzzJudge: no command line panics the matcher.
+// TestLimits: a command line over MaxCommand, or nested past
+// maxNesting, is refused whole (unreadable, floor) whatever the rules
+// allow; one just inside is judged as usual, and nesting that would
+// double the parser's work at each level (heredocs in heredocs) stays
+// within maxParse and returns at once.
+func TestLimits(t *testing.T) {
+	r := Rules{On: true, Role: "thread", Rules: []string{"merge"}, Home: "/h", Cwd: "/w", Writable: []string{"/w"},
+		Tools: map[string]Tool{"Bash": {Kind: KindShell, Fields: []string{"command"}}}}
+	judge := func(c string) *Denial { return r.Judge("Bash", map[string]any{"command": c}) }
+	nest := func(n int) string { return strings.Repeat("echo $(", n) + "ls" + strings.Repeat(")", n) }
+	if d := judge(nest(maxNesting)); d != nil {
+		t.Fatalf("nested %d deep: %+v", maxNesting, d)
+	}
+	if d := judge("echo $(" + nest(maxNesting-2) + " && gh pr merge 1)"); d == nil || d.Rule != "merge" {
+		t.Fatalf("a merge inside deep nesting: %+v", d)
+	}
+	for name, c := range map[string]string{
+		"too deep":  nest(maxNesting + 2),
+		"too long":  "echo " + strings.Repeat("a", MaxCommand),
+		"backticks": strings.Repeat("echo \"$(", maxNesting+2) + "x" + strings.Repeat(")\"", maxNesting+2),
+	} {
+		if d := judge(c); d == nil || d.Rule != RuleUnreadable || !d.Floor || d.Ask {
+			t.Errorf("%s: %+v", name, d)
+		}
+	}
+	// No allowance lifts it, and it is refused in yolo's floor too.
+	r.Allow = []Allow{{Rule: RuleUnreadable, Command: "*"}}
+	if d := judge(nest(maxNesting + 2)); d == nil || d.Rule != RuleUnreadable {
+		t.Errorf("allowed: %+v", d)
+	}
+	var doc strings.Builder
+	for i := range 40 {
+		fmt.Fprintf(&doc, "bash <<E%d\n$(cat <<F%d\n", i, i)
+	}
+	start := time.Now()
+	judge(doc.String())
+	if took := time.Since(start); took > 2*time.Second {
+		t.Fatalf("nested heredocs took %v", took)
+	}
+}
+
 func FuzzJudge(f *testing.F) {
 	f.Add("git push -f origin 'x' && echo \"$(gh pr merge 1)\" `x` \\")
 	f.Add("rm -rf ~/.terminatr/worktrees/../x; cat <~/.ssh/k")

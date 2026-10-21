@@ -786,8 +786,14 @@ func TestHookWireFormat(t *testing.T) {
 			if h.Respond == "" || h.Command != "" {
 				continue // tm hook waits only on the entries that answer; a command answers at once
 			}
-			context := h.Event == "SessionStart" || name == "claude" && h.Event == "UserPromptSubmit"
-			if want := map[bool]string{true: HookTimeoutContext}[context]; h.Timeout != want {
+			want := ""
+			switch h.Event {
+			case "SessionStart":
+				want = HookTimeoutContext
+			case "PreToolUse":
+				want = HookTimeoutGuard // the guard's verdict, failing closed
+			}
+			if h.Timeout != want {
 				t.Errorf("%s %s: timeout %q, want %q", name, h.Event, h.Timeout, want)
 			}
 		}

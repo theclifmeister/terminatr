@@ -465,6 +465,16 @@ func (s *Session) Hook(event string, payload map[string]any) (agent.HookResult, 
 	callID, _ := payload["tool_use_id"].(string)
 	if g := rt.cfg.Guard; g != nil {
 		env.Guard = func(tool string, input map[string]any) *guard.Denial {
+			// A call that asks to leave the sandbox is the user's to let
+			// run before it is judged: a verdict that is slow, or never
+			// comes (the guard fails closed, the agent may show its own
+			// prompt after its hook timed out), leaves no prompt of it
+			// unmarked for tm thread approve to answer.
+			if rt.man != nil {
+				if t, ok := rt.man.Guard.Tools[tool]; ok && t.Escape != "" && input[t.Escape] == true {
+					rt.setEscape(callID, true)
+				}
+			}
 			d := g(tool, input)
 			if d != nil && d.Ask && (d.Rule == guard.RuleEscape || d.Rule == guard.RuleExcluded) {
 				rt.setEscape(callID, true)

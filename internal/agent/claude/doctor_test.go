@@ -14,9 +14,14 @@ func doctorOf(t *testing.T, list string, runErr error) []agent.DoctorCheck {
 	if !ok {
 		t.Fatal("claude is not an agent.Doctor")
 	}
+	noHookSettings(t)
 	look := func(string) (string, error) { return "/bin/claude", nil }
 	run := func(_, _ string, _ ...string) (string, error) { return list, runErr }
-	return d.DoctorChecks(look, run)
+	cs := d.DoctorChecks(look, run)
+	if n := len(cs); n == 0 || cs[n-1].Name != "claude hooks" || cs[n-1].Warn {
+		t.Fatalf("hooks check: %+v", cs)
+	}
+	return cs[:len(cs)-1]
 }
 
 func TestDoctorUnsafePlugin(t *testing.T) {

@@ -156,6 +156,10 @@ tm didn't take /answer. Run `tm ask open` in the shell and say in one line what 
 # Claude's own config has a server "terminatr", or may (.MCPClash): then
 # they are an ask rule, which comes before any allow rule of the user's
 # or the folder's own.
+# disableAllHooks is pinned false: the hooks are how tm sees the session
+# and guards its tool calls, and --settings wins over the user's and the
+# folder's own settings (Claude's managed settings excepted; tm doctor
+# and the launch warn of those, internal/agent/claude/hooks.go).
 # Never put statusLine here: --settings would replace the user's own.
 # Outside safe mode Claude draws with tm's own theme in its config dir
 # ([theme] below, docs/SPEC.md §8.6), which the server rewrites on every
@@ -192,6 +196,7 @@ template = '''
   {{- else if .PaneScheme}}
   "theme": {{json (printf "%s-ansi" .PaneScheme)}},
   {{- end}}
+  "disableAllHooks": false,
   "permissions": {
     "allow": {{json (concat (list (not .MCPClash) "mcp__terminatr") (rules "Read(/%s/**)" .Access.Read) (rules "Edit(/%s/**)" .Access.Write) (rules "Edit(/%s)" .Access.WriteFiles) (rules "Bash(%s:*)" .Access.Commands) .Sandbox.Allow)}},
     "ask": {{json (list .MCPClash "mcp__terminatr")}},
@@ -558,6 +563,10 @@ transient = true
 # and a refusal is the hook's answer, before any dialog; a PowerShell
 # command it can't read is put to the dialog (or auto mode's classifier)
 # with "ask". Allowed: no output, so Claude's own permission check decides.
+# Without a verdict within 3 s (no server, a timeout, a payload tm hook
+# can't read), tm hook answers with the refusal "tm couldn't check this
+# call" (timeout = "guard"): the guard fails closed.
+timeout = "guard"
 respond = '''{{with .Guard}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":{{if .Ask}}"ask"{{else}}"deny"{{end}},"permissionDecisionReason":{{json .Message}}}}{{end}}'''
 
 [[hooks]]

@@ -210,6 +210,8 @@ func (s *Server) accessFor(role, slug string, tree *gitx.Tree, lc launchConfig) 
 		// No tree: a thread to come (access.show), whose git dirs aren't
 		// known yet, or one whose folder isn't its recorded checkout.
 		if tree != nil {
+			// Its settings that could turn its hooks off (hookSettings).
+			a.NoWriteFiles = append(a.NoWriteFiles, hookSettings(realPath(tree.Dir))...)
 			g := threadGitAccess(tree.CommonDir, tree.GitDir)
 			a.Write, a.WriteFiles = g.Write, g.WriteFiles
 			a.NoWrite = append(a.NoWrite, g.NoWrite...)
@@ -735,6 +737,15 @@ func (s *Server) prepareLaunch(l agentLaunch, v launchView) (*preparedLaunch, *p
 	}
 	spec.Theme = s.launchThemeOf(spec.PaneScheme, lc.cfg)
 	spec.LiveTheme = s.writeThemeFile(a, spec.Theme, v.schemeName, lc.cfg != nil && followsTerminal(lc.cfg))
+	// Settings that turn the agent's hooks off leave the session
+	// unguarded and unseen: the human is told.
+	if h, ok := a.(agent.HooksWarner); ok {
+		home, _ := os.UserHomeDir()
+		if w := h.HooksOff(home, r.Cwd); w != "" {
+			p.warnings = append(p.warnings, w)
+			s.log.Printf("session %s: %s", r.ID, w)
+		}
+	}
 	// tm mcp gives the typed tools: a server of the agent's own config
 	// with its name would stand in for it.
 	if c, ok := a.(agent.MCPClasher); ok {
@@ -1065,10 +1076,12 @@ func (s *Server) hookEvent(p proto.HookEventParams) proto.HookEventResult {
 	// tm hook says nothing of a dropped event, and the agent carries on
 	// without it: its state, its context and its prompt token (T491: a
 	// coordinator's only SessionStart lost, a nudge then refused).
+	// A dropped event the guard answers is refused (unchecked), never
+	// let through unjudged.
 	sess, perr := s.session(p.Session)
 	if perr != nil {
 		s.log.Printf("hook %s for %s dropped: %s", p.Event, p.Session, perr.Message)
-		return proto.HookEventResult{}
+		return s.droppedHook(p)
 	}
 	if a := sess.Agent(); a == nil || a.Name() != p.Agent {
 		runs := "no agent"
@@ -1076,7 +1089,7 @@ func (s *Server) hookEvent(p proto.HookEventParams) proto.HookEventResult {
 			runs = a.Name()
 		}
 		s.log.Printf("hook %s for %s dropped: from agent %q, the session runs %s", p.Event, p.Session, p.Agent, runs)
-		return proto.HookEventResult{}
+		return s.droppedHook(p)
 	}
 	if p.Token != "" {
 		sess.SetPromptToken(p.Token)
@@ -1085,7 +1098,29 @@ func (s *Server) hookEvent(p proto.HookEventParams) proto.HookEventResult {
 	if err != nil && !errors.Is(err, session.ErrNoAgent) {
 		s.log.Printf("session %s: hook %s: %v", p.Session, p.Event, err)
 	}
+	if err != nil {
+		if d := s.droppedHook(p); d.Stdout != "" {
+			return d
+		}
+	}
 	return proto.HookEventResult{Stdout: string(res.Stdout)}
+}
+
+// droppedHook answers an event the server didn't take: nothing, or for
+// the guard's event its agent's refusal of a call it couldn't check
+// (agent.FailClosed).
+func (s *Server) droppedHook(p proto.HookEventParams) proto.HookEventResult {
+	s.mu.Lock()
+	reg := s.agents
+	s.mu.Unlock()
+	if reg == nil {
+		return proto.HookEventResult{}
+	}
+	a, ok := reg.Get(p.Agent)
+	if !ok {
+		return proto.HookEventResult{}
+	}
+	return proto.HookEventResult{Stdout: string(agent.FailClosed(a, p.Event, p.Payload))}
 }
 
 func (s *Server) prompt(p proto.SessionPromptParams) (any, *proto.Error) {
