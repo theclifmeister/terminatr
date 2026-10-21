@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.43.0](https://github.com/theclifmeister/terminatr/compare/v0.42.0...v0.43.0) (2026-10-21)
+
+
+### ⚠ BREAKING CHANGES
+
+* **access:** protection levels, open by default ([#693](https://github.com/theclifmeister/terminatr/issues/693))
+
+### Features
+
+* **access:** protection levels, open by default ([#693](https://github.com/theclifmeister/terminatr/issues/693)) ([01be8bc](https://github.com/theclifmeister/terminatr/commit/01be8bc69a8ad6f8742e99a776623eba566f9992))
+
 ## [0.42.0](https://github.com/theclifmeister/terminatr/compare/v0.41.0...v0.42.0) (2026-10-20)
 
 
