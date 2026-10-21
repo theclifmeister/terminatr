@@ -116,6 +116,11 @@ export type Rules = {
   // prefix followed. The matcher has no file system of its own: the
   // hook asks the server (POST /v1/resolve) before judging. Not served.
   resolve?: (p: string) => string
+  // The command line being judged (with the lines that run it, for
+  // bash -c), and whether one of them has a cd: then a path from a
+  // folder the line can change (lineFolder) is not placed. Not served.
+  line?: string
+  lineCd?: boolean
 }
 
 // A guard rule a mod adds (mods design §7, Tighten only): the commands a
@@ -449,6 +454,14 @@ function lostCd(r: Rules, summary: string): Denial {
   return { rule: 'tm-files', message: `terminatr guard (tm-files): ${m}`, summary }
 }
 
+// folderVarCd is the tm-files refusal of a path from a folder a line
+// with a cd can change (lineFolder): its sentence says how to write it.
+function folderVarCd(r: Rules, summary: string): Denial {
+  const tell = r.role === 'thread' ? 'say so in your report' : 'ask the user'
+  const m = `on a line with a cd, a path given to a command that writes that starts with a folder the line can change ($PWD with an operator, $OLDPWD, ~-, $_, $(pwd), a positional parameter or a variable the line sets) could be tm's settings or the project folder. Give the path from /, from a variable the line doesn't set ($TMPDIR/x), or relative after a cd to a folder written out; if none of that fits, ${tell}.`
+  return { rule: 'tm-files', message: `terminatr guard (tm-files): ${m}`, summary }
+}
+
 // judgeMods judges a simple command, its name and arguments, by the
 // mods' rules; fold compares them with case folded (PowerShell's), and
 // under caseFold the name is.
@@ -496,6 +509,7 @@ function judgeBash(r: Rules, has: (id: string) => boolean, command: string): Den
 // trap, source, ., also through command or builtin) may move them at any
 // point after, so the rest of the line keeps unknown among them.
 function judgeLine(r: Rules, has: (id: string) => boolean, command: string, cwds: string[]): Denial | null {
+  r = { ...r, line: r.line ? r.line + '\n' + command : command, lineCd: r.lineCd || hasCd(command) }
   let parts = topLevel(command)
   if (!parts) {
     // A line it can't split: one part, with any cd in it leaving its
@@ -731,14 +745,16 @@ function accessOpen(args: string[]): boolean {
 
 // cdTo is where cmd (cd, pushd, popd) with args leaves a line whose
 // relative paths were from dir: a folder it names plainly, home for
-// none, else unknown (''). Its redirections (pushd x >/dev/null) are
-// no folder.
+// none, else unknown (''): a pattern or braces (cd ~/.term*) may name
+// another folder, and so may a relative one CDPATH looks up, when the
+// line sets it. Its redirections (pushd x >/dev/null) are no folder.
 function cdTo(r: Rules, dir: string, cmd: string, args: string[]): string {
   const to = unredirected(args).filter(a => !a.startsWith('-') || a === '-')
   if (cmd === 'popd' || to.length > 1) return ''
   if (to.length === 0) return cmd === 'pushd' ? '' : (r.home ?? '')
   const a = to[0]
-  if (a === '-' || /[$`]/.test(a) || (a.startsWith('~') && !a.startsWith('~/') && a !== '~')) return ''
+  if (a === '-' || /[$`*?[{]/.test(a) || (a.startsWith('~') && !a.startsWith('~/') && a !== '~')) return ''
+  if (!/^\.{0,2}(\/|$)/.test(slash(a)) && !a.startsWith('~') && !DRIVE.test(slash(a)) && (r.line ?? '').includes('CDPATH')) return ''
   if (dir === '' && !a.startsWith('/') && !a.startsWith('~') && !DRIVE.test(slash(a))) return ''
   return abs({ ...r, cwd: dir }, a)
 }
@@ -819,9 +835,10 @@ function plainCd(part: string): { cmd: string; args: string[] } | null {
 // quotes, ( ), { }, $( ) and backticks. A heredoc opened at the top
 // level has its body added to the part that opens it, after the
 // newline that ends the part's line. Null for a line whose quotes or
-// brackets don't close, with a heredoc inside brackets, or with a
-// shell that may run a heredoc's body (cat <<EOF | bash), which the
-// line's own reading (commands) judges.
+// brackets don't close, with a heredoc inside brackets or whose word
+// it may end elsewhere than bash does, or with a shell that may run a
+// heredoc's body (cat <<EOF | bash, | bash x.sh), which the line's own
+// reading (commands) judges.
 function topLevel(line: string): LinePart[] | null {
   const s = [...line]
   const stack: string[] = []
@@ -931,8 +948,8 @@ function topLevel(line: string): LinePart[] | null {
         const q = s[j]
         if (q === "'" || q === '"') {
           quoted = true
-          let end = s.indexOf(q, j + 1)
-          if (end < 0) end = s.length
+          const end = s.indexOf(q, j + 1)
+          if (end < 0) return null
           h.delim += s.slice(j + 1, end).join('')
           j = end + 1
         } else if (q === '\\') {
@@ -941,7 +958,9 @@ function topLevel(line: string): LinePart[] | null {
           j += 2
         } else h.delim += s[j++]
       }
-      if (h.delim === '' && !quoted) return null
+      // A word bash may end elsewhere ($'EOF', E$(x)F): commands reads
+      // its body as commands.
+      if ((h.delim === '' && !quoted) || /[$`\n]/.test(h.delim)) return null
       b += s.slice(i, j).join('')
       open.push(h)
       docs = true
@@ -979,7 +998,7 @@ function topLevel(line: string): LinePart[] | null {
   }
   if (stack.length > 0) return null
   cut('')
-  if (docs && parts.some(p => commands(p.text).some(readsHeredoc))) return null
+  if (docs && parts.some(p => commands(p.text).some(w => readsHeredoc(w) || (p.before === '|' && SHELLS.has(base(strip(w)[0] ?? '')))))) return null
   return parts
 }
 
@@ -995,9 +1014,11 @@ function judgeNoWrite(r: Rules, cmd: string, args: string[], words: string[]): D
   if (!r.noWrite?.length) return null
   const roots = r.noWrite
   const refuse = (w: string, parents: boolean): Denial | null => {
-    if (w === '' || w.startsWith('&')) return null
-    // $PWD is the line's folder: a path from it is a relative one.
-    w = w.replace(/^\$(PWD|\{PWD\})(?=\/|$)/, '.')
+    // A descriptor (2>&1) or a process substitution (> >(tee f)).
+    if (w === '' || w.startsWith('&') || /^[<>]\(/.test(w)) return null
+    // $PWD and ~+ are the line's folder: a path from one is a relative one.
+    w = w.replace(/^(\$PWD|\$\{PWD\}|~\+)(?=\/|$)/, '.')
+    if (r.lineCd && lineFolder(w, r.line ?? '')) return floor(folderVarCd(r, `${cmd} of ${safe(w)} after a cd`))
     if (r.cwd === '' && !slash(w).startsWith('/') && !w.startsWith('~') && !w.startsWith('$') && !DRIVE.test(slash(w))) {
       return floor(lostCd(r, `${cmd} of ${safe(w)} after a cd`))
     }
@@ -1062,6 +1083,31 @@ function judgeNoWrite(r: Rules, cmd: string, args: string[], words: string[]): D
     if (d) return d
   }
   return null
+}
+
+// LINE_FOLDERS are the variables a cd sets: $PWD (plain, the line's
+// folder), $OLDPWD, $DIRSTACK, and $_ (the last word of the command
+// before: the cd's folder).
+const LINE_FOLDERS = new Set(['PWD', 'OLDPWD', 'DIRSTACK', '_'])
+
+// lineFolder: path w starts with a folder that a cd on line can change:
+// ~-, a substitution ($(pwd), backticks), a positional or special
+// parameter ($1, $@, ${!x}), one of LINE_FOLDERS, or a variable the line
+// may set (assigns).
+function lineFolder(w: string, line: string): boolean {
+  if (/^~-(\/|$)/.test(w) || w.startsWith('`') || w.startsWith('$(')) return true
+  if (!w.startsWith('$')) return false
+  const m = /^\$(?:\{([A-Za-z_][A-Za-z0-9_]*)|([A-Za-z_][A-Za-z0-9_]*))/.exec(w)
+  if (!m) return true
+  const name = m[1] ?? m[2]
+  return LINE_FOLDERS.has(name) || assigns(line, name)
+}
+
+// assigns: line names variable name other than to expand it, as an
+// assignment (d=…, d+=…, d[0]=…) or a word (read d, for d in, export d,
+// printf -v d) does.
+function assigns(line: string, name: string): boolean {
+  return new RegExp(`(^|[\\s;&|(){}!\`"'])${name}(\\[|\\+?=|[\\s;&|)\`"']|$)`, 'm').test(line)
 }
 
 function judgeGit(r: Rules, has: (id: string) => boolean, args: string[]): Denial | null {
@@ -1475,7 +1521,9 @@ function substituted(a: string): boolean {
 // A here-document a command line opens (<<WORD, <<-WORD): the word that
 // ends it, whether its lines lose their leading tabs, and whether the
 // word was quoted (then nothing in it expands); then its body once read.
-type Heredoc = { delim: string; tabs: boolean; quoted: boolean; body: string }
+// odd when its word is one the guard may end elsewhere than bash does
+// ($'EOF', E$(x)F, a quote left open): its body is read as commands.
+type Heredoc = { delim: string; tabs: boolean; quoted: boolean; body: string; odd?: boolean }
 
 // commands splits a command line into simple commands, each a list of
 // words with quotes removed; redirections stay words ("<", ">"). A $( )
@@ -1489,22 +1537,33 @@ export function commands(line: string, arith = false): string[][] {
   let words: string[] = []
   // word is the word as written; lit the same without its unquoted
   // substitutions, what the word is when they print nothing (printenv$(x)
-  // is printenv): the word, unless it is substitutions alone.
+  // is printenv): the word, unless it is substitutions alone. Those a
+  // path starts with stay ($(pwd)/f is no /f).
   let word = ''
   let lit = ''
   let inWord = false
   let hasLit = false
+  // quoted: some of the word is quoted or escaped ("2">f writes 2's
+  // output to f: no descriptor).
+  let quoted = false
   let open: Heredoc[] = []
   const docs: Heredoc[] = []
+  // redir is the index of the last < or > read as a redirect (>| is one);
+  // fed: a pipe feeds the next command, and fedShell, it is a shell.
+  let redir = -1
+  let fed = false
+  let fedShell = false
   const endWord = () => {
     if (inWord) words.push(hasLit ? lit : word)
     word = ''
     lit = ''
     inWord = false
     hasLit = false
+    quoted = false
   }
   // text is literal text of the word.
   const text = (t: string) => {
+    if (!hasLit && word !== '' && t.startsWith('/')) lit = word
     word += t
     lit += t
     inWord = true
@@ -1512,7 +1571,12 @@ export function commands(line: string, arith = false): string[][] {
   }
   const endCommand = () => {
     endWord()
-    if (words.length) out.push(words)
+    if (words.length) {
+      const argv = strip(words)
+      if (fed && argv.length > 0 && SHELLS.has(base(argv[0]))) fedShell = true
+      fed = false
+      out.push(words)
+    }
     // What the command substitutes, after it.
     out.push(...inner)
     words = []
@@ -1521,12 +1585,16 @@ export function commands(line: string, arith = false): string[][] {
   for (let i = 0; i < line.length; i++) {
     const c = line[i]
     if (c === '\\' && i + 1 < line.length) {
-      if (line[i + 1] !== '\n') text(line[i + 1])
+      if (line[i + 1] !== '\n') {
+        text(line[i + 1])
+        quoted = true
+      }
       i++
     } else if (c === '$' && line[i + 1] === "'") {
       // ANSI-C quoting, $'…': the text its escapes give.
       const end = ansiEnd(line, i + 2)
       text(ansiC(line.slice(i + 2, end)))
+      quoted = true
       i = end
     } else if (c === '$' && line[i + 1] === '"') {
       // A locale string, $"…": read as the double-quoted one it is.
@@ -1534,6 +1602,7 @@ export function commands(line: string, arith = false): string[][] {
       const j = line.indexOf("'", i + 1)
       const end = j < 0 ? line.length : j
       text(line.slice(i + 1, end))
+      quoted = true
       i = end
     } else if (c === '"') {
       // Inside double quotes a $( ) or backtick still runs: its inside
@@ -1557,6 +1626,7 @@ export function commands(line: string, arith = false): string[][] {
         } else s += line[j++]
       }
       text(s)
+      quoted = true
       i = j
     } else if (c === ' ' || c === '\t') {
       endWord()
@@ -1617,11 +1687,22 @@ export function commands(line: string, arith = false): string[][] {
       }
       open = []
       i = j - 1
-    } else if (c === '&' && (line[i - 1] === '>' || line[i - 1] === '<') && /[0-9-]/.test(line[i + 1] ?? '')) {
+    } else if (c === '&' && redir === i - 1 && /[0-9-]/.test(line[i + 1] ?? '')) {
       // A redirect to or from a descriptor (2>&1, <&0, >&-): its word.
       text(c)
+    } else if (c === '|' && redir === i - 1 && line[i - 1] === '>') {
+      // >|, a redirect that overwrites under noclobber: its word follows.
+    } else if ((c === '<' || c === '>') && line[i + 1] === '(' && !arith) {
+      // A process substitution, <( ) or >( ), is a word of its command
+      // (cp <(x) f copies to f), its inside read as commands too.
+      const end = closing(line, i + 2, '(', ')')
+      inner.push(...commands(line.slice(i + 2, end)))
+      word += line.slice(i, end + 1)
+      inWord = true
+      i = end
     } else if (c === ';' || c === '&' || c === '|' || c === '\n' || c === '(' || c === ')' || c === '{' || c === '}') {
       endCommand()
+      if (c === '|' && line[i + 1] !== '|' && line[i - 1] !== '|') fed = true
     } else if (c === '<' && !arith && line[i + 1] === '<' && line[i + 2] !== '<' && line[i - 1] !== '<') {
       // A heredoc: <<WORD or <<-WORD.
       endWord()
@@ -1638,7 +1719,10 @@ export function commands(line: string, arith = false): string[][] {
         if (q === "'" || q === '"') {
           h.quoted = true
           let end = line.indexOf(q, j + 1)
-          if (end < 0) end = line.length
+          if (end < 0) {
+            end = line.length
+            h.odd = true
+          }
           h.delim += line.slice(j + 1, end)
           j = end + 1
         } else if (q === '\\') {
@@ -1651,14 +1735,15 @@ export function commands(line: string, arith = false): string[][] {
         }
       }
       if (h.delim !== '' || h.quoted) {
+        h.odd ||= /[$`\n]/.test(h.delim)
         words.push(h.delim)
         open.push(h)
       }
       i = j - 1
     } else if (c === '<' || c === '>') {
-      // Digits right before it are the descriptor it redirects (2>f),
-      // no word of the command.
-      if (inWord && hasLit && word === lit && /^\d+$/.test(word)) {
+      // Digits right before it, unquoted, are the descriptor it redirects
+      // (2>f), no word of the command.
+      if (inWord && hasLit && !quoted && word === lit && /^\d+$/.test(word)) {
         word = ''
         lit = ''
         inWord = false
@@ -1666,17 +1751,18 @@ export function commands(line: string, arith = false): string[][] {
       }
       endWord()
       words.push(c)
+      redir = i
     } else text(c)
   }
   endCommand()
   if (docs.length) {
     // A shell anywhere on the line (ssh host bash, docker exec -i c sh)
     // may run what a heredoc gives it.
-    const shell = out.some(readsHeredoc)
+    const shell = fedShell || out.some(readsHeredoc)
     for (const h of docs) {
       // The line's own shell expands an unquoted body first.
       if (!h.quoted) for (const s of substitutions(h.body)) out.push(...commands(s))
-      if (shell) out.push(...commands(h.body))
+      if (shell || h.odd) out.push(...commands(h.body))
     }
   }
   return out
@@ -1706,12 +1792,15 @@ function ansiC(t: string): string {
 
 // readsHeredoc: the simple command w (its words) may run what a heredoc
 // gives it: a shell or the like reading commands from its input, or a
-// shell word anywhere in it (ssh host bash, docker exec -i c sh); not a
-// shell that runs a script file (bash x.sh), which reads none.
+// shell word anywhere in it (ssh host bash, docker exec -i c sh), or an
+// exec (exec <<EOF gives the line's later commands the heredoc as their
+// input); not a shell that runs a script file (bash x.sh) with no input
+// of its own (<), which reads none. A shell a pipe feeds (cat <<EOF |
+// bash x.sh) is commands' to tell.
 function readsHeredoc(w: string[]): boolean {
   const argv = strip(w)
-  if (argv.length > 0 && SHELLS.has(base(argv[0])) && runsScript(unredirected(argv.slice(1)))) return argv.slice(1).some(a => SHELLS.has(base(a)))
-  return (argv.length > 0 && STDIN_SHELLS.has(base(argv[0]))) || w.some(a => SHELLS.has(base(a)))
+  if (argv.length > 0 && SHELLS.has(base(argv[0])) && runsScript(unredirected(argv.slice(1))) && !w.includes('<')) return argv.slice(1).some(a => SHELLS.has(base(a)))
+  return (argv.length > 0 && (STDIN_SHELLS.has(base(argv[0])) || argv[0] === 'exec')) || w.some(a => SHELLS.has(base(a)))
 }
 
 // runsScript: a shell given args runs a script file, the first argument
@@ -1733,9 +1822,10 @@ function runsScript(args: string[]): boolean {
 }
 
 // scriptFile: a is a script's path written out, which can't be the
-// shell's input.
+// shell's input: none of its parts is dev, proc or fd (/./dev/stdin,
+// dev/fd/0 from /), .. or a . but a leading one.
 function scriptFile(a: string): boolean {
-  return a !== '' && !/[$`<>()]/.test(a) && !/^\/+(dev|proc)\//.test(a)
+  return a !== '' && !/[$`<>()]/.test(a) && !/(^|\/)(dev|proc|fd|\.\.)(\/|$)/.test(a) && !/\/\.(\/|$)/.test(a)
 }
 
 // substitutions are the insides of the $( ) and backticks in s, which run

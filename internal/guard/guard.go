@@ -144,6 +144,11 @@ type Rules struct {
 	// prefix followed. The matcher has no file system of its own; the
 	// server, which judges the hooks' calls, gives it one. Not served.
 	Resolve func(string) string `json:"-"`
+	// line is the command line being judged (with the lines that run it,
+	// for bash -c), and lineCd whether one of them has a cd: then a path
+	// from a folder the line can change (lineFolder) is not placed.
+	line   string
+	lineCd bool
 }
 
 // ModRule is a guard rule a mod adds (mods design §7, Tighten only): the
@@ -683,7 +688,58 @@ func (r Rules) deny(rule, summary, target string) *Denial {
 }
 
 // pwdVar is $PWD (or ${PWD}) starting a path, and what follows it.
-var pwdVar = regexp.MustCompile(`^\$(?:PWD|\{PWD\})(/|$)`)
+var pwdVar = regexp.MustCompile(`^(?:\$PWD|\$\{PWD\}|~\+)(/|$)`)
+
+// dotted is a path from . or .. (./x, ../x), which CDPATH doesn't look up.
+var dotted = regexp.MustCompile(`^\.{0,2}(/|$)`)
+
+// lineFolders are the variables a cd sets: $PWD (plain, the line's
+// folder), $OLDPWD, $DIRSTACK, and $_ (the last word of the command
+// before: the cd's folder).
+var lineFolders = setOf("PWD OLDPWD DIRSTACK _")
+
+// paramName is the name a path starts with as $NAME or ${NAME….
+var paramName = regexp.MustCompile(`^\$(?:\{([A-Za-z_][A-Za-z0-9_]*)|([A-Za-z_][A-Za-z0-9_]*))`)
+
+// oldPwd is ~- alone or with a path after it.
+var oldPwd = regexp.MustCompile(`^~-(/|$)`)
+
+// lineFolder: path w starts with a folder that a cd on line can change:
+// ~-, a substitution ($(pwd), backticks), a positional or special
+// parameter ($1, $@, ${!x}), one of lineFolders, or a variable the line
+// may set (assigns).
+func lineFolder(w, line string) bool {
+	if oldPwd.MatchString(w) || strings.HasPrefix(w, "`") || strings.HasPrefix(w, "$(") {
+		return true
+	}
+	if !strings.HasPrefix(w, "$") {
+		return false
+	}
+	m := paramName.FindStringSubmatch(w)
+	if m == nil {
+		return true
+	}
+	name := m[1] + m[2]
+	return lineFolders[name] || assigns(line, name)
+}
+
+// assigns: line names variable name other than to expand it, as an
+// assignment (d=…, d+=…, d[0]=…) or a word (read d, for d in, export d,
+// printf -v d) does.
+func assigns(line, name string) bool {
+	return regexp.MustCompile("(?m)(^|[\\s;&|(){}!`\"'])" + name + "(\\[|\\+?=|[\\s;&|)`\"']|$)").MatchString(line)
+}
+
+// folderVarCd is the tm-files refusal of a path from a folder a line
+// with a cd can change (lineFolder): its sentence says how to write it.
+func (r Rules) folderVarCd(summary string) *Denial {
+	tell := "ask the user"
+	if r.Role == "thread" {
+		tell = "say so in your report"
+	}
+	m := "on a line with a cd, a path given to a command that writes that starts with a folder the line can change ($PWD with an operator, $OLDPWD, ~-, $_, $(pwd), a positional parameter or a variable the line sets) could be tm's settings or the project folder. Give the path from /, from a variable the line doesn't set ($TMPDIR/x), or relative after a cd to a folder written out; if none of that fits, " + tell + "."
+	return &Denial{Rule: RuleTMFiles, Message: "terminatr guard (" + RuleTMFiles + "): " + m, Summary: summary}
+}
 
 // lostCd is the tm-files refusal of a relative path after a cd the
 // guard can't follow: its sentence says how to write the line so it can.
@@ -723,6 +779,11 @@ func (r Rules) judgeBash(command string) *Denial { return r.judgeLine(command, [
 // (eval, trap, source, ., also through command or builtin) may move them
 // at any point after, so the rest of the line keeps unknown among them.
 func (r Rules) judgeLine(command string, cwds []string) *Denial {
+	if r.line != "" {
+		r.line += "\n"
+	}
+	r.line += command
+	r.lineCd = r.lineCd || hasCd(command)
 	parts, ok := topLevel(command)
 	if !ok {
 		// A line it can't split: one part, with any cd in it leaving its
@@ -1714,8 +1775,10 @@ func accessOpen(args []string) bool {
 type nowhere struct{ dir string }
 
 // cd is where cmd (cd, pushd, popd) with args leaves the line: a
-// folder it names plainly, home for none, else unknown. Its
-// redirections (pushd x >/dev/null) are no folder.
+// folder it names plainly, home for none, else unknown: a pattern or
+// braces (cd ~/.term*) may name another folder, and so may a relative
+// one CDPATH looks up, when the line sets it. Its redirections (pushd x
+// >/dev/null) are no folder.
 func (n nowhere) cd(r Rules, cmd string, args []string) nowhere {
 	var to []string
 	for _, a := range unredirected(args) {
@@ -1733,7 +1796,10 @@ func (n nowhere) cd(r Rules, cmd string, args []string) nowhere {
 		return nowhere{dir: r.Home}
 	}
 	a := to[0]
-	if a == "-" || strings.ContainsAny(a, "$`") || strings.HasPrefix(a, "~") && !strings.HasPrefix(a, "~/") && a != "~" {
+	if a == "-" || strings.ContainsAny(a, "$`*?[{") || strings.HasPrefix(a, "~") && !strings.HasPrefix(a, "~/") && a != "~" {
+		return nowhere{}
+	}
+	if !dotted.MatchString(slash(a)) && !strings.HasPrefix(a, "~") && !drive.MatchString(slash(a)) && strings.Contains(r.line, "CDPATH") {
 		return nowhere{}
 	}
 	if n.dir == "" && !strings.HasPrefix(a, "/") && !strings.HasPrefix(a, "~") && !drive.MatchString(slash(a)) {
@@ -2001,10 +2067,11 @@ func topLevel(line string) (parts []linePart, ok bool) {
 				switch s[j] {
 				case '\'', '"':
 					quoted = true
-					end := len(s)
-					if k := slices.Index(s[j+1:], s[j]); k >= 0 {
-						end = j + 1 + k
+					k := slices.Index(s[j+1:], s[j])
+					if k < 0 {
+						return nil, false
 					}
+					end := j + 1 + k
 					d.WriteString(string(s[j+1 : end]))
 					j = end + 1
 				case '\\':
@@ -2019,7 +2086,9 @@ func topLevel(line string) (parts []linePart, ok bool) {
 				}
 			}
 			h.delim = d.String()
-			if h.delim == "" && !quoted {
+			// A word bash may end elsewhere ($'EOF', E$(x)F): Commands
+			// reads its body as commands.
+			if h.delim == "" && !quoted || strings.ContainsAny(h.delim, "$`\n") {
 				return nil, false
 			}
 			b.WriteString(string(s[i:min(j, len(s))]))
@@ -2069,7 +2138,12 @@ func topLevel(line string) (parts []linePart, ok bool) {
 		return nil, false
 	}
 	cut("")
-	if docs && slices.ContainsFunc(parts, func(p linePart) bool { return slices.ContainsFunc(Commands(p.text), readsHeredoc) }) {
+	if docs && slices.ContainsFunc(parts, func(p linePart) bool {
+		return slices.ContainsFunc(Commands(p.text), func(w []string) bool {
+			argv := strip(w)
+			return readsHeredoc(w) || p.before == "|" && len(argv) > 0 && shells[base(argv[0])]
+		})
+	}) {
 		return nil, false
 	}
 	return parts, true
@@ -2088,11 +2162,16 @@ func (r Rules) judgeNoWrite(cmd string, args, words []string) *Denial {
 		return nil
 	}
 	refuse := func(w string, parents bool) *Denial {
-		if w == "" || strings.HasPrefix(w, "&") {
+		// A descriptor (2>&1) or a process substitution (> >(tee f)).
+		if w == "" || strings.HasPrefix(w, "&") || strings.HasPrefix(w, "<(") || strings.HasPrefix(w, ">(") {
 			return nil
 		}
-		// $PWD is the line's folder: a path from it is a relative one.
+		// $PWD and ~+ are the line's folder: a path from one is a
+		// relative one.
 		w = pwdVar.ReplaceAllString(w, ".$1")
+		if r.lineCd && lineFolder(w, r.line) {
+			return floor(r.folderVarCd(cmd + " of " + safe(w) + " after a cd"))
+		}
 		if r.Cwd == "" && !strings.HasPrefix(slash(w), "/") && !strings.HasPrefix(w, "~") && !strings.HasPrefix(w, "$") && !drive.MatchString(slash(w)) {
 			return floor(r.lostCd(cmd + " of " + safe(w) + " after a cd"))
 		}
@@ -2201,11 +2280,13 @@ func (r Rules) judgeNoWrite(cmd string, args, words []string) *Denial {
 // heredoc is a here-document a command line opens (<<WORD, <<-WORD):
 // the word that ends it, whether its lines lose their leading tabs, and
 // whether the word was quoted (then nothing in it expands); then its
-// body once read.
+// body once read. odd when its word is one the guard may end elsewhere
+// than bash does ($'EOF', E$(x)F, a quote left open): its body is read
+// as commands.
 type heredoc struct {
-	delim        string
-	tabs, quoted bool
-	body         string
+	delim             string
+	tabs, quoted, odd bool
+	body              string
 }
 
 // Commands splits a command line into simple commands, each a list of
@@ -2221,10 +2302,19 @@ func commands(line string, arith bool) [][]string {
 	var words []string
 	// word is the word as written; lit the same without its unquoted
 	// substitutions, what the word is when they print nothing (printenv$(x)
-	// is printenv): the word, unless it is substitutions alone.
+	// is printenv): the word, unless it is substitutions alone. Those a
+	// path starts with stay ($(pwd)/f is no /f).
 	var word, lit strings.Builder
 	inWord, hasLit := false, false
+	// quoted: some of the word is quoted or escaped ("2">f writes 2's
+	// output to f: no descriptor).
+	quoted := false
 	var open, docs []heredoc
+	// redir is the index of the last < or > read as a redirect (>| is
+	// one); fed: a pipe feeds the next command, and fedShell, it is a
+	// shell.
+	redir := -1
+	fed, fedShell := false, false
 	endWord := func() {
 		if inWord && hasLit {
 			words = append(words, lit.String())
@@ -2233,10 +2323,13 @@ func commands(line string, arith bool) [][]string {
 		}
 		word.Reset()
 		lit.Reset()
-		inWord, hasLit = false, false
+		inWord, hasLit, quoted = false, false, false
 	}
 	// text is literal text of the word.
 	text := func(t string) {
+		if !hasLit && word.Len() > 0 && strings.HasPrefix(t, "/") {
+			lit.WriteString(word.String())
+		}
 		word.WriteString(t)
 		lit.WriteString(t)
 		inWord, hasLit = true, true
@@ -2244,6 +2337,10 @@ func commands(line string, arith bool) [][]string {
 	endCommand := func() {
 		endWord()
 		if len(words) > 0 {
+			if argv := strip(words); fed && len(argv) > 0 && shells[base(argv[0])] {
+				fedShell = true
+			}
+			fed = false
 			out = append(out, words)
 		}
 		// What the command substitutes, after it.
@@ -2257,12 +2354,14 @@ func commands(line string, arith bool) [][]string {
 		case c == '\\' && i+1 < len(s):
 			if s[i+1] != '\n' {
 				text(string(s[i+1]))
+				quoted = true
 			}
 			i++
 		case c == '$' && i+1 < len(s) && s[i+1] == '\'':
 			// ANSI-C quoting, $'…': the text its escapes give.
 			end := ansiEnd(s, i+2)
 			text(ansiC(string(s[i+2 : end])))
+			quoted = true
 			i = end
 		case c == '$' && i+1 < len(s) && s[i+1] == '"':
 			// A locale string, $"…": read as the double-quoted one it is.
@@ -2272,6 +2371,7 @@ func commands(line string, arith bool) [][]string {
 				end = i + 1 + j
 			}
 			text(string(s[i+1 : end]))
+			quoted = true
 			i = end
 		case c == '"':
 			// Inside double quotes a $( ) or backtick still runs: its
@@ -2299,6 +2399,7 @@ func commands(line string, arith bool) [][]string {
 				}
 			}
 			text(q.String())
+			quoted = true
 			i = j
 		case c == ' ' || c == '\t':
 			endWord()
@@ -2370,11 +2471,26 @@ func commands(line string, arith bool) [][]string {
 			}
 			open = nil
 			i = j - 1
-		case c == '&' && i > 0 && (s[i-1] == '>' || s[i-1] == '<') && i+1 < len(s) && strings.ContainsRune("0123456789-", s[i+1]):
+		case c == '&' && redir == i-1 && i+1 < len(s) && strings.ContainsRune("0123456789-", s[i+1]):
 			// A redirect to or from a descriptor (2>&1, <&0, >&-): its word.
 			text(string(c))
+		case c == '|' && redir == i-1 && s[i-1] == '>':
+			// >|, a redirect that overwrites under noclobber: its word
+			// follows.
+		case (c == '<' || c == '>') && i+1 < len(s) && s[i+1] == '(' && !arith:
+			// A process substitution, <( ) or >( ), is a word of its
+			// command (cp <(x) f copies to f), its inside read as commands
+			// too.
+			end := closing(s, i+2, '(', ')')
+			inner = append(inner, Commands(string(s[i+2:end]))...)
+			word.WriteString(string(s[i:min(end+1, len(s))]))
+			inWord = true
+			i = end
 		case strings.ContainsRune(";&|\n(){}", c):
 			endCommand()
+			if c == '|' && (i+1 >= len(s) || s[i+1] != '|') && s[i-1] != '|' {
+				fed = true
+			}
 		case c == '<' && !arith && i+1 < len(s) && s[i+1] == '<' && (i+2 >= len(s) || s[i+2] != '<') && (i == 0 || s[i-1] != '<'):
 			// A heredoc: <<WORD or <<-WORD.
 			endWord()
@@ -2396,6 +2512,8 @@ func commands(line string, arith bool) [][]string {
 					end := len(s)
 					if k := slices.Index(s[j+1:], s[j]); k >= 0 {
 						end = j + 1 + k
+					} else {
+						h.odd = true
 					}
 					d.WriteString(string(s[j+1 : end]))
 					j = end + 1
@@ -2412,20 +2530,22 @@ func commands(line string, arith bool) [][]string {
 			}
 			h.delim = d.String()
 			if h.delim != "" || h.quoted {
+				h.odd = h.odd || strings.ContainsAny(h.delim, "$`\n")
 				words = append(words, h.delim)
 				open = append(open, h)
 			}
 			i = j - 1
 		case c == '<' || c == '>':
-			// Digits right before it are the descriptor it redirects
-			// (2>f), no word of the command.
-			if inWord && hasLit && word.String() == lit.String() && digits.MatchString(word.String()) {
+			// Digits right before it, unquoted, are the descriptor it
+			// redirects (2>f), no word of the command.
+			if inWord && hasLit && !quoted && word.String() == lit.String() && digits.MatchString(word.String()) {
 				word.Reset()
 				lit.Reset()
 				inWord, hasLit = false, false
 			}
 			endWord()
 			words = append(words, string(c))
+			redir = i
 		default:
 			text(string(c))
 		}
@@ -2434,7 +2554,7 @@ func commands(line string, arith bool) [][]string {
 	if len(docs) > 0 {
 		// A shell anywhere on the line (ssh host bash, docker exec -i c
 		// sh) may run what a heredoc gives it.
-		shell := slices.ContainsFunc(out, readsHeredoc)
+		shell := fedShell || slices.ContainsFunc(out, readsHeredoc)
 		for _, h := range docs {
 			if !h.quoted {
 				// The line's own shell expands it first.
@@ -2442,7 +2562,7 @@ func commands(line string, arith bool) [][]string {
 					out = append(out, Commands(in)...)
 				}
 			}
-			if shell {
+			if shell || h.odd {
 				out = append(out, Commands(h.body)...)
 			}
 		}
@@ -2497,15 +2617,18 @@ var digits = regexp.MustCompile(`^[0-9]+$`)
 
 // readsHeredoc: the simple command w (its words) may run what a heredoc
 // gives it: a shell or the like reading commands from its input, or a
-// shell word anywhere in it (ssh host bash, docker exec -i c sh); not a
-// shell that runs a script file (bash x.sh), which reads none.
+// shell word anywhere in it (ssh host bash, docker exec -i c sh), or an
+// exec (exec <<EOF gives the line's later commands the heredoc as their
+// input); not a shell that runs a script file (bash x.sh) with no input
+// of its own (<), which reads none. A shell a pipe feeds (cat <<EOF |
+// bash x.sh) is Commands' to tell.
 func readsHeredoc(w []string) bool {
 	argv := strip(w)
 	isShell := func(a string) bool { return shells[base(a)] }
-	if len(argv) > 0 && shells[base(argv[0])] && runsScript(unredirected(argv[1:])) {
+	if len(argv) > 0 && shells[base(argv[0])] && runsScript(unredirected(argv[1:])) && !slices.Contains(w, "<") {
 		return slices.ContainsFunc(argv[1:], isShell)
 	}
-	return len(argv) > 0 && stdinShells[base(argv[0])] || slices.ContainsFunc(w, isShell)
+	return len(argv) > 0 && (stdinShells[base(argv[0])] || argv[0] == "exec") || slices.ContainsFunc(w, isShell)
 }
 
 // shellFlags is a cluster of a shell's short options (-ex, +o).
@@ -2538,11 +2661,13 @@ func runsScript(args []string) bool {
 	return false
 }
 
-// devOrProc is a path under /dev or /proc.
-var devOrProc = regexp.MustCompile(`^/+(dev|proc)/`)
+// devOrProc is a path with a part dev, proc, fd or .., or a . but a
+// leading one.
+var devOrProc = regexp.MustCompile(`(^|/)(dev|proc|fd|\.\.)(/|$)|/\.(/|$)`)
 
 // scriptFile: a is a script's path written out, which can't be the
-// shell's input.
+// shell's input: none of its parts is dev, proc or fd (/./dev/stdin,
+// dev/fd/0 from /), .. or a . but a leading one.
 func scriptFile(a string) bool {
 	return a != "" && !strings.ContainsAny(a, "$`<>()") && !devOrProc.MatchString(a)
 }
