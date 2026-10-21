@@ -2374,6 +2374,12 @@ func (n nowhere) cd(r Rules, cmd string, args []string) nowhere {
 	if n.dir == "" && !strings.HasPrefix(a, "/") && !strings.HasPrefix(a, "~") && !drive.MatchString(slash(a)) {
 		return nowhere{}
 	}
+	// On a line that may set $PWD (pwdSet), a logical cd to a relative
+	// folder may be taken from it (zsh does) rather than from where the
+	// guard follows the line.
+	if r.pwdSet && mode != 'P' && !strings.HasPrefix(a, "/") && !strings.HasPrefix(a, "~") && !drive.MatchString(slash(a)) {
+		return nowhere{}
+	}
 	r.Cwd = n.dir
 	dir := r.abs(a)
 	if mode == 'P' || mode == 0 && r.physical {
@@ -2493,8 +2499,11 @@ func (r Rules) lineFlags(line string) (physical, cdpath, pwdSet bool) {
 
 // pwdExpanded is an expansion of PWD, OLDPWD, DIRSTACK or dirstack that
 // only reads it: $PWD, ${PWD}, ${#PWD}, ${PWD:-x}, ${PWD%/*},
-// ${DIRSTACK[1]}; not ${PWD:=x} or ${PWD=x}, which may assign it.
-var pwdExpanded = regexp.MustCompile(`\$(?:PWD|OLDPWD|DIRSTACK|dirstack)\b|\$\{[#!]?(?:PWD|OLDPWD|DIRSTACK|dirstack)(?:\[[^]]*\])?(?:[^:=}][^}]*|:[^=}][^}]*)?\}`)
+// ${DIRSTACK[1]}; not ${PWD:=x} or ${PWD=x}, which may assign it, nor
+// one whose body has a $, a backtick or a brace in it, where an
+// expansion nested in it may (${PWD:-${PWD:=x}}): those count as naming
+// it, failing safe.
+var pwdExpanded = regexp.MustCompile("\\$(?:PWD|OLDPWD|DIRSTACK|dirstack)\\b|\\$\\{[#!]?(?:PWD|OLDPWD|DIRSTACK|dirstack)(?:\\[[^]$`{}]*\\])?(?:[^:=}$`{][^}$`{]*|:[^=}$`{][^}$`{]*)?\\}")
 
 // pwdName is PWD, OLDPWD, DIRSTACK or dirstack as a name of its own.
 var pwdName = regexp.MustCompile(`(?:^|[^A-Za-z0-9_])(?:PWD|OLDPWD|DIRSTACK|dirstack)(?:[^A-Za-z0-9_]|$)`)
