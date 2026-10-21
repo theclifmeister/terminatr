@@ -123,11 +123,11 @@ func (m *dash) fromView() tea.Cmd {
 			m.dropOver()
 		case v.Focus != "" && v.Focus != m.over.Session:
 			m.result.Attach = v.Focus
-			return tea.Quit
+			return m.leave()
 		}
 	} else if v.Mode == view.ModeLayout && v.Focus != "" && v.Seq != m.viewSeq {
 		m.result.Attach = cmp.Or(v.Focus, "view")
-		return tea.Quit
+		return m.leave()
 	}
 	// The all-projects NEEDS YOU has no project row: "p:*" keeps the
 	// list's own selection (showProject).

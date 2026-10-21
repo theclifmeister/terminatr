@@ -1,5 +1,5 @@
  PROJECTS                      1   │ tm dashboard                            ● server ok · 1 session
- ■ demo             0              │ demo ────────────────────────── ● active — space to deactivate
+ ■ demo             0              │ demo ────────────────────────────── ● active — S to deactivate
  └─ coordinator         ·          │  coordinator             —           not running; enter starts…
                                    │  tasks: 0 need you · 1 in motion · 1 on deck
                                    │ OTHER SESSIONS 1 ──────────────────────────────────────────────
@@ -20,5 +20,5 @@
                                    │
  ───────────────────────────────── │
  demo · active                     │────────────────────────────────────────────────────────────────
- 0 threads · coordinator not runn… │ ≡ menu · enter open · space deactivate · a project · t tasks ·…
+ 0 threads · coordinator not runn… │ ≡ menu · enter open · S deactivate · A project · T tasks · I i…
  tab sidebar · ? help              │

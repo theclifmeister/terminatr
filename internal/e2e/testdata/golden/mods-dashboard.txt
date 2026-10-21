@@ -1,6 +1,6 @@
  PROJECTS                      1   │ tm dashboard                                                                                                           ● server ok · 2 sessions
- ■ demo        2                   │ demo ──────────────────────────────────────────────────────── ● active — space to deactivate │ T1 Fix the login
- └─ coordi…             ·          │  coordinator                           —           not running; enter starts it  3 inbox     │ ○ idle
+ ■ demo        2                   │ demo ──────────────────────────────────────────────────────────── ● active — S to deactivate │ T1 Fix the login
+ └─ coordi…             ·          │  coordinator                           —           not running; enter starts it  2 inbox     │ ○ idle
     ├─ T1    50% ☐      ○          │  T1 Fix the login                  ○ idle             report new  50% 1/2 ▸ Fix it  <duration>  PR #…│ ───────────────────────────────────────────────
     └─ T2        ☐ 4%   ○          │  T2 Write the docs                 ○ idle      4%     <duration>  t-0002                             │ project   demo
                                    │  tasks: 0 need you · 2 in motion · 0 on deck                                                 │ thread    t-0001
@@ -24,5 +24,5 @@
                                    │                                                                                              │
  ───────────────────────────────── │                                                                                              │
  demo · active                     │────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- 2 threads · coordinator not runn… │ ≡ menu · enter attach · space deactivate · a project · t tasks · i inbox · , settings · ? help · prefix+q quit
+ 2 threads · coordinator not runn… │ ≡ menu · enter attach · S deactivate · A project · T tasks · I inbox · , settings · ? help · prefix+q quit
  tab sidebar · ? help              │

@@ -1,5 +1,5 @@
  PROJECTS                      1   │ tm dashboard                                               ● server ok · 2 sessions
- ■ demo        2                   │ demo ────────────────────────────────────────────── ● active — space to deactivate
+ ■ demo        2                   │ demo ────────────────────────────────────────────────── ● active — S to deactivate
  └─ coordi…             ·          │  coordinator                      —           not running; enter starts it  3 inbox
     ├─ T1    50% ☐      ○          │  T1 Fix the login              ○ idle             report new  50% 1/2 ▸ Fix it  <duration>…
     └─ T2   ╭─ Settings ───────────────────────────────────────────────────────────────────────────────────╮
@@ -27,8 +27,8 @@
             │ past the warning, where C clears one (tm asks first) and enter attaches to it. For Claude    │
             │ sessions it needs the Agent mod on (early access, off by default: Settings, Agent mod, or    │
             │                                                                                              │
-            │ enter on/off · i install · p permissions · s settings · d defaults · l log · r restart       │
-            │ u update · x remove · e examples · ← → tabs · esc close                                      │
+            │ enter on/off · I install · p permissions · s settings · d defaults · l log · R restart       │
+            │ U update · X remove · E examples · ← → tabs · esc close                                      │
             ╰───────────────────────────────────────────────────────────────────────────────────── more ↓ ─╯
  ───────────────────────────────── │
  demo · active                     │────────────────────────────────────────────────────────────────────────────────────

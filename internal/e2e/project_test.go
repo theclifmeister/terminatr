@@ -51,8 +51,9 @@ func TestSmokeProjectOpenAndSwitch(t *testing.T) {
 		return a >= 0 && b == a+2 && coord(lines[a+1], "○") && coord(lines[b+1], "·")
 	})
 
-	// ]: beta's coordinator starts and is attached.
-	w.Type("]")
+	// prefix+]: beta's coordinator starts and is attached (alpha's
+	// coordinator's row is selected, where a plain ] types through).
+	w.Prefix("]")
 	w.WaitUntil("attached to beta", agentWait, func(sc string) bool { return lastLine(sc, beta+" › coordinator") })
 	w.WaitFor("Fake Claude Code", agentWait)
 

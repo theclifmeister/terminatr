@@ -252,6 +252,10 @@ type dash struct {
 	// (typethrough.go).
 	typing bool
 	typed  []Key
+	// typedAt is when the last of them came; settling: the session to
+	// attach is set, and the dashboard ends once they pause (leave).
+	typedAt  time.Time
+	settling bool
 	// pressing: a button or a menu item presses a key (pressKey), which
 	// never types through.
 	pressing bool
@@ -578,7 +582,7 @@ func (m *dash) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.leaving && msg.err == nil && msg.attach == "" {
 			// Over a session, the view shows what the popup opened.
 			m.result.Attach = "view"
-			return m, tea.Quit
+			return m, m.leave()
 		}
 		m.leaving = false
 		if msg.err != nil {
@@ -622,7 +626,7 @@ func (m *dash) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				})
 			}
 			m.result.Attach = msg.attach
-			return m, tea.Quit
+			return m, m.leave()
 		}
 		cmds := []tea.Cmd{m.load()}
 		if pv := m.projectPopupView(); pv != nil {
@@ -631,6 +635,8 @@ func (m *dash) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(cmds...)
 	case tea.KeyPressMsg:
 		return m, m.key(msg)
+	case typeSettledMsg:
+		return m, m.settled()
 	case tea.PasteMsg:
 		// Into a prompt: a path or a URL is often pasted.
 		if p, ok := m.top().(interface{ paste(*dash, string) }); ok {
@@ -777,7 +783,7 @@ func (m *dash) setData(d Data) tea.Cmd {
 	}
 	cmds = append(cmds, noticeCmds...)
 	switch {
-	case first && m.then == "t" && m.over != nil && m.over.Task > 0:
+	case first && m.then == "T" && m.over != nil && m.over.Task > 0:
 		// The info panel's task, over its session: in the popup's
 		// Tasks tab, shown.
 		cmds = append(cmds, m.showTask(m.over.Project, m.over.Task))
@@ -906,7 +912,7 @@ func (m *dash) paneSize() (int, int) {
 func (m *dash) key(k tea.KeyPressMsg) tea.Cmd {
 	if m.typing {
 		// On the way to the coordinator: every key is its pane's.
-		m.typed = append(m.typed, Key(k))
+		m.typed, m.typedAt = append(m.typed, Key(k)), time.Now()
 		return nil
 	}
 	if k.String() == "ctrl+c" {

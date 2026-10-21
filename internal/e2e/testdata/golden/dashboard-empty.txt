@@ -20,5 +20,5 @@
                                    │
  ───────────────────────────────── │
                                    │────────────────────────────────────────────────────────────────
-                                   │ ≡ menu · n new project · , settings · ? help · prefix+q quit
+                                   │ ≡ menu · + new project · , settings · ? help · prefix+q quit
  tab sidebar · ? help              │

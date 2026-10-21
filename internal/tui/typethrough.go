@@ -28,7 +28,7 @@ func (m *dash) typeThrough(k tea.KeyPressMsg) (tea.Cmd, bool) {
 	if !ok {
 		return nil, false
 	}
-	m.typing, m.typed = true, []Key{Key(k)}
+	m.typing, m.typed, m.typedAt = true, []Key{Key(k)}, time.Now()
 	m.focus = areaMain // the keyboard goes into the pane
 	return m.act(func() actionMsg { return actionMsg{attach: id, current: slug} }), true
 }
@@ -65,6 +65,36 @@ func (m *dash) typeThroughRow() (id, slug string, ok bool) {
 // never with ctrl, alt or the like (those keep their meaning).
 func printable(k tea.KeyPressMsg) bool {
 	return k.Text != "" && k.Mod&(tea.ModCtrl|tea.ModAlt|tea.ModMeta|tea.ModSuper|tea.ModHyper) == 0
+}
+
+// typeSettle is how long the keys typed through must have paused before
+// the dashboard hands them over and ends: keys the terminal sent but
+// the dashboard's input hasn't delivered yet would end with it.
+const typeSettle = 150 * time.Millisecond
+
+// typeSettledMsg asks whether the keys typed through have paused.
+type typeSettledMsg struct{}
+
+// leave ends the dashboard for the session the result attaches: at once,
+// or while keys are typed through, once they pause (typeSettle).
+func (m *dash) leave() tea.Cmd {
+	switch {
+	case !m.typing:
+		return tea.Quit
+	case m.settling:
+		return nil
+	}
+	m.settling = true
+	return tea.Tick(typeSettle, func(time.Time) tea.Msg { return typeSettledMsg{} })
+}
+
+// settled ends the dashboard once the keys typed through paused, else
+// looks again.
+func (m *dash) settled() tea.Cmd {
+	if wait := typeSettle - time.Since(m.typedAt); wait > 0 {
+		return tea.Tick(wait, func(time.Time) tea.Msg { return typeSettledMsg{} })
+	}
+	return tea.Quit
 }
 
 // typeThroughHint is the footer's word for typing on a coordinator's row.

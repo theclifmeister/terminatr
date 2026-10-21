@@ -2,6 +2,7 @@ package tui
 
 import (
 	"net"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -58,8 +59,9 @@ func TestTypeThroughList(t *testing.T) {
 	if m.top() != nil {
 		t.Fatalf("a key opened %T", m.top())
 	}
-	drain(t, m, cmd)
-	if m.result.Attach != "s-1" {
+	// The attach waits for the typing to pause, then ends the dashboard.
+	drain(t, m, cmd, reflect.TypeOf(typeSettledMsg{}))
+	if m.result.Attach != "s-1" || !m.settling {
 		t.Fatalf("result %+v", m.result)
 	}
 	if got := typedText(m.typed); got != "hi A1/?⏎" {

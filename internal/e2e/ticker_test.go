@@ -439,7 +439,7 @@ func TestSmokeDelegateFromList(t *testing.T) {
 
 	w := env.Window(110, 30)
 	w.WaitFor("1 in motion · 1 on deck", wait)
-	w.Type("T")
+	w.Prefix("T") // the coordinator's row: a plain T types through
 	w.WaitFor("3 tasks", wait)
 	// T2 (in motion) first: its footer offers no D, and D only says why.
 	w.WaitFor("enter show · + new task", wait)
