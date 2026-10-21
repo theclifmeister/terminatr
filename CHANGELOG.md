@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.44.0](https://github.com/theclifmeister/terminatr/compare/v0.43.0...v0.44.0) (2026-10-21)
+
+
+### ⚠ BREAKING CHANGES
+
+* **keys:** shift, merge and drop single unshifted shortcuts; type through to coordinators ([#705](https://github.com/theclifmeister/terminatr/issues/705))
+* **access:** access presets are gone (no `p` on the Access tab, no `tm access preset`); rules and guides a preset already added stay as plain rules, and old config files still read.
+
+### Features
+
+* **access:** remove access presets ([#702](https://github.com/theclifmeister/terminatr/issues/702)) ([a2b2c75](https://github.com/theclifmeister/terminatr/commit/a2b2c753d202ba867379c90a939abb2097efaa03))
+* **keys:** shift, merge and drop single unshifted shortcuts; type through to coordinators ([#705](https://github.com/theclifmeister/terminatr/issues/705)) ([f890a19](https://github.com/theclifmeister/terminatr/commit/f890a1961a6688796cc5fbc09ec72a00b0447c35))
+* **upkeep:** combined memory budget, upkeep prompt after a clear, note-writing guide ([#696](https://github.com/theclifmeister/terminatr/issues/696)) ([172be43](https://github.com/theclifmeister/terminatr/commit/172be43c8a997560724120f7d2377b4c07e08fdd))
+
+
+### Bug Fixes
+
+* **guard:** fewer tm-files false positives, and the floor reads the shell as the shell does ([#703](https://github.com/theclifmeister/terminatr/issues/703)) ([8c8dec7](https://github.com/theclifmeister/terminatr/commit/8c8dec79184aa0912ba12eef6364469cc2046143))
+* **threads:** --now and --interrupt know tm's own pending steer ([#701](https://github.com/theclifmeister/terminatr/issues/701)) ([b6082a3](https://github.com/theclifmeister/terminatr/commit/b6082a3bdad73252c6516077eeb7e68abe9f80cb))
+
 ## [0.43.0](https://github.com/theclifmeister/terminatr/compare/v0.42.0...v0.43.0) (2026-10-21)
 
 
