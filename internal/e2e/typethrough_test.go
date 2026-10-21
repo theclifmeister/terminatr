@@ -6,6 +6,16 @@ import (
 	"time"
 )
 
+// keyBar is the dashboard's footer: its line with the ≡ menu.
+func keyBar(sc string) string {
+	for _, l := range strings.Split(sc, "\n") {
+		if strings.Contains(l, "≡ menu ·") {
+			return l
+		}
+	}
+	return ""
+}
+
 // selectRow moves the list's cursor to the top, then down until the footer
 // says want (and not not), and fails when no row does.
 func selectRow(t *testing.T, w *Window, want, not string) {
@@ -15,7 +25,8 @@ func selectRow(t *testing.T, w *Window, want, not string) {
 	}
 	w.Quiet(300 * time.Millisecond)
 	ok := func(sc string) bool {
-		return lastLine(sc, want) && (not == "" || !lastLine(sc, not))
+		f := keyBar(sc)
+		return strings.Contains(f, want) && (not == "" || !strings.Contains(f, not))
 	}
 	for i := 0; i < 12; i++ {
 		if ok(w.Screen()) {
@@ -50,6 +61,8 @@ func TestSmokeTypeThrough(t *testing.T) {
 	env.WaitState(coord, "idle", agentWait)
 	w.Prefix("d")
 	w.WaitFor("SESSIONS", wait)
+	w.Key(keyEsc) // the click gave the sidebar the keyboard: the list's
+	w.WaitFor("tab sidebar", wait)
 
 	// The coordinator's row: typing writes to it.
 	selectRow(t, w, "type to write to the coordinator", "")
