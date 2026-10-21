@@ -10,7 +10,7 @@ type Vectors = {
   tools: Rules['tools']
   rules: Record<string, Rules>
   cases: {
-    rules: string; tool: string; input: Record<string, unknown>; rule: string | null; summary?: string; ask?: boolean; links?: Record<string, string>
+    rules: string; tool: string; input: Record<string, unknown>; rule: string | null; summary?: string; ask?: boolean; links?: Record<string, string>; files?: string[]
     floor?: boolean; subject?: string; message?: string
   }[]
   messages: Record<string, Record<string, string>>
@@ -53,6 +53,8 @@ test('the shared vectors: rule and summary of each call', () => {
   for (const c of v.cases) {
     const r: Rules = { ...v.rules[c.rules], tools: v.tools }
     if (c.links) r.resolve = linksTo(c.links)
+    if (c.files) r.files = filesOf(c.files, r.resolve ?? (p => p))
+    if (c.files) r.resolve ??= p => p
     const d = judge(r, c.tool, c.input)
     expect([c.rules, c.tool, c.input, d?.rule ?? null, d?.summary, d?.ask ?? false, d ? d.floor ?? false : undefined]).toEqual([c.rules, c.tool, c.input, c.rule, c.summary, c.ask ?? false, c.rule === null ? undefined : c.floor ?? false])
     if (c.subject !== undefined) expect([c.input, d?.subject]).toEqual([c.input, c.subject])
@@ -68,6 +70,19 @@ test('the shared vectors: rule and summary of each call', () => {
     for (const [rule, [tool, input]] of Object.entries(probe)) expect([role, rule, judge(r, tool, input)?.message]).toEqual([role, rule, m[rule]])
   }
 })
+
+// filesOf is a files that answers true for a path landing (resolve,
+// then cleaned) on one of files, as guard_test.go does.
+function filesOf(files: string[], resolve: (p: string) => string): (p: string) => boolean {
+  return p => {
+    const out: string[] = []
+    for (const s of resolve(p).split('/')) {
+      if (s === '..') out.pop()
+      else if (s !== '' && s !== '.') out.push(s)
+    }
+    return files.includes('/' + out.join('/'))
+  }
+}
 
 // linksTo is a resolve that follows links: a path under a link (a key)
 // to the same place under its target, as guard_test.go does.
@@ -120,6 +135,7 @@ async function start($: Engine, on: On, rules: Rules | null, env: Record<string,
   let current = rules
   let hangRules = false
   let links: Record<string, string> | number | 'hang' = {}
+  let files: string[] = []
   const resolved: string[][] = []
   const escapes: { id: string; done?: boolean }[] = []
   let escapeStatus = 204
@@ -130,7 +146,8 @@ async function start($: Engine, on: On, rules: Rules | null, env: Record<string,
       resolved.push(paths)
       if (links === 'hang') return new Promise<never>(() => {})
       if (typeof links === 'number') return ok(links, 'down')
-      return ok(200, JSON.stringify({ paths: paths.map(linksTo(links)) }))
+      const lands = paths.map(linksTo(links))
+      return ok(200, JSON.stringify({ paths: lands, files: lands.map(p => files.includes(p)) }))
     }
     if (e.url.endsWith('/v1/rules')) {
       fetches++
@@ -176,6 +193,7 @@ async function start($: Engine, on: On, rules: Rules | null, env: Record<string,
     setRules: (r: Rules | null) => { current = r },
     hang: (h: boolean) => { hangRules = h },
     setLinks: (l: typeof links) => { links = l },
+    setFiles: (f: string[]) => { files = f },
   }
 }
 
@@ -371,6 +389,25 @@ test('a write the server can\'t place is refused, not judged as written', async 
   expect((await $.tool.check({ tool: 'Bash', input: { command: 'ls' } })).decision).toBe('allow')
   await clock.settle()
   expect(denied).toEqual([])
+})
+
+test('a shell given a heredoc runs a regular file of the worktree without reading it; else the heredoc is commands', async ($, on) => {
+  const { resolved, setLinks, setFiles } = await start($, on, thread)
+  const command = "bash run.sh <<'EOF'\ngit push --force origin main\nEOF"
+  // No regular file there: the heredoc is commands.
+  expect((await $.tool.call({ tool: 'Bash', command }) as { deny?: string }).deny).toContain('terminatr guard (force-push)')
+  expect(resolved).toEqual([[`${WT}/run.sh`]])
+  setFiles([`${WT}/run.sh`])
+  expect((await $.tool.call({ tool: 'Bash', command }) as { deny?: string }).deny).toBe(undefined)
+  // A link out of the worktree, to a regular file: commands again.
+  setLinks({ [`${WT}/run.sh`]: '/tmp/run.sh' })
+  setFiles(['/tmp/run.sh'])
+  expect((await $.tool.call({ tool: 'Bash', command }) as { deny?: string }).deny).toContain('terminatr guard (force-push)')
+  // The server can't say: judged without it, not refused as unplaced.
+  setLinks(500)
+  const r = await $.tool.call({ tool: 'Bash', command })
+  expect((r as { deny?: string }).deny).toContain('terminatr guard (force-push)')
+  expect((await $.tool.call({ tool: 'Bash', command: 'ls' }) as { deny?: string }).deny).toBe(undefined)
 })
 
 test('psCommands splits a PowerShell line', () => {

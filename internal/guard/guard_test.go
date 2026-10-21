@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -28,6 +30,9 @@ type vectors struct {
 		Message string `json:"message"`
 		// Links are where writes under a link land (Resolve, faked).
 		Links map[string]string `json:"links"`
+		// Files are the paths (absolute, clean, where they land) that are
+		// regular files (File, faked).
+		Files []string `json:"files"`
 	} `json:"cases"`
 	Messages map[string]map[string]string `json:"messages"`
 }
@@ -84,6 +89,13 @@ func TestVectors(t *testing.T) {
 		}
 		if c.Links != nil {
 			r.Resolve = linksTo(c.Links)
+		}
+		if c.Files != nil {
+			if r.Resolve == nil {
+				r.Resolve = func(p string) string { return p }
+			}
+			resolve, files := r.Resolve, c.Files
+			r.File = func(p string) bool { return slices.Contains(files, path.Clean(resolve(p))) }
 		}
 		d := r.Judge(c.Tool, c.Input)
 		var got, want string

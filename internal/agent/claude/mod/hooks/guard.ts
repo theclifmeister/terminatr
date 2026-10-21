@@ -121,6 +121,16 @@ export type Rules = {
   // folder the line can change (lineFolder) is not placed. Not served.
   line?: string
   lineCd?: boolean
+  // The folders the line was in before its folder now ($OLDPWD, ~-;
+  // '' one it can't tell), as judgeLine follows its cds. Not served.
+  olds?: readonly string[]
+  // Whether a path, absolute but not cleaned as resolve is asked about,
+  // lands on a regular file: where a shell given input runs a script of
+  // the worktree's (POST /v1/resolve, scriptTargets). Not served.
+  files?: (p: string) => boolean
+  // The thread's worktree, as judgeBash takes it (worktreeOf), for
+  // worktreeScript. Not served.
+  wt?: string
 }
 
 // A guard rule a mod adds (mods design §7, Tighten only): the commands a
@@ -454,11 +464,12 @@ function lostCd(r: Rules, summary: string): Denial {
   return { rule: 'tm-files', message: `terminatr guard (tm-files): ${m}`, summary }
 }
 
-// folderVarCd is the tm-files refusal of a path from a folder a line
-// with a cd can change (lineFolder): its sentence says how to write it.
-function folderVarCd(r: Rules, summary: string): Denial {
+// unplaced is the tm-files refusal of a path from a folder the guard
+// can't place (folderStart, lineFolder): its sentence says how to write
+// it.
+function unplaced(r: Rules, summary: string): Denial {
   const tell = r.role === 'thread' ? 'say so in your report' : 'ask the user'
-  const m = `on a line with a cd, a path given to a command that writes that starts with a folder the line can change ($PWD with an operator, $OLDPWD, ~-, $_, $(pwd), a positional parameter or a variable the line sets) could be tm's settings or the project folder. Give the path from /, from a variable the line doesn't set ($TMPDIR/x), or relative after a cd to a folder written out; if none of that fits, ${tell}.`
+  const m = `a path given to a command that writes that starts with a folder the guard can't place ($OLDPWD or ~- from before the line, $PWD changed by an operator, or after a cd $_, a substitution, a positional parameter or a variable the line sets) could be tm's settings or the project folder. Give the path from /, from a variable the line doesn't set ($TMPDIR/x), or relative after a cd to a folder written out; if none of that fits, ${tell}.`
   return { rule: 'tm-files', message: `terminatr guard (tm-files): ${m}`, summary }
 }
 
@@ -494,7 +505,13 @@ function denyMod(m: ModRule, summary: string): Denial {
 
 // judgeBash checks each simple command of a Bash command line.
 function judgeBash(r: Rules, has: (id: string) => boolean, command: string): Denial | null {
-  return judgeLine(r, has, command, [r.cwd ?? ''])
+  return judgeLine({ ...r, wt: worktreeOf(r) }, has, command, [r.cwd ?? ''])
+}
+
+// worktreeOf is the thread's worktree: its first writable folder, or
+// the session's folder, where a thread starts; '' for a coordinator.
+function worktreeOf(r: Rules): string {
+  return r.role === 'thread' ? (r.writable?.[0] ?? r.cwd ?? '') : ''
 }
 
 // judgeLine judges each simple command of a Bash command line with its
@@ -520,13 +537,18 @@ function judgeLine(r: Rules, has: (id: string) => boolean, command: string, cwds
   let cur = cwds
   let list = cwds
   let hidden = false
+  // The folders $OLDPWD may hold: before the line, one it can't tell.
+  let olds: readonly string[] = r.olds ?? ['']
   for (const pt of parts) {
     if (listEnd(pt.before)) list = cur
     // A heredoc's body read as commands (topLevel and commands may tell
     // a << apart differently: $[1<<2]) may hold a cd anywhere.
-    if (pt.doc && hasCd(pt.text)) cur = withDirs(cur, '')
+    if (pt.doc && hasCd(pt.text)) {
+      olds = withDirs([...olds], ...cur, '')
+      cur = withDirs(cur, '')
+    }
     for (const c of cur) {
-      const d = judgeCommands(r, has, pt.text, c)
+      const d = judgeCommands({ ...r, olds }, has, pt.text, c)
       if (d) return d
     }
     const inPipe = pt.before === '|' || pt.after === '|' || pt.after === '&'
@@ -534,14 +556,21 @@ function judgeLine(r: Rules, has: (id: string) => boolean, command: string, cwds
     if (pc && !inPipe) {
       let to: string[] = []
       for (const c of cur) to = withDirs(to, cdTo(r, c, pc.cmd, pc.args))
-      if (pt.after === '&&' && pt.before !== '||') cur = to
+      // The cd leaves $OLDPWD the folder it left, if it runs.
+      const sure = pt.after === '&&' && pt.before !== '||'
+      olds = sure ? [...cur] : withDirs([...olds], ...cur)
+      if (sure) cur = to
       else if (pt.after === '||') list = withDirs(list, ...to)
       else cur = withDirs(cur, ...to)
     } else if (!inPipe && !pt.text.startsWith('(') && hasCd(pt.text)) {
+      olds = withDirs([...olds], ...cur, '')
       cur = withDirs(cur, '')
     }
     hidden ||= runsHidden(pt.text)
-    if (hidden) cur = withDirs(cur, '')
+    if (hidden) {
+      olds = withDirs([...olds], '')
+      cur = withDirs(cur, '')
+    }
     list = withDirs(list, ...cur)
     if (listEnd(pt.after)) cur = list
   }
@@ -571,7 +600,7 @@ function judgeCommands(r0: Rules, has: (id: string) => boolean, part: string, cw
   const fl: Rules = { ...r0, cwd }
   const r: Rules = cwd !== '' ? { ...r0, cwd } : r0
   let split = false
-  for (const words of commands(part)) {
+  for (const words of commands(part, false, p => worktreeScript(fl, p))) {
     const argv = strip(words)
     // Only a word that looks like a path: 2>&1 splits the same way.
     if (split && words.length > 0 && (/[/\\]/.test(words[0]) || words[0].startsWith('~'))) {
@@ -942,24 +971,12 @@ function topLevel(line: string): LinePart[] | null {
       const h = { delim: '', tabs: s[j] === '-', part: -1 }
       if (h.tabs) j++
       while (s[j] === ' ' || s[j] === '\t') j++
-      let quoted = false
-      while (j < s.length && !' \t\n;&|<>()'.includes(s[j])) {
-        const q = s[j]
-        if (q === "'" || q === '"') {
-          quoted = true
-          const end = s.indexOf(q, j + 1)
-          if (end < 0) return null
-          h.delim += s.slice(j + 1, end).join('')
-          j = end + 1
-        } else if (q === '\\') {
-          quoted = true
-          h.delim += s[j + 1] ?? ''
-          j += 2
-        } else h.delim += s[j++]
-      }
-      // A word bash may end elsewhere ($'EOF', E$(x)F): commands reads
-      // its body as commands.
-      if ((h.delim === '' && !quoted) || /[$`\n]/.test(h.delim)) return null
+      const dw = docWord(s, j)
+      // A word the guard can't read for sure: commands reads the rest as
+      // commands.
+      if (!dw.sure || (dw.delim === '' && !dw.quoted)) return null
+      h.delim = dw.delim
+      j = dw.end
       b += s.slice(i, j).join('')
       open.push(h)
       docs = true
@@ -997,7 +1014,7 @@ function topLevel(line: string): LinePart[] | null {
   }
   if (stack.length > 0) return null
   cut('')
-  if (docs && parts.some(p => commands(p.text).some(w => readsHeredoc(w) || (p.before === '|' && SHELLS.has(base(strip(w)[0] ?? '')))))) return null
+  if (docs && parts.some(p => commands(p.text).some(w => readsInput(w, p.before === '|')))) return null
   return parts
 }
 
@@ -1015,9 +1032,20 @@ function judgeNoWrite(r: Rules, cmd: string, args: string[], words: string[]): D
   const refuse = (w: string, parents: boolean): Denial | null => {
     // A descriptor (2>&1) or a process substitution (> >(tee f)).
     if (w === '' || w.startsWith('&') || /^[<>]\(/.test(w)) return null
-    // $PWD and ~+ are the line's folder: a path from one is a relative one.
-    w = w.replace(/^(\$PWD|\$\{PWD\}|~\+)(?=\/|$)/, '.')
-    if (r.lineCd && lineFolder(w, r.line ?? '')) return floor(folderVarCd(r, `${cmd} of ${safe(w)} after a cd`))
+    // A path from a folder the line has been in is judged from each
+    // folder that may be: $PWD from the line's, $OLDPWD from those
+    // before it (olds), $PWD changed by an operator from none.
+    const at = folderStart(w)
+    if (at) {
+      const dirs = at.kind === 'cur' ? [r.cwd ?? ''] : at.kind === 'old' ? (r.olds ?? ['']) : ['']
+      for (const d of dirs) {
+        if (d === '') return floor(at.kind === 'cur' ? lostCd(r, `${cmd} of ${safe(w)} after a cd`) : unplaced(r, `${cmd} of ${safe(w)}`))
+        const dd = refuse(d + w.slice(at.len), parents)
+        if (dd) return dd
+      }
+      return null
+    }
+    if (r.lineCd && lineFolder(w, r.line ?? '')) return floor(unplaced(r, `${cmd} of ${safe(w)} after a cd`))
     if (r.cwd === '' && !slash(w).startsWith('/') && !w.startsWith('~') && !w.startsWith('$') && !DRIVE.test(slash(w))) {
       return floor(lostCd(r, `${cmd} of ${safe(w)} after a cd`))
     }
@@ -1084,22 +1112,38 @@ function judgeNoWrite(r: Rules, cmd: string, args: string[], words: string[]): D
   return null
 }
 
-// LINE_FOLDERS are the variables a cd sets: $PWD (plain, the line's
-// folder), $OLDPWD, $DIRSTACK, and $_ (the last word of the command
-// before: the cd's folder).
-const LINE_FOLDERS = new Set(['PWD', 'OLDPWD', 'DIRSTACK', '_'])
+// The forms a path may start with that are the line's folder (cur):
+// $PWD, ${PWD} and the expansions that keep its value (${PWD:-x}), pwd
+// substituted, ~+, $DIRSTACK and ${DIRSTACK[0]}; a folder it was in
+// before (old): $OLDPWD and the like, ~-, a ~N or ${DIRSTACK[N]} of the
+// folder stack, dirs substituted; and $PWD, $OLDPWD or $DIRSTACK changed
+// by an operator (changed: ${PWD%/*}, ${PWD/a/b}), which may be anything.
+const CUR_FOLDER = /^(?:\$PWD\b|\$\{PWD(?::?[-=?][^}]*)?\}|\$\(\s*pwd(?:\s+-[LP]+)*\s*\)|`\s*pwd(?:\s+-[LP]+)*\s*`|~\+(?=\/|$)|\$DIRSTACK\b|\$\{DIRSTACK(?:\[0\])?\})/
+const OLD_FOLDER = /^(?:\$OLDPWD\b|\$\{OLDPWD(?::?[-=?][^}]*)?\}|~(?:-[0-9]*|\+?[0-9]+)(?=\/|$)|\$\{DIRSTACK\[[^\]]*\]\}|\$\(\s*dirs\b[^)]*\)|`\s*dirs\b[^`]*`)/
+const CHANGED_FOLDER = /^\$\{[#!]?(?:PWD|OLDPWD|DIRSTACK)\b[^}]*\}/
 
-// lineFolder: path w starts with a folder that a cd on line can change:
-// ~-, a substitution ($(pwd), backticks), a positional or special
-// parameter ($1, $@, ${!x}), one of LINE_FOLDERS, or a variable the line
-// may set (assigns).
+// folderStart: path w starts with a form of a folder the line has been
+// in: which kind, and how long the form is.
+function folderStart(w: string): { kind: 'cur' | 'old' | 'changed'; len: number } | null {
+  let m = CUR_FOLDER.exec(w)
+  if (m) return { kind: 'cur', len: m[0].length }
+  m = OLD_FOLDER.exec(w)
+  if (m) return { kind: 'old', len: m[0].length }
+  m = CHANGED_FOLDER.exec(w)
+  return m ? { kind: 'changed', len: m[0].length } : null
+}
+
+// lineFolder: path w starts with a folder that a cd on line can change
+// and folderStart doesn't place: $_ (the last word of the command
+// before: the cd's folder), a substitution, a positional or special
+// parameter ($1, $@, ${!x}), or a variable the line may set (assigns).
 function lineFolder(w: string, line: string): boolean {
-  if (/^~-(\/|$)/.test(w) || w.startsWith('`') || w.startsWith('$(')) return true
+  if (w.startsWith('`') || w.startsWith('$(')) return true
   if (!w.startsWith('$')) return false
   const m = /^\$(?:\{([A-Za-z_][A-Za-z0-9_]*)|([A-Za-z_][A-Za-z0-9_]*))/.exec(w)
   if (!m) return true
   const name = m[1] ?? m[2]
-  return LINE_FOLDERS.has(name) || assigns(line, name)
+  return name === '_' || assigns(line, name)
 }
 
 // assigns: line names variable name other than to expand it, as an
@@ -1530,7 +1574,7 @@ type Heredoc = { delim: string; tabs: boolean; quoted: boolean; body: string; od
 // A heredoc's body is read as commands when the line has a shell to run
 // it; otherwise only what it substitutes is. In arithmetic (arith) << is
 // a shift, no heredoc.
-export function commands(line: string, arith = false): string[][] {
+export function commands(line: string, arith = false, script?: (p: string) => boolean): string[][] {
   const out: string[][] = []
   let inner: string[][] = []
   let words: string[] = []
@@ -1562,7 +1606,7 @@ export function commands(line: string, arith = false): string[][] {
   }
   // text is literal text of the word.
   const text = (t: string) => {
-    if (!hasLit && word !== '' && t.startsWith('/')) lit = word
+    if (!hasLit && word !== '' && (t.startsWith('/') || CUR_FOLDER.test(word) || OLD_FOLDER.test(word))) lit = word
     word += t
     lit += t
     inWord = true
@@ -1571,8 +1615,7 @@ export function commands(line: string, arith = false): string[][] {
   const endCommand = () => {
     endWord()
     if (words.length) {
-      const argv = strip(words)
-      if (fed && argv.length > 0 && SHELLS.has(base(argv[0]))) fedShell = true
+      if (fed && readsInput(words, true, script)) fedShell = true
       fed = false
       out.push(words)
     }
@@ -1713,28 +1756,12 @@ export function commands(line: string, arith = false): string[][] {
         j++
       }
       while (line[j] === ' ' || line[j] === '\t') j++
-      while (j < line.length && !' \t\n;&|<>()'.includes(line[j])) {
-        const q = line[j]
-        if (q === "'" || q === '"') {
-          h.quoted = true
-          let end = line.indexOf(q, j + 1)
-          if (end < 0) {
-            end = line.length
-            h.odd = true
-          }
-          h.delim += line.slice(j + 1, end)
-          j = end + 1
-        } else if (q === '\\') {
-          h.quoted = true
-          h.delim += line[j + 1] ?? ''
-          j += 2
-        } else {
-          h.delim += q
-          j++
-        }
-      }
+      const dw = docWord(line, j)
+      h.delim = dw.delim
+      h.quoted = dw.quoted
+      h.odd = !dw.sure
+      j = dw.end
       if (h.delim !== '' || h.quoted) {
-        h.odd ||= /[$`\n]/.test(h.delim)
         words.push(h.delim)
         open.push(h)
       }
@@ -1757,7 +1784,7 @@ export function commands(line: string, arith = false): string[][] {
   if (docs.length) {
     // A shell anywhere on the line (ssh host bash, docker exec -i c sh)
     // may run what a heredoc gives it.
-    const shell = fedShell || out.some(readsHeredoc)
+    const shell = fedShell || out.some(w => readsInput(w, false, script))
     for (const h of docs) {
       // The line's own shell expands an unquoted body first.
       if (!h.quoted) for (const s of substitutions(h.body)) out.push(...commands(s))
@@ -1789,42 +1816,184 @@ function ansiC(t: string): string {
   })
 }
 
-// readsHeredoc: the simple command w (its words) may run what a heredoc
-// gives it: a shell or the like reading commands from its input, or a
+// readsInput: the simple command w (its words) may run what a heredoc
+// gives it: a shell or the like reading commands from its input, a
 // shell word anywhere in it (ssh host bash, docker exec -i c sh), or an
 // exec (exec <<EOF gives the line's later commands the heredoc as their
-// input); not a shell that runs a script file (bash x.sh) with no input
-// of its own (<), which reads none. A shell a pipe feeds (cat <<EOF |
-// bash x.sh) is commands' to tell.
-function readsHeredoc(w: string[]): boolean {
+// input). A shell that runs a script file reads none while nothing is
+// given it, nor when a pipe feeds it (fed) or a redirect does, if the
+// script is a regular file of the worktree (script); options or
+// variables that make it read more (-i, --rcfile, BASH_ENV=) count as
+// reading.
+function readsInput(w: string[], fed: boolean, script?: (p: string) => boolean): boolean {
   const argv = strip(w)
-  if (argv.length > 0 && SHELLS.has(base(argv[0])) && runsScript(unredirected(argv.slice(1))) && !w.includes('<')) return argv.slice(1).some(a => SHELLS.has(base(a)))
+  if (argv.length > 0 && SHELLS.has(base(argv[0]))) {
+    const run = shellRun(unredirected(argv.slice(1)))
+    const pre = w.slice(0, Math.max(0, w.length - argv.length))
+    if (run.file === null || run.extra || pre.some(a => EXTRA_ENV.test(a)) || !scriptFile(run.file)) return true
+    if ((fed || w.includes('<')) && !script?.(run.file)) return true
+    return argv.slice(1).some(a => SHELLS.has(base(a)))
+  }
   return (argv.length > 0 && (STDIN_SHELLS.has(base(argv[0])) || argv[0] === 'exec')) || w.some(a => SHELLS.has(base(a)))
 }
 
-// runsScript: a shell given args runs a script file, the first argument
-// that is no option, rather than commands from its input (-s) or a
-// string (-c); -o and -O, --rcfile and --init-file take a value. The
-// file is a path written out, not one that may be its input
-// (/dev/stdin, /proc/self/fd/0, a variable).
-function runsScript(args: string[]): boolean {
+// EXTRA_ENV are the assignments that make a shell read a file first:
+// bash's BASH_ENV, sh's ENV, zsh's ZDOTDIR (its .zshenv).
+const EXTRA_ENV = /^(BASH_ENV|ENV|ZDOTDIR)=/
+
+// shellRun is how a shell given args runs: the script file it runs, the
+// first argument that is no option (null when it runs commands from its
+// input, -s, or a string, -c, or nothing is given), and extra: an
+// option makes it read more (-i, --interactive, --rcfile, --init-file).
+// -o and -O take a value.
+function shellRun(args: string[]): { file: string | null; extra: boolean } {
+  let extra = false
   for (let i = 0; i < args.length; i++) {
     const a = args[i]
-    if (a === '--') return i + 1 < args.length && scriptFile(args[i + 1])
-    if (a === '--rcfile' || a === '--init-file') i++
+    if (a === '--') return { file: i + 1 < args.length ? args[i + 1] : null, extra }
+    if (isLong(a, '--rcfile') || isLong(a, '--init-file')) {
+      extra = true
+      if (!a.includes('=')) i++
+    } else if (isLong(a, '--interactive')) extra = true
     else if (/^[-+][a-zA-Z]+$/.test(a)) {
-      if (/[sc]/.test(a.slice(1))) return false
+      if (/[sc]/.test(a.slice(1))) return { file: null, extra }
+      if (a.startsWith('-') && a.includes('i')) extra = true
       if (/[oO]/.test(a)) i++
-    } else if (!a.startsWith('-')) return scriptFile(a)
+    } else if (!a.startsWith('-')) return { file: a, extra }
   }
-  return false
+  return { file: null, extra }
 }
 
 // scriptFile: a is a script's path written out, which can't be the
-// shell's input: none of its parts is dev, proc or fd (/./dev/stdin,
-// dev/fd/0 from /), .. or a . but a leading one.
+// shell's input: no variable or substitution in it, and, made clean, no
+// path under /dev or /proc (/./dev/stdin) or, relative, with a part dev,
+// proc or fd (dev/fd/0 from /).
 function scriptFile(a: string): boolean {
-  return a !== '' && !/[$`<>()]/.test(a) && !/(^|\/)(dev|proc|fd|\.\.)(\/|$)/.test(a) && !/\/\.(\/|$)/.test(a)
+  if (a === '' || /[$`<>()]/.test(a)) return false
+  const c = clean(slash(a))
+  return c.startsWith('/') ? !/^\/(dev|proc)(\/|$)/.test(c) : !/(^|\/)(dev|proc|fd)(\/|$)/.test(c)
+}
+
+// clean is path p with its . and .. parts worked out (.. at the root, or
+// leading a relative path, kept).
+function clean(p: string): string {
+  const root = p.startsWith('/')
+  const out: string[] = []
+  for (const s of p.split('/')) {
+    if (s === '' || s === '.') continue
+    if (s === '..' && out.length > 0 && out[out.length - 1] !== '..') out.pop()
+    else if (s !== '..' || !root) out.push(s)
+  }
+  return (root ? '/' : '') + out.join('/')
+}
+
+// worktreeScript: a shell run on line's folder r.cwd ('' unknown) runs p,
+// a regular file inside the thread's worktree once its links are
+// followed (resolve, files: what the server answered).
+function worktreeScript(r: Rules, p: string): boolean {
+  if (!r.wt || !r.resolve || !r.files || !scriptFile(p)) return false
+  if (r.cwd === '' && !slash(p).startsWith('/') && !p.startsWith('~')) return false
+  const j = joined(r, p)
+  const at = abs(r, r.resolve(j))
+  return !/^\/(dev|proc)(\/|$)/.test(at) && under(r, at, r.wt) && r.files(j)
+}
+
+// scriptTargets are the scripts the shell commands of the call of tool
+// with input may run with a heredoc given, made absolute from the
+// session's folder but not cleaned: what r.resolve and r.files are
+// asked about.
+export function scriptTargets(r: Rules, tool: string, input: Record<string, unknown>): string[] {
+  const t = r.tools && Object.hasOwn(r.tools, tool) ? r.tools[tool] : undefined
+  if (!r.on || !worktreeOf(r) || !t || t.kind !== 'shell' || t.syntax) return []
+  const out = new Set<string>()
+  for (const f of t.fields ?? []) {
+    const c = input[f]
+    if (typeof c !== 'string' || !c.includes('<<')) continue
+    for (const w of commands(c)) {
+      const argv = strip(w)
+      if (argv.length === 0 || !SHELLS.has(base(argv[0]))) continue
+      const run = shellRun(unredirected(argv.slice(1)))
+      if (run.file !== null && scriptFile(run.file)) out.add(joined(r, run.file))
+    }
+  }
+  return [...out]
+}
+
+// docWord is a heredoc's word as bash reads it from s[j]: the word that
+// ends the body, with quotes removed ('…', "…" with its \$ \` \" \\, \x,
+// $'…' with its escapes) and substitutions kept as written (E$(x)F);
+// whether some of it was quoted; the index after it; and sure: false
+// where bash and zsh read it apart or the guard can't tell where the
+// body ends ($"…", a newline in it, a substitution with a blank or a
+// quote in it or left open, a quote left open, a word that starts a
+// comment).
+function docWord(s: ArrayLike<string>, j: number): { delim: string; quoted: boolean; end: number; sure: boolean } {
+  let delim = ''
+  let quoted = false
+  let sure = s[j] !== '#'
+  while (j < s.length && !' \t\n;&|<>()'.includes(s[j])) {
+    const c = s[j]
+    if (c === "'") {
+      quoted = true
+      let k = j + 1
+      while (k < s.length && s[k] !== "'") delim += s[k++]
+      if (k >= s.length) sure = false
+      j = k + 1
+    } else if (c === '"') {
+      quoted = true
+      let k = j + 1
+      while (k < s.length && s[k] !== '"') {
+        if (s[k] === '\\' && k + 1 < s.length && '$`"\\'.includes(s[k + 1])) {
+          delim += s[k + 1]
+          k += 2
+        } else delim += s[k++]
+      }
+      if (k >= s.length) sure = false
+      j = k + 1
+    } else if (c === '\\') {
+      quoted = true
+      if (j + 1 >= s.length || s[j + 1] === '\n') sure = false
+      else delim += s[j + 1]
+      j += 2
+    } else if (c === '$' && s[j + 1] === "'") {
+      quoted = true
+      const k = ansiEnd(s, j + 2)
+      if (k >= s.length) sure = false
+      let t = ''
+      for (let x = j + 2; x < k; x++) t += s[x]
+      delim += ansiC(t)
+      j = k + 1
+    } else if (c === '$' && s[j + 1] === '"') {
+      // bash's locale string, zsh's $ and a quoted string.
+      sure = false
+      delim += c
+      j++
+    } else if ((c === '$' && (s[j + 1] === '(' || s[j + 1] === '{' || s[j + 1] === '[')) || c === '`') {
+      // A substitution: its text as written, to the close of its bracket.
+      const open = c === '`' ? '`' : s[j + 1]
+      const close = open === '(' ? ')' : open === '{' ? '}' : open === '[' ? ']' : '`'
+      let k = c === '`' ? j + 1 : j + 2
+      let depth = 1
+      for (; k < s.length; k++) {
+        if (' \t\n\'"\\'.includes(s[k])) break
+        if (s[k] === close && --depth === 0) break
+        if (s[k] === open) depth++
+      }
+      if (k >= s.length || s[k] !== close) {
+        sure = false
+        for (let x = j; x < k; x++) delim += s[x]
+        j = k
+      } else {
+        for (let x = j; x <= k; x++) delim += s[x]
+        j = k + 1
+      }
+    } else {
+      delim += c
+      j++
+    }
+  }
+  if (delim.includes('\n')) sure = false
+  return { delim, quoted, end: Math.min(j, s.length), sure }
 }
 
 // substitutions are the insides of the $( ) and backticks in s, which run

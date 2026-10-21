@@ -433,7 +433,7 @@ func guardVerdict(g guard.Rules, cmd string) (string, string) {
 	if tool == "" {
 		return "allowed", "the agent has no shell tool the guard judges"
 	}
-	g.Resolve = realTarget
+	g.Resolve, g.File = realTarget, regularFile
 	d := g.Judge(tool, map[string]any{field: cmd})
 	switch {
 	case d == nil:

@@ -34,7 +34,7 @@
 import { atom, update } from 'claude-code'
 import type { EngineInterface, On } from 'claude-code'
 
-import { judge, off, RULE_ESCAPE, RULE_EXCLUDED, rulesOf, writeTargets } from './guard'
+import { judge, off, RULE_ESCAPE, RULE_EXCLUDED, rulesOf, scriptTargets, writeTargets } from './guard'
 import type { Denial, Rules } from './guard'
 import { failed, FETCH_MS, postInit, refused, socketURL, timedOut, within } from './socket'
 import { initialTurn, step, waitKey } from './turn'
@@ -164,32 +164,41 @@ async function fetchRules($: EngineInterface, socket: string, now: number): Prom
 }
 
 // placed is r with resolve answering where each file the call writes
-// lands, as the server says (POST /v1/resolve); r itself when the call
-// writes no file a rule judges. Null when the server can't say in time.
+// lands, and the scripts a shell given a heredoc may run (scriptTargets)
+// with files whether each is a regular file, as the server says (POST
+// /v1/resolve); r itself when the call writes no file a rule judges and
+// runs no such script. Null when the server can't say in time where a
+// write lands; r itself when it can't for a script (a shell given
+// input then reads it as commands).
 async function placed($: EngineInterface, r: Rules, tool: string, input: Record<string, unknown>): Promise<Rules | null> {
-  const paths = writeTargets(r, tool, input)
+  const writes = writeTargets(r, tool, input)
+  const paths = [...new Set([...writes, ...scriptTargets(r, tool, input)])]
   if (paths.length === 0) return r
+  const unplaced = writes.length > 0 ? null : r
   try {
     const socket = (await $.env.get('TERMINATR_MOD_SOCKET')) ?? ''
     const got = socket ? await within($.http.fetch(socketURL('/v1/resolve'), postInit(socket, JSON.stringify({ paths }))), $.clock.sleep(FETCH_MS)) : null
     if (!got) {
       log($, socket ? timedOut('guard resolve') : 'terminatr: guard resolve: no mod socket')
-      return null
+      return unplaced
     }
     if (!got.ok) {
       log($, refused('guard resolve', got.status, got.text))
-      return null
+      return unplaced
     }
-    const lands = (JSON.parse(got.text) as { paths?: unknown }).paths
+    const answer = JSON.parse(got.text) as { paths?: unknown; files?: unknown }
+    const lands = answer.paths
     if (!Array.isArray(lands) || lands.length !== paths.length || !lands.every(p => typeof p === 'string' && p !== '')) {
       log($, `terminatr: guard resolve: unexpected answer ${got.text}`)
-      return null
+      return unplaced
     }
     const at = new Map(paths.map((p, i) => [p, lands[i] as string]))
-    return { ...r, resolve: p => at.get(p) ?? p }
+    const files = Array.isArray(answer.files) ? answer.files : []
+    const regular = new Set(paths.filter((_, i) => files[i] === true))
+    return { ...r, resolve: p => at.get(p) ?? p, files: p => regular.has(p) }
   } catch (err) {
     log($, failed('guard resolve', err))
-    return null
+    return unplaced
   }
 }
 
