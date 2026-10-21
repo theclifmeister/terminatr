@@ -4335,14 +4335,18 @@ var funLead = setOf("! time -p if then elif else while until do")
 // is in command position where a command starts (after ;, &, |, &&, ||,
 // a newline or a (, or after a reserved word that is itself in command
 // position), never after an argument or right after a redirect (its
-// word is the target); a { opens a group only there, and a } closes
-// (the body or a group) only as a whole word after ;, & or a newline,
-// a blank, an operator or the end after it (or, within double quotes,
-// dq, the closing quote). false where the guard can't tell the end for
-// sure: none, a comment, a heredoc, or a } anywhere else (${ echo }, a}b,
-// {a,b}, ${ a && }, a ${x:-…} holding a ${ cmd; }).
+// word is the target). A { of its own (a blank or an operator after it)
+// opens a group there or right after a ), and a } closes (the body or
+// a group) only as a whole word after ;, & or a newline, a blank, an
+// operator or the end after it (or, within double quotes, dq, the
+// closing quote or another expansion), with no group left open. false
+// where the guard can't tell the end for sure: none, a comment, a
+// heredoc, a } anywhere else (${ echo }, a}b, {a,b}, ${ a && }, a
+// ${x:-…} holding a ${ cmd; }), or a group it may miss: any other { of
+// its own, a ( ) pair (a function's name()), function, coproc or case
+// where a command starts.
 func funEnd(s []rune, i int, dq bool) (int, bool) {
-	cmd, closes, target := true, false, false
+	cmd, closes, target, after := true, false, false, false
 	groups, parens := 0, 0
 	j := i + 2
 	if j < len(s) && s[j] == '|' {
@@ -4365,6 +4369,11 @@ func funEnd(s []rune, i int, dq bool) (int, bool) {
 			}
 			target, j = false, k-1
 			continue
+		}
+		// paren: the token before this one was a ).
+		paren := false
+		if c != ' ' && c != '\t' {
+			paren, after = after, false
 		}
 		switch {
 		case c == ' ' || c == '\t':
@@ -4391,6 +4400,13 @@ func funEnd(s []rune, i int, dq bool) (int, bool) {
 			}
 			target, closes = true, false
 		case c == '(':
+			k := j + 1
+			for k < len(s) && (s[k] == ' ' || s[k] == '\t') {
+				k++
+			}
+			if k < len(s) && s[k] == ')' {
+				return 0, false // name() { …: a function's body
+			}
 			parens++
 			cmd, closes = true, false
 		case c == ')':
@@ -4398,7 +4414,7 @@ func funEnd(s []rune, i int, dq bool) (int, bool) {
 				return 0, false
 			}
 			parens--
-			cmd, closes = false, false
+			cmd, closes, after = false, false, true
 		case c == '}':
 			if !closes || parens > 0 || !funSep(s, j+1, dq && groups == 0) {
 				return 0, false
@@ -4408,9 +4424,12 @@ func funEnd(s []rune, i int, dq bool) (int, bool) {
 			}
 			groups--
 			cmd, closes = false, false
-		case c == '{' && cmd && (next == ' ' || next == '\t' || next == '\n'):
+		case c == '{' && (j+1 >= len(s) || strings.ContainsRune(" \t\n;&|()<>", next)):
+			if !cmd && !paren {
+				return 0, false
+			}
 			groups++
-			closes = false
+			cmd, closes = true, false
 		case c == '#':
 			return 0, false
 		default:
@@ -4418,7 +4437,11 @@ func funEnd(s []rune, i int, dq bool) (int, bool) {
 			if !ok {
 				return 0, false
 			}
-			cmd = cmd && funLead[string(s[j:k])]
+			w := string(s[j:k])
+			if cmd && (w == "function" || w == "coproc" || w == "case") {
+				return 0, false
+			}
+			cmd = cmd && funLead[w]
 			closes = false
 			j = k - 1
 		}
@@ -4427,9 +4450,10 @@ func funEnd(s []rune, i int, dq bool) (int, bool) {
 }
 
 // funSep: s[k] may follow a } that closes (funEnd): the end, a blank, an
-// operator, or, within double quotes (dq), the closing quote.
+// operator, or, within double quotes (dq), the closing quote or another
+// expansion ("${ a; }${ b; }").
 func funSep(s []rune, k int, dq bool) bool {
-	return k >= len(s) || strings.ContainsRune(" \t\n;&|()<>", s[k]) || dq && s[k] == '"'
+	return k >= len(s) || strings.ContainsRune(" \t\n;&|()<>", s[k]) || dq && strings.ContainsRune("\"$`", s[k])
 }
 
 // funWord is the index after the word at s[j] in a ${ cmd; } body
@@ -4576,7 +4600,10 @@ func tickClose(s []rune, i int) int {
 	return len(s)
 }
 
-var assignment = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*=`)
+// assignment is a word bash takes as an assignment before a command (and
+// env as one it sets): a name, a [subscript] or none, a + or none, then
+// = (a=1, a+=1, a[0]=1, a[k]+=1).
+var assignment = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*(?:\[[^=]*\])?\+?=`)
 
 // wrapper is how a command that runs another reads its own options: the
 // short ones that take a value (-n 5, -n5), the long ones that do (--x v;
