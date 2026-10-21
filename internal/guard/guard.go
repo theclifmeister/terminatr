@@ -174,6 +174,9 @@ type Rules struct {
 	// trapFrom is where the trap actions the line being read sets start
 	// in ps.traps (judgeLine).
 	trapFrom int
+	// sub: the line is a group's or a substitution's (walkLine), which
+	// the traps set before it may run in too.
+	sub bool
 }
 
 // ModRule is a guard rule a mod adds (mods design §7, Tighten only): the
@@ -1097,9 +1100,10 @@ func (r Rules) walkLine(command string, cwds []string) (d *Denial, end, endOlds 
 	// The trap actions set from here, and the folders the line may be
 	// in from the first on.
 	from := 0
-	if r.ps != nil {
+	if r.ps != nil && !r.sub {
 		from = len(r.ps.traps)
 	}
+	r.sub = false
 	trapped := func() bool { return r.ps != nil && len(r.ps.traps) > from }
 	var trapDirs []string
 	for i, pt := range parts {
@@ -1128,10 +1132,23 @@ func (r Rules) walkLine(command string, cwds []string) (d *Denial, end, endOlds 
 				return d, nil, nil
 			}
 		}
-		// Its group's own commands, from the part's folders on.
+		// Its group's own commands, from the part's folders on, and
+		// those of each substitution it runs in a subshell (the group's
+		// own walk reads those in it), which moves nothing after.
 		var gEnd, gOlds []string
-		if pt.group != nil {
-			if d, gEnd, gOlds = rp.nested().walkLine(pt.group.inner, cur); d != nil || r.spent() {
+		subs := pt.text
+		if g := pt.group; g != nil {
+			subs = g.lead + " " + g.tail
+			rg := rp.nested()
+			rg.sub = true
+			if d, gEnd, gOlds = rg.walkLine(g.inner, cur); d != nil || r.spent() {
+				return d, nil, nil
+			}
+		}
+		for _, in := range r.subsOf(subs) {
+			rs := rp.nested()
+			rs.sub = true
+			if d, _, _ := rs.walkLine(in, cur); d != nil || r.spent() {
 				return d, nil, nil
 			}
 		}
@@ -2215,10 +2232,11 @@ func accessOpen(args []string) bool {
 type nowhere struct{ dir string }
 
 // cd is where cmd (cd, pushd, popd) with args leaves the line: a
-// folder it names plainly, home for none, else unknown: a pattern or
-// braces (cd ~/.term*) may name another folder, and so may a relative
-// one CDPATH looks up, when the line sets it. Its redirections (pushd x
-// >/dev/null) are no folder. A physical cd (cd -P, or one the line may
+// folder it names plainly, home for none, else unknown: an entry of the
+// folder stack (+N, -N) may be any folder, a pattern or braces (cd
+// ~/.term*) may name another, and so may a relative one CDPATH looks
+// up, when the line sets it. Its redirections (pushd x >/dev/null) are
+// no folder. A physical cd (cd -P, or one the line may
 // have made physical: physicalCd) leaves the folder with its links
 // followed (Resolve), so its .. is the real parent; where the guard
 // can't follow them, or can't tell a logical cd from a physical one
@@ -2227,6 +2245,9 @@ func (n nowhere) cd(r Rules, cmd string, args []string) nowhere {
 	var to []string
 	mode := byte(0)
 	for _, a := range unredirected(args) {
+		if stackIndex.MatchString(a) {
+			return nowhere{} // cd +1, pushd -2: an entry of the folder stack
+		}
 		if !strings.HasPrefix(a, "-") || a == "-" {
 			to = append(to, a)
 		} else if i := strings.LastIndexAny(a, "LP"); i > 0 && !strings.HasPrefix(a, "--") {
@@ -2266,6 +2287,10 @@ func (n nowhere) cd(r Rules, cmd string, args []string) nowhere {
 	}
 	return nowhere{dir: dir}
 }
+
+// stackIndex is an argument of cd, pushd or popd that names an entry of
+// the folder stack (+N, -N), not a folder or an option.
+var stackIndex = regexp.MustCompile(`^[+-][0-9]+$`)
 
 // physicalCd is a line that may make its cds physical: bash's set -P or
 // set -o physical (or a shell started with them), zsh's chase_links or
@@ -2887,6 +2912,21 @@ type parse struct {
 	// file).
 	resolved map[string]string
 	files    map[string]bool
+	// subs, while collect, are the insides of the substitutions read at
+	// depth at (subsOf).
+	collect bool
+	at      int
+	subs    []string
+}
+
+// sub reads body, the inside of a substitution ($( ), backticks, <( ),
+// >( )) that runs in a subshell of a line read at depth, one level
+// deeper; while collecting at depth, it is kept too.
+func (p *parse) sub(body string, depth int) [][]string {
+	if p.collect && depth == p.at {
+		p.subs = append(p.subs, body)
+	}
+	return p.read(body, false, nil, depth+1)
 }
 
 // spent reports whether the judge's reading went past its limits (or
@@ -2901,6 +2941,21 @@ func (r Rules) nested() Rules {
 		r.ps.stop(0, r.depth)
 	}
 	return r
+}
+
+// subsOf are the insides of the substitutions text runs in subshells of
+// its own as it is expanded, those in them not counted: read with the
+// judge's budget.
+func (r Rules) subsOf(text string) []string {
+	if r.ps == nil {
+		return nil
+	}
+	p := r.ps
+	p.collect, p.at, p.subs = true, r.depth, nil
+	p.read(text, false, nil, r.depth)
+	subs := p.subs
+	p.collect, p.subs = false, nil
+	return subs
 }
 
 // cmds are the commands of line as Commands reads them, read with the
@@ -3034,12 +3089,12 @@ func (p *parse) read(line string, arith bool, script func(string) bool, depth in
 					j += 2
 				case s[j] == '$' && j+1 < len(s) && s[j+1] == '(':
 					end := closing(s, j+2, '(', ')')
-					out = append(out, p.read(string(s[j+2:end]), false, nil, depth+1)...)
+					out = append(out, p.sub(string(s[j+2:end]), depth)...)
 					q.WriteString(string(s[j:min(end+1, len(s))]))
 					j = end + 1
 				case s[j] == '`':
 					end := tickClose(s, j+1)
-					out = append(out, p.read(string(s[j+1:end]), false, nil, depth+1)...)
+					out = append(out, p.sub(string(s[j+1:end]), depth)...)
 					q.WriteString(string(s[j:min(end+1, len(s))]))
 					j = end + 1
 				default:
@@ -3077,20 +3132,20 @@ func (p *parse) read(line string, arith bool, script func(string) bool, depth in
 			// or backtick in it still runs.
 			end := closing(s, i+2, '{', '}')
 			for _, in := range substitutions(string(s[i+2 : end])) {
-				out = append(out, p.read(in, false, nil, depth+1)...)
+				out = append(out, p.sub(in, depth)...)
 			}
 			text(string(s[i:min(end+1, len(s))]))
 			i = end
 		case c == '$' && i+1 < len(s) && s[i+1] == '(':
 			// A command substitution is a word of the command it is in.
 			end := closing(s, i+2, '(', ')')
-			inner = append(inner, p.read(string(s[i+2:end]), false, nil, depth+1)...)
+			inner = append(inner, p.sub(string(s[i+2:end]), depth)...)
 			word.WriteString(string(s[i:min(end+1, len(s))]))
 			inWord = true
 			i = end
 		case c == '`':
 			end := tickClose(s, i+1)
-			inner = append(inner, p.read(string(s[i+1:end]), false, nil, depth+1)...)
+			inner = append(inner, p.sub(string(s[i+1:end]), depth)...)
 			word.WriteString(string(s[i:min(end+1, len(s))]))
 			inWord = true
 			i = end
@@ -3131,7 +3186,7 @@ func (p *parse) read(line string, arith bool, script func(string) bool, depth in
 			// command (cp <(x) f copies to f), its inside read as commands
 			// too.
 			end := closing(s, i+2, '(', ')')
-			inner = append(inner, p.read(string(s[i+2:end]), false, nil, depth+1)...)
+			inner = append(inner, p.sub(string(s[i+2:end]), depth)...)
 			word.WriteString(string(s[i:min(end+1, len(s))]))
 			inWord = true
 			i = end
@@ -3185,7 +3240,7 @@ func (p *parse) read(line string, arith bool, script func(string) bool, depth in
 			if !h.quoted {
 				// The line's own shell expands it first.
 				for _, in := range substitutions(h.body) {
-					out = append(out, p.read(in, false, nil, depth+1)...)
+					out = append(out, p.sub(in, depth)...)
 				}
 			}
 			if shell || h.odd {
