@@ -924,6 +924,9 @@ func defaultWord(w string) (string, bool) {
 // pushes is a pushd or popd word on a line.
 var pushes = regexp.MustCompile("(?m)(^|[\\s;&|(){}!`])(pushd|popd)([\\s;&|)`]|$)")
 
+// parent is a path with a .. in it (../x, a/../b, ..).
+var parent = regexp.MustCompile(`(^|/)\.\.(/|$)`)
+
 // dotted is a path from . or .. (./x, ../x), which CDPATH doesn't look up.
 var dotted = regexp.MustCompile(`^\.{0,2}(/|$)`)
 
@@ -996,7 +999,7 @@ func (r Rules) lostCd(summary string) *Denial {
 	if r.Role == "thread" {
 		tell = "say so in your report"
 	}
-	m := "after a cd the guard can't follow (to a variable or a substitution, cd -, popd, or one inside { }, if or a loop), a relative path given to a command that writes could be tm's settings or the project folder. Give the path from / or a variable ($TMPDIR/x), cd to a folder written out and join the rest with &&, or run the cd in a call of its own; if none of that fits, " + tell + "."
+	m := "after a cd the guard can't follow (to a variable or a substitution, cd -, popd, or one inside an if or a loop), a relative path given to a command that writes could be tm's settings or the project folder. Give the path from / or a variable ($TMPDIR/x), cd to a folder written out and join the rest with &&, or run the cd in a call of its own; if none of that fits, " + tell + "."
 	return &Denial{Rule: RuleTMFiles, Message: "terminatr guard (" + RuleTMFiles + "): " + m, Summary: summary}
 }
 
@@ -1045,12 +1048,16 @@ func (r Rules) worktreeOf() string {
 // given. A cd (or pushd, popd) moves them only where it is a plain
 // command of the line's top level: joined by && it moves them for what
 // follows in its list, joined by ; or || it adds a folder they may be
-// in (it may fail, or not run); in ( ), a pipeline or the background it
-// moves nothing, and anywhere else ({ }, if, a substitution) it leaves
-// them unknown. A part that runs shell code the line doesn't show
-// (eval, source, ., a trap whose action may move them, also through
-// command or builtin) may move them at any point after, so the rest of
-// the line keeps unknown among them.
+// in (it may fail, or not run); in a pipeline or the background it
+// moves nothing, and anywhere else (if, a loop, a substitution) it
+// leaves them unknown. A part's ( ) or { } (linePart's group) is a line
+// of its own, judged from the part's folders: a cd in it moves them for
+// the rest of the group, and a { } run in the line's own shell, with
+// nothing before it, leaves the line in the folders the group may end
+// in; a ( ) moves nothing after it. A part that runs shell code the
+// line doesn't show (eval, source, ., a trap whose action may move them,
+// also through command or builtin) may move them at any point after, so
+// the rest of the line keeps unknown among them.
 //
 // A trap's action (judgeCommands keeps it in ps.traps, as set here or in
 // a line this one reads: eval, bash -c) may run at any point from the
@@ -1058,6 +1065,13 @@ func (r Rules) worktreeOf() string {
 // arguments are, from each folder the line may be in from the trap on
 // and those it may end in.
 func (r Rules) judgeLine(command string, cwds []string) *Denial {
+	d, _, _ := r.walkLine(command, cwds)
+	return d
+}
+
+// walkLine is judgeLine, and the folders the line may end in and those
+// $OLDPWD may then hold.
+func (r Rules) walkLine(command string, cwds []string) (d *Denial, end, endOlds []string) {
 	if r.line != "" {
 		r.line += "\n"
 	}
@@ -1095,7 +1109,7 @@ func (r Rules) judgeLine(command string, cwds []string) *Denial {
 			r.ps.over = true
 		}
 		if r.spent() {
-			return nil // Judge refuses the call: no part is let through unread
+			return nil, nil, nil // Judge refuses the call: no part is let through unread
 		}
 		if listEnd(pt.before) {
 			list = cur
@@ -1111,14 +1125,29 @@ func (r Rules) judgeLine(command string, cwds []string) *Denial {
 		rp.trapFrom = from
 		for _, c := range cur {
 			if d := rp.judgeCommands(pt.text, c); d != nil || r.spent() {
-				return d
+				return d, nil, nil
+			}
+		}
+		// Its group's own commands, from the part's folders on.
+		var gEnd, gOlds []string
+		if pt.group != nil {
+			if d, gEnd, gOlds = rp.nested().walkLine(pt.group.inner, cur); d != nil || r.spent() {
+				return d, nil, nil
 			}
 		}
 		if trapped() {
 			trapDirs = withDirs(trapDirs, cur...)
 		}
 		inPipe := pt.before == "|" || pt.after == "|" || pt.after == "&"
-		if cmd, args, plain := r.plainCd(pt.text); plain && !inPipe {
+		if g := pt.group; g != nil && g.brace && g.lead == "" && !inPipe && r.hasCd(pt.text) {
+			// A { } in the line's own shell: where it may end, whether
+			// it fails or not.
+			olds, cur = gOlds, gEnd
+			if r.hasCd(g.tail) {
+				olds = withDirs(withDirs(olds, cur...), "")
+				cur = withDirs(cur, "")
+			}
+		} else if cmd, args, plain := r.plainCd(pt.text); plain && !inPipe {
 			var to []string
 			for _, c := range cur {
 				to = withDirs(to, nowhere{dir: c}.cd(r, cmd, args).dir)
@@ -1152,7 +1181,7 @@ func (r Rules) judgeLine(command string, cwds []string) *Denial {
 			default:
 				cur = withDirs(cur, to...)
 			}
-		} else if !inPipe && !strings.HasPrefix(pt.text, "(") && r.hasCd(pt.text) {
+		} else if !inPipe && (pt.group == nil || pt.group.brace || pt.group.lead != "") && r.hasCd(pt.text) {
 			olds = withDirs(withDirs(olds, cur...), "")
 			cur = withDirs(cur, "")
 		}
@@ -1167,7 +1196,7 @@ func (r Rules) judgeLine(command string, cwds []string) *Denial {
 		}
 	}
 	if !trapped() {
-		return nil
+		return nil, cur, olds
 	}
 	// The actions read here may set traps of their own, which their own
 	// reading judges.
@@ -1175,10 +1204,10 @@ func (r Rules) judgeLine(command string, cwds []string) *Denial {
 	rt.olds = withDirs(olds, "")
 	for _, a := range slices.Clone(r.ps.traps[from:]) {
 		if d := rt.judgeLine(a, withDirs(trapDirs, cur...)); d != nil || r.spent() {
-			return d
+			return d, nil, nil
 		}
 	}
-	return nil
+	return nil, cur, olds
 }
 
 // listSep is the separator that ends the and-or list part i is in: ";",
@@ -2274,11 +2303,26 @@ func (r Rules) globReaches(p, root string) bool {
 // linePart is a part of a command line between the separators of its
 // top level (;, newline, &&, ||, |, &): its text and the separators
 // before and after it ("" at the line's ends; a newline is ;, |& is |);
-// doc when its text holds the body of a heredoc it opens.
+// doc when its text holds the body of a heredoc it opens; group the
+// first ( ) or { } its top level opens, when only words that run it in
+// the line's flow (groupLead) come before it.
 type linePart struct {
 	text, before, after string
 	doc                 bool
+	group               *lineGroup
 }
+
+// lineGroup is a part's ( ) or { } (linePart): the words before it
+// (then, do, !), what is inside its brackets and what comes after them
+// (its redirections), and brace for { }.
+type lineGroup struct {
+	lead, inner, tail string
+	brace             bool
+}
+
+// groupLead are the words that may come before a part's ( ) or { } and
+// run it in the line's flow (an if's or a loop's, a pipeline's !, time).
+var groupLead = setOf("! time -p if then elif else while until do")
 
 // listEnd: separator sep ends an and-or list.
 func listEnd(sep string) bool { return sep == "" || sep == ";" || sep == "&" }
@@ -2340,9 +2384,19 @@ func (r Rules) topLevel(line string) (parts []linePart, ok bool) {
 	}
 	var open []doc
 	docs := false
+	// The first bracket the part's top level opens and the index after
+	// its close, in b (-1: none yet).
+	gOpen, gClose := -1, -1
 	cut := func(sep string) {
-		if t := strings.TrimSpace(b.String()); t != "" {
+		raw := b.String()
+		if t := strings.TrimSpace(raw); t != "" {
 			parts = append(parts, linePart{text: t, before: before})
+			if gClose > 0 {
+				g := &lineGroup{lead: strings.TrimSpace(raw[:gOpen]), inner: raw[gOpen+1 : gClose-1], tail: raw[gClose:], brace: raw[gOpen] == '{'}
+				if !slices.ContainsFunc(strings.Fields(g.lead), func(w string) bool { return !groupLead[w] }) {
+					parts[len(parts)-1].group = g
+				}
+			}
 			before = sep
 			for k := range open {
 				if open[k].part < 0 {
@@ -2356,6 +2410,7 @@ func (r Rules) topLevel(line string) (parts []linePart, ok bool) {
 			parts[n-1].after = sep
 		}
 		b.Reset()
+		gOpen, gClose = -1, -1
 	}
 	// bodies reads the bodies of the open heredocs from s[i], the start
 	// of the line after the one that opened them, into their parts; the
@@ -2471,16 +2526,28 @@ func (r Rules) topLevel(line string) (parts []linePart, ok bool) {
 			i = j
 			continue
 		case c == '(':
+			if len(stack) == 0 && gOpen < 0 {
+				gOpen = b.Len()
+			}
 			stack = append(stack, '(')
 		case c == ')':
 			if top() != '(' {
 				return nil, false
 			}
 			stack = stack[:len(stack)-1]
+			if len(stack) == 0 && gClose < 0 {
+				gClose = b.Len() + 1
+			}
 		case c == '{' && wordStart(i) && (next == ' ' || next == '\t' || next == '\n'):
+			if len(stack) == 0 && gOpen < 0 {
+				gOpen = b.Len()
+			}
 			stack = append(stack, '{')
 		case c == '}' && top() == '{' && wordStart(i):
 			stack = stack[:len(stack)-1]
+			if len(stack) == 0 && gClose < 0 {
+				gClose = b.Len() + 1
+			}
 		case c == '<' && next == '<' && (i+2 >= len(s) || s[i+2] != '<') && prev != '<':
 			// A heredoc: <<WORD or <<-WORD, its word quoted or not.
 			if len(stack) > 0 {
@@ -2642,13 +2709,28 @@ func (r Rules) judgeNoWrite(cmd string, args, words []string) *Denial {
 		if r.Cwd == "" && !strings.HasPrefix(slash(w), "/") && !strings.HasPrefix(w, "~") && !placedVar(w, r.line) && !drive.MatchString(slash(w)) {
 			return floor(r.lostCd(cmd + " of " + safe(w) + " after a cd"))
 		}
-		p := r.abs(w)
-		fixed := strings.TrimSuffix(wildcard.ReplaceAllString(p, ""), "/")
-		if fixed == "" {
-			fixed = "/"
+		// The kernel takes a .. from where the links before it lead,
+		// where abs takes it from the path as written (after a cd into a
+		// link, ../x is beside the link's target): such a path is judged
+		// where Resolve says it lands too, and without Resolve, after a
+		// cd, it is unknown.
+		lands := []string{r.abs(w)}
+		if parent.MatchString(slash(w)) {
+			switch {
+			case r.Resolve != nil:
+				lands = withDirs(lands, r.abs(r.resolve(r.joined(w))))
+			case r.lineCd:
+				return floor(r.lostCd(cmd + " of " + safe(w) + " after a cd"))
+			}
 		}
-		if r.covers(r.NoWrite, p) || parents && slices.ContainsFunc(r.NoWrite, func(n string) bool { return r.under(n, fixed) || r.globReaches(p, n) }) {
-			return floor(r.deny(RuleTMFiles, cmd+" of "+safe(p), ""))
+		for _, p := range lands {
+			fixed := strings.TrimSuffix(wildcard.ReplaceAllString(p, ""), "/")
+			if fixed == "" {
+				fixed = "/"
+			}
+			if r.covers(r.NoWrite, p) || parents && slices.ContainsFunc(r.NoWrite, func(n string) bool { return r.under(n, fixed) || r.globReaches(p, n) }) {
+				return floor(r.deny(RuleTMFiles, cmd+" of "+safe(p), ""))
+			}
 		}
 		return nil
 	}
