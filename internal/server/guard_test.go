@@ -448,6 +448,59 @@ func TestShellStateFloor(t *testing.T) {
 	}
 }
 
+// TestSessionCdPath: a session's shell may start with CDPATH or zsh's
+// cdpath set (guard.Rules.CdPath) when the server's environment has it,
+// tm gives it, or Claude's env file, a startup file or a shell snapshot
+// names it; then a relative cd leaves the guard's folder unknown.
+func TestSessionCdPath(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	for _, v := range []string{"CDPATH", "CLAUDE_ENV_FILE", "ZDOTDIR", "XDG_CONFIG_HOME", "CLAUDE_CONFIG_DIR", "CODEX_HOME"} {
+		t.Setenv(v, "")
+	}
+	s := &Server{log: log.New(os.Stderr, "", 0), records: map[string]SessionRecord{}}
+	write := func(p, text string) {
+		t.Helper()
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(text), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(filepath.Join(home, ".zshrc"), "export PATH=$HOME/bin:$PATH\n")
+	write(filepath.Join(home, ".claude", "shell-snapshots", "snapshot-zsh-1.sh"), "alias ll='ls -l'\n")
+	if s.sessionCdPath([]string{"GH_TOKEN"}, home) {
+		t.Fatal("cdpath with none set")
+	}
+	if !s.sessionCdPath([]string{"CDPATH"}, home) {
+		t.Error("tm's env")
+	}
+	t.Setenv("CDPATH", "/src")
+	if !s.sessionCdPath(nil, home) {
+		t.Error("the server's environment")
+	}
+	t.Setenv("CDPATH", "")
+	for _, f := range []string{
+		filepath.Join(home, ".zshrc"),
+		filepath.Join(home, ".claude", "shell-snapshots", "snapshot-zsh-2.sh"),
+		filepath.Join(home, ".config", "fish", "conf.d", "cd.fish"),
+		filepath.Join(home, "envfile"),
+	} {
+		old, _ := os.ReadFile(f)
+		write(f, string(old)+"cdpath=(~/src)\n")
+		if f == filepath.Join(home, "envfile") {
+			t.Setenv("CLAUDE_ENV_FILE", f)
+		}
+		if !s.sessionCdPath(nil, home) {
+			t.Errorf("%s names cdpath", f)
+		}
+		if err := os.Remove(f); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 // TestHookGuardFollowsLinks: a write through a link in the worktree is
 // judged where it lands; one that stays in the worktree is not refused.
 func TestHookGuardFollowsLinks(t *testing.T) {

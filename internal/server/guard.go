@@ -11,8 +11,10 @@ package server
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -166,6 +168,7 @@ func (s *Server) guardRulesFor(r SessionRecord) GuardRules {
 		g.Floor = append(g.Floor, "merge")
 	}
 	g.NoWrite = s.guardNoWrite(r)
+	g.CdPath = s.sessionCdPath(lc.cfg.SecretEnvNames(r.Project), home)
 	if home != "" {
 		g.NoWriteNames = withParentReal(agent.ShellPatterns(home, os.Getenv))
 	}
@@ -358,6 +361,91 @@ func (s *Server) guardNoWrite(r SessionRecord) []string {
 		out = append(append(out, dirs...), files...)
 	}
 	return withReal(out)
+}
+
+// sessionCdPath: session r's shell may start with CDPATH or zsh's
+// cdpath set (guard.Rules.CdPath), so the guard can't place a relative
+// cd: the server's environment, which sessions inherit, has it, tm
+// gives it (env, its names), or a file the shell runs before each
+// command names it in any case: Claude's env file ($CLAUDE_ENV_FILE),
+// the user's startup files and the agents' shell snapshots
+// (agent.ShellState), each folder's newest cdPathFiles.
+func (s *Server) sessionCdPath(env []string, home string) bool {
+	if os.Getenv("CDPATH") != "" || slices.ContainsFunc(env, cdPathName.MatchString) {
+		return true
+	}
+	files := []string{os.Getenv("CLAUDE_ENV_FILE")}
+	if home != "" {
+		s.mu.Lock()
+		reg := s.agents
+		s.mu.Unlock()
+		files = append(files, agent.ShellState(reg, home, os.Getenv)...)
+	}
+	for _, f := range files {
+		if f != "" && namesCdPath(f) {
+			return true
+		}
+	}
+	return false
+}
+
+// cdPathName names CDPATH or zsh's cdpath, any case.
+var cdPathName = regexp.MustCompile(`(?i)cd_?path`)
+
+// cdPathFiles and cdPathRead bound what namesCdPath reads of a folder:
+// its newest files, and of each its start.
+const (
+	cdPathFiles = 32
+	cdPathRead  = 1 << 20
+)
+
+// namesCdPath: file p, or one of the newest files in folder p (and
+// their folders' one level down), names CDPATH or cdpath.
+func namesCdPath(p string) bool {
+	fi, err := os.Stat(p)
+	switch {
+	case err != nil:
+		return false
+	case !fi.IsDir():
+		f, err := os.Open(p)
+		if err != nil {
+			return false
+		}
+		defer f.Close()
+		b, _ := io.ReadAll(io.LimitReader(f, cdPathRead))
+		return cdPathName.Match(b)
+	}
+	es, err := os.ReadDir(p)
+	if err != nil {
+		return false
+	}
+	type entry struct {
+		path string
+		mod  time.Time
+	}
+	var all []entry
+	for _, e := range es {
+		if i, err := e.Info(); err == nil && (i.Mode().IsRegular() || i.IsDir()) {
+			all = append(all, entry{filepath.Join(p, e.Name()), i.ModTime()})
+		}
+	}
+	slices.SortFunc(all, func(a, b entry) int { return b.mod.Compare(a.mod) })
+	for _, e := range all[:min(len(all), cdPathFiles)] {
+		if fi, err := os.Stat(e.path); err == nil && fi.IsDir() {
+			// One level down only (.config/fish/conf.d).
+			sub, _ := os.ReadDir(e.path)
+			for _, x := range sub[:min(len(sub), cdPathFiles)] {
+				if x.Type().IsRegular() && namesCdPath(filepath.Join(e.path, x.Name())) {
+					return true
+				}
+			}
+			continue
+		}
+		if namesCdPath(e.path) {
+			return true
+		}
+	}
+	return false
 }
 
 // homeFloor are what no session writes in tm's home h: everything but

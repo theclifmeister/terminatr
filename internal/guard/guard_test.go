@@ -412,6 +412,8 @@ func FuzzJudge(f *testing.F) {
 	f.Add("& { git push -f }; $x = @\"\n$(gh pr merge 1)\n\"@ <# c #> 'a''b' \"`\"$(\" 2>&1 &")
 	f.Add("cat <<-'E' <<F | sudo -u x env -S 'bash -c' # c\n\tE\n$((1<<2)) `y\nF\ngit push ('-f') @(1) $[2]")
 	f.Add("timeout -s 9 5 xargs -I{} nice -n gh -R o api graphql \"$(x \"(\")\" <<")
+	f.Add("|")
+	f.Add("f() { cd /x; }; ln -s \"$d\" l; while :; do cp -vt l a; done; trap 'f' EXIT")
 	r := Rules{On: true, Role: "thread", Rules: []string{"force-push", "push-default", "worktree-only", "delete-branch", "merge", "credentials"},
 		Home: "/h", Cwd: "/w", Writable: []string{"/w"}, Worktrees: "/h/wt", Protected: []string{"main"}, Secrets: []string{"/h/.ssh"},
 		Tools: map[string]Tool{"Bash": {Kind: KindShell, Fields: []string{"command"}}, "PowerShell": {Kind: KindShell, Syntax: SyntaxPowerShell, Fields: []string{"command"}},
