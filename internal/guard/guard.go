@@ -1076,12 +1076,18 @@ func (r Rules) worktreeOf() string {
 // command of the line's top level: joined by && it moves them for what
 // follows in its list, joined by ; or || it adds a folder they may be
 // in (it may fail, or not run); in a pipeline or the background it
-// moves nothing, and anywhere else (if, a loop, a substitution) it
-// leaves them unknown. A part's ( ) or { } (linePart's group) is a line
-// of its own, judged from the part's folders: a cd in it moves them for
-// the rest of the group, and a { } run in the line's own shell, with
-// nothing before it, leaves the line in the folders the group may end
-// in; a ( ) moves nothing after it. A part that runs shell code the
+// moves nothing, but in a pipeline's last element (zsh's, and bash's
+// with lastpipe, own shell) it leaves them unknown, as it does anywhere
+// else (if, a loop, a substitution). A loop holding a cd is judged
+// from unknown too (loopCds). A part's ( ) or { } (linePart's group) is
+// a line of its own, judged from the part's folders: a cd in it moves
+// them for the rest of the group, and a { } run in the line's own
+// shell, with nothing before it, leaves the line in the folders the
+// group may end in; a ( ) moves nothing after it. One the guard doesn't
+// take as the group (linePart's loose) has the part judged from unknown
+// too from there on, when it holds a cd; a ${ cmd; } is walked as a
+// { }, and one holding a cd has the whole part judged from unknown too.
+// A part that runs shell code the
 // line doesn't show (eval, trap, a zsh trap function, source, ., also
 // through command or builtin) may move them at any point after, so the
 // rest of the line keeps unknown among them.
@@ -1115,7 +1121,7 @@ func (r Rules) walkLine(command string, cwds []string) (d *Denial, st, ts lineDi
 	if !ok {
 		// A line it can't split: one part, with any cd in it leaving its
 		// relative paths unknown from the start.
-		parts = []linePart{{text: command}}
+		parts = []linePart{{text: command, loose: -1}}
 		if r.hasCd(command) {
 			cwds = withDirs(cwds, "")
 		}
@@ -1142,6 +1148,7 @@ func (r Rules) walkLine(command string, cwds []string) (d *Denial, st, ts lineDi
 	}
 	r.sub, r.trapCwds = false, nil
 	trapped := func() bool { return r.ps != nil && len(r.ps.traps) > from }
+	loops := r.loopCds(parts)
 	var trapDirs []string
 	seen, moves := from, false
 	for i, pt := range parts {
@@ -1153,23 +1160,36 @@ func (r Rules) walkLine(command string, cwds []string) (d *Denial, st, ts lineDi
 		if r.spent() {
 			return nil, st, ts // Judge refuses the call: no part is let through unread
 		}
+		// A loop that holds a cd: each pass after the first starts where
+		// the cd went.
+		if loops[i] {
+			st.cur, st.olds = withDirs(st.cur, ""), withDirs(st.olds, "")
+			ts.cur = withDirs(ts.cur, "")
+		}
 		st.begin(r, pt)
 		ts.begin(r, pt)
 		rp := r
 		rp.olds = st.olds
 		rp.trapFrom = from
-		for _, c := range st.cur {
-			if d := rp.judgeCommands(pt.text, c); d != nil || r.spent() {
+		var subs, funs []string
+		if len(st.cur) == 0 {
+			subs, funs = r.subsOf(pt.text)
+		}
+		for k, c := range st.cur {
+			d, s, f := rp.judgeCommands(pt.text, c)
+			if d != nil || r.spent() {
 				return d, st, ts
+			}
+			if k == 0 {
+				subs, funs = s, f
 			}
 		}
 		// Its group's own commands, from the part's folders on, and
 		// those of each substitution it runs in a subshell (the group's
 		// own walk reads those in it), which moves nothing after.
 		var gst, gts *lineDirs
-		subs := pt.text
 		if g := pt.group; g != nil {
-			subs = g.lead + " " + g.tail
+			subs, funs = r.subsOf(g.lead + " " + g.tail)
 			rg := rp.nested()
 			rg.sub, rg.trapCwds = true, ts.cur
 			d, est, ets := rg.walkLine(g.inner, st.cur)
@@ -1178,10 +1198,34 @@ func (r Rules) walkLine(command string, cwds []string) (d *Denial, st, ts lineDi
 			}
 			gst, gts = &est, &ets
 		}
-		for _, in := range r.subsOf(subs) {
+		for _, in := range subs {
 			rs := rp.nested()
 			rs.sub, rs.trapCwds = true, ts.cur
 			if d, _, _ := rs.walkLine(in, st.cur); d != nil || r.spent() {
+				return d, st, ts
+			}
+		}
+		// A ${ cmd; } runs in the line's own shell, as a { } does; one
+		// that may move the folder leaves the part's command (expanded
+		// before it runs) and what follows it unknown (end).
+		lost := -1
+		for _, in := range funs {
+			rf := rp.nested()
+			rf.sub, rf.trapCwds = true, ts.cur
+			if d, _, _ := rf.walkLine(in, st.cur); d != nil || r.spent() {
+				return d, st, ts
+			}
+			if r.hasCd(in) || r.runsCode(in) {
+				lost = 0
+			}
+		}
+		// A ( ) or { } the guard doesn't follow (loose), in a part that
+		// holds a cd: from it on, the part is in a folder it can't tell.
+		if lost < 0 && pt.loose >= 0 && r.hasCd(pt.text) {
+			lost = pt.loose
+		}
+		if lost >= 0 && !slices.Contains(st.cur, "") {
+			if d, _, _ := rp.judgeCommands(pt.text[lost:], ""); d != nil || r.spent() {
 				return d, st, ts
 			}
 		}
@@ -1259,7 +1303,7 @@ func (d *lineDirs) end(r Rules, parts []linePart, i int, g *lineDirs, hidden boo
 	} else if cmd, args, plain := r.plainCd(pt.text); plain && !inPipe {
 		var to []string
 		for _, c := range d.cur {
-			to = withDirs(to, nowhere{dir: c}.cd(r, cmd, args).dir)
+			to = withDirs(to, nowhere{dir: c}.cd(r, cmd, args)...)
 		}
 		// The cd leaves $OLDPWD the folder it left, if it runs.
 		sure := pt.after == "&&" && pt.before != "||"
@@ -1290,7 +1334,9 @@ func (d *lineDirs) end(r Rules, parts []linePart, i int, g *lineDirs, hidden boo
 		default:
 			d.cur = withDirs(d.cur, to...)
 		}
-	} else if !inPipe && (pt.group == nil || pt.group.brace || pt.group.lead != "") && r.hasCd(pt.text) {
+	} else if (!inPipe || lastPipe(pt)) && (pt.group == nil || pt.group.brace) && r.hasCd(pt.text) || !inPipe && pt.group != nil && pt.group.lead != "" && r.hasCd(pt.text) {
+		// zsh, and bash with lastpipe, run a pipeline's last element in
+		// the line's own shell.
 		d.olds = withDirs(withDirs(d.olds, d.cur...), "")
 		d.cur = withDirs(d.cur, "")
 	}
@@ -1305,6 +1351,9 @@ func (d *lineDirs) end(r Rules, parts []linePart, i int, g *lineDirs, hidden boo
 	}
 }
 
+// lastPipe: pt is a pipeline's last element (echo | cd x).
+func lastPipe(pt linePart) bool { return pt.before == "|" && pt.after != "|" }
+
 // listSep is the separator that ends the and-or list part i is in: ";",
 // "&" (run in the background), or "" at the line's end.
 func listSep(parts []linePart, i int) string {
@@ -1314,6 +1363,45 @@ func listSep(parts []linePart, i int) string {
 		}
 	}
 	return ""
+}
+
+// loopOpen are the words that open a loop whose body ends at done; the
+// words before them in a part (loopLead) run them in the line's flow.
+var (
+	loopOpen = setOf("for while until select repeat")
+	loopLead = setOf("! time -p if then elif else do")
+)
+
+// loopCds are the parts that open a loop (for, while, until, select,
+// zsh's repeat, to its done) whose parts hold a cd or code the guard
+// can't see (runsCode): each pass after the first starts where the last
+// one left the folder, so the loop is judged from an unknown folder too.
+// zsh's short forms (for x (a b) { … }) are one part, with a bracket the
+// guard doesn't follow (loose): no done closes them.
+func (r Rules) loopCds(parts []linePart) map[int]bool {
+	moves := make([]bool, len(parts))
+	out := map[int]bool{}
+	var open []int
+	for i, pt := range parts {
+		moves[i] = r.hasCd(pt.text) || r.runsCode(pt.text)
+		w := strings.Fields(pt.text)
+		k := 0
+		for k < len(w)-1 && loopLead[w[k]] {
+			k++
+		}
+		switch {
+		case len(w) == 0:
+		case loopOpen[w[k]] && pt.loose < 0:
+			open = append(open, i)
+		case w[0] == "done" && len(open) > 0:
+			o := open[len(open)-1]
+			open = open[:len(open)-1]
+			if slices.Contains(moves[o:i+1], true) {
+				out[o] = true
+			}
+		}
+	}
+	return out
 }
 
 // hiddenCode are the builtins that run shell code the line doesn't show
@@ -1406,20 +1494,31 @@ func unreadableTrap() *Denial {
 // (topLevel), with its relative paths from cwd ("" unknown: the floor
 // refuses them, the other rules take the session's folder). After a
 // command that ends in a redirect (>| f, tee >(…) f: the part splits
-// there), a command's first word may be what it writes.
-func (r Rules) judgeCommands(part, cwd string) *Denial {
+// there), a command's first word may be what it writes. subs and funs
+// are the part's substitutions as its reading found them (subsOf).
+func (r Rules) judgeCommands(part, cwd string) (d *Denial, subs, funs []string) {
+	fl := r
+	fl.Cwd = cwd
+	if cwd != "" {
+		r.Cwd = cwd
+	}
+	var read [][]string
+	if r.ps != nil {
+		read, subs, funs = r.ps.readSubs(part, func(p string) bool { return fl.worktreeScript(p) }, r.depth)
+	} else {
+		read = readCommands(part, false, func(p string) bool { return fl.worktreeScript(p) })
+	}
+	return r.judgeWords(read, cwd), subs, funs
+}
+
+// judgeWords is judgeCommands of a part's commands as read.
+func (r Rules) judgeWords(read [][]string, cwd string) *Denial {
 	fl := r
 	fl.Cwd = cwd
 	if cwd != "" {
 		r.Cwd = cwd
 	}
 	split := false
-	var read [][]string
-	if r.ps != nil {
-		read = r.ps.read(part, false, func(p string) bool { return fl.worktreeScript(p) }, r.depth)
-	} else {
-		read = readCommands(part, false, func(p string) bool { return fl.worktreeScript(p) })
-	}
 	for _, words := range read {
 		argv := strip(words)
 		// Only a word that looks like a path: 2>&1 splits the same way.
@@ -2330,7 +2429,8 @@ func accessOpen(args []string) bool {
 // the floor follows its cd: "" when it can't tell.
 type nowhere struct{ dir string }
 
-// cd is where cmd (cd, pushd, popd) with args leaves the line: a
+// cd is where cmd (cd, pushd, popd) with args may leave the line ("" a
+// folder it can't tell): a
 // folder it names plainly, home for none, else unknown: an entry of the
 // folder stack (+N, -N) may be any folder, a pattern or braces (cd
 // ~/.term*) may name another, and so may a relative one CDPATH looks
@@ -2339,13 +2439,15 @@ type nowhere struct{ dir string }
 // have made physical: physicalCd) leaves the folder with its links
 // followed (Resolve), so its .. is the real parent; where the guard
 // can't follow them, or can't tell a logical cd from a physical one
-// that lands elsewhere, the folder is unknown.
-func (n nowhere) cd(r Rules, cmd string, args []string) nowhere {
+// that lands elsewhere, the folder is unknown. A logical cd whose folder
+// has a .. lands where it says, or, where that is no folder, bash takes
+// it physically: where Resolve says too, or unknown without Resolve.
+func (n nowhere) cd(r Rules, cmd string, args []string) []string {
 	var to []string
 	mode := byte(0)
 	for _, a := range unredirected(args) {
 		if stackIndex.MatchString(a) {
-			return nowhere{} // cd +1, pushd -2: an entry of the folder stack
+			return []string{""} // cd +1, pushd -2: an entry of the folder stack
 		}
 		if !strings.HasPrefix(a, "-") || a == "-" {
 			to = append(to, a)
@@ -2355,41 +2457,196 @@ func (n nowhere) cd(r Rules, cmd string, args []string) nowhere {
 	}
 	switch {
 	case cmd == "popd" || len(to) > 1:
-		return nowhere{}
+		return []string{""}
 	case len(to) == 0:
 		if cmd == "pushd" {
-			return nowhere{}
+			return []string{""}
 		}
-		return nowhere{dir: r.Home}
+		return []string{r.Home}
 	}
 	a := to[0]
 	if a == "-" || strings.ContainsAny(a, "$`*?[{") || strings.HasPrefix(a, "~") && !strings.HasPrefix(a, "~/") && a != "~" {
-		return nowhere{}
+		return []string{""}
 	}
 	if !dotted.MatchString(slash(a)) && !strings.HasPrefix(a, "~") && !drive.MatchString(slash(a)) && r.cdpath {
-		return nowhere{}
+		return []string{""}
 	}
 	if n.dir == "" && !strings.HasPrefix(a, "/") && !strings.HasPrefix(a, "~") && !drive.MatchString(slash(a)) {
-		return nowhere{}
+		return []string{""}
 	}
 	r.Cwd = n.dir
 	dir := r.abs(a)
 	if mode == 'P' || mode == 0 && r.physical {
 		if r.Resolve == nil {
-			return nowhere{}
+			return []string{""}
 		}
 		real := r.abs(r.resolve(r.joined(a)))
 		if mode == 0 && real != dir {
-			return nowhere{}
+			return []string{""}
 		}
-		dir = real
+		return []string{real}
 	}
-	return nowhere{dir: dir}
+	if parent.MatchString(slash(a)) {
+		if r.Resolve == nil {
+			return []string{""}
+		}
+		return withDirs([]string{dir}, r.abs(r.resolve(r.joined(a))))
+	}
+	return []string{dir}
 }
 
 // stackIndex is an argument of cd, pushd or popd that names an entry of
 // the folder stack (+N, -N), not a folder or an option.
 var stackIndex = regexp.MustCompile(`^[+-][0-9]+$`)
+
+// maxAlts bounds the words a word's braces may give (braceAlts).
+const maxAlts = 4096
+
+// braceSeq is the inside of a {x..y} or {x..y..n} sequence: of numbers,
+// or of letters.
+var braceSeq = regexp.MustCompile(`^(?:(-?[0-9]+)\.\.(-?[0-9]+)|([A-Za-z])\.\.([A-Za-z]))(?:\.\.(-?[0-9]+))?$`)
+
+// braceAlts are the words brace expansion gives of w: each alternative
+// of a {a,b} (nested ones too) and each word of a {x..y} sequence, a
+// ${…} aside; w alone for none; nil for more than maxAlts, or more
+// than maxParse bytes. Words are read with their quotes gone, so a
+// quoted brace counts too.
+func braceAlts(w string) []string {
+	var out []string
+	size := 0
+	var expand func(w string) bool
+	expand = func(w string) bool {
+		pre, alts, post, ok := braceSplit(w)
+		if !ok {
+			out = append(out, w)
+			size += len(w)
+			return len(out) <= maxAlts && size <= maxParse
+		}
+		for _, a := range alts {
+			if !expand(pre + a + post) {
+				return false
+			}
+		}
+		return true
+	}
+	if !expand(w) {
+		return nil
+	}
+	return out
+}
+
+// braceEnd is the index of the } that closes the brace expansion ({a,b},
+// {1..3}, x{a,{b,c}}) opened at s[i], or -1: a { with no comma or
+// sequence before its close, or a blank, a quote, an expansion or an
+// operator, stays a separator (Commands).
+func braceEnd(s []rune, i int) int {
+	depth := 0
+	for j := i; j < len(s); j++ {
+		switch c := s[j]; {
+		case strings.ContainsRune(" \t\n;&|<>()'\"`$\\", c):
+			return -1
+		case c == '{':
+			depth++
+		case c == '}':
+			if depth--; depth == 0 {
+				if _, _, _, ok := braceSplit(string(s[i : j+1])); ok {
+					return j
+				}
+				return -1
+			}
+		}
+	}
+	return -1
+}
+
+// braceSplit is w's first brace expansion (braceAlts): the text before
+// it, its words and the text after it; false for none.
+func braceSplit(w string) (pre string, alts []string, post string, ok bool) {
+	for i := 0; i < len(w); i++ {
+		if w[i] != '{' {
+			continue
+		}
+		param := i > 0 && w[i-1] == '$'
+		depth, commas, end := 0, []int{}, -1
+		for j := i; j < len(w) && end < 0; j++ {
+			switch {
+			case w[j] == '{':
+				depth++
+			case w[j] == '}':
+				if depth--; depth == 0 {
+					end = j
+				}
+			case w[j] == ',' && depth == 1:
+				commas = append(commas, j)
+			}
+		}
+		switch {
+		case end < 0:
+			continue
+		case param:
+			i = end // ${…}: no braces of the path's
+			continue
+		case len(commas) > 0:
+			from := i + 1
+			for _, c := range append(commas, end) {
+				alts = append(alts, w[from:c])
+				from = c + 1
+			}
+			return w[:i], alts, w[end+1:], true
+		}
+		if m := braceSeq.FindStringSubmatch(w[i+1 : end]); m != nil {
+			return w[:i], braceRange(m), w[end+1:], true
+		}
+	}
+	return "", nil, "", false
+}
+
+// braceRange is the words of the sequence m matched (braceSeq), at most
+// maxAlts+1 of them: numbers padded to the width of one given with a
+// leading zero.
+func braceRange(m []string) []string {
+	step, _ := strconv.Atoi(strings.TrimPrefix(m[5], "-"))
+	step = max(step, 1)
+	a, _ := strconv.Atoi(m[1])
+	b, _ := strconv.Atoi(m[2])
+	width := 0
+	for _, n := range m[1:3] {
+		if d := strings.TrimPrefix(n, "-"); len(d) > 1 && d[0] == '0' {
+			width = max(width, len(n))
+		}
+	}
+	letters := m[3] != ""
+	if letters {
+		a, b = int(m[3][0]), int(m[4][0])
+	}
+	if a > b {
+		step = -step
+	}
+	var out []string
+	for c := a; len(out) <= maxAlts && (step > 0 && c <= b || step < 0 && c >= b); c += step {
+		if letters {
+			out = append(out, string(rune(c)))
+		} else {
+			out = append(out, fmt.Sprintf("%0*d", width, c))
+		}
+	}
+	return out
+}
+
+// dotsParent is path w with each part a pattern that may match ..
+// (.*, .?, ..*: bash's globs match a leading dot only when it is
+// written) made .., which the link check counts.
+func dotsParent(w string) string {
+	parts := strings.Split(w, "/")
+	for i, p := range parts {
+		if strings.HasPrefix(p, ".") && strings.ContainsAny(p, "*?[") {
+			if ok, _ := path.Match(p, ".."); ok {
+				parts[i] = ".."
+			}
+		}
+	}
+	return strings.Join(parts, "/")
+}
 
 // physicalSetters are the commands whose words may make cds physical:
 // set, setopt, unsetopt, shopt and the shells.
@@ -2518,11 +2775,16 @@ func (r Rules) globReaches(p, root string) bool {
 // before and after it ("" at the line's ends; a newline is ;, |& is |);
 // doc when its text holds the body of a heredoc it opens; group the
 // first ( ) or { } its top level opens, when only words that run it in
-// the line's flow (groupLead) come before it.
+// the line's flow (groupLead) come before it; loose, the index in text
+// of the first one it opens that isn't group (-1: none), which the
+// guard doesn't follow (coproc { }, zsh's for x (a) { }, the second
+// block of { } always { }). A $( ), <( ), >( ) or zsh's =( ) and an
+// array's a=( ) are none: its walk reads what they run.
 type linePart struct {
 	text, before, after string
 	doc                 bool
 	group               *lineGroup
+	loose               int
 }
 
 // lineGroup is a part's ( ) or { } (linePart): the words before it
@@ -2598,18 +2860,40 @@ func (r Rules) topLevel(line string) (parts []linePart, ok bool) {
 	var open []doc
 	docs := false
 	// The first bracket the part's top level opens and the index after
-	// its close, in b (-1: none yet).
-	gOpen, gClose := -1, -1
+	// its close, in b, and the next it opens (-1: none yet); opened, the
+	// bracket open at the top level is gOpen's.
+	gOpen, gClose, gLoose := -1, -1, -1
+	opened := false
+	openAt := func(at int) {
+		switch {
+		case gOpen < 0:
+			gOpen, opened = at, true
+		case gLoose < 0:
+			gLoose = at
+		}
+	}
+	closeAt := func(at int) {
+		if opened {
+			gClose, opened = at, false
+		}
+	}
 	cut := func(sep string) {
 		raw := b.String()
 		if t := strings.TrimSpace(raw); t != "" {
-			parts = append(parts, linePart{text: t, before: before})
+			pt := linePart{text: t, before: before, loose: -1}
+			off := len(raw) - len(strings.TrimLeftFunc(raw, unicode.IsSpace))
 			if gClose > 0 {
 				g := &lineGroup{lead: strings.TrimSpace(raw[:gOpen]), inner: raw[gOpen+1 : gClose-1], tail: raw[gClose:], brace: raw[gOpen] == '{'}
-				if !slices.ContainsFunc(strings.Fields(g.lead), func(w string) bool { return !groupLead[w] }) {
-					parts[len(parts)-1].group = g
+				switch {
+				case slices.ContainsFunc(strings.Fields(g.lead), func(w string) bool { return !groupLead[w] }):
+					pt.loose = gOpen - off
+				case gLoose >= 0:
+					pt.group, pt.loose = g, gLoose-off
+				default:
+					pt.group = g
 				}
 			}
+			parts = append(parts, pt)
 			before = sep
 			for k := range open {
 				if open[k].part < 0 {
@@ -2623,7 +2907,7 @@ func (r Rules) topLevel(line string) (parts []linePart, ok bool) {
 			parts[n-1].after = sep
 		}
 		b.Reset()
-		gOpen, gClose = -1, -1
+		gOpen, gClose, gLoose, opened = -1, -1, -1, false
 	}
 	// bodies reads the bodies of the open heredocs from s[i], the start
 	// of the line after the one that opened them, into their parts; the
@@ -2678,6 +2962,13 @@ func (r Rules) topLevel(line string) (parts []linePart, ok bool) {
 				i++
 				b.WriteRune('(')
 				stack = append(stack, '(')
+			case funStart(s, i):
+				j := closing(s, i+2, '{', '}')
+				if j == len(s) {
+					return nil, false
+				}
+				b.WriteString(string(s[i+1 : j+1]))
+				i = j
 			case c == '`':
 				stack = append(stack, '`')
 			}
@@ -2732,6 +3023,10 @@ func (r Rules) topLevel(line string) (parts []linePart, ok bool) {
 			for j < len(s) && s[j] != '}' {
 				j++
 			}
+			if funStart(s, i) {
+				// bash 5.3's ${ cmd; }: to its close, a word of the part.
+				j = closing(s, i+2, '{', '}')
+			}
 			if j == len(s) {
 				return nil, false
 			}
@@ -2739,8 +3034,8 @@ func (r Rules) topLevel(line string) (parts []linePart, ok bool) {
 			i = j
 			continue
 		case c == '(':
-			if len(stack) == 0 && gOpen < 0 {
-				gOpen = b.Len()
+			if len(stack) == 0 && !strings.ContainsRune("$<>=", prev) {
+				openAt(b.Len())
 			}
 			stack = append(stack, '(')
 		case c == ')':
@@ -2748,18 +3043,18 @@ func (r Rules) topLevel(line string) (parts []linePart, ok bool) {
 				return nil, false
 			}
 			stack = stack[:len(stack)-1]
-			if len(stack) == 0 && gClose < 0 {
-				gClose = b.Len() + 1
+			if len(stack) == 0 {
+				closeAt(b.Len() + 1)
 			}
 		case c == '{' && wordStart(i) && (next == ' ' || next == '\t' || next == '\n'):
-			if len(stack) == 0 && gOpen < 0 {
-				gOpen = b.Len()
+			if len(stack) == 0 {
+				openAt(b.Len())
 			}
 			stack = append(stack, '{')
 		case c == '}' && top() == '{' && wordStart(i):
 			stack = stack[:len(stack)-1]
-			if len(stack) == 0 && gClose < 0 {
-				gClose = b.Len() + 1
+			if len(stack) == 0 {
+				closeAt(b.Len() + 1)
 			}
 		case c == '<' && next == '<' && (i+2 >= len(s) || s[i+2] != '<') && prev != '<':
 			// A heredoc: <<WORD or <<-WORD, its word quoted or not.
@@ -2856,6 +3151,18 @@ func (r Rules) judgeNoWrite(cmd string, args, words []string) *Denial {
 		if w == "" || strings.HasPrefix(w, "&") || strings.HasPrefix(w, "<(") || strings.HasPrefix(w, ">(") {
 			return nil
 		}
+		// Braces give each of their words (touch {a,b}): each is judged.
+		switch alts := braceAlts(w); {
+		case alts == nil:
+			return floor(r.deny(RuleTMFiles, cmd+" of "+safe(w), ""))
+		case len(alts) > 1:
+			for _, a := range alts {
+				if dd := refuse(a, parents); dd != nil {
+					return dd
+				}
+			}
+			return nil
+		}
 		// ${x:-word} and the like may give their word: judged as a path
 		// too.
 		if dw, ok := defaultWord(w); ok {
@@ -2926,12 +3233,14 @@ func (r Rules) judgeNoWrite(cmd string, args, words []string) *Denial {
 		// where abs takes it from the path as written (after a cd into a
 		// link, ../x is beside the link's target): such a path is judged
 		// where Resolve says it lands too, and without Resolve, after a
-		// cd, it is unknown.
+		// cd, it is unknown. A pattern that may match .. (.*) counts as
+		// one.
 		lands := []string{r.abs(w)}
-		if parent.MatchString(slash(w)) {
+		if pw := dotsParent(w); parent.MatchString(slash(pw)) {
+			lands = withDirs(lands, r.abs(pw))
 			switch {
 			case r.Resolve != nil:
-				lands = withDirs(lands, r.abs(r.resolve(r.joined(w))))
+				lands = withDirs(lands, r.abs(r.resolve(r.joined(pw))))
 			case r.lineCd:
 				return floor(r.lostCd(cmd + " of " + safe(w) + " after a cd"))
 			}
@@ -3105,21 +3414,46 @@ type parse struct {
 	// glued are words that lost an unquoted substitution glued to their
 	// text (lit), as read.
 	glued map[string]bool
-	// subs, while collect, are the insides of the substitutions read at
-	// depth at (subsOf).
-	collect bool
-	at      int
-	subs    []string
+	// subs and funs, while collect, are the insides of the substitutions
+	// and of the ${ cmd; } read outside any other (nest 0: those in $[ ],
+	// (( )) or a heredoc count), the line's own (readSubs).
+	collect    bool
+	nest       int
+	subs, funs []string
 }
 
 // sub reads body, the inside of a substitution ($( ), backticks, <( ),
 // >( )) that runs in a subshell of a line read at depth, one level
-// deeper; while collecting at depth, it is kept too.
+// deeper; while collecting outside any other, it is kept too.
 func (p *parse) sub(body string, depth int) [][]string {
-	if p.collect && depth == p.at {
+	if p.collect && p.nest == 0 {
 		p.subs = append(p.subs, body)
 	}
+	p.nest++
+	defer func() { p.nest-- }()
 	return p.read(body, false, nil, depth+1)
+}
+
+// fun reads body, the inside of bash 5.3's ${ cmd; } or ${| cmd; }, which
+// runs in the line's own shell, as sub does; while collecting outside
+// any substitution, it is kept in funs.
+func (p *parse) fun(body string, depth int) [][]string {
+	if p.collect && p.nest == 0 {
+		p.funs = append(p.funs, body)
+	}
+	p.nest++
+	defer func() { p.nest-- }()
+	return p.read(body, false, nil, depth+1)
+}
+
+// readSubs is read of line, and the insides of the substitutions and of
+// the ${ cmd; } it runs outside any other (sub, fun).
+func (p *parse) readSubs(line string, script func(string) bool, depth int) (cmds [][]string, subs, funs []string) {
+	p.collect, p.nest, p.subs, p.funs = true, 0, nil, nil
+	cmds = p.read(line, false, script, depth)
+	subs, funs = p.subs, p.funs
+	p.collect, p.subs, p.funs = false, nil, nil
+	return cmds, subs, funs
 }
 
 // spent reports whether the judge's reading went past its limits (or
@@ -3137,18 +3471,14 @@ func (r Rules) nested() Rules {
 }
 
 // subsOf are the insides of the substitutions text runs in subshells of
-// its own as it is expanded, those in them not counted: read with the
-// judge's budget.
-func (r Rules) subsOf(text string) []string {
+// its own as it is expanded, and of the ${ cmd; } it runs in its own
+// shell (funs), those in them not counted: read with the judge's budget.
+func (r Rules) subsOf(text string) (subs, funs []string) {
 	if r.ps == nil {
-		return nil
+		return nil, nil
 	}
-	p := r.ps
-	p.collect, p.at, p.subs = true, r.depth, nil
-	p.read(text, false, nil, r.depth)
-	subs := p.subs
-	p.collect, p.subs = false, nil
-	return subs
+	_, subs, funs = r.ps.readSubs(text, nil, r.depth)
+	return subs, funs
 }
 
 // cmds are the commands of line as Commands reads them, read with the
@@ -3206,8 +3536,9 @@ func (p *parse) read(line string, arith bool, script func(string) bool, depth in
 	// dropped: an unquoted substitution of the word is in word, not lit.
 	dropped := false
 	// quoted: some of the word is quoted or escaped ("2">f writes 2's
-	// output to f: no descriptor).
-	quoted := false
+	// output to f: no descriptor); braced: it has a brace expansion
+	// (braceEnd), which makes it a word for each alternative.
+	quoted, braced := false, false
 	var open, docs []heredoc
 	// redir is the index of the last < or > read as a redirect (>| is
 	// one); fed: a pipe feeds the next command, and fedShell, it is a
@@ -3215,6 +3546,7 @@ func (p *parse) read(line string, arith bool, script func(string) bool, depth in
 	redir := -1
 	fed, fedShell := false, false
 	endWord := func() {
+		w := ""
 		if inWord && hasLit {
 			if dropped && lit.String() != word.String() {
 				if p.glued == nil {
@@ -3222,13 +3554,29 @@ func (p *parse) read(line string, arith bool, script func(string) bool, depth in
 				}
 				p.glued[lit.String()] = true
 			}
-			words = append(words, lit.String())
+			w = lit.String()
 		} else if inWord {
-			words = append(words, word.String())
+			w = word.String()
+		}
+		switch {
+		case !inWord:
+		case braced && len(words) > 0 && (words[len(words)-1] == ">" || words[len(words)-1] == "<"):
+			// A redirect's word stays one: zsh writes each of its words
+			// (judgeNoWrite judges them), bash none.
+			words = append(words, w)
+		case braced:
+			// Past maxAlts the line is past the guard's limits.
+			alts := braceAlts(w)
+			if alts == nil || p.stop(len(w)*len(alts), depth) {
+				p.over = true
+			}
+			words = append(words, alts...)
+		default:
+			words = append(words, w)
 		}
 		word.Reset()
 		lit.Reset()
-		inWord, hasLit, quoted, dropped = false, false, false, false
+		inWord, hasLit, quoted, dropped, braced = false, false, false, false, false
 	}
 	// text is literal text of the word.
 	text := func(t string) {
@@ -3298,6 +3646,11 @@ func (p *parse) read(line string, arith bool, script func(string) bool, depth in
 					out = append(out, p.sub(string(s[j+1:end]), depth)...)
 					q.WriteString(string(s[j:min(end+1, len(s))]))
 					j = end + 1
+				case funStart(s, j):
+					end := closing(s, j+2, '{', '}')
+					out = append(out, p.fun(funBody(s, j, end), depth)...)
+					q.WriteString(string(s[j:min(end+1, len(s))]))
+					j = end + 1
 				default:
 					q.WriteRune(s[j])
 					j++
@@ -3327,13 +3680,24 @@ func (p *parse) read(line string, arith bool, script func(string) bool, depth in
 			inner = append(inner, p.read(string(s[i+2:end]), true, nil, depth+1)...)
 			text(string(s[i : end+1]))
 			i = end
-		case c == '$' && i+2 < len(s) && s[i+1] == '{' && !strings.ContainsRune(" \t\n|", s[i+2]):
-			// A parameter expansion, ${NAME} or ${NAME:-word}, is part of
-			// the word (${ cmd; } runs commands: read below as { }). A $( )
-			// or backtick in it still runs.
+		case funStart(s, i):
+			// bash 5.3's ${ cmd; } and ${| cmd; }: commands run in the
+			// line's own shell, a part of the word (fun).
 			end := closing(s, i+2, '{', '}')
-			for _, in := range substitutions(string(s[i+2 : end])) {
+			inner = append(inner, p.fun(funBody(s, i, end), depth)...)
+			word.WriteString(string(s[i:min(end+1, len(s))]))
+			inWord, dropped = true, true
+			i = end
+		case c == '$' && i+2 < len(s) && s[i+1] == '{':
+			// A parameter expansion, ${NAME} or ${NAME:-word}, is part of
+			// the word. A $( ), a backtick or a ${ cmd; } in it still runs.
+			end := closing(s, i+2, '{', '}')
+			subs, funs := substitutions(string(s[i+2 : end]))
+			for _, in := range subs {
 				out = append(out, p.sub(in, depth)...)
+			}
+			for _, in := range funs {
+				out = append(out, p.fun(in, depth)...)
 			}
 			text(string(s[i:min(end+1, len(s))]))
 			i = end
@@ -3391,6 +3755,13 @@ func (p *parse) read(line string, arith bool, script func(string) bool, depth in
 			word.WriteString(string(s[i:min(end+1, len(s))]))
 			inWord, dropped = true, true
 			i = end
+		case c == '{' && braceEnd(s, i) > i:
+			// A brace expansion ({a,b}, x{1..3}) is a part of its word
+			// (zsh's {cd x} is a group).
+			end := braceEnd(s, i)
+			text(string(s[i : end+1]))
+			braced = true
+			i = end
 		case strings.ContainsRune(";&|\n(){}", c):
 			endCommand()
 			if c == '|' && (i+1 >= len(s) || s[i+1] != '|') && s[i-1] != '|' {
@@ -3440,8 +3811,12 @@ func (p *parse) read(line string, arith bool, script func(string) bool, depth in
 		for _, h := range docs {
 			if !h.quoted {
 				// The line's own shell expands it first.
-				for _, in := range substitutions(h.body) {
+				subs, funs := substitutions(h.body)
+				for _, in := range subs {
 					out = append(out, p.sub(in, depth)...)
+				}
+				for _, in := range funs {
+					out = append(out, p.fun(in, depth)...)
 				}
 			}
 			if shell || h.odd {
@@ -3750,9 +4125,8 @@ func docWord(s []rune, j int) heredocWord {
 }
 
 // substitutions are the insides of the $( ) and backticks in s, which run
-// where s is expanded.
-func substitutions(text string) []string {
-	var out []string
+// where s is expanded, and of its ${ cmd; } (funs).
+func substitutions(text string) (subs, funs []string) {
 	s := []rune(text)
 	for i := 0; i < len(s); i++ {
 		switch {
@@ -3760,15 +4134,30 @@ func substitutions(text string) []string {
 			i++
 		case s[i] == '$' && i+1 < len(s) && s[i+1] == '(':
 			end := closing(s, i+2, '(', ')')
-			out = append(out, string(s[i+2:end]))
+			subs = append(subs, string(s[i+2:end]))
 			i = end
 		case s[i] == '`':
 			end := tickClose(s, i+1)
-			out = append(out, string(s[i+1:end]))
+			subs = append(subs, string(s[i+1:end]))
+			i = end
+		case funStart(s, i):
+			end := closing(s, i+2, '{', '}')
+			funs = append(funs, funBody(s, i, end))
 			i = end
 		}
 	}
-	return out
+	return subs, funs
+}
+
+// funStart: s[i] starts bash 5.3's ${ cmd; } or ${| cmd; }: a ${ then a
+// blank or a |.
+func funStart(s []rune, i int) bool {
+	return i+2 < len(s) && s[i] == '$' && s[i+1] == '{' && strings.ContainsRune(" \t\n|", s[i+2])
+}
+
+// funBody is the commands of the ${ cmd; } at s[i] whose } is at end.
+func funBody(s []rune, i, end int) string {
+	return strings.TrimPrefix(string(s[i+2:end]), "|")
 }
 
 // closing is the index of the close that closes an open before i
