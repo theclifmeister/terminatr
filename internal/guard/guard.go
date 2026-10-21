@@ -168,6 +168,9 @@ type Rules struct {
 	olds []string
 	// wt is the thread's worktree, as judgeBash takes it (worktreeOf).
 	wt string
+	// trapFrom is where the trap actions the line being read sets start
+	// in ps.traps (judgeLine).
+	trapFrom int
 }
 
 // ModRule is a guard rule a mod adds (mods design §7, Tighten only): the
@@ -968,6 +971,9 @@ func (r Rules) JudgeCommand(line string) *Denial {
 // judgeBash checks each simple command of a Bash command line.
 func (r Rules) judgeBash(command string) *Denial {
 	r.wt = r.worktreeOf()
+	if r.ps != nil {
+		r.ps.traps = nil
+	}
 	return r.judgeLine(command, []string{r.Cwd})
 }
 
@@ -992,8 +998,15 @@ func (r Rules) worktreeOf() string {
 // in (it may fail, or not run); in ( ), a pipeline or the background it
 // moves nothing, and anywhere else ({ }, if, a substitution) it leaves
 // them unknown. A part that runs shell code the line doesn't show
-// (eval, trap, source, ., also through command or builtin) may move them
-// at any point after, so the rest of the line keeps unknown among them.
+// (eval, source, ., a trap whose action may move them, also through
+// command or builtin) may move them at any point after, so the rest of
+// the line keeps unknown among them.
+//
+// A trap's action (judgeCommands keeps it in ps.traps, as set here or in
+// a line this one reads: eval, bash -c) may run at any point from the
+// trap on (a signal) and at the end (EXIT), so it is judged as eval's
+// arguments are, from each folder the line may be in from the trap on
+// and those it may end in.
 func (r Rules) judgeLine(command string, cwds []string) *Denial {
 	if r.line != "" {
 		r.line += "\n"
@@ -1016,6 +1029,14 @@ func (r Rules) judgeLine(command string, cwds []string) *Denial {
 	if olds == nil {
 		olds = []string{""}
 	}
+	// The trap actions set from here, and the folders the line may be
+	// in from the first on.
+	from := 0
+	if r.ps != nil {
+		from = len(r.ps.traps)
+	}
+	trapped := func() bool { return r.ps != nil && len(r.ps.traps) > from }
+	var trapDirs []string
 	for i, pt := range parts {
 		// The folders a part may run in count against the budget, and
 		// a line that may be in more than maxFolders is past it.
@@ -1036,10 +1057,14 @@ func (r Rules) judgeLine(command string, cwds []string) *Denial {
 		}
 		rp := r
 		rp.olds = olds
+		rp.trapFrom = from
 		for _, c := range cur {
 			if d := rp.judgeCommands(pt.text, c); d != nil || r.spent() {
 				return d
 			}
+		}
+		if trapped() {
+			trapDirs = withDirs(trapDirs, cur...)
 		}
 		inPipe := pt.before == "|" || pt.after == "|" || pt.after == "&"
 		if cmd, args, plain := r.plainCd(pt.text); plain && !inPipe {
@@ -1090,6 +1115,18 @@ func (r Rules) judgeLine(command string, cwds []string) *Denial {
 			cur = list
 		}
 	}
+	if !trapped() {
+		return nil
+	}
+	// The actions read here may set traps of their own, which their own
+	// reading judges.
+	rt := r.nested()
+	rt.olds = withDirs(olds, "")
+	for _, a := range slices.Clone(r.ps.traps[from:]) {
+		if d := rt.judgeLine(a, withDirs(trapDirs, cur...)); d != nil || r.spent() {
+			return d
+		}
+	}
 	return nil
 }
 
@@ -1106,21 +1143,67 @@ func listSep(parts []linePart, i int) string {
 
 // hiddenCode are the builtins that run shell code the line doesn't show
 // in the shell itself, where a cd in it moves the line's folder.
-var hiddenCode = setOf("eval trap source .")
+var hiddenCode = setOf("eval source .")
 
 // runsHidden: one of text's commands is one of those, maybe through
-// command or builtin.
+// command or builtin, or a trap whose action may move the line's folder
+// (a cd in it, hidden code, or an action the guard can't read).
 func (r Rules) runsHidden(text string) bool {
 	for _, words := range r.cmds(text) {
 		argv := strip(words)
 		for len(argv) > 1 && (argv[0] == "command" || argv[0] == "builtin") {
 			argv = argv[1:]
 		}
-		if len(argv) > 0 && hiddenCode[argv[0]] {
+		if len(argv) == 0 {
+			continue
+		}
+		if hiddenCode[argv[0]] {
 			return true
+		}
+		if argv[0] == "trap" {
+			a, ok := r.trapAction(argv[1:])
+			if !ok || a != "" && (r.hasCd(a) || r.nested().runsHidden(a)) {
+				return true
+			}
 		}
 	}
 	return false
+}
+
+// trapAction is the action trap's args set ("" for none: a listing, a
+// reset, a signal ignored); false for one the guard can't read, whose
+// commands a variable or a substitution names ("$cleanup", $(cat f)).
+// The first word after the options is the action, as bash reads it with
+// a signal after it; with none (trap 2, bash's reset) it is read too,
+// which judges no command.
+func (r Rules) trapAction(args []string) (string, bool) {
+	i := 0
+	for ; i < len(args) && strings.HasPrefix(args[i], "-") && args[i] != "-"; i++ {
+		if args[i] == "--" {
+			i++
+			break
+		}
+		if strings.ContainsAny(args[i], "lp") {
+			return "", true // trap -l, trap -p: a listing
+		}
+	}
+	if i >= len(args) || args[i] == "-" {
+		return "", true
+	}
+	a := args[i]
+	for _, words := range r.cmds(a) {
+		if argv := strip(words); len(argv) > 0 && (strings.HasPrefix(argv[0], "$") || strings.Contains(argv[0], "`")) {
+			return a, false
+		}
+	}
+	return a, true
+}
+
+// unreadableTrap is the refusal of a trap whose action the guard can't
+// read (trapAction).
+func unreadableTrap() *Denial {
+	return &Denial{Rule: RuleUnreadable, Floor: true, Summary: "a trap action the guard can't read",
+		Message: "terminatr guard: this trap's action runs a command a variable or a substitution names, which the guard can't read, so it is refused; write the action's commands out in the trap."}
 }
 
 // judgeCommands judges each simple command of part, a part of a line
@@ -1185,6 +1268,13 @@ func (r Rules) judgeCommands(part, cwd string) *Denial {
 			}
 		case cmd == "eval":
 			d = r.nested().judgeLine(strings.Join(args, " "), []string{cwd})
+		case cmd == "trap":
+			// Its action runs later: judgeLine judges it where it may.
+			if a, ok := r.trapAction(args); !ok {
+				d = unreadableTrap()
+			} else if a != "" && r.ps != nil && !slices.Contains(r.ps.traps[r.trapFrom:], a) {
+				r.ps.traps = append(r.ps.traps, a)
+			}
 		case cmd == "pwsh" || cmd == "powershell":
 			d = r.judgePwsh(args)
 		case cmd == "rm" && r.has("delete-branch") && slices.ContainsFunc(args, func(a string) bool { return rmRecursive.MatchString(a) || isLong(a, "--recursive") }):
@@ -2634,6 +2724,9 @@ type parse struct {
 	deadline time.Time
 	over     bool
 	late     bool // over by the deadline
+	// traps are the actions of the traps the lines read set, in order
+	// (judgeLine).
+	traps []string
 }
 
 // spent reports whether the judge's reading went past its limits (or
