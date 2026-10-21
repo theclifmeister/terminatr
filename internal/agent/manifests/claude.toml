@@ -821,11 +821,14 @@ skip_dim = true
 # Not a state of its own (the box above already says idle): the paste
 # injector checks it so it never appends to text left in the box. Ghost
 # text (the dim prompt suggestion) doesn't count as typed. Claude puts a
-# no-break space after the ❯, which \s doesn't cover.
+# no-break space after the ❯, which \s doesn't cover. Mid-turn Claude
+# draws the ❯ itself dim (2.1.306, T653), so with dim cells blanked an
+# empty box is a blank row between the box's two rules: without that
+# reading, tm thread prompt --now took every box for a draft and queued.
 [[rules]]
 id = "idle-empty-box"
 state = "idle"
 priority = 0
 region = "bottom:10"
-regex = '(?m)^\s*[❯>][\s\x{00A0}]*$'
+regex = '(?m)^\s*[❯>][\s\x{00A0}]*$|^─+\n[ \x{00A0}]*\n─+$'
 skip_dim = true

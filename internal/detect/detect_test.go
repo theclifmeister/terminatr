@@ -1,6 +1,7 @@
 package detect
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -146,6 +147,23 @@ func TestClaudeEmptyBox(t *testing.T) {
 	}
 	if has(Screen{Rows: rows, NoDim: rows}) {
 		t.Fatal("typed text counts as an empty box")
+	}
+	// Mid-turn (2.1.306, T653): the ❯ itself is dim, with or without the
+	// no-break space after it.
+	rows = []string{"✻ Actualizing… (1m 32s · ↓ 4.7k tokens)", "", "──────", "❯ ", "──────", "  ⏵⏵ auto mode on"}
+	for _, box := range []string{"  ", "  ", ""} {
+		noDim := slices.Clone(rows)
+		noDim[3] = box
+		if !has(Screen{Rows: rows, NoDim: noDim}) {
+			t.Fatalf("an empty box with a dim ❯ (%q) is not empty", box)
+		}
+	}
+	draft := slices.Clone(rows)
+	draft[3] = "❯ half a thought"
+	noDim = slices.Clone(draft)
+	noDim[3] = "  half a thought"
+	if has(Screen{Rows: draft, NoDim: noDim}) {
+		t.Fatal("a draft typed mid-turn counts as an empty box")
 	}
 }
 

@@ -158,9 +158,16 @@ func TestPromptInterruptNoKey(t *testing.T) {
 // it gets to a file it returns.
 func startSteerBox(t *testing.T, a agent.Agent) (*Session, string) {
 	t.Helper()
+	return startSteerBoxWith(t, a, `\342\235\257`)
+}
+
+// startSteerBoxWith is startSteerBox with the box's pointer as printf
+// writes it.
+func startSteerBoxWith(t *testing.T, a agent.Agent, pointer string) (*Session, string) {
+	t.Helper()
 	log := filepath.Join(t.TempDir(), "keys")
 	script := `stty -echo -icanon min 1
-draw() { printf '\033[2J\033[H\n\342\224\200\342\224\200\342\224\200\n\342\235\257\302\240%s\n\342\224\200\342\224\200\342\224\200\n' "$1"; }
+draw() { printf '\033[2J\033[H\n\342\224\200\342\224\200\342\224\200\n` + pointer + `\302\240%s\n\342\224\200\342\224\200\342\224\200\n' "$1"; }
 draw ''
 tee "$KEYS" | while IFS= read -r l; do draw "$l"; done`
 	s, err := Start(Config{
@@ -245,6 +252,26 @@ func TestPromptNowOwnSteerNoDraft(t *testing.T) {
 		t.Fatalf("second, read: %q %q %v", via, why, err)
 	}
 	testwait.Eventually(t, "pasted again", func() bool { return strings.Count(keysGot(t, keys), "second") == 2 })
+}
+
+// TestPromptNowDimPointer reproduces T653: mid-turn, Claude 2.1.306
+// draws the box's ❯ dim. The box still reads empty, so --now steers (it
+// was queued, "prompt box not empty"), and a second --now joins the
+// first in the turn: nothing is queued.
+func TestPromptNowDimPointer(t *testing.T) {
+	s, keys := startSteerBoxWith(t, claudeLike(t), `\033[2m\342\235\257\033[22m`)
+	working(t, s, true)
+	if via, why, err := s.PromptNow("a", false); err != nil || via != ViaSteered || why != "" {
+		t.Fatalf("a: %q %q %v", via, why, err)
+	}
+	shown(t, s, "a")
+	if via, why, err := s.PromptNow("b", false); err != nil || via != ViaSteered || why != "" {
+		t.Fatalf("b: %q %q %v", via, why, err)
+	}
+	testwait.Eventually(t, "b pasted", func() bool { return strings.Contains(keysGot(t, keys), "b") })
+	if st, _ := s.AgentState(); st.Queued != 0 {
+		t.Fatalf("a steered prompt was queued too: %+v", st)
+	}
 }
 
 // TestPromptNowDraftAfterSteer: T641 (3): keys typed into the box after
