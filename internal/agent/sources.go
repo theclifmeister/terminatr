@@ -87,7 +87,14 @@ type HookTrim struct {
 	// [[hooks]] event matches. Empty: hook_event_name (docs/SPEC.md §8.2,
 	// the canonical hook wire format).
 	Event string `toml:"event_field"`
+	// Cwd names the payload field holding the agent's own folder (keep
+	// it), the location a tool call that leaves an optional one out
+	// means ([guard.tools] optional). Empty: cwd.
+	Cwd string `toml:"cwd_field"`
 }
+
+// CwdField is the payload field holding the agent's own folder.
+func (h HookTrim) CwdField() string { return cmp.Or(h.Cwd, "cwd") }
 
 // EventField is the payload field naming the hook event.
 func (h HookTrim) EventField() string { return cmp.Or(h.Event, "hook_event_name") }
@@ -231,8 +238,7 @@ type JSONLTail struct {
 	Root  string     `toml:"root"`
 	Name  string     `toml:"name"`
 	Rules []TailRule `toml:"rules"`
-	// Usage reads what the agent used from the lines that report it,
-	// for an agent without a mod to report it (POST /v1/usage).
+	// Usage reads what the agent used from the lines that report it.
 	Usage *TailUsage `toml:"usage"`
 	// Refused are the lines that say the agent's provider refused the
 	// session's model (docs/SPEC.md §8.2, Models): tm then marks that
@@ -381,8 +387,7 @@ func (u *TailUsage) validate() error {
 	return nil
 }
 
-// Usage is what one line says the agent used: the same numbers as the
-// mod's POST /v1/usage.
+// Usage is what one line says the agent used.
 type Usage struct {
 	Turns         int
 	Input         int64

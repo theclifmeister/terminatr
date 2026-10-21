@@ -304,6 +304,9 @@ transient = true
 # The server's guard (internal/guard) judges each call, and a refusal is
 # the hook's answer, before any approval (Codex 0.160 honours Claude's
 # deny output). Allowed: no output, so Codex's own policy decides.
+# Without a verdict within 3 s, tm hook refuses the call itself
+# (timeout = "guard"): the guard fails closed.
+timeout = "guard"
 respond = '''{{with .Guard}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":{{json .Message}}}}{{end}}'''
 
 [[hooks]]

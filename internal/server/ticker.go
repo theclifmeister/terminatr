@@ -64,18 +64,6 @@ func (h tickerHost) PromptFresh(id, text string, refresh func() (string, bool)) 
 
 func (h tickerHost) Alert(msg string) { h.s.alert(msg) }
 
-// Unstick pastes the queued prompt session id's mod holds while its agent
-// idles (session.Session.Unstick).
-func (h tickerHost) Unstick(id string) string {
-	h.s.mu.Lock()
-	sess := h.s.sessions[id]
-	h.s.mu.Unlock()
-	if sess == nil {
-		return ""
-	}
-	return sess.Unstick()
-}
-
 // Clear pastes the agent's clear prompt ([inject] clear) into session
 // id, the ticker's auto-clear: a plain prompt, never through the channel
 // (which runs no slash command), dropped at delivery unless still.

@@ -2,29 +2,18 @@ package proto
 
 import "time"
 
-// Open questions (docs/SPEC.md §3.3, Ask): an agent's mod that sees a
-// question menu open (Claude's AskUserQuestion) calls session.ask with
-// it. The server answers at once and keeps the question on the session
-// (SessionInfo.Question) until the connection ends; when every question
-// has an answer through session.answer it sends one ask.answered line
-// and hangs up. The mod answers the menu with it; when the user answers
-// in the pane first, the mod hangs up and the question goes.
+// Open questions (docs/SPEC.md §3.3, Ask): tm's own question on a
+// session, which the server keeps there (SessionInfo.Question) until it
+// is answered through session.answer or goes: a thread's approved
+// command that asks first (tm run).
 const (
-	// MethodSessionAsk opens a question on a session (SessionAskParams)
-	// and answers an empty result; one AskEvent line follows.
-	MethodSessionAsk = "session.ask"
 	// MethodSessionAnswer answers one question of a session's open one
 	// (SessionAnswerParams) and returns SessionAnswerResult.
 	MethodSessionAnswer = "session.answer"
-	// EventAskAnswered carries the answers, by question text.
-	EventAskAnswered = "ask.answered"
-	// EventAskClosed ends an ask without answers: another ask replaced it,
-	// or the session ended.
-	EventAskClosed = "ask.closed"
 )
 
-// ErrNoQuestion means the session has no open question (no mod, or the menu
-// is gone).
+// ErrNoQuestion means the session has no open question (none asked, or
+// it is gone).
 const ErrNoQuestion = "no-question"
 
 // Question is an open question menu: one or more questions, each
@@ -58,12 +47,6 @@ type QuestionOption struct {
 	Description string `json:"description,omitempty"`
 }
 
-// SessionAskParams are the params of session.ask.
-type SessionAskParams struct {
-	ID       string   `json:"id"`
-	Question Question `json:"question"`
-}
-
 // SessionAnswerParams are the params of session.answer: question Index
 // (from 0) of the session's open question gets Answer, an option's
 // label, labels joined with ", " for a multi-select, or free text.
@@ -85,13 +68,7 @@ type SessionAnswerParams struct {
 }
 
 // SessionAnswerResult says how many questions still wait for an answer;
-// at 0 the answers went to the mod.
+// at 0 the answers went to the question's asker.
 type SessionAnswerResult struct {
 	Remaining int `json:"remaining"`
-}
-
-// AskEvent is the line that ends a session.ask.
-type AskEvent struct {
-	Event   string            `json:"event"` // EventAskAnswered or EventAskClosed
-	Answers map[string]string `json:"answers,omitempty"`
 }

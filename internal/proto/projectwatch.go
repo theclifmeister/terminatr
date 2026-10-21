@@ -63,7 +63,7 @@ type ProjectWatch struct {
 	// delegate, in board order.
 	Ready []WatchTodo `json:"ready"`
 	// Context is the coordinator's context window use; nil when no
-	// coordinator runs or its mod hasn't reported a turn.
+	// coordinator runs or none of its turns was reported yet.
 	Context *WatchContext `json:"context,omitempty"`
 	// Questions counts the coordinator's open questions (tm ask), which
 	// the coordinator's info panel offers to open in its question dialog.

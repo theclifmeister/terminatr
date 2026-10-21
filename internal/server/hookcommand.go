@@ -6,19 +6,15 @@ import (
 	"github.com/theclifmeister/terminatr/internal/session"
 )
 
-// Session commands from hooks (docs/SPEC.md §8.6, Mods): without the
-// Claude mod, a coordinator's /saveclear and /answer are plain plugin
-// commands, and the UserPromptSubmit hook that carries them has the
-// server run them (HookMap.Command), as the mod's command.run runs tm
-// clear and tm ask open, and blocks the prompt with what came of it.
+// Session commands from hooks (docs/SPEC.md §8.6): a Claude
+// coordinator's /saveclear and /answer are plain plugin commands, and
+// the UserPromptSubmit hook that carries them has the server run them
+// (HookMap.Command): tm clear and tm ask open, and blocks the prompt
+// with what came of it.
 
 // hookCommandOf is session id's runner of the commands its hooks stand
-// for: none with the mod, which registers and runs them itself, and
-// only for a coordinator.
-func (s *Server) hookCommandOf(id string, mod bool) func(*session.Session, string) string {
-	if mod {
-		return nil
-	}
+// for, only for a coordinator.
+func (s *Server) hookCommandOf(id string) func(*session.Session, string) string {
 	return func(_ *session.Session, name string) string {
 		s.mu.Lock()
 		r := s.records[id]

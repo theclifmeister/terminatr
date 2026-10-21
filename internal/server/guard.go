@@ -1,20 +1,16 @@
 package server
 
-// The mod's guard (docs/SPEC.md §8.6, Guard): the standing rules as
-// checks on each tool call. The server decides which rules a session's
-// mod enforces, from the human's settings (config.toml: guard,
-// guard_off, merge) and the session's role, adds the rules the user's
-// enabled mods add (they only refuse: mods design §7, Tighten only), and
-// serves them on the mod socket as GET /v1/rules; the mod matches each call itself
-// (hooks/guard.ts), asking POST /v1/resolve where a file tool's writes
-// land (realTarget: the mod has no file system), and reports a refusal
-// with POST /v1/denied, which the server journals (and puts in the project's inbox only when a session is refused repeatedly).
+// The guard (docs/SPEC.md §8.6, Guard): the standing rules as checks on
+// each tool call. The server decides which rules a session's guard
+// enforces, from the human's settings (config.toml: guard, guard_off,
+// merge) and the session's role, adds the rules the user's enabled mods
+// add (they only refuse: mods design §7, Tighten only), and judges each
+// call the session's PreToolUse hook reports (hookGuardOf). A refusal is
+// journaled (and put in the project's inbox only when a session is
+// refused repeatedly).
 
 import (
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"path/filepath"
 	"slices"
@@ -38,22 +34,20 @@ import (
 	"github.com/theclifmeister/terminatr/internal/worktree"
 )
 
-// GuardRules is the body of GET /v1/rules: what the session's mod
-// refuses, and what the server judges a hook's tool call by
+// GuardRules is what the server judges a hook's tool call by
 // (guard.Rules.Judge). Off, nothing is refused and the agent's own
-// permission rules decide alone, as without the mod.
+// permission rules decide alone.
 type GuardRules = guard.Rules
 
-// GuardDenial is the body of POST /v1/denied: the refusal's rule, the
-// tool, the short summary the journal keeps, and for the guard's log
+// GuardDenial is a refusal: its rule, the tool, the short summary the journal keeps, and for the guard's log
 // (guardlog, the human's) the whole command line or file an allowance
 // would name and whether one can (Floor: never).
 type GuardDenial struct {
-	Rule    string `json:"rule"`
-	Tool    string `json:"tool"`
-	Summary string `json:"summary,omitempty"`
-	Subject string `json:"subject,omitempty"`
-	Floor   bool   `json:"floor,omitempty"`
+	Rule    string
+	Tool    string
+	Summary string
+	Subject string
+	Floor   bool
 }
 
 // A refusal is journaled and shown on the thread's info panel, not put
@@ -320,15 +314,25 @@ func ownExcluded(reg *agent.Registry, r SessionRecord, home string, lc launchCon
 }
 
 // guardNoWrite are the files and folders no tool of session r writes,
-// whatever the rules (the guard's floor, T574 §3.1): tm's settings
-// (config.toml), and a thread's project folder, or the parts of it only
-// tm writes for the coordinator, whose folder it is. The sandbox and the
+// whatever the rules (the guard's floor, T574 §3.1): tm's home but for
+// the projects and worktrees (homeFloor: its settings, agents, mods,
+// state, logs) and its run folder, the settings in the session's folder that could turn
+// its hooks off (hookSettings), and a thread's project folder, or the
+// parts of it only tm writes for the coordinator, whose folder it is. The sandbox and the
 // agent's deny rules hold them too, where there are those (not under
 // yolo).
 func (s *Server) guardNoWrite(r SessionRecord) []string {
 	var out []string
 	if h := s.opts.Paths.Home; h != "" {
-		out = append(out, filepath.Join(h, "config.toml"))
+		out = append(out, homeFloor(h)...)
+	}
+	if run := s.opts.Paths.RunDir; run != "" {
+		out = append(out, realPath(run), run)
+	}
+	if r.Cwd != "" && (r.Role == proto.RoleThread || r.Role == proto.RoleCoordinator) {
+		// Where a write lands (realTarget) and as the call may name it.
+		out = append(out, hookSettings(realPath(r.Cwd))...)
+		out = append(out, hookSettings(r.Cwd)...)
 	}
 	dir, err := project.Dir(r.Project)
 	if err != nil {
@@ -342,6 +346,42 @@ func (s *Server) guardNoWrite(r SessionRecord) []string {
 		out = append(append(out, dirs...), files...)
 	}
 	return withReal(out)
+}
+
+// homeFloor are what no session writes in tm's home h: everything but
+// projects/ and worktrees/, whose own rules hold (a thread writes its
+// worktree; the coordinator its project folder but for tm's parts).
+// The names tm keeps there, whether they exist yet or not, and anything
+// else found there.
+func homeFloor(h string) []string {
+	names := []string{"config.toml", "ui.json", "agents", "mods", "cache", "run", "state", "logs", "bin", ".trash"}
+	if es, err := os.ReadDir(h); err == nil {
+		for _, e := range es {
+			names = append(names, e.Name())
+		}
+	}
+	// Where a write lands (realTarget: the home's real path, as a name
+	// that doesn't exist yet has none of its own) and as written.
+	var out []string
+	for _, n := range names {
+		if n == "projects" || n == "worktrees" {
+			continue
+		}
+		for _, p := range []string{filepath.Join(realPath(h), n), filepath.Join(h, n)} {
+			if !slices.Contains(out, p) {
+				out = append(out, p)
+			}
+		}
+	}
+	return out
+}
+
+// hookSettings are the agent settings files in a session's folder dir
+// that could turn its hooks off (Claude's .claude/settings.json and
+// settings.local.json, disableAllHooks): refused whole, whatever they
+// would say, as a shell's write can't be read for what it writes.
+func hookSettings(dir string) []string {
+	return []string{filepath.Join(dir, ".claude", "settings.json"), filepath.Join(dir, ".claude", "settings.local.json")}
 }
 
 // guardMods are the guard rules the user's mods that run for session
@@ -450,150 +490,72 @@ func realTarget(p string) string {
 	return cur
 }
 
-// GuardEscape is POST /v1/escape's body: the call that asks to leave
-// the sandbox, by the mod's id for it, and whether it has ended.
-type GuardEscape struct {
-	ID   string `json:"id"`
-	Done bool   `json:"done,omitempty"`
-}
-
-// GuardResolve is POST /v1/resolve's body and answer: the paths a file
-// tool writes or a shell given a heredoc runs as its script, absolute
-// but not cleaned, and where each lands (realTarget), in the same
-// order; in the answer, Files says whether each lands on a regular file
-// (regularFile).
-type GuardResolve struct {
-	Paths []string `json:"paths"`
-	Files []bool   `json:"files,omitempty"`
-}
-
-// maxResolve bounds how many paths one POST /v1/resolve may ask about.
-const maxResolve = 256
-
-// guardRoutes adds the guard's routes to session id's mod handler.
-func (s *Server) guardRoutes(mux *http.ServeMux, id string) {
-	mux.HandleFunc("POST /v1/resolve", func(w http.ResponseWriter, r *http.Request) {
-		var q GuardResolve
-		b, err := io.ReadAll(io.LimitReader(r.Body, 64<<10))
-		if err == nil {
-			err = json.Unmarshal(b, &q)
-		}
-		if err == nil && len(q.Paths) > maxResolve {
-			err = fmt.Errorf("more than %d paths", maxResolve)
-		}
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		out := GuardResolve{Paths: make([]string, len(q.Paths)), Files: make([]bool, len(q.Paths))}
-		for i, p := range q.Paths {
-			// Only an absolute path is followed; the mod sends no other.
-			out.Paths[i] = p
-			if filepath.IsAbs(filepath.FromSlash(p)) {
-				out.Paths[i] = realTarget(p)
-				out.Files[i] = regularFile(p)
-			}
-		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(out)
-	})
-	mux.HandleFunc("GET /v1/rules", func(w http.ResponseWriter, r *http.Request) {
-		s.mu.Lock()
-		rec, ok := s.records[id]
-		s.mu.Unlock()
-		if !ok {
-			http.Error(w, "session "+id+" is gone", http.StatusGone)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(s.hookRules(rec))
-	})
-	// The guard asked about a call that leaves the sandbox: the prompt it
-	// brings is the user's (T574 case 6), which tm thread approve and the
-	// ticker read from the session's state (AgentState.Escape).
-	// Its body names the call (the mod's own id) and, once the call has
-	// ended, says done.
-	mux.HandleFunc("POST /v1/escape", func(w http.ResponseWriter, r *http.Request) {
-		var e GuardEscape
-		b, err := io.ReadAll(io.LimitReader(r.Body, maxModReport))
-		if err == nil {
-			err = json.Unmarshal(b, &e)
-		}
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		s.mu.Lock()
-		sess := s.sessions[id]
-		s.mu.Unlock()
-		if sess == nil {
-			http.Error(w, "session "+id+" is gone", http.StatusGone)
-			return
-		}
-		if e.Done {
-			sess.EndEscape(e.ID)
-		} else {
-			sess.MarkEscape(e.ID)
-		}
-		w.WriteHeader(http.StatusNoContent)
-	})
-	mux.HandleFunc("POST /v1/denied", func(w http.ResponseWriter, r *http.Request) {
-		var d GuardDenial
-		b, err := io.ReadAll(io.LimitReader(r.Body, maxModReport))
-		if err == nil {
-			err = json.Unmarshal(b, &d)
-		}
-		mods := strings.HasPrefix(d.Rule, "mod:")
-		if err == nil && !mods && !slices.Contains(config.GuardRules, d.Rule) && d.Rule != guard.RuleTMFiles {
-			err = fmt.Errorf("unknown rule %q", d.Rule)
-		}
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		s.mu.Lock()
-		rec, ok := s.records[id]
-		s.mu.Unlock()
-		if !ok {
-			http.Error(w, "session "+id+" is gone", http.StatusGone)
-			return
-		}
-		// A mod's rule is one the session has.
-		if mods && !slices.ContainsFunc(s.guardMods(rec, ""), func(m guard.ModRule) bool { return m.Name() == d.Rule }) {
-			http.Error(w, fmt.Sprintf("unknown rule %q", d.Rule), http.StatusBadRequest)
-			return
-		}
-		s.guardDenied(rec, d)
-		w.WriteHeader(http.StatusNoContent)
-	})
-}
-
 // hookGuardOf judges the tool calls session id's hooks report against
-// its rules (agent.HookEnv.Guard: agents without a mod, which answer
-// PreToolUse with the refusal, or an ask) and records a refusal as POST
-// /v1/denied does; an ask is not recorded. A file tool's write is judged
-// where it lands, through the links on its path (realTarget). With a
-// mod, the mod judges: nil.
-func (s *Server) hookGuardOf(id string, mod bool) func(string, map[string]any) *guard.Denial {
-	if mod {
-		return nil
-	}
+// its rules (agent.HookEnv.Guard: the agent answers PreToolUse with the
+// refusal, or an ask) and records a refusal; an ask is not recorded. A
+// file tool's write is judged where it lands, through the links on its
+// path (realTarget).
+//
+// It fails closed: a session without its record (exiting) gets
+// guard.Unchecked, and so does a call not judged within judgeLimit
+// (the rules' config and git reads included), well inside what tm hook
+// waits for the verdict (agent.HookGuardWait). The judge gets the same
+// deadline (guard.Rules.Deadline) and stops there, and a session has
+// one judge at a time: a call waits for the one before it.
+func (s *Server) hookGuardOf(id string) func(string, map[string]any) *guard.Denial {
+	// busy holds the session's one judge: a call waits for the one
+	// before it, which its deadline ends, within its own limit.
+	busy := make(chan struct{}, 1)
 	return func(tool string, input map[string]any) *guard.Denial {
 		s.mu.Lock()
 		rec, ok := s.records[id]
 		s.mu.Unlock()
 		if !ok {
-			return nil
+			return guard.Unchecked()
 		}
-		rules := s.hookRules(rec)
-		rules.Resolve, rules.File = realTarget, regularFile
-		d := rules.Judge(tool, input)
+		judge, limit := judgeCall, judgeLimit
+		deadline := time.Now().Add(limit)
+		var d *guard.Denial
+		select {
+		case busy <- struct{}{}:
+			done := make(chan *guard.Denial, 1)
+			go func() {
+				defer func() { <-busy }()
+				rules := s.hookRules(rec)
+				rules.Resolve, rules.File = realTarget, regularFile
+				rules.Deadline = deadline
+				done <- judge(rules, tool, input)
+			}()
+			select {
+			case d = <-done:
+			case <-time.After(time.Until(deadline)):
+				d = tooLong(s, id, tool, limit)
+			}
+		case <-time.After(limit):
+			d = tooLong(s, id, tool, limit)
+		}
 		if d != nil && !d.Ask {
 			s.guardDenied(rec, GuardDenial{Rule: d.Rule, Tool: tool, Summary: d.Summary, Subject: d.Subject, Floor: d.Floor})
 		}
 		return d
 	}
 }
+
+// tooLong is the refusal of a call not judged within limit.
+func tooLong(s *Server, id, tool string, limit time.Duration) *guard.Denial {
+	d := guard.Unchecked()
+	d.Message = "terminatr guard: checking this call took too long, so it is refused; try a shorter or simpler command."
+	s.log.Printf("session %s: the guard took over %v to judge a %s call: refused", id, limit, tool)
+	return d
+}
+
+// judgeLimit bounds how long the server judges one tool call; a
+// variable for tests.
+var judgeLimit = 1500 * time.Millisecond
+
+// judgeCall is how hookGuardOf judges a call: Rules.Judge (tests hold
+// it).
+var judgeCall = guard.Rules.Judge
 
 // hookRulesFor is how long a session's rules are kept for its hooks: a
 // tool call must not wait on config.toml and git each time, and a
@@ -623,8 +585,7 @@ type hookRulesEntry struct {
 	stamp string
 }
 
-// hookRules is session r's rules, for its hooks and its mod (GET
-// /v1/rules): worked out again when what they are made of changed (the
+// hookRules is session r's rules, for its hooks: worked out again when what they are made of changed (the
 // human's settings, the project, a mod enabled, disabled, updated or
 // removed: guardStamp), so a guard mod tightens or loosens running
 // sessions at once (T301 B4), and at least once per hookRulesFor for

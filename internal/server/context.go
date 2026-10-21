@@ -10,10 +10,9 @@ import (
 	"github.com/theclifmeister/terminatr/internal/thread"
 )
 
-// Context use (docs/SPEC.md §8.6, Context): the mod sends how many
-// tokens the session's last request read as context, and the window,
-// with its usage (or the agent's JSONL file reports them); the
-// server keeps the latest per session, in memory, and shows it with the
+// Context use (docs/SPEC.md §8.6, Context): the agent's hooks or JSONL
+// file report how many tokens the session's last request read as
+// context, and the window, with its usage; the server keeps the latest per session, in memory, and shows it with the
 // session (SessionInfo.Context) and in the project watch.
 
 // ctxUse is a session's latest context size and its model's window.
@@ -84,19 +83,8 @@ func crossedContext(was any, had bool, now ctxUse) bool {
 }
 
 // tailUsage takes what session sess used as its agent's JSONL file
-// reports it ([jsonl_tail.usage]): the same store as the mod's POST
-// /v1/usage, for an agent without a mod.
+// reports it ([jsonl_tail.usage]).
 func (s *Server) tailUsage(sess *session.Session, u agent.Usage) { s.agentUsage(sess.ID(), u) }
-
-// tailUsageOf is a launched session's tailUsage: none with the mod,
-// which reports the same turns itself (POST /v1/usage), so they would
-// count twice.
-func (s *Server) tailUsageOf(mod bool) func(*session.Session, agent.Usage) {
-	if mod {
-		return nil
-	}
-	return s.tailUsage
-}
 
 func (s *Server) agentUsage(id string, u agent.Usage) {
 	s.setContext(id, u.Model, u.Context, u.ContextWindow)

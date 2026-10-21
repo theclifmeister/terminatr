@@ -44,7 +44,7 @@ const threadUsage = `usage: tm thread <command> [--project <slug>] [--json]
                                  agent's next tool call); --interrupt stops the turn
                                  for it (only on the user's word)
   approve <id> [--choice N]      answer a permission prompt with "allow once"
-  answer <id> [--choice N[,N…]] [--option LABEL]… [--text T] [--question K]
+  answer <id> [--choice N[,N…]] [--text T] [--question K]
                                  relay the user's answer to a question menu
   ack <id>                       acknowledge the latest report
   stop <id> | restart <id>
@@ -310,13 +310,12 @@ func approveFlags(f *flagSet) func(pos []string) (approveOpts, error) {
 
 func answerFlags(f *flagSet) func(pos []string) (answerArgs, error) {
 	choice, text, question := f.String("choice"), f.String("text"), f.String("question")
-	options := f.List("option")
 	return func(pos []string) (answerArgs, error) {
-		id, err := idFlags("answer <id> [--choice N[,N…]] [--option LABEL]… [--text T] [--question K]")(pos)
+		id, err := idFlags("answer <id> [--choice N[,N…]] [--text T] [--question K]")(pos)
 		if err != nil {
 			return answerArgs{}, err
 		}
-		a := answerArgs{id: id, options: *options, text: *text, withText: f.IsSet("text")}
+		a := answerArgs{id: id, text: *text, withText: f.IsSet("text")}
 		if f.IsSet("choice") {
 			for _, c := range strings.Split(*choice, ",") {
 				n, err := strconv.Atoi(strings.TrimSpace(c))
@@ -331,8 +330,8 @@ func answerFlags(f *flagSet) func(pos []string) (answerArgs, error) {
 				return answerArgs{}, usagef("--question takes a number 1-4")
 			}
 		}
-		if len(a.choices) == 0 && len(a.options) == 0 && !a.withText {
-			return answerArgs{}, usagef("answer with --choice N, --option LABEL or --text T")
+		if len(a.choices) == 0 && !a.withText {
+			return answerArgs{}, usagef("answer with --choice N or --text T")
 		}
 		return a, nil
 	}
@@ -566,7 +565,7 @@ func (e *Env) threadShow(p *project.Project, id string, asJSON bool) error {
 	w.Flush()
 	if q := row.Question; q != nil {
 		ref := cmp.Or(r.Task, r.ID)
-		fmt.Fprintf(e.Stdout, "\nQuestion (open since %s; tm thread answer %s --choice N | --option LABEL | --text T [--question K]):\n", q.Since.UTC().Format("2006-01-02 15:04 UTC"), ref)
+		fmt.Fprintf(e.Stdout, "\nQuestion (open since %s; tm thread answer %s --choice N | --text T [--question K]):\n", q.Since.UTC().Format("2006-01-02 15:04 UTC"), ref)
 		for _, l := range questionLines(q) {
 			fmt.Fprintln(e.Stdout, "  "+l)
 		}

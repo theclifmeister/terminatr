@@ -12,54 +12,12 @@ import (
 	"github.com/theclifmeister/terminatr/internal/testwait"
 )
 
-// TestEscapeMod: a call the mod says leaves the sandbox (MarkEscape)
-// makes a permission prompt open while it is the user's (Info.Escape),
-// until that call ends (EndEscape); another call's prompt ending doesn't
-// end it (parallel calls), and the turn's end ends every mark.
-func TestEscapeMod(t *testing.T) {
-	noGrace(t)
-	s := startMod(t, "", true, make(chan PromptResolution, 1))
-	state := func(st agent.State, reason string) {
-		t.Helper()
-		if err := s.ModState(st, reason, "test"); err != nil {
-			t.Fatal(err)
-		}
-	}
-	state(agent.StateWorking, "")
-	s.MarkEscape("e1")
-	if s.Info().Escape {
-		t.Fatal("escape while working: no prompt yet")
-	}
-	state(agent.StateBlocked, "permission")
-	if !s.Info().Escape {
-		t.Fatal("the escape's prompt is not marked")
-	}
-	// A parallel call's prompt was open first and is answered: the
-	// escape's prompt shows next, still marked.
-	state(agent.StateWorking, "")
-	state(agent.StateBlocked, "permission")
-	if !s.Info().Escape {
-		t.Fatal("another prompt's end took the escape's mark")
-	}
-	s.EndEscape("e1")
-	if s.Info().Escape {
-		t.Fatal("the escape's call ended, its mark didn't")
-	}
-	state(agent.StateWorking, "")
-	s.MarkEscape("e2")
-	state(agent.StateIdle, "")
-	state(agent.StateWorking, "")
-	state(agent.StateBlocked, "permission")
-	if s.Info().Escape {
-		t.Fatal("a mark outlived its turn")
-	}
-}
-
-// TestEscapeHook: without the mod, the guard's "escape" ask on a
-// PreToolUse hook marks that call (tool_use_id) until its PostToolUse
-// or PermissionDenied; another ask doesn't mark, and another call's end
-// doesn't unmark. An agent whose every prompt is an escape
-// (PromptsEscape) marks each.
+// TestEscapeHook: a PreToolUse hook's call that asks to leave the
+// sandbox (dangerouslyDisableSandbox) is marked (tool_use_id) until its
+// PostToolUse or PermissionDenied, whatever the guard answers, and with
+// no verdict at all; the guard's "excluded" ask marks a call too, and
+// another call's end doesn't unmark. An agent whose every prompt is an
+// escape (PromptsEscape) marks each.
 func TestEscapeHook(t *testing.T) {
 	noGrace(t)
 	for _, c := range []struct {
@@ -70,7 +28,8 @@ func TestEscapeHook(t *testing.T) {
 	}{
 		{"escape", guard.RuleEscape, false, true},
 		{"excluded asks first", guard.RuleExcluded, false, true},
-		{"unknown", "unknown", false, false},
+		{"another ask", "unknown", false, true},
+		{"no verdict", "", false, true},
 		{"every prompt", "", true, true},
 	} {
 		t.Run(c.name, func(t *testing.T) {
@@ -255,4 +214,65 @@ func TestEscapeDialogUnmarked(t *testing.T) {
 		t.Fatal(err)
 	}
 	testwait.Eventually(t, "the escape's dialog marked", func() bool { return s.Info().Escape })
+}
+
+// TestGuardEveryCall: a tool call is judged and answered whatever its
+// event carries: a Claude subagent's (agent_id, no state of its own),
+// whose escape is marked too, and a Codex thread's the session left
+// (another session id).
+func TestGuardEveryCall(t *testing.T) {
+	noGrace(t)
+	deny := func(_ string, input map[string]any) *guard.Denial {
+		return &guard.Denial{Rule: "merge", Message: "no merging"}
+	}
+	codex := func(t *testing.T) agent.Agent {
+		b, _ := agent.Builtin("codex")
+		m, err := agent.ParseManifest(b)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return agent.FromManifest(m)
+	}
+	for _, c := range []struct {
+		name  string
+		agent func(*testing.T) agent.Agent
+		start map[string]any
+		call  map[string]any
+	}{
+		{"claude subagent", func(t *testing.T) agent.Agent { return claudeLike(t) }, map[string]any{"source": "startup", "session_id": "a"},
+			map[string]any{"agent_id": "sub-1", "session_id": "a", "tool_name": "Bash", "tool_use_id": "t1", "tool_input": map[string]any{"command": "gh pr merge 1", "dangerouslyDisableSandbox": true}}},
+		{"codex session left", codex, map[string]any{"source": "startup", "session_id": "a"},
+			map[string]any{"session_id": "b", "tool_name": "Bash", "tool_input": map[string]any{"command": "gh pr merge 1"}}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			s, err := Start(Config{
+				ID: "s-g", Role: proto.RoleThread, Project: "p",
+				Argv: []string{"/bin/sh", "-c", "exec cat"}, Cwd: t.TempDir(),
+				Env: []string{"PATH=/usr/bin:/bin", "TERM=xterm-256color"}, Cols: 80, Rows: 24, Logf: t.Logf,
+				Agent: &AgentConfig{Agent: c.agent(t), Home: t.TempDir(), Guard: deny},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { s.Stop(time.Second) })
+			if _, err := s.Hook("SessionStart", c.start); err != nil {
+				t.Fatal(err)
+			}
+			// The subagent runs inside its spawner's turn.
+			s.Hook("UserPromptSubmit", map[string]any{"prompt": "go", "session_id": "a"})
+			res, err := s.Hook("PreToolUse", c.call)
+			if err != nil || !strings.Contains(string(res.Stdout), `"permissionDecision":"deny"`) {
+				t.Fatalf("not judged: %q %v", res.Stdout, err)
+			}
+			if c.call["agent_id"] != nil {
+				rt := s.agentRT()
+				rt.mu.Lock()
+				_, marked := rt.escapes["t1"]
+				rt.mu.Unlock()
+				if !marked {
+					t.Error("the subagent's escape isn't marked")
+				}
+			}
+		})
+	}
 }

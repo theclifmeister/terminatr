@@ -288,36 +288,3 @@ func TestModExamples(t *testing.T) {
 		}
 	}
 }
-
-// TestModEnableToolsAgentMod: enabling a mod that offers tools says,
-// while the Agent mod is off, that Claude threads won't get them (T301
-// L1); with it on it says nothing.
-func TestModEnableToolsAgentMod(t *testing.T) {
-	h := newHarness(t)
-	src := modSource(t, `id = "lint"
-name = "Lint"
-version = "1.0.0"
-api = "1.0"
-[provides]
-main = "main.ts"
-[[provides.tools]]
-id = "ping"
-description = "Answers pong."
-[permissions]
-tools = true
-`)
-	if out := h.ok(human, "mod", "install", src, "--yes"); !strings.Contains(out, mod.ToolsAgentModNote) {
-		t.Errorf("install consent lacks the Agent mod: %q", out)
-	}
-	if out := h.ok(human, "mod", "enable", "lint", "--yes"); !strings.Contains(out, "The Agent mod is off: Claude threads get its tools only") {
-		t.Errorf("enable, Agent mod off: %q", out)
-	}
-	cfg := filepath.Join(h.root, "config.toml")
-	old, _ := os.ReadFile(cfg)
-	if err := os.WriteFile(cfg, append([]byte("[agent_mod]\nenabled = true\n"), old...), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if out := h.ok(human, "mod", "enable", "lint", "--yes"); strings.Contains(out, "Agent mod is off") {
-		t.Errorf("enable, Agent mod on: %q", out)
-	}
-}

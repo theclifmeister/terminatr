@@ -1,18 +1,51 @@
 package guard
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
-// vectors are the shared test vectors, which hooks/guard.ts passes too.
+// vectors are the guard's test vectors (testdata/vectors.json): what
+// each call breaks (rule, null for none) and the summary journaled; and
+// the sentence each rule gives each role. The tools (each one's kind and
+// input fields, as a manifest's [guard.tools] gives them) go with every
+// rule set: Claude's and Codex's, which their manifests must match
+// (internal/agent TestGuardToolVectors), and a lowercase vocabulary like
+// pi's and opencode's. A case the guard asks about rather than refuses (a
+// PowerShell command it can't read) has rule "unknown" and "ask": true.
+// The thread-mods and mods-only sets carry rules a mod adds (mods design
+// §7, Tighten only): the core's and the mod's, and the mod's alone. The
+// yolo-thread set is a yolo thread's guard: the floor only, with tm's
+// settings and the project folder no tool writes (noWrite); the
+// floor-coordinator set the coordinator's, whose project folder it writes
+// but for tm's parts of it; thread-escapes asks about a call that asks to
+// leave the sandbox (askEscapes), rule "escape"; thread-ask-first asks
+// about a command of an excluded command that asks first (askFirst), rule
+// "excluded", and thread-ask-first-only has nothing else; thread-own and
+// thread-own-off carry excluded commands of the user's own Claude
+// settings (unsandboxed): a call one takes and tm's (tmExcluded) don't is
+// an escape, asked, or with escapes off (noEscapes) refused. The
+// thread-allow, thread-learn and floor-only sets carry the human's
+// allowances (a refusal under an allowance's rule of the command line or
+// file it matches is lifted; an "exact" one's * matches only a *), tm's
+// own files and the secret variables: a case with "floor" is a refusal no
+// allowance lifts; the rules-off sets have the force-push and merge rules
+// off (guard_off) and their floor still refusing; "subject" (the command
+// line or file an allowance names) and "message", when a case gives them,
+// are the refusal's. A case with links judges file writes where they
+// land: each link (an absolute path) leads to its target, and a write
+// under a link to the same place under the target (Resolve, faked). A
+// case with files has those paths (absolute, clean, where they land)
+// regular files, the rest not: a shell given input runs a script of the
+// worktree only where one is (File, faked). One case a line.
 type vectors struct {
 	Tools map[string]Tool  `json:"tools"`
 	Rules map[string]Rules `json:"rules"`
@@ -37,25 +70,19 @@ type vectors struct {
 	Messages map[string]map[string]string `json:"messages"`
 }
 
-// loadVectors reads guard-vectors.ts: a TS module whose default export
-// is JSON.
+// loadVectors reads testdata/vectors.json.
 func loadVectors(t *testing.T) vectors {
 	t.Helper()
-	b, err := os.ReadFile("../agent/claude/mod/tests/guard-vectors.ts")
+	b, err := os.ReadFile("testdata/vectors.json")
 	if err != nil {
 		t.Fatal(err)
 	}
-	const mark = "\nexport default "
-	i := bytes.Index(b, []byte(mark))
-	if i < 0 {
-		t.Fatalf("guard-vectors.ts: no %q", mark)
-	}
 	var v vectors
-	if err := json.Unmarshal(b[i+len(mark):], &v); err != nil {
-		t.Fatalf("guard-vectors.ts: %v", err)
+	if err := json.Unmarshal(b, &v); err != nil {
+		t.Fatalf("vectors.json: %v", err)
 	}
 	if len(v.Cases) < 100 {
-		t.Fatalf("guard-vectors.ts: only %d cases", len(v.Cases))
+		t.Fatalf("vectors.json: only %d cases", len(v.Cases))
 	}
 	// The tools go with every rule set.
 	for name, r := range v.Rules {
@@ -78,8 +105,8 @@ func linksTo(links map[string]string) func(string) string {
 	}
 }
 
-// TestVectors: the Go port refuses (or asks about) what guard.ts does,
-// with the same rule, summary and sentence.
+// TestVectors: the guard refuses (or asks about) each case's call with
+// its rule, summary and sentence.
 func TestVectors(t *testing.T) {
 	v := loadVectors(t)
 	for _, c := range v.Cases {
@@ -237,6 +264,127 @@ func TestPatchPaths(t *testing.T) {
 }
 
 // FuzzJudge: no command line panics the matcher.
+// TestLimits: a command line over MaxCommand, or nested past
+// maxNesting, is refused whole (unreadable, floor) whatever the rules
+// allow; one just inside is judged as usual, and nesting that would
+// double the parser's work at each level (heredocs in heredocs) stays
+// within maxParse and returns at once.
+func TestLimits(t *testing.T) {
+	r := Rules{On: true, Role: "thread", Rules: []string{"merge"}, Home: "/h", Cwd: "/w", Writable: []string{"/w"},
+		Tools: map[string]Tool{"Bash": {Kind: KindShell, Fields: []string{"command"}}}}
+	judge := func(c string) *Denial { return r.Judge("Bash", map[string]any{"command": c}) }
+	nest := func(n int) string { return strings.Repeat("echo $(", n) + "ls" + strings.Repeat(")", n) }
+	if d := judge(nest(maxNesting)); d != nil {
+		t.Fatalf("nested %d deep: %+v", maxNesting, d)
+	}
+	if d := judge("echo $(" + nest(maxNesting-2) + " && gh pr merge 1)"); d == nil || d.Rule != "merge" {
+		t.Fatalf("a merge inside deep nesting: %+v", d)
+	}
+	for name, c := range map[string]string{
+		"too deep":  nest(maxNesting + 2),
+		"too long":  "echo " + strings.Repeat("a", MaxCommand),
+		"backticks": strings.Repeat("echo \"$(", maxNesting+2) + "x" + strings.Repeat(")\"", maxNesting+2),
+	} {
+		if d := judge(c); d == nil || d.Rule != RuleUnreadable || !d.Floor || d.Ask {
+			t.Errorf("%s: %+v", name, d)
+		}
+	}
+	// No allowance lifts it, and it is refused in yolo's floor too.
+	r.Allow = []Allow{{Rule: RuleUnreadable, Command: "*"}}
+	if d := judge(nest(maxNesting + 2)); d == nil || d.Rule != RuleUnreadable {
+		t.Errorf("allowed: %+v", d)
+	}
+	var doc strings.Builder
+	for i := range 40 {
+		fmt.Fprintf(&doc, "bash <<E%d\n$(cat <<F%d\n", i, i)
+	}
+	start := time.Now()
+	judge(doc.String())
+	if took := time.Since(start); took > 2*time.Second {
+		t.Fatalf("nested heredocs took %v", took)
+	}
+}
+
+// TestJudgeBudget: one judge reads with one budget. Re-reads count:
+// eval and sh -c nested past maxNesting, and a line whose parts are
+// judged from many folders over, stop and refuse (unreadable) rather
+// than run on; a judge past its Deadline stops and refuses (unchecked).
+func TestJudgeBudget(t *testing.T) {
+	r := Rules{On: true, Role: "thread", Rules: []string{"merge"}, Home: "/h", Cwd: "/w", Writable: []string{"/w"},
+		Tools: map[string]Tool{"Bash": {Kind: KindShell, Fields: []string{"command"}}, "PowerShell": {Kind: KindShell, Syntax: SyntaxPowerShell, Fields: []string{"command"}}}}
+	judge := func(r Rules, tool, c string) *Denial { return r.Judge(tool, map[string]any{"command": c}) }
+	if d := judge(r, "Bash", strings.Repeat("eval ", 8)+"gh pr merge 1"); d == nil || d.Rule != "merge" {
+		t.Fatalf("eval 8 deep: %+v", d)
+	}
+	if d := judge(r, "Bash", strings.Repeat("eval ", maxNesting+4)+"ls"); d == nil || d.Rule != RuleUnreadable {
+		t.Errorf("eval past maxNesting: %+v", d)
+	}
+	// sh -c counts with eval: alone each is inside the limit.
+	inner := strings.Repeat("eval ", maxNesting-2) + "ls"
+	if d := judge(r, "Bash", inner); d != nil {
+		t.Fatalf("eval inside the limit: %+v", d)
+	}
+	sh := inner
+	for range 4 {
+		sh = "sh -c " + strconv.Quote(sh)
+	}
+	if d := judge(r, "Bash", sh); d == nil || d.Rule != RuleUnreadable {
+		t.Errorf("sh -c and eval past maxNesting: %+v", d)
+	}
+	// Each "cd || true" adds a folder the rest is judged from: the parts
+	// times the folders, past the budget.
+	many := strings.Repeat("cd d || true; ", 2000) + "echo " + strings.Repeat("x ", 12000)
+	start := time.Now()
+	if d := judge(r, "Bash", many); d == nil || d.Rule != RuleUnreadable {
+		t.Errorf("many folders: %+v", d)
+	}
+	if took := time.Since(start); took > 5*time.Second {
+		t.Errorf("many folders took %v", took)
+	}
+	late := r
+	late.Deadline = time.Now().Add(-time.Second)
+	for _, tool := range []string{"Bash", "PowerShell"} {
+		if d := judge(late, tool, "ls"); d == nil || d.Rule != RuleUnchecked || !strings.Contains(d.Message, "took too long") {
+			t.Errorf("%s past its deadline: %+v", tool, d)
+		}
+	}
+	if d := late.JudgeCommand("ls"); d == nil || d.Rule != RuleUnchecked {
+		t.Errorf("JudgeCommand past its deadline: %+v", d)
+	}
+}
+
+// TestCdWalk: a script that walks ten subfolders in turn (cd X || exit
+// 1; …; cd ..) is judged as usual, not refused for its folders: a cd ..
+// that always runs merges the folders back into their parents (cd X ||
+// exit merges nothing). A write the floor holds is still found.
+func TestCdWalk(t *testing.T) {
+	wt := "/h/.terminatr/worktrees/demo/t-0001-fix"
+	r := Rules{On: true, Role: "thread", Rules: []string{"merge", "worktree-only"}, Home: "/h", Cwd: wt, Writable: []string{wt},
+		NoWrite: []string{"/h/.terminatr/projects/demo"},
+		Tools:   map[string]Tool{"Bash": {Kind: KindShell, Fields: []string{"command"}}}}
+	judge := func(c string) *Denial { return r.Judge("Bash", map[string]any{"command": c}) }
+	var walk, line, and strings.Builder
+	for _, d := range []string{"api", "cli", "web", "worker", "infra", "docs", "tools", "lib", "ops", "site"} {
+		fmt.Fprintf(&walk, "cd %s || exit 1\ngo test ./...\ncd ..\n", d)
+		fmt.Fprintf(&line, "cd %s || exit 1; go test ./...; cd ..; ", d)
+		fmt.Fprintf(&and, "cd %s && go test ./... ; cd .. ; ", d)
+	}
+	for name, c := range map[string]string{"|| exit": walk.String(), "one line": line.String(), "&&": and.String()} {
+		if d := judge(c); d != nil {
+			t.Errorf("%s walk: %+v", name, d)
+		}
+		if d := judge(c + "gh pr merge 1"); d == nil || d.Rule != "merge" {
+			t.Errorf("%s walk, then a merge: %+v", name, d)
+		}
+	}
+	if d := judge(walk.String() + "cd ../../../projects/demo || exit $?\nrm TASKS.md"); d == nil || d.Rule != RuleTMFiles {
+		t.Errorf("into the project folder: %+v", d)
+	}
+	if d := judge("cd sub || exit 1; rm ../../../../projects/demo/TASKS.md"); d == nil || d.Rule != RuleTMFiles {
+		t.Errorf("from the folder the cd went to: %+v", d)
+	}
+}
+
 func FuzzJudge(f *testing.F) {
 	f.Add("git push -f origin 'x' && echo \"$(gh pr merge 1)\" `x` \\")
 	f.Add("rm -rf ~/.terminatr/worktrees/../x; cat <~/.ssh/k")

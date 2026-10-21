@@ -141,7 +141,7 @@ func (p *Project) Context(seen Ticked, threads func(prs map[string]string) (Sect
 		case q.Thread != "":
 			who, ref = who+" "+q.Thread, q.Thread
 		}
-		head = append(head, fmt.Sprintf("Question: %s (%s) waits on a question menu since %s; relay the user's answer with tm thread answer %s --choice N | --option LABEL | --text T [--question K]:",
+		head = append(head, fmt.Sprintf("Question: %s (%s) waits on a question menu since %s; relay the user's answer with tm thread answer %s --choice N | --text T [--question K]:",
 			q.Session, who, q.Since.UTC().Format("2006-01-02 15:04 UTC"), ref))
 		for _, l := range q.Lines {
 			head = append(head, "  "+l)

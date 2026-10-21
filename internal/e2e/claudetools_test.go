@@ -1,8 +1,7 @@
 package e2e
 
-// Claude without the agent mod (T646): what the mod alone gave a Claude
-// thread before, the typed tools and the usage, from tm mcp and the
-// session's transcript, as Codex has them.
+// Claude's typed tools and usage (T646): from tm mcp and the session's
+// transcript, as Codex has them.
 
 import (
 	"encoding/json"
@@ -12,17 +11,15 @@ import (
 	"slices"
 	"strings"
 	"testing"
-	"time"
 )
 
-// TestClaudeWithoutMod: a Claude thread with the mod off (the default)
-// gets tm mcp as its MCP server, whose tools/list holds the thread's
+// TestClaudeToolsAndUsage: a Claude thread gets tm mcp as its MCP server, whose tools/list holds the thread's
 // typed tools under Claude's names and whose call runs as the thread;
 // its turns' tokens and its context use come from its transcript (the
 // fake writes Claude 2.1.306's usage lines), the window from the model's
 // id; /clear and /compact forget the context use until the next turn
 // reports it.
-func TestClaudeWithoutMod(t *testing.T) {
+func TestClaudeToolsAndUsage(t *testing.T) {
 	env, projDir, _ := threadEnv(t)
 	env.MustCLI("thread", "start", "Fix the login", "--project", "demo")
 	th := threadSession(t, env, "demo", "t-0001")
@@ -110,46 +107,12 @@ func TestClaudeWithoutMod(t *testing.T) {
 	}
 }
 
-// TestClaudeWithModNoMCP: with the mod on, the mod registers the typed
-// tools and reports the usage itself, so the launch names no MCP server
-// and the transcript's usage isn't counted (the fake runs no mod: its
-// thread reports none).
-func TestClaudeWithModNoMCP(t *testing.T) {
-	env, _, _ := threadEnv(t)
-	writeConfig(t, env, "[agent_mod]\nenabled = true\n")
-	env.MustCLI("thread", "start", "Fix the login", "--project", "demo")
-	th := threadSession(t, env, "demo", "t-0001")
-	env.WaitState(th, "idle", agentWait)
-	start := env.WaitFake("start", agentWait, nil)
-	argv, _ := json.Marshal(start["argv"])
-	plugin := pluginDir(t, start)
-	if _, err := os.Stat(filepath.Join(plugin, "hooks", "register.ts")); err != nil {
-		t.Fatalf("the mod isn't loaded (%v): %s", err, argv)
-	}
-	if cfgs, _ := start["mcp_config"].([]any); len(cfgs) != 0 {
-		t.Fatalf("the mod and tm mcp both: %s", argv)
-	}
-	env.Prompt(th, "hello")
-	env.WaitState(th, "idle", agentWait)
-	time.Sleep(time.Second) // the tailer's ticks
-	var show struct {
-		Thread struct{ Usage struct{ Turns, Output int64 } }
-	}
-	json.Unmarshal([]byte(env.MustCLI("thread", "show", "t-0001", "--project", "demo", "--json")), &show)
-	if u := show.Thread.Usage; u.Output != 0 || u.Turns != 0 {
-		t.Errorf("usage counted from the transcript beside the mod: %+v", u)
-	}
-	if i, _ := env.Info(th); i.Context != 0 {
-		t.Errorf("context from the transcript beside the mod: %d", i.Context)
-	}
-}
-
-// TestCoordinatorSlashCommandsWithoutMod: a coordinator's /saveclear and
-// /answer without the mod are the plugin's commands; the prompt never
+// TestCoordinatorSlashCommands: a coordinator's /saveclear and /answer
+// are the plugin's commands; the prompt never
 // reaches the model: the server runs tm clear's and tm ask open's work
 // and the hook blocks it with what came of it, the coordinator idle
 // again. A thread gets neither command.
-func TestCoordinatorSlashCommandsWithoutMod(t *testing.T) {
+func TestCoordinatorSlashCommands(t *testing.T) {
 	env, projDir, _ := threadEnv(t)
 	coord := env.StartAgent("claude", projDir, "--role", "coordinator", "--project", "demo")
 	env.WaitState(coord, "idle", agentWait)

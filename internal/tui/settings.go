@@ -309,7 +309,7 @@ const (
 func (m *dash) openSettings() {
 	m.agentsOK = false
 	m.catalogs = m.src.Catalogs()
-	rows := globalSettings(m.src.ModsNote())
+	rows := globalSettings()
 	if safeMode() {
 		rows = append([]setting{safeModeRow()}, rows...)
 	}
@@ -324,7 +324,7 @@ func safeModeRow() setting {
 		value: func(m *dash) string { return "on (tm --no-mods)" }}
 }
 
-func globalSettings(note string) []setting {
+func globalSettings() []setting {
 	return []setting{
 		{label: "Prefix key", help: "Starts the session commands, written prefix+<key> in hints. Inside tmux, which takes ctrl+b, pick another. Enter, then press the new one.",
 			value:  func(m *dash) string { return m.prefix },
@@ -438,41 +438,7 @@ func globalSettings(note string) []setting {
 		{label: "Models", help: "Each agent's models a thread may run, a line on when each fits, and the default. Agents release new ones often: add, change or remove them here. Enter lists them.",
 			value:  func(m *dash) string { return catalogWords(m.catalogs) },
 			change: func(m *dash) tea.Cmd { m.openCatalog(); return nil }},
-		{label: "Agent mod", help: "Load terminatr's agent mod in agent panes (early access). Needs " + note + " or newer. Applies to sessions launched after the change.",
-			value: func(m *dash) string { return onOff(m.data.AgentMod) },
-			change: func(m *dash) tea.Cmd {
-				on := !m.data.AgentMod
-				m.data.AgentMod = on
-				msg := "agent mod off; sessions launched from now on load no mod"
-				if on {
-					msg = "agent mod on; sessions launched from now on load the mod"
-				}
-				return m.setSetting("agent_mod", "enabled", on, msg)
-			}},
-		agentModRow("Agent mod band", "The band, status entry and toast in the pane; the feed still runs. Only matters while Agent mod is on. Applies to sessions launched after the change.",
-			"band", func(m *dash) *bool { return &m.data.AgentModBand }, "sessions launched from now on follow it"),
-		agentModRow("Agent mod pane", "Open the /tm dashboard pane beside the coordinator when it starts, where it docks as a sidebar (fullscreen, 144+ columns). Off by default: in tm the info panel beside the coordinator shows the same; /tm is for Claude desktop and Remote Control, and opens or closes it either way. Only matters while Agent mod is on. Applies to coordinators launched after the change.",
-			"pane", func(m *dash) *bool { return &m.data.AgentModPane }, "coordinators launched from now on follow it"),
 	}
-}
-
-// agentModRow is an [agent_mod] key's on/off row that matters only
-// while Agent mod is on; field is the console's copy, msg follows the
-// new value in the footer.
-func agentModRow(label, help, key string, field func(m *dash) *bool, msg string) setting {
-	return setting{label: label, help: help,
-		value: func(m *dash) string { return onOff(*field(m)) },
-		from: func(m *dash) string {
-			if !m.data.AgentMod {
-				return "needs Agent mod on"
-			}
-			return ""
-		},
-		change: func(m *dash) tea.Cmd {
-			on := !*field(m)
-			*field(m) = on
-			return m.setSetting("agent_mod", key, on, "agent mod "+key+" "+onOff(on)+"; "+msg)
-		}}
 }
 
 // pickMod saves a [ui] pick of a built-in or a mod's theme, icons or

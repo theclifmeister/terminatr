@@ -3,6 +3,7 @@ package claude
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 
@@ -29,12 +30,25 @@ type plugin struct {
 // enabled plugin on the known-unsafe list. Warnings only, with no fix:
 // the plugins are the user's, who can disable one with
 // `claude plugin disable <id>`.
+//
+// It also warns when Claude's managed or user settings turn tm's hooks
+// off (HooksOff; a folder's own are checked at each launch).
 func (a *Agent) DoctorChecks(look func(string) (string, error), run func(dir, name string, args ...string) (string, error)) []agent.DoctorCheck {
 	const name = "claude plugins"
 	path, err := look(a.m.Launch.Command)
 	if err != nil {
 		return nil // doctor's agents group reports a missing claude
 	}
+	home, _ := os.UserHomeDir()
+	hooks := agent.DoctorCheck{Name: "claude hooks", Detail: "no settings turn tm's hooks off"}
+	if w := a.HooksOff(home, ""); w != "" {
+		hooks.Warn, hooks.Detail = true, w
+	}
+	return append(a.pluginChecks(name, path, run), hooks)
+}
+
+// pluginChecks are DoctorChecks' plugin checks.
+func (a *Agent) pluginChecks(name, path string, run func(dir, name string, args ...string) (string, error)) []agent.DoctorCheck {
 	raw, err := run("", path, "plugin", "list", "--json")
 	if err != nil {
 		return []agent.DoctorCheck{{Name: name, Warn: true, Detail: "couldn't list: " + firstLine(err.Error())}}

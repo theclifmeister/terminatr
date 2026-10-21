@@ -185,18 +185,13 @@ type SessionInfo struct {
 	Model        string `json:"model,omitempty"`
 	ModelNext    string `json:"model_next,omitempty"`
 	ModelPending bool   `json:"model_pending,omitempty"`
-	// HooksSkipped says another of the agent's mods skipped terminatr's
-	// context hooks, and who: the mod's name, or "another mod" when it
-	// can't be told. tm's command hooks give the context instead
-	// (docs/SPEC.md §7.8).
-	HooksSkipped string `json:"hooks_skipped,omitempty"`
-	// Question is the question menu open in the agent, as its mod sent it
-	// (session.ask); nil without one, or without a mod.
+	// Question is tm's own question open on the session (an approved
+	// command that asks first, docs/SPEC.md §3.3); nil without one.
 	Question *Question `json:"question,omitempty"`
 	// Context is how many tokens the agent's latest turn read as context
 	// (input and cache, not the running total), ContextWindow the window
-	// of its model, both as its mod sent them; 0 without a mod or
-	// before the first turn.
+	// of its model, both as the agent's hooks or transcript report them;
+	// 0 before the first turn.
 	Context       int64 `json:"context,omitempty"`
 	ContextWindow int64 `json:"context_window,omitempty"`
 	// Server is the paired server's alias for one of its panes this

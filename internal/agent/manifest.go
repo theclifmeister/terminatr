@@ -144,7 +144,8 @@ type Manifest struct {
 	// IgnoreFields: a hook event with any of these payload fields present
 	// and non-empty (e.g. Claude's agent_id on subagent events) is ignored
 	// for state, session id and todos. It still feeds [[hooks]] entries
-	// that have a counter.
+	// that have a counter, and is answered as any other (Respond): the
+	// guard judges a subagent's tool calls too, and marks its escapes.
 	IgnoreFields []string  `toml:"ignore_fields"`
 	Hooks        []HookMap `toml:"hooks"`
 	Todos        []TodoMap `toml:"todos"`
@@ -405,13 +406,13 @@ type HookMap struct {
 	// ClearsContext says the event leaves the conversation's context
 	// empty or rewritten (/clear, a compaction): the server forgets the
 	// session's context use until the next request reports it
-	// (docs/SPEC.md §8.6, Context), as the mod's POST /v1/context/clear.
+	// (docs/SPEC.md §8.6, Context).
 	ClearsContext bool `toml:"clears_context"`
 	// Command names the session command the event stands for, when the
 	// user typed it: a slash command the agent offers without a mod of
 	// its own (CommandSaveClear, CommandAnswer). The server runs it and
 	// Respond's .Command is what came of it, "" when it didn't run (the
-	// mod runs it instead, or the session can't).
+	// session can't).
 	Command string `toml:"command"`
 	// Respond is a template printed back to the harness. It sees .Event,
 	// .Payload, .Context (rendered only when the template uses it) and
@@ -420,8 +421,10 @@ type HookMap struct {
 	Respond string `toml:"respond"`
 	// Timeout is how long tm hook waits for the response: "" (the
 	// default, 500 ms), "context" (3 s, for the event whose response
-	// carries the session's context) or "command" (3 s, sent once, for a
-	// Command's entry). See HookTimeout.
+	// carries the session's context), "command" (3 s, sent once, for a
+	// Command's entry) or "guard" (HookGuardWait, for the entry whose
+	// response is the guard's verdict: without one, tm hook answers with
+	// guard.Unchecked, FailClosed). See HookTimeout.
 	Timeout string `toml:"timeout"`
 }
 
@@ -448,8 +451,8 @@ func ClearsContext(a Agent, event string, payload map[string]any) bool {
 
 // Session commands a [[hooks]] entry may stand for (HookMap.Command):
 // a coordinator's save and clear (tm clear) and the opening of its
-// questions to the user (tm ask open), as the Claude mod's /saveclear
-// and /answer (docs/SPEC.md §8.6, Mods).
+// questions to the user (tm ask open): Claude's /saveclear and /answer
+// (docs/SPEC.md §8.6).
 const (
 	CommandSaveClear = "saveclear"
 	CommandAnswer    = "answer"
@@ -460,7 +463,15 @@ const (
 	HookTimeoutResponse = "response"
 	HookTimeoutContext  = "context"
 	HookTimeoutCommand  = "command"
+	HookTimeoutGuard    = "guard"
 )
+
+// HookGuardWait is how long tm hook waits, in all, for the guard's
+// verdict on a tool call (timeout = "guard"): longer than a plain
+// response, as the server judges the call first, and well inside the
+// agents' 5 s hook timeout, so the refusal tm hook gives without a
+// verdict is always read.
+const HookGuardWait = 3 * time.Second
 
 // HookContextWait is how long tm hook waits, in all, for the response to
 // an event whose entry has timeout = "context": the server counts a
@@ -602,12 +613,12 @@ func (m *Manifest) validate() error {
 			errs = append(errs, fmt.Errorf("hooks[%d]: counter must be +name or -name, with counter_key", i))
 		}
 		switch h.Timeout {
-		case "", HookTimeoutResponse, HookTimeoutContext, HookTimeoutCommand:
+		case "", HookTimeoutResponse, HookTimeoutContext, HookTimeoutCommand, HookTimeoutGuard:
 			if h.Timeout != "" && h.Respond == "" {
 				errs = append(errs, fmt.Errorf("hooks[%d]: timeout needs respond", i))
 			}
 		default:
-			errs = append(errs, fmt.Errorf("hooks[%d]: timeout %q is not response|context|command", i, h.Timeout))
+			errs = append(errs, fmt.Errorf("hooks[%d]: timeout %q is not response|context|command|guard", i, h.Timeout))
 		}
 	}
 	for i, t := range m.Todos {
@@ -885,15 +896,12 @@ func (a *manifestAgent) Hook(ev HookEvent, env HookEnv) ([]Signal, HookResult, e
 			sig.CounterKey, _ = lookupString(ev.Payload, h.CounterKey)
 			sigs = append(sigs, sig)
 		}
-		if ignored {
-			continue
-		}
 		// The first entry whose response says something answers; one
 		// that renders nothing (a guard that let the call through, a
 		// command that didn't run) leaves it to the next.
 		answered := false
 		if h.Respond != "" && len(res.Stdout) == 0 {
-			out, ran, err := renderRespond(h.Respond, h.Command, ev, env, a.m.Hook)
+			out, ran, err := renderRespond(h.Respond, h.Command, ev, env, a.m.Hook, a.m.Guard.Tools)
 			if err != nil {
 				return sigs, res, err
 			}
@@ -901,8 +909,10 @@ func (a *manifestAgent) Hook(ev HookEvent, env HookEnv) ([]Signal, HookResult, e
 		}
 		// A command's entry sets its state only when the command ran
 		// and said what came of it: otherwise the prompt goes on, and
-		// the event's other entries say the state.
-		if h.State != "" && (h.Command == "" || answered) {
+		// the event's other entries say the state. An ignored event
+		// (ignore_fields: a subagent's) sets none, but is answered all
+		// the same: its tool call is judged by the guard like any other.
+		if !ignored && h.State != "" && (h.Command == "" || answered) {
 			sig := base
 			sig.State, sig.Reason, sig.Transient = h.State, h.Reason, h.Transient
 			sigs = append(sigs, sig)
@@ -925,6 +935,43 @@ func (a *manifestAgent) Hook(ev HookEvent, env HookEnv) ([]Signal, HookResult, e
 		break
 	}
 	return sigs, res, nil
+}
+
+// GuardEvent reports whether agent a's manifest has the guard answer
+// event (an entry with timeout = "guard").
+func GuardEvent(a Agent, event string) bool {
+	m := ManifestOf(a)
+	if m == nil {
+		return false
+	}
+	return slices.ContainsFunc(m.Hooks, func(h HookMap) bool { return h.Event == event && h.Timeout == HookTimeoutGuard })
+}
+
+// FailClosed is what agent a's hook answers to event when the guard's
+// verdict didn't come (no server, a timeout, a refusal, a payload tm
+// hook couldn't read): its own response with guard.Unchecked as the
+// verdict, so the call is refused, never let through unjudged; nil for
+// an event the guard doesn't answer. payload may be nil.
+func FailClosed(a Agent, event string, payload map[string]any) []byte {
+	if !GuardEvent(a, event) {
+		return nil
+	}
+	m := ManifestOf(a)
+	p := maps.Clone(payload)
+	if p == nil {
+		p = map[string]any{}
+	}
+	// A payload tm hook couldn't read names no tool: the verdict is
+	// asked for all the same.
+	if t, _ := p[m.Hook.ToolField()].(string); t == "" {
+		p[m.Hook.ToolField()] = "unknown"
+	}
+	_, res, err := a.Hook(HookEvent{Agent: a.Name(), Event: event, Payload: p},
+		HookEnv{Guard: func(string, map[string]any) *guard.Denial { return guard.Unchecked() }})
+	if err != nil {
+		return nil
+	}
+	return res.Stdout
 }
 
 func (a *manifestAgent) Sources() *Sources { return &a.m.Sources }
@@ -1010,7 +1057,7 @@ var funcs = template.FuncMap{
 	// {"error":"#bf616a"}.
 	"colors": colors,
 	// list is its strings when cond holds, else none, for a grant only
-	// some launches get: list (not .Mods) "mcp__terminatr".
+	// some launches get: list (not .MCPClash) "mcp__terminatr".
 	"list": func(cond bool, s ...string) []string {
 		if !cond {
 			return []string{}
@@ -1270,8 +1317,8 @@ func render(tmpl string, data any) (string, error) {
 // methods so the (possibly expensive) context is rendered, and the call
 // judged, only if the template uses them. ran says the entry's command
 // ran and said what came of it.
-func renderRespond(tmpl, command string, ev HookEvent, env HookEnv, hook HookTrim) (out []byte, ran bool, err error) {
-	d := &respondData{ev: ev, env: env, hook: hook, command: command}
+func renderRespond(tmpl, command string, ev HookEvent, env HookEnv, hook HookTrim, tools map[string]guard.Tool) (out []byte, ran bool, err error) {
+	d := &respondData{ev: ev, env: env, hook: hook, command: command, tools: tools}
 	s, err := render(tmpl, d)
 	return []byte(s), d.result != "", err
 }
@@ -1283,6 +1330,7 @@ type respondData struct {
 	ev      HookEvent
 	env     HookEnv
 	hook    HookTrim
+	tools   map[string]guard.Tool
 	judged  bool
 	denial  *guard.Denial
 }
@@ -1319,8 +1367,33 @@ func (d *respondData) Guard() *guard.Denial {
 	d.judged = true
 	tool, _ := d.ev.Payload[d.hook.ToolField()].(string)
 	input, _ := d.ev.Payload[d.hook.InputField()].(map[string]any)
-	if tool != "" {
-		d.denial = d.env.Guard(tool, input)
+	if tool == "" {
+		// A call that names no tool can't be judged: refused.
+		d.denial = guard.Unchecked()
+		return d.denial
 	}
+	d.denial = d.env.Guard(tool, d.located(tool, input))
 	return d.denial
+}
+
+// located is a tool call's input with each optional location it leaves
+// out or empty ([guard.tools] optional) set to the agent's own folder,
+// the payload's cwd (an absolute path), which is where the agent looks;
+// with none, the guard takes the session's folder.
+func (d *respondData) located(tool string, input map[string]any) map[string]any {
+	cwd, _ := d.ev.Payload[d.hook.CwdField()].(string)
+	t, ok := d.tools[tool]
+	if !ok || !filepath.IsAbs(cwd) {
+		return input
+	}
+	for _, f := range t.Optional {
+		if v, has := input[f]; !has || v == "" {
+			input = maps.Clone(input)
+			if input == nil {
+				input = map[string]any{}
+			}
+			input[f] = cwd
+		}
+	}
+	return input
 }

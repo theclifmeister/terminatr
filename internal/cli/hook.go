@@ -10,10 +10,13 @@ import (
 	"io"
 	"net"
 	"os"
+	"regexp"
+	"strconv"
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/client"
+	"github.com/theclifmeister/terminatr/internal/guard"
 	"github.com/theclifmeister/terminatr/internal/plat/ipc"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/version"
@@ -36,6 +39,10 @@ var (
 	// before it answers. Sent once: a command the server ran but didn't
 	// answer in time must not run again.
 	hookCommand = agent.HookContextWait
+	// hookGuard is the total for an entry with timeout = "guard"
+	// (PreToolUse): the server judges the call before it answers, and
+	// without its verdict the call is refused (failClosed).
+	hookGuard = agent.HookGuardWait
 	// hookTries and hookRetry: a "context" event (SessionStart) the server
 	// didn't take (no connection, closed, refused) is sent again, within
 	// hookContext: lost, it would leave the session without its context,
@@ -71,38 +78,76 @@ func runHook(e *Env, args []string) error {
 		}
 	}
 	session := e.Getenv("TERMINATR_SESSION")
-	data, _ := io.ReadAll(io.LimitReader(e.Stdin, maxHookPayload))
+	data, _ := io.ReadAll(io.LimitReader(e.Stdin, maxHookPayload+1))
 	if name == "" || session == "" {
 		return nil
 	}
-	var payload map[string]any
-	if json.Unmarshal(data, &payload) != nil {
-		return nil
-	}
-	paths, err := client.ResolvePaths()
-	if err != nil {
-		hookLog(e, session, "", err)
-		return nil
+	paths, perr := client.ResolvePaths()
+	dir := ""
+	if perr == nil {
+		dir = paths.AgentsDir()
 	}
 	// The event's name is in [hook] event_field (default hook_event_name),
 	// and its [[hooks]] entries say whether a response is expected and how
-	// long to wait for it (timeout).
+	// long to wait for it (timeout). How the event is trimmed, how long to
+	// wait and whether it fails closed come from tm's own manifest for a
+	// built-in agent, never a file a session could write over it;
+	// another agent's from the user's (tm's home, which the guard's floor
+	// keeps from sessions). No agent: PreToolUse gets tm's own refusal.
+	a, ok := agent.BuiltinAgent(name)
+	if !ok {
+		if reg, _ := agent.Load(dir); reg != nil {
+			a, _ = reg.Get(name)
+		}
+	}
 	var hook agent.HookTrim
 	var hooks []agent.HookMap
 	token := ""
-	if reg, _ := agent.Load(paths.AgentsDir()); reg != nil {
-		if a, ok := reg.Get(name); ok {
-			hook = a.Sources().Hook
-			if m := agent.ManifestOf(a); m != nil {
-				if m.Inject.TokenEnv != "" {
-					token = e.Getenv(m.Inject.TokenEnv)
-				}
-				hooks = m.Hooks
+	if a != nil {
+		hook = a.Sources().Hook
+		if m := agent.ManifestOf(a); m != nil {
+			if m.Inject.TokenEnv != "" {
+				token = e.Getenv(m.Inject.TokenEnv)
 			}
+			hooks = m.Hooks
 		}
 	}
-	event, _ := payload[hook.EventField()].(string)
+	var payload map[string]any
+	read := len(data) <= maxHookPayload && json.Unmarshal(data, &payload) == nil && payload != nil
+	event := rawEvent(data, hook.EventField())
+	if read {
+		event, _ = payload[hook.EventField()].(string)
+	}
+	// failClosed answers the guard's event without its verdict: the
+	// agent's refusal "tm couldn't check this call", never nothing, which
+	// would let the call through unjudged (docs/SPEC.md §8.6, Guard).
+	failClosed := func() {
+		switch {
+		case a != nil:
+			e.Stdout.Write(agent.FailClosed(a, event, payload))
+		case event == "PreToolUse":
+			// No agent to say how: tm's own refusal, in the shape Claude
+			// and Codex read.
+			io.WriteString(e.Stdout, genericDeny)
+		}
+	}
+	if a == nil {
+		hookLog(e, session, event, fmt.Errorf("no agent %q", name))
+		failClosed()
+		return nil
+	}
+	if !read {
+		hookLog(e, session, event, fmt.Errorf("payload of %d bytes unreadable or over %d", len(data), maxHookPayload))
+		failClosed()
+		return nil
+	}
+	if perr != nil {
+		hookLog(e, session, event, perr)
+		failClosed()
+		return nil
+	}
 	total, tries, once := hookAck, 1, false
+	guarded := false
 	for _, h := range hooks {
 		if h.Event != event || h.Respond == "" {
 			continue
@@ -115,6 +160,8 @@ func runHook(e *Env, args []string) error {
 			if h.Matches(event, payload) {
 				total, once = max(total, hookCommand), true
 			}
+		case agent.HookTimeoutGuard:
+			total, guarded = max(total, hookGuard), true
 		}
 	}
 	if once {
@@ -124,13 +171,33 @@ func runHook(e *Env, args []string) error {
 	params := proto.HookEventParams{Session: session, Agent: name, Event: event,
 		Payload: payload, Token: token}
 	start := time.Now()
-	out := sendHook(paths.Socket, params, total, tries, func(try int, err error) {
+	out, ok := sendHook(paths.Socket, params, total, tries, func(try int, err error) {
 		hookLog(e, session, event, fmt.Errorf("%w (try %d of %d, after %v of %v)", err, try, tries, time.Since(start).Round(time.Millisecond), total))
 	})
+	if !ok && guarded {
+		failClosed()
+		return nil
+	}
 	if out != "" {
 		io.WriteString(e.Stdout, out)
 	}
 	return nil
+}
+
+// genericDeny is the refusal of a PreToolUse tm hook can't judge for an
+// agent it doesn't know.
+var genericDeny = `{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":` +
+	strconv.Quote(guard.Unchecked().Message) + `}}`
+
+// rawEvent is the event name in a payload tm hook couldn't decode (cut
+// at the read limit, or not JSON): the first string value of field, ""
+// when there is none.
+func rawEvent(data []byte, field string) string {
+	re := regexp.MustCompile(`"` + regexp.QuoteMeta(field) + `"\s*:\s*"([A-Za-z_]{1,64})"`)
+	if m := re.FindSubmatch(data); m != nil {
+		return string(m[1])
+	}
+	return ""
 }
 
 // hookLog appends why event wasn't delivered to $TERMINATR_HOOK_LOG, if
@@ -149,20 +216,20 @@ func hookLog(e *Env, session, event string, err error) {
 }
 
 // sendHook delivers one event and returns the server's stdout for the
-// agent. Every failure (no server, a stale socket, a wedged server, a
-// protocol mismatch, a refusal) returns "" and goes to failed, never to
-// the agent. One the server didn't take is tried again, up to tries times
-// in all, while total lasts.
-func sendHook(socket string, p proto.HookEventParams, total time.Duration, tries int, failed func(try int, err error)) string {
+// agent, and ok once the server answered. Every failure (no server, a
+// stale socket, a wedged server, a protocol mismatch, a refusal) returns
+// false and goes to failed, never to the agent. One the server didn't
+// take is tried again, up to tries times in all, while total lasts.
+func sendHook(socket string, p proto.HookEventParams, total time.Duration, tries int, failed func(try int, err error)) (string, bool) {
 	deadline := time.Now().Add(total)
 	for i := 1; ; i++ {
 		out, again, err := sendHookOnce(socket, p, deadline)
 		if err == nil {
-			return out
+			return out, true
 		}
 		failed(i, err)
 		if !again || i >= tries || time.Until(deadline) < hookRetry+hookDial {
-			return ""
+			return "", false
 		}
 		time.Sleep(hookRetry)
 	}

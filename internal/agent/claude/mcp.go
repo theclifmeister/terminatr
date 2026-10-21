@@ -14,7 +14,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 )
 
-// tm's MCP server (docs/SPEC.md §8.6, tm mcp): without the mod, the
+// tm's MCP server (docs/SPEC.md §8.6, tm mcp): the
 // launch gives Claude tm mcp as the server "terminatr" (claude.toml's
 // claude-mcp.json), whose tools are the mcp__terminatr__<name> the
 // briefs name, and an mcp__terminatr rule that runs them without a

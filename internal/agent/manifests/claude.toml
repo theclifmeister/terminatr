@@ -35,14 +35,12 @@ command = "claude"
 # Hooks (--plugin-dir) and --settings are additive to the user's own
 # settings. --session-id only for fresh sessions: reusing an id fails.
 # The brief survives /clear as an appended system prompt.
-# Without the mod, tm mcp is the MCP server "terminatr" for the typed
-# tools (docs/SPEC.md §8.6, tm mcp): the same mcp__terminatr__<name>
-# tools the mod registers, so never both. --mcp-config is additive to
-# the user's own servers.
+# tm mcp is the MCP server "terminatr" for the typed tools (docs/SPEC.md
+# §8.6, tm mcp). --mcp-config is additive to the user's own servers.
 args = [
   "--plugin-dir", "{{.RuntimeDir}}/claude-plugin",
   "--settings", "{{.RuntimeDir}}/claude-settings.json",
-  "{{if not .Mods}}--mcp-config{{end}}", "{{if not .Mods}}{{.RuntimeDir}}/claude-mcp.json{{end}}",
+  "--mcp-config", "{{.RuntimeDir}}/claude-mcp.json",
   "{{if not .Resume}}--session-id{{end}}", "{{if not .Resume}}{{.AgentSID}}{{end}}",
   "{{if .BriefPath}}--append-system-prompt-file{{end}}", "{{.BriefPath}}",
 ]
@@ -77,14 +75,10 @@ TERMINATR_BIN = "{{.TMBin}}"
 CLAUDE_CODE_TMPDIR = "{{.TempDir}}"
 TMPDIR = "{{.TempDir}}"
 
-# With .Mods the same plugin is also terminatr's mod (docs/SPEC.md §8.6,
-# Mods): the Go agent (internal/agent/claude) writes its module and type
-# contract beside these files, and hooks.json names the module.
 [[launch.files]]
 path = "claude-plugin/.claude-plugin/plugin.json"
 template = '''
-{"name": "terminatr", "description": "terminatr session hooks", "version": "0.1.0"
-{{- if .Mods}}, "types": "./types/index.d.ts"{{end}}}
+{"name": "terminatr", "description": "terminatr session hooks", "version": "0.1.0"}
 '''
 
 # Every event goes to `tm hook --agent claude`: a command hook in exec form
@@ -92,44 +86,32 @@ template = '''
 # no quoting; Claude >= 2.1.139, [identify] min_version) (an http hook
 # shows a red error in Claude's UI whenever the server is down), synchronous
 # so events stay in order (~4 ms each), always exit 0, never stderr.
-# With .Mods the mod reports the turn's state itself (docs/SPEC.md §8.6,
-# Mods), so only what it doesn't cover stays a process spawn: the
-# context at SessionStart, the todo tools, the background counters and
-# the exit; and UserPromptSubmit and PreCompact, which give the context
-# when another mod skipped the mod's own hooks (§7.8): settings hooks
-# always run.
-# Without the mod, every event the [[hooks]], [[todos]] and
-# todos_snapshot below name (.HookEvents), and no other: an event no
-# entry maps would be a process spawn for nothing.
+# Every event the [[hooks]], [[todos]] and todos_snapshot below name
+# (.HookEvents), and no other: an event no entry maps would be a process
+# spawn for nothing.
 [[launch.files]]
 path = "claude-plugin/hooks/hooks.json"
 template = '''
 {{- $cmd := hookexec .TMBin "hook" "--agent" "claude" -}}
 {{- $h := printf `[{"hooks":[{"type":"command",%s,"timeout":5}]}]` $cmd -}}
-{{- $todo := printf `[{"matcher":"TaskCreate|TaskUpdate|TodoWrite","hooks":[{"type":"command",%s,"timeout":5}]}]` $cmd -}}
-{{- if .Mods}}{"modules": ["./register.ts"], "hooks": {
-  "SessionStart": {{$h}}, "UserPromptSubmit": {{$h}}, "PreCompact": {{$h}},
-  "PostToolUse": {{$todo}}, "SubagentStart": {{$h}}, "SubagentStop": {{$h}}, "SessionEnd": {{$h}}
-}}
-{{- else}}{"hooks": {
+{"hooks": {
 {{- range $i, $ev := .HookEvents}}{{if $i}},{{end}}
   {{json $ev}}: {{$h}}
 {{- end}}
 }}
-{{- end}}
 '''
 
-# tm mcp for the typed tools without the mod ([launch] args). Claude
-# runs MCP servers outside its sandbox, with its own environment (tm mcp
-# finds the session by its parents). Written with the mod too, unused.
+# tm mcp for the typed tools ([launch] args). Claude runs MCP servers
+# outside its sandbox, with its own environment (tm mcp finds the
+# session by its parents).
 [[launch.files]]
 path = "claude-mcp.json"
 template = '''
 {"mcpServers": {"terminatr": {"type": "stdio", {{hookexec .TMBin "mcp"}}}}}
 '''
 
-# A coordinator's /saveclear and /answer without the mod (with it, the
-# mod registers them): plain plugin commands, so Claude offers them;
+# A coordinator's /saveclear and /answer: plain plugin commands, so
+# Claude offers them;
 # the UserPromptSubmit hook carries the typed command first, and the
 # server runs it (tm clear, tm ask open) and blocks the prompt with what
 # came of it ([[hooks]] command below), so the model never sees it.
@@ -137,7 +119,7 @@ template = '''
 [[launch.files]]
 path = "claude-plugin/commands/saveclear.md"
 template = '''
-{{- if and (eq .Role "coordinator") (not .Mods)}}---
+{{- if eq .Role "coordinator"}}---
 description: Save what the coordinator learned, then clear its conversation (tm clear)
 ---
 tm didn't take /saveclear. Run `tm clear` in the shell and say in one line what it printed.
@@ -146,7 +128,7 @@ tm didn't take /saveclear. Run `tm clear` in the shell and say in one line what 
 [[launch.files]]
 path = "claude-plugin/commands/answer.md"
 template = '''
-{{- if and (eq .Role "coordinator") (not .Mods)}}---
+{{- if eq .Role "coordinator"}}---
 description: Open the coordinator's questions to you in a dialog
 ---
 tm didn't take /answer. Run `tm ask open` in the shell and say in one line what it printed.
@@ -170,10 +152,17 @@ tm didn't take /answer. Run `tm ask open` in the shell and say in one line what 
 # patterns (.Access.NoWriteSiblings, siblingRules): each pattern matches
 # the folder itself and all below it, so it can't be made, written or
 # moved into place.
-# Without the mod, mcp__terminatr lets tm mcp's tools run without a
-# prompt, as the mod's own do; not when Claude's own config has a
-# server "terminatr", or may (.MCPClash): then they are an ask rule,
-# which comes before any allow rule of the user's or the folder's own.
+# mcp__terminatr lets tm mcp's tools run without a prompt; not when
+# Claude's own config has a server "terminatr", or may (.MCPClash): then
+# they are an ask rule, which comes before any allow rule of the user's
+# or the folder's own.
+# disableAllHooks is pinned false: the hooks are how tm sees the session
+# and guards its tool calls, and --settings wins over the user's and the
+# folder's own settings (checked live on 2.1.306: a plugin hook that the
+# user's settings.json, the folder's .claude/settings.json or its
+# settings.local.json turned off with disableAllHooks: true ran again
+# with this pin). Claude's managed settings win over it; tm doctor and
+# the launch warn of those (internal/agent/claude/hooks.go).
 # Never put statusLine here: --settings would replace the user's own.
 # Outside safe mode Claude draws with tm's own theme in its config dir
 # ([theme] below, docs/SPEC.md §8.6), which the server rewrites on every
@@ -210,9 +199,10 @@ template = '''
   {{- else if .PaneScheme}}
   "theme": {{json (printf "%s-ansi" .PaneScheme)}},
   {{- end}}
+  "disableAllHooks": false,
   "permissions": {
-    "allow": {{json (concat (list (and (not .Mods) (not .MCPClash)) "mcp__terminatr") (rules "Read(/%s/**)" .Access.Read) (rules "Edit(/%s/**)" .Access.Write) (rules "Edit(/%s)" .Access.WriteFiles) (rules "Bash(%s:*)" .Access.Commands) .Sandbox.Allow)}},
-    "ask": {{json (list (and (not .Mods) .MCPClash) "mcp__terminatr")}},
+    "allow": {{json (concat (list (not .MCPClash) "mcp__terminatr") (rules "Read(/%s/**)" .Access.Read) (rules "Edit(/%s/**)" .Access.Write) (rules "Edit(/%s)" .Access.WriteFiles) (rules "Bash(%s:*)" .Access.Commands) .Sandbox.Allow)}},
+    "ask": {{json (list .MCPClash "mcp__terminatr")}},
     "deny": {{json (concat (rules "Edit(/%s/**)" .Access.NoWrite) (rules "Edit(/%s)" .Access.NoWriteFiles) (siblingRules "Edit(/%s)" .Access.NoWriteSiblings) (rules "Read(/%s/**)" .Access.Closed) (rules "Edit(/%s/**)" .Access.Closed))}}
   },
   "sandbox": {
@@ -306,7 +296,6 @@ temp_scratch = true
 temp_max = 44
 
 # The tools the guard judges, by kind, and the input fields each reads.
-# The mod's guard (hooks/guard.ts) gets them from GET /v1/rules too.
 # PowerShell is Claude's shell tool on Windows without Git Bash.
 [guard.tools]
 # A Bash call with dangerouslyDisableSandbox asks to run outside the
@@ -319,8 +308,9 @@ Write = { kind = "write", fields = ["file_path"] }
 MultiEdit = { kind = "write", fields = ["file_path"] }
 NotebookEdit = { kind = "write", fields = ["notebook_path"] }
 Read = { kind = "read", fields = ["file_path"] }
-Grep = { kind = "read", fields = ["path"] }
-Glob = { kind = "glob", fields = ["pattern", "path"] }
+# Grep's and Glob's path may be left out: the session's folder (optional).
+Grep = { kind = "read", fields = ["path"], optional = ["path"] }
+Glob = { kind = "glob", fields = ["pattern", "path"], optional = ["path"] }
 
 # Remote Control (2.1.289): the Claude apps list the session under its
 # name. /remote-control <name> turns it on in a running session. A resumed
@@ -432,7 +422,7 @@ match = { tool_name = "TodoWrite" }
 fields = ["tool_input"]
 
 # The guard judges each tool call from its input (Bash's command, the file
-# tools' paths), also with mods off, where the hook is the only way in.
+# tools' paths): the hook is its only way in.
 [[hook.keep_when]]
 match = { hook_event_name = "PreToolUse" }
 fields = ["tool_input"]
@@ -460,20 +450,19 @@ path_field = "transcript_path"
 root = "{{.ConfigDir}}/projects"
 name = "{{.AgentSID}}.jsonl"
 
-# Usage without the mod (T646, checked on 2.1.306 transcripts): each
+# Usage (T646, checked on 2.1.306 transcripts): each
 # model request is one or more assistant lines, one per content block,
 # all with the same message.id and the same usage, so the id tells a
 # repeat. input_tokens is the uncached part; the context is the whole
-# input, cache reads and writes included, as the mod's
-# $.session.usage().context reads it. The transcript gives no window
+# input, cache reads and writes included. The transcript gives no window
 # and no cost: context_windows lists only models whose window is fixed,
 # 1M as their default and only one (the API's Models table, 2026-10),
 # by exact id. Any other is left to the server's guess, 200K unless the
 # id or the context says more (the 4.x models' 1M depends on the plan
 # and on [1m], which the transcript doesn't show), so the % errs high
-# and auto_clear and the hint come on time. The cost stays the mod's
-# (Claude's own ledger). One turn per turn_duration, which ends every
-# finished turn. A subagent writes its own transcript, which isn't read.
+# and auto_clear and the hint come on time. A Claude session's tokens
+# have no cost. One turn per turn_duration, which ends every finished
+# turn. A subagent writes its own transcript, which isn't read.
 [jsonl_tail.usage]
 match = { type = "assistant" }
 input = "message.usage.input_tokens"
@@ -520,8 +509,7 @@ text_field = "message.content"
 event = "SessionStart"
 state = "idle"
 # Fires for startup, resume, clear, compact and fork; the context is
-# fetched fresh from the server every time. With the mod, only a line
-# saying where it is, unless another mod skipped the mod's hooks.
+# fetched fresh from the server every time.
 # tm hook waits up to 3 s for the context, not 500 ms (T94).
 timeout = "context"
 respond = '''{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":{{json .Context}}}}'''
@@ -529,22 +517,16 @@ respond = '''{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalCo
 [[hooks]]
 event = "UserPromptSubmit"
 state = "working"
-# With the mod: the context, when another mod skipped the mod's own
-# context hooks and the SessionStart hook didn't give it. Otherwise
-# nothing. tm hook waits as for SessionStart: a coordinator's context
-# can take longer than 500 ms to render.
-timeout = "context"
-respond ='''{{with .Context}}{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":{{json .}}}}{{end}}'''
 
-# A coordinator's /saveclear and /answer without the mod (the plugin's
+# A coordinator's /saveclear and /answer (the plugin's
 # commands, [[launch.files]] above): the server runs the command and the
 # prompt is blocked with what came of it, which Claude shows the user
 # (checked on 2.1.306: the hook gets the command as typed, before it
-# expands). The turn never starts: idle again. With the mod, or in
-# another session, .Command is "" and the prompt goes on: the entry
-# sets no state, and the session is working as for any prompt. tm hook
-# waits 3 s for the answer and sends the prompt once (timeout), so a
-# command the server ran late never runs twice.
+# expands). The turn never starts: idle again. In another session,
+# .Command is "" and the prompt goes on: the entry sets no state, and
+# the session is working as for any prompt. tm hook waits 3 s for the
+# answer and sends the prompt once (timeout), so a command the server
+# ran late never runs twice.
 [[hooks]]
 event = "UserPromptSubmit"
 match = { prompt = "/saveclear" }
@@ -581,10 +563,14 @@ respond = '''{{with .Command}}{"decision":"block","reason":{{json .}}}{{end}}'''
 event = "PreToolUse"
 state = "working"
 transient = true
-# Without the mod, the server's guard (internal/guard) judges each call
+# The server's guard (internal/guard) judges each call
 # and a refusal is the hook's answer, before any dialog; a PowerShell
 # command it can't read is put to the dialog (or auto mode's classifier)
 # with "ask". Allowed: no output, so Claude's own permission check decides.
+# Without a verdict within 3 s (no server, a timeout, a payload tm hook
+# can't read), tm hook answers with the refusal "tm couldn't check this
+# call" (timeout = "guard"): the guard fails closed.
+timeout = "guard"
 respond = '''{{with .Guard}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":{{if .Ask}}"ask"{{else}}"deny"{{end}},"permissionDecisionReason":{{json .Message}}}}{{end}}'''
 
 [[hooks]]
@@ -670,7 +656,7 @@ match = { reason = "!clear" }
 state = "exited"
 
 # The context use is forgotten on /clear and after a compaction, until
-# the next request reports it ([jsonl_tail.usage], or the mod's turn):
+# the next request reports it ([jsonl_tail.usage]):
 # a coordinator's hint and auto-/clear don't act on the old fill.
 [[hooks]]
 event = "SessionEnd"

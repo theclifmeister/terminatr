@@ -26,9 +26,9 @@ func TestPollStream(t *testing.T) {
 			case 1:
 				return nil, false
 			case 2:
-				return proto.AskEvent{Event: "one"}, false
+				return proto.WatchEvent{Event: "one"}, false
 			}
-			return proto.AskEvent{Event: "last"}, true
+			return proto.WatchEvent{Event: "last"}, true
 		})
 	}()
 	br := bufio.NewReader(cli)
@@ -37,7 +37,7 @@ func TestPollStream(t *testing.T) {
 		if want == "one" {
 			wake <- struct{}{} // the first look finds nothing
 		}
-		var ev proto.AskEvent
+		var ev proto.WatchEvent
 		if err := proto.ReadLine(br, &ev); err != nil || ev.Event != want {
 			t.Fatalf("event %+v %v, want %s", ev, err, want)
 		}

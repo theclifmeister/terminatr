@@ -80,8 +80,6 @@ type Session struct {
 	remote atomic.Bool // remote control is on
 	held   atomic.Bool // the user turned it off (RemoteHeld)
 	model  atomic.Pointer[ModelState]
-	// skipped is who skipped the agent's terminatr hooks (SetHooksSkipped).
-	skipped atomic.Pointer[string]
 	// ident is the role, project and thread set by Adopt; nil until then.
 	ident atomic.Pointer[Identity]
 	// closeNote, when set, replaces "session exited: …" as the reason
@@ -198,18 +196,6 @@ func (s *Session) SetRemoteControl(on bool) { s.remote.Store(on) }
 // SetRemoteHeld records whether the user turned remote control off.
 func (s *Session) SetRemoteHeld(held bool) { s.held.Store(held) }
 
-// SetHooksSkipped records that another of the agent's mods skipped
-// terminatr's own hooks, by (SessionInfo.HooksSkipped); "" clears it.
-func (s *Session) SetHooksSkipped(by string) { s.skipped.Store(&by) }
-
-// HooksSkipped is who SetHooksSkipped last named; "" for none.
-func (s *Session) HooksSkipped() string {
-	if by := s.skipped.Load(); by != nil {
-		return *by
-	}
-	return ""
-}
-
 // ModelState is the model a session's agent runs, and one waiting for
 // its next start (SessionInfo.Model, ModelNext, ModelPending).
 type ModelState struct {
@@ -276,7 +262,6 @@ func (s *Session) Info() proto.SessionInfo {
 	if m := s.model.Load(); m != nil {
 		info.Model, info.ModelNext, info.ModelPending = m.Model, m.Next, m.Pending
 	}
-	info.HooksSkipped = s.HooksSkipped()
 	if s.term != nil {
 		info.Title = s.term.Title()
 	}

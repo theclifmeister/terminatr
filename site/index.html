@@ -125,7 +125,7 @@
     </li>
     <li>
       <h3><span class="glyph" aria-hidden="true">⚙</span> Agents as data</h3>
-      <p>Claude Code and Codex today; pi and opencode will follow. Agents plug in through a TOML manifest that says how to launch and resume them and read their state from hooks and session logs, not by scraping the screen. For Claude Code, tm's <strong>Agent mod</strong> (early access, off by default, Claude Code 2.1.289 or newer) adds a status band, a <code>/tm</code> pane and the session's cost; without it Claude sessions still get tm's typed tools and their context and token use.</p>
+      <p>Claude Code and Codex today; pi and opencode will follow. Agents plug in through a TOML manifest that says how to launch and resume them and read their state from hooks and session logs, not by scraping the screen. Claude Code sessions get tm's typed tools and show their context and token use, read from Claude's own transcript; their state, tasks and pull requests show on tm's dashboard and in the info panel beside the coordinator.</p>
     </li>
   </ul>
 </section>
@@ -612,7 +612,7 @@ ix+? help · <span class="key">prefix+d</span> dashboard · <span class="key">�
             <span class="dim">│</span>                                                                                              <span class="dim">│</span>
             <span class="dim">│</span> Context gauge: How full each session's context window is, by its row; a card lists the ones  <span class="dim">│</span>
             <span class="dim">│</span> past the warning, where C clears one (tm asks first) and <span class="key">enter</span> attaches to it. Claude        <span class="dim">│</span>
-            <span class="dim">│</span> sessions report theirs through the Agent mod or, with it off, from their transcript. By      <span class="dim">│</span>
+            <span class="dim">│</span> sessions report theirs from their transcript. By terminatr.                                  <span class="dim">│</span>
             <span class="dim">│</span>                                                                                              <span class="dim">│</span>
             <span class="dim">│</span> <span class="key">enter</span> on/off · I install · p permissions · s settings · d defaults · l log · R restart       <span class="dim">│</span>
             <span class="dim">│</span> U update · X remove · E examples · <span class="key">← →</span> tabs · <span class="key">esc</span> close                                      <span class="dim">│</span>
@@ -744,7 +744,7 @@ ix+? help · <span class="key">prefix+d</span> dashboard · <span class="key">�
       </tbody>
     </table>
   </div>
-  <p class="note"><sup>*</sup> A Claude Code session's cost needs tm's <strong>Agent mod</strong>: it is early access and <strong>off by default</strong>. Turn it on in Settings (<kbd>,</kbd>, <em>Agent mod</em>) or with <code>[agent_mod] enabled = true</code> in <code>config.toml</code>; sessions started after use it. Without it the card shows a Claude thread's tokens and no cost.</p>
+  <p class="note"><sup>*</sup> For a Claude Code thread the card shows its tokens with <em>no cost</em>: Claude's transcript, where tm reads them, has no cost.</p>
 
   <div class="installs mods-cmds">
     <div class="os">

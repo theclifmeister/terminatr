@@ -1,7 +1,6 @@
 package agent
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"maps"
@@ -69,7 +68,7 @@ func TestClaudeLaunch(t *testing.T) {
 	if !reflect.DeepEqual(l.Argv, want) {
 		t.Fatalf("argv\n got %q\nwant %q", l.Argv, want)
 	}
-	// Without the mod, tm mcp is the typed tools' server (§8.6, tm mcp).
+	// tm mcp is the typed tools' server (§8.6, tm mcp).
 	var mcp struct {
 		MCPServers map[string]struct {
 			Type, Command string
@@ -505,7 +504,7 @@ func TestClaudeContextResponse(t *testing.T) {
 	}
 }
 
-// TestClaudeGuardResponse: without the mod, PreToolUse answers the
+// TestClaudeGuardResponse: PreToolUse answers the
 // guard's refusal as a deny, judged once; an allowed call gets no output.
 func TestClaudeGuardResponse(t *testing.T) {
 	a := claude(t)
@@ -787,8 +786,14 @@ func TestHookWireFormat(t *testing.T) {
 			if h.Respond == "" || h.Command != "" {
 				continue // tm hook waits only on the entries that answer; a command answers at once
 			}
-			context := h.Event == "SessionStart" || name == "claude" && h.Event == "UserPromptSubmit"
-			if want := map[bool]string{true: HookTimeoutContext}[context]; h.Timeout != want {
+			want := ""
+			switch h.Event {
+			case "SessionStart":
+				want = HookTimeoutContext
+			case "PreToolUse":
+				want = HookTimeoutGuard // the guard's verdict, failing closed
+			}
+			if h.Timeout != want {
 				t.Errorf("%s %s: timeout %q, want %q", name, h.Event, h.Timeout, want)
 			}
 		}
@@ -1180,22 +1185,16 @@ func TestManifestGuardTools(t *testing.T) {
 }
 
 // TestGuardToolVectors: the built-in manifests' [guard.tools] are the
-// shared guard vectors' (claude/mod/tests/guard-vectors.ts), which both
-// matchers pass.
+// guard's test vectors' (internal/guard/testdata/vectors.json).
 func TestGuardToolVectors(t *testing.T) {
-	b, err := os.ReadFile("claude/mod/tests/guard-vectors.ts")
+	b, err := os.ReadFile("../guard/testdata/vectors.json")
 	if err != nil {
 		t.Fatal(err)
-	}
-	const mark = "\nexport default "
-	i := bytes.Index(b, []byte(mark))
-	if i < 0 {
-		t.Fatalf("guard-vectors.ts: no %q", mark)
 	}
 	var v struct {
 		Tools map[string]guard.Tool `json:"tools"`
 	}
-	if err := json.Unmarshal(b[i+len(mark):], &v); err != nil {
+	if err := json.Unmarshal(b, &v); err != nil {
 		t.Fatal(err)
 	}
 	for _, name := range []string{"claude", "codex"} {
@@ -1384,7 +1383,7 @@ func TestHookCommand(t *testing.T) {
 		if len(sigs) == 0 || sigs[len(sigs)-1].State != StateIdle {
 			t.Errorf("%s: signals %+v, want idle last", prompt, sigs)
 		}
-		// No answer (the mod's session, or one that can't run it): the
+		// No answer (a session that can't run it): the
 		// prompt goes on, and the session is working, not idle.
 		for _, env := range []HookEnv{{Command: func(string) string { return "" }}, {}} {
 			sigs, res, _ = a.Hook(HookEvent{Event: "UserPromptSubmit", Payload: map[string]any{"prompt": prompt}}, env)
@@ -1416,6 +1415,82 @@ func TestHookCommandValidated(t *testing.T) {
 	} {
 		if _, err := ParseManifest([]byte(base + in)); (err == nil) != ok {
 			t.Errorf("%q: err %v, want ok %v", in, err, ok)
+		}
+	}
+}
+
+// TestGuardIgnoresNoFields: a PreToolUse whatever fields it carries (a
+// subagent's agent_id, which Claude's ignore_fields drops from state)
+// is judged and answered with the refusal, for Claude and Codex alike;
+// only its state signal is dropped.
+func TestGuardIgnoresNoFields(t *testing.T) {
+	for _, name := range []string{"claude", "codex"} {
+		data, _ := builtin.ReadFile("manifests/" + name + ".toml")
+		m, err := ParseManifest(data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		a := FromManifest(m)
+		judged := 0
+		env := HookEnv{Guard: func(tool string, input map[string]any) *guard.Denial {
+			judged++
+			return &guard.Denial{Rule: "merge", Message: "no merging"}
+		}}
+		payload := map[string]any{"hook_event_name": "PreToolUse", "agent_id": "sub-1", "session_id": "s", "tool_name": "Bash", "tool_input": map[string]any{"command": "gh pr merge 1"}}
+		sigs, res, err := a.Hook(HookEvent{Event: "PreToolUse", Payload: payload}, env)
+		if err != nil || judged != 1 || !strings.Contains(string(res.Stdout), `"permissionDecision":"deny"`) {
+			t.Fatalf("%s: judged %d, stdout %q, %v", name, judged, res.Stdout, err)
+		}
+		ignored := slices.Contains(m.IgnoreFields, "agent_id")
+		for _, s := range sigs {
+			if ignored && s.State != "" {
+				t.Errorf("%s: an ignored event set state %+v", name, s)
+			}
+		}
+		if out := FailClosed(a, "PreToolUse", payload); !strings.Contains(string(out), "tm couldn't check this call") {
+			t.Errorf("%s: fail closed with agent_id: %q", name, out)
+		}
+	}
+}
+
+// TestGuardLocatedCwd: a call that leaves an optional location out
+// (Claude's Grep path) is judged at the agent's own folder, the hook
+// payload's cwd, which [hook] keep keeps; without an absolute cwd it
+// goes to the guard as it came (the guard takes the session's folder),
+// and a location given is never changed.
+func TestGuardLocatedCwd(t *testing.T) {
+	a := claude(t)
+	if !slices.Contains(ManifestOf(a).Hook.Keep, ManifestOf(a).Hook.CwdField()) {
+		t.Fatal("claude.toml's [hook] keep drops cwd")
+	}
+	var got map[string]any
+	env := HookEnv{Guard: func(_ string, input map[string]any) *guard.Denial { got = input; return nil }}
+	for _, c := range []struct {
+		cwd   any
+		input map[string]any
+		want  any
+	}{
+		{"/home/u/agentdir", map[string]any{"pattern": "x"}, "/home/u/agentdir"},
+		{"/home/u/agentdir", map[string]any{"pattern": "x", "path": "/elsewhere"}, "/elsewhere"},
+		{"/home/u/agentdir", map[string]any{"pattern": "x", "path": ""}, "/home/u/agentdir"},
+		{"relative", map[string]any{"pattern": "x"}, nil},
+		{nil, map[string]any{"pattern": "x"}, nil},
+	} {
+		got = nil
+		p := map[string]any{"hook_event_name": "PreToolUse", "tool_name": "Grep", "tool_input": c.input}
+		if c.cwd != nil {
+			p["cwd"] = c.cwd
+		}
+		if _, _, err := a.Hook(HookEvent{Event: "PreToolUse", Payload: p}, env); err != nil {
+			t.Fatal(err)
+		}
+		if got["path"] != c.want {
+			t.Errorf("cwd %v, input %v: judged %v, want path %v", c.cwd, c.input, got, c.want)
+		}
+		if c.want != "/elsewhere" {
+			if v, ok := c.input["path"]; ok && v != "" {
+				t.Errorf("the call's own input was changed: %v", c.input)
+			}
 		}
 	}
 }

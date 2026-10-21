@@ -99,9 +99,6 @@ type Host interface {
 	// SyncModel applies the project's coordinator_model to its running
 	// coordinator, as session.model does.
 	SyncModel(session string) (proto.SessionModelResult, error)
-	// Unstick pastes the queued prompt a session's mod holds while its
-	// agent idles, and says what it did; "" when the mod holds none.
-	Unstick(session string) string
 	// Clear pastes the agent's clear prompt ([inject] clear) into a
 	// session; still is asked right before delivery and drops it when
 	// false. An error when the agent has none.
@@ -1136,16 +1133,15 @@ func (t *Ticker) nudgeStall(p *project.Project, pm *projectMemo, coord *proto.Se
 }
 
 // nudgeUnstick is how long a nudge may wait for a coordinator idle with
-// prompts queued before the ticker acts (T82: a nudge the coordinator's
-// mod never took held every later one for half an hour).
+// prompts queued before the ticker acts (T82: a nudge held every later
+// one for half an hour).
 const nudgeUnstick = 2 * time.Minute
 
 // unstick acts, once per stall, on a nudge held nudgeUnstick by a
 // coordinator idle with prompts queued: an idle agent takes its queue at
-// once, so something holds it. The server pastes what the mod holds
-// (Host.Unstick); a box with text in it or a dialog stays, bounded by the
-// server's prompt hold. Either way it alerts: the user is the one who
-// can clear a box, and nobody else hears of it.
+// once, so something holds it: a box with text in it or a dialog,
+// bounded by the server's prompt hold. It alerts: the user is the one
+// who can clear a box, and nobody else hears of it.
 func (t *Ticker) unstick(p *project.Project, pm *projectMemo, coord *proto.SessionInfo, n int, now time.Time) {
 	if coord.State != "idle" || coord.Queued == 0 {
 		pm.idleQueued, pm.unstuck = time.Time{}, false
@@ -1164,12 +1160,7 @@ func (t *Ticker) unstick(p *project.Project, pm *projectMemo, coord *proto.Sessi
 	}
 	msg := fmt.Sprintf("%s: nudge about %d item(s) held %s: coordinator %s is idle with %d queued prompt(s) (%s)",
 		p.Slug, n, now.Sub(pm.idleQueued).Round(time.Second), coord.ID, coord.Queued, why)
-	if did := t.o.Host.Unstick(coord.ID); did != "" {
-		msg += "; " + did
-	} else {
-		msg += "; see tm agent explain " + coord.ID
-	}
-	t.o.Host.Alert(msg)
+	t.o.Host.Alert(msg + "; see tm agent explain " + coord.ID)
 }
 
 // ServerRestarted raises one item per project that had sessions in the

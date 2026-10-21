@@ -43,7 +43,7 @@ var notHumanOnly = map[string]gate{
 	proto.MethodAgentList: 0, proto.MethodAgentExplain: 0, proto.MethodModHosts: 0,
 	proto.MethodHookEvent: 0, proto.MethodToolRun: 0, proto.MethodToolList: 0,
 	proto.MethodSessionList: 0, proto.MethodSessionRead: 0, proto.MethodSessionWait: 0,
-	proto.MethodSessionWatch: 0, proto.MethodSessionAsk: 0, proto.MethodProjectWatch: 0,
+	proto.MethodSessionWatch: 0, proto.MethodProjectWatch: 0,
 	// Gated in its handler (mayAnswer, mayShowAccess, mayExplainAccess).
 	proto.MethodSessionAnswer: 0,
 	proto.MethodAccessShow:    0,
@@ -157,7 +157,7 @@ func TestHumanSocket(t *testing.T) {
 		t.Errorf("an agent's client.Dial connected to %q, want %q", got, p.Socket)
 	}
 	for _, m := range []string{proto.MethodCLIRun, proto.MethodCallerWho, proto.MethodHookEvent,
-		proto.MethodSessionList, proto.MethodSessionRead, proto.MethodSessionWait, proto.MethodSessionAsk,
+		proto.MethodSessionList, proto.MethodSessionRead, proto.MethodSessionWait,
 		proto.MethodToolRun, proto.MethodToolList, proto.MethodViewDigest} {
 		if gateOf(m) == gateHuman {
 			t.Errorf("an agent's own method %s is human-only", m)

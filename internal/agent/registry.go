@@ -155,6 +155,21 @@ func (r *Registry) add(data []byte, source string) error {
 	return nil
 }
 
+// BuiltinAgent is the built-in agent name, from tm's own manifest alone:
+// never a user's manifest of that name, nor a mod's. ok is false for a
+// name tm doesn't ship.
+func BuiltinAgent(name string) (Agent, bool) {
+	b, ok := Builtin(name)
+	if !ok {
+		return nil, false
+	}
+	m, err := ParseManifest(b)
+	if err != nil {
+		return nil, false
+	}
+	return Wrap(m), true
+}
+
 // Wrap is the agent for m: its Go agent when one is registered under
 // its name (RegisterGo), else the manifest alone.
 func Wrap(m *Manifest) Agent {

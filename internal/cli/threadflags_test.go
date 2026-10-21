@@ -105,8 +105,8 @@ func TestThreadSubcommandFlags(t *testing.T) {
 }
 
 func TestThreadAnswerFlags(t *testing.T) {
-	a, err := parseWith(t, answerFlags, "t-0001", "--choice", "1, 3", "--option", "Pear", "--text", "kiwi", "--question", "2")
-	want := answerArgs{id: "t-0001", choices: []int{1, 3}, options: []string{"Pear"}, text: "kiwi", withText: true, question: 2}
+	a, err := parseWith(t, answerFlags, "t-0001", "--choice", "1, 3", "--text", "kiwi", "--question", "2")
+	want := answerArgs{id: "t-0001", choices: []int{1, 3}, text: "kiwi", withText: true, question: 2}
 	if err != nil || !reflect.DeepEqual(a, want) {
 		t.Errorf("got %+v, %v; want %+v", a, err, want)
 	}

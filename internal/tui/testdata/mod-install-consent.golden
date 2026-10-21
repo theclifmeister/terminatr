@@ -7,9 +7,6 @@ It changes what agents run or read:
 It may:
   • reads your projects
   • offers tools to agents
-Claude threads get its tools only while the Agent mod is on (early
-access, off by default: Settings, Agent mod, or [agent_mod] enabled =
-true).
 
 Rules it adds for every thread, rules.md, in full:
 ----- begin rules.md -----

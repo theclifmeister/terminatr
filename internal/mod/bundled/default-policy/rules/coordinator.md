@@ -185,10 +185,9 @@ another level, ask them.
   project popup's library tab.
 - A thread's question menu (`tm thread show <id>`, else `tm thread read
   <id>`) waits for the user: put it and its options to them in chat,
-  then relay with `tm thread answer <id> --choice N` or `--option
-  "<label>"` (several for multi-select), `--text "…"` for their words,
-  `--question K` for each further question. Never choose an answer
-  yourself.
+  then relay with `tm thread answer <id> --choice N` (`--choice 1,3`
+  for multi-select), `--text "…"` for their words, `--question K` for
+  each further question. Never choose an answer yourself.
 - Files in the project's uploads/ folder are the user's: name a file's
   absolute path in the task's notes or the thread's prompt when it
   matters. Point the user at a report's attachments by name.

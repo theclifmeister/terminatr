@@ -12,7 +12,8 @@ import (
 )
 
 // Settings checks config.toml for keys tm doesn't know under [keys] and
-// [ui], which it ignores, and for values tm no longer has: a project
+// [ui], which it ignores, for the removed agent mod's keys, which do
+// nothing, and for values tm no longer has: a project
 // whose complete_tasks is the removed "released" is read as "by you"
 // until the user picks again in its Settings; sandbox rules in a form
 // of tm 0.37 (config.OldAccess), still read.
@@ -25,6 +26,10 @@ func Settings(d Deps) []Check {
 	if len(c.Unknown) > 0 {
 		out = append(out, Check{Group: "settings", Name: "config.toml", Status: Warn,
 			Detail: fmt.Sprintf("unknown setting %s, ignored", strings.Join(c.Unknown, ", "))})
+	}
+	if len(c.AgentMod) > 0 {
+		out = append(out, Check{Group: "settings", Name: "config.toml", Status: Warn,
+			Detail: fmt.Sprintf("%s no longer does anything: the Claude agent mod was removed; delete it", strings.Join(c.AgentMod, ", "))})
 	}
 	if slugs := c.Removed(); len(slugs) > 0 {
 		out = append(out, Check{Group: "settings", Name: "complete tasks", Status: Warn,

@@ -3,7 +3,6 @@ package agent
 import (
 	"context"
 	"errors"
-	"strings"
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/guard"
@@ -67,10 +66,6 @@ type LaunchSpec struct {
 	RemoteName    string
 	TMBin         string // absolute path of the running tm binary, for hooks
 	Socket        string // server socket path; the agent's sandbox must allow it
-	// Mods loads terminatr's own mod into the agent (a Modder), beside
-	// its command hooks. The core sets it only when [agent_mod] enabled is on
-	// and the agent's version is at least ModsMinVersion.
-	Mods bool
 	// MCPClash says the agent's own config has an MCP server of the name
 	// tm mcp gets, or may (an MCPClasher's answer): the launch gives tm's
 	// tools no rule that runs them without a prompt, and one that asks.
@@ -438,6 +433,14 @@ type MCPClasher interface {
 	MCPClash(home, dir string, yolo bool) string
 }
 
+// HooksWarner is an Agent whose own settings can turn tm's hooks off
+// (docs/SPEC.md §8.6, Guard): HooksOff is what the launch and tm doctor
+// tell the human when they do, or try to, "" when none does. home is
+// the user's home directory, dir the session's folder ("" for none).
+type HooksWarner interface {
+	HooksOff(home, dir string) string
+}
+
 // Truster is an Agent that can mark a directory as trusted ahead of
 // launch, so its folder-trust screen never shows there (docs/SPEC.md
 // §8.6). The core calls it only for a thread's own worktree, which tm
@@ -494,20 +497,6 @@ type Mover interface {
 	MoveDir(home, from, to string) error
 }
 
-// Modder is an Agent that ships terminatr's mod: a plugin module the
-// agent loads beside its command hooks (docs/SPEC.md §8.6, Mods). The
-// agent's Launch writes it when LaunchSpec.Mods is set.
-type Modder interface {
-	// ModsMinVersion is the oldest agent version the mod was tested on;
-	// the core leaves it out for an older one, or one it can't read.
-	ModsMinVersion() string
-	// ModRequired is true when the agent has no fallback without the
-	// mod (no command hooks): the core then loads it whatever [mods]
-	// enabled says, which gates only optional mods. The version check
-	// still applies.
-	ModRequired() bool
-}
-
 // DoctorCheck is one finding of a Doctor agent: Warn is false for ok.
 type DoctorCheck struct {
 	Name, Detail string
@@ -519,29 +508,6 @@ type DoctorCheck struct {
 // finds a program on PATH and run runs one, as doctor's Deps do.
 type Doctor interface {
 	DoctorChecks(look func(string) (string, error), run func(dir, name string, args ...string) (string, error)) []DoctorCheck
-}
-
-// ModNote is the settings text on which agents the mods setting is for:
-// "Claude Code 2.1.289", for each optional Modder in reg, joined with
-// "; "; empty when there is none.
-func ModNote(reg *Registry) string {
-	if reg == nil {
-		return ""
-	}
-	var parts []string
-	for _, n := range reg.Names() {
-		a, _ := reg.Get(n)
-		m, ok := a.(Modder)
-		if !ok || m.ModRequired() {
-			continue
-		}
-		name := n
-		if mf := ManifestOf(a); mf != nil && mf.Display != "" {
-			name = mf.Display
-		}
-		parts = append(parts, name+" "+m.ModsMinVersion())
-	}
-	return strings.Join(parts, "; ")
 }
 
 // Rule is one screen rule. It is plain data, evaluated by package detect.

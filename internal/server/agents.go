@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"io/fs"
 	"maps"
-	"net/http"
 	"os"
 	"path/filepath"
 	"slices"
@@ -211,6 +210,8 @@ func (s *Server) accessFor(role, slug string, tree *gitx.Tree, lc launchConfig) 
 		// No tree: a thread to come (access.show), whose git dirs aren't
 		// known yet, or one whose folder isn't its recorded checkout.
 		if tree != nil {
+			// Its settings that could turn its hooks off (hookSettings).
+			a.NoWriteFiles = append(a.NoWriteFiles, hookSettings(realPath(tree.Dir))...)
 			g := threadGitAccess(tree.CommonDir, tree.GitDir)
 			a.Write, a.WriteFiles = g.Write, g.WriteFiles
 			a.NoWrite = append(a.NoWrite, g.NoWrite...)
@@ -395,75 +396,17 @@ func (s *Server) contextOf(id string) func() ([]byte, error) {
 	}
 }
 
-// modContextLine is what the SessionStart hook brings instead of the
-// context when the session has the mod: the mod gives it as a context
-// block of the conversation (T85), so a copy here would only be printed
-// twice.
-const modContextLine = "terminatr: your role's rules and your task's state are in this conversation's `terminatr` context block."
-
-// hookContextOf is what the session's SessionStart and UserPromptSubmit
-// hooks print, given the hook's payload: without the mod, the full
-// context at SessionStart; with it, a line saying where the context is,
-// or the context itself when the mod's hooks were skipped
-// (convcontext.go). None for a session outside a project.
-//
-// A resume keeps the conversation's context block as the transcript
-// recorded it: Claude computes it once per conversation, and only /clear
-// and compaction read it again. So a mod session resumed under another
-// build than the one that rendered its block (an upgrade and a server
-// restart, T226) gets the full context here, saying it replaces the
-// block's.
-func (s *Server) hookContextOf(id string, mod bool) func(payload map[string]any) ([]byte, error) {
+// hookContextOf is what the session's SessionStart hook prints: the
+// full context; nothing for UserPromptSubmit, or for a session outside
+// a project.
+func (s *Server) hookContextOf(id string) func(payload map[string]any) ([]byte, error) {
 	full := s.contextOf(id)
 	return func(payload map[string]any) ([]byte, error) {
-		prompt := payload["hook_event_name"] == "UserPromptSubmit"
-		switch {
-		case !mod && prompt:
+		if payload["hook_event_name"] == "UserPromptSubmit" {
 			return nil, nil
-		case !mod:
-			return full()
-		case prompt:
-			return s.promptContext(id, full)
 		}
-		return s.startContext(id, payload, full)
+		return full()
 	}
-}
-
-// staleContext reports whether session id's conversation carries a
-// context block another build rendered, and that build ("" when not
-// known: a record from before context_build).
-func (s *Server) staleContext(id string) (string, bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	b := s.records[id].ContextBuild
-	return b, b != version.BuildID()
-}
-
-// servedContext records that session id's conversation now carries the
-// context this build renders (GET /v1/context).
-func (s *Server) servedContext(id string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	r, ok := s.records[id]
-	if !ok || r.ContextBuild == version.BuildID() {
-		return
-	}
-	r.ContextBuild = version.BuildID()
-	s.records[id] = r
-	if err := s.saveLocked(""); err != nil {
-		s.log.Printf("sessions.json: %v", err)
-	}
-}
-
-// replacedContext heads the full context a resumed session gets when its
-// context block is another build's.
-func replacedContext(old string) string {
-	was := "an older tm"
-	if v, _, _ := strings.Cut(old, "+"); v != "" {
-		was = "tm " + v
-	}
-	return "terminatr: this conversation's `terminatr` context block was written by " + was +
-		"; tm is now " + version.Version + ". These are your current rules and state, in its place:\n\n"
 }
 
 // paneScheme is the scheme whose pane palette a console last drew the
@@ -625,13 +568,11 @@ func (s *Server) launchViewLocked() launchView {
 }
 
 // preparedLaunch is an agent session ready to start: its files are
-// written and its mod listens; commitLaunchLocked starts it.
+// written; commitLaunchLocked starts it.
 type preparedLaunch struct {
 	l         agentLaunch
 	a         agent.Agent
 	rt        string
-	mod       *http.Server // the mod's server, nil for none
-	modSock   string
 	model     string
 	liveTheme bool
 	argv      []string
@@ -674,15 +615,17 @@ func (s *Server) launchAgent(l agentLaunch, ok func() *proto.Error) (*session.Se
 
 // abandon undoes a prepared launch that doesn't start.
 func (p *preparedLaunch) abandon() {
-	if p.mod != nil {
-		p.mod.Close()
-	}
 	os.RemoveAll(p.rt)
 }
+
+// preparing runs as each launch is prepared, s.mu not held: tests hold
+// a launch there.
+var preparing = func() {}
 
 // prepareLaunch builds the argv, environment and files for an agent
 // session from v, the server state when the launch began; s.mu not held.
 func (s *Server) prepareLaunch(l agentLaunch, v launchView) (*preparedLaunch, *proto.Error) {
+	preparing()
 	r := l.rec
 	reg := v.agents
 	if reg == nil {
@@ -695,7 +638,7 @@ func (s *Server) prepareLaunch(l agentLaunch, v launchView) (*preparedLaunch, *p
 	if l.resume && r.AgentSessionID == "" {
 		return nil, proto.Errorf(proto.ErrRefused, "session %s: no agent session id to resume", r.ID)
 	}
-	// config.toml once for the launch: its access, mod, model and theme.
+	// config.toml once for the launch: its access, model and theme.
 	lc := loadLaunchConfig()
 	// Its access as rules (access.go), which the launch's settings come
 	// from and the thread's launch record keeps.
@@ -724,17 +667,11 @@ func (s *Server) prepareLaunch(l agentLaunch, v launchView) (*preparedLaunch, *p
 		repo = worktree.Dirs{GitDir: realPath(d.GitDir), CommonDir: realPath(d.CommonDir), RepoRoot: realPath(d.RepoRoot)}
 	}
 	// No session of this id runs (a new id, a resume, a relaunch after
-	// the old one exited and its mod closed): its runtime dir is free.
+	// the old one exited): its runtime dir is free.
 	p := &preparedLaunch{l: l, a: a, rt: s.runtimeDir(r.ID)}
 	os.RemoveAll(p.rt)
 	if err := os.MkdirAll(p.rt, 0o700); err != nil {
 		return nil, proto.Errorf(proto.ErrInternal, "%v", err)
-	}
-	if s.modsFor(a, r.ID, lc) {
-		// Without its channel the mod can't report state: no mod then.
-		if p.mod, p.modSock, err = s.openMod(r.ID, p.rt); err != nil {
-			s.log.Printf("session %s: no mod: %v", r.ID, err)
-		}
 	}
 	// A thread's secret environment (secretenv.go): got now, put only in
 	// the session's environment below.
@@ -756,7 +693,7 @@ func (s *Server) prepareLaunch(l agentLaunch, v launchView) (*preparedLaunch, *p
 		Cwd: r.Cwd, RepoRoot: repo.RepoRoot, GitDir: repo.GitDir, RuntimeDir: p.rt, BriefPath: r.Brief, Kickoff: l.kick, Resume: l.resume,
 		Yolo: yolo, NoSandbox: noSandbox, NoSandboxEscapes: noEscapes, Model: r.Model, TMBin: s.opts.Bin, Socket: s.opts.Paths.Socket, Access: launchAccess(acc),
 		RemoteControl: r.RemoteControl, RemoteName: remoteName(r),
-		Mods: p.modSock != "", PaneScheme: v.paneScheme,
+		PaneScheme: v.paneScheme,
 	}
 	if spec.TempDir = launchTemp(acc); spec.TempDir != "" {
 		// The thread's own temp folder (T587), kept across its restarts
@@ -800,9 +737,18 @@ func (s *Server) prepareLaunch(l agentLaunch, v launchView) (*preparedLaunch, *p
 	}
 	spec.Theme = s.launchThemeOf(spec.PaneScheme, lc.cfg)
 	spec.LiveTheme = s.writeThemeFile(a, spec.Theme, v.schemeName, lc.cfg != nil && followsTerminal(lc.cfg))
-	// Without the mod, tm mcp gives the typed tools: a server of the
-	// agent's own config with its name would stand in for it.
-	if c, ok := a.(agent.MCPClasher); ok && !spec.Mods {
+	// Settings that turn the agent's hooks off leave the session
+	// unguarded and unseen: the human is told.
+	if h, ok := a.(agent.HooksWarner); ok {
+		home, _ := os.UserHomeDir()
+		if w := h.HooksOff(home, r.Cwd); w != "" {
+			p.warnings = append(p.warnings, w)
+			s.log.Printf("session %s: %s", r.ID, w)
+		}
+	}
+	// tm mcp gives the typed tools: a server of the agent's own config
+	// with its name would stand in for it.
+	if c, ok := a.(agent.MCPClasher); ok {
 		home, _ := os.UserHomeDir()
 		if w := c.MCPClash(home, r.Cwd, spec.Yolo); w != "" {
 			spec.MCPClash = true
@@ -826,15 +772,6 @@ func (s *Server) prepareLaunch(l agentLaunch, v launchView) (*preparedLaunch, *p
 	for k, v := range secrets {
 		if _, taken := set[k]; !taken {
 			set[k] = v
-		}
-	}
-	if spec.Mods {
-		set[envModSocket] = p.modSock
-		if !lc.band() {
-			set[envBand] = "off"
-		}
-		if !lc.pane() {
-			set[envPane] = "off"
 		}
 	}
 	for _, kv := range launch.Env {
@@ -873,7 +810,6 @@ func (s *Server) prepareLaunch(l agentLaunch, v launchView) (*preparedLaunch, *p
 // none.
 func (s *Server) commitLaunchLocked(p *preparedLaunch) (*session.Session, *proto.Error) {
 	r, a := p.l.rec, p.a
-	mod := p.modSock != ""
 	sess, err := session.Start(session.Config{
 		ID: r.ID, Role: r.Role, Project: r.Project, Thread: r.Thread, Argv: p.argv, Cwd: r.Cwd, Env: p.env,
 		Cols: p.l.cols, Rows: p.l.rows, Created: r.Created,
@@ -886,16 +822,14 @@ func (s *Server) commitLaunchLocked(p *preparedLaunch) (*session.Session, *proto
 		RemoteControl: r.RemoteControl, RemoteHeld: r.RemoteHeld,
 		Agent: &session.AgentConfig{
 			Agent: a, AgentSID: p.agentSID, Kickoff: p.kickoff, Home: p.home,
-			Context:        s.hookContextOf(r.ID, mod),
-			OnHook:         s.convHook,
-			Guard:          s.hookGuardOf(r.ID, mod),
-			Command:        s.hookCommandOf(r.ID, mod),
+			Context:        s.hookContextOf(r.ID),
+			Guard:          s.hookGuardOf(r.ID),
+			Command:        s.hookCommandOf(r.ID),
 			OnChange:       s.agentChanged,
-			OnUsage:        s.tailUsageOf(mod),
+			OnUsage:        s.tailUsage,
 			OnContextClear: func(sess *session.Session) { s.clearContext(sess.ID()) },
 			OnRefused:      s.modelRefused,
 			PromptHold:     envDuration(envPromptHold), OnPromptResolved: s.promptResolved,
-			ModSocket:     p.modSock,
 			PromptsEscape: r.Role == proto.RoleThread && agent.ManifestOf(a) != nil && agent.ManifestOf(a).Guard.PromptsEscape,
 		},
 	})
@@ -903,17 +837,11 @@ func (s *Server) commitLaunchLocked(p *preparedLaunch) (*session.Session, *proto
 		p.abandon()
 		return nil, proto.Errorf(proto.ErrRefused, "%v", err)
 	}
-	if p.mod != nil {
-		s.setModLocked(r.ID, p.mod)
-	} else {
-		s.closeModLocked(r.ID)
-	}
 	if p.liveTheme {
 		s.markLiveThemed(a)
 	}
 	s.sessions[r.ID] = sess
 	s.records[r.ID] = r
-	s.newConvLocked(r.ID)
 	if s.launched == nil {
 		s.launched = map[string]string{}
 	}
@@ -1148,10 +1076,12 @@ func (s *Server) hookEvent(p proto.HookEventParams) proto.HookEventResult {
 	// tm hook says nothing of a dropped event, and the agent carries on
 	// without it: its state, its context and its prompt token (T491: a
 	// coordinator's only SessionStart lost, a nudge then refused).
+	// A dropped event the guard answers is refused (unchecked), never
+	// let through unjudged.
 	sess, perr := s.session(p.Session)
 	if perr != nil {
 		s.log.Printf("hook %s for %s dropped: %s", p.Event, p.Session, perr.Message)
-		return proto.HookEventResult{}
+		return s.droppedHook(p)
 	}
 	if a := sess.Agent(); a == nil || a.Name() != p.Agent {
 		runs := "no agent"
@@ -1159,7 +1089,7 @@ func (s *Server) hookEvent(p proto.HookEventParams) proto.HookEventResult {
 			runs = a.Name()
 		}
 		s.log.Printf("hook %s for %s dropped: from agent %q, the session runs %s", p.Event, p.Session, p.Agent, runs)
-		return proto.HookEventResult{}
+		return s.droppedHook(p)
 	}
 	if p.Token != "" {
 		sess.SetPromptToken(p.Token)
@@ -1168,7 +1098,31 @@ func (s *Server) hookEvent(p proto.HookEventParams) proto.HookEventResult {
 	if err != nil && !errors.Is(err, session.ErrNoAgent) {
 		s.log.Printf("session %s: hook %s: %v", p.Session, p.Event, err)
 	}
+	if err != nil {
+		if d := s.droppedHook(p); d.Stdout != "" {
+			return d
+		}
+	}
 	return proto.HookEventResult{Stdout: string(res.Stdout)}
+}
+
+// droppedHook answers an event the server didn't take: nothing, or for
+// the guard's event its agent's refusal of a call it couldn't check
+// (agent.FailClosed).
+func (s *Server) droppedHook(p proto.HookEventParams) proto.HookEventResult {
+	a, ok := agent.BuiltinAgent(p.Agent)
+	if !ok {
+		s.mu.Lock()
+		reg := s.agents
+		s.mu.Unlock()
+		if reg != nil {
+			a, ok = reg.Get(p.Agent)
+		}
+	}
+	if !ok {
+		return proto.HookEventResult{}
+	}
+	return proto.HookEventResult{Stdout: string(agent.FailClosed(a, p.Event, p.Payload))}
 }
 
 func (s *Server) prompt(p proto.SessionPromptParams) (any, *proto.Error) {

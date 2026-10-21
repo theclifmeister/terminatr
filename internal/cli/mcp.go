@@ -12,15 +12,14 @@ import (
 	"github.com/theclifmeister/terminatr/internal/version"
 )
 
-// tm mcp (docs/SPEC.md §8.6, Mods): a session's tools (a thread's
+// tm mcp (docs/SPEC.md §8.6, tm mcp): a session's tools (a thread's
 // report, status, steps and done, and the tools enabled user mods offer
-// the session) as an MCP server on stdio, for agents without the Claude
-// mod that speak MCP, such as Codex. It is a thin bridge: tools/list asks
-// the server with tool.list and each call goes to it as tool.run; the
-// server tells the session from the process tree (the agent started this
-// process, so it is inside the session) and answers as the mod socket's
-// GET /v1/tools and POST /v1/tools/{name} would. When the server can't
-// be asked, the list is a thread's own tools.
+// the session) as an MCP server on stdio, for agents that speak MCP:
+// Claude and Codex. It is a thin bridge: tools/list asks the server with
+// tool.list and each call goes to it as tool.run; the server tells the
+// session from the process tree (the agent started this process, so it
+// is inside the session). When the server can't be asked, the list is a
+// thread's own tools.
 
 const mcpProtocol = "2025-06-18"
 

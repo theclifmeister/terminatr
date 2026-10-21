@@ -1,43 +1,4 @@
-// The guard's shared test vectors: hooks/guard.ts (tests/guard.test.ts)
-// and its Go port (internal/guard/guard_test.go, TestVectors) both
-// pass every case: what the call breaks (rule, null for none) and the
-// summary journaled; and the sentence each rule gives each role. The
-// tools (each one's kind and input fields, as a manifest's [guard.tools]
-// gives them and GET /v1/rules serves them) go with every rule set:
-// Claude's and Codex's, which their manifests must match
-// (internal/agent TestGuardToolVectors), and a lowercase vocabulary like
-// pi's and opencode's. A case the guard asks about rather than refuses
-// (a PowerShell command it can't read) has rule "unknown" and "ask": true.
-// The thread-mods and mods-only sets carry rules a mod adds (mods design
-// §7, Tighten only): the core's and the mod's, and the mod's alone.
-// The yolo-thread set is a yolo thread's guard: the floor only, with
-// tm's settings and the project folder no tool writes (noWrite); the
-// floor-coordinator set the coordinator's, whose project folder it
-// writes but for tm's parts of it; thread-escapes asks about a call that
-// asks to leave the sandbox (askEscapes), rule "escape"; thread-ask-first
-// asks about a command of an excluded command that asks first (askFirst),
-// rule "excluded", and thread-ask-first-only has nothing else; thread-own
-// and thread-own-off carry excluded commands of the user's own Claude
-// settings (unsandboxed): a call one takes and tm's (tmExcluded) don't is
-// an escape, asked, or with escapes off (noEscapes) refused.
-// The thread-allow, thread-learn and floor-only sets carry the human's
-// allowances (a refusal under an allowance's rule of the command line or
-// file it matches is lifted; an "exact" one's * matches only a *), tm's
-// own files and the secret variables:
-// a case with "floor" is a refusal no allowance lifts; the rules-off
-// sets have the force-push and merge rules off (guard_off) and their
-// floor still refusing; "subject" (the
-// command line or file an allowance names) and "message", when a case
-// gives them, are the refusal's.
-// A case with links judges file writes where they land: each link (an
-// absolute path) leads to its target, and a write under a link to the
-// same place under the target (the server's POST /v1/resolve, faked).
-// A case with files has those paths (absolute, clean, where they land)
-// regular files, the rest not: a shell given input runs a script of the
-// worktree only where one is (POST /v1/resolve's files, faked).
-// Everything after "export default " is JSON, for the Go test: keep it
-// so (double quotes, no trailing commas, no comments). One case a line.
-export default {
+{
 "tools": {
  "Bash": {"kind": "shell", "fields": ["command"], "escape": "dangerouslyDisableSandbox"},
  "PowerShell": {"kind": "shell", "syntax": "powershell", "fields": ["command"]},
@@ -46,16 +7,16 @@ export default {
  "MultiEdit": {"kind": "write", "fields": ["file_path"]},
  "NotebookEdit": {"kind": "write", "fields": ["notebook_path"]},
  "Read": {"kind": "read", "fields": ["file_path"]},
- "Grep": {"kind": "read", "fields": ["path"]},
- "Glob": {"kind": "glob", "fields": ["pattern", "path"]},
+ "Grep": {"kind": "read", "fields": ["path"], "optional": ["path"]},
+ "Glob": {"kind": "glob", "fields": ["pattern", "path"], "optional": ["path"]},
  "apply_patch": {"kind": "patch", "fields": ["command"]},
  "bash": {"kind": "shell", "fields": ["command"]},
  "edit": {"kind": "write", "fields": ["filePath"]},
  "write": {"kind": "write", "fields": ["filePath"]},
  "patch": {"kind": "patch", "fields": ["patchText"]},
  "read": {"kind": "read", "fields": ["filePath"]},
- "grep": {"kind": "read", "fields": ["path"]},
- "glob": {"kind": "glob", "fields": ["pattern", "path"]}
+ "grep": {"kind": "read", "fields": ["path"], "optional": ["path"]},
+ "glob": {"kind": "glob", "fields": ["pattern", "path"], "optional": ["path"]}
 },
 "rules": {
  "thread": {"on": true, "role": "thread", "rules": ["force-push", "push-default", "worktree-only", "delete-branch", "merge", "credentials"], "home": "/h", "cwd": "/h/.terminatr/worktrees/demo/t-0001-fix", "writable": ["/h/.terminatr/worktrees/demo/t-0001-fix", "/tmp", "/private/tmp"], "gitConfig": ["/h/src/app/.git/hooks", "/h/src/app/.git/info", "/h/src/app/.git/config"], "worktrees": "/h/.terminatr/worktrees", "protected": ["main", "master"], "secrets": ["/h/.ssh", "/h/.aws", "/h/.config/gh", "/h/.codex/auth.json", "/ch/auth.json"]},
@@ -236,7 +197,13 @@ export default {
  {"rules": "thread", "tool": "bash", "input": {"command": "git push -u origin tm/x"}, "rule": null},
  {"rules": "thread", "tool": "edit", "input": {"filePath": "/h/.terminatr/projects/demo/PROJECT.md"}, "rule": "worktree-only", "summary": "edit of /h/.terminatr/projects/demo/PROJECT.md"},
  {"rules": "thread", "tool": "write", "input": {"filePath": "docs/a.md"}, "rule": null},
- {"rules": "thread", "tool": "write", "input": {"file_path": "/etc/x"}, "rule": null},
+ {"rules": "thread", "tool": "write", "input": {"file_path": "/etc/x"}, "rule": "unchecked", "summary": "a write call without filePath", "floor": true, "message": "terminatr guard: this call's input lacks filePath, which the guard reads, so it is refused."},
+ {"rules": "thread", "tool": "Grep", "input": {"pattern": "token"}, "rule": null},
+ {"rules": "thread", "tool": "Grep", "input": {"pattern": "token", "path": ["/h/.ssh"]}, "rule": "unchecked", "summary": "a Grep call with a malformed path", "floor": true, "message": "terminatr guard: this call's path is not text the guard can read, so it is refused."},
+ {"rules": "thread", "tool": "Bash", "input": {"command": 5}, "rule": "unchecked", "summary": "a Bash call with a malformed command", "floor": true},
+ {"rules": "thread", "tool": "Glob", "input": {"pattern": "*.go"}, "rule": null},
+ {"rules": "thread", "tool": "Glob", "input": {"path": "/h/.terminatr/worktrees/demo/t-0001-fix"}, "rule": "unchecked", "summary": "a Glob call without pattern", "floor": true},
+ {"rules": "thread", "tool": "Read", "input": {"limit": 5}, "rule": "unchecked", "summary": "a Read call without file_path", "floor": true},
  {"rules": "thread", "tool": "patch", "input": {"patchText": "*** Begin Patch\n*** Update File: /etc/hosts\n@@\n-a\n+b\n*** End Patch"}, "rule": "worktree-only", "summary": "patch of /etc/hosts"},
  {"rules": "thread", "tool": "patch", "input": {"patchText": "*** Begin Patch\n*** Add File: x.go\n+package x\n*** End Patch"}, "rule": null},
  {"rules": "thread", "tool": "read", "input": {"filePath": "/h/.ssh/id_ed25519"}, "rule": "credentials", "summary": "read of /h/.ssh/id_ed25519"},
@@ -245,7 +212,7 @@ export default {
  {"rules": "thread", "tool": "glob", "input": {"pattern": "/h/.aws/*"}, "rule": "credentials", "summary": "glob of /h/.aws/?"},
  {"rules": "thread", "tool": "Glob", "input": {"pattern": "*.json", "path": "/h/.aws"}, "rule": "credentials", "summary": "Glob of /h/.aws"},
  {"rules": "thread", "tool": "shell", "input": {"command": "gh pr merge 1"}, "rule": null},
- {"rules": "thread", "tool": "Bash", "input": {"cmd": "gh pr merge 1"}, "rule": null},
+ {"rules": "thread", "tool": "Bash", "input": {"cmd": "gh pr merge 1"}, "rule": "unchecked", "summary": "a Bash call without command", "floor": true},
  {"rules": "off", "tool": "bash", "input": {"command": "gh pr merge 1"}, "rule": null},
  {"rules": "thread", "tool": "Bash", "input": {"command": "gh auth token"}, "rule": "credentials", "summary": "gh auth token"},
  {"rules": "thread", "tool": "Bash", "input": {"command": "gh auth status --show-token"}, "rule": "credentials", "summary": "gh auth status --show-token"},
@@ -590,7 +557,7 @@ export default {
  {"rules": "rules-off-merge-thread", "tool": "Bash", "input": {"command": "gh pr merge 1"}, "rule": null},
  {"rules": "rules-off-merge-thread", "tool": "Bash", "input": {"command": "git push -f origin main"}, "rule": "force-push", "summary": "git push with force", "floor": true},
  {"rules": "rules-off-merge-thread", "tool": "Bash", "input": {"command": "git push -f origin tm/x"}, "rule": null},
- {"rules": "yolo-thread", "tool": "Write", "input": {"file_path": "/h/.terminatr/config.toml"}, "rule": "tm-files", "summary": "Write of /h/.terminatr/config.toml", "floor": true, "message": "terminatr guard (tm-files): a thread doesn't write tm's settings (config.toml) or the project folder. Write in your worktree, or say so in your report."},
+ {"rules": "yolo-thread", "tool": "Write", "input": {"file_path": "/h/.terminatr/config.toml"}, "rule": "tm-files", "summary": "Write of /h/.terminatr/config.toml", "floor": true, "message": "terminatr guard (tm-files): a thread doesn't write tm's own files (config.toml, agents/, mods/, state/ and the rest of tm's home but its worktrees), the project folder or the worktree's .claude/settings.json and settings.local.json (they could turn tm's hooks off). Write elsewhere in your worktree, or say so in your report."},
  {"rules": "yolo-thread", "tool": "Edit", "input": {"file_path": "/h/.terminatr/projects/demo/CONTEXT.md"}, "rule": "tm-files", "summary": "Edit of /h/.terminatr/projects/demo/CONTEXT.md", "floor": true},
  {"rules": "yolo-thread", "tool": "Write", "input": {"file_path": "/h/.terminatr/worktrees/demo/t-0001-fix/link/x"}, "links": {"/h/.terminatr/worktrees/demo/t-0001-fix/link": "/h/.terminatr/projects/demo"}, "rule": "tm-files", "summary": "Write of /h/.terminatr/worktrees/demo/t-0001-fix/link/x", "floor": true},
  {"rules": "yolo-thread", "tool": "apply_patch", "input": {"command": "*** Begin Patch\n*** Add File: /h/.terminatr/projects/demo/TASKS.md\n+x\n*** End Patch"}, "rule": "tm-files", "summary": "apply_patch of /h/.terminatr/projects/demo/TASKS.md", "floor": true},
@@ -846,6 +813,15 @@ export default {
  {"rules": "yolo-thread", "tool": "Bash", "input": {"command": "git config -f ~/.terminatr/config.toml --get a"}, "rule": "tm-files", "summary": "git of /h/.terminatr/config.toml", "floor": true},
  {"rules": "yolo-thread", "tool": "Bash", "input": {"command": "git config user.name x"}, "rule": null},
  {"rules": "floor-coordinator", "tool": "Bash", "input": {"command": "rm -rf ."}, "rule": "tm-files", "summary": "rm of /h/.terminatr/projects/demo", "floor": true},
+ {"rules": "floor-coordinator", "tool": "Bash", "input": {"command": "cd /tmp || exit 1; rm TASKS.md"}, "rule": "tm-files", "summary": "rm of /h/.terminatr/projects/demo/TASKS.md", "floor": true},
+ {"rules": "floor-coordinator", "tool": "Bash", "input": {"command": "false || cd /tmp || exit 1; rm TASKS.md"}, "rule": "tm-files", "summary": "rm of /h/.terminatr/projects/demo/TASKS.md", "floor": true},
+ {"rules": "floor-coordinator", "tool": "Bash", "input": {"command": "exit() { :; }; cd /tmp || exit 1; rm TASKS.md"}, "rule": "tm-files", "summary": "rm of /h/.terminatr/projects/demo/TASKS.md", "floor": true},
+ {"rules": "floor-coordinator", "tool": "Bash", "input": {"command": "function exit { :; }\ncd /tmp || exit 1\nrm TASKS.md"}, "rule": "tm-files", "summary": "rm of /h/.terminatr/projects/demo/TASKS.md", "floor": true},
+ {"rules": "floor-coordinator", "tool": "Bash", "input": {"command": "enable -n exit; cd /tmp || exit 1; rm TASKS.md"}, "rule": "tm-files", "summary": "rm of /h/.terminatr/projects/demo/TASKS.md", "floor": true},
+ {"rules": "floor-coordinator", "tool": "Bash", "input": {"command": "cd /tmp || return 1; rm TASKS.md"}, "rule": "tm-files", "summary": "rm of /h/.terminatr/projects/demo/TASKS.md", "floor": true},
+ {"rules": "floor-coordinator", "tool": "Bash", "input": {"command": "cd /tmp || exit 1 & rm TASKS.md"}, "rule": "tm-files", "summary": "rm of /h/.terminatr/projects/demo/TASKS.md", "floor": true},
+ {"rules": "floor-coordinator", "tool": "Bash", "input": {"command": "cd .. & rm projects/demo/TASKS.md"}, "rule": null},
+ {"rules": "floor-coordinator", "tool": "Bash", "input": {"command": "cd /tmp && cd .. && true & rm TASKS.md"}, "rule": "tm-files", "summary": "rm of /h/.terminatr/projects/demo/TASKS.md", "floor": true},
  {"rules": "floor-coordinator", "tool": "Bash", "input": {"command": "rm -rf memory/old"}, "rule": null},
  {"rules": "yolo-thread", "tool": "Bash", "input": {"command": "env -u TERMINATR_SESSION setsid tm mod enable evil"}, "rule": "tm-files", "summary": "tm mod enable", "floor": true},
  {"rules": "yolo-thread", "tool": "Bash", "input": {"command": "\"$TERMINATR_BIN\" --no-mods mod grant x net"}, "rule": "tm-files", "summary": "tm mod grant", "floor": true},
@@ -905,7 +881,7 @@ export default {
  {"rules": "floor-coordinator", "tool": "Bash", "input": {"command": "cd /tmp && command source x && rm TASKS.md"}, "rule": "tm-files", "summary": "rm of TASKS.md after a cd", "floor": true},
  {"rules": "floor-coordinator", "tool": "Bash", "input": {"command": "cd /tmp && rm -rf . && rm TASKS.md"}, "rule": null},
  {"rules": "floor-coordinator", "tool": "Edit", "input": {"file_path": "/h/.terminatr/projects/demo/CONTEXT.md"}, "rule": null},
- {"rules": "floor-coordinator", "tool": "Write", "input": {"file_path": "/h/.terminatr/projects/demo/TASKS.md"}, "rule": "tm-files", "summary": "Write of /h/.terminatr/projects/demo/TASKS.md", "floor": true, "message": "terminatr guard (tm-files): tm's settings (config.toml) and the parts of the project folder tm keeps (threads/, inbox/, tasks/, journal/, TASKS.md and the like) are written by tm only: use tm's commands, or ask the user."},
+ {"rules": "floor-coordinator", "tool": "Write", "input": {"file_path": "/h/.terminatr/projects/demo/TASKS.md"}, "rule": "tm-files", "summary": "Write of /h/.terminatr/projects/demo/TASKS.md", "floor": true, "message": "terminatr guard (tm-files): tm's own files (config.toml, agents/, mods/, state/ and the rest of tm's home but the projects and worktrees), the parts of the project folder tm keeps (threads/, inbox/, tasks/, journal/, TASKS.md and the like) and the folder's .claude/settings.json and settings.local.json (they could turn tm's hooks off) are written by tm or the user only: use tm's commands, or ask the user."},
  {"rules": "floor-coordinator", "tool": "Write", "input": {"file_path": "/h/.terminatr/config.toml"}, "rule": "tm-files", "summary": "Write of /h/.terminatr/config.toml", "floor": true},
  {"rules": "floor-coordinator", "tool": "Bash", "input": {"command": "echo hi > inbox/x.md"}, "rule": "tm-files", "summary": "echo of /h/.terminatr/projects/demo/inbox/x.md", "floor": true},
  {"rules": "floor-coordinator", "tool": "Bash", "input": {"command": "echo hi > memory/x.md"}, "rule": null},

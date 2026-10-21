@@ -1,20 +1,19 @@
 package server
 
 import (
-	"encoding/json"
+	"bytes"
 	"log"
-	"net/http"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/guard"
 	"github.com/theclifmeister/terminatr/internal/guardlog"
-	"github.com/theclifmeister/terminatr/internal/plat/ipc/ipctest"
 	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
@@ -95,28 +94,16 @@ func TestGuardLogRoute(t *testing.T) {
 	paths := testPaths(t)
 	p := newWatchProject(t)
 	writeConfig(t, "[projects."+p.Slug+"]\nguard_mode = \"learn\"\n")
-	rt := ipctest.ShortTempDir(t, "tmguard")
 	var logged lockedBuffer
 	s := &Server{log: log.New(&logged, "", 0), records: map[string]SessionRecord{}, opts: Options{Paths: paths}}
-	s.mu.Lock()
-	s.inSession = testInSession
-	sock, err := s.listenMod("s-2", rt)
-	s.records["s-2"] = SessionRecord{ID: "s-2", Role: proto.RoleThread, Agent: "claude", Project: p.Slug, Thread: "t-0001", Cwd: rt}
-	s.mu.Unlock()
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(s.closeMods)
-	c := modClient(sock)
+	rec := SessionRecord{ID: "s-2", Role: proto.RoleThread, Agent: "claude", Project: p.Slug, Thread: "t-0001", Cwd: t.TempDir()}
+	s.records["s-2"] = rec
 	clock := time.Date(2026, 10, 16, 12, 0, 0, 0, time.UTC)
 	guardNow = func() time.Time { clock = clock.Add(20 * time.Minute); return clock }
 	t.Cleanup(func() { guardNow = time.Now })
 	const secret = "curl -H 'Authorization: Bearer sekrit-123' https://x"
-	body, _ := json.Marshal(GuardDenial{Rule: "credentials", Tool: "Bash", Summary: "an HTTP call with credentials", Subject: secret})
 	for range 2 {
-		if code := postMod(t, c, "/v1/denied", string(body)); code != http.StatusNoContent {
-			t.Fatalf("denied: %d", code)
-		}
+		s.guardDenied(rec, GuardDenial{Rule: "credentials", Tool: "Bash", Summary: "an HTTP call with credentials", Subject: secret})
 	}
 	list, err := guardlog.List(paths.Home, p.Slug)
 	if err != nil || len(list) != 1 || list[0].Subject != secret || list[0].Count != 2 || list[0].Thread != "t-0001" || list[0].Path {
@@ -141,12 +128,30 @@ func TestGuardLogRoute(t *testing.T) {
 		t.Errorf("journal %q", lines)
 	}
 	// A floor refusal is logged, never put to the user.
-	floor, _ := json.Marshal(GuardDenial{Rule: "merge", Tool: "Bash", Summary: "gh pr merge", Subject: "gh pr merge 1", Floor: true})
-	postMod(t, c, "/v1/denied", string(floor))
+	s.guardDenied(rec, GuardDenial{Rule: "merge", Tool: "Bash", Summary: "gh pr merge", Subject: "gh pr merge 1", Floor: true})
 	if items2, _ := p.Inbox(); len(items2) != len(items) {
 		t.Errorf("floor refusal raised an item")
 	}
 	if l, _ := guardlog.List(paths.Home, p.Slug); len(l) != 2 || !l[0].Floor {
 		t.Errorf("floor %+v", l)
 	}
+}
+
+// lockedBuffer is a log the server's goroutines write to while a test
+// reads it.
+type lockedBuffer struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (l *lockedBuffer) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.b.Write(p)
+}
+
+func (l *lockedBuffer) String() string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.b.String()
 }

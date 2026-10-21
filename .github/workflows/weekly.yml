@@ -88,12 +88,11 @@ jobs:
         env:
           TM: ${{ runner.temp }}/tm
 
-      # The hooks.json and mod tm writes, against the latest Claude's
-      # own plugin checks.
-      - name: claude plugin validate / test
+      # The plugin tm writes, against the latest Claude's own plugin check.
+      - name: claude plugin validate
         if: ${{ !cancelled() }}
         shell: bash
-        run: go test -count=1 -run '^TestModPlugin$' -v ./internal/agent/claude 2>&1 | tee "$RUNNER_TEMP/plugin.txt"
+        run: go test -count=1 -run '^TestPlugin$' -v ./internal/agent/claude 2>&1 | tee "$RUNNER_TEMP/plugin.txt"
         env:
           TERMINATR_CLAUDE_PLUGIN_CHECK: "1"
           CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"

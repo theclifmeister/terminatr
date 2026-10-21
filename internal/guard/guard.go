@@ -1,11 +1,8 @@
 // Package guard is the guard's matcher (docs/SPEC.md §8.6, Guard): the
-// standing rules as checks on each tool call. It is the Go port of the
-// Claude mod's hooks/guard.ts, for agents without a mod: the server
-// judges each call a PreToolUse hook reports and the agent's manifest
-// answers with the refusal (.Guard in a respond template). The two
-// matchers pass the same test vectors
-// (internal/agent/claude/mod/tests/guard-vectors.ts): change them
-// together.
+// standing rules as checks on each tool call: the server judges each
+// call a PreToolUse hook reports and the agent's manifest answers with
+// the refusal (.Guard in a respond template). Its test vectors are
+// testdata/vectors.json.
 //
 // It refuses, or for a PowerShell command it can't read, asks: a call no
 // rule matches goes on to the agent's own permission check. Bash
@@ -21,17 +18,20 @@
 package guard
 
 import (
+	"cmp"
+	"fmt"
 	"path"
 	"regexp"
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 )
 
 // Rules are what a session's guard refuses, as the server works them out
 // from the human's settings and the session's role. Off, nothing is
-// refused. It is also the body of GET /v1/rules on the mod socket.
+// refused.
 type Rules struct {
 	On   bool   `json:"on"`
 	Role string `json:"role,omitempty"`
@@ -109,6 +109,16 @@ type Rules struct {
 	// "excluded"), even where an allow rule or auto mode would let it run
 	// (T574 case 1).
 	AskFirst []string `json:"askFirst,omitempty"`
+	// Deadline, when set, is when Judge gives up: a judge past it stops
+	// reading and refuses the call (unchecked), so one the server stopped
+	// waiting for doesn't run on.
+	Deadline time.Time `json:"-"`
+	// ps is the reading of the call being judged, shared by every copy
+	// of the rules Judge makes: one budget and deadline for every read
+	// and re-read of its command lines (sh -c, eval, wrappers), and depth
+	// how deeply the line being read is nested in them.
+	ps    *parse
+	depth int
 	// Unsandboxed are the command patterns of the agent's own settings
 	// files that run a command outside the sandbox (Claude's
 	// sandbox.excludedCommands in ~/.claude and the folder's .claude),
@@ -206,6 +216,11 @@ type Tool struct {
 	// Escape is a shell tool's input field that, true, asks to run the
 	// call outside the sandbox (Claude's dangerouslyDisableSandbox).
 	Escape string `json:"escape,omitempty" toml:"escape"`
+	// Optional are the Fields the tool may leave out, each a location
+	// that then means the session's folder (Grep's and Glob's path):
+	// the call is judged with that. A call without one of the others,
+	// which the tool always carries, is refused.
+	Optional []string `json:"optional,omitempty" toml:"optional"`
 }
 
 // RuleTMFiles is the rule of the floor's refusal to write tm's settings
@@ -223,6 +238,28 @@ const RuleEscape = "escape"
 // RuleExcluded is the rule of the guard's question about a call that
 // runs an excluded command that asks first (Rules.AskFirst).
 const RuleExcluded = "excluded"
+
+// RuleUnchecked is the rule of a refusal of a call nobody could judge:
+// tm hook got no verdict from the server, or the server ran out of
+// time judging it (docs/SPEC.md §8.6, Guard: the guard fails closed).
+const RuleUnchecked = "unchecked"
+
+// Unchecked is the refusal of a call tm couldn't check: the agent's
+// hook answers with it when the server's verdict doesn't come.
+func Unchecked() *Denial {
+	return &Denial{Rule: RuleUnchecked, Floor: true, Summary: "a call tm couldn't check",
+		Message: "terminatr guard: tm couldn't check this call (its server didn't answer in time), so it is refused; try again."}
+}
+
+// RuleUnreadable is the rule of the floor's refusal of a command line
+// past the guard's limits (MaxCommand, maxNesting, maxParse).
+const RuleUnreadable = "unreadable"
+
+// unreadable is the refusal of a command line past the guard's limits.
+func unreadable() *Denial {
+	return &Denial{Rule: RuleUnreadable, Floor: true, Summary: "a command too long or nested too deep to check",
+		Message: fmt.Sprintf("terminatr guard: this command is too long (over %d KiB) or nested too deep (substitutions, subshells or heredocs over %d levels) for the guard to check, so it is refused; split it into shorter commands, or put the script in a file in the worktree and run that.", MaxCommand>>10, maxNesting)}
+}
 
 // SyntaxPowerShell marks a shell tool whose command lines are PowerShell.
 const SyntaxPowerShell = "powershell"
@@ -279,7 +316,39 @@ const learnNote = " The user reviews refused calls: if they allow this one, you 
 
 // Judge is the rule the call of tool with input breaks, or nil. The
 // tool is judged by its kind in r.Tools, from the fields listed there.
+//
+// One judge reads the call's command lines with one budget: every read
+// and re-read (sh -c, eval, a wrapper's command, an allowance judged
+// again) counts against judgeParse and maxNesting, and Deadline ends it;
+// past either it stops and refuses the call (unreadable, or unchecked
+// for the deadline), never judging it in part.
 func (r Rules) Judge(tool string, input map[string]any) *Denial {
+	if r.ps == nil {
+		r.ps = &parse{limit: judgeParse, deadline: r.Deadline}
+	}
+	d := r.judge(tool, input)
+	return r.ps.verdict(d)
+}
+
+// judgeParse bounds the bytes one judge reads in all, its re-reads
+// counted: a line inside maxParse is read several times over (its
+// parts, its folders, an allowance judged again).
+const judgeParse = 16 << 20
+
+// verdict is d, unless the reading went past its limits: then the
+// refusal of a call the guard couldn't read, or couldn't in time.
+func (p *parse) verdict(d *Denial) *Denial {
+	switch {
+	case p.late:
+		d = Unchecked()
+		d.Message = "terminatr guard: checking this call took too long, so it is refused; try a shorter or simpler command."
+	case p.over:
+		d = unreadable()
+	}
+	return d
+}
+
+func (r Rules) judge(tool string, input map[string]any) *Denial {
 	if !r.On || len(r.Rules) == 0 && len(r.Mods) == 0 && len(r.Own) == 0 && len(r.OtherTemps) == 0 && len(r.SecretEnv) == 0 && len(r.Floor) == 0 && len(r.NoWrite) == 0 && !r.AskEscapes && len(r.Unsandboxed) == 0 && len(r.AskFirst) == 0 {
 		return nil
 	}
@@ -287,14 +356,50 @@ func (r Rules) Judge(tool string, input map[string]any) *Denial {
 	if !ok {
 		return nil
 	}
-	var values []string
+	var values, missing, malformed []string
 	for _, f := range t.Fields {
-		if s, _ := input[f].(string); s != "" {
+		v, has := input[f]
+		switch s, ok := v.(string); {
+		case ok && s != "":
 			values = append(values, s)
+		case has && !ok:
+			// There, but not the text a location or command is: the
+			// guard can't tell what it names.
+			malformed = append(malformed, f)
+		case slices.Contains(t.Optional, f):
+			// A location left out: the session's own folder (the agent's
+			// own, when its hook gave it, is filled in before: agent).
+			if r.Cwd != "" {
+				values = append(values, r.Cwd)
+			}
+		default:
+			missing = append(missing, f)
 		}
+	}
+	if len(malformed) > 0 {
+		d := Unchecked()
+		d.Summary = "a " + tool + " call with a malformed " + strings.Join(malformed, " or ")
+		d.Message = "terminatr guard: this call's " + strings.Join(malformed, ", ") + " is not text the guard can read, so it is refused."
+		return d
+	}
+	if len(missing) > 0 {
+		// A field the tool always carries is missing (its input trimmed
+		// away, or not the tool's shape): nothing to judge it by, so
+		// refused, never let through.
+		d := Unchecked()
+		d.Summary = "a " + tool + " call without " + strings.Join(missing, " or ")
+		d.Message = "terminatr guard: this call's input lacks " + strings.Join(missing, ", ") + ", which the guard reads, so it is refused."
+		return d
 	}
 	switch t.Kind {
 	case KindShell:
+		// A line past the guard's limits is refused whole, whatever else
+		// is allowed: read in part, what it hides would run unjudged.
+		for _, c := range values {
+			if len(c) > MaxCommand || t.Syntax == "" && !readable(c) {
+				return unreadable()
+			}
+		}
 		var ask *Denial
 		for _, c := range values {
 			d := r.lifted(strings.TrimSpace(c), false, func(r Rules) *Denial {
@@ -368,7 +473,7 @@ func (r Rules) judgeUnsandboxed(line string) *Denial {
 		return nil
 	}
 	var cands []string
-	for _, words := range Commands(line) {
+	for _, words := range r.cmds(line) {
 		cands = append(cands, strings.Join(words, " "), strings.Join(strip(words), " "))
 	}
 	cands = append(cands, line)
@@ -524,7 +629,7 @@ func (r Rules) askFirst(line string) string {
 		return ""
 	}
 	texts := []string{strings.TrimSpace(line)}
-	for _, words := range Commands(line) {
+	for _, words := range r.cmds(line) {
 		texts = append(texts, strings.Join(words, " "))
 		if argv := strip(words); len(argv) > 0 {
 			texts = append(texts, strings.Join(argv, " "))
@@ -683,9 +788,9 @@ func (r Rules) deny(rule, summary, target string) *Denial {
 		m = `merging is the coordinator's job in this project (merge = "coordinator"). Leave the PR open with CI green and say so in your report.`
 	case RuleTMFiles:
 		if r.Role == "thread" {
-			m = "a thread doesn't write tm's settings (config.toml) or the project folder. Write in your worktree, or say so in your report."
+			m = "a thread doesn't write tm's own files (config.toml, agents/, mods/, state/ and the rest of tm's home but its worktrees), the project folder or the worktree's .claude/settings.json and settings.local.json (they could turn tm's hooks off). Write elsewhere in your worktree, or say so in your report."
 		} else {
-			m = "tm's settings (config.toml) and the parts of the project folder tm keeps (threads/, inbox/, tasks/, journal/, TASKS.md and the like) are written by tm only: use tm's commands, or ask the user."
+			m = "tm's own files (config.toml, agents/, mods/, state/ and the rest of tm's home but the projects and worktrees), the parts of the project folder tm keeps (threads/, inbox/, tasks/, journal/, TASKS.md and the like) and the folder's .claude/settings.json and settings.local.json (they could turn tm's hooks off) are written by tm or the user only: use tm's commands, or ask the user."
 		}
 	case RuleTempFolders:
 		m = "other threads' temp folders are not read or written here. Keep your files in your own temp folder ($TMPDIR) or your worktree, or " + tell + "."
@@ -851,7 +956,13 @@ func (r Rules) JudgeCommand(line string) *Denial {
 		return nil
 	}
 	line = strings.TrimSpace(line)
-	return r.lifted(line, false, func(r Rules) *Denial { return r.judgeBash(line) })
+	if len(line) > MaxCommand || !readable(line) {
+		return unreadable()
+	}
+	if r.ps == nil {
+		r.ps = &parse{limit: judgeParse, deadline: r.Deadline}
+	}
+	return r.ps.verdict(r.lifted(line, false, func(r Rules) *Denial { return r.judgeBash(line) }))
 }
 
 // judgeBash checks each simple command of a Bash command line.
@@ -888,13 +999,13 @@ func (r Rules) judgeLine(command string, cwds []string) *Denial {
 		r.line += "\n"
 	}
 	r.line += command
-	r.lineCd = r.lineCd || hasCd(command)
-	parts, ok := topLevel(command)
+	r.lineCd = r.lineCd || r.hasCd(command)
+	parts, ok := r.topLevel(command)
 	if !ok {
 		// A line it can't split: one part, with any cd in it leaving its
 		// relative paths unknown from the start.
 		parts = []linePart{{text: command}}
-		if hasCd(command) {
+		if r.hasCd(command) {
 			cwds = withDirs(cwds, "")
 		}
 	}
@@ -905,37 +1016,59 @@ func (r Rules) judgeLine(command string, cwds []string) *Denial {
 	if olds == nil {
 		olds = []string{""}
 	}
-	for _, pt := range parts {
+	for i, pt := range parts {
+		// The folders a part may run in count against the budget, and
+		// a line that may be in more than maxFolders is past it.
+		if r.ps != nil && (len(cur)+len(list)+len(olds) > maxFolders || r.ps.stop(len(cur)*len(pt.text), r.depth)) {
+			r.ps.over = true
+		}
+		if r.spent() {
+			return nil // Judge refuses the call: no part is let through unread
+		}
 		if listEnd(pt.before) {
 			list = cur
 		}
 		// A heredoc's body read as commands (topLevel and Commands may
 		// tell a << apart differently: $[1<<2]) may hold a cd anywhere.
-		if pt.doc && hasCd(pt.text) {
+		if pt.doc && r.hasCd(pt.text) {
 			olds = withDirs(withDirs(olds, cur...), "")
 			cur = withDirs(cur, "")
 		}
 		rp := r
 		rp.olds = olds
 		for _, c := range cur {
-			if d := rp.judgeCommands(pt.text, c); d != nil {
+			if d := rp.judgeCommands(pt.text, c); d != nil || r.spent() {
 				return d
 			}
 		}
 		inPipe := pt.before == "|" || pt.after == "|" || pt.after == "&"
-		if cmd, args, plain := plainCd(pt.text); plain && !inPipe {
+		if cmd, args, plain := r.plainCd(pt.text); plain && !inPipe {
 			var to []string
 			for _, c := range cur {
 				to = withDirs(to, nowhere{dir: c}.cd(r, cmd, args).dir)
 			}
 			// The cd leaves $OLDPWD the folder it left, if it runs.
 			sure := pt.after == "&&" && pt.before != "||"
-			if sure {
+			// A cd .. that always runs (the first command of its list,
+			// none after it on ||) fails only where the parent is gone:
+			// the folders the line may be in merge into their parents, so
+			// a script that walks its subfolders in turn (cd X || exit 1;
+			// …; cd ..) doesn't gather a folder for each. Not in a list
+			// run in the background, which moves no folder of the line's
+			// own shell. A cd X || exit merges nothing: an earlier member
+			// of its list may have ended it, and the shell may have made
+			// exit something else where the guard can't see (Claude's
+			// Bash sources a snapshot of the user's shell first).
+			up := cmd == "cd" && len(args) == 1 && (args[0] == ".." || args[0] == "../") &&
+				listEnd(pt.before) && pt.after != "||" && listSep(parts, i) != "&"
+			if sure || up {
 				olds = slices.Clone(cur)
 			} else {
 				olds = withDirs(olds, cur...)
 			}
 			switch {
+			case up:
+				cur, list = to, to
 			case sure:
 				cur = to
 			case pt.after == "||":
@@ -943,11 +1076,11 @@ func (r Rules) judgeLine(command string, cwds []string) *Denial {
 			default:
 				cur = withDirs(cur, to...)
 			}
-		} else if !inPipe && !strings.HasPrefix(pt.text, "(") && hasCd(pt.text) {
+		} else if !inPipe && !strings.HasPrefix(pt.text, "(") && r.hasCd(pt.text) {
 			olds = withDirs(withDirs(olds, cur...), "")
 			cur = withDirs(cur, "")
 		}
-		hidden = hidden || runsHidden(pt.text)
+		hidden = hidden || r.runsHidden(pt.text)
 		if hidden {
 			olds = withDirs(olds, "")
 			cur = withDirs(cur, "")
@@ -960,14 +1093,25 @@ func (r Rules) judgeLine(command string, cwds []string) *Denial {
 	return nil
 }
 
+// listSep is the separator that ends the and-or list part i is in: ";",
+// "&" (run in the background), or "" at the line's end.
+func listSep(parts []linePart, i int) string {
+	for ; i < len(parts); i++ {
+		if listEnd(parts[i].after) {
+			return parts[i].after
+		}
+	}
+	return ""
+}
+
 // hiddenCode are the builtins that run shell code the line doesn't show
 // in the shell itself, where a cd in it moves the line's folder.
 var hiddenCode = setOf("eval trap source .")
 
 // runsHidden: one of text's commands is one of those, maybe through
 // command or builtin.
-func runsHidden(text string) bool {
-	for _, words := range Commands(text) {
+func (r Rules) runsHidden(text string) bool {
+	for _, words := range r.cmds(text) {
 		argv := strip(words)
 		for len(argv) > 1 && (argv[0] == "command" || argv[0] == "builtin") {
 			argv = argv[1:]
@@ -991,7 +1135,13 @@ func (r Rules) judgeCommands(part, cwd string) *Denial {
 		r.Cwd = cwd
 	}
 	split := false
-	for _, words := range readCommands(part, false, func(p string) bool { return fl.worktreeScript(p) }) {
+	var read [][]string
+	if r.ps != nil {
+		read = r.ps.read(part, false, func(p string) bool { return fl.worktreeScript(p) }, r.depth)
+	} else {
+		read = readCommands(part, false, func(p string) bool { return fl.worktreeScript(p) })
+	}
+	for _, words := range read {
 		argv := strip(words)
 		// Only a word that looks like a path: 2>&1 splits the same way.
 		if split && len(words) > 0 && (strings.ContainsAny(words[0], `/\`) || strings.HasPrefix(words[0], "~")) {
@@ -1029,12 +1179,12 @@ func (r Rules) judgeCommands(part, cwd string) *Denial {
 		case httpClients[cmd]:
 			d = r.judgeHTTP(cmd, args)
 		case shells[cmd]:
-			// bash -c STRING runs the string.
+			// bash -c STRING runs the string: read one level deeper.
 			if c, ok := shellCommand(args); ok {
-				d = r.judgeLine(c, []string{cwd})
+				d = r.nested().judgeLine(c, []string{cwd})
 			}
 		case cmd == "eval":
-			d = r.judgeLine(strings.Join(args, " "), []string{cwd})
+			d = r.nested().judgeLine(strings.Join(args, " "), []string{cwd})
 		case cmd == "pwsh" || cmd == "powershell":
 			d = r.judgePwsh(args)
 		case cmd == "rm" && r.has("delete-branch") && slices.ContainsFunc(args, func(a string) bool { return rmRecursive.MatchString(a) || isLong(a, "--recursive") }):
@@ -1984,8 +2134,8 @@ func withDirs(dirs []string, more ...string) []string {
 var cdWords = setOf("cd pushd popd")
 
 // hasCd: some word of text's commands is cd, pushd or popd.
-func hasCd(text string) bool {
-	for _, words := range Commands(text) {
+func (r Rules) hasCd(text string) bool {
+	for _, words := range r.cmds(text) {
 		if slices.ContainsFunc(words, func(w string) bool { return cdWords[w] }) {
 			return true
 		}
@@ -1994,11 +2144,11 @@ func hasCd(text string) bool {
 }
 
 // plainCd: part is one plain cd, pushd or popd, and its arguments.
-func plainCd(part string) (cmd string, args []string, ok bool) {
+func (r Rules) plainCd(part string) (cmd string, args []string, ok bool) {
 	if strings.HasPrefix(part, "(") || strings.HasPrefix(part, "{") {
 		return "", nil, false
 	}
-	cmds := Commands(part)
+	cmds := r.cmds(part)
 	if len(cmds) != 1 || len(cmds[0]) == 0 || !cdWords[cmds[0][0]] {
 		return "", nil, false
 	}
@@ -2012,7 +2162,7 @@ func plainCd(part string) (cmd string, args []string, ok bool) {
 // quotes or brackets don't close, with a heredoc inside brackets, or
 // with a shell that may run a heredoc's body (cat <<EOF | bash), which
 // the line's own reading (Commands) judges.
-func topLevel(line string) (parts []linePart, ok bool) {
+func (r Rules) topLevel(line string) (parts []linePart, ok bool) {
 	s := []rune(line)
 	var stack []rune
 	var b strings.Builder
@@ -2237,7 +2387,7 @@ func topLevel(line string) (parts []linePart, ok bool) {
 	}
 	cut("")
 	if docs && slices.ContainsFunc(parts, func(p linePart) bool {
-		return slices.ContainsFunc(Commands(p.text), func(w []string) bool { return readsInput(w, p.before == "|", nil) })
+		return slices.ContainsFunc(r.cmds(p.text), func(w []string) bool { return readsInput(w, p.before == "|", nil) })
 	}) {
 		return nil, false
 	}
@@ -2449,13 +2599,101 @@ type heredoc struct {
 // it; otherwise only what it substitutes is.
 func Commands(line string) [][]string { return readCommands(line, false, nil) }
 
-// commands is Commands; in arithmetic (arith) << is a shift, no heredoc.
-func commands(line string, arith bool) [][]string { return readCommands(line, arith, nil) }
-
-// readCommands is commands, where a shell given input that runs a
+// readCommands is Commands (in arithmetic, arith, << is a shift, no
+// heredoc), where a shell given input that runs a
 // script reads none of it if script says the file is the worktree's
 // (worktreeScript; nil: none is).
 func readCommands(line string, arith bool, script func(string) bool) [][]string {
+	return (&parse{}).read(line, arith, script, 0)
+}
+
+// Limits on what the guard reads of one command line (docs/SPEC.md
+// §8.6, Guard): MaxCommand bytes, substitutions, subshells, arithmetic
+// and heredocs nested maxNesting deep, and maxParse bytes read by the
+// parser in all, every nesting level counted (a heredoc's body is read
+// twice: as text the line expands and as a shell's input, so without a
+// bound nested heredocs double the work at each level). A line past
+// them is refused (Judge), not read in part.
+const (
+	MaxCommand = 64 << 10
+	maxNesting = 32
+	maxParse   = 4 << 20
+	// maxFolders bounds the folders a line's cd, pushd and popd may
+	// leave it in (judgeLine), each of which its parts are judged from:
+	// a script that walks its subfolders in turn levels off near 36 (the
+	// parents its cd .. climb to repeat), more for a deeper folder; the
+	// parse budget and deadline bound the work either way.
+	maxFolders = 256
+)
+
+// parse is one line's reading: what its parser has read, every nesting
+// level counted, and whether it went past the limits.
+type parse struct {
+	work     int
+	limit    int
+	deadline time.Time
+	over     bool
+	late     bool // over by the deadline
+}
+
+// spent reports whether the judge's reading went past its limits (or
+// its deadline): judging stops, and Judge refuses the call.
+func (r Rules) spent() bool { return r.ps != nil && r.ps.stop(0, r.depth) }
+
+// nested is r for a line read one level deeper (sh -c, eval): past
+// maxNesting the reading stops.
+func (r Rules) nested() Rules {
+	r.depth++
+	if r.ps != nil {
+		r.ps.stop(0, r.depth)
+	}
+	return r
+}
+
+// cmds are the commands of line as Commands reads them, read with the
+// judge's budget at its depth.
+func (r Rules) cmds(line string) [][]string {
+	if r.ps == nil {
+		return Commands(line)
+	}
+	return r.ps.read(line, false, nil, r.depth)
+}
+
+// stop counts n more bytes read at depth and reports whether the
+// reading is over its limits: its work (maxParse unless limit says),
+// maxNesting, or its deadline.
+func (p *parse) stop(n, depth int) bool {
+	p.work += n
+	limit := cmp.Or(p.limit, maxParse)
+	switch {
+	case p.over:
+	case !p.deadline.IsZero() && time.Now().After(p.deadline):
+		p.over, p.late = true, true
+	case depth > maxNesting || p.work > limit:
+		p.over = true
+	}
+	return p.over
+}
+
+// readable reports whether line is within the guard's limits: no longer
+// than MaxCommand, nested no deeper than maxNesting, read within
+// maxParse.
+func readable(line string) bool {
+	if len(line) > MaxCommand {
+		return false
+	}
+	p := &parse{}
+	p.read(line, false, nil, 0)
+	return !p.over
+}
+
+// read is readCommands of line at nesting depth; the commands of what
+// it substitutes or nests are read at depth+1, sharing p's budget. Past
+// the limits it reads nothing more and marks p over.
+func (p *parse) read(line string, arith bool, script func(string) bool, depth int) [][]string {
+	if p.stop(len(line), depth) {
+		return nil
+	}
 	var out, inner [][]string
 	var words []string
 	// word is the word as written; lit the same without its unquoted
@@ -2543,12 +2781,12 @@ func readCommands(line string, arith bool, script func(string) bool) [][]string 
 					j += 2
 				case s[j] == '$' && j+1 < len(s) && s[j+1] == '(':
 					end := closing(s, j+2, '(', ')')
-					out = append(out, Commands(string(s[j+2:end]))...)
+					out = append(out, p.read(string(s[j+2:end]), false, nil, depth+1)...)
 					q.WriteString(string(s[j:min(end+1, len(s))]))
 					j = end + 1
 				case s[j] == '`':
 					end := tickClose(s, j+1)
-					out = append(out, Commands(string(s[j+1:end]))...)
+					out = append(out, p.read(string(s[j+1:end]), false, nil, depth+1)...)
 					q.WriteString(string(s[j:min(end+1, len(s))]))
 					j = end + 1
 				default:
@@ -2571,13 +2809,13 @@ func readCommands(line string, arith bool, script func(string) bool) [][]string 
 			// on its own, as commands (bash takes ((a; b)) for subshells).
 			end := closing(s, i+1, '(', ')')
 			endCommand()
-			out = append(out, commands(string(s[i+2:min(end, len(s))]), true)...)
+			out = append(out, p.read(string(s[i+2:min(end, len(s))]), true, nil, depth+1)...)
 			i = end
 		case c == '$' && i+1 < len(s) && s[i+1] == '[' && closing(s, i+2, '[', ']') < len(s):
 			// Arithmetic, $[ … ], a part of its word: its inside read on
 			// its own, as commands.
 			end := closing(s, i+2, '[', ']')
-			inner = append(inner, commands(string(s[i+2:end]), true)...)
+			inner = append(inner, p.read(string(s[i+2:end]), true, nil, depth+1)...)
 			text(string(s[i : end+1]))
 			i = end
 		case c == '$' && i+2 < len(s) && s[i+1] == '{' && !strings.ContainsRune(" \t\n|", s[i+2]):
@@ -2586,20 +2824,20 @@ func readCommands(line string, arith bool, script func(string) bool) [][]string 
 			// or backtick in it still runs.
 			end := closing(s, i+2, '{', '}')
 			for _, in := range substitutions(string(s[i+2 : end])) {
-				out = append(out, Commands(in)...)
+				out = append(out, p.read(in, false, nil, depth+1)...)
 			}
 			text(string(s[i:min(end+1, len(s))]))
 			i = end
 		case c == '$' && i+1 < len(s) && s[i+1] == '(':
 			// A command substitution is a word of the command it is in.
 			end := closing(s, i+2, '(', ')')
-			inner = append(inner, Commands(string(s[i+2:end]))...)
+			inner = append(inner, p.read(string(s[i+2:end]), false, nil, depth+1)...)
 			word.WriteString(string(s[i:min(end+1, len(s))]))
 			inWord = true
 			i = end
 		case c == '`':
 			end := tickClose(s, i+1)
-			inner = append(inner, Commands(string(s[i+1:end]))...)
+			inner = append(inner, p.read(string(s[i+1:end]), false, nil, depth+1)...)
 			word.WriteString(string(s[i:min(end+1, len(s))]))
 			inWord = true
 			i = end
@@ -2640,7 +2878,7 @@ func readCommands(line string, arith bool, script func(string) bool) [][]string 
 			// command (cp <(x) f copies to f), its inside read as commands
 			// too.
 			end := closing(s, i+2, '(', ')')
-			inner = append(inner, Commands(string(s[i+2:end]))...)
+			inner = append(inner, p.read(string(s[i+2:end]), false, nil, depth+1)...)
 			word.WriteString(string(s[i:min(end+1, len(s))]))
 			inWord = true
 			i = end
@@ -2694,11 +2932,11 @@ func readCommands(line string, arith bool, script func(string) bool) [][]string 
 			if !h.quoted {
 				// The line's own shell expands it first.
 				for _, in := range substitutions(h.body) {
-					out = append(out, Commands(in)...)
+					out = append(out, p.read(in, false, nil, depth+1)...)
 				}
 			}
 			if shell || h.odd {
-				out = append(out, Commands(h.body)...)
+				out = append(out, p.read(h.body, false, nil, depth+1)...)
 			}
 		}
 	}
@@ -2847,7 +3085,7 @@ func scriptFile(a string) bool {
 // runs p, a regular file inside the thread's worktree once its links
 // are followed (Resolve, File).
 func (r Rules) worktreeScript(p string) bool {
-	if r.wt == "" || r.Resolve == nil || r.File == nil || !scriptFile(p) || writesScript(r.line, p) {
+	if r.wt == "" || r.Resolve == nil || r.File == nil || !scriptFile(p) || r.writesScript(r.line, p) {
 		return false
 	}
 	if r.Cwd == "" && !strings.HasPrefix(slash(p), "/") && !strings.HasPrefix(p, "~") {
@@ -2873,9 +3111,9 @@ var scriptWriters = func() map[string]bool {
 // writesScript: line writes, links or moves a file named as script p
 // (its last part): one of scriptWriters names it, or a redirect does.
 // What File answered about p is from before the line ran.
-func writesScript(line, p string) bool {
+func (r Rules) writesScript(line, p string) bool {
 	b := base(path.Clean(slash(p)))
-	return slices.ContainsFunc(Commands(line), func(w []string) bool {
+	return slices.ContainsFunc(r.cmds(line), func(w []string) bool {
 		argv := strip(w)
 		writer := len(argv) > 0 && scriptWriters[base(argv[0])]
 		for i, a := range w {
@@ -3395,7 +3633,7 @@ func safe(s string) string {
 		ok := c < 128 && (c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || strings.ContainsRune("._/~@+:-", c))
 		w := 1
 		if c > 0xFFFF {
-			w = 2 // two UTF-16 units, as guard.ts counts them
+			w = 2 // two UTF-16 units, as the journal has always counted them
 		}
 		for range w {
 			if n == 100 {

@@ -7,25 +7,22 @@ import (
 // MethodToolRun runs one of a session's tools (a thread's report,
 // status, steps and done, and the tools user mods offer; docs/SPEC.md
 // §8.6) for `tm mcp`, which serves them to agents that speak MCP. The
-// server tells the session from the peer pid, as for cli.run, and
-// answers like POST /v1/tools/{name} on the mod socket.
+// server tells the session from the peer pid, as for cli.run.
 const MethodToolRun = "tool.run"
 
 // MethodToolList lists the tools of the caller's session, found from
-// the peer pid, as GET /v1/tools on the mod socket does: no params,
-// answered with ToolListResult.
+// the peer pid: no params, answered with ToolListResult.
 const MethodToolList = "tool.list"
 
 // ToolDef is a tool as an agent is given it: its name, description and
-// input as a JSON schema (MCP's tools/list shape, and what Claude's
-// $.tool.register takes).
+// input as a JSON schema (MCP's tools/list shape).
 type ToolDef struct {
 	Name        string         `json:"name"`
 	Description string         `json:"description"`
 	InputSchema map[string]any `json:"inputSchema"`
 }
 
-// ToolListResult is the answer of tool.list and GET /v1/tools.
+// ToolListResult is the answer of tool.list.
 type ToolListResult struct {
 	Tools []ToolDef `json:"tools"`
 }

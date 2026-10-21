@@ -73,9 +73,6 @@ type AgentConfig struct {
 	// OnPromptResolved is called (without locks held) when a held prompt
 	// was resolved after PromptHold.
 	OnPromptResolved func(*Session, PromptResolution)
-	// ModSocket, when set, says the agent runs terminatr's mod, which
-	// reports its state over this socket (ModState; docs/SPEC.md §8.6).
-	ModSocket string
 	// PromptsEscape: every permission prompt of the agent asks to run
 	// outside its sandbox (a Codex thread's escalation), which the user
 	// answers, never the coordinator (AgentState.Escape).
@@ -97,9 +94,6 @@ const (
 	// (agent.ErrNoToken). It goes once a hook brings the token, or is
 	// pasted once the box and screen clear.
 	HeldToken = "waiting for the agent's messaging token"
-	// HeldMod: the mod took the prompt and handed it to the agent, which
-	// is idle and hasn't run it (modprompt.go).
-	HeldMod = "the mod took it, the agent hasn't run it"
 )
 
 // PromptOptions qualify a prompt.
@@ -131,7 +125,7 @@ type PromptResolution struct {
 	Err    error // why the channel failed, for a drop that tried it
 }
 
-// queuedPrompt is one prompt waiting for the mod or the paste injector.
+// queuedPrompt is one prompt waiting for the paste injector.
 type queuedPrompt struct {
 	id      string
 	text    string
@@ -140,14 +134,6 @@ type queuedPrompt struct {
 	refresh func() (string, bool)
 	// waitToken: the channel refused it for want of a token (HeldToken).
 	waitToken bool
-	// The mod's side (modprompt.go): when it was last offered to the mod,
-	// whether the mod took it (stored it and handed it to Claude),
-	// whether its text was refreshed already, and whether it goes to the
-	// paste injector after all (the mod refused it or never answered).
-	offered   time.Time
-	taken     bool
-	refreshed bool
-	paste     bool
 }
 
 // Timings of the agent sources (docs/SPEC.md §8.3–8.4).
@@ -199,17 +185,15 @@ type agentRT struct {
 	promptGen  string    // tells this agent's prompt ids from an earlier one's
 	heldSince  time.Time // the head prompt has been held while idle since
 	heldWhy    string
-	modPolls   int       // the mod's polls for prompts in flight (modprompt.go)
-	modPolled  time.Time // when the mod's last poll ended
 	stallAt    time.Time // the queued-at of the head prompt whose stall was logged
 	lastState  agent.Merged
 	lastSID    string
 	lastTodos  []agent.Todo
 	// escapes are the calls, by id, that asked to run outside the
-	// sandbox (MarkEscape): while one is held, the permission prompt on
+	// sandbox (setEscape): while one is held, the permission prompt on
 	// screen may be its, so it is the user's. One per call, so that a
 	// parallel call's prompt ending doesn't end an escape's. The call's
-	// end (EndEscape, its PostToolUse) or the turn's only says it may
+	// end (its PostToolUse) or the turn's only says it may
 	// go: it goes once the screen shows no permission dialog and
 	// escapeGrace has passed since, since the hooks that say so can
 	// come from any process in the agent's tree, before its dialog has
@@ -269,9 +253,6 @@ func newAgentRT(cfg AgentConfig, pid int, observed bool) (*agentRT, error) {
 	}
 	if cfg.Kickoff && !observed {
 		rt.tr.AwaitKickoff()
-	}
-	if cfg.ModSocket != "" && !observed {
-		rt.tr.ExpectMod()
 	}
 	return rt, nil
 }
@@ -347,27 +328,6 @@ func (s *Session) AgentState() (st AgentState, ok bool) {
 	}, true
 }
 
-// MarkEscape says the agent's call id runs outside its sandbox (the
-// guard asked: rule "escape", or "excluded" for an excluded command that
-// asks first), so a permission prompt open while
-// the call is is the user's to answer. Kept until EndEscape(id), or
-// the turn's end, and then until the screen shows no permission
-// dialog. An id "" is the call's when it has none of its own.
-func (s *Session) MarkEscape(id string) { s.escape(id, true) }
-
-// EndEscape says the call id ended (ran, failed or was refused): its
-// mark goes once no permission dialog is on screen.
-func (s *Session) EndEscape(id string) { s.escape(id, false) }
-
-func (s *Session) escape(id string, open bool) {
-	rt := s.agentRT()
-	if rt == nil {
-		return
-	}
-	rt.setEscape(id, open)
-	s.agentChanged(rt)
-}
-
 // escapeMark is an escape's call: when it ended (zero while it runs).
 type escapeMark struct{ ended time.Time }
 
@@ -376,6 +336,12 @@ type escapeMark struct{ ended time.Time }
 // forged hook says the call ended (a variable for tests).
 var escapeGrace = 8 * time.Second
 
+// setEscape says the agent's call id runs outside its sandbox (the
+// guard asked: rule "escape", or "excluded" for an excluded command that
+// asks first), so a permission prompt open while the call is is the
+// user's to answer; kept until the call ends (open false), or the turn's
+// end, and then until the screen shows no permission dialog. An id "" is
+// the call's when it has none of its own.
 func (rt *agentRT) setEscape(id string, open bool) {
 	rt.mu.Lock()
 	defer rt.mu.Unlock()
@@ -447,9 +413,6 @@ func (s *Session) Explain() (agent.Explanation, bool) {
 	if len(rt.driftNotes) > 0 {
 		e.Extra["drift"] = strings.Join(rt.driftNotes, " | ")
 	}
-	if rt.cfg.ModSocket != "" {
-		e.Extra["mod_socket"] = rt.cfg.ModSocket
-	}
 	if rt.observed {
 		e.Extra["identified"] = "by process"
 	}
@@ -486,10 +449,38 @@ func (s *Session) Hook(event string, payload map[string]any) (agent.HookResult, 
 		return agent.HookResult{}, ErrNoAgent
 	}
 	ev := agent.HookEvent{Agent: rt.a.Name(), Event: event, Payload: payload, Seq: rt.seq.Add(1), At: time.Now()}
+	env := agent.HookEnv{}
+	callID, _ := payload["tool_use_id"].(string)
+	if g := rt.cfg.Guard; g != nil {
+		env.Guard = func(tool string, input map[string]any) *guard.Denial {
+			// A call that asks to leave the sandbox is the user's to let
+			// run before it is judged: a verdict that is slow, or never
+			// comes (the guard fails closed, the agent may show its own
+			// prompt after its hook timed out), leaves no prompt of it
+			// unmarked for tm thread approve to answer.
+			if rt.man != nil {
+				if t, ok := rt.man.Guard.Tools[tool]; ok && t.Escape != "" && input[t.Escape] == true {
+					rt.setEscape(callID, true)
+				}
+			}
+			d := g(tool, input)
+			if d != nil && d.Ask && (d.Rule == guard.RuleEscape || d.Rule == guard.RuleExcluded) {
+				rt.setEscape(callID, true)
+			}
+			return d
+		}
+	}
 	if sid, ok := rt.src.Foreign(event, payload, rt.tr.AgentSID()); ok {
+		// Its state is no longer this session's; a tool call it makes
+		// is judged all the same (the guard answers whatever the event
+		// carries).
 		rt.tr.Ignore(ev, "session "+sid+" was left")
 		s.agentChanged(rt)
-		return agent.HookResult{}, nil
+		if !agent.GuardEvent(rt.a, event) {
+			return agent.HookResult{}, nil
+		}
+		_, res, err := rt.a.Hook(ev, agent.HookEnv{Guard: env.Guard})
+		return res, err
 	}
 	s.checkHook(rt, event, payload)
 	if rt.cfg.OnHook != nil {
@@ -497,17 +488,6 @@ func (s *Session) Hook(event string, payload map[string]any) (agent.HookResult, 
 	}
 	if rt.cfg.OnContextClear != nil && agent.ClearsContext(rt.a, event, payload) {
 		rt.cfg.OnContextClear(s)
-	}
-	env := agent.HookEnv{}
-	callID, _ := payload["tool_use_id"].(string)
-	if g := rt.cfg.Guard; g != nil {
-		env.Guard = func(tool string, input map[string]any) *guard.Denial {
-			d := g(tool, input)
-			if d != nil && d.Ask && (d.Rule == guard.RuleEscape || d.Rule == guard.RuleExcluded) {
-				rt.setEscape(callID, true)
-			}
-			return d
-		}
 	}
 	switch event {
 	case "PostToolUse", "PostToolUseFailure", "PermissionDenied":
@@ -534,23 +514,6 @@ func (s *Session) Hook(event string, payload map[string]any) (agent.HookResult, 
 	}
 	s.agentChanged(rt)
 	return res, err
-}
-
-// ModState takes a state report from the agent's mod: a transition it
-// saw (event names it, e.g. "turn.complete"), or its heartbeat ("beat",
-// with the state it holds). A turn's end re-reads the todo snapshot, as
-// the hooks' Stop did.
-func (s *Session) ModState(state agent.State, reason, event string) error {
-	rt := s.agentRT()
-	if rt == nil || rt.observed {
-		return ErrNoAgent
-	}
-	rt.tr.Mod(state, reason, event)
-	if event == "turn.complete" && rt.src.TodoSnapshot != nil {
-		rt.healTodos()
-	}
-	s.agentChanged(rt)
-	return nil
 }
 
 // setTail follows a new JSONL file from its current end: what is already
@@ -1076,10 +1039,8 @@ func (rt *agentRT) pasteWaits() bool {
 
 // Prompt delivers a follow-up prompt (docs/SPEC.md §8.1, §8.6). A
 // structured channel is tried first when the agent has one; otherwise,
-// or when it fails, the prompt is queued. While the agent's mod is live
-// the mod takes the queue's head and hands it to the agent, which runs it
-// once idle (modprompt.go); otherwise the paste injector pastes it once
-// the agent is idle, no dialog is visible and the prompt box is empty.
+// or when it fails, the prompt is queued: the paste injector pastes it
+// once the agent is idle, no dialog is visible and the prompt box is empty.
 // It returns "channel" or "queued".
 func (s *Session) Prompt(text string) (string, error) {
 	return s.PromptWith(text, PromptOptions{})
@@ -1149,32 +1110,6 @@ func (s *Session) deliverPrompts(rt *agentRT, now time.Time) {
 	if len(rt.prompts) == 0 {
 		rt.heldSince, rt.heldWhy = time.Time{}, ""
 		rt.mu.Unlock()
-		return
-	}
-	if s.modDeliversLocked(rt, now) {
-		// The mod has the head; the box and dialogs are no concern of a
-		// prompt Claude queues itself. Taken while the agent idles, it is
-		// held, and pasted after PromptHold: Claude runs what it queued
-		// once idle, so it lost this one.
-		p := &rt.prompts[0]
-		if !idle || !p.taken {
-			rt.heldSince, rt.heldWhy = time.Time{}, ""
-			rt.mu.Unlock()
-			return
-		}
-		if rt.heldWhy != HeldMod {
-			rt.heldSince, rt.heldWhy = now, HeldMod
-		}
-		held := now.Sub(rt.heldSince)
-		if held < rt.promptHold() {
-			rt.mu.Unlock()
-			return
-		}
-		p.paste, p.taken = true, false
-		id := p.id
-		rt.heldSince, rt.heldWhy = time.Time{}, ""
-		rt.mu.Unlock()
-		s.cfg.Logf("session %s: prompt %s held %s (%s): pasting it", s.cfg.ID, id, held.Round(time.Second), HeldMod)
 		return
 	}
 	why := ""

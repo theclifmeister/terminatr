@@ -324,7 +324,7 @@ func TestPickLayout(t *testing.T) {
 	ui := filepath.Join(t.TempDir(), "ui.json")
 	m := newDash(DashOptions{Source: &fakeSource{data: testData()}, Width: 200, Height: 40, UIFile: ui})
 	var pick setting
-	for _, s := range globalSettings("") {
+	for _, s := range globalSettings() {
 		if s.label == "Layout" {
 			pick = s
 		}
@@ -430,7 +430,7 @@ func TestDetailsBottom(t *testing.T) {
 	// The settings row says the place, and enter steps it: off, right,
 	// bottom.
 	var place setting
-	for _, s := range globalSettings("") {
+	for _, s := range globalSettings() {
 		if s.label == "Details panel" {
 			place = s
 		}

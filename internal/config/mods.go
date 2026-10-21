@@ -45,15 +45,16 @@ type rawMod struct {
 	Settings map[string]any `toml:"settings"`
 }
 
-// oldModsKeys are the older [mods] keys, now [agent_mod]'s.
+// oldModsKeys are the older [mods] keys of the removed agent mod's
+// settings, later [agent_mod]'s.
 var oldModsKeys = []string{"enabled", "band", "pane"}
 
-// readMods splits the [mods] table into the older [agent_mod] keys
-// (enabled, band, pane) and the user mods' [mods.<id>] tables. Only an
-// older key of the wrong type is an error, as it was before mods took
-// the table; a bad mod table is that mod's Err. unknown lists the other
-// keys directly under [mods] ("mods.sidebar").
-func readMods(md toml.MetaData, prims map[string]toml.Primitive) (old rawAgentMod, mods map[string]Mod, unknown []string, err error) {
+// readMods splits the [mods] table into the older agent mod keys
+// (enabled, band, pane: old, as "mods.enabled", read whatever their
+// value) and the user mods' [mods.<id>] tables; a bad mod table is that
+// mod's Err. unknown lists the other keys directly under [mods]
+// ("mods.sidebar").
+func readMods(md toml.MetaData, prims map[string]toml.Primitive) (old []string, mods map[string]Mod, unknown []string) {
 	mods = map[string]Mod{}
 	order := map[string]int{}
 	for _, k := range md.Keys() {
@@ -65,18 +66,8 @@ func readMods(md toml.MetaData, prims map[string]toml.Primitive) (old rawAgentMo
 	}
 	for id, p := range prims {
 		if slices.Contains(oldModsKeys, id) {
-			var b bool
-			if err := md.PrimitiveDecode(p, &b); err != nil {
-				return old, nil, nil, fmt.Errorf("mods.%s must be true or false", id)
-			}
-			switch id {
-			case "enabled":
-				old.Enabled = &b
-			case "band":
-				old.Band = &b
-			case "pane":
-				old.Pane = &b
-			}
+			md.PrimitiveDecode(p, new(any))
+			old = append(old, "mods."+id)
 			continue
 		}
 		// A table, or one only its [mods.<id>.settings] defines (no type).
@@ -94,7 +85,7 @@ func readMods(md toml.MetaData, prims map[string]toml.Primitive) (old rawAgentMo
 		}
 		mods[id] = Mod{Enabled: r.Enabled != nil && *r.Enabled, EnabledSet: r.Enabled != nil, Grants: r.Grants, Projects: r.Projects, Settings: r.Settings, Order: order[id]}
 	}
-	return old, mods, unknown, nil
+	return old, mods, unknown
 }
 
 // ModsTable is the config.toml table of mod id.

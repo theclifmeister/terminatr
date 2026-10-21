@@ -347,10 +347,6 @@ func statusBar(s proto.SessionInfo, ts *thread.Status, title string, pending boo
 		// The coordinator's agent can't switch models live (§8.2).
 		rest = append(rest, modelWord(s.ModelNext)+" on next start")
 	}
-	if s.HooksSkipped != "" {
-		// Its context comes through the command hooks instead (§7.8).
-		rest = append(rest, "terminatr hooks skipped by "+s.HooksSkipped)
-	}
 	join := func(parts ...string) string {
 		var out []string
 		for _, p := range parts {

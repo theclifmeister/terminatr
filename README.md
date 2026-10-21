@@ -6,7 +6,7 @@ You talk to one **coordinator**. It splits the work into tasks and hands each to
 
 **Claude Code and Codex are supported**; pi and opencode will follow. Agents plug in through a manifest ([docs/SPEC.md §8](docs/SPEC.md#8-agents)). Using Codex? See [docs/CODEX.md](docs/CODEX.md).
 
-tm reads each agent's state from its hooks and session logs, not by scraping the screen. For Claude Code, tm's **Agent mod** (Claude Code's plugin hooks; early access, off by default, Claude Code 2.1.289 or newer) adds a status band, a `/tm` pane and the session's cost; without it Claude sessions still get tm's typed tools (`tm mcp`) and their context and token use (from Claude's transcript) ([docs/SPEC.md §8.6](docs/SPEC.md#8-agents)).
+tm reads each agent's state from its hooks and session logs, not by scraping the screen. Claude Code sessions get tm's typed tools (`tm mcp`) and show their context and token use, read from Claude's transcript; their state, tasks and pull requests show in tm's dashboard and in the info panel beside the coordinator ([docs/SPEC.md §8.6](docs/SPEC.md#8-agents)).
 
 ![The tm dashboard: the project tree on the left with a coordinator and a thread on task T1 at 50%, the dashboard in the middle listing them, and the selected thread's task, steps, PR and report on the right.](docs/images/dashboard.svg)
 
@@ -36,7 +36,7 @@ Some of tm is mods already: the Tasks tab, the sidebar's PR/CI column, the Memor
 
 ![Settings, Mods tab: the installed example mods, then the built-in ones, each with what it provides and the permissions it runs with.](docs/images/mods-settings.svg)
 
-To try one, install it from [the examples](examples/mods) with one line and turn it on in the Mods tab: `tm mod install https://github.com/theclifmeister/terminatr/tree/v0.44.0/examples/mods/standup`. `tm mod install` takes a folder, a git URL, a repository's subfolder (`<git-url>//<folder>@<tag>`) or a GitHub folder's link like this one; in the Mods tab (`,` then `3`), `I` takes the same, and `E` installs an example, each after the same consent. To write your own, run `tm mod new my-mod --kind column`, `tm mod dev my-mod` (live, restarts on save), `tm mod test my-mod` and `tm mod logs my-mod`. In Claude Code sessions, cost-card's cost needs the Agent mod (its tokens don't), which is early access and off by default: turn it on in Settings (*Agent mod*) or with `[agent_mod] enabled = true` in `config.toml`.
+To try one, install it from [the examples](examples/mods) with one line and turn it on in the Mods tab: `tm mod install https://github.com/theclifmeister/terminatr/tree/v0.44.0/examples/mods/standup`. `tm mod install` takes a folder, a git URL, a repository's subfolder (`<git-url>//<folder>@<tag>`) or a GitHub folder's link like this one; in the Mods tab (`,` then `3`), `I` takes the same, and `E` installs an example, each after the same consent. To write your own, run `tm mod new my-mod --kind column`, `tm mod dev my-mod` (live, restarts on save), `tm mod test my-mod` and `tm mod logs my-mod`. In Claude Code sessions, cost-card shows a thread's tokens with `no cost`: Claude's transcript has none.
 
 ## Requirements
 
