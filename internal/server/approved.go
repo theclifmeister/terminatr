@@ -512,8 +512,8 @@ func (s *Server) commandRun(c net.Conn, br *bufio.Reader, req proto.Request, who
 		ended = sess.Done()
 	}
 	if err := s.startRun(x, r); err != nil {
-		out.end(proto.CommandRunEvent{Event: proto.EventRunExit, Code: -1, Error: err.Error()})
 		s.journalRun(r, "run.end", line+": didn't start: "+err.Error())
+		out.end(proto.CommandRunEvent{Event: proto.EventRunExit, Code: -1, Error: err.Error()})
 		return
 	}
 	done := make(chan error, 1)
@@ -527,8 +527,10 @@ func (s *Server) commandRun(c net.Conn, br *bufio.Reader, req proto.Request, who
 		case err := <-done:
 			s.endRun(pid)
 			code, msg := exitOf(err)
-			out.end(proto.CommandRunEvent{Event: proto.EventRunExit, Code: code, Error: msg})
+			// Journaled before the exit event: whoever sees the exit
+			// can rely on the journal being written.
 			s.journalRun(r, "run.end", fmt.Sprintf("%s: exit %d", line, code))
+			out.end(proto.CommandRunEvent{Event: proto.EventRunExit, Code: code, Error: msg})
 			return
 		case <-gone:
 			why = "the thread's call ended"
@@ -542,8 +544,8 @@ func (s *Server) commandRun(c net.Conn, br *bufio.Reader, req proto.Request, who
 	}
 	s.endRun(pid)
 	<-done
-	out.end(proto.CommandRunEvent{Event: proto.EventRunExit, Code: -1, Error: "killed: " + why})
 	s.journalRun(r, "run.end", line+": killed, "+why)
+	out.end(proto.CommandRunEvent{Event: proto.EventRunExit, Code: -1, Error: "killed: " + why})
 }
 
 // startRun starts x for thread r, its pid among the runs before any of
