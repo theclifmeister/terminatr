@@ -1377,9 +1377,9 @@ func (d *respondData) Guard() *guard.Denial {
 }
 
 // located is a tool call's input with each optional location it leaves
-// out ([guard.tools] optional) set to the agent's own folder, the
-// payload's cwd (an absolute path), which is where the agent looks; with
-// none, the guard takes the session's folder.
+// out or empty ([guard.tools] optional) set to the agent's own folder,
+// the payload's cwd (an absolute path), which is where the agent looks;
+// with none, the guard takes the session's folder.
 func (d *respondData) located(tool string, input map[string]any) map[string]any {
 	cwd, _ := d.ev.Payload[d.hook.CwdField()].(string)
 	t, ok := d.tools[tool]
@@ -1387,7 +1387,7 @@ func (d *respondData) located(tool string, input map[string]any) map[string]any 
 		return input
 	}
 	for _, f := range t.Optional {
-		if _, has := input[f]; !has {
+		if v, has := input[f]; !has || v == "" {
 			input = maps.Clone(input)
 			if input == nil {
 				input = map[string]any{}

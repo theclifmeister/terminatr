@@ -1472,6 +1472,7 @@ func TestGuardLocatedCwd(t *testing.T) {
 	}{
 		{"/home/u/agentdir", map[string]any{"pattern": "x"}, "/home/u/agentdir"},
 		{"/home/u/agentdir", map[string]any{"pattern": "x", "path": "/elsewhere"}, "/elsewhere"},
+		{"/home/u/agentdir", map[string]any{"pattern": "x", "path": ""}, "/home/u/agentdir"},
 		{"relative", map[string]any{"pattern": "x"}, nil},
 		{nil, map[string]any{"pattern": "x"}, nil},
 	} {
@@ -1487,7 +1488,7 @@ func TestGuardLocatedCwd(t *testing.T) {
 			t.Errorf("cwd %v, input %v: judged %v, want path %v", c.cwd, c.input, got, c.want)
 		}
 		if c.want != "/elsewhere" {
-			if _, ok := c.input["path"]; ok {
+			if v, ok := c.input["path"]; ok && v != "" {
 				t.Errorf("the call's own input was changed: %v", c.input)
 			}
 		}

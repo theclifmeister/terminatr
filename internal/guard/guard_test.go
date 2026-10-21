@@ -353,12 +353,10 @@ func TestJudgeBudget(t *testing.T) {
 	}
 }
 
-// TestCdWalk: a script that walks subfolders in turn (cd X || exit 1;
-// …; cd ..) stays in one folder, however many blocks: cd X || exit
-// leaves the line only where the cd went, and a cd .. that always runs
-// merges the folders back. It is judged as usual, not refused for its
-// folders, and a write the floor holds is still found from where the cd
-// went.
+// TestCdWalk: a script that walks ten subfolders in turn (cd X || exit
+// 1; …; cd ..) is judged as usual, not refused for its folders: a cd ..
+// that always runs merges the folders back into their parents (cd X ||
+// exit merges nothing). A write the floor holds is still found.
 func TestCdWalk(t *testing.T) {
 	wt := "/h/.terminatr/worktrees/demo/t-0001-fix"
 	r := Rules{On: true, Role: "thread", Rules: []string{"merge", "worktree-only"}, Home: "/h", Cwd: wt, Writable: []string{wt},
@@ -366,7 +364,7 @@ func TestCdWalk(t *testing.T) {
 		Tools:   map[string]Tool{"Bash": {Kind: KindShell, Fields: []string{"command"}}}}
 	judge := func(c string) *Denial { return r.Judge("Bash", map[string]any{"command": c}) }
 	var walk, line, and strings.Builder
-	for _, d := range []string{"api", "cli", "web", "worker", "infra", "docs", "tools", "lib"} {
+	for _, d := range []string{"api", "cli", "web", "worker", "infra", "docs", "tools", "lib", "ops", "site"} {
 		fmt.Fprintf(&walk, "cd %s || exit 1\ngo test ./...\ncd ..\n", d)
 		fmt.Fprintf(&line, "cd %s || exit 1; go test ./...; cd ..; ", d)
 		fmt.Fprintf(&and, "cd %s && go test ./... ; cd .. ; ", d)

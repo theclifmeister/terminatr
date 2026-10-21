@@ -1049,24 +1049,25 @@ func (r Rules) judgeLine(command string, cwds []string) *Denial {
 			}
 			// The cd leaves $OLDPWD the folder it left, if it runs.
 			sure := pt.after == "&&" && pt.before != "||"
-			// cd DIR || exit: the line goes on only where the cd went, so
-			// the folders it left merge into those (a script that walks
-			// its subfolders in turn stays in one). So does a cd .. that
-			// always runs: it fails only where the parent is gone. Neither
-			// in a list run in the background, which moves no folder of
-			// the line's own shell, and the exit only when it is the
-			// builtin (exitsLine: never return, which doesn't end a -c
-			// line or an eval at their top level).
-			fg := listSep(parts, i) != "&"
-			exits := fg && pt.after == "||" && i+1 < len(parts) && exitsLine(parts[i+1].text) && listEnd(parts[i+1].after) && !exitRedefined(r.line)
-			up := fg && cmd == "cd" && len(args) == 1 && (args[0] == ".." || args[0] == "../") && listEnd(pt.before) && pt.after != "||"
-			if sure || exits || up {
+			// A cd .. that always runs (the first command of its list,
+			// none after it on ||) fails only where the parent is gone:
+			// the folders the line may be in merge into their parents, so
+			// a script that walks its subfolders in turn (cd X || exit 1;
+			// …; cd ..) doesn't gather a folder for each. Not in a list
+			// run in the background, which moves no folder of the line's
+			// own shell. A cd X || exit merges nothing: an earlier member
+			// of its list may have ended it, and the shell may have made
+			// exit something else where the guard can't see (Claude's
+			// Bash sources a snapshot of the user's shell first).
+			up := cmd == "cd" && len(args) == 1 && (args[0] == ".." || args[0] == "../") &&
+				listEnd(pt.before) && pt.after != "||" && listSep(parts, i) != "&"
+			if sure || up {
 				olds = slices.Clone(cur)
 			} else {
 				olds = withDirs(olds, cur...)
 			}
 			switch {
-			case exits || up:
+			case up:
 				cur, list = to, to
 			case sure:
 				cur = to
@@ -1091,21 +1092,6 @@ func (r Rules) judgeLine(command string, cwds []string) *Denial {
 	}
 	return nil
 }
-
-// exitLine is a part that ends the script: exit, with a status or none.
-var exitLine = regexp.MustCompile(`^exit(\s+[$?A-Za-z0-9_{}]+)?\s*$`)
-
-// exitsLine reports whether part only ends the script.
-func exitsLine(part string) bool { return exitLine.MatchString(strings.TrimSpace(part)) }
-
-// exitChanged: a line that may make exit something other than the
-// builtin: a function of that name (exit() …, function exit), enable
-// (enable -n exit turns the builtin off), an alias with aliases on.
-var exitChanged = regexp.MustCompile(`(^|[^A-Za-z0-9_])(exit\s*\(\s*\)|function\s+exit([^A-Za-z0-9_]|$)|enable([^A-Za-z0-9_]|$)|alias\s+exit=|expand_aliases)`)
-
-// exitRedefined reports whether line, the whole line as the guard reads
-// it, may make exit no builtin: then an exit is no sure end of it.
-func exitRedefined(line string) bool { return exitChanged.MatchString(line) }
 
 // listSep is the separator that ends the and-or list part i is in: ";",
 // "&" (run in the background), or "" at the line's end.
@@ -2633,8 +2619,11 @@ const (
 	maxNesting = 32
 	maxParse   = 4 << 20
 	// maxFolders bounds the folders a line's cd, pushd and popd may
-	// leave it in (judgeLine), each of which its parts are judged from.
-	maxFolders = 64
+	// leave it in (judgeLine), each of which its parts are judged from:
+	// a script that walks its subfolders in turn levels off near 36 (the
+	// parents its cd .. climb to repeat), more for a deeper folder; the
+	// parse budget and deadline bound the work either way.
+	maxFolders = 256
 )
 
 // parse is one line's reading: what its parser has read, every nesting
