@@ -7,6 +7,7 @@ import (
 	"path"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -301,6 +302,54 @@ func TestLimits(t *testing.T) {
 	judge(doc.String())
 	if took := time.Since(start); took > 2*time.Second {
 		t.Fatalf("nested heredocs took %v", took)
+	}
+}
+
+// TestJudgeBudget: one judge reads with one budget. Re-reads count:
+// eval and sh -c nested past maxNesting, and a line whose parts are
+// judged from many folders over, stop and refuse (unreadable) rather
+// than run on; a judge past its Deadline stops and refuses (unchecked).
+func TestJudgeBudget(t *testing.T) {
+	r := Rules{On: true, Role: "thread", Rules: []string{"merge"}, Home: "/h", Cwd: "/w", Writable: []string{"/w"},
+		Tools: map[string]Tool{"Bash": {Kind: KindShell, Fields: []string{"command"}}, "PowerShell": {Kind: KindShell, Syntax: SyntaxPowerShell, Fields: []string{"command"}}}}
+	judge := func(r Rules, tool, c string) *Denial { return r.Judge(tool, map[string]any{"command": c}) }
+	if d := judge(r, "Bash", strings.Repeat("eval ", 8)+"gh pr merge 1"); d == nil || d.Rule != "merge" {
+		t.Fatalf("eval 8 deep: %+v", d)
+	}
+	if d := judge(r, "Bash", strings.Repeat("eval ", maxNesting+4)+"ls"); d == nil || d.Rule != RuleUnreadable {
+		t.Errorf("eval past maxNesting: %+v", d)
+	}
+	// sh -c counts with eval: alone each is inside the limit.
+	inner := strings.Repeat("eval ", maxNesting-2) + "ls"
+	if d := judge(r, "Bash", inner); d != nil {
+		t.Fatalf("eval inside the limit: %+v", d)
+	}
+	sh := inner
+	for range 4 {
+		sh = "sh -c " + strconv.Quote(sh)
+	}
+	if d := judge(r, "Bash", sh); d == nil || d.Rule != RuleUnreadable {
+		t.Errorf("sh -c and eval past maxNesting: %+v", d)
+	}
+	// Each "cd || true" adds a folder the rest is judged from: the parts
+	// times the folders, past the budget.
+	many := strings.Repeat("cd d || true; ", 2000) + "echo " + strings.Repeat("x ", 12000)
+	start := time.Now()
+	if d := judge(r, "Bash", many); d == nil || d.Rule != RuleUnreadable {
+		t.Errorf("many folders: %+v", d)
+	}
+	if took := time.Since(start); took > 5*time.Second {
+		t.Errorf("many folders took %v", took)
+	}
+	late := r
+	late.Deadline = time.Now().Add(-time.Second)
+	for _, tool := range []string{"Bash", "PowerShell"} {
+		if d := judge(late, tool, "ls"); d == nil || d.Rule != RuleUnchecked || !strings.Contains(d.Message, "took too long") {
+			t.Errorf("%s past its deadline: %+v", tool, d)
+		}
+	}
+	if d := late.JudgeCommand("ls"); d == nil || d.Rule != RuleUnchecked {
+		t.Errorf("JudgeCommand past its deadline: %+v", d)
 	}
 }
 

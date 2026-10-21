@@ -314,8 +314,9 @@ func ownExcluded(reg *agent.Registry, r SessionRecord, home string, lc launchCon
 }
 
 // guardNoWrite are the files and folders no tool of session r writes,
-// whatever the rules (the guard's floor, T574 §3.1): tm's settings
-// (config.toml), the settings in the session's folder that could turn
+// whatever the rules (the guard's floor, T574 §3.1): tm's home but for
+// the projects and worktrees (homeFloor: its settings, agents, mods,
+// state, logs) and its run folder, the settings in the session's folder that could turn
 // its hooks off (hookSettings), and a thread's project folder, or the
 // parts of it only tm writes for the coordinator, whose folder it is. The sandbox and the
 // agent's deny rules hold them too, where there are those (not under
@@ -323,9 +324,14 @@ func ownExcluded(reg *agent.Registry, r SessionRecord, home string, lc launchCon
 func (s *Server) guardNoWrite(r SessionRecord) []string {
 	var out []string
 	if h := s.opts.Paths.Home; h != "" {
-		out = append(out, filepath.Join(h, "config.toml"))
+		out = append(out, homeFloor(h)...)
+	}
+	if run := s.opts.Paths.RunDir; run != "" {
+		out = append(out, run)
 	}
 	if r.Cwd != "" && (r.Role == proto.RoleThread || r.Role == proto.RoleCoordinator) {
+		// Where a write lands (realTarget) and as the call may name it.
+		out = append(out, hookSettings(realPath(r.Cwd))...)
 		out = append(out, hookSettings(r.Cwd)...)
 	}
 	dir, err := project.Dir(r.Project)
@@ -340,6 +346,28 @@ func (s *Server) guardNoWrite(r SessionRecord) []string {
 		out = append(append(out, dirs...), files...)
 	}
 	return withReal(out)
+}
+
+// homeFloor are what no session writes in tm's home h: everything but
+// projects/ and worktrees/, whose own rules hold (a thread writes its
+// worktree; the coordinator its project folder but for tm's parts).
+// The names tm keeps there, whether they exist yet or not, and anything
+// else found there.
+func homeFloor(h string) []string {
+	names := []string{"config.toml", "ui.json", "agents", "mods", "cache", "run", "state", "logs", "bin", ".trash"}
+	if es, err := os.ReadDir(h); err == nil {
+		for _, e := range es {
+			names = append(names, e.Name())
+		}
+	}
+	var out []string
+	for _, n := range names {
+		if n == "projects" || n == "worktrees" || slices.Contains(out, filepath.Join(h, n)) {
+			continue
+		}
+		out = append(out, filepath.Join(h, n))
+	}
+	return out
 }
 
 // hookSettings are the agent settings files in a session's folder dir
@@ -465,9 +493,13 @@ func realTarget(p string) string {
 // It fails closed: a session without its record (exiting) gets
 // guard.Unchecked, and so does a call not judged within judgeLimit
 // (the rules' config and git reads included), well inside what tm hook
-// waits for the verdict (agent.HookGuardWait); the judging goes on
-// alone, bounded by the guard's own limits (guard.MaxCommand).
+// waits for the verdict (agent.HookGuardWait). The judge gets the same
+// deadline (guard.Rules.Deadline) and stops there, and a session has
+// one judge at a time: a call waits for the one before it.
 func (s *Server) hookGuardOf(id string) func(string, map[string]any) *guard.Denial {
+	// busy holds the session's one judge: a call waits for the one
+	// before it, which its deadline ends, within its own limit.
+	busy := make(chan struct{}, 1)
 	return func(tool string, input map[string]any) *guard.Denial {
 		s.mu.Lock()
 		rec, ok := s.records[id]
@@ -475,26 +507,40 @@ func (s *Server) hookGuardOf(id string) func(string, map[string]any) *guard.Deni
 		if !ok {
 			return guard.Unchecked()
 		}
-		done := make(chan *guard.Denial, 1)
 		judge, limit := judgeCall, judgeLimit
-		go func() {
-			rules := s.hookRules(rec)
-			rules.Resolve, rules.File = realTarget, regularFile
-			done <- judge(rules, tool, input)
-		}()
+		deadline := time.Now().Add(limit)
 		var d *guard.Denial
 		select {
-		case d = <-done:
+		case busy <- struct{}{}:
+			done := make(chan *guard.Denial, 1)
+			go func() {
+				defer func() { <-busy }()
+				rules := s.hookRules(rec)
+				rules.Resolve, rules.File = realTarget, regularFile
+				rules.Deadline = deadline
+				done <- judge(rules, tool, input)
+			}()
+			select {
+			case d = <-done:
+			case <-time.After(time.Until(deadline)):
+				d = tooLong(s, id, tool, limit)
+			}
 		case <-time.After(limit):
-			d = guard.Unchecked()
-			d.Message = "terminatr guard: checking this call took too long, so it is refused; try a shorter or simpler command."
-			s.log.Printf("session %s: the guard took over %v to judge a %s call: refused", id, limit, tool)
+			d = tooLong(s, id, tool, limit)
 		}
 		if d != nil && !d.Ask {
 			s.guardDenied(rec, GuardDenial{Rule: d.Rule, Tool: tool, Summary: d.Summary, Subject: d.Subject, Floor: d.Floor})
 		}
 		return d
 	}
+}
+
+// tooLong is the refusal of a call not judged within limit.
+func tooLong(s *Server, id, tool string, limit time.Duration) *guard.Denial {
+	d := guard.Unchecked()
+	d.Message = "terminatr guard: checking this call took too long, so it is refused; try a shorter or simpler command."
+	s.log.Printf("session %s: the guard took over %v to judge a %s call: refused", id, limit, tool)
+	return d
 }
 
 // judgeLimit bounds how long the server judges one tool call; a

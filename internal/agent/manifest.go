@@ -144,7 +144,8 @@ type Manifest struct {
 	// IgnoreFields: a hook event with any of these payload fields present
 	// and non-empty (e.g. Claude's agent_id on subagent events) is ignored
 	// for state, session id and todos. It still feeds [[hooks]] entries
-	// that have a counter.
+	// that have a counter, and is answered as any other (Respond): the
+	// guard judges a subagent's tool calls too, and marks its escapes.
 	IgnoreFields []string  `toml:"ignore_fields"`
 	Hooks        []HookMap `toml:"hooks"`
 	Todos        []TodoMap `toml:"todos"`
@@ -895,9 +896,6 @@ func (a *manifestAgent) Hook(ev HookEvent, env HookEnv) ([]Signal, HookResult, e
 			sig.CounterKey, _ = lookupString(ev.Payload, h.CounterKey)
 			sigs = append(sigs, sig)
 		}
-		if ignored {
-			continue
-		}
 		// The first entry whose response says something answers; one
 		// that renders nothing (a guard that let the call through, a
 		// command that didn't run) leaves it to the next.
@@ -911,8 +909,10 @@ func (a *manifestAgent) Hook(ev HookEvent, env HookEnv) ([]Signal, HookResult, e
 		}
 		// A command's entry sets its state only when the command ran
 		// and said what came of it: otherwise the prompt goes on, and
-		// the event's other entries say the state.
-		if h.State != "" && (h.Command == "" || answered) {
+		// the event's other entries say the state. An ignored event
+		// (ignore_fields: a subagent's) sets none, but is answered all
+		// the same: its tool call is judged by the guard like any other.
+		if !ignored && h.State != "" && (h.Command == "" || answered) {
 			sig := base
 			sig.State, sig.Reason, sig.Transient = h.State, h.Reason, h.Transient
 			sigs = append(sigs, sig)
@@ -1366,8 +1366,11 @@ func (d *respondData) Guard() *guard.Denial {
 	d.judged = true
 	tool, _ := d.ev.Payload[d.hook.ToolField()].(string)
 	input, _ := d.ev.Payload[d.hook.InputField()].(map[string]any)
-	if tool != "" {
-		d.denial = d.env.Guard(tool, input)
+	if tool == "" {
+		// A call that names no tool can't be judged: refused.
+		d.denial = guard.Unchecked()
+		return d.denial
 	}
+	d.denial = d.env.Guard(tool, input)
 	return d.denial
 }

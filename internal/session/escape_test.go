@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/guard"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/testwait"
@@ -213,4 +214,65 @@ func TestEscapeDialogUnmarked(t *testing.T) {
 		t.Fatal(err)
 	}
 	testwait.Eventually(t, "the escape's dialog marked", func() bool { return s.Info().Escape })
+}
+
+// TestGuardEveryCall: a tool call is judged and answered whatever its
+// event carries: a Claude subagent's (agent_id, no state of its own),
+// whose escape is marked too, and a Codex thread's the session left
+// (another session id).
+func TestGuardEveryCall(t *testing.T) {
+	noGrace(t)
+	deny := func(_ string, input map[string]any) *guard.Denial {
+		return &guard.Denial{Rule: "merge", Message: "no merging"}
+	}
+	codex := func(t *testing.T) agent.Agent {
+		b, _ := agent.Builtin("codex")
+		m, err := agent.ParseManifest(b)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return agent.FromManifest(m)
+	}
+	for _, c := range []struct {
+		name  string
+		agent func(*testing.T) agent.Agent
+		start map[string]any
+		call  map[string]any
+	}{
+		{"claude subagent", func(t *testing.T) agent.Agent { return claudeLike(t) }, map[string]any{"source": "startup", "session_id": "a"},
+			map[string]any{"agent_id": "sub-1", "session_id": "a", "tool_name": "Bash", "tool_use_id": "t1", "tool_input": map[string]any{"command": "gh pr merge 1", "dangerouslyDisableSandbox": true}}},
+		{"codex session left", codex, map[string]any{"source": "startup", "session_id": "a"},
+			map[string]any{"session_id": "b", "tool_name": "Bash", "tool_input": map[string]any{"command": "gh pr merge 1"}}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			s, err := Start(Config{
+				ID: "s-g", Role: proto.RoleThread, Project: "p",
+				Argv: []string{"/bin/sh", "-c", "exec cat"}, Cwd: t.TempDir(),
+				Env: []string{"PATH=/usr/bin:/bin", "TERM=xterm-256color"}, Cols: 80, Rows: 24, Logf: t.Logf,
+				Agent: &AgentConfig{Agent: c.agent(t), Home: t.TempDir(), Guard: deny},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { s.Stop(time.Second) })
+			if _, err := s.Hook("SessionStart", c.start); err != nil {
+				t.Fatal(err)
+			}
+			// The subagent runs inside its spawner's turn.
+			s.Hook("UserPromptSubmit", map[string]any{"prompt": "go", "session_id": "a"})
+			res, err := s.Hook("PreToolUse", c.call)
+			if err != nil || !strings.Contains(string(res.Stdout), `"permissionDecision":"deny"`) {
+				t.Fatalf("not judged: %q %v", res.Stdout, err)
+			}
+			if c.call["agent_id"] != nil {
+				rt := s.agentRT()
+				rt.mu.Lock()
+				_, marked := rt.escapes["t1"]
+				rt.mu.Unlock()
+				if !marked {
+					t.Error("the subagent's escape isn't marked")
+				}
+			}
+		})
+	}
 }

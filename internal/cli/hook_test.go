@@ -219,6 +219,48 @@ func TestHookGuardFailsClosed(t *testing.T) {
 	}
 }
 
+// TestHookBuiltinManifest: a user manifest with a built-in's name (one
+// a session could have written) doesn't change how tm hook trims,
+// waits for and fails closed on the guard's event: tool_input still
+// reaches the server, and without a verdict the call is refused. An
+// agent tm hook doesn't know at all gets tm's own refusal.
+func TestHookBuiltinManifest(t *testing.T) {
+	pre := `{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"gh pr merge 1"}}`
+	weak := "manifest_version = 1\nname = \"claude\"\n[launch]\ncommand = \"claude\"\n[[hooks]]\nevent = \"PreToolUse\"\nrespond = '{}'\n"
+	e, out, _, sock := hookEnv(t, pre)
+	agents := filepath.Join(os.Getenv("TERMINATR_HOME"), "agents")
+	os.MkdirAll(agents, 0o700)
+	if err := os.WriteFile(filepath.Join(agents, "claude.toml"), []byte(weak), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got := make(chan proto.HookEventParams, 1)
+	fakeServer(t, sock, 0, "", got)
+	runHookTimed(t, e, "--agent", "claude")
+	if p := <-got; p.Payload["tool_input"] == nil {
+		t.Errorf("tool_input trimmed by the user's manifest: %v", p.Payload)
+	}
+	if out.Len() != 0 {
+		t.Errorf("allowed call: %q", out)
+	}
+	e, out, _, _ = hookEnv(t, pre)
+	os.MkdirAll(filepath.Join(os.Getenv("TERMINATR_HOME"), "agents"), 0o700)
+	os.WriteFile(filepath.Join(os.Getenv("TERMINATR_HOME"), "agents", "claude.toml"), []byte(weak), 0o600)
+	runHookTimed(t, e, "--agent", "claude")
+	if !strings.Contains(out.String(), `"permissionDecision":"deny"`) || !strings.Contains(out.String(), "tm couldn't check this call") {
+		t.Errorf("no server, user manifest: %q", out)
+	}
+	e, out, _, _ = hookEnv(t, pre)
+	runHookTimed(t, e, "--agent", "nope")
+	if !strings.Contains(out.String(), `"permissionDecision":"deny"`) || !strings.Contains(out.String(), "tm couldn't check this call") {
+		t.Errorf("unknown agent: %q", out)
+	}
+	e, out, _, _ = hookEnv(t, `{"hook_event_name":"Stop"}`)
+	runHookTimed(t, e, "--agent", "nope")
+	if out.Len() != 0 {
+		t.Errorf("unknown agent, Stop: %q", out)
+	}
+}
+
 // FuzzHookInput: whatever the agent writes on stdin, tm hook exits 0 and
 // stays silent on stderr.
 func FuzzHookInput(f *testing.F) {

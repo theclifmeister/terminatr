@@ -1418,3 +1418,37 @@ func TestHookCommandValidated(t *testing.T) {
 		}
 	}
 }
+
+// TestGuardIgnoresNoFields: a PreToolUse whatever fields it carries (a
+// subagent's agent_id, which Claude's ignore_fields drops from state)
+// is judged and answered with the refusal, for Claude and Codex alike;
+// only its state signal is dropped.
+func TestGuardIgnoresNoFields(t *testing.T) {
+	for _, name := range []string{"claude", "codex"} {
+		data, _ := builtin.ReadFile("manifests/" + name + ".toml")
+		m, err := ParseManifest(data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		a := FromManifest(m)
+		judged := 0
+		env := HookEnv{Guard: func(tool string, input map[string]any) *guard.Denial {
+			judged++
+			return &guard.Denial{Rule: "merge", Message: "no merging"}
+		}}
+		payload := map[string]any{"hook_event_name": "PreToolUse", "agent_id": "sub-1", "session_id": "s", "tool_name": "Bash", "tool_input": map[string]any{"command": "gh pr merge 1"}}
+		sigs, res, err := a.Hook(HookEvent{Event: "PreToolUse", Payload: payload}, env)
+		if err != nil || judged != 1 || !strings.Contains(string(res.Stdout), `"permissionDecision":"deny"`) {
+			t.Fatalf("%s: judged %d, stdout %q, %v", name, judged, res.Stdout, err)
+		}
+		ignored := slices.Contains(m.IgnoreFields, "agent_id")
+		for _, s := range sigs {
+			if ignored && s.State != "" {
+				t.Errorf("%s: an ignored event set state %+v", name, s)
+			}
+		}
+		if out := FailClosed(a, "PreToolUse", payload); !strings.Contains(string(out), "tm couldn't check this call") {
+			t.Errorf("%s: fail closed with agent_id: %q", name, out)
+		}
+	}
+}

@@ -29,7 +29,13 @@ func (r Rules) judgePowerShell(line string) *Denial {
 	if m := psMethod.FindStringSubmatch(line); m != nil {
 		ask = r.ask("the ." + m[1] + "() method")
 	}
-	for _, words := range PSCommands(line) {
+	var cmds [][]string
+	if r.ps != nil {
+		cmds = r.ps.psRead(line, r.depth)
+	} else {
+		cmds = PSCommands(line)
+	}
+	for _, words := range cmds {
 		d := r.judgePSCommand(words)
 		if d != nil && !d.Ask {
 			return d
@@ -394,7 +400,15 @@ func isDQuote(c rune) bool { return c == '"' || c == '“' || c == '”' || c ==
 // are skipped; redirections stay words (">"), their stream number
 // dropped. An expression given as an argument ((…), $(…), @(…)) is a
 // word of its command, marked (psExprMark), its commands read after it.
-func PSCommands(line string) [][]string {
+func PSCommands(line string) [][]string { return (&parse{}).psRead(line, 0) }
+
+// psRead is PSCommands of line at nesting depth, with p's budget: what
+// it nests is read at depth+1, and past the limits it reads nothing
+// more.
+func (p *parse) psRead(line string, depth int) [][]string {
+	if p.stop(len(line), depth) {
+		return nil
+	}
 	var out, inner [][]string
 	var words []string
 	var word strings.Builder
@@ -436,7 +450,7 @@ func PSCommands(line string) [][]string {
 				i += 2
 			case s[i] == '$' && i+1 < len(s) && s[i+1] == '(':
 				end := psClose(s, i+2)
-				out = append(out, PSCommands(string(s[i+2:end]))...)
+				out = append(out, p.psRead(string(s[i+2:end]), depth+1)...)
 				q.WriteString(string(s[i:min(end+1, len(s))]))
 				i = end + 1
 			default:
@@ -564,7 +578,7 @@ func PSCommands(line string) [][]string {
 				start = i + 2
 			}
 			end := psClose(s, start)
-			inner = append(inner, PSCommands(string(s[start:end]))...)
+			inner = append(inner, p.psRead(string(s[start:end]), depth+1)...)
 			word.WriteString(psExprMark + string(s[i:min(end+1, len(s))]))
 			inWord = true
 			endWord()

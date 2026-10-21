@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -291,10 +292,21 @@ func TestHookGuardLimit(t *testing.T) {
 	s := &Server{log: log.New(os.Stderr, "", 0), records: map[string]SessionRecord{}}
 	s.records["s-2"] = SessionRecord{ID: "s-2", Role: proto.RoleThread, Agent: "claude", Project: p.Slug, Thread: "t-0001", Cwd: t.TempDir()}
 	release := make(chan struct{})
-	judgeLimit, judgeCall = 50*time.Millisecond, func(guard.Rules, string, map[string]any) *guard.Denial { <-release; return nil }
+	var running, most atomic.Int32
+	var deadline atomic.Value
+	judgeLimit, judgeCall = 50*time.Millisecond, func(r guard.Rules, _ string, _ map[string]any) *guard.Denial {
+		deadline.Store(r.Deadline)
+		n := running.Add(1)
+		for m := most.Load(); n > m && !most.CompareAndSwap(m, n); m = most.Load() {
+		}
+		<-release
+		running.Add(-1)
+		return nil
+	}
 	t.Cleanup(func() { close(release); judgeLimit, judgeCall = 1500*time.Millisecond, guard.Rules.Judge })
 	start := time.Now()
-	d := s.hookGuardOf("s-2")("Bash", map[string]any{"command": "ls"})
+	judge := s.hookGuardOf("s-2")
+	d := judge("Bash", map[string]any{"command": "ls"})
 	if d == nil || d.Rule != guard.RuleUnchecked || d.Ask || !strings.Contains(d.Message, "took too long") {
 		t.Fatalf("overrun: %+v", d)
 	}
@@ -305,15 +317,33 @@ func TestHookGuardLimit(t *testing.T) {
 	if !slices.ContainsFunc(lines, func(l string) bool { return strings.Contains(l, "guard.deny t-0001 unchecked Bash") }) {
 		t.Errorf("journal %q", lines)
 	}
+	// The judge got the deadline the server waits to, so it stops there.
+	if dl, _ := deadline.Load().(time.Time); dl.IsZero() || dl.After(start.Add(judgeLimit+100*time.Millisecond)) {
+		t.Errorf("judge deadline %v, started %v", dl, start)
+	}
+	// While that judge runs on, the session's next call starts none: it
+	// waits its own limit for it, and is refused.
+	if d := judge("Bash", map[string]any{"command": "pwd"}); d == nil || d.Rule != guard.RuleUnchecked {
+		t.Fatalf("second call: %+v", d)
+	}
+	if n := most.Load(); n != 1 {
+		t.Errorf("%d judges at once in one session", n)
+	}
 }
 
 // TestHookSettingsFloor: a session's .claude/settings.json and
 // settings.local.json, which could turn its hooks off, are the floor's:
-// no file tool or shell redirect writes them, whatever the rules.
+// no file tool or shell redirect writes them, whatever the rules, named
+// through the session folder's link or where it leads (macOS's /var is
+// /private/var).
 func TestHookSettingsFloor(t *testing.T) {
 	testPaths(t)
 	p := newWatchProject(t)
-	wt := t.TempDir()
+	real := t.TempDir()
+	wt := filepath.Join(t.TempDir(), "wt")
+	if err := os.Symlink(real, wt); err != nil {
+		t.Fatal(err)
+	}
 	s := &Server{log: log.New(os.Stderr, "", 0), records: map[string]SessionRecord{}}
 	s.records["s-2"] = SessionRecord{ID: "s-2", Role: proto.RoleThread, Agent: "claude", Project: p.Slug, Thread: "t-0001", Cwd: wt}
 	writeConfig(t, "[projects."+p.Slug+"]\nguard_off = [\"worktree-only\"]\n")
@@ -325,6 +355,8 @@ func TestHookSettingsFloor(t *testing.T) {
 		{"Write", map[string]any{"file_path": filepath.Join(wt, ".claude", "settings.json"), "content": `{"disableAllHooks": true}`}},
 		{"Edit", map[string]any{"file_path": filepath.Join(wt, ".claude", "settings.local.json")}},
 		{"Bash", map[string]any{"command": `echo '{"disableAllHooks":true}' > .claude/settings.local.json`}},
+		{"Write", map[string]any{"file_path": filepath.Join(real, ".claude", "settings.json")}},
+		{"Edit", map[string]any{"file_path": filepath.Join(realPath(real), ".claude", "settings.local.json")}},
 	} {
 		if d := judge(c.tool, c.input); d == nil || d.Rule != guard.RuleTMFiles || !d.Floor {
 			t.Errorf("%s %v: %+v", c.tool, c.input, d)
@@ -1167,5 +1199,44 @@ func TestDroppedGuardEvent(t *testing.T) {
 	}
 	if res := s.hookEvent(proto.HookEventParams{Session: "s-9", Agent: "claude", Event: "Stop", Payload: map[string]any{"hook_event_name": "Stop"}}); res.Stdout != "" {
 		t.Errorf("Stop: %q", res.Stdout)
+	}
+}
+
+// TestHomeFloor: tm's home is the floor's for every role, but for the
+// worktrees (a thread's own) and the projects (the coordinator's folder,
+// which its own rules hold): a session doesn't write tm's agents, mods,
+// state or run folder.
+func TestHomeFloor(t *testing.T) {
+	paths := testPaths(t)
+	p := newWatchProject(t)
+	home := paths.Home
+	wt := filepath.Join(home, "worktrees", p.Slug, "t-0001-x")
+	os.MkdirAll(wt, 0o700)
+	s := &Server{log: log.New(io.Discard, "", 0), opts: Options{Paths: paths}, records: map[string]SessionRecord{
+		"s-1": {ID: "s-1", Role: proto.RoleCoordinator, Agent: "claude", Project: p.Slug, Cwd: p.Dir},
+		"s-2": {ID: "s-2", Role: proto.RoleThread, Agent: "claude", Project: p.Slug, Thread: "t-0001", Cwd: wt},
+	}}
+	writeConfig(t, "[defaults]\nguard_off = [\"worktree-only\"]\n")
+	for _, id := range []string{"s-1", "s-2"} {
+		judge := s.hookGuardOf(id)
+		for _, f := range []string{
+			filepath.Join(home, "agents", "claude.toml"),
+			filepath.Join(home, "mods", "x", "mod.toml"),
+			filepath.Join(home, "state", "sessions.json"),
+			filepath.Join(paths.RunDir, "x"),
+		} {
+			if d := judge("Write", map[string]any{"file_path": f}); d == nil || d.Rule != guard.RuleTMFiles || !d.Floor {
+				t.Errorf("%s writes %s: %+v", id, f, d)
+			}
+		}
+		if d := judge("Bash", map[string]any{"command": "echo x > " + filepath.Join(home, "agents", "codex.toml")}); d == nil || d.Rule != guard.RuleTMFiles {
+			t.Errorf("%s redirect into agents/: %+v", id, d)
+		}
+	}
+	if d := s.hookGuardOf("s-2")("Write", map[string]any{"file_path": filepath.Join(wt, "main.go")}); d != nil {
+		t.Errorf("a thread's own worktree: %+v", d)
+	}
+	if d := s.hookGuardOf("s-1")("Write", map[string]any{"file_path": filepath.Join(p.Dir, "CONTEXT.md")}); d != nil {
+		t.Errorf("the coordinator's CONTEXT.md: %+v", d)
 	}
 }

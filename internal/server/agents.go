@@ -1110,13 +1110,15 @@ func (s *Server) hookEvent(p proto.HookEventParams) proto.HookEventResult {
 // the guard's event its agent's refusal of a call it couldn't check
 // (agent.FailClosed).
 func (s *Server) droppedHook(p proto.HookEventParams) proto.HookEventResult {
-	s.mu.Lock()
-	reg := s.agents
-	s.mu.Unlock()
-	if reg == nil {
-		return proto.HookEventResult{}
+	a, ok := agent.BuiltinAgent(p.Agent)
+	if !ok {
+		s.mu.Lock()
+		reg := s.agents
+		s.mu.Unlock()
+		if reg != nil {
+			a, ok = reg.Get(p.Agent)
+		}
 	}
-	a, ok := reg.Get(p.Agent)
 	if !ok {
 		return proto.HookEventResult{}
 	}

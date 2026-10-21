@@ -449,18 +449,6 @@ func (s *Session) Hook(event string, payload map[string]any) (agent.HookResult, 
 		return agent.HookResult{}, ErrNoAgent
 	}
 	ev := agent.HookEvent{Agent: rt.a.Name(), Event: event, Payload: payload, Seq: rt.seq.Add(1), At: time.Now()}
-	if sid, ok := rt.src.Foreign(event, payload, rt.tr.AgentSID()); ok {
-		rt.tr.Ignore(ev, "session "+sid+" was left")
-		s.agentChanged(rt)
-		return agent.HookResult{}, nil
-	}
-	s.checkHook(rt, event, payload)
-	if rt.cfg.OnHook != nil {
-		rt.cfg.OnHook(s, event, payload)
-	}
-	if rt.cfg.OnContextClear != nil && agent.ClearsContext(rt.a, event, payload) {
-		rt.cfg.OnContextClear(s)
-	}
 	env := agent.HookEnv{}
 	callID, _ := payload["tool_use_id"].(string)
 	if g := rt.cfg.Guard; g != nil {
@@ -481,6 +469,25 @@ func (s *Session) Hook(event string, payload map[string]any) (agent.HookResult, 
 			}
 			return d
 		}
+	}
+	if sid, ok := rt.src.Foreign(event, payload, rt.tr.AgentSID()); ok {
+		// Its state is no longer this session's; a tool call it makes
+		// is judged all the same (the guard answers whatever the event
+		// carries).
+		rt.tr.Ignore(ev, "session "+sid+" was left")
+		s.agentChanged(rt)
+		if !agent.GuardEvent(rt.a, event) {
+			return agent.HookResult{}, nil
+		}
+		_, res, err := rt.a.Hook(ev, agent.HookEnv{Guard: env.Guard})
+		return res, err
+	}
+	s.checkHook(rt, event, payload)
+	if rt.cfg.OnHook != nil {
+		rt.cfg.OnHook(s, event, payload)
+	}
+	if rt.cfg.OnContextClear != nil && agent.ClearsContext(rt.a, event, payload) {
+		rt.cfg.OnContextClear(s)
 	}
 	switch event {
 	case "PostToolUse", "PostToolUseFailure", "PermissionDenied":

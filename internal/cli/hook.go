@@ -11,10 +11,12 @@ import (
 	"net"
 	"os"
 	"regexp"
+	"strconv"
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/client"
+	"github.com/theclifmeister/terminatr/internal/guard"
 	"github.com/theclifmeister/terminatr/internal/plat/ipc"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/version"
@@ -87,10 +89,16 @@ func runHook(e *Env, args []string) error {
 	}
 	// The event's name is in [hook] event_field (default hook_event_name),
 	// and its [[hooks]] entries say whether a response is expected and how
-	// long to wait for it (timeout).
-	var a agent.Agent
-	if reg, _ := agent.Load(dir); reg != nil {
-		a, _ = reg.Get(name)
+	// long to wait for it (timeout). How the event is trimmed, how long to
+	// wait and whether it fails closed come from tm's own manifest for a
+	// built-in agent, never a file a session could write over it;
+	// another agent's from the user's (tm's home, which the guard's floor
+	// keeps from sessions). No agent: PreToolUse gets tm's own refusal.
+	a, ok := agent.BuiltinAgent(name)
+	if !ok {
+		if reg, _ := agent.Load(dir); reg != nil {
+			a, _ = reg.Get(name)
+		}
 	}
 	var hook agent.HookTrim
 	var hooks []agent.HookMap
@@ -114,9 +122,19 @@ func runHook(e *Env, args []string) error {
 	// agent's refusal "tm couldn't check this call", never nothing, which
 	// would let the call through unjudged (docs/SPEC.md §8.6, Guard).
 	failClosed := func() {
-		if a != nil {
+		switch {
+		case a != nil:
 			e.Stdout.Write(agent.FailClosed(a, event, payload))
+		case event == "PreToolUse":
+			// No agent to say how: tm's own refusal, in the shape Claude
+			// and Codex read.
+			io.WriteString(e.Stdout, genericDeny)
 		}
+	}
+	if a == nil {
+		hookLog(e, session, event, fmt.Errorf("no agent %q", name))
+		failClosed()
+		return nil
 	}
 	if !read {
 		hookLog(e, session, event, fmt.Errorf("payload of %d bytes unreadable or over %d", len(data), maxHookPayload))
@@ -165,6 +183,11 @@ func runHook(e *Env, args []string) error {
 	}
 	return nil
 }
+
+// genericDeny is the refusal of a PreToolUse tm hook can't judge for an
+// agent it doesn't know.
+var genericDeny = `{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":` +
+	strconv.Quote(guard.Unchecked().Message) + `}}`
 
 // rawEvent is the event name in a payload tm hook couldn't decode (cut
 // at the read limit, or not JSON): the first string value of field, ""
