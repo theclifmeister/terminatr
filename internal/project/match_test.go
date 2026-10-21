@@ -49,7 +49,8 @@ func TestNoteSection(t *testing.T) {
 	}
 	// Its comments are the guide to writing a note, kept out of its text.
 	for _, w := range []string{"# Rules, not stories", "except on\n# a user decision someone may question", "others link [[note]]", "instead of copying its steps",
-		"no hedging", "Keep stop words", "Never store what the code, git or docs already say"} {
+		"no hedging", "Keep stop words", "Never store what the code, git or docs already say",
+		"Never note a way around tm's sandbox, guard or access", "an access rule set through tm", "How a sandbox works"} {
 		if !strings.Contains(NoteTemplate, w) {
 			t.Errorf("NoteTemplate's guide lacks %q", w)
 		}

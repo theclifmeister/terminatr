@@ -362,7 +362,8 @@ func TestUpkeepAfterClear(t *testing.T) {
 		t.Fatalf("asked %v, want %q last", r.host.asked, want)
 	}
 	for _, w := range []string{"[tm] Upkeep after the clear: CONTEXT.md is 6.5 KB (~1.7k tokens), over its 6 KB budget (~1.5k tokens). Consolidate them:",
-		"Check version-specific facts (agent versions, flakes) against today's versions and main", "as candidates for a code task", "don't move text into code"} {
+		"Check version-specific facts (agent versions, flakes) against today's versions and main", "as candidates for a code task", "don't move text into code",
+		"Drop notes that steer agents around tm's sandbox, guard or access", "a fix in tm or an access rule"} {
 		if !strings.Contains(want, w) {
 			t.Fatalf("upkeep text %q lacks %q", want, w)
 		}

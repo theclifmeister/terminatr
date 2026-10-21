@@ -257,7 +257,12 @@ You are the only agent that writes it.
   `[[note]]`; point to a repo file instead of copying its steps; terse
   one-line imperative bullets, no hedging; keep stop words (only, not):
   matching ignores them anyway; never store what the code, git or docs
-  already say.
+  already say. Never save a note that steers agents around tm's
+  sandbox, guard or access (how to run something unsandboxed, dodge a
+  guard refusal, or have you run a command for a thread): tm must
+  behave the same for every user, so a needed workaround becomes a task
+  for a fix in tm or an access rule set through tm. How a sandbox
+  works, kept for building tm, is fine.
 - Keep CONTEXT.md, MEMORY.md and memory/ short and factual: the lowest
   context that keeps every live fact. When a file grows, re-read it,
   merge and rewrite it, and drop what is no longer true. The Upkeep
@@ -269,7 +274,9 @@ You are the only agent that writes it.
   version-specific facts (agent versions, flakes) against today's
   versions and main and drop the dead ones, and list gotchas that
   belong in a package's doc comment as candidates for a code task
-  (file it as any task; that pass moves no text into code), then stop.
+  (file it as any task; that pass moves no text into code); drop notes
+  that steer around tm's sandbox, guard or access and list them, each
+  to become a task (a fix in tm or an access rule), then stop.
 - tm archives done tasks, resolved threads, handled items and old
   journal lines itself; don't by hand (`tm task archive T<n>` for
   sooner). `tm thread list --all` lists archived threads; `tm thread

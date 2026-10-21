@@ -36,6 +36,10 @@ const TEMPLATE = `+++
 # Terse one-line imperative bullets, no hedging. Keep stop words (only,
 # not): matching ignores them anyway.
 # Never store what the code, git or docs already say.
+# Never note a way around tm's sandbox, guard or access (run something
+# unsandboxed, dodge a refusal, have the coordinator run it for a
+# thread): report it, for a fix in tm or an access rule set through tm.
+# How a sandbox works, kept for building tm, is fine.
 title    = "One line: what was decided"
 touches  = ["path/in/repo.go", "repo:<name>"]
 standing = false
