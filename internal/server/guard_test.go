@@ -294,8 +294,13 @@ func TestHookGuardLimit(t *testing.T) {
 	release := make(chan struct{})
 	var running, most atomic.Int32
 	var deadline atomic.Value
+	called := make(chan struct{}, 1)
 	judgeLimit, judgeCall = 50*time.Millisecond, func(r guard.Rules, _ string, _ map[string]any) *guard.Denial {
 		deadline.Store(r.Deadline)
+		select {
+		case called <- struct{}{}:
+		default:
+		}
 		n := running.Add(1)
 		for m := most.Load(); n > m && !most.CompareAndSwap(m, n); m = most.Load() {
 		}
@@ -318,6 +323,13 @@ func TestHookGuardLimit(t *testing.T) {
 		t.Errorf("journal %q", lines)
 	}
 	// The judge got the deadline the server waits to, so it stops there.
+	// Its rules (config and git reads) can outlast the limit under -race:
+	// wait for it to start.
+	select {
+	case <-called:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the judge never ran")
+	}
 	if dl, _ := deadline.Load().(time.Time); dl.IsZero() || dl.After(start.Add(judgeLimit+100*time.Millisecond)) {
 		t.Errorf("judge deadline %v, started %v", dl, start)
 	}
