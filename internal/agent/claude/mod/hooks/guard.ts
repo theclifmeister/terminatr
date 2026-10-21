@@ -441,6 +441,14 @@ function deny(r: Rules, rule: string, summary: string, target = ''): Denial {
   return rule === 'merge' ? floor(d) : d
 }
 
+// lostCd is the tm-files refusal of a relative path after a cd the
+// guard can't follow: its sentence says how to write the line so it can.
+function lostCd(r: Rules, summary: string): Denial {
+  const tell = r.role === 'thread' ? 'say so in your report' : 'ask the user'
+  const m = `after a cd the guard can't follow (to a variable or a substitution, cd -, popd, or one inside { }, if or a loop), a relative path given to a command that writes could be tm's settings or the project folder. Give the path from / or a variable ($TMPDIR/x), cd to a folder written out and join the rest with &&, or run the cd in a call of its own; if none of that fits, ${tell}.`
+  return { rule: 'tm-files', message: `terminatr guard (tm-files): ${m}`, summary }
+}
+
 // judgeMods judges a simple command, its name and arguments, by the
 // mods' rules; fold compares them with case folded (PowerShell's), and
 // under caseFold the name is.
@@ -490,8 +498,8 @@ function judgeBash(r: Rules, has: (id: string) => boolean, command: string): Den
 function judgeLine(r: Rules, has: (id: string) => boolean, command: string, cwds: string[]): Denial | null {
   let parts = topLevel(command)
   if (!parts) {
-    // A heredoc or a line it can't split: one part, with any cd in it
-    // leaving its relative paths unknown from the start.
+    // A line it can't split: one part, with any cd in it leaving its
+    // relative paths unknown from the start.
     parts = [{ text: command, before: '', after: '' }]
     if (hasCd(command)) cwds = withDirs(cwds, '')
   }
@@ -500,6 +508,9 @@ function judgeLine(r: Rules, has: (id: string) => boolean, command: string, cwds
   let hidden = false
   for (const pt of parts) {
     if (listEnd(pt.before)) list = cur
+    // A heredoc's body read as commands (topLevel and commands may tell
+    // a << apart differently: $[1<<2]) may hold a cd anywhere.
+    if (pt.doc && hasCd(pt.text)) cur = withDirs(cur, '')
     for (const c of cur) {
       const d = judgeCommands(r, has, pt.text, c)
       if (d) return d
@@ -646,6 +657,37 @@ const WRITERS: ReadonlyMap<string, boolean> = new Map([
   ...'cp install ln rsync'.split(' ').map(c => [c, false] as const),
 ])
 const IN_PLACE = new Set('sed gsed perl ruby'.split(' '))
+
+// inPlaceFiles are the files cmd (IN_PLACE) with args writes: its
+// arguments but its options, the script -e gives (sed's -f too, with
+// their long forms), and sed's first argument when no -e or -f gives
+// the script (sed -i s/a/b/ f). An option it can't read keeps what
+// follows among the files.
+function inPlaceFiles(cmd: string, args: string[]): string[] {
+  const sed = cmd === 'sed' || cmd === 'gsed'
+  const out: string[] = []
+  let script = false
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i]
+    if (a === '--') {
+      out.push(...args.slice(i + 1))
+      break
+    }
+    if (a === '-e' || (cmd !== 'ruby' && a === '-E' && !sed) || (sed && (a === '-f' || isLong(a, '--expression') || isLong(a, '--file')))) {
+      script = true
+      if (!a.includes('=')) i++
+    } else if (/^-[a-zA-Z]+$/.test(a) && !a.includes('i') && /[eE]$/.test(a) && (!sed || a.endsWith('e'))) {
+      // A cluster ending in the script's option (perl -pe, sed -ne).
+      script = true
+      i++
+    } else if (a.startsWith('-') && a !== '-') {
+      if (sed && (a.startsWith('-e') || a.startsWith('-f'))) script = true
+      // macOS's sed -i '' (no backup): '' is -i's.
+      if (sed && a === '-i' && args[i + 1] === '') i++
+    } else out.push(a)
+  }
+  return sed && !script ? out.slice(1) : out
+}
 const REMOVERS = new Set('rm rmdir mv rsync'.split(' '))
 
 // TM_AGENT_MOD are the tm mod subcommands an agent may run; the others,
@@ -689,9 +731,10 @@ function accessOpen(args: string[]): boolean {
 
 // cdTo is where cmd (cd, pushd, popd) with args leaves a line whose
 // relative paths were from dir: a folder it names plainly, home for
-// none, else unknown ('').
+// none, else unknown (''). Its redirections (pushd x >/dev/null) are
+// no folder.
 function cdTo(r: Rules, dir: string, cmd: string, args: string[]): string {
-  const to = args.filter(a => !a.startsWith('-') || a === '-')
+  const to = unredirected(args).filter(a => !a.startsWith('-') || a === '-')
   if (cmd === 'popd' || to.length > 1) return ''
   if (to.length === 0) return cmd === 'pushd' ? '' : (r.home ?? '')
   const a = to[0]
@@ -740,8 +783,9 @@ function globPart(pat: string): RegExp {
 
 // A part of a command line between the separators of its top level
 // (;, newline, &&, ||, |, &): its text and the separators before and
-// after it ('' at the line's ends; a newline is ;, |& is |).
-type LinePart = { text: string; before: string; after: string }
+// after it ('' at the line's ends; a newline is ;, |& is |); doc when
+// its text holds the body of a heredoc it opens.
+type LinePart = { text: string; before: string; after: string; doc?: boolean }
 
 // listEnd: separator sep ends an and-or list.
 function listEnd(sep: string): boolean {
@@ -772,23 +816,55 @@ function plainCd(part: string): { cmd: string; args: string[] } | null {
 }
 
 // topLevel splits a command line at its top level's separators, outside
-// quotes, ( ), { }, $( ) and backticks; null for a line with a heredoc,
-// or whose quotes or brackets don't close.
+// quotes, ( ), { }, $( ) and backticks. A heredoc opened at the top
+// level has its body added to the part that opens it, after the
+// newline that ends the part's line. Null for a line whose quotes or
+// brackets don't close, with a heredoc inside brackets, or with a
+// shell that may run a heredoc's body (cat <<EOF | bash), which the
+// line's own reading (commands) judges.
 function topLevel(line: string): LinePart[] | null {
   const s = [...line]
   const stack: string[] = []
   const parts: LinePart[] = []
   let b = ''
   let before = ''
+  // The heredocs opened and not yet read: their word, <<- and the part
+  // that opens each (-1: the one being read).
+  let open: { delim: string; tabs: boolean; part: number }[] = []
+  let docs = false
   const cut = (sep: string) => {
     const t = b.trim()
     if (t !== '') {
       parts.push({ text: t, before, after: '' })
       before = sep
+      for (const h of open) if (h.part < 0) h.part = parts.length - 1
     } else if (before === '' || sep === ';') before = sep
     const n = parts.length
     if (n > 0 && parts[n - 1].after === '') parts[n - 1].after = sep
     b = ''
+  }
+  // bodies reads the bodies of the open heredocs from s[i], the start
+  // of the line after the one that opened them, into their parts; the
+  // index after them.
+  const bodies = (i: number): number => {
+    for (const h of open) {
+      let body = ''
+      while (i < s.length) {
+        let k = s.indexOf('\n', i)
+        if (k < 0) k = s.length
+        const l = s.slice(i, k).join('')
+        body += '\n' + l
+        i = k + 1
+        if ((h.tabs ? l.replace(/^\t+/, '') : l) === h.delim) break
+      }
+      if (h.part < 0) b += body
+      else {
+        parts[h.part].text += body
+        parts[h.part].doc = true
+      }
+    }
+    open = []
+    return i
   }
   const wordStart = (i: number) => i === 0 || ' \t\n;&|('.includes(s[i - 1])
   const top = () => stack[stack.length - 1] ?? ''
@@ -816,6 +892,13 @@ function topLevel(line: string): LinePart[] | null {
       b += c + s[++i]
       continue
     }
+    if (c === '$' && next === "'") {
+      const j = ansiEnd(s, i + 2)
+      if (j >= s.length) return null
+      b += s.slice(i, j + 1).join('')
+      i = j
+      continue
+    }
     if (c === "'") {
       const j = s.indexOf("'", i + 1)
       if (j < 0) return null
@@ -836,15 +919,45 @@ function topLevel(line: string): LinePart[] | null {
       stack.pop()
     } else if (c === '{' && wordStart(i) && (next === ' ' || next === '\t' || next === '\n')) stack.push('{')
     else if (c === '}' && top() === '{' && wordStart(i)) stack.pop()
-    else if (c === '<' && next === '<' && s[i + 2] !== '<' && prev !== '<') return null
-    else if (stack.length > 0) {
-      // Inside brackets: no separator.
+    else if (c === '<' && next === '<' && s[i + 2] !== '<' && prev !== '<') {
+      // A heredoc: <<WORD or <<-WORD, its word quoted or not.
+      if (stack.length > 0) return null
+      let j = i + 2
+      const h = { delim: '', tabs: s[j] === '-', part: -1 }
+      if (h.tabs) j++
+      while (s[j] === ' ' || s[j] === '\t') j++
+      let quoted = false
+      while (j < s.length && !' \t\n;&|<>()'.includes(s[j])) {
+        const q = s[j]
+        if (q === "'" || q === '"') {
+          quoted = true
+          let end = s.indexOf(q, j + 1)
+          if (end < 0) end = s.length
+          h.delim += s.slice(j + 1, end).join('')
+          j = end + 1
+        } else if (q === '\\') {
+          quoted = true
+          h.delim += s[j + 1] ?? ''
+          j += 2
+        } else h.delim += s[j++]
+      }
+      if (h.delim === '' && !quoted) return null
+      b += s.slice(i, j).join('')
+      open.push(h)
+      docs = true
+      i = j - 1
+      continue
+    } else if (stack.length > 0) {
+      // Inside brackets: no separator, and no heredoc body read.
+      if (c === '\n' && open.length > 0) return null
     } else if (c === '#' && wordStart(i)) {
       while (i < s.length && s[i] !== '\n') i++
       cut(';')
+      i = bodies(i + 1) - 1
       continue
     } else if (c === ';' || c === '\n') {
       cut(';')
+      if (c === '\n') i = bodies(i + 1) - 1
       continue
     } else if (c === '&' && next === '&') {
       i++
@@ -866,6 +979,7 @@ function topLevel(line: string): LinePart[] | null {
   }
   if (stack.length > 0) return null
   cut('')
+  if (docs && parts.some(p => commands(p.text).some(readsHeredoc))) return null
   return parts
 }
 
@@ -874,14 +988,18 @@ function topLevel(line: string): LinePart[] | null {
 // command that writes the paths it is given naming one (cp's and the
 // like's target; a folder holding one, for a remover). With r.cwd ''
 // (a cd the line made that it can't follow) a relative path could be
-// anywhere, so it is refused.
+// anywhere, so it is refused; one that starts with a variable or a
+// substitution ($TMPDIR/x, "$F") is where its value says, which the
+// guard can't place with a cd or without one.
 function judgeNoWrite(r: Rules, cmd: string, args: string[], words: string[]): Denial | null {
   if (!r.noWrite?.length) return null
   const roots = r.noWrite
   const refuse = (w: string, parents: boolean): Denial | null => {
     if (w === '' || w.startsWith('&')) return null
-    if (r.cwd === '' && !slash(w).startsWith('/') && !w.startsWith('~') && !DRIVE.test(slash(w))) {
-      return floor(deny(r, 'tm-files', `${cmd} of ${safe(w)} after a cd`))
+    // $PWD is the line's folder: a path from it is a relative one.
+    w = w.replace(/^\$(PWD|\{PWD\})(?=\/|$)/, '.')
+    if (r.cwd === '' && !slash(w).startsWith('/') && !w.startsWith('~') && !w.startsWith('$') && !DRIVE.test(slash(w))) {
+      return floor(lostCd(r, `${cmd} of ${safe(w)} after a cd`))
     }
     const p = abs(r, w)
     const fixed = p.replace(/[*?[{].*$/, '').replace(/\/$/, '') || '/'
@@ -918,6 +1036,13 @@ function judgeNoWrite(r: Rules, cmd: string, args: string[], words: string[]): D
     }
   }
   if (all === undefined) return null
+  if (IN_PLACE.has(cmd)) {
+    for (const p of inPlaceFiles(cmd, unredirected(args))) {
+      const d = refuse(p, false)
+      if (d) return d
+    }
+    return null
+  }
   const recursive = REMOVERS.has(cmd) || args.some(a => isLong(a, '--recursive') || isLong(a, '--archive') || (/^-[a-zA-Z0-9]+$/.test(a) && /[rRa]/.test(a.slice(1))))
   // The paths given, and the targets given with -t.
   let paths: string[] = []
@@ -1398,6 +1523,13 @@ export function commands(line: string, arith = false): string[][] {
     if (c === '\\' && i + 1 < line.length) {
       if (line[i + 1] !== '\n') text(line[i + 1])
       i++
+    } else if (c === '$' && line[i + 1] === "'") {
+      // ANSI-C quoting, $'…': the text its escapes give.
+      const end = ansiEnd(line, i + 2)
+      text(ansiC(line.slice(i + 2, end)))
+      i = end
+    } else if (c === '$' && line[i + 1] === '"') {
+      // A locale string, $"…": read as the double-quoted one it is.
     } else if (c === "'") {
       const j = line.indexOf("'", i + 1)
       const end = j < 0 ? line.length : j
@@ -1485,6 +1617,9 @@ export function commands(line: string, arith = false): string[][] {
       }
       open = []
       i = j - 1
+    } else if (c === '&' && (line[i - 1] === '>' || line[i - 1] === '<') && /[0-9-]/.test(line[i + 1] ?? '')) {
+      // A redirect to or from a descriptor (2>&1, <&0, >&-): its word.
+      text(c)
     } else if (c === ';' || c === '&' || c === '|' || c === '\n' || c === '(' || c === ')' || c === '{' || c === '}') {
       endCommand()
     } else if (c === '<' && !arith && line[i + 1] === '<' && line[i + 2] !== '<' && line[i - 1] !== '<') {
@@ -1521,6 +1656,14 @@ export function commands(line: string, arith = false): string[][] {
       }
       i = j - 1
     } else if (c === '<' || c === '>') {
+      // Digits right before it are the descriptor it redirects (2>f),
+      // no word of the command.
+      if (inWord && hasLit && word === lit && /^\d+$/.test(word)) {
+        word = ''
+        lit = ''
+        inWord = false
+        hasLit = false
+      }
       endWord()
       words.push(c)
     } else text(c)
@@ -1529,10 +1672,7 @@ export function commands(line: string, arith = false): string[][] {
   if (docs.length) {
     // A shell anywhere on the line (ssh host bash, docker exec -i c sh)
     // may run what a heredoc gives it.
-    const shell = out.some(w => {
-      const argv = strip(w)
-      return (argv.length > 0 && STDIN_SHELLS.has(base(argv[0]))) || w.some(a => SHELLS.has(base(a)))
-    })
+    const shell = out.some(readsHeredoc)
     for (const h of docs) {
       // The line's own shell expands an unquoted body first.
       if (!h.quoted) for (const s of substitutions(h.body)) out.push(...commands(s))
@@ -1540,6 +1680,62 @@ export function commands(line: string, arith = false): string[][] {
     }
   }
   return out
+}
+
+// ansiEnd is the index of the quote that closes $'…' whose text starts
+// at s[i], past its escapes (\'); s's length when none does.
+function ansiEnd(s: ArrayLike<string>, i: number): number {
+  for (; i < s.length && s[i] !== "'"; i++) if (s[i] === '\\') i++
+  return Math.min(i, s.length)
+}
+
+// ansiC is the text of $'t': its escapes (\n, \x2e, \056, \u2e, \cA)
+// as the characters they stand for, any other \c as c.
+function ansiC(t: string): string {
+  const simple: Record<string, string> = { n: '\n', t: '\t', r: '\r', a: '\x07', b: '\b', e: '\x1b', E: '\x1b', f: '\f', v: '\v' }
+  return t.replace(/\\(x[0-9a-fA-F]{1,2}|u[0-9a-fA-F]{1,4}|U[0-9a-fA-F]{1,8}|[0-7]{1,3}|c[\s\S]|[\s\S])/g, (_, e: string) => {
+    if (/^[xuU]/.test(e) && e.length > 1) {
+      const n = parseInt(e.slice(1), 16)
+      return n <= 0x10ffff ? String.fromCodePoint(n) : '\ufffd'
+    }
+    if (/^[0-7]/.test(e)) return String.fromCharCode(parseInt(e, 8) & 0xff)
+    if (e[0] === 'c' && e.length > 1) return String.fromCharCode(e.charCodeAt(1) & 0x1f)
+    return Object.hasOwn(simple, e) ? simple[e] : e
+  })
+}
+
+// readsHeredoc: the simple command w (its words) may run what a heredoc
+// gives it: a shell or the like reading commands from its input, or a
+// shell word anywhere in it (ssh host bash, docker exec -i c sh); not a
+// shell that runs a script file (bash x.sh), which reads none.
+function readsHeredoc(w: string[]): boolean {
+  const argv = strip(w)
+  if (argv.length > 0 && SHELLS.has(base(argv[0])) && runsScript(unredirected(argv.slice(1)))) return argv.slice(1).some(a => SHELLS.has(base(a)))
+  return (argv.length > 0 && STDIN_SHELLS.has(base(argv[0]))) || w.some(a => SHELLS.has(base(a)))
+}
+
+// runsScript: a shell given args runs a script file, the first argument
+// that is no option, rather than commands from its input (-s) or a
+// string (-c); -o and -O, --rcfile and --init-file take a value. The
+// file is a path written out, not one that may be its input
+// (/dev/stdin, /proc/self/fd/0, a variable).
+function runsScript(args: string[]): boolean {
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i]
+    if (a === '--') return i + 1 < args.length && scriptFile(args[i + 1])
+    if (a === '--rcfile' || a === '--init-file') i++
+    else if (/^[-+][a-zA-Z]+$/.test(a)) {
+      if (/[sc]/.test(a.slice(1))) return false
+      if (/[oO]/.test(a)) i++
+    } else if (!a.startsWith('-')) return scriptFile(a)
+  }
+  return false
+}
+
+// scriptFile: a is a script's path written out, which can't be the
+// shell's input.
+function scriptFile(a: string): boolean {
+  return a !== '' && !/[$`<>()]/.test(a) && !/^\/+(dev|proc)\//.test(a)
 }
 
 // substitutions are the insides of the $( ) and backticks in s, which run

@@ -24,7 +24,9 @@ import (
 	"path"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
+	"unicode"
 )
 
 // Rules are what a session's guard refuses, as the server works them out
@@ -680,6 +682,20 @@ func (r Rules) deny(rule, summary, target string) *Denial {
 	return &Denial{Rule: rule, Message: "terminatr guard (" + rule + "): " + m, Summary: summary, Floor: rule == "merge"}
 }
 
+// pwdVar is $PWD (or ${PWD}) starting a path, and what follows it.
+var pwdVar = regexp.MustCompile(`^\$(?:PWD|\{PWD\})(/|$)`)
+
+// lostCd is the tm-files refusal of a relative path after a cd the
+// guard can't follow: its sentence says how to write the line so it can.
+func (r Rules) lostCd(summary string) *Denial {
+	tell := "ask the user"
+	if r.Role == "thread" {
+		tell = "say so in your report"
+	}
+	m := "after a cd the guard can't follow (to a variable or a substitution, cd -, popd, or one inside { }, if or a loop), a relative path given to a command that writes could be tm's settings or the project folder. Give the path from / or a variable ($TMPDIR/x), cd to a folder written out and join the rest with &&, or run the cd in a call of its own; if none of that fits, " + tell + "."
+	return &Denial{Rule: RuleTMFiles, Message: "terminatr guard (" + RuleTMFiles + "): " + m, Summary: summary}
+}
+
 // JudgeCommand is the rule a command line breaks as a Bash call would,
 // the allowances lifting what they name, or nil: what tm runs for a
 // thread outside its sandbox (an approved command, its words quoted)
@@ -709,8 +725,8 @@ func (r Rules) judgeBash(command string) *Denial { return r.judgeLine(command, [
 func (r Rules) judgeLine(command string, cwds []string) *Denial {
 	parts, ok := topLevel(command)
 	if !ok {
-		// A heredoc or a line it can't split: one part, with any cd in
-		// it leaving its relative paths unknown from the start.
+		// A line it can't split: one part, with any cd in it leaving its
+		// relative paths unknown from the start.
 		parts = []linePart{{text: command}}
 		if hasCd(command) {
 			cwds = withDirs(cwds, "")
@@ -721,6 +737,11 @@ func (r Rules) judgeLine(command string, cwds []string) *Denial {
 	for _, pt := range parts {
 		if listEnd(pt.before) {
 			list = cur
+		}
+		// A heredoc's body read as commands (topLevel and Commands may
+		// tell a << apart differently: $[1<<2]) may hold a cd anywhere.
+		if pt.doc && hasCd(pt.text) {
+			cur = withDirs(cur, "")
 		}
 		for _, c := range cur {
 			if d := r.judgeCommands(pt.text, c); d != nil {
@@ -1576,6 +1597,52 @@ var (
 	removers = setOf("rm rmdir mv rsync")
 )
 
+// scriptCluster is a cluster of short options ending in the one that
+// takes the script (perl -pe, sed -ne).
+var scriptCluster = regexp.MustCompile(`^-[a-zA-Z]+$`)
+
+// inPlaceFiles are the files cmd (inPlace) with args writes: its
+// arguments but its options, the script -e gives (sed's -f too, with
+// their long forms), and sed's first argument when no -e or -f gives
+// the script (sed -i s/a/b/ f). An option it can't read keeps what
+// follows among the files.
+func inPlaceFiles(cmd string, args []string) []string {
+	sed := cmd == "sed" || cmd == "gsed"
+	var out []string
+	script := false
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "--":
+			out = append(out, args[i+1:]...)
+			i = len(args)
+		case a == "-e" || a == "-E" && !sed && cmd != "ruby" || sed && (a == "-f" || isLong(a, "--expression") || isLong(a, "--file")):
+			script = true
+			if !strings.Contains(a, "=") {
+				i++
+			}
+		case scriptCluster.MatchString(a) && !strings.Contains(a, "i") && (strings.HasSuffix(a, "e") || !sed && strings.HasSuffix(a, "E")):
+			// A cluster ending in the script's option.
+			script = true
+			i++
+		case strings.HasPrefix(a, "-") && a != "-":
+			if sed && (strings.HasPrefix(a, "-e") || strings.HasPrefix(a, "-f")) {
+				script = true
+			}
+			// macOS's sed -i '' (no backup): '' is -i's.
+			if sed && a == "-i" && i+1 < len(args) && args[i+1] == "" {
+				i++
+			}
+		default:
+			out = append(out, a)
+		}
+	}
+	if sed && !script && len(out) > 0 {
+		return out[1:]
+	}
+	return out
+}
+
 // tmAgentMod are the tm mod subcommands an agent may run; the others,
 // tm project's tmProjectWrites (and repo add), tm access's
 // tmAccessWrites (and preset add) and the dashboard write
@@ -1647,10 +1714,11 @@ func accessOpen(args []string) bool {
 type nowhere struct{ dir string }
 
 // cd is where cmd (cd, pushd, popd) with args leaves the line: a
-// folder it names plainly, home for none, else unknown.
+// folder it names plainly, home for none, else unknown. Its
+// redirections (pushd x >/dev/null) are no folder.
 func (n nowhere) cd(r Rules, cmd string, args []string) nowhere {
 	var to []string
-	for _, a := range args {
+	for _, a := range unredirected(args) {
 		if !strings.HasPrefix(a, "-") || a == "-" {
 			to = append(to, a)
 		}
@@ -1705,8 +1773,12 @@ func (r Rules) globReaches(p, root string) bool {
 
 // linePart is a part of a command line between the separators of its
 // top level (;, newline, &&, ||, |, &): its text and the separators
-// before and after it ("" at the line's ends; a newline is ;, |& is |).
-type linePart struct{ text, before, after string }
+// before and after it ("" at the line's ends; a newline is ;, |& is |);
+// doc when its text holds the body of a heredoc it opens.
+type linePart struct {
+	text, before, after string
+	doc                 bool
+}
 
 // listEnd: separator sep ends an and-or list.
 func listEnd(sep string) bool { return sep == "" || sep == ";" || sep == "&" }
@@ -1748,17 +1820,35 @@ func plainCd(part string) (cmd string, args []string, ok bool) {
 }
 
 // topLevel splits a command line at its top level's separators, outside
-// quotes, ( ), { }, $( ) and backticks; ok is false for a line with a
-// heredoc, or whose quotes or brackets don't close.
+// quotes, ( ), { }, $( ) and backticks. A heredoc opened at the top
+// level has its body added to the part that opens it, after the
+// newline that ends the part's line. ok is false for a line whose
+// quotes or brackets don't close, with a heredoc inside brackets, or
+// with a shell that may run a heredoc's body (cat <<EOF | bash), which
+// the line's own reading (Commands) judges.
 func topLevel(line string) (parts []linePart, ok bool) {
 	s := []rune(line)
 	var stack []rune
 	var b strings.Builder
 	before := ""
+	// The heredocs opened and not yet read: their word, <<- and the
+	// part that opens each (-1: the one being read).
+	type doc struct {
+		delim string
+		tabs  bool
+		part  int
+	}
+	var open []doc
+	docs := false
 	cut := func(sep string) {
 		if t := strings.TrimSpace(b.String()); t != "" {
 			parts = append(parts, linePart{text: t, before: before})
 			before = sep
+			for k := range open {
+				if open[k].part < 0 {
+					open[k].part = len(parts) - 1
+				}
+			}
 		} else if before == "" || sep == ";" {
 			before = sep
 		}
@@ -1766,6 +1856,37 @@ func topLevel(line string) (parts []linePart, ok bool) {
 			parts[n-1].after = sep
 		}
 		b.Reset()
+	}
+	// bodies reads the bodies of the open heredocs from s[i], the start
+	// of the line after the one that opened them, into their parts; the
+	// index after them.
+	bodies := func(i int) int {
+		for _, h := range open {
+			var body strings.Builder
+			for i < len(s) {
+				k := i
+				for k < len(s) && s[k] != '\n' {
+					k++
+				}
+				l := string(s[i:k])
+				body.WriteString("\n" + l)
+				i = k + 1
+				if h.tabs {
+					l = strings.TrimLeft(l, "\t")
+				}
+				if l == h.delim {
+					break
+				}
+			}
+			if h.part < 0 {
+				b.WriteString(body.String())
+			} else {
+				parts[h.part].text += body.String()
+				parts[h.part].doc = true
+			}
+		}
+		open = nil
+		return i
 	}
 	wordStart := func(i int) bool { return i == 0 || strings.ContainsRune(" \t\n;&|(", s[i-1]) }
 	top := func() rune {
@@ -1817,6 +1938,14 @@ func topLevel(line string) (parts []linePart, ok bool) {
 			i++
 			b.WriteRune(s[i])
 			continue
+		case c == '$' && next == '\'':
+			j := ansiEnd(s, i+2)
+			if j == len(s) {
+				return nil, false
+			}
+			b.WriteString(string(s[i : j+1]))
+			i = j
+			continue
 		case c == '\'':
 			j := i + 1
 			for j < len(s) && s[j] != '\'' {
@@ -1853,16 +1982,68 @@ func topLevel(line string) (parts []linePart, ok bool) {
 		case c == '}' && top() == '{' && wordStart(i):
 			stack = stack[:len(stack)-1]
 		case c == '<' && next == '<' && (i+2 >= len(s) || s[i+2] != '<') && prev != '<':
-			return nil, false
+			// A heredoc: <<WORD or <<-WORD, its word quoted or not.
+			if len(stack) > 0 {
+				return nil, false
+			}
+			j := i + 2
+			h := doc{part: -1}
+			if j < len(s) && s[j] == '-' {
+				h.tabs = true
+				j++
+			}
+			for j < len(s) && (s[j] == ' ' || s[j] == '\t') {
+				j++
+			}
+			var d strings.Builder
+			quoted := false
+			for j < len(s) && !strings.ContainsRune(" \t\n;&|<>()", s[j]) {
+				switch s[j] {
+				case '\'', '"':
+					quoted = true
+					end := len(s)
+					if k := slices.Index(s[j+1:], s[j]); k >= 0 {
+						end = j + 1 + k
+					}
+					d.WriteString(string(s[j+1 : end]))
+					j = end + 1
+				case '\\':
+					quoted = true
+					if j+1 < len(s) {
+						d.WriteRune(s[j+1])
+					}
+					j += 2
+				default:
+					d.WriteRune(s[j])
+					j++
+				}
+			}
+			h.delim = d.String()
+			if h.delim == "" && !quoted {
+				return nil, false
+			}
+			b.WriteString(string(s[i:min(j, len(s))]))
+			open = append(open, h)
+			docs = true
+			i = j - 1
+			continue
 		case len(stack) > 0:
+			// Inside brackets: no separator, and no heredoc body read.
+			if c == '\n' && len(open) > 0 {
+				return nil, false
+			}
 		case c == '#' && wordStart(i):
 			for i < len(s) && s[i] != '\n' {
 				i++
 			}
 			cut(";")
+			i = bodies(i+1) - 1
 			continue
 		case c == ';' || c == '\n':
 			cut(";")
+			if c == '\n' {
+				i = bodies(i+1) - 1
+			}
 			continue
 		case c == '&' && next == '&':
 			i++
@@ -1888,6 +2069,9 @@ func topLevel(line string) (parts []linePart, ok bool) {
 		return nil, false
 	}
 	cut("")
+	if docs && slices.ContainsFunc(parts, func(p linePart) bool { return slices.ContainsFunc(Commands(p.text), readsHeredoc) }) {
+		return nil, false
+	}
 	return parts, true
 }
 
@@ -1896,7 +2080,9 @@ func topLevel(line string) (parts []linePart, ok bool) {
 // a command that writes the paths it is given naming one (cp's and the
 // like's target; a folder holding one, for a remover). With r.Cwd ""
 // (a cd the line made that it can't follow) a relative path could be
-// anywhere, so it is refused.
+// anywhere, so it is refused; one that starts with a variable or a
+// substitution ($TMPDIR/x, "$F") is where its value says, which the
+// guard can't place with a cd or without one.
 func (r Rules) judgeNoWrite(cmd string, args, words []string) *Denial {
 	if len(r.NoWrite) == 0 {
 		return nil
@@ -1905,8 +2091,10 @@ func (r Rules) judgeNoWrite(cmd string, args, words []string) *Denial {
 		if w == "" || strings.HasPrefix(w, "&") {
 			return nil
 		}
-		if r.Cwd == "" && !strings.HasPrefix(slash(w), "/") && !strings.HasPrefix(w, "~") && !drive.MatchString(slash(w)) {
-			return floor(r.deny(RuleTMFiles, cmd+" of "+safe(w)+" after a cd", ""))
+		// $PWD is the line's folder: a path from it is a relative one.
+		w = pwdVar.ReplaceAllString(w, ".$1")
+		if r.Cwd == "" && !strings.HasPrefix(slash(w), "/") && !strings.HasPrefix(w, "~") && !strings.HasPrefix(w, "$") && !drive.MatchString(slash(w)) {
+			return floor(r.lostCd(cmd + " of " + safe(w) + " after a cd"))
 		}
 		p := r.abs(w)
 		fixed := strings.TrimSuffix(wildcard.ReplaceAllString(p, ""), "/")
@@ -1966,6 +2154,14 @@ func (r Rules) judgeNoWrite(cmd string, args, words []string) *Denial {
 		}
 	}
 	if !ok {
+		return nil
+	}
+	if inPlace[cmd] {
+		for _, p := range inPlaceFiles(cmd, unredirected(args)) {
+			if d := refuse(p, false); d != nil {
+				return d
+			}
+		}
 		return nil
 	}
 	recursive := removers[cmd] || slices.ContainsFunc(args, func(a string) bool {
@@ -2063,6 +2259,13 @@ func commands(line string, arith bool) [][]string {
 				text(string(s[i+1]))
 			}
 			i++
+		case c == '$' && i+1 < len(s) && s[i+1] == '\'':
+			// ANSI-C quoting, $'…': the text its escapes give.
+			end := ansiEnd(s, i+2)
+			text(ansiC(string(s[i+2 : end])))
+			i = end
+		case c == '$' && i+1 < len(s) && s[i+1] == '"':
+			// A locale string, $"…": read as the double-quoted one it is.
 		case c == '\'':
 			end := len(s)
 			if j := slices.Index(s[i+1:], '\''); j >= 0 {
@@ -2167,6 +2370,9 @@ func commands(line string, arith bool) [][]string {
 			}
 			open = nil
 			i = j - 1
+		case c == '&' && i > 0 && (s[i-1] == '>' || s[i-1] == '<') && i+1 < len(s) && strings.ContainsRune("0123456789-", s[i+1]):
+			// A redirect to or from a descriptor (2>&1, <&0, >&-): its word.
+			text(string(c))
 		case strings.ContainsRune(";&|\n(){}", c):
 			endCommand()
 		case c == '<' && !arith && i+1 < len(s) && s[i+1] == '<' && (i+2 >= len(s) || s[i+2] != '<') && (i == 0 || s[i-1] != '<'):
@@ -2211,6 +2417,13 @@ func commands(line string, arith bool) [][]string {
 			}
 			i = j - 1
 		case c == '<' || c == '>':
+			// Digits right before it are the descriptor it redirects
+			// (2>f), no word of the command.
+			if inWord && hasLit && word.String() == lit.String() && digits.MatchString(word.String()) {
+				word.Reset()
+				lit.Reset()
+				inWord, hasLit = false, false
+			}
 			endWord()
 			words = append(words, string(c))
 		default:
@@ -2221,10 +2434,7 @@ func commands(line string, arith bool) [][]string {
 	if len(docs) > 0 {
 		// A shell anywhere on the line (ssh host bash, docker exec -i c
 		// sh) may run what a heredoc gives it.
-		shell := slices.ContainsFunc(out, func(w []string) bool {
-			argv := strip(w)
-			return len(argv) > 0 && stdinShells[base(argv[0])] || slices.ContainsFunc(w, func(a string) bool { return shells[base(a)] })
-		})
+		shell := slices.ContainsFunc(out, readsHeredoc)
 		for _, h := range docs {
 			if !h.quoted {
 				// The line's own shell expands it first.
@@ -2238,6 +2448,103 @@ func commands(line string, arith bool) [][]string {
 		}
 	}
 	return out
+}
+
+// ansiEnd is the index of the quote that closes $'…' whose text starts
+// at s[i], past its escapes (\'); len(s) when none does.
+func ansiEnd(s []rune, i int) int {
+	for ; i < len(s) && s[i] != '\''; i++ {
+		if s[i] == '\\' {
+			i++
+		}
+	}
+	return min(i, len(s))
+}
+
+// ansiEscape is an escape of $'…'.
+var ansiEscape = regexp.MustCompile(`\\(x[0-9a-fA-F]{1,2}|u[0-9a-fA-F]{1,4}|U[0-9a-fA-F]{1,8}|[0-7]{1,3}|c[\s\S]|[\s\S])`)
+
+// ansiSimple are the escapes of $'…' that stand for one character.
+var ansiSimple = map[string]string{"n": "\n", "t": "\t", "r": "\r", "a": "\x07", "b": "\b", "e": "\x1b", "E": "\x1b", "f": "\f", "v": "\v"}
+
+// ansiC is the text of $'t': its escapes (\n, \x2e, \056, \u2e, \cA)
+// as the characters they stand for, any other \c as c.
+func ansiC(t string) string {
+	return ansiEscape.ReplaceAllStringFunc(t, func(m string) string {
+		e := m[1:]
+		switch {
+		case strings.ContainsRune("xuU", rune(e[0])) && len(e) > 1:
+			n, _ := strconv.ParseUint(e[1:], 16, 32)
+			if n > unicode.MaxRune {
+				return "\uFFFD"
+			}
+			return string(rune(n))
+		case e[0] >= '0' && e[0] <= '7':
+			n, _ := strconv.ParseUint(e, 8, 32)
+			return string(rune(n & 0xff))
+		case e[0] == 'c' && len(e) > 1:
+			return string([]rune(e)[1] & 0x1f)
+		}
+		if r, ok := ansiSimple[e]; ok {
+			return r
+		}
+		return e
+	})
+}
+
+// digits is a word of digits alone.
+var digits = regexp.MustCompile(`^[0-9]+$`)
+
+// readsHeredoc: the simple command w (its words) may run what a heredoc
+// gives it: a shell or the like reading commands from its input, or a
+// shell word anywhere in it (ssh host bash, docker exec -i c sh); not a
+// shell that runs a script file (bash x.sh), which reads none.
+func readsHeredoc(w []string) bool {
+	argv := strip(w)
+	isShell := func(a string) bool { return shells[base(a)] }
+	if len(argv) > 0 && shells[base(argv[0])] && runsScript(unredirected(argv[1:])) {
+		return slices.ContainsFunc(argv[1:], isShell)
+	}
+	return len(argv) > 0 && stdinShells[base(argv[0])] || slices.ContainsFunc(w, isShell)
+}
+
+// shellFlags is a cluster of a shell's short options (-ex, +o).
+var shellFlags = regexp.MustCompile(`^[-+][a-zA-Z]+$`)
+
+// runsScript: a shell given args runs a script file, the first argument
+// that is no option, rather than commands from its input (-s) or a
+// string (-c); -o and -O, --rcfile and --init-file take a value. The
+// file is a path written out, not one that may be its input
+// (/dev/stdin, /proc/self/fd/0, a variable).
+func runsScript(args []string) bool {
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "--":
+			return i+1 < len(args) && scriptFile(args[i+1])
+		case a == "--rcfile" || a == "--init-file":
+			i++
+		case shellFlags.MatchString(a):
+			if strings.ContainsAny(a[1:], "sc") {
+				return false
+			}
+			if strings.ContainsAny(a, "oO") {
+				i++
+			}
+		case !strings.HasPrefix(a, "-"):
+			return scriptFile(a)
+		}
+	}
+	return false
+}
+
+// devOrProc is a path under /dev or /proc.
+var devOrProc = regexp.MustCompile(`^/+(dev|proc)/`)
+
+// scriptFile: a is a script's path written out, which can't be the
+// shell's input.
+func scriptFile(a string) bool {
+	return a != "" && !strings.ContainsAny(a, "$`<>()") && !devOrProc.MatchString(a)
 }
 
 // substitutions are the insides of the $( ) and backticks in s, which run
