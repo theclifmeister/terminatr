@@ -250,10 +250,32 @@ You are the only agent that writes it.
   (title, description, touches) after each, and by itself for a note
   written otherwise; don't edit the list by hand, but a line's
   description is yours to word: tm keeps it.
-- Keep CONTEXT.md, MEMORY.md and memory/ short and factual. When a file
-  grows, re-read it, merge and rewrite it, and drop what is no longer
-  true. The Upkeep section of `tm context` names a file over its 6 KB
-  budget: consolidate it that turn.
+- How to write a note (the template's comments say the same): rules,
+  not stories (no how-we-found-out); no task ids, dates or (user, date)
+  provenance in the text, except on a user decision someone may
+  question; each fact once, in the note whose touches fit, others link
+  `[[note]]`; point to a repo file instead of copying its steps; terse
+  one-line imperative bullets, no hedging; keep stop words (only, not):
+  matching ignores them anyway; never store what the code, git or docs
+  already say. Never save a workaround for tm's own behaviour that
+  every user would hit (a guard false positive, a preset that doesn't
+  work): tm must behave the same for every user, so it becomes a task
+  for a fix in tm. Workarounds for the project's own setup (its
+  toolchain, test setup, VMs, cloud CLIs) may stay.
+- Keep CONTEXT.md, MEMORY.md and memory/ short and factual: the lowest
+  context that keeps every live fact. When a file grows, re-read it,
+  merge and rewrite it, and drop what is no longer true. The Upkeep
+  section of `tm context` names a file over its budget (memory/ also
+  has one for all notes together): consolidate it that turn.
+  `[tm] Upkeep after the clear` comes once after a clear when some are
+  over: consolidate the files it names (merge overlapping notes, drop
+  repeated, stale or fixed facts, keep each fact once), check
+  version-specific facts (agent versions, flakes) against today's
+  versions and main and drop the dead ones, and list gotchas that
+  belong in a package's doc comment as candidates for a code task
+  (file it as any task; that pass moves no text into code); drop notes
+  that work around tm's own behaviour every user would hit and list
+  them, each to become a task for a fix in tm, then stop.
 - tm archives done tasks, resolved threads, handled items and old
   journal lines itself; don't by hand (`tm task archive T<n>` for
   sooner). `tm thread list --all` lists archived threads; `tm thread

@@ -106,10 +106,10 @@ type Host interface {
 	// session; still is asked right before delivery and drops it when
 	// false. An error when the agent has none.
 	Clear(session string, still func() bool) error
-	// AskSave pastes text (SaveText) into a session whose agent has a
-	// clear prompt, ahead of its clear; still is asked right before
-	// delivery and drops it when false. An error when the agent has no
-	// clear prompt.
+	// AskSave pastes text (SaveText ahead of a clear, UpkeepText after
+	// one) into a session whose agent has a clear prompt; still is asked
+	// right before delivery and drops it when false. An error when the
+	// agent has no clear prompt.
 	AskSave(session, text string, still func() bool) error
 }
 
@@ -247,6 +247,8 @@ type projectMemo struct {
 	Remote *remoteMemo `json:"remote,omitempty"`
 	// Clear is what autoClear saw of the coordinator (clear.go).
 	Clear *clearMemo `json:"clear,omitempty"`
+	// Upkeep is the clear an upkeep prompt may follow (clear.go).
+	Upkeep *upkeepMemo `json:"upkeep,omitempty"`
 }
 
 // repoMemo is a repo's checkout as the last sync left it, and the PR
@@ -526,6 +528,7 @@ func (t *Ticker) sweepProject(slug string, cfg *config.Config, sessions []proto.
 	t.keepRemote(p, sessions, safety, now)
 	t.keepModel(p, sessions)
 	t.autoClear(p, sessions, safety, cfg.ContextHint, now)
+	t.upkeepAfterClear(p, sessions, safety, now)
 	if prune {
 		t.upkeep(p, safety, now)
 	}
