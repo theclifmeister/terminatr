@@ -1745,10 +1745,10 @@ func TestAccessTabByLevel(t *testing.T) {
 		t.Errorf("open: %q", got)
 	}
 	out := screen(m)
-	if !strings.Contains(out, "Protection is open") || strings.Contains(out, "Prefer rules inside the sandbox") || strings.Contains(out, "P add a preset") {
+	if !strings.Contains(out, "Protection is open") || strings.Contains(out, "Prefer rules inside the sandbox") || strings.Contains(out, "p add a preset") {
 		t.Errorf("open screen:\n%s", out)
 	}
-	keyPress(m, "P")
+	keyPress(m, "p")
 	if _, ok := m.top().(*presetsView); ok {
 		t.Error("p opened the presets at open")
 	}
@@ -1763,7 +1763,7 @@ func TestAccessTabByLevel(t *testing.T) {
 	if got := labels(); !slices.Contains(got, "Guard mode") || !slices.Contains(got, "Excluded commands") {
 		t.Errorf("sandboxed: %q", got)
 	}
-	if out := screen(m); !strings.Contains(out, "P add a preset") {
+	if out := screen(m); !strings.Contains(out, "p add a preset") {
 		t.Errorf("sandboxed footer:\n%s", out)
 	}
 }

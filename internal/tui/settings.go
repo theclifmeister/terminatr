@@ -563,7 +563,7 @@ func (sv *settingsView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	if sv.tab == tabMods || sv.tab == tabPeers || sv.tab == tabLogs {
 		return nil
 	}
-	if sv.tab == tabAllAccess && s == "P" && sandboxShown(m, "") {
+	if sv.tab == tabAllAccess && s == "p" && sandboxShown(m, "") {
 		return m.openPresets("")
 	}
 	if sv.tab == tabAllAccess && s == "R" {
@@ -616,7 +616,7 @@ func (sv *settingsView) render(m *dash) string {
 		lines = append(lines, faintLines("Every project's threads get these, a new one's too. A project's lists add to these, and it may drop one of them, in its popup's Access tab (A on the dashboard, prefix+A in a session); its own switches replace these, X there makes it follow these again.", w)...)
 		keys = "enter change · R reset · ↑ ↓ move · ← → tabs · esc close"
 		if sandboxShown(m, "") {
-			keys = "enter change · P add a preset · R reset · ↑ ↓ move · ← → tabs · esc close"
+			keys = "enter change · p add a preset · R reset · ↑ ↓ move · ← → tabs · esc close"
 		}
 	default:
 		lines = append(lines, faintLines("Every project follows these, a new one too, unless it sets its own in its popup (A on the dashboard, prefix+A in a session); X there makes it follow these again.", w)...)

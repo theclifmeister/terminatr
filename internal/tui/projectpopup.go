@@ -195,7 +195,7 @@ func (pv *projectView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	if pv.tab == tabAccess && s == "E" {
 		return m.showAccess(pv.slug, "")
 	}
-	if pv.tab == tabAccess && s == "P" && sandboxShown(m, pv.slug) {
+	if pv.tab == tabAccess && s == "p" && sandboxShown(m, pv.slug) {
 		return m.openPresets(pv.slug)
 	}
 	if pv.tab == tabAccess && s == "R" {
@@ -448,7 +448,7 @@ func listKeys(m *dash, l *settingsList, access bool, slug string) string {
 	}
 	if access {
 		if sandboxShown(m, slug) {
-			keys = append(keys, "P add a preset")
+			keys = append(keys, "p add a preset")
 		}
 		keys = append(keys, "E effective access", "R reset")
 	}

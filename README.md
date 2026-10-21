@@ -14,6 +14,8 @@ tm reads each agent's state from its hooks and session logs, not by scraping the
 
 These are tm's own screens, captured by its end-to-end tests (the agent in them is a test stand-in).
 
+On a coordinator's row, on the dashboard or in the sidebar, just start typing: the first key opens the coordinator and everything you type lands in its prompt (the dashboard's keys are `prefix+<key>` there). A thread's row takes `enter` first. On the other rows the dashboard's commands are capitals (`A`, `T`, `S` …), so lower-case text typed into the wrong place does nothing.
+
 Every agent runs in its own session. Open one and tm keeps the project tree on the left and the thread's task, steps, PR and last report on the right; the status bar says where you are and how far it got.
 
 ![A thread's session: the agent's conversation in the middle, the project sidebar on the left, and the thread's info panel on the right with its steps, PR and last report.](docs/images/session.svg)

@@ -49,7 +49,7 @@ const sandboxLocal = "A thread can then connect to every service listening on a 
 const sandboxHost = "Every command a thread runs inside its sandbox may then reach it, not only the tool you add it for."
 
 // sandboxGuide heads the Access tab.
-const sandboxGuide = "Prefer rules inside the sandbox (P adds a preset's): the thread's commands stay in it, opened only as far as the tool needs. Excluded commands (Outside the sandbox) run outside it: a last resort. " + sandboxBoth
+const sandboxGuide = "Prefer rules inside the sandbox (p adds a preset's): the thread's commands stay in it, opened only as far as the tool needs. Excluded commands (Outside the sandbox) run outside it: a last resort. " + sandboxBoth
 
 // sandboxAdds says how a project's lists combine with all projects'.
 const sandboxAdds = "A project's entries add to all projects'. In the list, enter or e changes an entry in place and X removes it; on a project, all projects' entries change in the , popup, and X drops one or takes the drop back."

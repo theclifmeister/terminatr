@@ -262,7 +262,7 @@ func TestAccessTab(t *testing.T) {
 		"Inside the sandbox", "Network hosts", "Local ports", "Guidance for threads",
 		"Outside the sandbox", "Excluded commands", "Permission rules", "Allow rules",
 		"Guard", "Guard mode", "Guard rules", "Guard allowances", "Guard refusals", "Secrets", "Secret environment",
-		"Built in", "tm's rules", "P add a preset", "E effective access", "← → tabs"} {
+		"Built in", "tm's rules", "p add a preset", "E effective access", "← → tabs"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("Access tab lacks %q:\n%s", want, out)
 		}
@@ -301,7 +301,7 @@ func TestAccessTab(t *testing.T) {
 		keyPress(m, "down")
 		out += screen(m)
 	}
-	for _, want := range []string{"3 access", "Protection", "Yolo mode", "Network hosts", "Guard mode", "Secret environment", "A project's lists add to these", "alpha sets its own", "P add a preset"} {
+	for _, want := range []string{"3 access", "Protection", "Yolo mode", "Network hosts", "Guard mode", "Secret environment", "A project's lists add to these", "alpha sets its own", "p add a preset"} {
 		if !strings.Contains(out, want) {
 			t.Errorf(", Access tab lacks %q:\n%s", want, out)
 		}
@@ -414,7 +414,7 @@ func TestLocalPortsRow(t *testing.T) {
 	}
 }
 
-// TestPresetAdd: P on a project's Access tab lists the presets; enter
+// TestPresetAdd: p on a project's Access tab lists the presets; enter
 // shows the rules one adds, space leaves one out, enter adds the rest
 // as plain rules; adding it again offers only what is missing, and A
 // adds to all projects instead.
@@ -423,7 +423,7 @@ func TestPresetAdd(t *testing.T) {
 	m.Update(tea.WindowSizeMsg{Width: 160, Height: 80})
 	feed(m, keyPress(m, "A"))
 	keyPress(m, "5")
-	keyPress(m, "P")
+	keyPress(m, "p")
 	if _, ok := m.top().(*presetsView); !ok {
 		t.Fatalf("p: %T", m.top())
 	}
@@ -467,7 +467,7 @@ func TestPresetAdd(t *testing.T) {
 		t.Errorf("alpha: %+v", got)
 	}
 	// Again: only the left-out host is offered; A adds it to all projects.
-	keyPress(m, "P")
+	keyPress(m, "p")
 	keyPress(m, "down")
 	keyPress(m, "enter")
 	out = screen(m)
@@ -486,7 +486,7 @@ func TestPresetAdd(t *testing.T) {
 		t.Errorf("saved %q", src.sandbox)
 	}
 	// Local dev servers adds local ports, as a plain setting.
-	keyPress(m, "P")
+	keyPress(m, "p")
 	keyPress(m, "down")
 	keyPress(m, "down")
 	keyPress(m, "enter")
