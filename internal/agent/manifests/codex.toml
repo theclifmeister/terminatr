@@ -160,6 +160,9 @@ logged_out = { "result.account.type" = "!*", "result.requiresOpenaiAuth" = "true
 # The guard (docs/SPEC.md §8.6): Codex's login, in ~/.codex or $CODEX_HOME.
 [guard]
 secrets = [".codex/auth.json", "$CODEX_HOME/auth.json"]
+# Its shell_snapshot feature sources a snapshot of the user's shell
+# before each command: no session writes them (the guard's floor).
+shell_state = [".codex/shell_snapshots", "$CODEX_HOME/shell_snapshots"]
 # A thread runs with -a on-request: Codex asks only to leave its sandbox
 # (an escalation), which the user answers, never the coordinator (T574
 # case 6). With escapes off it runs with -a never and doesn't ask.

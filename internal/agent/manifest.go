@@ -202,6 +202,11 @@ type Guard struct {
 	// Writable are the agent's own folders its threads write to besides
 	// the worktree and the temporary folders (the worktree-only rule).
 	Writable []string `toml:"writable"`
+	// ShellState are the files the agent's shell tool runs before each
+	// command (Claude's shell snapshots): no session writes them, whatever
+	// its agent (the guard's floor, ShellState), so none redefines cd or
+	// exit for the calls after where the guard can't see.
+	ShellState []string `toml:"shell_state"`
 	// Temp is where the agent's sandbox has it write temporary files
 	// (its TMPDIR): entries absolute or under $VAR, "{uid}" the user's
 	// id; the first that resolves is the agent's temp folder, the only
@@ -569,6 +574,11 @@ func (m *Manifest) validate() error {
 	for _, e := range m.Guard.Writable {
 		if !validGuardPath(e) {
 			errs = append(errs, fmt.Errorf("guard.writable: %q is not relative to home or under $VAR", e))
+		}
+	}
+	for _, e := range m.Guard.ShellState {
+		if !validGuardPath(e) {
+			errs = append(errs, fmt.Errorf("guard.shell_state: %q is not relative to home or under $VAR", e))
 		}
 	}
 	for _, e := range m.Guard.Temp {

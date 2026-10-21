@@ -1105,6 +1105,8 @@ func TestManifestGuard(t *testing.T) {
 	}{
 		{`secrets = [".a/key", "~/.a/token", "$A_HOME/key"]`, true},
 		{`writable = [".a/plans"]`, true},
+		{`shell_state = [".a/snapshots", "$A_HOME/snapshots"]`, true},
+		{`shell_state = ["/etc/profile"]`, false},
 		{`secrets = ["/etc/a/key"]`, false},
 		{`secrets = ["../x"]`, false},
 		{`writable = ["$A_HOME/../x"]`, false},
@@ -1139,6 +1141,15 @@ func TestManifestGuard(t *testing.T) {
 		for _, want := range []string{"/h/.claude/.credentials.json", "/h/.codex/auth.json", "/ch/auth.json"} {
 			if !slices.Contains(s, want) {
 				t.Errorf("GuardSecrets(%v) = %q, lacks %s", r != nil, s, want)
+			}
+		}
+	}
+	env["ZDOTDIR"] = "/z"
+	for _, r := range []*Registry{nil, reg} {
+		s := ShellState(r, "/h", getenv)
+		for _, want := range []string{"/h/.zshrc", "/h/.bashrc", "/h/.profile", "/z/.zshenv", "/h/.claude/shell-snapshots", "/ch/shell_snapshots"} {
+			if !slices.Contains(s, want) {
+				t.Errorf("ShellState(%v) = %q, lacks %s", r != nil, s, want)
 			}
 		}
 	}

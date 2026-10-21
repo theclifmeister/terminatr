@@ -317,7 +317,10 @@ func ownExcluded(reg *agent.Registry, r SessionRecord, home string, lc launchCon
 // whatever the rules (the guard's floor, T574 §3.1): tm's home but for
 // the projects and worktrees (homeFloor: its settings, agents, mods,
 // state, logs) and its run folder, the settings in the session's folder that could turn
-// its hooks off (hookSettings), and a thread's project folder, or the
+// its hooks off (hookSettings), what a shell runs before each command
+// (the user's shell startup files and the agents' shell snapshots,
+// agent.ShellState: a cd or exit defined there is one the guard can't
+// see), and a thread's project folder, or the
 // parts of it only tm writes for the coordinator, whose folder it is. The sandbox and the
 // agent's deny rules hold them too, where there are those (not under
 // yolo).
@@ -333,6 +336,12 @@ func (s *Server) guardNoWrite(r SessionRecord) []string {
 		// Where a write lands (realTarget) and as the call may name it.
 		out = append(out, hookSettings(realPath(r.Cwd))...)
 		out = append(out, hookSettings(r.Cwd)...)
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		s.mu.Lock()
+		reg := s.agents
+		s.mu.Unlock()
+		out = append(out, agent.ShellState(reg, home, os.Getenv)...)
 	}
 	dir, err := project.Dir(r.Project)
 	if err != nil {

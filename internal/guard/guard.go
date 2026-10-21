@@ -91,9 +91,10 @@ type Rules struct {
 	// environment, whichever rules are on (the floor).
 	SecretEnv []string `json:"secretEnv,omitempty"`
 	// NoWrite are the files and folders no tool writes, whichever rules
-	// are on (the floor): tm's settings (config.toml), and a thread's
-	// project folder or the parts of it only tm writes for the
-	// coordinator. File tools are judged by where they write, shell
+	// are on (the floor): tm's settings (config.toml), what a shell runs
+	// before each command (the user's startup files, the agents' shell
+	// snapshots), and a thread's project folder or the parts of it only
+	// tm writes for the coordinator. File tools are judged by where they write, shell
 	// commands by the paths they redirect into or give a command that
 	// writes (cp, mv, tee, rm and the like: judgeNoWrite).
 	NoWrite []string `json:"noWrite,omitempty"`
@@ -840,9 +841,9 @@ func (r Rules) deny(rule, summary, target string) *Denial {
 		m = `merging is the coordinator's job in this project (merge = "coordinator"). Leave the PR open with CI green and say so in your report.`
 	case RuleTMFiles:
 		if r.Role == "thread" {
-			m = "a thread doesn't write tm's own files (config.toml, agents/, mods/, state/ and the rest of tm's home but its worktrees), the project folder or the worktree's .claude/settings.json and settings.local.json (they could turn tm's hooks off). Write elsewhere in your worktree, or say so in your report."
+			m = "a thread doesn't write tm's own files (config.toml, agents/, mods/, state/ and the rest of tm's home but its worktrees), the project folder, the worktree's .claude/settings.json and settings.local.json (they could turn tm's hooks off) or the shell's startup files and snapshots (.bashrc, .zshrc and the like: they run before each command). Write elsewhere in your worktree, or say so in your report."
 		} else {
-			m = "tm's own files (config.toml, agents/, mods/, state/ and the rest of tm's home but the projects and worktrees), the parts of the project folder tm keeps (threads/, inbox/, tasks/, journal/, TASKS.md and the like) and the folder's .claude/settings.json and settings.local.json (they could turn tm's hooks off) are written by tm or the user only: use tm's commands, or ask the user."
+			m = "tm's own files (config.toml, agents/, mods/, state/ and the rest of tm's home but the projects and worktrees), the parts of the project folder tm keeps (threads/, inbox/, tasks/, journal/, TASKS.md and the like) the folder's .claude/settings.json and settings.local.json (they could turn tm's hooks off) and the shell's startup files and snapshots (.bashrc, .zshrc and the like: they run before each command) are written by tm or the user only: use tm's commands, or ask the user."
 		}
 	case RuleTempFolders:
 		m = "other threads' temp folders are not read or written here. Keep your files in your own temp folder ($TMPDIR) or your worktree, or " + tell + "."

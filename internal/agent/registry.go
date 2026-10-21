@@ -271,6 +271,32 @@ func GuardSecrets(reg *Registry, home string, getenv func(string) string) []stri
 	return out
 }
 
+// ShellStartup are the user's shell startup files, relative to home or
+// under $ZDOTDIR: what a shell runs before a command, and what an
+// agent's snapshot of the user's shell (Claude's) is made from.
+var ShellStartup = []string{
+	".profile", ".bashrc", ".bash_profile", ".bash_login", ".bash_logout", ".bashrc.d",
+	".zshenv", ".zprofile", ".zshrc", ".zlogin", ".zlogout",
+	"$ZDOTDIR/.zshenv", "$ZDOTDIR/.zprofile", "$ZDOTDIR/.zshrc", "$ZDOTDIR/.zlogin", "$ZDOTDIR/.zlogout",
+	".kshrc", ".mkshrc", ".config/fish",
+}
+
+// ShellState is every file a session's shell may run before its
+// commands, which no session writes (the guard's floor): ShellStartup
+// and every known agent's [guard] shell_state, resolved as GuardSecrets
+// does.
+func ShellState(reg *Registry, home string, getenv func(string) string) []string {
+	out := GuardPaths(ShellStartup, home, getenv)
+	for _, m := range knownManifests(reg) {
+		for _, p := range GuardPaths(m.Guard.ShellState, home, getenv) {
+			if !slices.Contains(out, p) {
+				out = append(out, p)
+			}
+		}
+	}
+	return out
+}
+
 // SharedTemps is the temp folders that every known agent's sessions of
 // the user share ([guard] temp_scratch: Claude Code's /tmp/claude-<uid>,
 // with its sessions' scratchpads and task output), resolved as
