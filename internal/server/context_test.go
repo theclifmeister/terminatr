@@ -1,13 +1,17 @@
 package server
 
 import (
+	"log"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/home"
+	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/thread"
 )
 
 func TestContextWindow(t *testing.T) {
@@ -101,5 +105,32 @@ func TestContextAgentWindow(t *testing.T) {
 	s.setContext("s-1", "claude-x", 50_000, 10)
 	if c := get(); c.window != windowStandard {
 		t.Fatalf("a window below the context: %d", c.window)
+	}
+}
+
+// TestAgentUsage: usage the agent's JSONL file reports goes to the
+// thread's totals and the session's context use; a turn-only report
+// leaves the context alone.
+func TestAgentUsage(t *testing.T) {
+	t.Setenv("TERMINATR_HOME", t.TempDir())
+	p, err := project.New(project.Options{Slug: "demo"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := thread.Create(p, thread.Record{Title: "T", Session: "s-1", State: thread.Running})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := &Server{log: log.New(os.Stderr, "", 0), records: map[string]SessionRecord{
+		"s-1": {ID: "s-1", Role: proto.RoleThread, Project: p.Slug, Thread: r.ID},
+	}}
+	s.agentUsage("s-1", agent.Usage{Input: 1080, CacheRead: 11776, Output: 302, Context: 12856, ContextWindow: 258400, Key: "25402"})
+	s.agentUsage("s-1", agent.Usage{Turns: 1})
+	got, _ := thread.Load(p, r.ID)
+	if want := (thread.Usage{Turns: 1, Input: 1080, CacheRead: 11776, Output: 302, Uncosted: 13158}); got.Usage != want {
+		t.Fatalf("usage %+v, want %+v", got.Usage, want)
+	}
+	if v, ok := s.ctxOf.Load("s-1"); !ok || v.(ctxUse) != (ctxUse{12856, 258400}) {
+		t.Fatalf("context %+v %v", v, ok)
 	}
 }

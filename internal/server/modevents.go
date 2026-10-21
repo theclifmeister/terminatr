@@ -163,7 +163,7 @@ func (s *Server) lookModEvents(tr *modbus.Tracker) {
 	for _, info := range sessions {
 		n := modbus.Session{Session: info.ID, Project: info.Project, Thread: info.Thread, Role: info.Role,
 			Agent: info.Agent, State: info.State, Reason: info.Reason, Context: info.ContextPercent()}
-		n.Tokens, n.CostUSD = sessionUsage(info)
+		n.Tokens, n.CostUSD, n.Uncosted = sessionUsage(info)
 		ss = append(ss, n)
 	}
 	tr.Sessions(ss)
@@ -190,19 +190,19 @@ func (s *Server) lookModEvents(tr *modbus.Tracker) {
 // sessionUsage is what session info's thread has used so far: its
 // record's totals while the session is the thread's; none for a session
 // that is no thread's.
-func sessionUsage(info proto.SessionInfo) (int64, float64) {
+func sessionUsage(info proto.SessionInfo) (int64, float64, int64) {
 	if info.Role != proto.RoleThread || info.Project == "" || info.Thread == "" {
-		return 0, 0
+		return 0, 0, 0
 	}
 	p, err := project.Open(info.Project)
 	if err != nil {
-		return 0, 0
+		return 0, 0, 0
 	}
 	r, err := thread.Load(p, info.Thread)
 	if err != nil || r.Session != info.ID {
-		return 0, 0
+		return 0, 0, 0
 	}
-	return r.Usage.Tokens(), r.Usage.CostUSD
+	return r.Usage.Tokens(), r.Usage.CostUSD, r.Usage.Uncosted
 }
 
 // sessionQuestions are the questions open on the sessions of a project:

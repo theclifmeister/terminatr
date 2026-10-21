@@ -5,7 +5,7 @@
                                    │  tasks: 0 need you · 1 in motion · 0 on deck                                              │ project   demo
                                    │ OTHER SESSIONS ───────────────────────────────────────────────────────────────────────────│ thread    t-0001
                                    │  none outside the projects (1 in them)                                                    │ session   <session>
-                                   │                                                                                           │ usage     22.6k tokens, $0.00
+                                   │                                                                                           │ usage     22.6k tokens, no cost
                                    │                                                                                           │ progress  ▰▰▰▱▱ 50% 1/2
                                    │                                                                                           │ now       ▸ Fix
                                    │                                                                                           │ updated   <duration> ago

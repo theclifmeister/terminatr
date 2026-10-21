@@ -186,7 +186,7 @@ func TestTailUsageTable(t *testing.T) {
 		CacheCreation: "u.cw", CostUSD: "cost", Model: "model"}
 	var obj map[string]any
 	json.Unmarshal([]byte(`{"type":"usage","u":{"in":5,"out":-3,"cw":"7"},"cost":0.25,"model":"m-1"}`), &obj)
-	if got := u.read(obj); got == nil || *got != (Usage{Turns: 1, Input: 5, CostUSD: 0.25, Model: "m-1"}) {
+	if got := u.read(obj); got == nil || *got != (Usage{Turns: 1, Input: 5, CostUSD: 0.25, HasCost: true, Model: "m-1"}) {
 		t.Errorf("usage line: %+v", got)
 	}
 	json.Unmarshal([]byte(`{"type":"other","u":{"in":5}}`), &obj)
@@ -254,6 +254,13 @@ func TestTailUsageClaude(t *testing.T) {
 			t.Errorf("line %d: usage %+v, want %+v", i, l.Usage, want[i])
 		}
 	}
+	// Only fixed windows are listed: a model whose window may be either
+	// (the 4.x 1M), or one not known yet, is left to the server's guess.
+	for _, m := range []string{"claude-opus-4-6", "claude-sonnet-4-6", "claude-opus-4-8", "claude-opus-6", "claude-opus-5-5-x"} {
+		if w := tail.Usage.window(m); w != 0 {
+			t.Errorf("%s: window %d, want none", m, w)
+		}
+	}
 }
 
 // TestTailUsageContextOptions: context_from_counts sums the counts in
@@ -288,5 +295,32 @@ func TestTailUsageContextOptions(t *testing.T) {
 		if _, err := ParseManifest([]byte(base + table)); (err == nil) != ok {
 			t.Errorf("%q: err = %v, want ok %v", table, err, ok)
 		}
+	}
+}
+
+// TestJSONLTailAccepts: Claude's transcript is followed only under its
+// projects folder and named for the session's id.
+func TestJSONLTailAccepts(t *testing.T) {
+	tail := claude(t).Sources().JSONLTail
+	root := filepath.Join(string(filepath.Separator)+"h", ".claude")
+	v := SourceVars{ConfigDir: root, AgentSID: "s1"}
+	for p, ok := range map[string]bool{
+		filepath.Join(root, "projects", "-r-p", "s1.jsonl"):                   true,
+		filepath.Join(root, "projects", "-r-p", "s2.jsonl"):                   false,
+		filepath.Join(root, "projects", "-r-p", "s1", "subagents", "a.jsonl"): false,
+		filepath.Join(root, "projects", "..", "..", "etc", "s1.jsonl"):        false,
+		filepath.Join(root, "other", "s1.jsonl"):                              false,
+		filepath.Join("rel", "s1.jsonl"):                                      false,
+		filepath.Join(string(filepath.Separator)+"tmp", "x", "s1.jsonl"):      false,
+	} {
+		if _, got := tail.Accepts(p, v); got != ok {
+			t.Errorf("%s: %v, want %v", p, got, ok)
+		}
+	}
+	if r, _ := tail.Accepts(filepath.Join(root, "projects", "-r-p", "s1.jsonl"), v); r != filepath.Join(root, "projects") {
+		t.Errorf("opened under %q, want the projects folder", r)
+	}
+	if _, ok := tail.Accepts(filepath.Join(root, "projects", "-r-p", ".jsonl"), SourceVars{ConfigDir: root}); ok {
+		t.Error("accepted with no session id")
 	}
 }

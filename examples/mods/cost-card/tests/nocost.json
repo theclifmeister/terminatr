@@ -1,0 +1,18 @@
+{
+  "name": "tokens with no cost source show no cost instead of $0.00",
+  "store": { "threads": { "demo/t-0012": { "project": "demo", "thread": "t-0012", "title": "Login page", "tokens": 1000, "cost": 0 } } },
+  "events": [
+    { "name": "view.opened", "data": { "view": "cost", "slot": "dashboard.card", "width": 60, "height": 8 } },
+    { "name": "session.state", "project": "demo",
+      "data": { "session": "s-7", "project": "demo", "thread": "t-0012", "role": "thread", "state": "idle", "context": 30, "tokens": 4000, "uncosted": 4000 } }
+  ],
+  "expect": {
+    "calls": [
+      { "method": "ui.view.set", "params": { "view": "cost" } },
+      { "method": "ui.view.set", "params": { "view": "cost", "widget": { "children": [
+        { "pairs": [{ "key": "today", "value": [{ "text": "no cost" }, { "text": "  3.0k tokens" }] }, {}] },
+        {},
+        { "rows": [{ "id": "demo/t-0012", "cells": [[{ "text": "demo Login page" }], [{ "text": "4.0k" }], [{ "text": "no cost" }]] }] } ] } } }
+    ]
+  }
+}

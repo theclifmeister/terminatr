@@ -222,14 +222,57 @@ func (f *StatusFile) Read(data []byte, s *Sources) (StatusReading, error) {
 type JSONLTail struct {
 	// PathField is the hook payload field that names the file, e.g.
 	// Claude's transcript_path.
-	PathField string     `toml:"path_field"`
-	Rules     []TailRule `toml:"rules"`
+	PathField string `toml:"path_field"`
+	// Root and Name, when set, are where the named file may be: under
+	// the folder Root and with a base name matching the glob Name
+	// (path.Match), both templates of SourceVars (.AgentSID the
+	// session id the event gave). A file elsewhere isn't followed: a
+	// payload names any file, and the session's usage is read from it.
+	Root  string     `toml:"root"`
+	Name  string     `toml:"name"`
+	Rules []TailRule `toml:"rules"`
 	// Usage reads what the agent used from the lines that report it.
 	Usage *TailUsage `toml:"usage"`
 	// Refused are the lines that say the agent's provider refused the
 	// session's model (docs/SPEC.md §8.2, Models): tm then marks that
 	// model refused for the user's account.
 	Refused []RefusedRule `toml:"refused"`
+}
+
+// Accepts reports whether the file p, absolute, is one to follow with
+// v: under Root and named as Name says, when they are set. root is the
+// folder it is to be opened under (Root, else p's own folder), so that
+// no link on the way leads out of it.
+func (t *JSONLTail) Accepts(p string, v SourceVars) (root string, ok bool) {
+	if !filepath.IsAbs(p) {
+		return "", false
+	}
+	p = filepath.Clean(p)
+	root = filepath.Dir(p)
+	if t.Root != "" {
+		r, err := render(t.Root, v)
+		if err != nil || !filepath.IsAbs(r) {
+			return "", false
+		}
+		root = filepath.Clean(r)
+		rel, err := filepath.Rel(root, filepath.Dir(p))
+		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return "", false
+		}
+	}
+	if t.Name != "" {
+		if v.AgentSID == "" && strings.Contains(t.Name, "AgentSID") {
+			return "", false // named for a session not known yet
+		}
+		name, err := render(t.Name, v)
+		if err != nil || name == "" {
+			return "", false
+		}
+		if ok, err := path.Match(name, filepath.Base(p)); err != nil || !ok {
+			return "", false
+		}
+	}
+	return root, true
 }
 
 // RefusedRule matches a line saying the model was refused; TextField
@@ -345,6 +388,7 @@ type Usage struct {
 	CacheRead     int64
 	CacheCreation int64
 	CostUSD       float64
+	HasCost       bool // the manifest has a cost_usd path
 	PlanPct       float64
 	HasPlan       bool
 	Context       int64
@@ -431,6 +475,7 @@ func (u *TailUsage) read(obj map[string]any) *Usage {
 	r.Input, r.Output = int64(num(u.Input)), int64(num(u.Output))
 	r.CacheRead, r.CacheCreation = int64(num(u.CacheRead)), int64(num(u.CacheCreation))
 	r.CostUSD = num(u.CostUSD)
+	r.HasCost = u.CostUSD != ""
 	r.Context = int64(num(u.Context))
 	if !found {
 		if turn {

@@ -419,9 +419,16 @@ type HookMap struct {
 	// judged only when the template uses it).
 	Respond string `toml:"respond"`
 	// Timeout is how long tm hook waits for the response: "" (the
-	// default, 500 ms) or "context" (3 s, for the event whose response
-	// carries the session's context). See HookTimeout.
+	// default, 500 ms), "context" (3 s, for the event whose response
+	// carries the session's context) or "command" (3 s, sent once, for a
+	// Command's entry). See HookTimeout.
 	Timeout string `toml:"timeout"`
+}
+
+// Matches reports whether the entry applies to the hook event (event,
+// payload).
+func (h HookMap) Matches(event string, payload map[string]any) bool {
+	return h.Event == event && matches(h.Match, payload)
 }
 
 // ClearsContext reports whether agent a's manifest says the hook event
@@ -452,6 +459,7 @@ const (
 const (
 	HookTimeoutResponse = "response"
 	HookTimeoutContext  = "context"
+	HookTimeoutCommand  = "command"
 )
 
 // HookContextWait is how long tm hook waits, in all, for the response to
@@ -594,12 +602,12 @@ func (m *Manifest) validate() error {
 			errs = append(errs, fmt.Errorf("hooks[%d]: counter must be +name or -name, with counter_key", i))
 		}
 		switch h.Timeout {
-		case "", HookTimeoutResponse, HookTimeoutContext:
+		case "", HookTimeoutResponse, HookTimeoutContext, HookTimeoutCommand:
 			if h.Timeout != "" && h.Respond == "" {
 				errs = append(errs, fmt.Errorf("hooks[%d]: timeout needs respond", i))
 			}
 		default:
-			errs = append(errs, fmt.Errorf("hooks[%d]: timeout %q is not response|context", i, h.Timeout))
+			errs = append(errs, fmt.Errorf("hooks[%d]: timeout %q is not response|context|command", i, h.Timeout))
 		}
 	}
 	for i, t := range m.Todos {
@@ -880,20 +888,24 @@ func (a *manifestAgent) Hook(ev HookEvent, env HookEnv) ([]Signal, HookResult, e
 		if ignored {
 			continue
 		}
-		if h.State != "" {
-			sig := base
-			sig.State, sig.Reason, sig.Transient = h.State, h.Reason, h.Transient
-			sigs = append(sigs, sig)
-		}
 		// The first entry whose response says something answers; one
 		// that renders nothing (a guard that let the call through, a
 		// command that didn't run) leaves it to the next.
+		answered := false
 		if h.Respond != "" && len(res.Stdout) == 0 {
-			out, err := renderRespond(h.Respond, h.Command, ev, env, a.m.Hook)
+			out, ran, err := renderRespond(h.Respond, h.Command, ev, env, a.m.Hook)
 			if err != nil {
 				return sigs, res, err
 			}
-			res.Stdout = out
+			res.Stdout, answered = out, ran
+		}
+		// A command's entry sets its state only when the command ran
+		// and said what came of it: otherwise the prompt goes on, and
+		// the event's other entries say the state.
+		if h.State != "" && (h.Command == "" || answered) {
+			sig := base
+			sig.State, sig.Reason, sig.Transient = h.State, h.Reason, h.Transient
+			sigs = append(sigs, sig)
 		}
 	}
 	if ignored {
@@ -997,8 +1009,14 @@ var funcs = template.FuncMap{
 	// with no colour: colors "error" .Theme.Fg.bad "success" "" ->
 	// {"error":"#bf616a"}.
 	"colors": colors,
-	// list is its strings, for a grant given as is: list "mcp__terminatr".
-	"list": func(s ...string) []string { return append([]string{}, s...) },
+	// list is its strings when cond holds, else none, for a grant only
+	// some launches get: list (not .MCPClash) "mcp__terminatr".
+	"list": func(cond bool, s ...string) []string {
+		if !cond {
+			return []string{}
+		}
+		return s
+	},
 	// concat joins lists, for building one JSON array from several grants.
 	"concat": func(lists ...[]string) []string {
 		out := []string{}
@@ -1250,10 +1268,12 @@ func render(tmpl string, data any) (string, error) {
 
 // renderRespond renders a hook response. .Context and .Guard are
 // methods so the (possibly expensive) context is rendered, and the call
-// judged, only if the template uses them.
-func renderRespond(tmpl, command string, ev HookEvent, env HookEnv, hook HookTrim) ([]byte, error) {
-	s, err := render(tmpl, &respondData{ev: ev, env: env, hook: hook, command: command})
-	return []byte(s), err
+// judged, only if the template uses them. ran says the entry's command
+// ran and said what came of it.
+func renderRespond(tmpl, command string, ev HookEvent, env HookEnv, hook HookTrim) (out []byte, ran bool, err error) {
+	d := &respondData{ev: ev, env: env, hook: hook, command: command}
+	s, err := render(tmpl, d)
+	return []byte(s), d.result != "", err
 }
 
 type respondData struct {

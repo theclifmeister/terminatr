@@ -199,11 +199,12 @@ func TestHookSessionStartLimit(t *testing.T) {
 // TestHookSessionStartRetried (T493): a SessionStart the server didn't
 // take (closed before its hello, or refused) is sent again, so neither
 // the context nor the messaging token is lost; an event that needs no
-// context is not.
+// context is not, nor a coordinator's /saveclear, which the server may
+// have run already.
 func TestHookSessionStartRetried(t *testing.T) {
-	for _, event := range []string{"SessionStart", "Stop"} {
+	for _, event := range []string{"SessionStart", "Stop", "UserPromptSubmit"} {
 		t.Run(event, func(t *testing.T) {
-			e, out, _, sock := hookEnv(t, `{"hook_event_name":"`+event+`","source":"startup"}`)
+			e, out, _, sock := hookEnv(t, `{"hook_event_name":"`+event+`","source":"startup","prompt":"/saveclear"}`)
 			log := filepath.Join(t.TempDir(), "hook.log")
 			getenv := e.Getenv
 			e.Getenv = func(k string) string {
@@ -248,9 +249,9 @@ func TestHookSessionStartRetried(t *testing.T) {
 				}
 			}()
 			runHookTimed(t, e, "--agent", "claude")
-			if event == "Stop" {
+			if event != "SessionStart" {
 				if len(conns) != 1 || out.Len() != 0 {
-					t.Fatalf("Stop: %d connections, stdout %q", len(conns), out)
+					t.Fatalf("%s: %d connections, stdout %q", event, len(conns), out)
 				}
 				return
 			}

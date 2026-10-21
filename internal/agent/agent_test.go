@@ -133,6 +133,18 @@ func TestClaudeLaunch(t *testing.T) {
 	if want := []string{"Edit(//h/.terminatr/projects/p/**)"}; !reflect.DeepEqual(settings.Permissions.Deny, want) {
 		t.Fatalf("deny = %q, want %q (Edit rules only)", settings.Permissions.Deny, want)
 	}
+	// A server "terminatr" of Claude's own config: its tools get no rule.
+	clash := spec
+	clash.MCPClash = true
+	if l, err := a.Launch(clash); err != nil {
+		t.Fatal(err)
+	} else if s := parseSettings(t, l.Files["claude-settings.json"]); !reflect.DeepEqual(s.Permissions.Allow, []string{"Read(//h/.terminatr/projects/p/**)"}) ||
+		!reflect.DeepEqual(s.Permissions.Ask, []string{"mcp__terminatr"}) {
+		t.Fatalf("clash: allow = %q, ask = %q", s.Permissions.Allow, s.Permissions.Ask)
+	}
+	if len(settings.Permissions.Ask) != 0 {
+		t.Fatalf("ask = %q without a clash", settings.Permissions.Ask)
+	}
 	// A worktree's git paths: directories and files as allow rules, the
 	// git dir's configuration as deny rules (docs/SPEC.md §8.6, Access).
 	git := spec
@@ -373,7 +385,7 @@ func TestClaudeLaunch(t *testing.T) {
 }
 
 type claudeSettings struct {
-	Permissions struct{ Allow, Deny []string }
+	Permissions struct{ Allow, Ask, Deny []string }
 	Sandbox     struct {
 		Enabled                  bool
 		AllowUnsandboxedCommands *bool
@@ -1365,10 +1377,16 @@ func TestHookCommand(t *testing.T) {
 		if len(sigs) == 0 || sigs[len(sigs)-1].State != StateIdle {
 			t.Errorf("%s: signals %+v, want idle last", prompt, sigs)
 		}
-		_, res, _ = a.Hook(HookEvent{Event: "UserPromptSubmit", Payload: map[string]any{"prompt": prompt}},
-			HookEnv{Command: func(string) string { return "" }})
-		if len(res.Stdout) != 0 {
-			t.Errorf("%s not run: %s", prompt, res.Stdout)
+		// No answer (a session that can't run it): the
+		// prompt goes on, and the session is working, not idle.
+		for _, env := range []HookEnv{{Command: func(string) string { return "" }}, {}} {
+			sigs, res, _ = a.Hook(HookEvent{Event: "UserPromptSubmit", Payload: map[string]any{"prompt": prompt}}, env)
+			if len(res.Stdout) != 0 {
+				t.Errorf("%s not run: %s", prompt, res.Stdout)
+			}
+			if len(sigs) == 0 || sigs[len(sigs)-1].State != StateWorking {
+				t.Errorf("%s not run: signals %+v, want working last", prompt, sigs)
+			}
 		}
 	}
 	var ran bool

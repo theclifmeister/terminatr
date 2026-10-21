@@ -142,9 +142,9 @@ func TestTrackerSessions(t *testing.T) {
 	tr.Sessions([]Session{a, c})
 	tr.Sessions([]Session{c})
 	want := []string{
-		"session.state {Session:s-1 Project:p Thread: Role:coordinator Agent:claude State:idle Reason: Context:40 Tokens:0 CostUSD:0}",
-		"session.state {Session:s-2 Project: Thread: Role:shell Agent: State: Reason: Context:-1 Tokens:0 CostUSD:0}",
-		"session.state {Session:s-1 Project:p Thread: Role:coordinator Agent:claude State:exited Reason: Context:40 Tokens:0 CostUSD:0}",
+		"session.state {Session:s-1 Project:p Thread: Role:coordinator Agent:claude State:idle Reason: Context:40 Tokens:0 CostUSD:0 Uncosted:0}",
+		"session.state {Session:s-2 Project: Thread: Role:shell Agent: State: Reason: Context:-1 Tokens:0 CostUSD:0 Uncosted:0}",
+		"session.state {Session:s-1 Project:p Thread: Role:coordinator Agent:claude State:exited Reason: Context:40 Tokens:0 CostUSD:0 Uncosted:0}",
 	}
 	if got := drain(t, s); fmt.Sprint(got) != fmt.Sprint(want) {
 		t.Fatalf("events:\n%q\nwant\n%q", got, want)
