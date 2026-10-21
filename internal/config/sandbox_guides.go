@@ -201,7 +201,7 @@ const (
 
 // PresetGuides say what each preset's guide tells threads, by title.
 var PresetGuides = map[string]string{
-	GuideBrowserTesting:   "how to run Playwright and other Chromium tools inside macOS's sandbox: the headless shell in one process, and a ready Playwright test setup; it says whether local ports are open",
+	GuideBrowserTesting:   "how to run Playwright and other Chromium tools inside macOS's sandbox: the headless shell in one process, a ready Playwright test setup and a screenshot command; it says whether local ports are open",
 	GuideBrowserDownloads: "how to install npm packages and Playwright's browser inside the sandbox: the npm cache and browsers path of the thread's own, curl when Playwright's downloader is cut off, and which download hosts are open",
 }
 
@@ -294,8 +294,15 @@ export { expect } from '@playwright/test';
 
   A test that calls browser.newContext() itself still needs a browser of its
   own (chromium.launch with the same args).
-- Not channel 'chrome' or 'chromium' (full Chrome) and not headed mode: those
-  fail in this sandbox.
+- A screenshot of a page, without Playwright: the headless shell's own
+  command line, in one process. It takes a true phone width, and
+  --blink-settings=preferredColorScheme=0 (dark) or =1 (light) sets the
+  color scheme:
+  HS=$(ls -d "${PLAYWRIGHT_BROWSERS_PATH:-$HOME/Library/Caches/ms-playwright}"/chromium_headless_shell-*/chrome-headless-shell-mac-*/chrome-headless-shell | tail -1)
+  "$HS" --single-process --user-data-dir="$TMPDIR/hs-profile" \
+    --window-size=390,844 --screenshot="$TMPDIR/shot.png" "file://$PWD/page.html"
+- Not channel 'chrome' or 'chromium' (full Chrome), Google Chrome's own
+  --headless or headed mode: those fail in this sandbox.
 
 %s%s`
 

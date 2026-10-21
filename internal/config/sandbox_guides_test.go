@@ -87,6 +87,11 @@ func TestPresetGuides(t *testing.T) {
 	if len(r) != 1 || !strings.Contains(r[0].Body, "--single-process") || !strings.Contains(r[0].Body, "hasn't opened local ports") || strings.Contains(r[0].Body, "Downloads:") {
 		t.Errorf("testing: %q", r)
 	}
+	// A screenshot without Playwright: the headless shell's own command
+	// line, in one process (T638).
+	if !strings.Contains(r[0].Body, `"$HS" --single-process`) || !strings.Contains(r[0].Body, "--screenshot=") {
+		t.Errorf("testing, no screenshot command: %q", r[0].Body)
+	}
 	if r = WordRules(p.Rules, ThreadSandbox{LocalPorts: true}); !strings.Contains(r[0].Body, "The\nhuman also opened local ports") {
 		t.Errorf("testing, ports open: %q", r[0].Body)
 	}
