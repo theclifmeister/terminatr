@@ -117,10 +117,10 @@ func (e *Env) fullConsole(own bool, goTo *tui.Target) error {
 		}
 	}
 	attach := vc.View().Mode == view.ModeLayout
-	flash := modsNote  // the popup's last message, for the session's status bar
-	command := ""      // a prefix command typed over the popup, for the session
+	flash := modsNote   // the popup's last message, for the session's status bar
+	command := ""       // a prefix command typed over the popup, for the session
 	var typed []tui.Key // keys typed through a coordinator's row, for its pane
-	sideFocus := false // the sidebar has the keyboard, across screens
+	sideFocus := false  // the sidebar has the keyboard, across screens
 	// handover: the screen is up, the last screen's frame showing, for the
 	// next to draw over (T372); the first starts it.
 	handover := false
