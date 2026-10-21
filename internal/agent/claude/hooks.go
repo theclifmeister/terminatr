@@ -11,9 +11,9 @@ import (
 // command hooks are how tm sees a Claude session's state and judges its
 // tool calls, so a session without them runs unguarded. tm's --settings
 // file sets disableAllHooks to false, which wins over the user's and the
-// folder's own settings; Claude's managed settings win over it, and
-// their allowManagedHooksOnly drops every hook but the managed ones,
-// tm's plugin's included.
+// folder's own settings (checked live on 2.1.306); Claude's managed
+// settings win over it, and their allowManagedHooksOnly drops every hook
+// but the managed ones, tm's plugin's included.
 
 // managedSettings are where Claude reads managed settings, per OS (only
 // the one for this OS exists).

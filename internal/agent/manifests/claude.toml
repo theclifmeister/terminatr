@@ -158,8 +158,11 @@ tm didn't take /answer. Run `tm ask open` in the shell and say in one line what 
 # or the folder's own.
 # disableAllHooks is pinned false: the hooks are how tm sees the session
 # and guards its tool calls, and --settings wins over the user's and the
-# folder's own settings (Claude's managed settings excepted; tm doctor
-# and the launch warn of those, internal/agent/claude/hooks.go).
+# folder's own settings (checked live on 2.1.306: a plugin hook that the
+# user's settings.json, the folder's .claude/settings.json or its
+# settings.local.json turned off with disableAllHooks: true ran again
+# with this pin). Claude's managed settings win over it; tm doctor and
+# the launch warn of those (internal/agent/claude/hooks.go).
 # Never put statusLine here: --settings would replace the user's own.
 # Outside safe mode Claude draws with tm's own theme in its config dir
 # ([theme] below, docs/SPEC.md §8.6), which the server rewrites on every
