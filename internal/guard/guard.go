@@ -163,6 +163,8 @@ type Rules struct {
 	// from a folder the line can change (lineFolder) is not placed.
 	line   string
 	lineCd bool
+	// physical: the line may make its cds physical (physicalCd).
+	physical bool
 	// olds are the folders the line was in before its folder now
 	// ($OLDPWD, ~-; "" one it can't tell), as judgeLine follows its cds.
 	olds []string
@@ -675,7 +677,54 @@ func (r Rules) target(p string) string {
 	if r.Resolve == nil {
 		return r.abs(p)
 	}
-	return r.abs(r.Resolve(r.joined(p)))
+	return r.abs(r.resolve(r.joined(p)))
+}
+
+// fsCheck is what one file-system check (Resolve, File) counts against
+// a judge's budget, as bytes read: a line that needs more than
+// judgeParse/fsCheck of them is refused as unreadable at once, rather
+// than run out the deadline on a slow file system. A judge checks each
+// path once.
+const fsCheck = judgeParse / 64
+
+// resolve is r.Resolve(p), counted against the judge's budget; past it,
+// p as it is (Judge refuses the call).
+func (r Rules) resolve(p string) string {
+	if r.ps == nil {
+		return r.Resolve(p)
+	}
+	if q, ok := r.ps.resolved[p]; ok {
+		return q
+	}
+	if r.ps.stop(fsCheck, r.depth) {
+		return p
+	}
+	q := r.Resolve(p)
+	if r.ps.resolved == nil {
+		r.ps.resolved = map[string]string{}
+	}
+	r.ps.resolved[p] = q
+	return q
+}
+
+// file is r.File(p), counted against the judge's budget as resolve is;
+// past it, false.
+func (r Rules) file(p string) bool {
+	if r.ps == nil {
+		return r.File(p)
+	}
+	if f, ok := r.ps.files[p]; ok {
+		return f
+	}
+	if r.ps.stop(fsCheck, r.depth) {
+		return false
+	}
+	f := r.File(p)
+	if r.ps.files == nil {
+		r.ps.files = map[string]bool{}
+	}
+	r.ps.files[p] = f
+	return f
 }
 
 // judgeWrite judges a file tool writing p (absolute, where the write
@@ -1013,6 +1062,7 @@ func (r Rules) judgeLine(command string, cwds []string) *Denial {
 	}
 	r.line += command
 	r.lineCd = r.lineCd || r.hasCd(command)
+	r.physical = r.physical || physicalCd.MatchString(command)
 	parts, ok := r.topLevel(command)
 	if !ok {
 		// A line it can't split: one part, with any cd in it leaving its
@@ -2138,12 +2188,19 @@ type nowhere struct{ dir string }
 // folder it names plainly, home for none, else unknown: a pattern or
 // braces (cd ~/.term*) may name another folder, and so may a relative
 // one CDPATH looks up, when the line sets it. Its redirections (pushd x
-// >/dev/null) are no folder.
+// >/dev/null) are no folder. A physical cd (cd -P, or one the line may
+// have made physical: physicalCd) leaves the folder with its links
+// followed (Resolve), so its .. is the real parent; where the guard
+// can't follow them, or can't tell a logical cd from a physical one
+// that lands elsewhere, the folder is unknown.
 func (n nowhere) cd(r Rules, cmd string, args []string) nowhere {
 	var to []string
+	mode := byte(0)
 	for _, a := range unredirected(args) {
 		if !strings.HasPrefix(a, "-") || a == "-" {
 			to = append(to, a)
+		} else if i := strings.LastIndexAny(a, "LP"); i > 0 && !strings.HasPrefix(a, "--") {
+			mode = a[i]
 		}
 	}
 	switch {
@@ -2166,8 +2223,24 @@ func (n nowhere) cd(r Rules, cmd string, args []string) nowhere {
 		return nowhere{}
 	}
 	r.Cwd = n.dir
-	return nowhere{dir: r.abs(a)}
+	dir := r.abs(a)
+	if mode == 'P' || mode == 0 && r.physical {
+		if r.Resolve == nil {
+			return nowhere{}
+		}
+		real := r.abs(r.resolve(r.joined(a)))
+		if mode == 0 && real != dir {
+			return nowhere{}
+		}
+		dir = real
+	}
+	return nowhere{dir: dir}
 }
+
+// physicalCd is a line that may make its cds physical: bash's set -P or
+// set -o physical (or a shell started with them), zsh's chase_links or
+// chase_dots.
+var physicalCd = regexp.MustCompile(`\bphysical\b|(?i:chase_?(?:links|dots))|(?:^|[\s;&|(){}])(?:set|bash|sh|zsh|ksh|dash)(?:\s+[-+]\S*)*\s+-[A-Za-z]*P`)
 
 // globReaches: glob p (a wildcard in it) could name a folder that holds
 // root, or root itself: its part before the first wildcard, back to the
@@ -2727,6 +2800,10 @@ type parse struct {
 	// traps are the actions of the traps the lines read set, in order
 	// (judgeLine).
 	traps []string
+	// resolved and files are what the file system answered (resolve,
+	// file).
+	resolved map[string]string
+	files    map[string]bool
 }
 
 // spent reports whether the judge's reading went past its limits (or
@@ -3185,8 +3262,8 @@ func (r Rules) worktreeScript(p string) bool {
 		return false
 	}
 	j := r.joined(p)
-	at := r.abs(r.Resolve(j))
-	return !devOrProc.MatchString(at) && r.under(at, r.wt) && r.File(j)
+	at := r.abs(r.resolve(j))
+	return !devOrProc.MatchString(at) && r.under(at, r.wt) && r.file(j)
 }
 
 // scriptWriters are the commands that may write, link or move a file
