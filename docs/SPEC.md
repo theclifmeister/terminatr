@@ -1469,6 +1469,7 @@ Claude Code is pure data (`manifests/claude.toml`), except for the optional sock
 - **Question menus.** An `AskUserQuestion` menu lists the options by number, then `Type something.`, a text field once focused. `[answer]` names the `blocked-question` rule, that option and Enter as its submit, for `tm thread answer` (§11.2).
 - **Found against 2.1.289:**
   - The prompt box line is `❯` followed by a **no-break space** (U+00A0), which RE2's `\s` doesn't match; the empty-box rule (`inject.empty_rule`, used by the paste injector) allows for it.
+  - **Mid-turn the `❯` is dim** (2.1.306, T653). The empty-box rule skips dim cells, so ghost text isn't read as typed. While a turn runs it therefore also takes a blank row between the box's two rules for an empty box. Before this, `tm thread prompt --now` took every box mid-turn for a draft: it queued the prompt and answered `queued (prompt box not empty)`.
   - A fresh session file has **no `status`** until Claude's first state change; until then the tracker uses hooks.
   - The status file is written ~100 ms **after** the hook: a hook newer than the file stands in for it for up to 1 s.
   - Claude saves a conversation only after the first prompt, so `--resume` of an **unprompted** session fails ("No conversation found"). The server records whether a session was prompted and relaunches unprompted ones fresh.
