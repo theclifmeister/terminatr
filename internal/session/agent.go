@@ -207,7 +207,14 @@ type agentRT struct {
 	// even drawn.
 	escapes  map[string]*escapeMark
 	emptyBox bool // the empty-box rule matched at the last evaluation
-	blocker  bool // a blocked rule matched at the last evaluation
+	// steers are the prompts PromptNow pasted into the running turn that
+	// the agent may not have read yet: until it does, Claude shows them
+	// in its prompt box, which then holds no draft. Forgotten once the
+	// box reads empty after showing them (steerShown), the agent idles,
+	// or a key is typed into the box (Input).
+	steers     []string
+	steerShown bool
+	blocker    bool // a blocked rule matched at the last evaluation
 	// permDialog: a permission dialog's rule matched at the last
 	// evaluation; escapeDialog: the one that says it runs a command
 	// outside the sandbox ([guard] escape_rule).
@@ -820,6 +827,7 @@ func (s *Session) evalScreen(rt *agentRT) {
 		return
 	}
 	best, all := rt.eng.Eval(detect.Screen{Title: title, Rows: rows, NoDim: noDim})
+	st := rt.tr.State().State
 	var names []string
 	empty, blocker, perm, esc := false, false, false, false
 	for _, m := range all {
@@ -837,6 +845,16 @@ func (s *Session) evalScreen(rt *agentRT) {
 	}
 	rt.mu.Lock()
 	rt.emptyBox, rt.blocker, rt.permDialog, rt.escapeDialog = empty, blocker, perm, esc
+	if len(rt.steers) > 0 {
+		switch {
+		case st == agent.StateIdle || st == agent.StateExited:
+			rt.steers, rt.steerShown = nil, false // the turn took them, or ended
+		case !empty:
+			rt.steerShown = true
+		case rt.steerShown:
+			rt.steers, rt.steerShown = nil, false // the agent read them
+		}
+	}
 	rt.sweepEscapes()
 	if best != nil && best.State == agent.StateWorking && rt.workingSince.IsZero() {
 		rt.workingSince = time.Now()
@@ -849,7 +867,7 @@ func (s *Session) evalScreen(rt *agentRT) {
 	rt.tr.Screen(sig, names)
 	if keys := rt.answer(sig.Rule, time.Now()); keys != "" && !rt.observed {
 		s.cfg.Logf("session %s: answering %s", s.cfg.ID, sig.Rule)
-		if err := s.Input([]byte(keys)); err != nil {
+		if err := s.input([]byte(keys)); err != nil {
 			s.cfg.Logf("session %s: answering %s: %v", s.cfg.ID, sig.Rule, err)
 		}
 	}
@@ -1157,13 +1175,13 @@ func (s *Session) deliverPrompts(rt *agentRT, now time.Time) {
 // paste), then keys, when set, interruptDelay after that.
 func (s *Session) paste(text, keys string) {
 	text = strings.ReplaceAll(text, "\x1b[201~", "")
-	s.Input([]byte("\x1b[200~" + text + "\x1b[201~"))
+	s.input([]byte("\x1b[200~" + text + "\x1b[201~"))
 	go func() {
 		time.Sleep(pasteEnterDelay)
-		s.Input([]byte("\r"))
+		s.input([]byte("\r"))
 		if keys != "" {
 			time.Sleep(interruptDelay)
-			s.Input([]byte(keys))
+			s.input([]byte(keys))
 		}
 	}()
 }

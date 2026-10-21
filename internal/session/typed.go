@@ -58,6 +58,15 @@ type typedLine struct {
 	inexact bool
 	pending []byte // an escape sequence or rune cut at a write's end
 	paste   bool   // between the bracketed-paste markers
+	keys    int    // keys taken: text, Enter, edits; not reports or replies
+}
+
+// typesKeys reports whether p holds a key that edits or submits the
+// prompt box, beside mouse and focus reports and terminal replies.
+func typesKeys(p []byte) bool {
+	var l typedLine
+	l.feed(p, func(string, bool) {})
+	return l.keys > 0 || len(l.pending) > 0 && l.pending[0] != 0x1b // a rune cut short
 }
 
 const maxTypedLine = 4096 // runes kept; a longer line only needs its start
@@ -110,9 +119,13 @@ func (l *typedLine) feed(p []byte, submit func(line string, exact bool)) {
 			var r rune
 			r, n = utf8.DecodeRune(b)
 			l.add(r)
+			l.keys++
 			c = 0
 		}
 		b = b[n:]
+		if c != 0 {
+			l.keys++
+		}
 		switch {
 		case c == 0:
 		case c == '\r' || c == '\n':
@@ -189,6 +202,7 @@ func (l *typedLine) text(b []byte) {
 	for len(b) > 0 {
 		r, n := utf8.DecodeRune(b)
 		l.add(r)
+		l.keys++
 		b = b[n:]
 	}
 }
