@@ -347,6 +347,7 @@ type Usage struct {
 	CacheRead     int64
 	CacheCreation int64
 	CostUSD       float64
+	HasCost       bool // the manifest has a cost_usd path
 	PlanPct       float64
 	HasPlan       bool
 	Context       int64
@@ -433,6 +434,7 @@ func (u *TailUsage) read(obj map[string]any) *Usage {
 	r.Input, r.Output = int64(num(u.Input)), int64(num(u.Output))
 	r.CacheRead, r.CacheCreation = int64(num(u.CacheRead)), int64(num(u.CacheCreation))
 	r.CostUSD = num(u.CostUSD)
+	r.HasCost = u.CostUSD != ""
 	r.Context = int64(num(u.Context))
 	if !found {
 		if turn {

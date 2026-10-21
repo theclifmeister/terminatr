@@ -26,11 +26,13 @@ interface Used {
   title: string;
   tokens: number;
   cost: number;
+  uncosted?: number; // tokens that came with no cost (the agent has no cost source)
   resolved?: string; // RFC 3339, once the thread is resolved
 }
 interface Day {
   tokens: number;
   cost: number;
+  partial?: true; // some of the day's tokens had no cost
 }
 
 let threads: Record<string, Used> = {}; // by "<project>/<thread>"
@@ -39,6 +41,13 @@ let fresh: Record<string, true> = {}; // threads started while the mod ran, not 
 const shown = new Set<string>(); // projects whose card shows ("" for all)
 
 const money = (usd: number) => `$${usd.toFixed(2)}`;
+
+// spent is a total's cost: "no cost" when none of its tokens had one,
+// and marked partial when only some did.
+function spent(cost: number, tokens: number, uncosted = 0, partial = false): string {
+  if (tokens > 0 && uncosted >= tokens) return "no cost";
+  return uncosted > 0 || partial ? `${money(cost)} partial` : money(cost);
+}
 
 function compact(n: number): string {
   if (n >= 1e6) return `${(n / 1e6).toFixed(1)}M`;
@@ -53,6 +62,8 @@ function day(d: Date, n = 0): string {
 
 function card(project: string, now: Date): TM.Widget {
   const week = [6, 5, 4, 3, 2, 1, 0].map((n) => days[day(now, n)]?.cost ?? 0);
+  const weekCost = week.reduce((a, b) => a + b, 0);
+  const weekPartial = [6, 5, 4, 3, 2, 1, 0].some((n) => days[day(now, n)]?.partial);
   const today = days[day(now)] ?? { tokens: 0, cost: 0 };
   const mine = Object.values(threads)
     .filter((u) => project === "" || u.project === project)
@@ -62,7 +73,7 @@ function card(project: string, now: Date): TM.Widget {
     cells: [
       [{ text: project ? u.title : `${u.project} ${u.title}` }],
       [{ text: compact(u.tokens), role: "faint" as TM.Role }],
-      [{ text: money(u.cost) }],
+      [{ text: spent(u.cost, u.tokens, u.uncosted) }],
     ],
   }));
   return {
@@ -71,8 +82,8 @@ function card(project: string, now: Date): TM.Widget {
       {
         kind: "kv",
         pairs: [
-          { key: "today", value: [{ text: money(today.cost), role: "accent" }, { text: `  ${compact(today.tokens)} tokens`, role: "faint" }] },
-          { key: "7 days", value: [{ text: money(week.reduce((a, b) => a + b, 0)) }] },
+          { key: "today", value: [{ text: today.tokens > 0 && today.cost === 0 && today.partial ? "no cost" : spent(today.cost, 0, 0, today.partial), role: "accent" }, { text: `  ${compact(today.tokens)} tokens`, role: "faint" }] },
+          { key: "7 days", value: [{ text: weekPartial && weekCost === 0 ? "no cost" : spent(weekCost, 0, 0, weekPartial) }] },
         ],
       },
       { kind: "bars", values: week, spark: true },
@@ -144,18 +155,20 @@ $.on("session.state", async (e, meta) => {
   const was: Used | undefined = threads[k] ?? (fresh[k] ? { project: e.project, thread: e.thread, title: "", tokens: 0, cost: 0 } : undefined);
   const tokens = e.tokens ?? 0;
   const cost = e.cost_usd ?? 0;
-  if (was && was.tokens === tokens && was.cost === cost) return;
+  const uncosted = e.uncosted ?? 0;
+  if (was && was.tokens === tokens && was.cost === cost && (was.uncosted ?? 0) === uncosted) return;
   const now = new Date(meta.time);
-  if (was && tokens >= was.tokens && cost >= was.cost) {
+  if (was && tokens >= was.tokens && cost >= was.cost && uncosted >= (was.uncosted ?? 0)) {
     const d = (days[day(now)] ??= { tokens: 0, cost: 0 });
     d.tokens += tokens - was.tokens;
     d.cost += cost - was.cost;
+    if (uncosted > (was.uncosted ?? 0)) d.partial = true;
     for (const old of Object.keys(days)) if (old < day(now, KEEP_DAYS)) delete days[old];
     await save(DAYS, days);
   }
   // The thread's title, once: its id until the project says.
   const title = was?.title || (await $.thread.get(e.project, e.thread))?.title || e.thread;
-  threads[k] = { project: e.project, thread: e.thread, title, tokens, cost };
+  threads[k] = { project: e.project, thread: e.thread, title, tokens, cost, ...(uncosted ? { uncosted } : {}) };
   prune(now);
   await save(THREADS, threads);
   if (fresh[k]) {

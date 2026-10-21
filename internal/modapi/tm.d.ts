@@ -483,6 +483,7 @@ export declare namespace TM {
     context: number;
     tokens?: number;
     cost_usd?: number;
+    uncosted?: number;
   }
 
   type Settings = Record<string, Value>;
