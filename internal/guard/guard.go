@@ -1075,8 +1075,9 @@ func (r Rules) worktreeOf() string {
 // A trap's action (judgeCommands keeps it in ps.traps, as set here or in
 // a line this one reads: eval, bash -c) may run at any point from the
 // trap on (a signal) and at the end (EXIT), so it is judged as eval's
-// arguments are, from each folder the line may be in from the trap on
-// and those it may end in.
+// arguments are, from each folder the line itself may be in from the
+// trap on and those it may end in: the trap leaves the folder unknown
+// for the line's later commands, not for its action (lineDirs).
 func (r Rules) judgeLine(command string, cwds []string) *Denial {
 	if r.line != "" {
 		r.line += "\n"
@@ -1095,13 +1096,17 @@ func (r Rules) judgeLine(command string, cwds []string) *Denial {
 			cwds = withDirs(cwds, "")
 		}
 	}
-	cur, list := cwds, cwds
-	hidden := false
 	// The folders $OLDPWD may hold: before the line, one it can't tell.
 	olds := r.olds
 	if olds == nil {
 		olds = []string{""}
 	}
+	// st are the folders the line's commands may be in; ts those its
+	// trap actions may run in: a trap leaves st unknown for the line's
+	// later commands, but not ts, unless an action may move the folder
+	// itself (a cd or hidden code in it).
+	st := lineDirs{cur: cwds, list: cwds, olds: olds}
+	ts := st
 	// The trap actions set from here, and the folders the line may be
 	// in from the first on.
 	from := 0
@@ -1110,91 +1115,43 @@ func (r Rules) judgeLine(command string, cwds []string) *Denial {
 	}
 	trapped := func() bool { return r.ps != nil && len(r.ps.traps) > from }
 	var trapDirs []string
+	seen, moves := from, false
 	for i, pt := range parts {
 		// The folders a part may run in count against the budget, and
 		// a line that may be in more than maxFolders is past it.
-		if r.ps != nil && (len(cur)+len(list)+len(olds) > maxFolders || r.ps.stop(len(cur)*len(pt.text), r.depth)) {
+		if r.ps != nil && (len(st.cur)+len(st.list)+len(st.olds)+len(ts.cur) > maxFolders || r.ps.stop(len(st.cur)*len(pt.text), r.depth)) {
 			r.ps.over = true
 		}
 		if r.spent() {
 			return nil // Judge refuses the call: no part is let through unread
 		}
-		if listEnd(pt.before) {
-			list = cur
-		}
-		// A heredoc's body read as commands (topLevel and Commands may
-		// tell a << apart differently: $[1<<2]) may hold a cd anywhere.
-		if pt.doc && r.hasCd(pt.text) {
-			olds = withDirs(withDirs(olds, cur...), "")
-			cur = withDirs(cur, "")
-		}
+		st.begin(r, pt)
+		ts.begin(r, pt)
 		rp := r
-		rp.olds = olds
+		rp.olds = st.olds
 		rp.trapFrom = from
-		for _, c := range cur {
+		for _, c := range st.cur {
 			if d := rp.judgeCommands(pt.text, c); d != nil || r.spent() {
 				return d
 			}
 		}
 		// zsh's trap functions (TRAPEXIT() { … }) are traps whose action
 		// is the body.
-		for _, body := range trapFuncs(pt.text) {
+		funcs := trapFuncs(pt.text)
+		for _, body := range funcs {
 			if r.ps != nil && !slices.Contains(r.ps.traps[from:], body) {
 				r.ps.traps = append(r.ps.traps, body)
 			}
-			hidden = true
 		}
 		if trapped() {
-			trapDirs = withDirs(trapDirs, cur...)
-		}
-		inPipe := pt.before == "|" || pt.after == "|" || pt.after == "&"
-		if cmd, args, plain := r.plainCd(pt.text); plain && !inPipe {
-			var to []string
-			for _, c := range cur {
-				to = withDirs(to, nowhere{dir: c}.cd(r, cmd, args).dir)
+			trapDirs = withDirs(trapDirs, ts.cur...)
+			for _, a := range r.ps.traps[seen:] {
+				moves = moves || r.hasCd(a) || r.nested().runsCode(a) || r.nested().runsTrap(a)
 			}
-			// The cd leaves $OLDPWD the folder it left, if it runs.
-			sure := pt.after == "&&" && pt.before != "||"
-			// A cd .. that always runs (the first command of its list,
-			// none after it on ||) fails only where the parent is gone:
-			// the folders the line may be in merge into their parents, so
-			// a script that walks its subfolders in turn (cd X || exit 1;
-			// …; cd ..) doesn't gather a folder for each. Not in a list
-			// run in the background, which moves no folder of the line's
-			// own shell. A cd X || exit merges nothing: an earlier member
-			// of its list may have ended it, and the shell may have made
-			// exit something else where the guard can't see (Claude's
-			// Bash sources a snapshot of the user's shell first).
-			up := cmd == "cd" && len(args) == 1 && (args[0] == ".." || args[0] == "../") &&
-				listEnd(pt.before) && pt.after != "||" && listSep(parts, i) != "&"
-			if sure || up {
-				olds = slices.Clone(cur)
-			} else {
-				olds = withDirs(olds, cur...)
-			}
-			switch {
-			case up:
-				cur, list = to, to
-			case sure:
-				cur = to
-			case pt.after == "||":
-				list = withDirs(list, to...)
-			default:
-				cur = withDirs(cur, to...)
-			}
-		} else if !inPipe && !strings.HasPrefix(pt.text, "(") && r.hasCd(pt.text) {
-			olds = withDirs(withDirs(olds, cur...), "")
-			cur = withDirs(cur, "")
+			seen = len(r.ps.traps)
 		}
-		hidden = hidden || r.runsHidden(pt.text)
-		if hidden {
-			olds = withDirs(olds, "")
-			cur = withDirs(cur, "")
-		}
-		list = withDirs(list, cur...)
-		if listEnd(pt.after) {
-			cur = list
-		}
+		st.end(r, parts, i, len(funcs) > 0 || r.runsCode(pt.text) || r.runsTrap(pt.text))
+		ts.end(r, parts, i, moves || r.runsCode(pt.text))
 	}
 	if !trapped() {
 		return nil
@@ -1202,13 +1159,89 @@ func (r Rules) judgeLine(command string, cwds []string) *Denial {
 	// The actions read here may set traps of their own, which their own
 	// reading judges.
 	rt := r.nested()
-	rt.olds = withDirs(olds, "")
+	rt.olds = withDirs(ts.olds, "")
 	for _, a := range slices.Clone(r.ps.traps[from:]) {
-		if d := rt.judgeLine(a, withDirs(trapDirs, cur...)); d != nil || r.spent() {
+		if d := rt.judgeLine(a, withDirs(trapDirs, ts.cur...)); d != nil || r.spent() {
 			return d
 		}
 	}
 	return nil
+}
+
+// lineDirs are the folders a line may be in as judgeLine follows it:
+// cur, where its next part runs; list, where its and-or list may have
+// left it; olds, what $OLDPWD may hold; hidden, whether a part ran code
+// that may have moved it where the guard can't see.
+type lineDirs struct {
+	cur, list, olds []string
+	hidden          bool
+}
+
+// begin moves d to the start of part pt.
+func (d *lineDirs) begin(r Rules, pt linePart) {
+	if listEnd(pt.before) {
+		d.list = d.cur
+	}
+	// A heredoc's body read as commands (topLevel and Commands may
+	// tell a << apart differently: $[1<<2]) may hold a cd anywhere.
+	if pt.doc && r.hasCd(pt.text) {
+		d.olds = withDirs(withDirs(d.olds, d.cur...), "")
+		d.cur = withDirs(d.cur, "")
+	}
+}
+
+// end moves d past part i of parts, its cd followed; hidden: the part
+// ran code that may move the folder where the guard can't see.
+func (d *lineDirs) end(r Rules, parts []linePart, i int, hidden bool) {
+	pt := parts[i]
+	inPipe := pt.before == "|" || pt.after == "|" || pt.after == "&"
+	if cmd, args, plain := r.plainCd(pt.text); plain && !inPipe {
+		var to []string
+		for _, c := range d.cur {
+			to = withDirs(to, nowhere{dir: c}.cd(r, cmd, args).dir)
+		}
+		// The cd leaves $OLDPWD the folder it left, if it runs.
+		sure := pt.after == "&&" && pt.before != "||"
+		// A cd .. that always runs (the first command of its list,
+		// none after it on ||) fails only where the parent is gone:
+		// the folders the line may be in merge into their parents, so
+		// a script that walks its subfolders in turn (cd X || exit 1;
+		// …; cd ..) doesn't gather a folder for each. Not in a list
+		// run in the background, which moves no folder of the line's
+		// own shell. A cd X || exit merges nothing: an earlier member
+		// of its list may have ended it, and the shell may have made
+		// exit something else where the guard can't see (Claude's
+		// Bash sources a snapshot of the user's shell first).
+		up := cmd == "cd" && len(args) == 1 && (args[0] == ".." || args[0] == "../") &&
+			listEnd(pt.before) && pt.after != "||" && listSep(parts, i) != "&"
+		if sure || up {
+			d.olds = slices.Clone(d.cur)
+		} else {
+			d.olds = withDirs(d.olds, d.cur...)
+		}
+		switch {
+		case up:
+			d.cur, d.list = to, to
+		case sure:
+			d.cur = to
+		case pt.after == "||":
+			d.list = withDirs(d.list, to...)
+		default:
+			d.cur = withDirs(d.cur, to...)
+		}
+	} else if !inPipe && !strings.HasPrefix(pt.text, "(") && r.hasCd(pt.text) {
+		d.olds = withDirs(withDirs(d.olds, d.cur...), "")
+		d.cur = withDirs(d.cur, "")
+	}
+	d.hidden = d.hidden || hidden
+	if d.hidden {
+		d.olds = withDirs(d.olds, "")
+		d.cur = withDirs(d.cur, "")
+	}
+	d.list = withDirs(d.list, d.cur...)
+	if listEnd(pt.after) {
+		d.cur = d.list
+	}
 }
 
 // listSep is the separator that ends the and-or list part i is in: ";",
@@ -1224,22 +1257,27 @@ func listSep(parts []linePart, i int) string {
 
 // hiddenCode are the builtins that run shell code the line doesn't show
 // in the shell itself, where a cd in it moves the line's folder.
-var hiddenCode = setOf("eval trap source .")
+var hiddenCode = setOf("eval source .")
 
-// runsHidden: one of text's commands is one of those, maybe through
-// command or builtin. A trap's action, read as commands (judgeLine), may
-// still call what the guard can't see: a function or an alias the line
-// defines in a way it can't follow, which may be a cd.
-func (r Rules) runsHidden(text string) bool {
+// runsCode: one of text's commands is one of those, maybe through
+// command or builtin.
+func (r Rules) runsCode(text string) bool { return r.runs(text, hiddenCode) }
+
+// runsTrap: one of text's commands is trap. Its action, read as commands
+// (judgeLine), may still call what the guard can't see from the line's
+// later commands: a function or an alias the line defines in a way it
+// can't follow, which may be a cd.
+func (r Rules) runsTrap(text string) bool { return r.runs(text, setOf("trap")) }
+
+// runs: one of text's commands is one of names, maybe through command or
+// builtin.
+func (r Rules) runs(text string, names map[string]bool) bool {
 	for _, words := range r.cmds(text) {
 		argv := strip(words)
 		for len(argv) > 1 && (argv[0] == "command" || argv[0] == "builtin") {
 			argv = argv[1:]
 		}
-		if len(argv) == 0 {
-			continue
-		}
-		if hiddenCode[argv[0]] {
+		if len(argv) > 0 && names[argv[0]] {
 			return true
 		}
 	}
