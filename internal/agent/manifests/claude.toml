@@ -172,7 +172,8 @@ tm didn't take /answer. Run `tm ask open` in the shell and say in one line what 
 # moved into place.
 # Without the mod, mcp__terminatr lets tm mcp's tools run without a
 # prompt, as the mod's own do; not when Claude's own config has a
-# server "terminatr" (.MCPClash), whose tools the rule would let run.
+# server "terminatr", or may (.MCPClash): then they are an ask rule,
+# which comes before any allow rule of the user's or the folder's own.
 # Never put statusLine here: --settings would replace the user's own.
 # Outside safe mode Claude draws with tm's own theme in its config dir
 # ([theme] below, docs/SPEC.md §8.6), which the server rewrites on every
@@ -211,6 +212,7 @@ template = '''
   {{- end}}
   "permissions": {
     "allow": {{json (concat (list (and (not .Mods) (not .MCPClash)) "mcp__terminatr") (rules "Read(/%s/**)" .Access.Read) (rules "Edit(/%s/**)" .Access.Write) (rules "Edit(/%s)" .Access.WriteFiles) (rules "Bash(%s:*)" .Access.Commands) .Sandbox.Allow)}},
+    "ask": {{json (list (and (not .Mods) .MCPClash) "mcp__terminatr")}},
     "deny": {{json (concat (rules "Edit(/%s/**)" .Access.NoWrite) (rules "Edit(/%s)" .Access.NoWriteFiles) (siblingRules "Edit(/%s)" .Access.NoWriteSiblings) (rules "Read(/%s/**)" .Access.Closed) (rules "Edit(/%s/**)" .Access.Closed))}}
   },
   "sandbox": {

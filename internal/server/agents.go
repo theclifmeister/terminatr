@@ -804,7 +804,7 @@ func (s *Server) prepareLaunch(l agentLaunch, v launchView) (*preparedLaunch, *p
 	// agent's own config with its name would stand in for it.
 	if c, ok := a.(agent.MCPClasher); ok && !spec.Mods {
 		home, _ := os.UserHomeDir()
-		if w := c.MCPClash(home, r.Cwd); w != "" {
+		if w := c.MCPClash(home, r.Cwd, spec.Yolo); w != "" {
 			spec.MCPClash = true
 			p.warnings = append(p.warnings, w)
 			s.log.Printf("session %s: %s", r.ID, w)

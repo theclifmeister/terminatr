@@ -139,8 +139,12 @@ func TestClaudeLaunch(t *testing.T) {
 	clash.MCPClash = true
 	if l, err := a.Launch(clash); err != nil {
 		t.Fatal(err)
-	} else if s := parseSettings(t, l.Files["claude-settings.json"]); !reflect.DeepEqual(s.Permissions.Allow, []string{"Read(//h/.terminatr/projects/p/**)"}) {
-		t.Fatalf("clash: allow = %q", s.Permissions.Allow)
+	} else if s := parseSettings(t, l.Files["claude-settings.json"]); !reflect.DeepEqual(s.Permissions.Allow, []string{"Read(//h/.terminatr/projects/p/**)"}) ||
+		!reflect.DeepEqual(s.Permissions.Ask, []string{"mcp__terminatr"}) {
+		t.Fatalf("clash: allow = %q, ask = %q", s.Permissions.Allow, s.Permissions.Ask)
+	}
+	if len(settings.Permissions.Ask) != 0 {
+		t.Fatalf("ask = %q without a clash", settings.Permissions.Ask)
 	}
 	// A worktree's git paths: directories and files as allow rules, the
 	// git dir's configuration as deny rules (docs/SPEC.md §8.6, Access).
@@ -382,7 +386,7 @@ func TestClaudeLaunch(t *testing.T) {
 }
 
 type claudeSettings struct {
-	Permissions struct{ Allow, Deny []string }
+	Permissions struct{ Allow, Ask, Deny []string }
 	Sandbox     struct {
 		Enabled                  bool
 		AllowUnsandboxedCommands *bool

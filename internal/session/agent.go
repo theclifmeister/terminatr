@@ -18,6 +18,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/detect"
 	"github.com/theclifmeister/terminatr/internal/guard"
+	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 	"github.com/theclifmeister/terminatr/internal/plat/proc"
 	"github.com/theclifmeister/terminatr/internal/plat/shell"
 )
@@ -178,6 +179,7 @@ type agentRT struct {
 	stopOnce sync.Once
 
 	mu         sync.Mutex
+	tailRoot   string // the folder tailPath is opened under
 	tailPath   string
 	tailOff    int64
 	tailSkip   bool   // tailOff is inside a line too long to read: drop to its end
@@ -521,8 +523,10 @@ func (s *Session) Hook(event string, payload map[string]any) (agent.HookResult, 
 	sigs, res, err := rt.a.Hook(ev, env)
 	rt.tr.Hook(ev, sigs)
 	if t := rt.src.JSONLTail; t != nil {
-		if p, ok := payload[t.PathField].(string); ok && p != "" && t.Accepts(p, rt.vars()) {
-			rt.setTail(p)
+		if p, ok := payload[t.PathField].(string); ok && p != "" {
+			if root, ok := t.Accepts(p, rt.vars()); ok {
+				rt.setTail(root, filepath.Clean(p))
+			}
 		}
 	}
 	if snap := rt.src.TodoSnapshot; snap != nil && slices.Contains(snap.On, event) {
@@ -551,16 +555,48 @@ func (s *Session) ModState(state agent.State, reason, event string) error {
 
 // setTail follows a new JSONL file from its current end: what is already
 // in it happened before this event.
-func (rt *agentRT) setTail(p string) {
+func (rt *agentRT) setTail(root, p string) {
 	rt.mu.Lock()
 	defer rt.mu.Unlock()
 	if p == rt.tailPath {
 		return
 	}
-	rt.tailPath, rt.tailOff, rt.tailSkip, rt.usageKey = p, 0, false, ""
-	if fi, err := os.Stat(p); err == nil {
-		rt.tailOff = fi.Size()
+	rt.tailRoot, rt.tailPath, rt.tailOff, rt.tailSkip, rt.usageKey = root, p, 0, false, ""
+	if li, err := os.Lstat(p); err == nil {
+		if f, fi, err := openTail(root, p, li); err == nil {
+			f.Close()
+			rt.tailOff = fi.Size()
+		}
 	}
+}
+
+// openTail opens the followed file p under root, through no link that
+// leads out of it and without blocking (a FIFO), and checks the handle:
+// a regular file, the one li (p's Lstat) is, so neither a link nor a
+// file swapped in after the Lstat is read.
+func openTail(root, p string, li os.FileInfo) (*os.File, os.FileInfo, error) {
+	rel, err := filepath.Rel(root, p)
+	if err != nil {
+		return nil, nil, err
+	}
+	r, err := os.OpenRoot(root)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer r.Close()
+	f, err := fsx.OpenInNoBlock(r, rel)
+	if err != nil {
+		return nil, nil, err
+	}
+	fi, err := f.Stat()
+	if err == nil && (!fi.Mode().IsRegular() || !os.SameFile(fi, li)) {
+		err = fmt.Errorf("%s: not the regular file named", p)
+	}
+	if err != nil {
+		f.Close()
+		return nil, nil, err
+	}
+	return f, fi, nil
 }
 
 func (rt *agentRT) vars() agent.SourceVars {
@@ -735,25 +771,21 @@ func (rt *agentRT) readTail() ([]agent.Usage, []string) {
 		return nil, nil
 	}
 	rt.mu.Lock()
-	p, off, skip := rt.tailPath, rt.tailOff, rt.tailSkip
+	root, p, off, skip := rt.tailRoot, rt.tailPath, rt.tailOff, rt.tailSkip
 	rt.mu.Unlock()
 	if p == "" {
 		return nil, nil
 	}
-	// Nothing appended: one stat, no open (this runs every tick). Only a
-	// regular file, not a link to one: a FIFO would block the open.
-	if fi, err := os.Lstat(p); err != nil || !fi.Mode().IsRegular() || fi.Size() == off {
+	// Nothing appended: one stat, no open (this runs every tick).
+	li, err := os.Lstat(p)
+	if err != nil || !li.Mode().IsRegular() || li.Size() == off {
 		return nil, nil
 	}
-	f, err := os.Open(p)
+	f, fi, err := openTail(root, p, li)
 	if err != nil {
 		return nil, nil
 	}
 	defer f.Close()
-	fi, err := f.Stat()
-	if err != nil {
-		return nil, nil
-	}
 	if fi.Size() < off {
 		off, skip = 0, false // truncated or replaced
 	}

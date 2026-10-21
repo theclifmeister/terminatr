@@ -313,11 +313,14 @@ func TestJSONLTailAccepts(t *testing.T) {
 		filepath.Join("rel", "s1.jsonl"):                                      false,
 		filepath.Join(string(filepath.Separator)+"tmp", "x", "s1.jsonl"):      false,
 	} {
-		if got := tail.Accepts(p, v); got != ok {
+		if _, got := tail.Accepts(p, v); got != ok {
 			t.Errorf("%s: %v, want %v", p, got, ok)
 		}
 	}
-	if tail.Accepts(filepath.Join(root, "projects", "-r-p", ".jsonl"), SourceVars{ConfigDir: root}) {
+	if r, _ := tail.Accepts(filepath.Join(root, "projects", "-r-p", "s1.jsonl"), v); r != filepath.Join(root, "projects") {
+		t.Errorf("opened under %q, want the projects folder", r)
+	}
+	if _, ok := tail.Accepts(filepath.Join(root, "projects", "-r-p", ".jsonl"), SourceVars{ConfigDir: root}); ok {
 		t.Error("accepted with no session id")
 	}
 }

@@ -241,35 +241,39 @@ type JSONLTail struct {
 }
 
 // Accepts reports whether the file p, absolute, is one to follow with
-// v: under Root and named as Name says, when they are set.
-func (t *JSONLTail) Accepts(p string, v SourceVars) bool {
+// v: under Root and named as Name says, when they are set. root is the
+// folder it is to be opened under (Root, else p's own folder), so that
+// no link on the way leads out of it.
+func (t *JSONLTail) Accepts(p string, v SourceVars) (root string, ok bool) {
 	if !filepath.IsAbs(p) {
-		return false
+		return "", false
 	}
 	p = filepath.Clean(p)
+	root = filepath.Dir(p)
 	if t.Root != "" {
-		root, err := render(t.Root, v)
-		if err != nil || !filepath.IsAbs(root) {
-			return false
+		r, err := render(t.Root, v)
+		if err != nil || !filepath.IsAbs(r) {
+			return "", false
 		}
-		rel, err := filepath.Rel(filepath.Clean(root), filepath.Dir(p))
+		root = filepath.Clean(r)
+		rel, err := filepath.Rel(root, filepath.Dir(p))
 		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-			return false
+			return "", false
 		}
 	}
 	if t.Name != "" {
 		if v.AgentSID == "" && strings.Contains(t.Name, "AgentSID") {
-			return false // named for a session not known yet
+			return "", false // named for a session not known yet
 		}
 		name, err := render(t.Name, v)
 		if err != nil || name == "" {
-			return false
+			return "", false
 		}
 		if ok, err := path.Match(name, filepath.Base(p)); err != nil || !ok {
-			return false
+			return "", false
 		}
 	}
-	return true
+	return root, true
 }
 
 // RefusedRule matches a line saying the model was refused; TextField
