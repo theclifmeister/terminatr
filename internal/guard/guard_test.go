@@ -426,3 +426,22 @@ func FuzzJudge(f *testing.F) {
 		r.Judge("Glob", map[string]any{"pattern": s})
 	})
 }
+
+// TestBraceRuns: a 64 KiB line of braces the guard reads to a word's end
+// at each { (brace expansions, quoted ones, ${ cmd; } bodies) is judged
+// within a second: the reading is charged to the parse budget.
+func TestBraceRuns(t *testing.T) {
+	r := loadVectors(t).Rules["yolo-thread"]
+	for name, line := range map[string]string{
+		"plain":  "echo " + strings.Repeat("{a", MaxCommand/2-8),
+		"hidden": strings.Repeat("{'a'", MaxCommand/4-2),
+		"funsub": "echo ${ echo " + strings.Repeat("{a", MaxCommand/2-16) + "; }",
+		"param":  strings.Repeat("{${a}", MaxCommand/5-2),
+	} {
+		start := time.Now()
+		r.Judge("Bash", map[string]any{"command": line})
+		if d := time.Since(start); d > time.Second {
+			t.Errorf("%s: judged in %v", name, d)
+		}
+	}
+}
