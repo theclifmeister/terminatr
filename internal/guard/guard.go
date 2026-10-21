@@ -705,17 +705,18 @@ func (r Rules) deny(rule, summary, target string) *Denial {
 // folder before (~-, $OLDPWD and the like); unknown, any other index
 // (~1, ~-2, ${DIRSTACK[1]}), a listing (${DIRSTACK[@]}, dirs
 // substituted), or $PWD, $OLDPWD or $DIRSTACK changed by an operator
-// (${PWD%/*}). A tilde form ends at a / or the path's end.
+// (${PWD%/*}). zsh's $dirstack is read as $DIRSTACK, in every form. A
+// tilde form ends at a / or the path's end.
 var folderForms = []struct {
 	kind string
 	re   *regexp.Regexp
 }{
 	{"cur", regexp.MustCompile("^(?:\\$PWD\\b|\\$\\{PWD(?::?[-=?][^}]*)?\\}|\\$\\(\\s*pwd(?:\\s+-[LP]+)*\\s*\\)|`\\s*pwd(?:\\s+-[LP]+)*\\s*`|~(?:\\+0?|0)(?:/|$))")},
-	{"stack", regexp.MustCompile(`^(?:\$DIRSTACK\b|\$\{DIRSTACK(?:\[0\])?\})`)},
+	{"stack", regexp.MustCompile(`^(?:\$(?:DIRSTACK|dirstack)\b|\$\{(?:DIRSTACK|dirstack)(?:\[0\])?\})`)},
 	{"bottom", regexp.MustCompile(`^~-0(?:/|$)`)},
-	{"bottomStack", regexp.MustCompile(`^\$\{DIRSTACK\[-1\]\}`)},
+	{"bottomStack", regexp.MustCompile(`^\$\{(?:DIRSTACK|dirstack)\[-1\]\}`)},
 	{"old", regexp.MustCompile(`^(?:\$OLDPWD\b|\$\{OLDPWD(?::?[-=?][^}]*)?\}|~-(?:/|$))`)},
-	{"unknown", regexp.MustCompile("^(?:~[+-]?[0-9]+(?:/|$)|\\$\\{[#!]?(?:PWD|OLDPWD|DIRSTACK)\\b[^}]*\\}|\\$\\(\\s*dirs\\b[^)]*\\)|`\\s*dirs\\b[^`]*`)")},
+	{"unknown", regexp.MustCompile("^(?:~[+-]?[0-9]+(?:/|$)|\\$\\{[#!]?(?:PWD|OLDPWD|DIRSTACK|dirstack)\\b[^}]*\\}|\\$\\(\\s*dirs\\b[^)]*\\)|`\\s*dirs\\b[^`]*`)")},
 }
 
 // folderStart: path w starts with a form of a folder the line has been
@@ -727,6 +728,39 @@ func folderStart(w string) (string, int) {
 		}
 	}
 	return "", 0
+}
+
+// zshStack is zsh's $dirstack starting a path.
+var zshStack = regexp.MustCompile(`^\$\{?dirstack`)
+
+// defaultName is the ${x:-, ${x-, ${x:=, ${x=, ${x:+ or ${x+ a path
+// starts with.
+var defaultName = regexp.MustCompile(`^\$\{[A-Za-z_][A-Za-z0-9_]*:?[-=+]`)
+
+// defaultWord is what path w gives when the ${x:-word}, ${x-word},
+// ${x:=word}, ${x=word}, ${x:+word} or ${x+word} it starts with gives
+// its word: the word, quotes removed, then the rest of w; false for
+// none.
+func defaultWord(w string) (string, bool) {
+	m := defaultName.FindString(w)
+	if m == "" {
+		return "", false
+	}
+	depth := 1
+	for i := len(m); i < len(w); i++ {
+		switch {
+		case w[i] == '\\':
+			i++
+		case w[i] == '$' && i+1 < len(w) && w[i+1] == '{':
+			depth++
+			i++
+		case w[i] == '}':
+			if depth--; depth == 0 {
+				return strings.NewReplacer(`"`, "", "'", "").Replace(w[len(m):i]) + w[i+1:], true
+			}
+		}
+	}
+	return "", false
 }
 
 // pushes is a pushd or popd word on a line.
@@ -2228,9 +2262,20 @@ func (r Rules) judgeNoWrite(cmd string, args, words []string) *Denial {
 		if w == "" || strings.HasPrefix(w, "&") || strings.HasPrefix(w, "<(") || strings.HasPrefix(w, ">(") {
 			return nil
 		}
+		// ${x:-word} and the like may give their word: judged as a path
+		// too.
+		if dw, ok := defaultWord(w); ok {
+			if dd := refuse(dw, parents); dd != nil {
+				return dd
+			}
+		}
 		// A path from a folder the line has been in is judged from each
 		// folder that may be: $PWD from the line's, $OLDPWD from those
-		// before it (olds), $PWD changed by an operator from none.
+		// before it (olds), the folder stack's bottom from the line's
+		// while it pushes none, and from none another index or $PWD
+		// changed by an operator. zsh has no $DIRSTACK: there it is empty,
+		// and its $dirstack is empty too until the line pushes, then the
+		// folders before.
 		if kind, n := folderStart(w); kind != "" {
 			switch {
 			case kind == "bottom" && pushes.MatchString(r.line), kind == "bottomStack" && pushes.MatchString(r.line):
@@ -2239,6 +2284,9 @@ func (r Rules) judgeNoWrite(cmd string, args, words []string) *Denial {
 				kind = "cur"
 			case kind == "bottomStack":
 				kind = "stack"
+			}
+			if kind == "stack" && pushes.MatchString(r.line) && zshStack.MatchString(w) {
+				kind = "unknown"
 			}
 			if kind == "stack" {
 				if dd := refuse(w[n:], parents); dd != nil {

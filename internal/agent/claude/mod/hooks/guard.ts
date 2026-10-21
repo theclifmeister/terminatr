@@ -1033,17 +1033,26 @@ function judgeNoWrite(r: Rules, cmd: string, args: string[], words: string[]): D
   const refuse = (w: string, parents: boolean): Denial | null => {
     // A descriptor (2>&1) or a process substitution (> >(tee f)).
     if (w === '' || w.startsWith('&') || /^[<>]\(/.test(w)) return null
+    // ${x:-word} and the like may give their word: judged as a path too.
+    const dw = defaultWord(w)
+    if (dw !== null) {
+      const dd = refuse(dw, parents)
+      if (dd) return dd
+    }
     // A path from a folder the line has been in is judged from each
     // folder that may be: $PWD from the line's, $OLDPWD from those
     // before it (olds), the folder stack's bottom from the line's while
     // it pushes none, and from none another index or $PWD changed by an
-    // operator. zsh has no $DIRSTACK: there it is empty.
+    // operator. zsh has no $DIRSTACK: there it is empty, and its
+    // $dirstack is empty too until the line pushes, then the folders
+    // before.
     const at = folderStart(w)
     if (at) {
       const pushes = /(^|[\s;&|(){}!`])(pushd|popd)([\s;&|)`]|$)/m.test(r.line ?? '')
       let kind = at.kind
       if (kind === 'bottom') kind = pushes ? 'unknown' : 'cur'
       if (kind === 'bottomStack') kind = pushes ? 'unknown' : 'stack'
+      if (kind === 'stack' && pushes && /^\$\{?dirstack/.test(w)) kind = 'unknown'
       if (kind === 'stack') {
         const dd = refuse(w.slice(at.len), parents)
         if (dd) return dd
@@ -1137,14 +1146,15 @@ function judgeNoWrite(r: Rules, cmd: string, args: string[], words: string[]): D
 // bottom entry (~-0, ${DIRSTACK[-1]}); old, the folder before (~-,
 // $OLDPWD and the like); unknown, any other index (~1, ~-2,
 // ${DIRSTACK[1]}), a listing (${DIRSTACK[@]}, dirs substituted), or
-// $PWD, $OLDPWD or $DIRSTACK changed by an operator (${PWD%/*}).
+// $PWD, $OLDPWD or $DIRSTACK changed by an operator (${PWD%/*}). zsh's
+// $dirstack is read as $DIRSTACK, in every form.
 const FOLDER_FORMS: readonly [string, RegExp][] = [
   ['cur', /^(?:\$PWD\b|\$\{PWD(?::?[-=?][^}]*)?\}|\$\(\s*pwd(?:\s+-[LP]+)*\s*\)|`\s*pwd(?:\s+-[LP]+)*\s*`|~(?:\+0?|0)(?=\/|$))/],
-  ['stack', /^(?:\$DIRSTACK\b|\$\{DIRSTACK(?:\[0\])?\})/],
+  ['stack', /^(?:\$(?:DIRSTACK|dirstack)\b|\$\{(?:DIRSTACK|dirstack)(?:\[0\])?\})/],
   ['bottom', /^~-0(?=\/|$)/],
-  ['bottomStack', /^\$\{DIRSTACK\[-1\]\}/],
+  ['bottomStack', /^\$\{(?:DIRSTACK|dirstack)\[-1\]\}/],
   ['old', /^(?:\$OLDPWD\b|\$\{OLDPWD(?::?[-=?][^}]*)?\}|~-(?=\/|$))/],
-  ['unknown', /^(?:~[+-]?[0-9]+(?=\/|$)|\$\{[#!]?(?:PWD|OLDPWD|DIRSTACK)\b[^}]*\}|\$\(\s*dirs\b[^)]*\)|`\s*dirs\b[^`]*`)/],
+  ['unknown', /^(?:~[+-]?[0-9]+(?=\/|$)|\$\{[#!]?(?:PWD|OLDPWD|DIRSTACK|dirstack)\b[^}]*\}|\$\(\s*dirs\b[^)]*\)|`\s*dirs\b[^`]*`)/],
 ]
 
 // folderStart: path w starts with a form of a folder the line has been
@@ -1153,6 +1163,23 @@ function folderStart(w: string): { kind: string; len: number } | null {
   for (const [kind, re] of FOLDER_FORMS) {
     const m = re.exec(w)
     if (m) return { kind, len: m[0].length }
+  }
+  return null
+}
+
+// defaultWord is what path w gives when the ${x:-word}, ${x-word},
+// ${x:=word}, ${x=word}, ${x:+word} or ${x+word} it starts with gives
+// its word: the word, quotes removed, then the rest of w; null for none.
+function defaultWord(w: string): string | null {
+  const m = /^\$\{[A-Za-z_][A-Za-z0-9_]*:?[-=+]/.exec(w)
+  if (!m) return null
+  let depth = 1
+  for (let i = m[0].length; i < w.length; i++) {
+    if (w[i] === '\\') i++
+    else if (w[i] === '$' && w[i + 1] === '{') {
+      depth++
+      i++
+    } else if (w[i] === '}' && --depth === 0) return w.slice(m[0].length, i).replace(/["']/g, '') + w.slice(i + 1)
   }
   return null
 }
