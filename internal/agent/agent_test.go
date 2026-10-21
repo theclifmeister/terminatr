@@ -1153,6 +1153,9 @@ func TestManifestGuard(t *testing.T) {
 			}
 		}
 	}
+	if got := ShellPatterns("/h", getenv); !slices.Equal(got, []string{"/h/.zcompdump*", "/z/.zcompdump*"}) {
+		t.Errorf("ShellPatterns = %q", got)
+	}
 	if got := GuardWritable(nil, "claude", "/h", getenv); !slices.Equal(got, []string{"/h/.claude/plans", "/h/.claude/projects"}) {
 		t.Errorf("built-in claude writable = %q", got)
 	}

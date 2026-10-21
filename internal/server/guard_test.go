@@ -421,6 +421,8 @@ func TestShellStateFloor(t *testing.T) {
 			{"Write", map[string]any{"file_path": filepath.Join(home, ".config", "zsh", ".zshrc")}},
 			{"Bash", map[string]any{"command": "echo x > ~/.zshrc.d/50-cd.zsh"}},
 			{"Bash", map[string]any{"command": "touch ~/.zcompdump-host-5.9"}},
+			{"Bash", map[string]any{"command": "echo 'cd() { :; }' > ~/.zcompdump-other-5.9.zwc"}},
+			{"Write", map[string]any{"file_path": filepath.Join(zdot, ".zcompdump")}},
 			{"Write", map[string]any{"file_path": filepath.Join(dots, ".zshenv.zwc")}},
 			{"Write", map[string]any{"file_path": filepath.Join(zdot, ".zlogin")}},
 		} {
