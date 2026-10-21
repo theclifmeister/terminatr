@@ -716,15 +716,16 @@ func (e *Env) threadPrompt(p *project.Project, o promptOpts) error {
 	if info.State == "blocked" {
 		return &tasks.Error{Code: "blocked", Msg: fmt.Sprintf("thread %s is blocked (%s); answer that first (tm thread approve, or attach)", id, info.Reason)}
 	}
+	// Sent first: a refused --interrupt sends nothing, so records nothing.
+	var res proto.SessionPromptResult
+	if err := e.call(proto.MethodSessionPrompt, proto.SessionPromptParams{ID: r.Session, Text: text, Mode: o.mode}, &res); err != nil {
+		return err
+	}
 	now := time.Now().UTC()
 	if err := thread.AppendFollowUp(p, id, text, now); err != nil {
 		return err
 	}
 	if _, err := thread.Update(p, id, func(x *thread.Record) error { x.LastPrompt = now; return nil }); err != nil {
-		return err
-	}
-	var res proto.SessionPromptResult
-	if err := e.call(proto.MethodSessionPrompt, proto.SessionPromptParams{ID: r.Session, Text: text, Mode: o.mode}, &res); err != nil {
 		return err
 	}
 	action := "thread.prompt"
@@ -750,6 +751,9 @@ func promptOutcome(res proto.SessionPromptResult) string {
 	}
 	if res.Why != "" {
 		out += " (" + res.Why + ")"
+	}
+	if res.Running {
+		out += "; the turn runs on, and gets it once it ends"
 	}
 	return out
 }
