@@ -160,28 +160,34 @@ func Rows(cfg *config.Config, p *project.Project) []Row {
 	return out
 }
 
-// newest is p's newest message with other, by id, read alone: a look
-// at the links parses no other message.
+// newest is p's newest message with other: a look at the links parses
+// no other message but the newest of each series of ids. A series
+// counts on its own: M-17 here; M-4F2A-17 and M-9C1B-4, one per side,
+// with a paired server's project, so the latest created of those wins.
 func newest(p *project.Project, other string) *Message {
 	ents, _ := os.ReadDir(dir(p, other))
-	best, bestN := "", -1
+	best := map[string]string{} // by series ("M-", "M-4F2A-"): its highest id
 	for _, e := range ents {
 		id, ok := strings.CutSuffix(e.Name(), ".md")
 		if !ok || e.IsDir() || !ValidID(id) {
 			continue
 		}
-		if n := idNum(id); n > bestN {
-			best, bestN = id, n
+		series := id[:strings.LastIndexByte(id, '-')+1]
+		if b, ok := best[series]; !ok || idNum(id) > idNum(b) {
+			best[series] = id
 		}
 	}
-	if best == "" {
-		return nil
+	var out *Message
+	for _, id := range best {
+		m, err := readFile(path(p, other, id), other)
+		if err != nil {
+			continue
+		}
+		if out == nil || m.Created.After(out.Created) || m.Created.Equal(out.Created) && m.ID > out.ID {
+			out = m
+		}
 	}
-	m, err := readFile(path(p, other, best), other)
-	if err != nil {
-		return nil
-	}
-	return m
+	return out
 }
 
 // StampPaths are the files and folders Rows read for project p, with

@@ -109,6 +109,53 @@ func TestMessagesTab(t *testing.T) {
 	}
 }
 
+// TestMessagesTabRemote (T683): a paired server's project is a row like
+// one here, its "<server>/<slug>" whole however long; its conversation
+// has both ways, the paired user's message isn't called yours, and a
+// queued or undelivered message says so.
+func TestMessagesTabRemote(t *testing.T) {
+	src, m := linkDash(t)
+	now := time.Now()
+	src.data.Projects[0].Links = append(src.data.Projects[0].Links,
+		link.Row{Peer: "del-02-0468-lt/gatehouse", Remote: true, HasMine: true, Mine: config.Link{Allow: config.LinkBoth},
+			Send: true, Receive: true, Unread: 2, Last: "M-8F49-29", LastAt: now})
+	m.setData(src.data)
+	src.linkLogs = map[string][]*link.Message{"del-02-0468-lt/gatehouse": {
+		{ID: "M-8F49-28", Peer: "del-02-0468-lt/gatehouse", Created: now.Add(-3 * time.Minute), State: link.StateRead, By: "human", Text: "From their user"},
+		{ID: "M-F885-28", Out: true, Peer: "del-02-0468-lt/gatehouse", Created: now.Add(-2 * time.Minute), State: link.StateRead, By: "coordinator", Text: "Read there", Re: "M-8F49-28"},
+		{ID: "M-8F49-29", Peer: "del-02-0468-lt/gatehouse", Created: now.Add(-time.Minute), State: link.StateSent, By: "coordinator", Text: "Their coordinator"},
+		{ID: "M-F885-29", Out: true, Peer: "del-02-0468-lt/gatehouse", Created: now, State: link.StateQueued, By: "human", Text: "Waits in the outbox"},
+		{ID: "M-F885-30", Out: true, Peer: "del-02-0468-lt/gatehouse", Created: now, State: link.StateUndelivered, By: "coordinator", Text: "Refused there"},
+	}}
+	m.openTab("alpha", tabMessages, 0)
+	out := screen(m)
+	for _, want := range []string{"beta ", "del-02-0468-lt/gatehouse  ⇄ linked both ways on this side · 2 unread · last M-8F49-29"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("tab lacks %q:\n%s", want, out)
+		}
+	}
+	keyPress(m, "down")
+	press(m, "enter")
+	if cv, ok := m.top().(*convView); !ok || cv.other != "del-02-0468-lt/gatehouse" {
+		t.Fatalf("enter opened %T", m.top())
+	}
+	out = screen(m)
+	for _, want := range []string{
+		"← M-8F49-28", "del-02-0468-lt/gatehouse (its user) · read", "From their user",
+		"→ M-F885-28", "alpha · re M-8F49-28 · read",
+		"← M-8F49-29", "del-02-0468-lt/gatehouse · sent",
+		"→ M-F885-29", "alpha (you) · queued until del-02-0468-lt takes it",
+		"→ M-F885-30", "undelivered (see the inbox)",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("conversation lacks %q:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "gatehouse (you)") {
+		t.Errorf("the paired user's message is called yours:\n%s", out)
+	}
+}
+
 // TestLinkedProjectsRemote: the list has a group per paired server with
 // the projects it shares and any this side links; enter and a write
 // this side only (SetLink with the qualified key, which asks first when
