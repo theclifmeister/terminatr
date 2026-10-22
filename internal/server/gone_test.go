@@ -15,8 +15,8 @@ func TestServerStopsWhenHomeIsGone(t *testing.T) {
 			if dir == "run dir" {
 				useTestHooks(t)
 			}
-			goneEvery = 20 * time.Millisecond
-			t.Cleanup(func() { goneEvery = 5 * time.Second })
+			setGoneEvery(20 * time.Millisecond)
+			t.Cleanup(func() { setGoneEvery(defaultGoneEvery) })
 			p := testPaths(t)
 			r := startServer(t, p)
 			d := p.Home
@@ -47,8 +47,8 @@ func TestServerKeepsItsRunDir(t *testing.T) {
 	if testHooksBuilt {
 		t.Skip("built with testhooks")
 	}
-	goneEvery = 20 * time.Millisecond
-	t.Cleanup(func() { goneEvery = 5 * time.Second })
+	setGoneEvery(20 * time.Millisecond)
+	t.Cleanup(func() { setGoneEvery(defaultGoneEvery) })
 	p := testPaths(t)
 	r := startServer(t, p)
 	if err := os.Rename(p.RunDir, p.RunDir+".gone"); err != nil {
