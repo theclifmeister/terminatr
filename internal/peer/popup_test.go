@@ -103,7 +103,7 @@ func TestPopupCap(t *testing.T) {
 // against their patterns, and each list cut to its most.
 func TestPopupIsCleaned(t *testing.T) {
 	in := proto.PeerPopup{
-		Project: "web", Goal: "ship‮" + osc52 + "\nnow", Repos: -3,
+		Project: "web", Goal: "ship\u202e" + osc52 + "\nnow", Repos: -3,
 		Tasks: []proto.PeerTask{
 			{ID: 1, Title: "fix\x1b[2J it\nnow", Status: "ready", Thread: "t-0001", StepsDone: 9, StepsTotal: 2},
 			{ID: 0, Title: "no id"},
