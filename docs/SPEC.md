@@ -542,7 +542,7 @@ Each enabled code mod runs in its own `tm mod host` child of the server: the sam
   | Popup | Its keys |
   |---|---|
   | help | `↑` `↓` scroll |
-  | project popup | `←` `→` or `1`–`7` switch tabs; Overview: `+` adds a repository, `X` removes one (asks first); Settings: `enter` / `space` change, `+` `-` step a number; Tasks: `enter` shows the task, `D` delegate, `A` accept, `X` send back, `c` the coordinator; Library: `enter` reads the file, `X` deletes it, `D` deletes its thread's files (each asks first) |
+  | project popup | `←` `→` or `1`–`7` switch tabs; Overview: `+` adds a repository (an empty one is the current folder, shown faint), `X` removes one (asks first); Settings: `enter` / `space` change, `+` `-` step a number; Tasks: `enter` shows the task, `D` delegate, `A` accept, `X` send back, `c` the coordinator; Library: `enter` reads the file, `X` deletes it, `D` deletes its thread's files (each asks first) |
   | a shown task | `D` `A` `X` `c` as on the Tasks tab; `esc` goes back to it |
   | inbox, settings | the list's keys; the settings' `enter` / `space` / `+` `-` change one, and `X` on a project's own setting makes it follow All projects again |
   | menus (`≡`, a right-click) | `enter` / `space` pick |
