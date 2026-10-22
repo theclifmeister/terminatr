@@ -2750,7 +2750,7 @@ var (
 func tmWritesSettings(args []string) string {
 	i := 0
 	for i < len(args) && strings.HasPrefix(args[i], "-") {
-		if args[i] == "-h" || args[i] == "--help" {
+		if args[i] == "-h" || args[i] == "--help" || args[i] == "--version" {
 			return ""
 		}
 		i++
@@ -3821,7 +3821,9 @@ func (r Rules) judgeNoWrite(cmd string, args, words []string) *Denial {
 	}
 	if cmd == "tm" || strings.Contains(cmd, "TERMINATR_BIN") {
 		if what := tmWritesSettings(args); what != "" && !(r.AccessWrites && accessOpen(args)) {
-			return floor(r.deny(RuleTMFiles, what, ""))
+			d := r.deny(RuleTMFiles, what, "")
+			d.Message = "terminatr guard (" + RuleTMFiles + "): " + what + " changes tm's settings, which are the user's alone. Run tm's read-only commands instead (tm --version, tm --help, tm project list), or ask the user."
+			return floor(d)
 		}
 	}
 	all, ok := writers[cmd]
