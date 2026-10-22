@@ -134,8 +134,10 @@ func TestPeerPopupAllowlist(t *testing.T) {
 // without notes, owners, repos or steps' words, its settings without
 // the branch template or the guard's allowed calls, how many
 // repositories but not where, its links with that server's projects
-// only and their messages' headers without text, and the titles of the
-// notes for everyone. Off refuses it, as an unshared project is.
+// only and the headers of the messages that crossed (sent, read), without
+// text: never one held for the user's OK, queued over the rate, dropped
+// or undelivered, nor their counts. Nothing of the memory crosses, not
+// even a note's title. Off refuses it, as an unshared project is.
 func TestPeerPopupNeverLeaks(t *testing.T) {
 	testPaths(t)
 	root, _ := home.Dir()
@@ -175,12 +177,17 @@ func TestPeerPopupNeverLeaks(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	// Two that crossed, then the newest four that didn't.
 	msg("studio/notes", "M-AB12-1", true, link.StateSent)
+	msg("studio/notes", "M-9C1B-8", false, link.StateRead)
 	msg("studio/notes", "M-AB12-2", true, link.StateHeld)
+	msg("studio/notes", "M-AB12-5", true, link.StateQueued)
+	msg("studio/notes", "M-AB12-6", true, link.StateDropped)
+	msg("studio/notes", "M-AB12-7", true, link.StateUndelivered)
 	msg("other/x", "M-AB12-3", true, link.StateSent)
 	msg("secret-proj", "M-4", true, link.StateSent)
 	for name, text := range map[string]string{
-		"build.md": "+++\ntitle = \"Build notes\"\n+++\nSECRET-BODY\n",
+		"build.md": "+++\ntitle = \"SECRET-NOTE-TITLE\"\n+++\nSECRET-BODY\n",
 		"coord.md": "+++\ntitle = \"SECRET-COORD-NOTE\"\naudience = \"coordinator\"\n+++\nx\n",
 	} {
 		os.MkdirAll(web.Path("memory"), 0o755)
@@ -225,11 +232,17 @@ func TestPeerPopupNeverLeaks(t *testing.T) {
 	if !pp.Settings.Share || pp.Settings.ParallelThreads == 0 {
 		t.Errorf("settings: %+v", pp.Settings)
 	}
-	if len(pp.Links) != 1 || pp.Links[0].Project != "notes" || len(pp.Links[0].Messages) != 2 || pp.Links[0].Messages[1].State != link.StateHeld {
+	if len(pp.Links) != 1 || pp.Links[0].Project != "notes" || pp.Links[0].Last != "M-9C1B-8" {
 		t.Errorf("links: %+v", pp.Links)
 	}
-	if !slices.Equal(pp.Memory, []string{"Build notes"}) {
-		t.Errorf("memory: %q", pp.Memory)
+	var ids []string
+	for _, l := range pp.Links {
+		for _, m := range l.Messages {
+			ids = append(ids, m.ID+" "+m.State)
+		}
+	}
+	if !slices.Equal(ids, []string{"M-AB12-1 sent", "M-9C1B-8 read"}) {
+		t.Errorf("message headers: %q, want only the sent and the read one", ids)
 	}
 	for _, slug := range []string{"secret-proj", "nope"} {
 		if _, err := studio.Popup(ctx, "mini", slug); code(err) != proto.ErrNotShared {
@@ -237,7 +250,8 @@ func TestPeerPopupNeverLeaks(t *testing.T) {
 		}
 	}
 	cfg, _ := os.ReadFile(filepath.Join(root, "config.toml"))
-	for _, never := range []string{"SECRET", "secret-proj", "other/x", "M-4\"", root, "/Users/", "config.toml", "users/", `"notes":`, `"text"`, `"attachments"`, `"owner"`, `"repo"`} {
+	for _, never := range []string{"SECRET", "secret-proj", "other/x", "M-4\"", root, "/Users/", "config.toml", "users/", `"notes":`, `"text"`, `"attachments"`, `"owner"`, `"repo"`,
+		"M-AB12-2", "M-AB12-5", "M-AB12-6", "M-AB12-7", `"held"`, `"queued"`, "dropped", "undelivered", `"memory"`} {
 		if strings.Contains(string(raw), never) {
 			t.Errorf("%q crossed:\n%s", never, raw)
 		}

@@ -31,7 +31,6 @@ func remotePopupData() proto.PeerPopup {
 		Links: []proto.PeerPopupLink{{Project: "terminatr", Send: true, Receive: true, Unread: 1, Last: "M-AB12-2", LastAt: at,
 			Messages: []proto.PeerLinkMessage{{ID: "M-AB12-1", Out: true, Created: at, State: "read", Bytes: 20},
 				{ID: "M-9C1B-2", Created: at, State: "sent", Bytes: 40, Re: "M-AB12-1"}}}},
-		Memory: []string{"Build notes", "Release steps"},
 	}
 }
 
@@ -72,7 +71,7 @@ func TestRemotePopup(t *testing.T) {
 		t.Fatalf("popup %+v, read %v", v, src.popups)
 	}
 	out := ansi.Strip(screen(m))
-	for _, want := range []string{"mini's acme-api", "1 overview", "2 inbox 1", "6 memory", "read-only", "change it on mini",
+	for _, want := range []string{"mini's acme-api", "1 overview", "2 inbox 1", "5 messages", "read-only", "change it on mini",
 		"the billing API", "2 on mini; their paths stay there", "1 needs you", "1 in motion", "1 on deck", "1 done"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("overview lacks %q:\n%s", want, out)
@@ -86,7 +85,6 @@ func TestRemotePopup(t *testing.T) {
 		{"3", []string{"Needs you 1", "T41    review   Billing · t-0041 · 3/3 steps", "In motion 1", "On deck 1", "Done 1"}},
 		{"4", []string{"Start threads", "Parallel threads", "3", "Protection", "sandboxed", "Guard", "on · enforce", "Shared"}},
 		{"5", []string{"terminatr", "⇄ linked both ways on mini's side", "1 unread there", "→ M-AB12-1", "← M-9C1B-2", "re M-AB12-1"}},
-		{"6", []string{"Build notes", "Release steps", "Titles only"}},
 	}
 	for i, tab := range tabs {
 		drain(t, m, press(m, tab.key))
@@ -111,6 +109,14 @@ func TestRemotePopup(t *testing.T) {
 	}
 	if len(src.delegated)+len(src.asked)+len(src.settings)+len(src.repos)+len(src.lifecycle) > 0 {
 		t.Errorf("acted here: %v %v %v %v %v", src.delegated, src.asked, src.settings, src.repos, src.lifecycle)
+	}
+	// No memory tab: nothing of the other server's memory crosses.
+	if strings.Contains(ansi.Strip(screen(m)), "memory") {
+		t.Errorf("a memory tab:\n%s", ansi.Strip(screen(m)))
+	}
+	drain(t, m, press(m, "6"))
+	if v.tab != rtabMessages {
+		t.Errorf("6 went to tab %d", v.tab)
 	}
 	drain(t, m, press(m, "esc"))
 	if m.top() != nil {

@@ -60,9 +60,4 @@ terminatr             ⇄ linked both ways on mini's side
   → M-AB12-1     read        2m
   ← M-9C1B-2     sent        2m re M-AB12-1
 
-→ is mini's side sending. Their texts are in your project's Messages tab.
-== memory
-Build notes
-Release steps
-
-Titles only; the notes stay on their server.
+→ is mini's side sending; only messages that reached this server show. Their texts are in your project's Messages tab.

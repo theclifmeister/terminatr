@@ -2,6 +2,7 @@ package peer
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"slices"
 	"strings"
@@ -100,7 +101,9 @@ func TestPopupCap(t *testing.T) {
 
 // TestPopupIsCleaned: a peer's popup arrives with no escape or bidi
 // override in any string, its rows' words on one line, ids checked
-// against their patterns, and each list cut to its most.
+// against their patterns, only the headers of messages that crossed
+// (sent, read: never held, queued, dropped or undelivered, whatever the
+// peer sends), no memory, and each list cut to its most.
 func TestPopupIsCleaned(t *testing.T) {
 	in := proto.PeerPopup{
 		Project: "web", Goal: "ship\u202e" + osc52 + "\nnow", Repos: -3,
@@ -111,17 +114,19 @@ func TestPopupIsCleaned(t *testing.T) {
 		},
 		Settings: proto.PeerSettings{ThreadAgent: "claude" + osc52, Models: []string{"opus\nx", osc52}},
 		Links: []proto.PeerPopupLink{
-			{Project: "api", Held: -1, Last: "M-9", Messages: []proto.PeerLinkMessage{
+			{Project: "api", Unread: -1, Last: "M-9", Messages: []proto.PeerLinkMessage{
 				{ID: "M-1", State: "sent", By: "coordinator"}, {ID: "../M-2", State: "sent"}, {ID: "M-3", State: "x\x1b[31m", Re: "nope nope"}}},
 			{Project: "../etc"},
 		},
-		Memory: []string{"Build" + osc52 + "\nnotes", "", "\x1b[2J"},
 	}
 	for i := range proto.PeerPopupMaxTasks + 10 {
 		in.Tasks = append(in.Tasks, proto.PeerTask{ID: 10 + i, Title: "t"})
 	}
 	for i := range proto.PeerPopupMaxMessages + 5 {
 		in.Links[0].Messages = append(in.Links[0].Messages, proto.PeerLinkMessage{ID: fmt.Sprintf("M-%d", 100+i), State: "read"})
+	}
+	for i, st := range []string{"held", "queued", "dropped", "undelivered", ""} {
+		in.Links[0].Messages = append(in.Links[0].Messages, proto.PeerLinkMessage{ID: fmt.Sprintf("M-%d", 200+i), State: st})
 	}
 	p := cleanPopup(in)
 	if hasEscape(t, p) {
@@ -136,15 +141,27 @@ func TestPopupIsCleaned(t *testing.T) {
 	if t0, t1 := p.Tasks[0], p.Tasks[1]; strings.Contains(t0.Title, "\n") || t0.StepsDone != 2 || t0.Thread != "t-0001" || t1.Thread != "" || t1.Status != "" {
 		t.Errorf("tasks cleaned to %+v, %+v", t0, t1)
 	}
-	if len(p.Links) != 1 || p.Links[0].Held != 0 || p.Links[0].Last != "M-9" {
+	if len(p.Links) != 1 || p.Links[0].Unread != 0 || p.Links[0].Last != "M-9" {
 		t.Fatalf("links: %+v", p.Links)
 	}
+	// The newest 50 are cut first, then the 5 that didn't cross go.
 	ms := p.Links[0].Messages
-	if len(ms) != proto.PeerPopupMaxMessages || ms[len(ms)-1].ID != fmt.Sprintf("M-%d", 100+proto.PeerPopupMaxMessages+4) {
+	if len(ms) != proto.PeerPopupMaxMessages-5 || ms[len(ms)-1].ID != fmt.Sprintf("M-%d", 100+proto.PeerPopupMaxMessages+4) {
 		t.Errorf("messages: %d, last %+v", len(ms), ms[len(ms)-1])
 	}
-	if len(p.Memory) != 2 || strings.Contains(p.Memory[0], "\n") {
-		t.Errorf("memory: %q", p.Memory)
+	for _, m := range ms {
+		if m.State != "sent" && m.State != "read" {
+			t.Errorf("a %q header crossed: %+v", m.State, m)
+		}
+	}
+	// A peer that sends memory titles anyway: the answer has no place
+	// for them.
+	var withMemory proto.PeerPopup
+	if err := json.Unmarshal([]byte(`{"project":"web","memory":["SECRET-TITLE"]}`), &withMemory); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := json.Marshal(cleanPopup(withMemory)); strings.Contains(string(b), "SECRET") || strings.Contains(string(b), "memory") {
+		t.Errorf("memory crossed: %s", b)
 	}
 	if strings.Contains(p.Settings.Models[0], "\n") {
 		t.Errorf("models: %q", p.Settings.Models)

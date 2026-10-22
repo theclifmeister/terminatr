@@ -36,7 +36,7 @@ func (e peerExport) Popup(c caller.Caller, slug string) (proto.PeerPopup, error)
 		return proto.PeerPopup{}, errNotShared(slug)
 	}
 	out := proto.PeerPopup{Project: slug, Goal: p.Meta.Goal, Repos: len(p.Repos),
-		Tasks: []proto.PeerTask{}, Links: []proto.PeerPopupLink{}, Memory: []string{}}
+		Tasks: []proto.PeerTask{}, Links: []proto.PeerPopupLink{}}
 	if b, err := p.Tasks().Load(); err == nil {
 		for _, t := range b.Tasks {
 			if !t.Archived && len(out.Tasks) < proto.PeerPopupMaxTasks {
@@ -47,15 +47,8 @@ func (e peerExport) Popup(c caller.Caller, slug string) (proto.PeerPopup, error)
 	if s, err := cfg.Safety(slug); err == nil {
 		out.Settings = peerSettingsOf(s)
 	}
+	// Nothing of the memory crosses, not even its notes' titles.
 	out.Links = peerLinksOf(p, link.Rows(cfg, p), c.Alias)
-	if notes, err := p.Notes(); err == nil {
-		for _, n := range notes {
-			// A note for the coordinator only stays home.
-			if n.ForThreads() && n.Title != "" && len(out.Memory) < proto.PeerPopupMaxMemory {
-				out.Memory = append(out.Memory, n.Title)
-			}
-		}
-	}
 	return out, nil
 }
 
@@ -81,9 +74,11 @@ func peerSettingsOf(s config.Safety) proto.PeerSettings {
 }
 
 // peerLinksOf are p's links (rows) with the projects of the paired
-// server this one calls alias, each named by its slug there, with its
-// messages' headers: links with this server's other projects and with
-// other servers' stay home.
+// server this one calls alias, each named by its slug there, with the
+// headers of its messages that crossed (proto.PeerMessageStates): links
+// with this server's other projects and with other servers' stay home,
+// as do messages held for the user's OK, queued over the rate, dropped
+// or undelivered, their counts, and a newest one among them.
 func peerLinksOf(p *project.Project, rows []link.Row, alias string) []proto.PeerPopupLink {
 	out := []proto.PeerPopupLink{}
 	for _, r := range rows {
@@ -92,13 +87,17 @@ func peerLinksOf(p *project.Project, rows []link.Row, alias string) []proto.Peer
 			continue
 		}
 		l := proto.PeerPopupLink{Project: slug, Send: r.Send, Receive: r.Receive, Paused: r.Paused,
-			Unread: r.Unread, Held: r.Held, Queued: r.Queued, Last: r.Last, LastAt: r.LastAt, Messages: []proto.PeerLinkMessage{}}
+			Unread: r.Unread, Messages: []proto.PeerLinkMessage{}}
 		msgs, _ := link.Log(p, r.Peer)
+		msgs = slices.DeleteFunc(msgs, func(m *link.Message) bool { return !slices.Contains(proto.PeerMessageStates, m.State) })
 		if n := len(msgs); n > proto.PeerPopupMaxMessages {
 			msgs = msgs[n-proto.PeerPopupMaxMessages:]
 		}
 		for _, m := range msgs {
 			l.Messages = append(l.Messages, peerMessageOf(m))
+		}
+		if n := len(msgs); n > 0 {
+			l.Last, l.LastAt = msgs[n-1].ID, msgs[n-1].Created
 		}
 		out = append(out, l)
 	}

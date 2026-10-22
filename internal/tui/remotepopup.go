@@ -21,10 +21,11 @@ import (
 // The project popup of a paired server's project (docs/SPEC.md §4,
 // Remote dashboard; §16.9): A, T and I on its dashboard, or prefix+A, T
 // and I over its pane, open the popup's layout with the other server's
-// data, read-only. Its board, settings, links with this server and
-// memory titles come from peer.popup, read when it opens and at each
-// tab change; the inbox, the coordinator and the threads from the
-// mirror (peer.watch), live. Nothing here acts on the other server:
+// data, read-only. Its board, settings and links with this server come
+// from peer.popup, read when it opens and at each tab change; the
+// inbox, the coordinator and the threads from the mirror (peer.watch),
+// live. Its memory has no tab: nothing of it crosses. Nothing here acts
+// on the other server:
 // every key that would (delegate, accept, a setting, the access) says
 // to change it there. A paired server serves it only while its pane
 // switch for this one is view or type; a tm without it, or one whose
@@ -42,11 +43,10 @@ const (
 	rtabTasks
 	rtabSettings
 	rtabMessages
-	rtabMemory
 	rtabCount
 )
 
-var rtabNames = [rtabCount]string{"overview", "inbox", "tasks", "settings", "messages", "memory"}
+var rtabNames = [rtabCount]string{"overview", "inbox", "tasks", "settings", "messages"}
 
 // remoteTab is the remote popup's tab the local popup's tab shows (A
 // opens the overview, T the tasks, I the inbox).
@@ -60,8 +60,6 @@ func remoteTab(tab int) int {
 		return rtabSettings
 	case tabMessages:
 		return rtabMessages
-	case tabMemory:
-		return rtabMemory
 	}
 	return rtabOverview
 }
@@ -158,7 +156,7 @@ func (v *remotePopupView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 		v.tab = (v.tab + 1) % rtabCount
 	case "left", "shift+tab":
 		v.tab = (v.tab + rtabCount - 1) % rtabCount
-	case "1", "2", "3", "4", "5", "6":
+	case "1", "2", "3", "4", "5":
 		v.tab = int(s[0] - '1')
 	case "home":
 		v.top[v.tab] = 0
@@ -184,7 +182,7 @@ func (v *remotePopupView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 func (v *remotePopupView) refusal(what string) string {
 	if what == "" {
 		what = map[int]string{rtabOverview: "the repositories", rtabInbox: "the inbox", rtabTasks: "the tasks",
-			rtabSettings: "the settings", rtabMessages: "the links", rtabMemory: "the memory"}[v.tab]
+			rtabSettings: "the settings", rtabMessages: "the links"}[v.tab]
 	}
 	return fmt.Sprintf("%s of %s are %s's: change it on %s", what, v.slug, v.alias, v.alias)
 }
@@ -271,8 +269,6 @@ func (v *remotePopupView) box(m *dash) box {
 			body = remoteSettings(v.slug, v.pp.Settings, w)
 		case rtabMessages:
 			body = remoteMessages(v.alias, v.pp.Links, w)
-		case rtabMemory:
-			body = remoteMemory(v.pp.Memory, w)
 		}
 	}
 	status := th().Faint.Render(v.statusWords(pm))
@@ -511,8 +507,9 @@ func allKeys(keys []string) bool {
 }
 
 // remoteMessages are the project's links with this server's projects,
-// as the other side has them, each with its messages' headers: the
-// texts are in this server's project's own Messages tab.
+// as the other side has them, each with the headers of the messages
+// that crossed: the texts are in this server's project's own Messages
+// tab.
 func remoteMessages(alias string, ls []proto.PeerPopupLink, w int) []string {
 	var out []string
 	for _, l := range ls {
@@ -524,22 +521,12 @@ func remoteMessages(alias string, ls []proto.PeerPopupLink, w int) []string {
 			words += ", paused"
 		}
 		head := fit(l.Project, 20) + "  " + r.Arrow() + " " + words
-		var counts []string
-		if l.Unread > 0 {
-			counts = append(counts, fmt.Sprintf("%d unread there", l.Unread))
-		}
-		if l.Held > 0 {
-			counts = append(counts, fmt.Sprintf("%d wait for %s's user", l.Held, alias))
-		}
-		if l.Queued > 0 {
-			counts = append(counts, fmt.Sprintf("%d queued over the rate", l.Queued))
-		}
 		if len(out) > 0 {
 			out = append(out, "")
 		}
 		out = append(out, fit(th().Head.Render(head), w)+reset)
-		if len(counts) > 0 {
-			out = append(out, fit(th().Faint.Render("  "+strings.Join(counts, " · ")), w)+reset)
+		if l.Unread > 0 {
+			out = append(out, fit(th().Faint.Render(fmt.Sprintf("  %d unread there", l.Unread)), w)+reset)
 		}
 		for _, msg := range l.Messages {
 			dir := "←"
@@ -556,17 +543,5 @@ func remoteMessages(alias string, ls []proto.PeerPopupLink, w int) []string {
 	if len(out) == 0 {
 		return []string{th().Faint.Render("no links with this server's projects")}
 	}
-	return append(out, "", th().Faint.Render("→ is "+alias+"'s side sending. Their texts are in your project's Messages tab."))
-}
-
-// remoteMemory are the project's memory notes' titles.
-func remoteMemory(titles []string, w int) []string {
-	var out []string
-	for _, t := range titles {
-		out = append(out, fit(oneLine(t), w)+reset)
-	}
-	if len(out) == 0 {
-		return []string{th().Faint.Render("no notes")}
-	}
-	return append(out, "", th().Faint.Render("Titles only; the notes stay on their server."))
+	return append(out, "", th().Faint.Render("→ is "+alias+"'s side sending; only messages that reached this server show. Their texts are in your project's Messages tab."))
 }

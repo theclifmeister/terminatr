@@ -84,8 +84,9 @@ var ErrNoPopup = proto.Errorf(proto.ErrUnknownMethod, "the paired server's tm se
 
 // cleanPopup is a peer.popup answer with every string cleaned, the words
 // a row shows on one line, ids checked against their patterns (a task
-// or message whose id isn't one is dropped, a thread's is blanked), and
-// each list cut to its most.
+// or message whose id isn't one is dropped, a thread's is blanked),
+// messages only in the states that crossed (proto.PeerMessageStates),
+// and each list cut to its most.
 func cleanPopup(p proto.PeerPopup) proto.PeerPopup {
 	cleanStrings(&p)
 	p.Project = word(peerSlug, p.Project)
@@ -115,17 +116,19 @@ func cleanPopup(p proto.PeerPopup) proto.PeerPopup {
 		if !peerSlug.MatchString(l.Project) {
 			continue
 		}
-		l.Unread, l.Held, l.Queued = max(l.Unread, 0), max(l.Held, 0), max(l.Queued, 0)
+		l.Unread = max(l.Unread, 0)
 		l.Last = word(peerMessage, l.Last)
 		if n := len(l.Messages); n > proto.PeerPopupMaxMessages {
 			l.Messages = l.Messages[n-proto.PeerPopupMaxMessages:]
 		}
 		ms := make([]proto.PeerLinkMessage, 0, len(l.Messages))
 		for _, msg := range l.Messages {
-			if !peerMessage.MatchString(msg.ID) {
+			// Only a message that crossed: a held or queued one a
+			// server sends anyway isn't shown.
+			if !peerMessage.MatchString(msg.ID) || !slices.Contains(proto.PeerMessageStates, msg.State) {
 				continue
 			}
-			msg.Re, msg.State, msg.By = word(peerMessage, msg.Re), word(peerWord, msg.State), word(peerWord, msg.By)
+			msg.Re, msg.By = word(peerMessage, msg.Re), word(peerWord, msg.By)
 			msg.Bytes = max(msg.Bytes, 0)
 			ms = append(ms, msg)
 		}
@@ -133,16 +136,6 @@ func cleanPopup(p proto.PeerPopup) proto.PeerPopup {
 		ls = append(ls, l)
 	}
 	p.Links = ls
-	if len(p.Memory) > proto.PeerPopupMaxMemory {
-		p.Memory = p.Memory[:proto.PeerPopupMaxMemory]
-	}
-	mem := make([]string, 0, len(p.Memory))
-	for _, t := range p.Memory {
-		if t = textsafe.Line(t, 120); t != "" {
-			mem = append(mem, t)
-		}
-	}
-	p.Memory = mem
 	s := &p.Settings
 	for _, w := range []*string{&s.StartThreads, &s.AutoClose, &s.CompleteTasks, &s.Protection, &s.ThreadAgent,
 		&s.CoordinatorAgent, &s.CoordinatorModel, &s.Merge, &s.MergeMethod, &s.GuardMode} {

@@ -14,8 +14,8 @@ import (
 
 // TestPeerProjectPopup (T693): mini shares api and lets studio view its
 // panes. On api's remote dashboard A opens mini's popup of api, read
-// from mini: its goal, its board, its settings and its memory's titles,
-// tab by tab; a key that would act says to change it on mini. With the
+// from mini: its goal, its board and its settings, tab by tab, nothing
+// of its memory; a key that would act says to change it on mini. With the
 // switch back to off, A gives the remote dashboard's message again.
 func TestPeerProjectPopup(t *testing.T) {
 	studio, mini := New(t), New(t)
@@ -75,10 +75,11 @@ func TestPeerProjectPopup(t *testing.T) {
 	if strings.Contains(screen, "SECRET") {
 		t.Fatalf("the branch template crossed:\n%s", screen)
 	}
-	w.Type("6")
-	screen = w.WaitFor("Deploying the API", wait)
-	if strings.Contains(screen, "SECRET-BODY") {
-		t.Fatalf("a note's text crossed:\n%s", screen)
+	w.Type("5")
+	screen = w.WaitFor("no links with this server's projects", wait)
+	// No memory tab, and no note's title or text on any tab.
+	if strings.Contains(screen, "memory") || strings.Contains(screen, "Deploying the API") || strings.Contains(screen, "SECRET-BODY") {
+		t.Fatalf("the memory crossed:\n%s", screen)
 	}
 	w.Type("3")
 	w.Type("D")

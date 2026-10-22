@@ -38,16 +38,15 @@ const (
 	PeerPopupMaxTasks    = 500
 	PeerPopupMaxLinks    = 50
 	PeerPopupMaxMessages = 50 // a link's newest
-	PeerPopupMaxMemory   = 200
 	PeerPopupMaxModels   = 50
 )
 
 // PeerPopup is a shared project's popup as a paired server may read it:
 // its goal, how many repositories (never their paths), its board, its
 // settings that say how it runs (no secrets, no paths, no settings
-// file), its links with the asking server's projects and their messages'
-// headers (never their text), and its memory notes' titles. Now is the
-// far server's clock as it answered.
+// file), and its links with the asking server's projects with the
+// headers of the messages that crossed (never their text). Nothing of
+// its memory crosses. Now is the far server's clock as it answered.
 type PeerPopup struct {
 	Project  string          `json:"project"`
 	Goal     string          `json:"goal,omitempty"`
@@ -56,7 +55,6 @@ type PeerPopup struct {
 	Tasks    []PeerTask      `json:"tasks"`
 	Settings PeerSettings    `json:"settings"`
 	Links    []PeerPopupLink `json:"links"`
-	Memory   []string        `json:"memory"`
 }
 
 // PeerTask is a task of the board: its id, title and status, its
@@ -75,20 +73,25 @@ type PeerTask struct {
 
 // PeerPopupLink is the far project's link with a project of the asking
 // server (Project is that project's slug there, on the near server), as
-// the far side has it: which way messages go from there, and its
-// messages' headers, newest last.
+// the far side has it: which way messages go from there, and the
+// headers of its messages that crossed (PeerMessageStates), newest
+// last; Last is the newest of those. A message held for the far user's
+// OK, queued over the rate, dropped or undelivered never crossed and
+// stays home, its count too.
 type PeerPopupLink struct {
 	Project  string            `json:"project"`
 	Send     bool              `json:"send,omitempty"`
 	Receive  bool              `json:"receive,omitempty"`
 	Paused   bool              `json:"paused,omitempty"`
 	Unread   int               `json:"unread,omitempty"`
-	Held     int               `json:"held,omitempty"`
-	Queued   int               `json:"queued,omitempty"`
 	Last     string            `json:"last,omitempty"`
 	LastAt   time.Time         `json:"last_at,omitzero"`
 	Messages []PeerLinkMessage `json:"messages"`
 }
+
+// PeerMessageStates are the states of a message whose header crosses:
+// it reached the other server (link.StateSent, link.StateRead).
+var PeerMessageStates = []string{"sent", "read"}
 
 // PeerLinkMessage is a message's header: no text, no attachments' names.
 type PeerLinkMessage struct {
