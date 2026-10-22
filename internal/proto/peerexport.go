@@ -153,7 +153,7 @@ func PeerProjectWatch(w ProjectWatch) ProjectWatch {
 	}
 	for _, l := range w.Links {
 		out.Links = append(out.Links, WatchLink{Peer: l.Peer, State: l.State, Send: l.Send, Receive: l.Receive,
-			Paused: l.Paused, Unread: l.Unread, Held: l.Held, Last: l.Last})
+			Paused: l.Paused, Unread: l.Unread, Held: l.Held, Queued: l.Queued, Last: l.Last})
 	}
 	return out
 }
