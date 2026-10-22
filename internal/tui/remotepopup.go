@@ -456,7 +456,8 @@ func safetyOfPeer(p proto.PeerSettings) config.Safety {
 		CoordinatorAgent: p.CoordinatorAgent, Models: p.Models, CoordinatorModel: p.CoordinatorModel, Active: p.Active,
 		Paused: p.Paused, Share: p.Share, Merge: p.Merge, MergeMethod: p.MergeMethod, Guard: p.Guard, GuardMode: p.GuardMode,
 		ArchiveTasksDays: p.ArchiveTasksDays, ArchiveThreadsDays: p.ArchiveThreadsDays, ArchiveInboxDays: p.ArchiveInboxDays,
-		ArchiveJournalDays: p.ArchiveJournalDays, LinkBurst: p.LinkBurst, LinkPerHour: p.LinkPerHour, LinkMaxKB: p.LinkMaxKB}
+		ArchiveJournalDays: p.ArchiveJournalDays, LinkBurst: p.LinkBurst, LinkPerHour: p.LinkPerHour, LinkMaxKB: p.LinkMaxKB,
+		LinkFileMB: p.LinkFileMB, LinkFileKbps: p.LinkFileKbps}
 }
 
 // remoteSettings are the project's settings as its Settings tab words

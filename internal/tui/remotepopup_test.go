@@ -26,7 +26,7 @@ func remotePopupData() proto.PeerPopup {
 		},
 		Settings: proto.PeerSettings{StartThreads: "propose", ParallelThreads: 3, AutoClose: "merged", CompleteTasks: "user",
 			PRFollowup: true, Protection: "sandboxed", Guard: true, GuardMode: "enforce", Merge: "coordinator", MergeMethod: "squash",
-			Active: true, Share: true, ThreadAgent: "claude", CoordinatorAgent: "claude", LinkBurst: 3, LinkPerHour: 10, LinkMaxKB: 8,
+			Active: true, Share: true, ThreadAgent: "claude", CoordinatorAgent: "claude", LinkBurst: 3, LinkPerHour: 10, LinkMaxKB: 8, LinkFileMB: 25, LinkFileKbps: 1024,
 			ArchiveTasksDays: 30, ArchiveThreadsDays: 30, ArchiveInboxDays: 30, ArchiveJournalDays: 30},
 		Links: []proto.PeerPopupLink{{Project: "terminatr", Send: true, Receive: true, Unread: 1, Last: "M-AB12-2", LastAt: at,
 			Messages: []proto.PeerLinkMessage{{ID: "M-AB12-1", Out: true, Created: at, State: "read", Bytes: 20},

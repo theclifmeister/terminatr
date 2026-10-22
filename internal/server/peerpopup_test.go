@@ -124,7 +124,7 @@ func TestPeerPopupAllowlist(t *testing.T) {
 	if z := zeroFields(reflect.ValueOf(pm)); len(z) > 0 {
 		t.Errorf("message fields not copied: %v", z)
 	}
-	if want := []string{"Attachments", "By", "Bytes", "Created", "Due", "ID", "Out", "Peer", "Re", "Refused", "State", "Text"}; !slices.Equal(fieldNames(reflect.TypeFor[link.Message]()), want) {
+	if want := []string{"Attachments", "By", "Bytes", "Created", "Due", "File", "FileSize", "ID", "Out", "Peer", "Re", "Refused", "State", "Text", "Transfer"}; !slices.Equal(fieldNames(reflect.TypeFor[link.Message]()), want) {
 		t.Errorf("link.Message has %v: decide what of a new field a paired server sees (peerMessageOf)", fieldNames(reflect.TypeFor[link.Message]()))
 	}
 }
@@ -172,7 +172,8 @@ func TestPeerPopupNeverLeaks(t *testing.T) {
 			dir = web.Path("messages", other)
 		}
 		os.MkdirAll(dir, 0o755)
-		m := &link.Message{ID: id, Out: out, Created: time.Now(), State: state, By: "coordinator", Bytes: 20, Attachments: []string{"SECRET-FILE"}}
+		m := &link.Message{ID: id, Out: out, Created: time.Now(), State: state, By: "coordinator", Bytes: 20, Attachments: []string{"SECRET-FILE"},
+			File: "SECRET-OFFERED.pdf", FileSize: 4 << 20, Transfer: "X-AB12-99"}
 		if err := mdfile.Write(filepath.Join(dir, id+".md"), m, []byte("SECRET-TEXT\n")); err != nil {
 			t.Fatal(err)
 		}
@@ -251,7 +252,7 @@ func TestPeerPopupNeverLeaks(t *testing.T) {
 	}
 	cfg, _ := os.ReadFile(filepath.Join(root, "config.toml"))
 	for _, never := range []string{"SECRET", "secret-proj", "other/x", "M-4\"", root, "/Users/", "config.toml", "users/", `"notes":`, `"text"`, `"attachments"`, `"owner"`, `"repo"`,
-		"M-AB12-2", "M-AB12-5", "M-AB12-6", "M-AB12-7", `"held"`, `"queued"`, "dropped", "undelivered", `"memory"`} {
+		"M-AB12-2", "M-AB12-5", "M-AB12-6", "M-AB12-7", "X-AB12-99", `"file`, "4194304", `"held"`, `"queued"`, "dropped", "undelivered", `"memory"`} {
 		if strings.Contains(string(raw), never) {
 			t.Errorf("%q crossed:\n%s", never, raw)
 		}

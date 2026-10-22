@@ -70,7 +70,7 @@ func peerSettingsOf(s config.Safety) proto.PeerSettings {
 		Active: s.Active, Paused: s.Paused, Share: s.Share, Merge: s.Merge, MergeMethod: s.MergeMethod, Guard: s.Guard,
 		GuardMode: s.GuardMode, ArchiveTasksDays: s.ArchiveTasksDays, ArchiveThreadsDays: s.ArchiveThreadsDays,
 		ArchiveInboxDays: s.ArchiveInboxDays, ArchiveJournalDays: s.ArchiveJournalDays, LinkBurst: s.LinkBurst,
-		LinkPerHour: s.LinkPerHour, LinkMaxKB: s.LinkMaxKB}
+		LinkPerHour: s.LinkPerHour, LinkMaxKB: s.LinkMaxKB, LinkFileMB: s.LinkFileMB, LinkFileKbps: s.LinkFileKbps}
 }
 
 // peerLinksOf are p's links (rows) with the projects of the paired
@@ -104,8 +104,8 @@ func peerLinksOf(p *project.Project, rows []link.Row, alias string) []proto.Peer
 	return out
 }
 
-// peerMessageOf is m's header: its text, attachments, refusal code and
-// due time stay home.
+// peerMessageOf is m's header: its text, attachments, refusal code, due
+// time and the file it offers (its name, size and transfer) stay home.
 func peerMessageOf(m *link.Message) proto.PeerLinkMessage {
 	return proto.PeerLinkMessage{ID: m.ID, Out: m.Out, Created: m.Created, Re: m.Re, Bytes: m.Bytes, State: m.State, By: m.By}
 }

@@ -2611,15 +2611,16 @@ user shares a project, and nothing that crosses can act here.
   `coordinator_access`, `thread_agent`, `coordinator_agent`, `models`,
   `coordinator_model`, `active`, `paused`, `share`, `merge`,
   `merge_method`, `guard`, `guard_mode`, the `archive_*_days` and the
-  link limits), never `branch_name`, `guard_off`, `guard_allow`,
+  link limits, files' too: `link_file_mb`, `link_file_kbps`), never `branch_name`, `guard_off`, `guard_allow`,
   `global_parallel_threads`, `archived`, `pinned`, secrets or the
   settings file; `links` its links with the caller's projects only
   (the keys `<caller's alias>/<slug>`, named by that slug), each with
   which way messages go from this side, its `unread` count, and the
   headers of its messages that crossed: `sent` or `read` only, the
   newest 50, each `{"id", "out", "created", "re", "bytes", "state",
-  "by"}`, and the newest one's id and time; never their text or
-  attachments. A message held for this user's OK, queued over the
+  "by"}`, and the newest one's id and time; never their text,
+  attachments or the file one offers (its name, size or transfer,
+  §16.13). A message held for this user's OK, queued over the
   rate, dropped or undelivered never left, so neither it nor its count
   crosses. Nothing of the project's memory crosses, not even its notes'
   titles; the popup has no memory tab. The reader cleans every string

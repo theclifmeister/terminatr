@@ -143,4 +143,6 @@ type PeerSettings struct {
 	LinkBurst                int      `json:"link_burst"`
 	LinkPerHour              int      `json:"link_per_hour"`
 	LinkMaxKB                int      `json:"link_max_kb"`
+	LinkFileMB               int      `json:"link_file_mb"`
+	LinkFileKbps             int      `json:"link_file_kbps"`
 }
