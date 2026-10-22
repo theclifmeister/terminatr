@@ -48,6 +48,8 @@ import (
 	"strings"
 	"time"
 	"unicode"
+
+	"github.com/theclifmeister/terminatr/internal/textsafe"
 )
 
 // Rules are what a session's guard refuses, as the server works them out
@@ -1762,10 +1764,10 @@ func called(words []string) []string {
 var trapFunc = regexp.MustCompile(`(?:^|[\s;&|(){}])(?:function\s+TRAP[A-Z0-9]+(?:\s*\(\s*\))?|TRAP[A-Z0-9]+\s*\(\s*\))`)
 
 // trapFuncs are the bodies of the trap functions text defines: what
-// follows each head, to the part's end.
+// follows each head outside quotes (unquoted), to the part's end.
 func trapFuncs(text string) []string {
 	var out []string
-	for _, m := range trapFunc.FindAllStringIndex(text, -1) {
+	for _, m := range trapFunc.FindAllStringIndex(unquoted(text), -1) {
 		if b := strings.TrimSpace(text[m[1]:]); b != "" {
 			out = append(out, b)
 		}
@@ -1780,6 +1782,54 @@ const funcName = "[^\\s;&|(){}<>'\"$`=\\\\]+"
 // funcHead is the head of a function's definition, any name: f(),
 // function f or function f().
 var funcHead = regexp.MustCompile(`(?:^|[\s;&|(){}])(?:function\s+(` + funcName + `)(?:\s*\(\s*\))?|(` + funcName + `)\s*\(\s*\))`)
+
+// unquoted is text with what its quotes ('…', $'…', "…") hold blanked,
+// byte for byte: what is scanned for the heads of the functions it
+// defines, so that code a quoted argument carries (sed -e "s|(e()…|",
+// python3 -c '…') isn't read as one. A quote that holds a $( or a
+// backtick, which the shell runs, is kept, and so is all of text when
+// one doesn't close.
+func unquoted(text string) string {
+	b := []byte(text)
+	for i := 0; i < len(b); i++ {
+		var j int
+		switch {
+		case b[i] == '\\':
+			i++
+			continue
+		case b[i] == '$' && i+1 < len(b) && b[i+1] == '\'':
+			for j = i + 2; j < len(b) && b[j] != '\''; j++ {
+				if b[j] == '\\' {
+					j++
+				}
+			}
+			i++
+		case b[i] == '\'':
+			j = strings.IndexByte(text[i+1:], '\'') + i + 1
+			if j == i {
+				j = len(b)
+			}
+		case b[i] == '"':
+			for j = i + 1; j < len(b) && b[j] != '"'; j++ {
+				if b[j] == '\\' {
+					j++
+				}
+			}
+		default:
+			continue
+		}
+		if j >= len(b) {
+			return text
+		}
+		if in := text[i+1 : j]; !strings.Contains(in, "$(") && !strings.Contains(in, "`") {
+			for k := i + 1; k < j; k++ {
+				b[k] = ' '
+			}
+		}
+		i = j
+	}
+	return string(b)
+}
 
 // tableName is zsh's functions or aliases table, alone or with a
 // subscript, as an assignment or a command that assigns names is given
@@ -1841,10 +1891,11 @@ func assignsExp(text string) bool {
 var nameTakers = setOf("read typeset declare export local readonly integer float mapfile readarray vared getopts")
 
 // definitions are the names and bodies of the functions part defines
-// (what follows each head, to the part's end), and of its aliases and
+// (what follows each head outside quotes, unquoted, to the part's end),
+// and of its aliases and
 // assignments to zsh's functions and aliases tables (their values).
 func (r Rules) definitions(part string) (names, bodies []string) {
-	for _, m := range funcHead.FindAllStringSubmatchIndex(part, -1) {
+	for _, m := range funcHead.FindAllStringSubmatchIndex(unquoted(part), -1) {
 		if m[2] >= 0 {
 			names = append(names, part[m[2]:m[3]])
 		} else {
@@ -5870,27 +5921,22 @@ func (r Rules) isWorktreeRoot(p string) bool {
 	return len(strings.Split(p[len(wt)+1:], "/")) <= 2
 }
 
-// safe keeps a path or branch to the characters a journal line needs.
+// safe is a path or branch as a summary shows it: as written ($S/x,
+// *.cs), one line without what textsafe drops, cut at 100 UTF-16 units
+// (as the journal has always counted them).
 func safe(s string) string {
 	var b strings.Builder
 	n := 0
-	for _, c := range s {
-		ok := c < 128 && (c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || strings.ContainsRune("._/~@+:-", c))
+	for _, c := range textsafe.Clean(s, false) {
 		w := 1
 		if c > 0xFFFF {
-			w = 2 // two UTF-16 units, as the journal has always counted them
+			w = 2
 		}
-		for range w {
-			if n == 100 {
-				return b.String()
-			}
-			if ok {
-				b.WriteRune(c)
-			} else {
-				b.WriteByte('?')
-			}
-			n++
+		if n+w > 100 {
+			break
 		}
+		b.WriteRune(c)
+		n += w
 	}
 	return b.String()
 }
