@@ -314,6 +314,11 @@ func (s *Session) Read(scrollback bool) (proto.SessionReadResult, error) {
 // that edit the prompt box (not mouse or focus reports) make what is in
 // it no longer tm's own steer (PromptNow).
 func (s *Session) Input(p []byte) error {
+	// Only what the program asked for: a console's terminal replies, and
+	// reports of modes the program has off, never reach it.
+	if p = emu.ForProgram(p, s.Modes()); len(p) == 0 {
+		return nil
+	}
 	if err := s.input(p); err != nil {
 		return err
 	}
@@ -410,6 +415,16 @@ func (s *Session) resizeLater() {
 	if err := s.Resize(s.want[0], s.want[1]); err != nil && !errors.Is(err, ErrExited) {
 		s.cfg.Logf("session %s: resize: %v", s.cfg.ID, err)
 	}
+}
+
+// Modes are the program's terminal modes; none once it exited.
+func (s *Session) Modes() emu.Modes {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.term == nil {
+		return emu.Modes{}
+	}
+	return s.term.Modes()
 }
 
 // SetColorScheme records the colour scheme of the terminal a client is

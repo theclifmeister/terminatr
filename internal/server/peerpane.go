@@ -8,12 +8,11 @@ package server
 
 import (
 	"slices"
-	"strconv"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
+	"github.com/theclifmeister/terminatr/internal/emu"
 	"github.com/theclifmeister/terminatr/internal/peer"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
@@ -55,6 +54,10 @@ func (h peerPanes) OpenPane(c caller.Caller, slug, id string) (peer.PaneSource, 
 	return src, proto.PeerSessionOf(info), nil
 }
 
+// takeoverLogged is how much of the input that raised a takeover the
+// log keeps.
+const takeoverLogged = 32
+
 // paneSource is one of this server's panes open on a paired server.
 type paneSource struct {
 	s    *Server
@@ -76,62 +79,27 @@ func (p *paneSource) Resync()              { p.sub.Resync() }
 
 // Input types keys from the peer's console: the first into a thread's
 // pane on this stream tells its coordinator, as a local console's first
-// keys do (docs/SPEC.md §4), in this server's words.
+// keys do (docs/SPEC.md §4), in this server's words. Only a person's
+// typing counts, a key, a paste or a click that reaches the program: the
+// console's reports (focus, mouse release, motion and wheel) and the
+// terminal's replies, which the session drops, don't (emu.NextInput).
 func (p *paneSource) Input(b []byte) error {
 	p.mu.Lock()
-	tell := p.info.Role == proto.RoleThread && !p.told && typing(b)
+	tell := p.info.Role == proto.RoleThread && !p.told && emu.Typed(emu.ForProgram(b, p.sess.Modes()))
 	if tell {
 		p.told = true
 	}
 	p.mu.Unlock()
 	if tell {
-		go p.takeover()
+		go p.takeover(string(b[:min(len(b), takeoverLogged)]))
 	}
 	return p.sess.Input(b)
 }
 
-// typing reports whether b holds something the user did: a key, a paste
-// or a mouse press. The console's own reports (focus in and out, which it
-// sends when a pane is shown or the window changes focus, and mouse
-// release, motion and wheel) are not typing, so they raise no takeover.
-func typing(b []byte) bool {
-	for len(b) > 0 {
-		if b[0] != 0x1b || len(b) < 3 || b[1] != '[' {
-			return true
-		}
-		switch b[2] {
-		case 'I', 'O': // focus in, focus out
-			b = b[3:]
-		case '<': // SGR mouse: ESC [ < Cb ; Cx ; Cy M|m
-			end := 3
-			for end < len(b) && b[end] != 'M' && b[end] != 'm' {
-				end++
-			}
-			if end == len(b) {
-				return true
-			}
-			cb, _, _ := strings.Cut(string(b[3:end]), ";")
-			n, err := strconv.Atoi(cb)
-			if err != nil || (b[end] == 'M' && n&(32|64) == 0) {
-				return true // a press (or something we can't read)
-			}
-			b = b[end+1:]
-		case 'M': // X10 mouse: ESC [ M Cb Cx Cy
-			if len(b) < 6 {
-				return true
-			}
-			if cb := int(b[3]) - 32; cb&3 != 3 && cb&(32|64) == 0 {
-				return true
-			}
-			b = b[6:]
-		default:
-			return true
-		}
-	}
-	return false
-}
-
-func (p *paneSource) takeover() {
+// takeover tells the thread's coordinator; the log keeps the start of
+// the input that raised it, typed.
+func (p *paneSource) takeover(typed string) {
+	p.s.log.Printf("session %s: takeover from %s on %q", p.info.ID, p.by, typed)
 	pr, err := project.Open(p.info.Project)
 	if err == nil {
 		err = pr.TookOver(p.by, p.info.Thread, thread.Label(pr, p.info.Thread))

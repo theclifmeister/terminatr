@@ -1926,7 +1926,7 @@ func (c *client) input(k uv.Key) {
 	if ok {
 		b, err = c.enc.Key(p.mirror, ek)
 	}
-	if err == nil && len(b) > 0 {
+	if err == nil && emu.Typed(b) {
 		c.typed(p)
 	}
 	claim := c.needClaim()
