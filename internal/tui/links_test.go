@@ -315,3 +315,38 @@ func TestQueuedState(t *testing.T) {
 		t.Errorf("row %q", lines[0])
 	}
 }
+
+// TestDropQueuedKey: X drops a message queued over the rate, after a Y,
+// as it does a held one; A doesn't apply to it, and a message queued
+// for a paired server (no due time: it has left) or sent has no X.
+func TestDropQueuedKey(t *testing.T) {
+	src, m := linkDash(t)
+	now := time.Now()
+	src.linkLog = append(src.linkLog,
+		&link.Message{ID: "M-4", Out: true, Peer: "beta", Created: now, Bytes: 3, State: link.StateQueued, Due: now.Add(10 * time.Minute), By: "coordinator", Text: "Over the rate"},
+		&link.Message{ID: "M-5", Out: true, Peer: "beta", Created: now, Bytes: 3, State: link.StateQueued, By: "coordinator", Text: "In the outbox"})
+	m.openTab("alpha", tabMessages, 0)
+	press(m, "enter")
+	cv := m.top().(*convView)
+	cv.sel = 2
+	if out := screen(m); !strings.Contains(out, "X drop") || strings.Contains(out, "A approve") {
+		t.Fatalf("keys on a queued message:\n%s", out)
+	}
+	press(m, "A")
+	if len(src.linkActs) != 0 || !strings.Contains(m.msg, "only a message") {
+		t.Fatalf("A on a queued one: %v %q", src.linkActs, m.msg)
+	}
+	press(m, "X")
+	if _, ok := m.top().(*confirmView); !ok {
+		t.Fatalf("X: %T", m.top())
+	}
+	drain(t, m, press(m, "Y"))
+	if len(src.linkActs) != 1 || src.linkActs[0] != "alpha drop M-4" {
+		t.Fatalf("acts %v", src.linkActs)
+	}
+	cv.sel = 3
+	press(m, "X")
+	if _, ok := m.top().(*confirmView); ok || len(src.linkActs) != 1 {
+		t.Fatalf("X on one in the outbox: %T %v", m.top(), src.linkActs)
+	}
+}

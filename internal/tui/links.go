@@ -474,6 +474,13 @@ func (m *dash) openConversation(slug, other string) tea.Cmd {
 	return nil
 }
 
+// droppable is a message the user can still drop: waiting for the OK,
+// or queued over the rate (in the outbox for a paired server it has no
+// due time, and has left).
+func droppable(m *link.Message) bool {
+	return m != nil && m.Out && (m.State == link.StateHeld || m.State == link.StateQueued && !m.Due.IsZero())
+}
+
 func (v *convView) load(m *dash) {
 	v.msgs, v.err = m.src.LinkLog(v.slug, v.other)
 	v.loaded = time.Now()
@@ -512,8 +519,9 @@ func (v *convView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	case "up", "down", "pgup", "pgdown":
 		v.sel = moveSel(v.sel, scrollKeys[s], len(v.msgs))
 	case "A", "X":
-		if cur == nil || !cur.Out || cur.State != link.StateHeld {
-			m.msg = "only a message that waits for your OK can be approved or dropped"
+		held := cur != nil && cur.Out && cur.State == link.StateHeld
+		if !held && (s == "A" || !droppable(cur)) {
+			m.msg = "only a message that waits for your OK can be approved, or one that waits over the rate dropped"
 			return nil
 		}
 		if s == "A" {
@@ -628,8 +636,12 @@ func (v *convView) render(m *dash) string {
 		lines = append(lines, th().Faint.Render("no messages yet"))
 	}
 	keys := []string{}
-	if v.sel < len(v.msgs) && v.msgs[v.sel].Out && v.msgs[v.sel].State == link.StateHeld {
-		keys = append(keys, "A approve", "X drop")
+	if v.sel < len(v.msgs) {
+		if cur := v.msgs[v.sel]; cur.Out && cur.State == link.StateHeld {
+			keys = append(keys, "A approve", "X drop")
+		} else if droppable(cur) {
+			keys = append(keys, "X drop")
+		}
 	}
 	if r.Paused {
 		keys = append(keys, "R resume")
