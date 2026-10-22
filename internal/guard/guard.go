@@ -3426,9 +3426,9 @@ func (r Rules) globReaches(p, root string) bool {
 // shell doesn't read: what is scanned for the functions it defines.
 type linePart struct {
 	text, code, before, after string
-	doc                 bool
-	group               *lineGroup
-	loose               int
+	doc                       bool
+	group                     *lineGroup
+	loose                     int
 }
 
 // lineGroup is a part's ( ) or { } (linePart): the words before it
