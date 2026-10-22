@@ -1314,6 +1314,69 @@ func TestHistorySetting(t *testing.T) {
 	}
 }
 
+// TestLinkLimitsSetting: Link limits lists the burst, the rate and the
+// size; lowering one saves it, raising one above its default asks first
+// (N leaves it), and x makes the project follow all projects again.
+func TestLinkLimitsSetting(t *testing.T) {
+	src, m := popupData(t)
+	m.Update(tea.WindowSizeMsg{Width: 160, Height: 60})
+	keyPress(m, "A")
+	keyPress(m, "4")
+	pv := m.top().(*projectView)
+	i := slices.IndexFunc(pv.settings.rows, func(r setting) bool { return r.label == "Link limits" })
+	if i < 0 {
+		t.Fatal("no Link limits row")
+	}
+	pv.settings.sel = i
+	if out := screen(m); !strings.Contains(out, "3 at once · 10 an hour · 8 KB · all projects") {
+		t.Fatalf("row:\n%s", out)
+	}
+	keyPress(m, "enter")
+	if _, ok := m.top().(*historyView); !ok {
+		t.Fatalf("enter opened %T", m.top())
+	}
+	out := screen(m)
+	for _, w := range []string{"link limits for alpha", "Messages at once", "Messages an hour", "Message size", "+ - one"} {
+		if !strings.Contains(out, w) {
+			t.Errorf("view lacks %q:\n%s", w, out)
+		}
+	}
+	act(t, m, src, "-") // burst 3 → 2, no question
+	if s := alphaSafety(t); s.LinkBurst != 2 {
+		t.Fatalf("saved %+v", s)
+	}
+	keyPress(m, "down")
+	keyPress(m, "enter") // an hour 10 → 20: asks
+	cv, ok := m.top().(*confirmView)
+	if !ok || !strings.Contains(cv.question, "to 20 an hour (the default is 10 an hour)") {
+		t.Fatalf("raise didn't ask: %T %+v", m.top(), cv)
+	}
+	keyPress(m, "N")
+	if s := alphaSafety(t); s.LinkPerHour != 10 {
+		t.Fatalf("N saved %+v", s)
+	}
+	keyPress(m, "enter")
+	act(t, m, src, "Y")
+	if s := alphaSafety(t); s.LinkPerHour != 20 {
+		t.Fatalf("Y didn't save %+v", s)
+	}
+	keyPress(m, "up")
+	act(t, m, src, "X")
+	if s := alphaSafety(t); s.LinkBurst != config.DefaultLinkBurst {
+		t.Fatal("x left the project's own value")
+	}
+}
+
+// alphaSafety is alpha's settings as the file has them.
+func alphaSafety(t *testing.T) config.Safety {
+	t.Helper()
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return must(cfg.Safety("alpha"))
+}
+
 // lineWith is the first line of out that contains s, "" for none.
 func lineWith(out, s string) string {
 	for _, l := range strings.Split(out, "\n") {

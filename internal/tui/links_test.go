@@ -251,3 +251,23 @@ func TestLinkRequests(t *testing.T) {
 		t.Fatalf("decline %v", src.linkActs)
 	}
 }
+
+// TestConvState: the conversation says when a message over the rate
+// goes, and tells it from one waiting for a paired server; the links
+// list counts those waiting.
+func TestConvState(t *testing.T) {
+	due := time.Now().Add(12 * time.Minute)
+	if got := convState(&link.Message{State: link.StateQueued, Due: due}); !strings.HasPrefix(got, "queued over the rate, goes about ") || !strings.Contains(got, due.Local().Format("15:04")) {
+		t.Errorf("over the rate: %q", got)
+	}
+	if got := convState(&link.Message{State: link.StateQueued}); got != "queued for the paired server" {
+		t.Errorf("outbox: %q", got)
+	}
+	if got := convState(&link.Message{State: link.StateUndelivered, Refused: "no-link"}); got != "not delivered (no-link)" {
+		t.Errorf("undelivered: %q", got)
+	}
+	p := ProjectData{Links: []link.Row{{Peer: "beta", Queued: 6}}}
+	if lines, _, _ := messagesLines(p, -1, 120); !strings.Contains(ansi.Strip(lines[0]), "6 queued over the rate") {
+		t.Errorf("row %q", lines[0])
+	}
+}
