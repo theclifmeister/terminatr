@@ -59,4 +59,7 @@ const (
 type PeerMessageResult struct {
 	Status string `json:"status"`
 	Code   string `json:"code,omitempty"`
+	// RetryAfter is, with PeerRetry, how many seconds the outbox waits
+	// before it tries that server again; 0 is its next poll.
+	RetryAfter int `json:"retry_after,omitempty"`
 }

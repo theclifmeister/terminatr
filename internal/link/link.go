@@ -48,19 +48,14 @@ const (
 	KindUndelivered = "link-undelivered"
 )
 
-// Limits, fixed in v1.
+// Limits fixed in v1. Each direction's rate and the most a message's
+// text may have, after cleaning, are the user's settings (limits,
+// config.LinkKeys).
 const (
-	// MaxText is the most bytes a message's text may have, after
-	// cleaning.
-	MaxText = 8 << 10
 	// MaxAttach and MaxAttachSize bound a message's attachments: library
 	// files of the sending project's threads, copied.
 	MaxAttach     = 3
 	MaxAttachSize = 1 << 20
-	// PerHour and Burst are each direction's token bucket: Burst
-	// messages at once, then PerHour an hour.
-	PerHour = 10
-	Burst   = 3
 	// Exchanges is the conversation breaker: this many exchanges (a
 	// message each way) within an hour without the user pauses the link.
 	Exchanges = 6
@@ -72,9 +67,10 @@ const (
 	StateSent    = "sent"    // delivered to both folders
 	StateRead    = "read"    // the receiver handled its inbox item
 	StateDropped = "dropped" // the user dropped a held message
-	// A message to a paired server's project waits in the outbox
-	// (queued) until that server takes it (sent), or doesn't
-	// (undelivered).
+	// A message over its direction's rate waits in the sender's folder
+	// (queued, with Due) until its bucket refills (queue.go). A message
+	// to a paired server's project then waits in the outbox (queued)
+	// until that server takes it (sent), or doesn't (undelivered).
 	StateQueued      = "queued"
 	StateUndelivered = "undelivered"
 )
@@ -96,6 +92,9 @@ type Message struct {
 	// Refused is the code a paired server refused an undelivered
 	// message with (RefusalWords), "expired" when it didn't take it.
 	Refused string `toml:"refused,omitempty" json:"refused,omitempty"`
+	// Due is when a message waiting over the rate should go: zero once
+	// it went.
+	Due time.Time `toml:"due,omitzero" json:"due,omitzero"`
 	// Peer is the other project (the folder's name), Text the message;
 	// neither is in the front matter.
 	Peer string `toml:"-" json:"peer"`
@@ -330,16 +329,16 @@ func checkAttach(p *project.Project, specs []string) ([]attachment, error) {
 type deliverer interface {
 	// newID numbers a message on the link.
 	newID(s *store) string
-	deliver(s *store, c caller.Caller, from *project.Project, m *Message, att []attachment) error
+	deliver(s *store, c caller.Caller, from *project.Project, m *Message, att []attachment, l limits) error
 }
 
 // local is a project on this server.
 type local struct{ to *project.Project }
 
-func (l local) newID(s *store) string { return s.nextID() }
+func (lo local) newID(s *store) string { return s.nextID() }
 
-func (l local) deliver(s *store, c caller.Caller, from *project.Project, m *Message, att []attachment) error {
-	return s.deliver(c, from, l.to, m, att)
+func (lo local) deliver(s *store, c caller.Caller, from *project.Project, m *Message, att []attachment, l limits) error {
+	return s.deliver(c, from, lo.to, m, att, l)
 }
 
 // resolve is the deliverer to the other side key: a project here
@@ -374,10 +373,11 @@ func target(cfg *config.Config, slug string) (*project.Project, error) {
 // Send sends a message from project from to project to, as caller c
 // (the coordinator, or the human for the project; the CLI checks that a
 // coordinator is from's own). It refuses, with nothing written, in the
-// order: the receiving project, the link (both sides), the breaker, the
-// text, --re, the attachments, the rate. On a link whose ask is on, a
+// order: the receiving project, the link (both sides), the text, --re,
+// the attachments, the breaker. On a link whose ask is on, a
 // coordinator's message waits for the user's OK (StateHeld) and a
-// link-held item tells the sender's inbox.
+// link-held item tells the sender's inbox. One over the rate, or behind
+// others that are, waits queued (queue.go).
 func Send(c caller.Caller, from *project.Project, toSlug string, o Opts) (*Message, error) {
 	if c.Kind == caller.Thread {
 		return nil, refuse("coordinator-only", "messages to linked projects are the coordinator's")
@@ -402,8 +402,13 @@ func Send(c caller.Caller, from *project.Project, toSlug string, o Opts) (*Messa
 	if text == "" {
 		return nil, refuse("empty", "the message has no text")
 	}
-	if len(text) > MaxText {
-		return nil, refuse("too-long", "message is %s, at most 8 KB: shorten it or attach a library file", KB(len(text)))
+	l := limitsOf(cfg, from.Slug, toSlug)
+	if len(text) > l.maxText {
+		how := "shorten it or attach a library file"
+		if _, ok := d.(remote); ok {
+			how = "split it into parts, which go in order"
+		}
+		return nil, refuse("too-long", "message is %s, at most %s: %s", KB(len(text)), KB(l.maxText), how)
 	}
 	if o.Re != "" {
 		if !ValidID(o.Re) {
@@ -425,7 +430,9 @@ func Send(c caller.Caller, from *project.Project, toSlug string, o Opts) (*Messa
 		m.Attachments = append(m.Attachments, a.name)
 	}
 	err = withStore(func(s *store) error {
-		if err := s.allow(from.Slug, toSlug, !ask, now()); err != nil {
+		// Those waiting on the link go first, as far as they can.
+		s.drain(cfg, from.Slug, toSlug, now())
+		if err := s.allow(from.Slug, toSlug); err != nil {
 			return err
 		}
 		m.ID = d.newID(s)
@@ -440,10 +447,16 @@ func Send(c caller.Caller, from *project.Project, toSlug string, o Opts) (*Messa
 			}
 			return nil
 		}
-		return d.deliver(s, c, from, m, att)
+		if s.over(from.Slug, toSlug, l, now()) {
+			return s.wait(from, m, att, false, l, now())
+		}
+		return d.deliver(s, c, from, m, att, l)
 	})
 	if err != nil {
 		return nil, err
+	}
+	if !m.Due.IsZero() {
+		from.Journal(c, "link.queued", toSlug, queuedWords(m))
 	}
 	if ask {
 		if _, err := from.AddMessageItem(KindHeld, toSlug, fmt.Sprintf("your message %s to %s (%s) waits for the user's OK", m.ID, toSlug, KB(m.Bytes)), true, m.ID); err != nil {
@@ -498,7 +511,7 @@ func copyFile(src, dst string) error {
 // deliver writes m (Out, in from's folder) to both projects, raises the
 // receiver's item, journals both and counts it for the rate and the
 // breaker; the store is locked.
-func (s *store) deliver(c caller.Caller, from, to *project.Project, m *Message, att []attachment) error {
+func (s *store) deliver(c caller.Caller, from, to *project.Project, m *Message, att []attachment, l limits) error {
 	m.State = StateSent
 	if err := write(from, m); err != nil {
 		return err
@@ -527,7 +540,7 @@ func (s *store) deliver(c caller.Caller, from, to *project.Project, m *Message, 
 	detail := fmt.Sprintf("%s (%s)", m.ID, KB(m.Bytes))
 	from.Journal(c, "link.send", to.Slug, detail)
 	to.Journal(c, "link.receive", from.Slug, detail)
-	s.account(c.IsAgent(), from.Slug, to.Slug, now(), side{from, to.Slug}, side{to, from.Slug})
+	s.account(c.IsAgent(), from.Slug, to.Slug, l, now(), side{from, to.Slug}, side{to, from.Slug})
 	return nil
 }
 
@@ -541,8 +554,8 @@ type side struct {
 // account spends a token of from → to and counts the message for the
 // breaker: a coordinator's (agent) message counts toward a pause, which
 // each side here hears of; the user's starts the count again.
-func (s *store) account(agent bool, from, to string, t time.Time, sides ...side) {
-	s.spend(from, to, t)
+func (s *store) account(agent bool, from, to string, l limits, t time.Time, sides ...side) {
+	s.spend(from, to, l, t)
 	if !agent {
 		s.human(from, to, t)
 		return
@@ -603,7 +616,8 @@ func held(p *project.Project, id string) (*Message, error) {
 }
 
 // Approve sends p's held message id: the user's OK. The link and the
-// breaker are checked again, and the rate.
+// breaker are checked again; over the rate it waits queued, to go as
+// the user's.
 func Approve(c caller.Caller, p *project.Project, id string, approved bool) (*Message, error) {
 	if err := heldFor(c, approved, "approving a held message"); err != nil {
 		return nil, err
@@ -627,18 +641,27 @@ func Approve(c caller.Caller, p *project.Project, id string, approved bool) (*Me
 		if err := stillHeld(p, m); err != nil {
 			return err
 		}
-		if err := s.allow(p.Slug, m.Peer, true, now()); err != nil {
+		s.drain(cfg, p.Slug, m.Peer, now())
+		if err := s.allow(p.Slug, m.Peer); err != nil {
 			return err
 		}
 		s.unhold(p.Slug, m.Peer, m.ID)
+		l := limitsOf(cfg, p.Slug, m.Peer)
+		if s.over(p.Slug, m.Peer, l, now()) {
+			// Its files are in p's folder since it was held.
+			return s.wait(p, m, nil, true, l, now())
+		}
 		// The user's OK is the user's input on the link.
 		user := caller.Caller{Kind: caller.Human}
-		return d.deliver(s, user, p, m, nil)
+		return d.deliver(s, user, p, m, nil, l)
 	})
 	if err != nil {
 		return nil, err
 	}
 	p.Journal(c, "link.approve", m.Peer, approvedWords(c, m.ID))
+	if !m.Due.IsZero() {
+		p.Journal(c, "link.queued", m.Peer, queuedWords(m))
+	}
 	doneHeld(p, m.ID)
 	return m, nil
 }
@@ -721,6 +744,8 @@ func Resume(c caller.Caller, p *project.Project, other string, approved bool) er
 	}
 	p.Journal(c, "link.resume", other, approvedWords(c, ""))
 	p.DoneItems(KindPaused, other)
+	Drain() // what waited while it was paused
+	Kick()
 	if o, err := project.Open(other); err == nil {
 		o.Journal(c, "link.resume", p.Slug, approvedWords(c, ""))
 		o.DoneItems(KindPaused, p.Slug)
@@ -762,21 +787,26 @@ func Paused(a, b string) bool {
 }
 
 // looked is what a look at the links needs from the store: which pairs
-// are paused and how many messages wait, by direction.
+// are paused and how many messages wait, held or over the rate, by
+// direction.
 type looked struct {
 	paused   map[string]bool
 	held     map[string]int
+	queued   map[string]int
 	requests []*Request
 }
 
 func look() looked {
-	l := looked{paused: map[string]bool{}, held: map[string]int{}}
+	l := looked{paused: map[string]bool{}, held: map[string]int{}, queued: map[string]int{}}
 	readStore(func(s *store) {
 		for k, p := range s.Pairs {
 			l.paused[k] = p.Paused
 		}
 		for k, ids := range s.Held {
 			l.held[k] = len(ids)
+		}
+		for k, q := range s.Queued {
+			l.queued[k] = len(q)
 		}
 		l.requests = s.Requests
 	})
@@ -921,7 +951,7 @@ func Frame(self string, m *Message) string {
 	if m.Re != "" {
 		meta = append(meta, "re "+m.Re)
 	}
-	meta = append(meta, "sent "+m.Created.Local().Format("2006-01-02 15:04"), "to "+m.To(self), m.State)
+	meta = append(meta, "sent "+m.Created.Local().Format("2006-01-02 15:04"), "to "+m.To(self), StateWords(m))
 	if len(m.Attachments) > 0 {
 		meta = append(meta, "attached: "+strings.Join(m.Attachments, ", ")+" (tm link read "+m.ID+" --file NAME)")
 	}

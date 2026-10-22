@@ -142,7 +142,7 @@ func runLink(e *Env, args []string) error {
 			return nil
 		}
 		for _, m := range msgs {
-			fmt.Fprintf(e.Stdout, "%s  %s  %s → %s  %s%s  %s\n", m.ID, m.Created.Local().Format("2006-01-02 15:04"), m.From(p.Slug), m.To(p.Slug), link.KB(m.Bytes), reWords(m.Re), m.State)
+			fmt.Fprintf(e.Stdout, "%s  %s  %s → %s  %s%s  %s\n", m.ID, m.Created.Local().Format("2006-01-02 15:04"), m.From(p.Slug), m.To(p.Slug), link.KB(m.Bytes), reWords(m.Re), link.StateWords(m))
 			fmt.Fprint(e.Stdout, link.Frame(p.Slug, m))
 		}
 		return nil
@@ -272,9 +272,12 @@ func linkAllowWords(allow string, ask bool) string {
 	return allow
 }
 
-// sentWords is what send and approve say of a message that went: sent
-// here, or queued for a paired server.
+// sentWords is what send and approve say of a message: sent here, queued
+// over the link's rate, or queued for a paired server.
 func sentWords(m *link.Message) string {
+	if !m.Due.IsZero() {
+		return fmt.Sprintf("queued %s for %s (%s%s): over the link's rate, it goes in order %s; nothing more to do, tm link log %s shows it sent", m.ID, m.Peer, link.KB(m.Bytes), reWords(m.Re), link.DueWords(m), m.Peer)
+	}
 	if m.State == link.StateQueued {
 		return fmt.Sprintf("queued %s for %s (%s%s): it goes when the link to that server is up; tm link log %s shows sent, then read", m.ID, m.Peer, link.KB(m.Bytes), reWords(m.Re), m.Peer)
 	}
@@ -288,7 +291,7 @@ func reWords(re string) string {
 	return ", re " + re
 }
 
-// rowCounts are a link row's unread, held and last message.
+// rowCounts are a link row's unread, held, queued and last message.
 func rowCounts(r link.Row) string {
 	s := ""
 	if r.Unread > 0 {
@@ -296,6 +299,9 @@ func rowCounts(r link.Row) string {
 	}
 	if r.Held > 0 {
 		s += fmt.Sprintf(" · %d held", r.Held)
+	}
+	if r.Queued > 0 {
+		s += fmt.Sprintf(" · %d queued over the rate", r.Queued)
 	}
 	if r.Last != "" {
 		s += " · last " + r.Last + " " + r.LastAt.Local().Format(time.DateTime[:16])

@@ -24,6 +24,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
@@ -47,6 +48,7 @@ var RefusalWords = map[string]string{
 	"link-paused":  "the link is paused on {to}'s server; its user resumes it there",
 	"bad-message":  "{to}'s server refused it as malformed",
 	"rate-limited": "{to}'s server is over the link's rate",
+	"too-long":     "{to}'s server takes shorter messages: split it into parts",
 	"expired":      "{to}'s server didn't take it within 72 hours",
 	"refused":      "{to}'s server refused it",
 }
@@ -88,7 +90,7 @@ func (r remote) newID(s *store) string {
 // deliver keeps the sender's copy, queued, and puts the message in the
 // outbox to the paired server; it counts for the rate and the breaker
 // now, as a local one does.
-func (r remote) deliver(s *store, c caller.Caller, from *project.Project, m *Message, _ []attachment) error {
+func (r remote) deliver(s *store, c caller.Caller, from *project.Project, m *Message, _ []attachment, l limits) error {
 	m.State = StateQueued
 	if err := write(from, m); err != nil {
 		return err
@@ -98,7 +100,7 @@ func (r remote) deliver(s *store, c caller.Caller, from *project.Project, m *Mes
 		return err
 	}
 	from.Journal(c, "link.send", m.Peer, fmt.Sprintf("%s (%s, queued)", m.ID, KB(m.Bytes)))
-	s.account(c.IsAgent(), from.Slug, m.Peer, now(), side{from, m.Peer})
+	s.account(c.IsAgent(), from.Slug, m.Peer, l, now(), side{from, m.Peer})
 	Kick()
 	return nil
 }
@@ -195,10 +197,37 @@ func RunOutbox(ctx context.Context, t Transport) {
 // callTimeout bounds one delivery.
 const callTimeout = 30 * time.Second
 
-// Flush expires the outbox's old entries, then delivers each ready
-// peer's in sequence order, stopping at a peer's first entry that isn't
-// taken now.
+// holdUntil is, by alias, when the outbox tries a server again that
+// answered retry with RetryAfter: its rate, not its link.
+var (
+	holdMu    sync.Mutex
+	holdUntil = map[string]time.Time{}
+)
+
+// maxHold bounds a server's RetryAfter.
+const maxHold = time.Hour
+
+func holding(alias string) bool {
+	holdMu.Lock()
+	defer holdMu.Unlock()
+	return now().Before(holdUntil[alias])
+}
+
+func holdOff(alias string, secs int) {
+	holdMu.Lock()
+	defer holdMu.Unlock()
+	if secs <= 0 {
+		delete(holdUntil, alias)
+		return
+	}
+	holdUntil[alias] = now().Add(min(time.Duration(secs)*time.Second, maxHold))
+}
+
+// Flush sends what waits over the rate (Drain), expires the outbox's old
+// entries, then delivers each ready peer's in sequence order, stopping
+// at a peer's first entry that isn't taken now.
 func Flush(ctx context.Context, t Transport) {
+	Drain()
 	ExpireRequests()
 	root, err := outboxDir()
 	if err != nil {
@@ -218,7 +247,7 @@ func Flush(ctx context.Context, t Transport) {
 			}
 		}
 		sort.Strings(names)
-		ready := t != nil && t.Ready(alias)
+		ready := t != nil && t.Ready(alias) && !holding(alias)
 		for _, name := range names {
 			file := filepath.Join(root, alias, name)
 			var e entry
@@ -243,6 +272,9 @@ func Flush(ctx context.Context, t Transport) {
 			switch {
 			case err != nil, res.Status == proto.PeerRetry:
 				ready = false // the rest wait, in order; expiry still runs
+				if err == nil {
+					holdOff(alias, res.RetryAfter)
+				}
 			case res.Status == proto.PeerDelivered, res.Status == proto.PeerDuplicate:
 				os.Remove(file)
 				delivered(alias, e.Msg)
@@ -375,7 +407,7 @@ func (s *store) receive(alias, fp string, m proto.PeerMessage) proto.PeerMessage
 		return bad
 	}
 	text := Clean(m.Text)
-	if text == "" || len(text) > MaxText {
+	if text == "" || len(text) > config.MaxLinkKB<<10 {
 		return bad
 	}
 	key := alias + "/" + m.From
@@ -398,8 +430,15 @@ func (s *store) receive(alias, fp string, m proto.PeerMessage) proto.PeerMessage
 	if pr := s.Pairs[pairKey(key, to.Slug)]; pr != nil && pr.Paused {
 		return proto.PeerMessageResult{Status: proto.PeerRefused, Code: "link-paused"}
 	}
-	if err := s.allow(key, to.Slug, true, t); err != nil {
-		return proto.PeerMessageResult{Status: proto.PeerRetry, Code: "rate-limited"}
+	// This side's own limits: over the rate the sender's outbox keeps
+	// it, in order, and tries again once a token is back here.
+	l := limitsOf(cfg, to.Slug)
+	if len(text) > l.maxText {
+		return proto.PeerMessageResult{Status: proto.PeerRefused, Code: "too-long"}
+	}
+	if b := s.refill(key, to.Slug, l, t); b.Tokens < 1 {
+		wait := time.Duration((1 - b.Tokens) / float64(l.perHour) * float64(time.Hour))
+		return proto.PeerMessageResult{Status: proto.PeerRetry, Code: "rate-limited", RetryAfter: int(wait.Seconds()) + 1}
 	}
 	created := m.Created.UTC().Truncate(time.Second)
 	if created.IsZero() || created.After(t.Add(clockSkew)) {
@@ -417,7 +456,7 @@ func (s *store) receive(alias, fp string, m proto.PeerMessage) proto.PeerMessage
 	}
 	to.AddMessageItem(KindMessage, key, Summary(key, in), false, in.ID)
 	to.Journal(caller.ForPeer(alias), "link.receive", key, fmt.Sprintf("%s (%s)", in.ID, KB(in.Bytes)))
-	s.account(m.By == "coordinator", key, to.Slug, t, side{to, key})
+	s.account(m.By == "coordinator", key, to.Slug, l, t, side{to, key})
 	return proto.PeerMessageResult{Status: proto.PeerDelivered}
 }
 

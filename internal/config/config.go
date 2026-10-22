@@ -102,7 +102,20 @@ const (
 	MinPRPollSeconds     = 30
 	MaxPRPollSeconds     = 3600
 	DefaultPRPollSeconds = 120
+	// The limits of links between coordinators (docs/SPEC.md §7.9):
+	// each direction's token bucket, link_burst messages at once, then
+	// link_per_hour an hour, and link_max_kb the most a message may
+	// have; the defaults, then the bounds.
+	DefaultLinkBurst   = 3
+	DefaultLinkPerHour = 10
+	DefaultLinkMaxKB   = 8
+	MaxLinkBurst       = 20
+	MaxLinkPerHour     = 120
+	MaxLinkKB          = 64
 )
+
+// LinkKeys are the link limits' settings.
+var LinkKeys = []string{"link_burst", "link_per_hour", "link_max_kb"}
 
 // ArchiveKeys are the retention settings (docs/SPEC.md §7.6): how many
 // days the ticker keeps done tasks on the board, resolved threads'
@@ -228,6 +241,13 @@ type Safety struct {
 	ArchiveThreadsDays int `json:"archive_threads_days"`
 	ArchiveInboxDays   int `json:"archive_inbox_days"`
 	ArchiveJournalDays int `json:"archive_journal_days"`
+	// The link limits (LinkKeys): a message over the rate waits in the
+	// sender's folder until its bucket refills; one over the size is
+	// refused. A direction between two projects here keeps to the lower
+	// of the two sides'.
+	LinkBurst   int `json:"link_burst"`
+	LinkPerHour int `json:"link_per_hour"`
+	LinkMaxKB   int `json:"link_max_kb"`
 }
 
 // ArchiveDays is the retention setting key names (ArchiveKeys), 0 for
@@ -249,7 +269,8 @@ const LegacyAgent = "claude"
 var Defaults = Safety{StartThreads: StartPropose, Yolo: false, CoordinatorApproves: true,
 	ParallelThreads: 10, AutoClose: CloseMerged, AutoCloseDays: 7, PRFollowup: true, PRPollSeconds: DefaultPRPollSeconds,
 	CompleteTasks: CompleteUser, FastForwardCheckout: true, Protection: ProtectOpen, Merge: MergeCoordinator, MergeMethod: MethodMerge, BranchName: DefaultBranchName, Guard: true, GuardMode: GuardEnforce, Active: true,
-	ArchiveTasksDays: 30, ArchiveThreadsDays: 30, ArchiveInboxDays: 30, ArchiveJournalDays: 30}
+	ArchiveTasksDays: 30, ArchiveThreadsDays: 30, ArchiveInboxDays: 30, ArchiveJournalDays: 30,
+	LinkBurst: DefaultLinkBurst, LinkPerHour: DefaultLinkPerHour, LinkMaxKB: DefaultLinkMaxKB}
 
 type rawSafety struct {
 	StartThreads        *string `toml:"start_threads"`
@@ -295,6 +316,9 @@ type rawSafety struct {
 	ArchiveThreads *int          `toml:"archive_threads_days"`
 	ArchiveInbox   *int          `toml:"archive_inbox_days"`
 	ArchiveJournal *int          `toml:"archive_journal_days"`
+	LinkBurst      *int          `toml:"link_burst"`
+	LinkPerHour    *int          `toml:"link_per_hour"`
+	LinkMaxKB      *int          `toml:"link_max_kb"`
 	// Repos is the project's repo list, the repositories the user
 	// approved for its threads' worktrees (Config.Repos): here, not in
 	// PROJECT.md, which the coordinator writes. Not a setting: neither

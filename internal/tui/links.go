@@ -424,6 +424,9 @@ func messagesLines(p ProjectData, sel, w int) ([]string, int, []int) {
 		if r.Held > 0 {
 			counts += fmt.Sprintf(" · %d waits for you", r.Held)
 		}
+		if r.Queued > 0 {
+			counts += fmt.Sprintf(" · %d queued over the rate", r.Queued)
+		}
 		if r.Last != "" {
 			counts += " · last " + r.Last + " " + age(time.Since(r.LastAt))
 		}
@@ -541,6 +544,22 @@ func cmpStr(a, b string) string {
 	return b
 }
 
+// convState is a message's state in the conversation's words.
+func convState(msg *link.Message) string {
+	switch msg.State {
+	case link.StateHeld:
+		return "waits for your OK"
+	case link.StateQueued:
+		if !msg.Due.IsZero() {
+			return "queued over the rate, goes " + link.DueWords(msg)
+		}
+		return "queued for the paired server"
+	case link.StateUndelivered:
+		return "not delivered (" + msg.Refused + ")"
+	}
+	return msg.State
+}
+
 func (v *convView) render(m *dash) string {
 	if time.Since(v.loaded) > 2*time.Second {
 		v.load(m)
@@ -568,8 +587,7 @@ func (v *convView) render(m *dash) string {
 		if msg.Re != "" {
 			meta += " · re " + msg.Re
 		}
-		state := map[string]string{link.StateSent: "sent", link.StateRead: "read", link.StateHeld: "waits for your OK", link.StateDropped: "dropped"}[msg.State]
-		meta += " · " + state
+		meta += " · " + convState(msg)
 		if len(msg.Attachments) > 0 {
 			meta += " · " + oneLine(strings.Join(msg.Attachments, ", "))
 		}

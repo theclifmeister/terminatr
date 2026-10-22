@@ -2,13 +2,16 @@ package link
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
+	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/home"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/tasks"
@@ -49,28 +52,215 @@ func code(err error) string {
 	return ""
 }
 
-func TestRate(t *testing.T) {
-	a, _, clock := setup(t)
-	ca := coord
-	ca.Project = "a"
-	for i := range Burst {
-		if _, err := Send(ca, a, "b", Opts{Text: "hi"}); err != nil {
-			t.Fatalf("message %d: %v", i, err)
-		}
-	}
-	_, err := Send(ca, a, "b", Opts{Text: "one more"})
-	if code(err) != "rate-limited" || !strings.Contains(err.Error(), "the next fits at") {
-		t.Fatalf("over the burst: %v", err)
-	}
-	*clock = clock.Add(time.Hour / PerHour)
-	if _, err := Send(ca, a, "b", Opts{Text: "later"}); err != nil {
-		t.Fatalf("after a token came back: %v", err)
-	}
-	// The other direction has its own bucket.
-	b, _ := project.Open("b")
-	if _, err := Send(caller.Caller{Kind: caller.Coordinator, Project: "b"}, b, "a", Opts{Text: "back"}); err != nil {
+// texts are the texts of p's messages with other, oldest first, and
+// their states.
+func texts(t *testing.T, p *project.Project, other string) (txt, states []string) {
+	t.Helper()
+	msgs, err := Log(p, other)
+	if err != nil {
 		t.Fatal(err)
 	}
+	for _, m := range msgs {
+		txt, states = append(txt, m.Text), append(states, m.State)
+	}
+	return txt, states
+}
+
+// TestQueue: a reply in nine parts at once. The burst goes; the rest
+// wait queued, each with when it should go, and go in order as the
+// bucket refills; nothing is refused or lost. The other direction has
+// its own bucket.
+func TestQueue(t *testing.T) {
+	a, b, clock := setup(t)
+	ca := coord
+	ca.Project = "a"
+	start := *clock
+	var parts []string
+	for i := range 9 {
+		parts = append(parts, fmt.Sprintf("part %d of 9", i+1))
+		m, err := Send(ca, a, "b", Opts{Text: parts[i]})
+		if err != nil {
+			t.Fatalf("part %d: %v", i+1, err)
+		}
+		want := StateSent
+		if i >= config.DefaultLinkBurst {
+			want = StateQueued
+			// the 4th waits a token (6 min), the 9th six of them
+			if due := start.Add(time.Duration(i-config.DefaultLinkBurst+1) * time.Hour / config.DefaultLinkPerHour); !m.Due.Equal(due) {
+				t.Errorf("part %d due %v, want %v", i+1, m.Due, due)
+			}
+		}
+		if m.State != want {
+			t.Fatalf("part %d %s", i+1, m.State)
+		}
+	}
+	if got, _ := texts(t, b, "a"); len(got) != config.DefaultLinkBurst {
+		t.Fatalf("b has %v", got)
+	}
+	cb := caller.Caller{Kind: caller.Coordinator, Project: "b"}
+	if _, err := Send(cb, b, "a", Opts{Text: "back"}); err != nil {
+		t.Fatal(err)
+	}
+	if rows := Rows(mustConfig(t), a); len(rows) != 1 || rows[0].Queued != 6 {
+		t.Fatalf("rows %+v", rows)
+	}
+	// Half a token: nothing more goes.
+	*clock = clock.Add(3 * time.Minute)
+	Drain()
+	if got, _ := texts(t, b, "a"); len(got) != config.DefaultLinkBurst+1 {
+		t.Fatalf("after 3 min b has %d", len(got))
+	}
+	// A token each 6 minutes, one at a time, in order.
+	for i := 1; i <= 6; i++ {
+		*clock = start.Add(time.Duration(i) * time.Hour / config.DefaultLinkPerHour)
+		Drain()
+		got, _ := texts(t, b, "a")
+		if n := len(got) - 1; n != config.DefaultLinkBurst+i { // less b's own
+			t.Fatalf("after %d tokens b has %d of a's", i, n)
+		}
+	}
+	got, _ := texts(t, b, "a")
+	var in []string
+	for _, x := range got {
+		if x != "back" {
+			in = append(in, x)
+		}
+	}
+	if !slices.Equal(in, parts) {
+		t.Fatalf("arrived %q", in)
+	}
+	if _, states := texts(t, a, "b"); slices.Contains(states, StateQueued) {
+		t.Fatalf("a's copies %v", states)
+	}
+	if rows := Rows(mustConfig(t), a); rows[0].Queued != 0 {
+		t.Fatalf("still queued %+v", rows[0])
+	}
+}
+
+// TestQueueOrder: a message sent while others wait goes behind them,
+// even once a token is back; a drain at the send lets the first go.
+func TestQueueOrder(t *testing.T) {
+	a, b, clock := setup(t)
+	ca := coord
+	ca.Project = "a"
+	for i := range 5 {
+		Send(ca, a, "b", Opts{Text: fmt.Sprint(i)})
+	}
+	*clock = clock.Add(time.Hour / config.DefaultLinkPerHour)
+	m, err := Send(ca, a, "b", Opts{Text: "5"})
+	if err != nil || m.State != StateQueued {
+		t.Fatalf("%v %+v", err, m)
+	}
+	got, _ := texts(t, b, "a")
+	if !slices.Equal(got, []string{"0", "1", "2", "3"}) {
+		t.Fatalf("b has %q", got)
+	}
+}
+
+// TestQueueLimits: the limits are settings, the lower of the two sides'
+// for a direction here; a size over them is refused.
+func TestQueueLimits(t *testing.T) {
+	a, b, _ := setup(t)
+	os.WriteFile(filepath.Join(os.Getenv(home.Env), "config.toml"), []byte("[defaults]\nlink_burst = 5\nlink_max_kb = 1\n\n[projects.a]\nlink_max_kb = 2\n\n[projects.a.links]\nb = \"both\"\n\n[projects.b]\nlink_burst = 2\n\n[projects.b.links]\na = \"both\"\n"), 0o600)
+	ca := coord
+	ca.Project = "a"
+	if _, err := Send(ca, a, "b", Opts{Text: strings.Repeat("x", 1025)}); code(err) != "too-long" || !strings.Contains(err.Error(), "at most 1.0 KB") {
+		t.Fatalf("size: %v", err)
+	}
+	for i := range 3 {
+		m, err := Send(ca, a, "b", Opts{Text: "x"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if want := map[bool]string{true: StateSent, false: StateQueued}[i < 2]; m.State != want {
+			t.Fatalf("message %d %s", i, m.State)
+		}
+	}
+	if got, _ := texts(t, b, "a"); len(got) != 2 {
+		t.Fatalf("b has %d", len(got))
+	}
+}
+
+// TestQueuePausedAndOff: what waits stays while the breaker holds the
+// link and goes once the user resumes it; a send meanwhile is still
+// refused. A link turned off since marks what waits undelivered.
+func TestQueuePausedAndOff(t *testing.T) {
+	a, b, clock := setup(t)
+	ca := coord
+	ca.Project = "a"
+	for i := range 4 {
+		Send(ca, a, "b", Opts{Text: fmt.Sprint(i)})
+	}
+	withStore(func(s *store) error { s.pair("a", "b").Paused = true; return nil })
+	*clock = clock.Add(time.Hour)
+	Drain()
+	if got, _ := texts(t, b, "a"); len(got) != 3 {
+		t.Fatalf("paused: b has %d", len(got))
+	}
+	if _, err := Send(ca, a, "b", Opts{Text: "more"}); code(err) != "link-paused" {
+		t.Fatalf("send while paused: %v", err)
+	}
+	if err := Resume(caller.Caller{Kind: caller.Human}, a, "b", false); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := texts(t, b, "a"); len(got) != 4 {
+		t.Fatalf("resumed: b has %d", len(got))
+	}
+	for i := range 4 {
+		Send(ca, a, "b", Opts{Text: fmt.Sprint("x", i)})
+	}
+	os.WriteFile(filepath.Join(os.Getenv(home.Env), "config.toml"), []byte("[projects.b.links]\na = \"both\"\n"), 0o600)
+	*clock = clock.Add(time.Hour)
+	Drain()
+	_, states := texts(t, a, "b")
+	if n := strings.Count(strings.Join(states, " "), StateUndelivered); n == 0 || slices.Contains(states, StateQueued) {
+		t.Fatalf("after the link went: %v", states)
+	}
+	if len(items(t, a, KindUndelivered)) == 0 {
+		t.Fatal("no undelivered item")
+	}
+}
+
+// TestApproveQueues: a held message the user approves over the rate
+// waits queued, then goes as the user's input (the breaker's count
+// starts again).
+func TestApproveQueues(t *testing.T) {
+	a, b, clock := setup(t)
+	os.WriteFile(filepath.Join(os.Getenv(home.Env), "config.toml"), []byte("[projects.a.links]\nb = { allow = \"both\", ask = true }\n\n[projects.b.links]\na = \"both\"\n"), 0o600)
+	human := caller.Caller{Kind: caller.Human}
+	for i := range 3 {
+		Send(human, a, "b", Opts{Text: fmt.Sprint(i)})
+	}
+	ca := coord
+	ca.Project = "a"
+	h, err := Send(ca, a, "b", Opts{Text: "held"})
+	if err != nil || h.State != StateHeld {
+		t.Fatalf("%v %+v", err, h)
+	}
+	m, err := Approve(human, a, h.ID, false)
+	if err != nil || m.State != StateQueued || m.Due.IsZero() {
+		t.Fatalf("approve: %v %+v", err, m)
+	}
+	*clock = clock.Add(time.Hour / config.DefaultLinkPerHour)
+	Drain()
+	got, _ := texts(t, b, "a")
+	if len(got) != 4 || got[3] != "held" {
+		t.Fatalf("b has %q", got)
+	}
+	readStore(func(s *store) {
+		if p := s.Pairs[pairKey("a", "b")]; p == nil || !p.Human.Equal(*clock) {
+			t.Errorf("not the user's input: %+v", p)
+		}
+	})
+}
+
+func mustConfig(t *testing.T) *config.Config {
+	t.Helper()
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return cfg
 }
 
 func TestBreaker(t *testing.T) {
