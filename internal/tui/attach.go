@@ -45,12 +45,13 @@ import (
 // rectangle is laid out at the view's size, the window of its latest
 // client; a smaller window shows the same frame cropped, a larger one
 // padded. What stays here is this console's own: its window, the outer
-// terminal's modes, the local scrollback, the prefix and the takeovers.
+// terminal's modes, the local scrollback and the prefix.
 //
 // A thread's pane takes input like any other. The user talks to
 // coordinators, and threads to their coordinator (docs/SPEC.md §4), so
-// the first input this console sends a thread's pane during an attach
-// tells the thread's coordinator, without asking: a takeover.
+// the first text this console types into a thread's prompt box during
+// an attach tells the thread's coordinator, without asking: a takeover,
+// which the server raises (session.Session.HumanInput).
 
 const (
 	frameInterval = time.Second / 120 // render cap
@@ -100,10 +101,6 @@ type Options struct {
 	// Log receives diagnostics (digest checks, key encodings); nil
 	// discards them.
 	Log *log.Logger
-	// Takeover tells a thread's coordinator that the user typed into the
-	// thread's pane: once per thread for the attach, on its first input
-	// from this console. nil tells no one.
-	Takeover func(s proto.SessionInfo) error
 	// Sidebar configures the projects sidebar, which every view shows
 	// (docs/SPEC.md §4); nil is the defaults.
 	Sidebar *SidebarOptions
@@ -210,7 +207,7 @@ func Attach(opts Options) (res Result, err error) {
 	vc := opts.View
 	v := vc.View()
 	c.vc, c.me = vc, vc.Client()
-	c.prefix, c.takeover, c.told = prefix, opts.Takeover, map[string]bool{}
+	c.prefix = prefix
 	c.bare, c.dashboard = v.Bare, !v.Bare
 	c.flash = opts.Flash
 	c.typeAhead, c.typeAheadFor = opts.Type, opts.TypeFor
@@ -388,11 +385,7 @@ type client struct {
 	confirm func(yes bool)
 	// dialog is the yes/no dialog drawn over the panes while one asks
 	// (confirm), nil otherwise.
-	dialog   *amenu
-	takeover func(proto.SessionInfo) error
-	// told are the threads' sessions whose coordinator this attach has
-	// told of a takeover.
-	told map[string]bool
+	dialog *amenu
 
 	// The mouse (attachmouse.go): the open menu and the status bar's
 	// buttons, by column from its start.
@@ -521,7 +514,7 @@ func (c *client) open(id string) (*pane, error) {
 	c.mu.Lock() // events resizes the window under it
 	cols, rows := c.cols, c.rows
 	c.mu.Unlock()
-	conn, info, err := tmclient.Attach(c.paths, proto.AttachParams{Session: id, Cols: uint16(cols), Rows: uint16(rows)})
+	conn, info, err := tmclient.Attach(c.paths, proto.AttachParams{Session: id, Cols: uint16(cols), Rows: uint16(rows), Console: c.me})
 	if err != nil {
 		return nil, err
 	}
@@ -1315,7 +1308,6 @@ func (c *client) handle(ev uv.Event) {
 			return
 		}
 		b, err := emu.Paste(p.mirror, []byte(e.Content))
-		c.typed(p)
 		claim := c.needClaim()
 		c.mu.Unlock()
 		if claim {
@@ -1711,26 +1703,6 @@ func (c *client) paneCommand(cmd string) {
 	c.poke()
 }
 
-// typed notes input from this console to p: the first into a thread's
-// pane during this attach tells its coordinator, without asking
-// (docs/SPEC.md §4). c.mu held.
-func (c *client) typed(p *pane) {
-	// A paired server's pane: that server tells its coordinator
-	// (docs/SPEC.md §16.12).
-	if p.info.Role != proto.RoleThread || c.told[p.info.ID] || p.info.Server != "" {
-		return
-	}
-	c.told[p.info.ID] = true
-	if tell, info := c.takeover, p.info; tell != nil {
-		go func() {
-			if err := tell(info); err != nil {
-				c.log.Printf("takeover %s: %v", info.ID, err)
-				clog("attach: takeover %s: %v", info.ID, err)
-			}
-		}()
-	}
-}
-
 // viewOnlyNote starts the note on a key dropped at a view-only pane.
 const viewOnlyNote = "view-only: "
 
@@ -1947,9 +1919,6 @@ func (c *client) input(k uv.Key) {
 	if ok {
 		b, err = c.enc.Key(p.mirror, ek)
 	}
-	if err == nil && emu.Typed(b) {
-		c.typed(p)
-	}
 	claim := c.needClaim()
 	c.mu.Unlock()
 	if claim {
@@ -2117,9 +2086,6 @@ func (c *client) mouse(ev uv.Event) {
 	var err error
 	if m.X < int(cols) && m.Y < int(rows) {
 		b, err = c.enc.Mouse(p.mirror, m)
-	}
-	if press && err == nil && len(b) > 0 {
-		c.typed(p)
 	}
 	c.mu.Unlock()
 	if claim {

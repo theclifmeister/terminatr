@@ -8,7 +8,8 @@ import (
 )
 
 // What a console sends a pane, read back from the bytes (docs/SPEC.md §4,
-// §16.12): keys, pastes and mouse presses are a person's typing; the
+// §16.12): keys, pastes and mouse presses are a person's typing, and of
+// those only text keys and pastes put text in a prompt box; the
 // reports the program asked for (mouse release, motion and wheel, focus,
 // kitty key releases and lone modifiers) are not, and the terminal's
 // replies (DA, DSR, DECRPM, kitty flags, colour scheme, window reports,
@@ -19,7 +20,8 @@ import (
 type InputKind uint8
 
 const (
-	InputKey     InputKind = iota // a key press: text, a control key, Esc or Alt with a key, a CSI or SS3 key
+	InputKey     InputKind = iota // a key press that types no text: a control key, Esc or Alt with a key, a CSI or SS3 key
+	InputText                     // a key that types text: a printable character, plain or shifted
 	InputPaste                    // a bracketed paste, markers and text
 	InputClick                    // a mouse button press
 	InputMouse                    // a mouse release, motion or wheel
@@ -29,8 +31,15 @@ const (
 )
 
 // Typed says whether the kind is a person typing: a key, a paste or a
-// click, which takes a thread over.
-func (k InputKind) Typed() bool { return k == InputKey || k == InputPaste || k == InputClick }
+// click.
+func (k InputKind) Typed() bool {
+	return k == InputKey || k == InputText || k == InputPaste || k == InputClick
+}
+
+// IsText says whether the kind puts text in a prompt box, a text key or
+// a paste, which may take a thread over (session.Session.HumanInput):
+// arrows, Esc, Enter, control keys and the mouse don't.
+func (k InputKind) IsText() bool { return k == InputText || k == InputPaste }
 
 // NextInput reads the piece of input at b's start: its kind and length
 // (at least 1 for a non-empty b). A sequence cut short is a key, the
@@ -44,7 +53,7 @@ func NextInput(b []byte) (InputKind, int) {
 			return InputKey, 1
 		}
 		_, n := utf8.DecodeRune(b)
-		return InputKey, n
+		return InputText, n
 	}
 	if len(b) == 1 {
 		return InputKey, 1 // Esc
@@ -130,20 +139,33 @@ func mouseKind(cb int, press bool) InputKind {
 
 // kittyKind is a kitty keyboard report's kind, ESC [ code[:alts] ;
 // mods[:event] ; text u: a release (event 3) or repeat (2), or a
-// modifier key alone (57441-57452, and the lock keys), is no typing.
+// modifier key alone (57441-57452, and the lock keys), is no typing; a
+// character with no modifier but shift (or the locks), or a key with its
+// text, is text.
 func kittyKind(params string) InputKind {
 	f := strings.Split(params, ";")
 	code, err := strconv.Atoi(strings.Split(f[0], ":")[0])
 	if err != nil {
 		return InputKey
 	}
+	mods := 1
 	if len(f) > 1 {
-		if _, ev, ok := strings.Cut(f[1], ":"); ok && ev != "1" {
+		m, ev, ok := strings.Cut(f[1], ":")
+		if ok && ev != "1" {
 			return InputRelease
 		}
+		if n, err := strconv.Atoi(m); err == nil {
+			mods = n
+		}
 	}
-	if code >= 57441 && code <= 57452 || code >= 57358 && code <= 57360 {
+	switch {
+	case code >= 57441 && code <= 57452 || code >= 57358 && code <= 57360:
 		return InputRelease
+	case len(f) > 2 && f[2] != "",
+		// The keys with no character (arrows, F keys, the keypad) are in
+		// the private use area.
+		(mods-1)&^(1|64|128) == 0 && code >= 0x20 && code != 0x7f && (code < 57344 || code > 63743):
+		return InputText
 	}
 	return InputKey
 }
@@ -173,6 +195,19 @@ func Typed(b []byte) bool {
 	for len(b) > 0 {
 		kind, n := NextInput(b)
 		if kind.Typed() {
+			return true
+		}
+		b = b[n:]
+	}
+	return false
+}
+
+// Text says whether b holds text for a prompt box: a text key or a
+// paste (InputKind.IsText).
+func Text(b []byte) bool {
+	for len(b) > 0 {
+		kind, n := NextInput(b)
+		if kind.IsText() {
 			return true
 		}
 		b = b[n:]

@@ -9,8 +9,9 @@ func TestNextInput(t *testing.T) {
 		kind InputKind
 		n    int
 	}{
-		{"a", InputKey, 1},
-		{"é", InputKey, 2},
+		{"a", InputText, 1},
+		{"é", InputText, 2},
+		{" ", InputText, 1},
 		{"\r", InputKey, 1},
 		{"\x7f", InputKey, 1},
 		{"\x1b", InputKey, 1},
@@ -22,7 +23,13 @@ func TestNextInput(t *testing.T) {
 		{"\x1b[1;5R", InputKey, 6}, // F3 with ctrl
 		{"\x1b[13u", InputKey, 5},
 		{"\x1b[97;5u", InputKey, 7},
-		{"\x1b[97;1:1u", InputKey, 9},
+		{"\x1b[97;1:1u", InputText, 9},
+		{"\x1b[97u", InputText, 5},
+		{"\x1b[65;2u", InputText, 7},     // shift+a
+		{"\x1b[97;65u", InputText, 8},    // caps lock on
+		{"\x1b[97;1;97u", InputText, 10}, // with its text
+		{"\x1b[57399u", InputKey, 8},     // keypad 0, no text
+		{"\x1b[127u", InputKey, 6},
 		{"\x1b[200~hi\x1b[201~x", InputPaste, 14},
 		{"\x1b[200~cut", InputPaste, 9},
 		{"\x1b[<0;10;5M", InputClick, 10},
@@ -96,6 +103,42 @@ func TestTyped(t *testing.T) {
 	} {
 		if got := Typed([]byte(c.in)); got != c.want {
 			t.Errorf("Typed(%q) = %v, want %v", c.in, got, c.want)
+		}
+	}
+}
+
+// TestText (T691): only text keys and pastes put text in a prompt box;
+// clicks, the wheel, focus, arrows, page keys, Esc, Enter and control
+// keys don't.
+func TestText(t *testing.T) {
+	for _, c := range []struct {
+		in   string
+		want bool
+	}{
+		{"", false},
+		{"a", true},
+		{"hello", true},
+		{"\x1b[200~hi\x1b[201~", true},
+		{"\x1b[97u", true},
+		{"\r", false},
+		{"\t", false},
+		{"\x7f", false},
+		{"\x03", false},
+		{"\x1b", false},
+		{"\x1bx", false},
+		{"\x1b[A\x1b[B\x1b[C\x1b[D", false},
+		{"\x1bOA", false},
+		{"\x1b[5~\x1b[6~", false},
+		{"\x1b[H\x1b[F", false},
+		{"\x1b[97;5u", false},
+		{"\x1b[<0;10;5M\x1b[<0;10;5m", false},
+		{"\x1b[<64;10;5M\x1b[<65;10;5M", false},
+		{"\x1b[I\x1b[O", false},
+		{"\x1b[?62;22c\x1b]11;rgb:0/0/0\x07", false},
+		{"\x1b[Ix", true},
+	} {
+		if got := Text([]byte(c.in)); got != c.want {
+			t.Errorf("Text(%q) = %v, want %v", c.in, got, c.want)
 		}
 	}
 }

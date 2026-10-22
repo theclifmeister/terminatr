@@ -12,12 +12,9 @@ import (
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
-	"github.com/theclifmeister/terminatr/internal/emu"
 	"github.com/theclifmeister/terminatr/internal/peer"
-	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/session"
-	"github.com/theclifmeister/terminatr/internal/thread"
 )
 
 // paneShareCheck is how often an open remote pane checks that its
@@ -77,36 +74,30 @@ func (p *paneSource) Next() ([]byte, bool) { return p.sub.Next() }
 func (p *paneSource) Resyncs() int         { return p.sub.Resyncs() }
 func (p *paneSource) Resync()              { p.sub.Resync() }
 
-// Input types keys from the peer's console: the first into a thread's
-// pane on this stream tells its coordinator, as a local console's first
-// keys do (docs/SPEC.md §4), in this server's words. Only a person's
-// typing counts, a key, a paste or a click that reaches the program: the
-// console's reports (focus, mouse release, motion and wheel) and the
-// terminal's replies, which the session drops, don't (emu.NextInput).
+// Input types keys from the peer's console: the first text it types
+// into a thread's prompt box on this stream tells its coordinator, as a
+// local console's does (docs/SPEC.md §4), in this server's words. Only
+// a text key or a paste that shows in the box counts
+// (session.Session.HumanInput): clicks, the wheel, focus, arrows, Esc,
+// the terminal's replies and the agent's own suggestion in the box
+// don't. The log keeps the start of the input that raised it.
 func (p *paneSource) Input(b []byte) error {
+	var took func()
 	p.mu.Lock()
-	tell := p.info.Role == proto.RoleThread && !p.told && emu.Typed(emu.ForProgram(b, p.sess.Modes()))
-	if tell {
-		p.told = true
+	if p.info.Role == proto.RoleThread && !p.told {
+		typed := string(b[:min(len(b), takeoverLogged)])
+		took = func() {
+			p.mu.Lock()
+			tell := !p.told
+			p.told = true
+			p.mu.Unlock()
+			if tell {
+				go p.s.tookOver(p.info, p.by, typed)
+			}
+		}
 	}
 	p.mu.Unlock()
-	if tell {
-		go p.takeover(string(b[:min(len(b), takeoverLogged)]))
-	}
-	return p.sess.Input(b)
-}
-
-// takeover tells the thread's coordinator; the log keeps the start of
-// the input that raised it, typed.
-func (p *paneSource) takeover(typed string) {
-	p.s.log.Printf("session %s: takeover from %s on %q", p.info.ID, p.by, typed)
-	pr, err := project.Open(p.info.Project)
-	if err == nil {
-		err = pr.TookOver(p.by, p.info.Thread, thread.Label(pr, p.info.Thread))
-	}
-	if err != nil {
-		p.s.log.Printf("session %s: takeover from %s: %v", p.info.ID, p.by, err)
-	}
+	return p.sess.HumanInput(b, took)
 }
 
 // Resize claims the pane's size for the peer's console that typed, as a
