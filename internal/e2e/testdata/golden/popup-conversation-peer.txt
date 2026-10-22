@@ -1,40 +1,40 @@
  PROJECTS                      1   │ tm dashboard                                               ● server ok · 0 sessions
- <server>       │ NEEDS YOU 1 ───────────────────────────────────────────────────────────────────────
+ <server>│ NEEDS YOU 1 ───────────────────────────────────────────────────────────────────────
  ■ acme             0              │  1 link request waits             ▲ blocked   enter opens Messages
  └─ coordinator         ·          │ acme ────────────────────────────────────────────────── ● active — S to deactivate
             ╭─ acme · mini/api · ⇄ linked both ways on this side ──────────────────────────────────────────╮ it  2 inbox
- <since> │ → <id> · <time> · acme (you) · sent                                                │
+ <since>│ → <id> · <time> · acme (you) · sent │
             │       The API landed.                                                                        │────────────
-            │                                                                                              │
-            │ ← <id> · <time> · mini/api (its user) · re <id> · sent                         │
-            │   Thanks, testing it.                                                                        │
-            │                                                                                              │
-            │                                                                                              │
-            │                                                                                              │
-            │                                                                                              │
-            │                                                                                              │
-            │                                                                                              │
-            │                                                                                              │
-            │                                                                                              │
-            │                                                                                              │
-            │                                                                                              │
-            │                                                                                              │
-            │                                                                                              │
-            │                                                                                              │
-            │                                                                                              │
-            │                                                                                              │
-            │                                                                                              │
-            │                                                                                              │
-            │                                                                                              │
-            │                                                                                              │
-            │                                                                                              │
-            │                                                                                              │
-            │                                                                                              │
-            │                                                                                              │
-            │                                                                                              │
-            │ M write · ↑ ↓ move · esc back                                                                │
+            │ │
+            │ ← <id> · <time> · mini/api (its user) · re <id> · sent │
+            │   Thanks, testing it. │
+            │ │
+            │ │
+            │ │
+            │ │
+            │ │
+            │ │
+            │ │
+            │ │
+            │ │
+            │ │
+            │ │
+            │ │
+            │ │
+            │ │
+            │ │
+            │ │
+            │ │
+            │ │
+            │ │
+            │ │
+            │ │
+            │ │
+            │ │
+            │ │
+            │ M write · ↑ ↓ move · esc back │
             ╰──────────────────────────────────────────────────────────────────────────────────────────────╯
  ───────────────────────────────── │
  acme · active                     │────────────────────────────────────────────────────────────────────────────────────
  0 threads · coordinator not runn… │
- tab sidebar · ? help              │
+ tab sidebar · ? help │

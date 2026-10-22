@@ -15,13 +15,15 @@ import (
 
 // peerMessageMasks hide what changes from run to run in the Messages
 // tab with a paired server: the message and request ids carry a key's
-// fingerprint, and the ages and times move.
+// fingerprint, the ages and times move, and so does the padding a
+// masked part leaves before the popup's right edge.
 var peerMessageMasks = append([]Mask{
 	{Name: "id", Re: regexp.MustCompile(`[MR]-[0-9A-F]{4}-\d+`)},
 	{Name: "age", Re: regexp.MustCompile(`\b\d+[smhd]\b`)},
 	{Name: "time", Re: regexp.MustCompile(`[A-Z][a-z]{2} \d{1,2} \d\d:\d\d`)},
-	{Name: "server", Re: regexp.MustCompile(`◉ \S+ · this server`)},
-	{Name: "since", Re: regexp.MustCompile(`◉ mini · \S+`)},
+	{Name: "server", Re: regexp.MustCompile(`◉ \S+ · this server *`)},
+	{Name: "since", Re: regexp.MustCompile(`◉ mini · [^│]*`)},
+	{Name: "pad", Re: regexp.MustCompile(`(?m) +│$`), Repl: " │"},
 }, popupMasks...)
 
 // shareProject shares env's project slug with its paired servers.
