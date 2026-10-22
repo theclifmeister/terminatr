@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.47.0](https://github.com/theclifmeister/terminatr/compare/v0.46.0...v0.47.0) (2026-10-22)
+
+
+### Features
+
+* **link:** files over links: offer, consent, stream, resume ([#747](https://github.com/theclifmeister/terminatr/issues/747)) ([819d335](https://github.com/theclifmeister/terminatr/commit/819d3358f3d4aa5084314c7a996db8f5a0b3b209))
+* **link:** queue messages over the rate instead of refusing; link limits as settings ([#741](https://github.com/theclifmeister/terminatr/issues/741)) ([14b96c8](https://github.com/theclifmeister/terminatr/commit/14b96c8574ff8678a8bc13f53a39e068cb506fd8))
+* **link:** tm link drop also drops a message queued over the rate ([#745](https://github.com/theclifmeister/terminatr/issues/745)) ([bf5b043](https://github.com/theclifmeister/terminatr/commit/bf5b04367dd42b189d17f29c1841c82f0b78e91b))
+* **peer,tui:** read-only project popup for a paired server's project ([#749](https://github.com/theclifmeister/terminatr/issues/749)) ([e190436](https://github.com/theclifmeister/terminatr/commit/e1904362e2d78266e5b0cc241bfc68fe9f90edbd))
+* **tui:** a real cursor, line-editing keys and placeholders in edit dialogs ([#735](https://github.com/theclifmeister/terminatr/issues/735)) ([ca57597](https://github.com/theclifmeister/terminatr/commit/ca575977d578f3530ec8dc2a492cdb241b069f4c))
+
+
+### Bug Fixes
+
+* **guard:** judge commands after a cd instead of refusing them ([#740](https://github.com/theclifmeister/terminatr/issues/740)) ([c68468e](https://github.com/theclifmeister/terminatr/commit/c68468e7789f1a4314e6bf6c94ef7b946aca26c7))
+* **guard:** quoted text is no function definition; summaries show paths as written ([#743](https://github.com/theclifmeister/terminatr/issues/743)) ([83a6e66](https://github.com/theclifmeister/terminatr/commit/83a6e66f44de1a81619919efc45e692d87de9d53))
+* **guard:** tm --version is read-only; tm command refusals say settings, not files ([#738](https://github.com/theclifmeister/terminatr/issues/738)) ([3feddef](https://github.com/theclifmeister/terminatr/commit/3feddef7199edef4d2724a339529e33f533a64a4))
+* **server,session,emu:** takeover only on typing; console replies never reach the agent ([#742](https://github.com/theclifmeister/terminatr/issues/742)) ([b74daf0](https://github.com/theclifmeister/terminatr/commit/b74daf08748ddee9216469c624106c754cd2d519))
+* **server:** make goneEvery race-free (T672) ([#730](https://github.com/theclifmeister/terminatr/issues/730)) ([e67a4b7](https://github.com/theclifmeister/terminatr/commit/e67a4b7c954db5434900ab64c6446491eb077a9b))
+* **server:** make TestAnswerBound repeatable under -count&gt;1 (T673) ([#733](https://github.com/theclifmeister/terminatr/issues/733)) ([afa17c0](https://github.com/theclifmeister/terminatr/commit/afa17c086c5cf993ca7ba12a3b1df382cce60572))
+* **session,server,emu:** takeover only when a person types text into the prompt box ([#746](https://github.com/theclifmeister/terminatr/issues/746)) ([4c60051](https://github.com/theclifmeister/terminatr/commit/4c60051d882c5985a0d6b07a5987b28497f49527))
+* **session:** data race on boxWatchWait in takeover tests (-race) ([#748](https://github.com/theclifmeister/terminatr/issues/748)) ([e11d7fd](https://github.com/theclifmeister/terminatr/commit/e11d7fdfd45137c3e32fc50a313bb0f716dc7901))
+* **tui,link:** paired-server links in the Messages tab: whole names, real last message, queued state ([#739](https://github.com/theclifmeister/terminatr/issues/739)) ([d0accf2](https://github.com/theclifmeister/terminatr/commit/d0accf2f0487970452d030504f611772dec2e28c))
+* **tui,server:** type through to a paired server's coordinator; size remote panes when shown ([#736](https://github.com/theclifmeister/terminatr/issues/736)) ([d0a9510](https://github.com/theclifmeister/terminatr/commit/d0a9510d48171948134e16a260ccaa5e113bad3e))
+* **tui:** prefix+a on a paired server's project no longer opens a local project's popup ([#744](https://github.com/theclifmeister/terminatr/issues/744)) ([a6bac08](https://github.com/theclifmeister/terminatr/commit/a6bac083c4b0f51fd877a731a2376ade89011f50))
+
 ## [0.46.0](https://github.com/theclifmeister/terminatr/compare/v0.45.0...v0.46.0) (2026-10-22)
 
 
