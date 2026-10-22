@@ -278,7 +278,7 @@ func TestRequestClearAsksThenClears(t *testing.T) {
 	if want := []string{"s-1"}; !slices.Equal(r.host.cleared, want) || len(r.host.asked) != 1 {
 		t.Fatalf("cleared %v asked %v", r.host.cleared, r.host.asked)
 	}
-	if j := r.journal(); !strings.Contains(j, " ticker coordinator.clear demo s-1 at 10% of its context window, on the user's request, idle with nothing waiting") {
+	if j := r.journal(); !strings.Contains(j, " ticker coordinator.clear demo s-1 at 10% of its context window, on the user's request, still waiting: thread t-0001 needs the user") {
 		t.Fatalf("journal %q", j)
 	}
 	for range 3 {
