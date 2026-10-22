@@ -206,27 +206,52 @@ func TestRemoteDashboardPrefix(t *testing.T) {
 	}
 }
 
-// TestRemotePanePopup (T690): in a paired server's pane, prefix+a, i
-// and t say there is no project popup for it, rather than open one of
-// the far slug's (or of a project here of the same name); the ≡ menu
-// leaves them out. The other popups still open over the pane.
+// TestRemotePanePopup: over a paired server's pane, prefix+A, I and T
+// open that server's popup of its project over the pane ("@alias/slug",
+// remotepopup.go); when the sidebar's mirror says that server serves
+// none to this one (an older tm, or its pane switch off), they say so
+// in the status bar instead and the ≡ menu leaves them out. This
+// server's panes and the other popups open as ever.
 func TestRemotePanePopup(t *testing.T) {
-	c := &client{dashboard: true, prefix: chord{'b'}, end: make(chan struct{}), log: log.New(io.Discard, "", 0),
-		focus: &pane{info: proto.SessionInfo{ID: "mini/s-1", Server: "mini", Role: proto.RoleCoordinator, Project: "terminatr"}}}
-	for _, k := range []string{"a", "A", "i", "t"} {
-		c.key(uv.Key{Code: 'b', Mod: uv.ModCtrl})
-		c.key(cmdKey(k))
-		if c.over != nil {
-			t.Fatalf("prefix+%s opened %+v", k, c.over)
+	newClient := func(peers []proto.PeerMirror, side bool) *client {
+		c := &client{dashboard: true, prefix: chord{'b'}, end: make(chan struct{}), log: log.New(io.Discard, "", 0),
+			focus: &pane{info: proto.SessionInfo{ID: "mini/s-1", Server: "mini", Role: proto.RoleCoordinator, Project: "terminatr"}}}
+		if side {
+			c.side = &sidebar{peers: peers}
 		}
-		if want := "terminatr is mini's: no project popup here; your messages with it are in the Messages tab of your project linked to it"; c.flash != want {
-			t.Errorf("prefix+%s: %q", k, c.flash)
+		return c
+	}
+	serves := []proto.PeerMirror{{Alias: "mini", State: proto.LinkUp, Popup: true, Pane: true, Panes: proto.PanesView}}
+	old := []proto.PeerMirror{{Alias: "mini", State: proto.LinkUp, Pane: true, Panes: proto.PanesView}}
+	off := []proto.PeerMirror{{Alias: "mini", State: proto.LinkUp, Popup: true, Pane: true, Panes: proto.PanesOff}}
+	for _, k := range []string{"a", "A", "i", "t"} {
+		for name, peers := range map[string][]proto.PeerMirror{"older tm": old, "switch off": off} {
+			c := newClient(peers, true)
+			c.key(uv.Key{Code: 'b', Mod: uv.ModCtrl})
+			c.key(cmdKey(k))
+			if c.over != nil {
+				t.Fatalf("%s: prefix+%s opened %+v", name, k, c.over)
+			}
+			if want := "terminatr is mini's: no project popup here; your messages with it are in the Messages tab of your project linked to it"; c.flash != want {
+				t.Errorf("%s: prefix+%s: %q", name, k, c.flash)
+			}
+			for _, it := range c.sessionItems() {
+				if it.label == "project popup" || it.label == "tasks" || it.label == "inbox" {
+					t.Errorf("%s: ≡ menu has %q", name, it.label)
+				}
+			}
+		}
+		for name, c := range map[string]*client{"serves": newClient(serves, true), "no sidebar": newClient(nil, false)} {
+			c.key(uv.Key{Code: 'b', Mod: uv.ModCtrl})
+			c.key(cmdKey(k))
+			if c.over == nil || c.over.Project != "@mini/terminatr" || c.over.Key != strings.ToUpper(k) {
+				t.Errorf("%s: prefix+%s: over %+v, flash %q", name, k, c.over, c.flash)
+			}
 		}
 	}
-	for _, it := range c.sessionItems() {
-		if it.label == "project popup" || it.label == "tasks" || it.label == "inbox" {
-			t.Errorf("≡ menu has %q", it.label)
-		}
+	c := newClient(serves, true)
+	if !slices.ContainsFunc(c.sessionItems(), func(it aitem) bool { return it.label == "project popup" }) {
+		t.Error("≡ menu lacks the project popup of a server that serves it")
 	}
 	if c.remotePopup(",") {
 		t.Error("settings refused")

@@ -27,7 +27,7 @@ var humanOnlyMethods = []string{
 	proto.MethodModActionCheck, proto.MethodModActionDone, proto.MethodSessionClear, proto.MethodSecretTest,
 	proto.MethodSessionStart, proto.MethodSessionStop, proto.MethodSessionKeys, proto.MethodSessionPrompt,
 	proto.MethodSessionAdopt, proto.MethodSessionAdoptAsk, proto.MethodSessionRemote, proto.MethodSessionModel, proto.MethodQuestionsOpen, proto.MethodCoordinatorClear,
-	proto.MethodServerStop, proto.MethodAgentReload, proto.MethodPeerReload, proto.MethodPeerList, proto.MethodProjectsWatch,
+	proto.MethodServerStop, proto.MethodAgentReload, proto.MethodPeerReload, proto.MethodPeerList, proto.MethodPeerPopupRead, proto.MethodProjectsWatch,
 	proto.MethodViewSubscribe, proto.MethodViewAttach, proto.MethodViewDashboard, proto.MethodViewProject,
 	proto.MethodViewSelect, proto.MethodViewSideSel, proto.MethodViewExpand, proto.MethodViewTree, proto.MethodViewSections,
 	proto.MethodViewSidebar, proto.MethodViewInfo, proto.MethodViewColumns, proto.MethodViewSize,
@@ -58,7 +58,8 @@ var notHumanOnly = map[string]gate{
 // of the control socket.
 var notControl = map[string]bool{
 	proto.MethodPeerProjects: true, proto.MethodPeerWatch: true, proto.MethodPeerAttach: true,
-	proto.MethodPeerPanes: true, proto.MethodPeerMessage: true, proto.MethodPeerFileFetch: true,
+	proto.MethodPeerPanes: true, proto.MethodPeerMessage: true, proto.MethodPeerPopup: true,
+	proto.MethodPeerFileFetch: true,
 }
 
 // gateOf is method m's gate, an attach connection's among them.

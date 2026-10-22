@@ -16,6 +16,7 @@ var drainFed = []reflect.Type{
 	reflect.TypeOf(modCursorMsg{}),
 	reflect.TypeOf(typeSettledMsg{}),
 	reflect.TypeOf(typeTimeoutMsg{}),
+	reflect.TypeOf(remotePopupMsg{}),
 }
 
 // drainDropped are results a test feeds itself (setData, the mod tabs) or

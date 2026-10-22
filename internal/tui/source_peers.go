@@ -79,6 +79,22 @@ func (s *ServerSource) Peers() (PeerList, error) {
 	return l, nil
 }
 
+func (s *ServerSource) PeerPopup(alias, slug string) (proto.PeerPopup, error) {
+	var pp proto.PeerPopup
+	if s.Caller.IsAgent() {
+		return pp, errHumanOnly
+	}
+	// A connection of its own: the read waits for the other server,
+	// and the console's other calls don't wait behind it.
+	c, err := tmclient.Connect(s.Paths, false)
+	if err != nil {
+		return pp, err
+	}
+	defer c.Close()
+	err = c.Call(proto.MethodPeerPopupRead, proto.PeerPopupReadParams{Alias: alias, Project: slug}, &pp)
+	return pp, err
+}
+
 func (s *ServerSource) RemovePeer(alias string) error {
 	if s.Caller.IsAgent() {
 		return errHumanOnly

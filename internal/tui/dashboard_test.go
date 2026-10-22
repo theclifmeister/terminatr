@@ -60,9 +60,14 @@ type fakeSource struct {
 	peers       PeerList
 	// logs are the Logs tab's (logstab_test.go), read from their files;
 	// logReads the log.read calls.
-	logs         []proto.LogInfo
-	logReads     []proto.LogReadParams
-	peerErr      error
+	logs     []proto.LogInfo
+	logReads []proto.LogReadParams
+	peerErr  error
+	// popup and popupErr are PeerPopup's answer; popups its calls,
+	// "alias/slug".
+	popup        proto.PeerPopup
+	popupErr     error
+	popups       []string
 	unpinned     []string // aliases removed from the Peers tab
 	panesSet     []string // "alias level" set from the Peers tab
 	relaySet     []string // "alias relay" set from the Peers tab
@@ -313,6 +318,10 @@ func (f *fakeSource) OpenProject(slug string, c, r int) (string, error) {
 }
 
 func (f *fakeSource) Peers() (PeerList, error) { return f.peers, f.peerErr }
+func (f *fakeSource) PeerPopup(alias, slug string) (proto.PeerPopup, error) {
+	f.popups = append(f.popups, alias+"/"+slug)
+	return f.popup, f.popupErr
+}
 func (f *fakeSource) SetPeerPanes(alias, level string) error {
 	f.panesSet = append(f.panesSet, alias+" "+level)
 	for i := range f.peers.Peers {

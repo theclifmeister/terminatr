@@ -1458,10 +1458,11 @@ func (c *client) run(do prefixDo) {
 	}
 }
 
-// remotePopup says, in the status bar, that the project popup (prefix+A,
-// I, T) isn't shown for a paired server's pane: its project is that
-// server's, and only its dashboard (peerdash.go) is seen here. false for
-// this server's panes and the other popups, which open as ever.
+// remotePopup opens the project popup (prefix+A, I, T) of a paired
+// server's pane: that server's popup of its project (remotepopup.go),
+// over the pane, or, when the sidebar's mirror says that server serves
+// none to this one, why not in the status bar. false for this server's
+// panes and the other popups, which open as ever.
 func (c *client) remotePopup(key string) bool {
 	if !projectPopups[key] || !c.lock() {
 		return false
@@ -1471,10 +1472,14 @@ func (c *client) remotePopup(key string) bool {
 		c.mu.Unlock()
 		return false
 	}
-	c.flash = remoteNoPopup(p.info.Server, p.info.Project)
-	c.status()
-	c.mu.Unlock()
-	c.poke()
+	if c.side != nil && !remotePopupOK(c.side.peers, p.info.Server) {
+		c.flash = remoteNoPopup(p.info.Server, p.info.Project)
+		c.status()
+		c.mu.Unlock()
+		c.poke()
+		return true
+	}
+	c.goOver(&Over{Key: key, Project: "@" + p.info.Server + "/" + p.info.Project})
 	return true
 }
 

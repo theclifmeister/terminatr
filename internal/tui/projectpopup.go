@@ -82,8 +82,7 @@ func (m *dash) projectPopup(string) tea.Cmd {
 	if slug == "" {
 		return nil
 	}
-	m.push(m.newProjectView(slug))
-	return m.loadPopup(slug)
+	return m.openTab(slug, tabOverview, 0)
 }
 
 // newProjectView is slug's popup on its first tab, its settings rows
@@ -115,6 +114,11 @@ func (m *dash) showTask(slug string, id int) tea.Cmd {
 func (m *dash) showTab(slug string, tab int) tea.Cmd { return m.openTab(slug, tab, 0) }
 
 func (m *dash) openTab(slug string, tab, show int) tea.Cmd {
+	if alias, peerSlug, ok := peerPlace(slug); ok {
+		// Over a paired server's pane: that server's popup
+		// (remotepopup.go).
+		return m.openRemotePopup(alias, peerSlug, tab)
+	}
 	pv := m.newProjectView(slug)
 	pv.tab, pv.show, pv.picking = tab, show, show != 0
 	m.push(pv)

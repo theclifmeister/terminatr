@@ -28,6 +28,10 @@ type PeerMirror struct {
 	// Watch: the peer exports (its hello lists the watch capability).
 	// A peer that doesn't has no projects here.
 	Watch bool `json:"watch,omitempty"`
+	// Popup: the peer serves its shared projects' popups (its hello
+	// lists the popup capability), while its pane switch for this
+	// server is view or type (peer.popup).
+	Popup bool `json:"popup,omitempty"`
 	// Pane: the peer has remote panes (its hello lists pane-vt), and
 	// Panes is its switch for this server as it last said (PanesOff,
 	// PanesView, PanesType; docs/SPEC.md §16.12). Version is its tm's

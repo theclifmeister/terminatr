@@ -60,7 +60,8 @@ type dispatcher struct {
 }
 
 // methods are the peer.* methods a paired server may call: nothing
-// else is reachable from a link. All of them read but peer.message,
+// else is reachable from a link. All of them read (peer.popup only while
+// the pane switch lets the peer look, popup.go) but peer.message,
 // which delivers a message to a linked project (§16.11), and peer.attach,
 // whose stream may type while the pane switch says so (§16.12);
 // peer.file.fetch reads only a file this server offered the peer
@@ -76,6 +77,9 @@ func (d *dispatcher) methods() map[string]handler {
 	if d.ex != nil {
 		m[proto.MethodPeerProjects] = d.projects
 		m[proto.MethodPeerWatch] = d.watch
+		if _, ok := d.ex.(PopupExporter); ok {
+			m[proto.MethodPeerPopup] = d.popup
+		}
 	}
 	if d.msgs != nil {
 		m[proto.MethodPeerMessage] = d.message
