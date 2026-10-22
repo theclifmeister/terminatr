@@ -449,13 +449,14 @@ func TestShellStateFloor(t *testing.T) {
 }
 
 // TestSessionCdPath: a session's shell may start with CDPATH or zsh's
-// cdpath set (guard.Rules.CdPath) when the server's environment has it,
-// tm gives it, or Claude's env file, a startup file or a shell snapshot
-// names it; then a relative cd leaves the guard's folder unknown.
+// cdpath set, or cdable_vars on (guard.Rules.CdPath), when the server's
+// environment has it, tm gives it, or Claude's env file, a startup file
+// or a shell snapshot names it; then a relative cd leaves the guard's
+// folder unknown.
 func TestSessionCdPath(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	for _, v := range []string{"CDPATH", "CLAUDE_ENV_FILE", "ZDOTDIR", "XDG_CONFIG_HOME", "CLAUDE_CONFIG_DIR", "CODEX_HOME"} {
+	for _, v := range []string{"CDPATH", "BASHOPTS", "CLAUDE_ENV_FILE", "ZDOTDIR", "XDG_CONFIG_HOME", "CLAUDE_CONFIG_DIR", "CODEX_HOME"} {
 		t.Setenv(v, "")
 	}
 	s := &Server{log: log.New(os.Stderr, "", 0), records: map[string]SessionRecord{}}
@@ -481,22 +482,35 @@ func TestSessionCdPath(t *testing.T) {
 		t.Error("the server's environment")
 	}
 	t.Setenv("CDPATH", "")
-	for _, f := range []string{
-		filepath.Join(home, ".zshrc"),
-		filepath.Join(home, ".claude", "shell-snapshots", "snapshot-zsh-2.sh"),
-		filepath.Join(home, ".config", "fish", "conf.d", "cd.fish"),
-		filepath.Join(home, "envfile"),
-	} {
-		old, _ := os.ReadFile(f)
-		write(f, string(old)+"cdpath=(~/src)\n")
-		if f == filepath.Join(home, "envfile") {
-			t.Setenv("CLAUDE_ENV_FILE", f)
-		}
-		if !s.sessionCdPath(nil, home) {
-			t.Errorf("%s names cdpath", f)
-		}
-		if err := os.Remove(f); err != nil {
-			t.Fatal(err)
+	if !s.sessionCdPath([]string{"BASHOPTS"}, home) {
+		t.Error("tm's BASHOPTS")
+	}
+	t.Setenv("BASHOPTS", "checkwinsize:cdable_vars")
+	if !s.sessionCdPath(nil, home) {
+		t.Error("the server's BASHOPTS")
+	}
+	t.Setenv("BASHOPTS", "checkwinsize")
+	if s.sessionCdPath(nil, home) {
+		t.Error("BASHOPTS without cdable_vars")
+	}
+	for _, line := range []string{"cdpath=(~/src)", "setopt CDABLE_VARS", "shopt -s cdable_vars"} {
+		for _, f := range []string{
+			filepath.Join(home, ".zshrc"),
+			filepath.Join(home, ".claude", "shell-snapshots", "snapshot-zsh-2.sh"),
+			filepath.Join(home, ".config", "fish", "conf.d", "cd.fish"),
+			filepath.Join(home, "envfile"),
+		} {
+			old, _ := os.ReadFile(f)
+			write(f, string(old)+line+"\n")
+			if f == filepath.Join(home, "envfile") {
+				t.Setenv("CLAUDE_ENV_FILE", f)
+			}
+			if !s.sessionCdPath(nil, home) {
+				t.Errorf("%s: %s", f, line)
+			}
+			if err := os.Remove(f); err != nil {
+				t.Fatal(err)
+			}
 		}
 	}
 }

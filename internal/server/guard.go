@@ -362,14 +362,16 @@ func (s *Server) guardNoWrite(r SessionRecord) []string {
 }
 
 // sessionCdPath: session r's shell may start with CDPATH or zsh's
-// cdpath set (guard.Rules.CdPath), so the guard can't place a relative
-// cd: the server's environment, which sessions inherit, has it, tm
-// gives it (env, its names), or a file the shell runs before each
-// command names it in any case: Claude's env file ($CLAUDE_ENV_FILE),
-// the user's startup files and the agents' shell snapshots
+// cdpath set, or cdable_vars on (guard.Rules.CdPath), so the guard
+// can't place a relative cd: the server's environment, which sessions
+// inherit, has it (bash's BASHOPTS may turn cdable_vars on), tm gives
+// it (env, its names), or a file the shell runs before each command
+// names it in any case: Claude's env file ($CLAUDE_ENV_FILE), the
+// user's startup files and the agents' shell snapshots
 // (agent.ShellState), each folder's newest cdPathFiles.
 func (s *Server) sessionCdPath(env []string, home string) bool {
-	if os.Getenv("CDPATH") != "" || slices.ContainsFunc(env, cdPathName.MatchString) {
+	if os.Getenv("CDPATH") != "" || cdPathName.MatchString(os.Getenv("BASHOPTS")) ||
+		slices.ContainsFunc(env, func(n string) bool { return cdPathName.MatchString(n) || n == "BASHOPTS" }) {
 		return true
 	}
 	files := []string{os.Getenv("CLAUDE_ENV_FILE")}
@@ -387,8 +389,9 @@ func (s *Server) sessionCdPath(env []string, home string) bool {
 	return false
 }
 
-// cdPathName names CDPATH or zsh's cdpath, any case.
-var cdPathName = regexp.MustCompile(`(?i)cd_?path`)
+// cdPathName names CDPATH or zsh's cdpath, or bash's cdable_vars or
+// zsh's cdablevars, any case.
+var cdPathName = regexp.MustCompile(`(?i)cd_?path|cd_?able_?vars`)
 
 // cdPathFiles and cdPathRead bound what namesCdPath reads of a folder:
 // its newest files, and of each its start.
@@ -398,7 +401,8 @@ const (
 )
 
 // namesCdPath: file p, or one of the newest files in folder p (and
-// their folders' one level down), names CDPATH or cdpath.
+// their folders' one level down), names CDPATH, cdpath or cdable_vars
+// (cdPathName).
 func namesCdPath(p string) bool {
 	fi, err := os.Stat(p)
 	switch {
