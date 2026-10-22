@@ -2,12 +2,19 @@ package server
 
 import (
 	"os"
+	"sync/atomic"
 	"time"
 )
 
 // goneEvery is how often watchGone looks at the home and run dir; a test
-// shortens it.
-var goneEvery = 5 * time.Second
+// shortens it through setGoneEvery (a server goroutine may be reading it).
+var goneEvery atomic.Int64
+
+const defaultGoneEvery = 5 * time.Second
+
+func setGoneEvery(d time.Duration) { goneEvery.Store(int64(d)) }
+
+func init() { setGoneEvery(defaultGoneEvery) }
 
 // watchGone stops the server once its TERMINATR_HOME is gone: a deleted
 // test home means the test that made it is over, even when it died before
@@ -37,7 +44,7 @@ func (s *Server) watchGone() {
 			select {
 			case <-s.stopReq:
 				return
-			case <-time.After(goneEvery):
+			case <-time.After(time.Duration(goneEvery.Load())):
 			}
 			for i, d := range dirs {
 				if fi, err := os.Stat(d); err == nil && os.SameFile(fi, was[i]) {
