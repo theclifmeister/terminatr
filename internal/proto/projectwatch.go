@@ -96,6 +96,11 @@ type WatchLink struct {
 	Held   int    `json:"held,omitempty"`
 	Queued int    `json:"queued,omitempty"`
 	Last   string `json:"last,omitempty"`
+	// FilesWaiting counts files offered here that wait for the user,
+	// FilesActive files either way that run or wait their turn
+	// (docs/SPEC.md §16.13).
+	FilesWaiting int `json:"files_waiting,omitempty"`
+	FilesActive  int `json:"files_active,omitempty"`
 }
 
 // WatchTicker is the ticker's slow timers for a project. Times, not

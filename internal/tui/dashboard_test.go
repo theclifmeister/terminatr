@@ -101,9 +101,11 @@ type fakeSource struct {
 	links    []string
 	linkActs []string
 	linkLog  []*link.Message
-	// linkLogs, when set, are LinkLog's by the other project instead.
-	linkLogs map[string][]*link.Message
-	modViews proto.ModViewsResult
+	// linkLogs, when set, are LinkLog's by the other project instead;
+	// linkFiles what LinkFiles gives.
+	linkLogs  map[string][]*link.Message
+	linkFiles []link.Transfer
+	modViews  proto.ModViewsResult
 	// tasksTab: ModViews lists the Tasks tab mod's view, drawn from the
 	// board (taskstab_test.go), its done tasks listed with tasksDoneAll.
 	tasksTab     bool
@@ -194,6 +196,11 @@ func (f *fakeSource) SetLinkAsk(slug, other string, ask bool) error {
 	f.links = append(f.links, fmt.Sprintf("%s %s ask %v", slug, other, ask))
 	return nil
 }
+func (f *fakeSource) SetLinkFiles(slug, other, files string) error {
+	f.links = append(f.links, fmt.Sprintf("%s %s files %s", slug, other, files))
+	return nil
+}
+func (f *fakeSource) LinkFiles(slug, other string) ([]link.Transfer, error) { return f.linkFiles, nil }
 func (f *fakeSource) LinkLog(slug, other string) ([]*link.Message, error) {
 	if f.linkLogs != nil {
 		return f.linkLogs[other], nil
@@ -282,7 +289,7 @@ func (f *fakeSource) LibraryRemove(_, id, name string) (int, error) {
 	var keep []thread.LibFile
 	n := 0
 	for _, l := range f.library {
-		if l.Thread == id && (name == "" || l.Name == name) {
+		if (l.Thread == id || l.Message == id) && (name == "" || l.Name == name) {
 			n++
 			continue
 		}

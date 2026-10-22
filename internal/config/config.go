@@ -112,10 +112,18 @@ const (
 	MaxLinkBurst       = 20
 	MaxLinkPerHour     = 120
 	MaxLinkKB          = 64
+	// A file sent over a link (§16.13): link_file_mb the most one may
+	// have, link_file_kbps the pace a sender serves it at; the defaults,
+	// then the bounds.
+	DefaultLinkFileMB   = 25
+	MaxLinkFileMB       = 200
+	DefaultLinkFileKbps = 1024
+	MinLinkFileKbps     = 64
+	MaxLinkFileKbps     = 2048
 )
 
 // LinkKeys are the link limits' settings.
-var LinkKeys = []string{"link_burst", "link_per_hour", "link_max_kb"}
+var LinkKeys = []string{"link_burst", "link_per_hour", "link_max_kb", "link_file_mb", "link_file_kbps"}
 
 // ArchiveKeys are the retention settings (docs/SPEC.md §7.6): how many
 // days the ticker keeps done tasks on the board, resolved threads'
@@ -248,6 +256,10 @@ type Safety struct {
 	LinkBurst   int `json:"link_burst"`
 	LinkPerHour int `json:"link_per_hour"`
 	LinkMaxKB   int `json:"link_max_kb"`
+	// LinkFileMB is the most a file over a link may have, each side its
+	// own; LinkFileKbps the pace this side sends one at, in KiB/s.
+	LinkFileMB   int `json:"link_file_mb"`
+	LinkFileKbps int `json:"link_file_kbps"`
 }
 
 // ArchiveDays is the retention setting key names (ArchiveKeys), 0 for
@@ -270,7 +282,8 @@ var Defaults = Safety{StartThreads: StartPropose, Yolo: false, CoordinatorApprov
 	ParallelThreads: 10, AutoClose: CloseMerged, AutoCloseDays: 7, PRFollowup: true, PRPollSeconds: DefaultPRPollSeconds,
 	CompleteTasks: CompleteUser, FastForwardCheckout: true, Protection: ProtectOpen, Merge: MergeCoordinator, MergeMethod: MethodMerge, BranchName: DefaultBranchName, Guard: true, GuardMode: GuardEnforce, Active: true,
 	ArchiveTasksDays: 30, ArchiveThreadsDays: 30, ArchiveInboxDays: 30, ArchiveJournalDays: 30,
-	LinkBurst: DefaultLinkBurst, LinkPerHour: DefaultLinkPerHour, LinkMaxKB: DefaultLinkMaxKB}
+	LinkBurst: DefaultLinkBurst, LinkPerHour: DefaultLinkPerHour, LinkMaxKB: DefaultLinkMaxKB,
+	LinkFileMB: DefaultLinkFileMB, LinkFileKbps: DefaultLinkFileKbps}
 
 type rawSafety struct {
 	StartThreads        *string `toml:"start_threads"`
@@ -319,6 +332,8 @@ type rawSafety struct {
 	LinkBurst      *int          `toml:"link_burst"`
 	LinkPerHour    *int          `toml:"link_per_hour"`
 	LinkMaxKB      *int          `toml:"link_max_kb"`
+	LinkFileMB     *int          `toml:"link_file_mb"`
+	LinkFileKbps   *int          `toml:"link_file_kbps"`
 	// Repos is the project's repo list, the repositories the user
 	// approved for its threads' worktrees (Config.Repos): here, not in
 	// PROJECT.md, which the coordinator writes. Not a setting: neither

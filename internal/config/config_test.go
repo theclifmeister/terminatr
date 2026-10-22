@@ -55,10 +55,10 @@ link_per_hour = 30
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s, _ := c.Safety("demo"); !reflect.DeepEqual(s, Safety{StartThreads: "auto", Yolo: true, CoordinatorApproves: true, ParallelThreads: 10, AutoClose: "merged", AutoCloseDays: 7, PRFollowup: true, PRPollSeconds: 120, CompleteTasks: "merged", FastForwardCheckout: true, Protection: ProtectOpen, Merge: "coordinator", MergeMethod: "merge", BranchName: DefaultBranchName, Guard: true, GuardMode: GuardEnforce, Active: true, ArchiveTasksDays: 30, ArchiveThreadsDays: 30, ArchiveInboxDays: 30, ArchiveJournalDays: 30, LinkBurst: 3, LinkPerHour: 10, LinkMaxKB: 8}) {
+	if s, _ := c.Safety("demo"); !reflect.DeepEqual(s, Safety{StartThreads: "auto", Yolo: true, CoordinatorApproves: true, ParallelThreads: 10, AutoClose: "merged", AutoCloseDays: 7, PRFollowup: true, PRPollSeconds: 120, CompleteTasks: "merged", FastForwardCheckout: true, Protection: ProtectOpen, Merge: "coordinator", MergeMethod: "merge", BranchName: DefaultBranchName, Guard: true, GuardMode: GuardEnforce, Active: true, ArchiveTasksDays: 30, ArchiveThreadsDays: 30, ArchiveInboxDays: 30, ArchiveJournalDays: 30, LinkBurst: 3, LinkPerHour: 10, LinkMaxKB: 8, LinkFileMB: 25, LinkFileKbps: 1024}) {
 		t.Fatalf("demo %+v", s)
 	}
-	if s, _ := c.Safety("other"); !reflect.DeepEqual(s, Safety{StartThreads: "propose", ParallelThreads: 10, AutoClose: "off", AutoCloseDays: 7, PRPollSeconds: 120, CompleteTasks: "user", CoordinatorRemoteControl: true, AutoClear: true, CoordinatorMerges: true, Protection: ProtectStrict, Merge: "coordinator", MergeMethod: "squash", BranchName: DefaultBranchName, Guard: true, GuardMode: GuardEnforce, Active: true, ArchiveTasksDays: 30, ArchiveThreadsDays: 30, ArchiveInboxDays: 30, ArchiveJournalDays: 30, LinkBurst: 3, LinkPerHour: 30, LinkMaxKB: 8}) {
+	if s, _ := c.Safety("other"); !reflect.DeepEqual(s, Safety{StartThreads: "propose", ParallelThreads: 10, AutoClose: "off", AutoCloseDays: 7, PRPollSeconds: 120, CompleteTasks: "user", CoordinatorRemoteControl: true, AutoClear: true, CoordinatorMerges: true, Protection: ProtectStrict, Merge: "coordinator", MergeMethod: "squash", BranchName: DefaultBranchName, Guard: true, GuardMode: GuardEnforce, Active: true, ArchiveTasksDays: 30, ArchiveThreadsDays: 30, ArchiveInboxDays: 30, ArchiveJournalDays: 30, LinkBurst: 3, LinkPerHour: 30, LinkMaxKB: 8, LinkFileMB: 25, LinkFileKbps: 1024}) {
 		t.Fatalf("other %+v", s)
 	}
 }
@@ -122,6 +122,8 @@ func TestBadSettings(t *testing.T) {
 		"[defaults]\nlink_burst = 0\n":                     "defaults.link_burst must be 1 to 20",
 		"[projects.demo]\nlink_per_hour = 500\n":           "link_per_hour must be 1 to 120",
 		"[projects.demo]\nlink_max_kb = 65\n":              "link_max_kb must be 1 to 64",
+		"[projects.demo]\nlink_file_mb = 201\n":            "link_file_mb must be 1 to 200",
+		"[defaults]\nlink_file_kbps = 32\n":                "defaults.link_file_kbps must be 64 to 2048",
 		"[projects.demo]\ncomplete_tasks = \"later\"\n":    "complete_tasks must be",
 		"[defaults]\nyoloo = true\n":                       "unknown setting defaults.yoloo",
 		"[defaults]\narchived = true\n":                    "defaults can't set active, paused, archived or pinned",
@@ -194,7 +196,7 @@ auto_resolve = true
 		t.Fatal(err)
 	}
 	all := Safety{StartThreads: "auto", CoordinatorApproves: true, ParallelThreads: 4, AutoClose: "off", AutoCloseDays: 7, PRFollowup: true, PRPollSeconds: 120, CompleteTasks: "merged", FastForwardCheckout: true, Protection: ProtectStrict, Merge: "coordinator", MergeMethod: "merge", BranchName: DefaultBranchName, Guard: true, GuardMode: GuardEnforce, Active: true,
-		ArchiveTasksDays: 30, ArchiveThreadsDays: 14, ArchiveInboxDays: 30, ArchiveJournalDays: 30, LinkBurst: 3, LinkPerHour: 10, LinkMaxKB: 8}
+		ArchiveTasksDays: 30, ArchiveThreadsDays: 14, ArchiveInboxDays: 30, ArchiveJournalDays: 30, LinkBurst: 3, LinkPerHour: 10, LinkMaxKB: 8, LinkFileMB: 25, LinkFileKbps: 1024}
 	if s, _ := c.AllProjects(); !reflect.DeepEqual(s, all) {
 		t.Fatalf("all projects %+v", s)
 	}

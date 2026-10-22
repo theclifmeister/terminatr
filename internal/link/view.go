@@ -34,9 +34,14 @@ type Row struct {
 	Unread int `json:"unread"`
 	Held   int `json:"held"`
 	// Queued counts this side's messages waiting over the rate.
-	Queued int       `json:"queued,omitempty"`
-	Last   string    `json:"last,omitempty"` // the newest message's id
-	LastAt time.Time `json:"last_at,omitzero"`
+	Queued int `json:"queued,omitempty"`
+	// FilesWaiting counts files offered here that wait for the user;
+	// FilesActive files either way that run or wait their turn
+	// (§16.13).
+	FilesWaiting int       `json:"files_waiting,omitempty"`
+	FilesActive  int       `json:"files_active,omitempty"`
+	Last         string    `json:"last,omitempty"` // the newest message's id
+	LastAt       time.Time `json:"last_at,omitzero"`
 	// Asks is the paired server's link request that waits for the
 	// user here; Asked this side's newest request to it (request.go).
 	Asks  *Request `json:"asks,omitempty"`
@@ -140,6 +145,7 @@ func Rows(cfg *config.Config, p *project.Project) []Row {
 		r.Paused = st.paused[pairKey(p.Slug, o)]
 		r.Held = st.held[p.Slug+">"+o]
 		r.Queued = st.queued[p.Slug+">"+o]
+		r.FilesWaiting, r.FilesActive = st.filesWaiting[p.Slug+">"+o], st.filesActive[p.Slug+">"+o]
 		for _, it := range items {
 			if it.Kind == KindMessage && it.Subject == o {
 				r.Unread++
@@ -200,6 +206,9 @@ func newest(p *project.Project, other string) *Message {
 func StampPaths(p *project.Project, rows []Row) []string {
 	paths := []string{p.Path("messages")}
 	if file, err := storePath(); err == nil {
+		paths = append(paths, file)
+	}
+	if file, err := filesPath(); err == nil {
 		paths = append(paths, file)
 	}
 	for _, r := range rows {

@@ -99,6 +99,11 @@ func (r remote) deliver(s *store, c caller.Caller, from *project.Project, m *Mes
 	if err := s.queue(r.alias, pm); err != nil {
 		return err
 	}
+	if m.Transfer != "" {
+		if err := r.queueOffer(s, from, m); err != nil {
+			return err
+		}
+	}
 	from.Journal(c, "link.send", m.Peer, fmt.Sprintf("%s (%s, queued)", m.ID, KB(m.Bytes)))
 	s.account(c.IsAgent(), from.Slug, m.Peer, l, now(), side{from, m.Peer})
 	Kick()
@@ -229,6 +234,7 @@ func holdOff(alias string, secs int) {
 func Flush(ctx context.Context, t Transport) {
 	Drain()
 	ExpireRequests()
+	ExpireFiles()
 	root, err := outboxDir()
 	if err != nil {
 		return
@@ -260,6 +266,7 @@ func Flush(ctx context.Context, t Transport) {
 				os.Remove(file)
 				undelivered(alias, e.Msg, "expired")
 				requestUndelivered(alias, e.Msg, "expired")
+				fileUnsent(alias, e.Msg, "expired")
 				continue
 			}
 			if !ready || ctx.Err() != nil {
@@ -279,10 +286,12 @@ func Flush(ctx context.Context, t Transport) {
 				os.Remove(file)
 				delivered(alias, e.Msg)
 				requestDelivered(alias, e.Msg)
+				fileSent(alias, e.Msg)
 			case res.Status == proto.PeerRefused:
 				os.Remove(file)
 				undelivered(alias, e.Msg, res.Code)
 				requestUndelivered(alias, e.Msg, res.Code)
+				fileUnsent(alias, e.Msg, res.Code)
 			default:
 				ready = false
 			}
@@ -358,8 +367,11 @@ const clockSkew = 5 * time.Minute
 func Receive(alias string, id peer.ID, m proto.PeerMessage) proto.PeerMessageResult {
 	res := proto.PeerMessageResult{Status: proto.PeerRefused, Code: "bad-message"}
 	idOK := ValidID(m.ID)
-	if m.Kind == proto.PeerLinkRequest || m.Kind == proto.PeerLinkAnswer {
+	switch m.Kind {
+	case proto.PeerLinkRequest, proto.PeerLinkAnswer:
 		idOK = ValidRequestID(m.ID)
+	case proto.PeerFileOffer, proto.PeerFileAnswer, proto.PeerFileDone, proto.PeerFileCancel:
+		idOK = ValidFileID(m.ID)
 	}
 	if m.Epoch == "" || m.Seq < 1 || !project.ValidSlug(m.From) || !project.ValidSlug(m.To) || !idOK {
 		return res
@@ -378,6 +390,14 @@ func Receive(alias string, id peer.ID, m proto.PeerMessage) proto.PeerMessageRes
 			res = s.receiveRequest(alias, fingerprint(id), m)
 		case proto.PeerLinkAnswer:
 			res = s.receiveAnswer(alias, m)
+		case proto.PeerFileOffer:
+			res = s.receiveOffer(alias, fingerprint(id), m)
+		case proto.PeerFileAnswer:
+			res = s.receiveFileAnswer(alias, m)
+		case proto.PeerFileDone:
+			res = s.receiveFileDone(alias, m)
+		case proto.PeerFileCancel:
+			res = s.receiveFileCancel(alias, m)
 		default:
 			res = proto.PeerMessageResult{Status: proto.PeerRefused, Code: "bad-message"}
 		}

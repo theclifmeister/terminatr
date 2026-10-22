@@ -25,6 +25,23 @@ const (
 	// PeerLinkAnswer is that user's answer to request ID: Allow is the
 	// answering side's own entry now, "off" when declined.
 	PeerLinkAnswer = "link-answer"
+	// The control half of a file over the link (docs/SPEC.md §16.13):
+	// the offer of a file with message Re (ID X-<fp>-<n>, Name, Size,
+	// SHA256), the receiving user's answer to it (Allow accepted or
+	// declined), the receipt once it is in place or failed for good
+	// (Allow received or failed, Code why), and either side's cancel.
+	PeerFileOffer  = "file-offer"
+	PeerFileAnswer = "file-answer"
+	PeerFileDone   = "file-done"
+	PeerFileCancel = "file-cancel"
+)
+
+// The words of a file-answer's and a file-done's Allow.
+const (
+	FileAccepted = "accepted"
+	FileDeclined = "declined"
+	FileReceived = "received"
+	FileFailed   = "failed"
 )
 
 // PeerMessage is one entry of a server's outbox to a paired server.
@@ -43,8 +60,51 @@ type PeerMessage struct {
 	Re      string    `json:"re,omitempty"`
 	By      string    `json:"by,omitempty"` // "coordinator" or "human"
 	Text    string    `json:"text,omitempty"`
-	Allow   string    `json:"allow,omitempty"` // link-request, link-answer
+	Allow   string    `json:"allow,omitempty"` // link-request, link-answer, file-answer, file-done
+	// A file-offer's file: its cleaned base name, size in bytes and
+	// SHA-256 in hex; Code is a file-done's failure, a fixed word.
+	Name   string `json:"name,omitempty"`
+	Size   int64  `json:"size,omitempty"`
+	SHA256 string `json:"sha256,omitempty"`
+	Code   string `json:"code,omitempty"`
 }
+
+// MethodPeerFileFetch is the data half of a file over the link (docs/SPEC.md
+// §16.13): the receiving server asks for an offered file's bytes from
+// Offset, on a stream id it picked; the answer is the file's size and
+// SHA-256, then binary frames carry the bytes. Only when both hellos list
+// the file capability.
+const MethodPeerFileFetch = "peer.file.fetch"
+
+// PeerFileFetchParams asks for transfer ID's bytes from Offset.
+type PeerFileFetchParams struct {
+	ID     string `json:"id"`
+	Stream uint32 `json:"stream"`
+	Offset int64  `json:"offset"`
+}
+
+// PeerFileFetchResult is the file a fetch opened.
+type PeerFileFetchResult struct {
+	Size   int64  `json:"size"`
+	SHA256 string `json:"sha256"`
+}
+
+// Refusals of peer.file.fetch, and the words a file stream's abort frame
+// says.
+const (
+	ErrUnknownFile = "unknown-file" // no such offer to that server, or cancelled
+	ErrFileBusy    = "busy"         // that link serves its streams already
+	ErrFileGone    = "gone"         // the sender's copy was deleted
+	ErrNotLinked   = "not-linked"   // the link doesn't send there now
+	ErrLinkPaused  = "link-paused"
+
+	FileCancelled  = "cancelled"
+	FileBadContent = "bad-content"
+	FileTooBig     = "too-big"
+	FileStalled    = "stalled"
+	FileNoSpace    = "no-space"
+	FileStopping   = "shutting-down"
+)
 
 // PeerMessageResult statuses.
 const (

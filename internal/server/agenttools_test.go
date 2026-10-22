@@ -92,7 +92,7 @@ func TestModAgentTools(t *testing.T) {
 	for _, tc := range []struct {
 		rec  SessionRecord
 		want string
-	}{{thr, "report,status,steps,done,lint_lint_report,lint_ping"}, {coord, "lint_ping"}, {other, "report,status,steps,done"}} {
+	}{{thr, "report,status,steps,done,lint_lint_report,lint_ping"}, {coord, "link_files,lint_ping"}, {other, "report,status,steps,done"}} {
 		if got := toolNames(s.sessionTools(tc.rec)); got != tc.want {
 			t.Errorf("%s of %s: %s, want %s", tc.rec.Role, tc.rec.Project, got, tc.want)
 		}

@@ -11,25 +11,28 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/theclifmeister/terminatr/internal/link"
 	"github.com/theclifmeister/terminatr/internal/thread"
 )
 
 // The project popup's Library tab (docs/SPEC.md §4): the files every
 // thread of the project attached to its reports, the resolved and
-// archived threads' too, grouped by task and thread, newest first. enter
-// reads one in the popup; d deletes the selected file and D the files of
-// its thread, each after y. A file shows by name and size, never a path.
+// archived threads' too, grouped by task and thread, newest first, and a
+// group per linked project for the files it sent (§16.13). enter reads
+// one in the popup; X deletes the selected file and D the files of its
+// thread, each after y. A file shows by name and size, never a path.
 
-// libraryOrder are the library's files grouped by thread, the group with
-// the newest file first and each group's files newest first.
+// libraryOrder are the library's files grouped by thread (or linked
+// project), the group with the newest file first and each group's files
+// newest first.
 func libraryOrder(files []thread.LibFile) []thread.LibFile {
 	var ids []string
 	by := map[string][]thread.LibFile{}
 	for _, f := range files { // newest first already
-		if _, ok := by[f.Thread]; !ok {
-			ids = append(ids, f.Thread)
+		if _, ok := by[f.Group()]; !ok {
+			ids = append(ids, f.Group())
 		}
-		by[f.Thread] = append(by[f.Thread], f)
+		by[f.Group()] = append(by[f.Group()], f)
 	}
 	out := make([]thread.LibFile, 0, len(files))
 	for _, id := range ids {
@@ -51,8 +54,16 @@ func (pv *projectView) selLib() (thread.LibFile, bool) {
 }
 
 // libGroup is the title line of a thread's files: task, title, thread
-// and the date of its newest file.
-func libGroup(f thread.LibFile, w int) string {
+// and the date of its newest file; of a linked project's, the project
+// and how many (n).
+func libGroup(f thread.LibFile, n, w int) string {
+	if f.Peer != "" {
+		rest := fmt.Sprintf(" · %d files", n)
+		if n == 1 {
+			rest = " · 1 file"
+		}
+		return th().Head.Render(ansi.Truncate("from "+f.Peer, max(w-ansi.StringWidth(rest), 8), "…")) + th().Faint.Render(rest)
+	}
 	rest := " · " + f.Thread + " · " + f.Time.Local().Format("2006-01-02")
 	if f.State == "archived" {
 		rest += " · archived"
@@ -88,13 +99,17 @@ func (pv *projectView) libraryLines(w int) ([]string, int, []int) {
 	var hits []int
 	sel := -1
 	group := ""
+	count := map[string]int{}
+	for _, f := range files {
+		count[f.Group()]++
+	}
 	for i, f := range files {
-		if f.Thread != group {
-			group = f.Thread
+		if f.Group() != group {
+			group = f.Group()
 			if len(out) > 0 {
 				out, hits = append(out, ""), append(hits, noHit)
 			}
-			out, hits = append(out, libGroup(f, w)), append(hits, noHit)
+			out, hits = append(out, libGroup(f, count[group], w)), append(hits, noHit)
 		}
 		size := fmt.Sprintf("%9s", sizeWords(f.Size))
 		l := "  " + fit(oneLine(f.Name), max(w-len(size)-4, 4)) + "  " + size
@@ -120,10 +135,20 @@ func (pv *projectView) libraryKey(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	case "enter":
 		return m.openLibFile(pv, f)
 	case "X":
+		if f.Peer != "" {
+			m.confirm("Delete a file", "Delete "+oneLine(f.Name)+" ("+sizeWords(f.Size)+"), which "+f.Peer+" sent with "+f.Message+"? It can't be brought back.", func() tea.Cmd {
+				return m.libRemove(pv.slug, f.Message, f.Name, "deleted "+oneLine(f.Name))
+			})
+			break
+		}
 		m.confirm("Delete a library file", "Delete "+oneLine(f.Name)+" ("+sizeWords(f.Size)+") of thread "+f.Thread+"? It can't be brought back.", func() tea.Cmd {
 			return m.libRemove(pv.slug, f.Thread, f.Name, "deleted "+oneLine(f.Name))
 		})
 	case "D":
+		if f.Peer != "" {
+			m.msg = "X deletes a linked project's files one at a time"
+			break
+		}
 		n := 0
 		for _, g := range pv.library {
 			if g.Thread == f.Thread {
@@ -178,12 +203,31 @@ func scrollKey(scroll *int, k tea.KeyPressMsg, n int) bool {
 
 func (m *dash) openLibFile(pv *projectView, f thread.LibFile) tea.Cmd {
 	tv := &textView{title: oneLine(f.Name) + " · " + sizeWords(f.Size)}
-	data, truncated, err := m.src.LibraryRead(pv.slug, f.Thread, f.Name, libMax)
+	id := f.Thread
+	if f.Peer != "" {
+		// Another project's: data, shown as text or not at all.
+		id, tv.title = f.Message, oneLine(f.Name)+" · "+sizeWords(f.Size)+" · from "+f.Peer
+	}
+	data, truncated, err := m.src.LibraryRead(pv.slug, id, f.Name, libMax)
 	switch {
 	case err != nil:
 		tv.note = "can't read it: " + oneLine(err.Error())
 	default:
 		tv.body, tv.note = libText(f.Name, data, truncated)
+	}
+	m.push(tv)
+	return nil
+}
+
+// openLinkFile shows the file that came with message msg of project
+// slug's link to other, as the Library tab shows one.
+func (m *dash) openLinkFile(slug, other string, msg *link.Message) tea.Cmd {
+	tv := &textView{title: oneLine(msg.File) + " · " + link.MB(msg.FileSize) + " · from " + other}
+	data, truncated, err := m.src.LibraryRead(slug, msg.ID, msg.File, libMax)
+	if err != nil {
+		tv.note = "can't read it: " + oneLine(err.Error())
+	} else {
+		tv.body, tv.note = libText(msg.File, data, truncated)
 	}
 	m.push(tv)
 	return nil

@@ -233,7 +233,8 @@ func (sn *projectSnap) watch(sessions []proto.SessionInfo) proto.ProjectWatch {
 	w.Context = contextOf(p.Slug, sessions, sn.hint)
 	for _, r := range sn.links {
 		w.Links = append(w.Links, proto.WatchLink{Peer: r.Peer, State: r.Words(), Send: r.Send, Receive: r.Receive,
-			Paused: r.Paused, Unread: r.Unread, Held: r.Held, Queued: r.Queued, Last: r.Last})
+			Paused: r.Paused, Unread: r.Unread, Held: r.Held, Queued: r.Queued, Last: r.Last,
+			FilesWaiting: r.FilesWaiting, FilesActive: r.FilesActive})
 	}
 	if t := watchTicker(timing, sn.prPoll, sn.noPRHost); !t.PRChecked.IsZero() || !t.Synced.IsZero() || t.NoPRHost {
 		w.Ticker = &t

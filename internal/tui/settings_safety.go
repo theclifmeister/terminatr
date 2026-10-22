@@ -203,20 +203,35 @@ var linkLimits = []struct {
 	def, most        int
 	steps            []int
 	words            func(int) string
+	// least is the lowest value (1 when 0); free, a raise that asks
+	// nothing first.
+	least int
+	free  bool
 }{
 	{"link_burst", "Messages at once", "How many messages the coordinator may send on a link at once before the rest wait their turn (each direction its own). Messages over the rate are queued and sent in order, never dropped. Raising it above the default asks first.",
-		config.DefaultLinkBurst, config.MaxLinkBurst, []int{1, 2, 3, 5, 10, 20}, func(n int) string { return fmt.Sprintf("%d at once", n) }},
+		config.DefaultLinkBurst, config.MaxLinkBurst, []int{1, 2, 3, 5, 10, 20}, func(n int) string { return fmt.Sprintf("%d at once", n) }, 0, false},
 	{"link_per_hour", "Messages an hour", "How many messages a link carries an hour each way after the burst; queued ones go as it allows. Raising it above the default asks first.",
-		config.DefaultLinkPerHour, config.MaxLinkPerHour, []int{5, 10, 20, 30, 60, 120}, func(n int) string { return fmt.Sprintf("%d an hour", n) }},
+		config.DefaultLinkPerHour, config.MaxLinkPerHour, []int{5, 10, 20, 30, 60, 120}, func(n int) string { return fmt.Sprintf("%d an hour", n) }, 0, false},
 	{"link_max_kb", "Message size", "The most text one message may have; a longer one is refused, to be split into parts (which go in order) or, on this server, to attach a library file. Raising it above the default asks first.",
-		config.DefaultLinkMaxKB, config.MaxLinkKB, []int{4, 8, 16, 32, 64}, func(n int) string { return fmt.Sprintf("%d KB", n) }},
+		config.DefaultLinkMaxKB, config.MaxLinkKB, []int{4, 8, 16, 32, 64}, func(n int) string { return fmt.Sprintf("%d KB", n) }, 0, false},
+	{"link_file_mb", "File size", "The most a file sent with a message may have (tm link send --file), this side's limit whichever way it goes; a bigger one is refused. Each file still waits for the receiving user's accept unless their link takes files on its own. Raising it above the default asks first.",
+		config.DefaultLinkFileMB, config.MaxLinkFileMB, []int{5, 10, 25, 50, 100, 200}, func(n int) string { return fmt.Sprintf("%d MB", n) }, 0, false},
+	{"link_file_kbps", "File pace", "How fast this side sends a file to a paired server, in KiB a second; it slows on its own when the link's round trips rise, so panes stay quick.",
+		config.DefaultLinkFileKbps, config.MaxLinkFileKbps, []int{64, 256, 512, 1024, 2048}, func(n int) string { return fmt.Sprintf("%d KiB/s", n) }, config.MinLinkFileKbps, true},
 }
 
-// linkLimitsWords is Link limits' value: "3 at once · 10 an hour · 8 KB".
+// linkLimitsWords is Link limits' value: "3 at once · 10 an hour · 8 KB ·
+// files 25 MB".
 func linkLimitsWords(s config.Safety) string {
 	var out []string
 	for _, l := range linkLimits {
-		out = append(out, l.words(s.Value(l.key).(int)))
+		switch l.key {
+		case "link_file_kbps": // the list shows it; the row stays short
+		case "link_file_mb":
+			out = append(out, "files "+l.words(s.Value(l.key).(int)))
+		default:
+			out = append(out, l.words(s.Value(l.key).(int)))
+		}
 	}
 	return strings.Join(out, " · ")
 }
@@ -229,13 +244,13 @@ func (sr safetyRows) linkLimitRows() []setting {
 	for _, l := range linkLimits {
 		get := func(m *dash) int { n, _ := sr.safety(m).Value(l.key).(int); return n }
 		put := func(m *dash, n int) tea.Cmd {
-			n = min(max(n, 1), l.most)
+			n = min(max(n, l.least, 1), l.most)
 			cur := get(m)
 			if n == cur {
 				return nil
 			}
 			msg := "links " + sr.ofWho + " take " + l.words(n)
-			if n <= cur || n <= l.def {
+			if n <= cur || n <= l.def || l.free {
 				return sr.set(m, l.key, n, msg)
 			}
 			who := sr.slug + "'s coordinator"

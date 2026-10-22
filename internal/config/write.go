@@ -495,16 +495,16 @@ func tomlValue(v any) (string, error) {
 		return "{ from = " + from + " }", nil
 	case Link:
 		allow, _ := tomlValue(v.Allow)
-		if !v.Ask {
+		if !v.Ask && v.Files == "" {
 			return allow, nil
 		}
-		return "{ allow = " + allow + ", ask = true }", nil
+		return "{ allow = " + allow + linkExtra(v.Ask, v.Ask, v.Files) + " }", nil
 	case remoteLink:
 		allow, _ := tomlValue(v.Allow)
-		if v.Ask {
+		if v.Ask && v.Files == "" {
 			return allow, nil
 		}
-		return "{ allow = " + allow + ", ask = false }", nil
+		return "{ allow = " + allow + linkExtra(!v.Ask, v.Ask, v.Files) + " }", nil
 	case []string:
 		parts := make([]string, len(v))
 		for i, x := range v {
@@ -855,4 +855,18 @@ func linkedTo(projects map[string]any, slug string) bool {
 		}
 	}
 	return false
+}
+
+// linkExtra is what an inline link entry says beside allow: ask when
+// say, and files when it isn't ask.
+func linkExtra(say, ask bool, files string) string {
+	s := ""
+	if say {
+		s += fmt.Sprintf(", ask = %t", ask)
+	}
+	if files != "" {
+		f, _ := tomlValue(files)
+		s += ", files = " + f
+	}
+	return s
 }

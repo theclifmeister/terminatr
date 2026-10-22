@@ -2,20 +2,25 @@ package cli
 
 import (
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
+	"github.com/theclifmeister/terminatr/internal/link"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/thread"
 )
 
 const libraryUsage = `usage: tm library list [--project <slug>] [--json]
        tm library rm <thread> <file> | --all [--project <slug>]
+       tm library rm M-12 <file> [--project <slug>]
 
 list shows the files every thread of the project attached to its reports
-(its library), the resolved and archived threads' too, newest first, by
-name and size. rm deletes one file of a thread, or all of its files with
---all; it is the coordinator's, and only on the user's word in chat.`
+(its library), the resolved and archived threads' too, and the files
+linked projects sent with their messages, newest first, by name and
+size. rm deletes one file of a thread, or all of its files with --all,
+or the file a message brought; it is the coordinator's, and only on the
+user's word in chat.`
 
 // runLibrary lists the project's library files, or deletes them
 // (docs/SPEC.md §7.2, Library).
@@ -45,6 +50,8 @@ func runLibrary(e *Env, args []string) error {
 		if err != nil {
 			return err
 		}
+		files = append(files, link.LibraryFiles(p)...)
+		sort.SliceStable(files, func(i, j int) bool { return files[i].Time.After(files[j].Time) })
 		if *asJSON {
 			if files == nil {
 				files = []thread.LibFile{}
@@ -52,6 +59,10 @@ func runLibrary(e *Env, args []string) error {
 			return e.printJSON(files)
 		}
 		for _, l := range files {
+			if l.Peer != "" {
+				fmt.Fprintln(e.Stdout, shown(fmt.Sprintf("%s  -  from %s  %s/%s  %d bytes  %s", l.Time.Local().Format(time.DateOnly), l.Peer, l.Message, l.Name, l.Size, l.State)))
+				continue
+			}
 			task := l.Task
 			if task == "" {
 				task = "-"
@@ -74,6 +85,16 @@ func runLibrary(e *Env, args []string) error {
 		}
 		if err := e.coordinatorOnly(p, "tm library rm"); err != nil {
 			return err
+		}
+		if link.ValidID(pos[0]) {
+			if *all {
+				return usagef("%s", libraryUsage)
+			}
+			if err := link.RemoveFile(p, e.Caller, pos[0], name); err != nil {
+				return err
+			}
+			fmt.Fprintf(e.Stdout, "deleted %s of %s\n", shown(name), pos[0])
+			return nil
 		}
 		n, err := thread.RemoveLibrary(p, e.Caller, pos[0], name)
 		if err != nil {

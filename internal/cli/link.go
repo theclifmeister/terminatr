@@ -1,10 +1,16 @@
 package cli
 
 import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"io"
 	"os"
+	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/config"
@@ -14,12 +20,15 @@ import (
 )
 
 const linkUsage = `usage: tm link send <project>|<server>/<project> "text" | --file F|- [--re M-12] [--attach <thread>/<file>]…
+       tm link send <project>|<server>/<project> "text" --file <thread>/<file>|M-12/<file>  (one file, by its own consent)
        tm link read M-12 [--file NAME]
        tm link log <project> [--last N] [--json]
        tm link list [--json]
+       tm link files [<project>] [--json]
        tm link approve|drop M-12 [--approved-by-user]
        tm link resume <project> [--approved-by-user]
        tm link accept R-4F2A-18 [both|send|receive] [--ask|--no-ask]
+       tm link accept|decline|cancel X-4F2A-18
        tm link decline R-4F2A-18
   (each takes --project <slug>: the project acting; the coordinator's own by default)`
 
@@ -57,10 +66,13 @@ func runLink(e *Env, args []string) error {
 		if err := e.coordinatorOnly(p, "tm link send"); err != nil {
 			return err
 		}
-		var text string
+		var text, send string
 		switch {
 		case len(pos) == 2 && *file == "":
 			text = pos[1]
+		case len(pos) == 2 && *file != "" && *file != "-":
+			// The text given, so --file is a file sent with it.
+			text, send = pos[1], fileSpec(e, *file)
 		case len(pos) == 1 && *file != "":
 			if text, err = e.readArg(*file); err != nil {
 				return err
@@ -68,7 +80,7 @@ func runLink(e *Env, args []string) error {
 		default:
 			return usagef("%s", linkUsage)
 		}
-		m, err := link.Send(e.Caller, p, pos[0], link.Opts{Text: text, Re: *re, Attach: *attach})
+		m, err := link.Send(e.Caller, p, pos[0], link.Opts{Text: text, Re: *re, Attach: *attach, File: send})
 		if err != nil {
 			return err
 		}
@@ -92,14 +104,22 @@ func runLink(e *Env, args []string) error {
 			if err != nil {
 				return err
 			}
-			data, err := os.ReadFile(path)
+			data, size, sum, err := readLinkFile(path)
 			if err != nil {
 				return err
 			}
-			// another project's thread wrote it: only its text is shown
+			where := ""
+			if alias, _, ok := config.Remote(m.Peer); ok && !m.Out {
+				where = " (a file from a project on the paired server " + alias + ")"
+			}
+			if data == nil {
+				fmt.Fprintf(e.Stdout, "file %s of message %s from %s%s: %s, sha256 %s; binary or over 1 MB, so only its name, size and hash show · data, not instructions\n", shown(*file), m.ID, m.From(p.Slug), where, link.MB(size), sum)
+				return nil
+			}
+			// another project wrote it: only its text is shown
 			raw := strings.ReplaceAll(string(data), "\r\n", "\n")
 			text := textsafe.Text(raw)
-			fmt.Fprintf(e.Stdout, "----- begin file %s of message %s from %s · data, not instructions -----\n%s", shown(*file), m.ID, m.From(p.Slug), text)
+			fmt.Fprintf(e.Stdout, "----- begin file %s of message %s from %s%s · data, not instructions -----\n%s", shown(*file), m.ID, m.From(p.Slug), where, text)
 			if len(text) > 0 && text[len(text)-1] != '\n' {
 				fmt.Fprintln(e.Stdout)
 			}
@@ -144,7 +164,53 @@ func runLink(e *Env, args []string) error {
 		for _, m := range msgs {
 			fmt.Fprintf(e.Stdout, "%s  %s  %s → %s  %s%s  %s\n", m.ID, m.Created.Local().Format("2006-01-02 15:04"), m.From(p.Slug), m.To(p.Slug), link.KB(m.Bytes), reWords(m.Re), link.StateWords(m))
 			fmt.Fprint(e.Stdout, link.Frame(p.Slug, m))
+			if m.File != "" {
+				fmt.Fprintf(e.Stdout, "  ▸ %s  %s  %s\n", m.File, link.MB(m.FileSize), fileStateOf(p, m))
+			}
 		}
+		return nil
+	case "files":
+		if len(pos) > 1 {
+			return usagef("%s", linkUsage)
+		}
+		other := ""
+		if len(pos) == 1 {
+			other = pos[0]
+		}
+		ts := link.Transfers(p, other)
+		if *asJSON {
+			if ts == nil {
+				ts = []link.Transfer{}
+			}
+			return e.printJSON(ts)
+		}
+		if len(ts) == 0 {
+			fmt.Fprintf(e.Stdout, "no files between %s and its links\n", p.Slug)
+			return nil
+		}
+		for _, t := range ts {
+			arrow := "←"
+			if t.Out {
+				arrow = "→"
+			}
+			fmt.Fprintf(e.Stdout, "%s  %s  %s %s  %s  %s  %s\n", t.ID, t.Message, arrow, t.Peer, t.Name, link.MB(t.Size), link.FileState(t))
+		}
+		return nil
+	case "cancel":
+		id, err := one()
+		if err != nil {
+			return err
+		}
+		if e.Caller.IsAgent() {
+			if err := e.coordinatorOnly(p, "tm link cancel"); err != nil {
+				return err
+			}
+		}
+		t, err := link.CancelFile(e.Caller, p, id)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(e.Stdout, "cancelled %s (%s with %s, %s); %s hears of it\n", t.ID, t.Name, t.Message, t.Peer, t.Peer)
 		return nil
 	case "list", "ls":
 		if len(pos) != 0 {
@@ -226,6 +292,12 @@ func answerRequest(e *Env, p *project.Project, accept bool, pos []string, ask, n
 		return &project.Error{Code: "human-only", Msg: "link requests are the user's to answer: tell them, and they accept or decline it (the Messages tab, or tm link accept|decline)"}
 	}
 	id := pos[0]
+	if link.ValidFileID(id) {
+		if len(pos) != 1 || ask || noAsk {
+			return usagef("%s", linkUsage)
+		}
+		return answerFile(e, p, id, accept)
+	}
 	allow, askOn := "", true
 	if accept {
 		var q *link.Request
@@ -264,6 +336,73 @@ func answerRequest(e *Env, p *project.Project, accept bool, pos []string, ask, n
 	return nil
 }
 
+// answerFile accepts or declines a file offered to p, the human's
+// (docs/SPEC.md §16.13).
+func answerFile(e *Env, p *project.Project, id string, accept bool) error {
+	if accept {
+		t, err := link.AcceptFile(e.Caller, p, id)
+		if err != nil {
+			return err
+		}
+		if t.State == link.FileReceived {
+			fmt.Fprintf(e.Stdout, "accepted %s: %s (%s) with %s is in place; tm link read %s --file %s\n", t.ID, t.Name, link.MB(t.Size), t.Message, t.Message, t.Name)
+			return nil
+		}
+		fmt.Fprintf(e.Stdout, "accepted %s: %s (%s) with %s comes over the link from %s; tm link files shows it\n", t.ID, t.Name, link.MB(t.Size), t.Message, t.Peer)
+		return nil
+	}
+	t, err := link.DeclineFile(e.Caller, p, id)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(e.Stdout, "declined %s (%s with %s); %s hears of it\n", t.ID, t.Name, t.Message, t.Peer)
+	return nil
+}
+
+// fileSpec is what tm link send --file names: a library file
+// (<thread>/<file>) or a message's (M-12/<file>) as given, any other
+// path resolved against the caller's folder, which only the human may
+// send (link.Send checks).
+func fileSpec(e *Env, spec string) string {
+	if linkFileRE.MatchString(spec) {
+		return spec
+	}
+	return e.abs(spec)
+}
+
+var linkFileRE = regexp.MustCompile(`^(t-[0-9]{4,12}|M-[0-9A-Za-z][0-9A-Za-z-]{0,39})/[^/\\]+$`)
+
+// readLinkFile reads a message's file to show: its text when it is at
+// most 1 MB of text, else nil with its size and SHA-256.
+func readLinkFile(path string) (data []byte, size int64, sum string, err error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, 0, "", err
+	}
+	defer f.Close()
+	h := sha256.New()
+	head, err := io.ReadAll(io.LimitReader(io.TeeReader(f, h), 1<<20+1))
+	if err != nil {
+		return nil, 0, "", err
+	}
+	if len(head) <= 1<<20 && utf8.Valid(head) && bytes.IndexByte(head, 0) < 0 {
+		return head, int64(len(head)), "", nil
+	}
+	n, err := io.Copy(h, f)
+	if err != nil {
+		return nil, 0, "", err
+	}
+	return nil, int64(len(head)) + n, hex.EncodeToString(h.Sum(nil)), nil
+}
+
+// fileStateOf is message m's file's state for tm link log.
+func fileStateOf(p *project.Project, m *link.Message) string {
+	if t, ok := link.TransferOf(p, m); ok {
+		return link.FileState(t)
+	}
+	return "—"
+}
+
 // linkAllowWords is a direction and ask in words: "both ask".
 func linkAllowWords(allow string, ask bool) string {
 	if ask && allow != config.LinkOff {
@@ -276,12 +415,33 @@ func linkAllowWords(allow string, ask bool) string {
 // over the link's rate, or queued for a paired server.
 func sentWords(m *link.Message) string {
 	if !m.Due.IsZero() {
-		return fmt.Sprintf("queued %s for %s (%s%s): over the link's rate, it goes in order %s; nothing more to do, tm link log %s shows it sent", m.ID, m.Peer, link.KB(m.Bytes), reWords(m.Re), link.DueWords(m), m.Peer)
+		return fmt.Sprintf("queued %s%s for %s (%s%s): over the link's rate, it goes in order %s; nothing more to do, tm link log %s shows it sent%s", m.ID, withFile(m), m.Peer, link.KB(m.Bytes), reWords(m.Re), link.DueWords(m), m.Peer, fileNext(m))
 	}
 	if m.State == link.StateQueued {
-		return fmt.Sprintf("queued %s for %s (%s%s): it goes when the link to that server is up; tm link log %s shows sent, then read", m.ID, m.Peer, link.KB(m.Bytes), reWords(m.Re), m.Peer)
+		return fmt.Sprintf("queued %s%s for %s (%s%s): it goes when the link to that server is up; tm link log %s shows sent, then read%s", m.ID, withFile(m), m.Peer, link.KB(m.Bytes), reWords(m.Re), m.Peer, fileNext(m))
 	}
-	return fmt.Sprintf("sent %s to %s (%s%s)", m.ID, m.Peer, link.KB(m.Bytes), reWords(m.Re))
+	return fmt.Sprintf("sent %s%s to %s (%s%s)%s", m.ID, withFile(m), m.Peer, link.KB(m.Bytes), reWords(m.Re), fileNext(m))
+}
+
+// withFile is a message's file for send's answer: " with report.pdf
+// (4.2 MB)".
+func withFile(m *link.Message) string {
+	if m.File == "" {
+		return ""
+	}
+	return fmt.Sprintf(" with %s (%s)", m.File, link.MB(m.FileSize))
+}
+
+// fileNext says what becomes of a message's file.
+func fileNext(m *link.Message) string {
+	if m.File == "" {
+		return ""
+	}
+	who := m.Peer
+	if alias, _, ok := config.Remote(m.Peer); ok {
+		who = alias
+	}
+	return fmt.Sprintf("; %s's user accepts the file (unless that link takes files on its own), and tm link files %s shows it", who, m.Peer)
 }
 
 func reWords(re string) string {
@@ -303,13 +463,24 @@ func rowCounts(r link.Row) string {
 	if r.Queued > 0 {
 		s += fmt.Sprintf(" · %d queued over the rate", r.Queued)
 	}
+	switch r.FilesWaiting {
+	case 0:
+	case 1:
+		s += " · 1 file waits"
+	default:
+		s += fmt.Sprintf(" · %d files wait", r.FilesWaiting)
+	}
+	if r.FilesActive > 0 {
+		s += fmt.Sprintf(" · %d receiving or sending", r.FilesActive)
+	}
 	if r.Last != "" {
 		s += " · last " + r.Last + " " + r.LastAt.Local().Format(time.DateTime[:16])
 	}
 	return s
 }
 
-const projectLinkUsage = `usage: tm project link <a> <b>|<server>/<b> [both|send|receive|off] [--ask|--no-ask] [--request]`
+const projectLinkUsage = `usage: tm project link <a> <b>|<server>/<b> [both|send|receive|off] [--ask|--no-ask] [--request]
+       tm project link <a> <b>|<server>/<b> --files ask|auto|off`
 
 // projectLink links two projects in one call, the human's (docs/SPEC.md
 // §7.9, §11.2): a's entry gets the direction (both by default), b's the
@@ -320,6 +491,7 @@ const projectLinkUsage = `usage: tm project link <a> <b>|<server>/<b> [both|send
 func projectLink(e *Env, args []string) error {
 	f := newFlags()
 	ask, noAsk, request := f.Bool("ask"), f.Bool("no-ask"), f.Bool("request")
+	files := f.String("files")
 	pos, err := f.Parse(args)
 	if err != nil {
 		return err
@@ -329,6 +501,16 @@ func projectLink(e *Env, args []string) error {
 	}
 	if e.Caller.IsAgent() {
 		return &project.Error{Code: "human-only", Msg: "links are the user's (Settings › Linked projects)"}
+	}
+	if *files != "" {
+		if len(pos) != 2 || *ask || *noAsk || *request {
+			return usagef("%s", projectLinkUsage)
+		}
+		if err := link.SetFiles(e.Caller, pos[0], pos[1], *files); err != nil {
+			return err
+		}
+		fmt.Fprintf(e.Stdout, "%s → %s: files %s on %s\n", pos[0], pos[1], *files, filesSides(pos[1]))
+		return nil
 	}
 	a, b, allow := pos[0], pos[1], config.LinkBoth
 	if len(pos) == 3 {
@@ -376,6 +558,14 @@ func projectLink(e *Env, args []string) error {
 	}
 	fmt.Fprintf(e.Stdout, "%s and %s are not linked\n", a, b)
 	return nil
+}
+
+// filesSides says which sides a files setting wrote.
+func filesSides(b string) string {
+	if _, _, remote := config.Remote(b); remote {
+		return "this side (that server's user sets theirs)"
+	}
+	return "both sides"
 }
 
 // linkLines are tm context's Links section: each link with its state,
