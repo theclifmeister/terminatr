@@ -552,12 +552,7 @@ func (s *Server) pane(id string) (paneInfo, bool) {
 func (s *Server) resizePane(id string, cols, rows uint16) {
 	if _, _, ok := remoteID(id); ok {
 		if s.remotes != nil {
-			s.remotes.mu.Lock()
-			rp := s.remotes.byID[id]
-			s.remotes.mu.Unlock()
-			if rp != nil {
-				rp.size(cols, rows)
-			}
+			s.remotes.size(id, cols, rows)
 		}
 		return
 	}

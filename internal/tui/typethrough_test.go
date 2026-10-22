@@ -383,3 +383,98 @@ func TestUnfoldLetterOnlyUnfolds(t *testing.T) {
 		t.Fatalf("l on the folded divider: %+v", st)
 	}
 }
+
+// peerTypeDash is the dashboard showing mini's acme-api, mini's pane
+// switch for this server at panes, the sidebar's keyboard on row sel.
+func peerTypeDash(t *testing.T, panes, sel string) *dash {
+	t.Helper()
+	m, src := remoteDash(t, "@mini/acme-api")
+	src.data.Peers[0].Pane, src.data.Peers[0].Panes, src.data.Peers[0].Version = true, panes, "0.46.0"
+	m.setData(src.data)
+	m.focus, m.sideSel = areaSide, sel
+	return m
+}
+
+// TestTypeThroughPeerSidebar (T679): on a paired server's coordinator
+// row, its panes shared for typing, a printable key attaches its remote
+// pane, mini/<id>, and it and every key after it go to that pane, as on
+// this server's coordinator; the key bar says so. ctrl+c drops them. A
+// remote thread's row keeps the guard, and so does the coordinator's
+// when mini only lets this server watch: no key types through.
+func TestTypeThroughPeerSidebar(t *testing.T) {
+	m := peerTypeDash(t, proto.PanesType, "rc:mini/acme-api")
+	r := rowOf(m.tree(), "rc:mini/acme-api")
+	if bar := ansi.Strip(sideKeyBar(&r, true, false, 200)); !strings.Contains(bar, "type to write to it") {
+		t.Fatalf("key bar %q", bar)
+	}
+	cmd := keyPress(m, "H")
+	for _, k := range []string{"i", " ", "/", "enter"} {
+		keyPress(m, k)
+	}
+	if !m.typing || m.typeFor != "mini/r-1" || m.focus != areaMain {
+		t.Fatalf("typing %v for %q focus %d", m.typing, m.typeFor, m.focus)
+	}
+	drain(t, m, cmd, reflect.TypeOf(typeSettledMsg{}))
+	if m.result.Attach != "mini/r-1" {
+		t.Fatalf("result %+v", m.result)
+	}
+	if keys, to := m.typedFor("mini/r-1"); typedText(keys) != "Hi /⏎" || to != "mini/r-1" {
+		t.Fatalf("for mini/r-1: %q to %q", typedText(keys), to)
+	}
+	// The view showed another pane: nothing replays into it.
+	if keys, _ := m.typedFor("s-1"); keys != nil {
+		t.Fatalf("for s-1: %q", typedText(keys))
+	}
+
+	m = peerTypeDash(t, proto.PanesType, "rc:mini/acme-api")
+	keyPress(m, "h")
+	keyPress(m, "i")
+	if _, cmd := m.Update(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl}); quits(cmd) || m.typing || m.typed != nil ||
+		m.msg != "typing to the coordinator cancelled: 2 keys dropped" {
+		t.Fatalf("ctrl+c: typing %v typed %q msg %q", m.typing, typedText(m.typed), m.msg)
+	}
+
+	for _, c := range []struct{ panes, sel string }{
+		{proto.PanesType, "rt:mini/acme-api/t-0041"},
+		{proto.PanesView, "rc:mini/acme-api"},
+	} {
+		m = peerTypeDash(t, c.panes, c.sel)
+		keyPress(m, "x")
+		if m.typing || m.result.Attach != "" {
+			t.Fatalf("%s %s: x typed through", c.panes, c.sel)
+		}
+		r := rowOf(m.tree(), c.sel)
+		if bar := ansi.Strip(sideKeyBar(&r, true, false, 200)); strings.Contains(bar, "type to write") {
+			t.Fatalf("%s %s: key bar %q", c.panes, c.sel, bar)
+		}
+	}
+}
+
+// TestTypeThroughPeerAttachSidebar (T679): in a session, the sidebar's
+// cursor on a paired server's coordinator, whose remote pane shows, a
+// printable key goes to that pane, mini/<id>, and the keyboard with it.
+func TestTypeThroughPeerAttachSidebar(t *testing.T) {
+	c, p := selClient(t, "")
+	in := pipedInput(t, p)
+	_, _, peers := peerData()
+	peers[0].Pane, peers[0].Panes, peers[0].Version = true, proto.PanesType, "0.46.0"
+	c.keyQueue = make(chan uv.Event, 8)
+	c.mu.Lock()
+	c.side.peers = peers
+	p.info.ID, c.v.Focus = "mini/r-1", "mini/r-1"
+	c.v.SideSel, c.kb = "rc:mini/acme-api", areaSide
+	if !c.sideTypeThrough(Key{Code: 'G', Text: "G"}) { // releases c.mu
+		c.mu.Unlock()
+		t.Fatal("no type-through on mini's coordinator")
+	}
+	if ev := <-c.keyQueue; ev != (typedReady{}) {
+		t.Fatalf("event %v", ev)
+	}
+	c.flushTyped()
+	if got := received(t, in, 1); got != "G" || c.kb != areaMain || c.typeFor != "" {
+		t.Fatalf("got %q, keyboard %d", got, c.kb)
+	}
+	c.mu.Lock()
+	p.info.ID = "s-1" // selClient's cleanup frees it by that
+	c.mu.Unlock()
+}

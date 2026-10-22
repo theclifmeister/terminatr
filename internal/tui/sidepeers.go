@@ -590,6 +590,10 @@ func peerKeyBar(r *treeRow) []string {
 		}
 		return []string{enter + " open", left + " fold"}
 	}
+	if _, _, through := typeTarget(*r); through {
+		// Every printable key types through to it (typethrough.go).
+		return []string{"type to write to it", enter + " open", left + " project"}
+	}
 	if paneWhyNot(*r) == "" {
 		return []string{enter + " open", left + " project"}
 	}
