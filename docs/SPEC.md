@@ -1166,6 +1166,8 @@ terminatr = "both"
 
 **Across servers** (§16.11). A link may name a project on a paired server, `"mini/acme-api" = "both"`: the same table, commands, item and limits, with `ask` on by default, each server checking its own side, an outbox in place of the synchronous write, and a `link-undelivered` item when the other server doesn't take the message.
 
+**Files** (§16.13). A file too big for an attachment goes with one message, by its own consent: `tm link send <project> "text" --file <thread>/<file>`, on this server or to a paired one. The receiving user accepts it (a `link-file` item) unless that side's entry says `files = "auto"`; it lands beside its message, `messages/<other>/<M-id>/<name>`. `--attach` stays as it is for small files on this server.
+
 ## 8. Agents
 
 ### 8.1 The interface
@@ -1664,7 +1666,7 @@ These commands are used by the human, the coordinator and threads alike. Exit co
 | `tm run -- <command> [args…] \| --list` | threads | have tm run one of the project's approved commands outside the sandbox, in the worktree, output streamed, exit code passed on; `--list` lists them (§5.2, approved commands) |
 | `tm done ["summary"]` | threads | §7.3. `tm status`, `tm report` and `tm done` also take `--project <slug> --thread <id>`, for a human acting for a thread outside its session (a thread's own call always means its own thread) |
 | `tm inbox list [--json] \| done <id>…` (`--project <slug>`) | coordinator | §7.5; handling a `link-message` item marks its message read in both projects |
-| `tm link send <project>\|<server>/<project> "text" \| --file F\|- [--re M-12] [--attach <thread>/<file>]… \| read M-12 [--file NAME] [--json] \| log <project> [--last N] [--json] \| list [--json] \| approve\|drop M-12 [--approved-by-user] \| resume <project> [--approved-by-user] \| accept R-4F2A-18 [both\|send\|receive] [--ask\|--no-ask] \| decline R-4F2A-18` (`--project <slug>`) | coordinator (its own project), human; threads refused (`coordinator-only`); accept and decline the human's (`human-only`) | messages to linked projects' coordinators, §7.9; accept and decline answer a paired server's link request, §16.11 |
+| `tm link send <project>\|<server>/<project> "text" \| --file F\|- [--re M-12] [--attach <thread>/<file>]… [--file <thread>/<file>\|M-12/<file> with the text] \| read M-12 [--file NAME] [--json] \| log <project> [--last N] [--json] \| list [--json] \| files [<project>] [--json] \| accept\|decline\|cancel X-4F2A-18 \| approve\|drop M-12 [--approved-by-user] \| resume <project> [--approved-by-user] \| accept R-4F2A-18 [both\|send\|receive] [--ask\|--no-ask] \| decline R-4F2A-18` (`--project <slug>`) | coordinator (its own project), human; threads refused (`coordinator-only`); accept and decline the human's (`human-only`), cancel the human's or the coordinator's for its own file | messages to linked projects' coordinators, §7.9; accept and decline answer a paired server's link request, §16.11, or a file offered (`X-…`), §16.13 |
 | `tm project link <a> <b>\|<server>/<b> [both\|send\|receive\|off] [--ask\|--no-ask] [--request]` | human (`human-only` for an agent) | links two projects in one call (§7.9, §11.2): a's entry as given (both by default), b's the mirror, off removes both; `--ask` is a's ask switch. For a paired server's project only a's entry, asking unless `--no-ask`; `--request` also asks that server's user to link back (§16.11) |
 | `tm clear [--project <slug>] [--json]` | coordinator, human; threads refused (`coordinator-only`) | save and clear the coordinator as auto-clear does (`coordinator.clear`), §7.5 **Auto-clear** |
 | `tm ask add "question" [--task T12] [--header H] --option "Label[: description]"… [--multi] [--recommend LABEL] \| add --file F\|- \| list [--json] \| done Q3… \| open` (`--project <slug>`) | coordinator, human; threads refused (`coordinator-only`) | the coordinator's open questions, §7.5 **Questions** |
@@ -1765,7 +1767,8 @@ The human changes these in the project popup's Settings tab, or for every projec
 | `models` | list of model names | unset (every available model) | the project's scope: the models the coordinator may pick for a thread, a subset of the available ones (what the installed agents offer, §8.2 **Models**), new ones included while unset. An empty list, a name with spaces or a repeated name is an error. `tm context` lists only the models in scope and a line saying the user limits them; `tm thread start` / `tm task delegate` refuse another with `model-not-allowed` (a name no installed agent offers is `unknown-model`); without `--model` the agent's default runs (the user's `default_model` only while it is in scope). The popup's Thread models row opens a list to allow or leave out each available model (at least one stays; with all allowed, All projects drops the line, a project keeps the full list and `X` makes it follow All projects). An allowed name no agent offers any more is never dropped silently: the list shows it `stale: no agent lists it` (enter leaves it out), `tm context` says `stale: … is allowed but no installed agent offers it now`, `tm doctor` warns, naming who allows it, and `--model` with it is `unknown-model` |
 | `coordinator_model` | a model name | unset (the agent's default) | the model the coordinator runs, from the project's scope and its coordinator agent's models. A change reaches the running coordinator: switched live with its agent's switch command once it is idle (Claude: `/model <name>`), the conversation kept; an agent without one (Codex) keeps its model until its next start, which the coordinator's status bar and the row say (§8.2 **Models**). Threads keep the model they were launched with. The popup's Coordinator model row steps through them, the agent's default first. One its agent doesn't offer now (unknown, hidden, refused, out of scope, another agent's) passes none, so the coordinator runs its agent's default; the row flags it and `tm doctor` warns |
 | `archive_tasks_days`, `archive_threads_days`, `archive_inbox_days`, `archive_journal_days` | 1–365 | `30` each | retention (§7.6, **Retention**): the days a done task stays on the board, a resolved thread's folder stays unpacked, a handled inbox item stays a file of its own, and a line stays in `JOURNAL.md`, before the ticker moves them to their archives. The popups show one `Keep history` row (one age when all four agree, else the four); enter lists the four, each stepped with enter (7, 14, 30, 60, 90, 180, 365 days), changed by a day with `+` and `-`, and made to follow All projects with `X` |
-| `link_burst`, `link_per_hour`, `link_max_kb` | 1–20, 1–120, 1–64 | `3`, `10`, `8` | the limits of links between coordinators (§7.9, **Limits**): each direction's token bucket, messages at once and an hour, and the most KB a message's text may have. Messages over the rate wait queued and go in order; a direction between two projects here keeps to the lower of the two. The popups show one `Link limits` row; enter lists the three, each stepped with enter, changed by one with `+` and `-`, made to follow All projects with `X`; a raise above the default asks first |
+| `link_burst`, `link_per_hour`, `link_max_kb` | 1–20, 1–120, 1–64 | `3`, `10`, `8` | the limits of links between coordinators (§7.9, **Limits**): each direction's token bucket, messages at once and an hour, and the most KB a message's text may have. Messages over the rate wait queued and go in order; a direction between two projects here keeps to the lower of the two. The popups show one `Link limits` row; enter lists them with the file limits below, each stepped with enter, changed by one with `+` and `-`, made to follow All projects with `X`; a raise above the default asks first |
+| `link_file_mb`, `link_file_kbps` | 1–200, 64–2048 | `25`, `1024` | files over links (§16.13): the most MB a file sent with a message may have, each side its own (the sender refuses over its own, the receiver answers `too-big` over its own; on this server the lower of the two), and the pace in KiB/s this side serves a file to a paired server at, which backs off on its own when the link's round trips rise. In the `Link limits` list (`File size`, `File pace`); a size above 25 asks first, a faster pace doesn't (it only speeds what consent allowed) |
 | `coordinator_merges` | bool | `false` | the coordinator's launch settings carry a permission allow rule for `Bash(tm thread merge:*)` (§9; never the raw host merge commands, which an auto-mode classifier blocks unless the command matches the rule exactly), so an auto-mode classifier that doesn't see the project's standing merge rule stops refusing the coordinator's merges (§5.2). The user's opt-in, popup row `Coordinator may merge`. Only effective with `merge = "coordinator"`; a thread never gets the rule and the guard still refuses its merges. A Codex coordinator gets nothing from it: its merge escalates to Codex's auto-review either way, and the PR host's domain stays closed to its sandbox (§8.6, Codex). Applies from the coordinator's next launch |
 | `merge_method` | `merge` / `squash` / `rebase` | `merge` | how `tm thread merge` merges a PR (§9): a merge commit, one squash commit (the PR's title and number as its subject), or the PR's commits rebased onto the base without a merge commit. A repo whose rules require linear history refuses `merge` (`merge-method-not-allowed`). Popup row `Merge method`; a mod can't set it |
 | `fast_forward_checkout` | bool | `true` | the ticker fast-forwards the user's own checkout of each repo to origin's default branch when that branch is checked out, clean and only behind; otherwise `tm context` and the overview say how far behind it is (§7.5) |
@@ -1783,7 +1786,7 @@ The human changes these in the project popup's Settings tab, or for every projec
 | `guard` | bool | `true` | the guard checks each tool call of the project's agents against the standing rules (§8.6, **Guard**): its floor at every protection level, its rules from `guarded` up; off, they have the agent's own permission rules alone. The **Guard** row; turning it off asks first |
 | `guard_mode` | `enforce` / `learn` | `enforce` | how the guard treats a refusal (§8.6, **Learn mode**): `enforce` refuses and lists it in **Guard refusals**; `learn` refuses too, tells the agent the user reviews it, and puts each new one to the user in the inbox. The **Guard mode** row (refuse / refuse, then ask you) |
 | `guard_allow` | list of `{ rule, command }` or `{ rule, path }`, each with an optional `exact` | `[]` | the human's allowances (§8.6, **Allowances**): a `*` matches anything but in an `exact` one, a `credentials` one is exact, `merge` and an unknown rule are errors, as is one with neither or both of command and path, a path neither absolute nor from `~/`, a control character (but a command's newlines and tabs) or one listed twice. A project's add to all projects'. Written from **Guard refusals** (allow) and **Guard allowances** (change, remove); journaled by count only |
-| `links` | table: other project's slug = `"both"` / `"send"` / `"receive"`, or `{ allow = …, ask = true }` | none | `[projects.<slug>.links]` only (`defaults.links` is an error): the other projects whose coordinators this one may write to (`send`), hear from (`receive`) or both; a message goes only when both sides allow it. The Settings tab's Linked projects list and `tm project link <a> <b>` always write both entries at once (the other's the mirror); a one-sided entry comes only from a hand edit and shows as half-linked (`tm doctor` warns). `ask = true` holds each message this coordinator sends there for the user's OK; §7.9. A key `"<server>/<slug>"` names a project on a paired server: only this side is here, and its `ask` is on unless it says `ask = false`; §16.11 |
+| `links` | table: other project's slug = `"both"` / `"send"` / `"receive"`, or `{ allow = …, ask = true, files = "auto" }` | none | `[projects.<slug>.links]` only (`defaults.links` is an error): the other projects whose coordinators this one may write to (`send`), hear from (`receive`) or both; a message goes only when both sides allow it. The Settings tab's Linked projects list and `tm project link <a> <b>` always write both entries at once (the other's the mirror); a one-sided entry comes only from a hand edit and shows as half-linked (`tm doctor` warns). `ask = true` holds each message this coordinator sends there for the user's OK; §7.9. A key `"<server>/<slug>"` names a project on a paired server: only this side is here, and its `ask` is on unless it says `ask = false`; §16.11. `files` (`ask`, the default and never written; `auto`; `off`) is what this side does with files sent with messages: §16.13 |
 | `guard_off` | list of rule ids | `[]` | guard rules left out: `force-push`, `push-default`, `worktree-only`, `delete-branch`, `merge`, `credentials`; an unknown id is an error. The **Guard rules** row lists them to turn each on or off; the floor (§8.6) holds whatever is off: a force-push to a protected branch (or `--all`/`--mirror`) and a thread merging under `merge = "coordinator"` stay refused with `force-push` or `merge` off |
 | `env` | table: `NAME = { from = … }` | none | `[projects.<slug>.env]` and `[defaults.env]`: the secret environment of the project's threads (§8.6, **Secret environment**); `from` is `"gh-auth-token"`, `"keychain:<item>"` or `"env:<NAME>"`. A name tm, the agent or the system sets (`PATH`, `HOME`, `TERMINATR_*`, `CLAUDE*`, `CODEX*`, `LD_*`, `DYLD_*`, …) is an error. Settings, **Secret environment**: add (name, then source), remove, test (ok or why not, never the value); journaled by name and source |
 | `sandbox` | table: `hosts`, `write`, `sockets`, `approved_commands`, `excluded_commands` (a command, or `{ command = …, ask = false }` for one that runs without asking), `allow`, `drop` (lists of strings), `guides` (a list of `{ title = …, body = … }`), `local_ports` (bool) | none, off | `[projects.<slug>.sandbox]` and `[defaults.sandbox]`: the sandbox rules of the project's threads (§5.2, T574 §3). Every list adds down the layers: all projects' entries, then the project's own. A file of tm 0.37 (without the top-level `sandbox_lists = "add"` that the migration and `config.EditSandbox` write) whose project sets `excluded_commands` or `allow` is read with tm 0.37's meaning, that list replacing all projects' (`[]` too): `config.SandboxOf` gives it as the lists and drops that give the same, and `config.EditSandbox` refuses to write it (`config.ErrLegacy`) until it moves (**Migration**, below). A project's `drop` names entries of all projects' lists (by value, in any list) its threads don't take (`drop` in `[defaults.sandbox]` fails to load). `local_ports` is the project's when it sets it, else all projects', else off. macOS only (`config.SandboxSettings`; Claude and Codex): `hosts` (a host name in lower case, or `*.example.com`; never an address in any form (a last label starting with a digit), a URL, a port, one word such as `localhost`, `*.localdomain`, a domain whose names resolve to any address (`nip.io`, `sslip.io`, `xip.io`, `lvh.me`, `localtest.me`, `traefik.me`, `localhost.direct`, `vcap.me`, or under one), or a public suffix or a wildcard over one (`golang.org/x/net/publicsuffix`: `co.uk`, `*.co.uk`, `*.github.io`); `config.SandboxWarning` names a wildcard and a host serving many owners, `storage.googleapis.com` among them), and `local_ports` (local binding). `guides` (T605, every platform, both agents; `sandbox_guides.go`): texts the brief gets after it, each a title of one line of plain text, at most 120 characters, and a body of plain text in lines (tabs kept; no other control or invisible character, no carriage return), not blank, at most 8 KiB; tm writes them inline, the body a multi-line string closed on its own line (`guides = [{ title = "Test data", body = """…""" }]`), and a hand-written array of tables (`[[projects.<slug>.sandbox.guides]]`) loads too; written, none twice by title; a project's guide adds to all projects', `drop` names one of theirs by its title, and one of the same title as all projects' is the project's only where it drops theirs. A plain string is a guide name of tm 0.38 (`browser-testing`, `browser-downloads`), worded at each launch until the migration writes it out; any other is refused at launch. The lists, Claude only, every platform: `excluded_commands` are commands in Claude's Bash rule syntax (`npx playwright *`) that run outside the sandbox, one without `*` only as written, with no arguments (`docker` never takes `docker ps`; T632): `proto.ExcludedOnlyItself` says so beside it in the views (`AccessRule.Remarks`, tm's rules only, never an agent file's; the TUI cleans every remark with `textsafe.Clean`), when it is added or edited, and in `access.explain` for a command it would take with ` *` (`bareExcluded`), and tm never widens it; `allow` are permission rules (`Bash(npx playwright *)`). Each entry is one line of plain text, at most 300 characters; written, none twice; tool names compare whatever their case; an entry that fails its check loads, and is refused on its own at launch: an excluded command that matches every command (`*`), is a rule (`Bash(…)`, `bash(…)`) is a single character, or holds `;`, `&`, `|`, `<`, `>`, a backquote, `$(`, `${` or `$X` (a variable) (it would never match); an allow rule that isn't `Tool` or `Tool(what)`, leaves out the target of Bash, PowerShell, Edit, Write, MultiEdit, NotebookEdit, Read, Glob, Grep or WebFetch (`Read`, `WebFetch`), or lets every call of one through (`Bash(*)`, `Bash(:*)`, `Edit(//**)`, `Read(~/**)`, `WebFetch(domain:*)`), or a Bash or PowerShell rule whose program is open (`Bash(*e*)`). `config.SandboxWarning` names, without refusing: an excluded command whose program is left open (`*e*`, `*-*`, `python* x`; T619: a wide pattern is the human's to set), a program that runs others or code with that left open (`npx *`, `bash *`, `/bin/sh *`, `env sh *`, past wrappers such as `env`, `sudo`, `timeout` and their flags; `sh -c *`, `python3 -c *`, `node -e *`), a whole tool or MCP server (`WebSearch`, `mcp__x`; one MCP tool, `mcp__x__y`, has no target and doesn't warn), and every `Edit(…)` rule (unprompted writes, and the Bash sandbox opened for writing there), more plainly on a tree high up (`~/<folder>/**`, `//Users/<name>/**`, a wildcard there) or a path through a file that starts programs (`.zshrc`, `.bashrc`, `.profile`, `.config`, `.ssh`, `.git`, `.claude`, `.codex`, `.terminatr`, `LaunchAgents`, …). A new allow rule may not be for Bash, PowerShell, Edit, Write, MultiEdit or NotebookEdit (`config.CheckNewSandboxEntry`; one already in the file keeps working until the migration moves it); a write folder is a plain absolute or `~/` folder, no wildcard, `.` or `..`, at least two folders below home (or `/Users/<name>`, `/home/<name>`) or the root, none of its parts a file that starts programs, never in a folder whose files are loaded or run as code (`~/Library` but `~/Library/Caches/<x>`, toolchains' and package managers' folders under home, `/usr`, `/opt/homebrew`, `/etc`, `/Library`, `/System`, `/Applications`, `/nix`) nor holding or in a folder on `PATH` (as the process checking has it: the console adding it; the server launching, its own PATH plus the user's login shell's, resolved once at its start with `$SHELL -ilc` within 5 s, `config.SetMorePath`), names compared with case folded where the file system ignores case (`config.CheckWriteFolder`); an excluded command has no `(` or `)` (tm writes it into a `Bash(…)` rule). `config.SandboxCovered` pairs an excluded command with a Bash allow rule of an older file whose pattern takes it: the command then runs without asking, as `ask = false` does, which the Access tab says under both. tm has no presets (T642; tm 0.38 to 0.43 had them, named groups of these rules): what one added is plain rules, and nothing in the file names a preset. tm 0.37's switches `browser_testing`, `browser_downloads`, `local_dev_servers` are still read, as the rules they unfold into (`config/sandbox_switches.go`: the guide name `browser-testing`; the four `config.BrowserDomains` in `hosts` and the guide name `browser-downloads`; `local_ports = true`; a project's `false` as drops of them, `local_ports = false` for local dev servers); `config.EditSandbox` writes the plain rules in their place, and never the switches. **Migration** (`config.Migrate`, `server/accessmigrate.go`, T574 §6): at its start, before any session resumes, the server moves a file of tm 0.37 once (`config.MigrateFile`, under the file's lock): a copy beside it (`config.toml.bak-<major.minor>`, created new, another name when taken); the switches as their rules; a project's `excluded_commands` or `allow` as its entries plus `drop` of each of all projects' it lacked, or has asking otherwise (an entry of another list a drop of the same text would take kept as the project's own); a `Bash(…)` allow rule covering an excluded command of its table's threads removed, the commands it covers `ask = false`; `Edit`, `Write`, `MultiEdit` and `NotebookEdit` allow rules on `//abs/**` or `~/x/**`, and `worktree-only` allowances on `<folder>/*`, as write folders where `config.CheckWriteFolder` takes the folder (`Migration.Widened`: the check counts them as the same rule, but a write folder reaches further, so the note names each, says that sandboxed commands and Codex threads write there too and that `tm access rm write <folder> <project>` (or `--all`) undoes it, and needs the user); the rest kept as it is and listed (`Migration.Kept`). Each project's own table is then fitted to what its threads got (`config.fit`), and the new file is loaded and compared with the old, read as tm 0.37 read it, for all projects and every project without yolo: the rules given (a covering Bash rule counted as its commands' no-ask, and refused when the new file has one the old didn't; a file rule or path allowance as its write folder), which excluded commands run without asking, local ports, and every other setting; any difference refuses the migration (`Migration.Differs`), and the file stays as it was. Each project gets a journal line (`ticker settings.migrate`) and an inbox item (`access-migration`, needing the user when something was kept for them) listing what moved for all projects and for it, what was kept, a yolo project's rules left uncompared, and the two meanings that change (yolo turns Claude's sandbox off too; escape prompts go only to the user); a refusal or a file that can't move is said once per reason. Whatever the migration does, each project with yolo on gets an inbox item once per tm home (`state/yolo-meaning-told`), needing the user: yolo now turns the sandbox off for Claude threads too. The same start, in the same write and with the same backup, writes out tm 0.38's guide names (`config.MigrateGuides`, also on a file already moved): all projects' as the texts all projects' threads got, each project's as its threads got them (other hosts or local ports than all projects' word them otherwise: the project drops all projects' guide and gets its own; a project's drop of a name becomes the drop of its title), a plain string naming no text removed (it gave nothing); the new file is checked as above, every project's guides compared as its brief has them and every other rule, any difference refusing it; the note (`access-migration`) then says the names were written out, without the two meanings when nothing else moved. `tm doctor` (Settings) lists what still has an old form (`config.OldAccess`, guide names among them). Access tab (§4): entries added, removed, dropped and taken back (`X`), local ports on or off; human-only (`EditSandbox`), journaled `settings.sandbox <what>` |
@@ -2637,8 +2640,9 @@ server's `projects.watch` or the files) and asks its own server instead. The con
 
 ### 16.11 Links across servers
 
-Coordinator links (§7.9) to a project on a paired server. Only messages
-cross, each server checks its own side, and the text stays data.
+Coordinator links (§7.9) to a project on a paired server. Messages
+cross, and files only by their own consent (§16.13); each server checks
+its own side, and the text stays data.
 
 - **The key.** `[projects.acme.links] "mini/api" = "both"`: the paired
   server's alias (§16.8) and the project's slug there, quoted. `ask`
@@ -2876,3 +2880,125 @@ user's own (§16.8); the far server's human decides what crosses.
   stream's end come on separate connections: a console whose view loses
   its last session first waits up to 2 s for the stream's words, so it
   prints them rather than a bare detach.
+
+### 16.13 Files over links
+
+A coordinator, or the user, sends a file too big for a message's text
+with one message, to a linked project on this server or on a paired one.
+The receiving user accepts it; the receiving server pulls it over the
+link that is already up, on a stream that opens when the transfer starts
+and closes when it ends. Nothing changes on the relay.
+
+- **Sending.** `tm link send <project> "text" --file F`: one message,
+  one file. With the text given, `--file` names the file; with only the
+  project it still reads the text from `F` (§7.9). `F` is a library file
+  of one of the project's threads (`t-0042/report.pdf`) or a file one of
+  its messages brought or sent (`M-4F2A-17/report.pdf`); the human may
+  also name any file (`~/x.pdf`, resolved against their folder), a
+  coordinator never (`bad-attachment`). It must be a regular file with
+  one link, opened without following one, of at most this side's
+  `link_file_mb` (on this server the lower of both sides', `too-big`);
+  this side's link entry must not say `files = "off"` (nor, here, the
+  other's; `files-off`); a paired server whose link is up and whose
+  hello doesn't list `file` refuses it at once (`no-file-transfers`).
+  The file is copied, hashed (SHA-256), into the message's folder,
+  `messages/<other>/<M-id>/<name>`, before anything is sent: that copy
+  is what goes, whatever happens to the original. The name is cleaned
+  (`link.CleanName`: the base name, `textsafe.Line`, each rune not a
+  letter, digit, `.` `_` `-` `+` or space as `_`, no leading dot, dash
+  or space, no `..`, at most 100 bytes, a Windows device name prefixed
+  with `_`, `file` when nothing is left). The transfer's id is `X-<n>`
+  here, `X-<fp>-<n>` across servers (the message counter, after its
+  message's). The offer goes with its message: held with it on an ask
+  link (approving the message sends both; dropping it cancels the
+  file), queued with it over the rate, spending no token of its own.
+  `send` says `queued M-4F2A-17 with report.pdf (4.2 MB) for mini/api
+  …; mini's user accepts the file (unless that link takes files on its
+  own), and tm link files mini/api shows it`. The message's front matter
+  has `file`, `file_size` and `transfer`; its item says `offers
+  report.pdf, 4.2 MB`.
+- **Consent.** On the receiving side, `files = "ask"` (the default)
+  raises a `link-file` item, `needs_user`, in fixed words (`studio/acme
+  offers a file with M-4F2A-17 (report.pdf, 4.2 MB); accept or decline
+  it in the Messages tab (or tm link accept|decline X-4F2A-18)`); NEEDS
+  YOU counts it (`1 file waits`). Accepting and declining are the
+  human's (`A` / `X` on the file's line, §4; `tm link accept|decline
+  X-…`; `human-only` for an agent). `files = "auto"` accepts at once
+  (journaled `(auto)`) and raises a `link-file` item without
+  `needs_user` once the file is in place. `files = "off"` refuses it
+  (`files-off`). An offer unanswered for 7 days expires on both sides.
+  `files` is each side's own: here the pair writer sets both (`F` in
+  Linked projects, `tm project link a b --files ask|auto|off`); to a
+  paired server's project this side only. Raising it to `auto` asks
+  first in the console.
+- **On this server** the transfer is a copy: accepting copies the
+  sender's copy beside the receiver's message, checked by size and hash,
+  and both sides' transfers are `received`.
+- **Across servers**, the control half is durable: `peer.message` kinds
+  `file-offer` (`id`, `re` the message, `name`, `size`, `sha256`, `by`),
+  `file-answer` (`allow` `accepted` / `declined`), `file-done` (`allow`
+  `received` / `failed`, `code`) and `file-cancel`, through the outbox
+  in order (§16.11). The receiver checks its own side: the id's `fp`,
+  the message there (`no-message`), the link (`not-linked`,
+  `link-paused`), its files (`files-off`), its size (`too-big`), and the
+  name, which must be clean already (`bad-message`). A server before
+  0.47.0 answers `bad-message` and takes its `seq`: the sender's copy is
+  `undelivered` and its `link-undelivered` item says `a tm before 0.47.0
+  doesn't take files; send the text, or update that server`.
+- **The data half** is a pull on the live link session, behind the hello
+  capability `file`. `peer.file.fetch {"id", "stream", "offset"}` →
+  `{"size", "sha256"}`, only for an offer this server made to that peer
+  that is still open (`unknown-file`), its copy still there (`gone`),
+  the link still sending (`not-linked`, `link-paused`) and no stream on
+  it already (`busy`); a server serves 2 at once. Frames use the link's
+  header (§16.12) with their own stream ids (the TLS client's top bit
+  clear, the server's set, so an abort names one stream either way):
+  `30` data (u64 offset, then at most 16 KiB), `31` end (u64 size,
+  32-byte SHA-256), `32` ack (u64 bytes written, every 32 KiB), `33`
+  abort (`cancelled`, `bad-content`, `too-big`, `stalled`, `no-space`,
+  `shutting-down`). The sender keeps at most 128 KiB unacked and paces
+  itself at `link_file_kbps`, halving the pace (down to 64 KiB/s) when
+  an ack's round trip runs 150 ms over the link's idle one and climbing
+  back a tenth a second. The receiver writes off the session's reader
+  and aborts a gap or an overrun; 60 s with no ack, or no frame, is
+  `stalled`.
+- **Receiving.** The fetcher pulls accepted files one at a time per pair
+  of projects and two at a time in all, each when its link is up and the
+  disk has the rest plus a tenth and 1 GB free (`waiting: disk`), into
+  `state/link/incoming/<X-id>.part` (a private folder outside every
+  project). A dropped link or a restart keeps the part, and the next
+  fetch goes on from its end. A whole file is checked by size and
+  hash; one that doesn't match is fetched once more from 0, then fails
+  `bad-content`; 5 stalls in a row fail `stalled`; not done 24 h after
+  it was accepted, `expired` (or `no-space`). Checked, it is made 0644
+  and moved beside its message (a taken name gets `-2`, `-3` …), never
+  into a worktree; the receipt goes back. Received files are kept until
+  the user deletes them.
+- **Cancel.** `tm link cancel X-…` (the human; the coordinator for a
+  file its project sends) or `C` on the line stops a held, queued,
+  offered, waiting or running transfer: an abort on a live stream, and
+  `file-cancel` through the outbox; the receiver keeps nothing partial.
+- **States**, shared by both copies (`state/link/files.json`): `held`,
+  `queued`, `offered`, `accepted`, `waiting`, `receiving` / `sending N%`,
+  `received`, `declined`, `failed: <code>`, `cancelled`, `expired`,
+  `undelivered`. A failure tells the sender with `link-undelivered` in
+  fixed words (`your file report.pdf with M-4F2A-17 to mini/api wasn't
+  received: …`).
+- **Seeing them.** `tm link files [<project>] [--json]` lists the
+  project's transfers, newest first; `tm link log` puts each file's line
+  under its message; `tm link list` and `tm context` add `1 file waits`
+  and `N receiving or sending`; `project.watch` adds `files_waiting` and
+  `files_active` to each link (they stay home, never exported to a
+  peer); a coordinator's `tm mcp` offers `link_files`. The Messages tab
+  shows the file under its message with its state, pace and time left;
+  the Library tab has a group per linked project (`from studio/acme · 2
+  files`), read and deleted (`X`) like a thread's, and `tm library list`
+  / `rm M-… <file>` list and delete them too.
+- **Content.** Received content is data: tm never opens, runs, unpacks
+  or renders it, nor sniffs its type. `tm link read M-… --file NAME`
+  shows up to 1 MB of text framed as data (`(a file from a project on
+  the paired server studio)`), anything else by name, size and hash.
+  The journal records ids and sizes, never names (`link.file-offer`,
+  `link.file-accept`, `link.file-received … (4.2 MB, 4 s)`,
+  `link.file-failed … (stalled)`); the server log one line per
+  transfer start and end.

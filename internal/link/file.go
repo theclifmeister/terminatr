@@ -491,22 +491,6 @@ func copyNoLink(src, dst string) error {
 	return out.Close()
 }
 
-// hashFile is the SHA-256 in hex and the size of the file at path,
-// opened without following a link.
-func hashFile(path string) (string, int64, error) {
-	f, err := fsx.OpenNoLink(path, os.O_RDONLY, 0)
-	if err != nil {
-		return "", 0, err
-	}
-	defer f.Close()
-	h := sha256.New()
-	n, err := io.Copy(h, f)
-	if err != nil {
-		return "", 0, err
-	}
-	return hex.EncodeToString(h.Sum(nil)), n, nil
-}
-
 // FilePath is where p keeps message m's file name: one of its
 // attachments, or the file sent with it once it is there.
 func FilePath(p *project.Project, m *Message, name string) (string, error) {
