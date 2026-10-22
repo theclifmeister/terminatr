@@ -206,19 +206,49 @@ func (m *dash) remoteKey(key string) (tea.Cmd, bool) {
 	if !ok {
 		return nil, false
 	}
-	if _, isCmd := m.commandFor(key); !isCmd {
-		canon := binds.list.canon(key)
-		i := slices.IndexFunc(actions, func(a action) bool { return slices.Contains(a.keys, canon) })
-		switch {
-		case i < 0:
-			return nil, true
-		case remoteActions[actions[i].id]:
-			return actions[i].run(m, actions[i].keys[0]), true
-		}
+	if _, isCmd := m.commandFor(key); isCmd {
+		m.msg = remoteNothing(alias, slug)
+		return nil, true
 	}
-	m.msg = slug + " is " + alias + "'s: nothing here acts on it"
-	return nil, true
+	return m.remoteAction(binds.list.canon(key)), true
 }
+
+// remoteAction runs the action of key, a default key, on the remote
+// dashboard: one it keeps, else why nothing happens; a key of none does
+// nothing. A key typed after the prefix comes here too (prefixCommand),
+// so that it never acts on this server's project the list rows are of.
+func (m *dash) remoteAction(key string) tea.Cmd {
+	alias, slug, _ := m.remote()
+	i := slices.IndexFunc(actions, func(a action) bool { return runsAs(a.id, a.keys, key) })
+	switch {
+	case i < 0:
+	case remoteActions[actions[i].id]:
+		return actions[i].run(m, runKey(actions[i].id, actions[i].keys))
+	case remotePopups[actions[i].id]:
+		m.msg = remoteNoPopup(alias, slug)
+	default:
+		m.msg = remoteNothing(alias, slug)
+	}
+	return nil
+}
+
+// remotePopups are the actions that open the project popup: on the
+// remote dashboard they say so, rather than open this server's
+// project's. The paired server serves its tasks, settings and messages
+// to no one; only a coordinator link reaches it.
+var remotePopups = map[string]bool{"project.popup": true, "project.tasks": true, "project.inbox": true}
+
+// projectPopups are the prefix commands that open the project popup.
+var projectPopups = map[string]bool{"A": true, "I": true, "T": true}
+
+// remoteNoPopup is why the project popup doesn't open on alias's project
+// slug, and where the messages with it are instead.
+func remoteNoPopup(alias, slug string) string {
+	return slug + " is " + alias + "'s: no project popup here; your messages with it are in the Messages tab of your project linked to it"
+}
+
+// remoteNothing is why a key does nothing on alias's project slug.
+func remoteNothing(alias, slug string) string { return slug + " is " + alias + "'s: nothing here acts on it" }
 
 // remoteFootKeys is the remote dashboard's key bar: the ≡ menu, the
 // scroll and the kept actions the footer shows.
