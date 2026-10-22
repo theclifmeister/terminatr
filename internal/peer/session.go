@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/proto"
@@ -131,8 +132,13 @@ type session struct {
 	ctx      context.Context
 	cancel   context.CancelFunc
 
-	// panes are the session's pane streams, both ways.
+	// panes are the session's pane streams, both ways; files its file
+	// streams (§16.13).
 	panes *paneMux
+	files *fileMux
+	// pinged is the last link.ping's round trip, in nanoseconds: the
+	// link's round trip without a file, for a file's pace.
+	pinged atomic.Int64
 
 	mu      sync.Mutex
 	next    int64
@@ -150,8 +156,12 @@ func newSession(c net.Conn) *session {
 		inFlight: make(chan struct{}, maxInFlight), cancel: cancel}
 	s.ctx = context.WithValue(ctx, sessionKey{}, s)
 	s.panes = newPaneMux(s)
+	s.files = newFileMux(s)
 	return s
 }
+
+// idleRTT is the link's last ping round trip.
+func (s *session) idleRTT() time.Duration { return time.Duration(s.pinged.Load()) }
 
 // sessionOf is the session whose ctx ctx is; nil for none.
 func sessionOf(ctx context.Context) *session {
@@ -315,7 +325,9 @@ func (s *session) serve(rtt func(time.Duration)) error {
 				s.c.Close()
 				return
 			}
-			rtt(time.Since(t0))
+			d := time.Since(t0)
+			s.pinged.Store(int64(d))
+			rtt(d)
 			select {
 			case <-t.C:
 			case <-done:
@@ -326,6 +338,7 @@ func (s *session) serve(rtt func(time.Duration)) error {
 	err := s.loop()
 	s.cancel()
 	s.panes.end()
+	s.files.end()
 	s.mu.Lock()
 	s.err = err
 	for id, ch := range s.pending {
@@ -344,7 +357,11 @@ func (s *session) loop() error {
 			if err != nil {
 				return err
 			}
-			s.panes.frame(stream, typ, payload)
+			if typ >= frameFileData && typ <= frameFileAbort {
+				s.files.frame(stream, typ, payload)
+			} else {
+				s.panes.frame(stream, typ, payload)
+			}
 			continue
 		}
 		var l line

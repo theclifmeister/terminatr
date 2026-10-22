@@ -349,7 +349,7 @@ func Run(ctx context.Context, opts Options) error {
 	// The links to paired servers: each its own goroutine, which no
 	// local call waits on (docs/SPEC.md §16.7). They read the shared
 	// projects through peerExport (§16.9), nothing else.
-	s.peers = peer.Start(peer.Options{Dir: peer.DirIn(p.Home), Version: version.Version, Logf: logger.Printf, Export: s.peerExport(), Messages: peerMessages{}, Panes: peerPanes{s}})
+	s.peers = peer.Start(peer.Options{Dir: peer.DirIn(p.Home), Version: version.Version, Logf: logger.Printf, Export: s.peerExport(), Messages: peerMessages{}, Panes: peerPanes{s}, Files: link.Files()})
 	defer s.peers.Close()
 	// What they share, for the consoles (§16.10); a peer's pane switch
 	// reaches the remote panes open here at once (§16.12).
@@ -362,6 +362,11 @@ func Run(ctx context.Context, opts Options) error {
 	outboxCtx, stopOutbox := context.WithCancel(context.Background())
 	defer stopOutbox()
 	go link.RunOutbox(outboxCtx, peerTransport{s.peers})
+	// And the files they offer are pulled over the links (§16.13).
+	link.Logf = logger.Printf
+	link.SetServedAborter(s.peers.AbortServed)
+	link.PeerFiles = peerTransport{s.peers}.files
+	go link.RunFiles(outboxCtx, peerTransport{s.peers})
 	logger.Printf("server pid %d %s protocol %d listening on %s", os.Getpid(), s.build, proto.Protocol, p.Socket)
 	go func() {
 		if st := keychain.Probe(runtime.GOOS, os.Getenv, keychain.Run); st.Checked && !st.OK {

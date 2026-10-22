@@ -37,6 +37,9 @@ type Options struct {
 	// Panes serves this server's panes to paired servers whose switch
 	// allows it (peer.attach); nil serves none and leaves out CapPane.
 	Panes PaneHost
+	// Files serves the files this server offered paired servers
+	// (peer.file.fetch); nil serves none and leaves out CapFile.
+	Files FileHost
 	// noPaneLevel plays tm v0.27.0 (tests): no CapPaneLevel, no
 	// peer.panes.
 	noPaneLevel bool
@@ -55,6 +58,8 @@ type Manager struct {
 	err     error
 	links   map[ID]*running
 	onPanes func(id ID, level string)
+	// fileSlots bounds the file streams served over all links.
+	fileSlots chan struct{}
 }
 
 type running struct {
@@ -69,7 +74,7 @@ func Start(opts Options) *Manager {
 	if opts.Backoff == nil {
 		opts.Backoff = backoff
 	}
-	m := &Manager{opts: opts, links: map[ID]*running{}}
+	m := &Manager{opts: opts, links: map[ID]*running{}, fileSlots: make(chan struct{}, maxFileStreams)}
 	m.ctx, m.stop = context.WithCancel(context.Background())
 	m.Reload()
 	return m
@@ -134,15 +139,16 @@ func (m *Manager) Reload() error {
 
 func (m *Manager) add(id *Identity, cert tls.Certificate, p Peer) {
 	l := &link{
-		peer:    p,
-		id:      id,
-		cert:    cert,
-		t:       RelayTransport(p.Relay, id, p.ID(), m.opts.RelayTLS),
-		hello:   Hello{LinkProtocol: LinkProtocol, Version: m.opts.Version, Caps: m.caps()},
-		logf:    m.opts.Logf,
-		backoff: m.opts.Backoff,
+		peer:      p,
+		id:        id,
+		cert:      cert,
+		t:         RelayTransport(p.Relay, id, p.ID(), m.opts.RelayTLS),
+		hello:     Hello{LinkProtocol: LinkProtocol, Version: m.opts.Version, Caps: m.caps()},
+		logf:      m.opts.Logf,
+		backoff:   m.opts.Backoff,
+		fileSlots: m.fileSlots,
 	}
-	d := &dispatcher{ex: m.opts.Export, msgs: m.opts.Messages, panes: m.opts.Panes, caller: caller.ForPeer(p.Alias),
+	d := &dispatcher{ex: m.opts.Export, msgs: m.opts.Messages, panes: m.opts.Panes, files: m.opts.Files, caller: caller.ForPeer(p.Alias),
 		peer: p.ID(), level: l.panesLevel, panesHere: func(level string) { m.panesHere(p.ID(), level) }}
 	if m.opts.noPaneLevel {
 		d.panesHere = nil
@@ -170,6 +176,9 @@ func (m *Manager) caps() []string {
 	}
 	if m.opts.Panes != nil {
 		caps = append(caps, CapPane)
+	}
+	if m.opts.Files != nil {
+		caps = append(caps, CapFile)
 	}
 	if m.opts.noPaneLevel {
 		return caps

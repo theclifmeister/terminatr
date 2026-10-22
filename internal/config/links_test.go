@@ -54,6 +54,7 @@ func TestLinksInvalid(t *testing.T) {
 		{"[projects.a.links]\nb = { allow = \"both\", mute = true }\n", "unknown key"},
 		{"[projects.a.links]\n\"B C\" = \"both\"\n", "not a project slug"},
 		{"[projects.a.links]\nb = 3\n", "must be"},
+		{"[projects.a.links]\nb = { allow = \"both\", files = \"always\" }\n", "files must be"},
 	} {
 		write(t, tc.file)
 		if _, err := Load(); err == nil || !strings.Contains(err.Error(), tc.want) {
@@ -98,6 +99,41 @@ func TestSetLink(t *testing.T) {
 	}
 	if Mirror(LinkSend) != LinkReceive || Mirror(LinkReceive) != LinkSend || Mirror(LinkBoth) != LinkBoth {
 		t.Error("Mirror")
+	}
+}
+
+// TestLinkFiles: files is read from the table, ask is the default and
+// isn't written, and a remote entry keeps its ask beside files.
+func TestLinkFiles(t *testing.T) {
+	write(t, "[projects.a.links]\nb = { allow = \"both\", files = \"auto\" }\nc = { allow = \"send\", files = \"ask\" }\n\"mini/x\" = { allow = \"both\", files = \"off\" }\n")
+	c, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	links, _ := c.Links("a")
+	if links["b"] != (Link{Allow: LinkBoth, Files: FilesAuto}) || links["c"] != (Link{Allow: LinkSend}) || links["c"].FilesMode() != FilesAsk ||
+		links["mini/x"] != (Link{Allow: LinkBoth, Ask: true, Files: FilesOff}) {
+		t.Fatalf("links %v", links)
+	}
+	write(t, "")
+	SetLink("a", "b", Link{Allow: LinkBoth, Files: FilesAuto})
+	SetLink("a", "c", Link{Allow: LinkSend, Ask: true, Files: FilesAsk})
+	SetLink("a", "mini/x", Link{Allow: LinkBoth, Ask: true, Files: FilesOff})
+	SetLink("a", "mini/y", Link{Allow: LinkBoth, Files: FilesAuto})
+	path, _ := Path()
+	data, _ := os.ReadFile(path)
+	want := "[projects.a.links]\nb = { allow = \"both\", files = \"auto\" }\nc = { allow = \"send\", ask = true }\n\"mini/x\" = { allow = \"both\", files = \"off\" }\n\"mini/y\" = { allow = \"both\", ask = false, files = \"auto\" }\n"
+	if string(data) != want {
+		t.Fatalf("file\n%s\nwant\n%s", data, want)
+	}
+	// The pair writer sets files on both sides.
+	if err := SetLinkPair("a", "b", Link{Allow: LinkSend, Files: FilesOff}, false); err != nil {
+		t.Fatal(err)
+	}
+	c, _ = Load()
+	b, _ := c.Links("b")
+	if b["a"] != (Link{Allow: LinkReceive, Files: FilesOff}) {
+		t.Fatalf("b %v", b)
 	}
 }
 

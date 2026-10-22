@@ -95,6 +95,12 @@ type Message struct {
 	// Due is when a message waiting over the rate should go: zero once
 	// it went.
 	Due time.Time `toml:"due,omitzero" json:"due,omitzero"`
+	// File is the name of the file sent with the message (file.go), in
+	// its folder beside the attachments once it is there; FileSize its
+	// bytes, Transfer the transfer's id (X-…).
+	File     string `toml:"file,omitempty" json:"file,omitempty"`
+	FileSize int64  `toml:"file_size,omitempty" json:"file_size,omitempty"`
+	Transfer string `toml:"transfer,omitempty" json:"transfer,omitempty"`
 	// Peer is the other project (the folder's name), Text the message;
 	// neither is in the front matter.
 	Peer string `toml:"-" json:"peer"`
@@ -273,12 +279,10 @@ func Peers(p *project.Project) []string {
 	return append(out, remote...)
 }
 
-// AttachmentPath is where p keeps message m's attached file name.
+// AttachmentPath is where p keeps message m's attached file name, or
+// the file sent with it (FilePath).
 func AttachmentPath(p *project.Project, m *Message, name string) (string, error) {
-	if !slices.Contains(m.Attachments, name) {
-		return "", refuse("unknown-file", "%s has no attachment %q", m.ID, name)
-	}
-	return filepath.Join(dir(p, m.Peer), m.ID, name), nil
+	return FilePath(p, m, name)
 }
 
 // Opts are what tm link send was given.
@@ -286,6 +290,10 @@ type Opts struct {
 	Text   string
 	Re     string
 	Attach []string // "<thread>/<file>" in the sender's thread libraries
+	// File is a file sent with the message, by its own consent
+	// (file.go): "<thread>/<file>", "M-12/<file>", or for the human an
+	// absolute path.
+	File string
 	// ApprovedByUser: the coordinator relays the user's OK (approve,
 	// resume); never needed to send.
 	ApprovedByUser bool
@@ -327,8 +335,9 @@ func checkAttach(p *project.Project, specs []string) ([]attachment, error) {
 // side, the store locked: local writes the receiving project's copy and
 // item, remote (remote.go) queues the message for the paired server.
 type deliverer interface {
-	// newID numbers a message on the link.
+	// newID numbers a message on the link, newFileID a file.
 	newID(s *store) string
+	newFileID(s *store) string
 	deliver(s *store, c caller.Caller, from *project.Project, m *Message, att []attachment, l limits) error
 }
 
@@ -336,6 +345,11 @@ type deliverer interface {
 type local struct{ to *project.Project }
 
 func (lo local) newID(s *store) string { return s.nextID() }
+
+func (lo local) newFileID(s *store) string {
+	s.Next++
+	return fmt.Sprintf("X-%d", s.Next)
+}
 
 func (lo local) deliver(s *store, c caller.Caller, from *project.Project, m *Message, att []attachment, l limits) error {
 	return s.deliver(c, from, lo.to, m, att, l)
@@ -429,6 +443,15 @@ func Send(c caller.Caller, from *project.Project, toSlug string, o Opts) (*Messa
 	for _, a := range att {
 		m.Attachments = append(m.Attachments, a.name)
 	}
+	var snap, sum string
+	if o.File != "" {
+		// The copy the sender serves is taken before the store's lock:
+		// a big file takes a while.
+		if m.File, snap, sum, m.FileSize, err = prepareFile(c, cfg, from, toSlug, o.File, att); err != nil {
+			return nil, err
+		}
+		defer os.Remove(snap) // gone once it is placed
+	}
 	err = withStore(func(s *store) error {
 		// Those waiting on the link go first, as far as they can.
 		s.drain(cfg, from.Slug, toSlug, now())
@@ -436,6 +459,16 @@ func Send(c caller.Caller, from *project.Project, toSlug string, o Opts) (*Messa
 			return err
 		}
 		m.ID = d.newID(s)
+		if snap != "" {
+			m.Transfer = d.newFileID(s)
+			state := FileQueued
+			if ask {
+				state = FileHeld
+			}
+			if err := addOut(from, m, snap, sum, state); err != nil {
+				return err
+			}
+		}
 		if ask {
 			s.Held[from.Slug+">"+toSlug] = append(s.Held[from.Slug+">"+toSlug], m.ID)
 			m.State = StateHeld
@@ -459,7 +492,7 @@ func Send(c caller.Caller, from *project.Project, toSlug string, o Opts) (*Messa
 		from.Journal(c, "link.queued", toSlug, queuedWords(m))
 	}
 	if ask {
-		if _, err := from.AddMessageItem(KindHeld, toSlug, fmt.Sprintf("your message %s to %s (%s) waits for the user's OK", m.ID, toSlug, KB(m.Bytes)), true, m.ID); err != nil {
+		if _, err := from.AddMessageItem(KindHeld, toSlug, fmt.Sprintf("your message %s to %s (%s%s) waits for the user's OK", m.ID, toSlug, KB(m.Bytes), fileExtra(m)), true, m.ID); err != nil {
 			return m, err
 		}
 		from.Journal(c, "link.held", toSlug, fmt.Sprintf("%s (%s)", m.ID, KB(m.Bytes)))
@@ -541,6 +574,7 @@ func (s *store) deliver(c caller.Caller, from, to *project.Project, m *Message, 
 	from.Journal(c, "link.send", to.Slug, detail)
 	to.Journal(c, "link.receive", from.Slug, detail)
 	s.account(c.IsAgent(), from.Slug, to.Slug, l, now(), side{from, to.Slug}, side{to, from.Slug})
+	s.offerLocal(c, from, to, m)
 	return nil
 }
 
@@ -584,6 +618,9 @@ func Summary(from string, m *Message) string {
 	default:
 		extra = append(extra, fmt.Sprintf("%d files", n))
 	}
+	if m.File != "" {
+		extra = append(extra, fmt.Sprintf("offers %s, %s", m.File, MB(m.FileSize)))
+	}
 	who := ""
 	if m.By == "human" {
 		who = " (the user, for it)"
@@ -613,6 +650,15 @@ func held(p *project.Project, id string) (*Message, error) {
 		return nil, refuse("not-held", "%s doesn't wait for the user's OK (it is %s)", id, m.State)
 	}
 	return m, nil
+}
+
+// fileExtra is a message's file for its summaries: ", with report.pdf
+// (4.2 MB)".
+func fileExtra(m *Message) string {
+	if m.File == "" {
+		return ""
+	}
+	return fmt.Sprintf(", with %s (%s)", m.File, MB(m.FileSize))
 }
 
 // Approve sends p's held message id: the user's OK. The link and the
@@ -692,6 +738,7 @@ func Drop(c caller.Caller, p *project.Project, id string, approved bool) (*Messa
 	if err != nil {
 		return nil, err
 	}
+	dropFile(p, m, FileCancelled, "")
 	m.State = StateDropped
 	p.Journal(c, "link.drop", m.Peer, approvedWords(c, m.ID))
 	doneHeld(p, m.ID)
@@ -794,10 +841,25 @@ type looked struct {
 	held     map[string]int
 	queued   map[string]int
 	requests []*Request
+	// filesWaiting and filesActive count transfers by "<project>><peer>"
+	// (Row).
+	filesWaiting map[string]int
+	filesActive  map[string]int
 }
 
 func look() looked {
-	l := looked{paused: map[string]bool{}, held: map[string]int{}, queued: map[string]int{}}
+	l := looked{paused: map[string]bool{}, held: map[string]int{}, queued: map[string]int{}, filesWaiting: map[string]int{}, filesActive: map[string]int{}}
+	readFiles(func(st *fileStore) {
+		for _, t := range st.Transfers {
+			k := t.Project + ">" + t.Peer
+			switch {
+			case !t.Out && t.State == FileOffered:
+				l.filesWaiting[k]++
+			case t.Active():
+				l.filesActive[k]++
+			}
+		}
+	})
 	readStore(func(s *store) {
 		for k, p := range s.Pairs {
 			l.paused[k] = p.Paused
@@ -845,7 +907,7 @@ func Set(c caller.Caller, a, b, allow string, ask *bool) error {
 	}
 	mine, _ := cfg.Links(a)
 	theirs, _ := cfg.Links(b)
-	la := config.Link{Allow: allow, Ask: mine[b].Ask}
+	la := config.Link{Allow: allow, Ask: mine[b].Ask, Files: mine[b].Files}
 	if ask != nil {
 		la.Ask = *ask
 	}
@@ -877,7 +939,7 @@ func setRemote(c caller.Caller, p *project.Project, b, alias, slug, allow string
 	mine, _ := cfg.Links(p.Slug)
 	l := config.Link{Allow: allow, Ask: true}
 	if old, ok := mine[b]; ok {
-		l.Ask = old.Ask
+		l.Ask, l.Files = old.Ask, old.Files
 	}
 	if ask != nil {
 		l.Ask = *ask
@@ -914,11 +976,56 @@ func SetAsk(c caller.Caller, a, b string, ask bool) error {
 	return nil
 }
 
-func linkWords(l config.Link) string {
-	if l.Ask && l.Allow != config.LinkOff {
-		return l.Allow + " ask"
+// SetFiles sets what a's link to b does with files (config.FilesOff,
+// FilesAsk, FilesAuto), as the human: on this server both sides at
+// once, as the pair is linked; to a paired server's project this side
+// only. The link must be there.
+func SetFiles(c caller.Caller, a, b, files string) error {
+	if c.IsAgent() {
+		return refuse("human-only", "links are the user's (Settings › Linked projects)")
 	}
-	return l.Allow
+	if !slices.Contains(config.LinkFiles, files) {
+		return refuse("bad-files", "a link's files are %s, %s or %s", config.FilesAsk, config.FilesAuto, config.FilesOff)
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	mine, _ := cfg.Links(a)
+	l, ok := mine[b]
+	if !ok {
+		return refuse("no-link", "%s has no link to %s", a, b)
+	}
+	l.Files = files
+	if _, _, remote := config.Remote(b); remote {
+		err = config.SetLink(a, b, l)
+	} else {
+		theirs, _ := cfg.Links(b)
+		err = config.SetLinkPair(a, b, l, theirs[a].Ask)
+	}
+	if err != nil {
+		return err
+	}
+	if p, err := project.Open(a); err == nil {
+		p.Journal(c, "settings.links", a, b+" "+linkWords(l))
+	}
+	if _, _, remote := config.Remote(b); !remote {
+		if p, err := project.Open(b); err == nil {
+			p.Journal(c, "settings.links", a, b+" "+linkWords(l))
+		}
+	}
+	return nil
+}
+
+func linkWords(l config.Link) string {
+	s := l.Allow
+	if l.Ask && l.Allow != config.LinkOff {
+		s += " ask"
+	}
+	if l.Files != "" && l.Allow != config.LinkOff {
+		s += " files " + l.Files
+	}
+	return s
 }
 
 // now is the clock, for tests.
@@ -954,6 +1061,9 @@ func Frame(self string, m *Message) string {
 	meta = append(meta, "sent "+m.Created.Local().Format("2006-01-02 15:04"), "to "+m.To(self), StateWords(m))
 	if len(m.Attachments) > 0 {
 		meta = append(meta, "attached: "+strings.Join(m.Attachments, ", ")+" (tm link read "+m.ID+" --file NAME)")
+	}
+	if m.File != "" {
+		meta = append(meta, fmt.Sprintf("file: %s, %s (tm link files)", m.File, MB(m.FileSize)))
 	}
 	fmt.Fprintf(&b, "%s\n----- end message %s -----\n", strings.Join(meta, " · "), m.ID)
 	return b.String()
