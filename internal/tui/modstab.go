@@ -826,7 +826,7 @@ func modSettingRow(id, key string, s mod.Setting) setting {
 	case mod.SettingString:
 		r.change = func(m *dash) tea.Cmd {
 			old, _ := cur(m).(string)
-			m.push(&inputView{title: key, label: help, text: old, cancel: key + " unchanged",
+			m.push(&inputView{title: key, label: help, lineEdit: newLine(old), cancel: key + " unchanged",
 				max: mod.MaxTextSetting, keep: true, submit: func(v string) tea.Cmd {
 					if v == old {
 						m.msg = key + " unchanged"

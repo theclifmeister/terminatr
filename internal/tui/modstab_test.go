@@ -308,7 +308,7 @@ func TestModsTextSetting(t *testing.T) {
 		t.Helper()
 		press(m, "enter")
 		in, ok := m.top().(*inputView)
-		if !ok || in.text != modState(t, src, "review-age").Settings["wording"] {
+		if !ok || in.value() != modState(t, src, "review-age").Settings["wording"] {
 			t.Fatalf("enter doesn't open its value: %T", m.top())
 		}
 		m.Update(clear)
@@ -348,8 +348,8 @@ func TestModsTextSetting(t *testing.T) {
 		t.Error("a value over the cap was saved")
 	}
 	edit("a\tb")
-	if in := m.top().(*inputView); in.text != "a b" {
-		t.Errorf("a pasted tab: %q", in.text)
+	if in := m.top().(*inputView); in.value() != "a b" {
+		t.Errorf("a pasted tab: %q", in.value())
 	}
 	press(m, "esc")
 }

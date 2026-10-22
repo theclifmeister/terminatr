@@ -203,7 +203,7 @@ func TestModsInstallRefused(t *testing.T) {
 				t.Errorf("staging left behind: %v", left)
 			}
 			press(m, "enter")
-			if in, ok := m.top().(*inputView); !ok || in.text != arg {
+			if in, ok := m.top().(*inputView); !ok || in.value() != arg {
 				t.Errorf("enter on the error: %T, want the line back", m.top())
 			}
 			src.loadMods()

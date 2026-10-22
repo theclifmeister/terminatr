@@ -1095,7 +1095,7 @@ func TestPromptWraps(t *testing.T) {
 	m := newDash(DashOptions{Source: src, Width: 100, Height: 30})
 	m.setData(src.data)
 	prefixed(m, "+")
-	m.top().(*inputView).text = long
+	m.top().(*inputView).lineEdit = newLine(long)
 	if out := screen(m); !strings.Contains(out, "Its name (becomes a lower-case slug") || !strings.Contains(out, "│ /var/folders") {
 		t.Fatalf("prompt:\n%s", out)
 	}

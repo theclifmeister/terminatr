@@ -400,7 +400,7 @@ func TestProjectRepos(t *testing.T) {
 	if !ok {
 		t.Fatalf("+ opened %T", m.top())
 	}
-	in.text = dir
+	in.lineEdit = newLine(dir)
 	act(t, m, src, "enter")
 	real, _ := filepath.EvalSymlinks(dir)
 	if len(src.repos) != 1 || src.repos[0] != "+"+real {

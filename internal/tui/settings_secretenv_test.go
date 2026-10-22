@@ -86,7 +86,7 @@ func TestSecretEnvAdd(t *testing.T) {
 		if !ok {
 			t.Fatalf("no input: %T", m.top())
 		}
-		in.text = text
+		in.lineEdit = newLine(text)
 		drain(t, m, keyPress(m, "enter"))
 	}
 	keyPress(m, "A")

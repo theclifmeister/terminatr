@@ -417,11 +417,11 @@ func TestPeersTabRelay(t *testing.T) {
 	}
 	press(m, "down", "down", "E")
 	in, ok := m.top().(*inputView)
-	if !ok || in.text != "wss://relay.example.net" {
+	if !ok || in.value() != "wss://relay.example.net" {
 		t.Fatalf("E: %T %+v", m.top(), m.top())
 	}
 	pinned := "wss://203.0.113.5#sha256=" + strings.Repeat("ab", 32)
-	in.text = pinned
+	in.lineEdit = newLine(pinned)
 	drain(t, m, press(m, "enter"))
 	if !slices.Equal(src.relaySet, []string{"mini " + pinned}) || m.msg != "relay for mini set; set it on mini too" {
 		t.Fatalf("set %v, %q", src.relaySet, m.msg)
@@ -462,7 +462,7 @@ func TestPeersTabPair(t *testing.T) {
 	screen(m)
 	press(m, "N")
 	in, ok := m.top().(*inputView)
-	if !ok || in.text != "wss://relay.example.net:8443" {
+	if !ok || in.value() != "wss://relay.example.net:8443" {
 		t.Fatalf("N: %T %+v", m.top(), m.top())
 	}
 	cmd := press(m, "enter")
@@ -507,7 +507,7 @@ func TestPeersTabJoin(t *testing.T) {
 		t.Errorf("empty tab:\n%s", out)
 	}
 	press(m, "J")
-	if in, ok := m.top().(*inputView); !ok || in.text != "" {
+	if in, ok := m.top().(*inputView); !ok || in.value() != "" {
 		t.Fatalf("J: %T", m.top())
 	}
 	press(m, "r", "/", "x")
@@ -522,7 +522,7 @@ func TestPeersTabJoin(t *testing.T) {
 		t.Fatalf("after N:\n%s", out)
 	}
 	press(m, "enter")
-	if in, ok := m.top().(*inputView); !ok || in.text != "r/x" || in.title != "Join a server" {
+	if in, ok := m.top().(*inputView); !ok || in.value() != "r/x" || in.title != "Join a server" {
 		t.Fatalf("enter: %T", m.top())
 	}
 	if !slices.Equal(src.pairs, []string{"join r/x"}) || len(src.peers.Peers) != 0 {
