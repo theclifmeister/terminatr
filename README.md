@@ -36,7 +36,7 @@ Some of tm is mods already: the Tasks tab, the sidebar's PR/CI column, the Memor
 
 ![Settings, Mods tab: the installed example mods, then the built-in ones, each with what it provides and the permissions it runs with.](docs/images/mods-settings.svg)
 
-To try one, install it from [the examples](examples/mods) with one line and turn it on in the Mods tab: `tm mod install https://github.com/theclifmeister/terminatr/tree/v0.45.0/examples/mods/standup`. `tm mod install` takes a folder, a git URL, a repository's subfolder (`<git-url>//<folder>@<tag>`) or a GitHub folder's link like this one; in the Mods tab (`,` then `3`), `I` takes the same, and `E` installs an example, each after the same consent. To write your own, run `tm mod new my-mod --kind column`, `tm mod dev my-mod` (live, restarts on save), `tm mod test my-mod` and `tm mod logs my-mod`. In Claude Code sessions, cost-card shows a thread's tokens with `no cost`: Claude's transcript has none.
+To try one, install it from [the examples](examples/mods) with one line and turn it on in the Mods tab: `tm mod install https://github.com/theclifmeister/terminatr/tree/v0.46.0/examples/mods/standup`. `tm mod install` takes a folder, a git URL, a repository's subfolder (`<git-url>//<folder>@<tag>`) or a GitHub folder's link like this one; in the Mods tab (`,` then `3`), `I` takes the same, and `E` installs an example, each after the same consent. To write your own, run `tm mod new my-mod --kind column`, `tm mod dev my-mod` (live, restarts on save), `tm mod test my-mod` and `tm mod logs my-mod`. In Claude Code sessions, cost-card shows a thread's tokens with `no cost`: Claude's transcript has none.
 
 ## Requirements
 
