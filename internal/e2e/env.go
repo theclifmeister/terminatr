@@ -193,7 +193,17 @@ func New(t testing.TB) *Env {
 		t.Fatal(err)
 	}
 	noteRunDir(runDir)
-	root := t.TempDir()
+	// Marks the run dir as this run's for sweepStale, as the bin dir.
+	if err := os.WriteFile(filepath.Join(runDir, ownerFile), []byte(strconv.Itoa(os.Getpid())), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// In the run's bin dir, not t.TempDir: when the run dies before its
+	// cleanups, the next run's sweepStale removes the homes with the
+	// binaries, and a server whose home is gone stops (server/gone.go).
+	root, err := os.MkdirTemp(dir, "h")
+	if err != nil {
+		t.Fatal(err)
+	}
 	e := &Env{
 		T:      t,
 		Bin:    filepath.Join(dir, exe("tm")),
@@ -228,6 +238,7 @@ func New(t testing.TB) *Env {
 		e.cleanup()
 		os.RemoveAll(runDir)
 		hometest.RemoveThreadTemps(e.Home)
+		os.RemoveAll(root)
 	})
 	return e
 }

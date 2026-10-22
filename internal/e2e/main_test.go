@@ -35,11 +35,24 @@ func TestMain(m *testing.M) {
 			finish(false)
 		})
 	}
+	// A killed go test leaves this binary running the rest of the
+	// scenarios on its own: once go test is gone, end the run.
+	go func() {
+		parent := os.Getppid()
+		for os.Getppid() == parent {
+			time.Sleep(time.Second)
+		}
+		fmt.Fprintln(os.Stderr, "e2e: go test is gone; stopping this run's processes")
+		finish(true)
+		restore()
+		os.Exit(1)
+	}()
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-sig
 		finish(true)
+		restore()
 		os.Exit(1)
 	}()
 	code := m.Run()
