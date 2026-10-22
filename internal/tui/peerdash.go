@@ -248,7 +248,9 @@ func remoteNoPopup(alias, slug string) string {
 }
 
 // remoteNothing is why a key does nothing on alias's project slug.
-func remoteNothing(alias, slug string) string { return slug + " is " + alias + "'s: nothing here acts on it" }
+func remoteNothing(alias, slug string) string {
+	return slug + " is " + alias + "'s: nothing here acts on it"
+}
 
 // remoteFootKeys is the remote dashboard's key bar: the ≡ menu, the
 // scroll and the kept actions the footer shows.
