@@ -100,14 +100,21 @@ func startBoxAgent(t *testing.T, suggestion string) *Session {
 	return s
 }
 
+// setBoxWatchWait sets boxWatchWait until the test's cleanups run, which
+// is after the session's Stop (cleanups run last in, first out), so no
+// goroutine of the session outlives the restore.
+func setBoxWatchWait(t *testing.T, d time.Duration) {
+	old := boxWatchWaitNS.Swap(int64(d))
+	t.Cleanup(func() { boxWatchWaitNS.Store(old) })
+}
+
 // TestHumanInputTakeover (T691): a takeover is a person's text in the
 // prompt box. Clicks, the wheel, focus, arrows, page keys, Esc and Tab
 // over the agent's dim suggestion take nothing over, nor does a ? that
 // shows the shortcuts and leaves the box to the suggestion, nor tm's own
 // keys; a typed key or a paste that shows in the box does.
 func TestHumanInputTakeover(t *testing.T) {
-	defer func(w time.Duration) { boxWatchWait = w }(boxWatchWait)
-	boxWatchWait = time.Second
+	setBoxWatchWait(t, time.Second)
 	s := startBoxAgent(t, "try: fix the tests")
 	var took atomic.Int32
 	count := func() { took.Add(1) }
@@ -125,7 +132,7 @@ func TestHumanInputTakeover(t *testing.T) {
 		time.Sleep(50 * time.Millisecond)
 	}
 	testwait.Eventually(t, "the shortcuts", func() bool { return strings.Contains(screen(t, s), "? for shortcuts") })
-	never(t, boxWatchWait+time.Second, "a takeover", func() bool { return took.Load() > 0 })
+	never(t, boxWatchWait()+time.Second, "a takeover", func() bool { return took.Load() > 0 })
 	if sc := screen(t, s); !strings.Contains(sc, "try: fix the tests") {
 		t.Fatalf("the suggestion went:\n%s", sc)
 	}
@@ -150,13 +157,12 @@ func TestHumanInputTakeover(t *testing.T) {
 // agent starts the turn they sent; text sent to a box that starts none
 // doesn't.
 func TestHumanInputSentAtOnce(t *testing.T) {
-	defer func(w time.Duration) { boxWatchWait = w }(boxWatchWait)
-	boxWatchWait = time.Second
+	setBoxWatchWait(t, time.Second)
 	s := startBoxAgent(t, "try: fix the tests")
 	var took atomic.Int32
 	count := func() { took.Add(1) }
 	s.HumanInput([]byte("y\r"), count)
-	never(t, boxWatchWait/2, "a takeover before the turn", func() bool { return took.Load() > 0 })
+	never(t, boxWatchWait()/2, "a takeover before the turn", func() bool { return took.Load() > 0 })
 	if _, err := s.Hook("UserPromptSubmit", map[string]any{"prompt": "y"}); err != nil {
 		t.Fatal(err)
 	}
@@ -169,7 +175,7 @@ func TestHumanInputSentAtOnce(t *testing.T) {
 	took.Store(0)
 	s.HumanInput([]byte("?"), count)
 	s.HumanInput([]byte("\r"), count)
-	never(t, boxWatchWait+time.Second, "a takeover", func() bool { return took.Load() > 0 })
+	never(t, boxWatchWait()+time.Second, "a takeover", func() bool { return took.Load() > 0 })
 }
 
 // TestHumanInputNoBox: a program whose box tm doesn't read takes a
