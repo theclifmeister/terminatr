@@ -1,6 +1,7 @@
 package session
 
 import (
+	"sync/atomic"
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/emu"
@@ -8,8 +9,13 @@ import (
 
 // boxWatchWait is how long text a person typed has to show in the
 // agent's prompt box to count as theirs (HumanInput): a key that went
-// elsewhere (a dialog's answer, a menu) leaves the box as it was.
-var boxWatchWait = 3 * time.Second
+// elsewhere (a dialog's answer, a menu) leaves the box as it was. Atomic
+// as session goroutines read it while tests set it.
+var boxWatchWaitNS atomic.Int64
+
+func init() { boxWatchWaitNS.Store(int64(3 * time.Second)) }
+
+func boxWatchWait() time.Duration { return time.Duration(boxWatchWaitNS.Load()) }
 
 // boxWatch waits for a person's text to show in the prompt box.
 type boxWatch struct {
@@ -84,7 +90,7 @@ func (rt *agentRT) settleBoxWatches(at time.Time, held, working bool) []func() {
 		switch {
 		case held && !w.since.After(at), working && w.sent:
 			run = append(run, w.took)
-		case at.Sub(w.since) <= boxWatchWait:
+		case at.Sub(w.since) <= boxWatchWait():
 			kept = append(kept, w)
 		}
 	}
