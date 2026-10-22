@@ -2,6 +2,8 @@ package tui
 
 import (
 	"errors"
+	"io"
+	"log"
 	"net"
 	"slices"
 	"strings"
@@ -9,6 +11,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	uv "github.com/charmbracelet/ultraviolet"
 
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/view"
@@ -126,7 +129,11 @@ func TestRemoteDashboardKeys(t *testing.T) {
 		if m.top() != nil || len(src.lifecycle) > 0 || len(src.opened) > 0 || len(src.adopted) > 0 {
 			t.Fatalf("%q acted: %+v %v %v", k, m.top(), src.lifecycle, src.opened)
 		}
-		if m.msg != "acme-api is mini's: nothing here acts on it" {
+		want := "acme-api is mini's: nothing here acts on it"
+		if k == "A" || k == "T" || k == "I" {
+			want = "acme-api is mini's: no project popup here; your messages with it are in the Messages tab of your project linked to it"
+		}
+		if m.msg != want {
 			t.Errorf("%q: %q", k, m.msg)
 		}
 	}
@@ -152,6 +159,81 @@ func TestRemoteDashboardKeys(t *testing.T) {
 	}
 	if m.panel() != "" {
 		t.Errorf("a details panel: %q", m.panel())
+	}
+}
+
+// TestRemoteDashboardPrefix (T690): prefix then a key on the remote
+// dashboard is no way round it: the project popup, its Tasks and Inbox
+// tabs, save-and-clear and remote control neither open nor act on this
+// server's project the list rows are of (once its first), and say why;
+// settings and help still open.
+func TestRemoteDashboardPrefix(t *testing.T) {
+	m, src := remoteDash(t, "@mini/acme-api")
+	popup := "acme-api is mini's: no project popup here; your messages with it are in the Messages tab of your project linked to it"
+	nothing := "acme-api is mini's: nothing here acts on it"
+	for _, c := range []struct{ key, want string }{
+		{"a", popup}, {"A", popup}, {"t", popup}, {"T", popup}, {"i", popup}, {"I", popup},
+		{"C", nothing}, {"r", nothing}, {"S", nothing}, {"O", nothing},
+	} {
+		drain(t, m, press(m, m.prefix))
+		drain(t, m, press(m, c.key))
+		if m.top() != nil || len(src.saveCleared) > 0 || len(src.remote) > 0 || len(src.lifecycle) > 0 || len(src.adopted) > 0 {
+			t.Fatalf("prefix+%s acted: %T %v %v %v", c.key, m.top(), src.saveCleared, src.remote, src.lifecycle)
+		}
+		if m.msg != c.want {
+			t.Errorf("prefix+%s: %q", c.key, m.msg)
+		}
+	}
+	if slug := m.projectHere(); slug != "" {
+		t.Errorf("project here %q", slug)
+	}
+	drain(t, m, press(m, m.prefix))
+	drain(t, m, press(m, ","))
+	if _, ok := m.top().(*settingsView); !ok {
+		t.Errorf("prefix+,: %T", m.top())
+	}
+	drain(t, m, press(m, m.prefix))
+	drain(t, m, press(m, "?"))
+	if _, ok := m.top().(*helpView); !ok {
+		t.Errorf("prefix+?: %T", m.top())
+	}
+	// On this server's project, prefix+a is its popup again.
+	m, _ = remoteDash(t, "terminatr")
+	drain(t, m, press(m, m.prefix))
+	drain(t, m, press(m, "a"))
+	if pv := m.projectPopupView(); pv == nil || pv.slug != "terminatr" {
+		t.Errorf("prefix+a on terminatr: %+v", pv)
+	}
+}
+
+// TestRemotePanePopup (T690): in a paired server's pane, prefix+a, i
+// and t say there is no project popup for it, rather than open one of
+// the far slug's (or of a project here of the same name); the ≡ menu
+// leaves them out. The other popups still open over the pane.
+func TestRemotePanePopup(t *testing.T) {
+	c := &client{dashboard: true, prefix: chord{'b'}, end: make(chan struct{}), log: log.New(io.Discard, "", 0),
+		focus: &pane{info: proto.SessionInfo{ID: "mini/s-1", Server: "mini", Role: proto.RoleCoordinator, Project: "terminatr"}}}
+	for _, k := range []string{"a", "A", "i", "t"} {
+		c.key(uv.Key{Code: 'b', Mod: uv.ModCtrl})
+		c.key(cmdKey(k))
+		if c.over != nil {
+			t.Fatalf("prefix+%s opened %+v", k, c.over)
+		}
+		if want := "terminatr is mini's: no project popup here; your messages with it are in the Messages tab of your project linked to it"; c.flash != want {
+			t.Errorf("prefix+%s: %q", k, c.flash)
+		}
+	}
+	for _, it := range c.sessionItems() {
+		if it.label == "project popup" || it.label == "tasks" || it.label == "inbox" {
+			t.Errorf("≡ menu has %q", it.label)
+		}
+	}
+	if c.remotePopup(",") {
+		t.Error("settings refused")
+	}
+	c.focus.info.Server = ""
+	if c.remotePopup("A") {
+		t.Error("this server's pane refused")
 	}
 }
 

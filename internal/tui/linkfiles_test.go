@@ -22,7 +22,7 @@ func fileDash(t *testing.T) (*fakeSource, *dash) {
 	m.setData(src.data)
 	src.linkLog[0].File, src.linkLog[0].FileSize, src.linkLog[0].Transfer = "report.pdf", 4400000, "X-2"
 	src.linkLog[1].State = link.StateSent
-	src.linkLog[1].File, src.linkLog[1].FileSize, src.linkLog[1].Transfer = "trace.bin", 64 << 20, "X-4"
+	src.linkLog[1].File, src.linkLog[1].FileSize, src.linkLog[1].Transfer = "trace.bin", 64<<20, "X-4"
 	src.linkFiles = []link.Transfer{
 		{ID: "X-2", Peer: "beta", Message: "M-1", Name: "report.pdf", Size: 4400000, State: link.FileOffered},
 		{ID: "X-4", Out: true, Peer: "beta", Message: "M-3", Name: "trace.bin", Size: 64 << 20, Offset: 24 << 20, Rate: 1 << 20, State: link.FileSending},

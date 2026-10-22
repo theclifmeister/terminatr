@@ -105,7 +105,7 @@ type fakeSource struct {
 	// linkFiles what LinkFiles gives.
 	linkLogs  map[string][]*link.Message
 	linkFiles []link.Transfer
-	modViews proto.ModViewsResult
+	modViews  proto.ModViewsResult
 	// tasksTab: ModViews lists the Tasks tab mod's view, drawn from the
 	// board (taskstab_test.go), its done tasks listed with tasksDoneAll.
 	tasksTab     bool

@@ -91,6 +91,26 @@ func (s *store) wait(p *project.Project, m *Message, att []attachment, user bool
 	return copyAttach(p, m, att)
 }
 
+// unqueue takes message id out of p's queue to other, the rest keeping
+// their order and the due times of those behind it moving up; false if
+// it isn't there (it left); the store is locked.
+func (s *store) unqueue(p *project.Project, other, id string, l limits, t time.Time) bool {
+	k := p.Slug + ">" + other
+	i := slices.IndexFunc(s.Queued[k], func(q queued) bool { return q.ID == id })
+	if i < 0 {
+		return false
+	}
+	s.Queued[k] = slices.Delete(s.Queued[k], i, i+1)
+	for j := i; j < len(s.Queued[k]); j++ {
+		due := s.due(p.Slug, other, j+1, l, t).UTC().Truncate(time.Second)
+		update(p, other, s.Queued[k][j].ID, func(x *Message) { x.Due = due })
+	}
+	if len(s.Queued[k]) == 0 {
+		delete(s.Queued, k)
+	}
+	return true
+}
+
 // Drain sends what waits over the rate, each direction in order, as far
 // as its bucket allows; the server's outbox poll runs it. A look at the
 // store comes first, so a server with nothing waiting writes nothing.

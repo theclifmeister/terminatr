@@ -1452,6 +1452,7 @@ func (c *client) run(do prefixDo) {
 		c.quit()
 	case do.detach:
 		c.detachThen(do.then)
+	case do.popup != "" && c.remotePopup(do.popup):
 	case do.popup != "":
 		c.popupOver("", do.popup)
 	case do.pane != "":
@@ -1463,6 +1464,26 @@ func (c *client) run(do prefixDo) {
 	case do.saveClear:
 		c.saveClearFocus()
 	}
+}
+
+// remotePopup says, in the status bar, that the project popup (prefix+A,
+// I, T) isn't shown for a paired server's pane: its project is that
+// server's, and only its dashboard (peerdash.go) is seen here. false for
+// this server's panes and the other popups, which open as ever.
+func (c *client) remotePopup(key string) bool {
+	if !projectPopups[key] || !c.lock() {
+		return false
+	}
+	p := c.focus
+	if p == nil || p.info.Server == "" {
+		c.mu.Unlock()
+		return false
+	}
+	c.flash = remoteNoPopup(p.info.Server, p.info.Project)
+	c.status()
+	c.mu.Unlock()
+	c.poke()
+	return true
 }
 
 // repaint asks the focused pane, a paired server's, for a fresh repaint
@@ -1926,7 +1947,7 @@ func (c *client) input(k uv.Key) {
 	if ok {
 		b, err = c.enc.Key(p.mirror, ek)
 	}
-	if err == nil && len(b) > 0 {
+	if err == nil && emu.Typed(b) {
 		c.typed(p)
 	}
 	claim := c.needClaim()

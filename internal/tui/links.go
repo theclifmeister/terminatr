@@ -541,6 +541,13 @@ func (m *dash) openConversation(slug, other string) tea.Cmd {
 	return nil
 }
 
+// droppable is a message the user can still drop: waiting for the OK,
+// or queued over the rate (in the outbox for a paired server it has no
+// due time, and has left).
+func droppable(m *link.Message) bool {
+	return m != nil && m.Out && (m.State == link.StateHeld || m.State == link.StateQueued && !m.Due.IsZero())
+}
+
 func (v *convView) load(m *dash) {
 	v.msgs, v.err = m.src.LinkLog(v.slug, v.other)
 	v.files = map[string]link.Transfer{}
@@ -627,8 +634,9 @@ func (v *convView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 			m.confirm("Decline a file", "Decline "+oneLine(t.Name)+" ("+link.MB(t.Size)+") from "+v.other+"? "+v.other+" hears of it.", func() tea.Cmd { return act("decline-file", id, "", "declined "+id) })
 			return nil
 		}
-		if cur == nil || !cur.Out || cur.State != link.StateHeld {
-			m.msg = "only a message that waits for your OK, or a file offered to you, can be answered"
+		held := cur != nil && cur.Out && cur.State == link.StateHeld
+		if !held && (s == "A" || !droppable(cur)) {
+			m.msg = "only a message that waits for your OK can be approved, or one that waits over the rate dropped, or a file offered to you answered"
 			return nil
 		}
 		if s == "A" {
@@ -769,6 +777,8 @@ func (v *convView) render(m *dash) string {
 	}
 	if cur != nil && cur.Out && cur.State == link.StateHeld {
 		keys = append(keys, "A approve", "X drop")
+	} else if droppable(cur) {
+		keys = append(keys, "X drop")
 	}
 	if t, ok := v.fileOf(cur); ok {
 		switch {

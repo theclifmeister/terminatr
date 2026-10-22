@@ -1020,10 +1020,14 @@ func (m *dash) openProject(slug string) tea.Cmd {
 }
 
 // projectHere is the project of the selected row, else the listed one;
-// over a session, the popup's.
+// over a session, the popup's; none on a paired server's dashboard,
+// whose list rows are this server's first project's.
 func (m *dash) projectHere() string {
 	if m.over != nil && m.over.Project != "" {
 		return m.over.Project
+	}
+	if m.remoteHere() {
+		return ""
 	}
 	if r, ok := m.selected(); ok && r.project != "" {
 		return r.project

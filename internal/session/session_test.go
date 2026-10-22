@@ -344,3 +344,17 @@ func TestColors(t *testing.T) {
 	}
 	query("E]11;rgb:fafa/fafa/fafaB")
 }
+
+// TestInputDropsReplies (T686): a console's terminal replies, and the
+// focus and mouse reports of modes the program has off, never reach it;
+// its keys do.
+func TestInputDropsReplies(t *testing.T) {
+	s := start(t, "/bin/sh")
+	s.Input([]byte("stty -echo; cat -v\r"))
+	time.Sleep(300 * time.Millisecond)
+	s.Input([]byte("\x1b[I\x1b]11;rgb:0/0/0\x07\x1b[?62;22c\x1b[<35;2;1M\x1b[12;40Rkeys-in\r"))
+	testwait.Eventually(t, "the keys", func() bool { return strings.Contains(screen(t, s), "keys-in") })
+	if sc := screen(t, s); strings.Contains(sc, "^[") {
+		t.Fatalf("a reply or report reached the program:\n%s", sc)
+	}
+}
