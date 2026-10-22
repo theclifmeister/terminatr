@@ -190,6 +190,8 @@ var settingRows = []settingRow{
 	def("link_burst", "link messages at once", everywhere, func(r *rawSafety) *int { return r.LinkBurst }, func(s *Safety) *int { return &s.LinkBurst }, between(1, MaxLinkBurst)),
 	def("link_per_hour", "link messages an hour", everywhere, func(r *rawSafety) *int { return r.LinkPerHour }, func(s *Safety) *int { return &s.LinkPerHour }, between(1, MaxLinkPerHour)),
 	def("link_max_kb", "link message size", everywhere, func(r *rawSafety) *int { return r.LinkMaxKB }, func(s *Safety) *int { return &s.LinkMaxKB }, between(1, MaxLinkKB)),
+	def("link_file_mb", "link file size", everywhere, func(r *rawSafety) *int { return r.LinkFileMB }, func(s *Safety) *int { return &s.LinkFileMB }, between(1, MaxLinkFileMB)),
+	def("link_file_kbps", "link file pace", everywhere, func(r *rawSafety) *int { return r.LinkFileKbps }, func(s *Safety) *int { return &s.LinkFileKbps }, between(MinLinkFileKbps, MaxLinkFileKbps)),
 	def("branch_name", "branch names", everywhere, func(r *rawSafety) *string { return r.BranchName }, func(s *Safety) *string { return &s.BranchName }, CheckBranchName),
 	def("guard", "guard", everywhere, func(r *rawSafety) *bool { return r.Guard }, func(s *Safety) *bool { return &s.Guard }, nil),
 	def("guard_off", "guard off", everywhere, func(r *rawSafety) *[]string { return r.GuardOff }, func(s *Safety) *[]string { return &s.GuardOff }, checkGuardOff),

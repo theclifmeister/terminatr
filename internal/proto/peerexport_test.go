@@ -79,7 +79,8 @@ func TestPeerProjectWatch(t *testing.T) {
 	out := PeerProjectWatch(w)
 	var home []string
 	zeros("", reflect.ValueOf(out), &home)
-	want := []string{".Inbox[].ID", ".Inbox[].Subject", ".Inbox[].Summary", ".Inbox[].What", ".Cells"}
+	// A link's file counts stay home: files cross only on their own consent.
+	want := []string{".Inbox[].ID", ".Inbox[].Subject", ".Inbox[].Summary", ".Inbox[].What", ".Cells", ".Links[].FilesWaiting", ".Links[].FilesActive"}
 	slices.Sort(home)
 	slices.Sort(want)
 	if !slices.Equal(home, want) {

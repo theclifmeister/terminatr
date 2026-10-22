@@ -46,6 +46,8 @@ type link struct {
 	logf    func(string, ...any)
 	// backoff is the wait after n failures (a test shortens it).
 	backoff func(n int) time.Duration
+	// fileSlots bounds the file streams the server serves (Manager's).
+	fileSlots chan struct{}
 
 	mu sync.Mutex
 	st proto.PeerLink
@@ -226,6 +228,10 @@ func (l *link) once(ctx context.Context) (up bool, err error) {
 	}
 	s := newSession(tc)
 	s.methods = l.methods
+	s.files.slots = l.fileSlots
+	if !tlsClient(l.id.ID, l.peer.ID()) {
+		s.files.top = 1 << 31
+	}
 	peer, err := s.hello(l.hello)
 	l.mu.Lock()
 	l.st.Version, l.st.LinkProtocol, l.st.Caps = peer.Version, peer.LinkProtocol, peer.Caps

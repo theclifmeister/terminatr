@@ -150,6 +150,19 @@ var ThreadTools = []proto.ToolDef{
 	},
 }
 
+// CoordinatorTools are a coordinator's own tools: reads it otherwise
+// does through the shell.
+var CoordinatorTools = []proto.ToolDef{
+	{
+		Name: "link_files",
+		Description: "List the files sent with messages between this project and its linked projects (what `tm link files --json` does), newest first: " +
+			"id, message, project, name, size, state and progress. A file offered to this project waits for the user to accept it; read a received one with `tm link read M-<n> --file NAME`.",
+		InputSchema: toolObject(map[string]any{
+			"project": toolLine("Optional: only the files with this linked project (a slug, or <server>/<slug>).", 100),
+		}),
+	},
+}
+
 // modToolRef is a mod tool a session is offered.
 type modToolRef struct {
 	mod  string
@@ -163,6 +176,9 @@ func (s *Server) sessionTools(rec SessionRecord) []proto.ToolDef {
 	out := []proto.ToolDef{}
 	if rec.Role == proto.RoleThread && thread.ValidID(rec.Thread) {
 		out = append(out, ThreadTools...)
+	}
+	if rec.Role == proto.RoleCoordinator && rec.Project != "" {
+		out = append(out, CoordinatorTools...)
 	}
 	for _, t := range s.modToolsFor(rec) {
 		out = append(out, t.def)
@@ -208,6 +224,10 @@ func (s *Server) runTool(rec SessionRecord, name string, b []byte) (int, ModTool
 	if len(b) > maxModTool {
 		return http.StatusBadRequest, ModToolResult{Error: toolErr("input is over %d bytes", maxModTool).Error()}
 	}
+	// The coordinator's own tool first: its name is in a mod tool's form.
+	if rec.Role == proto.RoleCoordinator && name == "link_files" {
+		return s.runLinkFiles(rec, b)
+	}
 	if _, _, ok := mod.ParseToolName(name); ok {
 		return s.runModTool(rec, name, b)
 	}
@@ -244,6 +264,33 @@ func (s *Server) runTool(rec SessionRecord, name string, b []byte) (int, ModTool
 		}
 	}
 	return http.StatusOK, ModToolResult{Text: strings.TrimSpace(out.String())}
+}
+
+// runLinkFiles runs the coordinator's link_files tool: tm link files
+// --json for its own project.
+func (s *Server) runLinkFiles(rec SessionRecord, b []byte) (int, ModToolResult) {
+	var in struct {
+		Project string `json:"project"`
+	}
+	if len(strings.TrimSpace(string(b))) > 0 {
+		dec := json.NewDecoder(strings.NewReader(string(b)))
+		dec.DisallowUnknownFields()
+		if err := dec.Decode(&in); err != nil {
+			return http.StatusBadRequest, ModToolResult{Error: toolErr("%v", err).Error()}
+		}
+	}
+	if s.opts.RunCLI == nil {
+		return http.StatusServiceUnavailable, ModToolResult{Error: "this server runs no project commands"}
+	}
+	args := []string{"link", "files", "--json"}
+	if in.Project != "" {
+		args = append(args, in.Project)
+	}
+	res := s.opts.RunCLI(proto.CLIRunParams{Args: args, Cwd: rec.Cwd}, caller.Caller{Kind: caller.Coordinator, Project: rec.Project})
+	if res.Code != 0 {
+		return http.StatusUnprocessableEntity, ModToolResult{Error: strings.TrimSpace(firstNonEmpty(res.Stderr, res.Stdout))}
+	}
+	return http.StatusOK, ModToolResult{Text: strings.TrimSpace(res.Stdout)}
 }
 
 // runModTool runs mod tool name (<mod>_<tool>) for session rec: the

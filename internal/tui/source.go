@@ -148,10 +148,12 @@ type ProjectData struct {
 	// Links are the project's links to other projects' coordinators
 	// (link.Rows); LinkWaits counts its messages waiting for the user's
 	// OK, its links the breaker paused and the paired servers' link
-	// requests waiting for the user (LinkAsks of them), a NEEDS YOU row.
+	// requests waiting for the user (LinkAsks of them) and the files
+	// offered it (LinkFiles of them), a NEEDS YOU row.
 	Links     []link.Row
 	LinkWaits int
 	LinkAsks  int
+	LinkFiles int
 	Err       string
 }
 
@@ -339,11 +341,17 @@ type LinkSource interface {
 	// other's the mirror, off removing both; SetLinkAsk turns slug's ask
 	// switch for the link on or off (link.SetAsk). LinkLog reads the messages between them;
 	// LinkAct approves, drops (arg a message id) or resumes (arg the
-	// other project), or sends text to arg as the user. All are the
-	// human's, refused when tm runs inside an agent.
+	// other project), or sends text to arg as the user; accepts,
+	// declines or cancels a file (accept-file …, arg its X- id).
+	// LinkFiles are the files between them (link.Transfers);
+	// SetLinkFiles sets what slug's link to other does with files
+	// (link.SetFiles). All but the reads are the human's, refused when
+	// tm runs inside an agent.
 	SetLink(slug, other, allow string) error
 	SetLinkAsk(slug, other string, ask bool) error
+	SetLinkFiles(slug, other, files string) error
 	LinkLog(slug, other string) ([]*link.Message, error)
+	LinkFiles(slug, other string) ([]link.Transfer, error)
 	LinkAct(slug, verb, arg, text string) (string, error)
 }
 
@@ -729,18 +737,42 @@ func (s *ServerSource) Board(slug string) (*tasks.Board, error) {
 	return p.Tasks().Load()
 }
 
+// Library is the project's library files and, in their own groups, the
+// files its links brought (link.LibraryFiles).
 func (s *ServerSource) Library(slug string) ([]thread.LibFile, error) {
 	p, err := project.Open(slug)
 	if err != nil {
 		return nil, err
 	}
-	return thread.Library(p)
+	files, err := thread.Library(p)
+	if err != nil {
+		return nil, err
+	}
+	return mergeNewest(files, link.LibraryFiles(p)), nil
 }
 
+// mergeNewest merges two lists of files, each newest first.
+func mergeNewest(a, b []thread.LibFile) []thread.LibFile {
+	out := make([]thread.LibFile, 0, len(a)+len(b))
+	for len(a) > 0 || len(b) > 0 {
+		if len(b) == 0 || len(a) > 0 && !b[0].Time.After(a[0].Time) {
+			out, a = append(out, a[0]), a[1:]
+		} else {
+			out, b = append(out, b[0]), b[1:]
+		}
+	}
+	return out
+}
+
+// LibraryRead reads a thread's library file, or, for id a message's,
+// the file it brought.
 func (s *ServerSource) LibraryRead(slug, id, name string, max int64) ([]byte, bool, error) {
 	p, err := project.Open(slug)
 	if err != nil {
 		return nil, false, err
+	}
+	if link.ValidID(id) {
+		return link.ReadFile(p, id, name, max)
 	}
 	return thread.ReadLibraryFile(p, id, name, max)
 }
@@ -752,6 +784,12 @@ func (s *ServerSource) LibraryRemove(slug, id, name string) (int, error) {
 	p, err := project.Open(slug)
 	if err != nil {
 		return 0, err
+	}
+	if link.ValidID(id) {
+		if err := link.RemoveFile(p, s.Caller, id, name); err != nil {
+			return 0, err
+		}
+		return 1, nil
 	}
 	return thread.RemoveLibrary(p, s.Caller, id, name)
 }

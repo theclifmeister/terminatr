@@ -48,6 +48,7 @@ type dispatcher struct {
 	ex     Exporter
 	msgs   Messages
 	panes  PaneHost
+	files  FileHost
 	caller caller.Caller
 	peer   ID
 	// level is this server's pane switch for the peer now
@@ -62,9 +63,11 @@ type dispatcher struct {
 // else is reachable from a link. All of them read (peer.popup only while
 // the pane switch lets the peer look, popup.go) but peer.message,
 // which delivers a message to a linked project (§16.11), and peer.attach,
-// whose stream may type while the pane switch says so (§16.12).
+// whose stream may type while the pane switch says so (§16.12);
+// peer.file.fetch reads only a file this server offered the peer
+// (§16.13).
 func (d *dispatcher) methods() map[string]handler {
-	if d == nil || (d.ex == nil && d.msgs == nil && d.panes == nil && d.panesHere == nil) {
+	if d == nil || (d.ex == nil && d.msgs == nil && d.panes == nil && d.files == nil && d.panesHere == nil) {
 		return nil
 	}
 	m := map[string]handler{}
@@ -83,6 +86,9 @@ func (d *dispatcher) methods() map[string]handler {
 	}
 	if d.panes != nil {
 		m[proto.MethodPeerAttach] = d.attach
+	}
+	if d.files != nil {
+		m[proto.MethodPeerFileFetch] = d.fileFetch
 	}
 	return m
 }

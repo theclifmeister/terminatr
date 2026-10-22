@@ -29,12 +29,33 @@ const (
 // settings popup steps through them after off.
 var LinkAllows = []string{LinkBoth, LinkSend, LinkReceive}
 
+// What a link entry's files says of files over the link (docs/SPEC.md
+// §16.13), for this side: none sent or taken, each offered file waits
+// for the user (the default), or this side takes them without asking.
+const (
+	FilesOff  = "off"
+	FilesAsk  = "ask"
+	FilesAuto = "auto"
+)
+
+// LinkFiles are the values of files, in the order F steps through them.
+var LinkFiles = []string{FilesAsk, FilesAuto, FilesOff}
+
 // Link is one project's entry for another: which way this side lets
-// messages go, and whether each message this side sends waits for the
-// user's OK.
+// messages go, whether each message this side sends waits for the
+// user's OK, and what this side does with files ("" is ask).
 type Link struct {
 	Allow string `json:"allow"`
 	Ask   bool   `json:"ask"`
+	Files string `json:"files,omitempty"`
+}
+
+// FilesMode is the entry's files: ask when it doesn't say.
+func (l Link) FilesMode() string {
+	if l.Files == "" {
+		return FilesAsk
+	}
+	return l.Files
 }
 
 // Sends reports whether this side lets its coordinator write on the link.
@@ -129,8 +150,16 @@ func parseLink(v any) (l Link, askSet bool, err error) {
 					return Link{}, false, fmt.Errorf("ask must be true or false")
 				}
 				l.Ask, askSet = b, true
+			case "files":
+				f, ok := v[k].(string)
+				if !ok || !slices.Contains(LinkFiles, f) {
+					return Link{}, false, fmt.Errorf("files must be %q, %q or %q", FilesOff, FilesAsk, FilesAuto)
+				}
+				if f != FilesAsk {
+					l.Files = f
+				}
 			default:
-				return Link{}, false, fmt.Errorf("has an unknown key %q (allow, ask)", k)
+				return Link{}, false, fmt.Errorf("has an unknown key %q (allow, ask, files)", k)
 			}
 		}
 		if l.Allow == "" {
@@ -138,7 +167,7 @@ func parseLink(v any) (l Link, askSet bool, err error) {
 		}
 		return l, askSet, nil
 	}
-	return Link{}, false, fmt.Errorf("must be %q, %q, %q or a table { allow = …, ask = … }", LinkBoth, LinkSend, LinkReceive)
+	return Link{}, false, fmt.Errorf("must be %q, %q, %q or a table { allow = …, ask = …, files = … }", LinkBoth, LinkSend, LinkReceive)
 }
 
 // LinkRefusal says why from's coordinator may not write to to's: "" when
@@ -215,7 +244,7 @@ func SetLink(slug, other string, l Link) error {
 // LinkOff removes both. Linking is one act of the user's, never a side
 // at a time.
 func SetLinkPair(a, b string, la Link, askB bool) error {
-	lb := Link{Allow: Mirror(la.Allow), Ask: askB}
+	lb := Link{Allow: Mirror(la.Allow), Ask: askB, Files: la.Files}
 	return edit(func(data []byte) ([]byte, error) {
 		out, err := editLink(data, a, b, la)
 		if err != nil {
@@ -239,6 +268,12 @@ func editLink(data []byte, slug, other string, l Link) ([]byte, error) {
 	}
 	if !slices.Contains(LinkAllows, l.Allow) {
 		return nil, fmt.Errorf("a link allows %q, %q or %q", LinkBoth, LinkSend, LinkReceive)
+	}
+	if l.Files == FilesAsk {
+		l.Files = ""
+	}
+	if l.Files != "" && !slices.Contains(LinkFiles, l.Files) {
+		return nil, fmt.Errorf("a link's files are %q, %q or %q", FilesOff, FilesAsk, FilesAuto)
 	}
 	if _, _, remote := Remote(other); remote {
 		return Edit(data, table, other, remoteLink(l))

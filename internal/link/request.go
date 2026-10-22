@@ -260,7 +260,12 @@ func Answer(c caller.Caller, p *project.Project, id string, accept bool, allow s
 		}
 		// This server's own entry only; the asking side set its own.
 		if accept {
-			if err := config.SetLink(p.Slug, r.Peer, config.Link{Allow: allow, Ask: ask}); err != nil {
+			cfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+			mine, _ := cfg.Links(p.Slug)
+			if err := config.SetLink(p.Slug, r.Peer, config.Link{Allow: allow, Ask: ask, Files: mine[r.Peer].Files}); err != nil {
 				return err
 			}
 		}

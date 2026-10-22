@@ -626,6 +626,8 @@ export declare namespace TM {
     held?: number;
     queued?: number;
     last?: string;
+    files_waiting?: number;
+    files_active?: number;
   }
 
   interface WatchNeed {

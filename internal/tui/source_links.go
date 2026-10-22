@@ -27,6 +27,22 @@ func (s *ServerSource) SetLinkAsk(slug, other string, ask bool) error {
 	return link.SetAsk(s.Caller, slug, other, ask)
 }
 
+func (s *ServerSource) SetLinkFiles(slug, other, files string) error {
+	defer s.touch()
+	if s.Caller.IsAgent() {
+		return errHumanOnly
+	}
+	return link.SetFiles(s.Caller, slug, other, files)
+}
+
+func (s *ServerSource) LinkFiles(slug, other string) ([]link.Transfer, error) {
+	p, err := project.Open(slug)
+	if err != nil {
+		return nil, err
+	}
+	return link.Transfers(p, other), nil
+}
+
 func (s *ServerSource) LinkLog(slug, other string) ([]*link.Message, error) {
 	p, err := project.Open(slug)
 	if err != nil {
@@ -80,6 +96,27 @@ func (s *ServerSource) LinkAct(slug, verb, arg, text string) (string, error) {
 			return "", err
 		}
 		return RequestWords(r), nil
+	case "accept-file":
+		t, err := link.AcceptFile(s.Caller, p, arg)
+		if err != nil {
+			return "", err
+		}
+		if t.State == link.FileReceived {
+			return "accepted " + t.ID + ": " + t.Name + " is in place", nil
+		}
+		return "accepted " + t.ID + ": " + t.Name + " comes over the link", nil
+	case "decline-file":
+		t, err := link.DeclineFile(s.Caller, p, arg)
+		if err != nil {
+			return "", err
+		}
+		return "declined " + t.ID + " (" + t.Name + ")", nil
+	case "cancel-file":
+		t, err := link.CancelFile(s.Caller, p, arg)
+		if err != nil {
+			return "", err
+		}
+		return "cancelled " + t.ID + " (" + t.Name + ")", nil
 	case "accept", "decline":
 		allow, ask, _ := strings.Cut(text, " ")
 		r, err := link.Answer(s.Caller, p, arg, verb == "accept", allow, ask == "ask")

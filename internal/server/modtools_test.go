@@ -75,6 +75,28 @@ func TestModTools(t *testing.T) {
 	if code, _ := call("status", `{"activity":"x"}`); code != http.StatusForbidden {
 		t.Fatalf("coordinator: %d", code)
 	}
+	// The coordinator's own read: tm link files, as itself.
+	if code, r := call("link_files", `{"project":"mini/api"}`); code != http.StatusOK {
+		t.Fatalf("link_files: %d %+v", code, r)
+	}
+	if got := took(); len(got) != 1 || !reflect.DeepEqual(got[0].Args, []string{"link", "files", "--json", "mini/api"}) {
+		t.Fatalf("link_files ran %+v", got)
+	}
+	if as[len(as)-1] != (caller.Caller{Kind: caller.Coordinator, Project: "proj"}) {
+		t.Fatalf("link_files caller %+v", as[len(as)-1])
+	}
+	if code, _ := call("link_files", `{"path":"/etc"}`); code != http.StatusBadRequest {
+		t.Fatalf("link_files took an unknown input: %d", code)
+	}
+	s.mu.Lock()
+	tools := s.sessionTools(s.records["s-1"])
+	s.mu.Unlock()
+	if len(tools) == 0 || tools[0].Name != "link_files" {
+		t.Fatalf("coordinator tools %+v", tools)
+	}
+	mu.Lock()
+	as = nil
+	mu.Unlock()
 	s.mu.Lock()
 	s.records["s-1"] = SessionRecord{ID: "s-1", Role: proto.RoleThread, Project: "proj", Thread: "t-0001", Cwd: rt}
 	s.mu.Unlock()

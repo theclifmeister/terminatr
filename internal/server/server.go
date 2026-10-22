@@ -124,7 +124,8 @@ type Server struct {
 	// activation (active.go).
 	sleeping map[string]bool
 	dormant  map[string]SessionRecord
-	blocked  map[string]bool // sessions whose agent is blocked, for alerts
+	blocked  map[string]bool            // sessions whose agent is blocked, for alerts
+	told     map[string]map[string]bool // the consoles, by session, that raised its takeover (consoleTakeover)
 	// adoptAsks are the human's go-aheads to adopt a session (by id)
 	// into a project (session.adopt.ask), kept until it is adopted.
 	adoptAsks map[string]adoptAsk
@@ -349,7 +350,7 @@ func Run(ctx context.Context, opts Options) error {
 	// The links to paired servers: each its own goroutine, which no
 	// local call waits on (docs/SPEC.md §16.7). They read the shared
 	// projects through peerExport (§16.9), nothing else.
-	s.peers = peer.Start(peer.Options{Dir: peer.DirIn(p.Home), Version: version.Version, Logf: logger.Printf, Export: s.peerExport(), Messages: peerMessages{}, Panes: peerPanes{s}})
+	s.peers = peer.Start(peer.Options{Dir: peer.DirIn(p.Home), Version: version.Version, Logf: logger.Printf, Export: s.peerExport(), Messages: peerMessages{}, Panes: peerPanes{s}, Files: link.Files()})
 	defer s.peers.Close()
 	// What they share, for the consoles (§16.10); a peer's pane switch
 	// reaches the remote panes open here at once (§16.12).
@@ -362,6 +363,11 @@ func Run(ctx context.Context, opts Options) error {
 	outboxCtx, stopOutbox := context.WithCancel(context.Background())
 	defer stopOutbox()
 	go link.RunOutbox(outboxCtx, peerTransport{s.peers})
+	// And the files they offer are pulled over the links (§16.13).
+	link.Logf = logger.Printf
+	link.SetServedAborter(s.peers.AbortServed)
+	link.PeerFiles = peerTransport{s.peers}.files
+	go link.RunFiles(outboxCtx, peerTransport{s.peers})
 	logger.Printf("server pid %d %s protocol %d listening on %s", os.Getpid(), s.build, proto.Protocol, p.Socket)
 	go func() {
 		if st := keychain.Probe(runtime.GOOS, os.Getenv, keychain.Run); st.Checked && !st.OK {
@@ -1080,6 +1086,7 @@ func (s *Server) sessionExited(sess *session.Session) {
 	delete(s.sessions, sess.ID())
 	delete(s.blocked, sess.ID())
 	delete(s.adoptAsks, sess.ID())
+	delete(s.told, sess.ID())
 	s.guard.forget(sess.ID())
 	if s.tick != nil {
 		s.tick.Kick()
@@ -1137,7 +1144,8 @@ func (s *Server) serveAttach(c net.Conn, br *bufio.Reader, peerPID int, human bo
 	c.SetReadDeadline(time.Time{})
 	// Attach types into a session as the human would: the human's alone,
 	// like session.keys.
-	if perr := mayCall(attachMethod, gateHuman, human, s.whoFor(peerPID)); perr != nil {
+	who := s.whoFor(peerPID)
+	if perr := mayCall(attachMethod, gateHuman, human, who); perr != nil {
 		proto.WriteLine(c, proto.AttachReply{Error: perr})
 		return
 	}
@@ -1188,7 +1196,7 @@ loop:
 		buf = payload
 		switch typ {
 		case proto.FrameInput:
-			sess.Input(payload)
+			sess.HumanInput(payload, s.consoleTakeover(info, req.Attach.Console, who))
 		case proto.FrameDigestReq:
 			sess.RequestDigest(sub)
 		case proto.FrameColorScheme:

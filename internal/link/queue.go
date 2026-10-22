@@ -197,6 +197,7 @@ func (s *store) send(cfg *config.Config, p *project.Project, m *Message, user bo
 // since it was queued, and tells p's inbox.
 func unqueued(p *project.Project, m *Message, why *tasks.Error) {
 	update(p, m.Peer, m.ID, func(x *Message) { x.State, x.Refused, x.Due = StateUndelivered, why.Code, time.Time{} })
+	dropFile(p, m, FileUndelivered, why.Code)
 	p.AddMessageItem(KindUndelivered, m.Peer, fmt.Sprintf("your message %s to %s waited over the link's rate and wasn't delivered: %s", m.ID, m.Peer, why.Msg), false, m.ID)
 	p.Journal(caller.Caller{Kind: caller.Ticker}, "link.undelivered", m.Peer, m.ID+" ("+why.Code+")")
 }
