@@ -10,9 +10,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/plat/proc"
-	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
-	"github.com/theclifmeister/terminatr/internal/thread"
 	"github.com/theclifmeister/terminatr/internal/tui"
 )
 
@@ -97,16 +95,6 @@ func attachCmd(e *Env, args []string) error {
 	return nil
 }
 
-// tookOver tells a thread's coordinator that the user typed into the
-// thread's pane (docs/SPEC.md §4): an inbox item and a journal line.
-func (e *Env) tookOver(s proto.SessionInfo) error {
-	p, err := project.Open(s.Project)
-	if err != nil {
-		return err
-	}
-	return p.TookOver(e.Caller, s.Thread, thread.Label(p, s.Thread))
-}
-
 // attach draws the view's layout on this terminal until it leaves it or
 // the user detaches, with opts' sidebar, flash, command and handover
 // (the rest is filled in here). On a build mismatch it re-execs the
@@ -124,7 +112,7 @@ func (e *Env) attach(p client.Paths, vc *tui.ViewConn, opts tui.Options, args []
 			logger = log.New(f, fmt.Sprintf("attach %s pid %d: ", id, pid), log.Lmicroseconds)
 		}
 	}
-	opts.Paths, opts.View, opts.In, opts.Out, opts.Log, opts.Takeover = p, vc, os.Stdin, os.Stdout, logger, e.tookOver
+	opts.Paths, opts.View, opts.In, opts.Out, opts.Log = p, vc, os.Stdin, os.Stdout, logger
 	res, err := tui.Attach(opts)
 	var verr *proto.MismatchError
 	if errors.As(err, &verr) && verr.ReExec && e.Getenv(reexecEnv) == "" {

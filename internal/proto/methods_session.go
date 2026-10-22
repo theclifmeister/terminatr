@@ -345,10 +345,13 @@ type AttachRequest struct {
 
 // AttachParams name the session and the client's window size. The size is
 // informational: attaching never resizes the pane (docs/SPEC.md §3.3).
+// Console is the client's id in its view (view.subscribe): a thread's
+// takeover is told once per console's attach (docs/SPEC.md §4).
 type AttachParams struct {
 	Session string `json:"session"`
 	Cols    uint16 `json:"cols,omitempty"`
 	Rows    uint16 `json:"rows,omitempty"`
+	Console string `json:"console,omitempty"`
 }
 
 // AttachReply is the server's answer; frames follow only if Error is nil.

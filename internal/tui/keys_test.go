@@ -147,42 +147,23 @@ func TestToKey(t *testing.T) {
 	}
 }
 
-// TestThreadPaneTakeover: a thread's pane is like any other, with no
-// note in the status bar; the first input into it tells its coordinator,
-// once for the attach, and a coordinator's pane tells no one.
-func TestThreadPaneTakeover(t *testing.T) {
+// TestThreadPaneNoNote: a thread's pane is like any other, with no
+// note in the status bar (its takeover is the server's,
+// session.TestHumanInputTakeover).
+func TestThreadPaneNoNote(t *testing.T) {
 	c, err := newClient(tmclient.Paths{}, log.New(io.Discard, "", 0))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer c.enc.Close()
-	told := make(chan proto.SessionInfo, 4)
-	c.prefix, c.statusBar, c.told = chord{'\\'}, true, map[string]bool{}
+	c.prefix, c.statusBar = chord{'\\'}, true
 	c.setWindow(160, 40)
-	c.takeover = func(s proto.SessionInfo) error { told <- s; return nil }
 	p := &pane{info: proto.SessionInfo{ID: "s-2", Role: proto.RoleThread, Project: "demo", Thread: "t-0001"}}
-	co := &pane{info: proto.SessionInfo{ID: "s-1", Role: proto.RoleCoordinator, Project: "demo"}}
 	c.v = view.View{Mode: view.ModeLayout, Focus: "s-2"}
-	c.panes["s-2"], c.panes["s-1"], c.focus = p, co, p
+	c.panes["s-2"], c.focus = p, p
 	c.status()
 	if strings.Contains(c.statusText, "watch-only") || strings.Contains(c.statusText, "take") {
 		t.Fatalf("status %q", c.statusText)
-	}
-	c.typed(p)
-	c.typed(p)
-	c.typed(co)
-	select {
-	case s := <-told:
-		if s.Thread != "t-0001" {
-			t.Fatalf("told about %+v", s)
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("the coordinator wasn't told")
-	}
-	select {
-	case s := <-told:
-		t.Fatalf("told again, about %+v", s)
-	case <-time.After(100 * time.Millisecond):
 	}
 }
 

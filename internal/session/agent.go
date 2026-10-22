@@ -200,6 +200,9 @@ type agentRT struct {
 	// even drawn.
 	escapes  map[string]*escapeMark
 	emptyBox bool // the empty-box rule matched at the last evaluation
+	// boxWatches wait for a person's text to show in the box
+	// (HumanInput).
+	boxWatches []boxWatch
 	// steers are the prompts PromptNow pasted into the running turn that
 	// the agent may not have read yet: until it does, Claude shows them
 	// in its prompt box, which then holds no draft. Forgotten once the
@@ -850,6 +853,7 @@ func (rt *agentRT) setTailOff(p string, off int64, skip bool) {
 
 // evalScreen runs the screen rules on the emulator's current text.
 func (s *Session) evalScreen(rt *agentRT) {
+	at := time.Now()
 	s.mu.Lock()
 	if s.term == nil {
 		s.mu.Unlock()
@@ -881,6 +885,7 @@ func (s *Session) evalScreen(rt *agentRT) {
 	}
 	rt.mu.Lock()
 	rt.emptyBox, rt.blocker, rt.permDialog, rt.escapeDialog = empty, blocker, perm, esc
+	took := rt.settleBoxWatches(at, !empty && !blocker)
 	if len(rt.steers) > 0 {
 		switch {
 		case st == agent.StateIdle || st == agent.StateExited:
@@ -896,6 +901,9 @@ func (s *Session) evalScreen(rt *agentRT) {
 		rt.workingSince = time.Now()
 	}
 	rt.mu.Unlock()
+	for _, f := range took {
+		f()
+	}
 	var sig agent.ScreenSignal
 	if best != nil {
 		sig = agent.ScreenSignal{Rule: best.Rule, State: best.State, Reason: best.Reason}
