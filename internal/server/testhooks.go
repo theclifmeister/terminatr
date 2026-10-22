@@ -1,6 +1,7 @@
 package server
 
 import (
+	"errors"
 	"os"
 	"strconv"
 	"strings"
@@ -53,8 +54,24 @@ func (s *Server) watchOwner() {
 	if owner <= 0 {
 		return
 	}
+	// A pid is reused once its process is gone: an owner with another
+	// start time is someone else.
+	var started time.Time
+	if in, err := proc.Lookup(owner); err == nil {
+		started = in.Started
+	}
+	alive := func() bool {
+		if !proc.Alive(owner) {
+			return false
+		}
+		in, err := proc.Lookup(owner)
+		if err != nil {
+			return !errors.Is(err, proc.ErrNoProcess)
+		}
+		return started.IsZero() || in.Started.Equal(started)
+	}
 	go func() {
-		for proc.Alive(owner) {
+		for alive() {
 			select {
 			case <-s.stopReq:
 				return

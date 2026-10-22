@@ -324,6 +324,7 @@ func Run(ctx context.Context, opts Options) error {
 		logger.Printf("test hook %s: protocol %d, deaf %v", testHelloEnv, s.protocol, s.deaf)
 	}
 	s.watchOwner()
+	s.watchGone()
 	s.views = newViews(s, filepath.Join(filepath.Dir(p.Sessions), "views.json"), logger.Printf)
 	s.loadAgents()
 	s.modelsCtx, s.modelsStop = context.WithCancel(context.Background())
