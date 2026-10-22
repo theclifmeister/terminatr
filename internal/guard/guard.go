@@ -149,10 +149,11 @@ type Rules struct {
 	// Learn is guard_mode "learn": a refusal tells the model the user
 	// reviews it.
 	Learn bool `json:"learn,omitempty"`
-	// CdPath: the session's shell may have CDPATH or zsh's cdpath set
-	// before the line (the user's environment or startup files, the
-	// agent's env file or shell snapshot), so a relative cd may land
-	// elsewhere (nowhere.cd) as after a line that sets it.
+	// CdPath: the session's shell may have CDPATH or zsh's cdpath set,
+	// or cdable_vars on, before the line (the user's environment or
+	// startup files, the agent's env file or shell snapshot), so a
+	// relative cd may land elsewhere (nowhere.cd) as after a line that
+	// sets it.
 	CdPath bool `json:"cdPath,omitempty"`
 	// Floor are the rules whose floor holds though the human turned the
 	// rule off (guard_off): force-push (to a protected branch, --all,
@@ -174,9 +175,10 @@ type Rules struct {
 	line   string
 	lineCd bool
 	// physical: the line may make its cds physical; cdpath: it may set
-	// CDPATH or zsh's cdpath; pwdSet: it may set $PWD, $OLDPWD or the
-	// folder stack (lineFlags).
-	physical, cdpath, pwdSet bool
+	// CDPATH or zsh's cdpath, or turn on cdable_vars; pwdSet: it may set
+	// $PWD, $OLDPWD or the folder stack; autocd: it may turn on autocd
+	// (lineFlags).
+	physical, cdpath, pwdSet, autocd bool
 	// olds are the folders the line was in before its folder now
 	// ($OLDPWD, ~-; "" one it can't tell), as judgeLine follows its cds.
 	olds []string
@@ -1095,7 +1097,8 @@ func (r Rules) worktreeOf() string {
 // { }, and one holding a cd has the whole part judged from unknown too.
 // A part that runs shell code the
 // line doesn't show (eval, trap, a zsh trap function, source, ., also
-// through command or builtin) may move them at any point after, so the
+// through command or builtin; mapfile -C, enable -f: runsCode) may move
+// them at any point after, so the
 // rest of the line keeps unknown among them; so may a definition the
 // guard can't follow (hidesDefs), and a call of a function or an alias
 // the line defines while one of them may move them. A loop's parts may
@@ -1124,11 +1127,12 @@ func (r Rules) walkLine(command string, cwds []string) (d *Denial, st, ts lineDi
 		r.line += "\n"
 	}
 	r.line += command
-	r.lineCd = r.lineCd || r.hasCd(command)
-	physical, cdpath, pwdSet := r.lineFlags(command)
+	physical, cdpath, pwdSet, autocd := r.lineFlags(command)
 	r.physical = r.physical || physical
 	r.cdpath = r.cdpath || cdpath
 	r.pwdSet = r.pwdSet || pwdSet
+	r.autocd = r.autocd || autocd
+	r.lineCd = r.lineCd || r.hasCd(command)
 	parts, ok := r.topLevel(command)
 	if !ok {
 		// A line it can't split: one part, with any cd or hidden code in
@@ -1360,8 +1364,10 @@ func (d *lineDirs) end(r Rules, parts []linePart, i int, g *lineDirs, hidden boo
 		for _, c := range d.cur {
 			to = withDirs(to, nowhere{dir: c}.cd(r, cmd, args)...)
 		}
-		// The cd leaves $OLDPWD the folder it left, if it runs.
-		sure := pt.after == "&&" && pt.before != "||"
+		// The cd leaves $OLDPWD the folder it left, if it runs. One by
+		// autocd (cmd "") may not: its word may be no folder, or autocd
+		// off.
+		sure := pt.after == "&&" && pt.before != "||" && cmd != ""
 		// A cd .. that always runs (the first command of its list,
 		// none after it on ||) fails only where the parent is gone:
 		// the folders the line may be in merge into their parents, so
@@ -1502,8 +1508,63 @@ var hiddenCode = setOf("eval source . " + braceCode)
 const braceCode = "\x00{}"
 
 // runsCode: one of text's commands is one of those, maybe through
-// command or builtin.
-func (r Rules) runsCode(text string) bool { return r.runs(text, hiddenCode) }
+// command or builtin, or runs code of its own in the shell: bash's
+// mapfile or readarray given a callback (-C, callbacks), enable loading
+// a builtin from a shared object (-f).
+func (r Rules) runsCode(text string) bool {
+	if r.runs(text, hiddenCode) {
+		return true
+	}
+	for _, words := range r.cmds(text) {
+		argv := called(words)
+		if len(argv) == 0 {
+			continue
+		}
+		switch base(argv[0]) {
+		case "mapfile", "readarray":
+			if _, ok := callbacks(argv[1:]); ok {
+				return true
+			}
+		case "enable":
+			if slices.ContainsFunc(argv[1:], func(a string) bool {
+				return len(a) > 1 && a[0] == '-' && a[1] != '-' && strings.ContainsRune(a, 'f')
+			}) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// mapfileOpts are mapfile's options that take a value.
+const mapfileOpts = "dnOsucC"
+
+// callbacks are the callbacks mapfile's or readarray's args give it
+// (-C cb, -Ccb, -tC cb), which the shell runs as code with the line
+// read added (cb INDEX LINE); ok, it is given one.
+func callbacks(args []string) (cbs []string, ok bool) {
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if a == "--" || len(a) < 2 || a[0] != '-' {
+			break
+		}
+		for k := 1; k < len(a); k++ {
+			if !strings.ContainsRune(mapfileOpts, rune(a[k])) {
+				continue
+			}
+			v := a[k+1:]
+			if v == "" && i+1 < len(args) {
+				i++
+				v = args[i]
+			}
+			if a[k] == 'C' {
+				cbs, ok = append(cbs, v), true
+			}
+			break
+		}
+	}
+	return cbs, ok
+}
 
 // runsTrap: one of text's commands is trap. Its action, read as commands
 // (judgeLine), may still call what the guard can't see from the line's
@@ -1515,15 +1576,20 @@ func (r Rules) runsTrap(text string) bool { return r.runs(text, setOf("trap")) }
 // builtin.
 func (r Rules) runs(text string, names map[string]bool) bool {
 	for _, words := range r.cmds(text) {
-		argv := strip(words)
-		for len(argv) > 1 && (argv[0] == "command" || argv[0] == "builtin") {
-			argv = argv[1:]
-		}
-		if len(argv) > 0 && names[argv[0]] {
+		if argv := called(words); len(argv) > 0 && names[argv[0]] {
 			return true
 		}
 	}
 	return false
+}
+
+// called is the command words run (strip), past command and builtin.
+func called(words []string) []string {
+	argv := strip(words)
+	for len(argv) > 1 && (argv[0] == "command" || argv[0] == "builtin") {
+		argv = argv[1:]
+	}
+	return argv
 }
 
 // trapFunc is the head of a zsh trap function's definition: TRAPINT() or
@@ -1840,6 +1906,14 @@ func (r Rules) judgeWords(read [][]string, cwd string) *Denial {
 			}
 		case cmd == "eval":
 			d = r.nested().judgeLine(strings.Join(args, " "), []string{cwd})
+		case cmd == "mapfile" || cmd == "readarray":
+			// Its callback runs as eval's arguments do, for each line read.
+			cbs, _ := callbacks(args)
+			for _, cb := range cbs {
+				if d = r.nested().judgeLine(cb, []string{cwd}); d != nil {
+					break
+				}
+			}
 		case cmd == "trap":
 			// Its action runs later: judgeLine judges it where it may.
 			if a, ok := r.trapAction(args); !ok {
@@ -2711,8 +2785,9 @@ type nowhere struct{ dir string }
 // folder it names plainly, home for none, else unknown: an entry of the
 // folder stack (+N, -N) may be any folder, a pattern or braces (cd
 // ~/.term*) may name another, and so may a relative one CDPATH looks
-// up, when the line names it (lineFlags) or the session may have it set
-// (CdPath). Its redirections (pushd x >/dev/null) are no folder. A
+// up or cdable_vars takes for a variable's name, when the line names it
+// (lineFlags) or the session may have it set (CdPath). A command autocd
+// may take for a cd (autoCd) is followed as one with cmd "". Its redirections (pushd x >/dev/null) are no folder. A
 // physical cd (cd -P, or one the line may have made physical:
 // physicalCd) leaves the folder with its links
 // followed (Resolve), so its .. is the real parent; where the guard
@@ -3017,46 +3092,56 @@ var cdPath = regexp.MustCompile(`(?i)cd_?path`)
 // options, read options, printf -v options).
 var optionsWord = regexp.MustCompile(`^options(?:\[|\+?=|$)`)
 
+// optsEnv is a word that assigns bash's SHELLOPTS or BASHOPTS, in any
+// form (assignment).
+var optsEnv = assignOf(`SHELLOPTS|BASHOPTS`)
+
 // lineFlags reads line's commands, their words dequoted and their names
 // by base name (/bin/bash), for what the guard can't follow:
 //
 // physical, one may make its cds physical: set, setopt, unsetopt, shopt
 // or a shell given -P (zsh's -w, set -w), an option physicalOpts names
 // (set -o physical, shopt -so physical, setopt CHASE_LINKS, unsetopt
-// nochaselinks), an option argument with an expansion in it (setopt
-// $o), or physicalCd's words; emulate; any assignment to zsh's options
-// (optionsWord); a SHELLOPTS= or BASHOPTS= one, alone or through env; a
-// command named by an expansion. Either way it counts, so a line
+// nochaselinks), or physicalCd's words. Either way it counts, so a line
 // turning it off does too.
 //
 // cdpath, it names CDPATH or zsh's cdpath in any form (an assignment,
 // typeset, +=, an indirect name n=CDPATH, any case), in its text or its
-// words dequoted (C\DPATH): then a relative cd may land elsewhere.
+// words dequoted (C\DPATH), or one may turn on bash's cdable_vars or
+// zsh's cdablevars (shopt -s cdable_vars, setopt CDABLE_VARS, zsh's -T,
+// set -T): then a relative cd may land elsewhere, a folder a variable
+// holds.
 //
 // pwdSet, it names PWD, OLDPWD, DIRSTACK or zsh's dirstack other than
 // to expand it (namesPWD), in its text or its words dequoted: then
 // $PWD, ~+, pwd, $OLDPWD, ~- and the folder stack may not be the
 // folders the line's cds leave.
 //
-// Physical and cdpath both, a name it assigns indirectly (indirect: read
-// $n, typeset "$n=x", printf -v "$n"; zsh's (P) flag, ${…::=…}), which
-// may be CDPATH or zsh's options.
-func (r Rules) lineFlags(line string) (physical, cdpath, pwdSet bool) {
+// autocd, one may turn on zsh's or bash's autocd (setopt AUTO_CD, zsh's
+// -J, shopt -s autocd): then any command word alone may be a cd
+// (autoCd).
+//
+// All of them (but pwdSet), a command that may set options the guard
+// can't tell: one with an expansion in an option argument (setopt $o);
+// emulate; any assignment to zsh's options (optionsWord); a SHELLOPTS=
+// or BASHOPTS= one in any form, alone or through env; a command named
+// by an expansion; and a name it assigns indirectly (indirect: read $n,
+// typeset "$n=x", printf -v "$n"; zsh's (P) flag, ${…::=…}), which may
+// be CDPATH or zsh's options.
+func (r Rules) lineFlags(line string) (physical, cdpath, pwdSet, autocd bool) {
 	cdpath = cdPath.MatchString(line)
 	pwdSet = namesPWD(line)
-	if assignsExp(line) {
-		physical, cdpath = true, true
-	}
+	opts := assignsExp(line)
 	for _, words := range r.cmds(line) {
 		if indirect(strip(words)) {
-			physical, cdpath = true, true
+			opts = true
 		}
 		for _, w := range words {
 			if namesPWD(w) {
 				pwdSet = true
 			}
-			if strings.HasPrefix(w, "SHELLOPTS=") || strings.HasPrefix(w, "BASHOPTS=") || optionsWord.MatchString(w) {
-				physical = true
+			if optsEnv.MatchString(w) || optionsWord.MatchString(w) {
+				opts = true
 			}
 			if cdPath.MatchString(w) {
 				cdpath = true
@@ -3068,7 +3153,7 @@ func (r Rules) lineFlags(line string) (physical, cdpath, pwdSet bool) {
 		}
 		name := base(argv[0])
 		if name == "emulate" || strings.ContainsAny(argv[0], "$`") {
-			physical = true
+			opts = true
 		}
 		if !physicalSetters[name] {
 			continue
@@ -3076,23 +3161,38 @@ func (r Rules) lineFlags(line string) (physical, cdpath, pwdSet bool) {
 		if physicalCd.MatchString(strings.Join(argv, " ")) {
 			physical = true
 		}
+		zsh := name == "set" || name == "setopt" || name == "unsetopt" || shells[name]
 		for _, a := range argv[1:] {
 			if strings.ContainsAny(a, "$`") {
-				physical = true
+				opts = true
 				continue
 			}
 			if len(a) > 1 && (a[0] == '-' || a[0] == '+') && a[1] != '-' {
 				if strings.ContainsRune(a, 'P') || (name == "set" || shells[name]) && strings.ContainsRune(a, 'w') {
 					physical = true
 				}
+				if zsh && strings.ContainsRune(a, 'T') {
+					cdpath = true
+				}
+				if zsh && strings.ContainsRune(a, 'J') {
+					autocd = true
+				}
 				continue
 			}
-			if physicalOpts[optName(a)] {
+			switch o := optName(a); {
+			case physicalOpts[o]:
 				physical = true
+			case o == "cdablevars":
+				cdpath = true
+			case o == "autocd":
+				autocd = true
 			}
 		}
 	}
-	return physical, cdpath, pwdSet
+	if opts {
+		physical, cdpath, autocd = true, true, true
+	}
+	return physical, cdpath, pwdSet, autocd
 }
 
 // pwdExpanded is an expansion of PWD, OLDPWD, DIRSTACK or dirstack that
@@ -3193,23 +3293,62 @@ func withDirs(dirs []string, more ...string) []string {
 // cdWords are the commands that change a shell's folder.
 var cdWords = setOf("cd pushd popd chdir")
 
-// hasCd: some word of text's commands is cd, pushd, popd or zsh's chdir.
+// hasCd: some word of text's commands is cd, pushd, popd or zsh's chdir,
+// or one of them may be a cd by autocd (autoCd): not the elements of an
+// array, which Commands reads as a command after the assignment's
+// (a=(~/x): [a=] [~/x]).
 func (r Rules) hasCd(text string) bool {
-	for _, words := range r.cmds(text) {
+	cmds := r.cmds(text)
+	for i, words := range cmds {
 		if slices.ContainsFunc(words, func(w string) bool { return cdWords[w] }) {
+			return true
+		}
+		if i > 0 && len(cmds[i-1]) > 0 && strings.HasSuffix(cmds[i-1][len(cmds[i-1])-1], "=") {
+			continue
+		}
+		if _, ok := r.autoCd(words); ok {
 			return true
 		}
 	}
 	return false
 }
 
-// plainCd: part is one plain cd, pushd or popd, and its arguments.
+// autoCd is the folder simple command words may cd to by autocd, which
+// a shell reading its commands from its input may have on (zsh's, its
+// startup files may turn it on, and bash's interactive one): a command
+// word alone, its redirections aside, that is a path (one with a /, ..,
+// ~…), or any word when the line may turn autocd on; assignments and
+// the keywords of groupLead may come before it, not a wrapper (sudo
+// x, command x run x). The shell cds there when it is a folder.
+func (r Rules) autoCd(words []string) (dir string, ok bool) {
+	argv := unredirected(words)
+	for len(argv) > 1 && (assignment.MatchString(argv[0]) || groupLead[argv[0]]) {
+		argv = argv[1:]
+	}
+	if len(argv) != 1 || assignment.MatchString(argv[0]) {
+		return "", false
+	}
+	w := argv[0]
+	if r.autocd || strings.Contains(w, "/") || w == ".." || strings.HasPrefix(w, "~") {
+		return w, true
+	}
+	return "", false
+}
+
+// plainCd: part is one plain cd, pushd or popd, and its arguments; or a
+// command autocd may take as a cd (autoCd), with cmd "".
 func (r Rules) plainCd(part string) (cmd string, args []string, ok bool) {
 	if strings.HasPrefix(part, "(") || strings.HasPrefix(part, "{") {
 		return "", nil, false
 	}
 	cmds := r.cmds(part)
-	if len(cmds) != 1 || len(cmds[0]) == 0 || !cdWords[cmds[0][0]] {
+	if len(cmds) != 1 || len(cmds[0]) == 0 {
+		return "", nil, false
+	}
+	if dir, ok := r.autoCd(cmds[0]); ok && !cdWords[cmds[0][0]] {
+		return "", []string{dir}, true
+	}
+	if !cdWords[cmds[0][0]] {
 		return "", nil, false
 	}
 	return cmds[0][0], cmds[0][1:], true
@@ -4577,8 +4716,9 @@ func readsInput(w []string, fed bool, script func(string) bool) bool {
 }
 
 // extraEnv are the assignments that make a shell read a file first:
-// bash's BASH_ENV, sh's ENV, zsh's ZDOTDIR (its .zshenv).
-var extraEnv = regexp.MustCompile(`^(BASH_ENV|ENV|ZDOTDIR)=`)
+// bash's BASH_ENV, sh's ENV, zsh's ZDOTDIR (its .zshenv), in any form
+// (assignment: BASH_ENV+=, ENV[0]=).
+var extraEnv = assignOf(`BASH_ENV|ENV|ZDOTDIR`)
 
 // shellFlags is a cluster of a shell's short options (-ex, +o).
 var shellFlags = regexp.MustCompile(`^[-+][a-zA-Z]+$`)
@@ -5115,7 +5255,13 @@ func tickClose(s []rune, i int) int {
 // assignment is a word bash takes as an assignment before a command (and
 // env as one it sets): a name, a [subscript] or none, a + or none, then
 // = (a=1, a+=1, a[0]=1, a[k]+=1).
-var assignment = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*(?:\[[^=]*\])?\+?=`)
+var assignment = assignOf(`[A-Za-z_][A-Za-z0-9_]*`)
+
+// assignOf is a word that assigns a variable whose name matches names, as
+// assignment reads one.
+func assignOf(names string) *regexp.Regexp {
+	return regexp.MustCompile(`^(?:` + names + `)(?:\[[^=]*\])?\+?=`)
+}
 
 // wrapper is how a command that runs another reads its own options: the
 // short ones that take a value (-n 5, -n5), the long ones that do (--x v;
