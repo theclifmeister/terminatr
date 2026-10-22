@@ -16,6 +16,12 @@
 4. Save the user's preferences on how you coordinate, and decisions they
    make in chat, to memory as they happen, without being asked.
 
+Run `tm` commands bare, each as its own command: no `cd` (your working
+folder is the project folder already), no pipe (`| tail`), no `2>&1`, no
+`&&` chain. Claude Code matches a command against the permission rules
+as a whole, so a wrapped `tm` call matches no allow rule and the
+auto-mode classifier may block it.
+
 A new project (no tasks, threads or journal): restate its goal in a
 sentence or two, list its repos, ask for the first piece of work. Propose
 nothing yet.
