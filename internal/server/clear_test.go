@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -104,6 +105,9 @@ func TestSaveClear(t *testing.T) {
 // question, and for one answered already.
 func TestAnswerBound(t *testing.T) {
 	var a asks
+	// Answers fill in the question in place: a copy of menu's.
+	menu := menu
+	menu.Questions = slices.Clone(menu.Questions)
 	a.put("s-1", menu)
 	for _, c := range []struct {
 		i            int

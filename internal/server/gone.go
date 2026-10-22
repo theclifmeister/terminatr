@@ -31,13 +31,14 @@ func (s *Server) watchGone() {
 		}
 		was[i] = fi
 	}
+	every := goneEvery
 	go func() {
 		missed := make([]int, len(dirs))
 		for {
 			select {
 			case <-s.stopReq:
 				return
-			case <-time.After(goneEvery):
+			case <-time.After(every):
 			}
 			for i, d := range dirs {
 				if fi, err := os.Stat(d); err == nil && os.SameFile(fi, was[i]) {
