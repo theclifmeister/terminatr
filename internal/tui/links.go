@@ -416,6 +416,12 @@ func messagesLines(p ProjectData, sel, w int) ([]string, int, []int) {
 	var lines []string
 	var hits []int
 	at := -1
+	// The peer column fits the longest name, a paired server's
+	// "<server>/<slug>" whole, up to half the width.
+	col := 20
+	for _, r := range p.Links {
+		col = max(col, min(ansi.StringWidth(r.Peer), w/2))
+	}
 	for i, r := range p.Links {
 		counts := ""
 		if r.Unread > 0 {
@@ -427,7 +433,7 @@ func messagesLines(p ProjectData, sel, w int) ([]string, int, []int) {
 		if r.Last != "" {
 			counts += " · last " + r.Last + " " + age(time.Since(r.LastAt))
 		}
-		text := fit(r.Peer, 20) + "  " + r.Arrow() + " " + r.Words()
+		text := fit(r.Peer, col) + "  " + r.Arrow() + " " + r.Words()
 		hits = append(hits, i)
 		if i == sel {
 			at = len(lines)
@@ -534,6 +540,22 @@ func (v *convView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	return nil
 }
 
+// messageState is msg's state in words; other is the project at the
+// other end, a paired server's "<server>/<slug>" for queued and
+// undelivered.
+func messageState(msg *link.Message, other string) string {
+	switch msg.State {
+	case link.StateHeld:
+		return "waits for your OK"
+	case link.StateQueued:
+		alias, _, _ := config.Remote(other)
+		return "queued until " + alias + " takes it"
+	case link.StateUndelivered:
+		return "undelivered (see the inbox)"
+	}
+	return msg.State
+}
+
 func cmpStr(a, b string) string {
 	if a != "" {
 		return a
@@ -561,15 +583,17 @@ func (v *convView) render(m *dash) string {
 		if msg.Out {
 			dir, who = "→", v.slug
 		}
-		if msg.By == "human" {
+		// The user on a paired server isn't this one.
+		if msg.By == "human" && (msg.Out || !r.Remote) {
 			who += " (you)"
+		} else if msg.By == "human" {
+			who += " (its user)"
 		}
 		meta := fmt.Sprintf("%s %s · %s · %s", dir, msg.ID, msg.Created.Local().Format("Jan 2 15:04"), who)
 		if msg.Re != "" {
 			meta += " · re " + msg.Re
 		}
-		state := map[string]string{link.StateSent: "sent", link.StateRead: "read", link.StateHeld: "waits for your OK", link.StateDropped: "dropped"}[msg.State]
-		meta += " · " + state
+		meta += " · " + messageState(msg, v.other)
 		if len(msg.Attachments) > 0 {
 			meta += " · " + oneLine(strings.Join(msg.Attachments, ", "))
 		}
