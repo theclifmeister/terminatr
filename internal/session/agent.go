@@ -885,7 +885,7 @@ func (s *Session) evalScreen(rt *agentRT) {
 	}
 	rt.mu.Lock()
 	rt.emptyBox, rt.blocker, rt.permDialog, rt.escapeDialog = empty, blocker, perm, esc
-	took := rt.settleBoxWatches(at, !empty && !blocker)
+	took := rt.settleBoxWatches(at, !empty && !blocker, st == agent.StateWorking)
 	if len(rt.steers) > 0 {
 		switch {
 		case st == agent.StateIdle || st == agent.StateExited:
@@ -969,7 +969,11 @@ func (s *Session) agentChanged(rt *agentRT) {
 	default:
 		rt.sweepEscapes()
 	}
+	took := rt.settleBoxWatches(time.Now(), false, st.State == agent.StateWorking)
 	rt.mu.Unlock()
+	for _, f := range took {
+		f()
+	}
 	if changed {
 		s.notifyState()
 		if rt.cfg.OnChange != nil {

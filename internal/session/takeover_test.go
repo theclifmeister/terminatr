@@ -145,6 +145,33 @@ func TestHumanInputTakeover(t *testing.T) {
 	testwait.Eventually(t, "a paste's takeover", func() bool { return took.Load() > 0 })
 }
 
+// TestHumanInputSentAtOnce: text and Enter so close that no reading of
+// the screen shows the text in the box take the thread over once the
+// agent starts the turn they sent; text sent to a box that starts none
+// doesn't.
+func TestHumanInputSentAtOnce(t *testing.T) {
+	defer func(w time.Duration) { boxWatchWait = w }(boxWatchWait)
+	boxWatchWait = time.Second
+	s := startBoxAgent(t, "try: fix the tests")
+	var took atomic.Int32
+	count := func() { took.Add(1) }
+	s.HumanInput([]byte("y\r"), count)
+	never(t, boxWatchWait/2, "a takeover before the turn", func() bool { return took.Load() > 0 })
+	if _, err := s.Hook("UserPromptSubmit", map[string]any{"prompt": "y"}); err != nil {
+		t.Fatal(err)
+	}
+	testwait.Eventually(t, "a takeover", func() bool { return took.Load() > 0 })
+	if _, err := s.Hook("Stop", map[string]any{}); err != nil {
+		t.Fatal(err)
+	}
+	testwait.Eventually(t, "idle", func() bool { st, _ := s.AgentState(); return st.State == "idle" })
+
+	took.Store(0)
+	s.HumanInput([]byte("?"), count)
+	s.HumanInput([]byte("\r"), count)
+	never(t, boxWatchWait+time.Second, "a takeover", func() bool { return took.Load() > 0 })
+}
+
 // TestHumanInputNoBox: a program whose box tm doesn't read takes a
 // person's text over at once, and no other key.
 func TestHumanInputNoBox(t *testing.T) {
