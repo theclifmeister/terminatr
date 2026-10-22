@@ -629,7 +629,10 @@ func TestWithLanding(t *testing.T) {
 	}
 }
 
-func TestAccessMergeCommands(t *testing.T) {
+// TestAccessCoordinatorCommands: the coordinator's allow rules follow
+// each setting that authorizes its commands, per project; the read-only
+// ones are always there; threads get none.
+func TestAccessCoordinatorCommands(t *testing.T) {
 	testPaths(t)
 	p := newWatchProject(t)
 	s := &Server{opts: Options{Paths: client.Paths{Home: os.Getenv("TERMINATR_HOME")}}}
@@ -640,29 +643,44 @@ func TestAccessMergeCommands(t *testing.T) {
 		}
 		return a.Commands
 	}
-	if got := cmds(proto.RoleCoordinator); got != nil {
-		t.Errorf("default: coordinator commands %q", got)
-	}
-	want := []string{"tm thread merge"}
-	for _, body := range []string{
-		"[projects." + p.Slug + "]\ncoordinator_merges = true\n",
-		"[defaults]\ncoordinator_merges = true\n",
+	readOnly := []string{"tm context", "tm inbox list", "tm task list", "tm task show", "tm thread list", "tm thread show", "tm thread read", "tm library list", "tm memory find", "tm memory check"}
+	with := func(c ...string) []string { return append(slices.Clone(readOnly), c...) }
+	own := "[projects." + p.Slug + "]\n"
+	for _, c := range []struct {
+		body string
+		want []string
+	}{
+		// coordinator_approves is on by default.
+		{"", with("tm thread approve")},
+		{own + "coordinator_approves = false\n", readOnly},
+		{"[defaults]\ncoordinator_approves = false\n", readOnly},
+		{"[defaults]\ncoordinator_approves = false\n" + own + "coordinator_approves = true\n", with("tm thread approve")},
+		{own + "start_threads = \"auto\"\ncoordinator_approves = false\n", with("tm thread start", "tm task delegate")},
+		{"[defaults]\nstart_threads = \"auto\"\n" + own + "start_threads = \"propose\"\n", with("tm thread approve")},
+		{own + "coordinator_merges = true\n", with("tm thread approve", "tm thread merge")},
+		{"[defaults]\ncoordinator_merges = true\n", with("tm thread approve", "tm thread merge")},
+		{own + "coordinator_merges = true\nmerge = \"thread\"\n", with("tm thread approve")},
+		{"[defaults]\ncoordinator_merges = true\n" + own + "coordinator_merges = false\n", with("tm thread approve")},
+		{own + "start_threads = \"auto\"\ncoordinator_merges = true\n", with("tm thread start", "tm task delegate", "tm thread approve", "tm thread merge")},
+		// Neither the user's word nor the human's commands, whatever is on.
+		{own + "complete_tasks = \"merged\"\ncoordinator_access = true\ncoordinator_approves = false\n", readOnly},
 	} {
-		writeConfig(t, body)
-		if got := cmds(proto.RoleCoordinator); !slices.Equal(got, want) {
-			t.Errorf("%q: coordinator commands %q, want %q", body, got, want)
+		writeConfig(t, c.body)
+		if got := cmds(proto.RoleCoordinator); !slices.Equal(got, c.want) {
+			t.Errorf("%q: coordinator commands %q, want %q", c.body, got, c.want)
 		}
 		if got := cmds(proto.RoleThread); got != nil {
-			t.Errorf("%q: thread commands %q", body, got)
+			t.Errorf("%q: thread commands %q", c.body, got)
 		}
 	}
-	writeConfig(t, "[projects."+p.Slug+"]\ncoordinator_merges = true\nmerge = \"thread\"\n")
-	if got := cmds(proto.RoleCoordinator); got != nil {
-		t.Errorf("merge = thread: coordinator commands %q", got)
-	}
-	writeConfig(t, "[defaults]\ncoordinator_merges = true\n[projects."+p.Slug+"]\ncoordinator_merges = false\n")
-	if got := cmds(proto.RoleCoordinator); got != nil {
-		t.Errorf("project off: coordinator commands %q", got)
+	for _, r := range coordinatorRules {
+		for _, c := range r.commands {
+			for _, human := range []string{"tm access", "tm mod", "tm thread resolve", "tm library rm", "tm task status", "tm thread answer", "tm memory rm"} {
+				if strings.HasPrefix(c, human) {
+					t.Errorf("%q allowed: it needs the user's word or is the human's", c)
+				}
+			}
+		}
 	}
 }
 
