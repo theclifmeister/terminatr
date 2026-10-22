@@ -27,16 +27,30 @@ import (
 // files are in its tarball).
 
 // LibFile is one file of a thread's library. It never carries a path:
-// the thread and the name say where it is.
+// the thread and the name say where it is. A file a linked project sent
+// (docs/SPEC.md §16.13) has no thread: Peer is that project and Message
+// the message it came with (link.LibraryFiles).
 type LibFile struct {
 	Thread string `json:"thread"`
 	Task   string `json:"task,omitempty"`
 	Title  string `json:"title"`
-	// State is the thread's: running, stopped, resolved or archived.
-	State string    `json:"state"`
-	Name  string    `json:"name"`
-	Size  int64     `json:"size"`
-	Time  time.Time `json:"time"`
+	// State is the thread's: running, stopped, resolved or archived;
+	// received for a linked project's file.
+	State   string    `json:"state"`
+	Name    string    `json:"name"`
+	Size    int64     `json:"size"`
+	Time    time.Time `json:"time"`
+	Peer    string    `json:"peer,omitempty"`
+	Message string    `json:"message,omitempty"`
+}
+
+// Group is the Library tab's group of f: its thread, or the linked
+// project it came from.
+func (f LibFile) Group() string {
+	if f.Peer != "" {
+		return "@" + f.Peer
+	}
+	return f.Thread
 }
 
 // Library lists every file in the library of every thread of p, newest

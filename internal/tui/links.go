@@ -232,6 +232,11 @@ func (v *linksView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 			break
 		}
 		return v.request(m, items[v.sel])
+	case "F":
+		if v.sel >= len(items) || m.busy {
+			break
+		}
+		return v.files(m, items[v.sel])
 	case "A":
 		if v.sel >= len(items) || m.busy {
 			break
@@ -251,6 +256,53 @@ func (v *linksView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 		})
 	}
 	return nil
+}
+
+// nextFiles is the files setting after cur: ask, auto, off, ask.
+func nextFiles(cur string) string {
+	i := slices.Index(config.LinkFiles, cur)
+	return config.LinkFiles[(i+1)%len(config.LinkFiles)]
+}
+
+// files steps what this side's link to it does with files: ask, auto,
+// off (§16.13). Here the pair writer sets both sides at once. Raising it
+// to auto asks first; lowering it saves at once.
+func (v *linksView) files(m *dash, it linkItem) tea.Cmd {
+	r := v.entry(m, it.key)
+	if !r.HasMine {
+		m.msg = "link " + it.key + " first (enter)"
+		return nil
+	}
+	next := nextFiles(r.Mine.FilesMode())
+	src, slug, other := m.src, v.slug, it.key
+	set := func() tea.Cmd {
+		return m.act(func() actionMsg {
+			if err := src.SetLinkFiles(slug, other, next); err != nil {
+				return actionMsg{err: settingsErr(err)}
+			}
+			return actionMsg{msg: slug + " ⇄ " + other + ": " + filesWords(next)}
+		})
+	}
+	if next != config.FilesAuto {
+		return set()
+	}
+	mb := config.DefaultLinkFileMB
+	if p := m.projectData(slug); p != nil && p.Safety != nil {
+		mb = p.Safety.LinkFileMB
+	}
+	m.confirm("Take files without asking", fmt.Sprintf("Take files from %s without asking? Up to %d MB each land in %s's messages; the coordinator can read them.", other, mb, slug), set)
+	return nil
+}
+
+// filesWords is a files setting in words.
+func filesWords(files string) string {
+	switch files {
+	case config.FilesAuto:
+		return "files taken without asking"
+	case config.FilesOff:
+		return "no files"
+	}
+	return "files ask first"
 }
 
 // request asks the user of the paired server it.alias to link the project back
@@ -339,7 +391,7 @@ func linkAllowWords(l config.Link) string {
 
 func (v *linksView) render(m *dash) string {
 	lines, sel := v.lines(m, m.inner(viewWidth))
-	return m.popup(box{title: "Linked projects · " + v.slug, body: lines, sel: sel, keys: "enter link: off › both › send › receive · A ask first · R ask a paired server to link back · ↑ ↓ move · esc back"})
+	return m.popup(box{title: "Linked projects · " + v.slug, body: lines, sel: sel, keys: "enter link: off › both › send › receive · A ask first · F files: ask › auto › off · R ask a paired server to link back · ↑ ↓ move · esc back"})
 }
 
 // lines are the list's lines in width w, and the selected one's.
@@ -352,6 +404,9 @@ func (v *linksView) lines(m *dash, w int) ([]string, int) {
 		mine, theirs := "—", "—"
 		if r.HasMine {
 			mine = linkAllowWords(r.Mine)
+			if f := r.Mine.FilesMode(); f != config.FilesAsk {
+				mine += ", files " + f
+			}
 		}
 		if r.HasTheirs {
 			theirs = linkAllowWords(r.Theirs)
@@ -404,7 +459,7 @@ func (v *linksView) lines(m *dash, w int) ([]string, int) {
 			i++
 		}
 	}
-	lines = append(lines, "", th().Faint.Render("A link here is set on both sides at once: send here is receive there. With a paired server's project only this side is set, asking first; that server's user sets the other (tm project link there); R asks them to, and the answer shows in the other side's column. Ask first holds each message this coordinator sends on the link until you approve it in the Messages tab."))
+	lines = append(lines, "", th().Faint.Render("A link here is set on both sides at once: send here is receive there. With a paired server's project only this side is set, asking first; that server's user sets the other (tm project link there); R asks them to, and the answer shows in the other side's column. Ask first holds each message this coordinator sends on the link until you approve it in the Messages tab. Files (F) sent with a message wait for your accept in the Messages tab, unless set to auto; off takes and sends none."))
 	return lines, sel
 }
 
@@ -433,6 +488,16 @@ func messagesLines(p ProjectData, sel, w int) ([]string, int, []int) {
 		if r.Queued > 0 {
 			counts += fmt.Sprintf(" · %d queued over the rate", r.Queued)
 		}
+		switch r.FilesWaiting {
+		case 0:
+		case 1:
+			counts += " · 1 file waits for you"
+		default:
+			counts += fmt.Sprintf(" · %d files wait for you", r.FilesWaiting)
+		}
+		if r.FilesActive > 0 {
+			counts += fmt.Sprintf(" · %d on the way", r.FilesActive)
+		}
 		if r.Last != "" {
 			counts += " · last " + r.Last + " " + age(time.Since(r.LastAt))
 		}
@@ -444,7 +509,7 @@ func messagesLines(p ProjectData, sel, w int) ([]string, int, []int) {
 			continue
 		}
 		st := th().Head
-		if r.Held > 0 || r.Paused {
+		if r.Held > 0 || r.Paused || r.FilesWaiting > 0 {
 			st = th().Warn
 		}
 		lines = append(lines, fit(st.Render(text)+th().Faint.Render(counts), w)+reset)
@@ -461,9 +526,11 @@ func messagesLines(p ProjectData, sel, w int) ([]string, int, []int) {
 type convView struct {
 	slug, other string
 	msgs        []*link.Message
-	err         error
-	loaded      time.Time
-	sel         int
+	// files are the transfers of the messages' files, by message.
+	files  map[string]link.Transfer
+	err    error
+	loaded time.Time
+	sel    int
 }
 
 func (m *dash) openConversation(slug, other string) tea.Cmd {
@@ -476,8 +543,48 @@ func (m *dash) openConversation(slug, other string) tea.Cmd {
 
 func (v *convView) load(m *dash) {
 	v.msgs, v.err = m.src.LinkLog(v.slug, v.other)
+	v.files = map[string]link.Transfer{}
+	if ts, err := m.src.LinkFiles(v.slug, v.other); err == nil {
+		for _, t := range ts {
+			v.files[t.Message] = t
+		}
+	}
 	v.loaded = time.Now()
 	v.sel = min(v.sel, max(len(v.msgs)-1, 0))
+}
+
+// fileOf is the transfer of message msg's file; false for none.
+func (v *convView) fileOf(msg *link.Message) (link.Transfer, bool) {
+	if msg == nil || msg.File == "" {
+		return link.Transfer{}, false
+	}
+	t, ok := v.files[msg.ID]
+	return t, ok
+}
+
+// fileWords is a message's file line: its name, size and state, with
+// the pace and time left while it moves, "sha256 ok" once it is here.
+func fileWords(msg *link.Message, t link.Transfer, ok bool) string {
+	s := "▸ " + oneLine(msg.File) + "  " + link.MB(msg.FileSize) + "  "
+	if !ok {
+		return s + "sent with the message"
+	}
+	s += link.FileState(t)
+	switch {
+	case (t.State == link.FileReceiving || t.State == link.FileSending) && t.Rate > 0:
+		left := time.Duration(float64(t.Size-t.Offset) / t.Rate * float64(time.Second)).Round(time.Second)
+		s += fmt.Sprintf(" · %s/s · %s left", link.MB(int64(t.Rate)), clock(left))
+	case t.State == link.FileReceived && !t.Out:
+		s += " · sha256 ok"
+	case t.State == link.FileFailed && t.Code != "":
+		s = "▸ " + oneLine(msg.File) + "  " + link.MB(msg.FileSize) + "  failed: " + t.Code
+	}
+	return s
+}
+
+// clock is a duration as m:ss.
+func clock(d time.Duration) string {
+	return fmt.Sprintf("%d:%02d", int(d.Minutes()), int(d.Seconds())%60)
 }
 
 func (v *convView) row(m *dash) link.Row {
@@ -512,8 +619,16 @@ func (v *convView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	case "up", "down", "pgup", "pgdown":
 		v.sel = moveSel(v.sel, scrollKeys[s], len(v.msgs))
 	case "A", "X":
+		if t, ok := v.fileOf(cur); ok && !t.Out && t.State == link.FileOffered && !(cur.Out && cur.State == link.StateHeld) {
+			if s == "A" {
+				return act("accept-file", t.ID, "", "accepted "+t.ID)
+			}
+			id := t.ID
+			m.confirm("Decline a file", "Decline "+oneLine(t.Name)+" ("+link.MB(t.Size)+") from "+v.other+"? "+v.other+" hears of it.", func() tea.Cmd { return act("decline-file", id, "", "declined "+id) })
+			return nil
+		}
 		if cur == nil || !cur.Out || cur.State != link.StateHeld {
-			m.msg = "only a message that waits for your OK can be approved or dropped"
+			m.msg = "only a message that waits for your OK, or a file offered to you, can be answered"
 			return nil
 		}
 		if s == "A" {
@@ -521,6 +636,18 @@ func (v *convView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 		}
 		id := cur.ID
 		m.confirm("Drop a message", "Drop "+id+" to "+v.other+"? It is never sent.", func() tea.Cmd { return act("drop", id, "", "dropped "+id) })
+	case "C":
+		t, ok := v.fileOf(cur)
+		if !ok || !t.Open() {
+			m.msg = "only a file still on its way can be cancelled"
+			return nil
+		}
+		id := t.ID
+		m.confirm("Cancel a file", "Cancel "+oneLine(t.Name)+" ("+link.MB(t.Size)+")? "+v.other+" hears of it; nothing partial is kept.", func() tea.Cmd { return act("cancel-file", id, "", "cancelled "+id) })
+	case "enter":
+		if t, ok := v.fileOf(cur); ok && !t.Out && t.State == link.FileReceived {
+			return m.openLinkFile(v.slug, v.other, cur)
+		}
 	case "R":
 		if !v.row(m).Paused {
 			m.msg = "the link isn't paused"
@@ -620,6 +747,14 @@ func (v *convView) render(m *dash) string {
 				lines = append(lines, indent+l)
 			}
 		}
+		if msg.File != "" {
+			t, ok := v.fileOf(msg)
+			st := th().Faint
+			if ok && !t.Out && t.State == link.FileOffered {
+				st = th().Warn
+			}
+			lines = append(lines, st.Render(fit(indent+fileWords(msg, t, ok), w)))
+		}
 		if i == v.sel {
 			sel = len(lines) - 1
 		}
@@ -628,8 +763,23 @@ func (v *convView) render(m *dash) string {
 		lines = append(lines, th().Faint.Render("no messages yet"))
 	}
 	keys := []string{}
-	if v.sel < len(v.msgs) && v.msgs[v.sel].Out && v.msgs[v.sel].State == link.StateHeld {
+	var cur *link.Message
+	if v.sel < len(v.msgs) {
+		cur = v.msgs[v.sel]
+	}
+	if cur != nil && cur.Out && cur.State == link.StateHeld {
 		keys = append(keys, "A approve", "X drop")
+	}
+	if t, ok := v.fileOf(cur); ok {
+		switch {
+		case !t.Out && t.State == link.FileOffered:
+			keys = append(keys, "A accept", "X decline")
+		case !t.Out && t.State == link.FileReceived:
+			keys = append(keys, "enter read")
+		}
+		if t.Open() {
+			keys = append(keys, "C cancel")
+		}
 	}
 	if r.Paused {
 		keys = append(keys, "R resume")

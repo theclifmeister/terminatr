@@ -393,7 +393,7 @@ func needsRows(d Data, project string) []row {
 		}
 		if p.LinkWaits > 0 {
 			needs = append(needs, row{key: "nl:" + p.Slug, project: p.Slug, links: p.LinkWaits,
-				mark: markNeeds, who: p.Slug, what: linkWaitWords(p.LinkWaits-p.LinkAsks, p.LinkAsks), state: "blocked",
+				mark: markNeeds, who: p.Slug, what: linkWaitWords(p.LinkWaits-p.LinkAsks-p.LinkFiles, p.LinkAsks, p.LinkFiles), state: "blocked",
 				rest: "enter opens Messages", pct: -1})
 		}
 		for _, t := range p.NeedsYou {
@@ -733,8 +733,8 @@ func joinSp(parts ...string) string {
 }
 
 // linkWaitWords is a NEEDS YOU row's words for n held messages and
-// paused links and asks link requests.
-func linkWaitWords(n, asks int) string {
+// paused links, asks link requests and files offered files.
+func linkWaitWords(n, asks, files int) string {
 	var parts []string
 	switch {
 	case n == 1:
@@ -748,14 +748,21 @@ func linkWaitWords(n, asks int) string {
 	case asks > 1:
 		parts = append(parts, fmt.Sprintf("%d link requests wait", asks))
 	}
+	switch {
+	case files == 1:
+		parts = append(parts, "1 file waits")
+	case files > 1:
+		parts = append(parts, fmt.Sprintf("%d files wait", files))
+	}
 	return strings.Join(parts, " · ")
 }
 
-// countLinkWaits sets LinkWaits and LinkAsks from the links.
+// countLinkWaits sets LinkWaits, LinkAsks and LinkFiles from the links.
 func (p *ProjectData) countLinkWaits() {
-	p.LinkWaits, p.LinkAsks = 0, 0
+	p.LinkWaits, p.LinkAsks, p.LinkFiles = 0, 0, 0
 	for _, r := range p.Links {
-		p.LinkWaits += r.Held
+		p.LinkWaits += r.Held + r.FilesWaiting
+		p.LinkFiles += r.FilesWaiting
 		if r.Paused {
 			p.LinkWaits++
 		}

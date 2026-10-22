@@ -1328,7 +1328,7 @@ func TestLinkLimitsSetting(t *testing.T) {
 		t.Fatal("no Link limits row")
 	}
 	pv.settings.sel = i
-	if out := screen(m); !strings.Contains(out, "3 at once · 10 an hour · 8 KB · all projects") {
+	if out := screen(m); !strings.Contains(out, "3 at once · 10 an hour · 8 KB · files 25 MB · all projects") {
 		t.Fatalf("row:\n%s", out)
 	}
 	keyPress(m, "enter")

@@ -122,7 +122,7 @@ func TestBadSettings(t *testing.T) {
 		"[defaults]\nlink_burst = 0\n":                     "defaults.link_burst must be 1 to 20",
 		"[projects.demo]\nlink_per_hour = 500\n":           "link_per_hour must be 1 to 120",
 		"[projects.demo]\nlink_max_kb = 65\n":              "link_max_kb must be 1 to 64",
-		"[projects.demo]\nlink_file_mb = 201\n":             "link_file_mb must be 1 to 200",
+		"[projects.demo]\nlink_file_mb = 201\n":            "link_file_mb must be 1 to 200",
 		"[defaults]\nlink_file_kbps = 32\n":                "defaults.link_file_kbps must be 64 to 2048",
 		"[projects.demo]\ncomplete_tasks = \"later\"\n":    "complete_tasks must be",
 		"[defaults]\nyoloo = true\n":                       "unknown setting defaults.yoloo",
