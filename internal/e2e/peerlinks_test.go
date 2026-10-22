@@ -3,7 +3,10 @@ package e2e
 import (
 	"crypto/ed25519"
 	"encoding/json"
+	"fmt"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -138,5 +141,79 @@ func TestPeerLinks(t *testing.T) {
 	// Files don't cross.
 	if r := studio.CLI("link", "send", "mini/api", "x", "--attach", "t-0001/a.md", "--project", "acme"); r.Code != 1 || !strings.Contains(r.Stderr, "another server") {
 		t.Fatalf("attachment: %d %s", r.Code, r.Stderr)
+	}
+}
+
+// setDefaults appends a [defaults] table to env's config.toml, as the
+// user would by hand.
+func setDefaults(t *testing.T, env *Env, body string) {
+	t.Helper()
+	file := filepath.Join(env.Home, "config.toml")
+	old, _ := os.ReadFile(file)
+	if strings.Contains(string(old), "[defaults]") {
+		t.Fatalf("config.toml has [defaults] already:\n%s", old)
+	}
+	if err := os.WriteFile(file, append(old, []byte("\n[defaults]\n"+body)...), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestPeerLinkBurst (T684): a reply in parts, sent at once, over the
+// rate on both sides. studio keeps 2 at once and queues the rest, which
+// go in order as its bucket refills; mini takes 1 at once and answers
+// retry for the next, which studio's outbox sends again when told. Every
+// part arrives, in order; none is refused.
+func TestPeerLinkBurst(t *testing.T) {
+	studio, mini := New(t), New(t)
+	rs := relay.New(relay.DefaultConfig())
+	hs := httptest.NewServer(rs)
+	t.Cleanup(func() { rs.Shutdown(); hs.Close() })
+	pairDirect(t, studio, mini, "studio", "mini", "ws"+strings.TrimPrefix(hs.URL, "http"))
+	studio.MustCLI("project", "new", "acme")
+	mini.MustCLI("project", "new", "api")
+	studio.MustCLI("project", "link", "acme", "mini/api", "both", "--no-ask")
+	mini.MustCLI("project", "link", "api", "studio/acme")
+	// 120 an hour: a token each 30 s.
+	setDefaults(t, studio, "link_burst = 2\nlink_per_hour = 120\n")
+	setDefaults(t, mini, "link_burst = 1\nlink_per_hour = 120\n")
+	studio.MustCLI("server", "start")
+	mini.MustCLI("server", "start")
+	waitPeerState(t, studio, "mini", "up", "")
+
+	var ids []string
+	for i := 1; i <= 4; i++ {
+		out := studio.MustCLI("link", "send", "mini/api", fmt.Sprintf("part %d of 4", i), "--project", "acme")
+		m := regexp.MustCompile(`^queued (M-[0-9A-F]{4}-\d+) for mini/api \(`).FindStringSubmatch(out)
+		if m == nil {
+			t.Fatalf("part %d: %s", i, out)
+		}
+		if over := strings.Contains(out, "over the link's rate, it goes in order about "); over != (i > 2) {
+			t.Fatalf("part %d over the rate %v: %s", i, over, out)
+		}
+		ids = append(ids, m[1])
+	}
+	if list := studio.MustCLI("link", "list", "--project", "acme"); !strings.Contains(list, "2 queued over the rate") {
+		t.Fatalf("link list:\n%s", list)
+	}
+	if log := studio.MustCLI("link", "log", "mini/api", "--project", "acme"); !strings.Contains(log, "queued over the rate, goes about ") {
+		t.Fatalf("log:\n%s", log)
+	}
+	for _, id := range ids {
+		if !Poll(150*time.Second, func() bool { return linkState(studio, "acme", "mini/api", id) == "sent" }) {
+			t.Fatalf("%s never sent: %s\n%s", id, linkState(studio, "acme", "mini/api", id), studio.MustCLI("link", "log", "mini/api", "--project", "acme"))
+		}
+	}
+	var got []struct{ ID, Text string }
+	json.Unmarshal([]byte(mini.MustCLI("link", "log", "studio/acme", "--project", "api", "--json")), &got)
+	if len(got) != 4 {
+		t.Fatalf("api has %d: %+v", len(got), got)
+	}
+	for i, m := range got {
+		if m.ID != ids[i] || m.Text != fmt.Sprintf("part %d of 4", i+1) {
+			t.Fatalf("api's %d: %+v", i, m)
+		}
+	}
+	if items := studio.MustCLI("inbox", "list", "--project", "acme"); strings.Contains(items, "link-undelivered") {
+		t.Fatalf("acme's inbox:\n%s", items)
 	}
 }
