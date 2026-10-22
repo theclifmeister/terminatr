@@ -125,7 +125,7 @@ type Access struct {
 	// inside a NoRead folder.
 	OwnTemp string
 	// Commands are command prefixes that run without a permission prompt,
-	// e.g. the coordinator's PR merge command, opt-in (§11.2).
+	// the coordinator's tm commands its settings authorize (§9).
 	Commands []string
 }
 

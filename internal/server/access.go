@@ -217,7 +217,11 @@ func (s *Server) fileRules(in accessInput, a agent.Access, lc launchConfig) []pr
 		out = append(out, r)
 	}
 	for _, c := range a.Commands {
-		out = append(out, proto.AccessRule{Where: proto.AccessPrompts, Kind: proto.AccessCommand, Value: c, Source: settingSource(lc, in.slug, "coordinator_merges"), Note: "coordinator_merges"})
+		r := proto.AccessRule{Where: proto.AccessPrompts, Kind: proto.AccessCommand, Value: c, Source: proto.AccessFromTM, Note: "read-only"}
+		if key := commandSetting(c); key != "" {
+			r.Source, r.Note = settingSource(lc, in.slug, key), key
+		}
+		out = append(out, r)
 	}
 	if s.opts.Paths.Socket != "" {
 		out = append(out, proto.AccessRule{Where: proto.AccessInside, Kind: proto.AccessSocket, Value: s.opts.Paths.Socket, Source: proto.AccessFromTM, Note: "tm's socket; never the human socket"})

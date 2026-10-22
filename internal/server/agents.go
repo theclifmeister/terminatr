@@ -316,21 +316,57 @@ func mainState(common string) (dirs, files []string) {
 	return dirs, files
 }
 
-// mergeCommands are the commands the opt-in coordinator_merges setting
-// allows the coordinator without a prompt: tm's own merge, which checks
-// CI, mergeability and the project's merge setting itself. The raw
-// host commands (gh pr merge, az repos pr update) stay out: Claude
-// Code's auto mode blocks a merge it can't match to a rule exactly.
-var mergeCommands = []string{"tm thread merge"}
+// coordinatorRules are the tm commands a coordinator runs without a
+// prompt (docs/SPEC.md §9), each with the setting that authorizes it
+// ("" for always) and whether the project's settings do: tm still checks
+// each call itself. The merge is tm's own (CI, mergeability and the
+// merge setting checked), never the raw host commands (gh pr merge, az
+// repos pr update), which Claude Code's auto mode blocks unless they
+// match a rule exactly. Commands only the user's word allows (tm task
+// status … done --approved-by-user, tm thread resolve --discard, tm
+// library rm, tm thread answer) and the human's (tm mod, tm access
+// reset and set but for local-ports) are never here: a prefix rule
+// would let them through unseen. tm thread start's own flags of the
+// user's word (--approved-by-user, --over-cap) go through with it under
+// start_threads = auto, as tm takes them on the coordinator's word
+// either way; so do tm access writes' --all and another project's name,
+// which tm and the guard (accessOpen) refuse a coordinator themselves.
+var coordinatorRules = []struct {
+	commands []string
+	setting  string
+	on       func(config.Safety) bool
+}{
+	// Read-only: they change nothing.
+	{[]string{"tm context", "tm inbox list", "tm task list", "tm task show", "tm thread list", "tm thread show", "tm thread read", "tm library list", "tm memory find", "tm memory check", "tm access show", "tm access explain"}, "", nil},
+	// Its own project's rules within the level (accessedit.go accessFor).
+	{[]string{"tm access add", "tm access rm", "tm access edit", "tm access drop", "tm access undrop", "tm access set local-ports"}, "coordinator_access", func(s config.Safety) bool { return s.CoordinatorAccess }},
+	{[]string{"tm thread start", "tm task delegate"}, "start_threads", func(s config.Safety) bool { return s.StartThreads == config.StartAuto }},
+	{[]string{"tm thread approve"}, "coordinator_approves", func(s config.Safety) bool { return s.CoordinatorApproves }},
+	{[]string{"tm thread merge"}, "coordinator_merges", func(s config.Safety) bool { return s.CoordinatorMerges && s.Merge == config.MergeCoordinator }},
+}
 
-// coordinatorCommands is the commands a coordinator may run unprompted:
-// the merge commands when the project opted in and the coordinator is
-// the one who merges. Threads never get them.
+// coordinatorCommands is the commands a coordinator may run unprompted
+// under the project's settings set (coordinatorRules). Threads never get
+// them.
 func coordinatorCommands(set config.Safety) []string {
-	if set.CoordinatorMerges && set.Merge == config.MergeCoordinator {
-		return mergeCommands
+	var out []string
+	for _, r := range coordinatorRules {
+		if r.on == nil || r.on(set) {
+			out = append(out, r.commands...)
+		}
 	}
-	return nil
+	return out
+}
+
+// commandSetting is the setting that authorizes coordinator command c,
+// "" for one always allowed.
+func commandSetting(c string) string {
+	for _, r := range coordinatorRules {
+		if slices.Contains(r.commands, c) {
+			return r.setting
+		}
+	}
+	return ""
 }
 
 // contextFor renders the context a role gets back after a clear or a
