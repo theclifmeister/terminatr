@@ -6,6 +6,9 @@
 // characters (bidi overrides and isolates, zero-width characters, tag
 // characters, the soft hyphen), the line and paragraph separators, and
 // the replacement character that stands for bytes that weren't UTF-8.
+//
+// Text tm prints but didn't write goes through here; don't add another
+// sanitizer beside it.
 package textsafe
 
 import (

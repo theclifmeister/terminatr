@@ -6,6 +6,12 @@
 // list the temp roots; the Windows port adds a retry on sharing
 // violations to rename, an owner check by SID, and a role file that is a
 // small CLAUDE.md holding "@AGENTS.md" instead of a symlink.
+//
+// A file a thread can write is opened with OpenInNoBlock (a FIFO there
+// would block the open) and checked to be a regular file after it is
+// open; os.Root refuses an absolute symlink even when it points inside
+// the root. Code that changes the process umask must keep the owner's
+// bits: the umask is shared by all goroutines.
 package fsx
 
 import (

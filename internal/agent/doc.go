@@ -10,4 +10,9 @@
 // working Agent (FromManifest). Go code is only needed for what data cannot
 // express, such as a live protocol client; such agents wrap the manifest
 // agent and register themselves. See docs/SPEC.md §8.
+//
+// Permission-rule globs built from paths (siblingGlobs): Claude's sandbox
+// on macOS matches paths case-insensitively and a glob takes no escapes,
+// so a path with a glob character gets no pattern (GlobSafe) and a
+// letter is left out of a bracket expression in both cases.
 package agent

@@ -9,6 +9,12 @@
 // from the TUI's settings popups, on the human's keypress (write.go). It
 // lives outside every project folder, so a coordinator editing
 // PROJECT.md can't touch it, and coordinators get an Edit deny rule on it.
+//
+// Per-project tables are written with header lines ([projects.<slug>],
+// [projects.<slug>.<sub>]), not dotted keys: the line editor in write.go
+// changes only a setting in that form and leaves a dotted key or inline
+// table alone. settings.go declares every safety setting in one table
+// (settingRows); a new setting is one row there.
 package config
 
 import (

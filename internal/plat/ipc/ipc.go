@@ -7,6 +7,11 @@
 // socket path, never a named pipe. On Windows, Listen restricts the
 // socket file with a DACL rather than a mode, and PeerOf gets the pid
 // from SIO_AF_UNIX_GETPEERPID and compares the token's user SID.
+//
+// A socket path must fit sun_path (MaxPath, Fits): 104 bytes on macOS.
+// The umask is the whole process's, shared by all goroutines: Listen
+// changes it only under umaskMu and keeps the owner's bits, or a folder
+// made meanwhile loses its x.
 package ipc
 
 import (
