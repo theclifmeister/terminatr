@@ -9,6 +9,13 @@
 // tm knows, checks the worktree's .git names them, and Run then passes
 // them to git explicitly, with nothing in the folder able to make git
 // run a program.
+//
+// Rules for callers: git runs only through this package (TestOneRunner
+// enforces it). In a thread's worktree, call Pin(repo, dir) and pass the
+// result as Opts.Tree, never run git with the folder as its only anchor.
+// A pinned run in a linked worktree gets a private GIT_DIR that tm
+// writes (privateGitDir), so nothing the agent wrote in the worktree's
+// own git dir is read.
 package gitx
 
 import (

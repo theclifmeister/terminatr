@@ -15,6 +15,26 @@
 // commands (powershell.go) have no sandbox behind them on Windows, so
 // what names its command by an expression, or evaluates a string, is put
 // to the human (or auto mode's classifier) instead.
+//
+// Rules for changing the parser and the judge:
+//   - A group is walked as a line of its own.
+//   - A loop is split at ; into its parts; a check that depends on the
+//     order of the parts uses the loop's own parts (loops, from loopCds), not the flat list.
+//   - Judging state is rolled back before an inner re-read, so a
+//     re-read doesn't see the first read's effects.
+//   - A trap's own action is skipped when its effects are followed
+//     (Rules.inTrap): the shell runs no trap inside a trap's action.
+//   - Command position is decided by cmdPos, not by looking at the
+//     previous word.
+//   - The elements of an array assignment are read as commands.
+//   - Every re-read of text goes through Rules.cmds, so it is read with
+//     the judge's budget at its depth.
+//
+// The floor paths the server hands in are built there with withLanding
+// (internal/server): as written, plus the real path of the nearest
+// existing folder with the rest joined on, never realPath of the parent
+// alone. A PreToolUse hook that has no verdict never answers with
+// empty output: agent.FailClosed gives the refusal.
 package guard
 
 import (
