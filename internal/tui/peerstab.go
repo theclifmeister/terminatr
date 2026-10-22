@@ -440,7 +440,7 @@ func (pt *peersTab) toggle(m *dash, slug string) tea.Cmd {
 // current one, and sets it as tm peer relay does.
 func (pt *peersTab) relay(m *dash, e PeerEntry) {
 	alias := e.Alias
-	m.push(&inputView{title: "Relay for " + alias, text: e.Relay, cancel: "relay unchanged for " + alias,
+	m.push(&inputView{title: "Relay for " + alias, lineEdit: newLine(e.Relay), cancel: "relay unchanged for " + alias,
 		label: "The relay " + alias + "'s link goes through (a host name, or wss://…; a relay without a domain with its #sha256= pin). Set the same on " + alias + " for this server.",
 		submit: func(s string) tea.Cmd {
 			src := m.src

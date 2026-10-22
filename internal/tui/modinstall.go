@@ -25,10 +25,10 @@ import (
 // installPrompt asks for the mod to install, starting from text.
 func (m *dash) installPrompt(text string) {
 	m.push(&inputView{title: "Install a mod",
-		label:  "A folder, or a git URL: <git-url>[//<subfolder>][@<tag>], or a GitHub /tree/<ref>/<folder> link. It installs off; you see what it may do first.",
-		text:   text,
-		cancel: "nothing installed",
-		submit: m.installMod})
+		label:    "A folder, or a git URL: <git-url>[//<subfolder>][@<tag>], or a GitHub /tree/<ref>/<folder> link. It installs off; you see what it may do first.",
+		lineEdit: newLine(text),
+		cancel:   "nothing installed",
+		submit:   m.installMod})
 }
 
 // installMod fetches the mod at arg in the background, fetchView over

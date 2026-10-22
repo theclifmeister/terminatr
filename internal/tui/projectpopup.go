@@ -315,10 +315,11 @@ func (pv *projectView) repoKey(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	slug, repos := pv.slug, pv.data(m).Repos
 	switch k.String() {
 	case "+":
-		m.prompt("Add a repository", "Its directory:", m.cwd, func(path string) tea.Cmd {
-			path = absPath(path, m.cwd)
+		// Empty, the current folder shows faint, and enter adds it.
+		m.push(&inputView{title: "Add a repository", label: "Its directory (empty is the current folder):", placeholder: m.cwd, keep: true, submit: func(path string) tea.Cmd {
+			path = absPath(cmp.Or(strings.TrimSpace(path), m.cwd), m.cwd)
 			return m.setRepo(slug, path, true, "added "+path)
-		})
+		}})
 	case "X":
 		i := pv.sel[tabOverview]
 		if i >= len(repos) {

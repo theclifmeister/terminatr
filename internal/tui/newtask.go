@@ -59,7 +59,7 @@ func (m *dash) newTaskTitle(slug string, tpl *mod.Template) {
 		title += " · " + tpl.Name
 		label = "Its title, for " + oneLine(tpl.Title) + " (with its notes and steps):"
 	}
-	m.promptNo(title, label, "no task added", 0, func(t string) tea.Cmd {
+	m.promptNo(title, label, "", "no task added", 0, func(t string) tea.Cmd {
 		src := m.src
 		return m.act(func() actionMsg {
 			ref, err := src.AddTask(slug, t, tpl)

@@ -389,18 +389,31 @@ func TestProjectSettingsNumbers(t *testing.T) {
 	}
 }
 
-// TestProjectRepos: + adds a repository from a typed path, x removes the
-// selected one after a y.
+// TestProjectRepos: + opens empty, the current folder faint, and adds a
+// repository from a typed path, or the current folder from an empty one;
+// x removes the selected one after a y.
 func TestProjectRepos(t *testing.T) {
 	src, m := popupData(t)
 	dir := t.TempDir()
+	m.cwd = t.TempDir()
 	keyPress(m, "A")
 	keyPress(m, "+")
 	in, ok := m.top().(*inputView)
-	if !ok {
-		t.Fatalf("+ opened %T", m.top())
+	if !ok || in.value() != "" || in.placeholder != m.cwd {
+		t.Fatalf("+ opened %T, not empty with the current folder faint", m.top())
 	}
-	in.text = dir
+	if !strings.Contains(screen(m), "│ █"+m.cwd[:20]) {
+		t.Fatalf("no current folder shown:\n%s", screen(m))
+	}
+	act(t, m, src, "enter")
+	cwd, _ := filepath.EvalSymlinks(m.cwd)
+	if len(src.repos) != 1 || src.repos[0] != "+"+cwd {
+		t.Fatalf("empty enter added %v, want the current folder %s", src.repos, cwd)
+	}
+	src.repos = nil
+	keyPress(m, "+")
+	in = m.top().(*inputView)
+	in.lineEdit = newLine(dir)
 	act(t, m, src, "enter")
 	real, _ := filepath.EvalSymlinks(dir)
 	if len(src.repos) != 1 || src.repos[0] != "+"+real {
