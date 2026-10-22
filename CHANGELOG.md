@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.46.0](https://github.com/theclifmeister/terminatr/compare/v0.45.0...v0.46.0) (2026-10-22)
+
+
+### Features
+
+* **server:** coordinator allow rules for tm commands its settings authorize (T671) ([#729](https://github.com/theclifmeister/terminatr/issues/729)) ([d7106f4](https://github.com/theclifmeister/terminatr/commit/d7106f4dfc62f6cf51ea722e6f43e2de35d42fb7))
+
+
+### Bug Fixes
+
+* **coordinator:** run tm commands bare so allow rules match (T670) ([#728](https://github.com/theclifmeister/terminatr/issues/728)) ([5ced378](https://github.com/theclifmeister/terminatr/commit/5ced37868b26a270f8fc3dda26574521df927d29))
+* **e2e:** never leave test servers running after a killed run (T667) ([#726](https://github.com/theclifmeister/terminatr/issues/726)) ([6e4d1c8](https://github.com/theclifmeister/terminatr/commit/6e4d1c8775d380b0a1d0fde295a2324b92dfd07d))
+* **guard:** mapfile -C, enable -f, cdable_vars, autocd and +=/subscripted shell env ([#723](https://github.com/theclifmeister/terminatr/issues/723)) ([93b662f](https://github.com/theclifmeister/terminatr/commit/93b662f8f34e351fc536ff51069bb51bbeb6a3d7))
+* **session:** separate consecutive --now steers with a blank line ([#725](https://github.com/theclifmeister/terminatr/issues/725)) ([da14646](https://github.com/theclifmeister/terminatr/commit/da14646f0d9e26d2d2fcaa1294898935399af92b))
+* **ticker:** remind of inbox items left open, re-nudge after a clear (T669) ([#727](https://github.com/theclifmeister/terminatr/issues/727)) ([90ff0fd](https://github.com/theclifmeister/terminatr/commit/90ff0fdabd828d750967956853c04a8357529df9))
+
 ## [0.45.0](https://github.com/theclifmeister/terminatr/compare/v0.44.0...v0.45.0) (2026-10-21)
 
 
