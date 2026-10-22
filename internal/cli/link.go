@@ -415,7 +415,7 @@ func linkAllowWords(allow string, ask bool) string {
 // over the link's rate, or queued for a paired server.
 func sentWords(m *link.Message) string {
 	if !m.Due.IsZero() {
-		return fmt.Sprintf("queued %s for %s (%s%s): over the link's rate, it goes in order %s; nothing more to do, tm link log %s shows it sent", m.ID, m.Peer, link.KB(m.Bytes), reWords(m.Re), link.DueWords(m), m.Peer)
+		return fmt.Sprintf("queued %s%s for %s (%s%s): over the link's rate, it goes in order %s; nothing more to do, tm link log %s shows it sent%s", m.ID, withFile(m), m.Peer, link.KB(m.Bytes), reWords(m.Re), link.DueWords(m), m.Peer, fileNext(m))
 	}
 	if m.State == link.StateQueued {
 		return fmt.Sprintf("queued %s%s for %s (%s%s): it goes when the link to that server is up; tm link log %s shows sent, then read%s", m.ID, withFile(m), m.Peer, link.KB(m.Bytes), reWords(m.Re), m.Peer, fileNext(m))
