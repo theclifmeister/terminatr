@@ -165,9 +165,24 @@ func startSteerBox(t *testing.T, a agent.Agent) (*Session, string) {
 // writes it.
 func startSteerBoxWith(t *testing.T, a agent.Agent, pointer string) (*Session, string) {
 	t.Helper()
+	return startKeysBox(t, a, `printf '\033[2J\033[H\n\342\224\200\342\224\200\342\224\200\n`+pointer+`\302\240%s\n\342\224\200\342\224\200\342\224\200\n' "$1"`)
+}
+
+// startHistoryBox is startSteerBox the way Codex takes a steer: the line
+// goes above the box, which stays empty.
+func startHistoryBox(t *testing.T, a agent.Agent) (*Session, string) {
+	t.Helper()
+	return startKeysBox(t, a, `printf '\033[2J\033[H%s\n\342\224\200\342\224\200\342\224\200\n\342\235\257\302\240\n\342\224\200\342\224\200\342\224\200\n' "$1"`)
+}
+
+// startKeysBox runs a program that draws the screen with draw (a shell
+// command given the last line it was sent as $1) and logs the keys it
+// gets to a file it returns.
+func startKeysBox(t *testing.T, a agent.Agent, draw string) (*Session, string) {
+	t.Helper()
 	log := filepath.Join(t.TempDir(), "keys")
 	script := `stty -echo -icanon min 1
-draw() { printf '\033[2J\033[H\n\342\224\200\342\224\200\342\224\200\n` + pointer + `\302\240%s\n\342\224\200\342\224\200\342\224\200\n' "$1"; }
+draw() { ` + draw + `; }
 draw ''
 tee "$KEYS" | while IFS= read -r l; do draw "$l"; done`
 	s, err := Start(Config{
@@ -271,6 +286,54 @@ func TestPromptNowDimPointer(t *testing.T) {
 	testwait.Eventually(t, "b pasted", func() bool { return strings.Contains(keysGot(t, keys), "b") })
 	if st, _ := s.AgentState(); st.Queued != 0 {
 		t.Fatalf("a steered prompt was queued too: %+v", st)
+	}
+}
+
+// TestPromptNowSteersSeparated reproduces T668: Claude sends the steers
+// in its box as one prompt, joined with nothing between them, so a steer
+// pasted after another starts with a blank line.
+func TestPromptNowSteersSeparated(t *testing.T) {
+	s, keys := startSteerBox(t, claudeLike(t))
+	working(t, s, true)
+	if _, _, err := s.PromptNow("steer-a", false); err != nil {
+		t.Fatal(err)
+	}
+	shown(t, s, "steer-a")
+	if via, why, err := s.PromptNow("steer-b", false); err != nil || via != ViaSteered || why != "" {
+		t.Fatalf("steer-b: %q %q %v", via, why, err)
+	}
+	testwait.Eventually(t, "steer-b pasted", func() bool { return strings.Contains(keysGot(t, keys), "steer-b") })
+	if k := keysGot(t, keys); !strings.Contains(k, "\x1b[200~steer-a\x1b[201~") || !strings.Contains(k, "\x1b[200~"+steerSep+"steer-b\x1b[201~") {
+		t.Fatalf("keys: %q", k)
+	}
+}
+
+// TestPromptNowSteersCodex: Codex takes a steer into its history at once,
+// its box empty again, and sends each as a prompt of its own: no
+// separator.
+func TestPromptNowSteersCodex(t *testing.T) {
+	a := claudeLike(t)
+	a.m.Inject.InterruptPaste = agent.InterruptPasteAfter
+	s, keys := startHistoryBox(t, a)
+	working(t, s, true)
+	if _, _, err := s.PromptNow("steer-a", false); err != nil {
+		t.Fatal(err)
+	}
+	testwait.Eventually(t, "steer-a taken, the box read empty", func() bool {
+		if !strings.Contains(screen(t, s), "steer-a") {
+			return false
+		}
+		rt := s.agentRT()
+		rt.mu.Lock()
+		defer rt.mu.Unlock()
+		return rt.emptyBox
+	})
+	if via, why, err := s.PromptNow("steer-b", false); err != nil || via != ViaSteered || why != "" {
+		t.Fatalf("steer-b: %q %q %v", via, why, err)
+	}
+	testwait.Eventually(t, "steer-b pasted", func() bool { return strings.Contains(keysGot(t, keys), "steer-b") })
+	if k := keysGot(t, keys); !strings.Contains(k, "\x1b[200~steer-b\x1b[201~") {
+		t.Fatalf("keys: %q", k)
 	}
 }
 

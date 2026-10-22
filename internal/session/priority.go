@@ -30,6 +30,9 @@ const (
 // tests.
 var interruptDelay = time.Second
 
+// steerSep goes before a steer pasted after tm's unread steers in the box.
+const steerSep = "\n\n"
+
 // NotInterruptedError says PromptNow with interrupt left the running turn
 // alone, and neither sent nor queued the prompt. Why is HeldBox (a draft
 // tm didn't type), HeldDialog or HeldEscape, or that the agent was
@@ -106,6 +109,13 @@ func (s *Session) PromptNow(text string, interrupt bool) (via, why string, err e
 	}
 	rt.prompts = kept
 	steered := slices.Contains(rt.steers, text)
+	// Claude holds unread steers in its box and sends them as one prompt
+	// with no separator (T668): a blank line keeps each its own message.
+	// Codex took them at once, its box empty again: nothing to join.
+	paste := text
+	if len(rt.steers) > 0 && !rt.emptyBox {
+		paste = steerSep + text
+	}
 	key, after := "", false
 	if interrupt && rt.man != nil {
 		key, after = rt.man.Inject.Interrupt, rt.man.Inject.InterruptPaste != agent.InterruptPasteBefore
@@ -130,7 +140,7 @@ func (s *Session) PromptNow(text string, interrupt bool) (via, why string, err e
 		}
 		return ViaSteered, why, nil
 	case key == "":
-		s.paste(text, "")
+		s.paste(paste, "")
 		if interrupt {
 			return ViaSteered, "the agent has no interrupt key", nil
 		}
@@ -139,7 +149,7 @@ func (s *Session) PromptNow(text string, interrupt bool) (via, why string, err e
 		// Claude sends what it queued, the steer among it, once stopped.
 		s.input([]byte(key))
 	default:
-		s.paste(text, key)
+		s.paste(paste, key)
 	}
 	s.cfg.Logf("session %s: interrupted the agent's turn for a prompt", s.cfg.ID)
 	return ViaInterrupted, "", nil
