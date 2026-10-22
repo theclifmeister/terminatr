@@ -416,6 +416,12 @@ func messagesLines(p ProjectData, sel, w int) ([]string, int, []int) {
 	var lines []string
 	var hits []int
 	at := -1
+	// The peer column fits the longest name, a paired server's
+	// "<server>/<slug>" whole, up to half the width.
+	col := 20
+	for _, r := range p.Links {
+		col = max(col, min(ansi.StringWidth(r.Peer), w/2))
+	}
 	for i, r := range p.Links {
 		counts := ""
 		if r.Unread > 0 {
@@ -430,7 +436,7 @@ func messagesLines(p ProjectData, sel, w int) ([]string, int, []int) {
 		if r.Last != "" {
 			counts += " · last " + r.Last + " " + age(time.Since(r.LastAt))
 		}
-		text := fit(r.Peer, 20) + "  " + r.Arrow() + " " + r.Words()
+		text := fit(r.Peer, col) + "  " + r.Arrow() + " " + r.Words()
 		hits = append(hits, i)
 		if i == sel {
 			at = len(lines)
@@ -537,15 +543,10 @@ func (v *convView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	return nil
 }
 
-func cmpStr(a, b string) string {
-	if a != "" {
-		return a
-	}
-	return b
-}
-
-// convState is a message's state in the conversation's words.
-func convState(msg *link.Message) string {
+// messageState is msg's state in words; other is the project at the
+// other end, a paired server's "<server>/<slug>" for queued and
+// undelivered. One waiting over the link's rate says when it goes.
+func messageState(msg *link.Message, other string) string {
 	switch msg.State {
 	case link.StateHeld:
 		return "waits for your OK"
@@ -553,11 +554,19 @@ func convState(msg *link.Message) string {
 		if !msg.Due.IsZero() {
 			return "queued over the rate, goes " + link.DueWords(msg)
 		}
-		return "queued for the paired server"
+		alias, _, _ := config.Remote(other)
+		return "queued until " + alias + " takes it"
 	case link.StateUndelivered:
-		return "not delivered (" + msg.Refused + ")"
+		return "undelivered (see the inbox)"
 	}
 	return msg.State
+}
+
+func cmpStr(a, b string) string {
+	if a != "" {
+		return a
+	}
+	return b
 }
 
 func (v *convView) render(m *dash) string {
@@ -580,14 +589,17 @@ func (v *convView) render(m *dash) string {
 		if msg.Out {
 			dir, who = "→", v.slug
 		}
-		if msg.By == "human" {
+		// The user on a paired server isn't this one.
+		if msg.By == "human" && (msg.Out || !r.Remote) {
 			who += " (you)"
+		} else if msg.By == "human" {
+			who += " (its user)"
 		}
 		meta := fmt.Sprintf("%s %s · %s · %s", dir, msg.ID, msg.Created.Local().Format("Jan 2 15:04"), who)
 		if msg.Re != "" {
 			meta += " · re " + msg.Re
 		}
-		meta += " · " + convState(msg)
+		meta += " · " + messageState(msg, v.other)
 		if len(msg.Attachments) > 0 {
 			meta += " · " + oneLine(strings.Join(msg.Attachments, ", "))
 		}

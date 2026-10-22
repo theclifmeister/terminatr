@@ -384,3 +384,26 @@ func TestCopyAttachRefusesLinks(t *testing.T) {
 		t.Errorf("folder: wrote %v", ents)
 	}
 }
+
+// TestNewestAcrossSeries (T683): with a paired server's project each
+// side numbers its own ids, so the last message is the latest created
+// of each series' newest, not the highest number.
+func TestNewestAcrossSeries(t *testing.T) {
+	a, _, clock := setup(t)
+	other := "mini/api"
+	for _, m := range []*Message{
+		{ID: "M-F885-30", Out: true, Peer: other, State: StateRead, Created: clock.Add(-time.Hour)},
+		{ID: "M-8F49-4", Peer: other, State: StateSent, Created: *clock},
+		{ID: "M-8F49-3", Peer: other, State: StateRead, Created: clock.Add(-2 * time.Hour)},
+	} {
+		if err := write(a, m); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if m := newest(a, other); m == nil || m.ID != "M-8F49-4" {
+		t.Fatalf("newest %+v", m)
+	}
+	if m := newest(a, "b"); m != nil {
+		t.Fatalf("none with b: %+v", m)
+	}
+}
