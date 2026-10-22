@@ -407,3 +407,55 @@ func TestNewestAcrossSeries(t *testing.T) {
 		t.Fatalf("none with b: %+v", m)
 	}
 }
+
+// TestDropQueued: the user drops the middle one of three waiting
+// messages; it is dropped in the sender's folder, the others keep their
+// order and go on as the bucket refills; a message that has gone can't
+// be dropped any more; a thread can't drop.
+func TestDropQueued(t *testing.T) {
+	a, b, clock := setup(t)
+	ca := coord
+	ca.Project = "a"
+	var ids []string
+	for i := range config.DefaultLinkBurst + 3 {
+		m, err := Send(ca, a, "b", Opts{Text: fmt.Sprint(i)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, m.ID)
+	}
+	sent, mid := ids[0], ids[config.DefaultLinkBurst+1]
+	human := caller.Caller{Kind: caller.Human}
+	if _, err := Drop(caller.Caller{Kind: caller.Thread, Project: "a"}, a, mid, true); err == nil {
+		t.Fatal("a thread dropped")
+	}
+	if _, err := Drop(human, a, sent, false); err == nil || !strings.Contains(err.Error(), "can't be dropped") {
+		t.Fatalf("drop after send: %v", err)
+	}
+	m, err := Drop(human, a, mid, false)
+	if err != nil || m.State != StateDropped {
+		t.Fatalf("%v %+v", err, m)
+	}
+	if got, _ := Read(a, mid); got.State != StateDropped || !got.Due.IsZero() {
+		t.Fatalf("copy %+v", got)
+	}
+	if _, err := Drop(human, a, mid, false); err == nil {
+		t.Fatal("dropped twice")
+	}
+	if rows := Rows(mustConfig(t), a); rows[0].Queued != 2 {
+		t.Fatalf("rows %+v", rows[0])
+	}
+	// The one behind it moved up a token.
+	if got, _ := Read(a, ids[config.DefaultLinkBurst+2]); !got.Due.Equal(clock.Add(2 * time.Hour / config.DefaultLinkPerHour)) {
+		t.Errorf("due %v", got.Due)
+	}
+	*clock = clock.Add(3 * time.Hour / config.DefaultLinkPerHour)
+	Drain()
+	got, _ := texts(t, b, "a")
+	if want := []string{"0", "1", "2", "3", "5"}; !slices.Equal(got, want) {
+		t.Fatalf("b has %q, want %q", got, want)
+	}
+	if _, err := Drop(human, a, ids[config.DefaultLinkBurst], false); err == nil {
+		t.Fatal("dropped after it went")
+	}
+}

@@ -602,6 +602,8 @@ On `mini` it shows in NEEDS YOU (`1 link request waits`) and in `api`'s Messages
 
 Messages wait in the sending server's outbox until the link is up, and `tm link log mini/api` shows each as `queued`, `sent` (the other server has it) or `read` (its coordinator handled it). One not taken within 72 hours is dropped with a `link-undelivered` item. Files don't cross servers, so split a long text into parts: over the rate they wait (`queued over the rate, goes about 15:04` in the log) and go in order. Each server keeps its own link limits and breaker; when the other server's rate is lower it answers retry and the outbox tries again when it says, nothing lost, and `tm link resume` lifts only this server's pause (SPEC §16.11).
 
+A message waiting over the rate can be taken back: `X` on it in the Messages tab (after a Y) or `tm link drop M-21` removes it from the queue and marks it `dropped`; the others keep their order. Once it has been sent, or handed to the outbox for a paired server, it can't be dropped.
+
 ### Remote panes
 
 You can open a paired server's coordinator or thread in your console and type into it, as if it ran here. The other server decides: on `mini`,

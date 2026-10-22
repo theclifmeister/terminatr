@@ -673,29 +673,51 @@ func approvedWords(c caller.Caller, id string) string {
 	return id
 }
 
-// Drop discards p's held message id, on the user's word.
+// Drop discards p's held message id, or one waiting queued over the
+// rate (taken out of its direction's queue, the rest keeping their
+// order), on the user's word. One that has left is refused: sent, or
+// handed to the outbox for a paired server.
 func Drop(c caller.Caller, p *project.Project, id string, approved bool) (*Message, error) {
-	if err := heldFor(c, approved, "dropping a held message"); err != nil {
+	if err := heldFor(c, approved, "dropping a message"); err != nil {
 		return nil, err
 	}
-	m, err := held(p, id)
+	m, err := Read(p, id)
+	if err != nil {
+		return nil, err
+	}
+	if !m.Out || (m.State != StateHeld && m.State != StateQueued) {
+		return nil, refuse("not-droppable", "%s can't be dropped: it neither waits for the user's OK nor is queued over the rate (it is %s)", id, m.State)
+	}
+	cfg, err := config.Load()
 	if err != nil {
 		return nil, err
 	}
 	err = withStore(func(s *store) error {
-		if err := stillHeld(p, m); err != nil {
-			return err
+		cur, err := readFile(path(p, m.Peer, m.ID), m.Peer)
+		if err != nil || cur.State != m.State {
+			return refuse("not-droppable", "%s has been handled since (it is %s)", m.ID, stateOf(cur))
 		}
-		s.unhold(p.Slug, m.Peer, m.ID)
-		return update(p, m.Peer, m.ID, func(x *Message) { x.State = StateDropped })
+		if cur.State == StateHeld {
+			s.unhold(p.Slug, m.Peer, m.ID)
+		} else if !s.unqueue(p, m.Peer, m.ID, limitsOf(cfg, p.Slug, m.Peer), now()) {
+			return refuse("already-left", "%s has left: it waits in the outbox for the paired server, past dropping", m.ID)
+		}
+		return update(p, m.Peer, m.ID, func(x *Message) { x.State, x.Due = StateDropped, time.Time{} })
 	})
 	if err != nil {
 		return nil, err
 	}
-	m.State = StateDropped
+	m.State, m.Due = StateDropped, time.Time{}
 	p.Journal(c, "link.drop", m.Peer, approvedWords(c, m.ID))
 	doneHeld(p, m.ID)
 	return m, nil
+}
+
+func stateOf(m *Message) string {
+	if m == nil {
+		return "gone"
+	}
+	return m.State
 }
 
 // stillHeld refuses a held message another approve or drop handled
