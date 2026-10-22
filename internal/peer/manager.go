@@ -164,6 +164,9 @@ func (m *Manager) caps() []string {
 	caps := slices.Clone(Caps)
 	if m.opts.Export != nil {
 		caps = append(caps, CapWatch)
+		if _, ok := m.opts.Export.(PopupExporter); ok {
+			caps = append(caps, CapPopup)
+		}
 	}
 	if m.opts.Messages != nil {
 		caps = append(caps, CapMsg)

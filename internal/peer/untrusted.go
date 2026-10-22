@@ -21,6 +21,8 @@ var (
 	peerSlug = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,63}$`)
 	// peerThread is a thread id (tasks.ThreadIDPattern).
 	peerThread = regexp.MustCompile(`^t-[0-9]{4,12}$`)
+	// peerMessage is a link message's id (link.ValidID).
+	peerMessage = regexp.MustCompile(`^M-[0-9A-Za-z][0-9A-Za-z-]{0,39}$`)
 	// peerWord is an id, a code, a state or another one-word value.
 	peerWord = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:/#-]{0,63}$`)
 )
