@@ -17,7 +17,9 @@ import (
 // pane in order (DashResult.Type, client.replay), so it lands in the
 // agent's prompt. Every printable key does, capitals, digits, space and
 // / among them; the list's commands are prefix+key there. A thread's row
-// keeps the guard: enter attaches it first.
+// keeps the guard: enter attaches it first. A paired server's
+// coordinator types through too, from the sidebar, when that server
+// lets this one type into its panes (§16.12): its pane "<alias>/<id>".
 
 // typeThrough starts typing through to the coordinator of the selected
 // row with key k; ok is false when k or the row isn't for it.
@@ -41,11 +43,11 @@ func (m *dash) typeThrough(k tea.KeyPressMsg) (tea.Cmd, bool) {
 // whose row has the keyboard: the list's selected row, or the sidebar's
 // cursor while the sidebar has the keyboard and no filter is typed.
 func (m *dash) typeThroughRow() (id, slug string, ok bool) {
-	if m.remoteHere() {
-		return "", "", false
-	}
 	switch m.area() {
 	case areaMain:
+		if m.remoteHere() {
+			return "", "", false
+		}
 		r, ok := m.selected()
 		if !ok || r.session == "" || r.task != nil || r.card || r.remote != "" {
 			return "", "", false
@@ -57,10 +59,25 @@ func (m *dash) typeThroughRow() (id, slug string, ok bool) {
 		if sideFilterNow().typing {
 			return "", "", false
 		}
-		rows, i := cursorAt(m.tree(), m.sideW(), m.sideSel)
-		if i >= 0 && rows[i].kind == treeCoordinator && rows[i].session != "" && rows[i].peer == "" {
-			return rows[i].session, rows[i].slug, true
+		if rows, i := cursorAt(m.tree(), m.sideW(), m.sideSel); i >= 0 {
+			return typeTarget(rows[i])
 		}
+	}
+	return "", "", false
+}
+
+// typeTarget is the session a key on sidebar row r types through to,
+// and its project: a running coordinator's of this server, or of a
+// paired server that lets this one type into its panes, the session
+// "<alias>/<id>" in its project "@alias/slug" (peerTarget); ok is false
+// for any other row, a view-only remote pane's too.
+func typeTarget(r treeRow) (id, project string, ok bool) {
+	switch {
+	case r.session == "":
+	case r.kind == treeCoordinator && !r.isPeer():
+		return r.session, r.slug, true
+	case r.kind == treePeerCoord && r.link != nil && r.link.panes == proto.PanesType && paneWhyNot(r) == "":
+		return r.peer + "/" + r.session, peerFold(r.peer, r.slug), true
 	}
 	return "", "", false
 }
@@ -154,14 +171,18 @@ func (c *client) sideTypeThrough(k Key) bool {
 		return false
 	}
 	rows, i := cursorAt(c.sideTree(), c.sideW, c.v.SideSel)
-	if i < 0 || rows[i].kind != treeCoordinator || rows[i].session == "" || rows[i].peer != "" {
+	if i < 0 {
+		return false
+	}
+	id, _, ok := typeTarget(rows[i])
+	if !ok {
 		return false
 	}
 	st := enterStep(rows[i])
 	if st.target == nil {
 		return false
 	}
-	c.typeFor, c.typeKeys, c.typeBy = rows[i].session, []Key{k}, time.Now().Add(replayWait)
+	c.typeFor, c.typeKeys, c.typeBy = id, []Key{k}, time.Now().Add(replayWait)
 	time.AfterFunc(replayWait, c.typedSoon)
 	// Already showing (the cursor's preview): the pane takes them at once.
 	ready := c.focus != nil && c.focus.info.ID == c.typeFor

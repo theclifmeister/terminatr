@@ -44,9 +44,17 @@ type remotes struct {
 	s    *Server
 	mu   sync.Mutex
 	byID map[string]*remotePane
+	// want are the sizes a view claimed for panes not open yet: showing
+	// a pane claims its size before the console's attach opens it.
+	want map[string]paneSize
 }
 
-func newRemotes(s *Server) *remotes { return &remotes{s: s, byID: map[string]*remotePane{}} }
+// paneSize is a size claimed for a remote pane.
+type paneSize struct{ cols, rows uint16 }
+
+func newRemotes(s *Server) *remotes {
+	return &remotes{s: s, byID: map[string]*remotePane{}, want: map[string]paneSize{}}
+}
 
 // remotePane is one paired server's pane, shown here.
 type remotePane struct {
@@ -65,7 +73,10 @@ type remotePane struct {
 	conn                       *peer.PaneConn
 	input                      bool
 	// down: the link dropped; the pane is frozen until a stream is back.
-	down    bool
+	down bool
+	// want is the size last claimed for the pane, which a stream that
+	// opens after the claim sends then.
+	want    paneSize
 	viewers int
 	linger  *time.Timer
 	closed  bool
@@ -127,8 +138,9 @@ func (r *remotes) open(id string) (*remotePane, *proto.Error) {
 	r.mu.Lock()
 	rp := r.byID[id]
 	if rp == nil {
-		rp = &remotePane{r: r, id: id, alias: alias, sid: sid, proxy: session.NewProxy(id, r.s.log.Printf)}
+		rp = &remotePane{r: r, id: id, alias: alias, sid: sid, proxy: session.NewProxy(id, r.s.log.Printf), want: r.want[id]}
 		r.byID[id] = rp
+		delete(r.want, id)
 	}
 	r.mu.Unlock()
 	if perr := rp.open(); perr != nil {
@@ -241,7 +253,12 @@ func (rp *remotePane) open() *proto.Error {
 		}
 		rp.conn, rp.input, rp.down = conn, conn.Result.Input, false
 		rp.sid, rp.project, rp.role, rp.thread, rp.info = rs.s.ID, rs.project, rs.s.Role, rs.s.Thread, conn.Result.Session
+		want := rp.want
 		rp.mu.Unlock()
+		if conn.Result.Input && want.cols > 0 && want.rows > 0 {
+			// The size the view claimed while no stream was up.
+			go conn.Size(want.cols, want.rows)
+		}
 		rp.r.s.log.Printf("remote pane %s: open (%s)", rp.id, map[bool]string{true: "write", false: "view"}[conn.Result.Input])
 		rp.r.s.mirror.SetPanesOf(rp.alias, map[bool]string{true: proto.PanesType, false: proto.PanesView}[conn.Result.Input])
 	}
@@ -385,11 +402,27 @@ func (rp *remotePane) keys(p []byte) {
 	}
 }
 
+// size claims pane id's size: the open pane's, else the one that opens
+// next takes it (a view shows a pane before its console attaches it).
+func (r *remotes) size(id string, cols, rows uint16) {
+	r.mu.Lock()
+	rp := r.byID[id]
+	if rp == nil {
+		r.want[id] = paneSize{cols, rows}
+	}
+	r.mu.Unlock()
+	if rp != nil {
+		rp.size(cols, rows)
+	}
+}
+
 // size claims the far pane's size for the console that typed; off the
-// views' lock, which holds it.
+// views' lock, which holds it. With no stream up, the stream that opens
+// next sends it.
 func (rp *remotePane) size(cols, rows uint16) {
 	rp.mu.Lock()
 	conn, input := rp.conn, rp.input
+	rp.want = paneSize{cols, rows}
 	rp.mu.Unlock()
 	if conn != nil && input {
 		go conn.Size(cols, rows)
