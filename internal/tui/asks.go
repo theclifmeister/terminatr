@@ -148,7 +148,7 @@ func (m *dash) sendBack(slug string, t *tasks.Task, b *binding) tea.Cmd {
 		return nil
 	}
 	ref := t.Ref()
-	m.promptNo("Send "+ref+" back", "What should change? The coordinator passes your note on.", ref+" not sent back", project.MaxSendBackNote, func(note string) tea.Cmd {
+	m.promptNo("Send "+ref+" back", "What should change? The coordinator passes your note on.", "", ref+" not sent back", project.MaxSendBackNote, func(note string) tea.Cmd {
 		return m.askCoordinator(slug, t, project.KindSendBack, note, "sent "+ref+" back with your note; the coordinator passes it on", b)
 	})
 	return nil

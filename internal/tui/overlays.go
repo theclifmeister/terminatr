@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // Overlays: the views opened on top of the list (help, a prompt, the
@@ -85,10 +86,14 @@ var scrollKeys = map[string]int{"up": -1, "down": 1, "pgup": -10, "pgdown": 10}
 func clampScroll(s, n int) int { return min(max(s, 0), max(n-1, 0)) }
 
 // inputView reads a line of text: its title names what for, its label
-// asks for it.
+// asks for it. Its text starts as what it edits, the cursor at its end,
+// and the line-editing keys (lineEdit) work in it.
 type inputView struct {
-	title       string
-	label, text string
+	title, label string
+	lineEdit
+	// placeholder shows faint while the text is empty, an example or the
+	// default an empty one means; it is never the text.
+	placeholder string
 	submit      func(string) tea.Cmd
 	// cancel is the footer message on esc or an empty line; max is the
 	// most runes it takes, 0 for no limit.
@@ -100,13 +105,14 @@ type inputView struct {
 }
 
 func (m *dash) prompt(title, label, initial string, submit func(string) tea.Cmd) {
-	m.push(&inputView{title: title, label: label, text: initial, submit: submit})
+	m.push(&inputView{title: title, label: label, lineEdit: newLine(initial), submit: submit})
 }
 
 // promptNo is prompt with an empty start, saying cancel in the footer
-// when it is cancelled, and taking at most max runes.
-func (m *dash) promptNo(title, label, cancel string, max int, submit func(string) tea.Cmd) {
-	m.push(&inputView{title: title, label: label, submit: submit, cancel: cancel, max: max})
+// when it is cancelled, and taking at most max runes; placeholder shows
+// while it is empty.
+func (m *dash) promptNo(title, label, placeholder, cancel string, max int, submit func(string) tea.Cmd) {
+	m.push(&inputView{title: title, label: label, placeholder: placeholder, submit: submit, cancel: cancel, max: max})
 }
 
 func (in *inputView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
@@ -117,33 +123,31 @@ func (in *inputView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	case "enter":
 		m.pop()
 		if in.keep {
-			return in.submit(in.text)
+			return in.submit(in.value())
 		}
-		if t := strings.TrimSpace(in.text); t != "" {
+		if t := strings.TrimSpace(in.value()); t != "" {
 			return in.submit(t)
 		}
 		in.cancelled(m)
-	case "backspace":
-		if r := []rune(in.text); len(r) > 0 {
-			in.text = string(r[:len(r)-1])
-		}
 	case "ctrl+u":
-		in.text = ""
+		// It clears the line, as it always has, wherever the cursor is.
+		in.lineEdit = lineEdit{}
 	default:
-		in.paste(m, k.Text)
+		if !in.edit(k.String()) {
+			in.paste(m, k.Text)
+		}
 	}
 	return nil
 }
 
-// paste adds text typed or pasted, on one line, as far as max allows.
+// paste puts text typed or pasted in at the cursor, on one line, as far
+// as max allows.
 func (in *inputView) paste(_ *dash, text string) {
-	if text == "" {
-		return
+	r := []rune(oneLine(strings.TrimRight(text, "\r\n")))
+	if in.max > 0 {
+		r = r[:min(len(r), max(in.max-len(in.text), 0))]
 	}
-	in.text += oneLine(strings.TrimRight(text, "\r\n"))
-	if r := []rune(in.text); in.max > 0 && len(r) > in.max {
-		in.text = string(r[:in.max])
-	}
+	in.insert(r)
 }
 
 func (in *inputView) cancelled(m *dash) {
@@ -154,15 +158,20 @@ func (in *inputView) cancelled(m *dash) {
 
 func (in *inputView) render(m *dash) string {
 	// The label above the field; a long text wraps onto more lines, so
-	// all of it shows.
+	// all of it shows, the popup keeping the cursor's line in view.
 	w := m.inner(dialogWidth)
 	body := wrapLines(in.label, w)
-	body = append(body, wrapInput("", in.text+"█", w)...)
-	if n := len([]rune(in.text)); in.max > 0 && n*10 >= in.max*8 {
+	text, cur := in.lines(w)
+	if len(in.text) == 0 && in.placeholder != "" {
+		text = []string{"█" + th().Faint.Render(ansi.Truncate(in.placeholder, max(w-1, 0), "…"))}
+	}
+	sel := len(body) + cur
+	body = append(body, text...)
+	if n := len(in.text); in.max > 0 && n*10 >= in.max*8 {
 		// Near the limit: how much is left.
 		body = append(body, th().Faint.Render(fmt.Sprintf("%d of at most %d characters", n, in.max)))
 	}
-	return m.popup(box{title: in.title, body: body, sel: -1, keys: "enter ok · ctrl+u clear · esc cancel", dialog: true})
+	return m.popup(box{title: in.title, body: body, sel: sel, keys: "enter ok · ← → move · ctrl+u clear · esc cancel", dialog: true})
 }
 
 // wrapInput lays out a prompt's label and text in lines of w cells,

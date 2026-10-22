@@ -173,7 +173,7 @@ func (v *secretEnvView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 // source names, and saves it in the view's table.
 func (v *secretEnvView) add(m *dash) {
 	title := "Secret variable " + v.sr.forWho
-	m.promptNo(title, "Name (letters, digits and _, e.g. NODE_AUTH_TOKEN):", "", 128, func(name string) tea.Cmd {
+	m.promptNo(title, "Name (letters, digits and _):", "NODE_AUTH_TOKEN", "", 128, func(name string) tea.Cmd {
 		// Checked with a source that passes, so the name's error shows
 		// before the source is asked.
 		if err := config.CheckEnv(name, config.EnvSource{From: config.EnvFromGH}); err != nil {
@@ -196,7 +196,7 @@ func (v *secretEnvView) add(m *dash) {
 		}
 		ask := func(label, prefix string) func(*dash) tea.Cmd {
 			return func(m *dash) tea.Cmd {
-				m.promptNo(title, label, "", 200, func(t string) tea.Cmd { return done(prefix + t) })
+				m.promptNo(title, label, "", "", 200, func(t string) tea.Cmd { return done(prefix + t) })
 				return nil
 			}
 		}

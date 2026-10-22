@@ -404,8 +404,7 @@ func (v *sandboxView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 func (v *sandboxView) add(m *dash) {
 	l := sandboxLists[v.list]
 	title := l.label + " " + v.sr.forWho
-	label := "e.g. " + l.example + ":"
-	m.promptNo(title, label, "", 300, func(e string) tea.Cmd {
+	m.promptNo(title, l.label+":", l.example, "", 300, func(e string) tea.Cmd {
 		for _, r := range v.entries(m) {
 			switch {
 			case r.Value != e || r.stray:
@@ -604,7 +603,7 @@ func (v *sandboxView) guideRefused(m *dash, title string) string {
 // view's table.
 func (v *sandboxView) addGuide(m *dash) {
 	title := "Add a guide " + v.sr.forWho
-	m.promptNo(title, "Its title, one line (the brief's heading), e.g. "+sandboxLists[v.list].example+":", "", 120, func(t string) tea.Cmd {
+	m.promptNo(title, "Its title, one line (the brief's heading):", sandboxLists[v.list].example, "", 120, func(t string) tea.Cmd {
 		if why := v.guideRefused(m, t); why != "" {
 			m.msg = why
 			return nil
@@ -724,7 +723,7 @@ func (v *sandboxView) edit(m *dash, e sandboxEntry) {
 		return
 	}
 	l := sandboxLists[v.list]
-	m.push(&inputView{title: "Edit " + e.Value + " " + v.sr.forWho, label: l.label + ", e.g. " + l.example + ":", text: e.Value, cancel: "unchanged", max: 300,
+	m.push(&inputView{title: "Edit " + e.Value + " " + v.sr.forWho, label: l.label + ":", placeholder: l.example, lineEdit: newLine(e.Value), cancel: "unchanged", max: 300,
 		submit: func(val string) tea.Cmd {
 			if why := v.editRefused(m, e, val); why != "" {
 				m.msg = why
@@ -761,7 +760,7 @@ func (v *sandboxView) editGuide(m *dash, e sandboxEntry) {
 		return
 	}
 	title := "Edit the guide " + e.Value + " " + v.sr.forWho
-	m.push(&inputView{title: title, label: "Its title, one line (the brief's heading):", text: e.Value, cancel: "unchanged", max: 120,
+	m.push(&inputView{title: title, label: "Its title, one line (the brief's heading):", placeholder: sandboxLists[v.list].example, lineEdit: newLine(e.Value), cancel: "unchanged", max: 120,
 		submit: func(t string) tea.Cmd {
 			if why := v.editRefused(m, e, t); why != "" {
 				m.msg = why

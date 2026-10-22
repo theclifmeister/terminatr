@@ -136,7 +136,7 @@ guard_allow = [{ rule = "force-push", command = "git push -f origin tm/*" }, { r
 	if !ok {
 		t.Fatalf("no input: %T", m.top())
 	}
-	in.text = "~/.npm*"
+	in.lineEdit = newLine("~/.npm*")
 	n := len(src.settings)
 	drain(t, m, keyPress(m, "enter"))
 	if len(src.settings) != n || !strings.Contains(m.msg, "no *") {
@@ -169,7 +169,7 @@ guard_allow = [{ rule = "worktree-only", command = "cp build/* /opt/app/", exact
 	if !strings.Contains(in.label, "exact") {
 		t.Errorf("label %q", in.label)
 	}
-	in.text = "cp dist/* /opt/app/"
+	in.lineEdit = newLine("cp dist/* /opt/app/")
 	drain(t, m, keyPress(m, "enter"))
 	if got := src.settings[len(src.settings)-1]; got != "projects.alpha.guard_allow=[{worktree-only cp dist/* /opt/app/  true false}]" {
 		t.Errorf("changed: %v", src.settings)

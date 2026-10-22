@@ -10,15 +10,14 @@ import (
 )
 
 // textEditor edits a text of many lines over the popup (a guide's
-// body): typing and pasting go in at the cursor, the arrows, home and
-// end move it, enter breaks the line, ctrl+s saves, and esc leaves the
-// text as it was, asking first when it changed. Control characters
-// never go in; tabs and newlines do.
+// body): typing and pasting go in at the cursor, the arrows and the
+// line-editing keys (lineEdit) move it and edit, enter breaks the line,
+// ctrl+s saves, and esc leaves the text as it was, asking first when it
+// changed. Control characters never go in; tabs and newlines do.
 type textEditor struct {
 	title, label string
-	text         []rune
-	pos          int
-	orig         string
+	lineEdit
+	orig string
 	// max is the most bytes it takes.
 	max  int
 	save func(string) tea.Cmd
@@ -26,7 +25,7 @@ type textEditor struct {
 
 // editText opens the editor on text, saving with save.
 func (m *dash) editText(title, label, text string, max int, save func(string) tea.Cmd) {
-	m.push(&textEditor{title: title, label: label, text: []rune(text), pos: len([]rune(text)), orig: text, max: max, save: save})
+	m.push(&textEditor{title: title, label: label, lineEdit: newLine(text), orig: text, max: max, save: save})
 }
 
 func (ed *textEditor) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
@@ -49,23 +48,6 @@ func (ed *textEditor) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 		ed.insert("\n")
 	case "tab":
 		ed.insert("\t")
-	case "backspace":
-		if ed.pos > 0 {
-			ed.text = append(ed.text[:ed.pos-1], ed.text[ed.pos:]...)
-			ed.pos--
-		}
-	case "delete":
-		if ed.pos < len(ed.text) {
-			ed.text = append(ed.text[:ed.pos], ed.text[ed.pos+1:]...)
-		}
-	case "left":
-		ed.pos = max(ed.pos-1, 0)
-	case "right":
-		ed.pos = min(ed.pos+1, len(ed.text))
-	case "home", "ctrl+a":
-		ed.pos = ed.lineStart(ed.pos)
-	case "end", "ctrl+e":
-		ed.pos = ed.lineEnd(ed.pos)
 	case "up":
 		ed.vertical(-1)
 	case "down":
@@ -79,7 +61,9 @@ func (ed *textEditor) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 			ed.vertical(1)
 		}
 	default:
-		ed.insert(k.Text)
+		if !ed.edit(k.String()) {
+			ed.insert(k.Text)
+		}
 	}
 	return nil
 }
@@ -96,26 +80,7 @@ func (ed *textEditor) insert(s string) {
 	for ed.max > 0 && len(r) > 0 && len(string(r)) > room {
 		r = r[:len(r)-1]
 	}
-	if len(r) == 0 {
-		return
-	}
-	ed.text = append(ed.text[:ed.pos], append(r, ed.text[ed.pos:]...)...)
-	ed.pos += len(r)
-}
-
-// lineStart and lineEnd are where the line holding p starts and ends.
-func (ed *textEditor) lineStart(p int) int {
-	for p > 0 && ed.text[p-1] != '\n' {
-		p--
-	}
-	return p
-}
-
-func (ed *textEditor) lineEnd(p int) int {
-	for p < len(ed.text) && ed.text[p] != '\n' {
-		p++
-	}
-	return p
+	ed.lineEdit.insert(r)
 }
 
 // vertical moves the cursor d lines up or down, keeping its column where
@@ -143,39 +108,9 @@ func (ed *textEditor) render(m *dash) string {
 	w := m.inner(viewWidth)
 	body := wrapLines(ed.label, w)
 	body = append(body, "")
-	sel := len(body)
-	// Each line of the text, broken at w; the cursor a block.
-	line, n := []rune{}, 0
-	flush := func() {
-		body = append(body, string(line))
-		line, n = line[:0:0], 0
-	}
-	for i := 0; i <= len(ed.text); i++ {
-		if i == ed.pos {
-			sel = len(body)
-			line = append(line, '█')
-			n++
-		}
-		if i == len(ed.text) {
-			break
-		}
-		r := ed.text[i]
-		if r == '\n' {
-			flush()
-			continue
-		}
-		if n >= w {
-			flush()
-		}
-		if r == '\t' {
-			line = append(line, []rune("    ")...)
-			n += 4
-			continue
-		}
-		line = append(line, r)
-		n++
-	}
-	flush()
+	text, cur := ed.lines(w)
+	sel := len(body) + cur
+	body = append(body, text...)
 	if size := len(string(ed.text)); ed.max > 0 && size*10 >= ed.max*8 {
 		body = append(body, th().Faint.Render(fmt.Sprintf("%d of at most %d bytes", size, ed.max)))
 	}

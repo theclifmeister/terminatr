@@ -79,7 +79,7 @@ func TestSandboxView(t *testing.T) {
 		if !ok {
 			t.Fatalf("no input: %T", m.top())
 		}
-		in.text = text
+		in.lineEdit = newLine(text)
 		drain(t, m, keyPress(m, "enter"))
 	}
 	given := func() []string {
@@ -148,13 +148,13 @@ func TestHostsAndGuidance(t *testing.T) {
 	src, m := sandboxData(t)
 	drain(t, m, sandboxRow(t, "", "Network hosts").change(m))
 	keyPress(m, "A")
-	m.top().(*inputView).text = "https://x.dev"
+	m.top().(*inputView).lineEdit = newLine("https://x.dev")
 	drain(t, m, keyPress(m, "enter"))
 	if !strings.Contains(m.msg, "isn't a host name") {
 		t.Errorf("msg %q", m.msg)
 	}
 	keyPress(m, "A")
-	m.top().(*inputView).text = "storage.googleapis.com"
+	m.top().(*inputView).lineEdit = newLine("storage.googleapis.com")
 	drain(t, m, keyPress(m, "enter"))
 	if cv, ok := m.top().(*confirmView); !ok || !strings.Contains(cv.question, "Every command a thread runs") || !strings.Contains(cv.question, "Google Cloud Storage") {
 		t.Fatalf("no question before adding a host: %T", m.top())
@@ -164,7 +164,7 @@ func TestHostsAndGuidance(t *testing.T) {
 	drain(t, m, sandboxRow(t, "alpha", "Guidance for threads").change(m))
 	ctrlS := tea.KeyPressMsg{Code: 's', Mod: tea.ModCtrl}
 	keyPress(m, "A")
-	m.top().(*inputView).text = "Test data"
+	m.top().(*inputView).lineEdit = newLine("Test data")
 	drain(t, m, keyPress(m, "enter"))
 	if _, ok := m.top().(*textEditor); !ok {
 		t.Fatalf("no editor after the title: %T", m.top())
@@ -179,7 +179,7 @@ func TestHostsAndGuidance(t *testing.T) {
 		t.Errorf("alpha: %q", got)
 	}
 	keyPress(m, "A")
-	m.top().(*inputView).text = "Test data"
+	m.top().(*inputView).lineEdit = newLine("Test data")
 	drain(t, m, keyPress(m, "enter"))
 	if !strings.Contains(m.msg, "listed already") {
 		t.Errorf("same title: %q", m.msg)
@@ -215,10 +215,10 @@ func TestSandboxAllowAll(t *testing.T) {
 	src, m := sandboxData(t)
 	drain(t, m, sandboxRow(t, "", "Allow rules").change(m))
 	keyPress(m, "A")
-	m.top().(*inputView).text = "WebFetch(domain:playwright.dev)"
+	m.top().(*inputView).lineEdit = newLine("WebFetch(domain:playwright.dev)")
 	drain(t, m, keyPress(m, "enter"))
 	keyPress(m, "A")
-	m.top().(*inputView).text = "WebFetch"
+	m.top().(*inputView).lineEdit = newLine("WebFetch")
 	drain(t, m, keyPress(m, "enter"))
 	if !strings.Contains(m.msg, "allows every WebFetch call") {
 		t.Errorf("msg %q", m.msg)
@@ -450,7 +450,7 @@ func TestSandboxCoveredNote(t *testing.T) {
 	}
 	for _, rule := range []string{"Bash(docker *)", "Edit(/tmp/pw/**)"} {
 		keyPress(m, "A")
-		m.top().(*inputView).text = rule
+		m.top().(*inputView).lineEdit = newLine(rule)
 		drain(t, m, keyPress(m, "enter"))
 		if _, ok := m.top().(*confirmView); ok || !strings.Contains(m.msg, "not added") {
 			t.Errorf("%s: %T, %q", rule, m.top(), m.msg)
@@ -561,10 +561,10 @@ guides = [{ title = "Old", body = "Old text." }]
 	input := func(want, text string) {
 		t.Helper()
 		in, ok := m.top().(*inputView)
-		if !ok || in.text != want {
+		if !ok || in.value() != want {
 			t.Fatalf("no input of %q: %T", want, m.top())
 		}
-		in.text = text
+		in.lineEdit = newLine(text)
 		drain(t, m, keyPress(m, "enter"))
 	}
 	drain(t, m, sandboxRow(t, "", "Excluded commands").change(m))
@@ -654,7 +654,7 @@ func TestSandboxWideApproved(t *testing.T) {
 	_, m := sandboxData(t)
 	drain(t, m, sandboxRow(t, "alpha", "Approved commands").change(m))
 	keyPress(m, "A")
-	m.top().(*inputView).text = "prlctl *"
+	m.top().(*inputView).lineEdit = newLine("prlctl *")
 	drain(t, m, keyPress(m, "enter"))
 	cv, ok := m.top().(*confirmView)
 	if !ok || !strings.Contains(cv.question, "every argument of prlctl") {
@@ -662,7 +662,7 @@ func TestSandboxWideApproved(t *testing.T) {
 	}
 	drain(t, m, keyPress(m, "Y"))
 	keyPress(m, "enter")
-	m.top().(*inputView).text = "sh -c *"
+	m.top().(*inputView).lineEdit = newLine("sh -c *")
 	drain(t, m, keyPress(m, "enter"))
 	if cv, ok := m.top().(*confirmView); !ok || !strings.Contains(cv.question, "runs the code that follows it") {
 		t.Fatalf("no warning before the change: %T", m.top())

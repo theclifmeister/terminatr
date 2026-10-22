@@ -213,8 +213,13 @@ func (sr safetyRows) branchRow() setting {
 			return []string{"next branch, e.g. " + sr.branchPreview(sr.safety(m).BranchName)}
 		},
 		change: func(m *dash) tea.Cmd {
-			m.push(&inputView{title: "Branch names " + sr.forWho, keep: true, text: sr.safety(m).BranchName,
-				label: "Template ({project} {id} {task} {title}; {id} is required):",
+			// The default shows faint, never as the text: an empty one is it.
+			text := sr.safety(m).BranchName
+			if text == config.DefaultBranchName {
+				text = ""
+			}
+			m.push(&inputView{title: "Branch names " + sr.forWho, keep: true, lineEdit: newLine(text),
+				label: "Template ({project} {id} {task} {title}; {id} is required; empty is the default):", placeholder: config.DefaultBranchName,
 				submit: func(t string) tea.Cmd {
 					t = cmp.Or(strings.TrimSpace(t), config.DefaultBranchName)
 					if err := config.CheckBranchName(t); err != nil {

@@ -305,7 +305,7 @@ func (v *guardAllowView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 		case a.Exact:
 			label = strings.TrimSuffix(strings.Split(label, " (")[0], ":") + " (exact: * is a plain *):"
 		}
-		m.push(&inputView{title: "Allowance of " + guardRuleWord(a.Rule) + " " + where, keep: true, text: a.Text(), label: label,
+		m.push(&inputView{title: "Allowance of " + guardRuleWord(a.Rule) + " " + where, keep: true, lineEdit: newLine(a.Text()), label: label,
 			submit: func(t string) tea.Cmd {
 				t = strings.TrimSpace(t)
 				table, i := v.tableOf(m, a)

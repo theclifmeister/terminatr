@@ -252,7 +252,7 @@ func (m *dash) enter(string) tea.Cmd {
 }
 
 func (m *dash) newProject(string) tea.Cmd {
-	m.prompt("New project", "Its name (becomes a lower-case slug, e.g. demo-app):", "", func(slug string) tea.Cmd {
+	m.promptNo("New project", "Its name (becomes a lower-case slug):", "demo-app", "", 0, func(slug string) tea.Cmd {
 		src := m.src
 		return m.act(func() actionMsg {
 			slug, err := src.NewProject(slug)

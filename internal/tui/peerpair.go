@@ -74,16 +74,18 @@ type pairMsg struct {
 
 // pairPrompt asks for the relay to pair through, starting from relay.
 func (m *dash) pairPrompt(relay string) {
-	m.push(&inputView{title: "Pair a server", text: relay, cancel: "not paired",
-		label:  "The relay both servers dial (a host name, or wss://…; see Running a relay in docs/OPERATIONS.md):",
-		submit: func(s string) tea.Cmd { return m.startPairing(false, s) }})
+	m.push(&inputView{title: "Pair a server", lineEdit: newLine(relay), cancel: "not paired",
+		label:       "The relay both servers dial (a host name, or wss://…; see Running a relay in docs/OPERATIONS.md):",
+		placeholder: "relay.example.net",
+		submit:      func(s string) tea.Cmd { return m.startPairing(false, s) }})
 }
 
 // joinPrompt asks for the code the other server shows.
 func (m *dash) joinPrompt(code string) {
-	m.push(&inputView{title: "Join a server", text: code, cancel: "not paired",
-		label:  "The pairing code the other server shows (relay.example.net/7Q4M-K2XD-9HVA-PT3C):",
-		submit: func(s string) tea.Cmd { return m.startPairing(true, s) }})
+	m.push(&inputView{title: "Join a server", lineEdit: newLine(code), cancel: "not paired",
+		label:       "The pairing code the other server shows:",
+		placeholder: "relay.example.net/7Q4M-K2XD-9HVA-PT3C",
+		submit:      func(s string) tea.Cmd { return m.startPairing(true, s) }})
 }
 
 // startPairing opens the pairing popup and runs the pairing behind it.
