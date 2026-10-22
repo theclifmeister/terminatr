@@ -40,6 +40,7 @@ package guard
 import (
 	"cmp"
 	"fmt"
+	"maps"
 	"path"
 	"regexp"
 	"slices"
@@ -202,6 +203,11 @@ type Rules struct {
 	// olds are the folders the line was in before its folder now
 	// ($OLDPWD, ~-; "" one it can't tell), as judgeLine follows its cds.
 	olds []string
+	// vals are the values the variables the line sets to a path written
+	// out (S=/tmp/x) may hold where the part being judged runs ("" one it
+	// can't tell), as walkLine follows its assignments (lineVals): a path
+	// from one ($S/x) is judged at each.
+	vals map[string][]string
 	// wt is the thread's worktree, as judgeBash takes it (worktreeOf).
 	wt string
 	// trapFrom is where the trap actions the line being read sets start
@@ -1011,7 +1017,117 @@ func lineFolder(w, line string) bool {
 // assignment (d=…, d+=…, d[0]=…), an expansion that assigns (${d:=…},
 // ${d=…}) or a word (read d, for d in, export d, printf -v d) does.
 func assigns(line, name string) bool {
-	return regexp.MustCompile("(?m)(^|[\\s;&|(){}!`\"'])" + name + "(\\[|:?=|\\+=|[\\s;&|)`\"']|$)").MatchString(line)
+	return assignAt(name).MatchString(line)
+}
+
+// assignAt matches where a line may assign variable name (assigns).
+func assignAt(name string) *regexp.Regexp {
+	return regexp.MustCompile("(?m)(^|[\\s;&|(){}!`\"'])" + name + "(\\[|:?=|\\+=|[\\s;&|)`\"']|$)")
+}
+
+// litValue is a value written out from / that the shell takes as it is:
+// no expansion, pattern, quote or operator in it, or all of it in '…',
+// or in "…" without $, ` or \.
+const litValue = `(/[^\s$` + "`" + `'"\\;&|<>(){}*?\[\]~#!]*|'/[^']*'|"/[^"$` + "`" + `\\!]*")`
+
+var (
+	// litAssign is one assignment of a litValue to a variable.
+	litAssign = regexp.MustCompile(`([A-Za-z_][A-Za-z0-9_]*)=` + litValue)
+	// litAssigns is a command of litAssign alone, maybe exported:
+	// S=/tmp/x, export TMPDIR="/tmp/y" T=/a.
+	litAssigns = regexp.MustCompile(`^(?:export\s+)?[A-Za-z_][A-Za-z0-9_]*=` + litValue + `(?:\s+[A-Za-z_][A-Za-z0-9_]*=` + litValue + `)*$`)
+	// typed is a command that may make a variable a reference to another
+	// (declare -n, typeset -n, local -n, zsh's typeset -T and the like).
+	typed = regexp.MustCompile("(?m)(^|[\\s;&|(){}!`\"'])(declare|typeset|local|readonly|integer|float|nameref)([\\s;&|)`\"']|$)")
+)
+
+// blockOpen and blockClose are the words that open and close a compound
+// command spanning parts of a line (if …; then …; fi); blockLead the
+// words that may come before an opener in a part (do for f in …).
+var (
+	blockOpen  = setOf("if case while until for select repeat")
+	blockClose = setOf("fi esac done")
+	blockLead  = setOf("! time -p do then else elif")
+)
+
+// lineVals are the assignments of a path written out (litAssigns) that
+// walkLine follows, by the part each is: a plain part of the line's top
+// level, outside any compound command, pipeline or the background, that
+// is all assignments. A variable counts only when those are the only
+// places the line, its quoted heredocs' bodies aside, may assign it
+// (assigns): not in a loop, a group, a substitution, an eval's or a
+// trap's text, nor by read, for, ${S:=…} or the like. None counts on a
+// line that may assign a variable by a name it computes or that may
+// make one a reference to another (hidesDefs, typed). eval and source
+// may run code that assigns them where the guard can't see, as they may
+// a variable the line doesn't set ($TMPDIR/x), which it takes as given.
+func (r Rules) lineVals(parts []linePart) map[int][][2]string {
+	var code strings.Builder
+	found := map[int][][2]string{}
+	counts := map[string]int{}
+	depth := 0
+	for i, pt := range parts {
+		code.WriteString(pt.code + "\n")
+		w := strings.Fields(pt.text)
+		for len(w) > 1 && blockLead[w[0]] {
+			w = w[1:]
+		}
+		switch {
+		case len(w) == 0:
+			continue
+		case blockOpen[w[0]]:
+			depth++
+			continue
+		case blockClose[w[0]]:
+			if depth--; depth < 0 {
+				return nil
+			}
+			continue
+		}
+		if depth > 0 || pt.group != nil || pt.loose >= 0 || pt.doc || pt.before == "|" || pt.after == "|" || pt.after == "&" || !litAssigns.MatchString(pt.text) {
+			continue
+		}
+		for _, m := range litAssign.FindAllStringSubmatch(pt.text, -1) {
+			v := m[2]
+			if v[0] == '\'' || v[0] == '"' {
+				v = v[1 : len(v)-1]
+			}
+			found[i] = append(found[i], [2]string{m[1], v})
+			counts[m[1]]++
+		}
+	}
+	text := code.String()
+	if depth != 0 || len(found) == 0 || typed.MatchString(text) || r.hidesDefs(text) {
+		return nil
+	}
+	for i, as := range found {
+		found[i] = slices.DeleteFunc(as, func(a [2]string) bool {
+			n := a[0]
+			return n == "PWD" || n == "OLDPWD" || n == "HOME" || n == "CDPATH" ||
+				len(assignAt(n).FindAllStringIndex(text, -1)) != counts[n]
+		})
+	}
+	return found
+}
+
+// lineVal is where path w goes when it starts with a variable the line
+// sets to a path written out (r.vals), then a / or nothing: the path
+// from each value it may hold; ok false when it doesn't, or may hold one
+// the guard can't tell.
+func (r Rules) lineVal(w string) (paths []string, ok bool) {
+	m := bareParam.FindStringSubmatch(w)
+	if m == nil {
+		return nil, false
+	}
+	rest := w[len(m[0]):]
+	vals := r.vals[m[1]+m[2]]
+	if len(vals) == 0 || slices.Contains(vals, "") || rest != "" && !strings.HasPrefix(rest, "/") {
+		return nil, false
+	}
+	for _, v := range vals {
+		paths = append(paths, v+rest)
+	}
+	return paths, true
 }
 
 // bareParam is a bare $NAME or ${NAME} a path starts with.
@@ -1054,7 +1170,7 @@ func (r Rules) lostCd(summary string) *Denial {
 	if r.Role == "thread" {
 		tell = "say so in your report"
 	}
-	m := "after a cd the guard can't follow (to a variable or a substitution, cd -, popd, or one inside ( ), an if or a loop), a relative path given to a command that writes could be tm's settings or the project folder. Give the path from / or a variable ($TMPDIR/x), cd to a folder written out and join the rest with &&, or run the cd in a call of its own; if none of that fits, " + tell + "."
+	m := "after a cd the guard can't follow (to a variable or a substitution, cd -, popd, one inside ( ), an if or a loop, or code it can't see: eval, source), a relative path given to a command that writes could be tm's settings or the project folder. Give the path from / or a variable ($TMPDIR/x), cd to a folder written out and join the rest with &&, or run the cd in a call of its own; if none of that fits, " + tell + "."
 	return &Denial{Rule: RuleTMFiles, Message: "terminatr guard (" + RuleTMFiles + "): " + m, Summary: summary}
 }
 
@@ -1143,6 +1259,7 @@ func (r Rules) judgeLine(command string, cwds []string) *Denial {
 // it too, from the folders the line's trap actions may run in there
 // (r.trapCwds), which its own cds move.
 func (r Rules) walkLine(command string, cwds []string) (d *Denial, st, ts lineDirs) {
+	outer := r.line == ""
 	if r.line != "" {
 		r.line += "\n"
 	}
@@ -1157,7 +1274,7 @@ func (r Rules) walkLine(command string, cwds []string) (d *Denial, st, ts lineDi
 	if !ok {
 		// A line it can't split: one part, with any cd or hidden code in
 		// it leaving its relative paths unknown from the start.
-		parts = []linePart{{text: command, loose: -1}}
+		parts = []linePart{{text: command, code: command, loose: -1}}
 		if r.hasCd(command) || r.runsCode(command) {
 			cwds = withDirs(cwds, "")
 		}
@@ -1186,6 +1303,13 @@ func (r Rules) walkLine(command string, cwds []string) (d *Denial, st, ts lineDi
 	trapped := func() bool { return r.ps != nil && len(r.ps.traps) > from }
 	ends := r.loopEnds(parts)
 	loops := r.loopCds(parts, ends)
+	// The line's own assignments of paths written out, followed as its
+	// cds are (a line read inside it, a substitution's or eval's, keeps
+	// those of the part that reads it).
+	var lits map[int][][2]string
+	if outer {
+		lits = r.lineVals(parts)
+	}
 	var trapDirs []string
 	seen, moves := from, false
 	for i, pt := range parts {
@@ -1292,8 +1416,8 @@ func (r Rules) walkLine(command string, cwds []string) (d *Denial, st, ts lineDi
 		// they are judged as a trap's action is, from each folder the
 		// line may be in from the definition on, and a call of one when
 		// one may move the folder leaves it unknown, as eval does.
-		funcs := trapFuncs(pt.text)
-		names, bodies := r.definitions(pt.text)
+		funcs := trapFuncs(pt.code)
+		names, bodies := r.definitions(pt.code)
 		for _, body := range append(funcs, bodies...) {
 			if r.ps != nil && !slices.Contains(r.ps.traps[from:], body) {
 				r.ps.traps = append(r.ps.traps, body)
@@ -1311,7 +1435,7 @@ func (r Rules) walkLine(command string, cwds []string) (d *Denial, st, ts lineDi
 				r.ps.moving = r.ps.moving || rb.hasCd(b) || rb.runsCode(b) || rb.runsTrap(b) || rb.hidesDefs(b) || rb.callsDef(b)
 			}
 		}
-		hidden := r.hidesDefs(pt.text) || r.ps != nil && r.ps.moving && r.callsDef(pt.text)
+		hidden := r.hidesDefs(pt.code) || r.ps != nil && r.ps.moving && r.callsDef(pt.text)
 		if trapped() {
 			trapDirs = withDirs(trapDirs, ts.cur...)
 			for _, a := range r.ps.traps[seen:] {
@@ -1321,6 +1445,26 @@ func (r Rules) walkLine(command string, cwds []string) (d *Denial, st, ts lineDi
 		}
 		st.end(r, parts, i, gst, hidden || len(funcs) > 0 || r.runsCode(pt.text) || r.runsTrap(pt.text))
 		ts.end(r, parts, i, gts, hidden || moves || r.runsCode(pt.text))
+		if as := lits[i]; len(as) > 0 {
+			// One after && or || may not run: the value before stays
+			// possible.
+			vals := maps.Clone(r.vals)
+			if vals == nil {
+				vals = map[string][]string{}
+			}
+			for _, a := range as {
+				if pt.before == "&&" || pt.before == "||" {
+					was := vals[a[0]]
+					if was == nil {
+						was = []string{""}
+					}
+					vals[a[0]] = withDirs(was, a[1])
+				} else {
+					vals[a[0]] = []string{a[1]}
+				}
+			}
+			r.vals = vals
+		}
 	}
 	if !trapped() {
 		return nil, st, ts
@@ -1330,6 +1474,7 @@ func (r Rules) walkLine(command string, cwds []string) (d *Denial, st, ts lineDi
 	rt := r.nested()
 	rt.olds = withDirs(ts.olds, "")
 	rt.inTrap = true
+	rt.vals = nil // an action may run before the line's assignments
 	for _, a := range slices.Clone(r.ps.traps[from:]) {
 		if d := rt.judgeLine(a, withDirs(trapDirs, ts.cur...)); d != nil || r.spent() {
 			return d, st, ts
@@ -3276,12 +3421,14 @@ func (r Rules) globReaches(p, root string) bool {
 // of the first one it opens that isn't group (-1: none), which the
 // guard doesn't follow (coproc { }, zsh's for x (a) { }, the second
 // block of { } always { }). A $( ), <( ), >( ) or zsh's =( ) and an
-// array's a=( ) are none: its walk reads what they run.
+// array's a=( ) are none: its walk reads what they run. code is its text
+// without the bodies of its quoted heredocs (<<'EOF'), which the line's
+// shell doesn't read: what is scanned for the functions it defines.
 type linePart struct {
-	text, before, after string
-	doc                 bool
-	group               *lineGroup
-	loose               int
+	text, code, before, after string
+	doc                       bool
+	group                     *lineGroup
+	loose                     int
 }
 
 // lineGroup is a part's ( ) or { } (linePart): the words before it
@@ -3386,12 +3533,13 @@ func (r Rules) topLevel(line string) (parts []linePart, ok bool) {
 	var stack []rune
 	var b strings.Builder
 	before := ""
-	// The heredocs opened and not yet read: their word, <<- and the
-	// part that opens each (-1: the one being read).
+	// The heredocs opened and not yet read: their word, <<-, whether the
+	// word is quoted and the part that opens each (-1: the one being
+	// read).
 	type doc struct {
-		delim string
-		tabs  bool
-		part  int
+		delim        string
+		tabs, quoted bool
+		part         int
 	}
 	var open []doc
 	docs := false
@@ -3416,7 +3564,7 @@ func (r Rules) topLevel(line string) (parts []linePart, ok bool) {
 	cut := func(sep string) {
 		raw := b.String()
 		if t := strings.TrimSpace(raw); t != "" {
-			pt := linePart{text: t, before: before, loose: -1}
+			pt := linePart{text: t, code: t, before: before, loose: -1}
 			off := len(raw) - len(strings.TrimLeftFunc(raw, unicode.IsSpace))
 			if gClose > 0 {
 				g := &lineGroup{lead: strings.TrimSpace(raw[:gOpen]), inner: raw[gOpen+1 : gClose-1], tail: raw[gClose:], brace: raw[gOpen] == '{'}
@@ -3471,6 +3619,9 @@ func (r Rules) topLevel(line string) (parts []linePart, ok bool) {
 			} else {
 				parts[h.part].text += body.String()
 				parts[h.part].doc = true
+				if !h.quoted {
+					parts[h.part].code += body.String()
+				}
 			}
 		}
 		open = nil
@@ -3618,7 +3769,7 @@ func (r Rules) topLevel(line string) (parts []linePart, ok bool) {
 			if !dw.sure || dw.delim == "" && !dw.quoted {
 				return nil, false
 			}
-			h.delim = dw.delim
+			h.delim, h.quoted = dw.delim, dw.quoted
 			j = dw.end
 			b.WriteString(string(s[i:min(j, len(s))]))
 			open = append(open, h)
@@ -3667,12 +3818,95 @@ func (r Rules) topLevel(line string) (parts []linePart, ok bool) {
 		return nil, false
 	}
 	cut("")
-	if docs && slices.ContainsFunc(parts, func(p linePart) bool {
-		return slices.ContainsFunc(r.cmds(p.text), func(w []string) bool { return readsInput(w, p.before == "|", nil) })
-	}) {
-		return nil, false
+	if !docs {
+		return parts, true
+	}
+	reach := docReach(parts)
+	names, named := r.docNames(parts[:reach])
+	for i, p := range parts {
+		for _, w := range r.cmds(p.text) {
+			if !readsInput(w, p.before == "|", nil) {
+				continue
+			}
+			// Past the heredocs' reach, eval, source and . run a body only
+			// through the file a part before wrote it to, by its name
+			// (source a.txt, eval "$(cat a.txt)"); eval "$(make -s env)"
+			// runs none.
+			if argv := called(w); i >= reach && named && len(argv) > 0 && givenCode[argv[0]] &&
+				!slices.ContainsFunc(names, func(n string) bool { return strings.Contains(p.text, n) }) {
+				continue
+			}
+			return nil, false
+		}
 	}
 	return parts, true
+}
+
+// givenCode are the builtins that run the code they are given: their
+// arguments, or the file they name.
+var givenCode = setOf("eval source .")
+
+// docReach is how many of parts, from the first, a heredoc's body may be
+// given to: to the last part that opens one, a compound command's
+// redirect giving it to the parts before (while …; do sh; done <<EOF),
+// and on down the pipeline that part starts; all of them when that
+// pipeline ends in a compound command (cat <<EOF | while read l; do sh;
+// done), whose end the guard doesn't look for. A part after those reads
+// the line's own input (cat <<EOF > f; eval "$(make -s env)").
+func docReach(parts []linePart) int {
+	last := -1
+	for i, p := range parts {
+		if p.doc {
+			last = i
+		}
+	}
+	if last < 0 {
+		return len(parts)
+	}
+	k := last
+	for k+1 < len(parts) && parts[k].after == "|" {
+		k++
+	}
+	if w := strings.Fields(parts[k].text); k > last && len(w) > 0 && (compound[w[0]] || loopLead[w[0]] || strings.HasPrefix(w[0], "{") || strings.HasPrefix(w[0], "(")) {
+		return len(parts)
+	}
+	return k + 1
+}
+
+// compound are the words that open a compound command.
+var compound = setOf("if while until for select case repeat function")
+
+// docNames are the last parts of the files the heredoc parts among parts
+// may write a body to: every word of their commands but the command's
+// name, options and the heredocs' words (cat > a.txt <<EOF: a.txt). ok is
+// false for a word the guard can't name a file by (a variable, a
+// substitution, a pattern, ~, a folder).
+func (r Rules) docNames(parts []linePart) (names []string, ok bool) {
+	for _, p := range parts {
+		if !p.doc {
+			continue
+		}
+		for _, words := range r.cmds(p.code) {
+			for i := 1; i < len(words); i++ {
+				w := words[i]
+				switch {
+				case w == "<" && at(words, i+1) == "<":
+					i += 2 // <<, then its word
+					continue
+				case w == "<" || w == ">" || w == "-" || strings.HasPrefix(w, "-") && !strings.Contains(w, "/"):
+					continue
+				case strings.ContainsAny(w, "$`*?[{~"):
+					return nil, false
+				}
+				n := base(strings.TrimRight(w, "/"))
+				if n == "" || n == "." || n == ".." {
+					return nil, false
+				}
+				names = append(names, n)
+			}
+		}
+	}
+	return names, true
 }
 
 // judgeNoWrite: the floor's NoWrite, of a simple command, its name and
@@ -3686,6 +3920,9 @@ func (r Rules) topLevel(line string) (parts []linePart, ok bool) {
 func (r Rules) judgeNoWrite(cmd string, args, words []string) *Denial {
 	if len(r.NoWrite) == 0 && len(r.NoWriteNames) == 0 {
 		return nil
+	}
+	if cmd == "" {
+		cmd = "''" // a command named by an empty word: '' > f
 	}
 	var refuse func(w string, parents bool) *Denial
 	refuse = func(w string, parents bool) *Denial {
@@ -3756,6 +3993,17 @@ func (r Rules) judgeNoWrite(cmd string, args, words []string) *Denial {
 					return floor(r.unplaced(cmd + " of " + safe(w)))
 				}
 				if dd := refuse(d+w[n:], parents); dd != nil {
+					return dd
+				}
+			}
+			return nil
+		}
+		// A variable the line sets to a path written out is where that
+		// says, whatever the line's folder (S=/tmp/x; cd w && go test >
+		// $S/log).
+		if ps, ok := r.lineVal(w); ok {
+			for _, p := range ps {
+				if dd := refuse(p, parents); dd != nil {
 					return dd
 				}
 			}
