@@ -90,9 +90,11 @@ type WatchLink struct {
 	Receive bool   `json:"receive,omitempty"`
 	Paused  bool   `json:"paused,omitempty"`
 	// Unread counts received messages whose item isn't handled; Held
-	// this project's messages waiting for the user's OK.
+	// this project's messages waiting for the user's OK, Queued those
+	// waiting over the link's rate.
 	Unread int    `json:"unread,omitempty"`
 	Held   int    `json:"held,omitempty"`
+	Queued int    `json:"queued,omitempty"`
 	Last   string `json:"last,omitempty"`
 }
 

@@ -624,6 +624,7 @@ export declare namespace TM {
     paused?: boolean;
     unread?: number;
     held?: number;
+    queued?: number;
     last?: string;
   }
 

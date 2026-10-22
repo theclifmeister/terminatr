@@ -35,6 +35,15 @@ func (s *ServerSource) LinkLog(slug, other string) ([]*link.Message, error) {
 	return link.Log(p, other)
 }
 
+// sentNote is what the footer says of a message that went, or waits
+// over the link's rate.
+func sentNote(m *link.Message) string {
+	if !m.Due.IsZero() {
+		return "queued " + m.ID + " for " + m.Peer + ": over the link's rate, it goes in order " + link.DueWords(m)
+	}
+	return "sent " + m.ID + " to " + m.Peer
+}
+
 func (s *ServerSource) LinkAct(slug, verb, arg, text string) (string, error) {
 	defer s.touch()
 	if s.Caller.IsAgent() {
@@ -50,7 +59,7 @@ func (s *ServerSource) LinkAct(slug, verb, arg, text string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		return "sent " + m.ID + " to " + m.Peer, nil
+		return sentNote(m), nil
 	case "drop":
 		m, err := link.Drop(s.Caller, p, arg, false)
 		if err != nil {
@@ -64,7 +73,7 @@ func (s *ServerSource) LinkAct(slug, verb, arg, text string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		return "sent " + m.ID + " to " + m.Peer, nil
+		return sentNote(m), nil
 	case "request":
 		r, err := link.Ask(s.Caller, p, arg, text)
 		if err != nil {

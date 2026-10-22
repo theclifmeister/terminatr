@@ -191,7 +191,82 @@ func (sr safetyRows) sharedRows() []setting {
 		sr.modelsRow(),
 		sr.coordModelRow(),
 		sr.branchRow(),
+		sr.linkLimitsRow(),
 	}
+}
+
+// linkLimits are the link limits' settings (config.LinkKeys), as Link
+// limits lists them: each with its default, its bound, the values enter
+// steps through, and its value in words.
+var linkLimits = []struct {
+	key, label, help string
+	def, most        int
+	steps            []int
+	words            func(int) string
+}{
+	{"link_burst", "Messages at once", "How many messages the coordinator may send on a link at once before the rest wait their turn (each direction its own). Messages over the rate are queued and sent in order, never dropped. Raising it above the default asks first.",
+		config.DefaultLinkBurst, config.MaxLinkBurst, []int{1, 2, 3, 5, 10, 20}, func(n int) string { return fmt.Sprintf("%d at once", n) }},
+	{"link_per_hour", "Messages an hour", "How many messages a link carries an hour each way after the burst; queued ones go as it allows. Raising it above the default asks first.",
+		config.DefaultLinkPerHour, config.MaxLinkPerHour, []int{5, 10, 20, 30, 60, 120}, func(n int) string { return fmt.Sprintf("%d an hour", n) }},
+	{"link_max_kb", "Message size", "The most text one message may have; a longer one is refused, to be split into parts (which go in order) or, on this server, to attach a library file. Raising it above the default asks first.",
+		config.DefaultLinkMaxKB, config.MaxLinkKB, []int{4, 8, 16, 32, 64}, func(n int) string { return fmt.Sprintf("%d KB", n) }},
+}
+
+// linkLimitsWords is Link limits' value: "3 at once · 10 an hour · 8 KB".
+func linkLimitsWords(s config.Safety) string {
+	var out []string
+	for _, l := range linkLimits {
+		out = append(out, l.words(s.Value(l.key).(int)))
+	}
+	return strings.Join(out, " · ")
+}
+
+// linkLimitRows are the link limits Link limits opens, each its own
+// setting with its own scope. One raised above its default lets
+// coordinators send more without the user: it asks first.
+func (sr safetyRows) linkLimitRows() []setting {
+	var rows []setting
+	for _, l := range linkLimits {
+		get := func(m *dash) int { n, _ := sr.safety(m).Value(l.key).(int); return n }
+		put := func(m *dash, n int) tea.Cmd {
+			n = min(max(n, 1), l.most)
+			cur := get(m)
+			if n == cur {
+				return nil
+			}
+			msg := "links " + sr.ofWho + " take " + l.words(n)
+			if n <= cur || n <= l.def {
+				return sr.set(m, l.key, n, msg)
+			}
+			who := sr.slug + "'s coordinator"
+			if sr.all {
+				who = "the coordinators of " + followers(m, []string{l.key})
+			}
+			q := fmt.Sprintf("Raise %s %s to %s (the default is %s)? %s then reaches linked projects with more, without you.", strings.ToLower(l.label), sr.forWho, l.words(n), l.words(l.def), who)
+			m.confirm("Raise "+strings.ToLower(l.label), q, func() tea.Cmd {
+				return sr.set(m, l.key, n, msg)
+			})
+			return nil
+		}
+		rows = append(rows, setting{label: l.label, help: l.help,
+			keys: []string{l.key}, word: func(s config.Safety) string { return l.words(s.Value(l.key).(int)) },
+			value:  func(m *dash) string { return l.words(get(m)) },
+			change: func(m *dash) tea.Cmd { return put(m, nextStep(l.steps, get(m))) },
+			adjust: func(m *dash, d int) tea.Cmd { return put(m, get(m)+d) }})
+	}
+	return sr.scope(rows)
+}
+
+// linkLimitsRow is Link limits, which lists linkLimitRows.
+func (sr safetyRows) linkLimitsRow() setting {
+	rows := sr.linkLimitRows()
+	return setting{label: "Link limits", help: "How much the coordinator may send on links to other projects (tm link): messages at once and an hour, each way, and a message's size. Messages over the rate wait queued and go in order. Between two projects here the lower of their limits holds; a paired server keeps its own. Enter lists them.",
+		keys: config.LinkKeys, word: linkLimitsWords,
+		value: func(m *dash) string { return linkLimitsWords(sr.safety(m)) },
+		change: func(m *dash) tea.Cmd {
+			m.push(&historyView{title: "link limits " + sr.forWho, list: settingsList{rows: rows}, all: sr.all, unit: "one"})
+			return nil
+		}}
 }
 
 // branchPreview is the branch a thread would get from template: a

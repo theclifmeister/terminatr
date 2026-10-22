@@ -31,8 +31,10 @@ type Row struct {
 	Remote bool `json:"remote,omitempty"`
 	// Unread counts received messages whose item isn't handled; Held
 	// this side's messages waiting for the user's OK.
-	Unread int       `json:"unread"`
-	Held   int       `json:"held"`
+	Unread int `json:"unread"`
+	Held   int `json:"held"`
+	// Queued counts this side's messages waiting over the rate.
+	Queued int       `json:"queued,omitempty"`
 	Last   string    `json:"last,omitempty"` // the newest message's id
 	LastAt time.Time `json:"last_at,omitzero"`
 	// Asks is the paired server's link request that waits for the
@@ -137,6 +139,7 @@ func Rows(cfg *config.Config, p *project.Project) []Row {
 		}
 		r.Paused = st.paused[pairKey(p.Slug, o)]
 		r.Held = st.held[p.Slug+">"+o]
+		r.Queued = st.queued[p.Slug+">"+o]
 		for _, it := range items {
 			if it.Kind == KindMessage && it.Subject == o {
 				r.Unread++

@@ -298,3 +298,20 @@ func TestLinkRequests(t *testing.T) {
 		t.Fatalf("decline %v", src.linkActs)
 	}
 }
+
+// TestQueuedState: the conversation says when a message over the rate
+// goes, and tells it from one waiting for a paired server; the links
+// list counts those waiting.
+func TestQueuedState(t *testing.T) {
+	due := time.Now().Add(12 * time.Minute)
+	if got := messageState(&link.Message{State: link.StateQueued, Due: due}, "beta"); !strings.HasPrefix(got, "queued over the rate, goes about ") || !strings.Contains(got, due.Local().Format("15:04")) {
+		t.Errorf("over the rate: %q", got)
+	}
+	if got := messageState(&link.Message{State: link.StateQueued}, "mini/api"); got != "queued until mini takes it" {
+		t.Errorf("outbox: %q", got)
+	}
+	p := ProjectData{Links: []link.Row{{Peer: "beta", Queued: 6}}}
+	if lines, _, _ := messagesLines(p, -1, 120); !strings.Contains(ansi.Strip(lines[0]), "6 queued over the rate") {
+		t.Errorf("row %q", lines[0])
+	}
+}

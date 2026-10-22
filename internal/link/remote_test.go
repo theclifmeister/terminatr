@@ -3,9 +3,11 @@ package link
 import (
 	"context"
 	"crypto/ed25519"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -327,8 +329,8 @@ func TestRemoteRefusals(t *testing.T) {
 			t.Fatalf("forged id: %+v", r)
 		}
 		id := "M-" + sv.sid.Short()[:4] + "-2"
-		r = Receive("studio", sv.sid, proto.PeerMessage{Epoch: "e", Seq: 2, Kind: proto.PeerMessageText, From: "acme", To: "api", ID: id, By: "coordinator", Text: strings.Repeat("x", MaxText+1)})
-		if r.Status != proto.PeerRefused || r.Code != "bad-message" {
+		r = Receive("studio", sv.sid, proto.PeerMessage{Epoch: "e", Seq: 2, Kind: proto.PeerMessageText, From: "acme", To: "api", ID: id, By: "coordinator", Text: strings.Repeat("x", config.DefaultLinkMaxKB<<10+1)})
+		if r.Status != proto.PeerRefused || r.Code != "too-long" {
 			t.Fatalf("too long: %+v", r)
 		}
 		r = Receive("studio", sv.sid, proto.PeerMessage{Epoch: "e", Seq: 3, Kind: proto.PeerMessageText, From: "acme", To: "nope", ID: "M-" + sv.sid.Short()[:4] + "-3", By: "coordinator", Text: "x"})
@@ -394,4 +396,64 @@ func TestTheirSide(t *testing.T) {
 			t.Errorf("%d messages: %q, want %q", len(c.msgs), got, c.want)
 		}
 	}
+}
+
+// TestRemoteQueue: a reply in nine parts to a paired server's project.
+// The burst goes to the outbox, the rest wait queued here and follow as
+// the bucket refills. The far side, set to fewer an hour, answers retry
+// with when to try again: the outbox holds that server till then, and
+// nothing is lost or reordered.
+func TestRemoteQueue(t *testing.T) {
+	sv := setupServers(t)
+	t.Cleanup(func() { holdOff("mini", 0) })
+	os.WriteFile(filepath.Join(sv.mini, "config.toml"), []byte("[projects.api]\nlink_burst = 2\nlink_per_hour = 5\n\n[projects.api.links]\n\"studio/acme\" = \"both\"\n"), 0o600)
+	coordAcme := caller.Caller{Kind: caller.Coordinator, Project: "acme"}
+	toMini := &wire{sv: sv, to: sv.mini, alias: "studio", id: sv.sid, up: true}
+	acme := sv.open(sv.studio, "acme")
+	api := sv.open(sv.mini, "api")
+	var parts []string
+	sv.in(sv.studio, func() {
+		for i := range 9 {
+			parts = append(parts, fmt.Sprintf("part %d", i+1))
+			m, err := Send(coordAcme, acme, "mini/api", Opts{Text: parts[i]})
+			if err != nil || m.State != StateQueued || (i >= config.DefaultLinkBurst) == m.Due.IsZero() {
+				t.Fatalf("part %d: %v %+v", i+1, err, m)
+			}
+		}
+	})
+	arrived := func() []string {
+		var out []string
+		sv.in(sv.mini, func() {
+			msgs, _ := Log(api, "studio/acme")
+			for _, m := range msgs {
+				out = append(out, m.Text)
+			}
+		})
+		return out
+	}
+	start := *sv.clock
+	sv.in(sv.studio, func() { Flush(context.Background(), toMini) })
+	if got := arrived(); len(got) != 2 {
+		t.Fatalf("first flush: %q", got)
+	}
+	calls := toMini.calls
+	sv.in(sv.studio, func() { Flush(context.Background(), toMini) })
+	if toMini.calls != calls {
+		t.Fatal("tried mini again before its retry_after")
+	}
+	for step := 1; step <= 20 && len(arrived()) < 9; step++ {
+		*sv.clock = start.Add(time.Duration(step) * 6 * time.Minute)
+		sv.in(sv.studio, func() { Flush(context.Background(), toMini) })
+	}
+	if got := arrived(); !slices.Equal(got, parts) {
+		t.Fatalf("arrived %q", got)
+	}
+	sv.in(sv.studio, func() {
+		msgs, _ := Log(acme, "mini/api")
+		for _, m := range msgs {
+			if m.State != StateSent {
+				t.Errorf("%s %s", m.ID, m.State)
+			}
+		}
+	})
 }

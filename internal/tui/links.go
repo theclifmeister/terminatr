@@ -430,6 +430,9 @@ func messagesLines(p ProjectData, sel, w int) ([]string, int, []int) {
 		if r.Held > 0 {
 			counts += fmt.Sprintf(" · %d waits for you", r.Held)
 		}
+		if r.Queued > 0 {
+			counts += fmt.Sprintf(" · %d queued over the rate", r.Queued)
+		}
 		if r.Last != "" {
 			counts += " · last " + r.Last + " " + age(time.Since(r.LastAt))
 		}
@@ -542,12 +545,15 @@ func (v *convView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 
 // messageState is msg's state in words; other is the project at the
 // other end, a paired server's "<server>/<slug>" for queued and
-// undelivered.
+// undelivered. One waiting over the link's rate says when it goes.
 func messageState(msg *link.Message, other string) string {
 	switch msg.State {
 	case link.StateHeld:
 		return "waits for your OK"
 	case link.StateQueued:
+		if !msg.Due.IsZero() {
+			return "queued over the rate, goes " + link.DueWords(msg)
+		}
 		alias, _, _ := config.Remote(other)
 		return "queued until " + alias + " takes it"
 	case link.StateUndelivered:

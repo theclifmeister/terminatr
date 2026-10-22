@@ -11,7 +11,7 @@ import (
 // and order.
 func TestSettingKeys(t *testing.T) {
 	want := []string{"start_threads", "yolo", "coordinator_approves", "parallel_threads", "global_parallel_threads", "auto_close", "auto_close_days", "auto_resolve", "pr_followup", "pr_poll_seconds", "complete_tasks", "coordinator_remote_control", "auto_clear", "coordinator_merges", "merge_method", "fast_forward_checkout", "protection", "coordinator_access", "thread_agent", "coordinator_agent", "models", "coordinator_model", "active", "paused", "archived", "pinned", "share",
-		"archive_tasks_days", "archive_threads_days", "archive_inbox_days", "archive_journal_days", "branch_name", "guard", "guard_off", "guard_mode", "guard_allow"}
+		"archive_tasks_days", "archive_threads_days", "archive_inbox_days", "archive_journal_days", "link_burst", "link_per_hour", "link_max_kb", "branch_name", "guard", "guard_off", "guard_mode", "guard_allow"}
 	if !slices.Equal(ProjectKeys, want) {
 		t.Errorf("ProjectKeys %v", ProjectKeys)
 	}

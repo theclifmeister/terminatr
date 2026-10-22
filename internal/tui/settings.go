@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"cmp"
 	"fmt"
 	"regexp"
 	"slices"
@@ -1056,11 +1057,13 @@ func historyWords(s config.Safety) string {
 }
 
 // historyView lists the retention ages: enter steps one, + and - change
-// it by a day, X makes a project's follow all projects again.
+// it by a day (by unit), X makes a project's follow all projects again.
+// Link limits lists its settings in one too.
 type historyView struct {
 	title string
 	list  settingsList
 	all   bool
+	unit  string // what + and - change by; "" is a day
 }
 
 func (v *historyView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
@@ -1074,9 +1077,10 @@ func (v *historyView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 
 func (v *historyView) render(m *dash) string {
 	lines, sel, hits := v.list.lines(m, m.inner(viewWidth))
-	keys := "enter step · + - a day · X follow all projects · ↑ ↓ move · esc back"
+	unit := cmp.Or(v.unit, "a day")
+	keys := "enter step · + - " + unit + " · X follow all projects · ↑ ↓ move · esc back"
 	if v.all {
-		keys = "enter step · + - a day · ↑ ↓ move · esc back"
+		keys = "enter step · + - " + unit + " · ↑ ↓ move · esc back"
 	}
 	b := box{title: v.title, body: lines, sel: sel, hits: hits, keys: keys}
 	return m.popup(b)

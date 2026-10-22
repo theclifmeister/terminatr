@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"math"
 	"os"
 	"path/filepath"
 	"slices"
@@ -25,6 +26,9 @@ type store struct {
 	// Held are the messages waiting for the user's OK, by "<from>><to>",
 	// so a look at the links reads no message files.
 	Held map[string][]string `json:"held,omitempty"`
+	// Queued are the messages over their direction's rate, by
+	// "<from>><to>" in the order they go (queue.go).
+	Queued map[string][]queued `json:"queued,omitempty"`
 	// Epoch, Out and In order the outboxes to paired servers (remote.go):
 	// this store's random epoch, the last sequence queued to each alias,
 	// and the highest taken from each.
@@ -39,7 +43,7 @@ type store struct {
 	ReqIn    map[string][]time.Time `json:"req_in,omitempty"`
 }
 
-// bucket is one direction's token bucket (PerHour, Burst).
+// bucket is one direction's token bucket (limits).
 type bucket struct {
 	Tokens float64   `json:"tokens"`
 	At     time.Time `json:"at"`
@@ -80,6 +84,9 @@ func loadStore(file string) *store {
 	}
 	if s.Held == nil {
 		s.Held = map[string][]string{}
+	}
+	if s.Queued == nil {
+		s.Queued = map[string][]queued{}
 	}
 	if s.Out == nil {
 		s.Out = map[string]int{}
@@ -164,43 +171,35 @@ func (s *store) pair(a, b string) *pair {
 	return s.Pairs[k]
 }
 
-// refill is the bucket from → to at t.
-func (s *store) refill(from, to string, t time.Time) *bucket {
+// refill is the bucket from → to at t, under limits l.
+func (s *store) refill(from, to string, l limits, t time.Time) *bucket {
 	k := from + ">" + to
 	b := s.Buckets[k]
 	if b == nil {
-		b = &bucket{Tokens: Burst, At: t}
+		b = &bucket{Tokens: float64(l.burst), At: t}
 		s.Buckets[k] = b
 	}
 	if el := t.Sub(b.At); el > 0 {
-		b.Tokens = min(Burst, b.Tokens+el.Hours()*PerHour)
+		// to a millionth, so a token's time brings a whole one back
+		b.Tokens = math.Round((b.Tokens+el.Hours()*float64(l.perHour))*1e6) / 1e6
 		b.At = t
 	}
+	// A burst set lower since holds at once.
+	b.Tokens = min(float64(l.burst), b.Tokens)
 	return b
 }
 
-// every is how long one token takes to come back.
-const every = time.Hour / PerHour
-
-// allow refuses a message from → to at t while the breaker holds the
-// link, and with rate, while the direction's bucket is empty.
-func (s *store) allow(from, to string, rate bool, t time.Time) error {
+// allow refuses a message from → to while the breaker holds the link.
+func (s *store) allow(from, to string) error {
 	if p := s.Pairs[pairKey(from, to)]; p != nil && p.Paused {
 		return refuse("link-paused", "the link with %s is paused after %d exchanges in an hour without the user; the user resumes it", to, Exchanges)
-	}
-	if !rate {
-		return nil
-	}
-	if b := s.refill(from, to, t); b.Tokens < 1 {
-		next := t.Add(time.Duration((1 - b.Tokens) * float64(every)))
-		return refuse("rate-limited", "the link to %s takes %d messages an hour (%d at once); the next fits at %s", to, PerHour, Burst, next.Local().Format("15:04"))
 	}
 	return nil
 }
 
 // spend takes a token of from → to.
-func (s *store) spend(from, to string, t time.Time) {
-	s.refill(from, to, t).Tokens--
+func (s *store) spend(from, to string, l limits, t time.Time) {
+	s.refill(from, to, l, t).Tokens--
 }
 
 // human records the user's input on the link: the breaker counts again
