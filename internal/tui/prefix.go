@@ -158,6 +158,16 @@ func (m *dash) prefixCommand(key string) tea.Cmd {
 	case paneCommands[key] && key != "tab":
 		// The sidebar's width and slim strip; the popup stays.
 		return m.listKey(key)
+	case m.over == nil && m.remoteHere() && slices.ContainsFunc(actions, func(a action) bool { return runsAs(a.id, a.keys, key) }):
+		// A paired server's dashboard: what it keeps (settings, help, the
+		// next project), never an action on this server's project its
+		// list rows are of (peerdash.go).
+		m.stack = nil
+		return m.remoteAction(key)
+	case m.over == nil && m.remoteHere() && m.commandKeyed(typed):
+		alias, slug, _ := m.remote()
+		m.stack, m.msg = nil, remoteNothing(alias, slug)
+		return nil
 	case popupCommands[key], key == "tab":
 		m.stack = nil
 		return m.listKey(key)
