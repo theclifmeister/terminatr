@@ -324,18 +324,22 @@ func mainState(common string) (dirs, files []string) {
 // repos pr update), which Claude Code's auto mode blocks unless they
 // match a rule exactly. Commands only the user's word allows (tm task
 // status … done --approved-by-user, tm thread resolve --discard, tm
-// library rm, tm thread answer) and the human's (tm access, tm mod) are
-// never here: a prefix rule would let them through unseen. tm thread
-// start's own flags of the user's word (--approved-by-user, --over-cap)
-// go through with it under start_threads = auto, as tm takes them on the
-// coordinator's word either way.
+// library rm, tm thread answer) and the human's (tm mod, tm access
+// reset and set but for local-ports) are never here: a prefix rule
+// would let them through unseen. tm thread start's own flags of the
+// user's word (--approved-by-user, --over-cap) go through with it under
+// start_threads = auto, as tm takes them on the coordinator's word
+// either way; so do tm access writes' --all and another project's name,
+// which tm and the guard (accessOpen) refuse a coordinator themselves.
 var coordinatorRules = []struct {
 	commands []string
 	setting  string
 	on       func(config.Safety) bool
 }{
 	// Read-only: they change nothing.
-	{[]string{"tm context", "tm inbox list", "tm task list", "tm task show", "tm thread list", "tm thread show", "tm thread read", "tm library list", "tm memory find", "tm memory check"}, "", nil},
+	{[]string{"tm context", "tm inbox list", "tm task list", "tm task show", "tm thread list", "tm thread show", "tm thread read", "tm library list", "tm memory find", "tm memory check", "tm access show", "tm access explain"}, "", nil},
+	// Its own project's rules within the level (accessedit.go accessFor).
+	{[]string{"tm access add", "tm access rm", "tm access edit", "tm access drop", "tm access undrop", "tm access set local-ports"}, "coordinator_access", func(s config.Safety) bool { return s.CoordinatorAccess }},
 	{[]string{"tm thread start", "tm task delegate"}, "start_threads", func(s config.Safety) bool { return s.StartThreads == config.StartAuto }},
 	{[]string{"tm thread approve"}, "coordinator_approves", func(s config.Safety) bool { return s.CoordinatorApproves }},
 	{[]string{"tm thread merge"}, "coordinator_merges", func(s config.Safety) bool { return s.CoordinatorMerges && s.Merge == config.MergeCoordinator }},

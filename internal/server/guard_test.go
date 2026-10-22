@@ -643,7 +643,8 @@ func TestAccessCoordinatorCommands(t *testing.T) {
 		}
 		return a.Commands
 	}
-	readOnly := []string{"tm context", "tm inbox list", "tm task list", "tm task show", "tm thread list", "tm thread show", "tm thread read", "tm library list", "tm memory find", "tm memory check"}
+	readOnly := []string{"tm context", "tm inbox list", "tm task list", "tm task show", "tm thread list", "tm thread show", "tm thread read", "tm library list", "tm memory find", "tm memory check", "tm access show", "tm access explain"}
+	access := []string{"tm access add", "tm access rm", "tm access edit", "tm access drop", "tm access undrop", "tm access set local-ports"}
 	with := func(c ...string) []string { return append(slices.Clone(readOnly), c...) }
 	own := "[projects." + p.Slug + "]\n"
 	for _, c := range []struct {
@@ -662,8 +663,11 @@ func TestAccessCoordinatorCommands(t *testing.T) {
 		{own + "coordinator_merges = true\nmerge = \"thread\"\n", with("tm thread approve")},
 		{"[defaults]\ncoordinator_merges = true\n" + own + "coordinator_merges = false\n", with("tm thread approve")},
 		{own + "start_threads = \"auto\"\ncoordinator_merges = true\n", with("tm thread start", "tm task delegate", "tm thread approve", "tm thread merge")},
-		// Neither the user's word nor the human's commands, whatever is on.
-		{own + "complete_tasks = \"merged\"\ncoordinator_access = true\ncoordinator_approves = false\n", readOnly},
+		{own + "coordinator_access = true\ncoordinator_approves = false\n", with(access...)},
+		{"[defaults]\ncoordinator_access = true\n", with(append(slices.Clone(access), "tm thread approve")...)},
+		{"[defaults]\ncoordinator_access = true\n" + own + "coordinator_access = false\n", with("tm thread approve")},
+		// Nothing for complete_tasks: done is the user's word whatever it says.
+		{own + "complete_tasks = \"merged\"\ncoordinator_approves = false\n", readOnly},
 	} {
 		writeConfig(t, c.body)
 		if got := cmds(proto.RoleCoordinator); !slices.Equal(got, c.want) {
@@ -675,8 +679,8 @@ func TestAccessCoordinatorCommands(t *testing.T) {
 	}
 	for _, r := range coordinatorRules {
 		for _, c := range r.commands {
-			for _, human := range []string{"tm access", "tm mod", "tm thread resolve", "tm library rm", "tm task status", "tm thread answer", "tm memory rm"} {
-				if strings.HasPrefix(c, human) {
+			for _, human := range []string{"tm access set", "tm access reset", "tm mod", "tm thread resolve", "tm library rm", "tm task status", "tm thread answer", "tm memory rm"} {
+				if strings.HasPrefix(c, human) && c != "tm access set local-ports" {
 					t.Errorf("%q allowed: it needs the user's word or is the human's", c)
 				}
 			}
