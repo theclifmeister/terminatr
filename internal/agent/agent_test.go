@@ -1508,3 +1508,31 @@ func TestGuardLocatedCwd(t *testing.T) {
 		}
 	}
 }
+
+// TestClaudeCommandRules: Access.Commands become Bash allow rules in the
+// launch settings, and only there: the coordinator's merge rule
+// (coordinator_merges) is in its settings iff its Access carries it, and
+// a thread's never does.
+func TestClaudeCommandRules(t *testing.T) {
+	a := claude(t)
+	rule := "Bash(tm thread merge:*)"
+	allow := func(spec LaunchSpec) []string {
+		l, err := a.Launch(spec)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return parseSettings(t, l.Files["claude-settings.json"]).Permissions.Allow
+	}
+	coord := threadSpec()
+	coord.Role = Role("coordinator")
+	if got := allow(coord); contains(got, rule) {
+		t.Errorf("coordinator without commands: allow = %q", got)
+	}
+	coord.Access.Commands = []string{"tm thread merge"}
+	if got := allow(coord); !contains(got, rule) {
+		t.Errorf("coordinator with merge command: allow = %q lacks %q", got, rule)
+	}
+	if got := allow(threadSpec()); contains(got, rule) {
+		t.Errorf("thread: allow = %q", got)
+	}
+}

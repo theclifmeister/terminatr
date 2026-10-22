@@ -222,7 +222,13 @@ func (t *Ticker) autoClear(p *project.Project, sessions []proto.SessionInfo, saf
 	cm.Seen, cm.Ready = "", time.Time{}
 	cm.AskedID, cm.Asked = "", time.Time{}
 	pm.Upkeep = &upkeepMemo{ID: seen, Cleared: now, Percent: pct}
+	// The fresh conversation hasn't been told about what is still open.
+	forget(pm)
 	detail := fmt.Sprintf("%s %s, idle with nothing waiting", coord.ID, at)
+	// The user's clear doesn't wait for the project: say what still did.
+	if w := waiting(p, sessions); user && len(w) > 0 {
+		detail = fmt.Sprintf("%s %s, still waiting: %s", coord.ID, at, strings.Join(w, "; "))
+	}
 	if err := p.Journal(caller.Caller{Kind: caller.Ticker}, "coordinator.clear", p.Slug, detail); err != nil {
 		t.o.Log.Printf("ticker: %s: journal: %v", p.Slug, err)
 	}
@@ -308,29 +314,46 @@ func clearBlocked(p *project.Project, sessions []proto.SessionInfo, hint int, de
 	case own:
 		return coord, ""
 	}
+	if w := waiting(p, sessions); len(w) > 0 {
+		return coord, w[0]
+	}
+	return coord, ""
+}
+
+// waiting says what waits in the project, in clearBlocked's words: a
+// thread waiting on a question, the inbox's open items, a thread that
+// needs the user.
+func waiting(p *project.Project, sessions []proto.SessionInfo) []string {
+	var w []string
 	for _, s := range sessions {
 		if s.Project == p.Slug && s.Role == proto.RoleThread && (s.Question != nil || s.State == "blocked") {
-			return coord, "thread " + s.Thread + " waits"
+			w = append(w, "thread "+s.Thread+" waits")
 		}
 	}
-	items, err := p.Inbox()
-	if err != nil {
-		return coord, "inbox: " + err.Error()
-	}
-	if len(items) > 0 {
-		return coord, "inbox not empty"
+	if items, err := p.Inbox(); err != nil {
+		w = append(w, "inbox: "+err.Error())
+	} else if len(items) > 0 {
+		var what []string
+		for _, it := range items {
+			if subjectRE.MatchString(it.Subject) {
+				what = append(what, it.Kind+" "+it.Subject)
+			} else {
+				what = append(what, it.Kind)
+			}
+		}
+		w = append(w, fmt.Sprintf("inbox not empty: %d %s open (%s)", len(items), noun(items), strings.Join(what, ", ")))
 	}
 	recs, err := thread.List(p)
 	if err != nil {
-		return coord, "threads: " + err.Error()
+		return append(w, "threads: "+err.Error())
 	}
 	for _, r := range recs {
 		if r.State == thread.Resolved {
 			continue
 		}
 		if st, err := thread.ReadStatus(p, r.ID); err == nil && st.NeedsYou != "" {
-			return coord, "thread " + r.ID + " needs the user"
+			w = append(w, "thread "+r.ID+" needs the user")
 		}
 	}
-	return coord, ""
+	return w
 }
