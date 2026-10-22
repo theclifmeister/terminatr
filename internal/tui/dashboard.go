@@ -552,6 +552,9 @@ func (m *dash) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case modCursorMsg:
 		return m, m.cursorSent(msg)
+	case remotePopupMsg:
+		m.remotePopupTook(msg)
+		return m, nil
 	case boardMsg:
 		if pv := m.projectPopupView(); pv != nil && pv.slug == msg.slug {
 			if msg.err == nil {

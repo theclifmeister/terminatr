@@ -1,0 +1,68 @@
+== overview
+Project       acme-api on mini
+Goal          the billing API
+
+Repositories  2 on mini; their paths stay there
+Machines      mini
+
+Coordinator   coordinator ● working · 22 / 100 context
+Threads       claude · t-0041
+
+Tasks         1 needs you · 1 in motion · 1 on deck · 1 done
+== inbox
+report          T41
+
+mini's coordinator handles these; what each says stays on mini.
+== tasks
+Needs you 1
+T41    review   Billing · t-0041 · 3/3 steps
+
+In motion 1
+T45    started  Invoices · t-0045 · 1/4 steps
+
+On deck 1
+T44    ready    Refunds
+
+Done 1
+T40    done     Setup
+== settings
+Start threads               ask first
+Parallel threads            3
+Auto-close finished threads when its pull request merges
+Complete tasks              by you
+Pull request follow-up      on
+Remote control              off
+Auto-clear coordinator      off
+Coordinator may merge       off
+Merge method                squash
+Keep my checkout current    off
+Thread agent                claude
+Coordinator agent           claude
+Thread models               any
+Coordinator model           agent's default
+Link limits                 3 at once · 10 an hour · 8 KB
+Keep history                30 days
+
+Access
+Protection                  sandboxed
+Yolo mode                   off
+Guard                       on · enforce
+Coordinator access          off
+Merge                       coordinator
+
+Project
+Active                      on
+Paused                      off
+Shared                      on
+== messages
+terminatr             ⇄ linked both ways on mini's side
+  1 unread there
+  → M-AB12-1     read        2m
+  ← M-9C1B-2     sent        2m re M-AB12-1
+
+→ is mini's side sending. Their texts are in your project's Messages tab.
+== memory
+Build notes
+Release steps
+
+Titles only; the notes stay on their server.

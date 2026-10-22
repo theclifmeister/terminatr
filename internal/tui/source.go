@@ -374,6 +374,12 @@ type PeerSource interface {
 	// for the six digits; ctx cancels. The human's, as above.
 	PairPeer(ctx context.Context, relay string, ev PairEvents) (string, error)
 	JoinPeer(ctx context.Context, code string, ev PairEvents) (string, error)
+	// PeerPopup reads the project popup of the paired server alias's
+	// shared project slug, read-only and cleaned (peer.popup-read,
+	// §16.9): a *proto.Error with ErrUnknownMethod from a tm that
+	// serves none, ErrPanesOff while its pane switch for this server is
+	// off. The human's.
+	PeerPopup(alias, slug string) (proto.PeerPopup, error)
 }
 
 // ModSource installs, updates and runs mods (the Mods tab).
