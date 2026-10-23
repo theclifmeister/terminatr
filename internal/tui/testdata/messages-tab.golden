@@ -1,0 +1,31 @@
+│⚑ NEEDS YOU 4 · 1 message waits for your OK · 1 file waits for you · 1 paused link · 1 link request
+│⚑ mini/acme-api    link paused: too many messages without you · R resumes it
+│⚑ nas/old          asks to link (R-9C1B-3) · A accept · X decline
+│
+│  project          id        title                                                                date
+│⚑ → beta           M-3       Thanks: a long answer that goes on and on, past what the title col…  Oct 14 15:09
+│⚑ mini/acme-api    M-9C1B-8  The report, attached                                                 Oct 14 15:06
+│  → mini/acme-api  M-4F2A-7  From me                                                              Oct 14 15:04
+│  beta             M-1       The API landed.                                                      Oct 14 15:02
+== M-3 · alpha → beta · A send · X drop · ↑ ↓ scroll · esc close
+│From      alpha
+│To        beta
+│Date      Wed Oct 14 2026 15:09
+│Id        M-3
+│Re        M-1
+│State     waits for your OK
+│Size      120 B
+│Attached  t-0042/notes.md
+│
+│Thanks: a long answer that goes on and on, past what the title column can hold in the list, so it is cut
+│there.
+== M-9C1B-8 · mini/acme-api → alpha · A accept the file · X decline · C cancel the file · R resume the link · ↑ ↓ scroll · esc close
+│From      mini/acme-api (its user)
+│To        alpha
+│Date      Wed Oct 14 2026 15:06
+│Id        M-9C1B-8
+│State     sent
+│Size      20 B
+│File      ▸ report.pdf  4.2 MB  offered · waits for you
+│
+│The report, attached

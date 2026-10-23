@@ -30,25 +30,25 @@ func fileDash(t *testing.T) (*fakeSource, *dash) {
 	return src, m
 }
 
-// TestMessagesTabFiles: the tab counts files that wait and move, NEEDS
-// YOU says a file waits, and in the conversation the file is a line
-// under its message: A accepts, X declines after y, C cancels one on
-// its way after y.
+// TestMessagesTabFiles: NEEDS YOU says a file waits and the list marks
+// its message; in the message's dialog the file is a line with its
+// transfer's state: A accepts, X declines after y, C cancels one on its
+// way after y, and enter reads one received.
 func TestMessagesTabFiles(t *testing.T) {
 	src, m := fileDash(t)
 	if out := screen(m); !strings.Contains(out, "1 file waits") {
 		t.Fatalf("no NEEDS YOU words:\n%s", out)
 	}
 	m.openTab("alpha", tabMessages, 0)
-	if out := screen(m); !strings.Contains(out, "1 file waits for you · 1 on the way") {
+	if out := screen(m); !strings.Contains(out, "⚑ NEEDS YOU 1 · 1 file waits for you") || !strings.Contains(out, "⚑ beta") {
 		t.Fatalf("tab:\n%s", out)
 	}
+	keyPress(m, "down")
 	press(m, "enter")
-	keyPress(m, "up")
 	out := screen(m)
-	for _, want := range []string{"▸ report.pdf  4.2 MB  offered · waits for you", "▸ trace.bin  64.0 MB  sending 37% · 1.0 MB/s · 0:40 left", "A accept · X decline"} {
+	for _, want := range []string{"File      ▸ report.pdf  4.2 MB  offered · waits for you", "A accept the file · X decline"} {
 		if !strings.Contains(out, want) {
-			t.Errorf("conversation lacks %q:\n%s", want, out)
+			t.Errorf("dialog lacks %q:\n%s", want, out)
 		}
 	}
 	drain(t, m, press(m, "A"))
@@ -63,21 +63,26 @@ func TestMessagesTabFiles(t *testing.T) {
 	if len(src.linkActs) != 2 || src.linkActs[1] != "alpha decline-file X-2" {
 		t.Fatalf("decline %v", src.linkActs)
 	}
-	keyPress(m, "down")
-	if out := screen(m); !strings.Contains(out, "C cancel") || strings.Contains(out, "A accept") {
-		t.Fatalf("keys on the sent file:\n%s", out)
+	press(m, "esc")
+	keyPress(m, "up")
+	press(m, "enter")
+	out = screen(m)
+	if !strings.Contains(out, "▸ trace.bin  64.0 MB  sending 37% · 1.0 MB/s · 0:40 left") || !strings.Contains(out, "C cancel the file") || strings.Contains(out, "A accept") {
+		t.Fatalf("the sent file:\n%s", out)
 	}
 	press(m, "C")
 	drain(t, m, press(m, "Y"))
 	if len(src.linkActs) != 3 || src.linkActs[2] != "alpha cancel-file X-4" {
 		t.Fatalf("cancel %v", src.linkActs)
 	}
+	press(m, "esc")
 	// Received: enter reads it as the Library does.
 	src.linkFiles[0].State = link.FileReceived
 	src.libFiles = map[string]string{"M-1/report.pdf": "plain words"}
-	m.top().(*convView).load(m)
-	keyPress(m, "up")
-	if out := screen(m); !strings.Contains(out, "received · sha256 ok") || !strings.Contains(out, "enter read") {
+	m.reloadMessages()
+	keyPress(m, "down")
+	press(m, "enter")
+	if out := screen(m); !strings.Contains(out, "received · sha256 ok") || !strings.Contains(out, "enter read the file") {
 		t.Fatalf("received:\n%s", out)
 	}
 	keyPress(m, "enter")

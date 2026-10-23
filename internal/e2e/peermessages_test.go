@@ -20,6 +20,7 @@ import (
 var peerMessageMasks = append([]Mask{
 	{Name: "id", Re: regexp.MustCompile(`[MR]-[0-9A-F]{4}-\d+`)},
 	{Name: "age", Re: regexp.MustCompile(`\b\d+[smhd]\b`)},
+	{Name: "date", Re: regexp.MustCompile(`[A-Z][a-z]{2} [A-Z][a-z]{2} \d{1,2} \d{4} \d\d:\d\d`)},
 	{Name: "time", Re: regexp.MustCompile(`[A-Z][a-z]{2} \d{1,2} \d\d:\d\d`)},
 	{Name: "server", Re: regexp.MustCompile(`◉ \S+ · this server *`)},
 	{Name: "since", Re: regexp.MustCompile(`◉ mini · [^│]*`)},
@@ -44,10 +45,11 @@ func shareProject(t *testing.T, env *Env, slug string) {
 
 // TestPeerMessagesTab (T683): acme on studio and api on mini, linked
 // both ways across the pair, write to each other; docs on mini asks acme
-// to link. In studio's console acme's Messages tab lists mini/api with
-// its last message and mini/docs asking to link; enter opens the
-// conversation, both ways with each message's state; X declines the
-// request after a Y and mini hears of it.
+// to link. In studio's console acme's Messages tab lists both messages,
+// newest first, as one here would be, under mini/docs asking to link,
+// marked ⚑ under a NEEDS YOU line; enter opens the message's dialog,
+// with who wrote it and what it answers; X on the request's row
+// declines it after a Y and mini hears of it.
 func TestPeerMessagesTab(t *testing.T) {
 	studio, mini := New(t), New(t)
 	rs := relay.New(relay.DefaultConfig())
@@ -96,27 +98,33 @@ func TestPeerMessagesTab(t *testing.T) {
 	w.WaitFor("1 overview", wait)
 	w.Type("9")
 	w.WaitFor("mini/docs", wait)
-	screen := w.WaitFor("last "+back[1], wait)
-	for _, want := range []string{"mini/api", "⇄ linked both ways on this side", "1 unread", "asks to link (R-", "enter open", "9 messages 1"} {
+	screen := w.WaitFor("Thanks, testing it.", wait)
+	for _, want := range []string{"⚑ NEEDS YOU 1 · 1 link request", "⚑ mini/docs", "asks to link (R-", "→ mini/api", "The API landed.",
+		"A accept the link · X decline", "M write as you", "9 messages 1"} {
 		if !strings.Contains(screen, want) {
 			t.Errorf("Messages tab lacks %q:\n%s", want, screen)
 		}
 	}
+	if strings.Index(screen, "Thanks, testing it.") > strings.Index(screen, "The API landed.") {
+		t.Errorf("not newest first:\n%s", screen)
+	}
 	w.Golden("popup-messages-peer.txt", peerMessageMasks...)
 
+	w.Key(keyDown)
+	w.WaitFor("enter open", wait)
 	w.Key(keyEnter)
-	screen = w.WaitFor("Thanks, testing it.", wait)
-	for _, want := range []string{"acme · mini/api · ⇄ linked both ways on this side", "→ " + m[1], "The API landed.", "← " + back[1], "mini/api (its user) · re " + m[1], "M write"} {
+	screen = w.WaitFor("From      mini/api (its user)", wait)
+	for _, want := range []string{back[1] + " · mini/api → acme", "To        acme", "Re        " + m[1], "Thanks, testing it.", "esc close"} {
 		if !strings.Contains(screen, want) {
-			t.Errorf("conversation lacks %q:\n%s", want, screen)
+			t.Errorf("dialog lacks %q:\n%s", want, screen)
 		}
 	}
-	w.Golden("popup-conversation-peer.txt", peerMessageMasks...)
+	w.Golden("popup-message-peer.txt", peerMessageMasks...)
 	w.Key(keyEsc)
 
 	// The request: X declines after a Y; mini's side hears of it.
-	w.WaitFor("mini/docs", wait)
-	w.Key(keyDown)
+	w.WaitFor("enter open", wait)
+	w.Key(keyUp)
 	w.WaitFor("A accept the link · X decline", wait)
 	w.Type("X")
 	w.WaitFor("Decline", wait)

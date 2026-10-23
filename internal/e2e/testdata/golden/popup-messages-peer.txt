@@ -5,8 +5,12 @@
             ╭─ acme ───────────────────────────────────────────────────────────────────────────────────────╮ it  2 inbox
  <since>│ 1 overview 2 inbox 2 3 tasks 4 settings 5 access 6 keys 7 memory 8 library 9 messages 1 │
             │                                                                                              │────────────
-            │ mini/api              ⇄ linked both ways on this side · 1 unread · last <id> <duration> │
-            │ mini/docs             · off, asks to link (<id>) │
+            │ ⚑ NEEDS YOU 1 · 1 link request │
+            │ ⚑ mini/docs   asks to link (<id>) · A accept · X decline │
+            │ │
+            │   project     id        title                                                   date │
+            │   mini/api    <id>  Thanks, testing it.                                     <time> │
+            │   → mini/api  <id>  The API landed.                                         <time> │
             │ │
             │ Messages between this project's coordinator and linked projects' (tm link). │
             │ │
@@ -28,11 +32,7 @@
             │ │
             │ │
             │ │
-            │ │
-            │ │
-            │ │
-            │ │
-            │ enter open · ← → tabs · esc close │
+            │ A accept the link · X decline · M write as you · ↑ ↓ move · ← → tabs · esc close │
             ╰──────────────────────────────────────────────────────────────────────────────────────────────╯
  ───────────────────────────────── │
  acme · active                     │────────────────────────────────────────────────────────────────────────────────────
