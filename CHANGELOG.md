@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.49.0](https://github.com/theclifmeister/terminatr/compare/v0.48.0...v0.49.0) (2026-10-23)
+
+
+### Features
+
+* **peer:** a display name for a paired server, usable as &lt;name&gt;/project ([#759](https://github.com/theclifmeister/terminatr/issues/759)) ([9dd4dda](https://github.com/theclifmeister/terminatr/commit/9dd4dda56189fa63ee53e5280a0e027e7f5d665f))
+
+
+### Bug Fixes
+
+* **e2e:** remove a test's temp dirs only after its server stops ([#756](https://github.com/theclifmeister/terminatr/issues/756)) ([cff90b7](https://github.com/theclifmeister/terminatr/commit/cff90b772e9ba1a3a1d1f5d05dc8c2065cf64408))
+* **tui:** Linked projects drops a paired server's projects it no longer shares ([#757](https://github.com/theclifmeister/terminatr/issues/757)) ([a405bac](https://github.com/theclifmeister/terminatr/commit/a405bac31c8e2371459a9f3aeed1d2b5adcf9026))
+
 ## [0.48.0](https://github.com/theclifmeister/terminatr/compare/v0.47.0...v0.48.0) (2026-10-23)
 
 
