@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -270,6 +271,68 @@ func TestLinkedProjectsRemote(t *testing.T) {
 	out := ansi.Strip(strings.Join(lines, "\n"))
 	if !strings.Contains(out, "storage · paired server, offline") || !strings.Contains(out, "storage decides its side") || strings.Contains(out, "nas") {
 		t.Errorf("the name doesn't show:\n%s", out)
+	}
+}
+
+// TestLinkedProjectsUnshared (T701): a paired server's group lists only
+// the projects it shares now. One it stopped sharing drops out, though
+// messages or an answered request of this side's name it; one this side
+// still links stays, marked, and enter sets it off; one a request waits
+// on stays as it is. Without a peer.projects answer yet nothing is
+// marked.
+func TestLinkedProjectsUnshared(t *testing.T) {
+	src, m := linkDash(t)
+	src.data.Peers = remotePeers()
+	src.data.Peers[0].Listed = true
+	now := time.Now()
+	src.data.Projects[0].Links = []link.Row{
+		{Peer: "mini/billing", Remote: true, HasMine: true, Mine: config.Link{Allow: config.LinkBoth, Ask: true}, Send: true, Receive: true},
+		{Peer: "mini/docs", Remote: true, Last: "M-4F2A-3", LastAt: now,
+			Asked: &link.Request{ID: "R-4F2A-2", Out: true, Peer: "mini/docs", Allow: "both", Created: now, State: link.ReqDeclined}},
+		{Peer: "mini/infra", Remote: true,
+			Asks: &link.Request{ID: "R-9C1B-5", Peer: "mini/infra", Project: "alpha", Allow: "send", Created: now, State: link.ReqWaiting}},
+	}
+	m.setData(src.data)
+	v := &linksView{slug: "alpha"}
+	m.push(v)
+	items, _ := v.items(m)
+	var keys []string
+	for _, it := range items {
+		keys = append(keys, it.key)
+	}
+	if got := strings.Join(keys, " "); got != "beta mini/acme-api mini/billing mini/infra nas/media" {
+		t.Fatalf("items %s", got)
+	}
+	for _, it := range items {
+		if it.gone != (it.key == "mini/billing") {
+			t.Errorf("%s gone %v", it.key, it.gone)
+		}
+	}
+	out := screen(m)
+	if !strings.Contains(out, "not shared any more") || strings.Count(out, "billing") != 1 {
+		t.Fatalf("list:\n%s", out)
+	}
+
+	v.sel = 2
+	drain(t, m, press(m, "enter"))
+	if got := src.links[len(src.links)-1]; got != "alpha mini/billing off" {
+		t.Fatalf("enter on an unshared project: %v %q", src.links, m.msg)
+	}
+	src.data.Projects[0].Links = src.data.Projects[0].Links[1:]
+	m.setData(src.data)
+	if items, _ := v.items(m); slices.ContainsFunc(items, func(it linkItem) bool { return it.slug == "billing" }) {
+		t.Fatalf("billing set off still listed: %+v", items)
+	}
+
+	// Before the first peer.projects answer, a link is no sign of an
+	// unshared project.
+	src.data.Peers[0].Listed = false
+	src.data.Projects[0].Links = append(src.data.Projects[0].Links,
+		link.Row{Peer: "mini/billing", Remote: true, HasMine: true, Mine: config.Link{Allow: config.LinkSend}, Send: true})
+	m.setData(src.data)
+	items, _ = v.items(m)
+	if i := slices.IndexFunc(items, func(it linkItem) bool { return it.key == "mini/billing" }); i < 0 || items[i].gone {
+		t.Fatalf("not listed yet: %+v", items)
 	}
 }
 

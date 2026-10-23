@@ -48,7 +48,11 @@ type PeerMirror struct {
 	Offset int64 `json:"offset_ms,omitempty"`
 	// RTT is the link's last ping round trip in milliseconds, while up
 	// (PeerLink.RTT); a change of it alone doesn't bump Gen.
-	RTT      float64             `json:"rtt_ms,omitempty"`
+	RTT float64 `json:"rtt_ms,omitempty"`
+	// Listed: Projects are a peer.projects answer, the last one while
+	// the link is down; until the first, a project missing from them
+	// may still be shared.
+	Listed   bool                `json:"listed,omitempty"`
 	Projects []PeerMirrorProject `json:"projects"`
 }
 
