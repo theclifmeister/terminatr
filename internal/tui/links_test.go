@@ -257,6 +257,20 @@ func TestLinkedProjectsRemote(t *testing.T) {
 	if got := src.links[len(src.links)-1]; got != "alpha mini/acme-api ask false" {
 		t.Fatalf("ask %v", src.links)
 	}
+
+	// With a display name (tm peer name) the group and its rows show
+	// it; the keys stay the alias's.
+	src.data.Peers[1].Name = "storage"
+	m.setData(src.data)
+	items, groups = v.items(m)
+	if groups[1].alias != "nas" || groups[1].name != "storage" || items[2].key != "nas/media" {
+		t.Fatalf("named groups %+v", groups)
+	}
+	lines, _ = v.lines(m, 110)
+	out := ansi.Strip(strings.Join(lines, "\n"))
+	if !strings.Contains(out, "storage · paired server, offline") || !strings.Contains(out, "storage decides its side") || strings.Contains(out, "nas") {
+		t.Errorf("the name doesn't show:\n%s", out)
+	}
 }
 
 // TestLinkRequests: R on a paired server's project asks its user to
@@ -442,7 +456,7 @@ func TestMessagesGolden(t *testing.T) {
 	m.openTab("alpha", tabMessages, 0)
 	pv := m.projectPopupView()
 	needs, es := pv.messages(m)
-	lines, _, _ := msgLines(src.data.Projects[0].Links, es, len(needs), 110)
+	lines, _, _ := msgLines(nil, src.data.Projects[0].Links, es, len(needs), 110)
 	var b strings.Builder
 	write := func(lines []string) {
 		for _, l := range lines {

@@ -88,12 +88,13 @@ func remoteCrumb(alias, slug string) string { return alias + " › " + slug }
 // offset.
 func remoteLines(peers []proto.PeerMirror, alias, slug string, w int, now time.Time) []string {
 	pm, p := findPeer(peers, alias, slug)
+	name := peerShown(peers, alias)
 	var out []string
 	add := func(s string) { out = append(out, fit(" "+s, w)+reset) }
 	if pm == nil {
-		add(th().Head.Render(alias) + th().Faint.Render(" · not paired any more"))
+		add(th().Head.Render(name) + th().Faint.Render(" · not paired any more"))
 		out = append(out, "")
-		add(th().Faint.Render(alias + " isn't paired with this server any more (tm peer list)."))
+		add(th().Faint.Render(name + " isn't paired with this server any more (tm peer list)."))
 		return out
 	}
 	g, gst, words := remoteHead(pm, p, now)
@@ -101,10 +102,10 @@ func remoteLines(peers []proto.PeerMirror, alias, slug string, w int, now time.T
 	if pm.State != proto.LinkUp {
 		look = th().Faint
 	}
-	add(gst.Render(g) + " " + look.Render(alias) + th().Faint.Render(joinTag(" · "+words, panesTag(pm.Panes))))
+	add(gst.Render(g) + " " + look.Render(name) + th().Faint.Render(joinTag(" · "+words, panesTag(pm.Panes))))
 	if p == nil {
 		out = append(out, "")
-		add(th().Faint.Render(alias + " doesn't share " + slug + " with this server any more."))
+		add(th().Faint.Render(name + " doesn't share " + slug + " with this server any more."))
 		return out
 	}
 	var about []string
@@ -125,7 +126,7 @@ func remoteLines(peers []proto.PeerMirror, alias, slug string, w int, now time.T
 	}
 	out = append(out, "")
 	if p.Watch == nil {
-		add(th().Faint.Render("Nothing read from " + alias + " yet."))
+		add(th().Faint.Render("Nothing read from " + name + " yet."))
 		return out
 	}
 	// The peer's clock: its times (a PR last checked) are its own.
@@ -140,7 +141,7 @@ func remoteLines(peers []proto.PeerMirror, alias, slug string, w int, now time.T
 	}
 	out = append(out, lines...)
 	out = append(out, "")
-	for _, l := range wrapLines("To ask its coordinator something, link a project of yours to "+alias+"/"+slug+" (tm project link).", max(w-2, 8)) {
+	for _, l := range wrapLines("To ask its coordinator something, link a project of yours to "+name+"/"+slug+" (tm project link).", max(w-2, 8)) {
 		add(th().Faint.Render(l))
 	}
 	return out
@@ -207,7 +208,7 @@ func (m *dash) remoteKey(key string) (tea.Cmd, bool) {
 		return nil, false
 	}
 	if _, isCmd := m.commandFor(key); isCmd {
-		m.msg = remoteNothing(alias, slug)
+		m.msg = remoteNothing(peerShown(m.data.Peers, alias), slug)
 		return nil, true
 	}
 	return m.remoteAction(binds.list.canon(key)), true
@@ -232,7 +233,7 @@ func (m *dash) remoteAction(key string) tea.Cmd {
 	case popup:
 		return m.openRemotePopup(alias, slug, tab)
 	default:
-		m.msg = remoteNothing(alias, slug)
+		m.msg = remoteNothing(peerShown(m.data.Peers, alias), slug)
 	}
 	return nil
 }
@@ -284,7 +285,7 @@ func (m *dash) remoteHere() bool {
 // "" for one of this server's.
 func (m *dash) shownCrumb() string {
 	if alias, slug, ok := m.remote(); ok {
-		return remoteCrumb(alias, slug)
+		return remoteCrumb(peerShown(m.data.Peers, alias), slug)
 	}
 	if m.allShown() {
 		return "all projects"

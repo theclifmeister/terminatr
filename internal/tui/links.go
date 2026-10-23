@@ -70,13 +70,14 @@ type linksView struct {
 }
 
 // linkItem is one row of the list: a project here (alias "") or the
-// project slug on the paired server alias, key its link's key.
-type linkItem struct{ key, alias, slug string }
+// project slug on the paired server alias, key its link's key; name is
+// what the list calls that server, its display name or its alias.
+type linkItem struct{ key, alias, name, slug string }
 
 // linkGroup is a paired server's rows, with its link's state.
 type linkGroup struct {
-	alias, state string
-	items        []linkItem
+	alias, name, state string
+	items              []linkItem
 }
 
 // items are the projects the list shows: every project here but this
@@ -95,14 +96,14 @@ func (v *linksView) items(m *dash) ([]linkItem, []linkGroup) {
 		if g := groups[alias]; g != nil {
 			return g
 		}
-		groups[alias] = &linkGroup{alias: alias, state: "not paired"}
+		groups[alias] = &linkGroup{alias: alias, name: peerShown(m.data.Peers, alias), state: "not paired"}
 		order = append(order, alias)
 		return groups[alias]
 	}
 	add := func(alias, slug string) {
 		g, key := group(alias), alias+"/"+slug
 		if !slices.ContainsFunc(g.items, func(it linkItem) bool { return it.key == key }) {
-			g.items = append(g.items, linkItem{key: key, alias: alias, slug: slug})
+			g.items = append(g.items, linkItem{key: key, alias: alias, name: g.name, slug: slug})
 		}
 	}
 	for _, pm := range m.data.Peers {
@@ -221,7 +222,7 @@ func (v *linksView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 			}
 			if it.alias != "" {
 				l := config.Link{Allow: allow, Ask: !r.HasMine || r.Mine.Ask}
-				return actionMsg{msg: slug + " → " + other + ": " + linkAllowWords(l) + " on this side; " + it.alias + " decides its side"}
+				return actionMsg{msg: slug + " → " + it.name + "/" + it.slug + ": " + linkAllowWords(l) + " on this side; " + it.name + " decides its side"}
 			}
 			return actionMsg{msg: slug + " and " + other + ": " + linkAllowWords(config.Link{Allow: allow})}
 		})
@@ -332,13 +333,13 @@ func (v *linksView) request(m *dash, it linkItem) tea.Cmd {
 	}
 	r := v.entry(m, it.key)
 	if q := r.Asked; q != nil && q.Pending() {
-		m.msg = "asked already (" + q.ID + "): it waits for " + it.alias + "'s user"
+		m.msg = "asked already (" + q.ID + "): it waits for " + it.name + "'s user"
 		return nil
 	}
-	allow, q := r.Mine.Allow, "Ask "+it.alias+"'s user to link "+it.key+" back with "+v.slug+"? This side is "+linkAllowWords(r.Mine)+"; they choose theirs."
+	allow, q := r.Mine.Allow, "Ask "+it.name+"'s user to link "+it.name+"/"+it.slug+" back with "+v.slug+"? This side is "+linkAllowWords(r.Mine)+"; they choose theirs."
 	if !r.HasMine || allow == config.LinkOff {
 		allow = config.LinkBoth
-		q = "Link " + v.slug + " with " + it.key + " both ways on this side (asking first), and ask " + it.alias + "'s user to link back?"
+		q = "Link " + v.slug + " with " + it.name + "/" + it.slug + " both ways on this side (asking first), and ask " + it.name + "'s user to link back?"
 	}
 	src, slug, key := m.src, v.slug, it.key
 	m.confirm("Ask for a link", q, func() tea.Cmd {
@@ -442,7 +443,7 @@ func (v *linksView) lines(m *dash, w int) ([]string, int) {
 			// that server's user's, known from a request's answer and
 			// the messages.
 			back := v.theirSide(m, items, it.key)
-			name, theirs, state = "  "+it.slug, otherSide(r, back), it.alias+" decides its side"
+			name, theirs, state = "  "+it.slug, otherSide(r, back), it.name+" decides its side"
 			if r.Asks != nil {
 				state = "asks to link (Messages tab: A or x)"
 				st = th().Warn
@@ -470,7 +471,7 @@ func (v *linksView) lines(m *dash, w int) ([]string, int) {
 		lines = append(lines, th().Faint.Render("no other projects"))
 	}
 	for _, g := range groups {
-		lines = append(lines, "", th().Head.Render(g.alias)+th().Faint.Render(" · paired server, "+g.state+" · its user sets its side of each link"))
+		lines = append(lines, "", th().Head.Render(g.name)+th().Faint.Render(" · paired server, "+g.state+" · its user sets its side of each link"))
 		for range g.items {
 			row(i, items[i])
 			i++

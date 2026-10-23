@@ -65,7 +65,10 @@ func remoteTab(tab int) int {
 
 type remotePopupView struct {
 	alias, slug string
-	tab         int
+	// name is what the popup calls the server: its display name (tm
+	// peer name), else its alias.
+	name string
+	tab  int
 	// top is each tab's first line shown.
 	top [rtabCount]int
 	// pp is the last popup read, nil before the first; err why the last
@@ -99,10 +102,10 @@ func remotePopupOK(peers []proto.PeerMirror, alias string) bool {
 // of the local popup's tabs), or says why not.
 func (m *dash) openRemotePopup(alias, slug string, tab int) tea.Cmd {
 	if !remotePopupOK(m.data.Peers, alias) {
-		m.msg = remoteNoPopup(alias, slug)
+		m.msg = remoteNoPopup(peerShown(m.data.Peers, alias), slug)
 		return nil
 	}
-	v := &remotePopupView{alias: alias, slug: slug, tab: remoteTab(tab)}
+	v := &remotePopupView{alias: alias, slug: slug, name: peerShown(m.data.Peers, alias), tab: remoteTab(tab)}
 	m.push(v)
 	return v.load(m)
 }
@@ -190,7 +193,7 @@ func (v *remotePopupView) refusal(what string) string {
 		what = map[int]string{rtabOverview: "the repositories", rtabInbox: "the inbox", rtabTasks: "the tasks",
 			rtabSettings: "the settings", rtabMessages: "the links"}[v.tab]
 	}
-	return fmt.Sprintf("%s of %s are %s's: change it on %s", what, v.slug, v.alias, v.alias)
+	return fmt.Sprintf("%s of %s are %s's: change it on %s", what, v.slug, v.name, v.name)
 }
 
 // messages are the Messages tab's messages, newest first.
@@ -211,7 +214,7 @@ func (v *remotePopupView) messagesKey(m *dash, s string) (tea.Cmd, bool) {
 		return nil, true
 	}
 	if (s == "enter" || s == "space") && v.msgSel < n {
-		return m.openMessage(v.alias+"/"+v.slug, es[v.msgSel], v.alias), true
+		return m.openMessage(v.alias+"/"+v.slug, es[v.msgSel], v.name), true
 	}
 	return nil, false
 }
@@ -279,7 +282,7 @@ func (v *remotePopupView) tabAt(col int) int {
 }
 
 // title is the popup's title: whose project it is.
-func (v *remotePopupView) title() string { return v.alias + "'s " + v.slug }
+func (v *remotePopupView) title() string { return v.name + "'s " + v.slug }
 
 func (v *remotePopupView) render(m *dash) string { return m.popup(v.box(m)) }
 
@@ -296,15 +299,15 @@ func (v *remotePopupView) box(m *dash) box {
 	sel := -1
 	switch {
 	case v.pp == nil && v.err != nil:
-		body = remotePopupErr(v.alias, v.err, w)
+		body = remotePopupErr(v.name, v.err, w)
 	case v.pp == nil:
-		body = []string{th().Faint.Render("reading from " + v.alias + "…")}
+		body = []string{th().Faint.Render("reading from " + v.name + "…")}
 	default:
 		switch v.tab {
 		case rtabOverview:
 			body = v.overview(v.pp, sessions, w)
 		case rtabInbox:
-			body = remoteInbox(v.alias, watch, w)
+			body = remoteInbox(v.name, watch, w)
 		case rtabTasks:
 			body = remoteTasks(v.pp.Tasks, w)
 		case rtabSettings:
@@ -341,7 +344,7 @@ func (v *remotePopupView) statusWords(pm *proto.PeerMirror) string {
 	words := []string{"read-only"}
 	switch {
 	case pm != nil && pm.State != proto.LinkUp:
-		words = append(words, v.alias+" is offline; the last read")
+		words = append(words, v.name+" is offline; the last read")
 	case v.pp != nil && v.err != nil:
 		words = append(words, "the last read failed; shown as read "+age(time.Since(v.read))+" ago")
 	case v.reading && v.pp != nil:
@@ -349,7 +352,7 @@ func (v *remotePopupView) statusWords(pm *proto.PeerMirror) string {
 	case v.pp != nil:
 		words = append(words, "read "+age(time.Since(v.read))+" ago")
 	}
-	return strings.Join(append(words, "change it on "+v.alias), " · ")
+	return strings.Join(append(words, "change it on "+v.name), " · ")
 }
 
 // remotePopupErr is why the popup has nothing to show: the other
@@ -375,7 +378,7 @@ func remoteField(label string) string { return th().Faint.Render(fmt.Sprintf("%-
 // counted.
 func (v *remotePopupView) overview(pp *proto.PeerPopup, sessions []proto.PeerSession, w int) []string {
 	var out []string
-	out = append(out, remoteField("Project")+th().Head.Render(v.slug)+th().Faint.Render(" on "+v.alias))
+	out = append(out, remoteField("Project")+th().Head.Render(v.slug)+th().Faint.Render(" on "+v.name))
 	if g := strings.TrimSpace(pp.Goal); g == "" {
 		out = append(out, remoteField("Goal")+th().Faint.Render("none set"))
 	} else {
@@ -389,8 +392,8 @@ func (v *remotePopupView) overview(pp *proto.PeerPopup, sessions []proto.PeerSes
 	}
 	out = append(out, "")
 	repos := fmt.Sprintf("%d", pp.Repos)
-	out = append(out, remoteField("Repositories")+repos+th().Faint.Render(" on "+v.alias+"; their paths stay there"))
-	out = append(out, remoteField("Machines")+v.alias)
+	out = append(out, remoteField("Repositories")+repos+th().Faint.Render(" on "+v.name+"; their paths stay there"))
+	out = append(out, remoteField("Machines")+v.name)
 	out = append(out, "", remoteField("Coordinator")+remoteCoord(sessions))
 	threads := map[string][]string{}
 	for _, s := range sessions {
@@ -561,9 +564,9 @@ func allKeys(keys []string) bool {
 func (v *remotePopupView) messageLines(w int) ([]string, int, []int) {
 	es := v.messages()
 	v.msgSel = min(v.msgSel, max(min(len(es), msgShown)-1, 0))
-	lines, sel, hits := msgLines(nil, es, v.msgSel, w)
+	lines, sel, hits := msgLines(nil, nil, es, v.msgSel, w)
 	if len(v.pp.Links) == 0 {
 		lines, sel, hits = []string{th().Faint.Render("no links with this server's projects")}, -1, []int{noHit}
 	}
-	return append(lines, "", th().Faint.Render("→ is "+v.alias+"'s side sending; only messages that reached this server show, sent or read. Their texts are in your project's Messages tab.")), sel, append(hits, noHit, noHit)
+	return append(lines, "", th().Faint.Render("→ is "+v.name+"'s side sending; only messages that reached this server show, sent or read. Their texts are in your project's Messages tab.")), sel, append(hits, noHit, noHit)
 }

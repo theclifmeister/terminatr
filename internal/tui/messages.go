@@ -185,10 +185,11 @@ func msgDate(t time.Time) string { return t.Local().Format("Jan 2 15:04") }
 
 // msgLines are the list's lines in width w: the NEEDS YOU line and the
 // rows of links (whose needs these are; nil in a paired server's popup),
-// then the newest msgShown of es. sel indexes the link rows, then the
+// then the newest msgShown of es, a paired server by its display name
+// in peers (nil names none). sel indexes the link rows, then the
 // messages. It returns the lines, the selected one's and what each
 // picks.
-func msgLines(links []link.Row, es []msgEntry, sel, w int) ([]string, int, []int) {
+func msgLines(peers []proto.PeerMirror, links []link.Row, es []msgEntry, sel, w int) ([]string, int, []int) {
 	var lines []string
 	var hits []int
 	at := -1
@@ -202,10 +203,10 @@ func msgLines(links []link.Row, es []msgEntry, sel, w int) ([]string, int, []int
 	// column the longest id.
 	pc, ic := len("project"), len("id")
 	for _, n := range needs {
-		pc = max(pc, ansi.StringWidth(n.row.Peer))
+		pc = max(pc, ansi.StringWidth(peerShownKey(peers, n.row.Peer)))
 	}
 	for _, e := range shown {
-		name := e.other
+		name := peerShownKey(peers, e.other)
 		if e.msg.Out {
 			name = "→ " + name
 		}
@@ -234,7 +235,7 @@ func msgLines(links []link.Row, es []msgEntry, sel, w int) ([]string, int, []int
 		if n.ask {
 			words, keys = "asks to link ("+oneLine(n.row.Asks.ID)+")", " · A accept · X decline"
 		}
-		row(i, "⚑ ", th().Warn.Render(fit(n.row.Peer, pc)+"  "+words)+th().Faint.Render(keys))
+		row(i, "⚑ ", th().Warn.Render(fit(peerShownKey(peers, n.row.Peer), pc)+"  "+words)+th().Faint.Render(keys))
 	}
 	if len(needs) > 0 {
 		add("", noHit)
@@ -243,7 +244,7 @@ func msgLines(links []link.Row, es []msgEntry, sel, w int) ([]string, int, []int
 		add(th().Faint.Render(fit("  "+fit("project", pc)+"  "+fit("id", ic)+"  "+fit("title", tc)+"  "+"date", w)), noHit)
 	}
 	for j, e := range shown {
-		name := e.other
+		name := peerShownKey(peers, e.other)
 		if e.msg.Out {
 			name = "→ " + name
 		}
@@ -349,7 +350,7 @@ func (v *msgView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	}
 	if v.alias != "" {
 		if strings.Contains("AXCRM", s) && len(s) == 1 || s == "enter" {
-			m.msg = "the links of " + v.slug + " are " + v.alias + "'s: change it on " + v.alias
+			m.msg = "the links of " + peerShownKey(m.data.Peers, v.slug) + " are " + v.alias + "'s: change it on " + v.alias
 		}
 		return nil
 	}
@@ -364,6 +365,7 @@ func (v *msgView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 		})
 	}
 	cur, t, hasFile := v.e.msg, v.e.file, v.e.hasFile
+	other := peerShownKey(m.data.Peers, v.other)
 	switch s {
 	case "A", "X":
 		if hasFile && !t.Out && t.State == link.FileOffered && !(cur.Out && cur.State == link.StateHeld) {
@@ -371,7 +373,7 @@ func (v *msgView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 				return act("accept-file", t.ID, "", "accepted "+t.ID)
 			}
 			id := t.ID
-			m.confirm("Decline a file", "Decline "+oneLine(t.Name)+" ("+link.MB(t.Size)+") from "+v.other+"? "+v.other+" hears of it.", func() tea.Cmd { return act("decline-file", id, "", "declined "+id) })
+			m.confirm("Decline a file", "Decline "+oneLine(t.Name)+" ("+link.MB(t.Size)+") from "+other+"? "+other+" hears of it.", func() tea.Cmd { return act("decline-file", id, "", "declined "+id) })
 			return nil
 		}
 		held := cur.Out && cur.State == link.StateHeld
@@ -383,14 +385,14 @@ func (v *msgView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 			return act("approve", cur.ID, "", "sent "+cur.ID)
 		}
 		id := cur.ID
-		m.confirm("Drop a message", "Drop "+id+" to "+v.other+"? It is never sent.", func() tea.Cmd { return act("drop", id, "", "dropped "+id) })
+		m.confirm("Drop a message", "Drop "+id+" to "+other+"? It is never sent.", func() tea.Cmd { return act("drop", id, "", "dropped "+id) })
 	case "C":
 		if !hasFile || !t.Open() {
 			m.msg = "only a file still on its way can be cancelled"
 			return nil
 		}
 		id := t.ID
-		m.confirm("Cancel a file", "Cancel "+oneLine(t.Name)+" ("+link.MB(t.Size)+")? "+v.other+" hears of it; nothing partial is kept.", func() tea.Cmd { return act("cancel-file", id, "", "cancelled "+id) })
+		m.confirm("Cancel a file", "Cancel "+oneLine(t.Name)+" ("+link.MB(t.Size)+")? "+other+" hears of it; nothing partial is kept.", func() tea.Cmd { return act("cancel-file", id, "", "cancelled "+id) })
 	case "enter":
 		if hasFile && !t.Out && t.State == link.FileReceived {
 			return m.openLinkFile(v.slug, v.other, cur)
@@ -400,7 +402,7 @@ func (v *msgView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 			m.msg = "the link isn't paused"
 			return nil
 		}
-		return act("resume", v.other, "", "resumed the link with "+v.other)
+		return act("resume", v.other, "", "resumed the link with "+other)
 	}
 	return nil
 }
@@ -438,7 +440,8 @@ func (v *msgView) lines(m *dash, w int) []string {
 		return fit(th().Faint.Render(fmt.Sprintf("%-10s", label))+value, w) + reset
 	}
 	from, to := v.ends()
-	state := messageState(msg, v.other)
+	from, to = peerShownKey(m.data.Peers, from), peerShownKey(m.data.Peers, to)
+	state := messageState(msg, peerShownKey(m.data.Peers, v.other))
 	if msg.Refused != "" {
 		state += " · " + oneLine(msg.Refused)
 	}
@@ -470,7 +473,7 @@ func (v *msgView) lines(m *dash, w int) []string {
 	}
 	out = append(out, "")
 	if v.alias != "" {
-		return append(out, th().Faint.Render(fit("Only its header crosses; its text is in "+v.other+"'s Messages tab here.", w)))
+		return append(out, th().Faint.Render(fit("Only its header crosses; its text is in "+peerShownKey(m.data.Peers, v.other)+"'s Messages tab here.", w)))
 	}
 	for _, para := range strings.Split(msg.Text, "\n") {
 		out = append(out, wrapLines(ansi.Strip(para), w)...)
@@ -511,7 +514,7 @@ func (v *msgView) box(m *dash) box {
 	if v.alias == "" && time.Since(v.loaded) > 2*time.Second {
 		v.load(m)
 	}
-	from, to := v.other, v.slug
+	from, to := peerShownKey(m.data.Peers, v.other), peerShownKey(m.data.Peers, v.slug)
 	if v.e.msg.Out {
 		from, to = to, from
 	}

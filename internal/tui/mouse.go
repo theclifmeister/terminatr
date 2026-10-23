@@ -542,7 +542,7 @@ func (m *dash) sideMenu(mo tea.Mouse) tea.Cmd {
 	case treeCoordinator:
 		title += " coordinator"
 	case treePeerProject:
-		title = r.peer + " / " + r.slug
+		title = r.server() + " / " + r.slug
 	default:
 		title = r.thread
 	}
