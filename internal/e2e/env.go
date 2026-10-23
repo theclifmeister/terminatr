@@ -188,6 +188,11 @@ func New(t testing.TB) *Env {
 		t.Skip("end-to-end scenario: run with make e2e or make e2e-smoke (E2E=1)")
 	}
 	dir := build(t)
+	// testing removes all of t.TempDir in one cleanup, registered at the
+	// first call. Cleanups run last first, so a first call after the one
+	// below would remove the test's repos while the server still runs
+	// git in them (T700). Called here, it runs after the server stops.
+	t.TempDir()
 	runDir, err := os.MkdirTemp(runDirBase(), "tme2e")
 	if err != nil {
 		t.Fatal(err)
