@@ -16,7 +16,7 @@ import (
 
 // remotePopupData is a popup mini serves of acme-api.
 func remotePopupData() proto.PeerPopup {
-	at := time.Now().Add(-2 * time.Minute)
+	at := time.Date(2026, 10, 14, 15, 12, 0, 0, time.Local)
 	return proto.PeerPopup{Project: "acme-api", Goal: "the billing API", Repos: 2,
 		Tasks: []proto.PeerTask{
 			{ID: 41, Title: "Billing", Status: "review", Thread: "t-0041", StepsDone: 3, StepsTotal: 3},
@@ -84,7 +84,7 @@ func TestRemotePopup(t *testing.T) {
 		{"2", []string{"report", "T41"}},
 		{"3", []string{"Needs you 1", "T41    review   Billing · t-0041 · 3/3 steps", "In motion 1", "On deck 1", "Done 1"}},
 		{"4", []string{"Start threads", "Parallel threads", "3", "Protection", "sandboxed", "Guard", "on · enforce", "Shared"}},
-		{"5", []string{"terminatr", "⇄ linked both ways on mini's side", "1 unread there", "→ M-AB12-1", "← M-9C1B-2", "re M-AB12-1"}},
+		{"5", []string{"project", "title", "→ terminatr  M-AB12-1", "terminatr    M-9C1B-2", "Oct 14 15:12"}},
 	}
 	for i, tab := range tabs {
 		drain(t, m, press(m, tab.key))
@@ -98,6 +98,7 @@ func TestRemotePopup(t *testing.T) {
 			t.Errorf("tab %s: read %d times", tab.key, len(src.popups))
 		}
 	}
+	drain(t, m, press(m, "4"))
 	for _, k := range []string{"enter", "D", "A", "X", "+", "E", "c"} {
 		drain(t, m, press(m, k))
 		if m.top() != v {
@@ -110,6 +111,35 @@ func TestRemotePopup(t *testing.T) {
 	if len(src.delegated)+len(src.asked)+len(src.settings)+len(src.repos)+len(src.lifecycle) > 0 {
 		t.Errorf("acted here: %v %v %v %v %v", src.delegated, src.asked, src.settings, src.repos, src.lifecycle)
 	}
+	// The Messages tab: enter opens a message's dialog, its header
+	// only, read-only.
+	drain(t, m, press(m, "5"))
+	keyPress(m, "down")
+	drain(t, m, press(m, "enter"))
+	mv, ok := m.top().(*msgView)
+	if !ok || mv.e.msg.ID != "M-AB12-1" {
+		t.Fatalf("enter on a message opened %T", m.top())
+	}
+	out = ansi.Strip(screen(m))
+	for _, want := range []string{"M-AB12-1 · mini/acme-api → terminatr", "From      mini/acme-api", "To        terminatr", "State     read",
+		"Only its header crosses; its text is in terminatr's Messages tab here.", "↑ ↓ scroll · esc close"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("dialog lacks %q:\n%s", want, out)
+		}
+	}
+	for _, k := range []string{"A", "X", "C"} {
+		drain(t, m, press(m, k))
+		if m.top() != mv || !strings.Contains(m.msg, "change it on mini") {
+			t.Errorf("%s in the dialog: %T %q", k, m.top(), m.msg)
+		}
+	}
+	drain(t, m, press(m, "esc"))
+	// A click on a message opens it too.
+	drain(t, m, v.click(m, 0, 4, false))
+	if mv, ok := m.top().(*msgView); !ok || mv.e.msg.ID != "M-9C1B-2" {
+		t.Fatalf("a click opened %T", m.top())
+	}
+	drain(t, m, press(m, "esc"))
 	// No memory tab: nothing of the other server's memory crosses.
 	if strings.Contains(ansi.Strip(screen(m)), "memory") {
 		t.Errorf("a memory tab:\n%s", ansi.Strip(screen(m)))

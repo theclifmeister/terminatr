@@ -13,6 +13,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/link"
 	"github.com/theclifmeister/terminatr/internal/modaction"
 	"github.com/theclifmeister/terminatr/internal/modstore"
 	"github.com/theclifmeister/terminatr/internal/project"
@@ -70,6 +71,8 @@ type projectView struct {
 	library []thread.LibFile
 	libOK   bool
 	libErr  error
+	// msgs are the Messages tab's messages, newest first.
+	msgs msgList
 	// show is the task the popup was opened to show, 0 for none: the
 	// Tasks tab's mod hears it in view.opened, and picking puts the
 	// cursor on its row once the mod lists it.
@@ -225,16 +228,60 @@ func (pv *projectView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	case tabLibrary:
 		return pv.libraryKey(m, k)
 	case tabMessages:
-		ls := pv.data(m).Links
-		if pv.sel[tabMessages] >= len(ls) {
-			break
+		return pv.messagesKey(m, s)
+	}
+	return nil
+}
+
+// messages are the Messages tab's link rows and messages, the
+// messages read again at most every 2 s; the selection stays on its
+// message as new ones come in above it.
+func (pv *projectView) messages(m *dash) ([]msgNeed, []msgEntry) {
+	links := pv.data(m).Links
+	needs := msgNeeds(links)
+	if pv.msgs.stale(pv.slug) {
+		var at *link.Message
+		if i := pv.sel[tabMessages] - len(needs); i >= 0 && i < len(pv.msgs.entries) {
+			at = pv.msgs.entries[i].msg
 		}
-		switch r := ls[pv.sel[tabMessages]]; s {
-		case "enter", "space":
-			return m.openConversation(pv.slug, r.Peer)
-		case "A", "X":
-			return m.answerRequest(pv.slug, r, s == "A")
+		pv.msgs.load(m, pv.slug, links)
+		for j, e := range pv.msgs.entries {
+			if at != nil && e.msg.ID == at.ID && e.msg.Out == at.Out && j < msgShown {
+				pv.sel[tabMessages] = len(needs) + j
+			}
 		}
+	}
+	return needs, pv.msgs.entries
+}
+
+// messagesKey: enter opens the selected message's dialog; on a link's
+// row A and X answer its request and R resumes it; M writes as the user.
+func (pv *projectView) messagesKey(m *dash, s string) tea.Cmd {
+	needs, es := pv.messages(m)
+	links, i := pv.data(m).Links, pv.sel[tabMessages]
+	var e *msgEntry
+	if j := i - len(needs); j >= 0 && j < min(len(es), msgShown) {
+		e = &es[j]
+	}
+	switch {
+	case s == "M":
+		first := ""
+		if e != nil {
+			first = e.other
+		} else if i < len(needs) {
+			first = needs[i].row.Peer
+		}
+		return m.writeMessage(pv.slug, links, first)
+	case i < len(needs):
+		n := needs[i]
+		switch {
+		case n.ask && (s == "A" || s == "X"):
+			return m.answerRequest(pv.slug, n.row, s == "A")
+		case !n.ask && s == "R":
+			return m.resumeLink(pv.slug, n.row.Peer)
+		}
+	case e != nil && (s == "enter" || s == "space"):
+		return m.openMessage(pv.slug, *e, "")
 	}
 	return nil
 }
@@ -309,7 +356,8 @@ func (pv *projectView) count(m *dash) int {
 	case tabLibrary:
 		return len(pv.library)
 	case tabMessages:
-		return len(pv.data(m).Links)
+		needs, es := pv.messages(m)
+		return len(needs) + min(len(es), msgShown)
 	}
 	return 0
 }
@@ -411,13 +459,27 @@ func (pv *projectView) box(m *dash) box {
 			keys = "enter read · X delete · D delete the thread's · " + keys
 		}
 	case tabMessages:
-		body, sel, hits = messagesLines(p, pv.sel[tabMessages], w)
-		body = append(body, "", th().Faint.Render("Messages between this project's coordinator and linked projects' (tm link)."))
-		if len(p.Links) > 0 {
-			keys = "enter open · " + keys
+		needs, es := pv.messages(m)
+		body, sel, hits = msgLines(p.Links, es, pv.sel[tabMessages], w)
+		if pv.msgs.err != nil {
+			body = append(body, th().Bad.Render(fit("error: "+oneLine(pv.msgs.err.Error()), w)))
 		}
-		if pv.sel[tabMessages] < len(p.Links) && p.Links[pv.sel[tabMessages]].Asks != nil {
+		if len(p.Links) == 0 {
+			body = append(body, "", th().Faint.Render("no links; the Settings tab's Linked projects sets them"))
+		} else {
+			body = append(body, "", th().Faint.Render("Messages between this project's coordinator and linked projects' (tm link)."))
+		}
+		keys = "↑ ↓ move · " + keys
+		if len(p.Links) > 0 {
+			keys = "M write as you · " + keys
+		}
+		switch i := pv.sel[tabMessages]; {
+		case i < len(needs) && needs[i].ask:
 			keys = "A accept the link · X decline · " + keys
+		case i < len(needs):
+			keys = "R resume the link · " + keys
+		case i-len(needs) < len(es):
+			keys = "enter open · " + keys
 		}
 	}
 	head := []string{pv.tabBar(m, p), ""}
@@ -491,10 +553,9 @@ func (pv *projectView) click(m *dash, item, col int, double bool) tea.Cmd {
 		return l.click(m, item, col)
 	}
 	pv.sel[pv.tab] = item
-	if double && pv.tab == tabMessages {
-		if ls := pv.data(m).Links; item >= 0 && item < len(ls) {
-			return m.openConversation(pv.slug, ls[item].Peer)
-		}
+	if pv.tab == tabMessages {
+		// A click opens a message, as enter does.
+		return pv.messagesKey(m, "enter")
 	}
 	if double && pv.tab == tabLibrary {
 		if f, ok := pv.selLib(); ok {

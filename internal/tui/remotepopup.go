@@ -13,7 +13,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/theclifmeister/terminatr/internal/config"
-	"github.com/theclifmeister/terminatr/internal/link"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 )
@@ -77,6 +76,8 @@ type remotePopupView struct {
 	read    time.Time
 	// hint says why the last key did nothing: it is the other server's.
 	hint string
+	// msgSel is the Messages tab's selected message.
+	msgSel int
 }
 
 // remotePopupMsg is a peer.popup read.
@@ -161,6 +162,11 @@ func (v *remotePopupView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	case "home":
 		v.top[v.tab] = 0
 	default:
+		if v.tab == rtabMessages {
+			if cmd, ok := v.messagesKey(m, s); ok {
+				return cmd
+			}
+		}
 		if d, ok := scrollKeys[s]; ok {
 			v.top[v.tab] = max(v.top[v.tab]+d, 0)
 			return nil
@@ -187,10 +193,44 @@ func (v *remotePopupView) refusal(what string) string {
 	return fmt.Sprintf("%s of %s are %s's: change it on %s", what, v.slug, v.alias, v.alias)
 }
 
-func (v *remotePopupView) wheel(m *dash, d int) { v.top[v.tab] = max(v.top[v.tab]+3*d, 0) }
+// messages are the Messages tab's messages, newest first.
+func (v *remotePopupView) messages() []msgEntry {
+	if v.pp == nil {
+		return nil
+	}
+	return remoteMsgEntries(v.pp.Links)
+}
 
-// click picks a tab on the tab bar.
+// messagesKey moves the Messages tab's selection, and enter opens the
+// message's dialog, read-only; ok is false for a key it leaves.
+func (v *remotePopupView) messagesKey(m *dash, s string) (tea.Cmd, bool) {
+	es := v.messages()
+	n := min(len(es), msgShown)
+	if d, ok := scrollKeys[s]; ok {
+		v.msgSel = moveSel(v.msgSel, d, n)
+		return nil, true
+	}
+	if (s == "enter" || s == "space") && v.msgSel < n {
+		return m.openMessage(v.alias+"/"+v.slug, es[v.msgSel], v.alias), true
+	}
+	return nil, false
+}
+
+func (v *remotePopupView) wheel(m *dash, d int) {
+	if v.tab == rtabMessages {
+		v.messagesKey(m, arrow(d).String())
+		return
+	}
+	v.top[v.tab] = max(v.top[v.tab]+3*d, 0)
+}
+
+// click picks a tab on the tab bar, or opens the clicked message.
 func (v *remotePopupView) click(m *dash, item, col int, _ bool) tea.Cmd {
+	if item >= 0 && v.tab == rtabMessages {
+		v.msgSel = item
+		cmd, _ := v.messagesKey(m, "enter")
+		return cmd
+	}
 	if item != tabHit {
 		return nil
 	}
@@ -252,6 +292,8 @@ func (v *remotePopupView) box(m *dash) box {
 		watch, sessions = p.Watch, p.Sessions
 	}
 	var body []string
+	var bodyHits []int
+	sel := -1
 	switch {
 	case v.pp == nil && v.err != nil:
 		body = remotePopupErr(v.alias, v.err, w)
@@ -268,7 +310,7 @@ func (v *remotePopupView) box(m *dash) box {
 		case rtabSettings:
 			body = remoteSettings(v.slug, v.pp.Settings, w)
 		case rtabMessages:
-			body = remoteMessages(v.alias, v.pp.Links, w)
+			body, sel, bodyHits = v.messageLines(w)
 		}
 	}
 	status := th().Faint.Render(v.statusWords(pm))
@@ -281,7 +323,12 @@ func (v *remotePopupView) box(m *dash) box {
 		hits[i] = noHit
 	}
 	hits[0] = tabHit
-	b := box{title: v.title(), head: head, body: body, sel: -1, hits: hits, keys: "← → tabs · ↑ ↓ scroll · esc close"}
+	copy(hits[len(head):], bodyHits)
+	keys := "← → tabs · ↑ ↓ scroll · esc close"
+	if v.tab == rtabMessages {
+		keys = "enter open · ← → tabs · ↑ ↓ move · esc close"
+	}
+	b := box{title: v.title(), head: head, body: body, sel: sel, hits: hits, keys: keys}
 	rows := m.boxRows(b) - len(head)
 	v.top[v.tab] = min(v.top[v.tab], max(len(body)-max(rows, 1), 0))
 	b.scroll = v.top[v.tab]
@@ -507,42 +554,16 @@ func allKeys(keys []string) bool {
 	return true
 }
 
-// remoteMessages are the project's links with this server's projects,
-// as the other side has them, each with the headers of the messages
-// that crossed: the texts are in this server's project's own Messages
-// tab.
-func remoteMessages(alias string, ls []proto.PeerPopupLink, w int) []string {
-	var out []string
-	for _, l := range ls {
-		r := link.Row{Send: l.Send, Receive: l.Receive}
-		words := map[[2]bool]string{{true, true}: "linked both ways", {true, false}: "linked, send only",
-			{false, true}: "linked, receive only", {false, false}: "not linked"}[[2]bool{l.Send, l.Receive}]
-		words += " on " + alias + "'s side"
-		if l.Paused {
-			words += ", paused"
-		}
-		head := fit(l.Project, 20) + "  " + r.Arrow() + " " + words
-		if len(out) > 0 {
-			out = append(out, "")
-		}
-		out = append(out, fit(th().Head.Render(head), w)+reset)
-		if l.Unread > 0 {
-			out = append(out, fit(th().Faint.Render(fmt.Sprintf("  %d unread there", l.Unread)), w)+reset)
-		}
-		for _, msg := range l.Messages {
-			dir := "←"
-			if msg.Out {
-				dir = "→"
-			}
-			line := fmt.Sprintf("  %s %-12s %-11s %s", dir, msg.ID, oneLine(msg.State), age(time.Since(msg.Created)))
-			if msg.Re != "" {
-				line += " re " + msg.Re
-			}
-			out = append(out, fit(th().Faint.Render(line), w)+reset)
-		}
+// messageLines are the Messages tab's lines: the messages of the
+// project's links with this server's projects that reached this
+// server, as the local tab lists them, headers only; the selected
+// line's, and what each picks.
+func (v *remotePopupView) messageLines(w int) ([]string, int, []int) {
+	es := v.messages()
+	v.msgSel = min(v.msgSel, max(min(len(es), msgShown)-1, 0))
+	lines, sel, hits := msgLines(nil, es, v.msgSel, w)
+	if len(v.pp.Links) == 0 {
+		lines, sel, hits = []string{th().Faint.Render("no links with this server's projects")}, -1, []int{noHit}
 	}
-	if len(out) == 0 {
-		return []string{th().Faint.Render("no links with this server's projects")}
-	}
-	return append(out, "", th().Faint.Render("→ is "+alias+"'s side sending; only messages that reached this server show. Their texts are in your project's Messages tab."))
+	return append(lines, "", th().Faint.Render("→ is "+v.alias+"'s side sending; only messages that reached this server show, sent or read. Their texts are in your project's Messages tab.")), sel, append(hits, noHit, noHit)
 }
