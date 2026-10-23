@@ -288,8 +288,9 @@ func fileUnsent(alias string, m proto.PeerMessage, code string) {
 
 // answerRemote answers transfer t offered to p from project slug on the
 // server alias: this side's copy first, then the answer through the
-// outbox. Accepted, the fetcher takes it from here.
-func answerRemote(c caller.Caller, p *project.Project, t *Transfer, alias, slug string, accept bool) (*Transfer, error) {
+// outbox. Accepted, the fetcher takes it from here; auto says no one was
+// asked.
+func answerRemote(c caller.Caller, p *project.Project, t *Transfer, alias, slug string, accept, auto bool) (*Transfer, error) {
 	var out Transfer
 	err := withStore(func(s *store) error {
 		err := withFiles(func(st *fileStore) error {
@@ -298,7 +299,7 @@ func answerRemote(c caller.Caller, p *project.Project, t *Transfer, alias, slug 
 				return refuse("not-offered", "%s was answered meanwhile", t.ID)
 			}
 			if accept {
-				x.State, x.Accepted = FileAccepted, now().UTC().Truncate(time.Second)
+				x.State, x.Accepted, x.Auto = FileAccepted, now().UTC().Truncate(time.Second), auto
 			} else {
 				x.end(FileDeclined, "")
 			}
@@ -319,7 +320,11 @@ func answerRemote(c caller.Caller, p *project.Project, t *Transfer, alias, slug 
 	}
 	doneFile(p, t.ID)
 	if accept {
-		p.Journal(c, "link.file-accept", t.Peer, t.ID)
+		how := t.ID
+		if auto {
+			how += " (auto)"
+		}
+		p.Journal(c, "link.file-accept", t.Peer, how)
 		KickFiles()
 	} else {
 		p.Journal(c, "link.file-decline", t.Peer, t.ID)

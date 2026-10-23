@@ -113,6 +113,38 @@ func TestLinkedProjectsFiles(t *testing.T) {
 	}
 }
 
+// TestLinkedProjectsFilesWaiting: with offers waiting on the link, the
+// auto confirm says how many it takes and which stay over the size; off
+// then asks too, saying it declines them.
+func TestLinkedProjectsFilesWaiting(t *testing.T) {
+	src, m := linkDash(t)
+	src.linkFiles = []link.Transfer{
+		{ID: "X-2", Peer: "beta", State: link.FileOffered, Size: 4 << 20},
+		{ID: "X-3", Peer: "beta", State: link.FileOffered, Size: 30 << 20},
+		{ID: "X-4", Peer: "beta", Out: true, State: link.FileOffered, Size: 1 << 20},
+	}
+	m.push(&linksView{slug: "alpha"})
+	press(m, "F")
+	out := screen(m)
+	if !strings.Contains(out, "takes 1 waiting file") || !strings.Contains(out, "over 25 MB keeps") {
+		t.Fatalf("confirm:\n%s", out)
+	}
+	drain(t, m, press(m, "Y"))
+	src.data.Projects[0].Links[0].Mine.Files = config.FilesAuto
+	m.setData(src.data)
+	press(m, "F")
+	if _, ok := m.top().(*confirmView); !ok {
+		t.Fatalf("off didn't ask: %T", m.top())
+	}
+	if out := screen(m); !strings.Contains(out, "declines 2 waiting files") {
+		t.Fatalf("confirm:\n%s", out)
+	}
+	drain(t, m, press(m, "Y"))
+	if got := src.links[len(src.links)-1]; got != "alpha beta files off" {
+		t.Fatalf("links %v", src.links)
+	}
+}
+
 // TestLinkLimitsFiles: Link limits has the file size and pace; a size
 // above the default asks first, a faster pace doesn't, and the pace
 // stays within 64 to 2048 KiB/s.

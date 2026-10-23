@@ -815,7 +815,7 @@ func AcceptFile(c caller.Caller, p *project.Project, id string) (*Transfer, erro
 		return nil, err
 	}
 	if alias, slug, ok := config.Remote(t.Peer); ok {
-		return answerRemote(c, p, t, alias, slug, true)
+		return answerRemote(c, p, t, alias, slug, true, false)
 	}
 	from, err := project.Open(t.Peer)
 	if err != nil {
@@ -834,10 +834,20 @@ func DeclineFile(c caller.Caller, p *project.Project, id string) (*Transfer, err
 		return nil, err
 	}
 	if alias, slug, ok := config.Remote(t.Peer); ok {
-		return answerRemote(c, p, t, alias, slug, false)
+		return answerRemote(c, p, t, alias, slug, false, false)
 	}
+	return declineLocal(c, p, t)
+}
+
+// declineLocal refuses transfer t, offered to p by a project on this
+// server: both copies end declined and the sender hears of it.
+func declineLocal(c caller.Caller, p *project.Project, t *Transfer) (*Transfer, error) {
+	id := t.ID
 	var in Transfer
-	withFiles(func(st *fileStore) error {
+	err := withFiles(func(st *fileStore) error {
+		if x := st.find(p.Slug, id); x == nil || x.Out || x.State != FileOffered {
+			return refuse("not-offered", "%s was answered meanwhile", id)
+		}
 		for _, slug := range []string{p.Slug, t.Peer} {
 			if x := st.find(slug, id); x != nil && x.Open() {
 				x.end(FileDeclined, "")
@@ -848,6 +858,9 @@ func DeclineFile(c caller.Caller, p *project.Project, id string) (*Transfer, err
 		}
 		return nil
 	})
+	if err != nil {
+		return nil, err
+	}
 	doneFile(p, id)
 	p.Journal(c, "link.file-decline", t.Peer, id)
 	if from, err := project.Open(t.Peer); err == nil {
@@ -998,4 +1011,77 @@ func ExpireFiles() {
 			queueFileMsg(alias, doneMsg(p.Slug, slug, t.ID, t.Code))
 		}
 	}
+}
+
+// CountOffers counts the transfers in ts offered to this side that wait
+// for its user: fit within mb (the receiving side's link_file_mb), over
+// it.
+func CountOffers(ts []Transfer, mb int) (fit, over int) {
+	for _, t := range ts {
+		switch {
+		case t.Out || t.State != FileOffered:
+		case t.Size > int64(mb)<<20:
+			over++
+		default:
+			fit++
+		}
+	}
+	return fit, over
+}
+
+// SettleOffers answers the offers that wait for the user on links whose
+// files no longer ask (§16.13), slug's from other only unless both are
+// "": on an
+// auto link each is taken as if it had just arrived, except one over the
+// receiving side's link_file_mb, which keeps waiting; on an off link (or
+// one that is gone) each is declined. On this server an off sending side
+// declines too. It says how many it took and declined.
+func SettleOffers(c caller.Caller, slug, other string) (taken, declined int) {
+	var waiting []Transfer
+	readFiles(func(st *fileStore) {
+		for _, t := range st.Transfers {
+			if !t.Out && t.State == FileOffered && (slug == "" || t.Project == slug && t.Peer == other) {
+				waiting = append(waiting, *t)
+			}
+		}
+	})
+	if len(waiting) == 0 {
+		return 0, 0
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		return 0, 0
+	}
+	for _, t := range waiting {
+		mode := fileMode(cfg, t.Project, t.Peer)
+		alias, peerSlug, remote := config.Remote(t.Peer)
+		if !remote && mode == config.FilesAuto && fileMode(cfg, t.Peer, t.Project) == config.FilesOff {
+			mode = config.FilesOff
+		}
+		if mode == config.FilesAsk || (mode == config.FilesAuto && t.Size > int64(fileMB(cfg, t.Project))<<20) {
+			continue
+		}
+		p, err := project.Open(t.Project)
+		if err != nil {
+			continue
+		}
+		auto := mode == config.FilesAuto
+		if remote {
+			_, err = answerRemote(c, p, &t, alias, peerSlug, auto, auto)
+		} else if from, ferr := project.Open(t.Peer); ferr != nil {
+			continue
+		} else if auto {
+			_, err = acceptLocal(c, p, from, t.ID, true)
+		} else {
+			_, err = declineLocal(c, p, &t)
+		}
+		switch {
+		case err != nil:
+		case auto:
+			taken++
+		default:
+			declined++
+		}
+	}
+	return taken, declined
 }

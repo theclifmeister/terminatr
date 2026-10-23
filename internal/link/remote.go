@@ -229,12 +229,14 @@ func holdOff(alias string, secs int) {
 }
 
 // Flush sends what waits over the rate (Drain), expires the outbox's old
-// entries, then delivers each ready peer's in sequence order, stopping
+// entries, answers the offers a link's files setting no longer leaves to
+// the user (a hand edit of the config, too), then delivers each ready peer's in sequence order, stopping
 // at a peer's first entry that isn't taken now.
 func Flush(ctx context.Context, t Transport) {
 	Drain()
 	ExpireRequests()
 	ExpireFiles()
+	SettleOffers(caller.Caller{Kind: caller.Ticker}, "", "")
 	root, err := outboxDir()
 	if err != nil {
 		return
