@@ -55,11 +55,12 @@ func linksWords(p *ProjectData) string {
 // sides at once (the other side's entry the mirror of this one's); a
 // turns this side's ask first on or off. A half-linked pair (a hand edit
 // of config.toml) shows as such, and enter makes it whole. Under them,
-// a group per paired server lists the projects it shares (the mirror,
-// peer.list) and any this side still has an entry for: there enter and
-// a write this side only, a new entry asking first, since that server's
-// user sets its own (§16.11); what the messages tell of that side shows
-// beside it.
+// a group per paired server lists the projects it shares now (the
+// mirror, peer.list), any this side still has an entry for, marked once
+// that server's list no longer has it, and any a link request waits on:
+// there enter and a write this side only, a new entry asking first,
+// since that server's user sets its own (§16.11); what the messages tell
+// of that side shows beside it.
 type linksView struct {
 	slug string
 	sel  int
@@ -70,8 +71,12 @@ type linksView struct {
 }
 
 // linkItem is one row of the list: a project here (alias "") or the
-// project slug on the paired server alias, key its link's key.
-type linkItem struct{ key, alias, slug string }
+// project slug on the paired server alias, key its link's key; gone:
+// this side's entry names a project that server no longer shares.
+type linkItem struct {
+	key, alias, slug string
+	gone             bool
+}
 
 // linkGroup is a paired server's rows, with its link's state.
 type linkGroup struct {
@@ -99,25 +104,34 @@ func (v *linksView) items(m *dash) ([]linkItem, []linkGroup) {
 		order = append(order, alias)
 		return groups[alias]
 	}
-	add := func(alias, slug string) {
+	add := func(alias, slug string, gone bool) {
 		g, key := group(alias), alias+"/"+slug
 		if !slices.ContainsFunc(g.items, func(it linkItem) bool { return it.key == key }) {
-			g.items = append(g.items, linkItem{key: key, alias: alias, slug: slug})
+			g.items = append(g.items, linkItem{key: key, alias: alias, slug: slug, gone: gone})
 		}
 	}
+	// listed are the paired servers whose shared projects are known
+	// (a peer.projects answer, perhaps the last before the link went
+	// down): a project missing there isn't shared.
+	listed := map[string]bool{}
 	for _, pm := range m.data.Peers {
+		listed[pm.Alias] = pm.Listed
 		group(pm.Alias).state = map[string]string{proto.LinkUp: "linked", proto.LinkConnecting: "connecting"}[pm.State]
 		if pm.State != proto.LinkUp && pm.State != proto.LinkConnecting {
 			group(pm.Alias).state = "offline"
 		}
 		for _, pp := range pm.Projects {
-			add(pm.Alias, pp.Project)
+			add(pm.Alias, pp.Project, false)
 		}
 	}
+	// An unshared project stays while a link to it is set, so the user
+	// can set it off, or while a request waits; an answered request of
+	// this side's keeps none.
 	if p := m.projectData(v.slug); p != nil {
 		for _, r := range p.Links {
-			if alias, slug, ok := config.Remote(r.Peer); ok && (r.HasMine || r.Asks != nil || r.Asked != nil) {
-				add(alias, slug)
+			alias, slug, ok := config.Remote(r.Peer)
+			if ok && (r.HasMine || r.Asks != nil || r.Asked != nil && r.Asked.Pending()) {
+				add(alias, slug, r.HasMine && listed[alias])
 			}
 		}
 	}
@@ -214,6 +228,10 @@ func (v *linksView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 		it := items[v.sel]
 		other, r := it.key, v.entry(m, it.key)
 		allow := nextAllow(r.Mine.Allow, r.HasMine)
+		if it.gone {
+			// No message goes to a project its server doesn't share.
+			allow = config.LinkOff
+		}
 		src, slug := m.src, v.slug
 		return m.act(func() actionMsg {
 			if err := src.SetLink(slug, other, allow); err != nil {
@@ -452,6 +470,9 @@ func (v *linksView) lines(m *dash, w int) ([]string, int) {
 			}
 			if back.Refuses && r.Send {
 				st = th().Warn
+			}
+			if it.gone {
+				state, st = "not shared any more: enter sets off", th().Warn
 			}
 		}
 		l := fit(name, 20) + "  " + fit(mine, 22) + "  " + fit(theirs, 22) + "  "

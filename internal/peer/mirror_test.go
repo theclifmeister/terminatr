@@ -285,10 +285,13 @@ func TestMirrorProjectsComeAndGo(t *testing.T) {
 	f := newFakeLinks(0, map[string]int{"web": 1}, upLink("mini", CapWatch))
 	m := startMirror(f, MirrorOptions{Logf: t.Logf})
 	defer m.Close()
-	waitList(t, m, "synced web", func(l proto.PeerList) bool {
+	l := waitList(t, m, "synced web", func(l proto.PeerList) bool {
 		w := projectOf(l, "mini", "web")
 		return w != nil && !w.Stale
 	})
+	if !peerOf(l, "mini").Listed {
+		t.Fatalf("mini's projects are a peer.projects answer, not listed: %+v", peerOf(l, "mini"))
+	}
 	f.change("docs", 0)
 	f.change("web", -1)
 	waitList(t, m, "swapped web for docs", func(l proto.PeerList) bool {
@@ -310,7 +313,7 @@ func TestMirrorPeerWithoutWatch(t *testing.T) {
 	waitList(t, m, "listed old", func(l proto.PeerList) bool { return peerOf(l, "old") != nil })
 	time.Sleep(50 * time.Millisecond)
 	l := m.List()
-	if p := peerOf(l, "old"); p.Watch || len(p.Projects) != 0 || p.Offset != 0 {
+	if p := peerOf(l, "old"); p.Watch || p.Listed || len(p.Projects) != 0 || p.Offset != 0 {
 		t.Fatalf("old %+v", p)
 	}
 	f.mu.Lock()
