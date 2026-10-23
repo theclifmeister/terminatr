@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.48.0](https://github.com/theclifmeister/terminatr/compare/v0.47.0...v0.48.0) (2026-10-23)
+
+
+### Features
+
+* **link:** turning a link's files to auto or off answers the offers waiting on it ([#753](https://github.com/theclifmeister/terminatr/issues/753)) ([4c7c6fa](https://github.com/theclifmeister/terminatr/commit/4c7c6fa0b5932b021104fa6c07dbf9ba4f667fab))
+* **tui:** Messages tab is one list of all messages, newest first, with a detail dialog ([#754](https://github.com/theclifmeister/terminatr/issues/754)) ([473bc83](https://github.com/theclifmeister/terminatr/commit/473bc836bb9aa15c5fcd2c4e60a42b0d2506b63f))
+
+
+### Bug Fixes
+
+* **guard:** a loop variable over plain relative words is no unplaced folder ([#751](https://github.com/theclifmeister/terminatr/issues/751)) ([1c7f2f4](https://github.com/theclifmeister/terminatr/commit/1c7f2f4decd5d5e43381fb414726f42fc8718439))
+
 ## [0.47.0](https://github.com/theclifmeister/terminatr/compare/v0.46.0...v0.47.0) (2026-10-22)
 
 
