@@ -281,15 +281,34 @@ func (v *linksView) files(m *dash, it linkItem) tea.Cmd {
 			return actionMsg{msg: slug + " ⇄ " + other + ": " + filesWords(next)}
 		})
 	}
-	if next != config.FilesAuto {
-		return set()
-	}
 	mb := config.DefaultLinkFileMB
 	if p := m.projectData(slug); p != nil && p.Safety != nil {
 		mb = p.Safety.LinkFileMB
 	}
-	m.confirm("Take files without asking", fmt.Sprintf("Take files from %s without asking? Up to %d MB each land in %s's messages; the coordinator can read them.", other, mb, slug), set)
+	ts, _ := src.LinkFiles(slug, other)
+	fit, over := link.CountOffers(ts, mb)
+	switch {
+	case next == config.FilesAuto:
+		m.confirm("Take files without asking", fmt.Sprintf("Take files from %s without asking? Up to %d MB each land in %s's messages; the coordinator can read them.%s", other, mb, slug, waitingWords(fit, over, mb)), set)
+	case next == config.FilesOff && fit+over > 0:
+		m.confirm("Refuse files", fmt.Sprintf("Refuse files from %s? This declines %s.", other, counted(fit+over, "waiting file")), set)
+	default:
+		return set()
+	}
 	return nil
+}
+
+// waitingWords is what turning a link's files to auto does with the
+// offers waiting on it: fit taken, over (above mb) left waiting.
+func waitingWords(fit, over, mb int) string {
+	s := ""
+	if fit > 0 {
+		s = " This takes " + counted(fit, "waiting file") + "."
+	}
+	if over > 0 {
+		s += fmt.Sprintf(" %s over %d MB keeps waiting for you.", counted(over, "waiting file"), mb)
+	}
+	return s
 }
 
 // filesWords is a files setting in words.

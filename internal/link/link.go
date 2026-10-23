@@ -1001,22 +1001,23 @@ func SetAsk(c caller.Caller, a, b string, ask bool) error {
 // SetFiles sets what a's link to b does with files (config.FilesOff,
 // FilesAsk, FilesAuto), as the human: on this server both sides at
 // once, as the pair is linked; to a paired server's project this side
-// only. The link must be there.
-func SetFiles(c caller.Caller, a, b, files string) error {
+// only. The link must be there. The offers waiting on it are answered as
+// the new setting says (SettleOffers).
+func SetFiles(c caller.Caller, a, b, files string) (taken, declined int, err error) {
 	if c.IsAgent() {
-		return refuse("human-only", "links are the user's (Settings › Linked projects)")
+		return 0, 0, refuse("human-only", "links are the user's (Settings › Linked projects)")
 	}
 	if !slices.Contains(config.LinkFiles, files) {
-		return refuse("bad-files", "a link's files are %s, %s or %s", config.FilesAsk, config.FilesAuto, config.FilesOff)
+		return 0, 0, refuse("bad-files", "a link's files are %s, %s or %s", config.FilesAsk, config.FilesAuto, config.FilesOff)
 	}
 	cfg, err := config.Load()
 	if err != nil {
-		return err
+		return 0, 0, err
 	}
 	mine, _ := cfg.Links(a)
 	l, ok := mine[b]
 	if !ok {
-		return refuse("no-link", "%s has no link to %s", a, b)
+		return 0, 0, refuse("no-link", "%s has no link to %s", a, b)
 	}
 	l.Files = files
 	if _, _, remote := config.Remote(b); remote {
@@ -1026,7 +1027,7 @@ func SetFiles(c caller.Caller, a, b, files string) error {
 		err = config.SetLinkPair(a, b, l, theirs[a].Ask)
 	}
 	if err != nil {
-		return err
+		return 0, 0, err
 	}
 	if p, err := project.Open(a); err == nil {
 		p.Journal(c, "settings.links", a, b+" "+linkWords(l))
@@ -1035,8 +1036,10 @@ func SetFiles(c caller.Caller, a, b, files string) error {
 		if p, err := project.Open(b); err == nil {
 			p.Journal(c, "settings.links", a, b+" "+linkWords(l))
 		}
+		taken, declined = SettleOffers(c, b, a)
 	}
-	return nil
+	t, d := SettleOffers(c, a, b)
+	return taken + t, declined + d, nil
 }
 
 func linkWords(l config.Link) string {

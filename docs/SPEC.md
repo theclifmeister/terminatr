@@ -2979,7 +2979,19 @@ and closes when it ends. Nothing changes on the relay.
   `files` is each side's own: here the pair writer sets both (`F` in
   Linked projects, `tm project link a b --files ask|auto|off`); to a
   paired server's project this side only. Raising it to `auto` asks
-  first in the console.
+  first in the console. A change also answers the offers already
+  waiting on that link, whether it comes from `F`, `tm project link
+  --files` or a hand edit of the config (the outbox flusher looks every
+  3 s): `auto` takes each as if it had just arrived, journaled `(auto)`,
+  its `link-file` item done, except one over this side's
+  `link_file_mb`, which keeps waiting for the user; `off` declines each
+  (on this server also when the sending side's files are off), and the
+  sender hears of it as of a decline. The `auto` confirm says what it
+  takes (`This takes 1 waiting file.`, and `1 waiting file over 25 MB
+  keeps waiting for you.`); `off` asks first only when offers wait
+  (`Refuse files from beta? This declines 2 waiting files.`); `tm
+  project link --files` adds `; took 1 waiting file` / `; declined 1
+  waiting file`.
 - **On this server** the transfer is a copy: accepting copies the
   sender's copy beside the receiver's message, checked by size and hash,
   and both sides' transfers are `received`.

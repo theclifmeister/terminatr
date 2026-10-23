@@ -193,9 +193,12 @@ func TestPeerLinkFiles(t *testing.T) {
 	if items := mini.MustCLI("inbox", "list", "--project", "api"); strings.Contains(items, xid) {
 		t.Fatalf("the cancelled offer still asks:\n%s", items)
 	}
-	if out := mini.MustCLI("project", "link", "api", "studio/acme", "--files", "off"); !strings.Contains(out, "files off on this side") {
+	_, xid = sendFile(t, studio, path)
+	waitFile(t, mini, "api", xid, 30*time.Second, stateIs("offered"), "offered")
+	if out := mini.MustCLI("project", "link", "api", "studio/acme", "--files", "off"); !strings.Contains(out, "files off on this side (that server's user sets theirs); declined 1 waiting file") {
 		t.Fatalf("files off: %s", out)
 	}
+	waitFile(t, studio, "acme", xid, 30*time.Second, stateIs("declined"), "declined by files off")
 	_, xid = sendFile(t, studio, path)
 	if r := waitFile(t, studio, "acme", xid, 30*time.Second, stateIs("undelivered"), "undelivered"); r.Code != "files-off" {
 		t.Fatalf("files off: %+v", r)
