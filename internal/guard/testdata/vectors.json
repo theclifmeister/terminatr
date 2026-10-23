@@ -1378,7 +1378,14 @@
  {"rules": "yolo-thread", "tool": "Bash", "input": {"command": "f() { cd /h/.terminatr; }; echo \"it's\"; f; echo x \u003e config.toml"}, "rule": "tm-files", "summary": "echo of config.toml after a cd", "floor": true},
  {"rules": "yolo-thread", "tool": "Bash", "input": {"command": "sed -e \"s|(e()|x|\" a \u003e b; TRAPEXIT() { cd /h/.terminatr; }; echo x \u003e config.toml"}, "rule": "tm-files", "summary": "echo of config.toml after a cd", "floor": true},
  {"rules": "yolo-thread", "tool": "Bash", "input": {"command": "echo \"(e() $(g() { cd /h/.terminatr; }; g; echo x \u003e config.toml)\""}, "rule": "tm-files", "summary": "echo of config.toml after a cd", "floor": true},
- {"rules": "yolo-thread", "tool": "Bash", "input": {"command": "D=/h/.terminatr/projects/demo; rm -f $D/*.md"}, "rule": "tm-files", "summary": "rm of /h/.terminatr/projects/demo/*.md", "floor": true}
+ {"rules": "yolo-thread", "tool": "Bash", "input": {"command": "D=/h/.terminatr/projects/demo; rm -f $D/*.md"}, "rule": "tm-files", "summary": "rm of /h/.terminatr/projects/demo/*.md", "floor": true},
+ {"rules": "yolo-thread", "tool": "Bash", "input": {"command": "cd /h/.terminatr/worktrees/demo/t-0001-fix/app/env && perl -pi -e 's/a/b/' t.ts && for f in e.ts e.dev.ts; do perl -pi -e 's/a/b/' $f; done && cat e.ts"}, "rule": null},
+ {"rules": "yolo-thread", "tool": "Bash", "input": {"command": "cd /h/.terminatr/worktrees/demo/t-0001-fix/app && for f in a b; do rm -rf out/$f; done"}, "rule": null},
+ {"rules": "yolo-thread", "tool": "Bash", "input": {"command": "S=/private/tmp/tm-501/aaaa/s; rm -rf $S/x && cd /h/.terminatr/worktrees/demo/t-0001-fix/app && docker compose down -v; echo hi > $S/o"}, "rule": null},
+ {"rules": "yolo-thread", "tool": "Bash", "input": {"command": "cd /h/.terminatr/worktrees/demo/t-0001-fix/app && for f in ../../../../projects/demo/TASKS.md; do perl -pi -e 's/a/b/' $f; done"}, "rule": "tm-files", "summary": "perl of $f after a cd", "floor": true},
+ {"rules": "yolo-thread", "tool": "Bash", "input": {"command": "cd /h/.terminatr/worktrees/demo/t-0001-fix/app && for f in a $X; do perl -pi -e 's/a/b/' $f; done"}, "rule": "tm-files", "summary": "perl of $f after a cd", "floor": true},
+ {"rules": "yolo-thread", "tool": "Bash", "input": {"command": "cd /h/.terminatr/worktrees/demo/t-0001-fix/app && for f in a; do f=../../../../projects/demo/TASKS.md; perl -pi -e 's/a/b/' $f; done"}, "rule": "tm-files", "summary": "perl of $f after a cd", "floor": true},
+ {"rules": "yolo-thread", "tool": "Bash", "input": {"command": "cd /h/.terminatr/worktrees/demo/t-0001-fix/app && for f in a; do read f; perl -pi -e 's/a/b/' $f; done"}, "rule": "tm-files", "summary": "perl of $f after a cd", "floor": true}
 ],
 "messages": {
  "thread": {

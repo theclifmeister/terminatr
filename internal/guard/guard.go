@@ -1012,7 +1012,25 @@ func lineFolder(w, line string) bool {
 		return true
 	}
 	name := m[1] + m[2]
-	return name == "_" || assigns(line, name)
+	return name == "_" || assigns(plainFor(line, name), name)
+}
+
+// plainForHead matches a loop head over words written out: for f in a b;
+// do. Its words are relative names (no .., ~, $, quote or pattern).
+var plainForHead = regexp.MustCompile(`(^|[\s;&|(){}])for\s+([A-Za-z_][A-Za-z0-9_]*)\s+in((?:\s+[A-Za-z0-9_][A-Za-z0-9_.+-]*(?:/[A-Za-z0-9_.+-]+)*)+)\s*;\s*do\b`)
+
+// plainFor is line without the heads of loops over words written out
+// that set variable name: it takes only those words, which stay
+// beneath the folder the line is in (f in a.ts b.ts; do … $f), so it is
+// no folder the guard can't place.
+func plainFor(line, name string) string {
+	return plainForHead.ReplaceAllStringFunc(line, func(h string) string {
+		m := plainForHead.FindStringSubmatch(h)
+		if m[2] != name || strings.Contains(m[3], "..") {
+			return h
+		}
+		return m[1] + "do"
+	})
 }
 
 // assigns: line names variable name other than to expand it, as an
