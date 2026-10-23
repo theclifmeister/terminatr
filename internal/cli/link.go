@@ -506,10 +506,11 @@ func projectLink(e *Env, args []string) error {
 		if len(pos) != 2 || *ask || *noAsk || *request {
 			return usagef("%s", projectLinkUsage)
 		}
-		if err := link.SetFiles(e.Caller, pos[0], pos[1], *files); err != nil {
+		taken, declined, err := link.SetFiles(e.Caller, pos[0], pos[1], *files)
+		if err != nil {
 			return err
 		}
-		fmt.Fprintf(e.Stdout, "%s → %s: files %s on %s\n", pos[0], pos[1], *files, filesSides(pos[1]))
+		fmt.Fprintf(e.Stdout, "%s → %s: files %s on %s%s\n", pos[0], pos[1], *files, filesSides(pos[1]), settledWords(taken, declined))
 		return nil
 	}
 	a, b, allow := pos[0], pos[1], config.LinkBoth
@@ -561,6 +562,19 @@ func projectLink(e *Env, args []string) error {
 }
 
 // filesSides says which sides a files setting wrote.
+// settledWords is what setting a link's files did with the offers that
+// waited on it: "; took 1 waiting file".
+func settledWords(taken, declined int) string {
+	s := ""
+	if taken > 0 {
+		s += fmt.Sprintf("; took %d waiting file%s", taken, map[bool]string{true: "s"}[taken != 1])
+	}
+	if declined > 0 {
+		s += fmt.Sprintf("; declined %d waiting file%s", declined, map[bool]string{true: "s"}[declined != 1])
+	}
+	return s
+}
+
 func filesSides(b string) string {
 	if _, _, remote := config.Remote(b); remote {
 		return "this side (that server's user sets theirs)"

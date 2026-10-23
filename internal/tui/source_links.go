@@ -32,7 +32,8 @@ func (s *ServerSource) SetLinkFiles(slug, other, files string) error {
 	if s.Caller.IsAgent() {
 		return errHumanOnly
 	}
-	return link.SetFiles(s.Caller, slug, other, files)
+	_, _, err := link.SetFiles(s.Caller, slug, other, files)
+	return err
 }
 
 func (s *ServerSource) LinkFiles(slug, other string) ([]link.Transfer, error) {

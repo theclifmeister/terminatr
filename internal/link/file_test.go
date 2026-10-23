@@ -128,10 +128,10 @@ func TestFileLocalSettings(t *testing.T) {
 	ca := coord
 	ca.Project = "a"
 	libFile(t, a, "t-0001", "x.bin", 2<<20)
-	if err := SetFiles(ca, "a", "b", config.FilesAuto); code(err) != "human-only" {
+	if _, _, err := SetFiles(ca, "a", "b", config.FilesAuto); code(err) != "human-only" {
 		t.Fatalf("coordinator set files: %v", err)
 	}
-	if err := SetFiles(human, "a", "b", config.FilesAuto); err != nil {
+	if _, _, err := SetFiles(human, "a", "b", config.FilesAuto); err != nil {
 		t.Fatal(err)
 	}
 	cfg := mustConfig(t)
