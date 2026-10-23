@@ -264,3 +264,23 @@ func TestRemotePopupGolden(t *testing.T) {
 		t.Errorf("the remote popup differs from %s:\n%s", path, got)
 	}
 }
+
+// TestRemotePopupName: a paired server with a display name has the
+// popup under that name, and says to change things on it, while the read
+// still goes to the alias.
+func TestRemotePopupName(t *testing.T) {
+	m, src := popupDash(t, proto.PanesView)
+	src.data.Peers[0].Name = "work"
+	m.setData(src.data)
+	drain(t, m, press(m, "A"))
+	v, ok := m.top().(*remotePopupView)
+	if !ok || v.alias != "mini" || len(src.popups) != 1 || src.popups[0] != "mini/acme-api" {
+		t.Fatalf("A opened %T %+v (read %v)", m.top(), m.top(), src.popups)
+	}
+	out := ansi.Strip(screen(m))
+	for _, want := range []string{"work's acme-api", "change it on work", "2 on work; their paths stay there"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q:\n%s", want, out)
+		}
+	}
+}

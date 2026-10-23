@@ -131,14 +131,15 @@ func (s *ServerSource) LinkAct(slug, verb, arg, text string) (string, error) {
 
 // RequestWords is what sending link request r says.
 func RequestWords(r *link.Request) string {
-	alias, _, _ := config.Remote(r.Peer)
-	return fmt.Sprintf("asked %s to link back (%s, %s on this side); %s's user accepts or declines it there", r.Peer, r.ID, linkAllowWords(config.Link{Allow: r.Allow}), alias)
+	to := link.Shown(r.Peer)
+	server, _, _ := config.Remote(to)
+	return fmt.Sprintf("asked %s to link back (%s, %s on this side); %s's user accepts or declines it there", to, r.ID, linkAllowWords(config.Link{Allow: r.Allow}), server)
 }
 
 // AnswerWords is what answering link request r says.
 func AnswerWords(r *link.Request) string {
 	if r.State == link.ReqAccepted {
-		return fmt.Sprintf("accepted %s: %s → %s %s on this side; %s hears of it", r.ID, r.Project, r.Peer, linkAllowWords(config.Link{Allow: r.Answer, Ask: r.Ask}), r.Peer)
+		return fmt.Sprintf("accepted %s: %s → %s %s on this side; %s hears of it", r.ID, r.Project, link.Shown(r.Peer), linkAllowWords(config.Link{Allow: r.Answer, Ask: r.Ask}), link.Shown(r.Peer))
 	}
-	return fmt.Sprintf("declined %s from %s; %s hears of it, nothing here changed", r.ID, r.Peer, r.Peer)
+	return fmt.Sprintf("declined %s from %s; %s hears of it, nothing here changed", r.ID, link.Shown(r.Peer), link.Shown(r.Peer))
 }

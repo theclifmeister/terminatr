@@ -341,7 +341,7 @@ func undelivered(alias string, m proto.PeerMessage, code string) {
 	}
 	update(p, key, m.ID, func(x *Message) { x.State, x.Refused = StateUndelivered, code })
 	why := replaceWords(words, key, p.Slug)
-	p.AddMessageItem(KindUndelivered, key, fmt.Sprintf("your message %s to %s wasn't delivered: %s", m.ID, key, why), false, m.ID)
+	p.AddMessageItem(KindUndelivered, key, fmt.Sprintf("your message %s to %s wasn't delivered: %s", m.ID, Shown(key), why), false, m.ID)
 	p.Journal(caller.Caller{Kind: caller.Ticker}, "link.undelivered", key, m.ID+" ("+code+")")
 }
 
@@ -476,7 +476,7 @@ func (s *store) receive(alias, fp string, m proto.PeerMessage) proto.PeerMessage
 	if err := write(to, in); err != nil {
 		return proto.PeerMessageResult{Status: proto.PeerRetry, Code: "refused"}
 	}
-	to.AddMessageItem(KindMessage, key, Summary(key, in), false, in.ID)
+	to.AddMessageItem(KindMessage, key, Summary(Shown(key), in), false, in.ID)
 	to.Journal(caller.ForPeer(alias), "link.receive", key, fmt.Sprintf("%s (%s)", in.ID, KB(in.Bytes)))
 	s.account(m.By == "coordinator", key, to.Slug, l, t, side{to, key})
 	return proto.PeerMessageResult{Status: proto.PeerDelivered}

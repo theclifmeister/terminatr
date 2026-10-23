@@ -59,6 +59,9 @@ type peerLink struct {
 	// server (proto.PanesOff …), version its tm's release.
 	pane           bool
 	panes, version string
+	// name is the server's display name here (tm peer name), "" for
+	// none: the rows show it in its alias's place.
+	name string
 }
 
 // sideClock is the clock the server headers' ages are drawn by; tests
@@ -99,6 +102,35 @@ func peerKey(r treeRow) string {
 		return "rt:" + r.peer + "/" + r.slug + "/" + r.thread
 	}
 	return "g:" + r.peer
+}
+
+// server is the paired server r is of as the console shows it: its
+// display name, else its alias (r.peer, which keys the row).
+func (r treeRow) server() string {
+	if r.link != nil && r.link.name != "" {
+		return r.link.name
+	}
+	return r.peer
+}
+
+// peerShown is what the console calls the paired server alias: its
+// display name (tm peer name) as the mirror has it, else the alias.
+func peerShown(peers []proto.PeerMirror, alias string) string {
+	for _, pm := range peers {
+		if pm.Alias == alias && pm.Name != "" {
+			return pm.Name
+		}
+	}
+	return alias
+}
+
+// peerShownKey is key, a project here or "<alias>/<slug>" on a paired
+// server, with the server as the console calls it (peerShown).
+func peerShownKey(peers []proto.PeerMirror, key string) string {
+	if alias, rest, ok := strings.Cut(key, "/"); ok {
+		return peerShown(peers, alias) + "/" + rest
+	}
+	return key
 }
 
 // isPeer says r is a paired server's: its header or one of its rows.
@@ -167,13 +199,13 @@ func paneWhyNot(r treeRow) string {
 	l := r.link
 	switch {
 	case l.state != proto.LinkUp:
-		return r.peer + " is offline: its panes open once it is back"
+		return r.server() + " is offline: its panes open once it is back"
 	case !l.pane:
-		return r.peer + " runs tm " + l.version + ", which has no remote panes; update it to open them"
+		return r.server() + " runs tm " + l.version + ", which has no remote panes; update it to open them"
 	case l.panes != proto.PanesView && l.panes != proto.PanesType:
-		return r.peer + " doesn't share panes with this server: on " + r.peer + ", tm peer panes <this server> view, or write"
+		return r.server() + " doesn't share panes with this server: on " + r.server() + ", tm peer panes <this server> view, or write"
 	case r.session == "":
-		return "nothing runs for it on " + r.peer
+		return "nothing runs for it on " + r.server()
 	}
 	return ""
 }
@@ -221,7 +253,7 @@ func paneWords(r treeRow) string {
 // peerFold) is the row you are on.
 func peerRows(pm proto.PeerMirror, t view.Tree, current string) []treeRow {
 	link := peerLink{state: pm.State, reason: pm.Reason, since: pm.Since, rtt: pm.RTT, watch: pm.Watch,
-		pane: pm.Pane, panes: pm.Panes, version: pm.Version}
+		pane: pm.Pane, panes: pm.Panes, version: pm.Version, name: pm.Name}
 	for _, p := range pm.Projects {
 		if p.Synced.After(link.synced) {
 			link.synced = p.Synced
@@ -405,7 +437,7 @@ func serverCells(r treeRow, cw int, slim bool, sel lipgloss.Style) string {
 		}
 		return fit(" "+gst.Render(line), cw)
 	}
-	name := r.peer
+	name := r.server()
 	if r.link.local {
 		name = r.link.host
 	}
@@ -452,15 +484,15 @@ func peerDetails(r treeRow) (string, string) {
 		}
 		return "last seen " + l.synced.Local().Format("15:04")
 	}
-	where := r.peer + " / " + r.slug
+	where := r.server() + " / " + r.slug
 	switch r.kind {
 	case treeServer:
 		if l.local {
 			return l.host + " · this server", "its projects are below, each paired server's after them"
 		}
-		l1 := r.peer + " · " + linkWords(l, sideClock())
+		l1 := r.server() + " · " + linkWords(l, sideClock())
 		if l.state == proto.LinkUp {
-			l1 = r.peer + " · linked · " + linkWords(l, sideClock())
+			l1 = r.server() + " · linked · " + linkWords(l, sideClock())
 		}
 		switch {
 		case l.state != proto.LinkUp && r.threads > 0:
@@ -493,12 +525,12 @@ func peerDetails(r treeRow) (string, string) {
 		}
 		return where + " coordinator · " + running(r.state), strings.Join(bits, " · ")
 	}
-	l1 := r.peer + " / " + r.thread
+	l1 := r.server() + " / " + r.thread
 	switch {
 	case r.name != r.thread:
-		l1 = r.peer + " / " + strings.TrimSpace(r.name+" "+r.title) + " (" + r.thread + ")"
+		l1 = r.server() + " / " + strings.TrimSpace(r.name+" "+r.title) + " (" + r.thread + ")"
 	case r.title != "":
-		l1 = r.peer + " / " + r.thread + " " + r.title
+		l1 = r.server() + " / " + r.thread + " " + r.title
 	}
 	bits := []string{running(r.state)}
 	if r.pct >= 0 {
@@ -516,7 +548,7 @@ func peerWhy(r treeRow) string {
 		}
 		return "enter on a paired server folds or unfolds it"
 	}
-	return r.slug + " is " + r.peer + "'s: nothing here acts on it"
+	return r.slug + " is " + r.server() + "'s: nothing here acts on it"
 }
 
 // peerFoldStep is what → ← and enter do to the folds on a server header

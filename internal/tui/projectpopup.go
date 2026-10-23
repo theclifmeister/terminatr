@@ -460,7 +460,7 @@ func (pv *projectView) box(m *dash) box {
 		}
 	case tabMessages:
 		needs, es := pv.messages(m)
-		body, sel, hits = msgLines(p.Links, es, pv.sel[tabMessages], w)
+		body, sel, hits = msgLines(m.data.Peers, p.Links, es, pv.sel[tabMessages], w)
 		if pv.msgs.err != nil {
 			body = append(body, th().Bad.Render(fit("error: "+oneLine(pv.msgs.err.Error()), w)))
 		}

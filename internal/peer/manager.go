@@ -125,8 +125,13 @@ func (m *Manager) Reload() error {
 	for k, r := range m.links {
 		if p, ok := want[k]; !ok || p.Alias != r.l.peer.Alias || p.Relay != r.l.peer.Relay {
 			m.drop(k)
-		} else if p.PanesLevel() != r.l.panesLevel() {
-			r.l.setPanes(p.PanesLevel())
+		} else {
+			if p.PanesLevel() != r.l.panesLevel() {
+				r.l.setPanes(p.PanesLevel())
+			}
+			if p.Name != r.l.status().Name {
+				r.l.setName(p.Name)
+			}
 		}
 	}
 	for k, p := range want {
@@ -154,7 +159,7 @@ func (m *Manager) add(id *Identity, cert tls.Certificate, p Peer) {
 		d.panesHere = nil
 	}
 	l.methods = d.methods()
-	l.st = proto.PeerLink{Alias: p.Alias, ID: p.ID().String(), Transport: l.t.String(), State: proto.LinkConnecting}
+	l.st = proto.PeerLink{Alias: p.Alias, Name: p.Name, ID: p.ID().String(), Transport: l.t.String(), State: proto.LinkConnecting}
 	ctx, stop := context.WithCancel(m.ctx)
 	r := &running{l: l, stop: stop}
 	m.links[p.ID()] = r
@@ -206,21 +211,14 @@ func (m *Manager) panesHere(id ID, level string) {
 	}
 }
 
-// Call sends the paired server alias a request on its link and waits
+// Call sends the paired server alias (or the one named so) a request on its link and waits
 // for the answer (peer.projects, peer.watch where its hello lists
 // CapWatch).
 func (m *Manager) Call(ctx context.Context, alias, method string, params, result any) error {
 	if m == nil {
 		return errNotUp
 	}
-	m.mu.Lock()
-	var l *link
-	for _, r := range m.links {
-		if r.l.peer.Alias == alias {
-			l = r.l
-		}
-	}
-	m.mu.Unlock()
+	l := m.link(alias)
 	if l == nil {
 		return fmt.Errorf("no paired server %q", alias)
 	}
@@ -241,12 +239,18 @@ func (m *Manager) OpenPane(ctx context.Context, alias string, p proto.PeerAttach
 	return l.openPane(ctx, p, sink)
 }
 
-// link is the link to the paired server alias; nil for none.
+// link is the link to the paired server alias, or the one named so;
+// nil for none.
 func (m *Manager) link(alias string) *link {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, r := range m.links {
 		if r.l.peer.Alias == alias {
+			return r.l
+		}
+	}
+	for _, r := range m.links {
+		if r.l.status().Name == alias {
 			return r.l
 		}
 	}

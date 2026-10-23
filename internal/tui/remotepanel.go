@@ -40,9 +40,11 @@ import (
 // project is nil when the server doesn't share it (any more); peer is
 // nil when it isn't paired.
 type remoteData struct {
-	alias   string
-	peer    *proto.PeerMirror
-	project *proto.PeerMirrorProject
+	// alias keys the server; shown is what the panel calls it, its
+	// display name (tm peer name) when it has one.
+	alias, shown string
+	peer         *proto.PeerMirror
+	project      *proto.PeerMirrorProject
 	// sess is the pane's session as the mirror lists it; found says it
 	// does.
 	sess  proto.PeerSession
@@ -58,7 +60,7 @@ func loadRemoteInfo(peers []proto.PeerMirror, in proto.SessionInfo) *infoData {
 		return nil
 	}
 	alias = cmp.Or(in.Server, alias)
-	r := &remoteData{alias: alias}
+	r := &remoteData{alias: alias, shown: peerShown(peers, alias)}
 	for i := range peers {
 		if peers[i].Alias != alias {
 			continue
@@ -144,10 +146,10 @@ func remotePanel(d *infoData, w int, now time.Time) (*panel, []infoHit) {
 	// The head: the server's name on a line of its own, so a long one
 	// is cut, never the link's words, which wrap under it.
 	if r.peer == nil {
-		pl.add(th().Head.Render(oneLine(r.alias)))
+		pl.add(th().Head.Render(oneLine(r.shown)))
 		hang(pl, "", th().Faint.Render("not paired any more"))
 		pl.gap()
-		pl.wrap(th().Faint.Render(r.alias + " isn't paired with this server any more (tm peer list)."))
+		pl.wrap(th().Faint.Render(r.shown + " isn't paired with this server any more (tm peer list)."))
 		pad()
 		return pl, hits
 	}
@@ -156,20 +158,20 @@ func remotePanel(d *infoData, w int, now time.Time) (*panel, []infoHit) {
 	if r.peer.State != proto.LinkUp {
 		look = th().Faint
 	}
-	pl.add(look.Render(oneLine(r.alias)))
+	pl.add(look.Render(oneLine(r.shown)))
 	hang(pl, gst.Render(g)+" ", th().Faint.Render(words))
 	pl.mustFrom(0)
 	pad()
 	if r.project == nil {
 		pl.gap()
-		pl.wrap(th().Faint.Render(r.alias + " doesn't share this project with this server any more."))
+		pl.wrap(th().Faint.Render(r.shown + " doesn't share this project with this server any more."))
 		pad()
 		return pl, hits
 	}
 	pl.gap()
 	pad()
 	if r.project.Watch == nil {
-		pl.wrap(th().Faint.Render("Nothing read from " + r.alias + " yet."))
+		pl.wrap(th().Faint.Render("Nothing read from " + r.shown + " yet."))
 		pad()
 		return pl, hits
 	}
@@ -222,7 +224,7 @@ func (r *remoteData) hit(h infoHit) infoHit {
 	case hitPR:
 		return h
 	case hitSession:
-		row := treeRow{peer: r.alias, session: h.session, link: &peerLink{state: r.peer.State, pane: r.peer.Pane, panes: r.peer.Panes, version: r.peer.Version}}
+		row := treeRow{peer: r.alias, session: h.session, link: &peerLink{state: r.peer.State, pane: r.peer.Pane, panes: r.peer.Panes, version: r.peer.Version, name: r.peer.Name}}
 		if paneWhyNot(row) == "" {
 			return infoHit{kind: hitSession, session: r.alias + "/" + h.session}
 		}

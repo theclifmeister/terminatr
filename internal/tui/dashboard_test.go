@@ -71,6 +71,7 @@ type fakeSource struct {
 	unpinned     []string // aliases removed from the Peers tab
 	panesSet     []string // "alias level" set from the Peers tab
 	relaySet     []string // "alias relay" set from the Peers tab
+	namesSet     []string // "alias name" set from the Peers tab
 	relayUpdates []string // aliases whose relay u asked to update
 	pairs        []string // PairPeer's and JoinPeer's calls: "pair relay", "join code"
 	pairErr      error    // fails them before the code shows
@@ -327,6 +328,15 @@ func (f *fakeSource) SetPeerPanes(alias, level string) error {
 	for i := range f.peers.Peers {
 		if f.peers.Peers[i].Alias == alias {
 			f.peers.Peers[i].Panes = level
+		}
+	}
+	return nil
+}
+func (f *fakeSource) SetPeerName(alias, name string) error {
+	f.namesSet = append(f.namesSet, alias+" "+name)
+	for i := range f.peers.Peers {
+		if f.peers.Peers[i].Alias == alias {
+			f.peers.Peers[i].Name = name
 		}
 	}
 	return nil

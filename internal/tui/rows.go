@@ -541,10 +541,10 @@ func peerNeeds(peers []proto.PeerMirror) []row {
 			if w == nil {
 				continue
 			}
-			fold, who := peerFold(pm.Alias, mp.Project), remoteCrumb(pm.Alias, mp.Project)
+			fold, who := peerFold(pm.Alias, mp.Project), remoteCrumb(cmp.Or(pm.Name, pm.Alias), mp.Project)
 			if w.Questions > 0 {
 				out = append(out, row{key: "nr:" + fold + ":q", remote: fold, mark: markNeeds, who: who,
-					what: questionsWaiting(w.Questions), state: "blocked", rest: "on " + pm.Alias, pct: -1})
+					what: questionsWaiting(w.Questions), state: "blocked", rest: "on " + cmp.Or(pm.Name, pm.Alias), pct: -1})
 			}
 			for i, n := range w.NeedsYou {
 				ref := cmp.Or(n.Task, n.Thread, n.Session)

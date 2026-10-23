@@ -162,6 +162,22 @@ func Dir(slug string) (string, error) {
 	return filepath.Join(d, slug), nil
 }
 
+// PeerNameTaken says why name can't be a paired server's display name
+// here (docs/SPEC.md §16.8): it is this server's own name self, or a
+// project here, and <name>/<project> would read as either. "" when it
+// can be.
+func PeerNameTaken(name, self string) string {
+	if name == self {
+		return "it is this server's own name"
+	}
+	if dir, err := Dir(name); err == nil {
+		if _, err := os.Stat(dir); err == nil {
+			return "a project here is called that"
+		}
+	}
+	return ""
+}
+
 // Open reads a project by slug.
 func Open(slug string) (*Project, error) {
 	cfg, _ := config.Load() // a safety error still gives the tables

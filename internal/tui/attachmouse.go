@@ -339,7 +339,7 @@ func (c *client) sideName(r treeRow) string {
 	case treeDivider:
 		return "inactive projects"
 	case treePeerProject:
-		return r.peer + " / " + r.slug
+		return r.server() + " / " + r.slug
 	}
 	return r.slug
 }

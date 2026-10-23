@@ -108,6 +108,9 @@ func sessionID(p proto.SessionIDParams) string { return p.ID }
 // viewMethod is every view.* method methods doesn't name: the human's
 // console steering (views.do).
 var viewMethod = method{gate: gateHuman, call: typed(func(s *Server, p proto.ViewParams, c callCtx) (any, *proto.Error) {
+	if c.method == proto.MethodViewAttach {
+		p.Session = s.remoteCanon(p.Session)
+	}
 	return s.views.do(c.method, p)
 })}
 

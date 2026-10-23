@@ -1473,7 +1473,7 @@ func (c *client) remotePopup(key string) bool {
 		return false
 	}
 	if c.side != nil && !remotePopupOK(c.side.peers, p.info.Server) {
-		c.flash = remoteNoPopup(p.info.Server, p.info.Project)
+		c.flash = remoteNoPopup(c.serverShown(p.info.Server), p.info.Project)
 		c.status()
 		c.mu.Unlock()
 		c.poke()
@@ -1498,7 +1498,7 @@ func (c *client) repaint() {
 		c.poke()
 		return
 	}
-	c.flash = "repainting from " + p.info.Server
+	c.flash = "repainting from " + c.serverShown(p.info.Server)
 	c.status()
 	c.mu.Unlock()
 	c.poke()
@@ -1720,15 +1720,25 @@ func (c *client) remoteBlock(p *pane) string {
 	if alias == "" {
 		return ""
 	}
+	shown := c.serverShown(alias)
 	if p.info.ViewOnly {
-		return viewOnlyNote + alias + " shares its panes without typing"
+		return viewOnlyNote + shown + " shares its panes without typing"
 	}
 	for _, pm := range c.side.peers {
 		if pm.Alias == alias && pm.State != proto.LinkUp {
-			return alias + " is offline: keys aren't sent"
+			return shown + " is offline: keys aren't sent"
 		}
 	}
 	return ""
+}
+
+// serverShown is what the console calls the paired server alias: its
+// display name, as the sidebar's mirror has it. c.mu held.
+func (c *client) serverShown(alias string) string {
+	if c.side == nil {
+		return alias
+	}
+	return peerShown(c.side.peers, alias)
 }
 
 // remoteNote is the status bar's note on a paired server's pane: how it
@@ -1741,8 +1751,9 @@ func (c *client) remoteNote(p *pane) string {
 		if pm.Alias != in.Server {
 			continue
 		}
+		shown := cmp.Or(pm.Name, pm.Alias)
 		if pm.State != proto.LinkUp {
-			return "⚠ " + in.Server + " offline · keys aren't sent"
+			return "⚠ " + shown + " offline · keys aren't sent"
 		}
 		note := "remote"
 		if in.ViewOnly {
@@ -1750,7 +1761,7 @@ func (c *client) remoteNote(p *pane) string {
 			if p.mirror != nil {
 				cols, rows := p.mirror.Size()
 				if r := c.geo.Area; cols > 0 && (int(cols) != r.W || int(rows) != r.H) {
-					note += fmt.Sprintf(" · %d×%d on %s", cols, rows, in.Server)
+					note += fmt.Sprintf(" · %d×%d on %s", cols, rows, shown)
 				}
 			}
 		}
@@ -1834,7 +1845,13 @@ func (c *client) status() {
 	if where == "" && c.focus.info.Server != "" {
 		where = c.remoteNote(c.focus)
 	}
-	line, hits := statusBar(c.focus.info, c.focus.status, c.paneTitle(), c.pending, sw, where, c.cells)
+	info := c.focus.info
+	if info.Server != "" {
+		// The status bar's breadcrumb names the server as the sidebar
+		// does: its display name, when it has one.
+		info.Server = c.serverShown(info.Server)
+	}
+	line, hits := statusBar(info, c.focus.status, c.paneTitle(), c.pending, sw, where, c.cells)
 	line = plainUnder(line)
 	if bw > 0 {
 		line += reset + badge + " "

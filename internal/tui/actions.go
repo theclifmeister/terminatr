@@ -271,7 +271,7 @@ func (m *dash) newProject(string) tea.Cmd {
 func (m *dash) needProject() string {
 	slug := m.projectHere()
 	if alias, peerSlug, ok := m.remote(); ok && slug == "" {
-		m.msg = remoteNothing(alias, peerSlug)
+		m.msg = remoteNothing(peerShown(m.data.Peers, alias), peerSlug)
 	} else if slug == "" {
 		m.msg = "no project; " + keyShown(boundKey("+")) + " creates one"
 	}

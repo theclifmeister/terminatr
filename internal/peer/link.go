@@ -114,6 +114,13 @@ var ErrNoPanes = errors.New("the paired server's tm has no remote panes")
 // maxErrorRunes bounds the error a link keeps and shows.
 const maxErrorRunes = 200
 
+// setName changes the display name the link's status carries.
+func (l *link) setName(name string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.peer.Name, l.st.Name = name, name
+}
+
 func (l *link) status() proto.PeerLink {
 	l.mu.Lock()
 	defer l.mu.Unlock()

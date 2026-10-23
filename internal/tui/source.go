@@ -367,6 +367,10 @@ type PeerSource interface {
 	// server's panes (proto.PanesOff, PanesView, PanesType; §16.12), as
 	// tm peer panes does, and has the server read the peers again.
 	SetPeerPanes(alias, level string) error
+	// SetPeerName gives the paired server alias a display name, or
+	// clears it with "", as tm peer name does (§16.8), and has the
+	// server read the peers again.
+	SetPeerName(alias, name string) error
 	// SetPeerRelay gives the paired server alias another relay, as tm
 	// peer relay does, and has the server read the peers again; warn
 	// says when the relay is on a private address.

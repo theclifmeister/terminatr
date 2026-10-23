@@ -166,7 +166,7 @@ func (m *dash) prefixCommand(key string) tea.Cmd {
 		return m.remoteAction(key)
 	case m.over == nil && m.remoteHere() && m.commandKeyed(typed):
 		alias, slug, _ := m.remote()
-		m.stack, m.msg = nil, remoteNothing(alias, slug)
+		m.stack, m.msg = nil, remoteNothing(peerShown(m.data.Peers, alias), slug)
 		return nil
 	case popupCommands[key], key == "tab":
 		m.stack = nil

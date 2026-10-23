@@ -175,7 +175,7 @@ func (s *store) receiveFileAnswer(alias string, m proto.PeerMessage) proto.PeerM
 		return ok
 	}
 	if t.State == FileDeclined {
-		p.AddMessageItem(KindFile, t.Peer, fmt.Sprintf("%s declined your file %s with %s", t.Peer, t.Name, t.Message), false, t.ID)
+		p.AddMessageItem(KindFile, t.Peer, fmt.Sprintf("%s declined your file %s with %s", Shown(t.Peer), t.Name, t.Message), false, t.ID)
 		p.Journal(caller.ForPeer(alias), "link.file-declined", t.Peer, t.ID)
 	} else {
 		p.Journal(caller.ForPeer(alias), "link.file-accepted", t.Peer, t.ID)

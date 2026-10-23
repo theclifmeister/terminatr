@@ -333,6 +333,7 @@ func TestPeersTab(t *testing.T) {
 		"relay  relay.example.net",
 		"○ nas  offline 4m · relay · shares 1 project · dial: refused",
 		"relay  relay.example.net:8443",
+		"name   none: shown as mini",
 		"space toggle · ← → change · N pair · J join · E relay · U update relay · X remove · esc close",
 	} {
 		if !strings.Contains(out, want) {
@@ -344,8 +345,9 @@ func TestPeersTab(t *testing.T) {
 	if _, ok := m.top().(*settingsView); !ok {
 		t.Fatalf("X on a project: %T", m.top())
 	}
-	// Past the two projects and mini's panes and relay rows: nas's panes.
-	press(m, "down", "down", "down", "down", "X")
+	// Past the two projects and mini's panes, relay and name rows: nas's
+	// panes.
+	press(m, "down", "down", "down", "down", "down", "X")
 	if _, ok := m.top().(*confirmView); !ok {
 		t.Fatalf("X: %T", m.top())
 	}
@@ -692,5 +694,79 @@ func TestPairDialogLongName(t *testing.T) {
 	}
 	if !strings.Contains(pv.render(m), "server id 77AB-91C3") || !strings.Contains(pv.render(m), "381 204") {
 		t.Errorf("rows missing:\n%s", pv.render(m))
+	}
+}
+
+// TestPeerDisplayName: a paired server with a display name (tm peer
+// name) shows by it on the remote dashboard, its breadcrumb and the
+// sidebar, while its rows stay keyed by the alias; the Peers tab shows
+// "name (alias)" and a name row whose enter sets the name, empty for the
+// alias again.
+func TestPeerDisplayName(t *testing.T) {
+	m, src := remoteDash(t, "@mini/acme-api")
+	src.data.Peers[0].Name = "work"
+	m.setData(src.data)
+	out := screen(m)
+	for _, want := range []string{
+		" tm dashboard · work › acme-api",
+		"◉ work · linked 38 ms · synced 2s ago",
+		"link a project of yours to work/acme-api (tm project link).",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q in\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "mini") {
+		t.Errorf("the alias shows:\n%s", out)
+	}
+	var head *treeRow
+	for _, r := range m.tree() {
+		if r.kind == treeServer && r.peer == "mini" {
+			head = &r
+		}
+	}
+	if head == nil || head.server() != "work" || peerKey(*head) != "g:mini" {
+		t.Fatalf("server header %+v", head)
+	}
+	if got := peerShownKey(src.data.Peers, "mini/acme-api"); got != "work/acme-api" {
+		t.Errorf("peerShownKey %q", got)
+	}
+	if got := peerShownKey(src.data.Peers, "nas/x"); got != "nas/x" {
+		t.Errorf("peerShownKey without a name %q", got)
+	}
+
+	src.peers = peersList()
+	src.peers.Peers[0].Name = "work"
+	press(m, ",", "5")
+	out = screen(m)
+	for _, want := range []string{"◉ work (mini)  linked", "name   work", "name   none: shown as nas"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q in\n%s", want, out)
+		}
+	}
+	// Past the two projects and mini's panes and relay rows: its name.
+	press(m, "down", "down", "down", "down", "enter")
+	in, ok := m.top().(*inputView)
+	if !ok || in.title != "Name for mini" || in.value() != "work" || in.placeholder != "mini" {
+		t.Fatalf("enter on the name row: %T %+v", m.top(), m.top())
+	}
+	in.lineEdit = newLine("office")
+	drain(t, m, press(m, "enter"))
+	if !slices.Equal(src.namesSet, []string{"mini office"}) || m.msg != "mini is called office here" {
+		t.Fatalf("set %v, %q", src.namesSet, m.msg)
+	}
+	if !strings.Contains(screen(m), "◉ office (mini)") {
+		t.Errorf("the tab didn't read the name again:\n%s", screen(m))
+	}
+	press(m, "enter")
+	in = m.top().(*inputView)
+	in.lineEdit = newLine("")
+	drain(t, m, press(m, "enter"))
+	if !slices.Equal(src.namesSet, []string{"mini office", "mini "}) || m.msg != "mini shows by its alias again" {
+		t.Fatalf("cleared %v, %q", src.namesSet, m.msg)
+	}
+	press(m, "enter", "esc")
+	if m.msg != "name unchanged for mini" || len(src.namesSet) != 2 {
+		t.Errorf("esc: %v, %q", src.namesSet, m.msg)
 	}
 }

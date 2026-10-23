@@ -29,6 +29,7 @@ const peerUsage = `usage: tm peer pair [--relay URL] [--as ALIAS]
        tm peer join CODE [--as ALIAS]
        tm peer list [--json]
        tm peer remove ALIAS
+       tm peer name ALIAS|NAME NEW|""
        tm peer rotate [--yes]
        tm peer panes ALIAS off|view|write
        tm peer relay ALIAS ADDRESS
@@ -73,7 +74,7 @@ func runPeer(e *Env, args []string) error {
 			return usagef("tm peer %s takes no --%s\n%s", args[0], name, peerUsage)
 		}
 	}
-	npos := map[string]int{"pair": 0, "join": 1, "list": 0, "remove": 1, "rotate": 0, "panes": 2, "relay": 2, "relay-update": 1}
+	npos := map[string]int{"pair": 0, "join": 1, "list": 0, "remove": 1, "rotate": 0, "panes": 2, "relay": 2, "relay-update": 1, "name": 2}
 	if n, ok := npos[args[0]]; !ok || len(pos) != n {
 		return usagef("%s", peerUsage)
 	}
@@ -108,6 +109,8 @@ func runPeer(e *Env, args []string) error {
 		return e.peerRelay(dir, pos[0], pos[1])
 	case "relay-update":
 		return e.peerRelayUpdate(dir, pos[0])
+	case "name":
+		return e.peerName(dir, pos[0], pos[1])
 	default:
 		return e.peerRotate(dir, *yes)
 	}
@@ -352,9 +355,37 @@ func (e *Env) peerRelayUpdate(dir, alias string) error {
 	return nil
 }
 
+// peerName gives the paired server who (its alias or its name) the
+// display name name, or clears it with "" (docs/SPEC.md §16.8).
+func (e *Env) peerName(dir, who, name string) error {
+	self := pairName()
+	p, err := peer.SetName(dir, who, name, func(n string) string { return project.PeerNameTaken(n, self) })
+	var unknown *peer.UnknownPeerError
+	var taken *peer.NameError
+	switch {
+	case errors.As(err, &unknown):
+		return &project.Error{Code: "unknown-peer", Msg: fmt.Sprintf("no peer %q (tm peer list)", who)}
+	case errors.As(err, &taken):
+		return &project.Error{Code: "name-taken", Msg: err.Error()}
+	case err != nil && name != "" && peer.CheckName(name) != nil:
+		return usagef("%v", err)
+	case err != nil:
+		return err
+	}
+	if p.Name == "" {
+		fmt.Fprintf(e.Stdout, "%s shows by its alias again.\n", p.Alias)
+	} else {
+		fmt.Fprintf(e.Stdout, "%s is now called %s here: %s/<project> and %s/<project> both name its projects.\n", p.Alias, p.Name, p.Name, p.Alias)
+	}
+	e.reload()
+	return nil
+}
+
 // peerEntry is one paired server in tm peer list --json.
 type peerEntry struct {
-	Alias string          `json:"alias"`
+	Alias string `json:"alias"`
+	// Name is the display name set here (tm peer name); "" for none.
+	Name  string          `json:"name,omitempty"`
 	ID    string          `json:"id"`
 	Short string          `json:"short"`
 	Relay string          `json:"relay"`
@@ -382,7 +413,7 @@ func (e *Env) peerList(dir string, asJSON bool) error {
 	}
 	entries := []peerEntry{}
 	for _, p := range peers {
-		pe := peerEntry{Alias: p.Alias, ID: p.ID().String(), Short: p.ID().Short(), Relay: p.Relay, Panes: proto.PanesWord(p.PanesLevel())}
+		pe := peerEntry{Alias: p.Alias, Name: p.Name, ID: p.ID().String(), Short: p.ID().Short(), Relay: p.Relay, Panes: proto.PanesWord(p.PanesLevel())}
 		if l, ok := links[pe.ID]; ok {
 			pe.Link = &l
 		}
@@ -419,7 +450,7 @@ func (e *Env) peerList(dir string, asJSON bool) error {
 		if pe.Panes != proto.PanesOff {
 			state += "; panes: " + pe.Panes
 		}
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", pe.Alias, pe.Short, relayHost(pe.Relay), state)
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", peer.Both(pe.Name, pe.Alias), pe.Short, relayHost(pe.Relay), state)
 	}
 	return tw.Flush()
 }

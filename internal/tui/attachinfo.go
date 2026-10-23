@@ -206,7 +206,7 @@ func (c *client) infoKeyboard(k uv.Key) {
 	switch {
 	case ip.data != nil && ip.data.remote != nil && (name == "A" || ok && op == panelEnter && ip.sel == ""):
 		// The task and the questions are the paired server's.
-		c.flash = ip.data.remote.alias + "'s: view-only here"
+		c.flash = ip.data.remote.shown + "'s: view-only here"
 	case name == "A":
 		answer = true
 	case name == "tab":

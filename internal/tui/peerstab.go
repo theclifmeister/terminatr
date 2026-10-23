@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"cmp"
 	"fmt"
 	"github.com/theclifmeister/terminatr/internal/textsafe"
 	"net/url"
@@ -11,6 +12,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/theclifmeister/terminatr/internal/peer"
 	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
@@ -23,13 +25,15 @@ import (
 //     Settings tab's) as a box space or a click toggles; sharing asks
 //     first. It shows with nothing paired too.
 //   - PAIRED SERVERS: this server's id, then per server as tm peer list
-//     has them (Source.Peers) its link line (glyph, alias, link, tm) and
-//     two setting rows: panes, off · view · write side by side with the
-//     current one marked, which ← → or a click on a word changes as tm
+//     has them (Source.Peers) its link line (glyph, its name with the
+//     alias beside it, link, tm) and three setting rows: panes, off ·
+//     view · write side by side with the current one marked, which ← → or a click on a word changes as tm
 //     peer panes does (asking before it lets the server do more), and
 //     its relay, which E (or enter or a click on it) changes as tm peer
 //     relay does (the relay moved, or has a new key), with the relay's
-//     tm once known; U asks that relay to update itself (peerrelay.go).
+//     tm once known; U asks that relay to update itself (peerrelay.go);
+//     and its name, the display name enter (or a click) sets as tm peer
+//     name does, empty for the alias again.
 //
 // X removes the selected server, asking first, as tm peer remove does;
 // N pairs with another server and J joins one's pairing (peerpair.go),
@@ -40,10 +44,11 @@ import (
 //	"[ ] blog"
 //	""
 //	"PAIRED SERVERS · this server 4F2A-91C3"
-//	"◉ mini  linked · 38 ms · tm 0.27.0 · shares 2 projects"
+//	"◉ work (mini)  linked · 38 ms · tm 0.27.0 · shares 2 projects"
 //	"    panes  off · view · [write]"
 //	"           it can watch and type into …"
 //	"    relay  relay.example.net · v0.27.0 · update available (U)"
+//	"    name   work"
 
 // peersTab is the Peers tab: the list as last read, and the selection,
 // an index into its items.
@@ -55,11 +60,11 @@ type peersTab struct {
 }
 
 // peerItem is a row the cursor stops on: a project's share box, or a
-// paired server's panes or relay row.
+// paired server's panes, relay or name row.
 type peerItem struct {
 	kind int
 	slug string // itemShare
-	peer int    // itemPanes, itemRelay: the index in list.Peers
+	peer int    // itemPanes, itemRelay, itemName: the index in list.Peers
 }
 
 // The kinds of peerItem.
@@ -67,6 +72,7 @@ const (
 	itemShare = iota
 	itemPanes
 	itemRelay
+	itemName
 )
 
 // peersKeys are the Peers tab's action row.
@@ -105,7 +111,7 @@ func (pt *peersTab) items(m *dash) []peerItem {
 	}
 	if pt.err == nil {
 		for i := range pt.list.Peers {
-			out = append(out, peerItem{kind: itemPanes, peer: i}, peerItem{kind: itemRelay, peer: i})
+			out = append(out, peerItem{kind: itemPanes, peer: i}, peerItem{kind: itemRelay, peer: i}, peerItem{kind: itemName, peer: i})
 		}
 	}
 	return out
@@ -127,7 +133,8 @@ const (
 	panesLabel  = 5
 )
 
-// aliasMax is the most of a server's alias its link line shows.
+// aliasMax is the most of a server's name and alias its link line
+// shows.
 const aliasMax = 24
 
 // lines draws the tab w cells wide: its lines, the selected item's
@@ -201,7 +208,8 @@ func (pt *peersTab) lines(m *dash, w int) (out []string, sel int, hits []int) {
 		g, gst, words := peerLinkWords(m, e, l)
 		about := peerAbout(m, e)
 		// A long host name is cut, so the link's words still show.
-		line := gst.Render(g) + " " + th().Head.Render(fit(e.Alias, min(ansi.StringWidth(e.Alias), aliasMax))) + "  " + words
+		who := peer.Both(e.Name, e.Alias)
+		line := gst.Render(g) + " " + th().Head.Render(fit(who, min(ansi.StringWidth(who), aliasMax))) + "  " + words
 		if about != "" {
 			line += th().Faint.Render(" · " + about)
 		}
@@ -222,10 +230,18 @@ func (pt *peersTab) lines(m *dash, w int) (out []string, sel int, hits []int) {
 		}
 		row(pad+fit("relay", panesLabel)+"  "+relay,
 			pad+th().Head.Render(fit("relay", panesLabel))+"  "+fit(relay, max(w-panesIndent-panesLabel-2, 1)))
+		name, styled := e.Name, fit(e.Name, max(w-panesIndent-panesLabel-2, 1))
+		if name == "" {
+			// The faint placeholder, as the dialogs show one.
+			name = "none: shown as " + e.Alias
+			styled = th().Faint.Render(fit(name, max(w-panesIndent-panesLabel-2, 1)))
+		}
+		row(pad+fit("name", panesLabel)+"  "+name, pad+th().Head.Render(fit("name", panesLabel))+"  "+styled)
 	}
 	add(noHit, "")
 	add(noHit, faintLines("panes sets what a server may do with this server's panes, the coordinators and threads of the projects you share: nothing, watch them, or watch and type into them. ← → or a click on a word changes it; more asks first, less applies at once.", w)...)
 	add(noHit, faintLines("E gives the selected server another relay, as tm peer relay does: when the relay moved or was set up again with a new key (its link refuses a relay whose key changed); set it on the other server too.", w)...)
+	add(noHit, faintLines("name is what this server calls the selected server, instead of its alias: enter sets it, as tm peer name does, and either names it (work/acme-api or its alias/acme-api); empty shows the alias again. It stays here; the other server never sees it.", w)...)
 	add(noHit, faintLines("U asks the selected server's relay to update itself to the latest official release, as tm peer relay-update does: it restarts only for a newer one, and takes one request an hour from any server linked through it.", w)...)
 	add(noHit, faintLines("X removes the selected server, as tm peer remove does: its link closes and its projects leave the sidebar; remove this server there too.", w)...)
 	return out, sel, hits
@@ -356,21 +372,22 @@ func (pt *peersTab) setPanes(m *dash, e PeerEntry, to string) tea.Cmd {
 	if to == from {
 		return nil
 	}
+	name := cmp.Or(e.Name, e.Alias)
 	set := func() tea.Cmd {
 		src, alias := m.src, e.Alias
 		return m.act(func() actionMsg {
 			err := src.SetPeerPanes(alias, to)
-			return actionMsg{err: err, msg: "panes " + proto.PanesWord(to) + " for " + alias, then: func(m *dash) { pt.load(m) }}
+			return actionMsg{err: err, msg: "panes " + proto.PanesWord(to) + " for " + name, then: func(m *dash) { pt.load(m) }}
 		})
 	}
 	if slices.Index(panesLevels, to) < slices.Index(panesLevels, from) {
 		return set()
 	}
 	q := map[string]string{
-		proto.PanesView: fmt.Sprintf("Let %s watch the coordinator and thread panes of the projects this server shares? It sees whatever they show.", e.Alias),
-		proto.PanesType: fmt.Sprintf("Let %s type into the coordinator and thread panes of the projects this server shares? Typing into an agent can run anything here; the first keys into a thread tell its coordinator.", e.Alias),
+		proto.PanesView: fmt.Sprintf("Let %s watch the coordinator and thread panes of the projects this server shares? It sees whatever they show.", name),
+		proto.PanesType: fmt.Sprintf("Let %s type into the coordinator and thread panes of the projects this server shares? Typing into an agent can run anything here; the first keys into a thread tell its coordinator.", name),
 	}[to]
-	m.confirmNo("Panes for "+e.Alias, q, "panes unchanged for "+e.Alias, set)
+	m.confirmNo("Panes for "+name, q, "panes unchanged for "+name, set)
 	return nil
 }
 
@@ -413,10 +430,13 @@ func (pt *peersTab) key(m *dash, k tea.KeyPressMsg) (tea.Cmd, bool) {
 		i := slices.Index(panesLevels, panesLevel(e)) + map[string]int{"left": -1, "right": 1}[s]
 		return pt.setPanes(m, e, panesLevels[min(max(i, 0), len(panesLevels)-1)]), true
 	case it.kind != itemShare && s == "X":
-		pt.remove(m, pt.list.Peers[it.peer].Alias)
+		pt.remove(m, pt.list.Peers[it.peer])
 		return nil, true
 	case it.kind != itemShare && s == "E", it.kind == itemRelay && s == "enter":
 		pt.relay(m, pt.list.Peers[it.peer])
+		return nil, true
+	case it.kind == itemName && s == "enter":
+		pt.name(m, pt.list.Peers[it.peer])
 		return nil, true
 	case it.kind != itemShare && s == "U":
 		pt.relayUpdate(m, pt.list.Peers[it.peer])
@@ -455,15 +475,40 @@ func (pt *peersTab) relay(m *dash, e PeerEntry) {
 		}})
 }
 
-// remove asks, then unpins alias and has the server close its link; the
-// tab reads the list again after.
-func (pt *peersTab) remove(m *dash, alias string) {
-	q := fmt.Sprintf("Remove %s? Its link closes at once and its projects leave the sidebar; it refuses this server until the two pair again. Remove this server on %s too (tm peer remove there).", alias, alias)
-	m.confirmNo("Remove "+alias, q, alias+" kept", func() tea.Cmd {
+// name asks for the selected server's display name, starting from the
+// one it has, and sets it as tm peer name does: empty clears it.
+func (pt *peersTab) name(m *dash, e PeerEntry) {
+	alias := e.Alias
+	m.push(&inputView{title: "Name for " + alias, lineEdit: newLine(e.Name), placeholder: alias, keep: true, max: peer.MaxAlias, cancel: "name unchanged for " + alias,
+		label: "What this server calls " + alias + " (a-z, 0-9 and -); it names its projects too, as <name>/<project>. Empty shows the alias again:",
+		submit: func(s string) tea.Cmd {
+			s = strings.TrimSpace(s)
+			if s == e.Name {
+				m.msg = "name unchanged for " + alias
+				return nil
+			}
+			src := m.src
+			return m.act(func() actionMsg {
+				err := src.SetPeerName(alias, s)
+				msg := alias + " is called " + s + " here"
+				if s == "" {
+					msg = alias + " shows by its alias again"
+				}
+				return actionMsg{err: err, msg: msg, then: func(m *dash) { pt.load(m) }}
+			})
+		}})
+}
+
+// remove asks, then unpins server e and has the server close its link;
+// the tab reads the list again after.
+func (pt *peersTab) remove(m *dash, e PeerEntry) {
+	alias, name := e.Alias, cmp.Or(e.Name, e.Alias)
+	q := fmt.Sprintf("Remove %s? Its link closes at once and its projects leave the sidebar; it refuses this server until the two pair again. Remove this server on %s too (tm peer remove there).", name, name)
+	m.confirmNo("Remove "+name, q, name+" kept", func() tea.Cmd {
 		src := m.src
 		return m.act(func() actionMsg {
 			err := src.RemovePeer(alias)
-			return actionMsg{err: err, msg: "removed " + alias + "; its link closes. Remove this server on " + alias + " too.",
+			return actionMsg{err: err, msg: "removed " + name + "; its link closes. Remove this server on " + name + " too.",
 				then: func(m *dash) { pt.load(m) }}
 		})
 	})
@@ -501,6 +546,8 @@ func (pt *peersTab) click(m *dash, item, col int) tea.Cmd {
 		return pt.toggle(m, it.slug)
 	case it.kind == itemRelay && was:
 		pt.relay(m, pt.list.Peers[it.peer])
+	case it.kind == itemName && was:
+		pt.name(m, pt.list.Peers[it.peer])
 	case it.kind == itemPanes:
 		e := pt.list.Peers[it.peer]
 		if to := panesAt(panesLevel(e), col); to != "" {
