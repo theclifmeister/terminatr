@@ -39,6 +39,38 @@ func remoteID(id string) (alias, sid string, ok bool) {
 	return alias, sid, ok && alias != "" && sid != ""
 }
 
+// remoteCanon is id with a paired server's display name (tm peer name)
+// as its alias: "<name>/<session>" and "<alias>/<session>" are one pane,
+// kept by the alias. This server's own sessions, and an id the mirror
+// knows no peer of, are as they are.
+func (s *Server) remoteCanon(id string) string {
+	if _, _, ok := remoteID(id); !ok || s.mirror == nil {
+		return id
+	}
+	return remoteCanonIn(s.mirror.List().Peers, id)
+}
+
+// remoteCanonIn is remoteCanon with the peers the mirror lists.
+func remoteCanonIn(peers []proto.PeerMirror, id string) string {
+	name, sid, ok := remoteID(id)
+	if !ok {
+		return id
+	}
+	var alias string
+	for _, p := range peers {
+		switch {
+		case p.Alias == name:
+			return id
+		case p.Name == name:
+			alias = p.Alias
+		}
+	}
+	if alias == "" {
+		return id
+	}
+	return alias + "/" + sid
+}
+
 // remotes are the remote panes this server shows.
 type remotes struct {
 	s    *Server

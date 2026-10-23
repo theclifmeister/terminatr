@@ -24,7 +24,11 @@ const PeersFile = "peers.json"
 // Peer is a paired server: the key pinned at pairing, the local alias the
 // user knows it by, and the relay both dial.
 type Peer struct {
-	Alias string            `json:"alias"`
+	Alias string `json:"alias"`
+	// Name is the display name the user gave it here (tm peer name),
+	// shown in its alias's place; either targets it (Names). The alias
+	// stays the key of everything stored. Nothing of it crosses a link.
+	Name  string            `json:"name,omitempty"`
 	Key   ed25519.PublicKey `json:"key"`   // base64
 	Relay string            `json:"relay"` // wss://host[:port][#sha256=<pin>]
 	// Panes is what the peer may do with this server's panes
@@ -45,12 +49,35 @@ func (p Peer) PanesLevel() string {
 // ID is the peer's server id.
 func (p Peer) ID() ID { return IDOf(p.Key) }
 
+// Shown is what screens and agents call p: its name, else its alias.
+func (p Peer) Shown() string {
+	if p.Name != "" {
+		return p.Name
+	}
+	return p.Alias
+}
+
+// Both is p with its alias beside a name, "work (del-02-0468-lt)", for
+// where both help (tm peer list, Settings → Peers).
+func (p Peer) Both() string { return Both(p.Name, p.Alias) }
+
+// Both is name with alias beside it; alias alone without a name.
+func Both(name, alias string) string {
+	if name == "" || name == alias {
+		return alias
+	}
+	return name + " (" + alias + ")"
+}
+
 func (p Peer) check() error {
 	if p.Alias == "" {
 		return errors.New("a peer without an alias")
 	}
 	if len(p.Key) != ed25519.PublicKeySize {
 		return fmt.Errorf("peer %s: the key is %d bytes, want %d", p.Alias, len(p.Key), ed25519.PublicKeySize)
+	}
+	if p.Name != "" && CheckName(p.Name) != nil {
+		return fmt.Errorf("peer %s: %w", p.Alias, CheckName(p.Name))
 	}
 	if p.Panes != "" && !proto.ValidPanes(p.Panes) {
 		return fmt.Errorf("peer %s: panes %q is not off, view or write", p.Alias, p.Panes)
@@ -118,6 +145,21 @@ func checkPeers(peers []Peer) error {
 		}
 		alias[p.Alias], key[p.ID()] = true, true
 	}
+	// A name is one more word for its peer: no other peer's alias or
+	// name, or <name>/<project> would mean two servers.
+	names := map[string]string{}
+	for _, p := range peers {
+		if p.Name == "" || p.Name == p.Alias {
+			continue
+		}
+		if alias[p.Name] {
+			return fmt.Errorf("peer %s: the name %s is another peer's alias", p.Alias, p.Name)
+		}
+		if other, ok := names[p.Name]; ok {
+			return fmt.Errorf("peers %s and %s are both named %s", other, p.Alias, p.Name)
+		}
+		names[p.Name] = p.Alias
+	}
 	return nil
 }
 
@@ -158,6 +200,14 @@ func CheckAlias(s string) error {
 	}
 	if !ok {
 		return fmt.Errorf("alias %q: 1 to %d of a-z, 0-9 and -, not starting with -", s, MaxAlias)
+	}
+	return nil
+}
+
+// CheckName says why s can't be a peer's display name: an alias's rules.
+func CheckName(s string) error {
+	if CheckAlias(s) != nil {
+		return fmt.Errorf("name %q: 1 to %d of a-z, 0-9 and -, not starting with -", s, MaxAlias)
 	}
 	return nil
 }
@@ -211,30 +261,40 @@ func Pin(dir string, key ed25519.PublicKey, relayURL, name, as string) (Peer, er
 				if as == "" {
 					p.Alias = q.Alias
 				}
-				// Pairing again keeps the pane switch.
-				p.Panes = q.Panes
+				// Pairing again keeps the pane switch and the name.
+				p.Panes, p.Name = q.Panes, q.Name
 			case q.Alias == as:
 			default:
 				kept = append(kept, q)
 			}
 		}
 		if as != "" {
+			if i := slices.IndexFunc(kept, func(q Peer) bool { return q.Name == as }); i >= 0 {
+				return nil, fmt.Errorf("alias %s: it is the name of %s here (tm peer name %s NEW changes it)", as, kept[i].Alias, kept[i].Alias)
+			}
 			p.Alias = as
+		}
+		if p.Name == p.Alias {
+			p.Name = ""
 		}
 		if p.Alias == "" {
 			base := DefaultAlias(name)
 			p.Alias = base
-			for n := 2; slices.ContainsFunc(kept, func(q Peer) bool { return q.Alias == p.Alias }); n++ {
+			for n := 2; slices.ContainsFunc(kept, func(q Peer) bool { return q.Alias == p.Alias || q.Name == p.Alias }); n++ {
 				p.Alias = fmt.Sprintf("%s-%d", base, n)
 			}
+		}
+		if p.Name != "" && slices.ContainsFunc(kept, func(q Peer) bool { return q.Alias == p.Name || q.Name == p.Name }) {
+			// Another peer took the name meanwhile: the alias shows.
+			p.Name = ""
 		}
 		return append(kept, p), nil
 	})
 	return p, err
 }
 
-// SetPanes sets the pane switch for the peer called alias (docs/SPEC.md
-// §16.12); false when there is none.
+// SetPanes sets the pane switch for the peer called alias, or named so
+// (docs/SPEC.md §16.12); false when there is none.
 func SetPanes(dir, alias, word string) (bool, error) {
 	level, ok := proto.ParsePanes(word)
 	if !ok {
@@ -242,6 +302,7 @@ func SetPanes(dir, alias, word string) (bool, error) {
 	}
 	found := false
 	err := change(dir, func(peers []Peer) ([]Peer, error) {
+		alias := NamesOf(peers).Alias(alias)
 		for i := range peers {
 			if peers[i].Alias == alias {
 				found = true
@@ -256,10 +317,12 @@ func SetPanes(dir, alias, word string) (bool, error) {
 	return found, err
 }
 
-// Unpin drops the peer called alias; false when there is none.
+// Unpin drops the peer called alias, or named so; false when there is
+// none.
 func Unpin(dir, alias string) (bool, error) {
 	found := false
 	err := change(dir, func(peers []Peer) ([]Peer, error) {
+		alias := NamesOf(peers).Alias(alias)
 		return slices.DeleteFunc(peers, func(q Peer) bool {
 			if q.Alias == alias {
 				found = true
@@ -270,12 +333,13 @@ func Unpin(dir, alias string) (bool, error) {
 	return found, err
 }
 
-// SetRelay sets the relay of the peer called alias to relayURL
+// SetRelay sets the relay of the peer called alias (or named so) to relayURL
 // (RelayURL's form): the relay moved, or has a new key; false when there
 // is no such peer.
 func SetRelay(dir, alias, relayURL string) (bool, error) {
 	found := false
 	err := change(dir, func(peers []Peer) ([]Peer, error) {
+		alias := NamesOf(peers).Alias(alias)
 		for i := range peers {
 			if peers[i].Alias == alias {
 				found = true
@@ -286,3 +350,133 @@ func SetRelay(dir, alias, relayURL string) (bool, error) {
 	})
 	return found, err
 }
+
+// NameTaken says why name can't be a peer's name though no peer has it:
+// this server's own name, or a project here, would make <name>/<project>
+// mean two things. "" when it can be.
+type NameTaken func(name string) string
+
+// SetName gives the peer who (its alias or its name) the display name
+// name, or clears it with "" (the alias shows again). It refuses a name
+// another peer has as alias or name, and one taken says is taken.
+func SetName(dir, who, name string, taken NameTaken) (Peer, error) {
+	if name != "" {
+		if err := CheckName(name); err != nil {
+			return Peer{}, err
+		}
+	}
+	var got Peer
+	err := change(dir, func(peers []Peer) ([]Peer, error) {
+		i := slices.IndexFunc(peers, func(q Peer) bool { return q.Alias == who })
+		if i < 0 {
+			i = slices.IndexFunc(peers, func(q Peer) bool { return q.Name == who })
+		}
+		if i < 0 {
+			return nil, &UnknownPeerError{Alias: who}
+		}
+		if name == peers[i].Alias {
+			name = ""
+		}
+		if name != "" {
+			for j, q := range peers {
+				if j != i && (q.Alias == name || q.Name == name) {
+					return nil, &NameError{Name: name, Why: "the paired server " + q.Both() + " is called that"}
+				}
+			}
+			if taken != nil {
+				if why := taken(name); why != "" {
+					return nil, &NameError{Name: name, Why: why}
+				}
+			}
+		}
+		peers[i].Name = name
+		got = peers[i]
+		return peers, nil
+	})
+	return got, err
+}
+
+// NameError is a display name SetName refused, and why.
+type NameError struct{ Name, Why string }
+
+func (e *NameError) Error() string { return fmt.Sprintf("the name %s: %s", e.Name, e.Why) }
+
+// Names maps a paired server's alias or name to its alias, and an alias
+// to what screens show, from peers.json. The zero Names knows no peer:
+// every word is its own alias.
+type Names struct {
+	alias map[string]string // alias or name → alias
+	shown map[string]string // alias → name, when it has one
+}
+
+// NamesOf is the names of peers.
+func NamesOf(peers []Peer) Names {
+	n := Names{alias: map[string]string{}, shown: map[string]string{}}
+	for _, p := range peers {
+		n.alias[p.Alias] = p.Alias
+	}
+	for _, p := range peers {
+		if p.Name != "" && p.Name != p.Alias {
+			if _, ok := n.alias[p.Name]; !ok {
+				n.alias[p.Name] = p.Alias
+			}
+			n.shown[p.Alias] = p.Name
+		}
+	}
+	return n
+}
+
+// LoadNames is the names of the peers in dir; none when they can't be
+// read.
+func LoadNames(dir string) Names {
+	peers, _ := LoadPeers(dir)
+	return NamesOf(peers)
+}
+
+// HomeNames is LoadNames of this tm home's peer state directory.
+func HomeNames() Names {
+	dir, err := Dir()
+	if err != nil {
+		return Names{}
+	}
+	return LoadNames(dir)
+}
+
+// Alias is the alias of the peer s names (its alias or its name); s
+// itself when no peer has it.
+func (n Names) Alias(s string) string {
+	if a, ok := n.alias[s]; ok {
+		return a
+	}
+	return s
+}
+
+// Key is key, "<server>/<rest>", with the server as its alias: what
+// everything stored is keyed by. A key without "/" is a project here,
+// as it is.
+func (n Names) Key(key string) string {
+	if x, rest, ok := strings.Cut(key, "/"); ok {
+		return n.Alias(x) + "/" + rest
+	}
+	return key
+}
+
+// Show is what screens call the peer alias: its name, else alias.
+func (n Names) Show(alias string) string {
+	if s, ok := n.shown[alias]; ok {
+		return s
+	}
+	return alias
+}
+
+// ShowKey is key, "<alias>/<rest>", with the server as shown (Show); a
+// project here as it is.
+func (n Names) ShowKey(key string) string {
+	if a, rest, ok := strings.Cut(key, "/"); ok {
+		return n.Show(a) + "/" + rest
+	}
+	return key
+}
+
+// Both is the peer alias with its name: Both(name, alias).
+func (n Names) Both(alias string) string { return Both(n.shown[alias], alias) }

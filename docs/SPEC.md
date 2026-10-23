@@ -585,7 +585,7 @@ Each enabled code mod runs in its own `tm mod host` child of the server: the sam
   state/views.json                     the server-owned views but own ones: screen, the session shown, selection, current project, sidebar (§3.3)  [server]
   state/mods/<id>/                     a user mod's own data, and store.json, its $.store (§5.3)  [the mod, through the broker]
   state/peer/identity.key              the server's Ed25519 identity key, PKCS #8 PEM, 0600; its SHA-256 is the server id (§16.7)  [tm peer, made at the first pairing (§16.8)]
-  state/peer/peers.json                the paired servers: alias, pinned public key, relay URL (§16.7)  [tm peer, the human's (§16.8)]
+  state/peer/peers.json                the paired servers: alias, display name, pinned public key, relay URL (§16.7)  [tm peer, the human's (§16.8)]
   state/peer/peers.lock                held while tm peer changes peers.json (§16.8)  [tm peer]
   cache/mods/<id>/                     a code mod's bundle, bundle.json and host.json (§3.7, Supervisor)  [server]
   state/repos-moved                    the mark that the projects' repo lists have moved from PROJECT.md to config.toml (below)  [server]
@@ -1690,7 +1690,7 @@ These commands are used by the human, the coordinator and threads alike. Exit co
 | `tm mod new <id> [--kind column\|hook\|theme\|icons\|keymap\|rules] [--dir <dir>] \| dev <dir> [--yes] \| test [<dir>…] [--json] \| logs <id> [--follow\|-f] [--lines\|-n N]` | dev: human; the rest: anyone | the mod author's tools, §5.3: scaffold, run from a folder with a restart on every save, replay fixtures with a fake broker, read a mod's log |
 | `tm relay serve [--listen ADDR] (--domain NAME [--state DIR] [--email ADDR] \| --cert FILE --key FILE \| --plain) [--trusted-proxy CIDR]… [--max-conns N] [--max-per-ip N] [--bandwidth MiB/s] [--total-bandwidth MiB/s] [--log-ips] [--update-request FILE] [--auto-update on\|off]` | human (`human-only` for an agent) | the relay two linked servers meet through, on the user's own host (§16): `--listen` defaults to `:443`; TLS from Let's Encrypt for `--domain` (TLS-ALPN-01, cached in the state directory, renewed by itself), from the certificate files, reloaded when they change, or `--plain` for a TLS proxy in front, whose `X-Forwarded-For` counts only from a `--trusted-proxy`; runs until SIGINT or SIGTERM |
 | `tm relay install (--domain NAME [--email ADDR] \| --ip [ADDR]) [--auto-update=on\|off] \| update \| uninstall` | human, as root on Linux with systemd (`human-only` for an agent) | the relay as the `tm-relay` systemd service: install (with a daily update timer unless `--auto-update=off`, and a path unit for linked servers' update requests), update to the latest release (sha256 checked) and restart only when newer, remove (§16.6) |
-| `tm peer pair [--relay URL] [--as ALIAS] \| join CODE [--as ALIAS] \| list [--json] \| remove ALIAS \| rotate [--yes]` | human (`human-only` for an agent) | pairing this server with another through a relay by a one-time code and a six-digit check, and the paired servers (§16.8) |
+| `tm peer pair [--relay URL] [--as ALIAS] \| join CODE [--as ALIAS] \| list [--json] \| remove ALIAS \| name ALIAS\|NAME NEW\|"" \| rotate [--yes]` | human (`human-only` for an agent) | pairing this server with another through a relay by a one-time code and a six-digit check, and the paired servers (§16.8) |
 | `tm update [--check [--json]] [--yes] [--restart]` | human | §10.1 |
 | `tm version` (or `--version`), `tm selftest`, `tm help` | anyone | the version and build id; `selftest` writes a line through libghostty-vt to show it is linked; `help` (or `-h`, `--help`) lists the commands |
 
@@ -2365,10 +2365,15 @@ own goroutine; no local call waits on one.
   first eight upper case in two groups (`4F2A-91C3`). Pairing makes the
   key; a server without one has no links. A key that can't be read is an
   error and is never replaced: the peers have it pinned.
-- **Peers.** `state/peer/peers.json`: `{"peers": [{"alias", "key", "relay"}]}`,
+- **Peers.** `state/peer/peers.json`: `{"peers": [{"alias", "name", "key", "relay"}]}`,
   the key the peer's Ed25519 public key (base64), the relay a `wss://`
   URL, with `#sha256=<pin>` for a pinned relay (§16.1); aliases and keys
-  unique. A tm before pinned relays reads such a URL but can't check the
+  unique. `name` (left out when unset) is the display name the user gave
+  the peer here (`tm peer name`, §16.8): no other peer's alias or name.
+  The alias stays the key of everything stored (`peers.json`,
+  `state/link/outbox/<alias>/`, `messages/@<alias>/`, the link keys in
+  `config.toml`, the journal's `peer:<alias>`), so a name set, changed
+  or cleared moves nothing. A tm before pinned relays reads such a URL but can't check the
   relay (it asks the system's CAs). Read at start and on `Manager.Reload`
   (pairing calls it): a new peer gets a link, a removed or changed one
   loses or redials it, a new identity key redials them all. A file that
@@ -2433,13 +2438,37 @@ asks a running server to read it again (`peer.reload`).
 |---|---|
 | `tm peer pair [--relay URL] [--as ALIAS]` | makes a code, prints it and waits up to 10 minutes for the other side to join |
 | `tm peer join CODE [--as ALIAS]` | joins the pairing a code names |
-| `tm peer list [--json]` | this server's id, then each peer: alias, id, relay, link state |
+| `tm peer list [--json]` | this server's id, then each peer: its name and alias (`work (del-02-0468-lt)`, the alias alone without a name), id, relay, link state; `--json` has `name` beside `alias` |
 | `tm peer remove ALIAS` | drops the peer and its link at once |
+| `tm peer name ALIAS\|NAME NEW\|""` | gives the peer a display name here, or a new one; `""` (or its alias) clears it and the alias shows again (below) |
 | `tm peer rotate [--yes]` | a new identity key, after a `y`; every peer must pair again |
 | `tm peer panes ALIAS off\|view\|write` | what the peer may do with this server's panes (§16.12); off by default |
 | `tm peer relay ALIAS ADDRESS` | the relay the peer's link goes through: it moved, or has a new key (§16.1) |
 | `tm peer relay-update ALIAS` | asks the relay of the peer's link to update itself to the latest official release (§16.2): it says what came of it, exit 1 with `relay-update-<result>` when not `queued` |
 
+- **Display names.** A paired server is known here by its alias, chosen
+  at pairing (`--as`; by default the far host name, `del-02-0468-lt`),
+  which never changes without pairing again. `tm peer name` (or the
+  **name** row of Settings → Peers, §4) gives it a display name, `work`:
+  the same characters as an alias, and refused (`name-taken`) when it is
+  another peer's alias or name, this server's own name (the name it
+  gives the other side when pairing), or a project here, any of which
+  would make `<name>/<project>` mean two things. A pairing's alias
+  steers clear of the names too (`--as` one is refused). Everywhere a
+  server is named, either word does: `work/gatehouse` and
+  `del-02-0468-lt/gatehouse` are one project in `tm link send|log|files|resume`,
+  `tm project link`, `view.attach <name>/<session>` and every
+  `tm peer` command that takes an ALIAS. What shows says the name: the
+  sidebar's server group, Linked projects, the Messages tab, the remote
+  popup's title, `change it on work`, NEEDS YOU and the takeover lines;
+  Settings → Peers and `tm peer list` show both, `work (del-02-0468-lt)`.
+  So does what agents read: `tm link list` (`--json` adds `shown`),
+  `tm link send|read|log`, the summaries of inbox items written from
+  then on, and `server.status`/`peer.list`, whose peers carry `name`
+  beside `alias`. Nothing of it crosses a link: the name is this
+  server's, and the other side keeps calling this one by its own alias
+  or name. A config entry keyed by the alias keeps working through any
+  rename; one written by hand with a name isn't read as the server.
 - **Human only.** Every `tm peer` command refuses an agent (`human-only`,
   from the server's view of the caller as for `tm relay serve`), and
   `peer.reload` is a human-only method (the human socket, §3.2). The

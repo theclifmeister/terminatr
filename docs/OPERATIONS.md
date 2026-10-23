@@ -572,6 +572,8 @@ Both terminals then show the other server's name and id and the same six digits,
 
 A relay without a domain pairs the same way, with its whole address: `tm peer pair --relay wss://203.0.113.5#sha256=…` (see [Without a domain](#without-a-domain-an-ip-address)). When a relay moves or gets a new key, `tm peer relay mini wss://…` (or `E` in the Peers tab) gives a paired server the new one, on each side; nothing else changes.
 
+To call a paired server something else here, give it a display name: `tm peer name del-02-0468-lt work` (or the **name** row under it in the settings' Peers tab). Its alias stays as it was, and either names it from then on: `work/gatehouse` and `del-02-0468-lt/gatehouse` are the same project in `tm link`, `tm project link` and every `tm peer` command, and screens and agents see `work`, with `work (del-02-0468-lt)` where both help. The name can't be another paired server's alias or name, this server's own name or a project's here; `tm peer name work ""` clears it. It stays on this server: the other side never sees it.
+
 `tm peer list` shows this server's id and each paired server with its link; `tm peer remove mini` drops one at once (remove this server on the other side too). The console has the same list in its settings (`,`, then `5 peers`): each server's name, id, link and relay; `X` removes the selected one after asking, and `N` and `J` pair as above. `tm peer rotate` gives this server a new key, for a key you think was copied: every paired server then refuses it until you pair again with each (`tm peer pair --as mini` here, `tm peer join` there).
 
 ### Sharing a project
@@ -589,7 +591,7 @@ $ tm project link acme mini/api
 acme ⇄ mini/api: linked both ways on this side
 ```
 
-and on `mini`, `tm project link api studio/acme`. The name is the other server's alias here (`tm peer list`) and the project's slug there. Each side is written separately, since neither user can set the other's; a message goes only when both allow it, and a side that doesn't answers with a `link-undelivered` item in the sender's inbox. On a link to another server each of the coordinator's messages waits for your OK (approve it in the Messages tab, or tell the coordinator in chat) unless you link with `--no-ask`.
+and on `mini`, `tm project link api studio/acme`. The name is the other server's alias here, or the display name you gave it (`tm peer list`), and the project's slug there. Each side is written separately, since neither user can set the other's; a message goes only when both allow it, and a side that doesn't answers with a `link-undelivered` item in the sender's inbox. On a link to another server each of the coordinator's messages waits for your OK (approve it in the Messages tab, or tell the coordinator in chat) unless you link with `--no-ask`.
 
 Instead of telling the other user what to type, you can ask them from tm. In the project's Settings tab, **Linked projects** lists the projects each paired server shares; `R` on one sets your side (both ways, asking first, when it has none) and sends them a link request, or from the command line:
 

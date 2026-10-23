@@ -191,7 +191,7 @@ func (m *Mirror) sync() {
 				m.peers[l.ID] = p
 				changed = true
 			}
-			if p.link.Alias != l.Alias || p.link.State != l.State || p.link.Reason != l.Reason {
+			if p.link.Alias != l.Alias || p.link.Name != l.Name || p.link.State != l.State || p.link.Reason != l.Reason {
 				changed = true
 			}
 			p.link = l
@@ -457,7 +457,7 @@ func (m *Mirror) List() proto.PeerList {
 		return out
 	}
 	for _, l := range st.Peers {
-		pm := proto.PeerMirror{Alias: l.Alias, ID: l.ID, State: l.State, Reason: l.Reason, Since: l.Since, RTT: l.RTT,
+		pm := proto.PeerMirror{Alias: l.Alias, Name: l.Name, ID: l.ID, State: l.State, Reason: l.Reason, Since: l.Since, RTT: l.RTT,
 			Watch: slices.Contains(l.Caps, CapWatch), Popup: slices.Contains(l.Caps, CapPopup), Pane: slices.Contains(l.Caps, CapPane), Version: l.Version,
 			Projects: []proto.PeerMirrorProject{}}
 		if p := m.peers[l.ID]; p != nil {

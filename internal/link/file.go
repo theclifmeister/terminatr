@@ -259,6 +259,7 @@ func (t *Transfer) end(state, code string) {
 
 // Transfers are p's transfers with other ("" for all), newest first.
 func Transfers(p *project.Project, other string) []Transfer {
+	other = Canon(other)
 	var out []Transfer
 	readFiles(func(st *fileStore) {
 		for _, t := range st.Transfers {
@@ -319,7 +320,7 @@ func FileState(t Transfer) string {
 // FileSummary is the item that asks the user about an offer: fixed
 // words, the file's name (cleaned on both sides) and size.
 func FileSummary(t *Transfer) string {
-	return fmt.Sprintf("%s offers a file with %s (%s, %s); accept or decline it in the Messages tab (or tm link accept|decline %s)", t.Peer, t.Message, t.Name, MB(t.Size), t.ID)
+	return fmt.Sprintf("%s offers a file with %s (%s, %s); accept or decline it in the Messages tab (or tm link accept|decline %s)", Shown(t.Peer), t.Message, t.Name, MB(t.Size), t.ID)
 }
 
 // doneFile moves the link-file items of transfer id that need the user
@@ -659,7 +660,7 @@ func (s *store) offerLocal(c caller.Caller, from, to *project.Project, m *Messag
 // fileUndeliveredItem tells the sending project p that its file didn't
 // reach the other side, in fixed words for code.
 func fileUndeliveredItem(p *project.Project, t *Transfer, code string) {
-	p.AddMessageItem(KindUndelivered, t.Peer, fmt.Sprintf("your file %s with %s to %s wasn't received: %s", t.Name, t.Message, t.Peer, fileWords(code, t.Peer, p.Slug)), false, t.Message)
+	p.AddMessageItem(KindUndelivered, t.Peer, fmt.Sprintf("your file %s with %s to %s wasn't received: %s", t.Name, t.Message, Shown(t.Peer), fileWords(code, t.Peer, p.Slug)), false, t.Message)
 	p.Journal(caller.Caller{Kind: caller.Ticker}, "link.file-failed", t.Peer, t.ID+" ("+code+")")
 }
 
@@ -792,7 +793,7 @@ func landLocal(to, from *project.Project, t *Transfer) (string, error) {
 // receivedItem tells project p, without needing the user, that a file
 // came on its own (files = "auto").
 func receivedItem(p *project.Project, t *Transfer) {
-	p.AddMessageItem(KindFile, t.Peer, fmt.Sprintf("%s's file %s (%s) with %s was received (the link takes files without asking); read it with tm link read %s --file %s", t.Peer, t.Name, MB(t.Size), t.Message, t.Message, t.Name), false, t.ID)
+	p.AddMessageItem(KindFile, t.Peer, fmt.Sprintf("%s's file %s (%s) with %s was received (the link takes files without asking); read it with tm link read %s --file %s", Shown(t.Peer), t.Name, MB(t.Size), t.Message, t.Message, t.Name), false, t.ID)
 }
 
 // humanOnly refuses a transfer's answer to anyone but the human.

@@ -183,6 +183,7 @@ func Ask(c caller.Caller, p *project.Project, key, allow string) (*Request, erro
 	if c.IsAgent() {
 		return nil, refuse("human-only", "link requests are the user's (Settings › Linked projects)")
 	}
+	key = Canon(key)
 	alias, slug, ok := config.Remote(key)
 	if !ok {
 		return nil, refuse("not-remote", "a request goes to a paired server's project (<server>/<project>); %s is set on both sides at once", key)
@@ -348,7 +349,7 @@ func (s *store) receiveRequest(alias, fp string, m proto.PeerMessage) proto.Peer
 // RequestSummary is an incoming request's item: fixed words.
 func RequestSummary(r *Request) string {
 	return fmt.Sprintf("%s asks to link with %s: %s on its side, so %s here; accept or decline it in the Messages tab (or tm link accept|decline %s)",
-		r.Peer, r.Project, allowWords(r.Allow), allowWords(config.Mirror(r.Allow)), r.ID)
+		Shown(r.Peer), r.Project, allowWords(r.Allow), allowWords(config.Mirror(r.Allow)), r.ID)
 }
 
 // receiveAnswer takes the answer to request m.ID, which project m.To
@@ -373,10 +374,10 @@ func (s *store) receiveAnswer(alias string, m proto.PeerMessage) proto.PeerMessa
 		return ok
 	}
 	if r.State == ReqAccepted {
-		p.AddMessageItem(KindAnswer, key, fmt.Sprintf("%s accepted %s's link request %s: %s on its side", key, p.Slug, r.ID, allowWords(r.Answer)), false, r.ID)
+		p.AddMessageItem(KindAnswer, key, fmt.Sprintf("%s accepted %s's link request %s: %s on its side", Shown(key), p.Slug, r.ID, allowWords(r.Answer)), false, r.ID)
 		p.Journal(caller.ForPeer(alias), "link.accepted", key, fmt.Sprintf("%s (%s)", r.ID, r.Answer))
 	} else {
-		p.AddMessageItem(KindAnswer, key, fmt.Sprintf("%s declined %s's link request %s; this side's entry stays as it is", key, p.Slug, r.ID), false, r.ID)
+		p.AddMessageItem(KindAnswer, key, fmt.Sprintf("%s declined %s's link request %s; this side's entry stays as it is", Shown(key), p.Slug, r.ID), false, r.ID)
 		p.Journal(caller.ForPeer(alias), "link.declined", key, r.ID)
 	}
 	return ok
@@ -420,7 +421,7 @@ func requestUndelivered(alias string, m proto.PeerMessage, code string) {
 		return
 	}
 	why := replaceWords(words, key, p.Slug)
-	p.AddMessageItem(KindUndelivered, key, fmt.Sprintf("your link request %s to %s wasn't delivered: %s", m.ID, key, why), false, m.ID)
+	p.AddMessageItem(KindUndelivered, key, fmt.Sprintf("your link request %s to %s wasn't delivered: %s", m.ID, Shown(key), why), false, m.ID)
 	p.Journal(caller.Caller{Kind: caller.Ticker}, "link.undelivered", key, m.ID+" ("+code+")")
 }
 

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/peer"
 	"github.com/theclifmeister/terminatr/internal/project"
 )
 
@@ -14,6 +15,9 @@ import (
 // dashboard show it.
 type Row struct {
 	Peer string `json:"peer"`
+	// Shown is Peer with a paired server by its display name, when it
+	// has one (tm peer name); either names it.
+	Shown string `json:"shown,omitempty"`
 	// Mine and Theirs are each side's entry; Has* say whether there is
 	// one.
 	Mine      config.Link `json:"mine"`
@@ -127,11 +131,15 @@ func Rows(cfg *config.Config, p *project.Project) []Row {
 		}
 	}
 	slices.Sort(peers)
+	names := peer.HomeNames()
 	mine, _ := cfg.Links(p.Slug)
 	items, _ := p.Inbox()
 	var out []Row
 	for _, o := range peers {
 		r := Row{Peer: o}
+		if sh := names.ShowKey(o); sh != o {
+			r.Shown = sh
+		}
 		r.Mine, r.HasMine = mine[o]
 		if _, _, remote := config.Remote(o); remote {
 			r.Remote = true

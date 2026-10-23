@@ -1150,6 +1150,7 @@ func (s *Server) serveAttach(c net.Conn, br *bufio.Reader, peerPID int, human bo
 		return
 	}
 	if _, _, ok := remoteID(req.Attach.Session); ok {
+		req.Attach.Session = s.remoteCanon(req.Attach.Session)
 		s.serveRemoteAttach(c, br, req.Attach.Session)
 		return
 	}

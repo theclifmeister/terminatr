@@ -8,7 +8,8 @@ import (
 	"github.com/theclifmeister/terminatr/internal/relay"
 )
 
-// RequestRelayUpdate asks the relay of the paired server alias to update
+// RequestRelayUpdate asks the relay of the paired server alias (or the
+// one named so) to update
 // itself to the latest official release (docs/SPEC.md §16.2), with this
 // server's identity key: the relay takes it while the link to alias is
 // live through it, at most once an hour. tc is the outer TLS to the
@@ -22,6 +23,7 @@ func RequestRelayUpdate(ctx context.Context, dir, alias string, tc *tls.Config) 
 	if err != nil {
 		return Peer{}, relay.UpdateResult{}, err
 	}
+	alias = NamesOf(peers).Alias(alias)
 	for _, p := range peers {
 		if p.Alias != alias {
 			continue

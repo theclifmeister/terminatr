@@ -20,7 +20,9 @@ type PeerList struct {
 // the offset of its clock and its shared projects.
 type PeerMirror struct {
 	Alias string `json:"alias"`
-	ID    string `json:"id"`
+	// Name is the display name set here (PeerLink.Name).
+	Name string `json:"name,omitempty"`
+	ID   string `json:"id"`
 	// State, Reason and Since are the link's (LinkStatus).
 	State  string    `json:"state"`
 	Reason string    `json:"reason,omitempty"`
