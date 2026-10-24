@@ -14,6 +14,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/home"
 	"github.com/theclifmeister/terminatr/internal/mdfile"
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
+	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
 // store is <home>/state/links.json: the server-wide message counter,
@@ -41,6 +42,14 @@ type store struct {
 	Requests []*Request             `json:"requests,omitempty"`
 	ReqOut   map[string][]time.Time `json:"req_out,omitempty"`
 	ReqIn    map[string][]time.Time `json:"req_in,omitempty"`
+	// Shares are the share requests to and from paired servers
+	// (share.go), the newest per alias and direction; ShareOut and
+	// ShareIn the last hour's, by alias, for their own rate; ShareRev
+	// counts their changes.
+	Shares   []*proto.ShareRequest  `json:"shares,omitempty"`
+	ShareRev int                    `json:"share_rev,omitempty"`
+	ShareOut map[string][]time.Time `json:"share_out,omitempty"`
+	ShareIn  map[string][]time.Time `json:"share_in,omitempty"`
 }
 
 // bucket is one direction's token bucket (limits).
@@ -99,6 +108,12 @@ func loadStore(file string) *store {
 	}
 	if s.ReqIn == nil {
 		s.ReqIn = map[string][]time.Time{}
+	}
+	if s.ShareOut == nil {
+		s.ShareOut = map[string][]time.Time{}
+	}
+	if s.ShareIn == nil {
+		s.ShareIn = map[string][]time.Time{}
 	}
 	return s
 }

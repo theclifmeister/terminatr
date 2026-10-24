@@ -235,6 +235,7 @@ func holdOff(alias string, secs int) {
 func Flush(ctx context.Context, t Transport) {
 	Drain()
 	ExpireRequests()
+	ExpireShares()
 	ExpireFiles()
 	SettleOffers(caller.Caller{Kind: caller.Ticker}, "", "")
 	root, err := outboxDir()
@@ -268,6 +269,7 @@ func Flush(ctx context.Context, t Transport) {
 				os.Remove(file)
 				undelivered(alias, e.Msg, "expired")
 				requestUndelivered(alias, e.Msg, "expired")
+				shareUndelivered(alias, e.Msg, "expired")
 				fileUnsent(alias, e.Msg, "expired")
 				continue
 			}
@@ -288,11 +290,13 @@ func Flush(ctx context.Context, t Transport) {
 				os.Remove(file)
 				delivered(alias, e.Msg)
 				requestDelivered(alias, e.Msg)
+				shareDelivered(alias, e.Msg)
 				fileSent(alias, e.Msg)
 			case res.Status == proto.PeerRefused:
 				os.Remove(file)
 				undelivered(alias, e.Msg, res.Code)
 				requestUndelivered(alias, e.Msg, res.Code)
+				shareUndelivered(alias, e.Msg, res.Code)
 				fileUnsent(alias, e.Msg, res.Code)
 			default:
 				ready = false
@@ -369,13 +373,19 @@ const clockSkew = 5 * time.Minute
 func Receive(alias string, id peer.ID, m proto.PeerMessage) proto.PeerMessageResult {
 	res := proto.PeerMessageResult{Status: proto.PeerRefused, Code: "bad-message"}
 	idOK := ValidID(m.ID)
+	// A share request is the server's: no project on either side.
+	slugsOK := project.ValidSlug(m.From) && project.ValidSlug(m.To)
 	switch m.Kind {
 	case proto.PeerLinkRequest, proto.PeerLinkAnswer:
 		idOK = ValidRequestID(m.ID)
 	case proto.PeerFileOffer, proto.PeerFileAnswer, proto.PeerFileDone, proto.PeerFileCancel:
 		idOK = ValidFileID(m.ID)
+	case proto.PeerShareRequest:
+		idOK, slugsOK = ValidShareID(m.ID), m.From == "" && m.To == ""
+	case proto.PeerShareAnswer:
+		idOK, slugsOK = m.ID == "" && ValidShareID(m.Re), m.From == "" && m.To == ""
 	}
-	if m.Epoch == "" || m.Seq < 1 || !project.ValidSlug(m.From) || !project.ValidSlug(m.To) || !idOK {
+	if m.Epoch == "" || m.Seq < 1 || !slugsOK || !idOK {
 		return res
 	}
 	err := withStore(func(s *store) error {
@@ -392,6 +402,10 @@ func Receive(alias string, id peer.ID, m proto.PeerMessage) proto.PeerMessageRes
 			res = s.receiveRequest(alias, fingerprint(id), m)
 		case proto.PeerLinkAnswer:
 			res = s.receiveAnswer(alias, m)
+		case proto.PeerShareRequest:
+			res = s.receiveShare(alias, fingerprint(id), m)
+		case proto.PeerShareAnswer:
+			res = s.receiveShareAnswer(alias, m)
 		case proto.PeerFileOffer:
 			res = s.receiveOffer(alias, fingerprint(id), m)
 		case proto.PeerFileAnswer:

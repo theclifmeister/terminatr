@@ -33,7 +33,10 @@ const peerUsage = `usage: tm peer pair [--relay URL] [--as ALIAS]
        tm peer rotate [--yes]
        tm peer panes ALIAS off|view|write
        tm peer relay ALIAS ADDRESS
-       tm peer relay-update ALIAS`
+       tm peer relay-update ALIAS
+       tm peer ask-share ALIAS [--for PROJECT] [--note TEXT]
+       tm peer requests [--json]
+       tm peer decline S-…`
 
 func init() {
 	commands["peer"] = runPeer
@@ -63,18 +66,21 @@ func runPeer(e *Env, args []string) error {
 	}
 	f := newFlags()
 	relayFlag, as := f.String("relay"), f.String("as")
+	forFlag, note := f.String("for"), f.String("note")
 	asJSON, yes := f.Bool("json"), f.Bool("yes")
 	pos, err := f.Parse(args[1:])
 	if err != nil {
 		return err
 	}
-	allowed := map[string][]string{"pair": {"relay", "as"}, "join": {"as"}, "list": {"json"}, "rotate": {"yes"}}[args[0]]
-	for _, name := range []string{"relay", "as", "json", "yes"} {
+	allowed := map[string][]string{"pair": {"relay", "as"}, "join": {"as"}, "list": {"json"}, "rotate": {"yes"},
+		"ask-share": {"for", "note"}, "requests": {"json"}}[args[0]]
+	for _, name := range []string{"relay", "as", "json", "yes", "for", "note"} {
 		if f.IsSet(name) && !slices.Contains(allowed, name) {
 			return usagef("tm peer %s takes no --%s\n%s", args[0], name, peerUsage)
 		}
 	}
-	npos := map[string]int{"pair": 0, "join": 1, "list": 0, "remove": 1, "rotate": 0, "panes": 2, "relay": 2, "relay-update": 1, "name": 2}
+	npos := map[string]int{"pair": 0, "join": 1, "list": 0, "remove": 1, "rotate": 0, "panes": 2, "relay": 2, "relay-update": 1, "name": 2,
+		"ask-share": 1, "requests": 0, "decline": 1}
 	if n, ok := npos[args[0]]; !ok || len(pos) != n {
 		return usagef("%s", peerUsage)
 	}
@@ -111,6 +117,12 @@ func runPeer(e *Env, args []string) error {
 		return e.peerRelayUpdate(dir, pos[0])
 	case "name":
 		return e.peerName(dir, pos[0], pos[1])
+	case "ask-share":
+		return e.peerAskShare(pos[0], *forFlag, *note)
+	case "requests":
+		return e.peerRequests(*asJSON)
+	case "decline":
+		return e.peerDecline(pos[0])
 	default:
 		return e.peerRotate(dir, *yes)
 	}

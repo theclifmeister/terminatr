@@ -10,7 +10,8 @@ const MethodPeerList = "peer.list"
 
 // PeerList is the answer of peer.list: every paired server, by alias,
 // with what this server last read of its shared projects. Gen counts
-// the mirror's changes: the same Gen is the same answer.
+// the mirror's changes and the share requests': the same Gen is the
+// same answer.
 type PeerList struct {
 	Gen   uint64       `json:"gen"`
 	Peers []PeerMirror `json:"peers"`
@@ -54,6 +55,24 @@ type PeerMirror struct {
 	// may still be shared.
 	Listed   bool                `json:"listed,omitempty"`
 	Projects []PeerMirrorProject `json:"projects"`
+	// Shares are the share requests with the peer, the newest each way,
+	// whatever their state: an incoming one that is Pending waits for the
+	// user, a server-level need no project's inbox holds.
+	Shares []ShareRequest `json:"shares,omitempty"`
+}
+
+// ShareWaits counts the share requests from paired servers that wait for
+// the user: needs of the server, beside its projects'.
+func ShareWaits(peers []PeerMirror) int {
+	n := 0
+	for _, p := range peers {
+		for _, r := range p.Shares {
+			if !r.Out && r.Pending() {
+				n++
+			}
+		}
+	}
+	return n
 }
 
 // PeerMirrorProject is one shared project of a peer: its line in

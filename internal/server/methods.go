@@ -253,10 +253,12 @@ func init() {
 			s.peers.Reload()
 			return s.peers.Status()
 		})},
-		proto.MethodPeerList: {gate: gateHuman, call: plain(func(s *Server, _ callCtx) any { return s.mirror.List() })},
+		proto.MethodPeerList: {gate: gateHuman, call: plain(func(s *Server, _ callCtx) any { return s.peerList() })},
 		proto.MethodPeerPopupRead: {gate: gateHuman, call: typed(func(s *Server, p proto.PeerPopupReadParams, _ callCtx) (any, *proto.Error) {
 			return s.readPeerPopup(p)
 		})},
+		proto.MethodPeerShareAsk:    {gate: gateHuman, call: typed((*Server).askShare)},
+		proto.MethodPeerShareAnswer: {gate: gateHuman, call: typed((*Server).answerShare)},
 		proto.MethodModViews: {gate: gateHuman, call: typed(func(s *Server, p proto.ModViewsParams, c callCtx) (any, *proto.Error) {
 			return s.modViews(p, c.peerPID, c.who())
 		})},

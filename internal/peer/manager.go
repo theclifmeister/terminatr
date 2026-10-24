@@ -180,7 +180,7 @@ func (m *Manager) caps() []string {
 		}
 	}
 	if m.opts.Messages != nil {
-		caps = append(caps, CapMsg)
+		caps = append(caps, CapMsg, CapShare)
 	}
 	if m.opts.Panes != nil {
 		caps = append(caps, CapPane)
