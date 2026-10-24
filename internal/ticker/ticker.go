@@ -205,6 +205,9 @@ type threadMemo struct {
 	PRPolled   time.Time `json:"pr_polled"`
 	Resolving  bool      `json:"resolving,omitempty"` // auto-close tried once
 	Held       string    `json:"held,omitempty"`      // unsaved work an item was raised for
+	// IgnoredPR is a report's PR line found to name a PR of another
+	// branch (T728): the PR is looked up by the branch alone after.
+	IgnoredPR string `json:"ignored_pr,omitempty"`
 	// MainSeen is the default branch head the open PR was last checked
 	// against (followMain): once per head.
 	MainSeen string `json:"main_seen,omitempty"`
@@ -829,7 +832,14 @@ func (t *Ticker) refreshPR(p *project.Project, r *thread.Record, m *threadMemo, 
 	if rep, _ := thread.ReadReport(p, r.ID); rep != nil {
 		reportPR = rep.PR
 	}
-	pr, err := t.host(p, r.Repo).PR(r.Repo, codehost.Ref{URL: reportPR, Branch: r.Branch})
+	if reportPR == m.IgnoredPR {
+		reportPR = "" // not asked again
+	}
+	pr, other, err := codehost.ThreadPR(t.host(p, r.Repo), r.Repo, reportPR, r.Branch)
+	if other.Number > 0 {
+		m.IgnoredPR = reportPR
+		t.o.Log.Printf("ticker: %s: %s's report names %s, not of its branch %s: ignored", p.Slug, r.ID, other.Ref(), r.Branch)
+	}
 	if errors.Is(err, codehost.ErrNoRef) {
 		return false, false
 	}

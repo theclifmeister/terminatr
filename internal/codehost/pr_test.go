@@ -1,6 +1,7 @@
 package codehost
 
 import (
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -59,5 +60,45 @@ func TestSetRefsTimeLayouts(t *testing.T) {
 		if (errA == nil) != (errB == nil) || !a.Equal(b) {
 			t.Errorf("%q: RFC3339 %v, %v; RFC3339Nano %v, %v", s, a, errA, b, errB)
 		}
+	}
+}
+
+// prsHost answers PR by the URL, else the branch, it is asked about.
+type prsHost struct {
+	NoHost
+	byURL, byBranch map[string]PR
+	asked           []Ref
+}
+
+func (h *prsHost) PR(_ string, ref Ref) (PR, error) {
+	h.asked = append(h.asked, ref)
+	if pr, ok := h.byURL[ref.URL]; ok && ref.URL != "" {
+		return pr, nil
+	}
+	if pr, ok := h.byBranch[ref.Branch]; ok && ref.URL == "" {
+		return pr, nil
+	}
+	return PR{}, ErrNoPR
+}
+
+// T728: a report's PR line counts only for a PR of the thread's branch.
+func TestThreadPR(t *testing.T) {
+	own := PR{Number: 777, URL: "https://github.com/o/r/pull/777", Branch: "tm/x/t-1"}
+	release := PR{Number: 776, URL: "https://github.com/o/r/pull/776", Branch: "formula-0.51.0", State: "MERGED"}
+	h := &prsHost{byURL: map[string]PR{own.URL: own, release.URL: release}, byBranch: map[string]PR{own.Branch: own}}
+	for _, c := range []struct {
+		url       string
+		want, oth int
+		asks      int
+	}{{own.URL, 777, 0, 1}, {release.URL, 777, 776, 2}, {"https://github.com/o/r/pull/9", 777, 0, 2}, {"", 777, 0, 1}} {
+		h.asked = nil
+		pr, other, err := ThreadPR(h, "repo", c.url, own.Branch)
+		if err != nil || pr.Number != c.want || other.Number != c.oth || len(h.asked) != c.asks {
+			t.Errorf("%q: %d %d %v, asked %+v", c.url, pr.Number, other.Number, err, h.asked)
+		}
+	}
+	h.byBranch = nil
+	if _, other, err := ThreadPR(h, "repo", release.URL, own.Branch); !errors.Is(err, ErrNoPR) || other.Number != 776 {
+		t.Errorf("no PR of the branch: %v %d", err, other.Number)
 	}
 }

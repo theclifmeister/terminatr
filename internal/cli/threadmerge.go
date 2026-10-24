@@ -71,12 +71,19 @@ func (e *Env) threadMerge(p *project.Project, id string) error {
 	if pr.Branch != r.Branch || !codehost.InRepo(r.Repo, host, pr) {
 		return mergeRefusal("not-thread-pr", "%s is not from thread %s's branch in its repo", pr.Ref(), id)
 	}
+	// A PR line naming a PR of another branch is ignored, as the ticker
+	// does (T728): a guess, say, that once passed for the thread's.
+	ignored := ""
 	if reportPR != "" && !samePR(host, reportPR, pr) {
-		return mergeRefusal("not-thread-pr", "thread %s's report names another PR than %s, the one of its branch", id, pr.Ref())
+		_, n, head := host.PRHead(r.Repo, reportPR)
+		if head == "" || head == r.Branch {
+			return mergeRefusal("not-thread-pr", "thread %s's report names another PR than %s, the one of its branch", id, pr.Ref())
+		}
+		ignored = fmt.Sprintf(" (its report's PR #%d, of branch %s, ignored)", n, head)
 	}
 	switch pr.State {
 	case "MERGED":
-		fmt.Fprintf(e.Stdout, "%s unchanged (%s already merged)\n", id, pr.Ref())
+		fmt.Fprintf(e.Stdout, "%s unchanged (%s already merged)%s\n", id, pr.Ref(), ignored)
 		return nil
 	case "OPEN":
 	default:
@@ -113,7 +120,7 @@ func (e *Env) threadMerge(p *project.Project, id string) error {
 	if err := p.Journal(e.Caller, "thread.merge", id, fmt.Sprintf("%s merged at %s (%s)", pr.Ref(), head, methodWords[method])); err != nil {
 		return err
 	}
-	fmt.Fprintf(e.Stdout, "%s merged %s (%s, head %s, checks green)\n", id, pr.Ref(), methodWords[method], head)
+	fmt.Fprintf(e.Stdout, "%s merged %s (%s, head %s, checks green)%s\n", id, pr.Ref(), methodWords[method], head, ignored)
 	return nil
 }
 
