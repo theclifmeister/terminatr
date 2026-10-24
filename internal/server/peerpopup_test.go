@@ -124,7 +124,7 @@ func TestPeerPopupAllowlist(t *testing.T) {
 	if z := zeroFields(reflect.ValueOf(pm)); len(z) > 0 {
 		t.Errorf("message fields not copied: %v", z)
 	}
-	if want := []string{"Attachments", "By", "Bytes", "Created", "Due", "File", "FileSize", "ID", "Out", "Peer", "Re", "Refused", "State", "Text", "Transfer"}; !slices.Equal(fieldNames(reflect.TypeFor[link.Message]()), want) {
+	if want := []string{"Attachments", "By", "Bytes", "Created", "Due", "File", "FileSize", "ID", "Out", "Peer", "Re", "Refused", "Sender", "State", "Text", "Transfer"}; !slices.Equal(fieldNames(reflect.TypeFor[link.Message]()), want) {
 		t.Errorf("link.Message has %v: decide what of a new field a paired server sees (peerMessageOf)", fieldNames(reflect.TypeFor[link.Message]()))
 	}
 }

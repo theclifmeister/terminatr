@@ -293,8 +293,9 @@ func (p *Project) Inbox() ([]Item, error) {
 }
 
 // ParseItem reads one inbox file; its id is the file name. Links read
-// as the ids they show (vaultlink.Plain). The summary is folded to one line, so nothing in an item can pose as more lines of
-// a prompt or a listing.
+// as the ids they show (vaultlink.Plain). The summary is folded to one
+// line, so nothing in an item can pose as more lines of a prompt or a
+// listing.
 func ParseItem(id string, data []byte) (Item, error) {
 	var it Item
 	if _, err := mdfile.Decode(data, &it); err != nil {
