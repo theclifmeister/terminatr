@@ -24,9 +24,8 @@
       │ Context gauge: How full each session's context window is, by its row; a card lists the ones past the     │
       │ warning, where C clears one (tm asks first) and enter attaches to it. Claude sessions report theirs from │
       │ their transcript. By terminatr.                                                                          │
-      │ Installed from /Users/clifford/.terminatr/worktrees/terminatr/t-0644-popups-90-of-the-                   │
-      │ window/examples/mods/context-gauge. Installed 2026-10-24 13:44.                                          │
-      │ Runs as <pid>, using 28.0 MB.                                                                        │
+      │ Installed from <path>. Installed <time>. │
+      │ Runs as <pid>, using <mem>. │
       │                                                                                                          │
       │                                                                                                          │
       │ enter on/off · I install · p permissions · s settings · d defaults · l log · R restart · U update        │
