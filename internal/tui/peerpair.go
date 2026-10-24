@@ -15,9 +15,9 @@ import (
 	"github.com/theclifmeister/terminatr/internal/version"
 )
 
-// Pairing from the Peers tab (docs/SPEC.md §16.8): n asks for the relay
-// (the last one used to start with), shows the one-time code once it
-// works and waits for the other server; j asks for a code. Both then
+// Pairing from the Network popup (docs/SPEC.md §16.8): P asks for the
+// relay (the last one used to start with), shows the one-time code once
+// it works and waits for the other server; J asks for a code. Both then
 // show the other server and the six digits, and pin it on y, as tm peer
 // pair and tm peer join do (Source.PairPeer, JoinPeer). The code shows
 // in the popup only: never in the footer, an error or a log.
@@ -26,8 +26,8 @@ import (
 //	""
 //	"    relay.example.net/7Q4M-K2XD-9HVA-PT3C"
 //	""
-//	"On the other server: , then the Peers tab, j, and type it in;"
-//	"or tm peer join CODE. Pass it on yourself (a chat, a call)."
+//	"On the other server: N, then J, and type it in; or tm peer join"
+//	"CODE. Pass it on yourself (a chat, a call), never through the relay."
 //	"Waiting for the other server…"
 
 // pairStage is where a pairing is.
@@ -44,7 +44,7 @@ const (
 // codeLife is how long a pairing code works (the relay's pair room).
 const codeLife = 10 * time.Minute
 
-// pairView stands over the Peers tab while a pairing runs. esc cancels
+// pairView stands over the Network popup while a pairing runs. esc cancels
 // it at any stage.
 type pairView struct {
 	join bool
@@ -138,11 +138,9 @@ func (pv *pairView) step(m *dash, msg pairMsg) tea.Cmd {
 	case msg.done && msg.err == nil:
 		m.close(pv)
 		m.msg = "paired with " + msg.alias + "; its link comes up in a moment"
-		for _, o := range m.stack {
-			if sv, ok := o.(*settingsView); ok {
-				sv.peers.load(m)
-				sv.peers.selectAlias(m, msg.alias)
-			}
+		if nv := m.network(); nv != nil {
+			nv.load(m)
+			nv.sel, nv.panel = "g:"+msg.alias, false
 		}
 		return m.load()
 	case msg.done:
@@ -215,7 +213,7 @@ func (pv *pairView) render(m *dash) string {
 			body = append(body, "    "+th().Accent.Render(l))
 		}
 		body = append(body, "")
-		body = append(body, faintLines("On the other server: , then the Peers tab, j, and type it in; or tm peer join CODE. Pass it on yourself (a chat, a call), never through the relay.", w)...)
+		body = append(body, faintLines("On the other server: N (Network), then J, and type it in; or tm peer join CODE. Pass it on yourself (a chat, a call), never through the relay.", w)...)
 		if strings.Contains(pv.code, "#") {
 			body = append(body, faintLines("The code holds the relay's pin: the other server needs tm "+strings.TrimPrefix(version.Version, "v")+" or later to read it.", w)...)
 		}

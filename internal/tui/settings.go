@@ -279,32 +279,30 @@ func settingsErr(err error) error {
 	return err
 }
 
-// settingsView is the , popup: the settings of every project, in six
+// settingsView is the , popup: the settings of every project, in five
 // tabs: General, All projects (the project settings every project
 // follows unless it sets its own), Sandbox (all projects' sandbox
-// lists, settings_sandbox.go), Mods (modstab.go), Peers, the
-// paired servers (peerstab.go), and Logs, the server host's logs
-// (logstab.go).
+// lists, settings_sandbox.go), Mods (modstab.go) and Logs, the server
+// host's logs (logstab.go). The paired servers are in the Network popup
+// (network.go).
 type settingsView struct {
 	tab   int
 	tabs  [3]settingsList
-	mods  modsTab
-	peers peersTab
-	logs  logsTab
+	mods modsTab
+	logs logsTab
 	// top is each tab's first line shown; shown the selection's line
 	// (plus one) it last scrolled to (projectView.scroll).
 	top, shown [len(settingsTabs)]int
 }
 
 // settingsTabs are the , popup's tabs.
-var settingsTabs = [6]string{"general", "all projects", "access", "mods", "peers", "logs"}
+var settingsTabs = [5]string{"general", "all projects", "access", "mods", "logs"}
 
-// The Access, Mods, Peers and Logs tabs' indexes.
+// The Access, Mods and Logs tabs' indexes.
 const (
 	tabAllAccess = 2
 	tabMods      = 3
-	tabPeers     = 4
-	tabLogs      = 5
+	tabLogs      = 4
 )
 
 func (m *dash) openSettings() {
@@ -498,11 +496,6 @@ func (sv *settingsView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 			return cmd
 		}
 	}
-	if sv.tab == tabPeers {
-		if cmd, ok := sv.peers.key(m, k); ok {
-			return cmd
-		}
-	}
 	if sv.tab == tabLogs && (sv.logs.typing || s != "h" && s != "l" && s != "left" && s != "right" && s != "esc") {
 		// Its own keys first: l and h stay the tabs', as in Mods.
 		if cmd, ok := sv.logs.key(m, k); ok {
@@ -520,14 +513,14 @@ func (sv *settingsView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	case "left", "h":
 		sv.tab = (sv.tab + n - 1) % n
 		return nil
-	case "1", "2", "3", "4", "5", "6":
+	case "1", "2", "3", "4", "5":
 		sv.tab = int(s[0] - '1')
 		if sv.tab == tabLogs {
 			return sv.logs.poll(m)
 		}
 		return nil
 	}
-	if sv.tab == tabMods || sv.tab == tabPeers || sv.tab == tabLogs {
+	if sv.tab == tabMods || sv.tab == tabLogs {
 		return nil
 	}
 	if sv.tab == tabAllAccess && s == "R" {
@@ -543,8 +536,6 @@ func (sv *settingsView) tabLines(m *dash, i, w int) ([]string, int, []int) {
 	switch i {
 	case tabMods:
 		return sv.mods.lines(m, w)
-	case tabPeers:
-		return sv.peers.lines(m, w)
 	case tabAllAccess:
 		head := append(accessHead(m, "", w), "")
 		lines, sel, hits := sv.tabs[i].lines(m, w)
@@ -573,9 +564,6 @@ func (sv *settingsView) render(m *dash) string {
 	case tabMods:
 		lines = append(lines, faintLines("Mods extend terminatr: themes, keys, columns, panels. They never change the safety settings, and no agent can install or turn one on. I installs one, E lists the examples.", w)...)
 		keys = modsKeys
-	case tabPeers:
-		lines = append(lines, faintLines("Paired servers see the projects you share with them, read-only, in their sidebar; you see theirs in yours. No agent can pair, share or remove a server.", w)...)
-		keys = peersKeys
 	case tabAllAccess:
 		lines = append(lines, faintLines("Every project's threads get these, a new one's too. A project's lists add to these, and it may drop one of them, in its popup's Access tab (A on the dashboard, prefix+A in a session); its own switches replace these, X there makes it follow these again.", w)...)
 		keys = "enter change · R reset · ↑ ↓ move · ← → tabs · esc close"
@@ -673,8 +661,6 @@ func (sv *settingsView) click(m *dash, item, col int, _ bool) tea.Cmd {
 			sv.mods.sel = item
 		}
 		return nil
-	case tabPeers:
-		return sv.peers.click(m, item, col)
 	case tabLogs:
 		return nil
 	}
@@ -685,9 +671,6 @@ func (sv *settingsView) wheel(m *dash, d int) {
 	switch sv.tab {
 	case tabMods:
 		sv.mods.key(m, arrow(d))
-		return
-	case tabPeers:
-		sv.peers.key(m, arrow(d))
 		return
 	case tabLogs:
 		sv.logs.scroll(m, 3*d)
