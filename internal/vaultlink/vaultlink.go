@@ -31,7 +31,8 @@ const (
 	// Thread is <slug>/threads/<id>/<id>, id as "t-0001".
 	Thread
 	// ThreadFile is a file of a thread's folder, <slug>/threads/<id>/<name>,
-	// id as "t-0001/task".
+	// id as "t-0001/task" or "t-0001/reports/2"; a name other than .md
+	// keeps its extension ("t-0001/library/plan.html").
 	ThreadFile
 	// Memory is <slug>/memory/<name>, name as "ci" or "memory/ci.md".
 	Memory
@@ -72,7 +73,7 @@ func target(slug string, k Kind, id string) string {
 	case Thread:
 		return slug + "/threads/" + one(id) + "/" + one(id)
 	case ThreadFile:
-		if id, name, ok := strings.Cut(id, "/"); ok && !strings.Contains(name, "/") {
+		if id, name, ok := strings.Cut(id, "/"); ok {
 			return slug + "/threads/" + id + "/" + strings.TrimSuffix(name, ".md")
 		}
 	case Memory:
@@ -237,4 +238,95 @@ func validPart(p string) bool {
 func cleanAlias(alias string) string {
 	alias = strings.NewReplacer("[", "(", "]", ")", "|", "/").Replace(alias)
 	return strings.Join(strings.Fields(alias), " ")
+}
+
+// Text is Markdown s with each task ref (T12) and thread id (t-0001)
+// of project slug linked, for the notes tm derives (docs/SPEC.md §5.1,
+// Vault). Code (fenced blocks, code spans), links and URLs are left as
+// they are, and so is an id after a "!", which a link would make an
+// embed. Without links (mdfile.WritesYAML) it is s.
+func Text(slug, s string) string {
+	if !mdfile.WritesYAML() || slug == "" {
+		return s
+	}
+	lines := strings.Split(s, "\n")
+	var fence string
+	for i, l := range lines {
+		t := strings.TrimLeft(l, " \t>-*+0123456789.)")
+		if fence != "" {
+			if strings.HasPrefix(t, fence) && strings.Trim(t, fence[:1]+" \t") == "" {
+				fence = ""
+			}
+			continue
+		}
+		if strings.HasPrefix(t, "```") || strings.HasPrefix(t, "~~~") {
+			fence = t[:3]
+			continue
+		}
+		lines[i] = textLine(slug, l)
+	}
+	return strings.Join(lines, "\n")
+}
+
+// idRE is a task ref or thread id where Text may link it: at a word's
+// start, and not as part of a longer word.
+var idRE = regexp.MustCompile(`^(T[1-9][0-9]{0,8}|t-[0-9]{4,})\b`)
+
+func textLine(slug, l string) string {
+	var b strings.Builder
+	for i := 0; i < len(l); {
+		rest := l[i:]
+		switch {
+		case rest[0] == '\\' && len(rest) > 1:
+			b.WriteString(rest[:2])
+			i += 2
+		case rest[0] == '`':
+			n := len(rest) - len(strings.TrimLeft(rest, "`"))
+			end := strings.Index(rest[n:], rest[:n])
+			if end < 0 {
+				b.WriteString(rest[:n])
+				i += n
+				continue
+			}
+			b.WriteString(rest[:n+end+n])
+			i += n + end + n
+		case strings.HasPrefix(rest, "[["):
+			end := strings.Index(rest, "]]")
+			if end < 0 {
+				end = len(rest) - 2
+			}
+			b.WriteString(rest[:end+2])
+			i += end + 2
+		case strings.HasPrefix(rest, "]("):
+			end := strings.IndexByte(rest, ')')
+			if end < 0 {
+				end = len(rest) - 1
+			}
+			b.WriteString(rest[:end+1])
+			i += end + 1
+		case strings.HasPrefix(rest, "http://") || strings.HasPrefix(rest, "https://"):
+			end := strings.IndexAny(rest, " \t)>")
+			if end < 0 {
+				end = len(rest)
+			}
+			b.WriteString(rest[:end])
+			i += end
+		default:
+			if m := idRE.FindString(rest); m != "" && (i == 0 || !wordByte(l[i-1])) {
+				b.WriteString(Ref(slug, m))
+				i += len(m)
+				continue
+			}
+			b.WriteByte(rest[0])
+			i++
+		}
+	}
+	return b.String()
+}
+
+// wordByte reports whether c, before an id, makes it part of something
+// else: a word, a path, a name, or a "!" a link would make an embed.
+func wordByte(c byte) bool {
+	return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' ||
+		strings.IndexByte("_-/.#@!:[|", c) >= 0
 }
