@@ -79,33 +79,33 @@ const (
 // Message is one message, as either project keeps it in
 // messages/<other>/<id>.md: TOML front matter, then the text.
 type Message struct {
-	ID string `toml:"id" json:"id"`
+	ID string `toml:"id" yaml:"id" json:"id"`
 	// Out: this project sent it; else it received it. The folder names
 	// the other project, so a rename moves nothing but the folder.
-	Out     bool      `toml:"out" json:"out"`
-	Created time.Time `toml:"created" json:"created"`
-	Re      string    `toml:"re,omitempty" json:"re,omitempty"`
-	Bytes   int       `toml:"bytes" json:"bytes"`
-	State   string    `toml:"state" json:"state"`
+	Out     bool      `toml:"out" yaml:"out" json:"out"`
+	Created time.Time `toml:"created" yaml:"created" json:"created"`
+	Re      string    `toml:"re,omitempty" yaml:"re,omitempty" json:"re,omitempty"`
+	Bytes   int       `toml:"bytes" yaml:"bytes" json:"bytes"`
+	State   string    `toml:"state" yaml:"state" json:"state"`
 	// By is who sent it: the coordinator, or the human for the project.
-	By          string   `toml:"by" json:"by"`
-	Attachments []string `toml:"attachments,omitempty" json:"attachments,omitempty"`
+	By          string   `toml:"by" yaml:"by" json:"by"`
+	Attachments []string `toml:"attachments,omitempty" yaml:"attachments,omitempty" json:"attachments,omitempty"`
 	// Refused is the code a paired server refused an undelivered
 	// message with (RefusalWords), "expired" when it didn't take it.
-	Refused string `toml:"refused,omitempty" json:"refused,omitempty"`
+	Refused string `toml:"refused,omitempty" yaml:"refused,omitempty" json:"refused,omitempty"`
 	// Due is when a message waiting over the rate should go: zero once
 	// it went.
-	Due time.Time `toml:"due,omitzero" json:"due,omitzero"`
+	Due time.Time `toml:"due,omitzero" yaml:"due,omitempty" json:"due,omitzero"`
 	// File is the name of the file sent with the message (file.go), in
 	// its folder beside the attachments once it is there; FileSize its
 	// bytes, Transfer the transfer's id (X-…).
-	File     string `toml:"file,omitempty" json:"file,omitempty"`
-	FileSize int64  `toml:"file_size,omitempty" json:"file_size,omitempty"`
-	Transfer string `toml:"transfer,omitempty" json:"transfer,omitempty"`
+	File     string `toml:"file,omitempty" yaml:"file,omitempty" json:"file,omitempty"`
+	FileSize int64  `toml:"file_size,omitempty" yaml:"file_size,omitempty" json:"file_size,omitempty"`
+	Transfer string `toml:"transfer,omitempty" yaml:"transfer,omitempty" json:"transfer,omitempty"`
 	// Peer is the other project (the folder's name), Text the message;
 	// neither is in the front matter.
-	Peer string `toml:"-" json:"peer"`
-	Text string `toml:"-" json:"text,omitempty"`
+	Peer string `toml:"-" yaml:"-" json:"peer"`
+	Text string `toml:"-" yaml:"-" json:"text,omitempty"`
 }
 
 // From and To are the projects the message went between, for project

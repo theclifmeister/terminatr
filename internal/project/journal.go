@@ -52,15 +52,15 @@ func (p *Project) JournalTail(n int) (lines []string, total int, err error) {
 // Item is one inbox entry (§7.5): TOML front matter, no body taken from
 // untrusted sources.
 type Item struct {
-	ID        string    `toml:"id" json:"id"`
-	Kind      string    `toml:"kind" json:"kind"`
-	Subject   string    `toml:"subject" json:"subject"`
-	Created   time.Time `toml:"created" json:"created"`
-	Summary   string    `toml:"summary" json:"summary"`
-	NeedsUser bool      `toml:"needs_user" json:"needs_user"`
+	ID        string    `toml:"id" yaml:"id" json:"id"`
+	Kind      string    `toml:"kind" yaml:"kind" json:"kind"`
+	Subject   string    `toml:"subject" yaml:"subject" json:"subject"`
+	Created   time.Time `toml:"created" yaml:"created" json:"created"`
+	Summary   string    `toml:"summary" yaml:"summary" json:"summary"`
+	NeedsUser bool      `toml:"needs_user" yaml:"needs_user" json:"needs_user"`
 	// Message is the id of the message a link item is about
 	// (internal/link), "" on other kinds.
-	Message string `toml:"message,omitempty" json:"message,omitempty"`
+	Message string `toml:"message,omitempty" yaml:"message,omitempty" json:"message,omitempty"`
 }
 
 // AddItem writes inbox/<ts>-<kind>-<subject>.md.

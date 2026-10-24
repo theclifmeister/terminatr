@@ -28,7 +28,7 @@ const sep = " · "
 const maxID = 1_000_000_000
 
 type front struct {
-	NextID int `toml:"next_id"`
+	NextID int `toml:"next_id" yaml:"next_id"`
 }
 
 // ParseError is a TASKS.md line tm can't read. tm refuses to write the

@@ -110,7 +110,7 @@ func moveRepos(slug string) (bool, error) {
 		return false, err
 	}
 	var front struct {
-		Repos *[]string `toml:"repos"`
+		Repos *[]string `toml:"repos" yaml:"repos"`
 	}
 	if _, err := mdfile.Decode(data, &front); err != nil {
 		return false, err

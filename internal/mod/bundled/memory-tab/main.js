@@ -77,19 +77,12 @@ What bites whoever changes this next.
   }
   function front(md) {
     const lines = md.replace(/\r\n?/g, "\n").split("\n");
-    if (lines[0] !== "+++") return { meta: "", body: md };
-    const end = lines.indexOf("+++", 1);
+    const fence = lines[0];
+    if (fence !== "+++" && fence !== "---") return { meta: "", body: md };
+    const end = lines.indexOf(fence, 1);
     if (end < 0) return { meta: "", body: md };
-    const vals = /* @__PURE__ */ new Map();
-    for (const l of lines.slice(1, end)) {
-      const m = /^\s*([A-Za-z_]+)\s*=\s*(.*?)\s*$/.exec(l);
-      if (!m) continue;
-      try {
-        vals.set(m[1], JSON.parse(m[2]));
-      } catch (e) {
-        vals.set(m[1], m[2]);
-      }
-    }
+    const head = lines.slice(1, end);
+    const vals = fence === "+++" ? tomlValues(head) : yamlValues(head);
     const meta = [];
     const touches = vals.get("touches");
     if (Array.isArray(touches) && touches.length > 0) meta.push(`touches ${touches.join(", ")}`);
@@ -100,6 +93,59 @@ What bites whoever changes this next.
     const source = vals.get("source");
     if (source) meta.push(`from ${source}`);
     return { meta: meta.join(" · "), body: lines.slice(end + 1).join("\n") };
+  }
+  function tomlValues(head) {
+    const vals = /* @__PURE__ */ new Map();
+    for (const l of head) {
+      const m = /^\s*([A-Za-z_]+)\s*=\s*(.*?)\s*$/.exec(l);
+      if (!m) continue;
+      try {
+        vals.set(m[1], JSON.parse(m[2]));
+      } catch (e) {
+        vals.set(m[1], m[2]);
+      }
+    }
+    return vals;
+  }
+  function yamlValues(head) {
+    var _a, _b;
+    const vals = /* @__PURE__ */ new Map();
+    let list;
+    for (const l of head) {
+      const item = /^\s*-\s+(.*?)\s*$/.exec(l);
+      if (item && list) {
+        list.push(yamlScalar(item[1]));
+        continue;
+      }
+      list = void 0;
+      const m = /^([A-Za-z_][A-Za-z0-9_]*)\s*:(?:\s+(.*?))?\s*$/.exec(l);
+      if (!m) continue;
+      const raw = (_a = m[2]) != null ? _a : "";
+      const v = /^["']/.test(raw) ? raw : raw.replace(/^#.*$|\s+#.*$/, "");
+      if (v === "") {
+        list = [];
+        vals.set(m[1], list);
+      } else if (v.startsWith("[") && v.endsWith("]")) {
+        const inner = v.slice(1, -1).trim();
+        vals.set(m[1], inner === "" ? [] : ((_b = inner.match(/"(?:[^"\\]|\\.)*"|'(?:[^']|'')*'|[^,]+/g)) != null ? _b : []).map((x) => yamlScalar(x.trim())));
+      } else {
+        vals.set(m[1], yamlScalar(v));
+      }
+    }
+    return vals;
+  }
+  function yamlScalar(v) {
+    if (v.startsWith('"') && v.endsWith('"') && v.length > 1) {
+      try {
+        return JSON.parse(v);
+      } catch (e) {
+        return v.slice(1, -1);
+      }
+    }
+    if (v.startsWith("'") && v.endsWith("'") && v.length > 1) return v.slice(1, -1).replace(/''/g, "'");
+    if (v === "true") return true;
+    if (v === "false") return false;
+    return v;
   }
   function blocks(md) {
     const out = [];

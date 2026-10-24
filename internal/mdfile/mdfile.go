@@ -16,16 +16,29 @@ import (
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 )
 
-const fence = "+++"
+// fence opens and closes the TOML front matter Join writes; yamlFence
+// opens and closes YAML front matter, which Split and Decode read too.
+const (
+	fence     = "+++"
+	yamlFence = "---"
+)
 
-// Split separates TOML front matter from the body. A file without a
-// leading "+++" line has no front matter. An opening fence without a
-// closing one is an error.
+// Split separates front matter from the body: TOML between "+++" lines
+// or YAML between "---" lines. A file whose first line is neither has no
+// front matter. An opening fence without a closing one is an error.
 func Split(data []byte) (front, body []byte, err error) {
+	front, body, _, err = split(data)
+	return front, body, err
+}
+
+// split is Split, also saying which fence the front matter is in ("" when
+// there is none).
+func split(data []byte) (front, body []byte, fenced string, err error) {
 	s := string(data)
 	first, _, _ := strings.Cut(s, "\n")
-	if strings.TrimRight(first, "\r") != fence {
-		return nil, data, nil
+	open := strings.TrimRight(first, "\r")
+	if open != fence && open != yamlFence {
+		return nil, data, "", nil
 	}
 	start := len(first) + 1
 	for off := start; off <= len(s); {
@@ -34,15 +47,15 @@ func Split(data []byte) (front, body []byte, err error) {
 		if found {
 			next++
 		}
-		if strings.TrimRight(line, "\r") == fence {
-			return []byte(s[start:off]), []byte(s[next:]), nil
+		if strings.TrimRight(line, "\r") == open {
+			return []byte(s[start:off]), []byte(s[next:]), open, nil
 		}
 		if !found {
 			break
 		}
 		off = next
 	}
-	return nil, nil, errors.New("front matter: no closing +++ line")
+	return nil, nil, "", fmt.Errorf("front matter: no closing %s line", open)
 }
 
 // Join renders front matter and body. A nil front value gives a file with
@@ -65,14 +78,21 @@ func Join(front any, body []byte) ([]byte, error) {
 	return b.Bytes(), nil
 }
 
-// Decode splits data and decodes the front matter into v.
+// Decode splits data and decodes the front matter, TOML or YAML, into v.
+// v's fields need a toml and a yaml tag each. Keys v has no field for are
+// left alone, in either format.
 func Decode(data []byte, v any) (body []byte, err error) {
-	front, body, err := Split(data)
+	front, body, f, err := split(data)
 	if err != nil {
 		return nil, err
 	}
 	if v != nil && front != nil {
-		if _, err := toml.Decode(string(front), v); err != nil {
+		if f == yamlFence {
+			err = decodeYAML(front, v)
+		} else {
+			_, err = toml.Decode(string(front), v)
+		}
+		if err != nil {
 			return nil, fmt.Errorf("front matter: %w", err)
 		}
 	}

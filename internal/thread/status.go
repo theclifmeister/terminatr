@@ -21,20 +21,20 @@ const SelfReportTTL = 5 * time.Minute
 // todo list. Only tm writes it: the server on todo changes, tm on step
 // changes, tm status and tm done.
 type Status struct {
-	Percent       int          `toml:"percent" json:"percent"`
-	PercentSource string       `toml:"percent_source" json:"percent_source"` // steps+todos, steps, todos, self, done or ""
-	Current       string       `toml:"current" json:"current"`
-	StepsDone     int          `toml:"steps_done" json:"steps_done"`
-	StepsTotal    int          `toml:"steps_total" json:"steps_total"`
-	TodosDone     int          `toml:"todos_done" json:"todos_done"`
-	TodosTotal    int          `toml:"todos_total" json:"todos_total"`
-	Activity      string       `toml:"activity" json:"activity"`                  // last self-report
-	NeedsYou      string       `toml:"needs_you" json:"needs_you"`                // the question, when blocked on the human
-	SelfPercent   int          `toml:"self_percent" json:"self_percent"`          // -1: unknown
-	SelfAt        time.Time    `toml:"self_at,omitempty" json:"self_at,omitzero"` // when tm status was called
-	Done          bool         `toml:"done,omitempty" json:"done,omitempty"`      // tm done was called
-	Updated       time.Time    `toml:"updated" json:"updated"`                    //
-	Todos         []agent.Todo `toml:"-" json:"todos"`
+	Percent       int          `toml:"percent" yaml:"percent" json:"percent"`
+	PercentSource string       `toml:"percent_source" yaml:"percent_source" json:"percent_source"` // steps+todos, steps, todos, self, done or ""
+	Current       string       `toml:"current" yaml:"current" json:"current"`
+	StepsDone     int          `toml:"steps_done" yaml:"steps_done" json:"steps_done"`
+	StepsTotal    int          `toml:"steps_total" yaml:"steps_total" json:"steps_total"`
+	TodosDone     int          `toml:"todos_done" yaml:"todos_done" json:"todos_done"`
+	TodosTotal    int          `toml:"todos_total" yaml:"todos_total" json:"todos_total"`
+	Activity      string       `toml:"activity" yaml:"activity" json:"activity"`                           // last self-report
+	NeedsYou      string       `toml:"needs_you" yaml:"needs_you" json:"needs_you"`                        // the question, when blocked on the human
+	SelfPercent   int          `toml:"self_percent" yaml:"self_percent" json:"self_percent"`               // -1: unknown
+	SelfAt        time.Time    `toml:"self_at,omitempty" yaml:"self_at,omitempty" json:"self_at,omitzero"` // when tm status was called
+	Done          bool         `toml:"done,omitempty" yaml:"done,omitempty" json:"done,omitempty"`         // tm done was called
+	Updated       time.Time    `toml:"updated" yaml:"updated" json:"updated"`                              //
+	Todos         []agent.Todo `toml:"-" yaml:"-" json:"todos"`
 }
 
 // ParseStatus reads STATUS.md's text.
