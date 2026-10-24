@@ -138,7 +138,11 @@ func countedAs(n int, one, many string) string {
 
 // needsLine is the NEEDS YOU line over the list: how many things wait
 // for the user, and what; "" for none.
-func needsLine(links []link.Row) string {
+func needsLine(links []link.Row) string { return needsLineShares(links, 0) }
+
+// needsLineShares is needsLine with the paired servers' share requests
+// that wait (the Network popup's).
+func needsLineShares(links []link.Row, shares int) string {
 	var held, files, paused, asks int
 	for _, r := range links {
 		held += r.Held
@@ -163,10 +167,13 @@ func needsLine(links []link.Row) string {
 	if asks > 0 {
 		words = append(words, countedAs(asks, "link request", "link requests"))
 	}
+	if shares > 0 {
+		words = append(words, countedAs(shares, "share request", "share requests"))
+	}
 	if len(words) == 0 {
 		return ""
 	}
-	return th().Warn.Render(fmt.Sprintf("⚑ NEEDS YOU %d", held+files+paused+asks)) + th().Faint.Render(" · "+strings.Join(words, " · "))
+	return th().Warn.Render(fmt.Sprintf("⚑ NEEDS YOU %d", held+files+paused+asks+shares)) + th().Faint.Render(" · "+strings.Join(words, " · "))
 }
 
 // msgTitle is a message's first line of text, or for one without (a

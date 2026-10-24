@@ -175,3 +175,39 @@ func TestNetworkLinkMap(t *testing.T) {
 		t.Errorf("not the last three, newest first:\n%s", out)
 	}
 }
+
+// TestNetworkNeedsListShares: a paired server's share request is listed
+// and counted too, and its row answers with the tree row's handlers: X
+// declines after Y, A picks a project, then the share confirm; ← goes
+// to it under its server.
+func TestNetworkNeedsListShares(t *testing.T) {
+	m, src := shareDash(t, 120, 30, true)
+	nv := netOpen(t, m)
+	out := ansi.Strip(netBox(m))
+	for _, want := range []string{"⚑ NEEDS YOU 1 · 1 share request", `⚑ mini                           asks you to share a project (for its acme) · "the API docs"`} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q in\n%s", want, out)
+		}
+	}
+	clickOn(t, m, "⚑ mini   ")
+	if nv.sel != "!s:mini:S-91C3-7" {
+		t.Fatalf("a click: %q", nv.sel)
+	}
+	press(m, "X")
+	if cv, ok := m.top().(*confirmView); !ok || cv.question != "Decline mini's request (S-91C3-7)? Nothing is shared; mini hears of it." {
+		t.Fatalf("X on the list's request: %T", m.top())
+	}
+	press(m, "N")
+	src.data.Projects[1].Safety = nil
+	press(m, "A")
+	if title, _ := menuLabels(t, m); title != "Share a project with mini? · pick one of yours" {
+		t.Fatalf("A on the list's request: %q", title)
+	}
+	press(m, "esc")
+	nv.sel = "!s:mini:S-91C3-7"
+	nv.folded["g:mini"] = true
+	press(m, "left")
+	if nv.sel != "s:mini:S-91C3-7" || nv.folded["g:mini"] {
+		t.Fatalf("← from the list: %q", nv.sel)
+	}
+}

@@ -160,11 +160,12 @@ func (nv *networkView) linkRows(m *dash, slug string) []netRow {
 
 // isNeed says whether the cursor's ! stops on r: a need in the tree,
 // where it shows what it belongs to.
-func (r netRow) isNeed() bool { return r.kind == netNeed && !r.listed }
+func (r netRow) isNeed() bool { return (r.kind == netNeed || r.kind == netShareReq) && !r.listed }
 
 // listRows are the NEEDS YOU list's rows over the tree, with the popup
-// netWide or wider: every project's needs, folded or not, as the tree
-// has them, each answered on its row with the tree row's keys.
+// netWide or wider: every project's needs, folded or not, then the
+// paired servers' share requests, as the tree has them, each answered
+// on its row with the tree row's keys.
 func (nv *networkView) listRows(m *dash) []netRow {
 	if m.inner(viewWidth) < netWide {
 		return nil
@@ -173,6 +174,14 @@ func (nv *networkView) listRows(m *dash) []netRow {
 	for _, slug := range shareable(m) {
 		for _, r := range nv.linkRows(m, slug) {
 			if r.kind == netNeed {
+				r.listed = true
+				out = append(out, r)
+			}
+		}
+	}
+	for i, e := range nv.list.Peers {
+		for _, r := range shareRows(mirror(m, e), i) {
+			if r.kind == netShareReq {
 				r.listed = true
 				out = append(out, r)
 			}
@@ -208,7 +217,13 @@ func (nv *networkView) needsList(m *dash, rows []netRow, sel, w, n int) ([]strin
 			links = append(links, p.Links...)
 		}
 	}
-	head := needsLine(links)
+	shares := 0
+	for _, i := range at {
+		if rows[i].kind == netShareReq {
+			shares++
+		}
+	}
+	head := needsLineShares(links, shares)
 	if head == "" {
 		head = th().Warn.Render("⚑ NEEDS YOU")
 	}
@@ -219,7 +234,7 @@ func (nv *networkView) needsList(m *dash, rows []netRow, sel, w, n int) ([]strin
 	lines := []string{spread(head, next, w)}
 	of := []int{-1}
 	for k, i := range at[nv.ltop : nv.ltop+h] {
-		l := listLine(m, rows[i], w)
+		l := nv.listLine(m, rows[i], w)
 		if i == sel {
 			l = th().Sel.Render(fit(plainUnder(l), w))
 		}
@@ -235,8 +250,16 @@ func (nv *networkView) needsList(m *dash, rows []netRow, sel, w, n int) ([]strin
 }
 
 // listLine is the NEEDS YOU list's row r drawn w cells wide: the link
-// it is on, then what it waits for.
-func listLine(m *dash, r netRow, w int) string {
+// it is on (a share request's server), then what it waits for.
+func (nv *networkView) listLine(m *dash, r netRow, w int) string {
+	if r.kind == netShareReq {
+		what := ""
+		if r.share.For != "" {
+			what = " (for its " + oneLine(r.share.For) + ")"
+		}
+		on := fit(th().Head.Render(netName(nv.list.Peers[r.peer])), 30)
+		return fit(" "+th().Warn.Render("⚑")+" "+on+" asks you to share a project"+th().Faint.Render(what+noteWords(r.share)), w)
+	}
 	glyph := "·"
 	if r.link.HasMine {
 		glyph = dirGlyph(r.link.Mine.Allow)

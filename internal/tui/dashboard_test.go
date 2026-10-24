@@ -76,6 +76,10 @@ type fakeSource struct {
 	relayUpdates []string // aliases whose relay u asked to update
 	pairs        []string // PairPeer's and JoinPeer's calls: "pair relay", "join code"
 	pairErr      error    // fails them before the code shows
+	// shares are AskShare's and AnswerShare's calls, "ask alias for
+	// note" and "accept id slug" / "decline id"; shareErr refuses them.
+	shares       []string
+	shareErr     error
 	agents       []string
 	remote       []string // "slug on" or "slug off"
 	lifecycle    []string // "slug verb"
@@ -380,6 +384,55 @@ func (f *fakeSource) pairing(call, code string, ev PairEvents) (string, error) {
 	}
 	f.peers.Peers = append(f.peers.Peers, PeerEntry{Alias: "studio", ID: "s", Short: "77AB-91C3", Relay: "wss://relay.example.net"})
 	return "studio", nil
+}
+
+func (f *fakeSource) AskShare(alias, forSlug, note string) (proto.ShareRequest, error) {
+	f.shares = append(f.shares, "ask "+alias+" "+forSlug+" "+note)
+	if f.shareErr != nil {
+		return proto.ShareRequest{}, f.shareErr
+	}
+	r := proto.ShareRequest{ID: fmt.Sprintf("S-4F2A-%d", 30+len(f.shares)), Out: true, Peer: alias, For: forSlug, Note: note, State: proto.ShareWaiting}
+	for i := range f.data.Peers {
+		if f.data.Peers[i].Alias == alias {
+			f.data.Peers[i].Shares = append(f.data.Peers[i].Shares, r)
+		}
+	}
+	return r, nil
+}
+func (f *fakeSource) AnswerShare(id string, accept bool, slug string) (proto.ShareRequest, error) {
+	call := "decline " + id
+	if accept {
+		call = "accept " + id + " " + slug
+	}
+	f.shares = append(f.shares, call)
+	if f.shareErr != nil {
+		return proto.ShareRequest{}, f.shareErr
+	}
+	var r proto.ShareRequest
+	for i := range f.data.Peers {
+		for j := range f.data.Peers[i].Shares {
+			if q := &f.data.Peers[i].Shares[j]; q.ID == id && !q.Out {
+				q.State = proto.ShareIsDeclined
+				if accept {
+					q.State, q.Project = proto.ShareIsAccepted, slug
+				}
+				r = *q
+			}
+		}
+	}
+	if accept {
+		for i := range f.data.Projects {
+			if p := &f.data.Projects[i]; p.Slug == slug {
+				sf := config.Defaults
+				if p.Safety != nil {
+					sf = *p.Safety
+				}
+				sf.Share = true
+				p.Safety = &sf
+			}
+		}
+	}
+	return r, nil
 }
 
 func (f *fakeSource) RemovePeer(alias string) error {

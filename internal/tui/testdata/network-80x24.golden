@@ -61,8 +61,8 @@
 │ work (mini) · id 91C3-77AB · tm 0.27.0 · relay update (U)            │
 │ panes: work may watch yours (V) · you may watch its panes            │
 │                                                                      │
-│ E name · V panes · U update relay · X unpair · enter fold            │
-│ tab details · P pair · J join · ? keys · esc close                   │
+│ S ask to share · E name · V panes · U update relay · X unpair        │
+│ enter fold · tab details · P pair · J join · ? keys · esc close      │
 ╰──────────────────────────────────────────────────────────────────────╯
 == t:mini/acme-api
 ╭─ Network · studio + 2 paired ────────────────────────────────────────╮
