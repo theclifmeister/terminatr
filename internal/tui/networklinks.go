@@ -73,7 +73,8 @@ type linkLog struct {
 
 // logOf is link slug ⇄ r.Peer's messages and files, read at most every
 // 2 s, and only for a link to a paired server (what the other side says
-// is in its messages) or one with something waiting.
+// and what waits to go are in its messages), one with something waiting
+// or one with messages its panel shows.
 func (nv *networkView) logOf(m *dash, slug string, r link.Row) linkLog {
 	if nv.logs == nil || time.Since(nv.logsAt) > 2*time.Second {
 		nv.logs, nv.logsAt = map[string]linkLog{}, time.Now()
@@ -83,7 +84,7 @@ func (nv *networkView) logOf(m *dash, slug string, r link.Row) linkLog {
 		return l
 	}
 	var l linkLog
-	if r.Remote || r.Held > 0 || r.FilesWaiting > 0 {
+	if r.Remote || r.Held > 0 || r.FilesWaiting > 0 || r.Last != "" {
 		if msgs, err := m.src.LinkLog(slug, r.Peer); err == nil {
 			l.msgs, l.back = msgs, link.TheirSide(msgs)
 		}
@@ -157,8 +158,92 @@ func (nv *networkView) linkRows(m *dash, slug string) []netRow {
 	return out
 }
 
-// isNeed says whether the cursor's ! stops on r.
-func (r netRow) isNeed() bool { return r.kind == netNeed }
+// isNeed says whether the cursor's ! stops on r: a need in the tree,
+// where it shows what it belongs to.
+func (r netRow) isNeed() bool { return r.kind == netNeed && !r.listed }
+
+// listRows are the NEEDS YOU list's rows over the tree, with the popup
+// netWide or wider: every project's needs, folded or not, as the tree
+// has them, each answered on its row with the tree row's keys.
+func (nv *networkView) listRows(m *dash) []netRow {
+	if m.inner(viewWidth) < netWide {
+		return nil
+	}
+	var out []netRow
+	for _, slug := range shareable(m) {
+		for _, r := range nv.linkRows(m, slug) {
+			if r.kind == netNeed {
+				r.listed = true
+				out = append(out, r)
+			}
+		}
+	}
+	return out
+}
+
+// needsList is the NEEDS YOU list as drawn over the tree, w cells wide
+// in a body of n lines: its count line, its rows (as many as a third of
+// the body holds, scrolled to the selection, sel its index in rows) and
+// a rule, with the row each line draws (-1 for none); nothing with
+// nothing listed.
+func (nv *networkView) needsList(m *dash, rows []netRow, sel, w, n int) ([]string, []int) {
+	var at []int
+	for i, r := range rows {
+		if r.listed {
+			at = append(at, i)
+		}
+	}
+	if len(at) == 0 {
+		return nil, nil
+	}
+	h := min(len(at), max(n/3-2, 1))
+	if j := slices.Index(at, sel); j >= 0 {
+		nv.ltop = min(nv.ltop, j)
+		nv.ltop = max(nv.ltop, j-h+1)
+	}
+	nv.ltop = min(max(nv.ltop, 0), len(at)-h)
+	var links []link.Row
+	for _, slug := range shareable(m) {
+		if p := m.projectData(slug); p != nil {
+			links = append(links, p.Links...)
+		}
+	}
+	head := needsLine(links)
+	if head == "" {
+		head = th().Warn.Render("⚑ NEEDS YOU")
+	}
+	next := th().Accent.Render("!") + th().Faint.Render(" next in the tree")
+	if ansi.StringWidth(head)+1+ansi.StringWidth(next) > w {
+		next = "" // the count first
+	}
+	lines := []string{spread(head, next, w)}
+	of := []int{-1}
+	for k, i := range at[nv.ltop : nv.ltop+h] {
+		l := listLine(m, rows[i], w)
+		if i == sel {
+			l = th().Sel.Render(fit(plainUnder(l), w))
+		}
+		if k == 0 && nv.ltop > 0 {
+			l = fit(l, w-1) + th().Faint.Render("↑")
+		}
+		if k == h-1 && nv.ltop+h < len(at) {
+			l = fit(l, w-1) + th().Faint.Render("↓")
+		}
+		lines, of = append(lines, l), append(of, i)
+	}
+	return append(lines, th().Faint.Render(strings.Repeat("─", w))), append(of, -1)
+}
+
+// listLine is the NEEDS YOU list's row r drawn w cells wide: the link
+// it is on, then what it waits for.
+func listLine(m *dash, r netRow, w int) string {
+	glyph := "·"
+	if r.link.HasMine {
+		glyph = dirGlyph(r.link.Mine.Allow)
+	}
+	on := fit(th().Head.Render(r.slug)+" "+th().Accent.Render(glyph)+" "+peerShownKey(m.data.Peers, r.other), 30)
+	return fit(" "+th().Warn.Render("⚑")+" "+on+" "+needWords(m, r, true), w)
+}
 
 // The direction, ask and files of a link in words.
 var (
@@ -221,42 +306,53 @@ func linkedBack(r link.Row, back link.Back) bool {
 	return w == "linked back both ways" || strings.HasPrefix(w, "accepted")
 }
 
-// linkState is a link's state as its row ends: paused, half-linked or
-// linked here; for a paired server's project its other side as far as
-// known, or why nothing crosses.
+// linkState is a link's health as its row ends: paused, half-linked or
+// linked here; for a paired server's project why nothing crosses (that
+// server offline, with what waits in the outbox; a message undelivered;
+// this side's request unanswered), else its other side as far as known.
+// short is the row's form under 70 cells.
 func (nv *networkView) linkState(m *dash, slug string, r link.Row, short bool) (string, lipgloss.Style) {
 	if r.Paused {
 		return "paused ⚑", th().Warn
 	}
 	alias, other, remote := config.Remote(r.Peer)
 	if !remote {
-		if r.Half() {
+		switch {
+		case r.Half() && short:
 			return "half-linked", th().Warn
+		case r.Half():
+			return r.HalfWords(), th().Warn
 		}
 		return "linked", th().Good
 	}
 	name := peerShown(m.data.Peers, alias)
 	pm := theirMirror(m, alias)
+	l := nv.logOf(m, slug, r)
+	b := link.BacklogOf(l.msgs)
 	switch {
 	case pm == nil:
 		return name + " isn't paired", th().Warn
 	case r.HasMine && pm.Listed && !slices.ContainsFunc(pm.Projects, func(p proto.PeerMirrorProject) bool { return p.Project == other }):
 		return "not shared any more", th().Warn
+	case pm.State != proto.LinkUp && b.Queued > 0 && short:
+		return fmt.Sprintf("offline · %d queued", b.Queued), th().Faint
+	case pm.State != proto.LinkUp && b.Queued > 0:
+		return fmt.Sprintf("%s offline · %d queued in the outbox", name, b.Queued), th().Faint
 	case pm.State != proto.LinkUp:
-		if r.Queued > 0 && !short {
-			return fmt.Sprintf("%s offline · %d queued", name, r.Queued), th().Faint
-		}
 		return name + " offline", th().Faint
+	case b.Undelivered > 0 && short:
+		return "undelivered", th().Warn
+	case b.Undelivered > 0:
+		return "undelivered (see the inbox)", th().Warn
 	case r.Asked != nil && r.Asked.Pending() && short:
 		return "waiting on " + name, th().Warn
 	case r.Asked != nil && r.Asked.Pending():
 		return "waiting on " + name + "'s user", th().Warn
 	}
-	back := nv.logOf(m, slug, r).back
-	if linkedBack(r, back) {
+	if linkedBack(r, l.back) {
 		return "linked back", th().Good
 	}
-	return otherSide(r, back), th().Faint
+	return otherSide(r, l.back), th().Faint
 }
 
 // linkLine is link row r drawn w cells wide.
@@ -273,9 +369,13 @@ func (nv *networkView) linkLine(m *dash, r netRow, w int) string {
 	if r.link.HasMine {
 		glyph = dirGlyph(r.link.Mine.Allow)
 	}
-	left := "     " + th().Faint.Render(tree) + " " + fit(th().Accent.Render(glyph)+" "+peerShownKey(m.data.Peers, r.other), name-6) + " " +
-		th().Faint.Render(sideWords(r.link.Mine, r.link.HasMine, w < 70))
-	state, st := nv.linkState(m, r.slug, r.link, w < 100)
+	head := "     " + th().Faint.Render(tree) + " " + fit(th().Accent.Render(glyph)+" "+peerShownKey(m.data.Peers, r.other), name-6) + " "
+	state, st := nv.linkState(m, r.slug, r.link, w < 70)
+	// This side's settings shorten before the state gives way.
+	left := head + th().Faint.Render(sideWords(r.link.Mine, r.link.HasMine, false))
+	if w < 70 || ansi.StringWidth(left)+1+ansi.StringWidth(state) > w {
+		left = head + th().Faint.Render(sideWords(r.link.Mine, r.link.HasMine, true))
+	}
 	return spread(left, st.Render(state), w)
 }
 
@@ -286,16 +386,8 @@ func needLine(m *dash, r netRow, w int) string {
 		bar = "   "
 	}
 	flag := th().Warn.Render("⚑") + " "
-	var line string
-	switch r.need {
-	case needHeld:
-		line = oneLine(r.msg.ID) + th().Warn.Render(" waits for your OK") + th().Faint.Render(" · "+msgTitle(r.msg))
-	case needFile:
-		line = oneLine(r.file.Name) + " " + link.MB(r.file.Size) + th().Warn.Render(" offered") + th().Faint.Render(" · with "+oneLine(r.file.Message))
-	case needPaused:
-		line = th().Warn.Render("paused: too many messages without you")
-	case needAsk:
-		line = peerShownKey(m.data.Peers, r.other) + th().Warn.Render(" asks to link") + th().Faint.Render(" ("+dirWords(r.link.Asks.Allow)+" there, "+oneLine(r.link.Asks.ID)+")")
+	line := needWords(m, r, false)
+	if r.need == needAsk {
 		if !shownLink(r.link) {
 			tree := "├─"
 			if r.last {
@@ -305,6 +397,24 @@ func needLine(m *dash, r netRow, w int) string {
 		}
 	}
 	return fit("     "+bar+flag+line, w)
+}
+
+// needWords say what need row r waits for; listed, beside the link it
+// is on.
+func needWords(m *dash, r netRow, listed bool) string {
+	switch r.need {
+	case needHeld:
+		return oneLine(r.msg.ID) + th().Warn.Render(" waits for your OK") + th().Faint.Render(" · "+msgTitle(r.msg))
+	case needFile:
+		return oneLine(r.file.Name) + " " + link.MB(r.file.Size) + th().Warn.Render(" offered") + th().Faint.Render(" · with "+oneLine(r.file.Message))
+	case needPaused:
+		return th().Warn.Render("paused: too many messages without you")
+	}
+	asks := th().Warn.Render("asks to link") + th().Faint.Render(" ("+dirWords(r.link.Asks.Allow)+" there, "+oneLine(r.link.Asks.ID)+")")
+	if listed {
+		return asks
+	}
+	return peerShownKey(m.data.Peers, r.other) + " " + asks
 }
 
 // theirLinks are the links your projects have to a paired server's
@@ -384,6 +494,114 @@ func (nv *networkView) linkDetail(m *dash, r netRow, w int) [2]string {
 		l2 += th().Faint.Render(" · last " + oneLine(l.Last))
 	}
 	return [2]string{fit(l1, w), fit(l2, w)}
+}
+
+// netMapWide is the details panel's width from which a project's links
+// draw as a map.
+const netMapWide = 40
+
+// linkMap is project slug's links in its details panel, w cells wide:
+// from netMapWide a map whose lines say each link's state, ━ linked,
+// ┄ waiting on the other side, ─ its server offline, in the warning
+// colour while paused, with a legend; under that each link in a word.
+//
+//	"LINKS 2"
+//	" terminatr ┄┄⇄┄┄ mini/acme-api ⚑ ask · files: ask me"
+//	"           ━━⇄━━ web           ⚑ files: ask me"
+//	"━ linked  ┄ waiting  ─ offline  ━ paused"
+func (nv *networkView) linkMap(m *dash, slug string, w int) []string {
+	var links []link.Row
+	if p := m.projectData(slug); p != nil {
+		links = slices.DeleteFunc(slices.Clone(p.Links), func(r link.Row) bool { return !shownLink(r) })
+	}
+	out := []string{th().Faint.Render(fmt.Sprintf("LINKS %d", len(links)))}
+	if len(links) == 0 {
+		return append(out, th().Faint.Render("none · L links it"))
+	}
+	col := 0 // the other ends' column: the longest, to 18
+	for _, r := range links {
+		col = max(col, min(ansi.StringWidth(peerShownKey(m.data.Peers, r.Peer)), 18))
+	}
+	for i, r := range links {
+		glyph := "·"
+		if r.HasMine {
+			glyph = dirGlyph(r.Mine.Allow)
+		}
+		other := peerShownKey(m.data.Peers, r.Peer)
+		flag := "  "
+		if r.Held+r.FilesWaiting > 0 || r.Paused || r.Asks != nil {
+			flag = " " + th().Warn.Render("⚑")
+		}
+		if w < netMapWide {
+			out = append(out, fit(th().Accent.Render(glyph)+" "+other+strings.TrimRight(flag, " "), w))
+			continue
+		}
+		head := ""
+		if i == 0 {
+			head = " " + slug
+		}
+		c, st := nv.mapLine(m, slug, r)
+		settings := "files: " + filesPlain[r.Mine.FilesMode()]
+		if r.Mine.Ask {
+			settings = "ask · " + settings
+		}
+		if !r.HasMine {
+			settings = "no entry here"
+		}
+		line := fit(head, min(ansi.StringWidth(slug)+2, 16)) + st.Render(c+c+glyph+c+c) + " " + fit(other, col) + flag + " " + th().Faint.Render(settings)
+		out = append(out, fit(line, w))
+	}
+	if w >= netMapWide {
+		legend := th().Good.Render("━") + th().Faint.Render(" linked  ") + th().Warn.Render("┄") + th().Faint.Render(" waiting  ") +
+			th().Faint.Render("─ offline  ") + th().Warn.Render("━") + th().Faint.Render(" paused")
+		out = append(out, fit(legend, w))
+	}
+	return out
+}
+
+// mapLine is link r's line in the map and its look: paused, its server
+// offline, waiting on the other side (half-linked here, not linked back
+// there), or linked.
+func (nv *networkView) mapLine(m *dash, slug string, r link.Row) (string, lipgloss.Style) {
+	alias, _, remote := config.Remote(r.Peer)
+	switch {
+	case r.Paused:
+		return "━", th().Warn
+	case !remote && r.Half():
+		return "┄", th().Warn
+	case !remote:
+		return "━", th().Good
+	}
+	if pm := theirMirror(m, alias); pm == nil || pm.State != proto.LinkUp {
+		return "─", th().Faint
+	}
+	if linkedBack(r, nv.logOf(m, slug, r).back) {
+		return "━", th().Good
+	}
+	return "┄", th().Warn
+}
+
+// lastMessages are the headers of link slug ⇄ r.Peer's last three
+// messages, newest first, w cells wide, under a line that says where
+// the rest are; none without messages.
+func (nv *networkView) lastMessages(m *dash, slug string, r link.Row, w int) []string {
+	msgs := nv.logOf(m, slug, r).msgs
+	if len(msgs) == 0 {
+		return nil
+	}
+	out := []string{th().Faint.Render(fit("CONVERSATION · all of it in the Messages tab", w))}
+	for i := len(msgs) - 1; i >= max(len(msgs)-3, 0); i-- {
+		msg := msgs[i]
+		dir := th().Accent.Render("←")
+		if msg.Out {
+			dir = th().Head.Render("→")
+		}
+		when := " " + age(max(sideClock().Sub(msg.Created), 0))
+		id := oneLine(msg.ID)
+		title := fit(msgTitle(msg), max(w-ansi.StringWidth(id)-ansi.StringWidth(when)-6, 1))
+		out = append(out, spread("  "+dir+" "+th().Faint.Render(id)+" "+title, th().Faint.Render(when), w))
+	}
+	return out
 }
 
 // The panel's items on a link: its switches.
@@ -467,7 +685,9 @@ func (nv *networkView) linkPanel(m *dash, r netRow, w int) []panelLine {
 		add(itemNone, th().Warn.Render("⚑ NEEDS YOU"), rule)
 		d := nv.linkDetail(m, r, 1<<16)
 		for _, l := range d {
-			add(itemNone, wrapLines(strings.TrimRight(l, " "), w)...)
+			// Without fit's padding, which a style can hold.
+			l = ansi.Truncate(l, ansi.StringWidth(strings.TrimRight(ansi.Strip(l), " ")), "")
+			add(itemNone, wrapLines(l, w)...)
 		}
 		return out
 	}
@@ -496,8 +716,11 @@ func (nv *networkView) linkPanel(m *dash, r netRow, w int) []panelLine {
 		row("other side", sideWords(l.Theirs, l.HasTheirs, false))
 	}
 	state := "open"
-	if l.Paused {
+	switch {
+	case l.Paused:
 		state = th().Warn.Render("paused · R resumes")
+	case l.Half():
+		state = th().Warn.Render(l.HalfWords())
 	}
 	row("state", state)
 	msgs := th().Faint.Render("none yet")
@@ -505,8 +728,16 @@ func (nv *networkView) linkPanel(m *dash, r netRow, w int) []panelLine {
 		msgs = "last " + oneLine(l.Last)
 	}
 	row("messages", msgs)
+	help := "← → change a switch, writing at once (" + map[bool]string{true: "this side only", false: "both sides"}[remote] + "); enter edits the whole link"
+	if conv := nv.lastMessages(m, r.slug, l, w); len(conv) > 0 {
+		add(itemNone, "")
+		add(itemNone, conv...)
+		help += "."
+	} else {
+		help += "; all of the conversation is in the project's Messages tab."
+	}
 	add(itemNone, "")
-	add(itemNone, faintLines("← → change a switch, writing at once ("+map[bool]string{true: "this side only", false: "both sides"}[remote]+"); enter edits the whole link; all of the conversation is in the project's Messages tab.", w)...)
+	add(itemNone, faintLines(help, w)...)
 	return out
 }
 

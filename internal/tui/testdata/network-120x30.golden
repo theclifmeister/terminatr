@@ -32,15 +32,15 @@
 │    ■ terminatr         [ ] not shared            no links │ ──────────────────────────────────────────── │
 │    ■ web               [ ] not shared            no links │ shared        [ ] not shared                 │
 │                                                           │                                              │
-│ ▾ ◉ work (mini) · connected 38 ms              panes view │ A shared project shows, read-only, in the    │
-│    ■ acme-api          shared with you · + link (L)       │ sidebar of every paired server: what waits   │
-│    ■ infra             shared with you · + link (L)       │ for you, the inbox, threads, tasks on deck   │
+│ ▾ ◉ work (mini) · connected 38 ms              panes view │ LINKS 0                                      │
+│    ■ acme-api          shared with you · + link (L)       │ none · L links it                            │
+│    ■ infra             shared with you · + link (L)       │                                              │
+│                                                           │ A shared project shows, read-only, in the    │
+│ ▾ ○ nas · offline 4m · relay                    panes off │ sidebar of every paired server: what waits   │
+│    ■ media · stale     shared with you · + link (L)       │ for you, the inbox, threads, tasks on deck   │
 │                                                           │ and its sessions' states; never its files.   │
-│ ▾ ○ nas · offline 4m · relay                    panes off │ Sharing asks first; it is the project's own  │
-│    ■ media · stale     shared with you · + link (L)       │ Shared with paired servers setting.          │
-│                                                           │                                              │
-│                                                           │                                              │
-│                                                           │                                              │
+│                                                           │ Sharing asks first; it is the project's own  │
+│                                                           │ Shared with paired servers setting.          │
 │                                                           │                                              │
 │                                                           │                                              │
 │                                                           │                                              │

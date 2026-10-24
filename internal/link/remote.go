@@ -523,6 +523,25 @@ type Backlog struct {
 	Undelivered int
 }
 
+// BacklogOf is one link's backlog from its messages (Log, oldest
+// first): this side's messages waiting in the outbox (not those over the
+// rate), and those undelivered since the last that got through.
+func BacklogOf(msgs []*Message) Backlog {
+	var b Backlog
+	for _, m := range msgs {
+		switch {
+		case !m.Out:
+		case m.State == StateQueued && m.Due.IsZero():
+			b.Queued++
+		case m.State == StateUndelivered:
+			b.Undelivered++
+		case m.State == StateSent || m.State == StateRead:
+			b.Undelivered = 0
+		}
+	}
+	return b
+}
+
 // Backlogs counts, by alias of paired server, the outbox's entries and
 // the projects' undelivered messages; aliases with neither are left
 // out. A tm doctor look: it reads every project's message folders.

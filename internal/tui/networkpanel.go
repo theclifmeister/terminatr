@@ -185,6 +185,8 @@ func (nv *networkView) panelLines(m *dash, r netRow, ok bool, w int) []panelLine
 			out = append(out, panelLine{text: fit(th().Faint.Render("shared"), panelLabel) + th().Accent.Render("[ ]") + th().Faint.Render(" not shared"), item: itemShare, x: panelLabel})
 		}
 		add(itemNone, "")
+		add(itemNone, nv.linkMap(m, r.slug, w)...)
+		add(itemNone, "")
 		add(itemNone, faintLines("A shared project shows, read-only, in the sidebar of every paired server: what waits for you, the inbox, threads, tasks on deck and its sessions' states; never its files. Sharing asks first; it is the project's own Shared with paired servers setting.", w)...)
 	case netTheirs:
 		e := nv.list.Peers[r.peer]

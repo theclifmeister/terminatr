@@ -37,14 +37,14 @@
 │    ■ terminatr         [ ] not shared                                no links │ ──────────────────────────────────────────────────────────── │
 │    ■ web               [ ] not shared                                no links │ shared        [ ] not shared                                 │
 │                                                                               │                                                              │
-│ ▾ ◉ work (mini) · connected 38 ms · tm 0.27.0                      panes view │ A shared project shows, read-only, in the sidebar of every   │
-│    ■ acme-api          shared with you · + link (L)                 ● working │ paired server: what waits for you, the inbox, threads, tasks │
-│    ■ infra             shared with you · + link (L)             · not running │ on deck and its sessions' states; never its files. Sharing   │
+│ ▾ ◉ work (mini) · connected 38 ms · tm 0.27.0                      panes view │ LINKS 0                                                      │
+│    ■ acme-api          shared with you · + link (L)                 ● working │ none · L links it                                            │
+│    ■ infra             shared with you · + link (L)             · not running │                                                              │
+│                                                                               │ A shared project shows, read-only, in the sidebar of every   │
+│ ▾ ○ nas · offline 4m · relay                                        panes off │ paired server: what waits for you, the inbox, threads, tasks │
+│    ■ media · stale     shared with you · + link (L)                 ● working │ on deck and its sessions' states; never its files. Sharing   │
 │                                                                               │ asks first; it is the project's own Shared with paired       │
-│ ▾ ○ nas · offline 4m · relay                                        panes off │ servers setting.                                             │
-│    ■ media · stale     shared with you · + link (L)                 ● working │                                                              │
-│                                                                               │                                                              │
-│                                                                               │                                                              │
+│                                                                               │ servers setting.                                             │
 │                                                                               │                                                              │
 │                                                                               │                                                              │
 │                                                                               │                                                              │

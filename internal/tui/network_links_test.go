@@ -35,7 +35,12 @@ func linkNet(t *testing.T, w, h int) (*dash, *fakeSource) {
 		src.data.Projects[i].countLinkWaits()
 	}
 	src.linkLogs = map[string][]*link.Message{
-		"web":           {{ID: "M-3", Out: true, Peer: "web", Created: now, Bytes: 7, State: link.StateHeld, By: "coordinator", Text: "Held one"}},
+		"web": {
+			{ID: "M-0", Peer: "web", Created: peersAt.Add(-26 * time.Hour), Bytes: 5, State: link.StateRead, By: "coordinator", Text: "First"},
+			{ID: "M-1", Peer: "web", Created: peersAt.Add(-3 * time.Hour), Bytes: 26, State: link.StateRead, By: "coordinator", Text: "Can you look at the build?"},
+			{ID: "M-2", Out: true, Peer: "web", Created: peersAt.Add(-40 * time.Minute), Bytes: 5, State: link.StateRead, By: "coordinator", Text: "On it"},
+			{ID: "M-3", Out: true, Peer: "web", Created: peersAt.Add(-time.Minute), Bytes: 7, State: link.StateHeld, By: "coordinator", Text: "Held one"},
+		},
 		"mini/acme-api": {{ID: "M-9C1B-1", Peer: "mini/acme-api", Created: now, Bytes: 9, State: link.StateRead, By: "human", Text: "The report", File: "report.pdf", FileSize: 4400000, Transfer: "X-9C1B-2"}},
 	}
 	src.linkFiles = []link.Transfer{{ID: "X-9C1B-2", Project: "terminatr", Peer: "mini/acme-api", Message: "M-9C1B-1", Name: "report.pdf", Size: 4400000, State: link.FileOffered}}
@@ -85,8 +90,8 @@ func TestNetworkLinkRows(t *testing.T) {
 		t.Fatalf("← on a need: %q", nv.sel)
 	}
 	press(m, "enter")
-	if out := ansi.Strip(netBox(m)); strings.Contains(out, "report.pdf") {
-		t.Errorf("folded:\n%s", out)
+	if out := ansi.Strip(netBox(m)); strings.Contains(out, "│  ⚑ report.pdf") || !strings.Contains(out, "⚑ terminatr ⇄ mini/acme-api      report.pdf") {
+		t.Errorf("folded: the tree hides its needs, the list keeps them:\n%s", out)
 	}
 }
 
@@ -358,16 +363,22 @@ func TestNetworkNeeds(t *testing.T) {
 }
 
 // TestNetworkLinksGolden: the popup with links at 80×24 (two detail
-// lines) and 160×36 (the panel), on a link to a paired server's
-// project, on one here and on a need, matching
+// lines), 120×30 and 160×36 (the panel and the NEEDS YOU list over the
+// tree), on a link to a paired server's project, on one here with its
+// last messages, on a need, on a project with its links' map and on a
+// listed need, matching
 // testdata/network-links-<w>x<h>.golden (go test -run
 // TestNetworkLinksGolden -update rewrites them).
 func TestNetworkLinksGolden(t *testing.T) {
-	for _, size := range [][2]int{{80, 24}, {160, 36}} {
+	for _, size := range [][2]int{{80, 24}, {120, 30}, {160, 36}} {
 		m, _ := linkNet(t, size[0], size[1])
 		nv := netOpen(t, m)
 		var b strings.Builder
-		for _, sel := range []string{"l:terminatr>mini/acme-api", "l:web>terminatr", "n:terminatr>web>held:M-3"} {
+		sels := []string{"l:terminatr>mini/acme-api", "l:terminatr>web", "n:terminatr>web>held:M-3", "p:terminatr"}
+		if size[0] >= 120 {
+			sels = append(sels, "!n:terminatr>mini/acme-api>file:X-9C1B-2")
+		}
+		for _, sel := range sels {
 			nv.sel = sel
 			b.WriteString("== " + sel + "\n" + ansi.Strip(netBox(m)) + "\n")
 		}
