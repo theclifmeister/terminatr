@@ -25,22 +25,27 @@ const SelfReportTTL = 5 * time.Minute
 type Status struct {
 	// Thread and Task are the thread's id and its task's ref ("" for
 	// none); the file links them (vaultlink), ParseStatus reads ids.
-	Thread        string       `toml:"thread,omitempty" yaml:"thread,omitempty" json:"thread,omitempty"`
-	Task          string       `toml:"task,omitempty" yaml:"task,omitempty" json:"task,omitempty"`
-	Percent       int          `toml:"percent" yaml:"percent" json:"percent"`
-	PercentSource string       `toml:"percent_source" yaml:"percent_source" json:"percent_source"` // steps+todos, steps, todos, self, done or ""
-	Current       string       `toml:"current" yaml:"current" json:"current"`
-	StepsDone     int          `toml:"steps_done" yaml:"steps_done" json:"steps_done"`
-	StepsTotal    int          `toml:"steps_total" yaml:"steps_total" json:"steps_total"`
-	TodosDone     int          `toml:"todos_done" yaml:"todos_done" json:"todos_done"`
-	TodosTotal    int          `toml:"todos_total" yaml:"todos_total" json:"todos_total"`
-	Activity      string       `toml:"activity" yaml:"activity" json:"activity"`                           // last self-report
-	NeedsYou      string       `toml:"needs_you" yaml:"needs_you" json:"needs_you"`                        // the question, when blocked on the human
-	SelfPercent   int          `toml:"self_percent" yaml:"self_percent" json:"self_percent"`               // -1: unknown
-	SelfAt        time.Time    `toml:"self_at,omitempty" yaml:"self_at,omitempty" json:"self_at,omitzero"` // when tm status was called
-	Done          bool         `toml:"done,omitempty" yaml:"done,omitempty" json:"done,omitempty"`         // tm done was called
-	Updated       time.Time    `toml:"updated" yaml:"updated" json:"updated"`                              //
-	Todos         []agent.Todo `toml:"-" yaml:"-" json:"todos"`
+	Thread        string    `toml:"thread,omitempty" yaml:"thread,omitempty" json:"thread,omitempty"`
+	Task          string    `toml:"task,omitempty" yaml:"task,omitempty" json:"task,omitempty"`
+	Percent       int       `toml:"percent" yaml:"percent" json:"percent"`
+	PercentSource string    `toml:"percent_source" yaml:"percent_source" json:"percent_source"` // steps+todos, steps, todos, self, done or ""
+	Current       string    `toml:"current" yaml:"current" json:"current"`
+	StepsDone     int       `toml:"steps_done" yaml:"steps_done" json:"steps_done"`
+	StepsTotal    int       `toml:"steps_total" yaml:"steps_total" json:"steps_total"`
+	TodosDone     int       `toml:"todos_done" yaml:"todos_done" json:"todos_done"`
+	TodosTotal    int       `toml:"todos_total" yaml:"todos_total" json:"todos_total"`
+	Activity      string    `toml:"activity" yaml:"activity" json:"activity"`                           // last self-report
+	NeedsYou      string    `toml:"needs_you" yaml:"needs_you" json:"needs_you"`                        // the question, when blocked on the human
+	SelfPercent   int       `toml:"self_percent" yaml:"self_percent" json:"self_percent"`               // -1: unknown
+	SelfAt        time.Time `toml:"self_at,omitempty" yaml:"self_at,omitempty" json:"self_at,omitzero"` // when tm status was called
+	Done          bool      `toml:"done,omitempty" yaml:"done,omitempty" json:"done,omitempty"`         // tm done was called
+	Updated       time.Time `toml:"updated" yaml:"updated" json:"updated"`                              //
+	// Vault, Tags and CSSClasses are the vault's properties (docs/SPEC.md
+	// §5.1, Vault), which Render writes: the file only.
+	Vault      string       `toml:"tm,omitempty" yaml:"tm,omitempty" json:"-"`
+	Tags       []string     `toml:"tags,omitempty" yaml:"tags,omitempty" json:"-"`
+	CSSClasses []string     `toml:"cssclasses,omitempty" yaml:"cssclasses,omitempty" json:"-"`
+	Todos      []agent.Todo `toml:"-" yaml:"-" json:"todos"`
 }
 
 // ParseStatus reads STATUS.md's text.
@@ -91,7 +96,9 @@ func (st *Status) Render() ([]byte, error) {
 			fmt.Fprintf(&b, "- [ ] %s\n", text)
 		}
 	}
-	return mdfile.Join(st, []byte(b.String()))
+	f := *st
+	f.Vault, f.Tags, f.CSSClasses = vaultlink.Owned(st.NeedsYou != "")
+	return mdfile.Join(&f, []byte(b.String()))
 }
 
 // Derive recomputes the percent, counts and current item from the task's

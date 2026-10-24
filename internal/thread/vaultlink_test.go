@@ -24,12 +24,12 @@ func TestStatusLinks(t *testing.T) {
 		t.Fatal(err)
 	}
 	r, _ := Create(p, Record{Title: "x", Task: "T4", State: Running})
-	st, err := UpdateStatus(p, r.ID, func(st *Status) error { st.Activity = "a"; return nil })
+	st, err := UpdateStatus(p, r.ID, func(st *Status) error { st.Activity, st.NeedsYou = "a", "which?"; return nil })
 	if err != nil || st.Thread != r.ID || st.Task != "T4" {
 		t.Fatalf("%+v %v", st, err)
 	}
 	data, _ := os.ReadFile(Path(p, r.ID, "STATUS.md"))
-	for _, w := range []string{`thread: "[[demo/threads/` + r.ID + `/` + r.ID + `|` + r.ID + `]]"`, `task: "[[demo/tasks/T4|T4]]"`} {
+	for _, w := range []string{`thread: "[[demo/threads/` + r.ID + `/` + r.ID + `|` + r.ID + `]]"`, `task: "[[demo/tasks/T4|T4]]"`, `tm: "owned"`, "tags:\n  - \"needs-you\""} {
 		if !strings.Contains(string(data), w) {
 			t.Errorf("no %s in\n%s", w, data)
 		}

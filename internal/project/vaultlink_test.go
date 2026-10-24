@@ -28,9 +28,10 @@ func TestItemLinks(t *testing.T) {
 	}{
 		{"t-0001", "T3 Fix it (t-0001) reported", []string{`subject: "[[demo/threads/t-0001/t-0001|t-0001]]"`}},
 		{"T3", "T3 Fix it (t-0002) done", []string{`subject: "[[demo/tasks/T3|T3]]"`, `thread: "[[demo/threads/t-0002/t-0002|t-0002]]"`}},
-		{"config.toml", "plain", []string{`subject: "config.toml"`}},
+		{"config.toml", "plain", []string{`subject: "config.toml"`, `tm: "owned"`, "cssclasses:\n  - \"tm-owned\""}},
+		{"T9", "needs you", []string{"tags:\n  - \"needs-you\""}},
 	} {
-		it, err := p.AddItem("k", c.subject, c.summary, false)
+		it, err := p.AddItem("k", c.subject, c.summary, c.subject == "T9")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -39,6 +40,9 @@ func TestItemLinks(t *testing.T) {
 			if !strings.Contains(string(data), w) {
 				t.Errorf("%s: no %s in\n%s", c.subject, w, data)
 			}
+		}
+		if c.subject != "T9" && strings.Contains(string(data), "needs-you") {
+			t.Errorf("tagged needs-you:\n%s", data)
 		}
 		if c.subject == "t-0001" && strings.Contains(string(data), "thread:") {
 			t.Errorf("thread repeats the subject:\n%s", data)

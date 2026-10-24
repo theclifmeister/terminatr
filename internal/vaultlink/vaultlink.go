@@ -119,6 +119,20 @@ func Link(slug string, k Kind, id, alias string) string {
 	return "[[" + t + "|" + alias + "]]"
 }
 
+// Owned are the vault's properties of a file only tm writes: tm
+// "owned", its CSS class, and the needs-you tag when it waits for the
+// human (docs/SPEC.md §5.1, Vault). They are none until links are
+// written (mdfile.WritesYAML).
+func Owned(needsYou bool) (tm string, tags, cssclasses []string) {
+	if !mdfile.WritesYAML() {
+		return "", nil, nil
+	}
+	if needsYou {
+		tags = []string{"needs-you"}
+	}
+	return "owned", tags, []string{"tm-owned"}
+}
+
 // Ref links s when it is a task ref or a thread id of project slug, and
 // is s unchanged otherwise.
 func Ref(slug, s string) string {
