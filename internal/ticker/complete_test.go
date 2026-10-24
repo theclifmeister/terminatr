@@ -183,3 +183,41 @@ func TestCompleteTasksResolvedNoMergeCommit(t *testing.T) {
 		t.Fatalf("asked about #12 %d times", asked)
 	}
 }
+
+// TestReportPRLineOfAnotherBranch (T728): a report's PR line naming a
+// merged PR of another branch (a guess at release-please's) is not the
+// thread's PR: the branch's open PR is followed, the task stays in
+// review, and the line is asked about once.
+func TestReportPRLineOfAnotherBranch(t *testing.T) {
+	r := newRig(t)
+	r.setConfig("[projects.demo]\ncomplete_tasks = \"merged\"\n")
+	r.addTask("Fix it", "review", "t-0001", "")
+	if _, err := thread.StoreReport(r.p, "t-0001", "PR: https://github.com/o/r/pull/776\n## Report\nDone.\n## Next\n- Merge it\n", nil, r.now); err != nil {
+		t.Fatal(err)
+	}
+	guessed := 0
+	r.ghFor = func(target string) string {
+		switch target {
+		case "https://github.com/o/r/pull/776":
+			guessed++
+			return `{"number":776,"url":"https://github.com/o/r/pull/776","state":"MERGED","mergedAt":"2026-10-04T11:00:00Z","headRefName":"formula-0.51.0","statusCheckRollup":[]}`
+		case "tm/demo/t-0001-fix-it":
+			return `{"number":777,"url":"https://github.com/o/r/pull/777","state":"OPEN","headRefName":"tm/demo/t-0001-fix-it","statusCheckRollup":[{"status":"IN_PROGRESS","conclusion":""}]}`
+		}
+		return ""
+	}
+	r.sweep(0)
+	r.sweep(2 * time.Minute)
+	if s := Summaries(r.tk.o.State, "demo")["t-0001"]; s != "#777 open, checks pending" {
+		t.Fatalf("PR %q:\n%s", s, r.journal())
+	}
+	if k := r.kinds(); strings.Contains(k, KindPRMerged) || strings.Contains(k, KindTaskDone) {
+		t.Fatalf("kinds %s", k)
+	}
+	if st := r.status(1); st != tasks.Review {
+		t.Fatalf("task %s", st)
+	}
+	if guessed != 1 {
+		t.Fatalf("asked about the report's PR %d times", guessed)
+	}
+}

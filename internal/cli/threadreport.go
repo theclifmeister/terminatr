@@ -130,6 +130,10 @@ func runReport(e *Env, args []string) error {
 		return err
 	}
 	summary := fmt.Sprintf("%s handed in report %d", thread.Label(p, r.ID), n)
+	ignored := foreignPR(p, r)
+	if ignored != "" {
+		summary += "; " + ignored
+	}
 	if _, err := p.AddItem("report", r.ID, summary, false); err != nil {
 		return err
 	}
@@ -137,10 +141,29 @@ func runReport(e *Env, args []string) error {
 		return err
 	}
 	fmt.Fprintf(e.Stdout, "stored report %d for %s\n", n, r.ID)
+	if ignored != "" {
+		fmt.Fprintln(e.Stdout, shown("Report: "+ignored+"; put a PR: line only for a PR of your branch that exists"))
+	}
 	for _, w := range warn {
 		fmt.Fprintln(e.Stdout, shown(w))
 	}
 	return nil
+}
+
+// foreignPR says when the stored report's PR line names a PR of another
+// branch than the thread's (T728), which tm ignores: it follows the
+// branch's PR. "" when the line names the thread's PR, or the host
+// can't tell.
+func foreignPR(p *project.Project, r *thread.Record) string {
+	rep, _ := thread.ReadReport(p, r.ID)
+	if rep == nil || rep.PR == "" || r.Repo == "" || r.Branch == "" {
+		return ""
+	}
+	_, n, head := pickHost(r.Repo, p.CodeHost()).PRHead(r.Repo, rep.PR)
+	if head == "" || head == r.Branch {
+		return ""
+	}
+	return fmt.Sprintf("its PR: line names PR #%d, of branch %s, not of the thread's branch %s: ignored", n, head, r.Branch)
 }
 
 const statusUsage = `usage: tm status --percent N --activity "…" [--needs-you "question"]

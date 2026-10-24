@@ -18,8 +18,10 @@
   don't open the pull request: the coordinator does, from your report.
   Put the PR's title and body in the report (the first lines of `##
   Report`, or an attached file: `tm report --attach FILE`). Later
-  pushes to a PR that is already open need nothing more. Put the PR's
-  URL on the report's `PR:` line only when a PR exists. Completing or
+  pushes to a PR that is already open need nothing more. Put a URL on
+  the report's `PR:` line only for your branch's PR once it exists,
+  copied from the host (`gh pr view`): never a guessed one; tm ignores a
+  PR of another branch. Completing or
   merging it is not yours (`merge = "coordinator"`): the guard refuses
   it, on either host.
 - Work that makes no pull request (research, a review, notes, a data
@@ -46,7 +48,7 @@ Only through tm:
 - `tm status --needs-you "question"` when blocked on the human; `tm
   status --percent N --activity "…"` only with neither steps nor todos;
 - `tm report` (stdin or `--file`) whenever you finish or stop to wait:
-  an optional `PR: <url>` first line (a PR that exists), `## Report` (say what you assumed,
+  an optional `PR: <url>` first line (your branch's PR, never a guess), `## Report` (say what you assumed,
   and name any repository outside the project's repos you used or
   changed), a required `## Next` (one imperative action per line, at
   most 100 characters), an optional `## Check` (how the user can see the

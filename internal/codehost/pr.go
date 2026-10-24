@@ -1,6 +1,7 @@
 package codehost
 
 import (
+	"errors"
 	"strconv"
 	"strings"
 	"time"
@@ -32,6 +33,28 @@ type PR struct {
 	// Branch is the branch it comes from, of the repo itself: "" for a
 	// PR from a fork, or when the host doesn't say.
 	Branch string `json:"branch,omitempty"`
+}
+
+// ThreadPR is the PR of a thread's branch in repo: the one its report's
+// PR line (reportURL) names when that PR comes from the branch, else
+// the branch's own (T728). other is the PR the line named when it is of
+// another branch, which is ignored: a guessed line, say, naming
+// a release PR that merged, must not pass for the thread's.
+func ThreadPR(h Host, repo, reportURL, branch string) (pr, other PR, err error) {
+	pr, err = h.PR(repo, Ref{URL: reportURL, Branch: branch})
+	if reportURL == "" || branch == "" {
+		return pr, PR{}, err
+	}
+	switch {
+	case err == nil && pr.Branch == branch:
+		return pr, PR{}, nil
+	case err == nil:
+		other = pr
+	case !errors.Is(err, ErrNoPR):
+		return PR{}, PR{}, err
+	}
+	pr, err = h.PR(repo, Ref{Branch: branch})
+	return pr, other, err
 }
 
 // Ref is how items and prompts name a PR: "PR #12".
