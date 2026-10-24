@@ -398,6 +398,14 @@ type PeerSource interface {
 	// serves none, ErrPanesOff while its pane switch for this server is
 	// off. The human's.
 	PeerPopup(alias, slug string) (proto.PeerPopup, error)
+	// AskShare asks the paired server alias's user to share a project
+	// with this server, for project forSlug here ("" for none in
+	// particular), with an optional one-line note (peer.share-ask,
+	// §16.9); AnswerShare answers request id from one: accepting shares
+	// project slug here, declining shares nothing (peer.share-answer).
+	// A refusal is its words. The human's.
+	AskShare(alias, forSlug, note string) (proto.ShareRequest, error)
+	AnswerShare(id string, accept bool, slug string) (proto.ShareRequest, error)
 }
 
 // ModSource installs, updates and runs mods (the Mods tab).

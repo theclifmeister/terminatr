@@ -95,7 +95,7 @@
 │                                                                               │                                                              │
 │                                                                               │                                                              │
 │                                                                                                                                              │
-│ E name · V panes · U update relay · X unpair · enter fold · tab details · P pair · J join · ? keys · esc close                               │
+│ S ask to share · E name · V panes · U update relay · X unpair · enter fold · tab details · P pair · J join · ? keys · esc close              │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 == t:mini/acme-api
 ╭─ Network · studio + 2 paired ────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮

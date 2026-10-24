@@ -158,7 +158,7 @@ func (nv *networkView) linkRows(m *dash, slug string) []netRow {
 }
 
 // isNeed says whether the cursor's ! stops on r.
-func (r netRow) isNeed() bool { return r.kind == netNeed }
+func (r netRow) isNeed() bool { return r.kind == netNeed || r.kind == netShareReq }
 
 // The direction, ask and files of a link in words.
 var (

@@ -290,3 +290,32 @@ func pairWords(err error, relayURL string) error {
 	}
 	return err
 }
+
+func (s *ServerSource) AskShare(alias, forSlug, note string) (proto.ShareRequest, error) {
+	var r proto.ShareRequest
+	if s.Caller.IsAgent() {
+		return r, errHumanOnly
+	}
+	err := s.call(proto.MethodPeerShareAsk, proto.PeerShareAskParams{Alias: alias, For: forSlug, Note: note}, &r)
+	return r, refusalWords(err)
+}
+
+func (s *ServerSource) AnswerShare(id string, accept bool, slug string) (proto.ShareRequest, error) {
+	var r proto.ShareRequest
+	if s.Caller.IsAgent() {
+		return r, errHumanOnly
+	}
+	defer s.touch()
+	err := s.call(proto.MethodPeerShareAnswer, proto.PeerShareAnswerParams{ID: id, Accept: accept, Project: slug}, &r)
+	return r, refusalWords(err)
+}
+
+// refusalWords is a method's refusal as its words, without its code: the
+// server's message says it in full.
+func refusalWords(err error) error {
+	var pe *proto.Error
+	if errors.As(err, &pe) && pe.Message != "" {
+		return errors.New(pe.Message)
+	}
+	return err
+}

@@ -85,6 +85,8 @@ func (nv *networkView) panelLines(m *dash, r netRow, ok bool, w int) []panelLine
 	switch r.kind {
 	case netLink, netNeed:
 		out = nv.linkPanel(m, r, w)
+	case netAsked, netShareReq:
+		out = nv.sharePanel(r, w)
 	case netServer:
 		if r.peer < 0 {
 			add(itemNone, th().Head.Render(thisHost())+th().Faint.Render(" · this server"), rule)
@@ -165,7 +167,7 @@ func (nv *networkView) panelLines(m *dash, r netRow, ok bool, w int) []panelLine
 		for _, l := range wrapLines(theirWords(mirror(m, e), name), max(w-2, 8)) {
 			add(itemNone, "  "+l)
 		}
-		theirs := th().Faint.Render("nothing yet")
+		theirs := th().Faint.Render("nothing yet · S asks its user")
 		if pm := mirror(m, e); pm != nil && len(pm.Projects) > 0 {
 			var s []string
 			for _, p := range pm.Projects {

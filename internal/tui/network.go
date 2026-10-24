@@ -27,8 +27,9 @@ import (
 //   - on a paired server, E sets its display name (tm peer name), V moves
 //     its pane switch along off · view · write (tm peer panes; more asks
 //     first), U asks its relay to update itself (peerrelay.go), X unpairs
-//     it after asking (tm peer remove); its relay is set from the
-//     panel's relay row (tm peer relay);
+//     it after asking (tm peer remove), S asks its user to share a
+//     project (networkshare.go, tm peer ask-share); its relay is set
+//     from the panel's relay row (tm peer relay);
 //   - space on a project here shares it with every paired server, asking
 //     first, or stops sharing it at once (its Shared with paired servers
 //     setting).
@@ -185,6 +186,11 @@ func (nv *networkView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 			return cmd
 		}
 	}
+	if r.kind == netAsked || r.kind == netShareReq {
+		if cmd, done := nv.shareKey(m, r, s); done {
+			return cmd
+		}
+	}
 	switch {
 	case s == "tab":
 		if len(panelItems(nv.panelLines(m, r, ok, 40))) > 0 {
@@ -219,6 +225,8 @@ func (nv *networkView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	case r.kind == netServer && r.peer >= 0:
 		e := nv.list.Peers[r.peer]
 		switch s {
+		case "S":
+			nv.askShare(m, e)
 		case "E":
 			nv.name(m, e)
 		case "V":
@@ -621,9 +629,9 @@ var netKeys = []keyHelp{
 	{"enter", "fold; on a link its dialog, on theirs its dashboard, on a ⚑ read it"},
 	{"space L", "share a project of yours (asking first) / link it with another"},
 	{"K F R M X", "on a link: ask first, files, resume or ask back, write, unlink"},
-	{"A X", "on a ⚑: send or accept / drop or decline"},
+	{"A X", "on a ⚑: send, accept or choose / drop or decline"},
 	{"P J", "pair with another server / join the code one shows"},
-	{"E V U X", "a paired server's name, panes, relay update, unpair"},
+	{"S E V U X", "a paired server: ask to share, name, panes, relay update, unpair"},
 	{"tab", "the keyboard to the details: enter edits, ← → switch"},
 	{"! esc", "the next ⚑ that needs you / close"},
 }
