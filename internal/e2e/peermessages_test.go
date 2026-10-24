@@ -22,7 +22,7 @@ var peerMessageMasks = append([]Mask{
 	{Name: "age", Re: regexp.MustCompile(`\b\d+[smhd]\b`)},
 	{Name: "date", Re: regexp.MustCompile(`[A-Z][a-z]{2} [A-Z][a-z]{2} \d{1,2} \d{4} \d\d:\d\d`)},
 	{Name: "time", Re: regexp.MustCompile(`[A-Z][a-z]{2} \d{1,2} \d\d:\d\d`)},
-	{Name: "server", Re: regexp.MustCompile(`◉ \S+ · this server *`)},
+	{Name: "server", Re: regexp.MustCompile(` {2}\S+ · this server *`)},
 	{Name: "since", Re: regexp.MustCompile(`◉ mini · [^│]*`)},
 	{Name: "pad", Re: regexp.MustCompile(`(?m) +│$`), Repl: " │"},
 }, popupMasks...)

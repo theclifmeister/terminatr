@@ -430,6 +430,10 @@ func rttWords(ms float64) string {
 // link's colour mark where the group starts.
 func serverCells(r treeRow, cw int, slim bool, sel lipgloss.Style) string {
 	g, gst := linkLook(r.link)
+	if r.link.local {
+		// This server isn't linked to itself: no glyph, same width.
+		g = strings.Repeat(" ", ansi.StringWidth(g))
+	}
 	if slim {
 		line := g + " " + strings.Repeat("─", max(cw-4, 0))
 		if r.here {
