@@ -1,6 +1,6 @@
 mini's coordinator (width 40)
 │ mini
-│ ◉ linked 38 ms · synced 2s ago
+│ ◉ connected 38 ms · synced 2s ago
 │
 │ acme-api
 │ coordinator ● working · opus
@@ -25,7 +25,7 @@ mini's coordinator (width 40)
 
 mini's thread (width 40)
 │ mini
-│ ◉ linked 38 ms · synced 2s ago
+│ ◉ connected 38 ms · synced 2s ago
 │
 │ T7 Billing export
 │ ● started
@@ -47,7 +47,7 @@ mini's thread (width 40)
 
 mini's thread, view-only (width 40)
 │ mini
-│ ◉ linked 38 ms · synced 2s ago
+│ ◉ connected 38 ms · synced 2s ago
 │
 │ T7 Billing export
 │ ● started
@@ -82,8 +82,8 @@ nas's thread, offline (width 40)
 
 a long server name (width 30)
 │ runnervm-6qbd8-ubuntu-24-04-…
-│ ◉ linked 38 ms · synced 2s
-│   ago
+│ ◉ connected 38 ms · synced
+│   2s ago
 │
 │ T7 Billing export
 │ ● started
@@ -106,7 +106,7 @@ a long server name (width 30)
 
 not shared any more (width 40)
 │ mini
-│ ◉ linked 38 ms
+│ ◉ connected 38 ms
 │
 │ mini doesn't share this project with
 │ this server any more.

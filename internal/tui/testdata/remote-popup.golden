@@ -40,7 +40,7 @@ Thread agent                claude
 Coordinator agent           claude
 Thread models               any
 Coordinator model           agent's default
-Link limits                 3 at once · 10 an hour · 8 KB · files 25 MB
+Link limits                 3 at once · 10 an hour · 8 KB · files up to 25 MB
 Keep history                30 days
 
 Access

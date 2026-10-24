@@ -1,5 +1,5 @@
 │ mini
-│ ◉ linked <rtt> · synced <duration> ago
+│ ◉ connected <rtt> · synced <duration> ago
 │
 │ Fix the login
 │ no task

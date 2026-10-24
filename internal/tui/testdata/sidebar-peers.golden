@@ -7,7 +7,7 @@ nerd, width 36, folded []
    web               0            │
  └╴󰚩  coordinator       ·          │
                                    │
-  mini · 38 ms                    │
+  mini · connected 38 ms          │
    acme-api          1           │
  └╴󰚩  coordinator   22%           │
     └╴  T41 Bill… 100%          │
@@ -94,7 +94,7 @@ unicode, width 36, folded []
  ■ web                0            │
  └─ coordinator         ·          │
                                    │
- ◉ mini · 38 ms                    │
+ ◉ mini · connected 38 ms          │
  ■ acme-api           1         ⚑  │
  └─ coordinator     22% ●          │
     └─ T41 Billing 100% ◆       ⚑  │
@@ -181,7 +181,7 @@ ascii, width 36, folded []
  + web                0            │
  `- coordinator         .          │
                                    │
- O mini · 38 ms                    │
+ O mini · connected 38 ms          │
  + acme-api           1         ?  │
  `- coordinator     22% *          │
     `- T41 Billing 100% #       ?  │

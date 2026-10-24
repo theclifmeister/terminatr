@@ -17,7 +17,7 @@ import (
 // info panel: the link's last ping (how long ago the mirror read the
 // project is a duration, DefaultMasks').
 var remotePanelMasks = []Mask{
-	{Name: "rtt", Re: regexp.MustCompile(`linked (<1|\d+) ms`), Repl: "linked <rtt>"},
+	{Name: "rtt", Re: regexp.MustCompile(`connected (<1|\d+) ms`), Repl: "connected <rtt>"},
 }
 
 // infoPanelScreen is the info panel of window w at the default layout:

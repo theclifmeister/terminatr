@@ -397,3 +397,22 @@ func TestLinkedProjectsSummary(t *testing.T) {
 		t.Fatalf("esc: %T", m.top())
 	}
 }
+
+// TestFilePlain: a file's state names its link's files setting in the
+// screen's plain words; the config and the CLI keep ask, auto and off.
+func TestFilePlain(t *testing.T) {
+	for _, c := range []struct {
+		t    link.Transfer
+		want string
+	}{
+		{link.Transfer{State: link.FileOffered}, "offered · waits for you (files: ask me)"},
+		{link.Transfer{State: link.FileAccepted, Auto: true}, "accepted (files: take them)"},
+		{link.Transfer{State: link.FileUndelivered, Code: "files-off", Out: true}, "undelivered (files: refuse)"},
+		{link.Transfer{State: link.FileUndelivered, Code: "too-big", Out: true}, "undelivered: too-big"},
+		{link.Transfer{State: link.FileAccepted}, "accepted"},
+	} {
+		if got := filePlain(c.t); got != c.want {
+			t.Errorf("%+v: %q, want %q", c.t, got, c.want)
+		}
+	}
+}
