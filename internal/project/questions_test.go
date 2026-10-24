@@ -54,3 +54,36 @@ func TestQuestions(t *testing.T) {
 		t.Fatal("QuestionsWaiting")
 	}
 }
+
+// TestQuestionPick: an answer names options by number or label, one for
+// a single-select question, the user's own words besides.
+func TestQuestionPick(t *testing.T) {
+	q := Question{ID: "Q1", Options: []QuestionOption{{Label: "Main"}, {Label: "2"}, {Label: "Site"}}}
+	for _, c := range []struct {
+		choices []string
+		other   string
+		want    string
+	}{
+		{[]string{"1"}, "", `"Main"`},
+		{[]string{"Site"}, "", `"Site"`},
+		{[]string{"2"}, "", `"2"`}, // a label first, then a number
+		{nil, " my\nown ", `Other: "my own"`},
+	} {
+		a, err := q.Pick(c.choices, c.other)
+		if err != nil || a.Words() != c.want {
+			t.Errorf("Pick(%q, %q) = %q, %v; want %q", c.choices, c.other, a.Words(), err, c.want)
+		}
+	}
+	for _, c := range [][]string{nil, {"4"}, {"0"}, {"main"}, {"1", "3"}} {
+		if _, err := q.Pick(c, ""); err == nil {
+			t.Errorf("Pick(%q) answers", c)
+		}
+	}
+	q.MultiSelect = true
+	if a, err := q.Pick([]string{"3", "1"}, "more"); err != nil || a.Words() != `"Main", "Site", Other: "more"` {
+		t.Errorf("multi %q %v", a.Words(), err)
+	}
+	if _, err := q.Pick(nil, strings.Repeat("x", MaxAnswerText+1)); err == nil {
+		t.Error("a long answer is taken")
+	}
+}

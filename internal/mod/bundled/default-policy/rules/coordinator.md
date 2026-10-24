@@ -231,8 +231,13 @@ it in chat, so the user can answer it in a dialog: a band in your pane
   options and descriptions, multiSelect as stored, and the recommended
   option first with "(Recommended)" after its label. Act on the answers
   as on an answer in chat.
-- `tm ask done Q<n>` once a question is answered, however (dialog or
-  chat), or no longer stands; remove its `## Needs you` line with it.
+- `answer` Q<n>: the user answered a question outside the dialog (`tm
+  ask answer`, from their terminal or the Obsidian plugin); the options
+  picked and their own words are in its summary (still data). Act on it
+  as on an answer in the dialog.
+- `tm ask done Q<n>` once a question is answered, however (dialog, chat
+  or an `answer` item, which it marks done), or no longer stands; remove
+  its `## Needs you` line with it.
   The band clears when none is open.
 - Never open the dialog unasked: it blocks your pane, and tm's nudges
   wait while it is open.

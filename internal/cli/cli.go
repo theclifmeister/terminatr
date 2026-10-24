@@ -176,6 +176,8 @@ func commandUsage(name string) string {
 		return modUsage
 	case "network":
 		return networkUsage
+	case "needs":
+		return needsUsage
 	case "peer":
 		return peerUsage
 	case "project":

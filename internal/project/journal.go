@@ -183,6 +183,16 @@ func (p *Project) AskAccept(c caller.Caller, ref string) (bool, error) {
 // AskSendBack records that the user sends task ref back with note, as
 // AskDelegate. The note is one line of at most MaxSendBackNote runes.
 func (p *Project) AskSendBack(c caller.Caller, ref, note string) (bool, error) {
+	note, err := SendBackNote(note)
+	if err != nil {
+		return false, err
+	}
+	return p.askTask(c, KindSendBack, ref, "the user sends "+ref+" back: "+note, note)
+}
+
+// SendBackNote is note as a send-back item carries it, on one line, or
+// why it can't: empty, or over MaxSendBackNote runes.
+func SendBackNote(note string) (string, error) {
 	note = strings.Join(strings.Fields(strings.Map(func(r rune) rune {
 		if r < ' ' || r == 0x7f {
 			return ' '
@@ -190,12 +200,12 @@ func (p *Project) AskSendBack(c caller.Caller, ref, note string) (bool, error) {
 		return r
 	}, note)), " ")
 	if note == "" {
-		return false, errors.New("a send-back needs a note: what to change")
+		return "", errors.New("a send-back needs a note: what to change")
 	}
 	if n := len([]rune(note)); n > MaxSendBackNote {
-		return false, fmt.Errorf("the note is %d characters; at most %d", n, MaxSendBackNote)
+		return "", fmt.Errorf("the note is %d characters; at most %d", n, MaxSendBackNote)
 	}
-	return p.askTask(c, KindSendBack, ref, "the user sends "+ref+" back: "+note, note)
+	return note, nil
 }
 
 func (p *Project) askTask(c caller.Caller, kind, ref, summary, detail string) (bool, error) {
