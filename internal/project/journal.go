@@ -66,6 +66,11 @@ type Item struct {
 	// Thread is the thread a labelled summary names (thread.Label),
 	// when the subject is another: "" when it is the subject or none.
 	Thread string `toml:"thread,omitempty" yaml:"thread,omitempty" json:"thread,omitempty"`
+	// Vault, Tags and CSSClasses are the vault's properties (docs/SPEC.md
+	// §5.1, Vault): the file only, written by linkedItem.
+	Vault      string   `toml:"tm,omitempty" yaml:"tm,omitempty" json:"-"`
+	Tags       []string `toml:"tags,omitempty" yaml:"tags,omitempty" json:"-"`
+	CSSClasses []string `toml:"cssclasses,omitempty" yaml:"cssclasses,omitempty" json:"-"`
 }
 
 // AddItem writes inbox/<ts>-<kind>-<subject>.md.
@@ -107,7 +112,8 @@ func (p *Project) AddMessageItem(kind, subject, summary string, needsUser bool, 
 
 // linkedItem is it as its file keeps it, with links (vaultlink): a
 // subject that is a task or a thread, or the other project of a message
-// item, the thread, and the message a message item is about.
+// item, the thread, and the message a message item is about; and the
+// vault's properties (vaultlink.Owned).
 func (p *Project) linkedItem(it *Item) *Item {
 	f := *it
 	f.Subject = vaultlink.Ref(p.Slug, it.Subject)
@@ -118,6 +124,7 @@ func (p *Project) linkedItem(it *Item) *Item {
 			f.Message = vaultlink.Link(p.Slug, vaultlink.Message, it.Subject+"/"+it.Message, it.Message)
 		}
 	}
+	f.Vault, f.Tags, f.CSSClasses = vaultlink.Owned(it.NeedsUser)
 	return &f
 }
 

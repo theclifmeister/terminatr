@@ -23,6 +23,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/thread"
+	"github.com/theclifmeister/terminatr/internal/vault"
 	"github.com/theclifmeister/terminatr/internal/worktree"
 )
 
@@ -265,6 +266,9 @@ type projectMemo struct {
 	Clear *clearMemo `json:"clear,omitempty"`
 	// Upkeep is the clear an upkeep prompt may follow (clear.go).
 	Upkeep *upkeepMemo `json:"upkeep,omitempty"`
+	// vaultStamp is what the derived notes were last rendered from
+	// (vault.Stamp).
+	vaultStamp string
 }
 
 // repoMemo is a repo's checkout as the last sync left it, and the PR
@@ -551,6 +555,25 @@ func (t *Ticker) sweepProject(slug string, cfg *config.Config, sessions []proto.
 	if prune {
 		t.upkeep(p, safety, now)
 	}
+	t.renderVault(p)
+}
+
+// renderVault renders p's derived notes when the vault is on and what
+// they come from changed since the last time (docs/SPEC.md §5.1, Vault).
+func (t *Ticker) renderVault(p *project.Project) {
+	if !vault.On() {
+		return
+	}
+	pm := t.projectMemo(p.Slug)
+	stamp := vault.Stamp(p)
+	if stamp == pm.vaultStamp {
+		return
+	}
+	if _, _, err := vault.Render(p); err != nil {
+		t.o.Log.Printf("ticker: vault %s: %v", p.Slug, err)
+		return // tried again next sweep
+	}
+	pm.vaultStamp = stamp
 }
 
 // lockProjects takes the locks of the projects slugs, in order, and

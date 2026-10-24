@@ -131,3 +131,23 @@ func TestEach(t *testing.T) {
 		t.Errorf("got %q", got)
 	}
 }
+
+// TestText (T718): ids in a derived note's text are linked, but not in
+// code, links or URLs, as part of another word, or after a "!".
+func TestText(t *testing.T) {
+	on(t)
+	for _, c := range []struct{ in, want string }{
+		{"T1 and t-0002.", "[[d/tasks/T1|T1]] and [[d/threads/t-0002/t-0002|t-0002]]."},
+		{"`T1` ``a T1`` [[x/T1|T1]] [T1](https://x.y/T1) https://x.y/T1", "`T1` ``a T1`` [[x/T1|T1]] [T1](https://x.y/T1) https://x.y/T1"},
+		{"T12a xT1 a/T1 #T1 !T1 T01 T1:", "T12a xT1 a/T1 #T1 !T1 T01 [[d/tasks/T1|T1]]:"},
+		{"```\nT1\n```\n- T2", "```\nT1\n```\n- [[d/tasks/T2|T2]]"},
+	} {
+		if got := Text("d", c.in); got != c.want {
+			t.Errorf("Text(%q)\n got %q\nwant %q", c.in, got, c.want)
+		}
+	}
+	mdfile.WriteYAML(false)
+	if got := Text("d", "T1"); got != "T1" {
+		t.Errorf("without links: %q", got)
+	}
+}

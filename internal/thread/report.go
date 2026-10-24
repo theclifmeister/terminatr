@@ -266,7 +266,9 @@ func StoreReportFrom(p *project.Project, id, text string, attach []string, open 
 				return err
 			}
 		}
-		if err := fsx.WriteAtomic(Path(p, id, "REPORT.md"), []byte(strings.TrimSpace(strings.ReplaceAll(text, "\r\n", "\n"))+"\n"), 0o644); err != nil {
+		// Stored through the vault guard: opening it in Obsidian fetches
+		// nothing and runs nothing (textsafe.Vault).
+		if err := fsx.WriteAtomic(Path(p, id, "REPORT.md"), []byte(textsafe.Vault(strings.TrimSpace(strings.ReplaceAll(text, "\r\n", "\n")))+"\n"), 0o644); err != nil {
 			return err
 		}
 		for i, a := range attach {

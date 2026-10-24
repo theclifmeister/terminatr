@@ -114,7 +114,7 @@ func TestPeerPopupAllowlist(t *testing.T) {
 	if b, _ := json.Marshal(pt2); strings.Count(string(b), "SECRET") != 4 { // title, thread, created, updated
 		t.Errorf("a task's other words crossed: %s", b)
 	}
-	if want := []string{"Archived", "Created", "ID", "Notes", "Owner", "Repo", "Status", "Steps", "Thread", "Title", "Updated"}; !slices.Equal(fieldNames(reflect.TypeFor[tasks.Task]()), want) {
+	if want := []string{"After", "Archived", "Created", "Design", "ID", "Notes", "Owner", "Repo", "Status", "Steps", "Thread", "Title", "Updated"}; !slices.Equal(fieldNames(reflect.TypeFor[tasks.Task]()), want) {
 		t.Errorf("tasks.Task has %v: decide what of a new field a paired server sees (peerTaskOf)", fieldNames(reflect.TypeFor[tasks.Task]()))
 	}
 
@@ -124,7 +124,7 @@ func TestPeerPopupAllowlist(t *testing.T) {
 	if z := zeroFields(reflect.ValueOf(pm)); len(z) > 0 {
 		t.Errorf("message fields not copied: %v", z)
 	}
-	if want := []string{"Attachments", "By", "Bytes", "Created", "Due", "File", "FileSize", "ID", "Out", "Peer", "Re", "Refused", "Sender", "State", "Text", "Transfer"}; !slices.Equal(fieldNames(reflect.TypeFor[link.Message]()), want) {
+	if want := []string{"Attachments", "By", "Bytes", "CSSClasses", "Created", "Due", "File", "FileSize", "ID", "Out", "Peer", "Re", "Refused", "Sender", "State", "Tags", "Text", "Transfer", "Vault"}; !slices.Equal(fieldNames(reflect.TypeFor[link.Message]()), want) {
 		t.Errorf("link.Message has %v: decide what of a new field a paired server sees (peerMessageOf)", fieldNames(reflect.TypeFor[link.Message]()))
 	}
 }

@@ -2,6 +2,8 @@ package tasks
 
 import (
 	"errors"
+	"os"
+	"slices"
 	"strings"
 	"testing"
 
@@ -207,5 +209,59 @@ func TestThreadLink(t *testing.T) {
 	b.Slug = "demo"
 	if got := string(b.RenderArchive()); !strings.Contains(got, "thread: [[demo/threads/t-0002/t-0002|t-0002]]") {
 		t.Fatalf("archive has no thread link:\n%s", got)
+	}
+}
+
+// TestDesignAfter: a task's design and the tasks it comes after are
+// linked on its metadata line and read back as the name and ids.
+func TestDesignAfter(t *testing.T) {
+	yamlOn(t)
+	s, ev := newStore(t)
+	mustAdd(t, s, coord, NewTask{Title: "A"}, NewTask{Title: "B"}, NewTask{Title: "C"})
+	design := "network-view"
+	if res, err := s.SetPlan(coord, 3, &design, []string{"T2, t1", "T2"}); err != nil || !res.Changed {
+		t.Fatalf("%v %v", res, err)
+	}
+	if res, _ := s.SetPlan(coord, 3, &design, []string{"T1 T2"}); res.Changed {
+		t.Fatal("plan not idempotent")
+	}
+	data, _ := os.ReadFile(s.TasksPath())
+	const want = "design: [[demo/designs/network-view|network-view]] · after: [[demo/tasks/T1|T1]], [[demo/tasks/T2|T2]] · "
+	if !strings.Contains(string(data), want) {
+		t.Fatalf("no plan links:\n%s", data)
+	}
+	tk, _ := s.Get(3)
+	if tk.Design != "network-view" || !slices.Equal(tk.After, []int{1, 2}) {
+		t.Fatalf("%+v", tk)
+	}
+	for _, c := range []struct {
+		design string
+		after  []string
+		code   string
+	}{
+		{"../x", nil, "invalid-design"},
+		{"a b", nil, "invalid-design"},
+		{"", []string{"T3"}, "invalid-after"},
+		{"", []string{"T2,x"}, "invalid-after"},
+	} {
+		if _, err := s.SetPlan(coord, 3, &c.design, c.after); code(err) != c.code {
+			t.Errorf("%q %q: %v, want %s", c.design, c.after, err, c.code)
+		}
+	}
+	if _, err := s.SetPlan(thread, 3, nil, []string{""}); code(err) != "coordinator-only" {
+		t.Fatalf("thread plan: %v", err)
+	}
+	empty := ""
+	if _, err := s.SetPlan(coord, 3, &empty, []string{""}); err != nil {
+		t.Fatal(err)
+	}
+	if tk, _ := s.Get(3); tk.Design != "" || tk.After != nil {
+		t.Fatalf("not cleared: %+v", tk)
+	}
+	if !strings.Contains(strings.Join(ev.journal, "\n"), "task.edit T3") {
+		t.Fatalf("journal %v", ev.journal)
+	}
+	if _, err := Parse([]byte("# Tasks\n\n### T1 A\nstatus: open · after: T1\n")); err == nil {
+		t.Fatal("a task after itself read")
 	}
 }

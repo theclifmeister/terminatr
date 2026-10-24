@@ -106,6 +106,13 @@ type Message struct {
 	// Sender links the project that sent it (vaultlink), as the file
 	// keeps it; read back, it is "" (From says it).
 	Sender string `toml:"from,omitempty" yaml:"from,omitempty" json:"-"`
+	// Vault, Tags and CSSClasses mark the file as data in the vault
+	// (docs/SPEC.md §5.1, Vault): "data", "from-link" or "from-peer" on
+	// one received, and "tm-data"; the file only, as Sender. With Vault
+	// "data" the body is the text fenced (fenceText).
+	Vault      string   `toml:"tm,omitempty" yaml:"tm,omitempty" json:"-"`
+	Tags       []string `toml:"tags,omitempty" yaml:"tags,omitempty" json:"-"`
+	CSSClasses []string `toml:"cssclasses,omitempty" yaml:"cssclasses,omitempty" json:"-"`
 	// Peer is the other project (the folder's name), Text the message;
 	// neither is in the front matter.
 	Peer string `toml:"-" yaml:"-" json:"peer"`
@@ -169,24 +176,78 @@ func write(p *project.Project, m *Message) error {
 	if err := os.MkdirAll(dir(p, m.Peer), 0o755); err != nil {
 		return err
 	}
-	return mdfile.Write(path(p, m.Peer, m.ID), linked(p, m), []byte(m.Text+"\n"))
+	f := linked(p, m)
+	return mdfile.Write(path(p, m.Peer, m.ID), f, fileBody(f, m.Text))
 }
 
 // linked is m as its file in p's folder keeps it: the message it
 // answers and the project that sent it as links (vaultlink, docs/SPEC.md
-// §7.9), so a conversation threads in the vault's backlinks.
+// §7.9), so a conversation threads in the vault's backlinks, and marked
+// as data, its text fenced (fileBody). Both only once front matter is
+// YAML, which a tm that reads them reads.
 func linked(p *project.Project, m *Message) *Message {
 	f := *m
 	if ValidID(m.Re) {
 		f.Re = vaultlink.Link(p.Slug, vaultlink.Message, m.Peer+"/"+m.Re, m.Re)
 	}
 	f.Sender = vaultlink.Link(p.Slug, vaultlink.Project, m.From(p.Slug), "")
+	f.Vault, f.Tags, f.CSSClasses = "", nil, nil
+	if mdfile.WritesYAML() {
+		f.Vault, f.CSSClasses = "data", []string{"tm-data"}
+		switch _, _, remote := config.Remote(m.Peer); {
+		case m.Out:
+		case remote:
+			f.Tags = []string{"from-peer"}
+		default:
+			f.Tags = []string{"from-link"}
+		}
+	}
 	return &f
 }
 
 // unlinked reads m's links back as ids (vaultlink.Plain).
 func unlinked(m *Message) {
 	m.Re, m.Sender = vaultlink.Plain(m.Re), ""
+}
+
+// fileBody is the body of a message's file f with text: in a fence of
+// tildes longer than any run in it, so Obsidian shows it as text and
+// renders, fetches and runs nothing of it, when f is marked as data;
+// else the text as it is, as tm before the vault kept it.
+func fileBody(f *Message, text string) []byte {
+	if f.Vault != "data" {
+		return []byte(text + "\n")
+	}
+	n := 3
+	for i := 0; i < len(text); i++ {
+		if k := len(text[i:]) - len(strings.TrimLeft(text[i:], "~")); k > 0 {
+			n = max(n, k+1)
+			i += k
+		}
+	}
+	fence := strings.Repeat("~", n)
+	return []byte(fence + "text\n" + text + "\n" + fence + "\n")
+}
+
+// bodyText is the text of a message whose file m has body: unfenced
+// when the file says it is fenced (fileBody).
+func bodyText(m *Message, body []byte) string {
+	text := strings.TrimSuffix(string(body), "\n")
+	if m.Vault != "data" {
+		return text
+	}
+	first, rest, ok := strings.Cut(text, "\n")
+	fence := strings.TrimSuffix(first, "text")
+	if !ok || len(fence) < 3 || strings.Trim(fence, "~") != "" {
+		return text
+	}
+	if inner, ok := strings.CutSuffix(rest, "\n"+fence); ok {
+		return inner
+	}
+	if rest == fence { // the empty text
+		return ""
+	}
+	return text
 }
 
 func readFile(file, peer string) (*Message, error) {
@@ -196,7 +257,7 @@ func readFile(file, peer string) (*Message, error) {
 		return nil, err
 	}
 	unlinked(m)
-	m.Peer, m.Text = peer, strings.TrimSuffix(string(body), "\n")
+	m.Peer, m.Text = peer, bodyText(m, body)
 	return m, nil
 }
 
@@ -214,8 +275,10 @@ func update(p *project.Project, other, id string, fn func(m *Message)) error {
 		}
 		unlinked(m)
 		m.Peer = other
+		text := bodyText(m, body)
 		fn(m)
-		return mdfile.Join(linked(p, m), body)
+		f := linked(p, m)
+		return mdfile.Join(f, fileBody(f, text))
 	})
 }
 

@@ -64,3 +64,47 @@ func TestMessageLinks(t *testing.T) {
 		t.Fatalf("item:\n%s", data)
 	}
 }
+
+// TestMessageFenced (T718): a message's file marks it as data, and its
+// text is fenced so the vault shows it as text; it reads back whole,
+// through an update too, and a file from before reads as it was.
+func TestMessageFenced(t *testing.T) {
+	mdfile.WriteYAML(true)
+	t.Cleanup(func() { mdfile.WriteYAML(false) })
+	a, b, _ := setup(t)
+	ca := coord
+	ca.Project = "a"
+	text := "<img src=\"https://x.y/a.png\">\n~~~~~ text\n![[x]]\n```dataviewjs\nx\n```"
+	m, err := Send(ca, a, "b", Opts{Text: text})
+	if err != nil {
+		t.Fatal(err)
+	}
+	in, _ := os.ReadFile(b.Path("messages", "a", m.ID+".md"))
+	for _, w := range []string{"tm: \"data\"", "- \"from-link\"", "- \"tm-data\"", "\n~~~~~~text\n" + text + "\n~~~~~~\n"} {
+		if !strings.Contains(string(in), w) {
+			t.Errorf("received file has no %q:\n%s", w, in)
+		}
+	}
+	if out, _ := os.ReadFile(a.Path("messages", "b", m.ID+".md")); strings.Contains(string(out), "from-link") || !strings.Contains(string(out), "~~~~~~text\n") {
+		t.Errorf("sent file:\n%s", out)
+	}
+	if err := update(b, "a", m.ID, func(m *Message) { m.State = StateRead }); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := Read(b, m.ID); err != nil || got.Text != text || got.Vault != "data" {
+		t.Fatalf("%+v %v", got, err)
+	}
+	// A file tm wrote before the vault: its text as it is, fenced once
+	// it is updated.
+	old := b.Path("messages", "a", "M-99.md")
+	os.WriteFile(old, []byte("---\nid: \"M-99\"\nstate: \"new\"\n---\n~~~text\nplain\n~~~\n"), 0o644)
+	if got, err := Read(b, "M-99"); err != nil || got.Text != "~~~text\nplain\n~~~" {
+		t.Fatalf("old file: %+v %v", got, err)
+	}
+	if err := update(b, "a", "M-99", func(m *Message) { m.State = StateRead }); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := Read(b, "M-99"); got.Text != "~~~text\nplain\n~~~" {
+		t.Fatalf("old file after update: %q", got.Text)
+	}
+}

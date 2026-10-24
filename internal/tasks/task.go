@@ -2,6 +2,8 @@ package tasks
 
 import (
 	"fmt"
+	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -97,6 +99,8 @@ type Task struct {
 	Thread   string
 	Owner    string
 	Repo     string // the repo its thread works in, by name or path, or NoRepo
+	Design   string // the design it builds, by name (designs/<name>.md), or ""
+	After    []int  // the tasks it comes after, by id
 	Created  string
 	Updated  string
 	Archived bool
@@ -219,6 +223,40 @@ func checkStep(s string) (string, error) {
 		return "", refuse("invalid-step", "step text must be one line")
 	}
 	return s, nil
+}
+
+// designRE is a design's name, a file name in designs/.
+var designRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
+
+func checkDesign(s string) (string, error) {
+	s = strings.TrimSpace(s)
+	if s != "" && !designRE.MatchString(s) {
+		return "", refuse("invalid-design", fmt.Sprintf("design %q must be a name of letters, digits, '.', '_' and '-' (as designs/<name>.md)", s))
+	}
+	return s, nil
+}
+
+// checkAfter reads the tasks a task comes after: refs as "T12", split
+// by commas or spaces; an empty list clears them. They are sorted, once
+// each, and never the task itself.
+func checkAfter(id int, refs []string) ([]int, error) {
+	var out []int
+	for _, r := range refs {
+		for _, f := range strings.FieldsFunc(r, func(c rune) bool { return c == ',' || c == ' ' }) {
+			n, ok := ParseRef(f)
+			if !ok {
+				return nil, refuse("invalid-after", fmt.Sprintf("%q is not a task id (T12)", f))
+			}
+			if n == id {
+				return nil, refuse("invalid-after", fmt.Sprintf("T%d can't come after itself", id))
+			}
+			if !slices.Contains(out, n) {
+				out = append(out, n)
+			}
+		}
+	}
+	slices.Sort(out)
+	return out, nil
 }
 
 // checkLabel validates owner, repo and thread values, which live in the

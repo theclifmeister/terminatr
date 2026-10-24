@@ -154,6 +154,18 @@ func parseMeta(t *Task, line string) error {
 			t.Repo = v
 		case "thread":
 			t.Thread = vaultlink.Plain(v) // a link (vaultlink) or, as older tm wrote it, the id
+		case "design":
+			d, err := checkDesign(vaultlink.Plain(v))
+			if err != nil {
+				return fmt.Errorf("T%d: %s", t.ID, err.(*Error).Msg)
+			}
+			t.Design = d
+		case "after":
+			after, err := checkAfter(t.ID, []string{vaultlink.Plain(v)})
+			if err != nil {
+				return fmt.Errorf("T%d: after: %s", t.ID, err.(*Error).Msg)
+			}
+			t.After = after
 		case "created":
 			t.Created = v
 		case "updated":
@@ -233,11 +245,23 @@ func (b *Board) RenderArchive() []byte {
 func writeTask(w *bytes.Buffer, t *Task, slug string) {
 	fmt.Fprintf(w, "\n### %s %s\n", t.Ref(), t.Title)
 	meta := []string{"status: " + string(t.Status)}
-	thread := t.Thread
-	if thread != "" && slug != "" {
-		thread = vaultlink.Link(slug, vaultlink.Thread, thread, "")
+	thread, design := t.Thread, t.Design
+	after := make([]string, len(t.After))
+	for i, n := range t.After {
+		after[i] = "T" + strconv.Itoa(n)
 	}
-	for _, kv := range [][2]string{{"owner", t.Owner}, {"repo", t.Repo}, {"thread", thread}, {"created", t.Created}, {"updated", t.Updated}} {
+	if slug != "" {
+		if thread != "" {
+			thread = vaultlink.Link(slug, vaultlink.Thread, thread, "")
+		}
+		if design != "" {
+			design = vaultlink.Link(slug, vaultlink.Design, design, "")
+		}
+		for i, r := range after {
+			after[i] = vaultlink.Link(slug, vaultlink.Task, r, "")
+		}
+	}
+	for _, kv := range [][2]string{{"owner", t.Owner}, {"repo", t.Repo}, {"thread", thread}, {"design", design}, {"after", strings.Join(after, ", ")}, {"created", t.Created}, {"updated", t.Updated}} {
 		if kv[1] != "" {
 			meta = append(meta, kv[0]+": "+kv[1])
 		}

@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
@@ -427,6 +428,39 @@ func (s *Store) Edit(c caller.Caller, id int, title, notes, owner, repo *string)
 		}
 		if repo != nil && t.Repo != r2 {
 			t.Repo, changed = r2, true
+		}
+		return changed, nil
+	})
+	if err != nil || !res.Changed {
+		return res, err
+	}
+	return res, s.journal(c, "task.edit", res.Task, "")
+}
+
+// SetPlan sets the design a task builds and the tasks it comes after
+// (refs as "T12", split by commas or spaces); nil leaves one alone, and
+// "" or an empty list clears it.
+func (s *Store) SetPlan(c caller.Caller, id int, design *string, after []string) (Result, error) {
+	var d string
+	var a []int
+	var err error
+	if design != nil {
+		if d, err = checkDesign(*design); err != nil {
+			return Result{}, err
+		}
+	}
+	if after != nil {
+		if a, err = checkAfter(id, after); err != nil {
+			return Result{}, err
+		}
+	}
+	res, err := s.edit(c, id, opWrite, func(t *Task) (bool, error) {
+		changed := false
+		if design != nil && t.Design != d {
+			t.Design, changed = d, true
+		}
+		if after != nil && !slices.Equal(t.After, a) {
+			t.After, changed = a, true
 		}
 		return changed, nil
 	})

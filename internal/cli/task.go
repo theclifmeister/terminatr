@@ -27,7 +27,7 @@ const taskUsage = `usage: tm task <command> [--project <slug>] [--json]
   status T12 <open|ready|started|blocked|review|done> [--note "…"]
   status T12 done --approved-by-user
                                 the coordinator, once the user accepted the work
-  edit T12 [--title "…"] [--notes "…" | --notes-file F] [--owner O] [--repo R]
+  edit T12 [--title "…"] [--notes "…" | --notes-file F] [--owner O] [--repo R] [--design NAME] [--after T10,T11]
   steps T12 add "text" | check N | uncheck N | rename N "text" | remove N
   archive T12 | unarchive T12
   delegate T12 [--agent A] [--model M] [--repo R] [--base B] [--approved-by-user] [--over-cap]
@@ -118,14 +118,14 @@ func runTask(e *Env, args []string) error {
 		}
 	case "edit":
 		title, notes, notesFile, owner := f.String("title"), f.String("notes"), f.String("notes-file"), f.String("owner")
-		repo := f.String("repo")
+		repo, design, after := f.String("repo"), f.String("design"), f.String("after")
 		run = func(p *project.Project, s *tasks.Store, pos []string) error {
-			id, err := oneRef(pos, 1, "edit T12 [--title …] [--notes … | --notes-file F] [--owner O] [--repo R]")
+			id, err := oneRef(pos, 1, "edit T12 [--title …] [--notes … | --notes-file F] [--owner O] [--repo R] [--design NAME] [--after T10,T11]")
 			if err != nil {
 				return err
 			}
-			if !f.anySet("title", "notes", "notes-file", "owner", "repo") {
-				return usagef("nothing to edit: pass --title, --notes, --notes-file, --owner or --repo")
+			if !f.anySet("title", "notes", "notes-file", "owner", "repo", "design", "after") {
+				return usagef("nothing to edit: pass --title, --notes, --notes-file, --owner, --repo, --design or --after")
 			}
 			var tp, np, op, rp *string
 			if f.IsSet("title") {
@@ -141,7 +141,25 @@ func runTask(e *Env, args []string) error {
 				r := e.taskRepo(p, *repo)
 				rp = &r
 			}
-			res, err := s.Edit(e.Caller, id, tp, np, op, rp)
+			var res tasks.Result
+			if tp != nil || np != nil || op != nil || rp != nil {
+				if res, err = s.Edit(e.Caller, id, tp, np, op, rp); err != nil {
+					return e.done(res, err, *asJSON, "edited")
+				}
+			}
+			if f.anySet("design", "after") {
+				var dp *string
+				var al []string
+				if f.IsSet("design") {
+					dp = design
+				}
+				if f.IsSet("after") {
+					al = []string{*after}
+				}
+				changed := res.Changed
+				res, err = s.SetPlan(e.Caller, id, dp, al)
+				res.Changed = res.Changed || changed
+			}
 			return e.done(res, err, *asJSON, "edited")
 		}
 	case "steps", "step":
