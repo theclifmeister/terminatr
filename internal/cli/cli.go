@@ -174,6 +174,8 @@ func commandUsage(name string) string {
 		return "usage: tm mcp   (an MCP server on stdio: a thread's tools)"
 	case "mod":
 		return modUsage
+	case "network":
+		return networkUsage
 	case "peer":
 		return peerUsage
 	case "project":

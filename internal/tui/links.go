@@ -244,7 +244,7 @@ func fileWords(msg *link.Message, t link.Transfer, ok bool) string {
 	if !ok {
 		return s + "sent with the message"
 	}
-	s += link.FileState(t)
+	s += filePlain(t)
 	switch {
 	case (t.State == link.FileReceiving || t.State == link.FileSending) && t.Rate > 0:
 		left := time.Duration(float64(t.Size-t.Offset) / t.Rate * float64(time.Second)).Round(time.Second)
@@ -252,9 +252,24 @@ func fileWords(msg *link.Message, t link.Transfer, ok bool) string {
 	case t.State == link.FileReceived && !t.Out:
 		s += " · sha256 ok"
 	case t.State == link.FileFailed && t.Code != "":
-		s = "▸ " + oneLine(msg.File) + "  " + link.MB(msg.FileSize) + "  failed: " + t.Code
+		s = "▸ " + oneLine(msg.File) + "  " + link.MB(msg.FileSize) + "  " + filePlain(t)
 	}
 	return s
+}
+
+// filePlain is a file's state as the screen says it, with the link's
+// files setting in its plain words where the state names it (the
+// config and the CLI keep ask, auto and off).
+func filePlain(t link.Transfer) string {
+	switch {
+	case t.State == link.FileOffered && !t.Out:
+		return "offered · waits for you (files: " + filesPlain[config.FilesAsk] + ")"
+	case t.State == link.FileAccepted && t.Auto:
+		return "accepted (files: " + filesPlain[config.FilesAuto] + ")"
+	case t.Code == "files-off":
+		return t.State + " (files: " + filesPlain[config.FilesOff] + ")"
+	}
+	return link.FileState(t)
 }
 
 // clock is a duration as m:ss.

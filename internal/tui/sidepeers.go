@@ -384,8 +384,9 @@ func linkLook(l *peerLink) (string, lipgloss.Style) {
 }
 
 // linkWords are a server header's words after its name: "this server";
-// the link's last ping ("38 ms"); "connecting"; "offline 4m · relay",
-// how long and why.
+// the connection's last ping ("38 ms"), else "connected"; "connecting";
+// "offline 4m · relay", how long and why. On screen the server's
+// connection is "connected", never "linked": a link is a project's.
 func linkWords(l *peerLink, now time.Time) string {
 	switch {
 	case l.local:
@@ -393,7 +394,7 @@ func linkWords(l *peerLink, now time.Time) string {
 	case l.state == proto.LinkUp && l.rtt > 0:
 		return rttWords(l.rtt)
 	case l.state == proto.LinkUp:
-		return "linked"
+		return "connected"
 	case l.state == proto.LinkConnecting:
 		return "connecting"
 	}
@@ -423,9 +424,10 @@ func rttWords(ms float64) string {
 	return fmt.Sprintf("%d ms", int(math.Round(ms)))
 }
 
-// serverCells is a server header's row cw cells wide: " ◉ mini · 38 ms",
-// its glyph in the link's colour, its name bold (faint while the link
-// is down), the words faint; folded, how many projects it hides. In the
+// serverCells is a server header's row cw cells wide: " ◉ mini ·
+// connected 38 ms", or " ◉ mini · 38 ms" when narrow; its glyph in the
+// link's colour, its name bold (faint while the link is down), the
+// words faint; folded, how many projects it hides. In the
 // slim strip, with no room for names, its glyph and a rule in the
 // link's colour mark where the group starts.
 func serverCells(r treeRow, cw int, slim bool, sel lipgloss.Style) string {
@@ -462,6 +464,12 @@ func serverCells(r treeRow, cw int, slim bool, sel lipgloss.Style) string {
 		nameRoom = max(room-ansi.StringWidth(words), 1)
 	}
 	name = fitLabel(name, min(ansi.StringWidth(name), nameRoom))
+	// "connected 38 ms" where it fits whole, else the ping alone.
+	if !r.link.local && r.link.state == proto.LinkUp && r.link.rtt > 0 && !r.fold {
+		if long := " · connected " + rttWords(r.link.rtt); ansi.StringWidth(name)+ansi.StringWidth(long) <= room {
+			words = long
+		}
+	}
 	if ww := room - ansi.StringWidth(name); ansi.StringWidth(words) > ww {
 		words = fitLabel(words, ww)
 	}
@@ -501,8 +509,8 @@ func peerDetails(r treeRow) (string, string) {
 			return l.host + " · this server", "its projects are below, each paired server's after them"
 		}
 		l1 := r.server() + " · " + linkWords(l, sideClock())
-		if l.state == proto.LinkUp {
-			l1 = r.server() + " · linked · " + linkWords(l, sideClock())
+		if l.state == proto.LinkUp && l.rtt > 0 {
+			l1 = r.server() + " · connected " + linkWords(l, sideClock())
 		}
 		switch {
 		case l.state != proto.LinkUp && r.threads > 0:

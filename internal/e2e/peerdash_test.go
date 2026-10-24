@@ -54,7 +54,7 @@ func TestPeerDashboard(t *testing.T) {
 	w.WaitFor("mini / api", wait)
 	w.Key(keyEnter)
 	w.WaitFor("tm dashboard · mini › api", wait)
-	screen := w.WaitFor("◉ mini · linked", wait)
+	screen := w.WaitFor("◉ mini · connected", wait)
 	for _, want := range []string{"To ask its coordinator something", "≡ menu · ↑ ↓ scroll · + new project · , settings"} {
 		if !strings.Contains(screen, want) {
 			t.Errorf("missing %q in\n%s", want, screen)

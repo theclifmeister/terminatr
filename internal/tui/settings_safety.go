@@ -221,14 +221,14 @@ var linkLimits = []struct {
 }
 
 // linkLimitsWords is Link limits' value: "3 at once · 10 an hour · 8 KB ·
-// files 25 MB".
+// files up to 25 MB".
 func linkLimitsWords(s config.Safety) string {
 	var out []string
 	for _, l := range linkLimits {
 		switch l.key {
 		case "link_file_kbps": // the list shows it; the row stays short
 		case "link_file_mb":
-			out = append(out, "files "+l.words(s.Value(l.key).(int)))
+			out = append(out, "files up to "+l.words(s.Value(l.key).(int)))
 		default:
 			out = append(out, l.words(s.Value(l.key).(int)))
 		}

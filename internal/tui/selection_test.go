@@ -300,13 +300,13 @@ func TestViewOnlyRemoteMouse(t *testing.T) {
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if n := c.remoteNote(p); n != "view-only · 38 ms" {
+	if n := c.remoteNote(p); n != "view-only · connected 38 ms" {
 		t.Errorf("same size: note %q", n)
 	}
 	if err := p.mirror.Resize(120, 40); err != nil {
 		t.Fatal(err)
 	}
-	if n := c.remoteNote(p); n != "view-only · 120×40 on mini · 38 ms" {
+	if n := c.remoteNote(p); n != "view-only · 120×40 on mini · connected 38 ms" {
 		t.Errorf("other size: note %q", n)
 	}
 	if got := string(c.outerModes()); !strings.Contains(got, "\x1b[?1002h") && !strings.Contains(got, "\x1b[?1003h") {

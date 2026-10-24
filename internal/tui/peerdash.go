@@ -21,7 +21,7 @@ import (
 // sidebar included.
 //
 //	" tm dashboard · mini › acme-api                    ● server ok "
-//	" ◉ mini · linked 38 ms · synced 2s ago · view-only"
+//	" ◉ mini · connected 38 ms · synced 2s ago · view-only"
 //	" the billing API"                                    its goal
 //	" coordinator ● working · 84k / 200k context · opus"
 //	" acme-api"                                           the panel
