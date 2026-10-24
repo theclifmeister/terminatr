@@ -137,6 +137,9 @@ func (nv *networkView) shareDetail(r netRow, w int) [2]string {
 
 // expires is when share request q expires unanswered, as a date.
 func expires(q *proto.ShareRequest) string {
+	if q.Created.IsZero() {
+		return "7 days after it was asked"
+	}
 	return q.Created.Add(link.RequestExpiry).Local().Format("2006-01-02 15:04")
 }
 

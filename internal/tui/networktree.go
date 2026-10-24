@@ -32,15 +32,15 @@ import (
 
 // The kinds of netRow.
 const (
-	netServer  = iota // a server: this one (peer -1) or a paired one
-	netProject        // a project of this server's, with its share box
-	netTheirs         // a project a paired server shares with this one
-	netNote           // faint words, which the cursor skips
-	netGap            // a blank line between servers
-	netLink           // a link of a project of this server's (networklinks.go)
-	netNeed           // what a link needs of the user, under it
-	netAsked          // your share request to a paired server (networkshare.go)
-	netShareReq       // a paired server's share request, flagged
+	netServer   = iota // a server: this one (peer -1) or a paired one
+	netProject         // a project of this server's, with its share box
+	netTheirs          // a project a paired server shares with this one
+	netNote            // faint words, which the cursor skips
+	netGap             // a blank line between servers
+	netLink            // a link of a project of this server's (networklinks.go)
+	netNeed            // what a link needs of the user, under it
+	netAsked           // your share request to a paired server (networkshare.go)
+	netShareReq        // a paired server's share request, flagged
 )
 
 // netRow is one row of the tree.

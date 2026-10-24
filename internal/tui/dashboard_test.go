@@ -78,8 +78,8 @@ type fakeSource struct {
 	pairErr      error    // fails them before the code shows
 	// shares are AskShare's and AnswerShare's calls, "ask alias for
 	// note" and "accept id slug" / "decline id"; shareErr refuses them.
-	shares   []string
-	shareErr error
+	shares       []string
+	shareErr     error
 	agents       []string
 	remote       []string // "slug on" or "slug off"
 	lifecycle    []string // "slug verb"
