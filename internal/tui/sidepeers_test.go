@@ -522,3 +522,39 @@ func TestPeerGapsAndInactivePinned(t *testing.T) {
 		t.Errorf("without room the divider follows the last group:\n%s", strings.Join(lines, "\n"))
 	}
 }
+
+// TestLocalHeaderNoLinkGlyph: this server's header has no link glyph (it
+// isn't linked to itself), a paired server's has one, in each icon set,
+// and the names stay in the same column.
+func TestLocalHeaderNoLinkGlyph(t *testing.T) {
+	pinPeersClock(t)
+	freshConsole(t)
+	for _, set := range IconChoices[1:] {
+		setIcons(set)
+		g := ic().linked
+		rows := peerTree(view.Tree{})
+		lines := sidebarLines(rows, sideDefault, len(rows)+1, nil)
+		var local, mini string
+		for _, l := range lines {
+			l = ansi.Strip(l)
+			switch {
+			case strings.Contains(l, "studio"):
+				local = l
+			case strings.Contains(l, "mini ·"):
+				mini = l
+			}
+		}
+		if local == "" || mini == "" {
+			t.Fatalf("%s: headers not found in %q", set, lines)
+		}
+		if strings.Contains(local, g) {
+			t.Errorf("%s: this server's header has the link glyph %q: %q", set, g, local)
+		}
+		if !strings.Contains(mini, g) {
+			t.Errorf("%s: mini's header lacks the link glyph %q: %q", set, g, mini)
+		}
+		if a, b := ansi.StringWidth(local[:strings.Index(local, "studio")]), ansi.StringWidth(mini[:strings.Index(mini, "mini")]); a != b {
+			t.Errorf("%s: names misaligned (%d vs %d):\n%s\n%s", set, a, b, local, mini)
+		}
+	}
+}

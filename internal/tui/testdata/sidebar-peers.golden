@@ -1,6 +1,6 @@
 nerd, width 36, folded []
  PROJECTS                      2   │
-  studio · this server            │
+   studio · this server            │
    terminatr         1            │
  └╴󰚩  coordinator                 │
     └╴  T232 Sid…                │
@@ -17,7 +17,7 @@ nerd, width 36, folded []
 
 nerd, width 24, folded []
  PROJECTS          2   │
-  studio · this se…   │
+   studio · this se…   │
    termin…            │
  └╴󰚩  coor…           │
     └╴               │
@@ -34,7 +34,7 @@ nerd, width 24, folded []
 
 nerd, width 11, folded []
  PROJECTS │
-  ────── │
+   ────── │
   term…  │
  · web    │
           │
@@ -51,7 +51,7 @@ nerd, width 11, folded []
 
 nerd, width 36, folded [@mini]
  PROJECTS                      2   │
-  studio · this server            │
+   studio · this server            │
    terminatr         1            │
  └╴󰚩  coordinator                 │
     └╴  T232 Sid…                │
@@ -63,7 +63,7 @@ nerd, width 36, folded [@mini]
 
 nerd, width 24, folded [@mini]
  PROJECTS          2   │
-  studio · this se…   │
+   studio · this se…   │
    termin…            │
  └╴󰚩  coor…           │
     └╴               │
@@ -75,7 +75,7 @@ nerd, width 24, folded [@mini]
 
 nerd, width 11, folded [@mini]
  PROJECTS │
-  ────── │
+   ────── │
   term…  │
  · web    │
           │
@@ -87,7 +87,7 @@ nerd, width 11, folded [@mini]
 
 unicode, width 36, folded []
  PROJECTS                      2   │
- ◉ studio · this server            │
+   studio · this server            │
  ■ terminatr          1            │
  └─ coordinator         ●          │
     └─ T232 Sideb…      ●          │
@@ -104,7 +104,7 @@ unicode, width 36, folded []
 
 unicode, width 24, folded []
  PROJECTS          2   │
- ◉ studio · this se…   │
+   studio · this se…   │
  ■ termina…            │
  └─ coordi… ●          │
     └─ T232 ●          │
@@ -121,7 +121,7 @@ unicode, width 24, folded []
 
 unicode, width 11, folded []
  PROJECTS │
- ◉ ────── │
+   ────── │
  ● term…  │
  · web    │
           │
@@ -138,7 +138,7 @@ unicode, width 11, folded []
 
 unicode, width 36, folded [@mini]
  PROJECTS                      2   │
- ◉ studio · this server            │
+   studio · this server            │
  ■ terminatr          1            │
  └─ coordinator         ●          │
     └─ T232 Sideb…      ●          │
@@ -150,7 +150,7 @@ unicode, width 36, folded [@mini]
 
 unicode, width 24, folded [@mini]
  PROJECTS          2   │
- ◉ studio · this se…   │
+   studio · this se…   │
  ■ termina…            │
  └─ coordi… ●          │
     └─ T232 ●          │
@@ -162,7 +162,7 @@ unicode, width 24, folded [@mini]
 
 unicode, width 11, folded [@mini]
  PROJECTS │
- ◉ ────── │
+   ────── │
  ● term…  │
  · web    │
           │
@@ -174,7 +174,7 @@ unicode, width 11, folded [@mini]
 
 ascii, width 36, folded []
  PROJECTS                      2   │
- O studio · this server            │
+   studio · this server            │
  + terminatr          1            │
  `- coordinator         *          │
     `- T232 Sideb…      *          │
@@ -191,7 +191,7 @@ ascii, width 36, folded []
 
 ascii, width 24, folded []
  PROJECTS          2   │
- O studio · this se…   │
+   studio · this se…   │
  + termina…            │
  `- coordi… *          │
     `- T232 *          │
@@ -208,7 +208,7 @@ ascii, width 24, folded []
 
 ascii, width 11, folded []
  PROJECTS │
- O ────── │
+   ────── │
  * term…  │
  . web    │
           │
@@ -225,7 +225,7 @@ ascii, width 11, folded []
 
 ascii, width 36, folded [@mini]
  PROJECTS                      2   │
- O studio · this server            │
+   studio · this server            │
  + terminatr          1            │
  `- coordinator         *          │
     `- T232 Sideb…      *          │
@@ -237,7 +237,7 @@ ascii, width 36, folded [@mini]
 
 ascii, width 24, folded [@mini]
  PROJECTS          2   │
- O studio · this se…   │
+   studio · this se…   │
  + termina…            │
  `- coordi… *          │
     `- T232 *          │
@@ -249,7 +249,7 @@ ascii, width 24, folded [@mini]
 
 ascii, width 11, folded [@mini]
  PROJECTS │
- O ────── │
+   ────── │
  * term…  │
  . web    │
           │
