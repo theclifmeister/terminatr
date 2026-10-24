@@ -66,7 +66,7 @@ func logsData(t *testing.T) (*fakeSource, *dash, string) {
 		{ID: "mod:linear", Name: "mod linear", Path: filepath.Join(dir, "mods", "linear.log")},
 	}
 	m.Update(tea.WindowSizeMsg{Width: 160, Height: 40})
-	press(m, ",", "6")
+	press(m, ",", "5")
 	screen(m) // the first drawing lists the logs
 	return src, m, server
 }
@@ -77,7 +77,7 @@ func logsData(t *testing.T) (*fakeSource, *dash, string) {
 func TestLogsTab(t *testing.T) {
 	src, m, server := logsData(t)
 	out := screen(m)
-	for _, want := range []string{"6 logs", " Server ", " Console ", " mod linear ", "server.log", "following", "s-4999: claude working", "more ↑"} {
+	for _, want := range []string{"5 logs", " Server ", " Console ", " mod linear ", "server.log", "following", "s-4999: claude working", "more ↑"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("lacks %q:\n%s", want, out)
 		}
@@ -168,7 +168,7 @@ func TestLogsTab(t *testing.T) {
 		t.Errorf("[ round: %s", lt.id())
 	}
 	press(m, "h")
-	if m.top().(*settingsView).tab != tabPeers {
+	if m.top().(*settingsView).tab != tabMods {
 		t.Error("h didn't leave the tab")
 	}
 }

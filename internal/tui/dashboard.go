@@ -803,6 +803,10 @@ func (m *dash) setData(d Data) tea.Cmd {
 			m.push(&taskView{pv: pv, id: m.over.Task})
 		}
 		m.then = ""
+	case first && m.then == "N" && m.over != nil && m.over.Server != "":
+		// A server's header clicked in a session's sidebar.
+		m.openNetwork(m.over.Server)
+		m.then = ""
 	case first && m.then == thenNeeds:
 		// The needs-you badge clicked in a session.
 		cmds = append(cmds, m.goNeeds())

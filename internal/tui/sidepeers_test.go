@@ -13,6 +13,8 @@ import (
 	"testing"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/charmbracelet/x/ansi"
 
 	tmclient "github.com/theclifmeister/terminatr/internal/client"
@@ -556,5 +558,33 @@ func TestLocalHeaderNoLinkGlyph(t *testing.T) {
 		if a, b := ansi.StringWidth(local[:strings.Index(local, "studio")]), ansi.StringWidth(mini[:strings.Index(mini, "mini")]); a != b {
 			t.Errorf("%s: names misaligned (%d vs %d):\n%s\n%s", set, a, b, local, mini)
 		}
+	}
+}
+
+// TestSideServerHeaderClick: a click on a server's header in the
+// sidebar opens the Network popup on that server (this one's too), the
+// sidebar's cursor on the header; it folds nothing.
+func TestSideServerHeaderClick(t *testing.T) {
+	m, _ := remoteDash(t, "terminatr")
+	for _, c := range []struct{ text, key string }{{"◉ mini", "g:mini"}, {"· this server", "g:"}} {
+		m.stack = nil
+		x, y := atSide(t, m, c.text)
+		mouseAt(t, m, tea.MouseLeft, x, y)
+		nv, ok := m.top().(*networkView)
+		if !ok || nv.sel != c.key || m.sideSel != c.key {
+			t.Fatalf("click on %q: %T, side %q", c.text, m.top(), m.sideSel)
+		}
+	}
+	if len(m.folds.Folded) != 0 {
+		t.Errorf("the click folded %v", m.folds.Folded)
+	}
+	// In a session the click leaves for the dashboard over the pane,
+	// which opens the popup on that server once its first poll is in.
+	m2, src := remoteDash(t, "terminatr")
+	m2.over, m2.then, m2.loaded = &Over{Key: "N", Server: "g:nas"}, "N", false
+	src.peers = peersList()
+	m2.setData(src.data)
+	if nv, ok := m2.top().(*networkView); !ok || nv.sel != "g:nas" {
+		t.Errorf("over a session: %T", m2.top())
 	}
 }

@@ -180,8 +180,8 @@ func TestModsTabList(t *testing.T) {
 	}
 	press(m, "q")
 	drain(t, m, keyPress(m, "right"))
-	if sv := m.top().(*settingsView); sv.tab != tabPeers {
-		t.Errorf("→ from Mods goes to tab %d, want Peers", sv.tab)
+	if sv := m.top().(*settingsView); sv.tab != tabLogs {
+		t.Errorf("→ from Mods goes to tab %d, want Logs", sv.tab)
 	}
 }
 

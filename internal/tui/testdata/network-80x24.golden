@@ -1,0 +1,88 @@
+== g:
+╭─ Network · studio + 2 paired ────────────────────────────────────────╮
+│ ▾ ◉ studio · this server 4F2A-91C3                     shares 0 of 2 │
+│    ■ terminatr         [ ] not shared                                │
+│    ■ web               [ ] not shared                                │
+│                                                                      │
+│ ▾ ◉ work (mini) · connected 38 ms                         panes view │
+│    ■ acme-api          shared with you · + link (L)        ● working │
+│    ■ infra             shared with you · + link (L)    · not running │
+│                                                                      │
+│ ▾ ○ nas · offline 4m · relay                               panes off │
+│    ■ media · stale     shared with you · + link (L)        ● working │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+│ ──────────────────────────────────────────────────────────────────── │
+│ studio · this server · id 4F2A-91C3 · 2 paired servers               │
+│ shares nothing with the paired servers · P pairs a new one           │
+│                                                                      │
+│ enter fold · tab details · P pair · J join · ? keys · esc close      │
+╰──────────────────────────────────────────────────────────────────────╯
+== p:terminatr
+╭─ Network · studio + 2 paired ────────────────────────────────────────╮
+│ ▾ ◉ studio · this server 4F2A-91C3                     shares 0 of 2 │
+│    ■ terminatr         [ ] not shared                                │
+│    ■ web               [ ] not shared                                │
+│                                                                      │
+│ ▾ ◉ work (mini) · connected 38 ms                         panes view │
+│    ■ acme-api          shared with you · + link (L)        ● working │
+│    ■ infra             shared with you · + link (L)    · not running │
+│                                                                      │
+│ ▾ ○ nas · offline 4m · relay                               panes off │
+│    ■ media · stale     shared with you · + link (L)        ● working │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+│ ──────────────────────────────────────────────────────────────────── │
+│ terminatr · not shared: paired servers don't see it                  │
+│ space shares it with every paired server, asking first               │
+│                                                                      │
+│ space share · tab details · ? keys · esc close                       │
+╰──────────────────────────────────────────────────────────────────────╯
+== g:mini
+╭─ Network · studio + 2 paired ────────────────────────────────────────╮
+│ ▾ ◉ studio · this server 4F2A-91C3                     shares 0 of 2 │
+│    ■ terminatr         [ ] not shared                                │
+│    ■ web               [ ] not shared                                │
+│                                                                      │
+│ ▾ ◉ work (mini) · connected 38 ms                         panes view │
+│    ■ acme-api          shared with you · + link (L)        ● working │
+│    ■ infra             shared with you · + link (L)    · not running │
+│                                                                      │
+│ ▾ ○ nas · offline 4m · relay                               panes off │
+│    ■ media · stale     shared with you · + link (L)        ● working │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+│ ──────────────────────────────────────────────────────────────────── │
+│ work (mini) · id 91C3-77AB · tm 0.27.0 · relay update (U)            │
+│ panes: work may watch yours (V) · you may watch its panes            │
+│                                                                      │
+│ E name · V panes · U update relay · X unpair · enter fold            │
+│ tab details · P pair · J join · ? keys · esc close                   │
+╰──────────────────────────────────────────────────────────────────────╯
+== t:mini/acme-api
+╭─ Network · studio + 2 paired ────────────────────────────────────────╮
+│ ▾ ◉ studio · this server 4F2A-91C3                     shares 0 of 2 │
+│    ■ terminatr         [ ] not shared                                │
+│    ■ web               [ ] not shared                                │
+│                                                                      │
+│ ▾ ◉ work (mini) · connected 38 ms                         panes view │
+│    ■ acme-api          shared with you · + link (L)        ● working │
+│    ■ infra             shared with you · + link (L)    · not running │
+│                                                                      │
+│ ▾ ○ nas · offline 4m · relay                               panes off │
+│    ■ media · stale     shared with you · + link (L)        ● working │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+│ ──────────────────────────────────────────────────────────────────── │
+│ work's acme-api · synced 2s ago · coordinator working                │
+│ nothing here acts on it; enter shows its dashboard, read-only        │
+│                                                                      │
+│ enter its dashboard · ? keys · esc close                             │
+╰──────────────────────────────────────────────────────────────────────╯

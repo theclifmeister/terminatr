@@ -28,6 +28,7 @@
 "sidebar.slim" = ["B"]
 "details.toggle" = ["|", "D"]
 "settings.open" = [","]
+"network.open" = ["N"]
 "notices.open" = ["M"]
 "help.open" = ["?"]
 "pane.repaint" = ["R"]

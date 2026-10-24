@@ -30,6 +30,7 @@ func sessionKeys() []keyHelp {
 		{"prefix+d", "back to the dashboard, on every console of the view (the session keeps running); on the dashboard it closes the popups"},
 		{"prefix+q", "quit this console, from anywhere: a session, the dashboard, a popup, the sidebar, tm attach (the server, the sessions and other consoles keep running)"},
 		{"prefix+" + boundKeys("A", "I", "T", ",", "?", "+"), "the project popup, settings, help or the new-project prompt, over the session or the dashboard; T and I are the project popup on its Tasks and Inbox tabs; esc closes it. The lower-case key works too after the prefix (prefix+a as prefix+A, prefix+n as prefix++)"},
+		{"prefix+" + boundKey("N"), "the Network popup, over the session or the dashboard: this server and the paired ones, what you share and what they share (prefix+n stays the new project)"},
 		{"prefix+" + boundKeys("]", "["), "the next / previous project's coordinator"},
 		{"prefix+" + boundKeys("{", "}", "B"), "narrow / widen the sidebar; B a slim strip, hidden, full again (prefix+b too)"},
 		{"prefix+" + boundKey("|"), "show or hide the panel on the right: beside a thread's pane its info panel (task, steps, state, PR, last report; drag its border to resize it), on the dashboard the details panel; prefix+D too"},
@@ -71,11 +72,20 @@ var settingsKeys = []keyHelp{
 	{"+ -", "on a number: one step up / down"},
 	{"← → 1 2", "the , settings: General, or All projects (the settings every project follows unless it sets its own)"},
 	{"X", "on a project's setting it sets itself (its Settings tab): follow all projects again"},
-	{"N J", "on the , settings' Peers tab: pair with another server through a relay, or join the pairing code another shows; both compare six digits"},
-	{"space ← →", "on the Peers tab: share or stop sharing the selected project (sharing asks first), or move the selected server's panes setting along off · view · write (more asks first)"},
-	{"X E U", "on the Peers tab: remove the selected server (asks first), give it another relay (the relay moved, or has a new key), or ask its relay to update itself (asks first)"},
 	{"[ ] f / v", "on the , settings' Logs tab: pick the log (the server's, the service's, the consoles', a mod's), follow it as it grows, search it (n N next match), keep the lines of a level; o opens it in $PAGER, c copies its path"},
 	{"esc", "close"},
+}
+
+// networkKeys are the Network popup's keys (network.go). None is a
+// prefix command.
+var networkKeys = []keyHelp{
+	{"↑ ↓ ← → enter", "move; fold or unfold a server (← from a project goes to its server); enter on a paired server's project shows its dashboard, read-only"},
+	{"space", "on a project of yours: share it with every paired server (asks first), or stop sharing it"},
+	{"J P", "join the pairing code another server shows, or pair with one through a relay; both compare six digits"},
+	{"E V", "on a paired server: its display name (empty shows the alias again), its panes off · view · write (more asks first)"},
+	{"U X", "on a paired server: ask its relay to update itself, unpair it (both ask first)"},
+	{"tab", "the keyboard to the details panel: enter edits its name or relay row, ← → move its panes switch; tab back to the tree"},
+	{"? esc", "the popup's keys; close"},
 }
 
 // mouseKeys are the mouse's ways, in the help beside the keys: every
@@ -121,6 +131,7 @@ func keyGroups(mods []keyHelp) []keyGroup {
 		{"In the info and details panels (tab, or a click)", panel},
 		{"In the project popup", popupKeys},
 		{"In the settings (, or the project popup's Settings tab)", settingsKeys},
+		{"In the Network popup (N)", networkKeys},
 	}
 	if len(mods) > 0 {
 		groups = slices.Insert(groups, 1, keyGroup{"Mod commands: the key on the dashboard, prefix+key anywhere, the ≡ menu", mods})

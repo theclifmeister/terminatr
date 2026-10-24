@@ -63,8 +63,20 @@ func (nv *networkView) panelLines(m *dash, r netRow, ok bool, w int) []panelLine
 			out = append(out, panelLine{text: l, item: item})
 		}
 	}
+	// row is a label and its value, which wraps under itself.
 	row := func(item int, label, value string) {
-		add(item, fit(th().Faint.Render(label), panelLabel)+value)
+		for i, l := range strings.Split(ansi.Wordwrap(value, max(w-panelLabel, 8), " "), "\n") {
+			if i > 0 {
+				label = ""
+			}
+			add(item, fit(th().Faint.Render(label), panelLabel)+l)
+		}
+	}
+	// under is faint text under the row above, in its value's column.
+	under := func(text string) {
+		for _, l := range wrapLines(text, max(w-panelLabel, 8)) {
+			add(itemNone, strings.Repeat(" ", panelLabel)+th().Faint.Render(l))
+		}
 	}
 	rule := th().Faint.Render(strings.Repeat("─", max(w, 1)))
 	if !ok {
@@ -122,25 +134,35 @@ func (nv *networkView) panelLines(m *dash, r netRow, ok bool, w int) []panelLine
 		level := panesLevel(e)
 		lv := map[string]int{proto.PanesOff: 0, proto.PanesView: 1, proto.PanesType: 2}[level]
 		rung := func(on bool, text string) {
-			if on {
-				add(itemNone, "  "+th().Good.Render("●")+" "+text)
-			} else {
-				add(itemNone, "  "+th().Faint.Render("○ "+text))
+			for i, l := range wrapLines(text, max(w-4, 8)) {
+				mark := "  "
+				if i == 0 {
+					mark = th().Faint.Render("○ ")
+					if on {
+						mark = th().Good.Render("●") + " "
+					}
+				}
+				if !on {
+					l = th().Faint.Render(l)
+				}
+				add(itemNone, "  "+mark+l)
 			}
 		}
 		add(itemNone, th().Faint.Render("WHAT "+strings.ToUpper(name)+" MAY DO HERE"))
-		rung(true, "paired: your projects and its can be linked")
+		rung(true, "paired: your projects and its can link")
 		if s := sharedSlugs(m); len(s) > 0 {
 			rung(true, "sees what you share: "+strings.Join(s, ", "))
 		} else {
 			rung(false, "sees nothing: you share no project")
 		}
-		rung(lv >= 1, "watches your shared panes, popups read-only")
+		rung(lv >= 1, "watches your shared panes and popups")
 		rung(lv >= 2, "types in them")
 		out = append(out, panelLine{text: "  " + fit(th().Faint.Render("panes (V)"), panelLabel-2) + panesChoices(level, true), item: itemPanes, x: panelLabel})
-		add(itemNone, faintLines("  "+panesWhat(level), w)...)
+		under(panesWhat(level))
 		add(itemNone, th().Faint.Render("AND THE OTHER WAY"))
-		add(itemNone, faintLines("  "+theirWords(mirror(m, e), name), w)...)
+		for _, l := range wrapLines(theirWords(mirror(m, e), name), max(w-2, 8)) {
+			add(itemNone, "  "+l)
+		}
 		theirs := th().Faint.Render("nothing yet")
 		if pm := mirror(m, e); pm != nil && len(pm.Projects) > 0 {
 			var s []string
@@ -155,7 +177,7 @@ func (nv *networkView) panelLines(m *dash, r netRow, ok bool, w int) []panelLine
 		if shared(m, r.slug) {
 			out = append(out, panelLine{text: fit(th().Faint.Render("shared"), panelLabel) + th().Accent.Render("[x]") + " with every paired server", item: itemShare, x: panelLabel})
 			if len(nv.list.Peers) > 0 {
-				add(itemNone, faintLines(strings.Repeat(" ", panelLabel)+"seen by "+nv.pairedNames()+": its state, never its files", w)...)
+				under("seen by " + nv.pairedNames() + ": its state, never its files")
 			}
 		} else {
 			out = append(out, panelLine{text: fit(th().Faint.Render("shared"), panelLabel) + th().Accent.Render("[ ]") + th().Faint.Render(" not shared"), item: itemShare, x: panelLabel})

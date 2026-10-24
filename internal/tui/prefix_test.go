@@ -20,8 +20,8 @@ func TestPrefixCmdSets(t *testing.T) {
 		name      string
 		got, want map[string]bool
 	}{
-		{"prefixCommands", prefixCommands, set("A", "]", "[", "I", "T", ",", "?", "+")},
-		{"popupCommands", popupCommands, set("A", "I", "T", ",", "?", "+")},
+		{"prefixCommands", prefixCommands, set("A", "]", "[", "I", "T", ",", "N", "?", "+")},
+		{"popupCommands", popupCommands, set("A", "I", "T", ",", "N", "?", "+")},
 		{"paneCommands", paneCommands, set("{", "}", "B", "tab", "|", ";")},
 		{"prefixTwins", func() map[string]bool {
 			out := map[string]bool{}

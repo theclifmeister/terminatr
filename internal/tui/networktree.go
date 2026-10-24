@@ -279,7 +279,7 @@ func (nv *networkView) rowLines(m *dash, r netRow, w int) []string {
 				left += th().Faint.Render(" " + nv.list.Short)
 			}
 			right := ""
-			if w >= 60 {
+			if w >= 50 {
 				right = th().Faint.Render(fmt.Sprintf("shares %d of %d", len(sharedSlugs(m)), len(shareable(m))))
 			}
 			return []string{spread(left, right, w)}
@@ -295,11 +295,11 @@ func (nv *networkView) rowLines(m *dash, r netRow, w int) []string {
 		default:
 			left += th().Faint.Render(" · " + words)
 		}
-		if v := peerVersion(m, e); v != "" && w >= 90 {
+		if v := peerVersion(m, e); v != "" && w >= 70 {
 			left += th().Faint.Render(" · tm " + v)
 		}
 		right := ""
-		if w >= 60 {
+		if w >= 50 {
 			right = th().Faint.Render("panes ") + th().Accent.Render(proto.PanesWord(panesLevel(e)))
 		}
 		return []string{spread(left, right, w)}
@@ -307,7 +307,7 @@ func (nv *networkView) rowLines(m *dash, r netRow, w int) []string {
 		box := th().Accent.Render("[ ]") + th().Faint.Render(" not shared")
 		if shared(m, r.slug) {
 			box = th().Accent.Render("[x]") + " shared"
-			if len(nv.list.Peers) > 0 && w >= 60 {
+			if len(nv.list.Peers) > 0 && w >= 50 {
 				box += th().Faint.Render(" · seen by " + nv.pairedNames())
 			}
 		}
@@ -320,8 +320,14 @@ func (nv *networkView) rowLines(m *dash, r netRow, w int) []string {
 		}
 		left := "   " + th().Accent.Render(i.folder) + " " + fit(slug, name-5) + " " + th().Faint.Render("shared with you · ") + th().Accent.Render("+ link") + th().Faint.Render(" (L)")
 		right := ""
-		if g, st, word := theirCoord(p); word != "" && w >= 60 {
+		if g, st, word := theirCoord(p); word != "" && w >= 50 {
+			if p.Stale {
+				st = th().Faint
+			}
 			right = st.Render(g) + " " + th().Faint.Render(word)
+		}
+		if ansi.StringWidth(left)+1+ansi.StringWidth(right) > w {
+			right = "" // the link hint first
 		}
 		return []string{spread(left, right, w)}
 	}
@@ -344,9 +350,9 @@ func theirCoord(p *proto.PeerMirrorProject) (string, lipgloss.Style, string) {
 	return g, st, word
 }
 
-// detail is the two lines under the tree about row r, when the popup has
+// detail is the two lines w cells wide under the tree about row r, when the popup has
 // no room for the details panel.
-func (nv *networkView) detail(m *dash, r netRow) [2]string {
+func (nv *networkView) detail(m *dash, r netRow, w int) [2]string {
 	switch r.kind {
 	case netServer:
 		if r.peer < 0 {
@@ -362,16 +368,17 @@ func (nv *networkView) detail(m *dash, r netRow) [2]string {
 				th().Faint.Render(shares + " · P pairs a new one")}
 		}
 		e := nv.list.Peers[r.peer]
-		l1 := peer.Both(e.Name, e.Alias) + " · id " + e.Short + " · relay " + relayWords(e.Relay)
+		l1 := []string{peer.Both(e.Name, e.Alias), "id " + e.Short}
 		if v := peerVersion(m, e); v != "" {
-			l1 += " · tm " + v
+			l1 = append(l1, "tm "+v)
 		}
 		if e.Link != nil && e.Link.RelayVersion != "" {
 			if _, behind := relayBehind(m.data.Server, e.Link.RelayVersion); behind {
-				l1 += th().Warn.Render(" · relay update available (U)")
+				l1 = append(l1, th().Warn.Render("relay update (U)"))
 			}
 		}
-		return [2]string{l1, "panes: " + th().Accent.Render(netName(e)+" "+panesMay(panesLevel(e))) + " (V) · " + otherWay(mirror(m, e))}
+		l1 = append(l1, "relay "+relayWords(e.Relay))
+		return [2]string{joinFit(l1, w), joinFit(append([]string{"panes: " + th().Accent.Render(netName(e)+" "+panesMay(panesLevel(e))) + " (V)"}, otherWay(mirror(m, e))...), w)}
 	case netProject:
 		if shared(m, r.slug) {
 			return [2]string{r.slug + " · shared with every paired server: they see its state, never its files",
@@ -403,11 +410,11 @@ func panesMay(level string) string {
 
 // otherWay is what a paired server (its mirror pm) lets this server do
 // with its panes, and how many projects it shares, in a few words.
-func otherWay(pm *proto.PeerMirror) string {
+func otherWay(pm *proto.PeerMirror) []string {
 	may := "you may not open its panes"
 	switch {
 	case pm == nil:
-		return "what it lets you do isn't known yet"
+		return []string{"what it lets you do isn't known yet"}
 	case !pm.Pane:
 		may = "its tm has no remote panes"
 	case pm.Panes == proto.PanesView:
@@ -415,7 +422,20 @@ func otherWay(pm *proto.PeerMirror) string {
 	case pm.Panes == proto.PanesType:
 		may = "you may watch and type into its panes"
 	}
-	return may + " · it shares " + counted(len(pm.Projects), "project") + " with you"
+	return []string{may, "it shares " + counted(len(pm.Projects), "project") + " with you"}
+}
+
+// joinFit joins parts with " · " as far as they fit in w cells; the
+// first always shows, cut if it must.
+func joinFit(parts []string, w int) string {
+	out := parts[0]
+	for _, p := range parts[1:] {
+		if ansi.StringWidth(out+" · "+p) > w {
+			break
+		}
+		out += " · " + p
+	}
+	return fit(out, w)
 }
 
 // freshWords say how fresh a paired server's project is here.

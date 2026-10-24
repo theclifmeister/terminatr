@@ -3,7 +3,6 @@ package tui
 import (
 	"fmt"
 	"github.com/theclifmeister/terminatr/internal/textsafe"
-	"strings"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -15,19 +14,6 @@ import (
 // latest release this server knows of (its own update check) is newer,
 // and U asks the selected server's relay to update itself, as tm peer
 // relay-update does.
-
-// relayVersionWords are "relay v0.27.0", and " · update available" after
-// it when the relay is behind; "" when the relay didn't say.
-func relayVersionWords(m *dash, e PeerEntry) string {
-	if e.Link == nil || e.Link.RelayVersion == "" {
-		return ""
-	}
-	w := "relay v" + textsafe.Line(strings.TrimPrefix(e.Link.RelayVersion, "v"), 40)
-	if _, behind := relayBehind(m.data.Server, e.Link.RelayVersion); behind {
-		w += " · update available (U)"
-	}
-	return w
-}
 
 // relayBehind says whether a relay running tm v is older than the latest
 // release the server knows of: a newer one its update check found, else

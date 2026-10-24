@@ -86,6 +86,7 @@ func (m *dash) overDone() bool {
 type Over struct {
 	Key     string   // the dashboard key that opens the popup
 	Task    int      // with Key t: the task the Tasks tab shows (opened), 0 for none
+	Server  string   // with Key N: the server the Network popup opens on (peerKey), "" for the first
 	Project string   // the project it is about: the session's, or a sidebar row's
 	Session string   // the session it is drawn over
 	Title   string   // how the header names the session

@@ -23,9 +23,11 @@ type sideClick struct {
 	// section is a band section's click, header or body: as enter on
 	// its header (sectionStep); the zero step for none.
 	section sideStep
-	// refold folds or unfolds what the inactive divider or a paired
-	// server's header does.
+	// refold folds or unfolds what the inactive divider does.
 	refold func(*view.Tree)
+	// network is a server header's key (peerKey): the Network popup
+	// opens on that server.
+	network string
 	// cant: the row opens nothing, and msg says why.
 	cant bool
 	msg  string
@@ -57,8 +59,8 @@ func sideClickAt(all []treeRow, w, h, foot, needs, x, y int) sideClick {
 		c.section, _ = sectionStep(r, sideEnter)
 	case r.kind == treeDivider:
 		c.refold = foldDivider(r)
-	case r.kind == treeServer && !r.link.local:
-		c.refold = foldPeer(r, !r.fold)
+	case r.kind == treeServer:
+		c.network = peerKey(r)
 	case !can:
 		c.cant, c.msg = true, why
 	default:

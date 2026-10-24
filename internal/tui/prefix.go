@@ -46,6 +46,7 @@ var prefixCmds = []prefixCmd{
 	{"I", "inbox", cmdPopup},
 	{"T", "tasks", cmdPopup},
 	{",", "settings", cmdPopup},
+	{"N", "network", cmdPopup},
 	{"?", "help: keys and mouse", cmdPopup},
 	{"{", "narrower sidebar", cmdPane},
 	{"}", "wider sidebar", cmdPane},
@@ -76,7 +77,8 @@ func prefixCmdKeys(kinds ...int) map[string]bool {
 var prefixTwins = func() map[string]string {
 	out := map[string]string{"n": "+"}
 	for _, c := range prefixCmds {
-		if l := strings.ToLower(c.key); c.kind != cmdCore && len(c.key) == 1 && l != c.key {
+		// n stays the new project's, as it always was.
+		if l := strings.ToLower(c.key); c.kind != cmdCore && len(c.key) == 1 && l != c.key && out[l] == "" {
 			out[l] = c.key
 		}
 	}
@@ -103,7 +105,7 @@ func prefixName(key string) string {
 // prefixHint is the footer while the prefix waits for its command, in
 // the bound keys (keybind.go).
 func prefixHint() string {
-	return "prefix ▸ d dashboard · q quit · " + boundKeys("A", "I", "T", ",", "?", "+") + " popups · p " + boundKeys("]", "[") +
+	return "prefix ▸ d dashboard · q quit · " + boundKeys("A", "I", "T", ",", "N", "?", "+") + " popups · p " + boundKeys("]", "[") +
 		" projects · " + boundKeys("{", "}", "B") + " sidebar · " + boundKey("|") + " details · tab area · " + boundKey(";") +
 		" last place · r remote · " + boundKey("R") + " repaint · C save+clear · esc cancel"
 }

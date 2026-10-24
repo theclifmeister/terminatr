@@ -286,8 +286,8 @@ func settingsErr(err error) error {
 // host's logs (logstab.go). The paired servers are in the Network popup
 // (network.go).
 type settingsView struct {
-	tab   int
-	tabs  [3]settingsList
+	tab  int
+	tabs [3]settingsList
 	mods modsTab
 	logs logsTab
 	// top is each tab's first line shown; shown the selection's line

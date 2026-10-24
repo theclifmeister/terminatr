@@ -197,7 +197,7 @@ var remoteActions = map[string]bool{
 	"focus.next": true, "focus.prev": true, "place.last": true,
 	"project.new": true, "project.next": true, "project.prev": true,
 	"sidebar.narrower": true, "sidebar.wider": true, "sidebar.slim": true,
-	"settings.open": true, "help.open": true, "console.quit": true,
+	"settings.open": true, "network.open": true, "help.open": true, "console.quit": true,
 }
 
 // remoteKey runs a list key on the remote dashboard: the actions it

@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"cmp"
 	"fmt"
 	"net/url"
 	"slices"
@@ -69,7 +70,7 @@ const netWide = 96
 // openNetwork opens the Network popup, on the row keyed at ("g:" this
 // server, "g:<alias>" a paired one; "" the first).
 func (m *dash) openNetwork(at string) {
-	nv := &networkView{sel: at, folded: map[string]bool{}}
+	nv := &networkView{sel: cmp.Or(at, "g:"), folded: map[string]bool{}}
 	nv.load(m)
 	m.push(nv)
 }
@@ -338,7 +339,7 @@ func (nv *networkView) render(m *dash) string {
 		case i == treeH:
 			line = th().Faint.Render(strings.Repeat("─", iw))
 		default:
-			line = nv.detail(m, r)[i-treeH-1]
+			line = nv.detail(m, r, iw)[i-treeH-1]
 		}
 		body = append(body, line)
 		nv.lines = append(nv.lines, nl)
