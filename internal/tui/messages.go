@@ -329,9 +329,7 @@ func (v *msgView) row(m *dash) link.Row {
 // again.
 func (v *msgView) reloaded(m *dash) {
 	v.load(m)
-	if pv := m.projectPopupView(); pv != nil {
-		pv.msgs.loaded = time.Time{}
-	}
+	m.reloadMessages()
 }
 
 func (v *msgView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
@@ -537,7 +535,7 @@ func (m *dash) writeMessage(slug string, links []link.Row, first string) tea.Cmd
 		}
 	}
 	if len(to) == 0 {
-		m.msg = slug + " has no link it may write on; the Settings tab's Linked projects sets them"
+		m.msg = slug + " has no link it may write on; the Network popup (N) sets them"
 		return nil
 	}
 	write := func(other string) tea.Cmd {
@@ -576,6 +574,9 @@ func (m *dash) reloadMessages() {
 	if pv := m.projectPopupView(); pv != nil {
 		pv.msgs.loaded = time.Time{}
 	}
+	if nv := m.network(); nv != nil {
+		nv.relog(m)
+	}
 }
 
 // resumeLink resumes project slug's link with other, which the breaker
@@ -589,4 +590,50 @@ func (m *dash) resumeLink(slug, other string) tea.Cmd {
 		}
 		return actionMsg{msg: strings.TrimSpace(cmpStr(out, "resumed the link with "+other)), then: func(m *dash) { m.reloadMessages() }}
 	})
+}
+
+// openLinkNeed opens what project slug's link to other waits on, as
+// NEEDS YOU's row of kind need (needHeld …) says: a held message's or
+// a file's dialog (its first, oldest), else the Network popup on that
+// row.
+func (m *dash) openLinkNeed(slug, other string, need int) tea.Cmd {
+	if need == needAsk || need == needPaused {
+		m.openNetwork(needKey(slug, other, need, ""))
+		return nil
+	}
+	msgs, err := m.src.LinkLog(slug, other)
+	if err != nil {
+		m.fail(err)
+		return nil
+	}
+	if need == needHeld {
+		for _, msg := range msgs {
+			if msg.Out && msg.State == link.StateHeld {
+				return m.openMessage(slug, msgEntry{other: other, msg: msg}, "")
+			}
+		}
+		m.msg = "no message to " + peerShownKey(m.data.Peers, other) + " waits for your OK now"
+		return nil
+	}
+	ts, _ := m.src.LinkFiles(slug, other)
+	for _, t := range ts {
+		if t.Out || t.State != link.FileOffered || t.Peer != "" && t.Peer != other {
+			continue
+		}
+		return m.openMessage(slug, fileEntry(other, t, msgs), "")
+	}
+	m.msg = "no file from " + peerShownKey(m.data.Peers, other) + " waits for you now"
+	return nil
+}
+
+// fileEntry is file t offered on the link to other as its message's
+// entry, the message from msgs (just its file when it isn't there).
+func fileEntry(other string, t link.Transfer, msgs []*link.Message) msgEntry {
+	e := msgEntry{other: other, msg: &link.Message{ID: t.Message, Peer: other, File: t.Name, FileSize: t.Size}, file: t, hasFile: true}
+	for _, msg := range msgs {
+		if msg.ID == t.Message && !msg.Out {
+			e.msg = msg
+		}
+	}
+	return e
 }

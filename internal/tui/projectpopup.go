@@ -255,7 +255,9 @@ func (pv *projectView) messages(m *dash) ([]msgNeed, []msgEntry) {
 }
 
 // messagesKey: enter opens the selected message's dialog; on a link's
-// row A and X answer its request and R resumes it; M writes as the user.
+// row A and X answer its request and R resumes it; M writes as the user;
+// N opens the Network popup on the project, or on the selected link's
+// row.
 func (pv *projectView) messagesKey(m *dash, s string) tea.Cmd {
 	needs, es := pv.messages(m)
 	links, i := pv.data(m).Links, pv.sel[tabMessages]
@@ -264,6 +266,14 @@ func (pv *projectView) messagesKey(m *dash, s string) tea.Cmd {
 		e = &es[j]
 	}
 	switch {
+	case s == "N":
+		at := "p:" + pv.slug
+		if i < len(needs) {
+			kind := map[bool]int{true: needAsk, false: needPaused}[needs[i].ask]
+			at = needKey(pv.slug, needs[i].row.Peer, kind, "")
+		}
+		m.openNetwork(at)
+		return nil
 	case s == "M":
 		first := ""
 		if e != nil {
@@ -465,11 +475,11 @@ func (pv *projectView) box(m *dash) box {
 			body = append(body, th().Bad.Render(fit("error: "+oneLine(pv.msgs.err.Error()), w)))
 		}
 		if len(p.Links) == 0 {
-			body = append(body, "", th().Faint.Render("no links; the Settings tab's Linked projects sets them"))
+			body = append(body, "", th().Faint.Render("no links; N opens Network, where L links this project"))
 		} else {
-			body = append(body, "", th().Faint.Render("Messages between this project's coordinator and linked projects' (tm link)."))
+			body = append(append(body, ""), faintLines("Messages between this project's coordinator and linked projects' (tm link). N opens Network, where its links are set.", w)...)
 		}
-		keys = "↑ ↓ move · " + keys
+		keys = "↑ ↓ move · N network · " + keys
 		if len(p.Links) > 0 {
 			keys = "M write as you · " + keys
 		}

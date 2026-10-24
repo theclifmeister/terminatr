@@ -1,8 +1,8 @@
 == g:
 ╭─ Network · studio + 2 paired ────────────────────────────────────────────────────────────────────────────╮
 │ ▾ ◉ studio · this server 4F2A-91C3          shares 0 of 2 │ studio · this server                         │
-│    ■ terminatr         [ ] not shared                     │ ──────────────────────────────────────────── │
-│    ■ web               [ ] not shared                     │ id            4F2A-91C3                      │
+│    ■ terminatr         [ ] not shared            no links │ ──────────────────────────────────────────── │
+│    ■ web               [ ] not shared            no links │ id            4F2A-91C3                      │
 │                                                           │ paired        work, nas                      │
 │ ▾ ◉ work (mini) · connected 38 ms              panes view │ shares        nothing                        │
 │    ■ acme-api          shared with you · + link (L)       │                                              │
@@ -29,8 +29,8 @@
 == p:terminatr
 ╭─ Network · studio + 2 paired ────────────────────────────────────────────────────────────────────────────╮
 │ ▾ ◉ studio · this server 4F2A-91C3          shares 0 of 2 │ terminatr · this server                      │
-│    ■ terminatr         [ ] not shared                     │ ──────────────────────────────────────────── │
-│    ■ web               [ ] not shared                     │ shared        [ ] not shared                 │
+│    ■ terminatr         [ ] not shared            no links │ ──────────────────────────────────────────── │
+│    ■ web               [ ] not shared            no links │ shared        [ ] not shared                 │
 │                                                           │                                              │
 │ ▾ ◉ work (mini) · connected 38 ms              panes view │ A shared project shows, read-only, in the    │
 │    ■ acme-api          shared with you · + link (L)       │ sidebar of every paired server: what waits   │
@@ -52,13 +52,13 @@
 │                                                           │                                              │
 │                                                           │                                              │
 │                                                                                                          │
-│ space share · tab details · ? keys · esc close                                                           │
+│ space share · L link · tab details · ? keys · esc close                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 == g:mini
 ╭─ Network · studio + 2 paired ────────────────────────────────────────────────────────────────────────────╮
 │ ▾ ◉ studio · this server 4F2A-91C3          shares 0 of 2 │ work (mini)                                  │
-│    ■ terminatr         [ ] not shared                     │ ──────────────────────────────────────────── │
-│    ■ web               [ ] not shared                     │ name          work                           │
+│    ■ terminatr         [ ] not shared            no links │ ──────────────────────────────────────────── │
+│    ■ web               [ ] not shared            no links │ name          work                           │
 │                                                           │ connection    ◉ connected 38 ms              │
 │ ▾ ◉ work (mini) · connected 38 ms              panes view │ id · tm       91C3-77AB · 0.27.0             │
 │    ■ acme-api          shared with you · + link (L)       │ relay         relay.example.net · v0.27.0 ·  │
@@ -85,18 +85,18 @@
 == t:mini/acme-api
 ╭─ Network · studio + 2 paired ────────────────────────────────────────────────────────────────────────────╮
 │ ▾ ◉ studio · this server 4F2A-91C3          shares 0 of 2 │ acme-api · on work                           │
-│    ■ terminatr         [ ] not shared                     │ ──────────────────────────────────────────── │
-│    ■ web               [ ] not shared                     │ coordinator   ● working                      │
+│    ■ terminatr         [ ] not shared            no links │ ──────────────────────────────────────────── │
+│    ■ web               [ ] not shared            no links │ coordinator   ● working                      │
 │                                                           │ fresh         synced 2s ago                  │
 │ ▾ ◉ work (mini) · connected 38 ms              panes view │ its popup     read-only, from its dashboard  │
 │    ■ acme-api          shared with you · + link (L)       │                                              │
-│    ■ infra             shared with you · + link (L)       │ Nothing here acts on it: enter shows its     │
-│                                                           │ dashboard, read-only. Linking a project of   │
-│ ▾ ○ nas · offline 4m · relay                    panes off │ yours with it: its Settings tab (A, then 4), │
-│    ■ media · stale     shared with you · + link (L)       │ Linked projects, or tm project link.         │
-│                                                           │                                              │
-│                                                           │                                              │
-│                                                           │                                              │
+│    ■ infra             shared with you · + link (L)       │ LINKS FROM YOUR SIDE                         │
+│                                                           │   none · L links one of yours                │
+│ ▾ ○ nas · offline 4m · relay                    panes off │                                              │
+│    ■ media · stale     shared with you · + link (L)       │ Nothing here acts on it: enter shows its     │
+│                                                           │ dashboard, read-only. L links one of your    │
+│                                                           │ projects with it, which writes only your     │
+│                                                           │ side; its user sets theirs.                  │
 │                                                           │                                              │
 │                                                           │                                              │
 │                                                           │                                              │
@@ -108,5 +108,5 @@
 │                                                           │                                              │
 │                                                           │                                              │
 │                                                                                                          │
-│ enter its dashboard · ? keys · esc close                                                                 │
+│ enter its dashboard · L link one of yours · ? keys · esc close                                           │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────╯

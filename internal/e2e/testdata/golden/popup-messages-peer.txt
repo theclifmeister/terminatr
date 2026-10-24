@@ -1,6 +1,6 @@
  PROJECTS                      1   │ tm dashboard                                               ● server ok · 0 sessions
  <server>│ NEEDS YOU 1 ───────────────────────────────────────────────────────────────────────
- ■ acm╭─ acme ───────────────────────────────────────────────────────────────────────────────────────────────────╮
+ ■ acm╭─ acme ───────────────────────────────────────────────────────────────────────────────────────────────────╮twork
  └─ co│ 1 overview 2 inbox 2 3 tasks 4 settings 5 access 6 keys 7 memory 8 library 9 messages 1                  │ivate
       │                                                                                                          │ inbox
  ◉ min│ ⚑ NEEDS YOU 1 · 1 link request │
@@ -10,7 +10,8 @@
       │   mini/api    <id>  Thanks, testing it.                                                 <time> │
       │   → mini/api  <id>  The API landed.                                                     <time> │
       │ │
-      │ Messages between this project's coordinator and linked projects' (tm link). │
+      │ Messages between this project's coordinator and linked projects' (tm link). N opens Network, where its │
+      │ links are set. │
       │ │
       │ │
       │ │
@@ -33,8 +34,7 @@
       │ │
       │ │
       │ │
-      │ │
- ─────│ A accept the link · X decline · M write as you · ↑ ↓ move · ← → tabs · esc close │
+ ─────│ A accept the link · X decline · M write as you · ↑ ↓ move · N network · ← → tabs · esc close │
  acme ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────╯──────
  0 threads · coordinator not runn… │
  tab sidebar · ? help │

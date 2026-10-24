@@ -88,11 +88,11 @@ func Settings(d Deps) []Check {
 	}
 	if len(half) > 0 {
 		out = append(out, Check{Group: "settings", Name: "links", Status: Warn,
-			Detail: fmt.Sprintf("half-linked: %s; set the link again in Settings › Linked projects (or tm project link) to write both sides", strings.Join(half, ", "))})
+			Detail: fmt.Sprintf("half-linked: %s; set the link again in the Network popup (or tm project link) to write both sides", strings.Join(half, ", "))})
 	}
 	if len(dangling) > 0 {
 		out = append(out, Check{Group: "settings", Name: "links", Status: Warn,
-			Detail: fmt.Sprintf("linked to a project that isn't there: %s; remove the link in Settings › Linked projects", strings.Join(dangling, ", "))})
+			Detail: fmt.Sprintf("linked to a project that isn't there: %s; remove the link in the Network popup", strings.Join(dangling, ", "))})
 	}
 	return out
 }

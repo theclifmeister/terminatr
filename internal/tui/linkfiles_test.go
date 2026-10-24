@@ -91,65 +91,6 @@ func TestMessagesTabFiles(t *testing.T) {
 	}
 }
 
-// TestLinkedProjectsFiles: F steps files ask › auto › off; auto asks
-// first, the others save at once; the row shows it.
-func TestLinkedProjectsFiles(t *testing.T) {
-	src, m := linkDash(t)
-	m.push(&linksView{slug: "alpha"})
-	press(m, "F")
-	if _, ok := m.top().(*confirmView); !ok {
-		t.Fatalf("auto didn't ask: %T", m.top())
-	}
-	if out := screen(m); !strings.Contains(out, "Take files from beta without asking? Up to 25 MB each") {
-		t.Fatalf("confirm:\n%s", out)
-	}
-	drain(t, m, press(m, "Y"))
-	if got := src.links[len(src.links)-1]; got != "alpha beta files auto" {
-		t.Fatalf("links %v", src.links)
-	}
-	src.data.Projects[0].Links[0].Mine.Files = config.FilesAuto
-	m.setData(src.data)
-	if out := screen(m); !strings.Contains(out, "both ways, files auto") || !strings.Contains(out, "F files") {
-		t.Fatalf("row:\n%s", out)
-	}
-	drain(t, m, press(m, "F"))
-	if _, asked := m.top().(*confirmView); asked || src.links[len(src.links)-1] != "alpha beta files off" {
-		t.Fatalf("off: %v (%T)", src.links, m.top())
-	}
-}
-
-// TestLinkedProjectsFilesWaiting: with offers waiting on the link, the
-// auto confirm says how many it takes and which stay over the size; off
-// then asks too, saying it declines them.
-func TestLinkedProjectsFilesWaiting(t *testing.T) {
-	src, m := linkDash(t)
-	src.linkFiles = []link.Transfer{
-		{ID: "X-2", Peer: "beta", State: link.FileOffered, Size: 4 << 20},
-		{ID: "X-3", Peer: "beta", State: link.FileOffered, Size: 30 << 20},
-		{ID: "X-4", Peer: "beta", Out: true, State: link.FileOffered, Size: 1 << 20},
-	}
-	m.push(&linksView{slug: "alpha"})
-	press(m, "F")
-	out := screen(m)
-	if !strings.Contains(out, "takes 1 waiting file") || !strings.Contains(out, "over 25 MB keeps") {
-		t.Fatalf("confirm:\n%s", out)
-	}
-	drain(t, m, press(m, "Y"))
-	src.data.Projects[0].Links[0].Mine.Files = config.FilesAuto
-	m.setData(src.data)
-	press(m, "F")
-	if _, ok := m.top().(*confirmView); !ok {
-		t.Fatalf("off didn't ask: %T", m.top())
-	}
-	if out := screen(m); !strings.Contains(out, "declines 2 waiting files") {
-		t.Fatalf("confirm:\n%s", out)
-	}
-	drain(t, m, press(m, "Y"))
-	if got := src.links[len(src.links)-1]; got != "alpha beta files off" {
-		t.Fatalf("links %v", src.links)
-	}
-}
-
 // TestLinkLimitsFiles: Link limits has the file size and pace; a size
 // above the default asks first, a faster pace doesn't, and the pace
 // stays within 64 to 2048 KiB/s.
@@ -228,5 +169,63 @@ func TestLibraryLinkGroup(t *testing.T) {
 	drain(t, m, press(m, "Y"))
 	if len(src.libRemoved) != 1 || src.libRemoved[0] != "M-4F2A-21/trace.txt" {
 		t.Fatalf("removed %v", src.libRemoved)
+	}
+}
+
+// TestNetworkFiles: F on a link in the Network popup steps its files
+// ask me › take them › refuse. Take them asks first, saying how many
+// waiting offers it takes and which stay over the size; refuse asks
+// when offers wait, saying it declines them; ask me saves at once. The
+// dialog's save says what became of the offers.
+func TestNetworkFiles(t *testing.T) {
+	m, src := linkNet(t, 120, 30)
+	src.linkFiles = []link.Transfer{
+		{ID: "X-2", Project: "terminatr", Peer: "mini/acme-api", State: link.FileOffered, Size: 4 << 20},
+		{ID: "X-3", Project: "terminatr", Peer: "mini/acme-api", State: link.FileOffered, Size: 30 << 20},
+		{ID: "X-4", Project: "terminatr", Peer: "mini/acme-api", Out: true, State: link.FileOffered, Size: 1 << 20},
+	}
+	nv := netOpen(t, m)
+	nv.sel = "l:terminatr>mini/acme-api"
+	press(m, "F")
+	cv, ok := m.top().(*confirmView)
+	if !ok || !strings.Contains(cv.question, "takes 1 waiting file") || !strings.Contains(cv.question, "over 25 MB keeps") {
+		t.Fatalf("take them: %T %+v", m.top(), cv)
+	}
+	press(m, "N")
+	if len(src.links) != 0 || m.msg != "files unchanged" {
+		t.Fatalf("N: %v %q", src.links, m.msg)
+	}
+	press(m, "F")
+	drain(t, m, press(m, "Y"))
+	if got := src.links[len(src.links)-1]; got != "terminatr mini/acme-api files auto" || !strings.Contains(m.msg, "files: take them") {
+		t.Fatalf("auto: %v %q", src.links, m.msg)
+	}
+	src.data.Projects[0].Links[0].Mine.Files = config.FilesAuto
+	m.setData(src.data)
+	press(m, "F")
+	if cv, ok := m.top().(*confirmView); !ok || !strings.Contains(cv.question, "declines 2 waiting files") {
+		t.Fatalf("refuse: %T", m.top())
+	}
+	drain(t, m, press(m, "Y"))
+	if got := src.links[len(src.links)-1]; got != "terminatr mini/acme-api files off" {
+		t.Fatalf("off: %v", src.links)
+	}
+	src.data.Projects[0].Links[0].Mine.Files = config.FilesOff
+	m.setData(src.data)
+	drain(t, m, press(m, "F"))
+	if _, asked := m.top().(*confirmView); asked || src.links[len(src.links)-1] != "terminatr mini/acme-api files ask" {
+		t.Fatalf("ask me: %v (%T)", src.links, m.top())
+	}
+	// The dialog to take them: the save says what it took.
+	src.saved = "took 1 waiting file"
+	src.data.Projects[0].Links[0].Mine.Files = config.FilesAsk
+	m.setData(src.data)
+	press(m, "enter")
+	dv := m.top().(*linkDialogView)
+	dv.vals[2] = 1
+	press(m, "Y")
+	drain(t, m, press(m, "Y"))
+	if !strings.Contains(m.msg, "took 1 waiting file") {
+		t.Fatalf("settled: %q", m.msg)
 	}
 }

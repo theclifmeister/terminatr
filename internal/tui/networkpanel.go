@@ -83,6 +83,8 @@ func (nv *networkView) panelLines(m *dash, r netRow, ok bool, w int) []panelLine
 		return out
 	}
 	switch r.kind {
+	case netLink, netNeed:
+		out = nv.linkPanel(m, r, w)
 	case netServer:
 		if r.peer < 0 {
 			add(itemNone, th().Head.Render(thisHost())+th().Faint.Render(" · this server"), rule)
@@ -199,7 +201,14 @@ func (nv *networkView) panelLines(m *dash, r netRow, ok bool, w int) []panelLine
 			row(itemNone, "its popup", th().Faint.Render("off: "+netName(e)+" doesn't let you view"))
 		}
 		add(itemNone, "")
-		add(itemNone, faintLines("Nothing here acts on it: enter shows its dashboard, read-only. Linking a project of yours with it: its Settings tab (A, then 4), Linked projects, or tm project link.", w)...)
+		add(itemNone, th().Faint.Render("LINKS FROM YOUR SIDE"))
+		if links := theirLinks(m, e.Alias, r.slug); links != "" {
+			add(itemNone, "  "+links)
+		} else {
+			add(itemNone, "  "+th().Faint.Render("none · L links one of yours"))
+		}
+		add(itemNone, "")
+		add(itemNone, faintLines("Nothing here acts on it: enter shows its dashboard, read-only. L links one of your projects with it, which writes only your side; its user sets theirs.", w)...)
 	}
 	for i := range out {
 		out[i].text = fit(out[i].text, w)

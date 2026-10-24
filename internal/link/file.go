@@ -539,7 +539,7 @@ func fileMB(cfg *config.Config, slug string) int {
 // other's). The snapshot is the caller's to place or remove.
 func prepareFile(c caller.Caller, cfg *config.Config, p *project.Project, toSlug, spec string, att []attachment) (name, tmp, sum string, size int64, err error) {
 	if fileMode(cfg, p.Slug, toSlug) == config.FilesOff {
-		return "", "", "", 0, refuse("files-off", "%s sends no files to %s: its link's files are off (Settings › Linked projects, F)", p.Slug, toSlug)
+		return "", "", "", 0, refuse("files-off", "%s sends no files to %s: its link's files are off (F on the link in the Network popup)", p.Slug, toSlug)
 	}
 	most := fileMB(cfg, p.Slug)
 	if alias, _, remote := config.Remote(toSlug); remote && PeerFiles != nil {
@@ -549,7 +549,7 @@ func prepareFile(c caller.Caller, cfg *config.Config, p *project.Project, toSlug
 	}
 	if _, _, remote := config.Remote(toSlug); !remote {
 		if fileMode(cfg, toSlug, p.Slug) == config.FilesOff {
-			return "", "", "", 0, refuse("files-off", "%s takes no files from %s: its link's files are off (Settings › Linked projects, F)", toSlug, p.Slug)
+			return "", "", "", 0, refuse("files-off", "%s takes no files from %s: its link's files are off (F on the link in the Network popup)", toSlug, p.Slug)
 		}
 		most = min(most, fileMB(cfg, toSlug))
 	}

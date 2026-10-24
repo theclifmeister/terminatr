@@ -103,7 +103,7 @@ func (m *dash) listLines(w int, inline bool) listFrame {
 				}
 			}
 		case r.head == "NEEDS YOU" || r.head == "OTHER SESSIONS":
-			add(m.ruleIn(countLabel(r.head, r.count), sectionStyle(r.head), w), "")
+			add(m.ruleIn(needsHead(r), sectionStyle(r.head), w), "")
 		case r.head != "":
 			// A project's own section is headed by its name, its state
 			// label at the right, which a click toggles (stateAt).

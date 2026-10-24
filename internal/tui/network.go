@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"slices"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -55,6 +56,10 @@ type networkView struct {
 	// mouse: a tree row (its index, -1 for none) and a panel line.
 	lines []netLine
 	treeW int
+	// logs are the links' messages and files by "<slug>><other>", read
+	// at logsAt (logOf).
+	logs   map[string]linkLog
+	logsAt time.Time
 }
 
 // netLine is a body line as last drawn.
@@ -159,7 +164,7 @@ func (nv *networkView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 		m.push(&netKeysView{})
 		return nil
 	case "!":
-		m.msg = "nothing needs you here"
+		nv.nextNeed(m, rows)
 		return nil
 	case "home":
 		nv.move(m, -len(rows))
@@ -175,6 +180,11 @@ func (nv *networkView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	if !ok {
 		return nil
 	}
+	if r.kind == netLink || r.kind == netNeed {
+		if cmd, done := nv.linkKey(m, r, s); done {
+			return cmd
+		}
+	}
 	switch {
 	case s == "tab":
 		if len(panelItems(nv.panelLines(m, r, ok, 40))) > 0 {
@@ -184,20 +194,28 @@ func (nv *networkView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 		}
 	case r.kind == netServer && (s == "enter" || s == "left" && !nv.folded[nv.rowKey(r)] || s == "right" && nv.folded[nv.rowKey(r)]):
 		nv.folded[nv.rowKey(r)] = !nv.folded[nv.rowKey(r)]
+	case r.kind == netProject && nv.hasLinks(m, r.slug) && (s == "enter" || s == "left" && !nv.folded[nv.rowKey(r)] || s == "right" && nv.folded[nv.rowKey(r)]):
+		nv.folded[nv.rowKey(r)] = !nv.folded[nv.rowKey(r)]
 	case s == "left" && r.kind != netServer:
-		// Up to the row's server.
+		// Up to the row's project (a link's, a need's), else its server.
+		up := netServer
+		if r.kind == netLink || r.kind == netNeed {
+			up = netProject
+		}
 		for j := nv.at - 1; j >= 0; j-- {
-			if rows[j].kind == netServer {
+			if rows[j].kind == up {
 				nv.sel, nv.at = nv.rowKey(rows[j]), j
 				break
 			}
 		}
 	case r.kind == netProject && (s == "space" || s == " "):
 		return nv.toggle(m, r.slug)
+	case r.kind == netProject && s == "L":
+		nv.pick(m, r.slug, "")
 	case r.kind == netTheirs && s == "enter":
 		return nv.showTheirs(m, r)
 	case r.kind == netTheirs && s == "L":
-		m.msg = "to link a project of yours with " + netName(nv.list.Peers[r.peer]) + "/" + r.slug + ": its Settings tab (A, then 4), Linked projects, or tm project link"
+		nv.pick(m, "", nv.list.Peers[r.peer].Alias+"/"+r.slug)
 	case r.kind == netServer && r.peer >= 0:
 		e := nv.list.Peers[r.peer]
 		switch s {
@@ -243,6 +261,10 @@ func (nv *networkView) panelKey(m *dash, r netRow, ok bool, s string) (tea.Cmd, 
 		return nv.setPanes(m, e, panesLevels[min(max(i, 0), len(panesLevels)-1)]), true
 	case item == itemShare && (s == "enter" || s == "space" || s == " "):
 		return nv.toggle(m, r.slug), true
+	case (item == itemDir || item == itemAsk || item == itemFiles) && (s == "left" || s == "right"):
+		return nv.panelLinkKey(m, r, item, s), true
+	case (item == itemDir || item == itemAsk || item == itemFiles) && s == "enter":
+		nv.linkDialog(m, r.slug, r.other)
 	case s == "left" || s == "right" || s == "enter" || s == "space" || s == " " || s == "pgup" || s == "pgdown":
 	default:
 		return nil, false
@@ -422,6 +444,11 @@ func (nv *networkView) click(m *dash, item, col int, double bool) tea.Cmd {
 		if to := panesAt(panesLevel(e), col, nl.panel.x); to != "" {
 			return nv.setPanes(m, e, to)
 		}
+	case itemDir, itemAsk, itemFiles:
+		words, cur := linkSwitch(nl.panel.item, r.link.Mine)
+		if i := switchAt(words, cur, col, nl.panel.x); i >= 0 {
+			return nv.panelSet(m, r, nl.panel.item, i)
+		}
 	case itemName:
 		if was || double {
 			nv.name(m, nv.list.Peers[r.peer])
@@ -590,13 +617,15 @@ type netKeysView struct{}
 
 // netKeys are the Network popup's keys, as its ? lists them.
 var netKeys = []keyHelp{
-	{"↑ ↓ ← →", "move; fold or unfold a server, ← from a project to its server"},
-	{"enter", "fold a server; a paired server's project: its dashboard"},
-	{"space", "share a project of yours, asking first, or stop sharing it"},
+	{"↑ ↓ ← →", "move; fold a server or project, ← up to its parent"},
+	{"enter", "fold; on a link its dialog, on theirs its dashboard, on a ⚑ read it"},
+	{"space L", "share a project of yours (asking first) / link it with another"},
+	{"K F R M X", "on a link: ask first, files, resume or ask back, write, unlink"},
+	{"A X", "on a ⚑: send or accept / drop or decline"},
 	{"P J", "pair with another server / join the code one shows"},
 	{"E V U X", "a paired server's name, panes, relay update, unpair"},
 	{"tab", "the keyboard to the details: enter edits, ← → switch"},
-	{"! esc", "the next thing that needs you / close"},
+	{"! esc", "the next ⚑ that needs you / close"},
 }
 
 func (kv *netKeysView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
@@ -607,10 +636,10 @@ func (kv *netKeysView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 }
 
 func (kv *netKeysView) render(m *dash) string {
-	w := m.inner(dialogWidth)
+	w := m.inner(viewWidth)
 	var body []string
 	for _, k := range netKeys {
-		body = append(body, th().Accent.Render(fit(k.keys, 8))+" "+fit(k.help, max(w-9, 1)))
+		body = append(body, th().Accent.Render(fit(k.keys, 10))+" "+fit(k.help, max(w-11, 1)))
 	}
-	return m.popup(box{title: "Network keys", body: body, sel: -1, keys: "esc close", dialog: true})
+	return m.popup(box{title: "Network keys", body: body, sel: -1, keys: "esc close"})
 }

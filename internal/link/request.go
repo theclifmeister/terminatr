@@ -181,7 +181,7 @@ func Requests(p *project.Project) []Request {
 // server's user to set theirs. One request waits per pair.
 func Ask(c caller.Caller, p *project.Project, key, allow string) (*Request, error) {
 	if c.IsAgent() {
-		return nil, refuse("human-only", "link requests are the user's (Settings › Linked projects)")
+		return nil, refuse("human-only", "link requests are the user's (the Network popup, N)")
 	}
 	key = Canon(key)
 	alias, slug, ok := config.Remote(key)
@@ -201,7 +201,7 @@ func Ask(c caller.Caller, p *project.Project, key, allow string) (*Request, erro
 		return nil, err
 	}
 	if mine, _ := cfg.Links(p.Slug); mine[key].Allow != allow {
-		if err := setRemote(c, p, key, alias, slug, allow, nil); err != nil {
+		if err := setRemote(c, p, key, alias, slug, allow, nil, nil); err != nil {
 			return nil, err
 		}
 	}

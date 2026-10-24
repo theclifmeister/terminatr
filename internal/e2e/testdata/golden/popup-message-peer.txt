@@ -1,6 +1,6 @@
  PROJECTS                      1   │ tm dashboard                                               ● server ok · 0 sessions
  <server>│ NEEDS YOU 1 ───────────────────────────────────────────────────────────────────────
- ■ acm╭─ <id> · mini/api → acme ─────────────────────────────────────────────────────────────────────────────╮
+ ■ acm╭─ <id> · mini/api → acme ─────────────────────────────────────────────────────────────────────────────╮twork
  └─ co│ From      mini/api (its user)                                                                            │ivate
       │ To        acme                                                                                           │ inbox
  ◉ min│ Date      <date> │

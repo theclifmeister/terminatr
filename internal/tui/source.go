@@ -349,6 +349,11 @@ type LinkSource interface {
 	// (link.SetFiles). All but the reads are the human's, refused when
 	// tm runs inside an agent.
 	SetLink(slug, other, allow string) error
+	// SaveLink writes slug's side of its link to other as the Network
+	// popup's link dialog sets it, in one act (link.Save): on this
+	// server both sides, to a paired server's project this side only;
+	// it says what became of the files that waited on it, "" for none.
+	SaveLink(slug, other string, l config.Link) (string, error)
 	SetLinkAsk(slug, other string, ask bool) error
 	SetLinkFiles(slug, other, files string) error
 	LinkLog(slug, other string) ([]*link.Message, error)

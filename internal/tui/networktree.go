@@ -9,6 +9,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/theclifmeister/terminatr/internal/link"
 	"github.com/theclifmeister/terminatr/internal/peer"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/textsafe"
@@ -36,6 +37,8 @@ const (
 	netTheirs         // a project a paired server shares with this one
 	netNote           // faint words, which the cursor skips
 	netGap            // a blank line between servers
+	netLink           // a link of a project of this server's (networklinks.go)
+	netNeed           // what a link needs of the user, under it
 )
 
 // netRow is one row of the tree.
@@ -50,6 +53,16 @@ type netRow struct {
 	// text is a note's words; bad draws them as an error.
 	text string
 	bad  bool
+	// other is a link's other project (link.Row.Peer), link its row as
+	// the last poll has it; last: the project's last child, whose need
+	// rows go without the tree's bar. need is a need row's kind (needHeld
+	// …), msg and file what it waits on.
+	other string
+	link  link.Row
+	last  bool
+	need  int
+	msg   *link.Message
+	file  link.Transfer
 }
 
 // selectable says whether the cursor stops on r.
@@ -57,7 +70,9 @@ func (r netRow) selectable() bool { return r.kind != netNote && r.kind != netGap
 
 // key names r as the selection keeps it across reads: "g:" this
 // server, "g:<alias>" a paired one (as the sidebar's peerKey),
-// "p:<slug>" a project here, "t:<alias>/<slug>" one of theirs.
+// "p:<slug>" a project here, "t:<alias>/<slug>" one of theirs,
+// "l:<slug>><other>" a link and "n:<slug>><other>><need>" what it
+// needs (needKey).
 func (nv *networkView) rowKey(r netRow) string {
 	alias := ""
 	if r.peer >= 0 {
@@ -70,12 +85,24 @@ func (nv *networkView) rowKey(r netRow) string {
 		return "p:" + r.slug
 	case netTheirs:
 		return "t:" + alias + "/" + r.slug
+	case netLink:
+		return "l:" + r.slug + ">" + r.other
+	case netNeed:
+		return needKey(r.slug, r.other, r.need, r.id())
 	}
 	return ""
 }
 
 // relayHint ends the tree with nothing paired: where a relay comes from.
 const relayHint = "No relay yet? On a Linux server with a domain: sudo tm relay install --domain NAME; without one, on an address both servers reach: sudo tm relay install --ip (see the README)."
+
+// hasLinks says whether project slug has rows under it in the tree.
+func (nv *networkView) hasLinks(m *dash, slug string) bool {
+	if p := m.projectData(slug); p != nil {
+		return slices.ContainsFunc(p.Links, func(r link.Row) bool { return shownLink(r) || r.Asks != nil })
+	}
+	return false
+}
 
 // shareable are the projects this server offers to share: the active
 // ones (the dashboard's data has no archived one).
@@ -140,6 +167,9 @@ func (nv *networkView) rows(m *dash) []netRow {
 		}
 		for _, slug := range slugs {
 			out = append(out, netRow{kind: netProject, peer: -1, slug: slug})
+			if !nv.folded["p:"+slug] {
+				out = append(out, nv.linkRows(m, slug)...)
+			}
 		}
 	}
 	switch {
@@ -303,6 +333,10 @@ func (nv *networkView) rowLines(m *dash, r netRow, w int) []string {
 			right = th().Faint.Render("panes ") + th().Accent.Render(proto.PanesWord(panesLevel(e)))
 		}
 		return []string{spread(left, right, w)}
+	case netLink:
+		return []string{nv.linkLine(m, r, w)}
+	case netNeed:
+		return []string{needLine(m, r, w)}
 	case netProject:
 		box := th().Accent.Render("[ ]") + th().Faint.Render(" not shared")
 		if shared(m, r.slug) {
@@ -311,14 +345,26 @@ func (nv *networkView) rowLines(m *dash, r netRow, w int) []string {
 				box += th().Faint.Render(" · seen by " + nv.pairedNames())
 			}
 		}
-		return []string{fit("   "+th().Accent.Render(i.folder)+" "+fit(th().Head.Render(r.slug), name-5)+" "+box, w)}
+		left := "   " + th().Accent.Render(i.folder) + " " + fit(th().Head.Render(r.slug), name-5) + " " + box
+		right := ""
+		if w >= 50 {
+			right = linkCount(m, r.slug)
+		}
+		if ansi.StringWidth(left)+1+ansi.StringWidth(right) > w {
+			right = ""
+		}
+		return []string{spread(left, right, w)}
 	case netTheirs:
 		p := r.project
 		slug := th().Head.Render(r.slug)
 		if p.Stale {
 			slug = th().Faint.Render(r.slug + " · stale")
 		}
-		left := "   " + th().Accent.Render(i.folder) + " " + fit(slug, name-5) + " " + th().Faint.Render("shared with you · ") + th().Accent.Render("+ link") + th().Faint.Render(" (L)")
+		links := theirLinks(m, nv.list.Peers[r.peer].Alias, r.slug)
+		if links == "" {
+			links = th().Faint.Render("shared with you · ") + th().Accent.Render("+ link") + th().Faint.Render(" (L)")
+		}
+		left := "   " + th().Accent.Render(i.folder) + " " + fit(slug, name-5) + " " + links
 		right := ""
 		if g, st, word := theirCoord(p); word != "" && w >= 50 {
 			if p.Stale {
@@ -354,6 +400,8 @@ func theirCoord(p *proto.PeerMirrorProject) (string, lipgloss.Style, string) {
 // no room for the details panel.
 func (nv *networkView) detail(m *dash, r netRow, w int) [2]string {
 	switch r.kind {
+	case netLink, netNeed:
+		return nv.linkDetail(m, r, w)
 	case netServer:
 		if r.peer < 0 {
 			id := ""
@@ -382,16 +430,16 @@ func (nv *networkView) detail(m *dash, r netRow, w int) [2]string {
 	case netProject:
 		if shared(m, r.slug) {
 			return [2]string{r.slug + " · shared with every paired server: they see its state, never its files",
-				th().Faint.Render("space stops sharing it, at once · tab: the details")}
+				th().Faint.Render("space stops sharing it, at once · L links it with another project")}
 		}
-		return [2]string{r.slug + " · not shared: paired servers don't see it", th().Faint.Render("space shares it with every paired server, asking first")}
+		return [2]string{r.slug + " · not shared: paired servers don't see it", th().Faint.Render("space shares it with every paired server, asking first · L links it")}
 	case netTheirs:
 		e := nv.list.Peers[r.peer]
 		l1 := netName(e) + "'s " + r.slug + " · " + freshWords(r.project)
 		if _, _, word := theirCoord(r.project); word != "" && !r.project.Stale {
 			l1 += " · coordinator " + word
 		}
-		return [2]string{l1, th().Faint.Render("nothing here acts on it; enter shows its dashboard, read-only")}
+		return [2]string{l1, th().Faint.Render("nothing here acts on it; enter shows its dashboard, read-only; L links one of yours with it")}
 	}
 	return [2]string{}
 }
@@ -468,11 +516,13 @@ func (nv *networkView) rowKeys(m *dash, r netRow, ok bool) string {
 		}
 		return joinKeys("E name", "V panes", u, "X unpair", "enter fold", "tab details", "P pair", "J join", tail)
 	case r.kind == netProject && shared(m, r.slug):
-		return "space unshare · tab details · " + tail
+		return "space unshare · L link · tab details · " + tail
 	case r.kind == netProject:
-		return "space share · tab details · " + tail
+		return "space share · L link · tab details · " + tail
 	case r.kind == netTheirs:
-		return "enter its dashboard · " + tail
+		return "enter its dashboard · L link one of yours · " + tail
+	case r.kind == netLink, r.kind == netNeed:
+		return nv.linkKeys(m, r)
 	}
 	return tail
 }
