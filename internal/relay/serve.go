@@ -65,6 +65,8 @@ func Serve(ctx context.Context, ln net.Listener, s *Server, t TLS) error {
 	if cfg != nil {
 		ln = tls.NewListener(ln, cfg)
 	}
+	errLog, stopLog := s.errorLog()
+	defer stopLog()
 	hs := &http.Server{
 		Handler:           s,
 		ReadHeaderTimeout: s.http.header,
@@ -73,7 +75,7 @@ func Serve(ctx context.Context, ln net.Listener, s *Server, t TLS) error {
 		WriteTimeout:   s.http.handshake,
 		IdleTimeout:    s.http.idle,
 		MaxHeaderBytes: 8 << 10,
-		ErrorLog:       s.errorLog(),
+		ErrorLog:       errLog,
 	}
 	errc := make(chan error, 1)
 	go func() { errc <- hs.Serve(ln) }()
@@ -94,19 +96,20 @@ func Serve(ctx context.Context, ln net.Listener, s *Server, t TLS) error {
 }
 
 // errorLog is net/http's log of failed connections (a TLS handshake
-// that went wrong): the relay's log, without client addresses unless
-// LogIPs.
-func (s *Server) errorLog() *log.Logger {
+// that went wrong): the relay's log, with scanners' handshake errors
+// counted (handshakeNoise) and without client addresses unless LogIPs.
+// The func it returns logs what was counted and stops the hourly summary.
+func (s *Server) errorLog() (*log.Logger, func()) {
 	if s.cfg.Log == nil {
-		return log.New(io.Discard, "", 0)
+		return log.New(io.Discard, "", 0), func() {}
 	}
-	if s.cfg.LogIPs {
-		return s.cfg.Log
-	}
+	n := newHandshakeNoise(func(line string) { s.cfg.Log.Print(line) }, s.cfg.LogIPs, s.now)
+	done, ended := make(chan struct{}), make(chan struct{})
+	go func() { n.run(done); close(ended) }()
 	return log.New(writerFunc(func(p []byte) (int, error) {
-		s.cfg.Log.Print(hideAddrs(strings.TrimSuffix(string(p), "\n")))
+		n.line(strings.TrimSuffix(string(p), "\n"))
 		return len(p), nil
-	}), "", 0)
+	}), "", 0), func() { close(done); <-ended }
 }
 
 type writerFunc func([]byte) (int, error)
