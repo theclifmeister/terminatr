@@ -95,26 +95,18 @@ function size(n: number): string {
   return `${Math.round(n / 102.4) / 10} KB`;
 }
 
-// front splits a note's TOML front matter (between +++ lines) from its
-// body, and says it as one line: touches, standing, audience, source.
-// A value is read as JSON, which TOML's strings, arrays of strings and
-// booleans are; anything else shows as written. Without a closing +++ there is
-// no front matter, as tm reads it.
+// front splits a note's front matter, TOML between +++ lines or YAML
+// between --- lines, from its body, and says it as one line: touches,
+// standing, audience, source. Without a closing fence there is no front
+// matter, as tm reads it.
 function front(md: string): { meta: string; body: string } {
   const lines = md.replace(/\r\n?/g, "\n").split("\n");
-  if (lines[0] !== "+++") return { meta: "", body: md };
-  const end = lines.indexOf("+++", 1);
+  const fence = lines[0];
+  if (fence !== "+++" && fence !== "---") return { meta: "", body: md };
+  const end = lines.indexOf(fence, 1);
   if (end < 0) return { meta: "", body: md };
-  const vals = new Map<string, unknown>();
-  for (const l of lines.slice(1, end)) {
-    const m = /^\s*([A-Za-z_]+)\s*=\s*(.*?)\s*$/.exec(l);
-    if (!m) continue;
-    try {
-      vals.set(m[1], JSON.parse(m[2]));
-    } catch {
-      vals.set(m[1], m[2]);
-    }
-  }
+  const head = lines.slice(1, end);
+  const vals = fence === "+++" ? tomlValues(head) : yamlValues(head);
   const meta: string[] = [];
   const touches = vals.get("touches");
   if (Array.isArray(touches) && touches.length > 0) meta.push(`touches ${touches.join(", ")}`);
@@ -125,6 +117,69 @@ function front(md: string): { meta: string; body: string } {
   const source = vals.get("source");
   if (source) meta.push(`from ${source}`);
   return { meta: meta.join(" · "), body: lines.slice(end + 1).join("\n") };
+}
+
+// tomlValues reads key = value lines. A value is read as JSON, which
+// TOML's strings, arrays of strings and booleans are; anything else
+// shows as written.
+function tomlValues(head: string[]): Map<string, unknown> {
+  const vals = new Map<string, unknown>();
+  for (const l of head) {
+    const m = /^\s*([A-Za-z_]+)\s*=\s*(.*?)\s*$/.exec(l);
+    if (!m) continue;
+    try {
+      vals.set(m[1], JSON.parse(m[2]));
+    } catch {
+      vals.set(m[1], m[2]);
+    }
+  }
+  return vals;
+}
+
+// yamlValues reads the YAML tm and Obsidian write: key: value lines, a
+// value a scalar or a [flow, list], or a key with nothing after it and
+// "- item" lines below. Anything else is skipped.
+function yamlValues(head: string[]): Map<string, unknown> {
+  const vals = new Map<string, unknown>();
+  let list: unknown[] | undefined;
+  for (const l of head) {
+    const item = /^\s*-\s+(.*?)\s*$/.exec(l);
+    if (item && list) {
+      list.push(yamlScalar(item[1]));
+      continue;
+    }
+    list = undefined;
+    const m = /^([A-Za-z_][A-Za-z0-9_]*)\s*:(?:\s+(.*?))?\s*$/.exec(l);
+    if (!m) continue;
+    const raw = m[2] ?? "";
+    const v = /^["']/.test(raw) ? raw : raw.replace(/^#.*$|\s+#.*$/, "");
+    if (v === "") {
+      list = [];
+      vals.set(m[1], list);
+    } else if (v.startsWith("[") && v.endsWith("]")) {
+      const inner = v.slice(1, -1).trim();
+      vals.set(m[1], inner === "" ? [] : (inner.match(/"(?:[^"\\]|\\.)*"|'(?:[^']|'')*'|[^,]+/g) ?? []).map((x) => yamlScalar(x.trim())));
+    } else {
+      vals.set(m[1], yamlScalar(v));
+    }
+  }
+  return vals;
+}
+
+// yamlScalar is a YAML scalar's value: a quoted string unquoted, true and
+// false booleans, anything else the text as written.
+function yamlScalar(v: string): unknown {
+  if (v.startsWith('"') && v.endsWith('"') && v.length > 1) {
+    try {
+      return JSON.parse(v);
+    } catch {
+      return v.slice(1, -1);
+    }
+  }
+  if (v.startsWith("'") && v.endsWith("'") && v.length > 1) return v.slice(1, -1).replace(/''/g, "'");
+  if (v === "true") return true;
+  if (v === "false") return false;
+  return v;
 }
 
 // blocks is markdown as text widgets: each heading in the head role (the

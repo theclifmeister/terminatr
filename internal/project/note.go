@@ -70,18 +70,18 @@ What bites whoever changes this next.
 
 // NoteFront is a note's front matter.
 type NoteFront struct {
-	Title string `toml:"title,omitempty" json:"title,omitempty"`
+	Title string `toml:"title,omitempty" yaml:"title,omitempty" json:"title,omitempty"`
 	// Touches are the paths (relative to a repo's root; a folder ends
 	// with /) and repo:<name> entries the note is about.
-	Touches []string `toml:"touches,omitempty" json:"touches,omitempty"`
+	Touches []string `toml:"touches,omitempty" yaml:"touches,omitempty" json:"touches,omitempty"`
 	// Standing is a note every thread of the project should know.
-	Standing bool `toml:"standing,omitempty" json:"standing,omitempty"`
+	Standing bool `toml:"standing,omitempty" yaml:"standing,omitempty" json:"standing,omitempty"`
 	// Audience is who the note is for: "everyone" (the default, when
 	// empty) or AudienceCoordinator, a note tm never points a thread at
 	// or shows one (ForThreads).
-	Audience string `toml:"audience,omitempty" json:"audience,omitempty"`
+	Audience string `toml:"audience,omitempty" yaml:"audience,omitempty" json:"audience,omitempty"`
 	// Source is the task or thread the note came from.
-	Source string `toml:"source,omitempty" json:"source,omitempty"`
+	Source string `toml:"source,omitempty" yaml:"source,omitempty" json:"source,omitempty"`
 }
 
 // AudienceCoordinator is the audience of a note for the coordinator

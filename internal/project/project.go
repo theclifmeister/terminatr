@@ -27,15 +27,15 @@ import (
 // dropped the next time tm writes the front matter; so is a repos key,
 // the repo list's place before config.toml (Project.Repos, MoveRepos).
 type Meta struct {
-	Goal    string    `toml:"goal"`
-	Created time.Time `toml:"created"`
+	Goal    string    `toml:"goal" yaml:"goal"`
+	Created time.Time `toml:"created" yaml:"created"`
 	// CodeHost and AzureURL override where the repos' pull requests live
 	// (codehost.Config): "github", "azure", or the kind a code host mod
 	// serves ("gitlab"), and the Azure DevOps
 	// organization URL for a server tm doesn't recognize. Unset, each
 	// repo's origin URL decides.
-	CodeHost string `toml:"code_host,omitempty"`
-	AzureURL string `toml:"azure_url,omitempty"`
+	CodeHost string `toml:"code_host,omitempty" yaml:"code_host,omitempty"`
+	AzureURL string `toml:"azure_url,omitempty" yaml:"azure_url,omitempty"`
 }
 
 // CodeHost is the project's code host override, for codehost.Pick.
@@ -222,7 +222,7 @@ func approvedRepos(cfg *config.Config, slug string, data []byte) []string {
 // legacyRepos is the repos key of a PROJECT.md (data) an older tm wrote.
 func legacyRepos(data []byte) []string {
 	var old struct {
-		Repos []string `toml:"repos"`
+		Repos []string `toml:"repos" yaml:"repos"`
 	}
 	if _, err := mdfile.Decode(data, &old); err != nil {
 		return nil

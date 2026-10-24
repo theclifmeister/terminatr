@@ -20,6 +20,12 @@ func TestSplit(t *testing.T) {
 		{"+++\r\na = 1\r\n+++\r\nbody", "a = 1\r\n", "body", false},
 		{"+++\na = 1\n", "", "", true},
 		{"", "", "", false},
+		{"---\na: 1\n---\n# hi\n", "a: 1\n", "# hi\n", false},
+		{"---\r\na: 1\r\n---\r\nbody", "a: 1\r\n", "body", false},
+		{"---\na: 1\n+++\nb\n---\nc", "a: 1\n+++\nb\n", "c", false},
+		{"+++\na = 1\n---\nb\n", "", "", true},
+		{"---\na: 1\n", "", "", true},
+		{"----\na\n", "", "----\na\n", false},
 	}
 	for _, c := range cases {
 		front, body, err := Split([]byte(c.in))
@@ -34,8 +40,8 @@ func TestSplit(t *testing.T) {
 }
 
 type fm struct {
-	Name  string   `toml:"name"`
-	Repos []string `toml:"repos"`
+	Name  string   `toml:"name" yaml:"name"`
+	Repos []string `toml:"repos" yaml:"repos"`
 }
 
 func TestWriteRead(t *testing.T) {
