@@ -4,7 +4,7 @@
     ├│ About: tm dev · server unknown · update check off                                               │
     └│                                                                                                 │ivate
  ■ be│                                                                                                 │
- └─ c│ Link limits                  3 at once · 10 an hour · 8 KB · files 25 MB                        │
+ └─ c│ Link limits                  3 at once · 10 an hour · 8 KB · files up to 25 MB                  │
     ├│ How much the coordinator may send on links to other projects (tm link): messages at once and an │
     └│ hour, each way, and a message's size. Messages over the rate wait queued and go in order.       │
      │ Between two projects here the lower of their limits holds; a paired server keeps its own. Enter │

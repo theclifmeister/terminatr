@@ -212,7 +212,7 @@ func TestRemotePanelKeys(t *testing.T) {
 	c.showInfo(d)
 	c.mu.Unlock()
 	text := ansi.Strip(strings.Join(c.info.lines, "\n"))
-	if strings.Contains(text, "ticker") || !strings.Contains(text, "◉ linked 38 ms · synced 2s ago") {
+	if strings.Contains(text, "ticker") || !strings.Contains(text, "◉ connected 38 ms · synced 2s ago") {
 		t.Fatalf("the panel:\n%s", text)
 	}
 	key := func(k uv.Key) {

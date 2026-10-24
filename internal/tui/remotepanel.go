@@ -29,7 +29,7 @@ import (
 // shares its panes with this one.
 //
 //	" mini"
-//	" ◉ linked 38 ms · synced 2s ago"
+//	" ◉ connected 38 ms · synced 2s ago"
 //	" T7 Billing export"
 //	" ● in-progress"
 //	" STEPS ───"
@@ -108,14 +108,14 @@ func (r *remoteData) stale() bool {
 
 // remoteHead is a paired server's link as a remote project's head says
 // it, for project p (nil: not shared): its glyph and style, and its
-// words, "linked 38 ms · synced 2s ago", "offline 4m · relay · last
+// words, "connected 38 ms · synced 2s ago", "offline 4m · relay · last
 // seen 14:02".
 func remoteHead(pm *proto.PeerMirror, p *proto.PeerMirrorProject, now time.Time) (g string, gst lipgloss.Style, words string) {
 	link := &peerLink{state: pm.State, reason: pm.Reason, since: pm.Since, rtt: pm.RTT, watch: pm.Watch}
 	g, gst = linkLook(link)
 	words = linkWords(link, now)
 	if pm.State == proto.LinkUp && pm.RTT > 0 {
-		words = "linked " + words
+		words = "connected " + words
 	}
 	switch {
 	case p == nil:

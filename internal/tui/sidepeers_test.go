@@ -154,7 +154,7 @@ func TestPeerRows(t *testing.T) {
 	if l := ansi.Strip(treeCells(rows[12], sideDefault-1, false, false)); !strings.HasPrefix(l, " ○ nas · offline 4m · relay") {
 		t.Errorf("offline header %q", l)
 	}
-	if l := ansi.Strip(treeCells(rows[6], sideDefault-1, false, false)); !strings.HasPrefix(l, " ◉ mini · 38 ms") {
+	if l := ansi.Strip(treeCells(rows[6], sideDefault-1, false, false)); !strings.HasPrefix(l, " ◉ mini · connected 38 ms") {
 		t.Errorf("linked header %q", l)
 	}
 	if c := treeCells(rows[13], sideDefault-2, false, false); gridCol(c, gridState) != "·" {
@@ -375,13 +375,13 @@ func TestPeerRowHere(t *testing.T) {
 }
 
 // TestRemoteStatus: a remote pane's status bar leads with its server
-// and says how it is linked; keys don't go to a view-only pane, nor
+// and says how it is connected; keys don't go to a view-only pane, nor
 // while the link is down.
 func TestRemoteStatus(t *testing.T) {
 	setIcons(IconsUnicode)
 	in := proto.SessionInfo{ID: "mini/r-1", Role: proto.RoleCoordinator, Project: "acme-api", Server: "mini"}
-	line, _ := statusBar(in, nil, "", false, 160, "remote · 38 ms", nil)
-	if l := ansi.Strip(line); !strings.Contains(l, "mini › acme-api › coordinator") || !strings.Contains(l, "remote · 38 ms") {
+	line, _ := statusBar(in, nil, "", false, 160, "remote · connected 38 ms", nil)
+	if l := ansi.Strip(line); !strings.Contains(l, "mini › acme-api › coordinator") || !strings.Contains(l, "remote · connected 38 ms") {
 		t.Errorf("status bar %q", l)
 	}
 	_, _, peers := peerData()
@@ -390,7 +390,7 @@ func TestRemoteStatus(t *testing.T) {
 	if why := c.remoteBlock(p); why != "" {
 		t.Errorf("up, type: %q", why)
 	}
-	if n := c.remoteNote(p); n != "remote · 38 ms" {
+	if n := c.remoteNote(p); n != "remote · connected 38 ms" {
 		t.Errorf("note %q", n)
 	}
 	p.info.ViewOnly = true

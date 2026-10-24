@@ -45,7 +45,7 @@ func TestRemoteDashboard(t *testing.T) {
 	out := screen(m)
 	for _, want := range []string{
 		" tm dashboard · mini › acme-api",
-		"◉ mini · linked 38 ms · synced 2s ago",
+		"◉ mini · connected 38 ms · synced 2s ago",
 		"the billing API",
 		"coordinator ● working · 22 / 100 context",
 		"1 question waiting",
@@ -351,7 +351,7 @@ func TestPeerDisplayName(t *testing.T) {
 	out := screen(m)
 	for _, want := range []string{
 		" tm dashboard · work › acme-api",
-		"◉ work · linked 38 ms · synced 2s ago",
+		"◉ work · connected 38 ms · synced 2s ago",
 		"link a project of yours to work/acme-api (tm project link).",
 	} {
 		if !strings.Contains(out, want) {

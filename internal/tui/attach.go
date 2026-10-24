@@ -1742,7 +1742,7 @@ func (c *client) serverShown(alias string) string {
 }
 
 // remoteNote is the status bar's note on a paired server's pane: how it
-// is linked, or that keys don't go. A view-only pane keeps the far
+// is connected, or that keys don't go. A view-only pane keeps the far
 // session's size, drawn from the top left, cropped or padded: when that
 // isn't its rectangle's, the note says the size. c.mu held.
 func (c *client) remoteNote(p *pane) string {
@@ -1766,7 +1766,7 @@ func (c *client) remoteNote(p *pane) string {
 			}
 		}
 		if pm.RTT > 0 {
-			note += " · " + rttWords(pm.RTT)
+			note += " · connected " + rttWords(pm.RTT)
 		}
 		return note
 	}
