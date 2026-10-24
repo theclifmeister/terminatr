@@ -20,6 +20,9 @@ const askUsage = `usage: tm ask <command> [--project <slug>] [--json]
   list                          the open questions, oldest first
   done Q3...                    answered, or no longer asked
   open                          have the coordinator put them to the user in its question dialog
+  answer Q3 --choice N|LABEL... [--other "…"]
+                                the user's: answer a question (N counts its options from 1; --choice
+                                again for a multi-select one; --other in your own words)
 
 Questions take 2 to 4 options (the dialog adds Other) and a header of at most 12 characters (default: the task).
 Exit codes: 0 done, 1 refused, 2 usage, 3 I/O.`
@@ -36,9 +39,16 @@ func runAsk(e *Env, args []string) error {
 	slug, asJSON := f.String("project"), f.Bool("json")
 	task, header, file, recommend := f.String("task"), f.String("header"), f.String("file"), f.String("recommend")
 	options, multi := f.List("option"), f.Bool("multi")
+	choices, other := f.List("choice"), f.String("other")
 	pos, err := f.Parse(args[1:])
 	if err != nil {
 		return err
+	}
+	if sub == "answer" {
+		return askAnswer(e, *slug, pos, *choices, *other, *asJSON)
+	}
+	if f.anySet("choice", "other") {
+		return usagef("--choice and --other go with answer\n%s", askUsage)
 	}
 	if e.Caller.Kind == caller.Thread {
 		return &project.Error{Code: "coordinator-only", Msg: "questions to the user are the coordinator's; a thread uses tm status --needs-you"}
@@ -175,4 +185,34 @@ func (e *Env) readQuestions(path string) ([]project.Question, error) {
 		return nil, usagef("--file holds no question")
 	}
 	return qs, nil
+}
+
+// askAnswer is tm ask answer: the user answers an open question from
+// their own terminal (or the Obsidian plugin, which runs it), as in the
+// coordinator's question dialog. It drops an answer item, the user's
+// word, for the coordinator to act on (docs/SPEC.md §7.5, Questions).
+func askAnswer(e *Env, slug string, pos, choices []string, other string, asJSON bool) error {
+	if len(pos) != 1 {
+		return usagef("%s", askUsage)
+	}
+	if e.Caller.Kind != caller.Human {
+		return &project.Error{Code: "human-only", Msg: "only the user answers a question (the coordinator's question dialog, or tm ask answer in their own terminal); ask them in chat"}
+	}
+	p, err := e.openProject(slug)
+	if err != nil {
+		return err
+	}
+	q, a, asked, err := p.AnswerQuestion(e.Caller, pos[0], choices, other)
+	if err != nil {
+		return err
+	}
+	if asJSON {
+		return e.printJSON(map[string]any{"question": q.ID, "answer": a, "asked": asked})
+	}
+	if !asked {
+		fmt.Fprintf(e.Stdout, "%s is answered already; it waits on the coordinator\n", q.ID)
+		return nil
+	}
+	fmt.Fprintf(e.Stdout, "told the coordinator your answer to %s: %s\n", q.ID, shown(a.Words()))
+	return nil
 }

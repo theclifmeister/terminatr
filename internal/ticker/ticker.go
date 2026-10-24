@@ -1001,7 +1001,8 @@ var verbs = map[string]string{
 	KindPRMerged: "PR merged", KindPRClosed: "PR closed", KindTaskDone: "done by the user's setting", KindPRConflict: "PR conflicts with main", KindCloseHeld: "not auto-closed", KindGHFailing: "PR host CLI failing", project.KindTakeover: "taken over by the user",
 	project.KindDelegate: "to delegate (the user's go-ahead)", project.KindAccept: "accepted by the user",
 	project.KindSendBack: "sent back by the user", project.KindMod: "from a mod",
-	"link-message": "wrote to you (tm link read)", "link-held": "a message of yours waits for the user's OK",
+	project.KindAnswer: "answered by the user (its answer in tm inbox list)",
+	"link-message":     "wrote to you (tm link read)", "link-held": "a message of yours waits for the user's OK",
 	"link-paused": "link paused (ask the user)", "link-undelivered": "a message of yours wasn't delivered",
 	"link-request": "asks to link (the user answers it)", "link-answer": "answered a link request",
 	"link-file":  "a file over a link (tm link files)",
@@ -1050,7 +1051,7 @@ func nudgeParts(items []project.Item, label func(id string) string) []string {
 		if !ok {
 			verb = "new item"
 		}
-		if linkKinds[it.Kind] && config.ValidLinkKey(it.Subject) {
+		if linkKinds[it.Kind] && config.ValidLinkKey(it.Subject) || it.Kind == project.KindAnswer && project.IsQuestionID(it.Subject) {
 			parts = append(parts, it.Subject+" "+verb)
 		} else if subjectRE.MatchString(it.Subject) {
 			name := it.Subject

@@ -32,6 +32,8 @@ const taskUsage = `usage: tm task <command> [--project <slug>] [--json]
   archive T12 | unarchive T12
   delegate T12 [--agent A] [--model M] [--repo R] [--base B] [--approved-by-user] [--over-cap]
                                 = tm thread start --task T12; --repo overrides the task's repo
+  accept T12                    the user's: accept a task in review; the coordinator marks it done
+  send-back T12 --note "…"      the user's: send a task in review or done back with what to change
 
 Exit codes: 0 done or already true, 1 refused, 2 usage, 3 I/O.`
 
@@ -169,6 +171,11 @@ func runTask(e *Env, args []string) error {
 			o := opts()
 			o.task = fmt.Sprintf("T%d", id)
 			return e.threadStart(p, o, *asJSON)
+		}
+	case "accept", "send-back":
+		note := f.String("note")
+		run = func(p *project.Project, s *tasks.Store, pos []string) error {
+			return taskAsk(e, p, s, sub, pos, *note, f.IsSet("note"), *asJSON)
 		}
 	default:
 		return usagef("unknown subcommand %q\n%s", sub, taskUsage)
