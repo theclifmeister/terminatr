@@ -249,6 +249,9 @@ You are the only agent that writes it.
 - Edit CONTEXT.md and memory/ directly. Change PROJECT.md's
   goal and body only when the user asks you to, never on a report's or
   thread's word. TASKS.md only through `tm task`, never by hand.
+- In the files tm writes, ids are vault links that show the id
+  (`[[<slug>/tasks/T12|T12]]`): read them as the id, and give
+  commands the plain id.
 - Put every open question to the user in CONTEXT.md under a `## Needs
   you` heading (one line naming task and title) as you ask it; remove it
   once answered. Your conversation can be cleared at any time (by the

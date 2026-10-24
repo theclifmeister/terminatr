@@ -32,6 +32,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/textsafe"
 	"github.com/theclifmeister/terminatr/internal/thread"
+	"github.com/theclifmeister/terminatr/internal/vaultlink"
 )
 
 // Inbox item kinds.
@@ -102,6 +103,9 @@ type Message struct {
 	File     string `toml:"file,omitempty" yaml:"file,omitempty" json:"file,omitempty"`
 	FileSize int64  `toml:"file_size,omitempty" yaml:"file_size,omitempty" json:"file_size,omitempty"`
 	Transfer string `toml:"transfer,omitempty" yaml:"transfer,omitempty" json:"transfer,omitempty"`
+	// Sender links the project that sent it (vaultlink), as the file
+	// keeps it; read back, it is "" (From says it).
+	Sender string `toml:"from,omitempty" yaml:"from,omitempty" json:"-"`
 	// Peer is the other project (the folder's name), Text the message;
 	// neither is in the front matter.
 	Peer string `toml:"-" yaml:"-" json:"peer"`
@@ -165,7 +169,24 @@ func write(p *project.Project, m *Message) error {
 	if err := os.MkdirAll(dir(p, m.Peer), 0o755); err != nil {
 		return err
 	}
-	return mdfile.Write(path(p, m.Peer, m.ID), m, []byte(m.Text+"\n"))
+	return mdfile.Write(path(p, m.Peer, m.ID), linked(p, m), []byte(m.Text+"\n"))
+}
+
+// linked is m as its file in p's folder keeps it: the message it
+// answers and the project that sent it as links (vaultlink, docs/SPEC.md
+// §7.9), so a conversation threads in the vault's backlinks.
+func linked(p *project.Project, m *Message) *Message {
+	f := *m
+	if ValidID(m.Re) {
+		f.Re = vaultlink.Link(p.Slug, vaultlink.Message, m.Peer+"/"+m.Re, m.Re)
+	}
+	f.Sender = vaultlink.Link(p.Slug, vaultlink.Project, m.From(p.Slug), "")
+	return &f
+}
+
+// unlinked reads m's links back as ids (vaultlink.Plain).
+func unlinked(m *Message) {
+	m.Re, m.Sender = vaultlink.Plain(m.Re), ""
 }
 
 func readFile(file, peer string) (*Message, error) {
@@ -174,6 +195,7 @@ func readFile(file, peer string) (*Message, error) {
 	if err != nil {
 		return nil, err
 	}
+	unlinked(m)
 	m.Peer, m.Text = peer, strings.TrimSuffix(string(body), "\n")
 	return m, nil
 }
@@ -190,8 +212,10 @@ func update(p *project.Project, other, id string, fn func(m *Message)) error {
 		if err != nil {
 			return nil, err
 		}
+		unlinked(m)
+		m.Peer = other
 		fn(m)
-		return mdfile.Join(m, body)
+		return mdfile.Join(linked(p, m), body)
 	})
 }
 

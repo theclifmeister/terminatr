@@ -12,15 +12,20 @@ import (
 	"github.com/theclifmeister/terminatr/internal/mdfile"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/tasks"
+	"github.com/theclifmeister/terminatr/internal/vaultlink"
 )
 
 // SelfReportTTL is how long a `tm status` percent counts (docs/SPEC.md §7.3).
 const SelfReportTTL = 5 * time.Minute
 
-// Status is threads/<id>/STATUS.md: TOML front matter plus the mirrored
+// Status is threads/<id>/STATUS.md: front matter plus the mirrored
 // todo list. Only tm writes it: the server on todo changes, tm on step
 // changes, tm status and tm done.
 type Status struct {
+	// Thread and Task are the thread's id and its task's ref ("" for
+	// none); the file links them (vaultlink), ParseStatus reads ids.
+	Thread        string       `toml:"thread,omitempty" yaml:"thread,omitempty" json:"thread,omitempty"`
+	Task          string       `toml:"task,omitempty" yaml:"task,omitempty" json:"task,omitempty"`
 	Percent       int          `toml:"percent" yaml:"percent" json:"percent"`
 	PercentSource string       `toml:"percent_source" yaml:"percent_source" json:"percent_source"` // steps+todos, steps, todos, self, done or ""
 	Current       string       `toml:"current" yaml:"current" json:"current"`
@@ -44,6 +49,7 @@ func ParseStatus(data []byte) (*Status, error) {
 	if err != nil {
 		return nil, err
 	}
+	st.Thread, st.Task = vaultlink.Plain(st.Thread), vaultlink.Plain(st.Task)
 	for _, l := range strings.Split(string(body), "\n") {
 		l = strings.TrimSpace(l)
 		if len(l) < 6 || !strings.HasPrefix(l, "- [") || l[4] != ']' {
@@ -172,8 +178,11 @@ func UpdateStatus(p *project.Project, id string, fn func(st *Status) error) (*St
 		if old == nil || !sameStatus(&before, st) || fn != nil {
 			st.Updated = now
 		}
+		st.Thread, st.Task = id, r.Task
 		out = st
-		return st.Render()
+		f := *st
+		f.Thread, f.Task = vaultlink.Link(p.Slug, vaultlink.Thread, id, ""), vaultlink.Ref(p.Slug, r.Task)
+		return f.Render()
 	})
 	return out, err
 }

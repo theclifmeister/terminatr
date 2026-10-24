@@ -15,6 +15,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/mdfile"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/textsafe"
+	"github.com/theclifmeister/terminatr/internal/vaultlink"
 )
 
 var now = time.Now
@@ -49,8 +50,9 @@ func (p *Project) JournalTail(n int) (lines []string, total int, err error) {
 	return lines, total, nil
 }
 
-// Item is one inbox entry (§7.5): TOML front matter, no body taken from
-// untrusted sources.
+// Item is one inbox entry (§7.5): front matter, no body taken from
+// untrusted sources. Its file links the subject, thread and message
+// (vaultlink); ParseItem reads them back as plain ids.
 type Item struct {
 	ID        string    `toml:"id" yaml:"id" json:"id"`
 	Kind      string    `toml:"kind" yaml:"kind" json:"kind"`
@@ -61,6 +63,9 @@ type Item struct {
 	// Message is the id of the message a link item is about
 	// (internal/link), "" on other kinds.
 	Message string `toml:"message,omitempty" yaml:"message,omitempty" json:"message,omitempty"`
+	// Thread is the thread a labelled summary names (thread.Label),
+	// when the subject is another: "" when it is the subject or none.
+	Thread string `toml:"thread,omitempty" yaml:"thread,omitempty" json:"thread,omitempty"`
 }
 
 // AddItem writes inbox/<ts>-<kind>-<subject>.md.
@@ -91,10 +96,29 @@ func (p *Project) AddMessageItem(kind, subject, summary string, needsUser bool, 
 		id = fmt.Sprintf("%s-%d", base, i)
 	}
 	it := &Item{ID: id, Kind: kind, Subject: subject, Created: t, Summary: summary, NeedsUser: needsUser, Message: message}
-	if err := mdfile.Write(p.Path("inbox", id+".md"), it, nil); err != nil {
+	if m := labelled.FindStringSubmatch(summary); m != nil && m[3] != subject {
+		it.Thread = m[3]
+	}
+	if err := mdfile.Write(p.Path("inbox", id+".md"), p.linkedItem(it), nil); err != nil {
 		return nil, err
 	}
 	return it, nil
+}
+
+// linkedItem is it as its file keeps it, with links (vaultlink): a
+// subject that is a task or a thread, or the other project of a message
+// item, the thread, and the message a message item is about.
+func (p *Project) linkedItem(it *Item) *Item {
+	f := *it
+	f.Subject = vaultlink.Ref(p.Slug, it.Subject)
+	f.Thread = vaultlink.Ref(p.Slug, it.Thread)
+	if it.Message != "" {
+		f.Subject = vaultlink.Link(p.Slug, vaultlink.Project, it.Subject, "")
+		if strings.HasPrefix(it.Message, "M-") { // a message, not a request (R-) or a file (X-)
+			f.Message = vaultlink.Link(p.Slug, vaultlink.Message, it.Subject+"/"+it.Message, it.Message)
+		}
+	}
+	return &f
 }
 
 // KindMod is an item a user mod raised for the coordinator ($.inbox.raise,
@@ -268,9 +292,10 @@ func (p *Project) Inbox() ([]Item, error) {
 	return items, nil
 }
 
-// ParseItem reads one inbox file; its id is the file name. The summary
-// is folded to one line, so nothing in an item can pose as more lines of
-// a prompt or a listing.
+// ParseItem reads one inbox file; its id is the file name. Links read
+// as the ids they show (vaultlink.Plain). The summary is folded to one
+// line, so nothing in an item can pose as more lines of a prompt or a
+// listing.
 func ParseItem(id string, data []byte) (Item, error) {
 	var it Item
 	if _, err := mdfile.Decode(data, &it); err != nil {
@@ -278,9 +303,10 @@ func ParseItem(id string, data []byte) (Item, error) {
 	}
 	it.ID = id
 	it.Kind = strings.Join(strings.Fields(it.Kind), "-")
-	it.Subject = strings.Join(strings.Fields(it.Subject), " ")
+	it.Subject = strings.Join(strings.Fields(vaultlink.Plain(it.Subject)), " ")
 	it.Summary = strings.Join(strings.Fields(it.Summary), " ")
-	it.Message = strings.Join(strings.Fields(it.Message), "")
+	it.Message = strings.Join(strings.Fields(vaultlink.Plain(it.Message)), "")
+	it.Thread = strings.Join(strings.Fields(vaultlink.Plain(it.Thread)), "")
 	return it, nil
 }
 
@@ -326,7 +352,7 @@ type Row struct {
 
 // labelled matches a summary that starts with a thread's label
 // (thread.Label): "T12 Title (t-0001) what happened".
-var labelled = regexp.MustCompile(`^(` + tasks.RefPattern + `) (.+?) \(` + tasks.ThreadIDPattern + `\)(.*)$`)
+var labelled = regexp.MustCompile(`^(` + tasks.RefPattern + `) (.+?) \((` + tasks.ThreadIDPattern + `)\)(.*)$`)
 
 // Parts splits a summary into the task ref, what happened and the task
 // title. A summary without a label is all "what".
@@ -335,7 +361,7 @@ func Parts(summary string) (task, what, title string) {
 	if m == nil {
 		return "", summary, ""
 	}
-	return m[1], strings.TrimSpace(m[3]), m[2]
+	return m[1], strings.TrimSpace(m[4]), m[2]
 }
 
 // Rows collapses items (oldest first) into rows: those of one kind for

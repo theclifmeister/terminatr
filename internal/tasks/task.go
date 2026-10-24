@@ -137,6 +137,9 @@ func ParseRef(s string) (int, bool) {
 type Board struct {
 	NextID int
 	Tasks  []*Task
+	// Slug is the project's, for the links Render writes; "" writes
+	// none. Parse leaves it empty.
+	Slug string
 }
 
 // Find returns the task with the given id, or nil.

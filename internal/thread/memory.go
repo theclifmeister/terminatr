@@ -8,6 +8,7 @@ import (
 	"unicode"
 
 	"github.com/theclifmeister/terminatr/internal/project"
+	"github.com/theclifmeister/terminatr/internal/vaultlink"
 )
 
 // MaxMatched is how many matched memory notes a brief carries, besides
@@ -172,7 +173,9 @@ func appendNew(s []string, v string) []string {
 // Render is the brief's "## Memory notes" section, within ResetBudget:
 // each note under its title, path and why it is there, with its text
 // (front matter left out) clipped to an equal share; "" for no notes.
-func (m Memory) Render(dir string) string {
+// With project slug, each note's path is a link to it (vaultlink), as
+// brief.md has it; "" keeps it plain, for a terminal.
+func (m Memory) Render(dir, slug string) string {
 	if len(m.Notes) == 0 {
 		return ""
 	}
@@ -187,7 +190,11 @@ func (m Memory) Render(dir string) string {
 		if !n.Standing {
 			why = "matched: " + strings.Join(append(slices.Clone(n.Terms), n.Paths...), ", ")
 		}
-		title := fmt.Sprintf("### %s (%s; %s)\n", oneLine(n.Note.Title), n.Note.Path, why)
+		path := n.Note.Path
+		if slug != "" {
+			path = vaultlink.Link(slug, vaultlink.Memory, path, path)
+		}
+		title := fmt.Sprintf("### %s (%s; %s)\n", oneLine(n.Note.Title), path, why)
 		body := noteText(n.Note)
 		if body != "" {
 			body += "\n"

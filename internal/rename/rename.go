@@ -1,7 +1,9 @@
 // Package rename renames a project's slug (tm project rename,
 // docs/SPEC.md §5.1): its folder, its threads' worktrees folder, its
 // settings in config.toml and the paths in its thread records. The
-// journal, inbox, tasks and memory move with the folder unchanged.
+// journal, inbox, tasks and memory move with the folder, and the links
+// tm wrote into the project, in every project's files, name the new slug
+// (relink).
 // Branches keep their names: tm/<slug>/ names only new threads' branches.
 //
 // The caller makes sure no agent of the project runs: the server, or
@@ -14,13 +16,16 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/home"
+	"github.com/theclifmeister/terminatr/internal/mdfile"
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/thread"
+	"github.com/theclifmeister/terminatr/internal/vaultlink"
 	"github.com/theclifmeister/terminatr/internal/worktree"
 )
 
@@ -194,11 +199,110 @@ func Project(o Options) (*Result, error) {
 			}
 		}
 	}
+	if n, err := relink(o.From, o.To); err != nil {
+		note("links to %s not all renamed (%d files done): %v", o.From, n, err)
+	}
 	detail := o.From + " → " + o.To
 	if err := p.WriteRoleFile(); err != nil {
 		note("AGENTS.md not rewritten: %v", err)
 	}
 	return res, p.Journal(o.Caller, "project.rename", o.To, detail)
+}
+
+// linkFiles are the files tm writes links in (vaultlink), as patterns
+// below a project's folder (messages/ is walked whole), and the part of
+// each that is tm's: the rest is someone's words, which tm doesn't
+// rewrite.
+var linkFiles = []struct {
+	pat  string
+	part func(line string) bool // the lines that are tm's; nil: the front matter
+}{
+	{"TASKS.md", metaLine}, {"tasks/ARCHIVE.md", metaLine}, {"MEMORY.md", indexLine},
+	{"memory/*.md", nil}, {"inbox/*.md", nil}, {"inbox/done/*.md", nil},
+	{"threads/*/STATUS.md", nil}, {"threads/*/brief.md", func(string) bool { return true }},
+}
+
+// metaLine is a task's metadata line; indexLine a note's in MEMORY.md.
+func metaLine(l string) bool  { return strings.HasPrefix(l, "status:") }
+func indexLine(l string) bool { return strings.HasPrefix(l, "- [[") }
+
+// relinked is text with the links into from pointed at to in the part
+// that is tm's (linkFiles).
+func relinked(text, from, to string, part func(string) bool) string {
+	if part != nil {
+		lines := strings.SplitAfter(text, "\n")
+		for i, l := range lines {
+			if part(l) {
+				lines[i] = vaultlink.Rename(l, from, to)
+			}
+		}
+		return strings.Join(lines, "")
+	}
+	front, _, err := mdfile.Split([]byte(text))
+	if err != nil || front == nil {
+		return text
+	}
+	start := strings.IndexByte(text, '\n') + 1
+	return text[:start] + vaultlink.Rename(string(front), from, to) + text[start+len(front):]
+}
+
+// relink points the links into project from at project to
+// (vaultlink.Rename) in every project's linkFiles and messages, each
+// file that changes under its lock. A link, or anything but a regular
+// file, is left alone. It says how many files it rewrote.
+func relink(from, to string) (int, error) {
+	list, err := project.List()
+	if err != nil {
+		return 0, err
+	}
+	type file struct {
+		path string
+		part func(string) bool
+	}
+	n := 0
+	var errs []error
+	for _, sum := range list {
+		p, err := project.Open(sum.Slug)
+		if err != nil {
+			continue
+		}
+		var files []file
+		for _, lf := range linkFiles {
+			m, _ := filepath.Glob(p.Path(filepath.FromSlash(lf.pat)))
+			for _, f := range m {
+				files = append(files, file{f, lf.part})
+			}
+		}
+		filepath.WalkDir(p.Path("messages"), func(path string, d fs.DirEntry, err error) error {
+			if err == nil && d.Type().IsRegular() && filepath.Ext(path) == ".md" {
+				files = append(files, file{path, nil})
+			}
+			return nil
+		})
+		for _, f := range files {
+			if fi, err := os.Lstat(f.path); err != nil || !fi.Mode().IsRegular() {
+				continue
+			}
+			data, err := os.ReadFile(f.path)
+			if err != nil || relinked(string(data), from, to, f.part) == string(data) {
+				continue
+			}
+			rewrite := func(old []byte) ([]byte, error) { return []byte(relinked(string(old), from, to, f.part)), nil }
+			if filepath.Dir(f.path) == p.Path("inbox", "done") {
+				// A handled item has no writer: no lock file for it.
+				out, _ := rewrite(data)
+				err = fsx.WriteAtomic(f.path, out, 0o644)
+			} else {
+				err = mdfile.Update(f.path, rewrite)
+			}
+			if err != nil {
+				errs = append(errs, err)
+				continue
+			}
+			n++
+		}
+	}
+	return n, errors.Join(errs...)
 }
 
 // under reports path's place below dir, when it is below it.

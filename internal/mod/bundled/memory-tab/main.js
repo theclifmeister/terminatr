@@ -93,8 +93,11 @@ What bites whoever changes this next.
     const audience = vals.get("audience");
     if (audience && audience !== "everyone") meta.push(`for the ${audience} only`);
     const source = vals.get("source");
-    if (source) meta.push(`from ${source}`);
+    if (typeof source === "string" && source) meta.push(`from ${plainLinks(source)}`);
     return { meta: meta.join(" · "), body: lines.slice(end + 1).join("\n") };
+  }
+  function plainLinks(s) {
+    return s.replace(/\[\[([^\[\]|\n]+?)(?:\|([^\[\]\n]*))?\]\]/g, (_l, t, a) => a && a.trim() ? a.trim() : t.split("#")[0].split("/").pop() || t);
   }
   function tomlValues(head) {
     const vals = /* @__PURE__ */ new Map();

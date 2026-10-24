@@ -265,3 +265,59 @@ func TestProjectMovesMessages(t *testing.T) {
 		t.Fatalf("messages/demo: %v", err)
 	}
 }
+
+// TestProjectRelinks (T717): the links tm wrote into demo, in demo's
+// files and in another project's messages with it, name demo2; links in
+// someone's words (notes, a message's text, a report), plain text and
+// links elsewhere stay.
+func TestProjectRelinks(t *testing.T) {
+	setup(t)
+	o, err := project.New(project.Options{Slug: "other"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, _ := project.Open("demo")
+	files := map[string]string{
+		p.Path("TASKS.md"):                            "---\nnext_id: 2\n---\n# Tasks\n\n## In motion\n\n### T1 X\nstatus: started · thread: [[demo/threads/t-0001/t-0001|t-0001]]\n\nNotes: [[demo/tasks/T1|T1]]\n",
+		p.Path("MEMORY.md"):                           "# Memory\n\nSee [[demo/memory/x]].\n\n- [[demo/memory/x|X]]: holds demo/ text\n",
+		p.Path("memory", "x.md"):                      "---\nsource: \"[[demo/tasks/T1|T1]]\"\n---\nSee [[other/tasks/T9|T9]].\n",
+		p.Path("inbox", "done", "i.md"):               "---\nsubject: \"[[demo/threads/t-0001/t-0001|t-0001]]\"\n---\n",
+		p.Path("messages", "other", "M-2.md"):         "---\nre: \"[[demo/messages/other/M-1|M-1]]\"\nfrom: \"[[other/PROJECT|other]]\"\n---\nhi\n",
+		o.Path("messages", "demo", "M-2.md"):          "---\nre: \"[[other/messages/demo/M-1|M-1]]\"\nfrom: \"[[demo/PROJECT|demo]]\"\n---\n[[demo/x]] is their text, linked\n",
+		o.Path("threads", "t-0001", "STATUS.md"):      "---\nthread: \"[[other/threads/t-0001/t-0001|t-0001]]\"\n---\n",
+		p.Path("threads", "t-0001", "REPORT.md"):      "[[demo/tasks/T1|T1]] in a report: not tm's to rewrite\n",
+		p.Path("threads", "t-0001", "brief.md"):       "working on task [[demo/tasks/T1|T1]].\n",
+		o.Path("inbox", "20261025T000000Z-link-x.md"): "---\nsubject: \"[[demo/PROJECT|demo]]\"\nmessage: \"[[other/messages/demo/M-2|M-2]]\"\n---\n",
+	}
+	for f, text := range files {
+		os.MkdirAll(filepath.Dir(f), 0o755)
+		if err := os.WriteFile(f, []byte(text), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if res, err := Project(Options{From: "demo", To: "demo2", Caller: human}); err != nil || len(res.Notes) != 0 {
+		t.Fatalf("%v %+v", err, res)
+	}
+	p, _ = project.Open("demo2")
+	want := map[string]string{
+		p.Path("TASKS.md"):                            "thread: [[demo2/threads/t-0001/t-0001|t-0001]]\n\nNotes: [[demo/tasks/T1|T1]]\n",
+		p.Path("MEMORY.md"):                           "See [[demo/memory/x]].\n\n- [[demo2/memory/x|X]]: holds demo/ text\n",
+		p.Path("memory", "x.md"):                      "source: \"[[demo2/tasks/T1|T1]]\"\n---\nSee [[other/tasks/T9|T9]].\n",
+		p.Path("inbox", "done", "i.md"):               "subject: \"[[demo2/threads/t-0001/t-0001|t-0001]]\"",
+		p.Path("messages", "other", "M-2.md"):         "re: \"[[demo2/messages/other/M-1|M-1]]\"\nfrom: \"[[other/PROJECT|other]]\"",
+		o.Path("messages", "demo2", "M-2.md"):         "re: \"[[other/messages/demo2/M-1|M-1]]\"\nfrom: \"[[demo2/PROJECT|demo2]]\"\n---\n[[demo/x]] is their text",
+		o.Path("threads", "t-0001", "STATUS.md"):      "thread: \"[[other/threads/t-0001/t-0001|t-0001]]\"",
+		p.Path("threads", "t-0001", "REPORT.md"):      "[[demo/tasks/T1|T1]] in a report",
+		p.Path("threads", "t-0001", "brief.md"):       "working on task [[demo2/tasks/T1|T1]].",
+		o.Path("inbox", "20261025T000000Z-link-x.md"): "subject: \"[[demo2/PROJECT|demo2]]\"\nmessage: \"[[other/messages/demo2/M-2|M-2]]\"",
+	}
+	for f, w := range want {
+		data, err := os.ReadFile(f)
+		if err != nil || !strings.Contains(string(data), w) {
+			t.Errorf("%s: %v, no %q in\n%s", f, err, w, data)
+		}
+	}
+	if _, err := os.Lstat(filepath.Join(p.Path("inbox", "done"), ".i.md.lock")); err == nil {
+		t.Error("a lock file beside a handled item")
+	}
+}

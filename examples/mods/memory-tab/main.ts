@@ -117,8 +117,15 @@ function front(md: string): { meta: string; body: string } {
   const audience = vals.get("audience");
   if (audience && audience !== "everyone") meta.push(`for the ${audience} only`);
   const source = vals.get("source");
-  if (source) meta.push(`from ${source}`);
+  if (typeof source === "string" && source) meta.push(`from ${plainLinks(source)}`);
   return { meta: meta.join(" · "), body: lines.slice(end + 1).join("\n") };
+}
+
+// plainLinks shows each wikilink tm wrote as what it shows: its alias,
+// else its target's last part ([[demo/tasks/T12|T12]] is T12).
+function plainLinks(s: string): string {
+  return s.replace(/\[\[([^\[\]|\n]+?)(?:\|([^\[\]\n]*))?\]\]/g, (_l, t: string, a?: string) =>
+    a && a.trim() ? a.trim() : t.split("#")[0].split("/").pop() || t);
 }
 
 // tomlValues reads key = value lines. A value is read as JSON, which

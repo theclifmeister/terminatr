@@ -1,15 +1,19 @@
 package project
 
 import (
+	"bytes"
 	"cmp"
 	"errors"
 	"io/fs"
 	"os"
 	"path"
+	"regexp"
 	"slices"
 	"strings"
 
 	"github.com/theclifmeister/terminatr/internal/mdfile"
+	"github.com/theclifmeister/terminatr/internal/tasks"
+	"github.com/theclifmeister/terminatr/internal/vaultlink"
 )
 
 // A memory note (memory/<name>.md) may start with YAML front matter (or
@@ -85,7 +89,8 @@ type NoteFront struct {
 	// empty) or AudienceCoordinator, a note tm never points a thread at
 	// or shows one (ForThreads).
 	Audience string `toml:"audience,omitempty" yaml:"audience,omitempty" json:"audience,omitempty"`
-	// Source is the task or thread the note came from.
+	// Source is the task or thread the note came from; its file links
+	// it (LinkSource), ParseNote reads the id.
 	Source string `toml:"source,omitempty" yaml:"source,omitempty" json:"source,omitempty"`
 }
 
@@ -128,6 +133,7 @@ func ParseNote(p, text string) Note {
 	var f NoteFront
 	if body, err := mdfile.Decode([]byte(text), &f); err == nil && len(body) < len(text) {
 		n.NoteFront, n.Body, n.Front = f, string(body), true
+		n.Source = vaultlink.Plain(n.Source)
 		n.titled = strings.TrimSpace(f.Title) != ""
 	}
 	if strings.TrimSpace(n.Title) == "" {
@@ -135,6 +141,39 @@ func ParseNote(p, text string) Note {
 	}
 	n.Title = strings.TrimSpace(n.Title)
 	return n
+}
+
+// sourceRE is a note's source property naming a task or a thread
+// plainly, as NoteTemplate has it.
+var sourceRE = regexp.MustCompile(`^source:[ \t]*(["']?)(` + tasks.RefPattern + `|` + tasks.ThreadIDPattern + `)(["']?)[ \t]*$`)
+
+// LinkSource is a note's text with its source property linked
+// (vaultlink) when it names a task or a thread of the project plainly:
+// source: "T481" becomes source: "[[<slug>/tasks/T481|T481]]". Only that
+// line of YAML front matter changes; the rest is the writer's own.
+func (p *Project) LinkSource(data []byte) []byte {
+	front, _, err := mdfile.Split(data)
+	if err != nil || front == nil || !bytes.HasPrefix(data, []byte("---")) {
+		return data
+	}
+	start := bytes.IndexByte(data, '\n') + 1
+	lines := strings.SplitAfter(string(front), "\n")
+	for i, l := range lines {
+		text := strings.TrimRight(l, "\r\n")
+		m := sourceRE.FindStringSubmatch(text)
+		if m == nil || m[1] != m[3] {
+			continue
+		}
+		link := vaultlink.Ref(p.Slug, m[2])
+		if link == m[2] {
+			return data
+		}
+		lines[i] = `source: "` + link + `"` + l[len(text):]
+		out := append([]byte(nil), data[:start]...)
+		out = append(out, strings.Join(lines, "")...)
+		return append(out, data[start+len(front):]...)
+	}
+	return data
 }
 
 // Section is the text under the note's "## name" heading (any level,

@@ -31,7 +31,7 @@ conversation loses none.
 const memoryTemplate = `# Memory
 
 tm writes the list below from the notes in memory/ after every change:
-` + "`- [title](memory/file.md): what it holds (touches: a, b)`" + `.
+one line per note, a link to it, what it holds and (touches: a, b).
 A new note starts from ` + "`tm memory new`" + `; ` + "`tm memory find`" + ` searches them.
 `
 
