@@ -216,7 +216,7 @@ WantedBy=timers.target
 const relayUpdatePathUnit = `# tm relay install writes this file.
 #
 # A server linked through the relay may ask it to update itself to the
-# latest official release (the Peers tab's u, tm peer relay-update). The
+# latest official release (the Network popup's U, tm peer relay-update). The
 # relay runs unprivileged and only writes this request file; tm relay
 # update, as root, removes it and does the update.
 
@@ -431,7 +431,7 @@ func autoUpdateNote(e *Env, auto bool) {
 	} else {
 		fmt.Fprintln(e.Stdout, "Auto-update: off. Update with sudo tm relay update, or install again with --auto-update=on.")
 	}
-	fmt.Fprintln(e.Stdout, "Any server linked through the relay may also ask it to update to the latest release (the Peers tab's u, tm peer relay-update), at most once an hour.")
+	fmt.Fprintln(e.Stdout, "Any server linked through the relay may also ask it to update to the latest release (the Network popup's U, tm peer relay-update), at most once an hour.")
 }
 
 // installIP installs a relay without a domain: its key and self-signed

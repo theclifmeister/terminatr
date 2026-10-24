@@ -356,7 +356,7 @@ type LinkSource interface {
 	LinkAct(slug, verb, arg, text string) (string, error)
 }
 
-// PeerSource manages the paired servers (the Peers tab).
+// PeerSource manages the paired servers (the Network popup).
 type PeerSource interface {
 	// Peers is the paired servers as tm peer list has them (docs/SPEC.md
 	// §16.8); RemovePeer unpins one as tm peer remove does, and has the

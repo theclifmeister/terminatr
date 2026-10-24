@@ -86,7 +86,7 @@ curl -fsSL https://github.com/theclifmeister/terminatr/releases/latest/download/
 sudo ~/.local/bin/tm relay install --domain relay.example.net
 ```
 
-The first line puts `tm` in `~/.local/bin`, which `sudo` doesn't search, hence the full path. Homebrew on Linux works too, but is heavy for a small server. The second line installs the relay as a service, gets its certificate from Let's Encrypt and prints the address to pair with. It updates itself daily to the latest release (checksums checked, restarted only for a newer one; `--auto-update=off` to manage it yourself with `sudo tm relay update`: the relay runs its own copy in `/usr/local/bin`, which `brew upgrade` doesn't touch). Any server linked through the relay can also ask it to update now, at most once an hour (once every 10 minutes for all servers together): `U` in the Peers tab, which shows the relay's version, or `tm peer relay-update ALIAS`.
+The first line puts `tm` in `~/.local/bin`, which `sudo` doesn't search, hence the full path. Homebrew on Linux works too, but is heavy for a small server. The second line installs the relay as a service, gets its certificate from Let's Encrypt and prints the address to pair with. It updates itself daily to the latest release (checksums checked, restarted only for a newer one; `--auto-update=off` to manage it yourself with `sudo tm relay update`: the relay runs its own copy in `/usr/local/bin`, which `brew upgrade` doesn't touch). Any server linked through the relay can also ask it to update now, at most once an hour (once every 10 minutes for all servers together): `U` on the server in the Network popup (`N`), which shows the relay's version, or `tm peer relay-update ALIAS`.
 
 No domain? The relay can run on an IP address instead, public or private (a home network's `192.168.x.x`, a Tailscale `100.x`), with a certificate it makes itself:
 
@@ -94,9 +94,9 @@ No domain? The relay can run on an IP address instead, public or private (a home
 sudo ~/.local/bin/tm relay install --ip 203.0.113.5
 ```
 
-It prints the address to pair with, which ends in the relay key's fingerprint: `wss://203.0.113.5#sha256=…`. Use that whole address: the servers check the relay by that key instead of by a certificate authority, and the pairing code carries it to the other side. Both servers must reach that IP on port 443, so a private address only works where that network reaches. Back up the relay's state directory (`/var/lib/private/tm-relay`): it holds the key, and a relay set up again with a new key is refused until you give both servers its new address (`tm peer relay ALIAS ADDRESS`, or `E` in the Peers tab).
+It prints the address to pair with, which ends in the relay key's fingerprint: `wss://203.0.113.5#sha256=…`. Use that whole address: the servers check the relay by that key instead of by a certificate authority, and the pairing code carries it to the other side. Both servers must reach that IP on port 443, so a private address only works where that network reaches. Back up the relay's state directory (`/var/lib/private/tm-relay`): it holds the key, and a relay set up again with a new key is refused until you give both servers its new address (`tm peer relay ALIAS ADDRESS`, or the relay row in the Network popup).
 
-Then pair two machines: in Settings (`,`), Peers tab, press `N` on one to get a code and `J` on the other to enter it, or in a terminal run `tm peer pair --relay wss://relay.example.net` on one and `tm peer join CODE` on the other. Both show six digits to compare. Docker, a NAS and other setups: [Running a relay in docs/OPERATIONS.md](docs/OPERATIONS.md#running-a-relay).
+Then pair two machines: in the Network popup (`N` on the dashboard), press `P` on one to get a code and `J` on the other to enter it, or in a terminal run `tm peer pair --relay wss://relay.example.net` on one and `tm peer join CODE` on the other. Both show six digits to compare. Docker, a NAS and other setups: [Running a relay in docs/OPERATIONS.md](docs/OPERATIONS.md#running-a-relay).
 
 ## Learn more
 

@@ -76,8 +76,9 @@ func (m *dash) overDone() bool {
 }
 
 // Over is a popup opened over a session (docs/SPEC.md §4): prefix then
-// a, i, t, , or ? in a session. The dashboard runs its key and draws the
-// popup over the session's screen, dimmed, rather than over the list,
+// a, i, t, ,, N or ? in a session, or a click on a server's header in
+// its sidebar. The dashboard runs its key and draws the popup over the
+// session's screen, dimmed, rather than over the list,
 // and follows the session's output meanwhile (paneFeed); the view stays
 // as it is. When the popup closes the dashboard ends with
 // Attach set, and the caller attaches again. Should the view go back to

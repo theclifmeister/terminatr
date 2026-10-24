@@ -21,8 +21,8 @@ import (
 
 // ServerSource's PeerSource: the paired servers.
 
-// PeerList is the paired servers, for the settings' Peers tab
-// (peerstab.go): this server's id ("" before it has an identity key)
+// PeerList is the paired servers, for the Network popup (network.go):
+// this server's id ("" before it has an identity key)
 // and each paired server with its link as the server has it.
 type PeerList struct {
 	ID, Short string
