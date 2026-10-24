@@ -1,0 +1,66 @@
+== g:mini
+╭─ Network · studio + 2 paired ────────────────────────────────────────╮
+│ ▾ ◉ studio · this server 4F2A-91C3                     shares 0 of 2 │
+│    ■ terminatr         [ ] not shared                       no links │
+│    ■ web               [ ] not shared                       no links │
+│                                                                      │
+│ ▾ ◉ mini · connected 38 ms                                 panes off │
+│    ■ acme-api          shared with you · + link (L)        ● working │
+│    ■ infra             shared with you · + link (L)    · not running │
+│      └─⚑ asks you to share a project (for its acme) · "the API docs" │
+│                                                                      │
+│ ▾ ○ nas · offline 4m · relay                               panes off │
+│      shares nothing with you yet                                     │
+│      └─ asked (S-4F2A-33, for terminatr)       waiting on nas's user │
+│                                                                      │
+│ ──────────────────────────────────────────────────────────────────── │
+│ mini · id 91C3-77AB · tm 0.27.0 · relay relay.example.net            │
+│ panes: mini may not open yours (V) · its tm has no remote panes      │
+│                                                                      │
+│ S ask to share · E name · V panes · X unpair · enter fold            │
+│ tab details · P pair · J join · ? keys · esc close                   │
+╰──────────────────────────────────────────────────────────────────────╯
+== s:mini:S-91C3-7
+╭─ Network · studio + 2 paired ────────────────────────────────────────╮
+│ ▾ ◉ studio · this server 4F2A-91C3                     shares 0 of 2 │
+│    ■ terminatr         [ ] not shared                       no links │
+│    ■ web               [ ] not shared                       no links │
+│                                                                      │
+│ ▾ ◉ mini · connected 38 ms                                 panes off │
+│    ■ acme-api          shared with you · + link (L)        ● working │
+│    ■ infra             shared with you · + link (L)    · not running │
+│      └─⚑ asks you to share a project (for its acme) · "the API docs" │
+│                                                                      │
+│ ▾ ○ nas · offline 4m · relay                               panes off │
+│      shares nothing with you yet                                     │
+│      └─ asked (S-4F2A-33, for terminatr)       waiting on nas's user │
+│                                                                      │
+│                                                                      │
+│ ──────────────────────────────────────────────────────────────────── │
+│ mini asks you to share a project (S-91C3-7), for its acme            │
+│ A picks one of yours, shared with every paired server · X declines   │
+│                                                                      │
+│ A choose a project · X decline · ! next · esc close                  │
+╰──────────────────────────────────────────────────────────────────────╯
+== a:nas
+╭─ Network · studio + 2 paired ────────────────────────────────────────╮
+│ ▾ ◉ studio · this server 4F2A-91C3                     shares 0 of 2 │
+│    ■ terminatr         [ ] not shared                       no links │
+│    ■ web               [ ] not shared                       no links │
+│                                                                      │
+│ ▾ ◉ mini · connected 38 ms                                 panes off │
+│    ■ acme-api          shared with you · + link (L)        ● working │
+│    ■ infra             shared with you · + link (L)    · not running │
+│      └─⚑ asks you to share a project (for its acme) · "the API docs" │
+│                                                                      │
+│ ▾ ○ nas · offline 4m · relay                               panes off │
+│      shares nothing with you yet                                     │
+│      └─ asked (S-4F2A-33, for terminatr)       waiting on nas's user │
+│                                                                      │
+│                                                                      │
+│ ──────────────────────────────────────────────────────────────────── │
+│ asked nas to share a project (S-4F2A-33, for terminatr)              │
+│ its user picks which, if any · one request per server at a time      │
+│                                                                      │
+│ enter about it · tab details · ? keys · esc close                    │
+╰──────────────────────────────────────────────────────────────────────╯

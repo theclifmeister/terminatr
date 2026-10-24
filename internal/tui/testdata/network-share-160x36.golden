@@ -1,0 +1,99 @@
+== g:mini
+╭─ Network · studio + 2 paired ────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ ▾ ◉ studio · this server 4F2A-91C3                              shares 0 of 2 │ mini                                                         │
+│    ■ terminatr         [ ] not shared                                no links │ ──────────────────────────────────────────────────────────── │
+│    ■ web               [ ] not shared                                no links │ name          none: shown as mini                            │
+│                                                                               │ connection    ◉ connected 38 ms                              │
+│ ▾ ◉ mini · connected 38 ms · tm 0.27.0                              panes off │ id · tm       91C3-77AB · 0.27.0                             │
+│    ■ acme-api          shared with you · + link (L)                 ● working │ relay         relay.example.net                              │
+│    ■ infra             shared with you · + link (L)             · not running │                                                              │
+│      └─⚑ asks you to share a project (for its acme) · "the API docs"          │ WHAT MINI MAY DO HERE                                        │
+│                                                                               │   ● paired: your projects and its can link                   │
+│ ▾ ○ nas · offline 4m · relay                                        panes off │   ○ sees nothing: you share no project                       │
+│      shares nothing with you yet                                              │   ○ watches your shared panes and popups                     │
+│      └─ asked to share (S-4F2A-33, for terminatr)       waiting on nas's user │   ○ types in them                                            │
+│                                                                               │   panes (V)   [off] · view · write                           │
+│                                                                               │               it can't open this server's panes              │
+│                                                                               │ AND THE OTHER WAY                                            │
+│                                                                               │   mini's tm has no remote panes                              │
+│                                                                               │   it shares acme-api, infra                                  │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                                                                                              │
+│ S ask to share · E name · V panes · X unpair · enter fold · tab details · P pair · J join · ? keys · esc close                               │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+== s:mini:S-91C3-7
+╭─ Network · studio + 2 paired ────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ ▾ ◉ studio · this server 4F2A-91C3                              shares 0 of 2 │ ⚑ NEEDS YOU                                                  │
+│    ■ terminatr         [ ] not shared                                no links │ ──────────────────────────────────────────────────────────── │
+│    ■ web               [ ] not shared                                no links │ request       S-91C3-7                                       │
+│                                                                               │ from          mini's user                                    │
+│ ▾ ◉ mini · connected 38 ms · tm 0.27.0                              panes off │ for           mini's acme                                    │
+│    ■ acme-api          shared with you · + link (L)                 ● working │ note          "the API docs"                                 │
+│    ■ infra             shared with you · + link (L)             · not running │ asked         2026-10-14 14:06                               │
+│      └─⚑ asks you to share a project (for its acme) · "the API docs"          │ expires       2026-10-21 14:06                               │
+│                                                                               │                                                              │
+│ ▾ ○ nas · offline 4m · relay                                        panes off │ A picks one of your active projects that isn't shared; the   │
+│      shares nothing with you yet                                              │ usual confirm shares it with every paired server, read-only, │
+│      └─ asked to share (S-4F2A-33, for terminatr)       waiting on nas's user │ never its files. X declines: nothing is shared, and mini     │
+│                                                                               │ hears of it.                                                 │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                                                                                              │
+│ A choose a project · X decline · ! next · esc close                                                                                          │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+== a:nas
+╭─ Network · studio + 2 paired ────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ ▾ ◉ studio · this server 4F2A-91C3                              shares 0 of 2 │ ASKED TO SHARE                                               │
+│    ■ terminatr         [ ] not shared                                no links │ ──────────────────────────────────────────────────────────── │
+│    ■ web               [ ] not shared                                no links │ request       S-4F2A-33                                      │
+│                                                                               │ to            nas's user                                     │
+│ ▾ ◉ mini · connected 38 ms · tm 0.27.0                              panes off │ for           terminatr                                      │
+│    ■ acme-api          shared with you · + link (L)                 ● working │ asked         2026-10-14 14:06                               │
+│    ■ infra             shared with you · + link (L)             · not running │ expires       2026-10-21 14:06                               │
+│      └─⚑ asks you to share a project (for its acme) · "the API docs"          │                                                              │
+│                                                                               │ Its user picks one of theirs to share with every server      │
+│ ▾ ○ nas · offline 4m · relay                                        panes off │ paired with it, or declines; nothing is shared without them. │
+│      shares nothing with you yet                                              │ One request per server waits at a time.                      │
+│      └─ asked to share (S-4F2A-33, for terminatr)       waiting on nas's user │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                                                                                              │
+│ enter about it · tab details · ? keys · esc close                                                                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯

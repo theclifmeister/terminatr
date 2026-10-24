@@ -74,9 +74,9 @@ func shareState(t *testing.T, env *Env, alias, id string) string {
 // TestSmokePeerShareRequest: studio, paired with mini, shares nothing
 // and is shared nothing. Its user asks mini's to share a project; mini's
 // declines it with tm peer decline, and studio's peer.list says so; no
-// inbox hears of either. Asked again,
-// mini's user accepts with api through the console's method: api is
-// shared, and shows in studio's mirror of mini.
+// inbox hears of either. Asked again, from studio's Network popup (S),
+// mini's user accepts in its console's (A, api, Y): api is shared, and
+// shows in studio's mirror of mini and its tree.
 func TestSmokePeerShareRequest(t *testing.T) {
 	studio, mini := New(t), New(t)
 	rs := relay.New(relay.DefaultConfig())
@@ -129,24 +129,55 @@ func TestSmokePeerShareRequest(t *testing.T) {
 		t.Fatalf("studio never heard: %s", shareState(t, studio, "mini", id))
 	}
 
-	// Ask, accept through the method: api shows in studio's mirror.
-	id = ask()
+	// Ask in studio's Network popup: S on mini, for acme, with a note.
+	studio.FakeClaude()
+	mini.FakeClaude()
+	ws := studio.Window(120, 30)
+	ws.WaitFor("● server ok", wait)
+	ws.Prefix("N")
+	ws.WaitFor("◉ mini · connected", wait)
+	ws.Keys(keyDown, keyDown)
+	ws.WaitFor("S ask to share", wait)
+	ws.Type("S")
+	ws.WaitFor("which of yours is it for?", wait)
+	ws.Keys(keyEnter)
+	ws.WaitFor("what it's for (optional)", wait)
+	ws.Keys("the API docs", keyEnter)
+	m := regexp.MustCompile(`asked mini to share a project \((S-[0-9A-F]{4}-\d+), for acme\)`).FindStringSubmatch(ws.WaitFor("; its user answers there", wait))
+	if m == nil {
+		t.Fatalf("no request asked:\n%s", ws.Screen())
+	}
+	id = m[1]
+	ws.WaitFor("waiting on mini's user", wait)
 	if !Poll(30*time.Second, func() bool { return waiting(mini, id, false) }) {
 		t.Fatalf("the second request never arrived: %+v", shareRequests(mini))
 	}
 	if err := call(t, mini, proto.MethodPeerShareAnswer, proto.PeerShareAnswerParams{ID: id, Accept: true, Project: "nosuch"}, nil); err == nil {
 		t.Fatal("accepted with a project that isn't there")
 	}
-	var r proto.ShareRequest
-	if err := call(t, mini, proto.MethodPeerShareAnswer, proto.PeerShareAnswerParams{ID: id, Accept: true, Project: "api"}, &r); err != nil || r.State != proto.ShareIsAccepted {
-		t.Fatalf("accept: %+v %v", r, err)
-	}
+
+	// Accept in mini's console: the request is a need, A picks api, the
+	// share confirm's Y shares it; api shows in studio's mirror and tree.
+	wm := mini.Window(120, 30)
+	wm.WaitFor("● server ok", wait)
+	wm.Prefix("N")
+	wm.WaitFor("⚑ asks you to share a project (for its acme)", wait)
+	wm.Type("!")
+	wm.WaitFor("A choose a project · X decline", wait)
+	wm.Type("A")
+	wm.WaitFor("Share a project with studio?", wait)
+	wm.Keys(keyEnter)
+	wm.WaitFor("Share api with every paired server?", wait)
+	wm.Type("Y")
+	wm.WaitFor("api is shared with every paired server, for studio's request "+id, wait)
 	if !Poll(30*time.Second, func() bool {
 		pm, _ := mirrored(t, studio, "mini")
 		return slices.ContainsFunc(pm.Projects, func(mp proto.PeerMirrorProject) bool { return mp.Project == "api" })
 	}) {
 		t.Fatal("api never showed in studio's mirror of mini")
 	}
+	theirs := regexp.MustCompile(`api +shared with you`)
+	ws.WaitUntil("api under mini in the tree", wait, func(sc string) bool { return theirs.MatchString(sc) })
 	if !Poll(30*time.Second, func() bool { return shareState(t, studio, "mini", id) == proto.ShareIsAccepted }) {
 		t.Fatalf("studio never heard: %s", shareState(t, studio, "mini", id))
 	}

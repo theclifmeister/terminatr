@@ -65,8 +65,11 @@ type row struct {
 	other    string
 	linkNeed int
 	// network is NEEDS YOU's header's count of what other projects'
-	// links need, the Network popup's.
+	// links need and the share requests that wait, the Network popup's.
 	network int
+	// netAt is the Network popup's row a share request's row in the
+	// all-projects NEEDS YOU opens it at (shareNeedRows).
+	netAt string
 	// remote is a paired server's project ("@alias/slug", peerFold) on
 	// its row in the all-projects NEEDS YOU: enter shows its read-only
 	// dashboard.
@@ -303,20 +306,25 @@ func buildRows(d Data, project string, sections []string, cards []row) []row {
 	blocks := map[string][]row{}
 	// One project's NEEDS YOU counts what other projects' links need
 	// on its header: the Network popup has them.
-	network := 0
+	network, links := 0, 0
 	if !all {
 		for _, p := range d.Projects {
 			if p.Slug != project {
-				network += len(linkNeedRows(nil, p))
+				links += len(linkNeedRows(nil, p))
 			}
 		}
+		network = links + proto.ShareWaits(d.Peers)
 	}
 	if needs := needsRows(d, project); len(needs) > 0 {
 		blocks["needs"] = append([]row{{head: "NEEDS YOU", count: len(needs), network: network}}, needs...)
 	} else if all {
 		blocks["needs"] = []row{{head: "NEEDS YOU", count: 0}, {note: "  nothing waits on you in any project"}}
 	} else if network > 0 {
-		blocks["needs"] = []row{{head: "NEEDS YOU", count: 0, network: network}, {note: "  nothing here; N opens Network, where another project's link needs you"}}
+		where := "another project's link needs you"
+		if links == 0 {
+			where = countedAs(network, "share request waits", "share requests wait")
+		}
+		blocks["needs"] = []row{{head: "NEEDS YOU", count: 0, network: network}, {note: "  nothing here; N opens Network, where " + where}}
 	}
 	switch p, ok := findProject(d.Projects, project); {
 	case all:
@@ -423,6 +431,7 @@ func needsRows(d Data, project string) []row {
 		}
 	}
 	if all {
+		needs = append(needs, shareNeedRows(d.Peers)...)
 		needs = append(needs, peerNeeds(d.Peers)...)
 	} else {
 		// The project's rows need no label: the section is the project's.
@@ -567,6 +576,27 @@ func peerNeeds(peers []proto.PeerMirror) []row {
 					what: strings.TrimSpace(ref + " " + oneLine(n.Title)), state: cmp.Or(whyState[n.Why], "blocked"),
 					rest: joinSp(whyWords[n.Why], n.Thread), pct: -1})
 			}
+		}
+	}
+	return out
+}
+
+// shareNeedRows are the all-projects NEEDS YOU's rows of the share
+// requests from paired servers that wait for the user: enter opens the
+// Network popup at the request's row.
+func shareNeedRows(peers []proto.PeerMirror) []row {
+	var out []row
+	for _, pm := range peers {
+		for _, q := range pm.Shares {
+			if q.Out || !q.Pending() {
+				continue
+			}
+			what := ""
+			if q.For != "" {
+				what = " for its " + oneLine(q.For)
+			}
+			out = append(out, row{key: "ns:" + pm.Alias + ":" + q.ID, netAt: "s:" + pm.Alias + ":" + q.ID, mark: markNeeds, who: cmp.Or(pm.Name, pm.Alias),
+				what: "a share request", state: "blocked", rest: "asks you to share a project" + what + " · enter opens Network", pct: -1})
 		}
 	}
 	return out
