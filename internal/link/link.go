@@ -916,9 +916,37 @@ func look() looked {
 // ask switch; otherwise a keeps its own, and b always does. Journaled in
 // both projects.
 func Set(c caller.Caller, a, b, allow string, ask *bool) error {
+	return set(c, a, b, allow, ask, nil)
+}
+
+// Save writes a's side of its link to b as the link dialog sets it, as
+// the human, in one act: its direction, ask switch and files. On this
+// server both entries at once (Set: b's direction the mirror, its own
+// ask kept, the same files); to a paired server's project a's entry
+// only. Off removes it. The offers waiting on the link are then answered
+// as its files say (SettleOffers): how many were taken and declined.
+func Save(c caller.Caller, a, b string, l config.Link) (taken, declined int, err error) {
+	files := l.FilesMode()
+	if !slices.Contains(config.LinkFiles, files) {
+		return 0, 0, refuse("bad-files", "a link's files are %s, %s or %s", config.FilesAsk, config.FilesAuto, config.FilesOff)
+	}
+	ask := l.Ask
+	if err := set(c, a, b, l.Allow, &ask, &files); err != nil {
+		return 0, 0, err
+	}
+	b = Canon(b)
+	if _, _, remote := config.Remote(b); !remote {
+		taken, declined = SettleOffers(c, b, a)
+	}
+	t, d := SettleOffers(c, a, b)
+	return taken + t, declined + d, nil
+}
+
+// set is Set, files when not nil the entry's files (both sides' here).
+func set(c caller.Caller, a, b, allow string, ask *bool, files *string) error {
 	b = Canon(b)
 	if c.IsAgent() {
-		return refuse("human-only", "links are the user's (Settings › Linked projects)")
+		return refuse("human-only", "links are the user's (the Network popup, N)")
 	}
 	if a == b {
 		return refuse("self-link", "%s can't link to itself", a)
@@ -928,7 +956,7 @@ func Set(c caller.Caller, a, b, allow string, ask *bool) error {
 		return refuse("unknown-project", "no project named %s", a)
 	}
 	if alias, slug, ok := config.Remote(b); ok {
-		return setRemote(c, pa, b, alias, slug, allow, ask)
+		return setRemote(c, pa, b, alias, slug, allow, ask, files)
 	}
 	pb, err := project.Open(b)
 	if err != nil || !project.ValidSlug(b) {
@@ -947,6 +975,9 @@ func Set(c caller.Caller, a, b, allow string, ask *bool) error {
 	if ask != nil {
 		la.Ask = *ask
 	}
+	if files != nil {
+		la.Files = *files
+	}
 	if err := config.SetLinkPair(a, b, la, theirs[a].Ask); err != nil {
 		return err
 	}
@@ -959,7 +990,7 @@ func Set(c caller.Caller, a, b, allow string, ask *bool) error {
 // setRemote writes p's entry for project slug on the paired server alias
 // (key b): only this side, since the other is that server's user's. A new
 // entry asks unless ask says otherwise (§16.11).
-func setRemote(c caller.Caller, p *project.Project, b, alias, slug, allow string, ask *bool) error {
+func setRemote(c caller.Caller, p *project.Project, b, alias, slug, allow string, ask *bool, files *string) error {
 	if allow != config.LinkOff && !slices.Contains(config.LinkAllows, allow) {
 		return refuse("bad-direction", "a link is %s, %s, %s or %s", config.LinkBoth, config.LinkSend, config.LinkReceive, config.LinkOff)
 	}
@@ -980,6 +1011,9 @@ func setRemote(c caller.Caller, p *project.Project, b, alias, slug, allow string
 	if ask != nil {
 		l.Ask = *ask
 	}
+	if files != nil {
+		l.Files = *files
+	}
 	if err := config.SetLink(p.Slug, b, l); err != nil {
 		return err
 	}
@@ -992,7 +1026,7 @@ func setRemote(c caller.Caller, p *project.Project, b, alias, slug, allow string
 func SetAsk(c caller.Caller, a, b string, ask bool) error {
 	b = Canon(b)
 	if c.IsAgent() {
-		return refuse("human-only", "links are the user's (Settings › Linked projects)")
+		return refuse("human-only", "links are the user's (the Network popup, N)")
 	}
 	cfg, err := config.Load()
 	if err != nil {
@@ -1021,7 +1055,7 @@ func SetAsk(c caller.Caller, a, b string, ask bool) error {
 func SetFiles(c caller.Caller, a, b, files string) (taken, declined int, err error) {
 	b = Canon(b)
 	if c.IsAgent() {
-		return 0, 0, refuse("human-only", "links are the user's (Settings › Linked projects)")
+		return 0, 0, refuse("human-only", "links are the user's (the Network popup, N)")
 	}
 	if !slices.Contains(config.LinkFiles, files) {
 		return 0, 0, refuse("bad-files", "a link's files are %s, %s or %s", config.FilesAsk, config.FilesAuto, config.FilesOff)

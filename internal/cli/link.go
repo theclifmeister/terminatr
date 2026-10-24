@@ -229,7 +229,7 @@ func runLink(e *Env, args []string) error {
 			return e.printJSON(rows)
 		}
 		if len(rows) == 0 {
-			fmt.Fprintf(e.Stdout, "%s has no links (the user sets them: Settings › Linked projects)\n", p.Slug)
+			fmt.Fprintf(e.Stdout, "%s has no links (the user sets them: the Network popup, N)\n", p.Slug)
 			return nil
 		}
 		for _, r := range rows {
@@ -503,7 +503,7 @@ func projectLink(e *Env, args []string) error {
 		return usagef("%s", projectLinkUsage)
 	}
 	if e.Caller.IsAgent() {
-		return &project.Error{Code: "human-only", Msg: "links are the user's (Settings › Linked projects)"}
+		return &project.Error{Code: "human-only", Msg: "links are the user's (the Network popup, N)"}
 	}
 	if *files != "" {
 		if len(pos) != 2 || *ask || *noAsk || *request {

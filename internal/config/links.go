@@ -181,7 +181,7 @@ func (c *Config) LinkRefusal(from, to string) (code, msg string) {
 	}
 	mine, _ := c.Links(from)
 	if !mine[to].Sends() {
-		return "no-link", fmt.Sprintf("%s has no link to %s; links are the user's (Settings › Linked projects)", from, to)
+		return "no-link", fmt.Sprintf("%s has no link to %s; links are the user's (the Network popup, N)", from, to)
 	}
 	if _, _, remote := Remote(to); remote {
 		return "", ""

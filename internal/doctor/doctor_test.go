@@ -1109,7 +1109,7 @@ func TestSettingsHalfLinked(t *testing.T) {
 	}
 	os.WriteFile(filepath.Join(d.Paths.Home, "config.toml"), []byte("[projects.demo.links]\nmods = \"both\"\nweb = \"both\"\n\n[projects.mods.links]\ndemo = \"send\"\n\n[projects.web.links]\ndemo = \"both\"\n"), 0o600)
 	cs := Settings(d)
-	if len(cs) != 1 || cs[0].Name != "links" || cs[0].Detail != "half-linked: demo both / mods send; set the link again in Settings › Linked projects (or tm project link) to write both sides" {
+	if len(cs) != 1 || cs[0].Name != "links" || cs[0].Detail != "half-linked: demo both / mods send; set the link again in the Network popup (or tm project link) to write both sides" {
 		t.Fatalf("%+v", cs)
 	}
 }

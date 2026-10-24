@@ -151,3 +151,55 @@ func TestSettleRemote(t *testing.T) {
 		}
 	})
 }
+
+// TestSave: the link dialog's one act writes this side's direction, ask
+// and files and the other side's mirror, keeping its own ask, then
+// settles the offers waiting: auto takes the one within the size, off
+// (unlinking) declines the rest and removes both entries.
+func TestSave(t *testing.T) {
+	a, b, _ := setup(t)
+	ca := coord
+	ca.Project = "a"
+	libFile(t, a, "t-0001", "small.bin", 100<<10)
+	libFile(t, a, "t-0001", "big.bin", 2<<20)
+	small, err := Send(ca, a, "b", Opts{Text: "small", File: "t-0001/small.bin"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	big, err := Send(ca, a, "b", Opts{Text: "big", File: "t-0001/big.bin"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := mustConfig(t)
+	os.WriteFile(cfg.Path, []byte("[projects.a.links]\nb = { allow = \"both\", ask = true }\n\n[projects.b]\nlink_file_mb = 1\n\n[projects.b.links]\na = \"both\"\n"), 0o600)
+	if _, _, err := Save(coord, "b", "a", config.Link{Allow: config.LinkBoth, Files: config.FilesAuto}); code(err) != "human-only" {
+		t.Fatalf("an agent saved: %v", err)
+	}
+	taken, declined, err := Save(human, "b", "a", config.Link{Allow: config.LinkBoth, Ask: true, Files: config.FilesAuto})
+	if err != nil || taken != 1 || declined != 0 {
+		t.Fatalf("auto: took %d, declined %d, %v", taken, declined, err)
+	}
+	c := mustConfig(t)
+	mineB, _ := c.Links("b")
+	mineA, _ := c.Links("a")
+	if got := mineB["a"]; got != (config.Link{Allow: config.LinkBoth, Ask: true, Files: config.FilesAuto}) {
+		t.Errorf("b's entry %+v", got)
+	}
+	if got := mineA["b"]; got != (config.Link{Allow: config.LinkBoth, Ask: true, Files: config.FilesAuto}) {
+		t.Errorf("a's entry %+v (its ask kept)", got)
+	}
+	if in := transfer(t, b, small.Transfer); in.State != FileReceived {
+		t.Fatalf("small %+v", in)
+	}
+	taken, declined, err = Save(human, "b", "a", config.Link{Allow: config.LinkOff})
+	if err != nil || taken != 0 || declined != 1 {
+		t.Fatalf("off: took %d, declined %d, %v", taken, declined, err)
+	}
+	if in := transfer(t, b, big.Transfer); in.State != FileDeclined {
+		t.Fatalf("big %+v", in)
+	}
+	c = mustConfig(t)
+	if l, _ := c.Links("a"); len(l) != 0 {
+		t.Errorf("a still links %+v", l)
+	}
+}

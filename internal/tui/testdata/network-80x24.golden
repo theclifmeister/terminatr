@@ -1,8 +1,8 @@
 == g:
 ╭─ Network · studio + 2 paired ────────────────────────────────────────╮
 │ ▾ ◉ studio · this server 4F2A-91C3                     shares 0 of 2 │
-│    ■ terminatr         [ ] not shared                                │
-│    ■ web               [ ] not shared                                │
+│    ■ terminatr         [ ] not shared                       no links │
+│    ■ web               [ ] not shared                       no links │
 │                                                                      │
 │ ▾ ◉ work (mini) · connected 38 ms                         panes view │
 │    ■ acme-api          shared with you · + link (L)        ● working │
@@ -23,8 +23,8 @@
 == p:terminatr
 ╭─ Network · studio + 2 paired ────────────────────────────────────────╮
 │ ▾ ◉ studio · this server 4F2A-91C3                     shares 0 of 2 │
-│    ■ terminatr         [ ] not shared                                │
-│    ■ web               [ ] not shared                                │
+│    ■ terminatr         [ ] not shared                       no links │
+│    ■ web               [ ] not shared                       no links │
 │                                                                      │
 │ ▾ ◉ work (mini) · connected 38 ms                         panes view │
 │    ■ acme-api          shared with you · + link (L)        ● working │
@@ -38,15 +38,15 @@
 │                                                                      │
 │ ──────────────────────────────────────────────────────────────────── │
 │ terminatr · not shared: paired servers don't see it                  │
-│ space shares it with every paired server, asking first               │
+│ space shares it with every paired server, asking first · L links it  │
 │                                                                      │
-│ space share · tab details · ? keys · esc close                       │
+│ space share · L link · tab details · ? keys · esc close              │
 ╰──────────────────────────────────────────────────────────────────────╯
 == g:mini
 ╭─ Network · studio + 2 paired ────────────────────────────────────────╮
 │ ▾ ◉ studio · this server 4F2A-91C3                     shares 0 of 2 │
-│    ■ terminatr         [ ] not shared                                │
-│    ■ web               [ ] not shared                                │
+│    ■ terminatr         [ ] not shared                       no links │
+│    ■ web               [ ] not shared                       no links │
 │                                                                      │
 │ ▾ ◉ work (mini) · connected 38 ms                         panes view │
 │    ■ acme-api          shared with you · + link (L)        ● working │
@@ -67,8 +67,8 @@
 == t:mini/acme-api
 ╭─ Network · studio + 2 paired ────────────────────────────────────────╮
 │ ▾ ◉ studio · this server 4F2A-91C3                     shares 0 of 2 │
-│    ■ terminatr         [ ] not shared                                │
-│    ■ web               [ ] not shared                                │
+│    ■ terminatr         [ ] not shared                       no links │
+│    ■ web               [ ] not shared                       no links │
 │                                                                      │
 │ ▾ ◉ work (mini) · connected 38 ms                         panes view │
 │    ■ acme-api          shared with you · + link (L)        ● working │
@@ -82,7 +82,7 @@
 │                                                                      │
 │ ──────────────────────────────────────────────────────────────────── │
 │ work's acme-api · synced 2s ago · coordinator working                │
-│ nothing here acts on it; enter shows its dashboard, read-only        │
+│ nothing here acts on it; enter shows its dashboard, read-only; L li… │
 │                                                                      │
-│ enter its dashboard · ? keys · esc close                             │
+│ enter its dashboard · L link one of yours · ? keys · esc close       │
 ╰──────────────────────────────────────────────────────────────────────╯

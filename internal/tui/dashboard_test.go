@@ -112,6 +112,7 @@ type fakeSource struct {
 	// linkFiles what LinkFiles gives.
 	linkLogs  map[string][]*link.Message
 	linkFiles []link.Transfer
+	saved     string // what SaveLink says
 	modViews  proto.ModViewsResult
 	// tasksTab: ModViews lists the Tasks tab mod's view, drawn from the
 	// board (taskstab_test.go), its done tasks listed with tasksDoneAll.
@@ -198,6 +199,10 @@ func (f *fakeSource) SetSetting(table, key string, value any) error {
 func (f *fakeSource) SetLink(slug, other, allow string) error {
 	f.links = append(f.links, fmt.Sprintf("%s %s %s", slug, other, allow))
 	return nil
+}
+func (f *fakeSource) SaveLink(slug, other string, l config.Link) (string, error) {
+	f.links = append(f.links, fmt.Sprintf("%s %s save %s ask %v files %s", slug, other, l.Allow, l.Ask, l.FilesMode()))
+	return f.saved, nil
 }
 func (f *fakeSource) SetLinkAsk(slug, other string, ask bool) error {
 	f.links = append(f.links, fmt.Sprintf("%s %s ask %v", slug, other, ask))

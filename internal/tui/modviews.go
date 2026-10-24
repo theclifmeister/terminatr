@@ -856,7 +856,7 @@ func (fv *fullView) size(m *dash) (int, int) {
 func (m *dash) needsLine(w int) string {
 	for _, r := range m.rows {
 		if r.head == "NEEDS YOU" {
-			return m.ruleIn(countLabel(r.head, r.count), sectionStyle(r.head), w)
+			return m.ruleIn(needsHead(r), sectionStyle(r.head), w)
 		}
 	}
 	return m.ruleIn("NEEDS YOU 0", th().Faint, w)

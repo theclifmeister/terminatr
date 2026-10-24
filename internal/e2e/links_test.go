@@ -60,3 +60,34 @@ func TestLinkMessages(t *testing.T) {
 		t.Fatalf("thread send: %q", got)
 	}
 }
+
+// TestNetworkLinkHere: in the Network popup L on demo lists the
+// projects to link it with, the link dialog writes nothing until Y, and
+// Y links both sides at once, as tm project link does.
+func TestNetworkLinkHere(t *testing.T) {
+	env := New(t)
+	env.MustCLI("project", "new", "demo")
+	env.MustCLI("project", "new", "other")
+	env.MustCLI("server", "start")
+	env.FakeClaude()
+	w := env.Window(120, 40)
+	w.WaitFor("SESSIONS", wait)
+	w.Prefix("N")
+	w.WaitFor("Network · ", wait)
+	w.Key(keyDown)
+	w.WaitFor("space share · L link", wait)
+	w.Type("L")
+	w.WaitFor("Link demo with", wait)
+	w.WaitFor("a server not paired yet", wait)
+	w.Key(keyEnter)
+	w.WaitFor("WHAT CROSSES", wait)
+	if out := env.MustCLI("link", "list", "--project", "other"); strings.Contains(out, "demo") {
+		t.Fatalf("written before Y:\n%s", out)
+	}
+	w.Type("Y")
+	w.WaitFor("on both sides", wait)
+	w.WaitFor("└─ ⇄ other", wait)
+	if out := env.MustCLI("link", "list", "--project", "other"); !strings.Contains(out, "demo") || !strings.Contains(out, "linked both ways") {
+		t.Fatalf("other's links:\n%s", out)
+	}
+}

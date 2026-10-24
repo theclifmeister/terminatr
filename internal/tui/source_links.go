@@ -19,6 +19,28 @@ func (s *ServerSource) SetLink(slug, other, allow string) error {
 	return link.Set(s.Caller, slug, other, allow, nil)
 }
 
+func (s *ServerSource) SaveLink(slug, other string, l config.Link) (string, error) {
+	defer s.touch()
+	if s.Caller.IsAgent() {
+		return "", errHumanOnly
+	}
+	taken, declined, err := link.Save(s.Caller, slug, other, l)
+	return settledWords(taken, declined), err
+}
+
+// settledWords say what became of the offers waiting on a link whose
+// files changed: "took 1 waiting file", "declined 2 waiting files".
+func settledWords(taken, declined int) string {
+	var out []string
+	if taken > 0 {
+		out = append(out, "took "+counted(taken, "waiting file"))
+	}
+	if declined > 0 {
+		out = append(out, "declined "+counted(declined, "waiting file"))
+	}
+	return strings.Join(out, ", ")
+}
+
 func (s *ServerSource) SetLinkAsk(slug, other string, ask bool) error {
 	defer s.touch()
 	if s.Caller.IsAgent() {

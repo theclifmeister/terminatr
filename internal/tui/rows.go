@@ -57,9 +57,16 @@ type row struct {
 	// questions is the coordinator's open questions on its row in NEEDS
 	// YOU: enter has it open them.
 	questions int
-	// links is the project's held messages and paused links on its row
-	// in NEEDS YOU: enter opens the Messages tab.
-	links int
+	// links is what a link of the project's (other, link.Row.Peer)
+	// waits on in NEEDS YOU, linkNeed its kind (needHeld …): enter opens
+	// a held message's or a file's dialog, and the Network popup on a
+	// request or a paused link.
+	links    int
+	other    string
+	linkNeed int
+	// network is NEEDS YOU's header's count of what other projects'
+	// links need, the Network popup's.
+	network int
 	// remote is a paired server's project ("@alias/slug", peerFold) on
 	// its row in the all-projects NEEDS YOU: enter shows its read-only
 	// dashboard.
@@ -294,10 +301,22 @@ func buildRows(d Data, project string, sections []string, cards []row) []row {
 	}
 	now := time.Now()
 	blocks := map[string][]row{}
+	// One project's NEEDS YOU counts what other projects' links need
+	// on its header: the Network popup has them.
+	network := 0
+	if !all {
+		for _, p := range d.Projects {
+			if p.Slug != project {
+				network += len(linkNeedRows(nil, p))
+			}
+		}
+	}
 	if needs := needsRows(d, project); len(needs) > 0 {
-		blocks["needs"] = append([]row{{head: "NEEDS YOU", count: len(needs)}}, needs...)
+		blocks["needs"] = append([]row{{head: "NEEDS YOU", count: len(needs), network: network}}, needs...)
 	} else if all {
 		blocks["needs"] = []row{{head: "NEEDS YOU", count: 0}, {note: "  nothing waits on you in any project"}}
+	} else if network > 0 {
+		blocks["needs"] = []row{{head: "NEEDS YOU", count: 0, network: network}, {note: "  nothing here; N opens Network, where another project's link needs you"}}
 	}
 	switch p, ok := findProject(d.Projects, project); {
 	case all:
@@ -391,11 +410,7 @@ func needsRows(d Data, project string) []row {
 				mark: markNeeds, who: p.Slug, what: questionsWaiting(p.Questions), state: "blocked",
 				rest: "enter answers them", pct: -1})
 		}
-		if p.LinkWaits > 0 {
-			needs = append(needs, row{key: "nl:" + p.Slug, project: p.Slug, links: p.LinkWaits,
-				mark: markNeeds, who: p.Slug, what: linkWaitWords(p.LinkWaits-p.LinkAsks-p.LinkFiles, p.LinkAsks, p.LinkFiles), state: "blocked",
-				rest: "enter opens Messages", pct: -1})
-		}
+		needs = append(needs, linkNeedRows(d.Peers, p)...)
 		for _, t := range p.NeedsYou {
 			r := row{key: fmt.Sprintf("nt:%s:%d", p.Slug, t.ID), project: p.Slug, task: t,
 				mark: markNeeds, who: p.Slug, what: t.Ref() + " " + oneLine(t.Title), state: string(t.Status), rest: t.Thread, pct: -1}
@@ -590,11 +605,19 @@ func needsYouCount(ps []ProjectData, sessions []proto.SessionInfo) int {
 		if p.Questions > 0 {
 			n++
 		}
-		if p.LinkWaits > 0 {
-			n++
-		}
+		n += len(linkNeedRows(nil, p))
 	}
 	return n
+}
+
+// needsHead is NEEDS YOU's header's words: its count, and what other
+// projects' links need, "NEEDS YOU 2 · 1 network".
+func needsHead(r row) string {
+	s := countLabel(r.head, r.count)
+	if r.network > 0 {
+		s += fmt.Sprintf(" · %d network", r.network)
+	}
+	return s
 }
 
 // needsBadge is "⚑ N" in the warning colour, for n things that need the
@@ -732,29 +755,32 @@ func joinSp(parts ...string) string {
 	return strings.Join(out, "  ")
 }
 
-// linkWaitWords is a NEEDS YOU row's words for n held messages and
-// paused links, asks link requests and files offered files.
-func linkWaitWords(n, asks, files int) string {
-	var parts []string
-	switch {
-	case n == 1:
-		parts = append(parts, "1 message waits")
-	case n > 1:
-		parts = append(parts, fmt.Sprintf("%d messages wait", n))
+// linkNeedRows are NEEDS YOU's rows of what project p's links wait on,
+// each link's own: its held messages, its files offered, a paired
+// server's request, the link paused; a paired server's project by its
+// display name in peers.
+func linkNeedRows(peers []proto.PeerMirror, p ProjectData) []row {
+	var out []row
+	for _, r := range p.Links {
+		other := peerShownKey(peers, r.Peer)
+		add := func(kind, n int, what, rest string) {
+			out = append(out, row{key: "nl:" + p.Slug + ">" + r.Peer + ">" + strconv.Itoa(kind), project: p.Slug, links: n, other: r.Peer, linkNeed: kind,
+				mark: markNeeds, who: p.Slug, what: what, state: "blocked", rest: rest, pct: -1})
+		}
+		if r.Held > 0 {
+			add(needHeld, r.Held, countedAs(r.Held, "message waits", "messages wait"), "to "+other+" · enter opens it")
+		}
+		if r.FilesWaiting > 0 {
+			add(needFile, r.FilesWaiting, countedAs(r.FilesWaiting, "file waits", "files wait"), "from "+other+" · enter opens it")
+		}
+		if r.Asks != nil {
+			add(needAsk, 1, "a link request", "from "+other+" · enter opens Network")
+		}
+		if r.Paused {
+			add(needPaused, 1, "link paused", "with "+other+" · enter opens Network")
+		}
 	}
-	switch {
-	case asks == 1:
-		parts = append(parts, "1 link request waits")
-	case asks > 1:
-		parts = append(parts, fmt.Sprintf("%d link requests wait", asks))
-	}
-	switch {
-	case files == 1:
-		parts = append(parts, "1 file waits")
-	case files > 1:
-		parts = append(parts, fmt.Sprintf("%d files wait", files))
-	}
-	return strings.Join(parts, " · ")
+	return out
 }
 
 // countLinkWaits sets LinkWaits, LinkAsks and LinkFiles from the links.

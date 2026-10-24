@@ -30,10 +30,11 @@ func unshareProject(t *testing.T, env *Env, slug string) {
 }
 
 // TestPeerUnshareLinkedProjects (T701): mini shares api and docs, and
-// studio's acme links mini/docs. acme's Linked projects lists both under
-// mini; once mini stops sharing them, api drops out and docs, still
-// linked, shows once, marked not shared any more; enter sets it off and
-// it goes too.
+// studio's acme links mini/docs. acme's Linked projects opens the
+// Network popup on acme: its link to mini/docs under it, mini's api and
+// docs under mini, docs with the link acme has to it. Once mini stops
+// sharing them both leave mini's rows and the link, still set, says not
+// shared any more; X unlinks it after a Y and it goes.
 func TestPeerUnshareLinkedProjects(t *testing.T) {
 	studio, mini := New(t), New(t)
 	rs := relay.New(relay.DefaultConfig())
@@ -62,32 +63,29 @@ func TestPeerUnshareLinkedProjects(t *testing.T) {
 		w.Key(keyDown)
 	}
 	w.Key(keyUp)
-	w.WaitFor("lists the projects, this server's and the paired servers'", wait)
+	w.WaitFor("Enter opens the Network popup on this project", wait)
 	w.Key(keyEnter)
-	screen := w.WaitFor("mini · paired server, linked", wait)
-	for _, want := range []string{"  api ", "  docs "} {
-		if !strings.Contains(screen, want) {
-			t.Fatalf("Linked projects lacks %q:\n%s", want, screen)
-		}
-	}
+	w.WaitFor("Network · ", wait)
+	screen := w.WaitUntil("mini's projects", 30*time.Second, func(s string) bool {
+		return strings.Contains(s, "└─ ⇄ mini/docs") && strings.Contains(s, "■ api") && strings.Contains(s, "⇄ acme")
+	})
 	if strings.Contains(screen, "not shared any more") {
 		t.Fatalf("a shared project marked:\n%s", screen)
 	}
 
 	unshareProject(t, mini, "api")
 	unshareProject(t, mini, "docs")
-	screen = w.WaitUntil("api dropped, docs marked", 30*time.Second, func(s string) bool {
-		return !strings.Contains(s, "  api ") && strings.Contains(s, "not shared any more")
+	w.WaitUntil("api and docs gone from mini, the link marked", 30*time.Second, func(s string) bool {
+		return !strings.Contains(s, "■ api") && !strings.Contains(s, "■ docs") && strings.Contains(s, "not shared any more")
 	})
-	if n := strings.Count(screen, "  docs "); n != 1 {
-		t.Fatalf("docs shows %d times:\n%s", n, screen)
-	}
 
-	// The cursor is on docs, the one row left.
-	w.Key(keyEnter)
-	w.WaitUntil("docs set off and gone", wait, func(s string) bool {
-		return !strings.Contains(s, "  docs ") && !strings.Contains(s, "mini · paired server")
-	})
+	// The cursor is on acme; the link is under it.
+	w.Key(keyDown)
+	w.WaitFor("X unlink", wait)
+	w.Type("X")
+	w.WaitFor("This removes this side", wait)
+	w.Type("Y")
+	w.WaitUntil("the link gone", wait, func(s string) bool { return !strings.Contains(s, "⇄ mini/docs") })
 	if out := studio.MustCLI("link", "list", "--project", "acme"); strings.Contains(out, "mini/docs") {
 		t.Fatalf("acme still links mini/docs:\n%s", out)
 	}
