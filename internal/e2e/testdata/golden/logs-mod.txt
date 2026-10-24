@@ -1,6 +1,6 @@
  PROJECTS                          │ tm dashboard                                     ● server ok · 0 sessions
  no p╭─ Settings ──────────────────────────────────────────────────────────────────────────────────────╮
-     │  1 general   2 all projects   3 access   4 mods   5 peers   6 logs                              │──────
+     │  1 general   2 all projects   3 access   4 mods   5 logs                                        │──────
      │ About: tm dev · server dev · update check on                                                    │
      │                                                                                                 │
      │  Server   Console   mod demo                                                                    │
