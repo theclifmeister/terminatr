@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.49.1](https://github.com/theclifmeister/terminatr/compare/v0.49.0...v0.49.1) (2026-10-24)
+
+
+### Bug Fixes
+
+* **relay:** fold scanners' TLS handshake errors into one line an hour ([#761](https://github.com/theclifmeister/terminatr/issues/761)) ([1731495](https://github.com/theclifmeister/terminatr/commit/17314956c3fab6024386c4ebba135c67ef30b802))
+
 ## [0.49.0](https://github.com/theclifmeister/terminatr/compare/v0.48.0...v0.49.0) (2026-10-23)
 
 
