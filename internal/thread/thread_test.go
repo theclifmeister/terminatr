@@ -87,6 +87,15 @@ func TestStatusRoundTrip(t *testing.T) {
 	if !strings.Contains(string(b), "- [~] todo b  (in progress)") {
 		t.Fatalf("render:\n%s", b)
 	}
+	// A todo goes through the vault guard, and still reads the same.
+	st.Todos[0].Text = `fetch <img src="https://x.y/a.png"> ![a](https://x.y/b.png)`
+	b, _ = st.Render()
+	if !strings.Contains(string(b), `- [x] fetch &lt;img src="https://x.y/a.png"> [a](https://x.y/b.png)`) {
+		t.Fatalf("todo not guarded:\n%s", b)
+	}
+	if got, _ := ParseStatus(b); !SameTodos(got.Todos, st.Todos) {
+		t.Fatalf("guarded todos differ: %+v", got.Todos)
+	}
 }
 
 func TestValidate(t *testing.T) {
@@ -213,6 +222,12 @@ func TestFiles(t *testing.T) {
 	if _, err := os.Stat(Path(p, r.ID, "reports", "1.md")); err != nil {
 		t.Fatal("earlier report not kept")
 	}
+	if _, err := StoreReport(p, r.ID, "## Report\n<img src=\"https://x.y/a.png\">\n```dataviewjs\nx\n```\n## Next\nMerge\n", nil, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(Path(p, r.ID, "REPORT.md")); string(b) != "## Report\n&lt;img src=\"https://x.y/a.png\">\n```text\nx\n```\n## Next\nMerge\n" {
+		t.Fatalf("report not stored through the vault guard:\n%s", b)
+	}
 	if a := Attachments(p, r.ID); len(a) != 0 {
 		t.Fatalf("attachments before any: %v", a)
 	}
@@ -230,7 +245,7 @@ func TestFiles(t *testing.T) {
 		t.Fatal("invalid report stored")
 	}
 	got, _ := Load(p, r.ID)
-	if got.Reports != 3 || got.ReportState() != "new" {
+	if got.Reports != 4 || got.ReportState() != "new" {
 		t.Fatalf("record %+v", got)
 	}
 	if ctx := ResetContext(p, r.ID, ""); !strings.Contains(ctx, "brief.md") || !strings.Contains(ctx, "Report: new") || strings.Contains(ctx, "PR:") {

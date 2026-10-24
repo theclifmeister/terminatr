@@ -12,6 +12,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/mdfile"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/tasks"
+	"github.com/theclifmeister/terminatr/internal/textsafe"
 	"github.com/theclifmeister/terminatr/internal/vaultlink"
 )
 
@@ -80,7 +81,7 @@ func (st *Status) Render() ([]byte, error) {
 		b.WriteString("(none)\n")
 	}
 	for _, t := range st.Todos {
-		text := strings.Join(strings.Fields(t.Text), " ")
+		text := todoLine(t.Text)
 		switch t.Status {
 		case agent.TodoCompleted:
 			fmt.Fprintf(&b, "- [x] %s\n", text)
@@ -200,11 +201,17 @@ func SameTodos(a, b []agent.Todo) bool {
 		return false
 	}
 	for i := range a {
-		if strings.Join(strings.Fields(a[i].Text), " ") != strings.Join(strings.Fields(b[i].Text), " ") || norm(a[i].Status) != norm(b[i].Status) {
+		if todoLine(a[i].Text) != todoLine(b[i].Text) || norm(a[i].Status) != norm(b[i].Status) {
 			return false
 		}
 	}
 	return true
+}
+
+// todoLine is a todo as STATUS.md holds it: one line, through the vault
+// guard (textsafe.Vault), as the agent's words.
+func todoLine(s string) string {
+	return textsafe.Vault(strings.Join(strings.Fields(s), " "))
 }
 
 func norm(s agent.TodoStatus) agent.TodoStatus {
