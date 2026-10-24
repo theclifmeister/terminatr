@@ -12,7 +12,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/mdfile"
 )
 
-// The TASKS.md format (§6.2): TOML front matter with next_id, "# Tasks",
+// The TASKS.md format (§6.2): YAML front matter with next_id, "# Tasks",
 // one "## <group>" heading per non-empty group, and per task a
 // "### T<n> <title>" heading, a metadata line straight after it, notes, and
 // a trailing run of "- [ ]"/"- [x]" steps.
@@ -200,7 +200,7 @@ func trimBlankLines(s string) string {
 func (b *Board) Render() []byte {
 	b.Sort()
 	var w bytes.Buffer
-	fmt.Fprintf(&w, "+++\nnext_id = %d\n+++\n# Tasks\n", b.NextID)
+	fmt.Fprintf(&w, "---\nnext_id: %d\n---\n# Tasks\n", b.NextID)
 	var g Group
 	for _, t := range b.Tasks {
 		if gg := GroupOf(t.Status); gg != g {

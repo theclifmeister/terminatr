@@ -39,7 +39,7 @@ the note's Decided section holds that the diff changes, and words of
 its Ruled out section the diff adds; tm report adds what it flags to
 the report's ## Check, never refusing for it. template prints a new note with the optional
 front matter (title, touches, standing, audience, source) and its
-sections (Decided, Ruled out, Watch out). A note with audience =
+sections (Decided, Ruled out, Watch out). A note with audience:
 "coordinator" is never shown to a thread: not in its brief, find or
 check.
 

@@ -133,7 +133,7 @@ func TestMoveRepos(t *testing.T) {
 			t.Errorf("%s: PROJECT.md keeps repos:\n%s", slug, data)
 		}
 	}
-	if data, _ := os.ReadFile(old.Path("PROJECT.md")); !strings.Contains(string(data), `goal = "g"`) {
+	if data, _ := os.ReadFile(old.Path("PROJECT.md")); !strings.Contains(string(data), `goal: "g"`) {
 		t.Errorf("old: PROJECT.md lost its goal:\n%s", data)
 	}
 	if _, set := cfg.Repos("none"); set {

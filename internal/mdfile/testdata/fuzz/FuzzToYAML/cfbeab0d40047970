@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("+++\nneXt_Id=10\n+++")

@@ -135,7 +135,7 @@ func TestLegacyName(t *testing.T) {
 		t.Fatal(err)
 	}
 	b, _ := os.ReadFile(p.Path("PROJECT.md"))
-	if strings.Contains(string(b), "name") || strings.Contains(string(b), "repos") || !strings.Contains(string(b), `goal = "Ship it"`) || !strings.Contains(string(b), "Keep it.") {
+	if strings.Contains(string(b), "name") || strings.Contains(string(b), "repos") || !strings.Contains(string(b), `goal: "Ship it"`) || !strings.Contains(string(b), "Keep it.") {
 		t.Fatalf("rewritten:\n%s", b)
 	}
 }
@@ -332,7 +332,7 @@ func TestArchiveInbox(t *testing.T) {
 		b, _ := io.ReadAll(tr)
 		names[h.Name] = string(b)
 	}
-	if len(names) != 2 || !strings.Contains(names[old.ID+".md"], `summary = "old"`) || !strings.Contains(names[older.ID+".md"], `summary = "older"`) {
+	if len(names) != 2 || !strings.Contains(names[old.ID+".md"], `summary: "old"`) || !strings.Contains(names[older.ID+".md"], `summary: "older"`) {
 		t.Fatalf("tarball: %v", names)
 	}
 	if items, _ := p.Inbox(); len(items) != 1 || items[0].ID != open.ID {
@@ -658,7 +658,7 @@ func TestCodeHostOverride(t *testing.T) {
 	if c := p.CodeHost(); c.CodeHost != "" || c.AzureURL != "" {
 		t.Fatalf("%+v", c)
 	}
-	b = []byte(strings.Replace(string(b), "+++\n", "+++\ncode_host = \"azure\"\nazure_url = \"https://tfs.example.com/tfs/Coll\"\n", 1))
+	b = []byte(strings.Replace(string(b), "---\n", "---\ncode_host: \"azure\"\nazure_url: \"https://tfs.example.com/tfs/Coll\"\n", 1))
 	if err := os.WriteFile(p.Path("PROJECT.md"), b, 0o644); err != nil {
 		t.Fatal(err)
 	}

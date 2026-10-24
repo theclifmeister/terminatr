@@ -58,7 +58,7 @@ func TestWriteRead(t *testing.T) {
 		t.Fatalf("got %+v %q", got, body)
 	}
 	raw, _ := os.ReadFile(p)
-	if !strings.HasPrefix(string(raw), "+++\nname = \"demo\"\n") {
+	if !strings.HasPrefix(string(raw), "---\nname: \"demo\"\nrepos:\n  - \"/a\"\n---\n") {
 		t.Fatalf("unexpected file:\n%s", raw)
 	}
 }

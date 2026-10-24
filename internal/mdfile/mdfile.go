@@ -16,8 +16,8 @@ import (
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 )
 
-// fence opens and closes the TOML front matter Join writes; yamlFence
-// opens and closes YAML front matter, which Split and Decode read too.
+// yamlFence opens and closes the YAML front matter Join writes; fence
+// opens and closes TOML front matter, which Split and Decode read too.
 const (
 	fence     = "+++"
 	yamlFence = "---"
@@ -58,21 +58,22 @@ func split(data []byte) (front, body []byte, fenced string, err error) {
 	return nil, nil, "", fmt.Errorf("front matter: no closing %s line", open)
 }
 
-// Join renders front matter and body. A nil front value gives a file with
-// no front matter.
+// Join renders front matter, as YAML (encodeYAML), and body. A nil front
+// value gives a file with no front matter.
 func Join(front any, body []byte) ([]byte, error) {
 	var b bytes.Buffer
 	if front != nil {
-		b.WriteString(fence + "\n")
-		if err := toml.NewEncoder(&b).Encode(front); err != nil {
+		y, err := encodeYAML(front)
+		if err != nil {
 			return nil, err
 		}
-		if !utf8.Valid(b.Bytes()) {
-			// The encoder passes invalid UTF-8 through, and no decoder
-			// could read it back; refuse rather than write it.
+		if !utf8.Valid(y) {
+			// No decoder could read it back; refuse rather than write it.
 			return nil, errors.New("front matter: invalid UTF-8")
 		}
-		b.WriteString(fence + "\n")
+		b.WriteString(yamlFence + "\n")
+		b.Write(y)
+		b.WriteString(yamlFence + "\n")
 	}
 	b.Write(body)
 	return b.Bytes(), nil

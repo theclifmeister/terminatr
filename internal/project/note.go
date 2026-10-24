@@ -12,16 +12,19 @@ import (
 	"github.com/theclifmeister/terminatr/internal/mdfile"
 )
 
-// A memory note (memory/<name>.md) may start with TOML front matter,
-// as PROJECT.md does, and hold three sections (docs/SPEC.md §7.6):
+// A memory note (memory/<name>.md) may start with YAML front matter (or
+// an older note's TOML), as PROJECT.md does, and hold three sections
+// (docs/SPEC.md §7.6):
 //
-//	+++
-//	title    = "Retries stay at 4 for the gh poller"
-//	touches  = ["internal/ticker/pr.go", "repo:api"]
-//	standing = true
-//	audience = "coordinator"
-//	source   = "T481"
-//	+++
+//	---
+//	title: "Retries stay at 4 for the gh poller"
+//	touches:
+//	  - "internal/ticker/pr.go"
+//	  - "repo:api"
+//	standing: true
+//	audience: "coordinator"
+//	source: "T481"
+//	---
 //	## Decided
 //	## Ruled out
 //	## Watch out
@@ -39,7 +42,7 @@ const (
 // NoteTemplate is a new note with the schema, for the coordinator to
 // copy: the skill rules and the Memory tab show it. Its comments are
 // the short guide to writing one.
-const NoteTemplate = `+++
+const NoteTemplate = `---
 # Rules, not stories: no how-we-found-out.
 # No task ids, dates or (user, date) provenance in the text, except on
 # a user decision someone may question.
@@ -52,12 +55,14 @@ const NoteTemplate = `+++
 # hit (a guard false positive, a sandbox rule that doesn't work): report it,
 # for a fix in tm. Workarounds for the project's own setup (toolchain,
 # tests, VMs, cloud CLIs) may stay.
-title    = "One line: what was decided"
-touches  = ["path/in/repo.go", "repo:<name>"]
-standing = false
-audience = "everyone"
-source   = "T<n>"
-+++
+title: "One line: what was decided"
+touches:
+  - "path/in/repo.go"
+  - "repo:<name>"
+standing: false
+audience: "everyone"
+source: "T<n>"
+---
 ## Decided
 What holds, and why.
 

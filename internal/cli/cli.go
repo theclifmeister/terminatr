@@ -202,6 +202,8 @@ func commandUsage(name string) string {
 		return threadUsage
 	case "update":
 		return updateUsage
+	case "vault":
+		return vaultUsage
 	case "watch":
 		return watchUsage
 	}

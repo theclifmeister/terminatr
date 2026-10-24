@@ -7,9 +7,9 @@ import (
 )
 
 // specExample is §6.2's example, with created dates added.
-const specExample = `+++
-next_id = 13
-+++
+const specExample = `---
+next_id: 13
+---
 # Tasks
 
 ## Needs you
@@ -152,7 +152,7 @@ func TestCheckNotes(t *testing.T) {
 			t.Errorf("checkNotes(%q): %v", ok, err)
 		}
 	}
-	if !strings.Contains(string((&Board{NextID: 1}).Render()), "next_id = 1") {
+	if !strings.Contains(string((&Board{NextID: 1}).Render()), "---\nnext_id: 1\n---\n") {
 		t.Fatal("empty board render")
 	}
 }

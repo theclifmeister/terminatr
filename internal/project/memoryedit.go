@@ -329,7 +329,7 @@ func IndexLine(n Note, keptTitle, kept string) string {
 func firstLine(text string, skipHeads bool) string {
 	for _, l := range strings.Split(text, "\n") {
 		l = strings.TrimSpace(l)
-		if l == "" || l == "+++" {
+		if l == "" || l == "+++" || l == "---" {
 			continue
 		}
 		if h := strings.TrimLeft(l, "#"); len(h) < len(l) {

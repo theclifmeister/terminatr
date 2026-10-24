@@ -1,5 +1,5 @@
 # A code host (mods design §2, tier 5; §12 Phase 2): GitLab's merge
-# requests for the projects whose PROJECT.md says code_host = "gitlab".
+# requests for the projects whose PROJECT.md says code_host: "gitlab".
 # tm asks this mod what it would ask gh or az: a merge request's state,
 # checks and review, the failing job's log, and, from tm thread merge, to
 # merge the head tm checked. It runs glab on glab's own login, which the

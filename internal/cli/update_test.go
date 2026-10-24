@@ -186,3 +186,40 @@ func TestUpdateSourceBuild(t *testing.T) {
 		t.Fatalf("source build: %d %q", code, errs)
 	}
 }
+
+// TestUpdateYAMLGuard (T716): once the projects' front matter is YAML,
+// tm update refuses a release older than vault.YAMLSince, which can't
+// read it, unless --force; a release that reads YAML installs.
+func TestUpdateYAMLGuard(t *testing.T) {
+	r := newUpdateRig(t, "v0.50.0", "v0.50.0", "bin", false)
+	r.u.YAML = func() bool { return true }
+	r.u.Version = "v0.49.0"
+	if code, _, errs := r.run(t, "", "--yes"); code != ExitRefused || !strings.Contains(errs, "can't read YAML front matter") || !strings.Contains(errs, "--force") {
+		t.Fatalf("older release: %d %q", code, errs)
+	}
+	if b, _ := os.ReadFile(r.exe); string(b) != "old" {
+		t.Fatal("installed anyway")
+	}
+	if code, _, errs := r.run(t, "", "--yes", "--force"); code != ExitOK || !strings.Contains(errs, "anyway") {
+		t.Fatalf("--force: %d %q", code, errs)
+	}
+	// Homebrew: refused before brew runs.
+	r = newUpdateRig(t, "v0.50.0", "v0.50.0", "Cellar/terminatr/0.49.0/bin", false)
+	r.u.YAML = func() bool { return true }
+	r.u.Version = "v0.49.0"
+	if code, _, _ := r.run(t, "", "--yes"); code != ExitRefused || len(r.brews) != 0 {
+		t.Fatalf("brew: %d %v", code, r.brews)
+	}
+	// Not moved yet, or a release that reads YAML: no guard.
+	for _, c := range []struct {
+		tag  string
+		yaml bool
+	}{{"v0.50.0", false}, {"v0.51.0", true}} {
+		r = newUpdateRig(t, c.tag, c.tag, "bin", false)
+		r.u.YAML = func() bool { return c.yaml }
+		r.u.Version = "v0.49.0"
+		if code, out, errs := r.run(t, "", "--yes"); code != ExitOK {
+			t.Fatalf("%s, moved %v: %d\n%s%s", c.tag, c.yaml, code, out, errs)
+		}
+	}
+}

@@ -34,7 +34,7 @@ func TestResolveModHostMerged(t *testing.T) {
 			t.Fatal(err)
 		}
 		b, _ := os.ReadFile(p.Path("PROJECT.md"))
-		os.WriteFile(p.Path("PROJECT.md"), []byte(strings.Replace(string(b), "+++\n", "+++\ncode_host = \"gitlab\"\n", 1)), 0o644)
+		os.WriteFile(p.Path("PROJECT.md"), []byte(strings.Replace(string(b), "---\n", "---\ncode_host: \"gitlab\"\n", 1)), 0o644)
 
 		// origin names gitlab.com; git reaches it in a bare repo here.
 		bare := filepath.Join(t.TempDir(), "shop.git")
