@@ -330,7 +330,7 @@ func TestSmokeThreadLifecycle(t *testing.T) {
 
 	// Derived progress: 1 of 2 steps, 1 of 2 todos → (1 + 1/2) / 2 = 75 %.
 	mid, _ := os.ReadFile(filepath.Join(out, "status-mid"))
-	for _, w := range []string{"percent = 75", `percent_source = "steps+todos"`, "- [x] alpha", "- [ ] beta"} {
+	for _, w := range []string{"percent: 75", `percent_source: "steps+todos"`, "- [x] alpha", "- [ ] beta"} {
 		if !strings.Contains(string(mid), w) {
 			t.Errorf("STATUS.md mid-run lacks %q:\n%s", w, mid)
 		}

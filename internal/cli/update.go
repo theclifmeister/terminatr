@@ -13,10 +13,11 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/update"
+	"github.com/theclifmeister/terminatr/internal/vault"
 	"github.com/theclifmeister/terminatr/internal/version"
 )
 
-const updateUsage = `usage: tm update [--check] [--yes] [--restart] [--json]`
+const updateUsage = `usage: tm update [--check] [--yes] [--restart] [--force] [--json]`
 
 func init() {
 	commands["update"] = func(e *Env, args []string) error { return updateCmd(e, args, defaultUpdater(e)) }
@@ -42,6 +43,9 @@ type updater struct {
 	Server func() (st proto.ServerStatus, ok bool)
 	// Restart runs `<bin> server restart [--yes]` on the user's terminal.
 	Restart func(bin string, yes bool) int
+	// YAML reports whether the projects' front matter has moved to YAML
+	// (vault.Migrated); nil is no.
+	YAML func() bool
 }
 
 func defaultUpdater(e *Env) *updater {
@@ -81,6 +85,7 @@ func defaultUpdater(e *Env) *updater {
 			}
 			return st, true
 		},
+		YAML: vault.Migrated,
 		Restart: func(bin string, yes bool) int {
 			args := []string{"server", "restart"}
 			if yes {
@@ -117,6 +122,7 @@ func updateCmd(e *Env, args []string, u *updater) error {
 	check := f.Bool("check")     // only report whether a newer release exists
 	yes := f.Bool("yes")         // install without asking
 	restart := f.Bool("restart") // restart the server afterwards (agents are resumed)
+	force := f.Bool("force")     // install a release that can't read YAML front matter anyway
 	asJSON := f.Bool("json")     // with --check: print JSON
 	pos, err := f.Parse(args)
 	if isHelp(err) {
@@ -166,6 +172,9 @@ func updateCmd(e *Env, args []string, u *updater) error {
 			fmt.Fprintf(e.Stdout, "tm %s is the latest release\n", u.Version)
 			return nil
 		}
+		if err := u.yamlGuard(e, res.Latest, *force); err != nil {
+			return err
+		}
 		// Homebrew owns its files: never replace them, let brew do it.
 		fmt.Fprintf(e.Stdout, "tm was installed with Homebrew (%s); it updates with:\n  %s\n", in.Path, in.Upgrade)
 		if !*yes && !(u.TTY && ask(e, "Run it now? [y/N] ")) {
@@ -185,6 +194,9 @@ func updateCmd(e *Env, args []string, u *updater) error {
 	if !res.Newer {
 		fmt.Fprintf(e.Stdout, "tm %s is the latest release\n", u.Version)
 		return nil
+	}
+	if err := u.yamlGuard(e, rel.Tag, *force); err != nil {
+		return err
 	}
 	fmt.Fprintf(e.Stdout, "tm %s is available (installed: %s at %s)\n", rel.Tag, u.Version, in.Path)
 	if !*yes {
@@ -228,6 +240,23 @@ func updateCmd(e *Env, args []string, u *updater) error {
 	}
 	fmt.Fprintf(e.Stdout, "installed  %s at %s\n", rel.Tag, in.Path)
 	return u.afterUpdate(e, in.Path, rel.Tag, *restart)
+}
+
+// yamlGuard refuses to install release tag when it can't read YAML front
+// matter (older than vault.YAMLSince) and the projects' files have moved
+// to it: such a tm would read a YAML TASKS.md as having no front matter
+// and hand out task ids from T1 again. force installs it anyway.
+func (u *updater) yamlGuard(e *Env, tag string, force bool) error {
+	older, ok := update.Newer(vault.YAMLSince, tag)
+	if !ok || !older || u.YAML == nil || !u.YAML() {
+		return nil
+	}
+	if force {
+		fmt.Fprintf(e.Stderr, "tm update: warning: tm %s can't read YAML front matter, which the projects' files have (state/front-yaml); installing it anyway (--force)\n", tag)
+		return nil
+	}
+	fmt.Fprintf(e.Stderr, "tm update: tm %s is older than %s and can't read YAML front matter, which the projects' files have had since the move (state/front-yaml): it would lose TASKS.md's next_id; nothing changed (--force installs it anyway)\n", tag, vault.YAMLSince)
+	return &exitError{ExitRefused}
 }
 
 // brewBin is the tm Homebrew links into its prefix's bin, which names

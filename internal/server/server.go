@@ -26,6 +26,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/emu"
 	"github.com/theclifmeister/terminatr/internal/keychain"
 	"github.com/theclifmeister/terminatr/internal/link"
+	"github.com/theclifmeister/terminatr/internal/mdfile"
 	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/modnotify"
 	"github.com/theclifmeister/terminatr/internal/modsup"
@@ -41,6 +42,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/session"
 	"github.com/theclifmeister/terminatr/internal/thread"
 	"github.com/theclifmeister/terminatr/internal/ticker"
+	"github.com/theclifmeister/terminatr/internal/vault"
 	"github.com/theclifmeister/terminatr/internal/version"
 )
 
@@ -338,6 +340,13 @@ func Run(ctx context.Context, opts Options) error {
 	} else if len(moved) > 0 {
 		logger.Printf("repo lists moved to config.toml: %s", strings.Join(moved, ", "))
 	}
+	// And front matter goes from TOML to YAML, once (T716).
+	if n, err := vault.Migrate(time.Now()); err != nil {
+		logger.Printf("front matter to YAML: %v", err)
+	} else if n > 0 {
+		logger.Printf("front matter to YAML: %d files", n)
+	}
+	mdfile.WriteYAML(vault.Migrated())
 	// And config.toml's sandbox rules move to the access rules, once.
 	migrateAccess(logger.Printf)
 	// And an install from before protection keeps what it ran with.

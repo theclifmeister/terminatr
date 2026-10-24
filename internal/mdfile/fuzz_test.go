@@ -84,18 +84,60 @@ func FuzzJoinDecode(f *testing.F) {
 	f.Add("", "", "")
 	f.Add("+++", "\"quoted\"\n", "+++\nnot front\n+++\n")
 	f.Add("ünï\tcode", "a\\b", "\r\n")
+	f.Add("yes", "1e3", "---\nnot: front\n---\n")
+	f.Add("a: b # c", "- x", "")
+	f.Cleanup(func() { WriteYAML(false) })
 	f.Fuzz(func(t *testing.T, name, repo, body string) {
-		data, err := Join(fm{Name: name, Repos: []string{repo}}, []byte(body))
-		if err != nil {
-			return // TOML can't encode it (e.g. invalid UTF-8); nothing written
+		for _, yaml := range []bool{false, true} {
+			WriteYAML(yaml)
+			data, err := Join(fm{Name: name, Repos: []string{repo}}, []byte(body))
+			if err != nil {
+				continue // TOML or YAML can't hold it (e.g. invalid UTF-8); nothing written
+			}
+			var got fm
+			b, err := Decode(data, &got)
+			if err != nil {
+				t.Fatalf("decode own output: %v\n%q", err, data)
+			}
+			if got.Name != name || len(got.Repos) != 1 || got.Repos[0] != repo || string(b) != body {
+				t.Fatalf("lost content: %+v %q from %q %q %q", got, b, name, repo, body)
+			}
 		}
-		var got fm
-		b, err := Decode(data, &got)
-		if err != nil {
-			t.Fatalf("decode own output: %v\n%q", err, data)
+	})
+}
+
+// FuzzToYAML checks that the migration never panics and that a file it
+// rewrites decodes to what its TOML decoded to.
+func FuzzToYAML(f *testing.F) {
+	for _, s := range []string{
+		"+++\n# guide\ntitle    = \"CI\"\ntouches  = [\"a/\", \"repo:api\"]\nstanding = true\n+++\n## Decided\n",
+		"+++\nnext_id = 716\n+++\n# Tasks\n", "+++\ncreated = 2026-10-24T20:12:56.5+02:00\n+++\n", "+++\n+++\n",
+		"+++\ntitle = \"yes\"\nnext_id = 3 # inline\n[t]\nx = 1\n+++\n", "---\ntitle: a\n---\n", "no front\n",
+		"+++\ntitle = \"\"\"\n# not a comment\nnext_id = 2\n\"\"\"\n+++\n",
+	} {
+		f.Add([]byte(s))
+	}
+	f.Fuzz(func(t *testing.T, data []byte) {
+		var want yfm
+		if _, err := Decode(data, &want); err != nil {
+			return
 		}
-		if got.Name != name || len(got.Repos) != 1 || got.Repos[0] != repo || string(b) != body {
-			t.Fatalf("lost content: %+v %q from %q %q %q", got, b, name, repo, body)
+		out, err := ToYAML(data)
+		if err != nil {
+			return
+		}
+		if IsTOML(out) {
+			t.Fatalf("still TOML:\n%s", out)
+		}
+		var got yfm
+		body, err := Decode(out, &got)
+		if err != nil {
+			t.Fatalf("decode own output: %v\n%s", err, out)
+		}
+		_, wantBody, _ := Split(data)
+		if string(body) != string(wantBody) || got.Title != want.Title || got.NextID != want.NextID || got.Standing != want.Standing ||
+			!got.Created.Equal(want.Created) || strings.Join(got.Touches, "\x00") != strings.Join(want.Touches, "\x00") {
+			t.Fatalf("migrated %+v %q, was %+v %q", got, body, want, wantBody)
 		}
 	})
 }

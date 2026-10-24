@@ -3,7 +3,8 @@
 //
 // Front matter is TOML between +++ lines or YAML between --- lines; both
 // read, for good (old archives and hand-made files keep reading). Join
-// writes TOML. YAML is read strictly (yaml.go).
+// writes YAML (yamlwrite.go) once WriteYAML turned it on, and ToYAML turns a file's TOML front matter
+// into it (the one-time migration). YAML is read strictly (yaml.go).
 //
 // Locks are advisory flock(2) locks on a hidden sibling ".<file>.lock",
 // so every writer of a file must go through Lock, Update, Write or Append.

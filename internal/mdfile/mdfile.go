@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"unicode/utf8"
 
 	"github.com/BurntSushi/toml"
@@ -16,12 +17,24 @@ import (
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 )
 
-// fence opens and closes the TOML front matter Join writes; yamlFence
-// opens and closes YAML front matter, which Split and Decode read too.
+// yamlFence opens and closes YAML front matter, fence TOML front matter;
+// Split and Decode read both, and Join writes the one WritesYAML says.
 const (
 	fence     = "+++"
 	yamlFence = "---"
 )
+
+// writeYAML is WriteYAML's switch.
+var writeYAML atomic.Bool
+
+// WriteYAML sets whether Join (and the TASKS.md board) write front
+// matter as YAML rather than TOML. tm turns it on once the projects'
+// files have moved to YAML (vault.Migrate's mark): until then a server
+// older than 0.51.0, which reads only TOML, may still be running.
+func WriteYAML(on bool) { writeYAML.Store(on) }
+
+// WritesYAML reports whether Join writes YAML front matter (WriteYAML).
+func WritesYAML() bool { return writeYAML.Load() }
 
 // Split separates front matter from the body: TOML between "+++" lines
 // or YAML between "---" lines. A file whose first line is neither has no
@@ -58,11 +71,11 @@ func split(data []byte) (front, body []byte, fenced string, err error) {
 	return nil, nil, "", fmt.Errorf("front matter: no closing %s line", open)
 }
 
-// Join renders front matter and body. A nil front value gives a file with
-// no front matter.
+// Join renders front matter and body: YAML (encodeYAML) once WritesYAML,
+// else TOML. A nil front value gives a file with no front matter.
 func Join(front any, body []byte) ([]byte, error) {
 	var b bytes.Buffer
-	if front != nil {
+	if front != nil && !WritesYAML() {
 		b.WriteString(fence + "\n")
 		if err := toml.NewEncoder(&b).Encode(front); err != nil {
 			return nil, err
@@ -73,6 +86,18 @@ func Join(front any, body []byte) ([]byte, error) {
 			return nil, errors.New("front matter: invalid UTF-8")
 		}
 		b.WriteString(fence + "\n")
+	} else if front != nil {
+		y, err := encodeYAML(front)
+		if err != nil {
+			return nil, err
+		}
+		if !utf8.Valid(y) {
+			// No decoder could read it back; refuse rather than write it.
+			return nil, errors.New("front matter: invalid UTF-8")
+		}
+		b.WriteString(yamlFence + "\n")
+		b.Write(y)
+		b.WriteString(yamlFence + "\n")
 	}
 	b.Write(body)
 	return b.Bytes(), nil

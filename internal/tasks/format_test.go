@@ -4,12 +4,14 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/theclifmeister/terminatr/internal/mdfile"
 )
 
 // specExample is §6.2's example, with created dates added.
-const specExample = `+++
-next_id = 13
-+++
+const specExample = `---
+next_id: 13
+---
 # Tasks
 
 ## Needs you
@@ -41,7 +43,15 @@ status: ready · updated: 2026-10-03
 status: done · thread: t-0002 · updated: 2026-10-04
 `
 
+// yamlOn has the board written with YAML front matter for the test, as
+// after the move (mdfile.WriteYAML).
+func yamlOn(t *testing.T) {
+	mdfile.WriteYAML(true)
+	t.Cleanup(func() { mdfile.WriteYAML(false) })
+}
+
 func TestParseSpecExample(t *testing.T) {
+	yamlOn(t)
 	b, err := Parse([]byte(specExample))
 	if err != nil {
 		t.Fatal(err)
@@ -152,7 +162,11 @@ func TestCheckNotes(t *testing.T) {
 			t.Errorf("checkNotes(%q): %v", ok, err)
 		}
 	}
-	if !strings.Contains(string((&Board{NextID: 1}).Render()), "next_id = 1") {
+	if !strings.HasPrefix(string((&Board{NextID: 1}).Render()), "+++\nnext_id = 1\n+++\n") {
+		t.Fatal("empty board render before the move")
+	}
+	yamlOn(t)
+	if !strings.HasPrefix(string((&Board{NextID: 1}).Render()), "---\nnext_id: 1\n---\n") {
 		t.Fatal("empty board render")
 	}
 }

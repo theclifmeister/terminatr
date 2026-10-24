@@ -24,7 +24,7 @@
   var MAX_LINES = 1900;
   var MAX_BLOCKS = 250;
   var MAX_TREE = 8e5;
-  var TEMPLATE = `+++
+  var TEMPLATE = `---
 # Rules, not stories: no how-we-found-out.
 # No task ids, dates or (user, date) provenance in the text, except on
 # a user decision someone may question.
@@ -37,12 +37,14 @@
 # hit (a guard false positive, a sandbox rule that doesn't work): report it,
 # for a fix in tm. Workarounds for the project's own setup (toolchain,
 # tests, VMs, cloud CLIs) may stay.
-title    = "One line: what was decided"
-touches  = ["path/in/repo.go", "repo:<name>"]
-standing = false
-audience = "everyone"
-source   = "T<n>"
-+++
+title: "One line: what was decided"
+touches:
+  - "path/in/repo.go"
+  - "repo:<name>"
+standing: false
+audience: "everyone"
+source: "T<n>"
+---
 ## Decided
 What holds, and why.
 
@@ -206,7 +208,7 @@ What bites whoever changes this next.
           { kind: "text", text: TEMPLATE.replace(/\s+$/, "") },
           {
             kind: "text",
-            text: 'All of it is optional; a free-form note still works. touches are paths in a repo (a folder ends with /) or repo:<name>; standing notes are for every thread; audience = "coordinator" keeps a note from threads. tm lists the note in MEMORY.md with its touches.',
+            text: 'All of it is optional; a free-form note still works. touches are paths in a repo (a folder ends with /) or repo:<name>; standing notes are for every thread; audience: "coordinator" keeps a note from threads. tm lists the note in MEMORY.md with its touches.',
             role: "faint"
           },
           { kind: "keys", keys: [{ key: "enter", label: "files" }], actions: [{ id: "memory.new", target: { project } }] }

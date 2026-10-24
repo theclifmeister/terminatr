@@ -258,11 +258,11 @@ You are the only agent that writes it.
   that has them: file or dismiss them, then mark it done. Before an
   auto-clear tm asks you to save what you learned: write it down, then
   stop.
-- Write a new memory note from `tm memory template`: front matter
-  (`title`, `touches`: the paths and `repo:<name>` it is about,
-  `standing` for what every thread should know, `audience =
+- Write a new memory note from `tm memory template`: YAML front matter
+  between `---` lines (`title`, `touches`: the paths and `repo:<name>`
+  it is about, `standing` for what every thread should know, `audience:
   "coordinator"` for a note threads must never be pointed at or shown,
-  `source`: the task) and `## Decided`, `## Ruled out`, `## Watch out`. Run `tm memory
+  `source`: the task; strings quoted) and `## Decided`, `## Ruled out`, `## Watch out`. Run `tm memory
   find` with its words and paths first, and extend the note it finds
   instead of adding another. Old free-form notes stay valid; give one
   the schema when you next rewrite it. Write notes with `tm memory new
