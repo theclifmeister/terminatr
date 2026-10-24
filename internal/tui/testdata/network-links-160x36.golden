@@ -1,5 +1,12 @@
 == l:terminatr>mini/acme-api
 ╭─ Network · studio + 2 paired ────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ ⚑ NEEDS YOU 5 · 1 message waits for your OK · 1 file waits for you · 2 paused links · 1 link request                      ! next in the tree │
+│  ⚑ terminatr ⇄ mini/acme-api      report.pdf 4.2 MB offered · with M-9C1B-1                                                                  │
+│  ⚑ terminatr · nas/media          asks to link (send only there, R-A1B2-4)                                                                   │
+│  ⚑ terminatr ⇄ web                M-3 waits for your OK · Held one                                                                           │
+│  ⚑ terminatr ⇄ web                paused: too many messages without you                                                                      │
+│  ⚑ web ⇄ terminatr                paused: too many messages without you                                                                      │
+│ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── │
 │ ▾ ◉ studio · this server 4F2A-91C3                              shares 0 of 2 │ terminatr ⇄ mini/acme-api                                    │
 │    ■ terminatr         [ ] not shared                               2 links ⚑ │ ──────────────────────────────────────────────────────────── │
 │      ├─ ⇄ mini/acme-api  both · ask first · files: ask me          sends here │ this side     [both] · send · receive                        │
@@ -10,54 +17,47 @@
 │         ⚑ paused: too many messages without you                               │ state         open                                           │
 │    ■ web               [ ] not shared                                1 link ⚑ │ messages      last M-9C1B-1                                  │
 │      └─ ⇄ terminatr      both · ask first · files: ask me            paused ⚑ │                                                              │
-│         ⚑ paused: too many messages without you                               │ ← → change a switch, writing at once (this side only); enter │
-│                                                                               │ edits the whole link; all of the conversation is in the      │
-│ ▾ ◉ mini · connected 38 ms · tm 0.27.0                              panes off │ project's Messages tab.                                      │
-│    ■ acme-api          ⇄ terminatr                                  ● working │                                                              │
-│    ■ infra             shared with you · + link (L)             · not running │                                                              │
+│         ⚑ paused: too many messages without you                               │ CONVERSATION · all of it in the Messages tab                 │
+│                                                                               │   ← M-9C1B-1 The report                                   0s │
+│ ▾ ◉ mini · connected 38 ms · tm 0.27.0                              panes off │                                                              │
+│    ■ acme-api          ⇄ terminatr                                  ● working │ ← → change a switch, writing at once (this side only); enter │
+│    ■ infra             shared with you · + link (L)             · not running │ edits the whole link.                                        │
 │                                                                               │                                                              │
 │ ▾ ○ nas · offline 4m · relay                                        panes off │                                                              │
 │    ■ media · stale     shared with you · + link (L)                 ● working │                                                              │
-│                                                                               │                                                              │
-│                                                                               │                                                              │
-│                                                                               │                                                              │
-│                                                                               │                                                              │
-│                                                                               │                                                              │
-│                                                                               │                                                              │
-│                                                                               │                                                              │
 │                                                                               │                                                              │
 │                                                                               │                                                              │
 │                                                                               │                                                              │
 │                                                                                                                                              │
 │ enter edit · K ask first · F files · R ask back · M write · X unlink · tab details · ? keys · esc close                                      │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
-== l:web>terminatr
+== l:terminatr>web
 ╭─ Network · studio + 2 paired ────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ ▾ ◉ studio · this server 4F2A-91C3                              shares 0 of 2 │ web ⇄ terminatr                                              │
+│ ⚑ NEEDS YOU 5 · 1 message waits for your OK · 1 file waits for you · 2 paused links · 1 link request                      ! next in the tree │
+│  ⚑ terminatr ⇄ mini/acme-api      report.pdf 4.2 MB offered · with M-9C1B-1                                                                  │
+│  ⚑ terminatr · nas/media          asks to link (send only there, R-A1B2-4)                                                                   │
+│  ⚑ terminatr ⇄ web                M-3 waits for your OK · Held one                                                                           │
+│  ⚑ terminatr ⇄ web                paused: too many messages without you                                                                      │
+│  ⚑ web ⇄ terminatr                paused: too many messages without you                                                                      │
+│ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── │
+│ ▾ ◉ studio · this server 4F2A-91C3                              shares 0 of 2 │ terminatr ⇄ web                                              │
 │    ■ terminatr         [ ] not shared                               2 links ⚑ │ ──────────────────────────────────────────────────────────── │
 │      ├─ ⇄ mini/acme-api  both · ask first · files: ask me          sends here │ this side     [both] · send · receive                        │
-│      │  ⚑ report.pdf 4.2 MB offered · with M-9C1B-1                           │ ask first     [on] · off                                     │
+│      │  ⚑ report.pdf 4.2 MB offered · with M-9C1B-1                           │ ask first     on · [off]                                     │
 │      ├─⚑ nas/media asks to link (send only there, R-A1B2-4)                   │ files         [ask me] · take them · refuse                  │
 │      └─ ⇄ web            both · files: ask me                        paused ⚑ │ other side    both · files: ask me                           │
 │         ⚑ M-3 waits for your OK · Held one                                    │ state         paused · R resumes                             │
-│         ⚑ paused: too many messages without you                               │ messages      none yet                                       │
+│         ⚑ paused: too many messages without you                               │ messages      last M-3                                       │
 │    ■ web               [ ] not shared                                1 link ⚑ │                                                              │
-│      └─ ⇄ terminatr      both · ask first · files: ask me            paused ⚑ │ ← → change a switch, writing at once (both sides); enter     │
-│         ⚑ paused: too many messages without you                               │ edits the whole link; all of the conversation is in the      │
-│                                                                               │ project's Messages tab.                                      │
-│ ▾ ◉ mini · connected 38 ms · tm 0.27.0                              panes off │                                                              │
+│      └─ ⇄ terminatr      both · ask first · files: ask me            paused ⚑ │ CONVERSATION · all of it in the Messages tab                 │
+│         ⚑ paused: too many messages without you                               │   → M-3 Held one                                          1m │
+│                                                                               │   → M-2 On it                                            40m │
+│ ▾ ◉ mini · connected 38 ms · tm 0.27.0                              panes off │   ← M-1 Can you look at the build?                        3h │
 │    ■ acme-api          ⇄ terminatr                                  ● working │                                                              │
-│    ■ infra             shared with you · + link (L)             · not running │                                                              │
-│                                                                               │                                                              │
+│    ■ infra             shared with you · + link (L)             · not running │ ← → change a switch, writing at once (both sides); enter     │
+│                                                                               │ edits the whole link.                                        │
 │ ▾ ○ nas · offline 4m · relay                                        panes off │                                                              │
 │    ■ media · stale     shared with you · + link (L)                 ● working │                                                              │
-│                                                                               │                                                              │
-│                                                                               │                                                              │
-│                                                                               │                                                              │
-│                                                                               │                                                              │
-│                                                                               │                                                              │
-│                                                                               │                                                              │
-│                                                                               │                                                              │
 │                                                                               │                                                              │
 │                                                                               │                                                              │
 │                                                                               │                                                              │
@@ -66,10 +66,17 @@
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 == n:terminatr>web>held:M-3
 ╭─ Network · studio + 2 paired ────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ ⚑ NEEDS YOU 5 · 1 message waits for your OK · 1 file waits for you · 2 paused links · 1 link request                      ! next in the tree │
+│  ⚑ terminatr ⇄ mini/acme-api      report.pdf 4.2 MB offered · with M-9C1B-1                                                                  │
+│  ⚑ terminatr · nas/media          asks to link (send only there, R-A1B2-4)                                                                   │
+│  ⚑ terminatr ⇄ web                M-3 waits for your OK · Held one                                                                           │
+│  ⚑ terminatr ⇄ web                paused: too many messages without you                                                                      │
+│  ⚑ web ⇄ terminatr                paused: too many messages without you                                                                      │
+│ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── │
 │ ▾ ◉ studio · this server 4F2A-91C3                              shares 0 of 2 │ ⚑ NEEDS YOU                                                  │
 │    ■ terminatr         [ ] not shared                               2 links ⚑ │ ──────────────────────────────────────────────────────────── │
 │      ├─ ⇄ mini/acme-api  both · ask first · files: ask me          sends here │ M-3 · terminatr → web · 7 B · waits for your OK              │
-│      │  ⚑ report.pdf 4.2 MB offered · with M-9C1B-1                           │ enter reads it · A sends it as your OK · X drops it        … │
+│      │  ⚑ report.pdf 4.2 MB offered · with M-9C1B-1                           │ enter reads it · A sends it as your OK · X drops it          │
 │      ├─⚑ nas/media asks to link (send only there, R-A1B2-4)                   │                                                              │
 │      └─ ⇄ web            both · files: ask me                        paused ⚑ │                                                              │
 │         ⚑ M-3 waits for your OK · Held one                                    │                                                              │
@@ -87,13 +94,72 @@
 │                                                                               │                                                              │
 │                                                                               │                                                              │
 │                                                                               │                                                              │
+│                                                                                                                                              │
+│ enter read · A send · X drop · ! next · esc close                                                                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+== p:terminatr
+╭─ Network · studio + 2 paired ────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ ⚑ NEEDS YOU 5 · 1 message waits for your OK · 1 file waits for you · 2 paused links · 1 link request                      ! next in the tree │
+│  ⚑ terminatr ⇄ mini/acme-api      report.pdf 4.2 MB offered · with M-9C1B-1                                                                  │
+│  ⚑ terminatr · nas/media          asks to link (send only there, R-A1B2-4)                                                                   │
+│  ⚑ terminatr ⇄ web                M-3 waits for your OK · Held one                                                                           │
+│  ⚑ terminatr ⇄ web                paused: too many messages without you                                                                      │
+│  ⚑ web ⇄ terminatr                paused: too many messages without you                                                                      │
+│ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── │
+│ ▾ ◉ studio · this server 4F2A-91C3                              shares 0 of 2 │ terminatr · this server                                      │
+│    ■ terminatr         [ ] not shared                               2 links ⚑ │ ──────────────────────────────────────────────────────────── │
+│      ├─ ⇄ mini/acme-api  both · ask first · files: ask me          sends here │ shared        [ ] not shared                                 │
+│      │  ⚑ report.pdf 4.2 MB offered · with M-9C1B-1                           │                                                              │
+│      ├─⚑ nas/media asks to link (send only there, R-A1B2-4)                   │ LINKS 2                                                      │
+│      └─ ⇄ web            both · files: ask me                        paused ⚑ │  terminatr ┄┄⇄┄┄ mini/acme-api ⚑ ask · files: ask me         │
+│         ⚑ M-3 waits for your OK · Held one                                    │            ━━⇄━━ web           ⚑ files: ask me               │
+│         ⚑ paused: too many messages without you                               │ ━ linked  ┄ waiting  ─ offline  ━ paused                     │
+│    ■ web               [ ] not shared                                1 link ⚑ │                                                              │
+│      └─ ⇄ terminatr      both · ask first · files: ask me            paused ⚑ │ A shared project shows, read-only, in the sidebar of every   │
+│         ⚑ paused: too many messages without you                               │ paired server: what waits for you, the inbox, threads, tasks │
+│                                                                               │ on deck and its sessions' states; never its files. Sharing   │
+│ ▾ ◉ mini · connected 38 ms · tm 0.27.0                              panes off │ asks first; it is the project's own Shared with paired       │
+│    ■ acme-api          ⇄ terminatr                                  ● working │ servers setting.                                             │
+│    ■ infra             shared with you · + link (L)             · not running │                                                              │
 │                                                                               │                                                              │
-│                                                                               │                                                              │
-│                                                                               │                                                              │
-│                                                                               │                                                              │
+│ ▾ ○ nas · offline 4m · relay                                        panes off │                                                              │
+│    ■ media · stale     shared with you · + link (L)                 ● working │                                                              │
 │                                                                               │                                                              │
 │                                                                               │                                                              │
 │                                                                               │                                                              │
 │                                                                                                                                              │
-│ enter read · A send · X drop · ! next · esc close                                                                                            │
+│ space share · L link · tab details · ? keys · esc close                                                                                      │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+== !n:terminatr>mini/acme-api>file:X-9C1B-2
+╭─ Network · studio + 2 paired ────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ ⚑ NEEDS YOU 5 · 1 message waits for your OK · 1 file waits for you · 2 paused links · 1 link request                      ! next in the tree │
+│  ⚑ terminatr ⇄ mini/acme-api      report.pdf 4.2 MB offered · with M-9C1B-1                                                                  │
+│  ⚑ terminatr · nas/media          asks to link (send only there, R-A1B2-4)                                                                   │
+│  ⚑ terminatr ⇄ web                M-3 waits for your OK · Held one                                                                           │
+│  ⚑ terminatr ⇄ web                paused: too many messages without you                                                                      │
+│  ⚑ web ⇄ terminatr                paused: too many messages without you                                                                      │
+│ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── │
+│ ▾ ◉ studio · this server 4F2A-91C3                              shares 0 of 2 │ ⚑ NEEDS YOU                                                  │
+│    ■ terminatr         [ ] not shared                               2 links ⚑ │ ──────────────────────────────────────────────────────────── │
+│      ├─ ⇄ mini/acme-api  both · ask first · files: ask me          sends here │ report.pdf · 4.2 MB · offered by mini/acme-api with M-9C1B-1 │
+│      │  ⚑ report.pdf 4.2 MB offered · with M-9C1B-1                           │ · files: ask me                                              │
+│      ├─⚑ nas/media asks to link (send only there, R-A1B2-4)                   │ A accepts it (it lands beside its message) · X declines ·    │
+│      └─ ⇄ web            both · files: ask me                        paused ⚑ │ enter reads its message                                      │
+│         ⚑ M-3 waits for your OK · Held one                                    │                                                              │
+│         ⚑ paused: too many messages without you                               │                                                              │
+│    ■ web               [ ] not shared                                1 link ⚑ │                                                              │
+│      └─ ⇄ terminatr      both · ask first · files: ask me            paused ⚑ │                                                              │
+│         ⚑ paused: too many messages without you                               │                                                              │
+│                                                                               │                                                              │
+│ ▾ ◉ mini · connected 38 ms · tm 0.27.0                              panes off │                                                              │
+│    ■ acme-api          ⇄ terminatr                                  ● working │                                                              │
+│    ■ infra             shared with you · + link (L)             · not running │                                                              │
+│                                                                               │                                                              │
+│ ▾ ○ nas · offline 4m · relay                                        panes off │                                                              │
+│    ■ media · stale     shared with you · + link (L)                 ● working │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                                                                                              │
+│ enter read · A accept · X decline · ! next · esc close                                                                                       │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯

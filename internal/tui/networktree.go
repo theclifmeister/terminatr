@@ -58,13 +58,15 @@ type netRow struct {
 	// other is a link's other project (link.Row.Peer), link its row as
 	// the last poll has it; last: the project's last child, whose need
 	// rows go without the tree's bar. need is a need row's kind (needHeld
-	// …), msg and file what it waits on.
-	other string
-	link  link.Row
-	last  bool
-	need  int
-	msg   *link.Message
-	file  link.Transfer
+	// …), msg and file what it waits on; listed: the need's row in the
+	// NEEDS YOU list over the tree.
+	other  string
+	link   link.Row
+	last   bool
+	need   int
+	msg    *link.Message
+	file   link.Transfer
+	listed bool
 	// share is a share request row's request.
 	share *proto.ShareRequest
 }
@@ -76,7 +78,8 @@ func (r netRow) selectable() bool { return r.kind != netNote && r.kind != netGap
 // server, "g:<alias>" a paired one (as the sidebar's peerKey),
 // "p:<slug>" a project here, "t:<alias>/<slug>" one of theirs,
 // "l:<slug>><other>" a link, "n:<slug>><other>><need>" what it
-// needs (needKey), and a share request's (shareKeyOf).
+// needs (needKey), and a share request's (shareKeyOf); "!" and a need's
+// or a share request's key in the NEEDS YOU list.
 func (nv *networkView) rowKey(r netRow) string {
 	alias := ""
 	if r.peer >= 0 {
@@ -92,9 +95,17 @@ func (nv *networkView) rowKey(r netRow) string {
 	case netLink:
 		return "l:" + r.slug + ">" + r.other
 	case netNeed:
-		return needKey(r.slug, r.other, r.need, r.id())
+		k := needKey(r.slug, r.other, r.need, r.id())
+		if r.listed {
+			k = "!" + k
+		}
+		return k
 	case netAsked, netShareReq:
-		return shareKeyOf(alias, r)
+		k := shareKeyOf(alias, r)
+		if r.listed {
+			k = "!" + k
+		}
+		return k
 	}
 	return ""
 }
@@ -163,9 +174,10 @@ func (nv *networkView) pairedNames() string {
 	return strings.Join(out, ", ")
 }
 
-// rows are the tree's rows, in order.
+// rows are the tree's rows, in order, after the NEEDS YOU list's when
+// the popup is netWide or wider.
 func (nv *networkView) rows(m *dash) []netRow {
-	out := []netRow{{kind: netServer, peer: -1}}
+	out := append(nv.listRows(m), netRow{kind: netServer, peer: -1})
 	if !nv.folded["g:"] {
 		slugs := shareable(m)
 		if len(slugs) == 0 {

@@ -49,6 +49,8 @@ type networkView struct {
 	at     int
 	top    int
 	folded map[string]bool
+	// ltop is the NEEDS YOU list's first row shown.
+	ltop int
 	// panel: the details panel has the keyboard, on its item psel.
 	panel bool
 	psel  int
@@ -202,6 +204,15 @@ func (nv *networkView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 		nv.folded[nv.rowKey(r)] = !nv.folded[nv.rowKey(r)]
 	case r.kind == netProject && nv.hasLinks(m, r.slug) && (s == "enter" || s == "left" && !nv.folded[nv.rowKey(r)] || s == "right" && nv.folded[nv.rowKey(r)]):
 		nv.folded[nv.rowKey(r)] = !nv.folded[nv.rowKey(r)]
+	case s == "left" && r.listed && r.kind == netShareReq:
+		// To the request in the tree, unfolding its server.
+		alias := nv.list.Peers[r.peer].Alias
+		nv.folded["g:"+alias] = false
+		nv.sel = shareKeyOf(alias, r)
+	case s == "left" && r.listed:
+		// To the need in the tree, unfolding its project.
+		nv.folded["g:"], nv.folded["p:"+r.slug] = false, false
+		nv.sel = needKey(r.slug, r.other, r.need, r.id())
 	case s == "left" && r.kind != netServer:
 		// Up to the row's project (a link's, a need's), else its server.
 		up := netServer
@@ -302,6 +313,12 @@ func (nv *networkView) render(m *dash) string {
 	}
 	b := box{title: nv.title(), sel: -1, keys: keys}
 	n := m.boxRows(b)
+	var list []string
+	var listOf []int
+	if wide {
+		list, listOf = nv.needsList(m, rows, sel, iw, n)
+		n -= len(list)
+	}
 	treeW := iw
 	if wide {
 		treeW = iw * 55 / 100
@@ -312,6 +329,9 @@ func (nv *networkView) render(m *dash) string {
 	var tree []string
 	var of []int
 	for i, row := range rows {
+		if row.listed {
+			continue
+		}
 		for _, l := range nv.rowLines(m, row, treeW) {
 			if i == sel {
 				l = th().Sel.Render(fit(plainUnder(l), treeW))
@@ -343,6 +363,10 @@ func (nv *networkView) render(m *dash) string {
 
 	nv.lines = nv.lines[:0]
 	var body []string
+	for i, l := range list {
+		body = append(body, l)
+		nv.lines = append(nv.lines, netLine{row: listOf[i]})
+	}
 	for i := range n {
 		var line string
 		nl := netLine{row: -1}

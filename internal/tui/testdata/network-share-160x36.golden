@@ -1,5 +1,8 @@
 == g:mini
 ╭─ Network · studio + 2 paired ────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ ⚑ NEEDS YOU 1 · 1 share request                                                                                           ! next in the tree │
+│  ⚑ mini                           asks you to share a project (for its acme) · "the API docs"                                                │
+│ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── │
 │ ▾ ◉ studio · this server 4F2A-91C3                              shares 0 of 2 │ mini                                                         │
 │    ■ terminatr         [ ] not shared                                no links │ ──────────────────────────────────────────────────────────── │
 │    ■ web               [ ] not shared                                no links │ name          none: shown as mini                            │
@@ -25,14 +28,14 @@
 │                                                                               │                                                              │
 │                                                                               │                                                              │
 │                                                                               │                                                              │
-│                                                                               │                                                              │
-│                                                                               │                                                              │
-│                                                                               │                                                              │
 │                                                                                                                                              │
 │ S ask to share · E name · V panes · X unpair · enter fold · tab details · P pair · J join · ? keys · esc close                               │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 == s:mini:S-91C3-7
 ╭─ Network · studio + 2 paired ────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ ⚑ NEEDS YOU 1 · 1 share request                                                                                           ! next in the tree │
+│  ⚑ mini                           asks you to share a project (for its acme) · "the API docs"                                                │
+│ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── │
 │ ▾ ◉ studio · this server 4F2A-91C3                              shares 0 of 2 │ ⚑ NEEDS YOU                                                  │
 │    ■ terminatr         [ ] not shared                                no links │ ──────────────────────────────────────────────────────────── │
 │    ■ web               [ ] not shared                                no links │ request       S-91C3-7                                       │
@@ -58,14 +61,14 @@
 │                                                                               │                                                              │
 │                                                                               │                                                              │
 │                                                                               │                                                              │
-│                                                                               │                                                              │
-│                                                                               │                                                              │
-│                                                                               │                                                              │
 │                                                                                                                                              │
 │ A choose a project · X decline · ! next · esc close                                                                                          │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 == a:nas
 ╭─ Network · studio + 2 paired ────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ ⚑ NEEDS YOU 1 · 1 share request                                                                                           ! next in the tree │
+│  ⚑ mini                           asks you to share a project (for its acme) · "the API docs"                                                │
+│ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── │
 │ ▾ ◉ studio · this server 4F2A-91C3                              shares 0 of 2 │ ASKED TO SHARE                                               │
 │    ■ terminatr         [ ] not shared                                no links │ ──────────────────────────────────────────────────────────── │
 │    ■ web               [ ] not shared                                no links │ request       S-4F2A-33                                      │
@@ -78,9 +81,6 @@
 │ ▾ ○ nas · offline 4m · relay                                        panes off │ paired with it, or declines; nothing is shared without them. │
 │      shares nothing with you yet                                              │ One request per server waits at a time.                      │
 │      └─ asked to share (S-4F2A-33, for terminatr)       waiting on nas's user │                                                              │
-│                                                                               │                                                              │
-│                                                                               │                                                              │
-│                                                                               │                                                              │
 │                                                                               │                                                              │
 │                                                                               │                                                              │
 │                                                                               │                                                              │

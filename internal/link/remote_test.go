@@ -291,6 +291,9 @@ func TestRemoteUndelivered(t *testing.T) {
 		if b := Backlogs()["mini"]; b != (Backlog{Queued: 1, Undelivered: 1}) {
 			t.Fatalf("backlog before expiry: %+v", b)
 		}
+		if msgs, _ := Log(acme, "mini/api"); BacklogOf(msgs) != (Backlog{Queued: 1}) {
+			t.Fatalf("mini/api's backlog before expiry: %+v", BacklogOf(msgs))
+		}
 		*sv.clock = sv.clock.Add(2 * time.Minute)
 		Flush(context.Background(), toMini)
 		got, _ = Read(acme, m2.ID)
@@ -301,7 +304,32 @@ func TestRemoteUndelivered(t *testing.T) {
 		if b := Backlogs()["mini"]; b != (Backlog{Undelivered: 2}) {
 			t.Fatalf("backlog after expiry: %+v", b)
 		}
+		if msgs, _ := Log(acme, "mini/api"); BacklogOf(msgs) != (Backlog{Undelivered: 1}) {
+			t.Fatalf("mini/api's backlog after expiry: %+v", BacklogOf(msgs))
+		}
 	})
+}
+
+// TestBacklogOf: a link's backlog counts this side's messages in the
+// outbox, not those over the rate, and the undelivered ones since the
+// last that got through.
+func TestBacklogOf(t *testing.T) {
+	due := time.Now().Add(time.Hour)
+	msgs := []*Message{
+		{Out: true, State: StateUndelivered},
+		{Out: true, State: StateRead},
+		{Out: true, State: StateUndelivered},
+		{State: StateSent},
+		{Out: true, State: StateQueued},
+		{Out: true, State: StateQueued, Due: due},
+		{Out: true, State: StateHeld},
+	}
+	if b := BacklogOf(msgs); b != (Backlog{Queued: 1, Undelivered: 1}) {
+		t.Fatalf("backlog: %+v", b)
+	}
+	if b := BacklogOf(append(msgs, &Message{Out: true, State: StateSent})); b != (Backlog{Queued: 1}) {
+		t.Fatalf("after one got through: %+v", b)
+	}
 }
 
 // TestRemoteRefusals: what never leaves the sending server.
