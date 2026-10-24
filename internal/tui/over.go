@@ -76,8 +76,9 @@ func (m *dash) overDone() bool {
 }
 
 // Over is a popup opened over a session (docs/SPEC.md §4): prefix then
-// a, i, t, , or ? in a session. The dashboard runs its key and draws the
-// popup over the session's screen, dimmed, rather than over the list,
+// a, i, t, ,, N or ? in a session, or a click on a server's header in
+// its sidebar. The dashboard runs its key and draws the popup over the
+// session's screen, dimmed, rather than over the list,
 // and follows the session's output meanwhile (paneFeed); the view stays
 // as it is. When the popup closes the dashboard ends with
 // Attach set, and the caller attaches again. Should the view go back to
@@ -86,6 +87,7 @@ func (m *dash) overDone() bool {
 type Over struct {
 	Key     string   // the dashboard key that opens the popup
 	Task    int      // with Key t: the task the Tasks tab shows (opened), 0 for none
+	Server  string   // with Key N: the server the Network popup opens on (peerKey), "" for the first
 	Project string   // the project it is about: the session's, or a sidebar row's
 	Session string   // the session it is drawn over
 	Title   string   // how the header names the session

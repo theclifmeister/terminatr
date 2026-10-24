@@ -63,15 +63,16 @@ type fakeSource struct {
 	logs     []proto.LogInfo
 	logReads []proto.LogReadParams
 	peerErr  error
+	nameErr  error // SetPeerName's answer
 	// popup and popupErr are PeerPopup's answer; popups its calls,
 	// "alias/slug".
 	popup        proto.PeerPopup
 	popupErr     error
 	popups       []string
-	unpinned     []string // aliases removed from the Peers tab
-	panesSet     []string // "alias level" set from the Peers tab
-	relaySet     []string // "alias relay" set from the Peers tab
-	namesSet     []string // "alias name" set from the Peers tab
+	unpinned     []string // aliases unpaired in the Network popup
+	panesSet     []string // "alias level" set in the Network popup
+	relaySet     []string // "alias relay" set in the Network popup
+	namesSet     []string // "alias name" set in the Network popup
 	relayUpdates []string // aliases whose relay u asked to update
 	pairs        []string // PairPeer's and JoinPeer's calls: "pair relay", "join code"
 	pairErr      error    // fails them before the code shows
@@ -333,6 +334,9 @@ func (f *fakeSource) SetPeerPanes(alias, level string) error {
 	return nil
 }
 func (f *fakeSource) SetPeerName(alias, name string) error {
+	if f.nameErr != nil {
+		return f.nameErr
+	}
 	f.namesSet = append(f.namesSet, alias+" "+name)
 	for i := range f.peers.Peers {
 		if f.peers.Peers[i].Alias == alias {
@@ -818,7 +822,7 @@ func TestStatusLine(t *testing.T) {
 	}
 	// After the prefix: the commands.
 	got = ansi.Strip(statusLine(info, nil, true, 160, ""))
-	if !strings.Contains(got, `d dashboard · q quit · A project · + new · p ] [ projects · I T , ? · { } B sidebar · | info · tab sidebar keys`) || !strings.Contains(got, `prefix again sends it`) {
+	if !strings.Contains(got, `d dashboard · q quit · A project · + new · p ] [ projects · I T , N ? · { } B sidebar · | info · tab sidebar keys`) || !strings.Contains(got, `prefix again sends it`) {
 		t.Fatalf("pending status line %q", got)
 	}
 }

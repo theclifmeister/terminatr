@@ -1,0 +1,30 @@
+ PROJECTS                          │ tm dashboard                                     ● server ok · 0 sessions
+ no p╭─ Network · <host> ╮
+     │ ▾ ◉ <host> · this server shares 0 of 0 │──────
+     │      no active project here to share                                                            │
+     │                                                                                                 │
+     │      No paired server yet. P pairs with one: it shows a code to pass on, and J on the other     │
+     │      server takes it (or tm peer pair and tm peer join in a terminal); both of you then compare │
+     │      six digits.                                                                                │
+     │      No relay yet? On a Linux server with a domain: sudo tm relay install --domain NAME;        │
+     │      without one╭─ Pair a server ──────────────────────────────────────────────╮see the         │
+     │      README).   │ Pairing code (works once, for 10 minutes; <left>): │                │
+     │                 │                                                              │                │
+     │                 │     ws://<port>/<code> │                │
+     │                 │                                                              │                │
+     │                 │ On the other server: N (Network), then J, and type it in; or │                │
+     │                 │ tm peer join CODE. Pass it on yourself (a chat, a call),     │                │
+     │                 │ never through the relay.                                     │                │
+     │                 │ Waiting for the other server…                                │                │
+     │                 │                                                              │                │
+     │                 │ esc cancel                                                   │                │
+     │                 ╰──────────────────────────────────────────────────────────────╯                │
+     │                                                                                                 │
+     │ ─────────────────────────────────────────────────────────────────────────────────────────────── │
+     │ <host> · this server · 0 paired servers │
+     │ shares nothing with the paired servers · P pairs a new one                                      │
+     │                                                                                                 │
+ ────│ enter fold · tab details · P pair · J join · ? keys · esc close                                 │
+     ╰─────────────────────────────────────────────────────────────────────────────────────────────────╯──────
+                                   │
+ tab sidebar · ? help              │

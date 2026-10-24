@@ -5,17 +5,16 @@
     └─ T2        ☐ 4%   ○          │        steps 1/2
                                    │          ✓ 1 Reproduce the bug
                                    │          ○ 2 Fix it
-                                   │        report new · for the coordinator
-                                   │ ╭─ terminatr dev ─────────────────────────────╮   <duration>  t-0002
-                                   │ │ back to the last place                    ; │
-                                   │ │ open the selected row                 enter │────────────────────────────────────
-                                   │ │ adopt as a thread                         O │
-                                   │ │ activate / deactivate the project         S │───────────────────────────────────
-                                   │ │ fold / unfold the mod card                Z │
-                                   │ │ new project                               + │t's state is in its files, so
-                                   │ │ project popup                             A │
-                                   │ │ tasks                                     T │───────────────────────────────────
-                                   │ │ inbox                                     I │
+                                   │ ╭─ terminatr dev ─────────────────────────────╮
+                                   │ │ back to the last place                    ; │   <duration>  t-0002
+                                   │ │ open the selected row                 enter │
+                                   │ │ adopt as a thread                         O │────────────────────────────────────
+                                   │ │ activate / deactivate the project         S │
+                                   │ │ fold / unfold the mod card                Z │───────────────────────────────────
+                                   │ │ new project                               + │
+                                   │ │ project popup                             A │t's state is in its files, so
+                                   │ │ tasks                                     T │
+                                   │ │ inbox                                     I │───────────────────────────────────
                                    │ │ effective access                          E │
                                    │ │ next project                              ] │
                                    │ │ previous project                          [ │
@@ -26,6 +25,7 @@
                                    │ │ sidebar: slim / hide / full               B │
                                    │ │ details panel on / off                    | │
                                    │ │ settings                                  , │
+                                   │ │ network                                   N │
                                    │ │ notifications from mods                   M │
                                    │ │ help: keys and mouse                      ? │
                                    │ │ quit                               prefix+q │

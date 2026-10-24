@@ -15,9 +15,9 @@ import (
 // TestPeerDashboard (T398, relay phase 2): studio and mini paired
 // through an in-process relay, mini sharing api. In studio's console the
 // sidebar has mini's group; enter on api shows its read-only dashboard
-// (the breadcrumb, the link, nothing that acts on it), and the settings'
-// Peers tab lists mini with its link; X there removes it after asking,
-// and its group leaves the sidebar.
+// (the breadcrumb, the link, nothing that acts on it), and N there opens
+// the Network popup, which lists mini with its connection; X on it
+// unpairs it after asking, and its group leaves the sidebar.
 func TestPeerDashboard(t *testing.T) {
 	studio, mini := New(t), New(t)
 	rs := relay.New(relay.DefaultConfig())
@@ -68,17 +68,19 @@ func TestPeerDashboard(t *testing.T) {
 	w.Type("S")
 	w.WaitFor("api is mini's: nothing here acts on it", wait)
 
-	w.Keys(",", "5")
-	w.WaitFor("PAIRED SERVERS · this server ", wait)
-	screen = w.WaitFor("◉ mini  linked · ", wait)
-	if !strings.Contains(screen, "shares 1 project") || !strings.Contains(screen, "panes  [off] · view · write") {
-		t.Fatalf("Peers tab:\n%s", screen)
+	w.Type("N")
+	w.WaitFor("Network · ", wait)
+	screen = w.WaitFor("◉ mini · connected", wait)
+	if !strings.Contains(screen, "panes off") || !strings.Contains(screen, "shared with you · + link (L)") {
+		t.Fatalf("Network:\n%s", screen)
 	}
-	// studio has no project to share: the cursor starts on mini's panes.
+	// studio has no project to share: down from this server is mini.
+	w.Key(keyDown)
+	w.WaitFor("X unpair", wait)
 	w.Type("X")
-	w.WaitFor("Remove mini?", wait)
+	w.WaitFor("Unpair mini?", wait)
 	w.Type("Y")
-	w.WaitFor("No paired servers", wait)
+	w.WaitFor("No paired server yet", wait)
 	w.Key(keyEsc)
 	w.WaitFor("mini isn't paired with this server any more", 20*time.Second)
 	if out := studio.MustCLI("peer", "list"); !strings.Contains(out, "no peers") {

@@ -589,6 +589,19 @@ func (c *client) sideMouse(m emu.Mouse) {
 		c.flash = ck.msg
 		c.status()
 	}
+	if ck.network != "" && !c.bare {
+		// The Network popup on that server, over this pane (a bare
+		// attach has no dashboard to draw it).
+		key := ck.network
+		c.mu.Unlock()
+		if ck.sel != "" && c.vc != nil {
+			c.act(proto.MethodViewSideSel, proto.ViewParams{Key: ck.sel})
+		}
+		if c.lock() {
+			c.goOver(&Over{Key: "N", Server: key})
+		}
+		return
+	}
 	if ck.open != nil && ck.row.here && ck.row.kind != treeProject {
 		c.flash = "you are on it"
 		c.status()

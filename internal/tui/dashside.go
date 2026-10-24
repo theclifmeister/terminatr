@@ -13,7 +13,8 @@ import (
 // border starts a drag; a click on a row gives the sidebar the keyboard,
 // and a project row shows
 // its dashboard, the coordinator row opens the coordinator, a thread row
-// attaches its session.
+// attaches its session, and a server's header opens the Network popup
+// on that server.
 func (m *dash) sideClick(mo tea.Mouse) tea.Cmd {
 	if mo.Button != tea.MouseLeft {
 		return nil
@@ -43,6 +44,10 @@ func (m *dash) sideClick(mo tea.Mouse) tea.Cmd {
 	}
 	if ck.refold != nil {
 		cmds = append(cmds, m.refold(ck.refold))
+	}
+	if ck.network != "" {
+		m.stack = nil
+		m.openNetwork(ck.network)
 	}
 	if ck.cant {
 		m.msg = ck.msg

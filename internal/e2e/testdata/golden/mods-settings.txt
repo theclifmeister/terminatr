@@ -1,7 +1,7 @@
  PROJECTS                      1   │ tm dashboard                                               ● server ok · 2 sessions
  ■ demo        2                   │ demo ────────────────────────────────────────────────── ● active — S to deactivate
  └─ co╭─ Settings ───────────────────────────────────────────────────────────────────────────────────────────────╮ inbox
-    ├─│  1 general   2 all projects   3 access   4 mods   5 peers   6 logs                                       │t  <duration>…
+    ├─│  1 general   2 all projects   3 access   4 mods   5 logs                                                 │t  <duration>…
     └─│ About: tm dev · server dev · update check on                                                             │
       │                                                                                                          │
       │ ● Context gauge      code · column · view      1.0.0  reads your projects · draws its own panels · offe… │

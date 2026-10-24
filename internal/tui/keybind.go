@@ -42,7 +42,7 @@ var lockedKeys = []string{"esc", "ctrl+c", "d", "q", "r"}
 // that is a prefix command does nothing unless it is the popup's own
 // (A accepts a task there; TestNoPlainKeyIsAPrefixCommand).
 var popupOwnKeys = []string{"1", "2", "3", "4", "5", "6", "7", "enter", "space", "+", "-", "*", "c", "b",
-	"A", "D", "E", "H", "I", "J", "K", "M", "N", "P", "R", "T", "U", "W", "X", "Y",
+	"A", "D", "E", "H", "I", "J", "K", "M", "N", "P", "R", "T", "U", "V", "W", "X", "Y", "!",
 	"up", "down", "left", "right", "pgup", "pgdown", "home", "end"}
 
 // moveIDs are the actions that only move, scroll or fold: the only ones

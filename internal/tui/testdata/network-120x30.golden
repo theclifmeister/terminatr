@@ -1,0 +1,112 @@
+== g:
+╭─ Network · studio + 2 paired ────────────────────────────────────────────────────────────────────────────╮
+│ ▾ ◉ studio · this server 4F2A-91C3          shares 0 of 2 │ studio · this server                         │
+│    ■ terminatr         [ ] not shared                     │ ──────────────────────────────────────────── │
+│    ■ web               [ ] not shared                     │ id            4F2A-91C3                      │
+│                                                           │ paired        work, nas                      │
+│ ▾ ◉ work (mini) · connected 38 ms              panes view │ shares        nothing                        │
+│    ■ acme-api          shared with you · + link (L)       │                                              │
+│    ■ infra             shared with you · + link (L)       │ P pairs with another server, J joins one's   │
+│                                                           │ pairing: the code works once, for 10         │
+│ ▾ ○ nas · offline 4m · relay                    panes off │ minutes, and both of you compare six digits  │
+│    ■ media · stale     shared with you · + link (L)       │ before Y.                                    │
+│                                                           │                                              │
+│                                                           │                                              │
+│                                                           │                                              │
+│                                                           │                                              │
+│                                                           │                                              │
+│                                                           │                                              │
+│                                                           │                                              │
+│                                                           │                                              │
+│                                                           │                                              │
+│                                                           │                                              │
+│                                                           │                                              │
+│                                                           │                                              │
+│                                                           │                                              │
+│                                                                                                          │
+│ enter fold · tab details · P pair · J join · ? keys · esc close                                          │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+== p:terminatr
+╭─ Network · studio + 2 paired ────────────────────────────────────────────────────────────────────────────╮
+│ ▾ ◉ studio · this server 4F2A-91C3          shares 0 of 2 │ terminatr · this server                      │
+│    ■ terminatr         [ ] not shared                     │ ──────────────────────────────────────────── │
+│    ■ web               [ ] not shared                     │ shared        [ ] not shared                 │
+│                                                           │                                              │
+│ ▾ ◉ work (mini) · connected 38 ms              panes view │ A shared project shows, read-only, in the    │
+│    ■ acme-api          shared with you · + link (L)       │ sidebar of every paired server: what waits   │
+│    ■ infra             shared with you · + link (L)       │ for you, the inbox, threads, tasks on deck   │
+│                                                           │ and its sessions' states; never its files.   │
+│ ▾ ○ nas · offline 4m · relay                    panes off │ Sharing asks first; it is the project's own  │
+│    ■ media · stale     shared with you · + link (L)       │ Shared with paired servers setting.          │
+│                                                           │                                              │
+│                                                           │                                              │
+│                                                           │                                              │
+│                                                           │                                              │
+│                                                           │                                              │
+│                                                           │                                              │
+│                                                           │                                              │
+│                                                           │                                              │
+│                                                           │                                              │
+│                                                           │                                              │
+│                                                           │                                              │
+│                                                           │                                              │
+│                                                           │                                              │
+│                                                                                                          │
+│ space share · tab details · ? keys · esc close                                                           │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+== g:mini
+╭─ Network · studio + 2 paired ────────────────────────────────────────────────────────────────────────────╮
+│ ▾ ◉ studio · this server 4F2A-91C3          shares 0 of 2 │ work (mini)                                  │
+│    ■ terminatr         [ ] not shared                     │ ──────────────────────────────────────────── │
+│    ■ web               [ ] not shared                     │ name          work                           │
+│                                                           │ connection    ◉ connected 38 ms              │
+│ ▾ ◉ work (mini) · connected 38 ms              panes view │ id · tm       91C3-77AB · 0.27.0             │
+│    ■ acme-api          shared with you · + link (L)       │ relay         relay.example.net · v0.27.0 ·  │
+│    ■ infra             shared with you · + link (L)       │               update (U)                     │
+│                                                           │                                              │
+│ ▾ ○ nas · offline 4m · relay                    panes off │ WHAT WORK MAY DO HERE                        │
+│    ■ media · stale     shared with you · + link (L)       │   ● paired: your projects and its can link   │
+│                                                           │   ○ sees nothing: you share no project       │
+│                                                           │   ● watches your shared panes and popups     │
+│                                                           │   ○ types in them                            │
+│                                                           │   panes (V)   off · [view] · write           │
+│                                                           │               it can watch the coordinators  │
+│                                                           │               and threads of the projects    │
+│                                                           │               you share, not type            │
+│                                                           │ AND THE OTHER WAY                            │
+│                                                           │   work lets you watch its panes; its popups  │
+│                                                           │   open here, read-only                       │
+│                                                           │   it shares acme-api, infra                  │
+│                                                           │                                              │
+│                                                                                                          │
+│ E name · V panes · U update relay · X unpair · enter fold · tab details · P pair · J join · ? keys       │
+│ esc close                                                                                                │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+== t:mini/acme-api
+╭─ Network · studio + 2 paired ────────────────────────────────────────────────────────────────────────────╮
+│ ▾ ◉ studio · this server 4F2A-91C3          shares 0 of 2 │ acme-api · on work                           │
+│    ■ terminatr         [ ] not shared                     │ ──────────────────────────────────────────── │
+│    ■ web               [ ] not shared                     │ coordinator   ● working                      │
+│                                                           │ fresh         synced 2s ago                  │
+│ ▾ ◉ work (mini) · connected 38 ms              panes view │ its popup     read-only, from its dashboard  │
+│    ■ acme-api          shared with you · + link (L)       │                                              │
+│    ■ infra             shared with you · + link (L)       │ Nothing here acts on it: enter shows its     │
+│                                                           │ dashboard, read-only. Linking a project of   │
+│ ▾ ○ nas · offline 4m · relay                    panes off │ yours with it: its Settings tab (A, then 4), │
+│    ■ media · stale     shared with you · + link (L)       │ Linked projects, or tm project link.         │
+│                                                           │                                              │
+│                                                           │                                              │
+│                                                           │                                              │
+│                                                           │                                              │
+│                                                           │                                              │
+│                                                           │                                              │
+│                                                           │                                              │
+│                                                           │                                              │
+│                                                           │                                              │
+│                                                           │                                              │
+│                                                           │                                              │
+│                                                           │                                              │
+│                                                           │                                              │
+│                                                                                                          │
+│ enter its dashboard · ? keys · esc close                                                                 │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────╯

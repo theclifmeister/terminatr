@@ -39,7 +39,7 @@ func TestSmokeLogsTab(t *testing.T) {
 
 	w := env.Window(110, 30)
 	w.WaitFor("+ new project", wait)
-	w.Keys(",", "6")
+	w.Keys(",", "5")
 	w.WaitFor("server.log", wait)
 	w.WaitFor("following", wait)
 	w.Keys("]", "]")

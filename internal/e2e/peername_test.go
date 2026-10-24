@@ -18,7 +18,7 @@ import (
 // Either word links acme to api there and sends to it, config.toml and
 // the folders keep the alias, server.status and tm link list say the
 // name, and mini hears nothing of it. In studio's console the sidebar's
-// group and the Peers tab show the name.
+// group and the Network popup show the name.
 func TestPeerDisplayName(t *testing.T) {
 	studio, mini := New(t), New(t)
 	rs := relay.New(relay.DefaultConfig())
@@ -77,7 +77,7 @@ func TestPeerDisplayName(t *testing.T) {
 	w := studio.Window(110, 30)
 	w.WaitFor("◉ work · ", 30*time.Second)
 	w.WaitFor("■ api", 30*time.Second)
-	w.Keys(",", "5")
-	w.WaitFor("PAIRED SERVERS · this server ", wait)
-	w.WaitFor("work (mini)", wait)
+	w.Prefix("N")
+	w.WaitFor("Network · ", wait)
+	w.WaitFor("work (mini) · connected", wait)
 }

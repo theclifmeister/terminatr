@@ -153,6 +153,8 @@ func init() {
 			run: (*dash).toggleDetails},
 		{id: "settings.open", keys: []string{","}, label: ",", help: "settings for every project: the prefix key, the default agent, the layout (a project's own are under A)", menu: "settings",
 			foot: always("settings"), run: func(m *dash, _ string) tea.Cmd { m.openSettings(); return nil }},
+		{id: "network.open", keys: []string{"N"}, label: "N", help: "the Network popup: this server and the paired ones, with their connection; the projects you share and those they share with you; pair, name, panes, relay and unpair (a click on a server's header in the sidebar opens it on that server)", menu: "network",
+			run: func(m *dash, _ string) tea.Cmd { m.openNetwork(""); return nil }},
 		{id: "pane.repaint", keys: []string{"R"}, help: "a paired server's pane: repaint from its server (prefix+R; listed with the prefix commands)", mouse: "the session's " + menuButton + " menu in a paired server's pane: repaint from its server",
 			run: func(m *dash, _ string) tea.Cmd {
 				m.msg = "prefix+" + keyShown(boundKey("R")) + " repaints a paired server's pane: open one first"

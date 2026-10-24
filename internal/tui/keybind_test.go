@@ -26,7 +26,7 @@ var wantIDs = []string{
 	"list.up", "list.down", "list.page-up", "list.page-down", "focus.next", "focus.prev", "place.last", "row.open",
 	"session.adopt", "project.activate", "card.fold", "project.new", "project.popup", "project.tasks", "project.inbox", "access.show",
 	"project.next", "project.prev", "list.narrower", "list.wider", "sidebar.narrower", "sidebar.wider",
-	"sidebar.slim", "details.toggle", "settings.open", "pane.repaint", "notices.open", "help.open", "console.quit",
+	"sidebar.slim", "details.toggle", "settings.open", "network.open", "pane.repaint", "notices.open", "help.open", "console.quit",
 	"side.up", "side.down", "side.enter", "side.unfold", "side.fold", "side.back", "side.activate",
 	"side.fold-toggle", "side.fold-all", "side.unfold-all", "side.pin", "side.first", "side.last", "side.page-up", "side.page-down",
 	"side.nth", "side.needs-next", "side.needs-prev", "side.filter", "side.help",
@@ -141,7 +141,7 @@ func TestKeymapRefuses(t *testing.T) {
 // and the hints show the new key.
 func TestKeymapRemaps(t *testing.T) {
 	if err := keymap(t, map[string][]string{
-		"details.toggle": {"V"}, "session.adopt": {"G"}, "side.pin": {"F"}, "side.fold": {"left"}, "help.open": {"?", "L"},
+		"details.toggle": {"Q"}, "session.adopt": {"G"}, "side.pin": {"F"}, "side.fold": {"left"}, "help.open": {"?", "L"},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -151,14 +151,14 @@ func TestKeymapRemaps(t *testing.T) {
 	if m.layout.Details != before {
 		t.Fatal("| still toggles the details panel")
 	}
-	keyPress(m, "V")
+	keyPress(m, "Q")
 	if m.layout.Details == before {
-		t.Fatal("V doesn't toggle the details panel")
+		t.Fatal("Q doesn't toggle the details panel")
 	}
 	m.Update(tea.KeyPressMsg{Code: 'b', Mod: tea.ModCtrl})
-	keyPress(m, "V")
+	keyPress(m, "Q")
 	if m.layout.Details != before {
-		t.Fatal("prefix+V doesn't toggle the details panel")
+		t.Fatal("prefix+Q doesn't toggle the details panel")
 	}
 	m.Update(tea.KeyPressMsg{Code: 'b', Mod: tea.ModCtrl})
 	keyPress(m, "L")
@@ -166,7 +166,7 @@ func TestKeymapRemaps(t *testing.T) {
 		t.Fatalf("prefix+L didn't open the help: %T", m.top())
 	}
 	help := ansi.Strip(strings.Join(m.top().(*helpView).box(m).body, "\n"))
-	for _, want := range []string{"V ", "? L ", "prefix+A I T , ? +", "prefix+V ", "F ", "→ ← "} {
+	for _, want := range []string{"Q ", "? L ", "prefix+A I T , ? +", "prefix+Q ", "F ", "→ ← "} {
 		if !strings.Contains(help, "\n"+want) {
 			t.Errorf("the help lacks a line starting %q:\n%s", want, help)
 		}
@@ -178,20 +178,20 @@ func TestKeymapRemaps(t *testing.T) {
 
 	// The menus press the new keys, and say them.
 	items := m.dashItems()
-	if i := slices.IndexFunc(items, func(it menuItem) bool { return it.label == "details panel on / off" }); i < 0 || items[i].key != "V" {
+	if i := slices.IndexFunc(items, func(it menuItem) bool { return it.label == "details panel on / off" }); i < 0 || items[i].key != "Q" {
 		t.Errorf("the ≡ menu's details item: %+v", items)
 	}
-	if !strings.Contains(prefixHint(), " V details") || !strings.Contains(pendingList(), " V info") {
-		t.Errorf("the prefix hints don't say V: %q, %q", prefixHint(), pendingList())
+	if !strings.Contains(prefixHint(), " Q details") || !strings.Contains(pendingList(), " Q info") {
+		t.Errorf("the prefix hints don't say Q: %q, %q", prefixHint(), pendingList())
 	}
-	if c := (&client{dashboard: true}); !slices.ContainsFunc(c.sessionItems(), func(it aitem) bool { return it.key == "prefix+V" }) {
-		t.Errorf("the session's ≡ menu lacks prefix+V")
+	if c := (&client{dashboard: true}); !slices.ContainsFunc(c.sessionItems(), func(it aitem) bool { return it.key == "prefix+Q" }) {
+		t.Errorf("the session's ≡ menu lacks prefix+Q")
 	}
 
-	// In a session, prefix+V is the info panel's pane command, | nothing.
+	// In a session, prefix+Q is the info panel's pane command, | nothing.
 	prefix, _ := parseChord(DefaultPrefixKey)
-	if do := prefixStep(prefix, true, uv.Key{Code: 'V', Text: "V"}, true); do.pane != "|" {
-		t.Errorf("prefix+V in a session: %+v", do)
+	if do := prefixStep(prefix, true, uv.Key{Code: 'Q', Text: "Q"}, true); do.pane != "|" {
+		t.Errorf("prefix+Q in a session: %+v", do)
 	}
 	if do := prefixStep(prefix, true, uv.Key{Code: '|', Text: "|"}, true); do != (prefixDo{}) {
 		t.Errorf("prefix+| in a session still does %+v", do)
