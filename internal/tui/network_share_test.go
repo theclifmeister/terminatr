@@ -183,7 +183,7 @@ func TestNetworkShareRequest(t *testing.T) {
 	}
 	press(m, "A", "enter")
 	drain(t, m, press(m, "Y"))
-	if !slices.Equal(src.shares, []string{"accept S-91C3-7 terminatr"}) || m.msg != "terminatr is shared with every paired server; mini hears its request was answered (S-91C3-7)" {
+	if !slices.Equal(src.shares, []string{"accept S-91C3-7 terminatr"}) || m.msg != "terminatr is shared with every paired server, for mini's request S-91C3-7" {
 		t.Fatalf("Y: %q %q", src.shares, m.msg)
 	}
 	out = netBox(m)

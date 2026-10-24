@@ -300,7 +300,7 @@ func (nv *networkView) chooseShare(m *dash, name string, q proto.ShareRequest) {
 				src := m.src
 				return m.act(func() actionMsg {
 					_, err := src.AnswerShare(q.ID, true, slug)
-					return actionMsg{err: err, msg: slug + " is shared with every paired server; " + name + " hears its request was answered (" + id + ")", then: func(m *dash) {
+					return actionMsg{err: err, msg: slug + " is shared with every paired server, for " + name + "'s request " + id, then: func(m *dash) {
 						nv.reload(m)
 						nv.sel = "p:" + slug
 					}}
