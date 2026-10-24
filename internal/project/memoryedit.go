@@ -155,11 +155,12 @@ func (p *Project) ReadNote(rel string) ([]byte, error) {
 }
 
 // CreateNote writes note rel (NotePath's), which must not exist yet
-// (exists).
+// (exists), its source linked (LinkSource).
 func (p *Project) CreateNote(rel string, data []byte) error {
 	if err := p.notesDir(true); err != nil {
 		return err
 	}
+	data = p.LinkSource(data)
 	f, err := fsx.OpenNoLink(p.Path(filepath.FromSlash(rel)), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
 	if errors.Is(err, fs.ErrExist) {
 		return refuse("exists", "%s exists: tm memory edit %s changes it", rel, rel)
@@ -172,13 +173,13 @@ func (p *Project) CreateNote(rel string, data []byte) error {
 }
 
 // WriteNote replaces note rel (NotePath's), which must be there, with
-// data. The new file takes the old one's place by a rename, so a link
+// data, its source linked (LinkSource). The new file takes the old one's place by a rename, so a link
 // planted meanwhile is replaced, never followed.
 func (p *Project) WriteNote(rel string, data []byte) error {
 	if _, err := p.noteFile(rel); err != nil {
 		return err
 	}
-	return fsx.WriteAtomic(p.Path(filepath.FromSlash(rel)), data, 0o644)
+	return fsx.WriteAtomic(p.Path(filepath.FromSlash(rel)), p.LinkSource(data), 0o644)
 }
 
 // RemoveNote deletes note rel (NotePath's).

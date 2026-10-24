@@ -182,3 +182,30 @@ func TestGroupOfBacklog(t *testing.T) {
 		t.Fatalf("render:\n%s", out)
 	}
 }
+
+// TestThreadLink (T717): with the project's slug the metadata line links
+// the thread (vaultlink); the board reads back the same either way.
+func TestThreadLink(t *testing.T) {
+	yamlOn(t)
+	b, err := Parse([]byte(specExample))
+	if err != nil {
+		t.Fatal(err)
+	}
+	b.Slug = "demo"
+	linked := string(b.Render())
+	const want = "status: started · owner: claude · thread: [[demo/threads/t-0005/t-0005|t-0005]] · updated: 2026-10-04\n"
+	if !strings.Contains(linked, want) {
+		t.Fatalf("no thread link:\n%s", linked)
+	}
+	again, err := Parse([]byte(linked))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again.Find(12).Thread != "t-0005" || string(again.Render()) != specExample {
+		t.Fatalf("linked board reads back as\n%s", again.Render())
+	}
+	b.Slug = "demo"
+	if got := string(b.RenderArchive()); !strings.Contains(got, "thread: [[demo/threads/t-0002/t-0002|t-0002]]") {
+		t.Fatalf("archive has no thread link:\n%s", got)
+	}
+}

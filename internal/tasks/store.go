@@ -33,7 +33,7 @@ type Events interface {
 // Store applies task commands to one project folder.
 type Store struct {
 	Dir    string           // the project folder
-	Slug   string           // the project's slug, for the caller check
+	Slug   string           // the project's slug, for the caller check and the links in TASKS.md
 	Now    func() time.Time // nil means time.Now
 	Events Events           // nil means no journal
 	Repos  []string         // the project's repos, which a task's repo names (checkRepo)
@@ -139,6 +139,7 @@ func (s *Store) mutate(fn func(b *Board) error) error {
 		if err := fn(b); err != nil {
 			return nil, err
 		}
+		b.Slug = s.Slug
 		return b.Render(), nil
 	})
 }
@@ -584,6 +585,7 @@ func (s *Store) move(c caller.Caller, id int, archive bool) (Result, error) {
 			to.Tasks = append(to.Tasks, t)
 			t.Archived = archive
 			res = Result{Task: t, Changed: true}
+			a.Slug = s.Slug
 			return a.RenderArchive(), nil
 		})
 	})

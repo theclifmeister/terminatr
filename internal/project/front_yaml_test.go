@@ -12,7 +12,7 @@ import (
 func TestFrontYAML(t *testing.T) {
 	at := time.Date(2026, 10, 24, 18, 12, 56, 0, time.UTC)
 	mdfiletest.SameYAML(t, &Meta{Goal: "g", Created: at, CodeHost: "azure", AzureURL: "https://dev.azure.com/o"})
-	mdfiletest.SameYAML(t, &Item{ID: "i", Kind: "k", Subject: "s", Created: at, Summary: "x", NeedsUser: true, Message: "m"})
+	mdfiletest.SameYAML(t, &Item{ID: "i", Kind: "k", Subject: "s", Created: at, Summary: "x", NeedsUser: true, Message: "m", Thread: "t-0001"})
 	mdfiletest.SameYAML(t, &NoteFront{Title: "t", Touches: []string{"a/", "repo:api"}, Standing: true, Audience: "coordinator", Source: "T1"})
 }
 

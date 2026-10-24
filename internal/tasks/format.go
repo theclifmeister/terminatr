@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/theclifmeister/terminatr/internal/mdfile"
+	"github.com/theclifmeister/terminatr/internal/vaultlink"
 )
 
 // The TASKS.md format (§6.2): front matter with next_id, "# Tasks",
@@ -152,7 +153,7 @@ func parseMeta(t *Task, line string) error {
 		case "repo":
 			t.Repo = v
 		case "thread":
-			t.Thread = v
+			t.Thread = vaultlink.Plain(v) // a link (vaultlink) or, as older tm wrote it, the id
 		case "created":
 			t.Created = v
 		case "updated":
@@ -211,7 +212,7 @@ func (b *Board) Render() []byte {
 			g = gg
 			fmt.Fprintf(&w, "\n## %s\n", g)
 		}
-		writeTask(&w, t)
+		writeTask(&w, t, b.Slug)
 	}
 	return w.Bytes()
 }
@@ -222,15 +223,21 @@ func (b *Board) RenderArchive() []byte {
 	var w bytes.Buffer
 	w.WriteString("# Archive\n")
 	for _, t := range b.Tasks {
-		writeTask(&w, t)
+		writeTask(&w, t, b.Slug)
 	}
 	return w.Bytes()
 }
 
-func writeTask(w *bytes.Buffer, t *Task) {
+// writeTask writes one task; the metadata line links its thread in
+// project slug's vault (vaultlink).
+func writeTask(w *bytes.Buffer, t *Task, slug string) {
 	fmt.Fprintf(w, "\n### %s %s\n", t.Ref(), t.Title)
 	meta := []string{"status: " + string(t.Status)}
-	for _, kv := range [][2]string{{"owner", t.Owner}, {"repo", t.Repo}, {"thread", t.Thread}, {"created", t.Created}, {"updated", t.Updated}} {
+	thread := t.Thread
+	if thread != "" && slug != "" {
+		thread = vaultlink.Link(slug, vaultlink.Thread, thread, "")
+	}
+	for _, kv := range [][2]string{{"owner", t.Owner}, {"repo", t.Repo}, {"thread", thread}, {"created", t.Created}, {"updated", t.Updated}} {
 		if kv[1] != "" {
 			meta = append(meta, kv[0]+": "+kv[1])
 		}
