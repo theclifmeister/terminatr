@@ -1,36 +1,36 @@
  PROJECTS                      1   │ tm dashboard                                               ● server ok · 2 sessions
  ■ demo        2                   │ demo ────────────────────────────────────────────────── ● active — S to deactivate
- └─ coordi…             ·          │  coordinator                      —           not running; enter starts it  3 inbox
-    ├─ T1    50% ☐ 2%   ○          │  T1 Fix the login              ○ idle      2%     report new  50% 1/2 ▸ Fix it  10…
-    └─ T2   ╭─ demo ───────────────────────────────────────────────────────────────────────────────────────╮
-            │ 1 overview 2 inbox 3 3 tasks 4 settings 5 access 6 keys 7 memory 8 library 9 messages        │
-            │                                                                                              │
-            │ Memory  MEMORY.md                                                                            │
-            │ - Login flow: the redirect lives in auth/session.go                                          │
-            │ - Tests before push: run make test before every push                                         │
-            │ enter files · n next · p previous                                                            │────────────
-            │                                                                                              │
-            │                                                                                              │───────────
-            │                                                                                              │
-            │                                                                                              │s, so
-            │                                                                                              │
-            │                                                                                              │───────────
-            │                                                                                              │
-            │                                                                                              │
-            │                                                                                              │
-            │                                                                                              │
-            │                                                                                              │
-            │                                                                                              │
-            │                                                                                              │
-            │                                                                                              │
-            │                                                                                              │
-            │                                                                                              │
-            │                                                                                              │
-            │                                                                                              │
-            │                                                                                              │
-            │ ↑ ↓ scroll · ← → tabs · esc close                                                            │
-            ╰──────────────────────────────────────────────────────────────────────────────────────────────╯
- ───────────────────────────────── │
- demo · active                     │────────────────────────────────────────────────────────────────────────────────────
+ └─ co╭─ demo ───────────────────────────────────────────────────────────────────────────────────────────────────╮ inbox
+    ├─│  1 overview   2 inbox 3   3 tasks   4 settings   5 access   6 keys   7 memory   8 library   9 messages   │t  10…
+    └─│                                                                                                          │
+      │ Memory  MEMORY.md                                                                                        │
+      │ - Login flow: the redirect lives in auth/session.go                                                      │
+      │ - Tests before push: run make test before every push                                                     │
+      │ enter files · n next · p previous                                                                        │
+      │                                                                                                          │
+      │                                                                                                          │──────
+      │                                                                                                          │
+      │                                                                                                          │─────
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │─────
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+ ─────│ ↑ ↓ scroll · ← → tabs · esc close                                                                        │
+ demo ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────╯──────
  2 threads · coordinator not runn… │
  tab sidebar · ? help              │

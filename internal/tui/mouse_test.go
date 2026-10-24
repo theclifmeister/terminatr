@@ -230,7 +230,7 @@ func TestDashboardClicks(t *testing.T) {
 	if strings.Contains(screen(m), "×") {
 		t.Fatalf("the help has a ×:\n%s", screen(m))
 	}
-	mouseAt(t, m, tea.MouseLeft, m.sideW(), 2)
+	mouseAt(t, m, tea.MouseLeft, m.sideW(), 0)
 	if m.top() != nil {
 		t.Fatalf("a click outside didn't close the help: %T", m.top())
 	}
@@ -238,7 +238,7 @@ func TestDashboardClicks(t *testing.T) {
 	if _, ok := m.top().(*settingsView); !ok {
 		t.Fatalf(", settings didn't open: %T", m.top())
 	}
-	mouseAt(t, m, tea.MouseLeft, m.sideW()+1, 2)
+	mouseAt(t, m, tea.MouseLeft, m.sideW()+1, 0)
 	if m.top() != nil {
 		t.Fatalf("a click outside didn't close the settings: %T", m.top())
 	}

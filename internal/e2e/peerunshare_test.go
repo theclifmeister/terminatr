@@ -62,7 +62,7 @@ func TestPeerUnshareLinkedProjects(t *testing.T) {
 		w.Key(keyDown)
 	}
 	w.Key(keyUp)
-	w.WaitFor("Enter lists the projects, this server's and the paired servers'", wait)
+	w.WaitFor("lists the projects, this server's and the paired servers'", wait)
 	w.Key(keyEnter)
 	screen := w.WaitFor("mini · paired server, linked", wait)
 	for _, want := range []string{"  api ", "  docs "} {

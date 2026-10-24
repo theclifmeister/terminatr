@@ -1,40 +1,40 @@
  PROJECTS                      1   │ tm dashboard                                               ● server ok · 0 sessions
  <server>│ NEEDS YOU 1 ───────────────────────────────────────────────────────────────────────
- ■ acme             0              │  1 link request waits             ▲ blocked   enter opens Messages
- └─ coordinator         ·          │ acme ────────────────────────────────────────────────── ● active — S to deactivate
-            ╭─ acme ───────────────────────────────────────────────────────────────────────────────────────╮ it  2 inbox
- <since>│ 1 overview 2 inbox 2 3 tasks 4 settings 5 access 6 keys 7 memory 8 library 9 messages 1 │
-            │                                                                                              │────────────
-            │ ⚑ NEEDS YOU 1 · 1 link request │
-            │ ⚑ mini/docs   asks to link (<id>) · A accept · X decline │
-            │ │
-            │   project     id        title                                                   date │
-            │   mini/api    <id>  Thanks, testing it.                                     <time> │
-            │   → mini/api  <id>  The API landed.                                         <time> │
-            │ │
-            │ Messages between this project's coordinator and linked projects' (tm link). │
-            │ │
-            │ │
-            │ │
-            │ │
-            │ │
-            │ │
-            │ │
-            │ │
-            │ │
-            │ │
-            │ │
-            │ │
-            │ │
-            │ │
-            │ │
-            │ │
-            │ │
-            │ │
-            │ │
-            │ A accept the link · X decline · M write as you · ↑ ↓ move · ← → tabs · esc close │
-            ╰──────────────────────────────────────────────────────────────────────────────────────────────╯
- ───────────────────────────────── │
- acme · active                     │────────────────────────────────────────────────────────────────────────────────────
+ ■ acm╭─ acme ───────────────────────────────────────────────────────────────────────────────────────────────────╮
+ └─ co│ 1 overview 2 inbox 2 3 tasks 4 settings 5 access 6 keys 7 memory 8 library 9 messages 1                  │ivate
+      │                                                                                                          │ inbox
+ ◉ min│ ⚑ NEEDS YOU 1 · 1 link request │
+      │ ⚑ mini/docs   asks to link (<id>) · A accept · X decline                                             │──────
+      │ │
+      │   project     id        title                                                               date │
+      │   mini/api    <id>  Thanks, testing it.                                                 <time> │
+      │   → mini/api  <id>  The API landed.                                                     <time> │
+      │ │
+      │ Messages between this project's coordinator and linked projects' (tm link). │
+      │ │
+      │ │
+      │ │
+      │ │
+      │ │
+      │ │
+      │ │
+      │ │
+      │ │
+      │ │
+      │ │
+      │ │
+      │ │
+      │ │
+      │ │
+      │ │
+      │ │
+      │ │
+      │ │
+      │ │
+      │ │
+      │ │
+      │ │
+ ─────│ A accept the link · X decline · M write as you · ↑ ↓ move · ← → tabs · esc close │
+ acme ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────╯──────
  0 threads · coordinator not runn… │
  tab sidebar · ? help │

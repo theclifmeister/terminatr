@@ -33,7 +33,7 @@ func TestSmokeMouseDashboard(t *testing.T) {
 	top := w.Screen()
 	w.Wheel(false, 80, 10)
 	w.WaitUntil("the help scrolled", wait, func(sc string) bool { return sc != top })
-	w.Click(130, 10) // beside the box, which is centred on the whole window
+	w.Click(137, 10) // beside the box, which is centred on the whole window
 	w.WaitUntil("the help closed", wait, func(sc string) bool { return !strings.Contains(sc, "─ Help ─") })
 
 	w.ClickText("≡ menu", 28)
@@ -140,7 +140,7 @@ func TestSmokeMousePopupsAndAttach(t *testing.T) {
 	before := strings.Split(w.Screen(), "\n")[y]
 	w.ClickText("sandboxed: + the thread sandbox", 1)
 	saved(w, "the setting changed", func(sc string) bool { return strings.Split(sc, "\n")[y] != before })
-	w.Click(40, 1) // above the popup, which takes the dashboard's width
+	w.Click(40, 0) // above the popup, which takes the dashboard's width
 	w.WaitUntil("the popup closed", wait, func(sc string) bool { return !strings.Contains(sc, "1 overview") })
 
 	x, y := w.TextAt("│  t-0001 Small fix", 1) // the list's row, not the sidebar's

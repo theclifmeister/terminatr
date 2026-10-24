@@ -55,8 +55,8 @@ Active                      on
 Paused                      off
 Shared                      on
 == messages
-  project      id        title                                                              date
-  terminatr    M-9C1B-2  — 40 B                                                             Oct 14 15:12
-  → terminatr  M-AB12-1  — 20 B                                                             Oct 14 15:12
+  project      id        title                                                                            date
+  terminatr    M-9C1B-2  — 40 B                                                                           Oct 14 15:12
+  → terminatr  M-AB12-1  — 20 B                                                                           Oct 14 15:12
 
 → is mini's side sending; only messages that reached this server show, sent or read. Their texts are in your project's Messages tab.

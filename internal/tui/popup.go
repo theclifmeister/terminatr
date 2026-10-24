@@ -40,8 +40,10 @@ type box struct {
 
 // The popups' sizes when the window has room (docs/STYLE.md S7): a
 // dialog asks or takes one thing, a view lists or shows many. A view is
-// four fifths of the window wide and high, with no cap.
+// nine tenths of the window wide and high, with no cap.
 const (
+	// popupPercent is the share of the window a view takes, each way.
+	popupPercent = 90
 	dialogWidth  = 64
 	dialogHeight = 12
 	// viewWidth is what a view asks inner and boxWidth for: any width
@@ -117,7 +119,7 @@ func (m *dash) boxSize(b box) (int, int) {
 	if b.dialog {
 		return max(min(dialogWidth, w-2), 8), max(min(dialogHeight, h-2), 5)
 	}
-	return max(min(w*8/10, w-2), 8), max(min(h*8/10, h-2), 5)
+	return max(min(w*popupPercent/100, w-2), 8), max(min(h*popupPercent/100, h-2), 5)
 }
 
 // boxWidth is the width of a popup asking for width: a dialog's if it is

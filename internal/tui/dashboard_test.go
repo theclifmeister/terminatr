@@ -994,7 +994,11 @@ func TestDashboardPrefix(t *testing.T) {
 // there turns it into the dashboard.
 func TestDashboardOver(t *testing.T) {
 	src := &fakeSource{data: testData()}
-	scr := []string{"first row", "the session's second row", "its third row"}
+	scr := make([]string, 29) // the popup covers all but its last rows
+	scr[0] = "first row"
+	for i := 1; i < 29; i++ {
+		scr[i] = strings.Repeat(" ", 60) + "last"
+	}
 	m := newDash(DashOptions{Source: src, Width: 100, Height: 30, State: DashState{Current: "beta"},
 		Over: &Over{Key: "I", Project: "alpha", Session: "s-5", Title: "s-5 · beta t-0005", Screen: scr}})
 	m.setData(src.data)
@@ -1002,7 +1006,7 @@ func TestDashboardOver(t *testing.T) {
 		t.Fatalf("over: overlay %T %+v", m.top(), m.top())
 	}
 	out := screen(m)
-	for _, want := range []string{"tm s-5 · beta t-0005", "the session's second row", "2 inbox"} {
+	for _, want := range []string{"tm s-5 · beta t-0005", "last", "2 inbox"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("over lacks %q:\n%s", want, out)
 		}
@@ -1074,7 +1078,7 @@ func TestDashboardPopups(t *testing.T) {
 	prefixed(m, "I") // a coordinator's row
 	out := screen(m)
 	for _, want := range []string{"╭─ alpha ─", "2 inbox", "│ ", "t-0002 handed in report 1", "╰─", "esc close",
-		"NEEDS YOU 2"} { // the list stays in view behind the box
+		"PROJECTS"} { // the sidebar stays in view beside the box
 		if !strings.Contains(out, want) {
 			t.Errorf("inbox popup lacks %q:\n%s", want, out)
 		}

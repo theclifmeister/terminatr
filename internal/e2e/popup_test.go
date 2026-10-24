@@ -277,11 +277,11 @@ func TestSmokeProjectPopup(t *testing.T) {
 	// into it, and this one shows the output with the popup still open.
 	// The pane shows above and below the box, which is centred on the
 	// window. The output outruns the pane's height, so every row is live
-	// output, whatever the shell's prompt takes: the strips above and
-	// below the box (4 rows, and 2 over the status bar) are all output.
+	// output, whatever the shell's prompt takes: the strip above the
+	// box (2 rows at this height) is all output.
 	w2.Type("for i in $(seq 100); do echo live-$i; done\r")
 	w.WaitUntil("output under the popup", wait, func(string) bool {
-		return liveRows(t, w.PaneScreen(), "live-") >= 3 && strings.Contains(w.Screen(), "1 overview")
+		return liveRows(t, w.PaneScreen(), "live-") >= 1 && strings.Contains(w.Screen(), "1 overview")
 	})
 	w.Key(keyEsc)
 	w.WaitUntil("back on the session", wait, func(sc string) bool {
