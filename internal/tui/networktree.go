@@ -39,6 +39,8 @@ const (
 	netGap            // a blank line between servers
 	netLink           // a link of a project of this server's (networklinks.go)
 	netNeed           // what a link needs of the user, under it
+	netAsked          // your share request to a paired server (networkshare.go)
+	netShareReq       // a paired server's share request, flagged
 )
 
 // netRow is one row of the tree.
@@ -63,6 +65,8 @@ type netRow struct {
 	need  int
 	msg   *link.Message
 	file  link.Transfer
+	// share is a share request row's request.
+	share *proto.ShareRequest
 }
 
 // selectable says whether the cursor stops on r.
@@ -71,8 +75,8 @@ func (r netRow) selectable() bool { return r.kind != netNote && r.kind != netGap
 // key names r as the selection keeps it across reads: "g:" this
 // server, "g:<alias>" a paired one (as the sidebar's peerKey),
 // "p:<slug>" a project here, "t:<alias>/<slug>" one of theirs,
-// "l:<slug>><other>" a link and "n:<slug>><other>><need>" what it
-// needs (needKey).
+// "l:<slug>><other>" a link, "n:<slug>><other>><need>" what it
+// needs (needKey), and a share request's (shareKeyOf).
 func (nv *networkView) rowKey(r netRow) string {
 	alias := ""
 	if r.peer >= 0 {
@@ -89,6 +93,8 @@ func (nv *networkView) rowKey(r netRow) string {
 		return "l:" + r.slug + ">" + r.other
 	case netNeed:
 		return needKey(r.slug, r.other, r.need, r.id())
+	case netAsked, netShareReq:
+		return shareKeyOf(alias, r)
 	}
 	return ""
 }
@@ -189,13 +195,19 @@ func (nv *networkView) rows(m *dash) []netRow {
 			continue
 		}
 		pm := mirror(m, e)
-		if pm == nil || len(pm.Projects) == 0 {
+		switch {
+		case pm != nil && len(pm.Projects) > 0:
+		case asking(pm) != nil:
 			out = append(out, netRow{kind: netNote, peer: i, text: "shares nothing with you yet"})
-			continue
+		default:
+			out = append(out, netRow{kind: netNote, peer: i, text: "shares nothing with you yet · S asks its user to share one"})
 		}
-		for j := range pm.Projects {
-			out = append(out, netRow{kind: netTheirs, peer: i, slug: pm.Projects[j].Project, project: &pm.Projects[j]})
+		if pm != nil {
+			for j := range pm.Projects {
+				out = append(out, netRow{kind: netTheirs, peer: i, slug: pm.Projects[j].Project, project: &pm.Projects[j]})
+			}
 		}
+		out = append(out, shareRows(pm, i)...)
 	}
 	return out
 }
@@ -337,6 +349,8 @@ func (nv *networkView) rowLines(m *dash, r netRow, w int) []string {
 		return []string{nv.linkLine(m, r, w)}
 	case netNeed:
 		return []string{needLine(m, r, w)}
+	case netAsked, netShareReq:
+		return []string{nv.shareLine(r, w)}
 	case netProject:
 		box := th().Accent.Render("[ ]") + th().Faint.Render(" not shared")
 		if shared(m, r.slug) {
@@ -402,6 +416,8 @@ func (nv *networkView) detail(m *dash, r netRow, w int) [2]string {
 	switch r.kind {
 	case netLink, netNeed:
 		return nv.linkDetail(m, r, w)
+	case netAsked, netShareReq:
+		return nv.shareDetail(r, w)
 	case netServer:
 		if r.peer < 0 {
 			id := ""
@@ -514,7 +530,7 @@ func (nv *networkView) rowKeys(m *dash, r netRow, ok bool) string {
 				u = "U update relay"
 			}
 		}
-		return joinKeys("E name", "V panes", u, "X unpair", "enter fold", "tab details", "P pair", "J join", tail)
+		return joinKeys("S ask to share", "E name", "V panes", u, "X unpair", "enter fold", "tab details", "P pair", "J join", tail)
 	case r.kind == netProject && shared(m, r.slug):
 		return "space unshare · L link · tab details · " + tail
 	case r.kind == netProject:
@@ -523,6 +539,8 @@ func (nv *networkView) rowKeys(m *dash, r netRow, ok bool) string {
 		return "enter its dashboard · L link one of yours · " + tail
 	case r.kind == netLink, r.kind == netNeed:
 		return nv.linkKeys(m, r)
+	case r.kind == netAsked, r.kind == netShareReq:
+		return shareKeys(r)
 	}
 	return tail
 }
