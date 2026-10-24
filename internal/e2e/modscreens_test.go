@@ -20,6 +20,13 @@ import (
 // DefaultMasks can't match.
 var cutDuration = Mask{Name: "duration", Re: regexp.MustCompile(`\b\d+…`), Repl: "<duration>…"}
 
+// cutInstalled hides where a mod was installed from (the worktree's path,
+// wrapped across lines) and when.
+var cutInstalled = Mask{Name: "installed", Re: regexp.MustCompile(`(?s)Installed from .*?Installed \d{4}-\d\d-\d\d \d\d:\d\d\. *│`), Repl: "Installed from <path>. Installed <time>. │"}
+
+// cutMem hides a mod process's memory use.
+var cutMem = Mask{Name: "mem", Re: regexp.MustCompile(`using [\d.]+ [KMG]B\. *│`), Repl: "using <mem>. │"}
+
 func TestModScreens(t *testing.T) {
 	env, _, _ := tickerEnv(t)
 	state := fakeGH(t, env)
@@ -101,7 +108,7 @@ cmd = 'printf "PR: https://github.com/o/r/pull/7\n\n## Report\nFixed the login r
 	w.Type("4")
 	w.WaitFor("Tasks tab", wait)
 	w.WaitFor("● Standup", wait)
-	w.Golden("mods-settings.txt", append(popupMasks, cutDuration)...)
+	w.Golden("mods-settings.txt", append(popupMasks, cutDuration, cutInstalled, cutMem)...)
 	w.Key(keyEsc)
 	w.WaitUntil("settings closed", wait, func(sc string) bool { return !strings.Contains(sc, "1 general") })
 

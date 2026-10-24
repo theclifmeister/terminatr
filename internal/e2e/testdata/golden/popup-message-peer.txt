@@ -1,40 +1,40 @@
  PROJECTS                      1   │ tm dashboard                                               ● server ok · 0 sessions
  <server>│ NEEDS YOU 1 ───────────────────────────────────────────────────────────────────────
- ■ acme             0              │  1 link request waits             ▲ blocked   enter opens Messages
- └─ coordinator         ·          │ acme ────────────────────────────────────────────────── ● active — S to deactivate
-            ╭─ <id> · mini/api → acme ─────────────────────────────────────────────────────────────────╮ it  2 inbox
- <since>│ From      mini/api (its user) │
-            │ To        acme                                                                               │────────────
-            │ Date      <date> │
-            │ Id        <id> │
-            │ Re        <id> │
-            │ State     sent │
-            │ Size      19 B │
-            │ │
-            │ Thanks, testing it. │
-            │ │
-            │ │
-            │ │
-            │ │
-            │ │
-            │ │
-            │ │
-            │ │
-            │ │
-            │ │
-            │ │
-            │ │
-            │ │
-            │ │
-            │ │
-            │ │
-            │ │
-            │ │
-            │ │
-            │ │
-            │ ↑ ↓ scroll · esc close │
-            ╰──────────────────────────────────────────────────────────────────────────────────────────────╯
- ───────────────────────────────── │
- acme · active                     │────────────────────────────────────────────────────────────────────────────────────
+ ■ acm╭─ <id> · mini/api → acme ─────────────────────────────────────────────────────────────────────────────╮
+ └─ co│ From      mini/api (its user)                                                                            │ivate
+      │ To        acme                                                                                           │ inbox
+ ◉ min│ Date      <date> │
+      │ Id        <id>                                                                                       │──────
+      │ Re        <id> │
+      │ State     sent │
+      │ Size      19 B │
+      │ │
+      │ Thanks, testing it. │
+      │ │
+      │ │
+      │ │
+      │ │
+      │ │
+      │ │
+      │ │
+      │ │
+      │ │
+      │ │
+      │ │
+      │ │
+      │ │
+      │ │
+      │ │
+      │ │
+      │ │
+      │ │
+      │ │
+      │ │
+      │ │
+      │ │
+      │ │
+      │ │
+ ─────│ ↑ ↓ scroll · esc close │
+ acme ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────╯──────
  0 threads · coordinator not runn… │
  tab sidebar · ? help │

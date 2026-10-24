@@ -43,7 +43,7 @@ shots.html` (a page with a dark and a light palette).
   content: a **dialog** (a confirmation, a single question, one input:
   the prefix key) is 64 columns by 12 rows; a **view** (the project popup
   and its tabs, the task view, the inbox, help, the settings, lists) is
-  four fifths of the window's width by four fifths of its height,
+  nine tenths of the window's width by nine tenths of its height,
   with no cap. A view's content scrolls inside it
   (`more ↓`). Both are centred on the whole window, header and sidebar
   included, not on the body beside the sidebar; on a small window they

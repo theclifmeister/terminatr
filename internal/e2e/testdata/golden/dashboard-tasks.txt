@@ -1,24 +1,24 @@
  PROJECTS                      1   │ tm dashboard                            ● server ok · 1 session
- ■ demo             0           ⚑  │ NEEDS YOU 1 ───────────────────────────────────────────────────
- └─ coordi╭─ demo ───────────────────────────────────────────────────────────────────────╮
-          │ 1 overview 2 inbox 3 tasks 4 settings 5 access 6 keys 7 memory 8 library 9 … │eactivate
-          │                                                                              │er starts…
-          │ NEEDS YOU ────────────────────────────────────────────────────────────────── │on deck
-          │ T1  Write the README  ◆ review   0/2                                         │──────────
-          │       ○ Draft                                                                │/
-          │       ○ Review                                                               │
-          │                                                                              │
-          │ IN MOTION ────────────────────────────────────────────────────────────────── │
-          │ T2  Ship it           ● started                                              │
-          │                                                                              │
-          │                                                                              │
-          │                                                                              │
-          │                                                                              │
-          │                                                                              │
-          │                                                                              │
-          │ enter show · A accept · X send back · + new task · ↑ ↓ move · / filter       │
-          │ ← → tabs · esc close                                                         │
- ─────────╰──────────────────────────────────────────────────────────────────────────────╯
- demo · active                     │────────────────────────────────────────────────────────────────
+ ■ de╭─ demo ─────────────────────────────────────────────────────────────────────────────────╮─────
+ └─ c│ 1 overview 2 inbox 3 tasks 4 settings 5 access 6 keys 7 memory 8 library 9 messages    │
+     │                                                                                        │vate
+     │ NEEDS YOU ──────────────────────────────────────────────────────────────────────────── │arts…
+     │ T1  Write the README  ◆ review   0/2                                                   │ck
+     │       ○ Draft                                                                          │─────
+     │       ○ Review                                                                         │
+     │                                                                                        │
+     │ IN MOTION ──────────────────────────────────────────────────────────────────────────── │
+     │ T2  Ship it           ● started                                                        │
+     │                                                                                        │
+     │                                                                                        │
+     │                                                                                        │
+     │                                                                                        │
+     │                                                                                        │
+     │                                                                                        │
+     │                                                                                        │
+     │                                                                                        │
+     │ enter show · A accept · X send back · + new task · ↑ ↓ move · / filter · ← → tabs      │
+ ────│ esc close                                                                              │
+ demo╰────────────────────────────────────────────────────────────────────────────────────────╯─────
  0 threads · coordinator not runn… │
  tab sidebar · ? help              │

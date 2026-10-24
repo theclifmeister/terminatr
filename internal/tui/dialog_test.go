@@ -219,7 +219,7 @@ func TestSessionDialog(t *testing.T) {
 	}
 }
 
-// TestPopupSizes: a view is four fifths of the window's width and
+// TestPopupSizes: a view is nine tenths of the window's width and
 // height, uncapped; a dialog
 // is 64×12; both are centred on the whole window, and shrink to fit with
 // a cell of margin.
@@ -228,10 +228,10 @@ func TestPopupSizes(t *testing.T) {
 		w, h       int
 		view, conf [2]int
 	}{
-		{200, 60, [2]int{160, 48}, [2]int{64, 12}},
-		{120, 40, [2]int{96, 32}, [2]int{64, 12}},
-		{100, 30, [2]int{80, 24}, [2]int{64, 12}},
-		{40, 14, [2]int{32, 11}, [2]int{38, 12}},
+		{200, 60, [2]int{180, 54}, [2]int{64, 12}},
+		{120, 40, [2]int{108, 36}, [2]int{64, 12}},
+		{100, 30, [2]int{90, 27}, [2]int{64, 12}},
+		{40, 14, [2]int{36, 12}, [2]int{38, 12}},
 	} {
 		for _, open := range []struct {
 			name string

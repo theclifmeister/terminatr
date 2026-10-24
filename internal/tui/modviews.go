@@ -403,7 +403,7 @@ func (m *dash) shownViews() []modview.Shown {
 			out = append(out, s)
 		}
 	}
-	w, h := m.inner(viewWidth), max(m.h*8/10-6, 1)
+	w, h := m.inner(viewWidth), max(m.h*popupPercent/100-6, 1)
 	for _, o := range m.stack {
 		switch o := o.(type) {
 		case *projectView:

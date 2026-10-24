@@ -1,36 +1,35 @@
  PROJECTS                      1   │ tm dashboard                                               ● server ok · 2 sessions
  ■ demo        2                   │ demo ────────────────────────────────────────────────── ● active — S to deactivate
- └─ coordi…             ·          │  coordinator                      —           not running; enter starts it  3 inbox
-    ├─ T1    50% ☐ 2%   ○          │  T1 Fix the login              ○ idle      2%     report new  50% 1/2 ▸ Fix it  <duration>…
-    └─ T2   ╭─ Settings ───────────────────────────────────────────────────────────────────────────────────╮
-            │  1 general   2 all projects   3 access   4 mods   5 peers   6 logs                           │
-            │ About: tm dev · server dev · update check on                                                 │
-            │                                                                                              │
-            │ ● Context gauge      code · column · view      1.0.0  reads your projects · draws its own p… │
-            │ ● Cost card          code · view               1.0.0  reads your projects · draws its own p… │
-            │ ● Report glance      code · view               1.0.0  reads your projects · draws its own p… │────────────
-            │ ● Standup            code · view · commands    1.0.0  reads your projects · draws its own p… │
-            │ ● ASCII icons        icons · built in          1.0.0  built in · safe                        │───────────
-            │ ● Default keymap     keymap · built in         1.0.0  built in · safe                        │
-            │ ● Default layout     layout · built in         1.1.0  built in · safe                        │s, so
-            │ ● Default policy     rules · built in          1.0.0  built in · safe                        │
-            │ ● Default templates  templates · built in      1.0.0  built in · safe                        │───────────
-            │ ● Default theme      theme · built in          1.0.0  built in · safe                        │
-            │ ● Memory tab         code · view · built in    1.0.0  built in · reads your projects · draw… │
-            │ ● Nerd Font icons    icons · built in          1.0.0  built in · safe                        │
-            │ ● PR/CI column       code · column · built in  1.0.0  built in · reads your projects         │
-            │ ● Tasks tab          code · view · built in    1.0.0  built in · reads your projects · draw… │
-            │ ● Ticker             code · view · built in    1.0.0  built in · reads your projects · draw… │
-            │ ● Unicode icons      icons · built in          1.0.0  built in · safe                        │
-            │                                                                                              │
-            │ Context gauge: How full each session's context window is, by its row; a card lists the ones  │
-            │ past the warning, where C clears one (tm asks first) and enter attaches to it. Claude        │
-            │ sessions report theirs from their transcript. By terminatr.                                  │
-            │                                                                                              │
-            │ enter on/off · I install · p permissions · s settings · d defaults · l log · R restart       │
-            │ U update · X remove · E examples · ← → tabs · esc close                                      │
-            ╰───────────────────────────────────────────────────────────────────────────────────── more ↓ ─╯
- ───────────────────────────────── │
- demo · active                     │────────────────────────────────────────────────────────────────────────────────────
+ └─ co╭─ Settings ───────────────────────────────────────────────────────────────────────────────────────────────╮ inbox
+    ├─│  1 general   2 all projects   3 access   4 mods   5 peers   6 logs                                       │t  <duration>…
+    └─│ About: tm dev · server dev · update check on                                                             │
+      │                                                                                                          │
+      │ ● Context gauge      code · column · view      1.0.0  reads your projects · draws its own panels · offe… │
+      │ ● Cost card          code · view               1.0.0  reads your projects · draws its own panels         │
+      │ ● Report glance      code · view               1.0.0  reads your projects · draws its own panels         │
+      │ ● Standup            code · view · commands    1.0.0  reads your projects · draws its own panels         │
+      │ ● ASCII icons        icons · built in          1.0.0  built in · safe                                    │──────
+      │ ● Default keymap     keymap · built in         1.0.0  built in · safe                                    │
+      │ ● Default layout     layout · built in         1.1.0  built in · safe                                    │─────
+      │ ● Default policy     rules · built in          1.0.0  built in · safe                                    │
+      │ ● Default templates  templates · built in      1.0.0  built in · safe                                    │
+      │ ● Default theme      theme · built in          1.0.0  built in · safe                                    │
+      │ ● Memory tab         code · view · built in    1.0.0  built in · reads your projects · draws its own pa… │─────
+      │ ● Nerd Font icons    icons · built in          1.0.0  built in · safe                                    │
+      │ ● PR/CI column       code · column · built in  1.0.0  built in · reads your projects                     │
+      │ ● Tasks tab          code · view · built in    1.0.0  built in · reads your projects · draws its own pa… │
+      │ ● Ticker             code · view · built in    1.0.0  built in · reads your projects · draws its own pa… │
+      │ ● Unicode icons      icons · built in          1.0.0  built in · safe                                    │
+      │                                                                                                          │
+      │ Context gauge: How full each session's context window is, by its row; a card lists the ones past the     │
+      │ warning, where C clears one (tm asks first) and enter attaches to it. Claude sessions report theirs from │
+      │ their transcript. By terminatr.                                                                          │
+      │ Installed from <path>. Installed <time>. │
+      │ Runs as <pid>, using <mem>. │
+      │                                                                                                          │
+      │                                                                                                          │
+      │ enter on/off · I install · p permissions · s settings · d defaults · l log · R restart · U update        │
+ ─────│ X remove · E examples · ← → tabs · esc close                                                             │
+ demo ╰───────────────────────────────────────────────────────────────────────────────────────────────── more ↓ ─╯──────
  2 threads · coordinator not runn… │
  tab sidebar · ? help              │

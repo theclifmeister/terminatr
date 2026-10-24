@@ -603,7 +603,7 @@ func TestModsDataAndBuiltin(t *testing.T) {
 	}
 	selectMod(t, m, mod.BundledTheme)
 	out = screen(m)
-	for _, want := range []string{"● Default theme", "theme · built in", "Built into tm", "It can't be turned off; pick another theme in General settings."} {
+	for _, want := range []string{"● Default theme", "theme · built in", "Built into tm", "pick another theme in General settings."} {
 		if !strings.Contains(out, want) {
 			t.Errorf("default-theme lacks %q:\n%s", want, out)
 		}

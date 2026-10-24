@@ -15,9 +15,9 @@ import (
 func TestDashboardOverLive(t *testing.T) {
 	src := &fakeSource{data: testData()}
 	m := newDash(DashOptions{Source: src, Width: 100, Height: 30,
-		Over: &Over{Key: "I", Project: "alpha", Session: "s-5", Screen: make([]string, 28), X: 2, Y: 0, H: 28}})
+		Over: &Over{Key: "I", Project: "alpha", Session: "s-5", Screen: make([]string, 28), X: 0, Y: 0, H: 28}})
 	m.setData(src.data)
-	mirror, err := emu.New(60, 28)
+	mirror, err := emu.New(64, 28)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -39,21 +39,21 @@ func TestDashboardOverLive(t *testing.T) {
 		}
 		m.Update(feedMsg{})
 	}
-	draw("\r\nfirst output")
-	if out := screen(m); !strings.Contains(out, "  first output") {
+	draw("\x1b[3;61Hone") // right of the popup, which covers the rest
+	if out := screen(m); !strings.Contains(out, " one") {
 		t.Fatalf("the output isn't under the popup:\n%s", out)
 	}
 	if _, ok := m.top().(*projectView); !ok {
 		t.Fatalf("the popup closed: %T", m.top())
 	}
 
-	f.write([]byte("\x1b[?2026h\r\nhalf drawn"))
+	f.write([]byte("\x1b[?2026h\x1b[4;61Htw"))
 	f.changed()
 	if len(f.wake) != 0 {
 		t.Fatal("a held frame woke the popup")
 	}
-	draw(" and done\x1b[?2026l")
-	if out := screen(m); !strings.Contains(out, "half drawn and done") {
+	draw("o\x1b[?2026l")
+	if out := screen(m); !strings.Contains(out, "two") {
 		t.Fatalf("the finished frame isn't under the popup:\n%s", out)
 	}
 

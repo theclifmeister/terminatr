@@ -1,30 +1,30 @@
  PROJECTS                          │ tm dashboard                                     ● server ok · 0 sessions
- no projects                       │  no projects; n creates one
-                                   │ OTHER SESSIONS ──────────────────────────────────────────────────────────
-           ╭─ Settings ───────────────────────────────────────────────────────────────────────────╮
-           │  1 general   2 all projects   3 access   4 mods   5 peers   6 logs                   │
-           │ About: tm dev · server dev · update check on                                         │
-           │                                                                                      │
-           │ SHARED PROJECTS                                                                      │
-           │ No active project on this server to share.                                           │
-           │ A shared p╭─ Pair a server ──────────────────────────────────────────────╮what waits │
-           │ for you, t│ The other server: <host> │ its       │
-           │ files. Spa│ server id <id> · tm <version> │n Settings │
-           │ tab; shari│                                                              │           │
-           │           │ Check: <check>                                               │           │
-           │ PAIRED SER│                                                              │           │
-           │ This serve│ Pair only if the other side shows the same six digits. Do    │ pass on,  │
-           │ and J on t│ they match?                                                  │terminal); │
-           │ both of yo│                                                              │           │
-           │ No relay y│                                                              │ain NAME;  │
-           │ without on│ Y they match · N they don't · esc cancel                     │(see the   │
-           │ README).  ╰──────────────────────────────────────────────────────────────╯           │
-           │                                                                                      │
-           │ Paired servers see the projects you share with them, read-only, in their sidebar;    │
-           │                                                                                      │
-           │ space toggle · ← → change · N pair · J join · E relay · U update relay · X remove    │
-           │ esc close                                                                            │
- ──────────╰───────────────────────────────────────────────────────────────────────────── more ↓ ─╯
-                                   │──────────────────────────────────────────────────────────────────────────
+ no p╭─ Settings ──────────────────────────────────────────────────────────────────────────────────────╮
+     │  1 general   2 all projects   3 access   4 mods   5 peers   6 logs                              │──────
+     │ About: tm dev · server dev · update check on                                                    │
+     │                                                                                                 │
+     │ SHARED PROJECTS                                                                                 │
+     │ No active project on this server to share.                                                      │
+     │ A shared project shows, read-only, in the sidebar of every paired server: what waits for you,   │
+     │ the inbox, threads, tasks on deck and its sessions' states; never its files. Space toggles it,  │
+     │ as Shared with p╭─ Pair a server ──────────────────────────────────────────────╮rst.            │
+     │                 │ The other server: <host> │                │
+     │ PAIRED SERVERS  │ server id <id> · tm <version> │                │
+     │ This server isn'│                                                              │on, and J on    │
+     │ the other server│ Check: <check>                                               │ of you then    │
+     │ compare six digi│                                                              │                │
+     │ No relay yet? On│ Pair only if the other side shows the same six digits. Do    │ME; without     │
+     │ one, on an addre│ they match?                                                  │E).             │
+     │                 │                                                              │                │
+     │ Paired servers s│                                                              │; you see       │
+     │ theirs in yours.│ Y they match · N they don't · esc cancel                     │                │
+     │                 ╰──────────────────────────────────────────────────────────────╯                │
+     │                                                                                                 │
+     │                                                                                                 │
+     │                                                                                                 │
+     │                                                                                                 │
+     │                                                                                                 │
+ ────│ space toggle · ← → change · N pair · J join · E relay · U update relay · X remove · esc close   │
+     ╰─────────────────────────────────────────────────────────────────────────────────────────────────╯──────
                                    │
  tab sidebar · ? help              │
