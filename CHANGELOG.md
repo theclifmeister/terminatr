@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.51.0](https://github.com/theclifmeister/terminatr/compare/v0.50.0...v0.51.0) (2026-10-24)
+
+
+### Features
+
+* **cli:** tm needs, tm task accept|send-back and tm ask answer ([#774](https://github.com/theclifmeister/terminatr/issues/774)) ([8ffcbec](https://github.com/theclifmeister/terminatr/commit/8ffcbece2a67a2b54137000d1a3ed5ecc413692c))
+* **mdfile:** front matter reads YAML between --- lines too ([#773](https://github.com/theclifmeister/terminatr/issues/773)) ([c0f8a08](https://github.com/theclifmeister/terminatr/commit/c0f8a0805f9a6be1660c604bdbab547801bd85ca))
+
 ## [0.50.0](https://github.com/theclifmeister/terminatr/compare/v0.49.0...v0.50.0) (2026-10-24)
 
 
