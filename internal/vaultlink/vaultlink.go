@@ -39,6 +39,8 @@ const (
 	// other a link key: a paired server's project's folder is
 	// messages/@<alias>/<slug>.
 	Message
+	// Design is a design's note, <slug>/designs/<name>.
+	Design
 )
 
 // Target is the vault path a link of kind k with id points at, without
@@ -76,6 +78,8 @@ func target(slug string, k Kind, id string) string {
 	case Memory:
 		name := strings.TrimSuffix(strings.TrimPrefix(id, "memory/"), ".md")
 		return slug + "/memory/" + one(name)
+	case Design:
+		return slug + "/designs/" + one(id)
 	case Message:
 		parts := strings.Split(id, "/")
 		switch len(parts) {

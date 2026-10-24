@@ -766,6 +766,8 @@ Tasks follow tsk's model: a small, fixed set of statuses, short ids, flat steps,
 | `thread` | The thread running the task, e.g. `t-0003` (optional; set by delegation) |
 | `owner` | Optional: `me` or an agent name, so the coordinator knows who is meant to do it |
 | `repo` | Optional: the repo its thread works in, one of the project's repos by folder name (`web`) or path, or `none` for a plain folder without git (§9). Checked against the project's repos when it is set (`unknown-repo`; a name two repos share, `ambiguous-repo`: name it by path). `tm task delegate` and the dashboard's `D` use it; `--repo` overrides it. A project with several repos needs it (or `--repo`) to delegate: tm never guesses |
+| `design` | Optional: the design the task builds, by name (`network-view`, the note `designs/network-view.md`): letters, digits, `.`, `_` and `-` (`invalid-design`) |
+| `after` | Optional: the tasks it comes after, as `T708, T710` (`invalid-after` for a ref that isn't one, or the task itself). With `design` it draws a design's build (§5.1, **Vault**) |
 | `created`, `updated` | Dates |
 | archived | Archived tasks move to `tasks/ARCHIVE.md`, which keeps `TASKS.md` short enough for every agent's context |
 
@@ -815,7 +817,7 @@ status: ready · repo: web · updated: 2026-10-03
 status: done · thread: t-0002 · updated: 2026-10-04
 ```
 
-The parser keys on `### T<n> <title>` headings and on the `status:` line straight after them. The rest is the notes, except a trailing run of checklist items, which are the steps. Once front matter is YAML, the `thread` is a link (§5.1, **Links**): `thread: [[<slug>/threads/t-0005/t-0005|t-0005]]`; the parser reads it or the plain id.
+The parser keys on `### T<n> <title>` headings and on the `status:` line straight after them. The rest is the notes, except a trailing run of checklist items, which are the steps. Once front matter is YAML, the `thread` is a link (§5.1, **Links**): `thread: [[<slug>/threads/t-0005/t-0005|t-0005]]`; the parser reads it or the plain id. So are `design` and each task of `after`: `design: [[<slug>/designs/network-view|network-view]] · after: [[<slug>/tasks/T708|T708]], [[<slug>/tasks/T710|T710]]`.
 
 ### 6.3 CLI
 
@@ -835,7 +837,7 @@ tm task help                              # every task command
 tm task status T12 started                # also: open ready blocked review done
 tm task status T12 done --approved-by-user  # the coordinator, once the user accepted the work (§6.4)
 tm task status T12 blocked --note "waiting for API key"
-tm task edit T12 [--title "…"] [--notes "…" | --notes-file f.md] [--owner O] [--repo R]   # --repo "" clears it
+tm task edit T12 [--title "…"] [--notes "…" | --notes-file f.md] [--owner O] [--repo R] [--design NAME] [--after T10,T11]   # "" clears --repo, --design, --after
 tm task steps T12 add "Open a PR"
 tm task steps T12 check 2                 # idempotent; also uncheck, rename N "…", remove N
 tm task archive T12 | tm task unarchive T12

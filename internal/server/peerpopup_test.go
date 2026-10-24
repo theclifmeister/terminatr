@@ -114,7 +114,7 @@ func TestPeerPopupAllowlist(t *testing.T) {
 	if b, _ := json.Marshal(pt2); strings.Count(string(b), "SECRET") != 4 { // title, thread, created, updated
 		t.Errorf("a task's other words crossed: %s", b)
 	}
-	if want := []string{"Archived", "Created", "ID", "Notes", "Owner", "Repo", "Status", "Steps", "Thread", "Title", "Updated"}; !slices.Equal(fieldNames(reflect.TypeFor[tasks.Task]()), want) {
+	if want := []string{"After", "Archived", "Created", "Design", "ID", "Notes", "Owner", "Repo", "Status", "Steps", "Thread", "Title", "Updated"}; !slices.Equal(fieldNames(reflect.TypeFor[tasks.Task]()), want) {
 		t.Errorf("tasks.Task has %v: decide what of a new field a paired server sees (peerTaskOf)", fieldNames(reflect.TypeFor[tasks.Task]()))
 	}
 
