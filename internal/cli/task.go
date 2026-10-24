@@ -27,7 +27,7 @@ const taskUsage = `usage: tm task <command> [--project <slug>] [--json]
   status T12 <open|ready|started|blocked|review|done> [--note "…"]
   status T12 done --approved-by-user
                                 the coordinator, once the user accepted the work
-  edit T12 [--title "…"] [--notes "…" | --notes-file F] [--owner O] [--repo R]
+  edit T12 [--title "…"] [--notes "…" | --notes-file F] [--owner O] [--repo R] [--design NAME] [--after T10,T11]
   steps T12 add "text" | check N | uncheck N | rename N "text" | remove N
   archive T12 | unarchive T12
   delegate T12 [--agent A] [--model M] [--repo R] [--base B] [--approved-by-user] [--over-cap]
