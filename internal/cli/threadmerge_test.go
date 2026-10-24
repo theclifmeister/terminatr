@@ -25,6 +25,8 @@ type fakeHost struct {
 	asked    []codehost.Ref
 	merged   []codehost.PR
 	methods  []string
+	// head is PRHead's head branch of any PR URL, "" when it can't tell.
+	head string
 }
 
 func (f *fakeHost) Kind() string { return codehost.GitHubKind }
@@ -34,6 +36,13 @@ func (f *fakeHost) ParsePRURL(s string) (int, bool) {
 func (f *fakeHost) PR(_ string, ref codehost.Ref) (codehost.PR, error) {
 	f.asked = append(f.asked, ref)
 	return f.pr, f.err
+}
+func (f *fakeHost) PRHead(_, url string) (string, int, string) {
+	if f.head == "" {
+		return "", 0, ""
+	}
+	n, _ := f.ParsePRURL(url)
+	return "MERGED", n, f.head
 }
 func (f *fakeHost) Merge(_ string, pr codehost.PR, method string) error {
 	f.merged = append(f.merged, pr)
@@ -164,6 +173,16 @@ func TestThreadMerge(t *testing.T) {
 			t.Fatalf("report naming %s: merged %+v, asked %+v", other, fh.merged, fh.asked)
 		}
 	}
+	// T728: a PR line naming a PR of another branch (a guess at
+	// release-please's) is ignored: the branch's PR is merged. One of
+	// the thread's own branch that isn't its PR is still refused.
+	report("https://github.com/acme/shop/pull/776")
+	*fh = fakeHost{pr: greenPR(), head: rec.Branch}
+	h.expect(1, "not-thread-pr", coord, args()...)
+	*fh = fakeHost{pr: greenPR(), head: "formula-0.51.0"}
+	if out := h.ok(coord, args()...); !strings.Contains(out, "merged PR #7 (merge commit, head 0123456, checks green) (its report's PR #776, of branch formula-0.51.0, ignored)") || len(fh.merged) != 1 {
+		t.Fatalf("report naming another branch's PR: %q %+v", out, fh.merged)
+	}
 	report(pr7URL)
 	*fh = fakeHost{pr: greenPR()}
 	if out := h.ok(coord, args()...); !strings.Contains(out, "merged PR #7") || len(fh.merged) != 1 {
@@ -231,5 +250,47 @@ func TestResolveMergedKeepsUnpushed(t *testing.T) {
 		case pushed && (exists || !strings.Contains(out, "deleted branch "+rec.Branch+" (PR merged)")):
 			t.Errorf("pushed: exists=%v %q", exists, out)
 		}
+	}
+}
+
+// T728: tm report says in its inbox item, and to the thread, when the
+// PR line names a PR of another branch than the thread's.
+func TestReportPRLineOfAnotherBranch(t *testing.T) {
+	h := newHarness(t)
+	h.ok(human, "project", "new", "demo")
+	_, rec := threadWithWorktree(t, h, "demo")
+	fh := &fakeHost{head: "formula-0.51.0"}
+	old := pickHost
+	pickHost = func(string, codehost.Config) codehost.Host { return fh }
+	t.Cleanup(func() { pickHost = old })
+	p, err := project.Open("demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	report := func(pr string) (out, item string) {
+		t.Helper()
+		code, out, errOut := h.run(thr, "PR: "+pr+"\n## Report\nDone.\n## Next\n- Merge it\n", "report", "--project", "demo")
+		if code != 0 {
+			t.Fatalf("report: %d %s", code, errOut)
+		}
+		items, err := p.Inbox()
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, it := range items {
+			if it.Kind == "report" && it.Subject == rec.ID {
+				item = it.Summary
+			}
+		}
+		return out, item
+	}
+	out, item := report("https://github.com/acme/shop/pull/776")
+	want := "its PR: line names PR #776, of branch formula-0.51.0, not of the thread's branch " + rec.Branch + ": ignored"
+	if !strings.Contains(item, "handed in report 1; "+want) || !strings.Contains(out, want+"; put a PR: line only for a PR of your branch") {
+		t.Fatalf("item %q, out %q", item, out)
+	}
+	fh.head = rec.Branch
+	if out, item := report(pr7URL); strings.Contains(item, "ignored") || strings.Contains(out, "ignored") {
+		t.Fatalf("own PR: item %q, out %q", item, out)
 	}
 }
