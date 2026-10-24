@@ -83,7 +83,7 @@ func TestBriefMemory(t *testing.T) {
 		t.Errorf("counts %d %d", s, n)
 	}
 
-	out := m.Render(p.Dir)
+	out := m.Render(p.Dir, p.Slug)
 	if len(out) > ResetBudget {
 		t.Errorf("render is %d bytes, over %d", len(out), ResetBudget)
 	}
@@ -105,7 +105,7 @@ func TestBriefMemory(t *testing.T) {
 
 	// No notes, no section.
 	os.RemoveAll(p.Path("memory"))
-	if m := BriefMemory(p, r); len(m.Notes) != 0 || m.Render(p.Dir) != "" {
+	if m := BriefMemory(p, r); len(m.Notes) != 0 || m.Render(p.Dir, p.Slug) != "" {
 		t.Errorf("without notes: %+v", m)
 	}
 }

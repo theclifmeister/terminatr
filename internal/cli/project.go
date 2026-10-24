@@ -472,7 +472,7 @@ func (e *Env) previewMemory(p *project.Project, of string, asJSON bool) error {
 		fmt.Fprintln(e.Stdout, "The brief carries no memory notes: none is standing and none matches the task.")
 		return nil
 	}
-	fmt.Fprint(e.Stdout, "\n"+shownText(mem.Render(p.Dir)))
+	fmt.Fprint(e.Stdout, "\n"+shownText(mem.Render(p.Dir, "")))
 	return nil
 }
 

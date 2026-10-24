@@ -20,6 +20,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 	"github.com/theclifmeister/terminatr/internal/textsafe"
+	"github.com/theclifmeister/terminatr/internal/vaultlink"
 )
 
 // Changing the memory notes (docs/SPEC.md §7.6, Memory notes): tm
@@ -304,16 +305,20 @@ func indexTitle(n Note, keptTitle string) string {
 	return strings.NewReplacer("[", "(", "]", ")").Replace(textsafe.Line(title, indexDesc))
 }
 
-// IndexLine is note n's line in MEMORY.md: "- [title](memory/file.md):
-// what it holds (touches: a, b)". The title is indexTitle's; what it
-// holds is kept, the description the note's line had already ("" for
-// none), else the note's first line of text (a heading's text, but none
-// of the schema's section headings; for a free-form note, no front
-// matter, its first line whatever it is).
-func IndexLine(n Note, keptTitle, kept string) string {
+// IndexLine is note n's line in MEMORY.md: "- [[<slug>/memory/file|title]]:
+// what it holds (touches: a, b)", a link to the note (vaultlink), or
+// "- [title](memory/file.md): …" while links aren't written. The title
+// is indexTitle's; what it holds is kept, the description the note's
+// line had already ("" for none), else the note's first line of text (a
+// heading's text, but none of the schema's section headings; for a
+// free-form note, no front matter, its first line whatever it is).
+func IndexLine(slug string, n Note, keptTitle, kept string) string {
 	title := indexTitle(n, keptTitle)
 	desc := firstLine(n.Body, n.Front)
 	line := fmt.Sprintf("- [%s](%s)", title, n.Path)
+	if l := vaultlink.Link(slug, vaultlink.Memory, n.Path, title); strings.HasPrefix(l, "[[") {
+		line = "- " + l
+	}
 	if kept = textsafe.Line(kept, 0); kept != "" {
 		line += ": " + kept
 	} else if desc = textsafe.Line(desc, indexDesc); desc != "" && desc != title {
@@ -347,19 +352,25 @@ func firstLine(text string, skipHeads bool) string {
 }
 
 // indexLineRE reads a note's line in MEMORY.md: its title, its path,
-// then the rest after the link.
-var indexLineRE = regexp.MustCompile(`^- \[(.*?)\]\((memory/[^)\s]+)\)(.*)$`)
+// then the rest after the link; wikiLineRE one with a wikilink
+// (IndexLine): the note's name, its title, the rest.
+var (
+	indexLineRE = regexp.MustCompile(`^- \[(.*?)\]\((memory/[^)\s]+)\)(.*)$`)
+	wikiLineRE  = regexp.MustCompile(`^- \[\[[^\[\]|]*?/memory/([^\[\]|/]+)\|([^\[\]]*?)\]\](.*)$`)
+)
 
 // keptLine is what index line l says of its note: its path, its title
 // and its description, the text after the link and its ":" (or a dash),
 // without the touches tm adds. ok is false for a line that isn't a
 // note's.
 func keptLine(l string) (path, title, desc string, ok bool) {
-	m := indexLineRE.FindStringSubmatch(l)
-	if m == nil {
+	if m := wikiLineRE.FindStringSubmatch(l); m != nil {
+		title, path, desc = strings.TrimSpace(m[2]), "memory/"+m[1]+".md", strings.TrimSpace(m[3])
+	} else if m := indexLineRE.FindStringSubmatch(l); m != nil {
+		title, path, desc = strings.TrimSpace(m[1]), m[2], strings.TrimSpace(m[3])
+	} else {
 		return "", "", "", false
 	}
-	title, path, desc = strings.TrimSpace(m[1]), m[2], strings.TrimSpace(m[3])
 	if i := strings.LastIndex(desc, "(touches: "); i >= 0 && strings.HasSuffix(desc, ")") {
 		desc = strings.TrimSpace(desc[:i])
 	}
@@ -372,9 +383,26 @@ func keptLine(l string) (path, title, desc string, ok bool) {
 	return path, title, desc, true
 }
 
-// isIndexLine says whether l is one of MEMORY.md's lines for a note.
+// isIndexLine says whether l is one of MEMORY.md's lines for a note,
+// in either form IndexLine writes.
 func isIndexLine(l string) bool {
-	return strings.HasPrefix(l, "- [") && strings.Contains(l, "](memory/")
+	return strings.HasPrefix(l, "- [") && strings.Contains(l, "](memory/") || wikiLineRE.MatchString(l)
+}
+
+// PlainIndex is MEMORY.md's text as an agent or a terminal is shown it:
+// each note's wikilink (IndexLine) as a Markdown link to its file,
+// "- [title](memory/file.md): …", the rest as it is.
+func PlainIndex(text string) string {
+	if !strings.Contains(text, "[[") {
+		return text
+	}
+	lines := strings.Split(text, "\n")
+	for i, l := range lines {
+		if m := wikiLineRE.FindStringSubmatch(strings.TrimRight(l, "\r")); m != nil {
+			lines[i] = "- [" + m[2] + "](memory/" + m[1] + ".md)" + m[3]
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 // RebuildIndex writes MEMORY.md's list of the notes again, one
@@ -428,7 +456,7 @@ func (p *Project) RebuildIndex() (bool, error) {
 	})
 	list := make([]string, len(notes))
 	for i, n := range notes {
-		list[i] = IndexLine(n, kept[n.Path].title, kept[n.Path].desc)
+		list[i] = IndexLine(p.Slug, n, kept[n.Path].title, kept[n.Path].desc)
 	}
 	var out []string
 	placed := false

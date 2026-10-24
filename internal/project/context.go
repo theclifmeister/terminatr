@@ -164,7 +164,11 @@ func (p *Project) Context(seen Ticked, threads func(prs map[string]string) (Sect
 		if err != nil && !errors.Is(err, fs.ErrNotExist) {
 			return nil, err
 		}
-		out = append(out, capLines(f.title, splitLines(string(data)), f.cap, f.file))
+		text := string(data)
+		if f.file == "MEMORY.md" {
+			text = PlainIndex(text) // the notes by their files, not wikilinks
+		}
+		out = append(out, capLines(f.title, splitLines(text), f.cap, f.file))
 	}
 	// The coordinator's stored questions (tm ask); only when some are open.
 	qs, err := p.Questions()

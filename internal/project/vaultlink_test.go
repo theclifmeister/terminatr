@@ -73,3 +73,43 @@ func TestLinkSource(t *testing.T) {
 		}
 	}
 }
+
+// TestIndexLinks (T717): with links on, MEMORY.md's lines link the notes
+// and keep the wording of either form; PlainIndex shows them as
+// Markdown links to the files again.
+func TestIndexLinks(t *testing.T) {
+	p := memoryProject(t)
+	linksOn(t)
+	os.MkdirAll(p.Path("memory"), 0o755)
+	os.WriteFile(p.Path("memory", "retries.md"), []byte("---\ntitle: \"Retries | stay at 4\"\ntouches:\n  - \"internal/ticker/\"\n---\n## Decided\nFour.\n"), 0o644)
+	os.WriteFile(p.Path("memory", "gotchas.md"), []byte("# Code gotchas\n\nDashboard races.\n"), 0o644)
+	os.WriteFile(p.Path("memory", "web.md"), []byte("# Web\n\nBundler.\n"), 0o644)
+	os.WriteFile(p.Path("MEMORY.md"), []byte("# Memory\n\n- [Gotchas](memory/gotchas.md): hand-written\n- [[old/memory/web|Web quirks]]: kept too\n"), 0o644)
+	if _, err := p.RebuildIndex(); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := os.ReadFile(p.Path("MEMORY.md"))
+	want := "# Memory\n\n" +
+		"- [[demo/memory/gotchas|Gotchas]]: hand-written\n" +
+		"- [[demo/memory/retries|Retries / stay at 4]]: Four. (touches: internal/ticker/)\n" +
+		"- [[demo/memory/web|Web quirks]]: kept too\n"
+	if string(got) != want {
+		t.Fatalf("MEMORY.md:\n%s\nwant\n%s", got, want)
+	}
+	if changed, err := p.RebuildIndex(); err != nil || changed {
+		t.Errorf("again: %v, %v", changed, err)
+	}
+	plain := "# Memory\n\n" +
+		"- [Gotchas](memory/gotchas.md): hand-written\n" +
+		"- [Retries / stay at 4](memory/retries.md): Four. (touches: internal/ticker/)\n" +
+		"- [Web quirks](memory/web.md): kept too\n"
+	if got := PlainIndex(string(got)); got != plain {
+		t.Errorf("PlainIndex:\n%s\nwant\n%s", got, plain)
+	}
+	// Links off (before the move to YAML): the Markdown form again.
+	mdfile.WriteYAML(false)
+	p.RebuildIndex()
+	if got, _ := os.ReadFile(p.Path("MEMORY.md")); string(got) != strings.Replace(plain, "Retries /", "Retries |", 1) {
+		t.Errorf("without links:\n%s", got)
+	}
+}

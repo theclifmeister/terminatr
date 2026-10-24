@@ -13,6 +13,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/tasks"
+	"github.com/theclifmeister/terminatr/internal/vaultlink"
 )
 
 // Kickoff is the fixed first prompt of a thread (docs/SPEC.md §7.8).
@@ -81,14 +82,15 @@ func AppendFollowUp(p *project.Project, id, text string, at time.Time) error {
 
 // WriteBrief (re)generates brief.md (docs/SPEC.md §7.1). It is written
 // at start and restart only: the agent snapshots it as a system prompt.
-// It answers the memory notes the brief carries (BriefMemory).
+// It answers the memory notes the brief carries (BriefMemory). It links
+// the task, the notes and the follow-ups (vaultlink).
 func WriteBrief(p *project.Project, r *Record, restart bool) (string, Memory, error) {
 	path := Path(p, r.ID, "brief.md")
 	var b strings.Builder
 	fmt.Fprintf(&b, "# Thread %s of project %s\n\n", r.ID, p.Slug)
 	fmt.Fprintf(&b, "You are thread %s of the terminatr project %s", r.ID, p.Slug)
 	if r.Task != "" {
-		fmt.Fprintf(&b, ", working on task %s", r.Task)
+		fmt.Fprintf(&b, ", working on task %s", vaultlink.Ref(p.Slug, r.Task))
 	}
 	fmt.Fprintf(&b, ".\nYou work in %s", r.Worktree)
 	if r.Branch != "" {
@@ -116,7 +118,7 @@ func WriteBrief(p *project.Project, r *Record, restart bool) (string, Memory, er
 	fmt.Fprintf(&b, "## Project files (live, read-only; read as needed)\n\n%s/: PROJECT.md, CONTEXT.md, MEMORY.md,\n"+
 		"memory/, TASKS.md, and uploads/ (the user's files; your task names the ones for you).\n\n", p.Dir)
 	mem := BriefMemory(p, r)
-	if s := mem.Render(p.Dir); s != "" {
+	if s := mem.Render(p.Dir, p.Slug); s != "" {
 		b.WriteString(s + "\n")
 	}
 	if restart {
@@ -129,7 +131,11 @@ func WriteBrief(p *project.Project, r *Record, restart bool) (string, Memory, er
 		return "", mem, err
 	}
 	b.WriteString(strings.TrimSpace(string(task)) + "\n\n")
-	fmt.Fprintf(&b, "Follow-ups from the coordinator are appended to %s.\n", Path(p, r.ID, "task.md"))
+	followUps := "Follow-ups from the coordinator"
+	if l := vaultlink.Link(p.Slug, vaultlink.ThreadFile, r.ID+"/task", "task.md"); l != "task.md" {
+		followUps += " (" + l + ")"
+	}
+	fmt.Fprintf(&b, "%s are appended to %s.\n", followUps, Path(p, r.ID, "task.md"))
 	return path, mem, fsx.WriteAtomic(path, []byte(b.String()), 0o644)
 }
 
