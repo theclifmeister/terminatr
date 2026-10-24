@@ -201,7 +201,7 @@ So that this keeps working, every server of every future protocol keeps three pr
 | server | `ping`, `server.status`, `server.stop`, `server.keychain` (macOS: can the server's sessions reach the login keychain, §3.1; a server without it answers `unknown-method`, which `tm doctor` skips), `server.codehost` (runs tm doctor's code-host checks, `gh auth status`, `az` login and repo access, `git ls-remote origin`, in the server's own context, the one its sessions' `gh`, `az` and git have; result `{checks: [{name, ok, detail}]}`; a server without it answers `unknown-method` and doctor checks locally), `secret.test {project, name}` (the human's: gets one secret variable of threads from its source in the server's context and answers `{ok, error}`, never the value; §8.6, **Secret environment**) |
 | sessions | `session.list` (since protocol 13 also the mods' cells: `mods {columns, cells, status}` and each session's `cells`, §5.3 **Cells**; with mod API 1.7 also `mods.sections [{mod, view, title, slot, builtin}]`, the `sidebar.section` and `sidebar.project.section` views consoles show, the built-in mods' alone in safe mode, so an attached console asks `mod.views` only when there are some), `session.start`, `session.stop`, `session.read` (screen text), `session.prompt` (queued, pasted once the agent is idle; the answer's `via` says how it went), `questions.open {project}` (the project's coordinator opens its open questions, §7.5 **Questions**; refused with none open or no coordinator running; result `{session, via, open}`), `session.keys`, `session.wait` (until a state), `session.model {id}` (applies the project's `coordinator_model` to its running coordinator, §8.2 **Models**; `how`: `unchanged`, `switched`, `next-start`), `session.remote {id, on}` (a coordinator's remote control, §11.2), `session.adopt {id, project, thread, brief, asked}` (a plain agent session becomes a thread's, §9 **Adopt**; refused unless it is a live shell-role session with an agent, and with `asked` unless the user's go-ahead waits, which it uses up), `session.adopt.ask {id, project, check, withdraw}` (human-only: records the user's go-ahead to adopt the session into the project for an hour, or with `check` answers `{asked}`, recording nothing, or with `withdraw` drops it; §9 **Adopt**), `session.watch {id}` (the session's state; the connection then streams `watch.changed`, below; a server without it answers `unknown-method`), `project.watch {project}` (a project's dashboard, as the coordinator's info panel shows it; the connection then streams `project.changed`, **Watch** below), `projects.watch {detail}` (since protocol 17; the human's: every project as the consoles' sidebars show it, with `detail` since protocol 18 as the dashboard shows it; the connection then streams `projects.changed`, **Watch** below), `session.answer {id, index, answer, question}` (one question of tm's own question open on the session, **Ask** below, from `tm thread answer`; `no-question` when none is open; with `question`, from a console's `question.answer` binding, refused unless question `index` still asks it, unanswered and single-select, and `answer` is one of its options' labels), `session.clear {id}` (human-only: pastes the agent's clear prompt once it is idle, journaled; refused for an agent without `[inject] clear`; §5.3 **Action binding**) |
 | agents | `agent.list`, `agent.reload`, `agent.explain` (which signals and rules produced a session's state) |
-| peers | `peer.reload` (read the identity key and the paired servers again after `tm peer` changed them, answering the link status; the human's, §16.8), `peer.list` (the mirror of the paired servers' shared projects, for the consoles; the human's, §16.10) |
+| peers | `peer.reload` (read the identity key and the paired servers again after `tm peer` changed them, answering the link status; the human's, §16.8), `peer.list` (the mirror of the paired servers' shared projects, with their share requests, for the consoles; the human's, §16.10), `peer.share-ask` and `peer.share-answer` (ask a paired server's user to share a project, answer one; the human's, §16.9) |
 | hooks | `hook.event` (from `tm hook`; also its own connection kind, §8.2) |
 | views | `view.subscribe` (join a view; the connection then streams `view.changed`), `view.attach` (since protocol 16 also a paired server's pane, `<alias>/<session>`, §16.12), `view.dashboard`, `view.project`, `view.select`, `view.sidesel`, `view.expand {project, on}` (expand or collapse an inactive project in the sidebar's tree, §4; since protocol 10), `view.tree {tree}` (what the sidebar's tree folds: active projects folded, inactive ones expanded, the inactive divider open, §4; since protocol 11; the view keeps its section folds whatever the tree sent says), `view.sections {sections, on}` (fold or unfold the mods' sections, by id: a sidebar section's `mod.view`, or `mod.view@slug` under a project, and a right-pane section's `panel:mod.view`, one id for every project and row, §4 **Mod sections**; at most 64 ids a call, and a view keeps at most 128 folded, the oldest going first; every console of the view follows, and `ui.json` keeps them with the tree; a console on a server of protocol 14 keeps them as its own; since protocol 15), `view.sidebar {sidebar}` (its width, slim; since protocol 14 also `side`, `share` and `hidden`, §4; a side other than left or right, or a share outside 10 % to 60 %, is refused), `view.info`, `view.status {compact}` (the status bar under a pane: one row without the rule above it, from the layout's `[status_bar] style`, §5.3; a layout change, as `view.sidebar`; since protocol 14), `view.columns {columns}` (the sidebar's column order, from the layout mod `[ui] layout` picks, §5.3; none for the built-in order; since protocol 12), `view.size`, `view.input` (below), `view.digest` (tests: a console's digest check, §15.2) |
 | callers | `caller.who` (who the peer pid is: the hosted session it descends from, and its role, §11.1) |
@@ -1691,6 +1691,7 @@ These commands are used by the human, the coordinator and threads alike. Exit co
 | `tm relay serve [--listen ADDR] (--domain NAME [--state DIR] [--email ADDR] \| --cert FILE --key FILE \| --plain) [--trusted-proxy CIDR]… [--max-conns N] [--max-per-ip N] [--bandwidth MiB/s] [--total-bandwidth MiB/s] [--log-ips] [--update-request FILE] [--auto-update on\|off]` | human (`human-only` for an agent) | the relay two linked servers meet through, on the user's own host (§16): `--listen` defaults to `:443`; TLS from Let's Encrypt for `--domain` (TLS-ALPN-01, cached in the state directory, renewed by itself), from the certificate files, reloaded when they change, or `--plain` for a TLS proxy in front, whose `X-Forwarded-For` counts only from a `--trusted-proxy`; runs until SIGINT or SIGTERM |
 | `tm relay install (--domain NAME [--email ADDR] \| --ip [ADDR]) [--auto-update=on\|off] \| update \| uninstall` | human, as root on Linux with systemd (`human-only` for an agent) | the relay as the `tm-relay` systemd service: install (with a daily update timer unless `--auto-update=off`, and a path unit for linked servers' update requests), update to the latest release (sha256 checked) and restart only when newer, remove (§16.6) |
 | `tm peer pair [--relay URL] [--as ALIAS] \| join CODE [--as ALIAS] \| list [--json] \| remove ALIAS \| name ALIAS\|NAME NEW\|"" \| rotate [--yes]` | human (`human-only` for an agent) | pairing this server with another through a relay by a one-time code and a six-digit check, and the paired servers (§16.8) |
+| `tm peer ask-share ALIAS [--for PROJECT] [--note TEXT] \| requests [--json] \| decline S-…` | human (`human-only` for an agent) | asking a paired server's user to share a project, the share and link requests waiting both ways, declining one (§16.9, Asking for a share); accepting shares a project, so it stays in the console |
 | `tm update [--check [--json]] [--yes] [--restart]` | human | §10.1 |
 | `tm version` (or `--version`), `tm selftest`, `tm help` | anyone | the version and build id; `selftest` writes a line through libghostty-vt to show it is linked; `help` (or `-h`, `--help`) lists the commands |
 
@@ -2451,6 +2452,9 @@ asks a running server to read it again (`peer.reload`).
 | `tm peer panes ALIAS off\|view\|write` | what the peer may do with this server's panes (§16.12); off by default |
 | `tm peer relay ALIAS ADDRESS` | the relay the peer's link goes through: it moved, or has a new key (§16.1) |
 | `tm peer relay-update ALIAS` | asks the relay of the peer's link to update itself to the latest official release (§16.2): it says what came of it, exit 1 with `relay-update-<result>` when not `queued` |
+| `tm peer ask-share ALIAS [--for PROJECT] [--note TEXT]` | asks the peer's user to share a project with this server (§16.9, Asking for a share) |
+| `tm peer requests [--json]` | the share and link requests that wait for an answer, both ways, with their state and expiry |
+| `tm peer decline S-…` | declines a share request from a peer; nothing shares |
 
 - **Display names.** A paired server is known here by its alias, chosen
   at pairing (`--as`; by default the far host name, `del-02-0468-lt`),
@@ -2662,6 +2666,54 @@ user shares a project, and nothing that crosses can act here.
   (`textsafe`), checks ids against their patterns (a task's, a
   thread's, a message's, a slug), drops a header in any other state
   and cuts each list to its most.
+- **Asking for a share.** Pairing shows nothing until the other side
+  shares, so this server's user may ask a paired server's user to share
+  a project: `tm peer ask-share mini [--for acme] [--note TEXT]`, or `S`
+  on that server in the Network popup, the method `peer.share-ask`
+  `{"alias", "for", "note"}` (the human's). It asks; it never shares.
+  The request `S-<fp>-<n>` (the message counter) goes through the
+  outbox in order as `peer.message` kind `share-request`, with `for`
+  the asking project's slug or empty, `text` the note (one line, at
+  most 120 bytes, cleaned by `textsafe`, shown as data; longer is
+  `too-long`) and `by = "human"`; `from` and `to` are empty, as it is
+  the server's, not a project's. One waits per paired server
+  (`request-pending`, `asked already (S-…)`); at most 5 an hour go to
+  one server, and are taken from one (`rate-limited`), counted apart
+  from link requests; an alias that isn't paired is `unknown-server`;
+  when the server's hello lists `msg` without `share-ask` its tm is
+  older and the ask is refused at once (`old-tm`: `nas runs a tm before
+  0.50.0, which doesn't take share requests; ask its user yourself`).
+  The receiving server checks the id's `fp` is the sending peer's
+  (`bad-message`) and keeps the newest per peer and direction in
+  `state/links.json`, keyed by alias, each with its fixed words:
+  `studio asks you to share a project with it, for its acme: "the
+  deploy scripts"; answer in Network (N)`. Share requests are the
+  server's, never a project's: no inbox gets an item for them and no
+  coordinator acts on them; `peer.list` carries them under their
+  server (`shares`, §16.10), and the server's needs count the waiting
+  ones (the dashboard header's `⚑`, the Network popup, NEEDS YOU,
+  `tm network`). Its user answers in the console: accepting picks one
+  of this server's active projects and shares it through the usual
+  setting (`share = true`, as the Settings tab writes it), with
+  `peer.share-answer` `{"id", "accept", "project"}`; declining (`X`,
+  or `tm peer decline S-…`) shares nothing. Sharing stays a safety
+  setting the console writes on a keypress, so the CLI declines but
+  doesn't accept. The answer goes back as kind `share-answer`, `re`
+  the request, `allow` `accepted` or `declined`; which project was
+  shared travels by the mirror, as any share does. A request not
+  delivered in 72 hours, or refused there, is `undelivered` in fixed
+  words per code (`bad-message` from a tm before 0.50.0: `mini runs a
+  tm before 0.50.0, which doesn't take share requests; ask its user
+  yourself`); one unanswered for 7 days `expired` on both sides. `tm
+  peer requests [--json]` lists the share and link requests that wait,
+  both ways, with their state and expiry. Journaled with ids and slugs
+  only, in the server's log and in the journal of the project
+  concerned: `peer.share-request mini S-4F2A-33 (for acme)` (acme's),
+  `peer.share-accepted`, `peer.share-declined`, `peer.share-expired`,
+  `peer.share-undelivered` here; `peer.share-requested` and
+  `peer.share-accepted studio S-4F2A-33 (infra)` (infra's) there.
+  **Compatibility:** no protocol bump: a server before 0.50.0 answers
+  the unknown kind `refused`, `bad-message`, so the outbox goes on.
 - **Refusals.** A slug that isn't shared answers `not-shared` (`no
   shared project "x"`), the same whether the project exists, is
   unshared, inactive or archived; no slug is `bad-params`.
@@ -2712,7 +2764,11 @@ server's `projects.watch` or the files) and asks its own server instead. The con
   the mirror's changes, so a console that sees the same `gen` has
   nothing new; each change also wakes the server's watches. A server
   without an identity key answers `{"gen": 0, "peers": []}`. A peer
-  whose hello lists `popup` has `"popup": true`.
+  whose hello lists `popup` has `"popup": true`. Each peer's `shares`
+  are its share requests (§16.9, Asking for a share), the newest each
+  way whatever their state, each `{"id", "out", "peer", "for", "note",
+  "created", "state", "project", "answered", "code", "summary"}`; `gen`
+  also counts their changes.
 - **`peer.popup-read`** `{"alias", "project"}` (the human's, as
   `peer.list`) → the paired server's `peer.popup` answer (§16.9),
   cleaned, for the console's remote project popup; read when it opens
@@ -2805,15 +2861,17 @@ its own side, and the text stays data.
   `retry_after` until then (at most an hour); the entry and those after
   it stay, in order.
 - **`peer.message`** `{"epoch", "seq", "kind", "from", "to", "id",
-  "created", "re", "by", "text", "allow"}` → `{"status", "code",
+  "created", "re", "by", "text", "allow", "for"}` → `{"status", "code",
   "retry_after"}`: `kind` is
   `message` or `read`; `status` `ok` (taken: the delivered receipt),
   `duplicate`, `retry` or `refused`, with `code` one of `not-linked`,
   `link-paused`, `bad-message`, `too-long`, `rate-limited` (`retry`, with
   `retry_after` the seconds until a token is back) (and for a
   `link-request` `not-shared`). `kind` may also be `link-request` or
-  `link-answer` (Link requests, above), with `allow`. It is in the peer
-  dispatcher's list (§16.9) only when the server takes messages, under
+  `link-answer` (Link requests, above), with `allow`, or
+  `share-request` or `share-answer` (§16.9, Asking for a share), with
+  `for` and `re`; a hello that lists `share-ask` takes those. It is in
+  the peer dispatcher's list (§16.9) only when the server takes messages, under
   the caller `peer:<alias>`; the hello lists `msg`. Each `seq` of an
   `epoch` (a random value per sending store) is taken once: one at or
   below the highest taken answers `duplicate` and writes nothing.

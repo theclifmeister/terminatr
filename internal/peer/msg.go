@@ -16,6 +16,11 @@ import (
 // CapMsg is the link capability of peer.message.
 const CapMsg = "msg"
 
+// CapShare says peer.message takes share requests (kinds share-request
+// and share-answer, docs/SPEC.md §16.9): a server whose hello lists msg
+// without it runs a tm that refuses them.
+const CapShare = "share-ask"
+
 // Messages takes a paired server's messages. c is the paired server,
 // caller kind peer; id its server id.
 type Messages interface {

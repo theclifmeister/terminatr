@@ -92,7 +92,8 @@ type Data struct {
 	// Mods), oldest first.
 	Toasts []proto.ModToast
 	// Peers are the paired servers and their shared projects as the
-	// server's mirror has them (peer.list, docs/SPEC.md §16.10); none
+	// server's mirror has them (peer.list, docs/SPEC.md §16.10), with
+	// their share requests (§16.9); none
 	// without any, or from a server that doesn't say. With any the
 	// sidebar shows server groups (sidepeers.go).
 	Peers []proto.PeerMirror
