@@ -2270,7 +2270,13 @@ hellos, rooms mated and connections left, by room kind and the first four
 bytes of the room id, with duration and bytes in, and update requests
 with the first four bytes of the key's fingerprint and their result, and net/http's
 per-connection errors (a failed TLS handshake) with every IP address in them replaced by
-`(address)`. Client addresses only with `--log-ips`. Address counters are forgotten ten minutes after an
+`(address)`. Handshake errors of the kinds scanners cause (no SNI, plain
+HTTP, EOF, a reset, a timeout, an unsupported version or cipher) aren't
+logged one by one: they are counted by kind and logged as one line an
+hour, when there were any, and on stop (`tls: N handshakes refused in the
+last hour from M addresses (no server name …, plain http …)`), never with
+the addresses. Other handshake errors are logged at most 10 a minute, the
+rest counted as `other`. Client addresses only with `--log-ips`. Address counters are forgotten ten minutes after an
 address's last connection.
 
 ### 16.6 Packaging
