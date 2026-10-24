@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.50.0](https://github.com/theclifmeister/terminatr/compare/v0.49.0...v0.50.0) (2026-10-24)
+
+
+### Features
+
+* **peer:** ask a paired server to share a project ([#765](https://github.com/theclifmeister/terminatr/issues/765)) ([01eb25f](https://github.com/theclifmeister/terminatr/commit/01eb25ffa304dc86764444e35638e879dbbd391b))
+* tm network, and 'connected' and plain file words on screen ([#770](https://github.com/theclifmeister/terminatr/issues/770)) ([18605bb](https://github.com/theclifmeister/terminatr/commit/18605bbb3e1c06a828cc85675f43a61c68a53eb2))
+* **tui:** links and what they need in the Network popup; Linked projects becomes a summary line ([#768](https://github.com/theclifmeister/terminatr/issues/768)) ([8e8acdb](https://github.com/theclifmeister/terminatr/commit/8e8acdb9d66d77de0ae96709f54b54aed2b850d0))
+* **tui:** NEEDS YOU list, link map and link health in the Network popup ([#771](https://github.com/theclifmeister/terminatr/issues/771)) ([f215c2a](https://github.com/theclifmeister/terminatr/commit/f215c2a9454f526efa2c848c32fd07db58140cd6))
+* **tui:** popups open at 90% of the window instead of 80% ([#764](https://github.com/theclifmeister/terminatr/issues/764)) ([f91b163](https://github.com/theclifmeister/terminatr/commit/f91b16337a1017bfd1ff474285ec720811354860))
+* **tui:** share requests in the Network popup ([#769](https://github.com/theclifmeister/terminatr/issues/769)) ([65b3160](https://github.com/theclifmeister/terminatr/commit/65b3160744258bd9703501aced07cca17084ff77))
+* **tui:** the Network popup for servers and sharing; the Peers tab goes ([#766](https://github.com/theclifmeister/terminatr/issues/766)) ([7cf2e80](https://github.com/theclifmeister/terminatr/commit/7cf2e800b54fdec0eb21d6dca22fe6da5462c614))
+
+
+### Bug Fixes
+
+* **relay:** fold scanners' TLS handshake errors into one line an hour ([#761](https://github.com/theclifmeister/terminatr/issues/761)) ([1731495](https://github.com/theclifmeister/terminatr/commit/17314956c3fab6024386c4ebba135c67ef30b802))
+* **tui:** a long host name is cut, never '· this server', on this server's sidebar header ([#767](https://github.com/theclifmeister/terminatr/issues/767)) ([1f3c2ae](https://github.com/theclifmeister/terminatr/commit/1f3c2ae31c215471693f3a387c5425a487f14389))
+* **tui:** no link glyph on this server's own sidebar header ([#763](https://github.com/theclifmeister/terminatr/issues/763)) ([b8ba81d](https://github.com/theclifmeister/terminatr/commit/b8ba81d383480957eac82b94f0201688c98d2bb2))
+
 ## [0.49.0](https://github.com/theclifmeister/terminatr/compare/v0.48.0...v0.49.0) (2026-10-23)
 
 
