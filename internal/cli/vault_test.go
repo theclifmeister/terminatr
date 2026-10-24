@@ -12,7 +12,8 @@ import (
 )
 
 // TestVaultMigrateCheck: tm vault migrate --check lists the files the
-// move to YAML would rewrite and those it can't, and changes nothing.
+// move to YAML would rewrite (a new project's too: tm writes TOML until
+// the move) and those it can't, and changes nothing.
 func TestVaultMigrateCheck(t *testing.T) {
 	h := newHarness(t)
 	h.ok(human, "project", "new", "demo")
@@ -23,7 +24,7 @@ func TestVaultMigrateCheck(t *testing.T) {
 	os.WriteFile(p.Path("memory", "broken.md"), []byte("+++\ntitle = \n+++\n"), 0o644)
 
 	out := h.ok(human, "vault", "migrate", "--check")
-	for _, want := range []string{"rewrites 1 files' front matter", "  demo/memory/retries.md\n", "  demo/memory/broken.md: stays TOML: "} {
+	for _, want := range []string{"rewrites 3 files' front matter", "  demo/PROJECT.md\n", "  demo/TASKS.md\n", "  demo/memory/retries.md\n", "  demo/memory/broken.md: stays TOML: "} {
 		if !strings.Contains(out, want) {
 			t.Errorf("check lacks %q:\n%s", want, out)
 		}
@@ -35,7 +36,7 @@ func TestVaultMigrateCheck(t *testing.T) {
 		Migrated bool        `json:"migrated"`
 		Files    []vaultFile `json:"files"`
 	}
-	if err := json.Unmarshal([]byte(h.ok(coord, "vault", "migrate", "--check", "--json")), &res); err != nil || res.Migrated || len(res.Files) != 2 || res.Files[0].Path != "memory/broken.md" || res.Files[0].Error == "" {
+	if err := json.Unmarshal([]byte(h.ok(coord, "vault", "migrate", "--check", "--json")), &res); err != nil || res.Migrated || len(res.Files) != 4 || res.Files[2].Path != "memory/broken.md" || res.Files[2].Error == "" {
 		t.Fatalf("json: %v %+v", err, res)
 	}
 	vault.Migrate(time.Now())

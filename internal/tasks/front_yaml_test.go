@@ -10,6 +10,7 @@ import (
 // TestParseYAML: a board with TOML front matter, as an older tm wrote
 // it, keeps its next_id and reads like the YAML one, which Render writes.
 func TestParseYAML(t *testing.T) {
+	yamlOn(t)
 	mdfiletest.SameYAML(t, &front{NextID: 13})
 	tomlBoard := strings.Replace(specExample, "---\nnext_id: 13\n---\n", "+++\nnext_id = 13\n+++\n", 1)
 	if tomlBoard == specExample {

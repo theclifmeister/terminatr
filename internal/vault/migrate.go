@@ -25,12 +25,14 @@ import (
 )
 
 // The move to YAML (T716). tm wrote front matter as TOML until this
-// version, which writes YAML (mdfile.Join) and reads both. Migrate
+// version, which reads both and writes YAML once the move ran. Migrate
 // rewrites the live files that still have TOML once, on the first
 // start of a server that has it, keeping the originals in a tarball,
-// and leaves a mark. The mark is what tm update checks before going
-// back to a version that can't read YAML: such a tm would read a YAML
-// TASKS.md as having no front matter and hand out ids from T1 again.
+// and leaves a mark. From the mark on tm writes YAML (mdfile.WriteYAML:
+// before it, a server older than 0.51.0 may still run), and tm update
+// checks it before going back to a version that can't read YAML: such
+// a tm would read a YAML TASKS.md as having no front matter and hand
+// out ids from T1 again.
 
 // YAMLSince is the first release that reads YAML front matter: tm update
 // refuses to go below it once the mark exists.

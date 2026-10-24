@@ -6,9 +6,11 @@ import (
 	"time"
 )
 
-// TestJoinYAML: Join writes YAML with every string quoted, times in UTC
+// TestJoinYAML: once WriteYAML is on, Join writes YAML with every string quoted, times in UTC
 // and lists as block lists, and Decode reads it back.
 func TestJoinYAML(t *testing.T) {
+	WriteYAML(true)
+	t.Cleanup(func() { WriteYAML(false) })
 	type front struct {
 		Title   string    `toml:"title" yaml:"title"`
 		Slug    string    `toml:"slug" yaml:"slug"`

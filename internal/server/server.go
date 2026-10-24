@@ -26,6 +26,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/emu"
 	"github.com/theclifmeister/terminatr/internal/keychain"
 	"github.com/theclifmeister/terminatr/internal/link"
+	"github.com/theclifmeister/terminatr/internal/mdfile"
 	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/modnotify"
 	"github.com/theclifmeister/terminatr/internal/modsup"
@@ -345,6 +346,7 @@ func Run(ctx context.Context, opts Options) error {
 	} else if n > 0 {
 		logger.Printf("front matter to YAML: %d files", n)
 	}
+	mdfile.WriteYAML(vault.Migrated())
 	// And config.toml's sandbox rules move to the access rules, once.
 	migrateAccess(logger.Printf)
 	// And an install from before protection keeps what it ran with.

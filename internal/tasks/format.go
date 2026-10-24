@@ -12,7 +12,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/mdfile"
 )
 
-// The TASKS.md format (§6.2): YAML front matter with next_id, "# Tasks",
+// The TASKS.md format (§6.2): front matter with next_id, "# Tasks",
 // one "## <group>" heading per non-empty group, and per task a
 // "### T<n> <title>" heading, a metadata line straight after it, notes, and
 // a trailing run of "- [ ]"/"- [x]" steps.
@@ -195,12 +195,16 @@ func trimBlankLines(s string) string {
 	return strings.Join(lines, "\n")
 }
 
-// Render writes the board in canonical order with front matter, as
-// TASKS.md.
+// Render writes the board in canonical order with front matter (YAML
+// once mdfile.WritesYAML, else TOML), as TASKS.md.
 func (b *Board) Render() []byte {
 	b.Sort()
 	var w bytes.Buffer
-	fmt.Fprintf(&w, "---\nnext_id: %d\n---\n# Tasks\n", b.NextID)
+	if mdfile.WritesYAML() {
+		fmt.Fprintf(&w, "---\nnext_id: %d\n---\n# Tasks\n", b.NextID)
+	} else {
+		fmt.Fprintf(&w, "+++\nnext_id = %d\n+++\n# Tasks\n", b.NextID)
+	}
 	var g Group
 	for _, t := range b.Tasks {
 		if gg := GroupOf(t.Status); gg != g {

@@ -12,7 +12,9 @@ import (
 	_ "github.com/theclifmeister/terminatr/internal/agent/claude"
 	"github.com/theclifmeister/terminatr/internal/agent/codex"
 	"github.com/theclifmeister/terminatr/internal/cli"
+	"github.com/theclifmeister/terminatr/internal/mdfile"
 	"github.com/theclifmeister/terminatr/internal/mod"
+	"github.com/theclifmeister/terminatr/internal/vault"
 	"github.com/theclifmeister/terminatr/internal/version"
 )
 
@@ -35,6 +37,10 @@ func main() {
 		fmt.Println("libghostty-vt: ok")
 		return
 	}
+	// Front matter is written as YAML once the projects' files have moved
+	// (the server's first start with this version); before, an older
+	// server that reads only TOML may still run.
+	mdfile.WriteYAML(vault.Migrated())
 	// Run by Codex's sandbox when tm checks a coordinator's profile
 	// (internal/agent/codex/probe.go); not for people.
 	if len(os.Args) > 1 && os.Args[1] == codex.ProbeCommand {

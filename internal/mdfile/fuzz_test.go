@@ -86,18 +86,22 @@ func FuzzJoinDecode(f *testing.F) {
 	f.Add("ünï\tcode", "a\\b", "\r\n")
 	f.Add("yes", "1e3", "---\nnot: front\n---\n")
 	f.Add("a: b # c", "- x", "")
+	f.Cleanup(func() { WriteYAML(false) })
 	f.Fuzz(func(t *testing.T, name, repo, body string) {
-		data, err := Join(fm{Name: name, Repos: []string{repo}}, []byte(body))
-		if err != nil {
-			return // YAML can't hold it (e.g. invalid UTF-8); nothing written
-		}
-		var got fm
-		b, err := Decode(data, &got)
-		if err != nil {
-			t.Fatalf("decode own output: %v\n%q", err, data)
-		}
-		if got.Name != name || len(got.Repos) != 1 || got.Repos[0] != repo || string(b) != body {
-			t.Fatalf("lost content: %+v %q from %q %q %q", got, b, name, repo, body)
+		for _, yaml := range []bool{false, true} {
+			WriteYAML(yaml)
+			data, err := Join(fm{Name: name, Repos: []string{repo}}, []byte(body))
+			if err != nil {
+				continue // TOML or YAML can't hold it (e.g. invalid UTF-8); nothing written
+			}
+			var got fm
+			b, err := Decode(data, &got)
+			if err != nil {
+				t.Fatalf("decode own output: %v\n%q", err, data)
+			}
+			if got.Name != name || len(got.Repos) != 1 || got.Repos[0] != repo || string(b) != body {
+				t.Fatalf("lost content: %+v %q from %q %q %q", got, b, name, repo, body)
+			}
 		}
 	})
 }
