@@ -565,6 +565,7 @@ func TestLocalHeaderNoLinkGlyph(t *testing.T) {
 // sidebar opens the Network popup on that server (this one's too), the
 // sidebar's cursor on the header; it folds nothing.
 func TestSideServerHeaderClick(t *testing.T) {
+	pinHost(t, "studio")
 	m, _ := remoteDash(t, "terminatr")
 	for _, c := range []struct{ text, key string }{{"◉ mini", "g:mini"}, {"· this server", "g:"}} {
 		m.stack = nil
@@ -586,5 +587,29 @@ func TestSideServerHeaderClick(t *testing.T) {
 	m2.setData(src.data)
 	if nv, ok := m2.top().(*networkView); !ok || nv.sel != "g:nas" {
 		t.Errorf("over a session: %T", m2.top())
+	}
+}
+
+// pinHost makes name this machine's host name for the server header.
+func pinHost(t *testing.T, name string) {
+	t.Helper()
+	was := thisHost
+	thisHost = func() string { return name }
+	t.Cleanup(func() { thisHost = was })
+}
+
+// TestSideServerHeaderLongHost: a host name too long for the sidebar is
+// cut, never the "· this server" after it, so the header still says it
+// is this server's.
+func TestSideServerHeaderLongHost(t *testing.T) {
+	pinHost(t, "Mac-1922-8e7921bf-83c2-4254-b5a4-0123456789ab")
+	m, _ := remoteDash(t, "terminatr")
+	x, y := atSide(t, m, "· this server")
+	mouseAt(t, m, tea.MouseLeft, x, y)
+	if nv, ok := m.top().(*networkView); !ok || nv.sel != "g:" {
+		t.Fatalf("click on this server's header: %T", m.top())
+	}
+	if out := whole(m); !strings.Contains(out, "Mac-") || !strings.Contains(out, "…") {
+		t.Errorf("the host name isn't cut with an ellipsis:\n%s", out)
 	}
 }

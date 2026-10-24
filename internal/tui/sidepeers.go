@@ -455,7 +455,13 @@ func serverCells(r treeRow, cw int, slim bool, sel lipgloss.Style) string {
 	}
 	// The margin, the glyph and its blank, and the needs-you column.
 	room := max(cw-1-ansi.StringWidth(g)-1-2, 0)
-	name = fitLabel(name, min(ansi.StringWidth(name), room))
+	// This server's header keeps its words ("· this server"): a long host
+	// name is cut instead.
+	nameRoom := room
+	if r.link.local {
+		nameRoom = max(room-ansi.StringWidth(words), 1)
+	}
+	name = fitLabel(name, min(ansi.StringWidth(name), nameRoom))
 	if ww := room - ansi.StringWidth(name); ansi.StringWidth(words) > ww {
 		words = fitLabel(words, ww)
 	}
