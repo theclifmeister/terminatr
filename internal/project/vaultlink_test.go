@@ -57,12 +57,12 @@ func TestLinkSource(t *testing.T) {
 	p := &Project{Slug: "demo"}
 	for in, want := range map[string]string{
 		"---\ntitle: \"x\"\nsource: \"T481\"\n---\n## Decided\nsource: T1\n": "---\ntitle: \"x\"\nsource: \"[[demo/tasks/T481|T481]]\"\n---\n## Decided\nsource: T1\n",
-		"---\r\nsource: t-0001\r\n---\r\nbody\r\n":                        "---\r\nsource: \"[[demo/threads/t-0001/t-0001|t-0001]]\"\r\n---\r\nbody\r\n",
-		"---\nsource: \"[[demo/tasks/T1|T1]]\"\n---\n":                    "---\nsource: \"[[demo/tasks/T1|T1]]\"\n---\n",
-		"---\nsource: \"the user\"\n---\n":                                "---\nsource: \"the user\"\n---\n",
-		"---\nsource: \"T1'\n---\n":                                       "---\nsource: \"T1'\n---\n",
-		"+++\nsource = \"T1\"\n+++\n":                                     "+++\nsource = \"T1\"\n+++\n",
-		"# free-form\nsource: T1\n":                                       "# free-form\nsource: T1\n",
+		"---\r\nsource: t-0001\r\n---\r\nbody\r\n":                           "---\r\nsource: \"[[demo/threads/t-0001/t-0001|t-0001]]\"\r\n---\r\nbody\r\n",
+		"---\nsource: \"[[demo/tasks/T1|T1]]\"\n---\n":                       "---\nsource: \"[[demo/tasks/T1|T1]]\"\n---\n",
+		"---\nsource: \"the user\"\n---\n":                                   "---\nsource: \"the user\"\n---\n",
+		"---\nsource: \"T1'\n---\n":                                          "---\nsource: \"T1'\n---\n",
+		"+++\nsource = \"T1\"\n+++\n":                                        "+++\nsource = \"T1\"\n+++\n",
+		"# free-form\nsource: T1\n":                                          "# free-form\nsource: T1\n",
 	} {
 		got := string(p.LinkSource([]byte(in)))
 		if got != want {
