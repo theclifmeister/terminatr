@@ -23,7 +23,7 @@ func (f *fakeMessages) Message(c caller.Caller, id ID, m proto.PeerMessage) (pro
 
 // TestDispatcherMessage: peer.message reaches Messages as the paired
 // server, with its id, alone when nothing is exported; without Messages
-// it is unknown, and the hello lists CapMsg only with it.
+// it is unknown, and the hello lists CapMsg (and CapShare) only with it.
 func TestDispatcherMessage(t *testing.T) {
 	ca, cb, err := tcpPair()
 	if err != nil {
@@ -53,10 +53,10 @@ func TestDispatcherMessage(t *testing.T) {
 	if ms := (&dispatcher{ex: newFakeExport()}).methods(); ms[proto.MethodPeerMessage] != nil {
 		t.Fatal("peer.message without Messages")
 	}
-	if caps := (&Manager{opts: Options{Messages: fm}}).caps(); !slices.Contains(caps, CapMsg) || slices.Contains(caps, CapWatch) {
+	if caps := (&Manager{opts: Options{Messages: fm}}).caps(); !slices.Contains(caps, CapMsg) || !slices.Contains(caps, CapShare) || slices.Contains(caps, CapWatch) {
 		t.Fatalf("caps %v", caps)
 	}
-	if caps := (&Manager{}).caps(); slices.Contains(caps, CapMsg) {
+	if caps := (&Manager{}).caps(); slices.Contains(caps, CapMsg) || slices.Contains(caps, CapShare) {
 		t.Fatalf("caps without Messages %v", caps)
 	}
 }

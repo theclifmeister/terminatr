@@ -841,10 +841,10 @@ func (m *dash) rebuild() {
 }
 
 // needsCount is what waits on the human in every project of this
-// server, as the all-projects NEEDS YOU counts it (needsYouCount): the
-// header's ⚑ N.
+// server, as the all-projects NEEDS YOU counts it (needsYouCount), and
+// the share requests that wait for them: the header's ⚑ N.
 func (m *dash) needsCount() int {
-	return needsYouCount(m.data.Projects, m.data.Sessions)
+	return needsYouCount(m.data.Projects, m.data.Sessions) + proto.ShareWaits(m.data.Peers)
 }
 
 // thenNeeds is the then (DashState.Then) of the needs-you badge clicked

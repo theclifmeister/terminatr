@@ -25,6 +25,16 @@ const (
 	// PeerLinkAnswer is that user's answer to request ID: Allow is the
 	// answering side's own entry now, "off" when declined.
 	PeerLinkAnswer = "link-answer"
+	// PeerShareRequest asks the receiving server's user to share a
+	// project with the sender (docs/SPEC.md §16.9): ID is the request's
+	// (S-<fp>-<n>), For the asking project's slug or "", Text an
+	// optional one-line note. From and To are empty: it is the server's,
+	// not a project's. An older server refuses it as bad-message.
+	PeerShareRequest = "share-request"
+	// PeerShareAnswer is that user's answer to request Re: Allow is
+	// ShareAccepted or ShareDeclined. Which project was shared travels
+	// by the mirror, as any share does.
+	PeerShareAnswer = "share-answer"
 	// The control half of a file over the link (docs/SPEC.md §16.13):
 	// the offer of a file with message Re (ID X-<fp>-<n>, Name, Size,
 	// SHA256), the receiving user's answer to it (Allow accepted or
@@ -34,6 +44,12 @@ const (
 	PeerFileAnswer = "file-answer"
 	PeerFileDone   = "file-done"
 	PeerFileCancel = "file-cancel"
+)
+
+// The words of a share-answer's Allow.
+const (
+	ShareAccepted = "accepted"
+	ShareDeclined = "declined"
 )
 
 // The words of a file-answer's and a file-done's Allow.
@@ -60,7 +76,9 @@ type PeerMessage struct {
 	Re      string    `json:"re,omitempty"`
 	By      string    `json:"by,omitempty"` // "coordinator" or "human"
 	Text    string    `json:"text,omitempty"`
-	Allow   string    `json:"allow,omitempty"` // link-request, link-answer, file-answer, file-done
+	Allow   string    `json:"allow,omitempty"` // link-request, link-answer, share-answer, file-answer, file-done
+	// For is a share-request's asking project, "" for none in particular.
+	For string `json:"for,omitempty"`
 	// A file-offer's file: its cleaned base name, size in bytes and
 	// SHA-256 in hex; Code is a file-done's failure, a fixed word.
 	Name   string `json:"name,omitempty"`
