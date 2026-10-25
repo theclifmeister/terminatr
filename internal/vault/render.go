@@ -24,10 +24,12 @@ import (
 // overwritten on the next change.
 
 // Note is a derived note: its path in the project's folder, with forward
-// slashes, and its text.
+// slashes, and its text. Guard is for a path someone else may have a
+// file at (designs/): tm writes it only over a file it wrote.
 type Note struct {
-	Rel  string
-	Data []byte
+	Rel   string
+	Data  []byte
+	Guard bool
 }
 
 // taskFront is a task note's properties.
@@ -75,8 +77,9 @@ type threadFront struct {
 }
 
 // Notes renders every derived note of p: tasks/T<n>.md for each task
-// on the board, tasks/archive/T<n>.md for each archived one, and
-// threads/<id>/<id>.md for each thread whose folder is there.
+// on the board, tasks/archive/T<n>.md for each archived one,
+// threads/<id>/<id>.md for each thread whose folder is there, and
+// designs/<name>.md and .canvas for each design (designNotes).
 func Notes(p *project.Project) ([]Note, error) {
 	s := p.Tasks()
 	board, err := s.Load()
@@ -116,7 +119,8 @@ func Notes(p *project.Project) ([]Note, error) {
 		}
 		notes = append(notes, n)
 	}
-	return notes, nil
+	ds, err := designNotes(p, board, archive)
+	return append(notes, ds...), err
 }
 
 // TaskNote is the path of task ref's note, live or archived.
@@ -255,8 +259,9 @@ func body(slug, s string) string {
 }
 
 // Stamp is a cheap mark of what p's derived notes come from: the size
-// and time of TASKS.md, the archive and each thread's record, STATUS,
-// latest report and folders of reports and library. Notes changes only
+// and time of TASKS.md, the archive, designs.json, questions.json, each
+// file in designs/ and each thread's record, STATUS, latest report and
+// folders of reports and library. Notes changes only
 // when it does, so a caller renders on change by comparing stamps.
 func Stamp(p *project.Project) string {
 	var b strings.Builder
@@ -269,6 +274,16 @@ func Stamp(p *project.Project) string {
 	}
 	stamp(p.Path("TASKS.md"))
 	stamp(p.Path("tasks", "ARCHIVE.md"))
+	stamp(p.Path("designs.json"))
+	stamp(p.Path("questions.json"))
+	files, _ := os.ReadDir(p.Path("designs"))
+	for _, e := range files {
+		if strings.HasPrefix(e.Name(), ".") {
+			continue
+		}
+		b.WriteString(e.Name() + ":")
+		stamp(p.Path("designs", e.Name()))
+	}
 	ents, _ := os.ReadDir(p.Path("threads"))
 	for _, e := range ents {
 		if !e.IsDir() || !thread.ValidID(e.Name()) {
