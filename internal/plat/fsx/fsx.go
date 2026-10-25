@@ -22,6 +22,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/theclifmeister/terminatr/internal/plat/caps"
@@ -34,6 +35,21 @@ func WriteAtomic(path string, data []byte, perm fs.FileMode) error {
 		_, err := w.Write(data)
 		return err
 	})
+}
+
+// WriteReadOnly is WriteAtomic with mode 0444, for a file only tm
+// writes: an editor's save over it then fails, while tm's rename still
+// replaces it. Windows refuses a rename over a read-only file, so there
+// path's read-only attribute is cleared first.
+func WriteReadOnly(path string, data []byte) error {
+	if runtime.GOOS == "windows" {
+		if fi, err := os.Lstat(path); err == nil && fi.Mode().IsRegular() && fi.Mode().Perm()&0o200 == 0 {
+			if err := os.Chmod(path, 0o644); err != nil {
+				return err
+			}
+		}
+	}
+	return WriteAtomic(path, data, 0o444)
 }
 
 // Stream replaces path with what write writes, mode perm (Replace). An

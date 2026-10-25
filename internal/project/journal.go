@@ -66,6 +66,16 @@ type Item struct {
 	// Thread is the thread a labelled summary names (thread.Label),
 	// when the subject is another: "" when it is the subject or none.
 	Thread string `toml:"thread,omitempty" yaml:"thread,omitempty" json:"thread,omitempty"`
+	// Path, Hash and Part are where the text of a vault item
+	// (KindFromObsidian) is: the note's path in the vault, its text's
+	// SHA-256 and which part of the note it is (VaultItem); "" on other
+	// kinds. The item never holds the text.
+	Path string `toml:"path,omitempty" yaml:"path,omitempty" json:"path,omitempty"`
+	Hash string `toml:"hash,omitempty" yaml:"hash,omitempty" json:"hash,omitempty"`
+	Part string `toml:"part,omitempty" yaml:"part,omitempty" json:"part,omitempty"`
+	// Source links the note a vault item is about, so the item shows as
+	// a backlink on it: the file only, written by linkedItem.
+	Source string `toml:"source,omitempty" yaml:"source,omitempty" json:"-"`
 	// Vault, Tags and CSSClasses are the vault's properties (docs/SPEC.md
 	// §5.1, Vault): the file only, written by linkedItem.
 	Vault      string   `toml:"tm,omitempty" yaml:"tm,omitempty" json:"-"`
@@ -80,10 +90,24 @@ func (p *Project) AddItem(kind, subject, summary string, needsUser bool) (*Item,
 
 // AddMessageItem is AddItem for a link item about message id (Item.Message).
 func (p *Project) AddMessageItem(kind, subject, summary string, needsUser bool, message string) (*Item, error) {
+	it := &Item{Kind: kind, Subject: subject, Summary: summary, NeedsUser: needsUser, Message: message}
+	if m := labelled.FindStringSubmatch(summary); m != nil && m[3] != subject {
+		it.Thread = m[3]
+	}
+	if err := p.addItem(it, nil); err != nil {
+		return nil, err
+	}
+	return it, nil
+}
+
+// addItem writes item it under a new id, which it sets with its time;
+// summary, when not nil, makes its summary from the id.
+func (p *Project) addItem(it *Item, summary func(id string) string) error {
 	t := now().UTC().Truncate(time.Second)
+	kind, subject := it.Kind, it.Subject
 	base := fmt.Sprintf("%s-%s-%s", t.Format("20060102T150405Z"), kind, Slugify(subject))
 	if err := os.MkdirAll(p.Path("inbox"), 0o755); err != nil {
-		return nil, err
+		return err
 	}
 	// The name is taken by creating the file, so that two writers in the
 	// same second can't both pick it; mdfile.Write then replaces the empty
@@ -96,18 +120,15 @@ func (p *Project) AddMessageItem(kind, subject, summary string, needsUser bool, 
 			break
 		}
 		if !errors.Is(err, fs.ErrExist) {
-			return nil, err
+			return err
 		}
 		id = fmt.Sprintf("%s-%d", base, i)
 	}
-	it := &Item{ID: id, Kind: kind, Subject: subject, Created: t, Summary: summary, NeedsUser: needsUser, Message: message}
-	if m := labelled.FindStringSubmatch(summary); m != nil && m[3] != subject {
-		it.Thread = m[3]
+	it.ID, it.Created = id, t
+	if summary != nil {
+		it.Summary = summary(id)
 	}
-	if err := mdfile.Write(p.Path("inbox", id+".md"), p.linkedItem(it), nil); err != nil {
-		return nil, err
-	}
-	return it, nil
+	return mdfile.Write(p.Path("inbox", id+".md"), p.linkedItem(it), nil)
 }
 
 // linkedItem is it as its file keeps it, with links (vaultlink): a
@@ -123,6 +144,10 @@ func (p *Project) linkedItem(it *Item) *Item {
 		if strings.HasPrefix(it.Message, "M-") { // a message, not a request (R-) or a file (X-)
 			f.Message = vaultlink.Link(p.Slug, vaultlink.Message, it.Subject+"/"+it.Message, it.Message)
 		}
+	}
+	if it.Path != "" && it.Part != PartSaved {
+		// A saved edit's note is tm's, rewritten or gone: no backlink.
+		f.Source = vaultlink.File(it.Path)
 	}
 	f.Vault, f.Tags, f.CSSClasses = vaultlink.Owned(it.NeedsUser)
 	return &f
@@ -314,6 +339,11 @@ func ParseItem(id string, data []byte) (Item, error) {
 	it.Summary = strings.Join(strings.Fields(it.Summary), " ")
 	it.Message = strings.Join(strings.Fields(vaultlink.Plain(it.Message)), "")
 	it.Thread = strings.Join(strings.Fields(vaultlink.Plain(it.Thread)), "")
+	it.Part = strings.Join(strings.Fields(it.Part), " ")
+	if !hashRE.MatchString(it.Hash) {
+		it.Hash = ""
+	}
+	it.Source = ""
 	return it, nil
 }
 

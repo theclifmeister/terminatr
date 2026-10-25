@@ -505,6 +505,7 @@ func (t *Ticker) sweep() {
 	t.renderPeers(cfg, list)
 	t.slotFree(cfg, sessions, now)
 	t.renderDaily(now)
+	t.scanHuman(now)
 	if prune {
 		t.st.Pruned = now
 	}
@@ -567,6 +568,7 @@ func (t *Ticker) sweepProject(slug string, cfg *config.Config, sessions []proto.
 		t.upkeep(p, safety, now)
 	}
 	t.renderVault(p)
+	t.checkShared(p, now)
 }
 
 // renderVault renders p's derived notes when the vault is on and what
@@ -605,6 +607,27 @@ func (t *Ticker) renderDaily(now time.Time) {
 		return // tried again next sweep
 	}
 	t.dailyStamp = stamp
+}
+
+// checkShared raises vault-edit in p when PROJECT.md changed outside tm
+// and the vault is on (docs/SPEC.md §5.1, Vault: write-back).
+func (t *Ticker) checkShared(p *project.Project, now time.Time) {
+	if n, err := vault.CheckShared(p, now); err != nil {
+		t.o.Log.Printf("ticker: vault %s: shared files: %v", p.Slug, err)
+	} else if n > 0 {
+		t.o.Log.Printf("ticker: %s: inbox %s ×%d", p.Slug, project.KindVaultEdit, n)
+	}
+}
+
+// scanHuman raises a from-obsidian item for each note, line and card the
+// human left for tm in the vault, once per content hash, when the vault
+// is on (docs/SPEC.md §5.1, Vault: write-back).
+func (t *Ticker) scanHuman(now time.Time) {
+	if n, err := vault.ScanHuman(now); err != nil {
+		t.o.Log.Printf("ticker: vault: the human's notes: %v", err)
+	} else if n > 0 {
+		t.o.Log.Printf("ticker: vault: inbox %s ×%d", project.KindFromObsidian, n)
+	}
 }
 
 // lockProjects takes the locks of the projects slugs, in order, and
@@ -1065,8 +1088,9 @@ var verbs = map[string]string{
 	KindPRMerged: "PR merged", KindPRClosed: "PR closed", KindTaskDone: "done by the user's setting", KindPRConflict: "PR conflicts with main", KindCloseHeld: "not auto-closed", KindGHFailing: "PR host CLI failing", project.KindTakeover: "taken over by the user",
 	project.KindDelegate: "to delegate (the user's go-ahead)", project.KindAccept: "accepted by the user",
 	project.KindSendBack: "sent back by the user", project.KindMod: "from a mod",
-	project.KindAnswer: "answered by the user (its answer in tm inbox list)",
-	"link-message":     "wrote to you (tm link read)", "link-held": "a message of yours waits for the user's OK",
+	project.KindAnswer:       "answered by the user (its answer in tm inbox list)",
+	project.KindFromObsidian: "a note from the vault (tm inbox read)", project.KindVaultEdit: "PROJECT.md changed outside tm (reread it)",
+	"link-message": "wrote to you (tm link read)", "link-held": "a message of yours waits for the user's OK",
 	"link-paused": "link paused (ask the user)", "link-undelivered": "a message of yours wasn't delivered",
 	"link-request": "asks to link (the user answers it)", "link-answer": "answered a link request",
 	"link-file":  "a file over a link (tm link files)",

@@ -120,6 +120,18 @@ func Link(slug string, k Kind, id, alias string) string {
 	return "[[" + t + "|" + alias + "]]"
 }
 
+// File is the wikilink to the file at path in the vault (a note
+// without its .md, another file with its extension), showing its name:
+// [[_human/deploy idea|deploy idea]]. It is "" when path can't be
+// linked, or links aren't written yet (mdfile.WritesYAML).
+func File(path string) string {
+	t := strings.TrimSuffix(path, ".md")
+	if !mdfile.WritesYAML() || !validID(t) {
+		return ""
+	}
+	return "[[" + t + "|" + cleanAlias(t[strings.LastIndexByte(t, '/')+1:]) + "]]"
+}
+
 // Owned are the vault's properties of a file only tm writes: tm
 // "owned", its CSS class, and the needs-you tag when it waits for the
 // human (docs/SPEC.md §5.1, Vault). They are none until links are

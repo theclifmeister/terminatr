@@ -52,6 +52,27 @@ func TestWriteAtomic(t *testing.T) {
 	}
 }
 
+// TestWriteReadOnly: a read-only file is replaced again and again, and
+// stays read-only (on Windows, its attribute).
+func TestWriteReadOnly(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "T1.md")
+	for _, data := range []string{"one", "two"} {
+		if err := WriteReadOnly(p, []byte(data)); err != nil {
+			t.Fatal(err)
+		}
+		b, err := os.ReadFile(p)
+		if err != nil || string(b) != data {
+			t.Fatalf("read %q, %v; want %q", b, err, data)
+		}
+		if fi, _ := os.Stat(p); fi.Mode().Perm()&0o222 != 0 {
+			t.Fatalf("mode %o, want read-only", fi.Mode().Perm())
+		}
+	}
+	if err := os.Remove(p); err != nil {
+		t.Fatalf("remove a read-only file: %v", err)
+	}
+}
+
 func TestStreamFailureKeepsOld(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "f")

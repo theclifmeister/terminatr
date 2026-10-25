@@ -31,6 +31,13 @@ type ledger struct {
 	// Off: tm vault off removed the notes; a render that was waiting for
 	// the lock then writes nothing while the mark is gone.
 	Off bool `json:"off,omitempty"`
+	// Seen is the hash of each part of the human's notes tm raised an
+	// item for (ScanHuman), by its key: path, path#line <hash> or
+	// path#card <id>.
+	Seen map[string]string `json:"seen,omitempty"`
+	// Shared is what tm last saw of each shared file it watches
+	// (CheckShared), by its path in the vault.
+	Shared map[string]sharedFile `json:"shared,omitempty"`
 }
 
 func ledgerPath() (string, error) {
@@ -122,6 +129,10 @@ func Render(p *project.Project) (written, removed int, err error) {
 				continue
 			}
 		}
+		if err := keepEdit(key, path, l.Files[key]); err != nil {
+			errs = append(errs, err)
+			continue
+		}
 		if err := writeNote(path, n.Data, !strings.HasPrefix(n.Rel, "threads/")); err != nil {
 			errs = append(errs, err)
 			continue
@@ -136,6 +147,10 @@ func Render(p *project.Project) (written, removed int, err error) {
 		}
 		path := p.Path(filepath.FromSlash(rel))
 		if derived(rel) {
+			if err := keepEdit(key, path, l.Files[key]); err != nil {
+				errs = append(errs, err)
+				continue
+			}
 			if err := os.Remove(path); err == nil {
 				removed++
 			} else if !errors.Is(err, fs.ErrNotExist) {
@@ -168,7 +183,9 @@ func ownedFile(data []byte) bool {
 
 // writeNote replaces path with data under its lock, making its folder
 // with mkdir (a thread's note goes only where its folder still is); a
-// link in its place is replaced, never followed.
+// link in its place is replaced, never followed. A note is read-only
+// (fsx.WriteReadOnly), so Obsidian's save of a human's edit fails; a
+// canvas isn't, since the human moves its nodes and adds cards.
 func writeNote(path string, data []byte, mkdir bool) error {
 	if !mkdir {
 		if fi, err := os.Lstat(filepath.Dir(path)); err != nil || !fi.IsDir() {
@@ -182,5 +199,8 @@ func writeNote(path string, data []byte, mkdir bool) error {
 		return err
 	}
 	defer unlock()
-	return fsx.WriteAtomic(path, data, 0o644)
+	if strings.HasSuffix(path, ".canvas") {
+		return fsx.WriteAtomic(path, data, 0o644)
+	}
+	return fsx.WriteReadOnly(path, data)
 }

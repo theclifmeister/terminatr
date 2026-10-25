@@ -254,7 +254,7 @@ var tmCSS = `/* Written by tm vault init (docs/SPEC.md §5.1, Vault). */
 }
 .markdown-source-view.tm-owned .cm-sizer::before,
 .markdown-preview-view.tm-owned .markdown-preview-sizer::before {
-  content: "written by tm · edits here are overwritten · notes for tm go in _human";
+  content: "written by tm · read-only · notes for tm go in _human";
   color: var(--text-muted);
   background: var(--background-secondary);
 }

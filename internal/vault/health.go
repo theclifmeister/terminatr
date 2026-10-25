@@ -218,7 +218,8 @@ func settings(root string) []Finding {
 }
 
 // foreign lists the derived notes whose file isn't what tm last wrote:
-// someone else's edit, which the next render overwrites.
+// someone else's edit, which the next render saves (keepEdit) before it
+// writes the note again.
 func foreign(root string) Finding {
 	f := Finding{Name: "tm's notes", Status: "ok", Detail: "every derived note is as tm wrote it"}
 	file, err := ledgerPath()
@@ -237,7 +238,7 @@ func foreign(root string) Finding {
 	}
 	if len(f.Files) > 0 {
 		f.Status = "warn"
-		f.Detail = fmt.Sprintf("%d derived notes edited outside tm: the next change overwrites them (notes for tm go in _human/)", len(f.Files))
+		f.Detail = fmt.Sprintf("%d derived notes edited outside tm: the next change saves each edit as an inbox item and writes the note again (notes for tm go in _human/)", len(f.Files))
 	}
 	return f
 }

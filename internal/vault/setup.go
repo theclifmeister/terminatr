@@ -534,7 +534,7 @@ func RenderShared() ([]Change, error) {
 // Off turns the derived notes off: removes the mark first (the ticker
 // stops), then, under the ledger's lock, every derived note the ledger
 // has (tasks', threads' and designs' notes, paired servers' stubs),
-// emptying the ledger and marking it off, and _tm/. Design canvases, .obsidian/, _human/, YAML and links
+// emptying the ledger's notes (what the scans saw stays) and marking it off, and _tm/. Design canvases, .obsidian/, _human/, YAML and links
 // stay.
 // Each project is journaled (vault.off). It returns the notes removed.
 func Off(who caller.Caller) (removed int, err error) {
@@ -572,7 +572,10 @@ func Off(who caller.Caller) (removed int, err error) {
 			}
 			os.Remove(mdfile.LockPath(path))
 		}
-		b, err := json.MarshalIndent(&ledger{Files: map[string]string{}, Off: true}, "", "  ")
+		// What the scans saw stays: turned on again, the vault raises
+		// nothing it raised before.
+		l.Files, l.Off = map[string]string{}, true
+		b, err := json.MarshalIndent(&l, "", "  ")
 		if err == nil {
 			err = fsx.WriteAtomic(file, append(b, '\n'), 0o600)
 		}

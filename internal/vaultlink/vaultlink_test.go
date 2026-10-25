@@ -61,6 +61,21 @@ func TestLinkOff(t *testing.T) {
 	}
 }
 
+func TestFile(t *testing.T) {
+	on(t)
+	for path, want := range map[string]string{
+		"_human/deploy idea.md":   "[[_human/deploy idea|deploy idea]]",
+		"demo/designs/net.canvas": "[[demo/designs/net.canvas|net.canvas]]",
+		"_human/a#b.md":           "",
+		"_human/../x.md":          "",
+		"":                        "",
+	} {
+		if got := File(path); got != want {
+			t.Errorf("File(%q) = %q, want %q", path, got, want)
+		}
+	}
+}
+
 func TestRef(t *testing.T) {
 	on(t)
 	for in, want := range map[string]string{
