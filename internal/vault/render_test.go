@@ -18,7 +18,8 @@ import (
 // TestRender (T718): with the vault on, each task, archived task and
 // thread gets its note, with its properties, links and the thread's
 // guarded words; a second render writes nothing, a change rewrites the
-// one note, and archiving a task moves its note.
+// one note, and archiving or unarchiving a task keeps its note's path
+// (T729).
 func TestRender(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv(home.Env, dir)
@@ -98,7 +99,7 @@ func TestRender(t *testing.T) {
 			t.Errorf("thread note has no %q:\n%s", want, th)
 		}
 	}
-	if old := read("tasks/archive/T3.md"); !strings.Contains(old, "archived: true") {
+	if old := read("tasks/T3.md"); !strings.Contains(old, "archived: true") {
 		t.Errorf("archived note:\n%s", old)
 	}
 
@@ -114,16 +115,56 @@ func TestRender(t *testing.T) {
 		t.Fatalf("after a step: %d written, %v", w, err)
 	}
 	s.Archive(human, 1)
-	if w, rm, err := Render(p); err != nil || w != 1 || rm != 1 {
+	if w, rm, err := Render(p); err != nil || w != 1 || rm != 0 || !strings.Contains(read("tasks/T1.md"), "archived: true") {
 		t.Fatalf("after archiving: %d written, %d removed, %v", w, rm, err)
 	}
-	if _, err := os.Stat(p.Path("tasks", "T1.md")); err == nil {
-		t.Fatal("live note of an archived task left")
+	if _, err := os.Stat(p.Path("tasks", "archive")); err == nil {
+		t.Fatal("an archive folder of notes")
 	}
-	read("tasks/archive/T1.md")
+	s.Unarchive(human, 1)
+	if w, rm, err := Render(p); err != nil || w != 1 || rm != 0 || strings.Contains(read("tasks/T1.md"), "archived:") {
+		t.Fatalf("after unarchiving: %d written, %d removed, %v", w, rm, err)
+	}
 	// A note someone removed is written again.
 	os.Remove(p.Path("tasks", "T2.md"))
 	if w, _, _ := Render(p); w != 1 {
 		t.Fatalf("removed note: %d written", w)
+	}
+}
+
+// TestRenderOldArchive (T729): an archived task's note where a tm before
+// T729 put it, tasks/archive/T<n>.md, is removed with its folder, and
+// the note is at tasks/T<n>.md; the links to it then resolve.
+func TestRenderOldArchive(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv(home.Env, dir)
+	mdfile.WriteYAML(true)
+	t.Cleanup(func() { mdfile.WriteYAML(false) })
+	os.MkdirAll(filepath.Join(dir, "state"), 0o700)
+	os.WriteFile(filepath.Join(dir, "state", "vault"), nil, 0o600)
+	p, err := project.New(project.Options{Slug: "demo"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	human := caller.Caller{Kind: caller.Human}
+	s := p.Tasks()
+	s.Add(human, []tasks.NewTask{{Title: "Old", Status: "done"}})
+	s.Archive(human, 1)
+	os.MkdirAll(p.Path("tasks", "archive"), 0o755)
+	os.WriteFile(p.Path("tasks", "archive", "T1.md"), []byte("old\n"), 0o644)
+	os.WriteFile(filepath.Join(dir, "state", "vault.json"), []byte(`{"files": {"demo/tasks/archive/T1.md": "x"}}`), 0o600)
+	os.MkdirAll(p.Path("memory"), 0o755)
+	os.WriteFile(p.Path("memory", "x.md"), []byte("See [[demo/tasks/T1|T1]].\n"), 0o644)
+	if w, rm, err := Render(p); err != nil || w != 1 || rm != 1 {
+		t.Fatalf("render: %d written, %d removed, %v", w, rm, err)
+	}
+	if _, err := os.Stat(p.Path("tasks", "archive")); err == nil {
+		t.Fatal("old archive folder left")
+	}
+	if b, err := os.ReadFile(p.Path("tasks", "T1.md")); err != nil || !strings.Contains(string(b), "archived: true") {
+		t.Fatalf("note: %v\n%s", err, b)
+	}
+	if broken, err := Links(); err != nil || len(broken) != 0 {
+		t.Fatalf("doctor: %v %+v", err, broken)
 	}
 }

@@ -145,7 +145,8 @@ func (p *Project) linkedItem(it *Item) *Item {
 			f.Message = vaultlink.Link(p.Slug, vaultlink.Message, it.Subject+"/"+it.Message, it.Message)
 		}
 	}
-	if it.Path != "" {
+	if it.Path != "" && it.Part != PartSaved {
+		// A saved edit's note is tm's, rewritten or gone: no backlink.
 		f.Source = vaultlink.File(it.Path)
 	}
 	f.Vault, f.Tags, f.CSSClasses = vaultlink.Owned(it.NeedsUser)

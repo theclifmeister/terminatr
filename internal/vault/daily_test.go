@@ -146,7 +146,7 @@ func TestDaily(t *testing.T) {
 	if w, err := RenderDaily(now, 60); err != nil || w != 3 {
 		t.Fatalf("back-fill: %d written, %v", w, err)
 	}
-	if old := read("2026-09-10"); !strings.Contains(old, "- [[demo/tasks/archive/T3|T3]] Old\n") {
+	if old := read("2026-09-10"); !strings.Contains(old, "- [[demo/tasks/T3|T3]] Old\n") {
 		t.Errorf("back-filled day:\n%s", old)
 	}
 	notes, _ := filepath.Glob(filepath.Join(dir, "projects", "_tm", "daily", "*.md"))
