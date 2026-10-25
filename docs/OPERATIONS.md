@@ -643,6 +643,39 @@ peer      nas  offline 4m0s · relay · dials again in 30s · relay relay.exampl
 
 `offline · peer` means the relay is fine and the other server isn't connected (stopped, asleep, or not paired back); `offline · relay` that the relay can't be reached or closed the link (check `/healthz` and its log); `refused` that the keys don't match (pair again). A link dials again by itself, from 1 s up to once a minute. `--json` has the same as fields (SPEC §16.7).
 
+## Obsidian: the projects folder as a vault
+
+`~/.terminatr/projects` can be opened in [Obsidian](https://obsidian.md) as one vault, across every project: tm writes YAML front matter and wikilinks (`[[terminatr/tasks/T12|T12]]`) for everyone, and once you turn the vault on it also renders a note per task and per thread, Bases (Obsidian's table and card views over properties) and a home note. Nothing about it is needed to use tm.
+
+Turn it on from your own terminal (not an agent's):
+
+```
+tm vault init
+```
+
+It lists what it changes and asks first (`--yes` skips the question, needed without a terminal):
+- in `.obsidian/`, only the keys tm owns, merged into the settings Obsidian already has: links as tm writes them (absolute wikilinks), new notes in `_human/`, **Automatically update internal links off** (a rename in Obsidian would otherwise rewrite tm's files), the ignore filters (inbox/done, threads/archive, journal, `JOURNAL.md`, `AGENTS.md`, `CLAUDE.md`, review2 stay openable but out of search and the graph), the core plugins tm's notes use (Bases, Canvas, graph, backlinks, properties, tags, search), the graph's colours and default filter, property types, and the `tm` CSS snippet that marks tm's notes and other parties' words. Sync, Publish and daily notes stay as you have them;
+- `_tm/bases/` (Tasks, Threads, Memory, Needs you, Inbox, Messages, each with a view per project) and `_tm/Home.md`;
+- `_human/`, your folder: Obsidian puts new notes there and tm never writes in it;
+- reports threads stored before tm guarded them (raw HTML, remote images, embeds, code blocks plugins run) are put through the guard once, so opening one fetches and runs nothing; the originals go to `~/.terminatr/state/migrate/report-guard-<time>.tar.gz`;
+- the derived notes: `tasks/T12.md` (archived ones in `tasks/archive/`) and `threads/t-0001/t-0001.md` in each project, rendered by the server whenever their sources change. They wait for front matter to be YAML (the server's first start with 0.52.0 or later).
+
+Then open the folder in Obsidian (Open folder as vault). tm remembers what it wrote in `.obsidian/tm.json`: run `tm vault init` again after an update and it changes only what is still as it left it; a setting you changed or a Base you edited is kept, and listed. To get tm's Base back, delete yours and run `tm vault render`.
+
+tm's notes are tm's: an edit to a task or thread note is overwritten at the next change, and `TASKS.md` and the threads' files stay the source. Write your own notes in `_human/`.
+
+`tm vault render` renders the notes again (with `--project` one project's), for when something looks stale; the coordinator can run it for its own project. `tm vault off` removes the derived notes and `_tm/` and stops rendering them; `.obsidian/`, `_human/`, YAML and links stay.
+
+`tm vault doctor` checks the vault and changes nothing; `tm doctor` shows the same under `vault` once the folder is a vault:
+- **Sync and Publish.** The vault holds other projects' messages, paired servers' stubs and every report; Obsidian Sync or Publish would send them off this machine. tm warns and leaves the choice to you (Settings → Core plugins);
+- **link auto-update** on, which lets Obsidian rewrite links in tm's files when you rename a note;
+- community plugins that rewrite notes on their own (Linter, Update time on edit, Front matter modified date, Auto note mover, Filename heading sync): exclude the projects' folders in them, or turn them off;
+- tm's settings changed since `tm vault init`, and derived notes edited outside tm;
+- front matter that doesn't parse (tm can't read the file either: fix it by hand), files still in TOML, reports from before the guard;
+- links that point at nothing: inside a project, into another project (renamed or deleted), to a paired server's stub (unpaired, or no longer shared), or to a task that has been archived (its note moved to `tasks/archive/`).
+
+It exits 1 for a broken link or a front matter that doesn't parse; warnings don't count. `--json` prints `checks` and `links` for scripts.
+
 ## Checking an installation: tm doctor
 
 `tm doctor` checks your installation and changes nothing. It prints each group under an uppercase heading, with a blank line between groups and the status, name and detail in columns (`--json` is unchanged):
@@ -659,6 +692,7 @@ peer      nas  offline 4m0s · relay · dials again in 30s · relay relay.exampl
 - upkeep: a project's `CONTEXT.md`, `MEMORY.md` or memory file over its size budget (the coordinator consolidates it);
 - a project repository whose `.npmrc` reads a registry token from a variable the project's threads don't get from their secret environment (see The guard);
 - settings in `config.toml`: keys tm doesn't know under `[keys]` or `[ui]` (ignored), the Claude agent mod's `[agent_mod]` keys (they do nothing now: delete them), and a project's (or All projects') Complete tasks still set to the removed "when released" (it now means by you; pick again in Settings).
+- the Obsidian vault, once `~/.terminatr/projects` is one (Obsidian opened it, or `tm vault init` ran): Sync or Publish on, link auto-update, rewriting plugins, tm's notes and settings changed, front matter, reports before the guard, and the number of broken links (`tm vault doctor` lists them; see [Obsidian](#obsidian-the-projects-folder-as-a-vault)).
 
 Each group prints as soon as it is checked. The code-host checks are the slow ones (every `az` call starts Python, several per repo), so they run in the background from the start, each repo beside the others (at most 4 at once), and print last, under `code host (checking…)` while they finish.
 

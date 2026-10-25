@@ -105,6 +105,23 @@ func readState(root string) tmState {
 // openable but out of search, the graph and the quick switcher.
 var IgnoreFilters = []string{"*/inbox/done/", "*/threads/archive/", "*/journal/", "*/AGENTS.md", "*/CLAUDE.md", "*/JOURNAL.md", "*/review2/"}
 
+// Ignored reports whether rel, a path in the vault (a folder's ending
+// in "/"), is one IgnoreFilters hides: a log or an archive, not a note
+// the graph or the link check looks at.
+func Ignored(rel string) bool {
+	_, rest, ok := strings.Cut(rel, "/")
+	if !ok {
+		return false
+	}
+	for _, f := range IgnoreFilters {
+		f = strings.TrimPrefix(f, "*/")
+		if strings.HasSuffix(f, "/") && strings.HasPrefix(rest, f) || rest == f {
+			return true
+		}
+	}
+	return false
+}
+
 // appKeys are app.json's keys tm sets: links as tm writes them, new
 // notes in _human, and links never rewritten behind tm's back (a rename
 // in Obsidian would otherwise edit tm's files).

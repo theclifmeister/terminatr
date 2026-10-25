@@ -6,20 +6,43 @@ import (
 	"github.com/theclifmeister/terminatr/internal/vault"
 )
 
-const vaultUsage = `usage: tm vault migrate --check [--json]
+const vaultUsage = `usage: tm vault init [--yes]
+       tm vault render [--project <slug>]
        tm vault doctor [--json]
+       tm vault off [--yes]
+       tm vault migrate --check [--json]
 
-What the move of front matter from TOML (+++) to YAML (---) changes: the live files
-that still have TOML, per project, and any that can't move (they stay TOML, which
-still reads). The move itself runs once, at the server's first start with this
-version; it keeps the originals in state/migrate/ and then writes state/front-yaml.
+The projects folder is an Obsidian vault (docs/SPEC.md §5.1, Vault).
 
-doctor: links from one project's notes into another project's folder, or to a
-paired server's stub (_peers/<alias>/<slug>), that point at nothing: a project
-renamed or deleted, a server unpaired, a project no longer shared.
+init (the human): merges tm's keys into .obsidian/ (ignore filters, links as tm
+writes them, new notes in _human/, links never rewritten on a rename, the core
+plugins tm's notes need, graph colours, property types, the tm.css snippet),
+writes _tm/ (the Bases and Home.md) and _human/, puts reports stored before the
+vault guard through it (originals kept in state/migrate/), turns the derived
+notes on (state/vault) and renders them. It lists what it changes and asks first
+(--yes without a terminal). A key or file you changed since tm wrote it is kept.
 
-Both change nothing. Exit codes: 0 listed (doctor: nothing found), 1 doctor found
-something, 2 usage, 3 I/O.`
+render (the human; a coordinator for its own project): renders the derived notes
+again, and with no --project the Bases and Home.md; the ticker does it on change.
+
+doctor (the human, a coordinator): Obsidian Sync or Publish on, link auto-update
+on, plugins that rewrite notes, tm's settings changed, derived notes edited outside
+tm, front matter that doesn't parse, files still TOML, reports before the guard,
+and links that point at nothing: inside a project, into another project's folder
+(renamed or deleted), or to a paired server's stub (_peers/<alias>/<slug>). tm
+doctor shows the same under "vault" once the folder is a vault.
+
+off (the human): turns the derived notes off and removes them and _tm/; .obsidian/,
+_human/, YAML front matter and links stay. Asks first (--yes without a terminal).
+
+migrate --check: what the move of front matter from TOML (+++) to YAML (---)
+changes: the live files that still have TOML, per project, and any that can't move
+(they stay TOML, which still reads). The move itself runs once, at the server's
+first start with this version; it keeps the originals in state/migrate/ and then
+writes state/front-yaml.
+
+doctor and migrate change nothing. Exit codes: 0 done (doctor: nothing broken),
+1 refused (doctor: a broken link or a failed check), 2 usage, 3 I/O.`
 
 func init() {
 	commands["vault"] = runVault
@@ -32,8 +55,8 @@ type vaultFile struct {
 	Error   string `json:"error,omitempty"`
 }
 
-// runVault implements tm vault (docs/SPEC.md §5.1): migrate --check
-// and doctor.
+// runVault implements tm vault (docs/SPEC.md §5.1): init, render,
+// doctor, off and migrate --check.
 func runVault(e *Env, args []string) error {
 	if done, err := helpOr(e, args, vaultUsage); done {
 		return err
@@ -41,6 +64,12 @@ func runVault(e *Env, args []string) error {
 	switch args[0] {
 	case "doctor":
 		return vaultDoctor(e, args[1:])
+	case "init":
+		return vaultInit(e, args[1:])
+	case "render":
+		return vaultRender(e, args[1:])
+	case "off":
+		return vaultOff(e, args[1:])
 	case "migrate":
 	default:
 		return usagef("%s", vaultUsage)

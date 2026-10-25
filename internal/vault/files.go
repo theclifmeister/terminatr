@@ -251,4 +251,3 @@ var tmCSS = `/* Written by tm vault init (docs/SPEC.md §5.1, Vault). */
   border-left: 3px solid rgba(var(--color-orange-rgb), 0.6);
 }
 `
-

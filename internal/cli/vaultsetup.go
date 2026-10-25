@@ -63,7 +63,7 @@ func vaultInit(e *Env, args []string) error {
 // the human and a coordinator (its own project).
 func vaultRender(e *Env, args []string) error {
 	f := newFlags()
-	slug := f.String("project", "")
+	slug := f.String("project")
 	pos, err := f.Parse(args)
 	if isHelp(err) {
 		return err
@@ -150,20 +150,4 @@ func vaultOff(e *Env, args []string) error {
 	n, err := vault.Off(e.Caller)
 	fmt.Fprintf(e.Stdout, "vault off: %d derived notes removed\n", n)
 	return err
-}
-
-// vaultHealth prints vault.Health's findings, for tm vault doctor; it
-// reports whether any is worse than ok.
-func vaultHealth(e *Env, fs []vault.Finding) (bad bool) {
-	for _, f := range fs {
-		mark := "ok  "
-		if f.Status != "ok" {
-			mark, bad = f.Status+"", true
-		}
-		fmt.Fprintf(e.Stdout, "%-4s %-17s %s\n", mark, f.Name, f.Detail)
-		for _, file := range f.Files {
-			fmt.Fprintf(e.Stdout, "       %s\n", file)
-		}
-	}
-	return bad
 }
