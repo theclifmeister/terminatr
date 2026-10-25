@@ -448,3 +448,52 @@ func TestNetworkGolden(t *testing.T) {
 
 // tab presses tab.
 func tab(m *dash) { m.Update(tea.KeyPressMsg{Code: tea.KeyTab}) }
+
+// TestNetworkSelWholeRow: the selected row is highlighted across the
+// tree's whole width, as the sidebar's is, on every kind of row (this
+// server, a project, a paired server, theirs, a link), narrow and wide:
+// no reset inside it ends the reverse after its first coloured part.
+func TestNetworkSelWholeRow(t *testing.T) {
+	for _, w := range []int{80, 160} {
+		m, _ := netDash(t, w, 30)
+		nv := netOpen(t, m)
+		rows := nv.rows(m)
+		for _, r := range rows {
+			if !r.selectable() || r.listed {
+				continue
+			}
+			nv.sel = nv.rowKey(r)
+			if got, want := selCells(t, m.render()), nv.treeW; got < want {
+				t.Errorf("%d cols, %s: highlight %d cells, want %d", w, nv.sel, got, want)
+			}
+		}
+	}
+}
+
+// selCells is how many cells the reverse video runs on the first line
+// of out that has it, until an SGR turns it off.
+func selCells(t *testing.T, out string) int {
+	t.Helper()
+	for _, l := range strings.Split(out, "\n") {
+		i := strings.Index(l, "\x1b[7m")
+		if i < 0 {
+			continue
+		}
+		s, n, state := l[i+len("\x1b[7m"):], 0, byte(0)
+		for len(s) > 0 {
+			seq, width, k, ns := ansi.DecodeSequence(s, state, nil)
+			state, s = ns, s[k:]
+			if width == 0 && isSGR(seq) {
+				for _, p := range strings.Split(seq[2:len(seq)-1], ";") {
+					if p == "" || p == "0" || p == "27" {
+						return n
+					}
+				}
+			}
+			n += width
+		}
+		return n
+	}
+	t.Fatalf("no reverse video in\n%q", out)
+	return 0
+}

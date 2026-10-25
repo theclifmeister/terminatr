@@ -9,6 +9,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/theclifmeister/terminatr/internal/peer"
 	"github.com/theclifmeister/terminatr/internal/proto"
@@ -334,7 +335,7 @@ func (nv *networkView) render(m *dash) string {
 		}
 		for _, l := range nv.rowLines(m, row, treeW) {
 			if i == sel {
-				l = th().Sel.Render(fit(plainUnder(l), treeW))
+				l = selRow(l, treeW)
 			}
 			tree = append(tree, l)
 			of = append(of, i)
@@ -406,6 +407,14 @@ func (nv *networkView) render(m *dash) string {
 	return m.popup(b)
 }
 
+// selRow is line l as the selected row, w cells wide: its words plain
+// under the selection's look across the whole row, as the sidebar draws
+// its highlighted row. The row's own colours go: each of their resets
+// would end the highlight where it stands.
+func selRow(l string, w int) string {
+	return th().Sel.Render(fit(ansi.Strip(l), w))
+}
+
 // panelAt is the panel's line i as shown, scrolled and with its
 // selected item marked while it has the keyboard; nl notes it.
 func (nv *networkView) panelAt(pl []panelLine, i int, nl *netLine) string {
@@ -416,7 +425,7 @@ func (nv *networkView) panelAt(pl []panelLine, i int, nl *netLine) string {
 	l := pl[j]
 	nl.panel = &pl[j]
 	if items := panelItems(pl); nv.panel && nv.psel < len(items) && l.item == items[nv.psel] {
-		return th().Sel.Render(plainUnder(l.text))
+		return selRow(l.text, ansi.StringWidth(l.text))
 	}
 	return l.text
 }

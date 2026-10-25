@@ -236,7 +236,7 @@ func (nv *networkView) needsList(m *dash, rows []netRow, sel, w, n int) ([]strin
 	for k, i := range at[nv.ltop : nv.ltop+h] {
 		l := nv.listLine(m, rows[i], w)
 		if i == sel {
-			l = th().Sel.Render(fit(plainUnder(l), w))
+			l = selRow(l, w)
 		}
 		if k == 0 && nv.ltop > 0 {
 			l = fit(l, w-1) + th().Faint.Render("↑")
