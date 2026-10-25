@@ -2,7 +2,7 @@ name: ci
 
 # Lean by design (GitHub bills every job, rounded up to the minute):
 #   pull request  one Linux job (`test`: gofmt, build, vet, cross-vet, unit
-#                 tests, selftest, e2e smoke), plus mod-types / release-snapshot when their
+#                 tests, selftest, e2e smoke), plus mod-types / obsidian / release-snapshot when their
 #                 files change. No macOS, no -race. Docs-only and site-only changes
 #                 skip it.
 #   push to main  the same Linux job with unit tests under -race (the e2e
@@ -123,12 +123,15 @@ jobs:
   #            build. Not main: a release tag runs it (release.yml).
   #   modapi   the user mods' types check: every push, and pull requests
   #            that touch the mod API, its scaffolds or this file.
+  #   obsidian the Obsidian plugin's check: every push, and pull requests
+  #            that touch obsidian/ or this file.
   changes:
     runs-on: ubuntu-latest
     outputs:
       code: ${{ steps.code.outputs.code }}
       release: ${{ steps.release.outputs.release }}
       modapi: ${{ steps.modapi.outputs.modapi }}
+      obsidian: ${{ steps.obsidian.outputs.obsidian }}
     steps:
       # A pull request checks out its merge commit, whose first parent is
       # the base: depth 2 is enough to diff the two.
@@ -172,6 +175,17 @@ jobs:
           echo "modapi-related: ${hits:-none}"
           echo "modapi=$([ -n "$hits" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
 
+      - name: Obsidian plugin files
+        id: obsidian
+        run: |
+          if [ "$GITHUB_EVENT_NAME" != pull_request ]; then
+            echo "obsidian=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          hits=$(git diff --name-only HEAD^1 HEAD | grep -E '^(obsidian/|\.github/workflows/ci\.yml$)' || true)
+          echo "obsidian-related: ${hits:-none}"
+          echo "obsidian=$([ -n "$hits" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
   # The user mods' types (docs/SPEC.md §5.3, Mod dev tools): tsc --strict
   # on tm mod new's code scaffolds, internal/modapi/testdata's examples
   # and examples/mods against the generated tm.d.ts. Needs Go and a pinned
@@ -198,6 +212,42 @@ jobs:
         run: go test -count=1 -run '^TestTypesCompileStrict$' -v ./internal/moddev
         env:
           TERMINATR_TSC_CHECK: "1"
+
+  # terminatr's Obsidian plugin (docs/SPEC.md §5.1, Vault): tsc --strict
+  # on obsidian/src against the pinned Obsidian API types, its node tests,
+  # and tm's own bundle of it (go test ./obsidian), which tm vault init
+  # --plugin installs. Needs Go and node, not libghostty.
+  obsidian:
+    needs: changes
+    if: needs.changes.outputs.obsidian == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: obsidian
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+
+      - name: tsc --strict
+        run: npm run check
+
+      - name: node tests
+        run: npm test
+
+      - name: tm's bundle
+        run: go test -count=1 -v .
+        env:
+          CGO_ENABLED: "0"
 
   # The release build (.goreleaser.yaml) as a snapshot: every target
   # cross-compiled with zig cc and archived, nothing tagged or uploaded.

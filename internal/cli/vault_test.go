@@ -105,6 +105,41 @@ func TestVaultInitRenderOff(t *testing.T) {
 	}
 }
 
+// TestVaultInitPlugin (T726): --plugin installs the Obsidian plugin,
+// bundled, with where tm is; a later init keeps a file the user edited
+// and their data.json, and tm turns no community plugin on.
+func TestVaultInitPlugin(t *testing.T) {
+	h := newHarness(t)
+	h.ok(human, "project", "new", "demo")
+	out := h.ok(human, "vault", "init", "--plugin", "--yes")
+	for _, want := range []string{".obsidian/plugins/terminatr/main.js: new", ".obsidian/plugins/terminatr/manifest.json: new", ".obsidian/plugins/terminatr/styles.css: new", ".obsidian/plugins/terminatr/data.json: new (where tm is)", "turn it on in Obsidian"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("init lacks %q:\n%s", want, out)
+		}
+	}
+	root, _ := home.ProjectsDir()
+	dir := filepath.Join(root, ".obsidian", "plugins", "terminatr")
+	if b, err := os.ReadFile(filepath.Join(dir, "main.js")); err != nil || !strings.Contains(string(b), `require("child_process")`) {
+		t.Fatalf("main.js: %v", err)
+	}
+	var data struct{ TmPath string }
+	if b, err := os.ReadFile(filepath.Join(dir, "data.json")); err != nil || json.Unmarshal(b, &data) != nil || data.TmPath == "" {
+		t.Fatalf("data.json %s: %v", b, err)
+	}
+	if _, err := os.Stat(filepath.Join(root, ".obsidian", "community-plugins.json")); err == nil {
+		t.Error("init turned a community plugin on")
+	}
+	os.WriteFile(filepath.Join(dir, "styles.css"), []byte("/* mine */\n"), 0o644)
+	os.WriteFile(filepath.Join(dir, "data.json"), []byte(`{"tmPath": "/mine/tm"}`), 0o644)
+	out = h.ok(human, "vault", "init", "--plugin", "--yes")
+	if !strings.Contains(out, ".obsidian/plugins/terminatr/styles.css: keeps your edit") || strings.Contains(out, "main.js") || strings.Contains(out, "data.json") {
+		t.Errorf("second init:\n%s", out)
+	}
+	if b, _ := os.ReadFile(filepath.Join(dir, "data.json")); !strings.Contains(string(b), "/mine/tm") {
+		t.Errorf("data.json overwritten: %s", b)
+	}
+}
+
 // TestVaultRender (T719): tm vault render writes the derived notes and
 // the daily notes of the days asked, once the vault is on; a thread
 // can't, and --days is checked.

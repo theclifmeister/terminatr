@@ -1,0 +1,15 @@
+{
+  "name": "terminatr-obsidian",
+  "private": true,
+  "description": "terminatr's Obsidian plugin: type check and tests. tm bundles src/ itself (obsidian/bundle.go); this is only for CI and editors.",
+  "type": "module",
+  "scripts": {
+    "check": "tsc -p tsconfig.json",
+    "test": "node --test test/needs.test.ts"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "obsidian": "1.14.4",
+    "typescript": "5.9.3"
+  }
+}

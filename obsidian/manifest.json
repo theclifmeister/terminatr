@@ -1,0 +1,10 @@
+{
+  "id": "terminatr",
+  "name": "terminatr",
+  "version": "0.0.0",
+  "minAppVersion": "1.5.0",
+  "description": "What needs you across your terminatr projects, answered through your own tm.",
+  "author": "terminatr",
+  "authorUrl": "https://github.com/theclifmeister/terminatr",
+  "isDesktopOnly": true
+}
