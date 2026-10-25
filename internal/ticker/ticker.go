@@ -191,6 +191,9 @@ type Ticker struct {
 	// hosts are the repos' code hosts, picked once per sync (host); the
 	// sweep alone uses them.
 	hosts map[string]codehost.Host
+	// dailyStamp is what the daily notes were last rendered from
+	// (vault.DailyStamp); the sweep alone uses it.
+	dailyStamp string
 	// peersStamp is what the paired servers' stubs were last rendered
 	// from (renderPeers); the sweep alone uses it.
 	peersStamp string
@@ -501,6 +504,7 @@ func (t *Ticker) sweep() {
 	}
 	t.renderPeers(cfg, list)
 	t.slotFree(cfg, sessions, now)
+	t.renderDaily(now)
 	if prune {
 		t.st.Pruned = now
 	}
@@ -581,6 +585,26 @@ func (t *Ticker) renderVault(p *project.Project) {
 		return // tried again next sweep
 	}
 	pm.vaultStamp = stamp
+}
+
+// renderDaily renders the daily notes of today and yesterday, in the
+// server's local zone, when the vault is on and a journal or board
+// changed, or the day did, since the last time (docs/SPEC.md §5.1,
+// Vault).
+func (t *Ticker) renderDaily(now time.Time) {
+	if !vault.On() {
+		return
+	}
+	now = now.Local()
+	stamp := vault.DailyStamp(now)
+	if stamp == t.dailyStamp {
+		return
+	}
+	if _, err := vault.RenderDaily(now, vault.TickerDays); err != nil {
+		t.o.Log.Printf("ticker: vault daily notes: %v", err)
+		return // tried again next sweep
+	}
+	t.dailyStamp = stamp
 }
 
 // lockProjects takes the locks of the projects slugs, in order, and
