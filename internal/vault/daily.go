@@ -486,9 +486,9 @@ type dayFront struct {
 // dayProject is a project as a daily note shows it: its slug, its
 // board's titles and its journal.
 type dayProject struct {
-	slug     string
-	titles   map[string]string // task → title
-	journal  []entry
+	slug    string
+	titles  map[string]string // task → title
+	journal []entry
 }
 
 func loadDayProject(p *project.Project) (*dayProject, error) {
