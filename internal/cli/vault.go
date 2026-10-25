@@ -14,6 +14,7 @@ import (
 
 const vaultUsage = `usage: tm vault migrate --check [--json]
        tm vault render [--days N] [--json]
+       tm vault doctor [--json]
 
 migrate --check: what the move of front matter from TOML (+++) to YAML (---) changes: the live files
 that still have TOML, per project, and any that can't move (they stay TOML, which
@@ -27,7 +28,12 @@ from changes: every project's task and thread notes, and the daily notes
 most 3660), from JOURNAL.md and the archives in journal/. A note is written only when
 it changed. Only once the vault is on (state/vault) and front matter is YAML.
 
-Exit codes: 0 done, 1 refused, 2 usage, 3 I/O.`
+doctor: links from one project's notes into another project's folder, or to a
+paired server's stub (_peers/<alias>/<slug>), that point at nothing: a project
+renamed or deleted, a server unpaired, a project no longer shared. Changes nothing.
+
+Exit codes: 0 done (doctor: nothing found), 1 refused (doctor: found something),
+2 usage, 3 I/O.`
 
 func init() {
 	commands["vault"] = runVault
@@ -41,15 +47,18 @@ type vaultFile struct {
 }
 
 // runVault implements tm vault (docs/SPEC.md §5.1): migrate --check
-// and render.
+// render and doctor.
 func runVault(e *Env, args []string) error {
 	if done, err := helpOr(e, args, vaultUsage); done {
 		return err
 	}
-	if args[0] == "render" {
+	switch args[0] {
+	case "render":
 		return vaultRender(e, args[1:])
-	}
-	if args[0] != "migrate" {
+	case "doctor":
+		return vaultDoctor(e, args[1:])
+	case "migrate":
+	default:
 		return usagef("%s", vaultUsage)
 	}
 	f := newFlags()

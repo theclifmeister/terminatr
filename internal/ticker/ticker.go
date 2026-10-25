@@ -153,6 +153,9 @@ type Options struct {
 	// Swept is called after each sweep of Run, which may have raised
 	// items and polled PRs (the mods' event bus looks again).
 	Swept func()
+	// Peers is the peer mirror's list of paired servers, for their
+	// stubs in the vault (vault.PeerNotes); nil renders none.
+	Peers func() []proto.PeerMirror
 }
 
 // Ticker is the event loop.
@@ -191,6 +194,9 @@ type Ticker struct {
 	// dailyStamp is what the daily notes were last rendered from
 	// (vault.DailyStamp); the sweep alone uses it.
 	dailyStamp string
+	// peersStamp is what the paired servers' stubs were last rendered
+	// from (renderPeers); the sweep alone uses it.
+	peersStamp string
 }
 
 // state is ticker.json.
@@ -496,6 +502,7 @@ func (t *Ticker) sweep() {
 		}
 		t.sweepProject(sum.Slug, cfg, sessions, now, prune, seen)
 	}
+	t.renderPeers(cfg, list)
 	t.slotFree(cfg, sessions, now)
 	t.renderDaily(now)
 	if prune {
