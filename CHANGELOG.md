@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.52.0](https://github.com/theclifmeister/terminatr/compare/v0.51.0...v0.52.0) (2026-10-25)
+
+
+### Features
+
+* **mdfile:** front matter writes YAML, with a one-time migration ([#777](https://github.com/theclifmeister/terminatr/issues/777)) ([a28622c](https://github.com/theclifmeister/terminatr/commit/a28622c7331979b48ac1c720fdd228847c106e00))
+* **vault:** daily notes from the journals ([#784](https://github.com/theclifmeister/terminatr/issues/784)) ([cc098c3](https://github.com/theclifmeister/terminatr/commit/cc098c3f19590b565f77bdfb135eed88be0cc559))
+* **vault:** design notes and canvases ([#783](https://github.com/theclifmeister/terminatr/issues/783)) ([bf4493a](https://github.com/theclifmeister/terminatr/commit/bf4493a130387849347235776773bb6a2835e634))
+* **vault:** from-obsidian items, read-only owned notes ([#787](https://github.com/theclifmeister/terminatr/issues/787)) ([d9891f5](https://github.com/theclifmeister/terminatr/commit/d9891f5399ae9a05e67aa89e58accd019fa9a047))
+* **vault:** Obsidian plugin, the NEEDS YOU pane ([#788](https://github.com/theclifmeister/terminatr/issues/788)) ([4a2e65b](https://github.com/theclifmeister/terminatr/commit/4a2e65bd8d23122562753748bb280a775c928114))
+* **vault:** paired servers' stubs and cross-project link checks ([#782](https://github.com/theclifmeister/terminatr/issues/782)) ([51ae692](https://github.com/theclifmeister/terminatr/commit/51ae692dffbf7ddd5e798fa6dffe95a5c7715d98))
+* **vault:** task and thread notes, tags, the vault guard ([#781](https://github.com/theclifmeister/terminatr/issues/781)) ([3679a52](https://github.com/theclifmeister/terminatr/commit/3679a52d19db4a8f8a3f0597dd24040e88ec8c5b))
+* **vault:** tm vault init, render, doctor, off ([#785](https://github.com/theclifmeister/terminatr/issues/785)) ([c44bf96](https://github.com/theclifmeister/terminatr/commit/c44bf96a712ce8cc13cdd4ddb5382373ad00832a))
+* **vault:** wikilinks in what tm writes ([#780](https://github.com/theclifmeister/terminatr/issues/780)) ([ea5e0af](https://github.com/theclifmeister/terminatr/commit/ea5e0afb7eb6e9244aeada36bdd0dcb13efd82c3))
+
+
+### Bug Fixes
+
+* **threads:** a report's PR line counts only for a PR of the thread's branch ([#779](https://github.com/theclifmeister/terminatr/issues/779)) ([446b4b7](https://github.com/theclifmeister/terminatr/commit/446b4b715971980767ce840df594460b6c7ef6bd))
+* **vault:** one path for every task note, archived or not ([#786](https://github.com/theclifmeister/terminatr/issues/786)) ([8d96134](https://github.com/theclifmeister/terminatr/commit/8d96134839413abc7f8e56013781ead8c10143d0))
+
 ## [0.51.0](https://github.com/theclifmeister/terminatr/compare/v0.50.0...v0.51.0) (2026-10-24)
 
 
