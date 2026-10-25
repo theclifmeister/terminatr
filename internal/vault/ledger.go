@@ -22,8 +22,8 @@ import (
 // derived note, by its path in the vault (<slug>/<rel>), as a SHA-256.
 // A note is written only when what tm renders differs from it, and a
 // note the ledger has that tm no longer renders (a task archived, a
-// thread gone) is removed. tm vault doctor (V6) will list notes whose
-// file differs from it: someone else's edit.
+// thread gone) is removed. tm vault doctor lists notes whose file
+// differs from it: someone else's edit.
 
 type ledger struct {
 	Files map[string]string `json:"files"`
@@ -37,7 +37,7 @@ func ledgerPath() (string, error) {
 	return filepath.Join(d, "state", "vault.json"), nil
 }
 
-// onPath is the mark that the derived notes are on: tm vault init (V6)
+// onPath is the mark that the derived notes are on: tm vault init
 // writes it and tm vault off removes it, as the human chose (docs/SPEC.md
 // §5.1, Vault: derived notes only for those who open Obsidian).
 func onPath() (string, error) {
@@ -84,13 +84,10 @@ func Render(p *project.Project) (written, removed int, err error) {
 		return 0, 0, err
 	}
 	defer unlock()
-	l := ledger{Files: map[string]string{}}
-	if b, err := os.ReadFile(file); err == nil {
-		json.Unmarshal(b, &l)
-		if l.Files == nil {
-			l.Files = map[string]string{}
-		}
+	if !On() {
+		return 0, 0, nil // tm vault off ran while the notes rendered
 	}
+	l := readLedger(file)
 	prefix := p.Slug + "/"
 	keep := map[string]bool{}
 	var errs []error
@@ -124,6 +121,7 @@ func Render(p *project.Project) (written, removed int, err error) {
 				errs = append(errs, err)
 				continue
 			}
+			os.Remove(mdfile.LockPath(path))
 		}
 		delete(l.Files, key)
 	}

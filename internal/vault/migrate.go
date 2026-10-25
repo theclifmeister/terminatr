@@ -1,6 +1,7 @@
 // Package vault makes the project folders a vault Obsidian reads
-// (docs/SPEC.md §5.1). For now it holds the one-time move of front
-// matter from TOML (+++) to YAML (---).
+// (docs/SPEC.md §5.1): the one-time move of front matter from TOML
+// (+++) to YAML (---), the derived notes, and tm vault's init, render,
+// doctor and off.
 package vault
 
 import (
@@ -180,7 +181,7 @@ func Migrate(now time.Time) (int, error) {
 	}
 	n := 0
 	if len(files) > 0 {
-		backup, err := writeBackup(filepath.Dir(mark), now, files)
+		backup, err := writeBackup(filepath.Dir(mark), "front-yaml", now, files)
 		if err != nil {
 			return 0, fmt.Errorf("backup: %w", err)
 		}
@@ -217,8 +218,9 @@ func Migrate(now time.Time) (int, error) {
 }
 
 // writeBackup writes files' current contents to a new gzipped tar in
-// state/migrate/, named <slug>/<rel> inside, and returns its path.
-func writeBackup(state string, now time.Time, files []File) (string, error) {
+// state/migrate/, <name>-<time>.tar.gz, named <slug>/<rel> inside, and
+// returns its path.
+func writeBackup(state, name string, now time.Time, files []File) (string, error) {
 	dir := filepath.Join(state, "migrate")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", err
@@ -245,7 +247,7 @@ func writeBackup(state string, now time.Time, files []File) (string, error) {
 	if err := zw.Close(); err != nil {
 		return "", err
 	}
-	path := filepath.Join(dir, "front-yaml-"+now.UTC().Format("20060102T150405Z")+".tar.gz")
+	path := filepath.Join(dir, name+"-"+now.UTC().Format("20060102T150405Z")+".tar.gz")
 	return path, fsx.WriteAtomic(path, buf.Bytes(), 0o600)
 }
 
