@@ -141,7 +141,7 @@ func TestKeymapRefuses(t *testing.T) {
 // and the hints show the new key.
 func TestKeymapRemaps(t *testing.T) {
 	if err := keymap(t, map[string][]string{
-		"details.toggle": {"Q"}, "session.adopt": {"G"}, "side.pin": {"F"}, "side.fold": {"left"}, "help.open": {"?", "L"},
+		"details.toggle": {"Q"}, "session.adopt": {"G"}, "side.pin": {"F"}, "side.fold": {"left"}, "help.open": {"?", "L"}, "place.last": {"'"},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -181,8 +181,8 @@ func TestKeymapRemaps(t *testing.T) {
 	if i := slices.IndexFunc(items, func(it menuItem) bool { return it.label == "details panel on / off" }); i < 0 || items[i].key != "Q" {
 		t.Errorf("the ≡ menu's details item: %+v", items)
 	}
-	if !strings.Contains(prefixHint(), " Q details") || !strings.Contains(pendingList(), " Q info") {
-		t.Errorf("the prefix hints don't say Q: %q, %q", prefixHint(), pendingList())
+	if !strings.Contains(prefixHint(), " ' last place") || !strings.Contains(pendingList(), " ' last place") {
+		t.Errorf("the prefix hints don't say ': %q, %q", prefixHint(), pendingList())
 	}
 	if c := (&client{dashboard: true}); !slices.ContainsFunc(c.sessionItems(), func(it aitem) bool { return it.key == "prefix+Q" }) {
 		t.Errorf("the session's ≡ menu lacks prefix+Q")
