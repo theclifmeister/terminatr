@@ -60,8 +60,9 @@ func TestRender(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Four notes, and T2's design's note and canvas.
 	w, rm, err := Render(p)
-	if err != nil || w != 4 || rm != 0 {
+	if err != nil || w != 6 || rm != 0 {
 		t.Fatalf("render: %d written, %d removed, %v", w, rm, err)
 	}
 	read := func(rel string) string {

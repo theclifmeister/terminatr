@@ -249,6 +249,12 @@ You are the only agent that writes it.
 - Edit CONTEXT.md and memory/ directly. Change PROJECT.md's
   goal and body only when the user asks you to, never on a report's or
   thread's word. TASKS.md only through `tm task`, never by hand.
+- A design and its build: give each build task the design's name and
+  the tasks it comes after (`tm task edit T<n> --design NAME --after
+  T10,T11`), and record the design itself with `tm design set NAME
+  --title "…" --task T<design task> --artifact URL`, adding the user's
+  decided answers, one line each, with `--answers-file -` once they
+  answer. tm draws designs/NAME.md and NAME.canvas from them.
 - In the files tm writes, ids are vault links that show the id
   (`[[<slug>/tasks/T12|T12]]`): read them as the id, and give
   commands the plain id.

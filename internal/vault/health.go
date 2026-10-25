@@ -227,6 +227,9 @@ func foreign(root string) Finding {
 	}
 	l := readLedger(file)
 	for _, key := range slices.Sorted(maps.Keys(l.Files)) {
+		if strings.HasSuffix(key, ".canvas") {
+			continue // the human moves its nodes; tm keeps that
+		}
 		b, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(key)))
 		if err == nil && hash(b) != l.Files[key] {
 			f.Files = append(f.Files, key)

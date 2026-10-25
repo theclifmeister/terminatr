@@ -11,21 +11,21 @@ import (
 // The syntax is Obsidian's (Bases, 1.9 and later): a view's groupBy
 // needs a direction, or Obsidian refuses the whole file.
 
-type ownedFile struct {
+type wholeFile struct {
 	Rel  string
 	data []byte
 }
 
-func ownedFiles() []ownedFile {
+func wholeFiles() []wholeFile {
 	var slugs []string
 	for _, p := range projects() {
 		slugs = append(slugs, p.Slug)
 	}
-	files := []ownedFile{{obsidianDir + "/snippets/tm.css", []byte(tmCSS)}}
+	files := []wholeFile{{obsidianDir + "/snippets/tm.css", []byte(tmCSS)}}
 	for _, b := range bases(slugs) {
-		files = append(files, ownedFile{tmDir + "/bases/" + b.name + ".base", []byte(b.text)})
+		files = append(files, wholeFile{tmDir + "/bases/" + b.name + ".base", []byte(b.text)})
 	}
-	return append(files, ownedFile{tmDir + "/Home.md", []byte(homeNote(slugs))})
+	return append(files, wholeFile{tmDir + "/Home.md", []byte(homeNote(slugs))})
 }
 
 const baseHeader = "# Written by tm (tm vault init, tm vault render): a change here is kept,\n# and tm stops updating this file. Save your own Base in _human/.\n"

@@ -192,6 +192,16 @@ func TestInit(t *testing.T) {
 	if err != nil || removed != 2 || On() {
 		t.Fatalf("off: %d removed, %v", removed, err)
 	}
+	// A render that waited for the ledger's lock writes nothing now, and
+	// does again once the mark is back.
+	if w, _, err := Render(p); err != nil || w != 0 {
+		t.Fatalf("render after off: %d, %v", w, err)
+	}
+	os.WriteFile(filepath.Join(dir, "state", "vault"), nil, 0o600)
+	if w, _, err := Render(p); err != nil || w != 2 {
+		t.Fatalf("render with the mark back: %d, %v", w, err)
+	}
+	Off(human)
 	for _, rel := range []string{"_tm", "demo/tasks/T1.md", "demo/tasks/.T1.md.lock"} {
 		if _, err := os.Lstat(filepath.Join(root, rel)); err == nil {
 			t.Errorf("%s left after off", rel)
@@ -308,5 +318,34 @@ func TestLinksInside(t *testing.T) {
 	}
 	if cross, _ := CrossLinks(); len(cross) != 0 {
 		t.Fatalf("cross: %+v", cross)
+	}
+}
+
+// TestOffKeepsCanvases (T720): off removes a design's note and a paired
+// server's stub with the other derived notes, and keeps a design's
+// canvas, which holds the human's nodes and places too.
+func TestOffKeepsCanvases(t *testing.T) {
+	dir, _ := yamlHome(t)
+	os.WriteFile(filepath.Join(dir, "state", "vault"), nil, 0o600)
+	root := filepath.Join(dir, "projects")
+	files := []string{"demo/designs/net.md", "demo/designs/net.canvas", "_peers/mini/cowork.md"}
+	l := ledger{Files: map[string]string{}}
+	for _, rel := range files {
+		os.MkdirAll(filepath.Dir(filepath.Join(root, rel)), 0o755)
+		os.WriteFile(filepath.Join(root, rel), []byte("x"), 0o644)
+		l.Files[rel] = hash([]byte("x"))
+	}
+	b, _ := json.Marshal(&l)
+	os.WriteFile(filepath.Join(dir, "state", "vault.json"), b, 0o600)
+	if n, err := Off(caller.Caller{Kind: caller.Human}); err != nil || n != 2 {
+		t.Fatalf("off: %d, %v", n, err)
+	}
+	for _, rel := range []string{"demo/designs/net.md", "_peers"} {
+		if _, err := os.Lstat(filepath.Join(root, rel)); err == nil {
+			t.Errorf("%s left", rel)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(root, "demo/designs/net.canvas")); err != nil {
+		t.Errorf("canvas removed: %v", err)
 	}
 }

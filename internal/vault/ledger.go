@@ -1,6 +1,7 @@
 package vault
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -27,6 +28,9 @@ import (
 
 type ledger struct {
 	Files map[string]string `json:"files"`
+	// Off: tm vault off removed the notes; a render that was waiting for
+	// the lock then writes nothing while the mark is gone.
+	Off bool `json:"off,omitempty"`
 }
 
 func ledgerPath() (string, error) {
@@ -84,10 +88,13 @@ func Render(p *project.Project) (written, removed int, err error) {
 		return 0, 0, err
 	}
 	defer unlock()
-	if !On() {
-		return 0, 0, nil // tm vault off ran while the notes rendered
-	}
 	l := readLedger(file)
+	if l.Off {
+		if !On() {
+			return 0, 0, nil // tm vault off ran while the notes rendered
+		}
+		l.Off = false
+	}
 	prefix := p.Slug + "/"
 	keep := map[string]bool{}
 	var errs []error
@@ -98,6 +105,20 @@ func Render(p *project.Project) (written, removed int, err error) {
 		path := p.Path(filepath.FromSlash(n.Rel))
 		if l.Files[key] == h {
 			if fi, err := os.Lstat(path); err == nil && fi.Mode().IsRegular() {
+				continue
+			}
+		}
+		if fi, err := os.Lstat(path); err == nil && fi.Mode().IsRegular() {
+			cur, err := os.ReadFile(path)
+			switch {
+			case err == nil && bytes.Equal(cur, n.Data):
+				// What tm would write is there already (a canvas the
+				// human changed only where tm keeps their changes).
+				l.Files[key] = h
+				continue
+			case n.Guard && l.Files[key] == "" && !ownedFile(cur):
+				// Someone else's file where tm would put this note.
+				delete(keep, key)
 				continue
 			}
 		}
@@ -130,6 +151,16 @@ func Render(p *project.Project) (written, removed int, err error) {
 		err = fsx.WriteAtomic(file, append(b, '\n'), 0o600)
 	}
 	return written, removed, errors.Join(append(errs, err)...)
+}
+
+// ownedFile reports whether data is a note tm wrote: its tm property
+// is owned.
+func ownedFile(data []byte) bool {
+	var f struct {
+		TM string `toml:"tm" yaml:"tm"`
+	}
+	_, err := mdfile.Decode(data, &f)
+	return err == nil && f.TM == "owned"
 }
 
 // writeNote replaces path with data under its lock, making its folder

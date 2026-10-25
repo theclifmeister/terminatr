@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"maps"
 	"os"
+	"path"
 	"path/filepath"
 	"reflect"
 	"slices"
@@ -205,7 +206,7 @@ func NewPlan() (*Plan, error) {
 			pl.Changes = append(pl.Changes, *c)
 		}
 	}
-	for _, f := range ownedFiles() {
+	for _, f := range wholeFiles() {
 		if c := pl.whole(f.Rel, f.data); c != nil {
 			pl.Changes = append(pl.Changes, *c)
 		}
@@ -493,7 +494,7 @@ func RenderShared() ([]Change, error) {
 		return nil, err
 	}
 	pl := &Plan{Root: root, state: readState(root)}
-	for _, f := range ownedFiles() {
+	for _, f := range wholeFiles() {
 		if c := pl.whole(f.Rel, f.data); c != nil {
 			pl.Changes = append(pl.Changes, *c)
 		}
@@ -524,7 +525,9 @@ func RenderShared() ([]Change, error) {
 
 // Off turns the derived notes off: removes the mark first (the ticker
 // stops), then, under the ledger's lock, every derived note the ledger
-// has, the ledger and _tm/. .obsidian/, _human/, YAML and links stay.
+// has (tasks', threads' and designs' notes, paired servers' stubs),
+// emptying the ledger and marking it off, and _tm/. Design canvases, .obsidian/, _human/, YAML and links
+// stay.
 // Each project is journaled (vault.off). It returns the notes removed.
 func Off(who caller.Caller) (removed int, err error) {
 	mark, err := onPath()
@@ -550,11 +553,10 @@ func Off(who caller.Caller) (removed int, err error) {
 		}
 		l := readLedger(file)
 		for _, key := range slices.Sorted(maps.Keys(l.Files)) {
-			slug, rel, ok := strings.Cut(key, "/")
-			if !ok || !project.ValidSlug(slug) || !derived(rel) {
-				continue
+			if !offRemoves(key) {
+				continue // a canvas: the human's nodes and places too
 			}
-			path := filepath.Join(root, slug, filepath.FromSlash(rel))
+			path := filepath.Join(root, filepath.FromSlash(key))
 			if err := os.Remove(path); err == nil {
 				removed++
 			} else if !errors.Is(err, fs.ErrNotExist) {
@@ -562,10 +564,21 @@ func Off(who caller.Caller) (removed int, err error) {
 			}
 			os.Remove(mdfile.LockPath(path))
 		}
-		if err := os.Remove(file); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		b, err := json.MarshalIndent(&ledger{Files: map[string]string{}, Off: true}, "", "  ")
+		if err == nil {
+			err = fsx.WriteAtomic(file, append(b, '\n'), 0o600)
+		}
+		if err != nil {
 			errs = append(errs, err)
 		}
 		unlock()
+	}
+	// A paired server's folder of stubs goes once empty.
+	if ents, err := os.ReadDir(filepath.Join(root, PeersDir)); err == nil {
+		for _, e := range ents {
+			os.Remove(filepath.Join(root, PeersDir, e.Name()))
+		}
+		os.Remove(filepath.Join(root, PeersDir))
 	}
 	// _tm is tm's alone; a link there is removed, never followed.
 	if err := os.RemoveAll(filepath.Join(root, tmDir)); err != nil {
@@ -590,6 +603,22 @@ func Off(who caller.Caller) (removed int, err error) {
 		}
 	}
 	return removed, errors.Join(errs...)
+}
+
+// offRemoves reports whether off removes the file of ledger key (its
+// path in the vault): a task's, thread's or design's note, or a paired
+// server's stub. A design's canvas stays: the human's nodes, cards and
+// places are on it too.
+func offRemoves(key string) bool {
+	if _, ok := peerStub(key); ok {
+		return true
+	}
+	slug, rel, ok := strings.Cut(key, "/")
+	if !ok || !project.ValidSlug(slug) {
+		return false
+	}
+	dir, name := path.Split(rel)
+	return derived(rel) || dir == "designs/" && strings.HasSuffix(name, ".md") && !strings.Contains(name, "/")
 }
 
 // readLedger reads the hash ledger at file; empty when it can't.

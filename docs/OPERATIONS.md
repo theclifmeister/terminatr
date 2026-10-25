@@ -664,7 +664,7 @@ Then open the folder in Obsidian (Open folder as vault). tm remembers what it wr
 
 tm's notes are tm's: an edit to a task or thread note is overwritten at the next change, and `TASKS.md` and the threads' files stay the source. Write your own notes in `_human/`.
 
-`tm vault render` renders the notes again (with `--project` one project's), for when something looks stale; the coordinator can run it for its own project. `tm vault off` removes the derived notes and `_tm/` and stops rendering them; `.obsidian/`, `_human/`, YAML and links stay.
+`tm vault render` renders the notes again (with `--project` one project's), for when something looks stale; the coordinator can run it for its own project. `tm vault off` removes the derived notes (tasks', threads', designs' and paired servers' stubs) and `_tm/` and stops rendering them; design canvases stay, since your own cards and placements are on them, and so do `.obsidian/`, `_human/`, YAML and links.
 
 `tm vault doctor` checks the vault and changes nothing; `tm doctor` shows the same under `vault` once the folder is a vault:
 - **Sync and Publish.** The vault holds other projects' messages, paired servers' stubs and every report; Obsidian Sync or Publish would send them off this machine. tm warns and leaves the choice to you (Settings → Core plugins);
