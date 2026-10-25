@@ -658,7 +658,7 @@ It lists what it changes and asks first (`--yes` skips the question, needed with
 - `_tm/bases/` (Tasks, Threads, Memory, Needs you, Inbox, Messages, each with a view per project) and `_tm/Home.md`: what needs you, the last two weeks' daily notes, and each project's board, context and memory;
 - `_human/`, your folder: Obsidian puts new notes there and tm never writes in it;
 - reports threads stored before tm guarded them (raw HTML, remote images, embeds, code blocks plugins run) are put through the guard once, so opening one fetches and runs nothing; the originals go to `~/.terminatr/state/migrate/report-guard-<time>.tar.gz`;
-- the derived notes: `tasks/T12.md` (archived ones in `tasks/archive/`) and `threads/t-0001/t-0001.md` in each project, and a daily note per day across all projects (`_tm/daily/2026-10-24.md`: what shipped, started, was decided and needs you), rendered by the server whenever their sources change. To keep tm's day in your own daily notes, embed `![[_tm/daily/{{date}}]]` in their template. They wait for front matter to be YAML (the server's first start with 0.52.0 or later).
+- the derived notes: `tasks/T12.md` (archived ones too, marked `archived: true`, so a link to a task resolves whether it is archived or not) and `threads/t-0001/t-0001.md` in each project, and a daily note per day across all projects (`_tm/daily/2026-10-24.md`: what shipped, started, was decided and needs you), rendered by the server whenever their sources change. To keep tm's day in your own daily notes, embed `![[_tm/daily/{{date}}]]` in their template. They wait for front matter to be YAML (the server's first start with 0.52.0 or later).
 
 Then open the folder in Obsidian (Open folder as vault). tm remembers what it wrote in `.obsidian/tm.json`: run `tm vault init` again after an update and it changes only what is still as it left it; a setting you changed or a Base you edited is kept, and listed. To get tm's Base back, delete yours and run `tm vault render`.
 
@@ -672,7 +672,7 @@ tm's notes are tm's: an edit to a task or thread note is overwritten at the next
 - community plugins that rewrite notes on their own (Linter, Update time on edit, Front matter modified date, Auto note mover, Filename heading sync): exclude the projects' folders in them, or turn them off;
 - tm's settings changed since `tm vault init`, and derived notes edited outside tm;
 - front matter that doesn't parse (tm can't read the file either: fix it by hand), files still in TOML, reports from before the guard;
-- links that point at nothing: inside a project, into another project (renamed or deleted), to a paired server's stub (unpaired, or no longer shared), or to a task that has been archived (its note moved to `tasks/archive/`).
+- links that point at nothing: inside a project, into another project (renamed or deleted), to a paired server's stub (unpaired, or no longer shared), or to a task's note in `tasks/archive/`, where an earlier tm put archived tasks' notes (it is in `tasks/` now; `tm vault render --days N` rewrites older daily notes that link there).
 
 It exits 1 for a broken link or a front matter that doesn't parse; warnings don't count. `--json` prints `checks` and `links` for scripts.
 

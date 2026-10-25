@@ -45,10 +45,10 @@ type designFront struct {
 	CSSClasses    []string `toml:"cssclasses" yaml:"cssclasses"`
 }
 
-// boardTask is a task with where it is: on the board or archived.
+// boardTask is a task on the board or archived; its note's path is the
+// same either way (TaskNote).
 type boardTask struct {
 	*tasks.Task
-	archived bool
 }
 
 // design is what a design's note and canvas come from.
@@ -88,9 +88,9 @@ func designNotes(p *project.Project, boards ...*tasks.Board) ([]Note, error) {
 		}
 	}
 	refs := map[string]*boardTask{}
-	for i, b := range boards {
+	for _, b := range boards {
 		for _, t := range b.Tasks {
-			bt := &boardTask{t, i > 0}
+			bt := &boardTask{t}
 			refs[t.Ref()] = bt
 			if t.Design != "" {
 				get(t.Design)
@@ -361,7 +361,7 @@ func layout(slug string, d *design) ([]node, []edge) {
 		col := d.depth[t.ID]
 		id := "tm-" + t.Ref()
 		nodes = append(nodes, node{
-			id: id, typ: "file", file: slug + "/" + TaskNote(t.Ref(), t.archived), color: statusColor(t.Status),
+			id: id, typ: "file", file: slug + "/" + TaskNote(t.Ref()), color: statusColor(t.Status),
 			x: firstW + gapX + float64(col*(taskW+gapX)), y: float64(rows[col] * (taskH + gapY)), w: taskW, h: taskH,
 		})
 		rows[col]++

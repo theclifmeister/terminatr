@@ -76,8 +76,8 @@ type threadFront struct {
 	CSSClasses []string  `toml:"cssclasses" yaml:"cssclasses"`
 }
 
-// Notes renders every derived note of p: tasks/T<n>.md for each task
-// on the board, tasks/archive/T<n>.md for each archived one,
+// Notes renders every derived note of p: tasks/T<n>.md for each task,
+// on the board or archived (front matter archived: true),
 // threads/<id>/<id>.md for each thread whose folder is there, and
 // designs/<name>.md and .canvas for each design (designNotes).
 func Notes(p *project.Project) ([]Note, error) {
@@ -123,19 +123,17 @@ func Notes(p *project.Project) ([]Note, error) {
 	return append(notes, ds...), err
 }
 
-// TaskNote is the path of task ref's note, live or archived.
-func TaskNote(ref string, archived bool) string {
-	if archived {
-		return "tasks/archive/" + ref + ".md"
-	}
-	return "tasks/" + ref + ".md"
-}
+// TaskNote is the path of task ref's note, live or archived: one path,
+// so a link to the task, [[<slug>/tasks/T12|T12]], resolves either way
+// and archiving or unarchiving it changes no link (T729).
+func TaskNote(ref string) string { return "tasks/" + ref + ".md" }
 
 // ThreadNote is the path of thread id's note.
 func ThreadNote(id string) string { return "threads/" + id + "/" + id + ".md" }
 
-// derived reports whether rel is where Notes puts a note: a task's, live
-// or archived, or a thread's.
+// derived reports whether rel is where Notes puts a note: a task's or a
+// thread's. tasks/archive/T<n>.md is where a tm before T729 put an
+// archived task's note: still tm's, so the ledger removes it.
 func derived(rel string) bool {
 	dir, name := path.Split(rel)
 	ref := strings.TrimSuffix(name, ".md")
@@ -187,7 +185,7 @@ func taskNote(slug string, t *tasks.Task, r *thread.Record, pr string, archived 
 		fmt.Fprintf(&b, "\n## Thread\n\n![[%s#Report]]\n", vaultlink.Target(slug, vaultlink.Thread, r.ID))
 	}
 	data, err := mdfile.Join(&f, []byte(b.String()))
-	return Note{Rel: TaskNote(t.Ref(), archived), Data: data}, err
+	return Note{Rel: TaskNote(t.Ref()), Data: data}, err
 }
 
 func threadNote(p *project.Project, r *thread.Record, pr string) (Note, error) {

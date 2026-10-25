@@ -143,6 +143,9 @@ func Render(p *project.Project) (written, removed int, err error) {
 				continue
 			}
 			os.Remove(mdfile.LockPath(path))
+			if strings.HasPrefix(rel, "tasks/archive/") {
+				os.Remove(filepath.Dir(path)) // a tm before T729's folder, once empty
+			}
 		}
 		delete(l.Files, key)
 	}
