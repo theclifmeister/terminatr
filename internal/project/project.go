@@ -318,10 +318,10 @@ func (p *Project) Owned() (dirs, files []string) {
 	for _, d := range []string{"threads", "inbox", "tasks", "journal", "messages", "uploads"} {
 		dirs = append(dirs, p.Path(d))
 	}
-	for _, f := range []string{"JOURNAL.md", "TASKS.md", questionsFile, "AGENTS.md", "CLAUDE.md"} {
+	for _, f := range []string{"JOURNAL.md", "TASKS.md", questionsFile, designsFile, "AGENTS.md", "CLAUDE.md"} {
 		files = append(files, p.Path(f))
 	}
-	for _, f := range []string{"JOURNAL.md", "TASKS.md", questionsFile, "PROJECT.md"} {
+	for _, f := range []string{"JOURNAL.md", "TASKS.md", questionsFile, designsFile, "PROJECT.md"} {
 		files = append(files, mdfile.LockPath(p.Path(f)))
 	}
 	return dirs, files

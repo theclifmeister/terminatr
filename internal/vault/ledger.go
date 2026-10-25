@@ -1,6 +1,7 @@
 package vault
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -104,6 +105,20 @@ func Render(p *project.Project) (written, removed int, err error) {
 				continue
 			}
 		}
+		if fi, err := os.Lstat(path); err == nil && fi.Mode().IsRegular() {
+			cur, err := os.ReadFile(path)
+			switch {
+			case err == nil && bytes.Equal(cur, n.Data):
+				// What tm would write is there already (a canvas the
+				// human changed only where tm keeps their changes).
+				l.Files[key] = h
+				continue
+			case n.Guard && l.Files[key] == "" && !ownedFile(cur):
+				// Someone else's file where tm would put this note.
+				delete(keep, key)
+				continue
+			}
+		}
 		if err := writeNote(path, n.Data, !strings.HasPrefix(n.Rel, "threads/")); err != nil {
 			errs = append(errs, err)
 			continue
@@ -132,6 +147,16 @@ func Render(p *project.Project) (written, removed int, err error) {
 		err = fsx.WriteAtomic(file, append(b, '\n'), 0o600)
 	}
 	return written, removed, errors.Join(append(errs, err)...)
+}
+
+// ownedFile reports whether data is a note tm wrote: its tm property
+// is owned.
+func ownedFile(data []byte) bool {
+	var f struct {
+		TM string `toml:"tm" yaml:"tm"`
+	}
+	_, err := mdfile.Decode(data, &f)
+	return err == nil && f.TM == "owned"
 }
 
 // writeNote replaces path with data under its lock, making its folder

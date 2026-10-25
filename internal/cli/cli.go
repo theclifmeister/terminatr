@@ -79,6 +79,7 @@ var commands = map[string]command{
 	"context": runContext,
 	"inbox":   runInbox,
 	"ask":     runAsk,
+	"design":  runDesign,
 	"clear":   runClear,
 	"library": runLibrary,
 	"memory":  runMemory,
@@ -160,6 +161,8 @@ func commandUsage(name string) string {
 		return contextUsage
 	case "done":
 		return `usage: tm done ["summary"] [--project <slug>] [--thread <id>]`
+	case "design":
+		return designUsage
 	case "doctor":
 		return doctorUsage
 	case "inbox":

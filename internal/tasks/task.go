@@ -228,6 +228,9 @@ func checkStep(s string) (string, error) {
 // designRE is a design's name, a file name in designs/.
 var designRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
 
+// ValidDesign reports whether s can name a design.
+func ValidDesign(s string) bool { return designRE.MatchString(s) }
+
 func checkDesign(s string) (string, error) {
 	s = strings.TrimSpace(s)
 	if s != "" && !designRE.MatchString(s) {
