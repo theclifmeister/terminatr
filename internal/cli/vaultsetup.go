@@ -2,21 +2,26 @@ package cli
 
 import (
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/vault"
+	"github.com/theclifmeister/terminatr/internal/version"
+	"github.com/theclifmeister/terminatr/obsidian"
 )
 
 // tm vault init and off (T720, docs/SPEC.md §5.1, Vault); render is in
 // vault.go.
 
-// vaultInit implements tm vault init [--yes]: the human's, since it turns
-// on files in every project and edits Obsidian's settings.
+// vaultInit implements tm vault init [--plugin] [--yes]: the human's,
+// since it turns on files in every project and edits Obsidian's
+// settings. --plugin also installs the Obsidian plugin (obsidian/),
+// bundled from the sources tm embeds.
 func vaultInit(e *Env, args []string) error {
 	f := newFlags()
-	yes := f.Bool("yes")
+	yes, plugin := f.Bool("yes"), f.Bool("plugin")
 	pos, err := f.Parse(args)
 	if isHelp(err) {
 		return err
@@ -30,6 +35,16 @@ func vaultInit(e *Env, args []string) error {
 	pl, err := vault.NewPlan()
 	if err != nil {
 		return err
+	}
+	if *plugin {
+		files, err := obsidian.Files(version.Version)
+		if err != nil {
+			return fmt.Errorf("the Obsidian plugin: %w", err)
+		}
+		exe, _ := os.Executable()
+		if err := pl.Plugin(files, exe); err != nil {
+			return err
+		}
 	}
 	fmt.Fprintf(e.Stdout, "tm vault init in %s:\n", pl.Root)
 	for _, c := range pl.Changes {
@@ -57,6 +72,9 @@ func vaultInit(e *Env, args []string) error {
 		fmt.Fprintf(e.Stdout, "vault on: %d derived notes written\n", n)
 	}
 	fmt.Fprintf(e.Stdout, "Open %s as a vault in Obsidian (Open folder as vault); tm vault doctor checks it.\n", pl.Root)
+	if *plugin {
+		fmt.Fprintln(e.Stdout, "The NEEDS YOU pane is in .obsidian/plugins/terminatr: turn it on in Obsidian (Settings › Community plugins › terminatr); tm turns on no plugin for you.")
+	}
 	return err
 }
 

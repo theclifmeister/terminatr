@@ -1,0 +1,14 @@
+/* terminatr's NEEDS YOU pane (docs/SPEC.md §5.1, Vault). */
+.tm-needs-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.tm-needs-title { font-weight: 600; }
+.tm-needs-error { color: var(--text-error); margin-bottom: 8px; }
+.tm-needs-note, .tm-needs-foot { color: var(--text-muted); font-size: var(--font-ui-smaller); margin: 6px 0; }
+.tm-need { border-top: 1px solid var(--background-modifier-border); padding: 8px 0; }
+.tm-need-heading { color: var(--text-muted); font-size: var(--font-ui-smaller); }
+.tm-need-summary { margin: 2px 0; }
+/* Other parties' words: plain text, in the warning colour. */
+.tm-data { color: var(--text-warning); font-size: var(--font-ui-small); white-space: pre-wrap; overflow-wrap: anywhere; }
+.tm-need-buttons { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.tm-option { display: block; margin: 4px 0; }
+.tm-option-desc { color: var(--text-muted); margin-left: 1.6em; font-size: var(--font-ui-smaller); }
+.tm-note, .tm-other { width: 100%; }

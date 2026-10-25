@@ -12,7 +12,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/vault"
 )
 
-const vaultUsage = `usage: tm vault init [--yes]
+const vaultUsage = `usage: tm vault init [--plugin] [--yes]
        tm vault render [--project <slug>] [--days N] [--json]
        tm vault doctor [--json]
        tm vault off [--yes]
@@ -27,6 +27,9 @@ writes _tm/ (the Bases and Home.md) and _human/, puts reports stored before the
 vault guard through it (originals kept in state/migrate/), turns the derived
 notes on (state/vault) and renders them. It lists what it changes and asks first
 (--yes without a terminal). A key or file you changed since tm wrote it is kept.
+--plugin also installs terminatr's Obsidian plugin in .obsidian/plugins/terminatr/:
+a NEEDS YOU pane whose buttons run your own tm commands (tm needs, tm task accept,
+tm ask answer, …); you turn it on in Obsidian's Community plugins.
 
 render (the human, a coordinator; not a thread): writes the derived notes now, as
 the ticker does when what they come from changes: the task and thread notes of

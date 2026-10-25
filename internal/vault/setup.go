@@ -391,6 +391,33 @@ func (pl *Plan) merge(name string, keys map[string]any, nested string, lists map
 	return c, nil
 }
 
+// PluginDir is where tm vault init --plugin puts terminatr's Obsidian
+// plugin (obsidian/ in the tm repo).
+const PluginDir = obsidianDir + "/plugins/terminatr"
+
+// Plugin adds the Obsidian plugin to the plan (tm vault init --plugin):
+// files, by name, written whole like the snippet, kept when the user
+// changed one since; and data.json, the plugin's own setting of where
+// tm is, only when there is none (the plugin keeps it after). tm turns
+// no community plugin on: the user does, in Obsidian.
+func (pl *Plan) Plugin(files map[string][]byte, tm string) error {
+	for _, name := range slices.Sorted(maps.Keys(files)) {
+		if c := pl.whole(PluginDir+"/"+name, files[name]); c != nil {
+			pl.Changes = append(pl.Changes, *c)
+		}
+	}
+	rel := PluginDir + "/data.json"
+	if _, err := os.Lstat(filepath.Join(pl.Root, filepath.FromSlash(rel))); tm == "" || !errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	b, err := json.MarshalIndent(map[string]string{"tmPath": tm}, "", "  ")
+	if err != nil {
+		return err
+	}
+	pl.Changes = append(pl.Changes, Change{Rel: rel, What: "new (where tm is)", data: append(b, '\n')})
+	return nil
+}
+
 // whole plans a file tm writes whole: written when missing or as tm
 // left it, kept when the user changed it since.
 func (pl *Plan) whole(rel string, data []byte) *Change {
