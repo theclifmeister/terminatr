@@ -199,12 +199,14 @@ views:
 	}
 }
 
-// homeNote is _tm/Home.md: what needs you, then each project's board,
-// threads and memory, as links and embedded Base views.
+// homeNote is _tm/Home.md: what needs you, the recent days, then each
+// project's board, context and memory, as links and embedded Base views.
 func homeNote(slugs []string) string {
 	var b strings.Builder
 	b.WriteString("---\ntm: \"owned\"\ncssclasses:\n  - \"tm-owned\"\n---\n# Home\n\n")
-	b.WriteString("## Needs you\n\n![[_tm/bases/Needs you.base]]\n\n## Projects\n\n")
+	b.WriteString("## Needs you\n\n![[_tm/bases/Needs you.base]]\n\n")
+	b.WriteString(recentDays)
+	b.WriteString("\n## Projects\n\n")
 	if len(slugs) == 0 {
 		b.WriteString("No project yet: `tm project new`.\n")
 	}
@@ -218,6 +220,23 @@ func homeNote(slugs []string) string {
 	b.WriteString("\nWritten by tm. Notes for tm go in _human/.\n")
 	return b.String()
 }
+
+// recentDays is Home.md's list of the last two weeks' daily notes
+// (DailyDir), newest first: a Base in a code block, so the note needs no
+// rewrite when a day begins.
+const recentDays = "## Days\n\n```base\n" + `filters:
+  and:
+    - file.inFolder("` + DailyDir + `")
+    - file.hasTag("day")
+views:
+  - type: table
+    name: Recent days
+    order: [file.name, shipped, started, needs_you]
+    sort:
+      - property: file.name
+        direction: DESC
+    limit: 14
+` + "```\n"
 
 // tmCSS is .obsidian/snippets/tm.css: the banners on what tm owns and
 // on other parties' words, and a data note's fenced body in the warning

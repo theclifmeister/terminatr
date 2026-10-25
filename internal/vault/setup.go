@@ -414,8 +414,9 @@ func (pl *Plan) whole(rel string, data []byte) *Change {
 // Init does what pl planned: guards the reports (originals packed into
 // state/migrate/report-guard-<time>.tar.gz first), writes the settings
 // and files, makes _human/, writes .obsidian/tm.json and the mark, and
-// renders every project's derived notes. Each project is journaled
-// (vault.init). It returns the derived notes written.
+// renders every project's derived notes and the daily notes of the last
+// TickerDays. Each project is journaled (vault.init). It returns the
+// notes written.
 func Init(pl *Plan, who caller.Caller, now time.Time) (written int, err error) {
 	var errs []error
 	if len(pl.Reports) > 0 {
@@ -454,6 +455,13 @@ func Init(pl *Plan, who caller.Caller, now time.Time) (written int, err error) {
 	}
 	if err := fsx.WriteAtomic(mark, []byte("vault on "+now.UTC().Format(time.RFC3339)+"\n"), 0o600); err != nil {
 		return 0, err
+	}
+	if On() {
+		n, err := RenderDaily(now, TickerDays)
+		written += n
+		if err != nil {
+			errs = append(errs, fmt.Errorf("daily notes: %w", err))
+		}
 	}
 	for _, p := range projects() {
 		if On() {

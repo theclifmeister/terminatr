@@ -9,7 +9,8 @@ import (
 	"github.com/theclifmeister/terminatr/internal/vault"
 )
 
-// tm vault init, render and off (T720, docs/SPEC.md §5.1, Vault).
+// tm vault init and off (T720, docs/SPEC.md §5.1, Vault); render is in
+// vault.go.
 
 // vaultInit implements tm vault init [--yes]: the human's, since it turns
 // on files in every project and edits Obsidian's settings.
@@ -57,76 +58,6 @@ func vaultInit(e *Env, args []string) error {
 	}
 	fmt.Fprintf(e.Stdout, "Open %s as a vault in Obsidian (Open folder as vault); tm vault doctor checks it.\n", pl.Root)
 	return err
-}
-
-// vaultRender implements tm vault render [--project P]: the repair, for
-// the human and a coordinator (its own project).
-func vaultRender(e *Env, args []string) error {
-	f := newFlags()
-	slug := f.String("project")
-	pos, err := f.Parse(args)
-	if isHelp(err) {
-		return err
-	}
-	if err != nil || len(pos) > 0 {
-		return usagef("%s", vaultUsage)
-	}
-	switch e.Caller.Kind {
-	case caller.Human:
-	case caller.Coordinator:
-		if *slug == "" {
-			*slug = e.Caller.Project
-		}
-		if *slug != e.Caller.Project {
-			return &project.Error{Code: "not-your-project", Msg: "a coordinator renders its own project's notes"}
-		}
-	default:
-		return &project.Error{Code: "refused", Msg: "the human and the coordinator render the vault"}
-	}
-	if !vault.On() {
-		return &project.Error{Code: "vault-off", Msg: "the derived notes are off (or front matter is still TOML): the human turns them on with tm vault init"}
-	}
-	var ps []*project.Project
-	if *slug != "" {
-		p, err := project.Open(*slug)
-		if err != nil {
-			return err
-		}
-		ps = append(ps, p)
-	} else {
-		list, err := project.List()
-		if err != nil {
-			return err
-		}
-		for _, s := range list {
-			if p, err := project.Open(s.Slug); err == nil && s.Error == "" {
-				ps = append(ps, p)
-			}
-		}
-	}
-	var failed error
-	for _, p := range ps {
-		w, r, err := vault.Render(p)
-		if err != nil {
-			fmt.Fprintf(e.Stderr, "tm vault render: %s: %v\n", p.Slug, err)
-			failed = &exitError{ExitRefused}
-		}
-		fmt.Fprintf(e.Stdout, "%s: %d notes written, %d removed\n", p.Slug, w, r)
-	}
-	if *slug == "" {
-		cs, err := vault.RenderShared()
-		if err != nil {
-			return err
-		}
-		for _, c := range cs {
-			if c.What != "" {
-				fmt.Fprintf(e.Stdout, "%s: %s\n", c.Rel, c.What)
-			} else {
-				fmt.Fprintf(e.Stdout, "%s: keeps %s\n", c.Rel, c.Kept)
-			}
-		}
-	}
-	return failed
 }
 
 // vaultOff implements tm vault off [--yes]: the human's.

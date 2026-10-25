@@ -105,8 +105,14 @@ func TestInit(t *testing.T) {
 		t.Fatalf("reports: %+v", pl.Reports)
 	}
 	n, err := Init(pl, human, time.Now())
-	if err != nil || n != 2 || !On() {
+	if err != nil || n != 3 || !On() { // the task's, the thread's and today's
 		t.Fatalf("init: %d notes, %v, on %v", n, err, On())
+	}
+	if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(DailyNote(time.Now().Format(time.DateOnly))))); err != nil {
+		t.Errorf("no daily note: %v", err)
+	}
+	if b, _ := os.ReadFile(filepath.Join(root, "_tm", "Home.md")); !strings.Contains(string(b), "```base\nfilters:\n  and:\n    - file.inFolder(\"_tm/daily\")") {
+		t.Errorf("Home.md has no days:\n%s", b)
 	}
 	app := readObj(t, filepath.Join(obs, "app.json"))
 	if app["foo"] != float64(1) || app["alwaysUpdateLinks"] != false || app["newLinkFormat"] != "absolute" || app["newFileFolderPath"] != "_human" {
@@ -223,7 +229,8 @@ func TestInit(t *testing.T) {
 // order and sort are lists, summaries name a summary per property; the
 // filters are a string or one and/or/not of them.
 func TestBasesParse(t *testing.T) {
-	for _, b := range bases([]string{"demo", "o'brien"}) {
+	home := strings.TrimSuffix(strings.SplitN(recentDays, "```base\n", 2)[1], "```\n")
+	for _, b := range append(bases([]string{"demo", "o'brien"}), base{"Home days", home}) {
 		var doc struct {
 			Filters  any               `yaml:"filters"`
 			Formulas map[string]string `yaml:"formulas"`
@@ -245,7 +252,7 @@ func TestBasesParse(t *testing.T) {
 			names[name] = true
 			for k, val := range v {
 				switch k {
-				case "type", "name":
+				case "type", "name", "limit":
 				case "filters":
 					checkFilter(t, b.name+"/"+name, val)
 				case "groupBy":
