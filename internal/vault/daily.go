@@ -214,7 +214,7 @@ func (r *replay) open(d *projectDay) {
 	}
 	sortRefs(d.review)
 	d.asks = slices.Sorted(mapKeys(r.asks))
-	sort.Slice(d.asks, func(i, j int) bool { return num(d.asks[i]) < num(d.asks[j]) })
+	sort.Slice(d.asks, func(i, j int) bool { return refNum(d.asks[i]) < refNum(d.asks[j]) })
 	for _, id := range slices.Sorted(mapKeys(r.held)) {
 		d.held = append(d.held, [2]string{id, r.held[id]})
 	}
@@ -233,14 +233,14 @@ func mapKeys[V any](m map[string]V) func(func(string) bool) {
 	}
 }
 
-// num is the number in an id such as T12 or Q3.
-func num(id string) int {
+// refNum is the number in an id such as T12 or Q3.
+func refNum(id string) int {
 	n, _ := strconv.Atoi(strings.TrimLeft(id, "TQ"))
 	return n
 }
 
 func sortRefs(s [][2]string) {
-	sort.SliceStable(s, func(i, j int) bool { return num(s[i][0]) < num(s[j][0]) })
+	sort.SliceStable(s, func(i, j int) bool { return refNum(s[i][0]) < refNum(s[j][0]) })
 }
 
 func appendOnce(s []string, v string) []string {
