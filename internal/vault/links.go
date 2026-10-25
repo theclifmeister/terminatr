@@ -18,7 +18,7 @@ import (
 // or to a paired server's stub, that points at nothing. A project
 // renamed or deleted leaves them (tm project rename rewrites only the
 // links it owns), and so does a server unpaired or a project no longer
-// shared. Links inside a project are V6's.
+// shared. Links checks the links inside each project too.
 
 // Broken is a link that resolves to no note.
 type Broken struct {
@@ -33,12 +33,18 @@ type Broken struct {
 }
 
 // maxNote is the largest note the check reads; a bigger file is no
-// note tm or a coordinator wrote.
-const maxNote = 1 << 20
+// note tm or a coordinator wrote (a busy board's TASKS.md is over 1 MB).
+const maxNote = 8 << 20
 
 // CrossLinks lists the broken cross-project links in every project's
 // notes and the paired servers' stubs, in order of file and line.
-func CrossLinks() ([]Broken, error) {
+func CrossLinks() ([]Broken, error) { return links(false) }
+
+// Links is CrossLinks with the links inside each project too (T720): a
+// vault-absolute link into its own folder that points at nothing.
+func Links() ([]Broken, error) { return links(true) }
+
+func links(inside bool) ([]Broken, error) {
 	root, err := home.ProjectsDir()
 	if err != nil {
 		return nil, err
@@ -65,24 +71,24 @@ func CrossLinks() ([]Broken, error) {
 			dirs = append(dirs, e.Name())
 		}
 	}
-	c := &checker{root: root, projects: projects, on: On()}
+	c := &checker{root: root, projects: projects, on: On(), inside: inside}
 	var out []Broken
 	for _, dir := range dirs {
 		filepath.WalkDir(filepath.Join(root, dir), func(p string, d fs.DirEntry, err error) error {
 			if err != nil {
 				return nil
 			}
+			rel, err := filepath.Rel(root, p)
+			if err != nil {
+				return nil
+			}
 			if d.IsDir() {
-				if strings.HasPrefix(d.Name(), ".") && p != filepath.Join(root, dir) {
+				if strings.HasPrefix(d.Name(), ".") && p != filepath.Join(root, dir) || Ignored(filepath.ToSlash(rel)+"/") {
 					return filepath.SkipDir
 				}
 				return nil
 			}
-			if !d.Type().IsRegular() || filepath.Ext(p) != ".md" {
-				return nil
-			}
-			rel, err := filepath.Rel(root, p)
-			if err != nil {
+			if !d.Type().IsRegular() || filepath.Ext(p) != ".md" || Ignored(filepath.ToSlash(rel)) {
 				return nil
 			}
 			out = append(out, c.file(filepath.ToSlash(rel), p, dir)...)
@@ -98,6 +104,8 @@ type checker struct {
 	// on: the derived notes are rendered, so a link to a task's or a
 	// thread's note has a file to find.
 	on bool
+	// inside: links into the note's own project are checked too.
+	inside bool
 }
 
 // file checks the links of the note at p, rel in the vault, in folder
@@ -116,7 +124,7 @@ func (c *checker) file(rel, p, own string) []Broken {
 		vaultlink.Each(l, func(target, _ string) {
 			target, _, _ = strings.Cut(strings.TrimSpace(target), "#")
 			first, _, ok := strings.Cut(target, "/")
-			if !ok || first == own {
+			if !ok || first == own && !c.inside {
 				return // a link in its own folder, or not vault-absolute
 			}
 			if why := c.why(first, target); why != "" {
@@ -151,6 +159,9 @@ func (c *checker) why(first, target string) string {
 	}
 	if c.exists(target) || !c.on && derivedTarget(target) {
 		return ""
+	}
+	if dir, ref := path.Split(target); dir == first+"/tasks/" && c.exists(dir+"archive/"+ref) {
+		return "task archived: its note is " + dir + "archive/" + ref
 	}
 	return "no such note in project " + first
 }

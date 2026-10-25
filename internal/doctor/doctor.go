@@ -3,8 +3,9 @@
 // sessions can reach the keychain), the agents' versions (the last tested
 // one as information, min_version as a warning), enabled Claude plugins known to be unsafe in
 // tm's sessions, the sandbox prerequisites, and leftovers of
-// threads (worktrees and merged branches nobody uses any more), and
-// settings in config.toml that tm no longer has.
+// threads (worktrees and merged branches nobody uses any more),
+// settings in config.toml that tm no longer has, and the Obsidian vault
+// (tm vault doctor's checks).
 //
 // Checks only look. Each problem that can be repaired carries a Fix,
 // which `tm doctor --fix` applies after the human confirms.
@@ -201,6 +202,7 @@ func Each(d Deps, emit func([]Check), waiting func(group string)) {
 	emit(Mods(d, live))
 	emit(Peers(d, live))
 	emit(Upkeep(d))
+	emit(Vault(d))
 	select {
 	case cs := <-hosts:
 		emit(cs)

@@ -890,12 +890,12 @@ func withLedger(fn func(files map[string]string) error) error {
 		return err
 	}
 	defer unlock()
-	l := ledger{Files: map[string]string{}}
-	if b, err := os.ReadFile(file); err == nil {
-		json.Unmarshal(b, &l)
-		if l.Files == nil {
-			l.Files = map[string]string{}
+	l := readLedger(file)
+	if l.Off {
+		if !On() {
+			return nil // tm vault off ran while the notes rendered
 		}
+		l.Off = false
 	}
 	ferr := fn(l.Files)
 	b, err := json.MarshalIndent(&l, "", "  ")
