@@ -11,7 +11,7 @@ import { existsSync } from "fs";
 import { homedir } from "os";
 import { delimiter, join } from "path";
 import { App, ItemView, Modal, Notice, Plugin, PluginSettingTab, Setting, WorkspaceLeaf, debounce } from "obsidian";
-import { LABELS, Need, NeedsList, Rows, command, consoleHint, heading, notePath, parseNeeds } from "./needs";
+import { LABELS, Need, NeedsList, Rows, buttons, command, consoleHint, heading, notePath, parseNeeds } from "./needs";
 
 const VIEW = "terminatr-needs";
 
@@ -196,7 +196,7 @@ class NeedsView extends ItemView {
 			data(el, need.file.name);
 		}
 		const bar = el.createDiv({ cls: "tm-need-buttons" });
-		for (const action of need.actions) {
+		for (const action of buttons(need)) {
 			const b = bar.createEl("button", { text: LABELS[action] ?? action });
 			if (action === "accept" || action === "approve") {
 				b.addClass("mod-cta");

@@ -42,7 +42,8 @@ func TestFiles(t *testing.T) {
 	}
 	// Never a setting, a pairing or a share: no command but the ones
 	// needs.ts builds, and no --approved-by-user.
-	for _, s := range []string{"approved-by-user", "config.toml", `"pair"`, `"share"`, "innerHTML", "MarkdownRenderer"} {
+	// Accepting a link is the console's too.
+	for _, s := range []string{"approved-by-user", "config.toml", `"pair"`, `"share"`, "innerHTML", "MarkdownRenderer", `"link", "accept"`} {
 		if strings.Contains(main, s) {
 			t.Errorf("main.js has %q", s)
 		}

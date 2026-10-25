@@ -2,7 +2,7 @@
 // runs TypeScript as is).
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { type Need, Rows, SCHEMA, STABLE_MS, command, notePath, parseNeeds } from "../src/needs.ts";
+import { type Need, Rows, SCHEMA, STABLE_MS, buttons, command, notePath, parseNeeds } from "../src/needs.ts";
 
 const review: Need = { kind: "task", project: "demo", id: "T7", status: "review", summary: "T7 is in review", title: "Ship it", actions: ["accept", "send-back"] };
 const question: Need = {
@@ -50,9 +50,16 @@ test("command runs only the actions tm lists, as the human's commands", () => {
 	const share: Need = { kind: "share-request", server: "mini", id: "S-1", summary: "", actions: ["decline", "console"] };
 	assert.deepEqual(command(share, "decline"), ["peer", "decline", "S-1"]);
 	assert.equal(command(share, "console"), null);
-	for (const a of ["accept", "decline"]) {
-		assert.deepEqual(command({ kind: "link-request", project: "demo", peer: "web", id: "R-4F2A-18", summary: "", actions: ["accept", "decline"] }, a), ["link", a, "R-4F2A-18", "--project", "demo"]);
-	}
+	// Accepting a link is the console's, like a file or a share; declining is the pane's too.
+	const link: Need = { kind: "link-request", project: "demo", peer: "web", id: "R-4F2A-18", summary: "", actions: ["accept", "decline"] };
+	assert.equal(command(link, "accept"), null);
+	assert.deepEqual(command(link, "decline"), ["link", "decline", "R-4F2A-18", "--project", "demo"]);
+});
+
+test("buttons leave a link request's accept to the console", () => {
+	assert.deepEqual(buttons({ kind: "link-request", project: "demo", id: "R-1", summary: "", actions: ["accept", "decline"] }), ["console", "decline"]);
+	assert.deepEqual(buttons({ kind: "share-request", server: "mini", id: "S-1", summary: "", actions: ["decline", "console"] }), ["decline", "console"]);
+	assert.deepEqual(buttons(review), ["accept", "send-back"]);
 });
 
 test("Rows: a click acts only on a row unchanged for 300 ms and as drawn", () => {

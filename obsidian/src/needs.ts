@@ -159,13 +159,31 @@ export interface Input {
 // either.
 const ID_RE = /^[A-Za-z0-9][A-Za-z0-9._@\/-]{0,127}$/;
 
+// CONSOLE_ONLY are the actions tm needs lists that the pane leaves to
+// the console, by "kind action": accepting a link is a consent step, as
+// accepting a file or a share is.
+const CONSOLE_ONLY = new Set(["link-request accept"]);
+
+// buttons are the pane's buttons for n: its actions, with those only the
+// console takes as one In the console button.
+export function buttons(n: Need): string[] {
+	const out: string[] = [];
+	for (const a of n.actions) {
+		const b = CONSOLE_ONLY.has(`${n.kind} ${a}`) ? "console" : a;
+		if (!out.includes(b)) {
+			out.push(b);
+		}
+	}
+	return out;
+}
+
 // command is the tm command the button for action runs on need n, as
 // argv after tm; null for an action that only the console takes or a
 // need it doesn't fit. Every one is a human-only tm command, the same
 // call the console makes; none passes --approved-by-user, changes a
 // setting, pairs or shares.
 export function command(n: Need, action: string, input: Input = {}): string[] | null {
-	if (!n.actions.includes(action)) {
+	if (!n.actions.includes(action) || CONSOLE_ONLY.has(`${n.kind} ${action}`)) {
 		return null;
 	}
 	const at = (args: string[]): string[] | null => {
@@ -214,8 +232,6 @@ export function command(n: Need, action: string, input: Input = {}): string[] | 
 			return at(["link", "approve", id]);
 		case "link-held drop":
 			return at(["link", "drop", id]);
-		case "link-request accept":
-			return at(["link", "accept", id]);
 		case "link-request decline":
 			return at(["link", "decline", id]);
 		case "link-paused resume":
@@ -265,6 +281,8 @@ export function consoleHint(n: Need): string {
 			return "Files offered are a consent setting: answer it in tm's Network view (N).";
 		case "share-request":
 			return "Accepting shares a project: do it in tm's Network view (N).";
+		case "link-request":
+			return "Accepting a link is a consent step: do it in tm's Network view (N).";
 		case "remote":
 			return "A paired server's need: open it in tm's Network view (N).";
 		case "session":
