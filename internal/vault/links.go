@@ -160,8 +160,8 @@ func (c *checker) why(first, target string) string {
 	if c.exists(target) || !c.on && derivedTarget(target) {
 		return ""
 	}
-	if dir, ref := path.Split(target); dir == first+"/tasks/" && c.exists(dir+"archive/"+ref) {
-		return "task archived: its note is " + dir + "archive/" + ref
+	if dir, ref := path.Split(target); dir == first+"/tasks/archive/" && c.exists(first+"/tasks/"+ref) {
+		return "task note moved: its note is " + first + "/tasks/" + ref
 	}
 	return "no such note in project " + first
 }

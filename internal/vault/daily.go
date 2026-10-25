@@ -488,7 +488,6 @@ type dayFront struct {
 type dayProject struct {
 	slug     string
 	titles   map[string]string // task → title
-	archived map[string]bool
 	journal  []entry
 }
 
@@ -497,7 +496,7 @@ func loadDayProject(p *project.Project) (*dayProject, error) {
 	if err != nil {
 		return nil, err
 	}
-	dp := &dayProject{slug: p.Slug, titles: map[string]string{}, archived: map[string]bool{}, journal: j}
+	dp := &dayProject{slug: p.Slug, titles: map[string]string{}, journal: j}
 	s := p.Tasks()
 	board, err := s.Load()
 	if err != nil {
@@ -510,7 +509,6 @@ func loadDayProject(p *project.Project) (*dayProject, error) {
 	for _, b := range []*tasks.Board{board, archive} {
 		for _, t := range b.Tasks {
 			dp.titles[t.Ref()] = t.Title
-			dp.archived[t.Ref()] = b == archive
 		}
 	}
 	return dp, nil
@@ -584,9 +582,6 @@ func zoneName(t time.Time) string {
 func (p *dayProject) task(ref string, title bool) string {
 	alias := ref
 	l := vaultlink.Link(p.slug, vaultlink.Task, ref, alias)
-	if p.archived[ref] && strings.HasPrefix(l, "[[") {
-		l = "[[" + p.slug + "/" + strings.TrimSuffix(TaskNote(ref, true), ".md") + "|" + ref + "]]"
-	}
 	if t := p.titles[ref]; title && t != "" {
 		l += " " + heading(t)
 	}

@@ -311,16 +311,17 @@ func checkFilter(t *testing.T, where string, f any) {
 }
 
 // TestLinksInside (T720): Links checks the links inside a project too,
-// and names an archived task's note; CrossLinks still doesn't.
+// and names a task's note where a link from before T729 looks for it in
+// tasks/archive; CrossLinks still doesn't.
 func TestLinksInside(t *testing.T) {
 	dir, p := yamlHome(t)
 	os.WriteFile(filepath.Join(dir, "state", "vault"), nil, 0o600)
 	os.MkdirAll(p.Path("memory"), 0o755)
-	os.MkdirAll(p.Path("tasks", "archive"), 0o755)
-	os.WriteFile(p.Path("tasks", "archive", "T5.md"), nil, 0o644)
-	os.WriteFile(p.Path("memory", "x.md"), []byte("[[demo/memory/gone|gone]] [[demo/tasks/T5|T5]] [[demo/PROJECT|demo]] [[bare]]\n"), 0o644)
+	os.MkdirAll(p.Path("tasks"), 0o755)
+	os.WriteFile(p.Path("tasks", "T5.md"), nil, 0o644)
+	os.WriteFile(p.Path("memory", "x.md"), []byte("[[demo/memory/gone|gone]] [[demo/tasks/archive/T5|T5]] [[demo/tasks/T5|T5]] [[demo/PROJECT|demo]] [[bare]]\n"), 0o644)
 	broken, err := Links()
-	if err != nil || len(broken) != 2 || broken[0].Why != "no such note in project demo" || broken[1].Why != "task archived: its note is demo/tasks/archive/T5" {
+	if err != nil || len(broken) != 2 || broken[0].Why != "no such note in project demo" || broken[1].Why != "task note moved: its note is demo/tasks/T5" {
 		t.Fatalf("%v %+v", err, broken)
 	}
 	if cross, _ := CrossLinks(); len(cross) != 0 {
