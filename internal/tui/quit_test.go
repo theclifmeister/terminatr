@@ -155,9 +155,9 @@ func TestAttachPrefixQuits(t *testing.T) {
 }
 
 // TestEveryPrefixCommandListed: every key that does something after the
-// prefix in a session is in the help, the ≡ menu, the status bar's list
-// after the prefix and the dashboard's footer after the prefix, so none
-// is hidden.
+// prefix in a session is in the help (prefix+?) and the ≡ menu, so none
+// is hidden; the status bar and the dashboard's footer after the prefix
+// list a few of them and ?, the same ones.
 func TestEveryPrefixCommandListed(t *testing.T) {
 	var cmds []string
 	for r := rune(0x21); r < 0x7f; r++ {
@@ -196,18 +196,19 @@ func TestEveryPrefixCommandListed(t *testing.T) {
 			// listed under the key it runs as.
 			continue
 		}
-		if !slices.Contains(hint, k) {
-			t.Errorf("prefix+%s isn't in the dashboard's footer after the prefix (prefixHint)", k)
-		}
 		if !slices.Contains(help, k) {
 			t.Errorf("prefix+%s isn't in the help (sessionKeys)", k)
 		}
 		if !slices.Contains(menu, k) {
 			t.Errorf("prefix+%s isn't in the ≡ menu (sessionMenu)", k)
 		}
-		if !slices.Contains(bar, k) {
-			t.Errorf("prefix+%s isn't in the status bar after the prefix", k)
-		}
+	}
+	slices.Sort(bar)
+	if want := []string{"+", ";", "?", "[", "]", "d", "prefix"}; !slices.Equal(slices.Compact(bar), want) {
+		t.Errorf("the status bar after the prefix lists %q, want %q", bar, want)
+	}
+	if want := "prefix ▸ d dashboard · ] [ projects · + new · ; last place · ? all keys"; strings.Join(hint, " ") != want {
+		t.Errorf("the dashboard's footer after the prefix %q, want %q", prefixHint(), want)
 	}
 	// No plain key quits the dashboard: quitting is prefix+q's.
 	for _, a := range actions {

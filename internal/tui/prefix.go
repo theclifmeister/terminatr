@@ -102,12 +102,12 @@ func prefixName(key string) string {
 	return c
 }
 
-// prefixHint is the footer while the prefix waits for its command, in
-// the bound keys (keybind.go).
+// prefixHint is the footer while the prefix waits for its command: a
+// few of them, in the bound keys (keybind.go), and ? for the rest; the
+// help lists every one (TestEveryPrefixCommandListed). The status bar
+// says the same after the prefix (pendingList).
 func prefixHint() string {
-	return "prefix ▸ d dashboard · q quit · " + boundKeys("A", "I", "T", ",", "N", "?", "+") + " popups · p " + boundKeys("]", "[") +
-		" projects · " + boundKeys("{", "}", "B") + " sidebar · " + boundKey("|") + " details · tab area · " + boundKey(";") +
-		" last place · r remote · " + boundKey("R") + " repaint · C save+clear · esc cancel"
+	return "prefix ▸ " + pendingList()
 }
 
 // prefixCommand runs the key typed after the prefix: a bound key runs as

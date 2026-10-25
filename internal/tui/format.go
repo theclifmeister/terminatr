@@ -234,12 +234,12 @@ func fit(s string, w int) string {
 // pendingHead starts the status bar's list of commands after the prefix.
 const pendingHead = " prefix ▸ "
 
-// pendingList are the prefix commands, as the status bar lists them
-// after the prefix, in the bound keys (keybind.go).
+// pendingList are the prefix commands the status bar and the dashboard's
+// footer list after the prefix, in the bound keys (keybind.go): a few,
+// and ? for every one.
 func pendingList() string {
-	return "d dashboard · q quit · " + boundKey("A") + " project · " + boundKey("+") + " new · p " + boundKeys("]", "[") +
-		" projects · " + boundKeys("I", "T", ",", "N", "?") + " · " + boundKeys("{", "}", "B") + " sidebar · " + boundKey("|") +
-		" info · tab sidebar keys · " + boundKey(";") + " last place · r remote control · " + boundKey("R") + " repaint · C save+clear"
+	return "d dashboard · " + boundKeys("]", "[") + " projects · " + boundKey("+") + " new · " + boundKey(";") +
+		" last place · " + boundKey("?") + " all keys"
 }
 
 // The status bar's notes while the sidebar's cursor previews a row:
@@ -270,7 +270,8 @@ func statusRight() string {
 // preview note, the info panel's keys) or a note in passing; then, when
 // room is left, the mods' status segments ($.ui.status.set). Right, the
 // global keys: prefix+? help · prefix+d dashboard · ≡ menu. After the
-// prefix it lists the commands instead, and "prefix again sends it".
+// prefix it lists a few commands instead (pendingList), and "prefix
+// again sends it" when that fits too.
 //
 // When the left side doesn't fit, the step and the rest give way first,
 // then the bar, then the preview note shrinks to "preview", then the
@@ -281,13 +282,14 @@ func statusRight() string {
 func statusBar(s proto.SessionInfo, ts *thread.Status, title string, pending bool, cols int, where string, mods *modCells) (string, []hint) {
 	if pending {
 		right := "prefix again sends it "
-		w := cols - ansi.StringWidth(right) - 1
 		left := th().Faint.Render(pendingHead) + keysLine(pendingList())
-		if w < 1 {
-			return fit(left, cols), nil
-		}
 		hs := hints(pendingList(), ansi.StringWidth(pendingHead))
-		hs = slices.DeleteFunc(hs, func(h hint) bool { return h.x1 > w-1 })
+		w := cols - ansi.StringWidth(right) - 1
+		if w < ansi.StringWidth(pendingHead+pendingList()) {
+			// The commands come first: the right end goes.
+			hs = slices.DeleteFunc(hs, func(h hint) bool { return h.x1 > cols-1 })
+			return fit(left, cols), hs
+		}
 		hs = append(hs, hint{w + 1, w + 1 + 21, "prefix"})
 		return fit(left, w) + reset + " " + th().Faint.Render(right), hs
 	}

@@ -880,8 +880,13 @@ func TestStatusLine(t *testing.T) {
 	}
 	// After the prefix: the commands.
 	got = ansi.Strip(statusLine(info, nil, true, 160, ""))
-	if !strings.Contains(got, `d dashboard · q quit · A project · + new · p ] [ projects · I T , N ? · { } B sidebar · | info · tab sidebar keys`) || !strings.Contains(got, `prefix again sends it`) {
+	if !strings.Contains(got, ` prefix ▸ d dashboard · ] [ projects · + new · ; last place · ? all keys `) || !strings.HasSuffix(got, `prefix again sends it `) {
 		t.Fatalf("pending status line %q", got)
+	}
+	// Too narrow for both: the commands stay, "prefix again sends it" goes.
+	got = ansi.Strip(statusLine(info, nil, true, 80, ""))
+	if !strings.Contains(got, `? all keys`) || strings.Contains(got, `again`) {
+		t.Fatalf("pending status line, 80 columns: %q", got)
 	}
 }
 

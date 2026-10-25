@@ -392,8 +392,8 @@ func TestHints(t *testing.T) {
 	line, hits = statusBar(info, nil, "", true, 300, "", nil)
 	plain = []rune(ansi.Strip(line))
 	for _, h := range hits {
-		if h.key == "tab" && !strings.HasPrefix(string(plain[h.x0:]), "tab sidebar keys") {
-			t.Errorf("z at %d: %q", h.x0, string(plain[h.x0:]))
+		if h.key == "?" && !strings.HasPrefix(string(plain[h.x0:]), "? all keys") {
+			t.Errorf("? at %d: %q", h.x0, string(plain[h.x0:]))
 		}
 	}
 	if hintAt(hits, len(plain)-3) != "prefix" {
