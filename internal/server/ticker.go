@@ -151,7 +151,7 @@ func (s *Server) startTicker(ctx context.Context) <-chan struct{} {
 		Host: tickerHost{s, ctx}, Log: s.log, State: ticker.StatePath(s.opts.Paths.Sessions),
 		Sweep: envDuration(envTickSweep), PRPoll: envDuration(envTickPR), Nudge: envDuration(envTickNudge),
 		Day: envDuration(envTickDay), RemoteEvery: envDuration(envTickRemote), RemoteGrace: envDuration(envTickGrace),
-		Swept: s.modEv.wake,
+		Swept: s.modEv.wake, Peers: func() []proto.PeerMirror { return s.mirror.List().Peers },
 	})
 	s.mu.Lock()
 	s.tick = t
