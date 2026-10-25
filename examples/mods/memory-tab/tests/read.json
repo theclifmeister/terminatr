@@ -1,10 +1,10 @@
 {
-  "name": "enter on a file reads it: headings in the head role, a link as its text, an emoji left for the core to draw as ?",
+  "name": "enter on a file reads it: headings in the head role, a link and a wikilink as their text, an emoji left for the core to draw as ?",
   "answers": [
     { "method": "memory.list", "params": { "slug": "demo" },
       "result": [{ "path": "CONTEXT.md", "title": "Context", "bytes": 80 }] },
     { "method": "memory.read", "params": { "slug": "demo", "path": "CONTEXT.md" },
-      "result": "# Context\n\nSee [the plan](docs/plan.md).\n\n## Where things stand\n\nShipping 🚀 soon.\n" }
+      "result": "# Context\n\nSee [the plan](docs/plan.md) and [[demo/memory/login|Login flow]].\n\n## Where things stand\n\nShipping 🚀 soon.\n" }
   ],
   "events": [
     { "name": "view.opened", "project": "demo",
@@ -20,7 +20,7 @@
         "params": { "view": "memory", "options": { "project": "demo" },
           "widget": { "kind": "stack", "children": [
             { "kind": "text", "lines": [[{ "text": "Context", "role": "accent" }, { "text": "  CONTEXT.md", "role": "faint" }]] },
-            { "kind": "text", "text": "See the plan." },
+            { "kind": "text", "text": "See the plan and Login flow." },
             { "kind": "text", "text": "Where things stand", "role": "head" },
             { "kind": "text", "text": "Shipping 🚀 soon." },
             { "kind": "keys", "keys": [{ "key": "enter", "label": "files" }, { "key": "n", "label": "next" }, { "key": "p", "label": "previous" }] }

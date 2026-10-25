@@ -212,7 +212,7 @@ function blocks(md: string): TM.Widget[] {
   };
   for (let line of md.replace(/\r\n?/g, "\n").split("\n")) {
     if (out.length >= MAX_BLOCKS || total > MAX_TREE) break;
-    line = line.replace(/\[([^\]]*)\]\([^)]*\)/g, "$1").replace(/\s+$/, "");
+    line = plainLinks(line.replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")).replace(/\s+$/, "");
     const h = /^#{1,6}\s+(.*)$/.exec(line);
     if (h) {
       if (!(first && line.startsWith("# "))) {
