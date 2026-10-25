@@ -224,6 +224,10 @@ func RenderPeers(notes []Note, keep []string) (written, removed int, err error) 
 				continue
 			}
 		}
+		if err := keepEdit(n.Rel, p, l.Files[n.Rel]); err != nil {
+			errs = append(errs, err)
+			continue
+		}
 		if err := writeNote(p, n.Data, true); err != nil {
 			errs = append(errs, err)
 			continue
@@ -238,6 +242,10 @@ func RenderPeers(notes []Note, keep []string) (written, removed int, err error) 
 			continue
 		}
 		p := filepath.Join(root, filepath.FromSlash(key))
+		if err := keepEdit(key, p, l.Files[key]); err != nil {
+			errs = append(errs, err)
+			continue
+		}
 		if err := os.Remove(p); err == nil {
 			removed++
 			os.Remove(mdfile.LockPath(p)) // only this, under the ledger's lock, writes stubs

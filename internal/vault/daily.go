@@ -914,6 +914,9 @@ func put(files map[string]string, key, path string, data []byte) (bool, error) {
 			return false, nil
 		}
 	}
+	if err := keepEdit(key, path, files[key]); err != nil {
+		return false, err
+	}
 	if err := writeNote(path, data, true); err != nil {
 		return false, err
 	}

@@ -164,6 +164,7 @@ func TestInit(t *testing.T) {
 	b, _ := json.Marshal(app)
 	os.WriteFile(filepath.Join(obs, "app.json"), b, 0o644)
 	os.WriteFile(filepath.Join(root, "_tm", "bases", "Tasks.base"), []byte("views: []\n"), 0o644)
+	os.Chmod(filepath.Join(root, "demo", "tasks", "T1.md"), 0o644) // tm wrote it read-only
 	os.WriteFile(filepath.Join(root, "demo", "tasks", "T1.md"), []byte("mine\n"), 0o644)
 	os.WriteFile(filepath.Join(obs, "community-plugins.json"), []byte(`["obsidian-linter", "dataview"]`), 0o644)
 	h = Health()

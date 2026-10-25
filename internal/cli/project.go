@@ -24,6 +24,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/thread"
 	"github.com/theclifmeister/terminatr/internal/ticker"
 	"github.com/theclifmeister/terminatr/internal/tui"
+	"github.com/theclifmeister/terminatr/internal/vault"
 	"github.com/theclifmeister/terminatr/internal/version"
 )
 
@@ -509,6 +510,7 @@ func liveWaits(slug string, sessions []proto.SessionInfo) (queues []project.Held
 }
 
 const inboxUsage = `usage: tm inbox list [--project <slug>] [--json]
+       tm inbox read <id> [--project <slug>]
        tm inbox done <id>... [--project <slug>]`
 
 func runInbox(e *Env, args []string) error {
@@ -548,6 +550,27 @@ func runInbox(e *Env, args []string) error {
 			fmt.Fprintf(e.Stdout, "%s  %s%s: %s\n", it.ID, shown(it.Kind), flag, shown(it.Summary))
 		}
 		return nil
+	case "read":
+		// A from-obsidian item's text, framed as data: the vault's
+		// folder is writable by any process of the user's.
+		if len(pos) != 1 {
+			return usagef("%s", inboxUsage)
+		}
+		items, err := p.Inbox()
+		if err != nil {
+			return err
+		}
+		for _, it := range items {
+			if it.ID == pos[0] {
+				text, err := vault.ItemText(it)
+				if err != nil {
+					return &project.Error{Code: "no-text", Msg: err.Error()}
+				}
+				_, err = fmt.Fprint(e.Stdout, text)
+				return err
+			}
+		}
+		return &project.Error{Code: "unknown-item", Msg: fmt.Sprintf("no open inbox item %s (tm inbox list)", shown(pos[0]))}
 	case "done":
 		if len(pos) == 0 {
 			return usagef("%s", inboxUsage)
