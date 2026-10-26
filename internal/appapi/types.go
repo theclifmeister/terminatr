@@ -21,7 +21,7 @@ import (
 
 // Params of the app's methods.
 type (
-	// ProjectsWatchParams: Detail asks for the dashboard's data of each
+	// ProjectsWatchParams are projects.watch's: Detail asks for the dashboard's data of each
 	// project besides the sidebar's.
 	ProjectsWatchParams struct {
 		Detail bool `json:"detail,omitempty"`
@@ -34,14 +34,14 @@ type (
 	NoticeParams struct {
 		ID string `json:"id"`
 	}
-	// PromptParams: Text for session ID, queued, or Mode "now" (steer
+	// PromptParams are session.prompt's: Text for session ID, queued, or Mode "now" (steer
 	// into the running turn) or "interrupt".
 	PromptParams struct {
 		ID   string `json:"id"`
 		Text string `json:"text"`
 		Mode string `json:"mode,omitempty"`
 	}
-	// AnswerParams: question Index (from 0) of session ID's open
+	// AnswerParams are session.answer's: question Index (from 0) of session ID's open
 	// question gets Answer. Question, when set, is the text that
 	// question must still ask, single-select, with Answer one of its
 	// options' labels: refused otherwise (a notification's button sets
@@ -52,7 +52,7 @@ type (
 		Answer   string `json:"answer"`
 		Question string `json:"question,omitempty"`
 	}
-	// ApproveParams: option Choice (from 1, default 1) of the
+	// ApproveParams are session.approve's: option Choice (from 1, default 1) of the
 	// permission dialog on session ID's screen. Check answers without
 	// sending. Escape: the user confirmed, in words naming the
 	// command, a command that runs outside the sandbox.
@@ -62,13 +62,13 @@ type (
 		Check  bool   `json:"check,omitempty"`
 		Escape bool   `json:"escape,omitempty"`
 	}
-	// KeysParams: Data written to session ID's terminal as if typed;
+	// KeysParams are session.keys's: Data written to session ID's terminal as if typed;
 	// text typed into a thread's prompt box takes it over.
 	KeysParams struct {
 		ID   string `json:"id"`
 		Data string `json:"data"`
 	}
-	// TaskAskParams: ask Project's coordinator to "delegate", "accept"
+	// TaskAskParams are task.ask's: ask Project's coordinator to "delegate", "accept"
 	// or "send-back" (with Note) Task ("T12").
 	TaskAskParams struct {
 		Project string `json:"project"`
@@ -399,13 +399,13 @@ type ApproveResult struct {
 	Sent     bool     `json:"sent,omitempty"`
 }
 
-// TaskAskResult: Asked false when an item already asks the coordinator
+// TaskAskResult is task.ask's: Asked false when an item already asks the coordinator
 // something of the task.
 type TaskAskResult struct {
 	Asked bool `json:"asked"`
 }
 
-// NoticeResult: OK for the first console to claim a notice, and for a
+// NoticeResult is notify.claim's and notify.dismiss's: OK for the first console to claim a notice, and for a
 // dismiss that took it out.
 type NoticeResult struct {
 	OK bool `json:"ok"`

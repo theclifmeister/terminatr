@@ -143,12 +143,8 @@ func homeOf[S, A any](of func(S) A) []string {
 	root := &node{leaf: -1}
 	s := full()
 	var leaves []*node
-	// The tree: walk with a node per field, numbering the leaves.
-	var build func(v reflect.Value, path string, n *node)
-	build = func(v reflect.Value, path string, n *node) {
-		walk(v, path, n, func(string, reflect.Value) {})
-	}
-	build(reflect.ValueOf(&s).Elem(), "", root)
+	// The tree: walk with a node per field, then number the leaves.
+	walk(reflect.ValueOf(&s).Elem(), "", root, func(string, reflect.Value) {})
 	var number func(n *node)
 	number = func(n *node) {
 		if n.leaf >= 0 {
@@ -306,8 +302,8 @@ func TestAllowlist(t *testing.T) {
 // overrides go, newlines stay; map keys too.
 func TestSafe(t *testing.T) {
 	in := Projects{Projects: []Project{{Slug: "a\x1b]52;c;x\x07b", Goal: "line 1\nline 2",
-		Checkouts: map[string]string{"/r‮": "behind\x1b[2J"},
-		Threads:   []Thread{{Status: &ThreadStatus{NeedsYou: "ok?​"}}}}}}
+		Checkouts: map[string]string{"/r\u202e": "behind\x1b[2J"},
+		Threads:   []Thread{{Status: &ThreadStatus{NeedsYou: "ok?\u200b"}}}}}}
 	out := safe(in).(Projects)
 	p := out.Projects[0]
 	if p.Slug != "a]52;c;xb" || p.Goal != "line 1\nline 2" || p.Checkouts["/r"] != "behind[2J" || p.Threads[0].Status.NeedsYou != "ok?" {
