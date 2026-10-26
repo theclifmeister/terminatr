@@ -297,8 +297,10 @@ jobs:
       - name: swift test
         run: make -C macos test
 
+      # Universal, as the release builds it (scripts/release/app.sh): one
+      # build per architecture, joined by lipo (macos/Makefile).
       - name: Terminatr.app
-        run: make -C macos app
+        run: make -C macos app ARCHS="arm64 x86_64"
 
   # The release build (.goreleaser.yaml) as a snapshot: every target
   # cross-compiled with zig cc and archived, and the Mac app unsigned
