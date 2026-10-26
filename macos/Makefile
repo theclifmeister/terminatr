@@ -54,7 +54,7 @@ else
 		$(SWIFT) build -c $(CONFIG) --arch $$a; \
 		mkdir -p $(ARCH_DIR)/$$a; \
 		cp "$$($(SWIFT) build -c $(CONFIG) --arch $$a --show-bin-path)/Terminatr" $(ARCH_DIR)/$$a/; \
-		lipo -verify_arch $$a $(ARCH_DIR)/$$a/Terminatr; \
+		lipo $(ARCH_DIR)/$$a/Terminatr -verify_arch $$a; \
 	done; \
 	lipo -create -output $(APP)/Contents/MacOS/Terminatr $(foreach a,$(ARCHS),$(ARCH_DIR)/$(a)/Terminatr); \
 	cp -R "$$($(SWIFT) build -c $(CONFIG) --arch $(lastword $(ARCHS)) --show-bin-path)"/*.bundle $(APP)/Contents/Resources/
