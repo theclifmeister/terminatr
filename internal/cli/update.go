@@ -17,7 +17,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/version"
 )
 
-const updateUsage = `usage: tm update [--check] [--yes] [--restart] [--force] [--json]`
+const updateUsage = `usage: tm update [--check] [--yes] [--restart] [--force] [--app] [--json]`
 
 func init() {
 	commands["update"] = func(e *Env, args []string) error { return updateCmd(e, args, defaultUpdater(e)) }
@@ -46,6 +46,14 @@ type updater struct {
 	// YAML reports whether the projects' front matter has moved to YAML
 	// (vault.Migrated); nil is no.
 	YAML func() bool
+	// FindApp finds the installed Mac app (update.FindApp); nil, off
+	// macOS, leaves the app alone.
+	FindApp func() (update.App, bool)
+	// AppPlaces are where a new app may go, the first writable one
+	// (update.AppPlaces).
+	AppPlaces []string
+	// VerifyApp checks a downloaded app (update.VerifyApp); nil skips.
+	VerifyApp update.Verifier
 }
 
 func defaultUpdater(e *Env) *updater {
@@ -55,7 +63,7 @@ func defaultUpdater(e *Env) *updater {
 		cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, e.Stdout, e.Stderr
 		return cmd
 	}
-	return &updater{
+	u := &updater{
 		Exe: exe, Channel: version.Channel, Version: version.Version, Team: version.TeamID,
 		GOOS: runtime.GOOS, GOARCH: runtime.GOARCH,
 		Client: update.NewClient(e.Getenv),
@@ -103,6 +111,13 @@ func defaultUpdater(e *Env) *updater {
 			return ExitOK
 		},
 	}
+	if runtime.GOOS == "darwin" {
+		home, _ := os.UserHomeDir()
+		u.AppPlaces = update.AppPlaces(home)
+		u.FindApp = func() (update.App, bool) { return update.FindApp(u.AppPlaces, update.CaskRooms) }
+		u.VerifyApp = update.VerifyApp
+	}
+	return u
 }
 
 // updateCheck is `tm update --check --json`.
@@ -112,6 +127,22 @@ type updateCheck struct {
 	Latest  string `json:"latest,omitempty"`
 	Newer   bool   `json:"newer"`
 	Error   string `json:"error,omitempty"`
+	// App is the Mac app, on macOS.
+	App *appCheck `json:"app,omitempty"`
+}
+
+// appCheck is the Mac app in `tm update --check --json`.
+type appCheck struct {
+	Installed bool `json:"installed"`
+	update.App
+	// Newer: the latest release's app is newer than the installed one
+	// (or its version is unknown).
+	Newer bool `json:"newer"`
+}
+
+// updateOpts are tm update's flags that act.
+type updateOpts struct {
+	yes, restart, force, app bool
 }
 
 // updateCmd implements `tm update` (docs/SPEC.md §10.1). It never stops
@@ -123,6 +154,7 @@ func updateCmd(e *Env, args []string, u *updater) error {
 	yes := f.Bool("yes")         // install without asking
 	restart := f.Bool("restart") // restart the server afterwards (agents are resumed)
 	force := f.Bool("force")     // install a release that can't read YAML front matter anyway
+	app := f.Bool("app")         // macOS: install the Mac app if it isn't installed
 	asJSON := f.Bool("json")     // with --check: print JSON
 	pos, err := f.Parse(args)
 	if isHelp(err) {
@@ -147,6 +179,13 @@ func updateCmd(e *Env, args []string, u *updater) error {
 		}
 	}
 	if *check {
+		if u.FindApp != nil {
+			a, ok := u.FindApp()
+			res.App = &appCheck{Installed: ok, App: a}
+			if ok && res.Latest != "" {
+				res.App.Newer = appNewer(res.Latest, a)
+			}
+		}
 		if *asJSON {
 			return e.printJSON(res)
 		}
@@ -160,9 +199,35 @@ func updateCmd(e *Env, args []string, u *updater) error {
 		default:
 			fmt.Fprintf(e.Stdout, "latest     %s: up to date\n", rel.Tag)
 		}
+		if a := res.App; a != nil {
+			switch {
+			case !a.Installed:
+				fmt.Fprintln(e.Stdout, "app        not installed: tm update --app installs it")
+			case a.Newer:
+				fmt.Fprintf(e.Stdout, "app        %s (%s, %s): %s\n", orUnknown(a.Version), a.Method, a.Path, appHint(a.App))
+			default:
+				fmt.Fprintf(e.Stdout, "app        %s (%s, %s): up to date\n", a.Version, a.Method, a.Path)
+			}
+		}
 		return nil
 	}
 
+	opts := updateOpts{yes: *yes, restart: *restart, force: *force, app: *app}
+	if err := u.updateTM(e, in, rel, res, opts); err != nil {
+		return err
+	}
+	// The Mac app follows tm: not for a source build (its app is built
+	// from source too), nor without a release to compare it with.
+	if u.FindApp == nil || in.Method == update.Dev || res.Error != "" {
+		return nil
+	}
+	return u.updateApp(e, in, rel, opts)
+}
+
+// updateTM updates tm itself.
+func (u *updater) updateTM(e *Env, in update.Install, rel update.Release, res updateCheck, opts updateOpts) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
 	switch in.Method {
 	case update.Dev:
 		fmt.Fprintf(e.Stderr, "tm update: this tm (%s) was built from source; update it with git pull && make\n", u.Version)
@@ -172,19 +237,19 @@ func updateCmd(e *Env, args []string, u *updater) error {
 			fmt.Fprintf(e.Stdout, "tm %s is the latest release\n", u.Version)
 			return nil
 		}
-		if err := u.yamlGuard(e, res.Latest, *force); err != nil {
+		if err := u.yamlGuard(e, res.Latest, opts.force); err != nil {
 			return err
 		}
 		// Homebrew owns its files: never replace them, let brew do it.
 		fmt.Fprintf(e.Stdout, "tm was installed with Homebrew (%s); it updates with:\n  %s\n", in.Path, in.Upgrade)
-		if !*yes && !(u.TTY && ask(e, "Run it now? [y/N] ")) {
+		if !opts.yes && !(u.TTY && ask(e, "Run it now? [y/N] ")) {
 			return nil
 		}
 		if err := u.Brew("upgrade", update.Formula); err != nil {
 			fmt.Fprintf(e.Stderr, "tm update: brew upgrade: %v\n", err)
 			return &exitError{ExitIO}
 		}
-		return u.afterUpdate(e, brewBin(in.Path), res.Latest, *restart)
+		return u.afterUpdate(e, brewBin(in.Path), res.Latest, opts.restart)
 	}
 
 	if res.Error != "" {
@@ -195,11 +260,11 @@ func updateCmd(e *Env, args []string, u *updater) error {
 		fmt.Fprintf(e.Stdout, "tm %s is the latest release\n", u.Version)
 		return nil
 	}
-	if err := u.yamlGuard(e, rel.Tag, *force); err != nil {
+	if err := u.yamlGuard(e, rel.Tag, opts.force); err != nil {
 		return err
 	}
 	fmt.Fprintf(e.Stdout, "tm %s is available (installed: %s at %s)\n", rel.Tag, u.Version, in.Path)
-	if !*yes {
+	if !opts.yes {
 		if !u.TTY {
 			fmt.Fprintln(e.Stderr, "tm update: not a terminal; pass --yes to install it")
 			return &exitError{ExitRefused}
@@ -239,7 +304,7 @@ func updateCmd(e *Env, args []string, u *updater) error {
 		return &exitError{ExitIO}
 	}
 	fmt.Fprintf(e.Stdout, "installed  %s at %s\n", rel.Tag, in.Path)
-	return u.afterUpdate(e, in.Path, rel.Tag, *restart)
+	return u.afterUpdate(e, in.Path, rel.Tag, opts.restart)
 }
 
 // yamlGuard refuses to install release tag when it can't read YAML front
