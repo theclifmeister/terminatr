@@ -293,6 +293,11 @@ func (w *transcriptWatch) mapLine(line []byte) []proto.TranscriptItem {
 	if over := len(w.units) - driftUnits; over > 0 {
 		w.units = w.units[over:]
 	}
+	for i := range l.Items {
+		if it := &l.Items[i]; it.Kind == proto.ItemPrompt {
+			it.From = w.s.sent.from(w.sess.ID(), it.Text)
+		}
+	}
 	return l.Items
 }
 

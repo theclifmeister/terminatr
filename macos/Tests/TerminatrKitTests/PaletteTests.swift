@@ -19,6 +19,9 @@ private let demo = AppAPI.Project(
               thread("t-2", task: AppAPI.Task(id: 6, ref: "T6", title: "Sidebar CI", status: "ready"), session: "s-2"),
               thread("t-3", session: "s-3"),
               thread("t-4")],
+    board: [AppAPI.Task(id: 6, ref: "T6", title: "Sidebar CI", status: "ready"),
+            AppAPI.Task(id: 7, ref: "T7", title: "Cache eviction", status: "ready"),
+            AppAPI.Task(id: 8, ref: "T8", title: "Dock badge", status: "open")],
     usage: noUsage)
 
 private let sessions = [
@@ -47,9 +50,10 @@ private func item(_ id: String) -> PaletteItem? {
     #expect(question.act == .answer(SessionRef(project: "demo", thread: "t-2")))
     // A blocked task: its coordinator is asked to delegate it.
     #expect(item("need:blocked:demo:T3")?.act == .delegate(project: "demo", task: "T3"))
-    // In review: accepting it is the dashboard's, not the palette's.
+    // In review: accept or send it back.
     let review = try #require(item("need:review:demo:T1"))
-    #expect(review.act == nil)
+    #expect(review.act == .review(project: "demo", task: "T1"))
+    #expect(review.act?.verb == "review")
     #expect(review.go == .project("demo"))
 }
 
@@ -68,14 +72,20 @@ private func item(_ id: String) -> PaletteItem? {
 }
 
 @Test func paletteTasks() {
-    // The tasks the app knows, once each: delegable ones (open, ready,
-    // blocked) say so.
+    // The tasks the app knows, once each (the board's on deck and in the
+    // backlog too): delegable ones (open, ready, blocked) say so, one in
+    // review is reviewed.
     let tasks = items().filter { $0.group == .tasks }
-    #expect(tasks.map(\.id) == ["task:demo/T3", "task:demo/T1", "task:demo/T5", "task:demo/T6"])
-    #expect(tasks.map { $0.act != nil } == [true, false, false, true])
-    #expect(tasks.last?.detail == "demo · on deck")
-    // A task with a thread goes to it.
+    #expect(tasks.map(\.id) == ["task:demo/T3", "task:demo/T1", "task:demo/T5", "task:demo/T6", "task:demo/T7", "task:demo/T8"])
+    #expect(tasks.map(\.act) == [.delegate(project: "demo", task: "T3"), .review(project: "demo", task: "T1"), nil,
+                                  .delegate(project: "demo", task: "T6"), .delegate(project: "demo", task: "T7"),
+                                  .delegate(project: "demo", task: "T8")])
+    #expect(tasks[3].detail == "demo · on deck")
+    #expect(tasks[5].detail == "demo · backlog")
+    // A task with a thread goes to it; one on the board to its project.
     #expect(tasks[2].go == .session(SessionRef(project: "demo", thread: "t-1")))
+    #expect(tasks[3].go == .session(SessionRef(project: "demo", thread: "t-2")))
+    #expect(tasks[4].go == .project("demo"))
 }
 
 @Test func paletteSearch() {
@@ -92,6 +102,6 @@ private func item(_ id: String) -> PaletteItem? {
     #expect(found.map(\.id).contains("task:demo/T6"))
     #expect(Palette.search(all, "t6").filter { $0.group == .tasks }.map(\.id) == ["task:demo/T6"])
     let cache = Palette.search(all, "cache").filter { $0.group == .tasks }
-    #expect(cache.map(\.id) == ["task:demo/T1"])
+    #expect(cache.map(\.id) == ["task:demo/T1", "task:demo/T7"])
     #expect(Palette.search(all, "zzz").isEmpty)
 }

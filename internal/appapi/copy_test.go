@@ -228,6 +228,7 @@ func TestCopies(t *testing.T) {
 		".Projects[].Own", ".Projects[].Badges",
 		// A task's archive flag: archived tasks aren't sent.
 		".Projects[].NeedsYou[].Archived", ".Projects[].Threads[].Task.Archived",
+		".Projects[].Board[].Archived",
 		// For resume, and resolved threads aren't sent.
 		".Projects[].Threads[].Record.AgentSID", ".Projects[].Threads[].Record.Prompted",
 		".Projects[].Threads[].Record.ResolvedAt",
@@ -267,6 +268,7 @@ func TestCopies(t *testing.T) {
 	check("session.approve", homeOf(approveResultOf), nil)
 	check("task.ask", homeOf(taskAskResultOf), nil)
 	check("project.open", homeOf(projectOpenOf), nil)
+	check("questions.open", homeOf(questionsOpenOf), nil)
 	check("notify", homeOf(noticeResultOf), nil)
 	// The window is the bridge's: it acks for the app.
 	check("pane.vt", homeOf(paneResultOf), append(sessionHome(".Session"), ".Window"))
@@ -360,7 +362,7 @@ func TestAllowlist(t *testing.T) {
 		proto.MethodSessionAnswer, proto.MethodSessionApprove, proto.MethodSessionKeys, proto.MethodSessionList,
 		proto.MethodSessionPrompt, proto.MethodSessionWatch, proto.MethodTaskAsk,
 		proto.MethodTaskAccept, proto.MethodTaskSendBack, proto.MethodTaskDelegate, proto.MethodProjectOpen,
-		proto.MethodPaneVT, proto.MethodTranscriptWatch, MethodPaneInput}
+		proto.MethodQuestionsOpen, proto.MethodPaneVT, proto.MethodTranscriptWatch, MethodPaneInput}
 	slices.Sort(want)
 	if got := MethodNames(); !slices.Equal(got, want) {
 		t.Errorf("methods %v, want %v", got, want)

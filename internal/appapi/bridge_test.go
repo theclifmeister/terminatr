@@ -277,6 +277,13 @@ func TestBridgeTaskActions(t *testing.T) {
 			t.Errorf("%s %+v: %v, want %s", bad.method, bad.params, err, bad.code)
 		}
 	}
+	if _, err := pr.AddQuestion(project.Question{Question: "Which?", Options: []project.QuestionOption{{Label: "A"}, {Label: "B"}}}); err != nil {
+		t.Fatal(err)
+	}
+	// No coordinator runs to put the question to the user.
+	if err := c.Call(proto.MethodQuestionsOpen, appapi.ProjectParams{Project: "web"}, nil); code(err) != proto.ErrRefused {
+		t.Errorf("questions.open without a coordinator: %v", err)
+	}
 	var opened appapi.ProjectOpen
 	if err := c.Call(proto.MethodProjectOpen, appapi.ProjectOpenParams{Project: "web", Cols: 120, Rows: 40}, &opened); err != nil || !opened.Started || opened.Session == "" {
 		t.Fatalf("project.open: %+v %v", opened, err)
@@ -285,9 +292,14 @@ func TestBridgeTaskActions(t *testing.T) {
 	if err := c.Call(proto.MethodProjectOpen, appapi.ProjectOpenParams{Project: "web"}, &again); err != nil || again.Started || again.Session != opened.Session {
 		t.Fatalf("project.open again: %+v %v", again, err)
 	}
+	var qs appapi.QuestionsOpen
+	if err := c.Call(proto.MethodQuestionsOpen, appapi.ProjectParams{Project: "web"}, &qs); err != nil || qs.Session != opened.Session || qs.Open != 1 {
+		t.Fatalf("questions.open: %+v %v", qs, err)
+	}
 	journal, _ := os.ReadFile(pr.Path("JOURNAL.md"))
 	for _, want := range []string{" human (app) task.accept.ask T2", " human (app) task.sendback.ask T3 the tests fail",
-		" human (app) task.delegate.ask T1", " human (app) coordinator.start " + opened.Session} {
+		" human (app) task.delegate.ask T1", " human (app) coordinator.start " + opened.Session,
+		" human (app) questions.open " + opened.Session + " 1 open"} {
 		if !strings.Contains(string(journal), want) {
 			t.Errorf("journal lacks %q:\n%s", want, journal)
 		}

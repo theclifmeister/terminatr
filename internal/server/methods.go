@@ -259,8 +259,8 @@ func init() {
 		proto.MethodSessionAdoptAsk: {gate: gateHuman, call: typed(func(s *Server, p proto.SessionAdoptAskParams, _ callCtx) (any, *proto.Error) {
 			return s.adoptAsk(p)
 		})},
-		proto.MethodQuestionsOpen: {gate: gateHuman, call: typed(func(s *Server, p proto.QuestionsOpenParams, _ callCtx) (any, *proto.Error) {
-			return s.openQuestions(p)
+		proto.MethodQuestionsOpen: {gate: gateHuman, call: typed(func(s *Server, p proto.QuestionsOpenParams, c callCtx) (any, *proto.Error) {
+			return s.openQuestionsBy(p, c)
 		})},
 		proto.MethodCoordinatorClear: {gate: gateHuman, call: typed(func(s *Server, p proto.CoordinatorClearParams, _ callCtx) (any, *proto.Error) {
 			return s.saveClear(p)

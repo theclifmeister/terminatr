@@ -25,6 +25,17 @@ func QuestionsPrompt(n int) string {
 		n, project.MaxDialogQuestions)
 }
 
+// openQuestionsBy is questions.open's: the Mac app's call is journaled,
+// as its other acts are.
+func (s *Server) openQuestionsBy(p proto.QuestionsOpenParams, cc callCtx) (any, *proto.Error) {
+	res, perr := s.openQuestions(p)
+	if perr == nil && cc.app {
+		r := res.(proto.QuestionsOpenResult)
+		s.journalIn(p.Project, cc.who(), "questions.open", r.Session, fmt.Sprintf("%d open", r.Open))
+	}
+	return res, perr
+}
+
 func (s *Server) openQuestions(p proto.QuestionsOpenParams) (any, *proto.Error) {
 	pr, err := project.Open(p.Project)
 	if err != nil {

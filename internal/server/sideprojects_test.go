@@ -191,12 +191,15 @@ func TestSideHubShared(t *testing.T) {
 }
 
 // TestSideHubDetail: the dashboard's look (detail) carries the
-// project's goal, counts, inbox, usage and its threads' report PR and
-// task; the sidebars' look carries none of it.
+// project's goal, counts, inbox, usage, its threads' report PR and
+// task, and the tasks on deck and in the backlog without their notes
+// and steps; the sidebars' look carries none of it.
 func TestSideHubDetail(t *testing.T) {
 	paths := testPaths(t)
 	p := newWatchProject(t)
-	if _, err := p.Tasks().Add(human, []tasks.NewTask{{Title: "Work", Status: "started", Steps: []string{"a"}}}); err != nil {
+	if _, err := p.Tasks().Add(human, []tasks.NewTask{{Title: "Work", Status: "started", Steps: []string{"a"}},
+		{Title: "Next", Status: "ready", Notes: "why", Steps: []string{"b"}}, {Title: "Later", Status: "open"},
+		{Title: "Look", Status: "review"}}); err != nil {
 		t.Fatal(err)
 	}
 	rec, err := thread.Create(p, thread.Record{Title: "work", Task: "T1"})
@@ -224,8 +227,12 @@ func TestSideHubDetail(t *testing.T) {
 		d.Threads[0].ReportPR != "https://github.com/o/r/pull/3" || d.Threads[0].Task == nil || len(d.Threads[0].Task.Steps) != 1 {
 		t.Errorf("detail: %+v", d)
 	}
+	if len(d.Board) != 2 || d.Board[0].Title != "Next" || d.Board[0].Status != tasks.Ready || d.Board[0].Notes != "" ||
+		d.Board[0].Steps != nil || d.Board[1].Title != "Later" || d.Board[1].Status != tasks.Open {
+		t.Errorf("detail's board: %+v", d.Board)
+	}
 	sp := look(false)
-	if sp.Counts != nil || sp.Items != nil || len(sp.Threads) != 1 || sp.Threads[0].ReportPR != "" || sp.Threads[0].Task != nil {
+	if sp.Counts != nil || sp.Items != nil || sp.Board != nil || len(sp.Threads) != 1 || sp.Threads[0].ReportPR != "" || sp.Threads[0].Task != nil {
 		t.Errorf("the sidebars' look has the dashboard's: %+v", sp)
 	}
 }
