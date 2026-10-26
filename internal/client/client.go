@@ -73,7 +73,9 @@ func Dial(p Paths, kind proto.Kind) (*Client, error) { return dial(p, kind, prot
 
 // DialAs is Dial for a control connection whose hello names its
 // console (proto.Hello.Client): proto.ClientApp for tm app bridge.
-func DialAs(p Paths, name string) (*Client, error) { return dial(p, proto.KindControl, proto.Protocol, name) }
+func DialAs(p Paths, name string) (*Client, error) {
+	return dial(p, proto.KindControl, proto.Protocol, name)
+}
 
 // dial is Dial claiming protocol, which Stop lowers to an older server's,
 // and naming the console name in its hello.
