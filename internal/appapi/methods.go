@@ -46,6 +46,10 @@ func init() {
 			}, paneAck),
 		input(MethodPaneInput, proto.MethodPaneVT, true, paneInput),
 
+		// The paired servers and the projects they share (the server's
+		// mirror): no session, pane or transcript of theirs.
+		unary(proto.MethodPeerList, false, noParams, peerListOf),
+
 		// The notice tray (mods' notifications): one console draws each.
 		unary(proto.MethodNotifyClaim, false, noticeParams, noticeResultOf),
 		unary(proto.MethodNotifyDismiss, false, noticeParams, noticeResultOf),

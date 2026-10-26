@@ -14,6 +14,18 @@ public struct SessionRef: Codable, Hashable, Sendable {
 
     public var isCoordinator: Bool { thread.isEmpty }
 
+    /// The window of session s: its project's coordinator or one of its
+    /// threads; nil for any other session (a plain shell, one outside
+    /// the projects).
+    public init?(_ s: AppAPI.Session) {
+        guard !s.project.isEmpty else { return nil }
+        switch s.role {
+        case "coordinator": self.init(project: s.project)
+        case "thread" where !s.thread.isEmpty: self.init(project: s.project, thread: s.thread)
+        default: return nil
+        }
+    }
+
     /// The session running it now, or nil: a thread's from its record,
     /// a coordinator's from the session list.
     public func session(in projects: [AppAPI.Project], sessions: [AppAPI.Session]) -> String? {

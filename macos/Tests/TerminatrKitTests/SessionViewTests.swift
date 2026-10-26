@@ -36,6 +36,12 @@ private func status(_ state: String, reason: String = "", agent: String = "claud
     #expect(SessionRef(project: "p", thread: "t-1").session(in: projects, sessions: sessions) == "s2")
     #expect(SessionRef(project: "p", thread: "t-2").session(in: projects, sessions: sessions) == nil)
     #expect(SessionRef(project: "r").session(in: projects, sessions: sessions) == nil)
+
+    // A need's session, back to its window.
+    #expect(SessionRef(sessions[1]) == SessionRef(project: "p"))
+    #expect(SessionRef(AppAPI.Session(id: "s2", role: "thread", project: "p", thread: "t-1", cols: 80, rows: 24, created: created, clients: 0)) == SessionRef(project: "p", thread: "t-1"))
+    #expect(SessionRef(AppAPI.Session(id: "s4", role: "shell", project: "p", cols: 80, rows: 24, created: created, clients: 0)) == nil)
+    #expect(SessionRef(AppAPI.Session(id: "s5", role: "coordinator", cols: 80, rows: 24, created: created, clients: 0)) == nil)
 }
 
 private func item(_ kind: String, _ text: String = "", tool: String = "", call: String = "", lines: Int = 0, error: Bool = false) -> AppAPI.TranscriptItem {

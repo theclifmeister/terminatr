@@ -33,7 +33,7 @@ app:
 	rm -rf $(APP)
 	mkdir -p $(APP)/Contents/MacOS $(APP)/Contents/Resources
 	cp "$$($(SWIFT) build -c $(CONFIG) --show-bin-path)/Terminatr" $(APP)/Contents/MacOS/
-	cp -R "$$($(SWIFT) build -c $(CONFIG) --show-bin-path)/Terminatr_Terminatr.bundle" $(APP)/Contents/Resources/
+	cp -R "$$($(SWIFT) build -c $(CONFIG) --show-bin-path)"/*.bundle $(APP)/Contents/Resources/
 	cp Info.plist $(APP)/Contents/Info.plist
 	plutil -lint $(APP)/Contents/Info.plist
 

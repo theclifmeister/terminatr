@@ -23,9 +23,14 @@ struct ProjectsView: View {
         .foregroundStyle(theme.ink)
         .background { Backdrop() }
         .onChange(of: model.projects.map(\.slug), initial: true) { _, slugs in
-            if selected.map({ !slugs.contains($0) }) ?? true {
+            if let f = model.focus, slugs.contains(f), selected == nil {
+                selected = f
+            } else if selected.map({ !slugs.contains($0) }) ?? true {
                 selected = slugs.first
             }
+        }
+        .onChange(of: model.focus) { _, f in
+            if let f { selected = f }
         }
     }
 
@@ -80,7 +85,7 @@ struct ProjectsView: View {
                     ForEach(project.threads, id: \.record.id) { t in
                         ThreadCard(thread: t)
                             .contentShape(RoundedRectangle(cornerRadius: 14))
-                            .onTapGesture { openWindow(id: "session", value: SessionRef(project: project.slug, thread: t.record.id)) }
+                            .onTapGesture { openWindow(id: TerminatrApp.sessionWindow, value: SessionRef(project: project.slug, thread: t.record.id)) }
                             .accessibilityAddTraits(.isButton)
                             .help("Open \(t.task?.ref ?? t.record.id)'s window")
                     }
@@ -101,7 +106,7 @@ struct ProjectsView: View {
                 Text(p.slug)
                     .font(theme.title(30, .heavy))
                 Spacer()
-                Button("Coordinator") { openWindow(id: "session", value: SessionRef(project: p.slug)) }
+                Button("Coordinator") { openWindow(id: TerminatrApp.sessionWindow, value: SessionRef(project: p.slug)) }
                     .buttonStyle(.borderedProminent)
                     .tint(theme.action)
                     .help("Open the coordinator's window")
