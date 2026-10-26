@@ -49,3 +49,32 @@ func fakeTM(_ body: String) throws -> URL {
         _ = try await Bridge.launch(tm: tm)
     }
 }
+
+/// An app opened from a tm session's pane: the bridge still runs as the
+/// human, not on the agent socket as that session.
+@Test func bridgeEnvironmentDropsTheSession() async throws {
+    let inherited = [
+        "PATH": "/usr/bin:/bin", "HOME": "/Users/u", "LANG": "en_GB.UTF-8",
+        "TERMINATR": "1", "TERMINATR_SESSION": "s-913", "TERMINATR_SOCKET": "/Users/u/.terminatr/run/tm.sock",
+        "TERMINATR_BIN": "/Users/u/.terminatr/run/bin/tm", "TERMINATR_ROLE": "coordinator",
+        "TERMINATR_PROJECT": "terminatr", "TERMINATR_THREAD": "t-0680",
+        "TERMINATR_HOME": "/Users/u/.terminatr",
+    ]
+    #expect(ProcessTransport.bridgeEnvironment(inherited) == [
+        "PATH": "/usr/bin:/bin", "HOME": "/Users/u", "LANG": "en_GB.UTF-8",
+        "TERMINATR_HOME": "/Users/u/.terminatr",
+    ])
+    #expect(ProcessTransport.bridgeEnvironment(["PATH": "/bin"]) == ["PATH": "/bin"])
+
+    // The child gets that environment, whichever the app passed.
+    let tm = try fakeTM("""
+    env | grep '^TERMINATR' | sort | tr '\\n' ' ' >&2
+    exit 3
+    """)
+    await #expect {
+        _ = try await Bridge.launch(tm: tm, environment: inherited)
+    } throws: { error in
+        let why = "\(error)"
+        return why.contains("TERMINATR_HOME=/Users/u/.terminatr") && !why.contains("TERMINATR_SOCKET") && !why.contains("TERMINATR_SESSION")
+    }
+}
