@@ -591,3 +591,129 @@ func approveResultOf(r proto.SessionApproveResult) ApproveResult {
 func taskAskResultOf(r proto.TaskAskResult) TaskAskResult { return TaskAskResult{Asked: r.Asked} }
 
 func noticeResultOf(r proto.NoticeResult) NoticeResult { return NoticeResult{OK: r.OK} }
+
+// PaneParams are pane.vt's: the session whose pane to stream.
+type PaneParams struct {
+	Session string `json:"session"`
+}
+
+// PaneResult is pane.vt's result: the session as it is.
+type PaneResult struct {
+	Session Session `json:"session"`
+}
+
+// PaneEvent is a pane.vt event's data: for pane.repaint a fresh
+// emulator of Cols × Rows fed Data; for pane.output Data, the PTY's
+// output in order; for pane.resize the pane's new size; for pane.closed
+// why it ended (Reason). Data is bytes, base64 in JSON, never cleaned:
+// it is VT for an emulator.
+type PaneEvent struct {
+	Cols   uint16 `json:"cols,omitempty"`
+	Rows   uint16 `json:"rows,omitempty"`
+	Data   []byte `json:"data,omitempty"`
+	Reason string `json:"reason,omitempty"`
+}
+
+// PaneInputParams are pane.input's: into pane.vt stream ID, Input (keys
+// already encoded for the pane's modes, base64 in JSON), a Size claim,
+// a Repaint request.
+type PaneInputParams struct {
+	ID      int64     `json:"id"`
+	Input   []byte    `json:"input,omitempty"`
+	Size    *PaneSize `json:"size,omitempty"`
+	Repaint bool      `json:"repaint,omitempty"`
+}
+
+// PaneSize is a pane's size in cells.
+type PaneSize struct {
+	Cols uint16 `json:"cols"`
+	Rows uint16 `json:"rows"`
+}
+
+// TranscriptParams are transcript.watch's: the session whose
+// conversation to stream.
+type TranscriptParams struct {
+	Session string `json:"session"`
+}
+
+// TranscriptResult is transcript.watch's result: the session, and
+// whether its items follow the transcript (Status).
+type TranscriptResult struct {
+	Session Session          `json:"session"`
+	Status  TranscriptStatus `json:"status"`
+}
+
+// TranscriptStatus says whether the items follow the transcript (State
+// "mapped", "waiting" or "unmapped": then show the terminal), why not,
+// and the agent and version the transcript names.
+type TranscriptStatus struct {
+	State   string `json:"state"`
+	Reason  string `json:"reason,omitempty"`
+	Agent   string `json:"agent,omitempty"`
+	Version string `json:"version,omitempty"`
+}
+
+// TranscriptEvent is a transcript.watch event's data: for
+// transcript.reset the conversation's last Items (Skipped earlier ones
+// left out), for transcript.items the new ones, for transcript.status
+// the new Status, for transcript.closed why it ended (Reason).
+type TranscriptEvent struct {
+	Items   []TranscriptItem  `json:"items,omitempty"`
+	Skipped int               `json:"skipped,omitempty"`
+	Status  *TranscriptStatus `json:"status,omitempty"`
+	Reason  string            `json:"reason,omitempty"`
+}
+
+// TranscriptItem is one item of a conversation: Kind "prompt", "text",
+// "tool", "result", "note" or "todos".
+type TranscriptItem struct {
+	Kind      string           `json:"kind"`
+	Text      string           `json:"text,omitempty"`
+	Truncated bool             `json:"truncated,omitempty"`
+	Tool      string           `json:"tool,omitempty"`
+	Call      string           `json:"call,omitempty"`
+	Error     bool             `json:"error,omitempty"`
+	Lines     int              `json:"lines,omitempty"`
+	Todos     []TranscriptTodo `json:"todos,omitempty"`
+}
+
+// TranscriptTodo is one entry of a todos item.
+type TranscriptTodo struct {
+	Text   string `json:"text"`
+	Status string `json:"status"`
+}
+
+// paneResultOf is r as the app sees it; the window is the bridge's,
+// which acks for the app.
+func paneResultOf(r proto.PaneVTResult) PaneResult { return PaneResult{Session: sessionOf(r.Session)} }
+
+func paneEventOf(ev proto.PaneVTEvent) PaneEvent {
+	return PaneEvent{Cols: ev.Cols, Rows: ev.Rows, Data: ev.Data, Reason: ev.Reason}
+}
+
+// transcriptResultOf is r as the app sees it; the window is the
+// bridge's.
+func transcriptResultOf(r proto.TranscriptWatchResult) TranscriptResult {
+	return TranscriptResult{Session: sessionOf(r.Session), Status: transcriptStatusOf(r.Status)}
+}
+
+func transcriptStatusOf(s proto.TranscriptStatus) TranscriptStatus {
+	return TranscriptStatus{State: s.State, Reason: s.Reason, Agent: s.Agent, Version: s.Version}
+}
+
+func transcriptEventOf(ev proto.TranscriptEvent) TranscriptEvent {
+	out := TranscriptEvent{Skipped: ev.Skipped, Reason: ev.Reason}
+	for _, it := range ev.Items {
+		ti := TranscriptItem{Kind: it.Kind, Text: it.Text, Truncated: it.Truncated, Tool: it.Tool, Call: it.Call,
+			Error: it.Error, Lines: it.Lines}
+		for _, t := range it.Todos {
+			ti.Todos = append(ti.Todos, TranscriptTodo{Text: t.Text, Status: t.Status})
+		}
+		out.Items = append(out.Items, ti)
+	}
+	if ev.Status != nil {
+		st := transcriptStatusOf(*ev.Status)
+		out.Status = &st
+	}
+	return out
+}

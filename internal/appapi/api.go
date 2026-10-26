@@ -118,29 +118,39 @@ type Hello struct {
 }
 
 // Server is the server the bridge reached: its version, protocol and
-// pid, and whether the bridge started it (through the launchd job).
+// pid, whether the bridge started it (through the launchd job), and its
+// capabilities (proto.CapPaneVT, proto.CapTranscript): a method that
+// needs one the server lacks answers unknown-method from it.
 type Server struct {
-	Version  string `json:"version"`
-	Protocol int    `json:"protocol"`
-	PID      int    `json:"pid,omitempty"`
-	Started  bool   `json:"started,omitempty"`
+	Version  string   `json:"version"`
+	Protocol int      `json:"protocol"`
+	PID      int      `json:"pid,omitempty"`
+	Started  bool     `json:"started,omitempty"`
+	Caps     []string `json:"caps"`
 }
 
-// Method is one method of the app API: its name (the control method's),
-// whether it acts as the human, whether it streams, and its app types:
-// Params (nil for none), Result, and for a stream its events' Event name
-// and Data.
+// Method is one method of the app API: its name (the control method's,
+// or the bridge's own for a stream's input), whether it acts as the
+// human, whether it streams, and its app types: Params (nil for none),
+// Result, and for a stream its events' names and their Data. Target,
+// for a stream's input (pane.input), is the stream method whose open
+// stream (params' id) takes it.
 type Method struct {
 	Name   string
 	Write  bool
 	Stream bool
-	Event  string
+	Events []string
+	Target string
 	Params reflect.Type
 	Result reflect.Type
 	Data   reflect.Type
 	// toServer decodes the app's params and copies them into the
-	// server's; result and event copy the server's answer and events.
+	// server's; result and event copy the server's answer and events,
+	// event also the line that acks one (nil for none); toStream
+	// decodes a stream's input into its stream's id and the line for
+	// the server.
 	toServer func(json.RawMessage) (any, error)
 	result   func(json.RawMessage) (any, error)
-	event    func(json.RawMessage) (data any, keep bool, err error)
+	event    func(json.RawMessage) (name string, data any, keep bool, ack any, err error)
+	toStream func(json.RawMessage) (int64, any, error)
 }

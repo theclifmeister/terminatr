@@ -41,7 +41,7 @@ type Options struct {
 // error that kept it from reaching the server, after a Hello saying so,
 // or what broke in or out.
 func Serve(in io.Reader, out io.Writer, o Options) error {
-	b := &bridge{o: o, w: json.NewEncoder(out), open: map[int64]bool{}, streams: map[int64]context.CancelFunc{},
+	b := &bridge{o: o, w: json.NewEncoder(out), open: map[int64]bool{}, streams: map[int64]*openStream{},
 		idle: make(chan *client.Client, idleConns)}
 	c, err := client.ConnectAs(o.Paths, o.Autostart, proto.ClientApp)
 	hello := &Hello{AppAPI: Version, TM: version.Version, Build: version.BuildID(), Capabilities: Capabilities, Methods: MethodNames()}
@@ -50,7 +50,8 @@ func Serve(in io.Reader, out io.Writer, o Options) error {
 		b.write(Out{Hello: hello})
 		return err
 	}
-	hello.Server = &Server{Version: c.Server.Version, Protocol: c.Server.Protocol, PID: c.Server.PID, Started: c.Started}
+	hello.Server = &Server{Version: c.Server.Version, Protocol: c.Server.Protocol, PID: c.Server.PID, Started: c.Started,
+		Caps: append([]string{}, c.Server.Caps...)}
 	b.idle <- c
 	if err := b.write(Out{Hello: hello}); err != nil {
 		c.Close()
@@ -80,12 +81,32 @@ type bridge struct {
 
 	mu sync.Mutex
 	// open are the requests not yet answered, streams included;
-	// streams cancel each open stream.
+	// streams are the open streams.
 	open    map[int64]bool
-	streams map[int64]context.CancelFunc
+	streams map[int64]*openStream
 	wg      sync.WaitGroup
 	// idle are control connections free for a call.
 	idle chan *client.Client
+}
+
+// openStream is a stream the app opened: its method, what cancels it,
+// and once it is answered its connection, which the stream's input
+// and the bridge's acks are written to, a line at a time.
+type openStream struct {
+	method string
+	cancel context.CancelFunc
+	wm     sync.Mutex
+	c      *client.Client
+}
+
+// send writes line to the stream's server connection.
+func (s *openStream) send(line any) error {
+	s.wm.Lock()
+	defer s.wm.Unlock()
+	if s.c == nil {
+		return fmt.Errorf("the stream isn't answered yet")
+	}
+	return s.c.WriteLine(line)
 }
 
 // write writes one line; lines never interleave.
@@ -143,10 +164,10 @@ func (b *bridge) handle(req Request) {
 			return
 		}
 		b.mu.Lock()
-		cancel := b.streams[p.ID]
+		st := b.streams[p.ID]
 		b.mu.Unlock()
-		if cancel != nil {
-			cancel()
+		if st != nil {
+			st.cancel()
 		}
 		b.write(Out{ID: req.ID, Result: json.RawMessage("{}")})
 		return
@@ -154,6 +175,10 @@ func (b *bridge) handle(req Request) {
 	m, ok := Lookup(req.Method)
 	if !ok {
 		b.fail(req.ID, ErrUnknownMethod, "%s is not in the app API", req.Method)
+		return
+	}
+	if m.Target != "" {
+		b.streamInput(req, m)
 		return
 	}
 	params, err := m.toServer(req.Params)
@@ -174,28 +199,53 @@ func (b *bridge) handle(req Request) {
 	}
 	b.open[req.ID] = true
 	var ctx context.Context
+	var st *openStream
 	if m.Stream {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithCancel(context.Background())
-		b.streams[req.ID] = cancel
+		st = &openStream{method: m.Name, cancel: cancel}
+		b.streams[req.ID] = st
 	}
 	b.mu.Unlock()
 	b.wg.Add(1)
 	go func() {
 		defer b.wg.Done()
 		if m.Stream {
-			b.stream(ctx, req.ID, m, params)
+			b.stream(ctx, req.ID, m, params, st)
 		} else {
 			b.call(req.ID, m, params)
 		}
 		b.mu.Lock()
 		delete(b.open, req.ID)
-		if cancel := b.streams[req.ID]; cancel != nil {
-			cancel()
+		if st := b.streams[req.ID]; st != nil {
+			st.cancel()
 			delete(b.streams, req.ID)
 		}
 		b.mu.Unlock()
 	}()
+}
+
+// streamInput answers request req of input method m (pane.input): its
+// line goes to the open stream its params name, which must be m's
+// target's.
+func (b *bridge) streamInput(req Request, m Method) {
+	id, line, err := m.toStream(req.Params)
+	if err != nil {
+		b.fail(req.ID, ErrBadParams, "%s: %v", req.Method, err)
+		return
+	}
+	b.mu.Lock()
+	st := b.streams[id]
+	b.mu.Unlock()
+	if st == nil || st.method != m.Target {
+		b.fail(req.ID, ErrBadParams, "%s: no open %s stream %d", req.Method, m.Target, id)
+		return
+	}
+	if err := st.send(line); err != nil {
+		b.fail(req.ID, ErrServer, "%s: %v", req.Method, err)
+		return
+	}
+	b.write(Out{ID: req.ID, Result: json.RawMessage("{}")})
 }
 
 // conn is a control connection for a call: an idle one, or a new one
@@ -268,8 +318,10 @@ func (b *bridge) answer(id int64, v any) {
 
 // stream answers request id of stream method m: on a connection of its
 // own, the result, then each event, until the server ends it or ctx
-// (MethodCancel, the bridge ending) does; then the end line.
-func (b *bridge) stream(ctx context.Context, id int64, m Method, params any) {
+// (MethodCancel, the bridge ending) does; then the end line. An event
+// the server wants acked is acked once it is written to the app, so a
+// slow app holds the server at its window.
+func (b *bridge) stream(ctx context.Context, id int64, m Method, params any, st *openStream) {
 	c, err := client.ConnectAs(b.o.Paths, b.o.Autostart, proto.ClientApp)
 	if err != nil {
 		b.fail(id, ErrServer, "%v", err)
@@ -288,6 +340,9 @@ func (b *bridge) stream(ctx context.Context, id int64, m Method, params any) {
 		b.fail(id, ErrServer, "%s: the server's answer: %v", m.Name, err)
 		return
 	}
+	st.wm.Lock()
+	st.c = c
+	st.wm.Unlock()
 	b.answer(id, res)
 	end := Out{ID: id, End: true}
 	for {
@@ -298,7 +353,7 @@ func (b *bridge) stream(ctx context.Context, id int64, m Method, params any) {
 			}
 			break
 		}
-		data, keep, err := m.event(line)
+		name, data, keep, ack, err := m.event(line)
 		if err != nil {
 			end.Error = &Error{Code: ErrServer, Message: fmt.Sprintf("%s: the server's event: %v", m.Name, err)}
 			break
@@ -311,8 +366,14 @@ func (b *bridge) stream(ctx context.Context, id int64, m Method, params any) {
 			end.Error = &Error{Code: ErrServer, Message: err.Error()}
 			break
 		}
-		if b.write(Out{ID: id, Event: m.Event, Data: raw}) != nil {
+		if b.write(Out{ID: id, Event: name, Data: raw}) != nil {
 			return
+		}
+		if ack != nil {
+			if err := st.send(ack); err != nil {
+				end.Error = &Error{Code: ErrServer, Message: fmt.Sprintf("the stream broke: %v", err)}
+				break
+			}
 		}
 	}
 	b.write(end)
@@ -322,8 +383,8 @@ func (b *bridge) stream(ctx context.Context, id int64, m Method, params any) {
 // connections.
 func (b *bridge) close() {
 	b.mu.Lock()
-	for _, cancel := range b.streams {
-		cancel()
+	for _, st := range b.streams {
+		st.cancel()
 	}
 	b.mu.Unlock()
 	b.wg.Wait()

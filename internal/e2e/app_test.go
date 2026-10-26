@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -130,4 +131,41 @@ func TestAppBridgeEscape(t *testing.T) {
 		t.Fatalf("approve, confirmed: %v", err)
 	}
 	env.WaitFor(th, "ESCAPED", agentWait)
+}
+
+// TestAppBridgePane: the app streams a thread's pane (pane.vt) and its
+// conversation (transcript.watch), as the hello's caps say it may; text
+// it types into the pane takes the thread over, journaled as the app's.
+func TestAppBridgePane(t *testing.T) {
+	env, projDir, _ := tickerEnv(t)
+	th := startThread(t, env, projDir)
+	b := runBridge(t, env)
+	if caps := b.Hello.Server.Caps; !slices.Contains(caps, proto.CapPaneVT) || !slices.Contains(caps, proto.CapTranscript) {
+		t.Fatalf("caps %v", caps)
+	}
+	var tr appapi.TranscriptResult
+	ts, err := b.Stream(proto.MethodTranscriptWatch, appapi.TranscriptParams{Session: th.ID}, &tr)
+	if err != nil || tr.Session.ID != th.ID || tr.Status.State == "" {
+		t.Fatalf("transcript.watch: %+v %v", tr, err)
+	}
+	defer ts.Cancel()
+
+	var pr appapi.PaneResult
+	pane, err := b.Stream(proto.MethodPaneVT, appapi.PaneParams{Session: th.ID}, &pr)
+	if err != nil || pr.Session.ID != th.ID {
+		t.Fatalf("pane.vt: %+v %v", pr, err)
+	}
+	defer pane.Cancel()
+	var ev appapi.PaneEvent
+	if name, err := pane.Next(&ev); err != nil || name != proto.EventPaneRepaint || len(ev.Data) == 0 {
+		t.Fatalf("first event %q %v", name, err)
+	}
+	if err := b.Call(appapi.MethodPaneInput, appapi.PaneInputParams{ID: pane.ID(), Input: []byte("typed by the app")}, nil); err != nil {
+		t.Fatal(err)
+	}
+	waitInbox(t, env, "the user typed into")
+	journal, _ := os.ReadFile(filepath.Join(projDir, "JOURNAL.md"))
+	if !strings.Contains(string(journal), "human (app) thread.takeover t-0001") {
+		t.Errorf("journal:\n%s", journal)
+	}
 }

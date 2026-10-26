@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -262,5 +263,119 @@ func TestBridgeKeys(t *testing.T) {
 		if err != nil {
 			t.Fatalf("watch after stop: %v", err)
 		}
+	}
+}
+
+// TestBridgePane: the hello names the server's caps; pane.vt streams a
+// pane (a repaint, then output) and the app's keys go in through
+// pane.input, into that stream only; transcript.watch answers a
+// session's conversation status (unmapped: no agent here). The bridge
+// acks for the app.
+func TestBridgePane(t *testing.T) {
+	p := testPaths(t)
+	startServer(t, p)
+	h, err := client.Dial(p, proto.KindControl)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+	var started proto.SessionStartResult
+	if err := h.Call(proto.MethodSessionStart, proto.SessionStartParams{Argv: []string{"/bin/cat"}}, &started); err != nil {
+		t.Fatal(err)
+	}
+	id := started.Session.ID
+	c, err := bridge(t, p, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if caps := c.Hello.Server.Caps; !slices.Contains(caps, proto.CapPaneVT) || !slices.Contains(caps, proto.CapTranscript) {
+		t.Fatalf("hello caps %v", caps)
+	}
+
+	var pr appapi.PaneResult
+	pane, err := c.Stream(proto.MethodPaneVT, appapi.PaneParams{Session: id}, &pr)
+	if err != nil || pr.Session.ID != id {
+		t.Fatalf("pane.vt: %+v %v", pr, err)
+	}
+	var ev appapi.PaneEvent
+	if name, err := pane.Next(&ev); err != nil || name != proto.EventPaneRepaint || ev.Cols == 0 {
+		t.Fatalf("first event %q %+v %v", name, ev, err)
+	}
+	if err := c.Call(appapi.MethodPaneInput, appapi.PaneInputParams{ID: pane.ID(), Input: []byte("hello pane\r")}, nil); err != nil {
+		t.Fatal(err)
+	}
+	var out []byte
+	for !strings.Contains(string(out), "hello pane") {
+		var ev appapi.PaneEvent
+		name, err := pane.Next(&ev)
+		if err != nil {
+			t.Fatalf("pane after input: %v (%q)", err, out)
+		}
+		if name == proto.EventPaneOutput || name == proto.EventPaneRepaint {
+			out = append(out, ev.Data...)
+		}
+	}
+	if err := c.Call(appapi.MethodPaneInput, appapi.PaneInputParams{ID: pane.ID() + 100, Repaint: true}, nil); code(err) != appapi.ErrBadParams {
+		t.Errorf("input into no stream: %v", err)
+	}
+
+	// More than the server's window: only the bridge's acks let it all
+	// through (cat and the terminal's echo double it).
+	line := strings.Repeat("x", 99) + "\r"
+	for range 20 {
+		if err := c.Call(appapi.MethodPaneInput, appapi.PaneInputParams{ID: pane.ID(), Input: []byte(strings.Repeat(line, 100))}, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := c.Call(appapi.MethodPaneInput, appapi.PaneInputParams{ID: pane.ID(), Input: []byte("END-MARK\r")}, nil); err != nil {
+		t.Fatal(err)
+	}
+	total, tail := 0, ""
+	for !strings.Contains(tail, "END-MARK") {
+		var ev appapi.PaneEvent
+		name, err := pane.Next(&ev)
+		if err != nil {
+			t.Fatalf("pane after %d bytes: %v", total, err)
+		}
+		if name == proto.EventPaneRepaint {
+			tail = ""
+		}
+		total += len(ev.Data)
+		tail = string(append([]byte(tail), ev.Data...))
+		tail = tail[max(0, len(tail)-64):]
+	}
+	if total < proto.PaneVTWindow {
+		t.Errorf("%d bytes came, under the window %d: the test proves nothing", total, proto.PaneVTWindow)
+	}
+
+	var tr appapi.TranscriptResult
+	ts, err := c.Stream(proto.MethodTranscriptWatch, appapi.TranscriptParams{Session: id}, &tr)
+	if err != nil || tr.Session.ID != id || tr.Status.State == "" {
+		t.Fatalf("transcript.watch: %+v %v", tr, err)
+	}
+	// Input into a stream that isn't a pane's.
+	if err := c.Call(appapi.MethodPaneInput, appapi.PaneInputParams{ID: ts.ID(), Repaint: true}, nil); code(err) != appapi.ErrBadParams {
+		t.Errorf("pane input into a transcript: %v", err)
+	}
+	ts.Cancel()
+
+	// The session ends: the pane says so and ends.
+	if err := h.Call(proto.MethodSessionStop, proto.SessionIDParams{ID: id}, nil); err != nil {
+		t.Fatal(err)
+	}
+	closed := false
+	for {
+		var ev appapi.PaneEvent
+		name, err := pane.Next(&ev)
+		if err == apptest.ErrEnd {
+			break
+		}
+		if err != nil {
+			t.Fatalf("pane after stop: %v", err)
+		}
+		closed = closed || name == proto.EventPaneClosed
+	}
+	if !closed {
+		t.Error("no pane.closed before the end")
 	}
 }

@@ -714,7 +714,7 @@ func (s *Server) serveControl(c net.Conn, br *bufio.Reader, peerPID int, human, 
 			continue
 		}
 		if m.stream != nil {
-			m.stream(s, c, br, req, peerPID)
+			m.stream(s, c, br, req, callCtx{method: req.Method, params: params, peerPID: peerPID, human: human, app: app, who: who})
 			return
 		}
 		var result any

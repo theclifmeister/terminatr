@@ -252,6 +252,27 @@ func TestCopies(t *testing.T) {
 	check("session.approve", homeOf(approveResultOf), nil)
 	check("task.ask", homeOf(taskAskResultOf), nil)
 	check("notify", homeOf(noticeResultOf), nil)
+	// The window is the bridge's: it acks for the app.
+	check("pane.vt", homeOf(paneResultOf), append(sessionHome(".Session"), ".Window"))
+	check("pane.vt events", homeOf(paneEventOf), []string{".Event"})
+	check("transcript.watch", homeOf(transcriptResultOf), append(sessionHome(".Session"), ".Window"))
+	check("transcript.watch events", homeOf(transcriptEventOf), []string{".Event"})
+	// The app's pane input, into the line: its id picks the stream
+	// (TestParamsCopies).
+	check("pane.input", homeOf(func(in PaneInputParams) proto.PaneVTInput {
+		_, line := paneInput(in)
+		return line.(proto.PaneVTInput)
+	}), []string{".ID"})
+}
+
+// sessionHome is what of a SessionInfo at path stays home (session.list's
+// list).
+func sessionHome(path string) []string {
+	var out []string
+	for _, f := range []string{"Cells", "Argv", "Cwd", "PID", "StateSources", "AgentSID", "Identified", "RemoteHeld", "ModelNext", "ModelPending"} {
+		out = append(out, path+"."+f)
+	}
+	return out
 }
 
 // TestParamsCopies: the app's params cross field by field and strictly:
@@ -268,6 +289,19 @@ func TestParamsCopies(t *testing.T) {
 	p, err := m.toServer(json.RawMessage(`{"id":"s-1","choice":2,"escape":true}`))
 	if want := (proto.SessionApproveParams{ID: "s-1", Choice: 2, Escape: true}); err != nil || p != want {
 		t.Errorf("approve params %+v %v", p, err)
+	}
+	// The console a pane's takeover counts is the server's to name.
+	m, _ = Lookup(proto.MethodPaneVT)
+	if _, err := m.toServer(json.RawMessage(`{"session":"s-1","console":"c-1"}`)); err == nil {
+		t.Error("pane.vt took a console")
+	}
+	m, _ = Lookup(MethodPaneInput)
+	id, line, err := m.toStream(json.RawMessage(`{"id":3,"input":"aGk=","size":{"cols":80,"rows":24}}`))
+	if in, ok := line.(proto.PaneVTInput); err != nil || id != 3 || !ok || string(in.Input) != "hi" || in.Size.Cols != 80 || in.Ack != 0 {
+		t.Errorf("pane.input %d %+v %v", id, line, err)
+	}
+	if _, _, err := m.toStream(json.RawMessage(`{"id":3,"ack":5}`)); err == nil {
+		t.Error("pane.input took an ack")
 	}
 	m, _ = Lookup(proto.MethodSessionList)
 	for _, raw := range []string{"", "null", "{}"} {
@@ -286,14 +320,26 @@ func TestParamsCopies(t *testing.T) {
 func TestAllowlist(t *testing.T) {
 	want := []string{proto.MethodNotifyClaim, proto.MethodNotifyDismiss, proto.MethodProjectsWatch,
 		proto.MethodSessionAnswer, proto.MethodSessionApprove, proto.MethodSessionKeys, proto.MethodSessionList,
-		proto.MethodSessionPrompt, proto.MethodSessionWatch, proto.MethodTaskAsk}
+		proto.MethodSessionPrompt, proto.MethodSessionWatch, proto.MethodTaskAsk,
+		proto.MethodPaneVT, proto.MethodTranscriptWatch, MethodPaneInput}
 	slices.Sort(want)
 	if got := MethodNames(); !slices.Equal(got, want) {
 		t.Errorf("methods %v, want %v", got, want)
 	}
 	for _, m := range Methods() {
-		if m.Stream != (m.Event != "" && m.Data != nil && m.event != nil) || m.Result == nil || m.result == nil {
+		if m.Stream != (len(m.Events) > 0 && m.Data != nil && m.event != nil) || m.Result == nil || m.result == nil ||
+			(m.Target != "") != (m.toStream != nil) {
 			t.Errorf("%s: incomplete %+v", m.Name, m)
+		}
+		if m.Target != "" {
+			if tm, ok := Lookup(m.Target); !ok || !tm.Stream {
+				t.Errorf("%s: target %s is no stream", m.Name, m.Target)
+			}
+		}
+	}
+	for name, write := range map[string]bool{MethodPaneInput: true, proto.MethodPaneVT: false, proto.MethodTranscriptWatch: false} {
+		if m, _ := Lookup(name); m.Write != write {
+			t.Errorf("%s: write %v", name, m.Write)
 		}
 	}
 }

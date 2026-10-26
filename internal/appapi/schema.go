@@ -23,13 +23,15 @@ type Schema struct {
 }
 
 // SchemaMethod is one method in the Schema: Params is nil for a method
-// that takes none.
+// that takes none; a stream's Events share its Data; Target names the
+// stream method whose open stream an input method's id names.
 type SchemaMethod struct {
 	Write  bool        `json:"write"`
 	Stream bool        `json:"stream"`
 	Params *JSONSchema `json:"params"`
 	Result JSONSchema  `json:"result"`
-	Event  string      `json:"event,omitempty"`
+	Events []string    `json:"events,omitempty"`
+	Target string      `json:"target,omitempty"`
 	Data   *JSONSchema `json:"data,omitempty"`
 }
 
@@ -38,6 +40,7 @@ type JSONSchema struct {
 	Ref                  string                `json:"$ref,omitempty"`
 	Type                 string                `json:"type,omitempty"`
 	Format               string                `json:"format,omitempty"`
+	ContentEncoding      string                `json:"contentEncoding,omitempty"`
 	Properties           map[string]JSONSchema `json:"properties,omitempty"`
 	Required             []string              `json:"required,omitempty"`
 	Items                *JSONSchema           `json:"items,omitempty"`
@@ -58,7 +61,7 @@ func MakeSchema() Schema {
 			"cancel_params": g.of(reflect.TypeFor[CancelParams]()),
 		}}
 	for _, m := range Methods() {
-		sm := SchemaMethod{Write: m.Write, Stream: m.Stream, Result: g.of(m.Result), Event: m.Event}
+		sm := SchemaMethod{Write: m.Write, Stream: m.Stream, Result: g.of(m.Result), Events: m.Events, Target: m.Target}
 		if m.Params != nil {
 			p := g.of(m.Params)
 			sm.Params = &p
@@ -76,8 +79,9 @@ func MakeSchema() Schema {
 type schemaGen struct{ defs map[string]JSONSchema }
 
 var (
-	timeType = reflect.TypeFor[time.Time]()
-	rawType  = reflect.TypeFor[json.RawMessage]()
+	timeType  = reflect.TypeFor[time.Time]()
+	bytesType = reflect.TypeFor[[]byte]()
+	rawType   = reflect.TypeFor[json.RawMessage]()
 )
 
 // of is t's schema: a $ref for a named struct, whose definition goes
@@ -88,6 +92,8 @@ func (g *schemaGen) of(t reflect.Type) JSONSchema {
 		return JSONSchema{Type: "string", Format: "date-time"}
 	case t == rawType:
 		return JSONSchema{}
+	case t == bytesType:
+		return JSONSchema{Type: "string", ContentEncoding: "base64"}
 	}
 	switch t.Kind() {
 	case reflect.String:

@@ -568,7 +568,8 @@ func (s *Server) resizePane(id string, cols, rows uint16) {
 // serveViewStream answers view.subscribe and then streams the view: a
 // view.changed line for every new version, until the client hangs up,
 // which leaves the view.
-func (s *Server) serveViewStream(c net.Conn, br *bufio.Reader, req proto.Request, pid int) {
+func (s *Server) serveViewStream(c net.Conn, br *bufio.Reader, req proto.Request, cc callCtx) {
+	pid := cc.peerPID
 	var p proto.ViewSubscribeParams
 	if perr := decodeParams(req.Params, &p); perr != nil {
 		refuse(c, req, perr)

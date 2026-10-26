@@ -25,7 +25,7 @@ type method struct {
 	// call answers the request; stream, when set instead, serves the
 	// connection from then on.
 	call   handler
-	stream func(s *Server, c net.Conn, br *bufio.Reader, req proto.Request, peerPID int)
+	stream func(s *Server, c net.Conn, br *bufio.Reader, req proto.Request, cc callCtx)
 }
 
 // gate is who may call a method, before it runs (mayCall).
@@ -104,9 +104,10 @@ func scoped[P any](of func(P) string) func(json.RawMessage) (string, any, *proto
 	}
 }
 
-// stream is a method's stream of a server function that takes no pid.
-func stream(f func(s *Server, c net.Conn, br *bufio.Reader, req proto.Request)) func(*Server, net.Conn, *bufio.Reader, proto.Request, int) {
-	return func(s *Server, c net.Conn, br *bufio.Reader, req proto.Request, _ int) { f(s, c, br, req) }
+// stream is a method's stream of a server function that takes no
+// caller.
+func stream(f func(s *Server, c net.Conn, br *bufio.Reader, req proto.Request)) func(*Server, net.Conn, *bufio.Reader, proto.Request, callCtx) {
+	return func(s *Server, c net.Conn, br *bufio.Reader, req proto.Request, _ callCtx) { f(s, c, br, req) }
 }
 
 // sessionID names the session of SessionIDParams.

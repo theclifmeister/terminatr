@@ -180,6 +180,9 @@ func (c *Client) Stream(method string, params, result any) (*Stream, error) {
 	return &Stream{c: c, id: id, ch: ch}, nil
 }
 
+// ID is the stream's request id, which cancel and pane.input name.
+func (s *Stream) ID() int64 { return s.id }
+
 // ErrEnd is Next's error once the stream ended without a fault.
 var ErrEnd = errors.New("the stream ended")
 
