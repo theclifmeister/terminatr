@@ -72,3 +72,60 @@ type SessionAnswerParams struct {
 type SessionAnswerResult struct {
 	Remaining int `json:"remaining"`
 }
+
+// MethodSessionApprove answers the permission prompt open on an agent's
+// screen with one of its numbered options (SessionApproveParams), once
+// the server has checked what tm thread approve checks: the agent's
+// state is blocked on a permission, the screen shows the dialog and has
+// the option, which allows once only. An escape's prompt (a command
+// outside the sandbox) is the user's alone, and needs Escape. The
+// server journals the answer as thread.approve. The human's; tm's own
+// command sends it for the coordinator with Relay.
+const MethodSessionApprove = "session.approve"
+
+// Errors of session.approve, besides refused and human-only.
+const (
+	// ErrNotPermission: the agent isn't blocked on a permission prompt.
+	ErrNotPermission = "not-permission"
+	// ErrNoDialog: the screen shows no permission dialog, or none with
+	// that option.
+	ErrNoDialog = "no-dialog"
+	// ErrAlwaysAllow: the option allows more than once ("don't ask
+	// again"), which only the user picks, in the agent's pane.
+	ErrAlwaysAllow = "always-allow"
+	// ErrEscapeUnconfirmed: the prompt asks to run a command outside
+	// the sandbox and the call didn't say the user confirmed that.
+	ErrEscapeUnconfirmed = "escape-unconfirmed"
+)
+
+// SessionApproveParams are the params of session.approve: option
+// Choice (from 1, default 1: allow once) of the dialog on session ID's
+// screen.
+type SessionApproveParams struct {
+	ID     string `json:"id"`
+	Choice int    `json:"choice,omitempty"`
+	// Check runs every check and answers what would be chosen, without
+	// sending a key.
+	Check bool `json:"check,omitempty"`
+	// Escape says the user confirmed, in words naming the command, that
+	// it runs outside the sandbox: an escape's prompt is refused
+	// without it.
+	Escape bool `json:"escape,omitempty"`
+	// Relay is the role whose answer this is, when tm's own commands
+	// send it for an agent (the coordinator's tm thread approve):
+	// "coordinator" is refused on an escape's prompt, and unless the
+	// project's coordinator_approves is on.
+	Relay string `json:"relay,omitempty"`
+}
+
+// SessionApproveResult is the dialog as the screen shows it: its
+// question, the chosen option and every option, in order. Escape: the
+// prompt asks to run a command outside the sandbox. Sent: the key went
+// (not for Check).
+type SessionApproveResult struct {
+	Question string   `json:"question,omitempty"`
+	Option   string   `json:"option"`
+	Options  []string `json:"options"`
+	Escape   bool     `json:"escape,omitempty"`
+	Sent     bool     `json:"sent,omitempty"`
+}

@@ -46,7 +46,15 @@ type Caller struct {
 	// (any role, a shell's too), which session-addressed calls are scoped
 	// to (docs/SPEC.md §11.1). The environment never sets it.
 	Session string
+	// Via is the console a human's call came through, when its hello
+	// says so: ViaApp for the Mac app's bridge (tm app bridge,
+	// docs/SPEC.md §3.8). The rights are the human's; only the journal
+	// tells them apart.
+	Via string
 }
+
+// ViaApp is Via for the Mac app's calls, journaled as "human (app)".
+const ViaApp = "app"
 
 // ForMod is the caller for mod id's brokered calls.
 func ForMod(id string) Caller { return Caller{Kind: Mod, Mod: id} }
@@ -61,10 +69,12 @@ func (c Caller) IsAgent() bool {
 	return c.Kind == Coordinator || c.Kind == Thread || c.Kind == Mod || c.Kind == Peer
 }
 
-// String is the name used in the journal: "human", "coordinator", the
-// thread id or "mod:<id>".
+// String is the name used in the journal: "human", "human (app)",
+// "coordinator", the thread id or "mod:<id>".
 func (c Caller) String() string {
 	switch {
+	case c.Kind == Human && c.Via != "":
+		return "human (" + c.Via + ")"
 	case c.Kind == Thread && c.Thread != "":
 		return c.Thread
 	case c.Kind == Mod:

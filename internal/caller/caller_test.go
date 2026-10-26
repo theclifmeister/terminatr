@@ -57,3 +57,17 @@ func TestPeer(t *testing.T) {
 		t.Errorf("the environment made a peer: %v", got)
 	}
 }
+
+// TestViaApp: the Mac app's calls are the human's, journaled apart.
+func TestViaApp(t *testing.T) {
+	app := Caller{Kind: Human, Via: ViaApp}
+	if app.IsAgent() {
+		t.Error("the app's calls aren't the human's")
+	}
+	if got := app.String(); got != "human (app)" {
+		t.Errorf("String() = %q", got)
+	}
+	if got := (Caller{Kind: Coordinator, Via: ViaApp}).String(); got != "coordinator" {
+		t.Errorf("an agent's Via named it: %q", got)
+	}
+}

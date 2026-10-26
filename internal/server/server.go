@@ -39,6 +39,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/plat/shell"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/textsafe"
 	"github.com/theclifmeister/terminatr/internal/session"
 	"github.com/theclifmeister/terminatr/internal/thread"
 	"github.com/theclifmeister/terminatr/internal/ticker"
@@ -659,7 +660,7 @@ func (s *Server) handle(c net.Conn, human bool) {
 	}
 	switch hello.Kind {
 	case proto.KindControl, proto.KindHook:
-		s.serveControl(c, br, pid, human)
+		s.serveControl(c, br, pid, human, human && hello.Kind == proto.KindControl && hello.Client == proto.ClientApp)
 	case proto.KindAttach:
 		s.serveAttach(c, br, pid, human)
 	default:
@@ -678,13 +679,19 @@ func (s *Server) hello() proto.Hello {
 	}
 }
 
-func (s *Server) serveControl(c net.Conn, br *bufio.Reader, peerPID int, human bool) {
+// serveControl serves a control connection's requests; app is the Mac
+// app's bridge on the human socket (proto.ClientApp), whose human calls
+// are journaled as made through it (caller.ViaApp).
+func (s *Server) serveControl(c net.Conn, br *bufio.Reader, peerPID int, human, app bool) {
 	for {
 		var req proto.Request
 		if err := proto.ReadLine(br, &req); err != nil {
 			return
 		}
 		who := s.whoFor(peerPID)
+		if app {
+			who = viaApp(who)
+		}
 		m, known := methodOf(req.Method)
 		perr := mayCall(req.Method, m.gate, human, who)
 		var params any
@@ -706,7 +713,7 @@ func (s *Server) serveControl(c net.Conn, br *bufio.Reader, peerPID int, human b
 		}
 		var result any
 		if known {
-			result, perr = m.call(s, req, callCtx{method: req.Method, params: params, peerPID: peerPID, human: human, who: who})
+			result, perr = m.call(s, req, callCtx{method: req.Method, params: params, peerPID: peerPID, human: human, app: app, who: who})
 		} else {
 			perr = proto.Errorf(proto.ErrUnknownMethod, "unknown method %q", req.Method)
 		}
@@ -726,6 +733,18 @@ func (s *Server) serveControl(c net.Conn, br *bufio.Reader, peerPID int, human b
 			s.log.Printf("server.stop from pid %d", peerPID)
 			s.requestStop()
 		}
+	}
+}
+
+// viaApp is who for a connection of the Mac app's bridge: the human's
+// calls through it are the human's, journaled as the app's.
+func viaApp(who func() caller.Caller) func() caller.Caller {
+	return func() caller.Caller {
+		c := who()
+		if c.Kind == caller.Human {
+			c.Via = caller.ViaApp
+		}
+		return c
 	}
 }
 
@@ -810,6 +829,56 @@ func (s *Server) keys(p proto.SessionKeysParams) (any, *proto.Error) {
 	return struct{}{}, nil
 }
 
+// keysBy is session.keys's answer for caller cc: the Mac app's keys
+// are a console's, so text typed into a thread's prompt box takes it
+// over (session.HumanInput), and they are journaled.
+func (s *Server) keysBy(p proto.SessionKeysParams, cc callCtx) (any, *proto.Error) {
+	if !cc.app || p.Relay != "" {
+		return s.keys(p)
+	}
+	sess, perr := s.session(p.ID)
+	if perr != nil {
+		return nil, perr
+	}
+	info := sess.Info()
+	if err := sess.HumanInput([]byte(p.Data), s.consoleTakeover(info, cc.console(), cc.who)); err != nil {
+		return nil, sessionError(p.ID, err)
+	}
+	s.journalIn(info.Project, cc.who(), "session.keys", sessionRef(info), textsafe.Line(strconv.Quote(p.Data), 60))
+	return struct{}{}, nil
+}
+
+// promptBy is session.prompt's answer for caller cc: the Mac app's
+// prompt to a thread takes it over, as text typed into its pane does,
+// and is journaled.
+func (s *Server) promptBy(p proto.SessionPromptParams, cc callCtx) (any, *proto.Error) {
+	res, perr := s.prompt(p)
+	if perr != nil || !cc.app {
+		return res, perr
+	}
+	if sess, perr := s.session(p.ID); perr == nil {
+		info := sess.Info()
+		if took := s.consoleTakeover(info, cc.console(), cc.who); took != nil {
+			took()
+		}
+		detail := textsafe.Line(p.Text, 80)
+		if p.Mode != "" {
+			detail = p.Mode + ": " + detail
+		}
+		s.journalIn(info.Project, cc.who(), "session.prompt", sessionRef(info), detail)
+	}
+	return res, nil
+}
+
+// sessionRef names session info in a journal line: its thread, or its
+// id.
+func sessionRef(info proto.SessionInfo) string {
+	if info.Role == proto.RoleThread && info.Thread != "" {
+		return info.Thread
+	}
+	return info.ID
+}
+
 // answer is session.answer's, gated by mayAnswer.
 func (s *Server) answer(p proto.SessionAnswerParams, cc callCtx) (any, *proto.Error) {
 	sess, perr := s.session(p.ID)
@@ -827,7 +896,7 @@ func (s *Server) answer(p proto.SessionAnswerParams, cc callCtx) (any, *proto.Er
 		return nil, proto.Errorf(proto.ErrRefused, "session %s asks to run a command outside its sandbox: only the user answers that prompt", p.ID)
 	}
 	res, perr := s.asks.answer(p.ID, p.Index, p.Answer, p.Question, byHuman)
-	if perr == nil && p.Question != "" {
+	if perr == nil && (p.Question != "" || cc.app) {
 		s.journalAnswer(p, c)
 	}
 	s.watch.wake()

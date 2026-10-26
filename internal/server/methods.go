@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"net"
+	"strconv"
 	"strings"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
@@ -58,8 +59,14 @@ type callCtx struct {
 	params  any
 	peerPID int
 	human   bool // on the human socket
-	who     func() caller.Caller
+	// app: the Mac app's bridge on the human socket (proto.ClientApp).
+	app bool
+	who func() caller.Caller
 }
+
+// console is the caller's console as a thread's takeover counts it
+// (consoleTakeover): the Mac app's bridge by its pid.
+func (c callCtx) console() string { return "app:" + strconv.Itoa(c.peerPID) }
 
 // handler answers one request.
 type handler func(s *Server, req proto.Request, c callCtx) (any, *proto.Error)
@@ -206,11 +213,17 @@ func init() {
 		proto.MethodSessionStop: {gate: gateHuman, call: typed(func(s *Server, p proto.SessionIDParams, _ callCtx) (any, *proto.Error) {
 			return s.stopSession(p.ID)
 		})},
-		proto.MethodSessionKeys: {gate: gateHuman, call: typed(func(s *Server, p proto.SessionKeysParams, _ callCtx) (any, *proto.Error) {
-			return s.keys(p)
+		proto.MethodSessionKeys: {gate: gateHuman, call: typed(func(s *Server, p proto.SessionKeysParams, c callCtx) (any, *proto.Error) {
+			return s.keysBy(p, c)
 		})},
-		proto.MethodSessionPrompt: {gate: gateHuman, call: typed(func(s *Server, p proto.SessionPromptParams, _ callCtx) (any, *proto.Error) {
-			return s.prompt(p)
+		proto.MethodSessionPrompt: {gate: gateHuman, call: typed(func(s *Server, p proto.SessionPromptParams, c callCtx) (any, *proto.Error) {
+			return s.promptBy(p, c)
+		})},
+		proto.MethodSessionApprove: {gate: gateHuman, call: typed(func(s *Server, p proto.SessionApproveParams, c callCtx) (any, *proto.Error) {
+			return s.approve(p, c)
+		})},
+		proto.MethodTaskAsk: {gate: gateHuman, call: typed(func(s *Server, p proto.TaskAskParams, c callCtx) (any, *proto.Error) {
+			return s.taskAsk(p, c)
 		})},
 		proto.MethodSecretTest: {gate: gateHuman, call: typed(func(s *Server, p proto.SecretTestParams, _ callCtx) (any, *proto.Error) {
 			return s.secretTest(p)

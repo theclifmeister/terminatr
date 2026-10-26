@@ -1,6 +1,7 @@
 package server
 
 import (
+	"fmt"
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/project"
@@ -89,8 +90,9 @@ func (s *Server) saveClear(p proto.CoordinatorClearParams) (any, *proto.Error) {
 }
 
 // journalAnswer journals a console's answer to a question menu, from a
-// mod's question.answer binding the human confirmed, in the session's
-// project, as tm thread answer journals the coordinator's.
+// mod's question.answer binding the human confirmed or the Mac app, in
+// the session's project, as tm thread answer journals the
+// coordinator's.
 func (s *Server) journalAnswer(p proto.SessionAnswerParams, c caller.Caller) {
 	sess, perr := s.session(p.ID)
 	if perr != nil {
@@ -101,7 +103,11 @@ func (s *Server) journalAnswer(p proto.SessionAnswerParams, c caller.Caller) {
 		return
 	}
 	if pr, err := project.Open(slug); err == nil {
-		if err := pr.Journal(c, "session.answer", p.ID, p.Question+" → "+p.Answer); err != nil {
+		q := p.Question
+		if q == "" {
+			q = fmt.Sprintf("question %d", p.Index+1)
+		}
+		if err := pr.Journal(c, "session.answer", p.ID, q+" → "+p.Answer); err != nil {
 			s.log.Printf("journal: %v", err)
 		}
 	}

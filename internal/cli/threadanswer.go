@@ -15,7 +15,6 @@ import (
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/client"
-	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/tasks"
@@ -23,64 +22,36 @@ import (
 	"github.com/theclifmeister/terminatr/internal/thread"
 )
 
+// threadApprove answers thread id's permission prompt with option
+// choice through the server's session.approve, which checks the
+// agent's state and screen, the escape rule and coordinator_approves
+// (for the coordinator, by Relay), and journals the answer.
 func (e *Env) threadApprove(p *project.Project, id string, choice int) error {
 	if err := e.coordinatorOnly(p, "approving prompts"); err != nil {
 		return err
 	}
-	if e.Caller.Kind == caller.Coordinator {
-		cfg, err := config.Load()
-		if err != nil {
-			return err
-		}
-		if safety, err := cfg.Safety(p.Slug); err != nil {
-			return err
-		} else if !safety.CoordinatorApproves {
-			return &tasks.Error{Code: "human-only", Msg: "coordinator_approves = false: the user answers this thread's prompts"}
-		}
-	}
-	r, info, err := e.liveThread(p, id)
+	r, _, err := e.liveThread(p, id)
 	if err != nil {
 		return err
 	}
-	if info.State != "blocked" || info.Reason != "permission" {
-		return &tasks.Error{Code: "not-permission", Msg: fmt.Sprintf("thread %s is %s/%s, not blocked on a permission prompt", id, info.State, info.Reason)}
+	// The user's own tm thread approve names the thread and the
+	// option: their confirmation of an escape's command too.
+	var res proto.SessionApproveResult
+	err = e.call(proto.MethodSessionApprove, proto.SessionApproveParams{ID: r.Session, Choice: choice,
+		Escape: e.Caller.Kind == caller.Human, Relay: e.relay()}, &res)
+	var perr *proto.Error
+	if errors.As(err, &perr) {
+		switch perr.Code {
+		case proto.ErrNotPermission, proto.ErrAlwaysAllow, "human-only":
+			return &tasks.Error{Code: perr.Code, Msg: fmt.Sprintf("thread %s: %s", id, perr.Message)}
+		case proto.ErrNoDialog:
+			return &tasks.Error{Code: perr.Code, Msg: fmt.Sprintf("thread %s: %s; look with tm thread read %s", id, perr.Message, id)}
+		}
 	}
-	// A command that asks to run outside the sandbox is the user's to
-	// allow, whoever else may answer prompts (T574 case 6).
-	if info.Escape && e.Caller.Kind == caller.Coordinator {
-		return &tasks.Error{Code: "human-only", Msg: fmt.Sprintf("thread %s asks to run a command outside its sandbox: only the user answers that prompt", id)}
-	}
-	// The screen must show the dialog too: approving on hook state alone
-	// could answer something else.
-	var x struct {
-		Screen *struct {
-			State, Reason string
-		} `json:"screen"`
-	}
-	if err := e.call(proto.MethodAgentExplain, proto.SessionIDParams{ID: r.Session}, &x); err != nil {
+	if err != nil {
 		return err
 	}
-	if x.Screen == nil || x.Screen.State != "blocked" || x.Screen.Reason != "permission" {
-		return &tasks.Error{Code: "no-dialog", Msg: fmt.Sprintf("no permission dialog on thread %s's screen; look with tm thread read %s", id, id)}
-	}
-	var screen proto.SessionReadResult
-	if err := e.call(proto.MethodSessionRead, proto.SessionReadParams{ID: r.Session}, &screen); err != nil {
-		return err
-	}
-	option, question := dialogLines(screen.Text, choice)
-	if option == "" {
-		return &tasks.Error{Code: "no-dialog", Msg: fmt.Sprintf("the dialog on thread %s's screen has no option %d", id, choice)}
-	}
-	if l := strings.ToLower(option); strings.Contains(l, "don't ask again") || strings.Contains(l, "always") || strings.Contains(l, "don’t ask again") {
-		return &tasks.Error{Code: "always-allow", Msg: fmt.Sprintf("option %d (%s) allows more than once; only the user may choose it", choice, option)}
-	}
-	if err := e.call(proto.MethodSessionKeys, proto.SessionKeysParams{ID: r.Session, Data: strconv.Itoa(choice), Relay: e.relay()}, nil); err != nil {
-		return err
-	}
-	if err := p.Journal(e.Caller, "thread.approve", id, textsafe.Line(question+" → "+option, 160)); err != nil {
-		return err
-	}
-	fmt.Fprintf(e.Stdout, "approved %s: %s\n", id, shown(option))
+	fmt.Fprintf(e.Stdout, "approved %s: %s\n", id, shown(res.Option))
 	return nil
 }
 
@@ -282,7 +253,7 @@ func (e *Env) answerByKeys(p *project.Project, id string, r *thread.Record, info
 	if a.question > 0 && a.question != max(cur, 1) {
 		return &tasks.Error{Code: "question-order", Msg: fmt.Sprintf("thread %s's menu is on question %d; by keys the questions are answered in order, one call each", id, max(cur, 1))}
 	}
-	option, question := dialogLines(screen.Text, choice)
+	option, question := agent.DialogOption(screen.Text, choice)
 	if option == "" {
 		return &tasks.Error{Code: "no-option", Msg: fmt.Sprintf("the menu on thread %s's screen has no option %d", id, choice)}
 	}
@@ -348,10 +319,6 @@ func menuPosition(screen string) (k, n int) {
 	return k, n
 }
 
-var optionRE = regexp.MustCompile(`^[^0-9A-Za-z]*([0-9])\.\s+(.+)$`)
-
-// dialogLines finds option n of a numbered dialog on screen, and the
-// question above the options.
 // menuRule says whether the screen rule id matched a menu tm answers by
 // keys: the [answer] rule's question menu, or another blocked rule whose
 // reason is question (Codex's "Implement this plan?" and /new's dialog),
@@ -374,28 +341,4 @@ func menuRule(reg *agent.Registry, name string, ans *agent.Answer, id string) bo
 		}
 	}
 	return false
-}
-
-func dialogLines(screen string, n int) (option, question string) {
-	lines := strings.Split(screen, "\n")
-	first := -1
-	for i, l := range lines {
-		m := optionRE.FindStringSubmatch(strings.TrimSpace(l))
-		if m == nil {
-			continue
-		}
-		if first < 0 {
-			first = i
-		}
-		if m[1] == strconv.Itoa(n) && option == "" {
-			option = strings.TrimSpace(m[2])
-		}
-	}
-	for i := first - 1; i >= 0; i-- {
-		if t := strings.TrimSpace(lines[i]); strings.HasSuffix(t, "?") {
-			question = t
-			break
-		}
-	}
-	return option, question
 }

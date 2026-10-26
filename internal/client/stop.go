@@ -48,7 +48,7 @@ func Stop(p Paths, yes bool) (Stopped, error) {
 	}
 	var verr *proto.MismatchError
 	if errors.As(err, &verr) && verr.Server.Protocol > 0 && verr.Server.Protocol < proto.Protocol {
-		c, err = dial(p, proto.KindControl, verr.Server.Protocol)
+		c, err = dial(p, proto.KindControl, verr.Server.Protocol, "")
 	}
 	want := 0
 	if verr != nil {
