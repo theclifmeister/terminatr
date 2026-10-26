@@ -48,7 +48,7 @@ struct CoordinatorPanel: View {
             if !needs.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Needs you in \(model.ref.project) · \(needs.count)".uppercased())
-                        .font(theme.mono(10, .medium))
+                        .font(theme.mono(.label, .medium))
                         .tracking(1)
                         .foregroundStyle(theme.muted)
                     ForEach(shown) { NeedCard(need: $0) }
@@ -56,7 +56,7 @@ struct CoordinatorPanel: View {
                         Button(all ? "Fewer" : "\(needs.count - shown.count) more") { all.toggle() }
                             .buttonStyle(.link)
                             .foregroundStyle(theme.action)
-                            .font(theme.body(12))
+                            .font(theme.body(.subheadline))
                     }
                 }
                 .padding(.horizontal, 22)
@@ -84,9 +84,9 @@ private struct QuestionsCard: View {
             HStack(alignment: .center, spacing: 10) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(count == 1 ? "The coordinator has a question for you" : "The coordinator has \(count) questions for you")
-                        .font(theme.title(15, .bold))
+                        .font(theme.title(.headline, .bold))
                     Text(error ?? "It asks them here, one dialog at a time, when you answer now.")
-                        .font(theme.body(12))
+                        .font(theme.body(.subheadline))
                         .foregroundStyle(error == nil ? theme.muted : theme.attention)
                 }
                 Spacer(minLength: 8)

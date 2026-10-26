@@ -39,7 +39,7 @@ struct TerminalTab: View {
                     if let closed = pane.closed {
                         Text(closed)
                             .padding(10)
-                            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+                            .frosted(RoundedRectangle(cornerRadius: 10))
                             .padding(16)
                     }
                 }
@@ -56,11 +56,11 @@ struct TerminalTab: View {
         HStack(spacing: 12) {
             if let s = pane.size {
                 Text("\(s.cols)×\(s.rows)" + (remote == nil ? "" : " on \(model.ref.server)"))
-                    .font(theme.mono(11))
+                    .font(theme.mono(.caption))
                     .foregroundStyle(theme.muted)
             }
             Text(note(remote))
-                .font(theme.body(11.5))
+                .font(theme.body(.footnote))
                 .foregroundStyle(theme.muted)
             Spacer()
             Button("Fit to Window") { pane.fit() }

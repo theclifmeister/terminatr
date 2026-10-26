@@ -84,6 +84,61 @@ public enum TextSize {
     }
 }
 
+/// A role a text plays, which sets its size (T748 J1): views name one
+/// in place of a point size, and the theme scales it by the text size
+/// and, in the sidebar, the system's sidebar size. The sizes are
+/// Bloom's at 100%.
+public enum TextStyle: CaseIterable, Sendable {
+    /// A project's name over its dashboard.
+    case display
+    case largeTitle, title, title2, title3, headline
+    /// A third-level heading, the menu bar's titles.
+    case heading
+    case body, callout, subheadline, footnote, caption, caption2
+    /// A small tag's text.
+    case label
+    /// A chevron or glyph beside a label.
+    case glyph
+
+    /// The size in points at 100%.
+    public var points: Double {
+        switch self {
+        case .display: 30
+        case .largeTitle: 22
+        case .title: 20
+        case .title2: 18
+        case .title3: 16
+        case .headline: 15
+        case .heading: 14
+        case .body: 13
+        case .callout: 12.5
+        case .subheadline: 12
+        case .footnote: 11.5
+        case .caption: 11
+        case .caption2: 10.5
+        case .label: 10
+        case .glyph: 9
+        }
+    }
+}
+
+/// System Settings › Appearance › Sidebar icon size, which the sidebar's
+/// text follows as Finder's does: small, medium (the standard) or
+/// large.
+public enum SidebarSize: Sendable {
+    case small, medium, large
+
+    /// The sidebar's text size against medium's: the system's sidebar
+    /// rows set 11, 13 and 15 pt.
+    public var scale: Double {
+        switch self {
+        case .small: 11.0 / 13
+        case .medium: 1
+        case .large: 15.0 / 13
+        }
+    }
+}
+
 /// File › New Task…'s form: the title is one line and not empty, as tm
 /// task add takes it; notes are optional.
 public struct NewTaskForm: Equatable, Sendable {

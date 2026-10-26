@@ -43,17 +43,21 @@ struct CardFrame<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
             Text(tag.uppercased())
-                .font(theme.mono(10.5, .medium))
+                .font(theme.mono(.caption2, .medium))
                 .tracking(1)
                 .foregroundStyle(colour)
             content
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+        .frosted(RoundedRectangle(cornerRadius: 14))
         .background(tint, in: RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(colour.opacity(0.4), lineWidth: 1))
+        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(colour.opacity(theme.contrast ? 1 : 0.4), lineWidth: 1))
         .shadow(color: colour.opacity(0.25), radius: 12, y: 6)
+        // VoiceOver: a group named for the card, so its buttons are
+        // heard as the approval's or the question's.
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(tag)
     }
 }
 
@@ -82,7 +86,7 @@ struct QuestionCard: View {
         let tag = menu.escape ? "Question · outside the sandbox" : (item.header.isEmpty ? "Question" : item.header)
         CardFrame(tag: firstChoice == nil ? tag : "\(tag) · ⌘↩ answer", colour: theme.question, tint: theme.questionTint) {
             Text(item.question)
-                .font(theme.title(15, .bold))
+                .font(theme.title(.headline, .bold))
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
             if item.multiSelect {
@@ -114,7 +118,7 @@ struct QuestionCard: View {
             }
             if let error {
                 Text(error)
-                    .font(theme.body(12))
+                    .font(theme.body(.subheadline))
                     .foregroundStyle(theme.attention)
             }
         }
@@ -145,7 +149,7 @@ struct QuestionCard: View {
             Text(o.label)
             if !o.description.isEmpty {
                 Text(o.description)
-                    .font(theme.body(11.5))
+                    .font(theme.body(.footnote))
                     .foregroundStyle(theme.muted)
             }
         }
@@ -229,10 +233,10 @@ struct ApprovalCard: View {
         let tag = session.escape ? "Approval · outside the sandbox" : "Approval"
         CardFrame(tag: firstChoice == nil ? tag : "\(tag) · ⌘↩ allow", colour: theme.approval, tint: theme.approvalTint) {
             Text(tool.map { "Run \($0.tool.isEmpty ? "a tool" : $0.tool)?" } ?? "The agent asks for permission")
-                .font(theme.title(15, .bold))
+                .font(theme.title(.headline, .bold))
             if let tool, !tool.text.isEmpty {
                 Text(tool.text)
-                    .font(theme.mono(12.5))
+                    .font(theme.mono(.callout))
                     .textSelection(.enabled)
                     .padding(9)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -259,7 +263,7 @@ struct ApprovalCard: View {
                 .lineLimit(1)
                 if session.escape && command == nil {
                     Text("The conversation doesn't show the command: read it in the Terminal tab and answer there, or press Esc.")
-                        .font(theme.body(12))
+                        .font(theme.body(.subheadline))
                         .foregroundStyle(theme.muted)
                 }
             } else if error == nil {
@@ -268,12 +272,13 @@ struct ApprovalCard: View {
             HStack {
                 if let error {
                     Text(error)
-                        .font(theme.body(12))
+                        .font(theme.body(.subheadline))
                         .foregroundStyle(theme.attention)
                 }
                 Spacer()
                 Button("Esc") { Task { try? await model.keys("\u{1b}") } }
                     .help("Sends Esc to the agent: it dismisses the dialog")
+                    .accessibilityLabel("Dismiss the dialog (Esc)")
                     .controlSize(.small)
             }
         }

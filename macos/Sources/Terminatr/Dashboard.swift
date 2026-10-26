@@ -73,7 +73,7 @@ struct ProjectDashboard: View {
                         }
                         if inbox.count > Self.inboxShown {
                             Text("\(inbox.count - Self.inboxShown) more in tm")
-                                .font(theme.body(12))
+                                .font(theme.body(.subheadline))
                                 .foregroundStyle(theme.muted)
                         }
                     }
@@ -91,11 +91,12 @@ struct ProjectDashboard: View {
 
     private func threadCard(_ t: AppAPI.Thread) -> some View {
         let sel = Selection.card(t, in: project.slug)
-        return ThreadCard(thread: t, attention: app.attention(t))
-            .contentShape(RoundedRectangle(cornerRadius: 14))
-            .onTapGesture { app.select(sel) }
-            .accessibilityAddTraits(.isButton)
-            .accessibilityAction { app.select(sel) }
+        // A button, so Full Keyboard Access reaches it (Tab, Space).
+        return Button { app.select(sel) } label: {
+            ThreadCard(thread: t, attention: app.attention(t))
+                .contentShape(RoundedRectangle(cornerRadius: 14))
+        }
+        .buttonStyle(.plain)
             .help("Show \(t.task?.ref ?? t.record.id)")
             .contextMenu { NewWindowButton(ref: SessionRef(project: project.slug, thread: t.record.id)) }
     }
@@ -104,7 +105,7 @@ struct ProjectDashboard: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline) {
                 Text(project.slug)
-                    .font(theme.title(30, .heavy))
+                    .font(theme.title(.display, .heavy))
                 Spacer()
             }
             if !project.goal.isEmpty {
@@ -114,7 +115,7 @@ struct ProjectDashboard: View {
             }
             if let board = board {
                 Text(board)
-                    .font(theme.mono(11.5))
+                    .font(theme.mono(.footnote))
                     .foregroundStyle(theme.muted)
             }
             if !project.error.isEmpty {
@@ -136,7 +137,7 @@ struct ProjectDashboard: View {
     private func section<C: View>(_ title: String, @ViewBuilder _ content: () -> C) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(title.uppercased())
-                .font(theme.mono(10.5, .medium))
+                .font(theme.mono(.caption2, .medium))
                 .tracking(1)
                 .foregroundStyle(theme.muted)
                 .padding(.top, 6)
@@ -146,7 +147,7 @@ struct ProjectDashboard: View {
 
     private func label(_ title: String) -> some View {
         Text(title.uppercased())
-            .font(theme.mono(10, .medium))
+            .font(theme.mono(.label, .medium))
             .tracking(1)
             .foregroundStyle(theme.muted)
             .padding(.top, 2)
@@ -164,9 +165,9 @@ struct ProjectDashboard: View {
                 HStack(spacing: 5) {
                     Image(systemName: "chevron.right")
                         .rotationEffect(.degrees(open ? 90 : 0))
-                        .font(theme.body(9, .bold))
+                        .font(theme.body(.glyph, .bold))
                     Text("\(title) · \(n)".uppercased())
-                        .font(theme.mono(10, .medium))
+                        .font(theme.mono(.label, .medium))
                         .tracking(1)
                 }
                 .foregroundStyle(theme.muted)
@@ -203,14 +204,14 @@ struct CoordinatorRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text("Coordinator")
-                        .font(theme.title(15, .bold))
+                        .font(theme.title(.headline, .bold))
                     Text(attention.word)
-                        .font(theme.mono(11))
+                        .font(theme.mono(.caption))
                         .foregroundStyle(attention.waits ? theme.colour(attention.tone) : theme.muted)
                 }
                 if !attention.why.isEmpty {
                     Text(attention.why)
-                        .font(theme.body(12.5, attention.waits ? .medium : .regular))
+                        .font(theme.body(.callout, attention.waits ? .medium : .regular))
                         .foregroundStyle(attention.waits ? theme.colour(attention.tone) : theme.muted)
                         .lineLimit(2)
                 }
@@ -224,7 +225,7 @@ struct CoordinatorRow: View {
             }
         }
         .padding(14)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+        .frosted(RoundedRectangle(cornerRadius: 14))
         .background(theme.cardTint, in: RoundedRectangle(cornerRadius: 14))
         .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(theme.edge, lineWidth: 1))
         .contextMenu { NewWindowButton(ref: ref) }
@@ -259,7 +260,7 @@ struct StartButton: View {
                                  : "The project is inactive: tm project active \(project.slug) turns it on")
             if let error {
                 Text(error)
-                    .font(theme.body(11.5))
+                    .font(theme.body(.footnote))
                     .foregroundStyle(theme.attention)
                     .multilineTextAlignment(.trailing)
             }
@@ -289,11 +290,11 @@ private struct BoardRow: View {
     var body: some View {
         HStack(alignment: .center, spacing: 8) {
             Text(task.ref)
-                .font(theme.mono(12, .medium))
+                .font(theme.mono(.subheadline, .medium))
                 .foregroundStyle(theme.action)
                 .frame(minWidth: 44, alignment: .leading)
             Text(task.title)
-                .font(theme.body(13))
+                .font(theme.body(.body))
                 .lineLimit(1)
                 .textSelection(.enabled)
             Spacer(minLength: 8)
@@ -318,14 +319,14 @@ private struct NextStepCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(headline)
-                .font(theme.title(18, .heavy))
+                .font(theme.title(.title2, .heavy))
             Text(detail)
                 .foregroundStyle(theme.muted)
                 .fixedSize(horizontal: false, vertical: true)
             switch step {
             case .activate:
                 Text("tm project active \(project.slug)")
-                    .font(theme.mono(12.5))
+                    .font(theme.mono(.callout))
                     .textSelection(.enabled)
                     .padding(8)
                     .background(theme.command, in: RoundedRectangle(cornerRadius: 8))
@@ -342,7 +343,7 @@ private struct NextStepCard: View {
         }
         .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+        .frosted(RoundedRectangle(cornerRadius: 14))
         .background(theme.cardTint, in: RoundedRectangle(cornerRadius: 14))
         .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(theme.edge, lineWidth: 1))
     }
@@ -375,15 +376,15 @@ private struct InboxLine: View {
                 .frame(width: 6, height: 6)
                 .accessibilityHidden(true)
             Text(item.subject.isEmpty ? item.kind : item.subject)
-                .font(theme.body(12.5, .medium))
+                .font(theme.body(.callout, .medium))
                 .lineLimit(1)
             Text(item.shownSummary)
-                .font(theme.body(12))
+                .font(theme.body(.subheadline))
                 .foregroundStyle(theme.muted)
                 .lineLimit(1)
             Spacer(minLength: 6)
             Text(item.created, format: .relative(presentation: .named))
-                .font(theme.mono(11))
+                .font(theme.mono(.caption))
                 .foregroundStyle(theme.muted)
         }
         .accessibilityElement(children: .combine)
@@ -404,12 +405,12 @@ struct RemoteProjectDashboard: View {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text(peer.name.isEmpty ? peer.alias : peer.name)
-                            .font(theme.mono(12, .medium))
+                            .font(theme.mono(.subheadline, .medium))
                             .padding(.horizontal, 7)
                             .padding(.vertical, 1)
                             .background(theme.cardTint, in: Capsule())
                         Text(project.project)
-                            .font(theme.title(30, .heavy))
+                            .font(theme.title(.display, .heavy))
                     }
                     if !project.goal.isEmpty {
                         Text(project.goal)
@@ -417,7 +418,7 @@ struct RemoteProjectDashboard: View {
                             .lineLimit(2)
                     }
                     Text(facts)
-                        .font(theme.mono(11.5))
+                        .font(theme.mono(.footnote))
                         .foregroundStyle(theme.muted)
                 }
                 if project.sessions.isEmpty {
@@ -425,11 +426,11 @@ struct RemoteProjectDashboard: View {
                         .foregroundStyle(theme.muted)
                 }
                 ForEach(project.sessions.compactMap { s in SessionRef(s, of: peer.alias).map { (s, $0) } }, id: \.0.id) { s, ref in
-                    PeerSessionCard(session: s, ref: ref)
-                        .contentShape(RoundedRectangle(cornerRadius: 14))
-                        .onTapGesture { app.select(.session(ref)) }
-                        .accessibilityAddTraits(.isButton)
-                        .accessibilityAction { app.select(.session(ref)) }
+                    Button { app.select(.session(ref)) } label: {
+                        PeerSessionCard(session: s, ref: ref)
+                            .contentShape(RoundedRectangle(cornerRadius: 14))
+                    }
+                    .buttonStyle(.plain)
                         .contextMenu { NewWindowButton(ref: ref) }
                 }
             }
@@ -461,24 +462,24 @@ private struct PeerSessionCard: View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             if !session.task.isEmpty {
                 Text(session.task)
-                    .font(theme.mono(12.5, .medium))
+                    .font(theme.mono(.callout, .medium))
                     .foregroundStyle(theme.action)
             }
             Text(ref.isCoordinator ? "Coordinator" : ref.thread)
-                .font(theme.title(15, .bold))
+                .font(theme.title(.headline, .bold))
             if !session.current.isEmpty {
                 Text(session.current)
-                    .font(theme.body(12.5))
+                    .font(theme.body(.callout))
                     .foregroundStyle(theme.muted)
                     .lineLimit(1)
             }
             Spacer(minLength: 8)
             Text(session.asking ? "asks" : session.state)
-                .font(theme.mono(11))
+                .font(theme.mono(.caption))
                 .foregroundStyle(session.asking || session.state == "blocked" ? theme.approval : theme.muted)
         }
         .padding(14)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+        .frosted(RoundedRectangle(cornerRadius: 14))
         .background(theme.cardTint, in: RoundedRectangle(cornerRadius: 14))
         .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(theme.edge, lineWidth: 1))
         .accessibilityElement(children: .combine)
@@ -504,12 +505,12 @@ struct ProjectRow: View {
                 .frame(width: 8, height: 8)
                 .accessibilityHidden(true)
             Text(project.slug)
-                .font(theme.body(13, .semibold))
+                .font(theme.body(.body, .semibold))
                 .lineLimit(1)
             Spacer(minLength: 4)
             if needs > 0 {
                 Text("\(needs)")
-                    .font(theme.mono(11, .medium))
+                    .font(theme.mono(.caption, .medium))
                     .padding(.horizontal, 6)
                     .padding(.vertical, 1)
                     .background(theme.attention, in: Capsule())
@@ -542,26 +543,26 @@ struct ThreadCard: View {
                     .accessibilityHidden(true)
                 if let task = thread.task {
                     Text(task.ref)
-                        .font(theme.mono(12.5, .medium))
+                        .font(theme.mono(.callout, .medium))
                         .foregroundStyle(theme.action)
                 }
                 Text(r.title)
-                    .font(theme.title(15, .bold))
+                    .font(theme.title(.headline, .bold))
                     .lineLimit(1)
                 Spacer(minLength: 8)
                 Text(r.id)
-                    .font(theme.mono(11.5))
+                    .font(theme.mono(.footnote))
                     .foregroundStyle(theme.muted)
                     .textSelection(.enabled)
             }
             if attention.waits {
                 Label(attention.why, systemImage: "exclamationmark.bubble")
-                    .font(theme.body(12.5, .medium))
+                    .font(theme.body(.callout, .medium))
                     .foregroundStyle(theme.colour(attention.tone))
                     .lineLimit(2)
             } else if !attention.why.isEmpty {
                 Text(attention.why)
-                    .font(theme.body(12.5))
+                    .font(theme.body(.callout))
                     .foregroundStyle(theme.muted)
                     .lineLimit(2)
             }
@@ -570,18 +571,18 @@ struct ThreadCard: View {
                     Meter(fraction: Double(s.percent) / 100)
                         .frame(width: 120, height: 5)
                     Text(progress(s))
-                        .font(theme.mono(11))
+                        .font(theme.mono(.caption))
                         .foregroundStyle(theme.muted)
                 }
                 Spacer(minLength: 0)
                 Text(facts)
-                    .font(theme.mono(11))
+                    .font(theme.mono(.caption))
                     .foregroundStyle(theme.muted)
                     .lineLimit(1)
             }
         }
         .padding(14)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+        .frosted(RoundedRectangle(cornerRadius: 14))
         .background(theme.cardTint, in: RoundedRectangle(cornerRadius: 14))
         .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(theme.edge, lineWidth: 1))
         .accessibilityElement(children: .combine)
@@ -642,7 +643,7 @@ struct StatusLine: View {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundStyle(theme.attention)
                 }
-                .font(theme.body(10.5))
+                .font(theme.body(.caption2))
                 .foregroundStyle(theme.ink)
             }
         }
@@ -657,7 +658,7 @@ struct StatusLine: View {
             case .connected(let h):
                 Circle().fill(theme.good).frame(width: 7, height: 7)
                 Text("tm \(h.tm)" + (h.server.map { $0.version == h.tm ? "" : " · server \($0.version)" } ?? ""))
-                    .font(theme.mono(11))
+                    .font(theme.mono(.caption))
             case .failed:
                 Circle().fill(theme.attention).frame(width: 7, height: 7)
                 Text("Not connected")
@@ -667,7 +668,7 @@ struct StatusLine: View {
                     .foregroundStyle(theme.action)
             }
         }
-        .font(theme.body(11.5))
+        .font(theme.body(.footnote))
         .foregroundStyle(theme.muted)
     }
 }
@@ -688,7 +689,7 @@ struct Placeholder: View {
                 Text("Starting tm app bridge…").foregroundStyle(theme.muted)
             case .failed(let why):
                 Text("Can't reach terminatr")
-                    .font(theme.title(22, .heavy))
+                    .font(theme.title(.largeTitle, .heavy))
                 Text(why)
                     .multilineTextAlignment(.center)
                     .foregroundStyle(theme.muted)
@@ -702,7 +703,7 @@ struct Placeholder: View {
                 }
             case .connected:
                 Text(empty ? "No projects yet" : "Pick a project")
-                    .font(theme.title(22, .heavy))
+                    .font(theme.title(.largeTitle, .heavy))
                 if empty {
                     Text("Create one with tm project new in a terminal.")
                         .foregroundStyle(theme.muted)
@@ -710,7 +711,7 @@ struct Placeholder: View {
             }
         }
         .padding(28)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18))
+        .frosted(RoundedRectangle(cornerRadius: 18))
         .padding(40)
     }
 }

@@ -27,18 +27,21 @@ struct TaskActs: View {
                         .buttonStyle(.borderedProminent)
                         .tint(theme.action)
                         .help("Asks the coordinator to accept \(task): it merges and closes it")
+                        .accessibilityLabel("Accept \(task)")
                     Button("Send back…") { sendingBack = true }
                         .help("Asks the coordinator to send \(task) back with your note")
+                        .accessibilityLabel("Send \(task) back…")
                 } else if Palette.delegable(status) {
                     Button("Delegate…") { delegating = true }
                         .help("Asks the coordinator to start a thread for \(task)")
+                        .accessibilityLabel("Delegate \(task)…")
                 }
             }
             .controlSize(compact ? .small : .regular)
             .disabled(busy)
             if let said {
                 Text(said.text)
-                    .font(theme.body(11.5))
+                    .font(theme.body(.footnote))
                     .foregroundStyle(said.failed ? theme.attention : theme.muted)
                     .lineLimit(2)
                     .multilineTextAlignment(.trailing)
@@ -91,11 +94,11 @@ struct SendBackSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Send \(task) back")
-                .font(theme.title(18, .heavy))
+                .font(theme.title(.title2, .heavy))
             Text("Say what to change. The coordinator passes it on to the thread.")
                 .foregroundStyle(theme.muted)
             TextEditor(text: $note)
-                .font(theme.body(13))
+                .font(theme.body(.body))
                 .frame(minHeight: 90)
                 .scrollContentBackground(.hidden)
                 .padding(6)

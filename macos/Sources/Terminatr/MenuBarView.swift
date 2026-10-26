@@ -26,9 +26,9 @@ struct MenuBarView: View {
             case .failed(let why):
                 Panel {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("Can't reach terminatr").font(theme.title(15, .bold))
+                        Text("Can't reach terminatr").font(theme.title(.headline, .bold))
                         Text(why)
-                            .font(theme.body(12))
+                            .font(theme.body(.subheadline))
                             .foregroundStyle(theme.muted)
                             .lineLimit(4)
                         Button("Retry") { model.connect() }
@@ -42,7 +42,7 @@ struct MenuBarView: View {
                 if let behind = model.compatibility.message {
                     Panel {
                         Label(behind, systemImage: "arrow.down.circle")
-                            .font(theme.body(12))
+                            .font(theme.body(.subheadline))
                             .foregroundStyle(theme.attention)
                             .padding(10)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -77,7 +77,7 @@ struct MenuBarView: View {
                 Heading("Needs you", count: model.needs.count)
                 if model.needs.isEmpty {
                     Text("Nothing waits on you.")
-                        .font(theme.body(12.5))
+                        .font(theme.body(.callout))
                         .foregroundStyle(theme.muted)
                         .padding(.horizontal, 12)
                         .padding(.bottom, 10)
@@ -90,11 +90,11 @@ struct MenuBarView: View {
                         if !rest.isEmpty {
                             MenuRow(action: { open(nil) }) {
                                 Text(SidebarTree.moreNeeds(rest))
-                                    .font(theme.body(12))
+                                    .font(theme.body(.subheadline))
                                     .foregroundStyle(theme.muted)
                                 Spacer(minLength: 6)
                                 Text(MenuBarList.projects(of: rest))
-                                    .font(theme.body(12))
+                                    .font(theme.body(.subheadline))
                                     .foregroundStyle(theme.muted)
                                     .lineLimit(1)
                                     .truncationMode(.middle)
@@ -120,15 +120,15 @@ struct MenuBarView: View {
                         ForEach(shown, id: \.slug) { row in
                             if let p = model.project(row.slug) {
                                 MenuRow(action: { open(p.slug) }) {
-                                    Text(p.slug).font(theme.body(13, .semibold))
+                                    Text(p.slug).font(theme.body(.body, .semibold))
                                     Text(Self.summary(p))
-                                        .font(theme.body(12))
+                                        .font(theme.body(.subheadline))
                                         .foregroundStyle(theme.muted)
                                     Spacer(minLength: 6)
                                     Flag(count: model.needs(of: p.slug).count)
                                     if row.index < 9 {
                                         Text("⌘\(row.index + 1)")
-                                            .font(theme.mono(11))
+                                            .font(theme.mono(.caption))
                                             .foregroundStyle(theme.muted)
                                     }
                                 }
@@ -140,11 +140,11 @@ struct MenuBarView: View {
                             // Only inactive ones left out: the sidebar unfolds them.
                             MenuRow(action: { if more == 0 { model.nav.showInactive = true }; open(nil) }) {
                                 Text(others)
-                                    .font(theme.body(12))
+                                    .font(theme.body(.subheadline))
                                     .foregroundStyle(theme.muted)
                                 Spacer(minLength: 6)
                                 Text("in the window")
-                                    .font(theme.body(12))
+                                    .font(theme.body(.subheadline))
                                     .foregroundStyle(theme.muted)
                             }
                         }
@@ -189,7 +189,7 @@ struct MenuBarView: View {
                 open(nil)
             } label: {
                 Text("Open terminatr")
-                    .font(theme.body(12.5, .semibold))
+                    .font(theme.body(.callout, .semibold))
                     .padding(.horizontal, 10)
                     .padding(.vertical, 5)
                     .background(theme.action, in: RoundedRectangle(cornerRadius: 8))
@@ -201,6 +201,7 @@ struct MenuBarView: View {
             SettingsLink {
                 Image(systemName: "gearshape")
             }
+            .accessibilityLabel("Settings")
             .buttonStyle(.borderless)
             .help("Settings")
             Button {
@@ -208,6 +209,7 @@ struct MenuBarView: View {
             } label: {
                 Image(systemName: "power")
             }
+            .accessibilityLabel("Quit terminatr")
             .buttonStyle(.borderless)
             .keyboardShortcut("q")
             .help("Quit terminatr (the server keeps running)")
@@ -251,7 +253,7 @@ private struct Panel<Content: View>: View {
     var body: some View {
         content
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+            .frosted(RoundedRectangle(cornerRadius: 12))
             .background(theme.cardTint, in: RoundedRectangle(cornerRadius: 12))
             .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(theme.edge, lineWidth: 1))
     }
@@ -269,7 +271,7 @@ private struct Heading: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            Text(text).font(theme.title(14, .bold))
+            Text(text).font(theme.title(.heading, .bold))
             if let count, count > 0 {
                 Flag(count: count)
             }
@@ -288,7 +290,7 @@ private struct Flag: View {
     var body: some View {
         if count > 0 {
             Text("\(count)")
-                .font(theme.mono(11, .medium))
+                .font(theme.mono(.caption, .medium))
                 .padding(.horizontal, 6)
                 .padding(.vertical, 1)
                 .background(theme.attention, in: Capsule())
@@ -327,22 +329,22 @@ struct NeedRow: View {
     var body: some View {
         MenuRow(action: action) {
             Image(systemName: Self.symbol(need.kind))
-                .font(theme.body(13, .semibold))
+                .font(theme.body(.body, .semibold))
                 .foregroundStyle(colour)
                 .frame(width: 18)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 1) {
                 Text(need.title)
-                    .font(theme.body(13, .semibold))
+                    .font(theme.body(.body, .semibold))
                     .lineLimit(1)
                 Text(need.detail)
-                    .font(theme.body(11.5))
+                    .font(theme.body(.footnote))
                     .foregroundStyle(theme.muted)
                     .lineLimit(1)
             }
             Spacer(minLength: 4)
             Text(Self.verb(need.kind))
-                .font(theme.body(11.5, .semibold))
+                .font(theme.body(.footnote, .semibold))
                 .foregroundStyle(theme.action)
         }
         .accessibilityElement(children: .combine)
@@ -393,9 +395,9 @@ private struct PeerRow: View {
     var body: some View {
         HStack(spacing: 8) {
             Text("\(peer.name.isEmpty ? peer.alias : peer.name)/\(project.project)")
-                .font(theme.body(13, .semibold))
+                .font(theme.body(.body, .semibold))
             Text(summary)
-                .font(theme.body(12))
+                .font(theme.body(.subheadline))
                 .foregroundStyle(theme.muted)
             Spacer(minLength: 6)
             if !project.stale {

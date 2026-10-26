@@ -32,7 +32,7 @@ struct Composer: View {
                     }
                     TextEditor(text: $text)
                         .scrollContentBackground(.hidden)
-                        .font(theme.body(13))
+                        .font(theme.body(.body))
                         .frame(minHeight: 20, maxHeight: 120)
                         .fixedSize(horizontal: false, vertical: true)
                         .focused($focused)
@@ -61,7 +61,7 @@ struct Composer: View {
                     .help(running ? "Queued: it goes once the turn ends (↩)" : "Sends it (↩)")
             }
             .padding(10)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+            .frosted(RoundedRectangle(cornerRadius: 14))
             .background(theme.cardTint, in: RoundedRectangle(cornerRadius: 14))
             .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(theme.edge, lineWidth: 1))
             HStack(spacing: 10) {
@@ -79,10 +79,10 @@ struct Composer: View {
                 }
                 Spacer()
                 Text("⌥↩ steer · ⇧↩ new line")
-                    .font(theme.mono(10.5))
+                    .font(theme.mono(.caption2))
                     .foregroundStyle(theme.muted)
             }
-            .font(theme.body(11.5))
+            .font(theme.body(.footnote))
             .padding(.horizontal, 6)
         }
         .padding(.horizontal, 22)
