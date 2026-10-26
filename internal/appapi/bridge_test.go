@@ -2,9 +2,11 @@ package appapi_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"log"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -16,6 +18,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/appapi/apptest"
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/client"
+	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/home/hometest"
 	"github.com/theclifmeister/terminatr/internal/plat/ipc/ipctest"
 	"github.com/theclifmeister/terminatr/internal/project"
@@ -213,6 +216,50 @@ func TestBridge(t *testing.T) {
 	}
 	if err := c.Call(proto.MethodSessionList, nil, nil); err != nil {
 		t.Errorf("after a bad line: %v", err)
+	}
+}
+
+// TestBridgeProjectSettings: each project's active, paused and pinned
+// reach the app (app API 4), and no other setting does.
+func TestBridgeProjectSettings(t *testing.T) {
+	p := testPaths(t)
+	for _, slug := range []string{"alpha", "beta", "gamma"} {
+		if _, err := project.New(project.Options{Slug: slug}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, set := range []struct {
+		slug, key string
+		value     bool
+	}{{"alpha", "pinned", true}, {"beta", "paused", true}, {"gamma", "active", false}, {"gamma", "yolo", true}} {
+		if err := config.SetProject(set.slug, set.key, set.value); err != nil {
+			t.Fatal(err)
+		}
+	}
+	startServer(t, p)
+	c, err := bridge(t, p, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var raw json.RawMessage
+	if _, err := c.Stream(proto.MethodProjectsWatch, appapi.ProjectsWatchParams{}, &raw); err != nil {
+		t.Fatal(err)
+	}
+	var ps appapi.Projects
+	if err := json.Unmarshal(raw, &ps); err != nil {
+		t.Fatal(err)
+	}
+	type flags struct{ active, paused, pinned bool }
+	got := map[string]flags{}
+	for _, pr := range ps.Projects {
+		got[pr.Slug] = flags{pr.Active, pr.Paused, pr.Pinned}
+	}
+	want := map[string]flags{"alpha": {true, false, true}, "beta": {true, true, false}, "gamma": {false, false, false}}
+	if !maps.Equal(got, want) {
+		t.Errorf("projects %+v, want %+v", got, want)
+	}
+	if strings.Contains(string(raw), "yolo") || strings.Contains(string(raw), "safety") {
+		t.Errorf("a setting crossed: %s", raw)
 	}
 }
 

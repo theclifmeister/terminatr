@@ -74,7 +74,7 @@ let backend = AppAPI.QuestionItem(question: "Which cache backend?", options: [.i
                                                            state: "working", session: "s-9", created: t0, reports: 0,
                                                            reportAcked: 0, usage: noUsage),
                                checks: "fail", pr: 801, task: AppAPI.Task(id: 809, ref: "T809", title: "Sidebar CI", status: "doing"))
-    let p = AppAPI.Project(slug: "terminatr",
+    let p = AppAPI.Project(slug: "terminatr", active: true,
                            needsYou: [AppAPI.Task(id: 806, ref: "T806", title: "Docs pins", status: "review"),
                                       AppAPI.Task(id: 807, ref: "T807", title: "Paste guard", status: "blocked")],
                            questions: 2, threads: [thread], usage: noUsage)

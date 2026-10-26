@@ -27,7 +27,7 @@ private func status(_ state: String, reason: String = "", agent: String = "claud
     let usage = AppAPI.Usage(turns: 0, input: 0, output: 0, cacheRead: 0, cacheCreation: 0, costUsd: 0)
     let rec = AppAPI.ThreadRecord(id: "t-1", title: "x", agent: "claude", worktree: "/w", state: "working", session: "s2", created: created, reports: 0, reportAcked: 0, usage: usage)
     let idle = AppAPI.ThreadRecord(id: "t-2", title: "y", agent: "claude", worktree: "/w", state: "idle", created: created, reports: 0, reportAcked: 0, usage: usage)
-    let projects = [AppAPI.Project(slug: "p", threads: [AppAPI.Thread(record: rec), AppAPI.Thread(record: idle)], usage: usage)]
+    let projects = [AppAPI.Project(slug: "p", active: true, threads: [AppAPI.Thread(record: rec), AppAPI.Thread(record: idle)], usage: usage)]
     let sessions = [
         AppAPI.Session(id: "s1", role: "coordinator", project: "q", cols: 80, rows: 24, created: created, clients: 0),
         AppAPI.Session(id: "s3", role: "coordinator", project: "p", cols: 80, rows: 24, created: created, clients: 0),

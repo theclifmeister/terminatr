@@ -224,9 +224,14 @@ type Projects struct {
 // the user, open questions, threads), and with detail what the
 // dashboard shows too (goal, repos, board counts, inbox, usage, repos
 // behind origin, links). Error says why it doesn't open, or why its
-// board doesn't load.
+// board doesn't load. Active, Paused and Pinned are the project's
+// settings of those names (since app API 4), for the sidebar's order:
+// its only settings in the app API.
 type Project struct {
 	Slug        string            `json:"slug"`
+	Active      bool              `json:"active"`
+	Paused      bool              `json:"paused,omitempty"`
+	Pinned      bool              `json:"pinned,omitempty"`
 	NeedsYou    []Task            `json:"needs_you"`
 	Questions   int               `json:"questions,omitempty"`
 	Threads     []Thread          `json:"threads"`
@@ -550,12 +555,17 @@ func projectsOf(w server.ProjectsWatch) Projects {
 	return out
 }
 
-// projectOf is p as the app sees it. Its settings (Safety, Own) and the
-// mods' badges stay home: settings and mods are never in the app API.
+// projectOf is p as the app sees it. Of its settings only Active, Paused
+// and Pinned cross; the rest (Safety, Own) and the mods' badges stay
+// home: settings and mods are never in the app API. Settings that can't
+// be read count as active, as in the TUI.
 func projectOf(p server.SideProject) Project {
-	out := Project{Slug: p.Slug, NeedsYou: make([]Task, 0, len(p.NeedsYou)), Questions: p.Questions,
+	out := Project{Slug: p.Slug, Active: true, NeedsYou: make([]Task, 0, len(p.NeedsYou)), Questions: p.Questions,
 		Threads: make([]Thread, 0, len(p.Threads)), PRHostFails: p.PRHostFails, Goal: p.Goal, Repos: p.Repos,
 		Counts: p.Counts, Error: p.Error, Usage: usageOf(p.Usage), Checkouts: p.Checkouts}
+	if s := p.Safety; s != nil {
+		out.Active, out.Paused, out.Pinned = s.Active, s.Paused, s.Pinned
+	}
 	for _, t := range p.NeedsYou {
 		out.NeedsYou = append(out.NeedsYou, taskOf(t))
 	}
