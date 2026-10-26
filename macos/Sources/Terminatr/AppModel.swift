@@ -89,6 +89,10 @@ final class AppModel {
     /// Whether the first-run sheet shows (FirstRun; Help › Getting
     /// Started shows it again).
     var welcome = false
+    /// The project File › New Task… adds to while its sheet shows.
+    var newTask: String?
+    /// What the bridge did: Settings › Advanced shows it.
+    private(set) var log = BridgeLog()
     /// The need ⌥⌘↓ or ⌥⌘↑ showed last (Need.step).
     @ObservationIgnored private var lastNeed: String?
 
@@ -135,6 +139,7 @@ final class AppModel {
     /// (Re)starts the bridge: with the configured tm, or the first one
     /// found. A bridge already running is ended first.
     func connect() {
+        if run != nil { log.add("Reconnecting") }
         run?.cancel()
         run = Task { await watch(tmPath: UserDefaults.standard.string(forKey: Self.tmPathKey)) }
     }
@@ -147,6 +152,7 @@ final class AppModel {
         var started: Bridge?
         do {
             let tm = try TMLocator(configured: tmPath).locate()
+            log.add("Starting \(tm.path) app bridge")
             let b = try await Bridge.launch(tm: tm)
             started = b
             bridge = b
@@ -156,6 +162,7 @@ final class AppModel {
             if fit.blocks { throw BridgeError.closed(fit.message ?? "") }
             self.hello = hello
             phase = .connected(hello)
+            log.add(BridgeLog.connected(hello, tm: tm.lastPathComponent))
             // An older tm's bridge has no peer.list: no paired servers.
             loaded.peers = !hello.methods.contains(AppAPI.Methods.peerList.name)
             let peers = !loaded.peers
@@ -172,6 +179,7 @@ final class AppModel {
             if !Task.isCancelled {
                 // The needs stay for the window (dimmed); the menu bar and
                 // the Dock badge count none while it is down.
+                log.add("Failed: \(error.localizedDescription)")
                 phase = .failed(error.localizedDescription)
             }
         }
@@ -551,6 +559,35 @@ final class AppModel {
     /// once the server checked the dialog again.
     func approve(_ params: AppAPI.ApproveParams) async throws -> AppAPI.ApproveResult {
         try await connected().call(AppAPI.Methods.sessionApprove, params)
+    }
+
+    /// Whether this tm adds tasks from the app (task.add, app API 7).
+    var canAddTask: Bool {
+        if case .connected(let h) = phase { return Compatibility.addsTasks(h) }
+        return false
+    }
+
+    /// The project File › New Task… adds to: the shown one, a paired
+    /// server's never (its board is its own).
+    var boardProject: String? {
+        switch nav.selection {
+        case .project(let slug, let server) where server.isEmpty: slug
+        case .session(let ref) where !ref.isRemote: ref.project
+        default: nil
+        }
+    }
+
+    /// File › New Task… (⌘N): the sheet for the shown project.
+    func showNewTask() {
+        guard canAddTask, let p = boardProject else { return }
+        newTask = p
+        showWindow?()
+    }
+
+    /// Adds a task to project's board as the user (task.add).
+    func addTask(_ form: NewTaskForm, project: String) async throws -> AppAPI.TaskAdded {
+        guard let bridge else { throw BridgeError.closed("Not connected to terminatr.") }
+        return try await bridge.call(AppAPI.Methods.taskAdd, form.params(project: project))
     }
 
     /// Claims mod notice id for this console: true when the app is the

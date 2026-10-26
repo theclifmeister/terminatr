@@ -62,7 +62,7 @@ struct FirstRunSheet: View {
                     .tint(theme.action)
             }
         }
-        .font(.system(size: 13))
+        .font(theme.body(13))
         .padding(24)
         .frame(width: 600)
         .onDisappear { UserDefaults.standard.set(true, forKey: FirstRun.doneKey) }
@@ -233,12 +233,12 @@ struct ConnectionBanner: View {
             if case .failed(let why) = app.phase {
                 Image(systemName: "bolt.horizontal.circle.fill")
                     .foregroundStyle(theme.attention)
-                    .font(.system(size: 16))
+                    .font(theme.body(16))
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Lost the connection to terminatr")
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(theme.body(13, .semibold))
                     Text("What shows is from before. \(why)")
-                        .font(.system(size: 12))
+                        .font(theme.body(12))
                         .foregroundStyle(theme.muted)
                         .lineLimit(2)
                         .textSelection(.enabled)
@@ -250,7 +250,7 @@ struct ConnectionBanner: View {
             } else {
                 ProgressView().controlSize(.small)
                 Text("Reconnecting to terminatr…")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(theme.body(13, .semibold))
                 Spacer(minLength: 8)
             }
         }
@@ -290,7 +290,7 @@ struct VersionBadge: View {
                         .fixedSize(horizontal: false, vertical: true)
                     CommandText("tm update")
                 }
-                .font(.system(size: 13))
+                .font(theme.body(13))
                 .padding(16)
                 .frame(width: 320)
             }
@@ -315,7 +315,7 @@ struct NoProjects: View {
                 .foregroundStyle(theme.muted)
                 .fixedSize(horizontal: false, vertical: true)
             Text("tm doctor checks that tm and an agent are set up.")
-                .font(.system(size: 12))
+                .font(theme.body(12))
                 .foregroundStyle(theme.muted)
         }
         // A set width: with maxWidth its texts' ideal width made the

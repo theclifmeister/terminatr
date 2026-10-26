@@ -68,7 +68,7 @@ struct Inspector: View {
                 fact("PR", pr(t!), mono: false)
                 if let url = prURL(t!) {
                     Link("Open the PR", destination: url)
-                        .font(.system(size: 12))
+                        .font(theme.body(12))
                         .foregroundStyle(theme.action)
                 }
                 fact("State", app.attention(t!).word, mono: false)
@@ -98,7 +98,7 @@ struct Inspector: View {
         VStack(alignment: .leading, spacing: 6) {
             Text(model.ref.project).font(theme.title(16, .heavy))
             if let goal = p?.goal, !goal.isEmpty {
-                Text(goal).font(.system(size: 12)).foregroundStyle(theme.muted)
+                Text(goal).font(theme.body(12)).foregroundStyle(theme.muted)
             }
             pill
         }
@@ -113,8 +113,8 @@ struct Inspector: View {
                                     .foregroundStyle(NeedRow.colour(n.kind, theme))
                                     .accessibilityHidden(true)
                                 VStack(alignment: .leading, spacing: 0) {
-                                    Text(n.what).font(.system(size: 12, weight: .medium)).lineLimit(2)
-                                    Text(n.detail).font(.system(size: 11)).foregroundStyle(theme.muted).lineLimit(1)
+                                    Text(n.what).font(theme.body(12, .medium)).lineLimit(2)
+                                    Text(n.detail).font(theme.body(11)).foregroundStyle(theme.muted).lineLimit(1)
                                 }
                             }
                             .contentShape(Rectangle())
@@ -148,7 +148,7 @@ struct Inspector: View {
             }
             Text(ref.project).font(theme.title(16, .heavy))
             if let goal = project?.goal, !goal.isEmpty {
-                Text(goal).font(.system(size: 12)).foregroundStyle(theme.muted)
+                Text(goal).font(theme.body(12)).foregroundStyle(theme.muted)
             }
             if let s, !s.state.isEmpty {
                 let blocked = s.state == "blocked" || s.asking
@@ -166,7 +166,7 @@ struct Inspector: View {
             fact("Panes", panes(app.remotePane(ref)), mono: false)
             if project?.stale == true { fact("Read", "stale", mono: false) }
             Text("Its conversation stays there: only the pane crosses the link.")
-                .font(.system(size: 11.5))
+                .font(theme.body(11.5))
                 .foregroundStyle(theme.muted)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -183,7 +183,7 @@ struct Inspector: View {
                             .frame(height: 5)
                         Text("\(pct)%").font(theme.mono(11.5))
                     }
-                    .font(.system(size: 12))
+                    .font(theme.body(12))
                 }
                 if s.queuedPrompts > 0 { fact("Queued", "\(s.queuedPrompts) prompts", mono: false) }
                 fact("Started", s.created.formatted(date: .abbreviated, time: .shortened), mono: false)
@@ -215,7 +215,7 @@ struct Inspector: View {
                             .frame(height: 5)
                         Text("\(pct)%").font(theme.mono(11.5))
                     }
-                    .font(.system(size: 12))
+                    .font(theme.body(12))
                 }
                 if s.queuedPrompts > 0 { fact("Queued", "\(s.queuedPrompts) prompts", mono: false) }
                 fact("Session", s.id, mono: true)
@@ -253,9 +253,9 @@ struct Inspector: View {
         HStack(alignment: .firstTextBaseline, spacing: 7) {
             Image(systemName: done ? "checkmark.circle.fill" : current ? "circle.inset.filled" : "circle")
                 .foregroundStyle(done ? theme.good : current ? theme.action : theme.idle)
-                .font(.system(size: 11))
+                .font(theme.body(11))
             Text(text)
-                .font(.system(size: 12, weight: current ? .semibold : .regular))
+                .font(theme.body(12, current ? .semibold : .regular))
                 .foregroundStyle(done ? theme.muted : theme.ink)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -267,11 +267,11 @@ struct Inspector: View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text(label).foregroundStyle(theme.muted)
             Text(value)
-                .font(mono ? theme.mono(11.5) : .system(size: 12))
+                .font(mono ? theme.mono(11.5) : theme.body(12))
                 .lineLimit(2)
                 .truncationMode(.middle)
                 .textSelection(.enabled)
         }
-        .font(.system(size: 12))
+        .font(theme.body(12))
     }
 }

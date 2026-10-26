@@ -268,6 +268,7 @@ func TestCopies(t *testing.T) {
 	check("session.approve", homeOf(approveResultOf), nil)
 	check("task.ask", homeOf(taskAskResultOf), nil)
 	check("project.open", homeOf(projectOpenOf), nil)
+	check("task.add", homeOf(taskAddedOf), nil)
 	check("questions.open", homeOf(questionsOpenOf), nil)
 	check("notify", homeOf(noticeResultOf), nil)
 	// The window is the bridge's: it acks for the app.
@@ -333,6 +334,11 @@ func TestParamsCopies(t *testing.T) {
 	if _, _, err := m.toStream(json.RawMessage(`{"id":3,"ack":5}`)); err == nil {
 		t.Error("pane.input took an ack")
 	}
+	m, _ = Lookup(proto.MethodTaskAdd)
+	p, err = m.toServer(json.RawMessage(`{"project":"web","title":"Ship it","notes":"soon"}`))
+	if want := (proto.TaskAddParams{Project: "web", Title: "Ship it", Notes: "soon"}); err != nil || p != want {
+		t.Errorf("task.add params %+v %v", p, err)
+	}
 	// Only a send-back takes a note.
 	m, _ = Lookup(proto.MethodTaskAccept)
 	if _, err := m.toServer(json.RawMessage(`{"project":"web","task":"T2","note":"x"}`)); err == nil {
@@ -362,7 +368,7 @@ func TestAllowlist(t *testing.T) {
 		proto.MethodSessionAnswer, proto.MethodSessionApprove, proto.MethodSessionKeys, proto.MethodSessionList,
 		proto.MethodSessionPrompt, proto.MethodSessionWatch, proto.MethodTaskAsk,
 		proto.MethodTaskAccept, proto.MethodTaskSendBack, proto.MethodTaskDelegate, proto.MethodProjectOpen,
-		proto.MethodQuestionsOpen, proto.MethodPaneVT, proto.MethodTranscriptWatch, MethodPaneInput}
+		proto.MethodQuestionsOpen, proto.MethodTaskAdd, proto.MethodPaneVT, proto.MethodTranscriptWatch, MethodPaneInput}
 	slices.Sort(want)
 	if got := MethodNames(); !slices.Equal(got, want) {
 		t.Errorf("methods %v, want %v", got, want)

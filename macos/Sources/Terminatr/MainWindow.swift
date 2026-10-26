@@ -6,10 +6,17 @@ import TerminatrKit
 /// dashboard or a session; the session's inspector in a trailing column
 /// (⌘⌥I); over them the command palette (⌘K). The menu bar,
 /// notifications and cards change what it shows, never open another
-/// window, unless the user asks for one (Open in New Window).
+/// window, unless the user asks for one (Open in New Window). The
+/// toolbar has Search (⌘K), Needs you with its count and the inspector's
+/// toggle (T748 milestone G); the inspector keeps the width it was left
+/// at.
 struct MainWindow: View {
     @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
+    /// The inspector's width as it was left (InspectorWidth saves it),
+    /// read once: its ideal stays put while the user drags it.
+    private static let inspectorWidth = UserDefaults.standard.object(forKey: inspectorWidthKey) as? Double ?? 270
+    static let inspectorWidthKey = "inspectorWidth"
 
     var body: some View {
         @Bindable var app = app
@@ -29,8 +36,9 @@ struct MainWindow: View {
                 .inspector(isPresented: Binding(get: { app.inspector && app.selectedRef != nil },
                                                 set: { if app.selectedRef != nil { app.inspector = $0 } })) {
                     inspector
-                        .inspectorColumnWidth(min: 240, ideal: 270, max: 360)
+                        .inspectorColumnWidth(min: 240, ideal: Self.inspectorWidth, max: 360)
                         .background { Frost() }
+                        .background(InspectorWidth(key: Self.inspectorWidthKey))
                 }
         }
         .tint(theme.action)
@@ -52,11 +60,14 @@ struct MainWindow: View {
             if app.isConnected, app.compatibility.message != nil {
                 ToolbarItem(placement: .primaryAction) { VersionBadge() }
             }
-            if app.selectedRef != nil {
-                ToolbarItem(placement: .primaryAction) {
-                    Button { app.inspector.toggle() } label: { Label("Inspector", systemImage: "sidebar.right") }
-                        .help(app.inspector ? "Hide the inspector (⌘⌥I)" : "Show the inspector (⌘⌥I)")
-                }
+            ToolbarItemGroup(placement: .primaryAction) {
+                Button { app.palette.toggle() } label: { Label("Search", systemImage: "magnifyingglass") }
+                    .help("Search projects, threads, tasks and needs (⌘K)")
+                NeedsMenu()
+                Button { app.inspector.toggle() } label: { Label("Inspector", systemImage: "sidebar.right") }
+                    .disabled(app.selectedRef == nil)
+                    .help(app.selectedRef == nil ? "A session's inspector (⌘⌥I)"
+                        : app.inspector ? "Hide the inspector (⌘⌥I)" : "Show the inspector (⌘⌥I)")
             }
         }
         .overlay(alignment: .top) {
@@ -72,6 +83,11 @@ struct MainWindow: View {
         }
         .sheet(isPresented: $app.shortcuts) { ShortcutsSheet() }
         .sheet(isPresented: $app.welcome) { FirstRunSheet() }
+        .sheet(isPresented: Binding(get: { app.newTask != nil }, set: { if !$0 { app.newTask = nil } })) {
+            if let p = app.newTask {
+                NewTaskSheet(project: p)
+            }
+        }
     }
 
     /// What the window keeps while the bridge is down shows so (lost).
@@ -107,6 +123,36 @@ struct MainWindow: View {
             Inspector(model: m, session: app.session(of: m))
                 .id(ref)
         }
+    }
+}
+
+/// The toolbar's Needs you: its count on a flag, and a menu of the
+/// needs, each showing what it names; Next Need (⌥⌘↓) first.
+struct NeedsMenu: View {
+    @Environment(AppModel.self) private var app
+    @Environment(\.theme) private var theme
+
+    var body: some View {
+        Menu {
+            Button("Next Need") { app.stepNeed(1) }
+                .disabled(app.needs.isEmpty)
+            if !app.needs.isEmpty {
+                Divider()
+                ForEach(app.needs) { n in
+                    Button("\(n.title) · \(n.detail.isEmpty ? n.project : n.detail)") {
+                        app.open(project: n.project, session: n.session)
+                    }
+                }
+            }
+        } label: {
+            // The count beside the flag, as Bloom's toolbar has it (⚑ 6).
+            Label("\(app.needs.count)", systemImage: app.needs.isEmpty ? "flag" : "flag.fill")
+                .labelStyle(.titleAndIcon)
+                .monospacedDigit()
+        }
+        .menuIndicator(.hidden)
+        .help(app.needs.isEmpty ? "Nothing needs you" : "\(app.needs.count) need you: ⌥⌘↓ shows the next")
+        .accessibilityLabel("Needs you, \(app.needs.count)")
     }
 }
 
