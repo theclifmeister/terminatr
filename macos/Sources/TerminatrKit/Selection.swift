@@ -89,12 +89,31 @@ public struct Navigation: Codable, Equatable, Sendable {
     public private(set) var forward: [Selection] = []
     /// The sidebar's collapsed sections, by SidebarSection key.
     public var collapsed: Set<String> = []
+    /// Whether the sidebar unfolds its inactive projects (⇧⌘H).
+    public var showInactive = false
+    /// The sidebar's "N more" rows unfolded, by moreKey.
+    public var unfolded: Set<String> = []
 
     /// How many steps back are kept.
     public static let historyLimit = 50
 
     public init(selection: Selection? = nil) {
         self.selection = selection
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case selection, back, forward, collapsed, showInactive, unfolded
+    }
+
+    /// A save from before a field was added reads as its default.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        selection = try c.decodeIfPresent(Selection.self, forKey: .selection)
+        back = try c.decodeIfPresent([Selection].self, forKey: .back) ?? []
+        forward = try c.decodeIfPresent([Selection].self, forKey: .forward) ?? []
+        collapsed = try c.decodeIfPresent(Set<String>.self, forKey: .collapsed) ?? []
+        showInactive = try c.decodeIfPresent(Bool.self, forKey: .showInactive) ?? false
+        unfolded = try c.decodeIfPresent(Set<String>.self, forKey: .unfolded) ?? []
     }
 
     /// Shows s; the one shown before goes on the back list.
@@ -156,6 +175,12 @@ public struct Navigation: Codable, Equatable, Sendable {
     }
 
     public static let needsSection = "needs"
+
+    /// A "N more" row of the sidebar: a project's threads, or the needs
+    /// (project empty).
+    public static func moreKey(project: String = "") -> String {
+        project.isEmpty ? "more:needs" : "more:\(project)"
+    }
 }
 
 private extension Array where Element: Equatable {

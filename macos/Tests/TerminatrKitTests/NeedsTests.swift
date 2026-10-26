@@ -129,7 +129,7 @@ func thread(_ id: String, task: AppAPI.Task? = nil, session: String = "", checks
 /// A session's second line is its thread's task title, never the
 /// pane's title (Claude's terminal title, "✳ Fake Claude").
 @Test func taskTitles() {
-    let p = AppAPI.Project(slug: "terminatr", needsYou: [],
+    let p = AppAPI.Project(slug: "terminatr", active: true, needsYou: [],
                            threads: [thread("t-0675", task: AppAPI.Task(id: 812, ref: "T812", title: "Cache layer for project.watch", status: "started"))],
                            usage: noUsage)
     var s = session("s-1", state: "blocked", reason: "permission")
