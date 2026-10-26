@@ -74,7 +74,7 @@ func (s *Session) Attach() (*Subscriber, error) {
 }
 
 // AttachRemote registers a paired server's subscriber (docs/SPEC.md
-// §16.12): its stream starts with a FrameRepaint (Repaint, which any
+// §16.12), or a pane.vt client's (§3.3, Pane VT): its stream starts with a FrameRepaint (Repaint, which any
 // build can read), then output and resizes as Attach's; a backlog over
 // MaxRemotePending becomes a fresh repaint.
 func (s *Session) AttachRemote() (*Subscriber, error) {

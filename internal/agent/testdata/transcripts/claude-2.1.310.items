@@ -1,0 +1,36 @@
+{"kind":"tool","text":"lorem 399.0","tool":"Bash","call":"id-32"}
+{"kind":"result","text":"lorem 412.0","call":"id-32","lines":4}
+{"kind":"tool","text":"lorem 762.0","tool":"Bash","call":"id-42"}
+{"kind":"result","text":"lorem 775.0","call":"id-42","lines":4}
+{"kind":"text","text":"lorem 799.0"}
+{"kind":"tool","text":"lorem 808.0","tool":"Bash","call":"id-51"}
+{"kind":"result","text":"lorem 821.0","call":"id-51","lines":4}
+{"kind":"tool","text":"lorem 852.0","tool":"Bash","call":"id-57"}
+{"kind":"result","text":"lorem 865.0","call":"id-57","lines":1}
+{"kind":"text","text":"lorem 889.0\nlorem 889.1\nlorem 889.2"}
+{"kind":"prompt","text":"lorem 907.0"}
+{"kind":"tool","text":"lorem 917.0","tool":"Bash","call":"id-75"}
+{"kind":"result","text":"lorem 930.0","call":"id-75","lines":1}
+{"kind":"text","text":"lorem 954.0"}
+{"kind":"prompt","text":"[tm] lorem 976.0"}
+{"kind":"tool","text":"lorem 993.0","tool":"Bash","call":"id-94"}
+{"kind":"result","text":"lorem 1006.0","call":"id-94","lines":4}
+{"kind":"tool","text":"lorem 1030.0","tool":"Bash","call":"id-102"}
+{"kind":"result","text":"lorem 1043.0","call":"id-102","lines":4}
+{"kind":"tool","text":"lorem 1083.0","tool":"Bash","call":"id-114"}
+{"kind":"result","text":"lorem 1099.0","call":"id-114","lines":4}
+{"kind":"tool","text":"lorem 1146.0","tool":"Bash","call":"id-123"}
+{"kind":"result","text":"lorem 1159.0","call":"id-123","lines":4}
+{"kind":"tool","text":"lorem 1183.0","tool":"Bash","call":"id-129"}
+{"kind":"result","text":"lorem 1196.0","call":"id-129","lines":4}
+{"kind":"text","text":"lorem 1226.0"}
+{"kind":"tool","text":"lorem 1235.0","tool":"Bash","call":"id-141"}
+{"kind":"result","text":"lorem 1247.0","call":"id-141","lines":2}
+{"kind":"text","text":"lorem 1290.0\nlorem 1290.1\nlorem 1290.2\nlorem 1290.3"}
+{"kind":"prompt","text":"[tm] lorem 1308.0"}
+{"kind":"tool","text":"lorem 1318.0","tool":"Bash","call":"id-157"}
+{"kind":"result","text":"lorem 1331.0","call":"id-157","lines":1}
+{"kind":"tool","text":"lorem 1355.0","tool":"Bash","call":"id-165"}
+{"kind":"result","text":"lorem 1368.0","call":"id-165","lines":1}
+{"kind":"text","text":"lorem 1392.0"}
+{"kind":"prompt","text":"lorem 1410.0\nlorem 1410.1\nlorem 1410.2\nlorem 1410.3"}

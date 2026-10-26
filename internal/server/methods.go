@@ -197,6 +197,8 @@ func init() {
 			stream: stream((*Server).serveProjectWatch)},
 
 		// The human's.
+		proto.MethodPaneVT:          {gate: gateHuman, stream: (*Server).servePaneVT},
+		proto.MethodTranscriptWatch: {gate: gateHuman, stream: stream((*Server).serveTranscript)},
 		proto.MethodServerStop: {gate: gateHuman, call: typed(func(s *Server, p proto.ServerStopParams, _ callCtx) (any, *proto.Error) {
 			return s.stop(p)
 		})},

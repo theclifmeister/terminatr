@@ -51,7 +51,17 @@ type Hello struct {
 	Kind     Kind   `json:"kind,omitempty"` // client only
 	Bin      string `json:"bin,omitempty"`  // server only: its executable, for re-exec
 	PID      int    `json:"pid,omitempty"`  // server only
+	// Caps are the server's capabilities beside its protocol (CapPaneVT,
+	// CapTranscript): a client of another build checks for one before it
+	// calls what it names, without the protocol going up.
+	Caps []string `json:"caps,omitempty"` // server only
 }
+
+// The server's hello capabilities.
+const (
+	CapPaneVT     = "pane-vt"    // pane.vt
+	CapTranscript = "transcript" // transcript.watch
+)
 
 // MismatchError says the client can't talk to this server. When ReExec is
 // set, the client should re-exec the server's binary (Hello.Bin) with the

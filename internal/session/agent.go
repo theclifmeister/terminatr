@@ -536,6 +536,29 @@ func (rt *agentRT) setTail(root, p string) {
 	}
 }
 
+// Transcript is the file the agent's [jsonl_tail] follows and the folder
+// it is opened under, for transcript.watch; "" before the agent named
+// one, or for a session without an agent.
+func (s *Session) Transcript() (root, path string) {
+	rt := s.agentRT()
+	if rt == nil {
+		return "", ""
+	}
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	return rt.tailRoot, rt.tailPath
+}
+
+// OpenTranscript opens a Transcript's file as the tailer does: under
+// root, through no link out of it, never a FIFO.
+func OpenTranscript(root, path string) (*os.File, os.FileInfo, error) {
+	li, err := os.Lstat(path)
+	if err != nil {
+		return nil, nil, err
+	}
+	return openTail(root, path, li)
+}
+
 // openTail opens the followed file p under root, through no link that
 // leads out of it and without blocking (a FIFO), and checks the handle:
 // a regular file, the one li (p's Lstat) is, so neither a link nor a

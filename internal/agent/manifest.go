@@ -154,6 +154,9 @@ type Manifest struct {
 	// Sources holds tested_versions, session_field, [hook], [status_file],
 	// [jsonl_tail] and [todos_snapshot].
 	Sources
+	// Transcript reads [jsonl_tail]'s file as a conversation; nil for an
+	// agent tm shows only as a terminal.
+	Transcript *Transcript `toml:"transcript"`
 }
 
 // RemoteControl is a manifest's [remote_control] table. Templates see the
@@ -664,6 +667,14 @@ func (m *Manifest) validate() error {
 			if !valid[r.State] || r.State == "" {
 				errs = append(errs, fmt.Errorf("jsonl_tail.rules[%d]: unknown state %q", i, r.State))
 			}
+		}
+	}
+	if t := m.Transcript; t != nil {
+		if m.JSONLTail == nil {
+			errs = append(errs, errors.New("transcript: needs [jsonl_tail]"))
+		}
+		if err := t.validate(); err != nil {
+			errs = append(errs, fmt.Errorf("transcript: %w", err))
 		}
 	}
 	if t := m.TodoSnapshot; t != nil && (t.Dir == "" || t.Glob == "" || t.ID == "" || t.Text == "" || t.Status == "") {

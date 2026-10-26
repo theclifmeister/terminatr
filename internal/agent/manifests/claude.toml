@@ -507,6 +507,90 @@ state = "idle"
 match = { type = "assistant", error = "model_not_found" }
 text_field = "message.content"
 
+# The conversation view (docs/SPEC.md §3.3, Transcript): transcript.watch
+# reads the transcript as items. Checked on 2.1.302-2.1.310 transcripts
+# (recorded in internal/agent/testdata/transcripts, whose drift test
+# reads them): a "user" line's message.content is the prompt as a string,
+# or blocks (text, image, tool_result); an "assistant" line holds one
+# block (thinking, text or tool_use) per line. Subagents' lines
+# (isSidechain) and Claude's own (isMeta: caveats, skill bodies) aren't
+# the conversation. A prompt in tags is a command, a hook's or a task's
+# notice (<command-name>, <task-notification>…), not typed. Other line
+# types (attachment, system, ai-title…) aren't conversation lines.
+[transcript]
+tested = ["2."]
+version_field = "version"
+content = "message.content"
+block_kind = "type"
+string_block = "text"
+ignore = ["thinking", "redacted_thinking", "image", "tool_reference", "document"]
+
+[[transcript.items]]
+kind = "note"
+match = { type = "user", isSidechain = "!true", isMeta = "!true" }
+block = "text"
+text = "text"
+prefix = ["[Request interrupted by user"]
+note = "Interrupted"
+
+[[transcript.items]]
+kind = "skip"
+match = { type = "user", isSidechain = "!true" }
+block = "text"
+text = "text"
+prefix = ["<", "[Image"]
+
+[[transcript.items]]
+kind = "skip"
+match = { type = "user", isSidechain = "!true", isMeta = "true" }
+block = "text"
+
+[[transcript.items]]
+kind = "prompt"
+match = { type = "user", isSidechain = "!true" }
+block = "text"
+text = "text"
+
+[[transcript.items]]
+kind = "result"
+match = { type = "user", isSidechain = "!true" }
+block = "tool_result"
+id = "tool_use_id"
+text = "content"
+error = "is_error"
+
+[[transcript.items]]
+kind = "text"
+match = { type = "assistant", isSidechain = "!true" }
+block = "text"
+text = "text"
+
+[[transcript.items]]
+kind = "tool"
+match = { type = "assistant", isSidechain = "!true" }
+block = "tool_use"
+id = "id"
+name = "name"
+input = "input"
+
+[transcript.tool_args]
+Bash = "command"
+Read = "file_path"
+Write = "file_path"
+Edit = "file_path"
+MultiEdit = "file_path"
+NotebookEdit = "notebook_path"
+Grep = "pattern"
+Glob = "pattern"
+WebFetch = "url"
+WebSearch = "query"
+Task = "description"
+Agent = "description"
+Skill = "skill"
+TaskCreate = "subject"
+TaskUpdate = "subject"
+ToolSearch = "query"
+
 # Hook → state: edges and details (who is asking for what).
 [[hooks]]
 event = "SessionStart"
