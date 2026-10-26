@@ -91,6 +91,8 @@ public enum TextSize {
 public enum TextStyle: CaseIterable, Sendable {
     /// A project's name over its dashboard.
     case display
+    /// A sheet's headline: the first-run sheet's.
+    case sheetTitle
     case largeTitle, title, title2, title3, headline
     /// A third-level heading, the menu bar's titles.
     case heading
@@ -104,6 +106,7 @@ public enum TextStyle: CaseIterable, Sendable {
     public var points: Double {
         switch self {
         case .display: 30
+        case .sheetTitle: 24
         case .largeTitle: 22
         case .title: 20
         case .title2: 18

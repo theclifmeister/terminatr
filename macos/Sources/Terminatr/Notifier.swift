@@ -38,9 +38,17 @@ final class Notifier: NSObject {
     }
 
     /// Asks macOS for leave to notify, once: later calls answer what the
-    /// user said.
-    func authorize() async {
-        _ = try? await center?.requestAuthorization(options: [.alert, .sound, .badge])
+    /// user said. Only the first-run sheet and Settings ask, after
+    /// saying why (T748 H): never the launch.
+    static func authorize() async -> Bool {
+        guard Bundle.main.isApp else { return false }
+        return (try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])) ?? false
+    }
+
+    /// What the user told macOS, nil without the app bundle (swift run).
+    static func permission() async -> UNAuthorizationStatus? {
+        guard Bundle.main.isApp else { return nil }
+        return await UNUserNotificationCenter.current().notificationSettings().authorizationStatus
     }
 
     private static func on(_ key: String) -> Bool {

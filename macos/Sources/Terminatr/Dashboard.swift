@@ -257,7 +257,7 @@ struct StartButton: View {
             .tint(theme.action)
             .disabled(busy || !project.active)
             .help(project.active ? "Starts the coordinator with the project's agent and model, as tm project open does"
-                                 : "The project is inactive: tm project active \(project.slug) turns it on")
+                                 : "The project is inactive: tm project activate \(project.slug) turns it on")
             if let error {
                 Text(error)
                     .font(theme.body(.footnote))
@@ -325,11 +325,7 @@ private struct NextStepCard: View {
                 .fixedSize(horizontal: false, vertical: true)
             switch step {
             case .activate:
-                Text("tm project active \(project.slug)")
-                    .font(theme.mono(.callout))
-                    .textSelection(.enabled)
-                    .padding(8)
-                    .background(theme.command, in: RoundedRectangle(cornerRadius: 8))
+                CommandText("tm project activate \(project.slug)")
             case .start:
                 StartButton(project: project, title: "Start the Coordinator")
             case .message:
@@ -339,6 +335,25 @@ private struct NextStepCard: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(theme.action)
+            }
+            if step != .activate {
+                // The New Task sheet with a tm that adds tasks (app API
+                // 7); before it, the command that does.
+                if app.canAddTask {
+                    HStack(spacing: 8) {
+                        Text("Or add a task to its board yourself, for the coordinator to start:")
+                            .font(theme.body(.callout))
+                            .foregroundStyle(theme.muted)
+                        Button("New Task…") { app.showNewTask() }
+                    }
+                    .padding(.top, 6)
+                } else {
+                    Text("Or add a task to its board yourself, for the coordinator to start:")
+                        .font(theme.body(.callout))
+                        .foregroundStyle(theme.muted)
+                        .padding(.top, 6)
+                    CommandText(FirstRun.addTask(project.slug))
+                }
             }
         }
         .padding(18)
@@ -618,61 +633,6 @@ struct Meter: View {
     }
 }
 
-/// The bridge's state at the foot of the sidebar.
-struct StatusLine: View {
-    @Environment(AppModel.self) private var model
-    @Environment(\.theme) private var theme
-
-    /// Whether the sidebar shows it: not while connected and all fits.
-    static func shows(_ model: AppModel) -> Bool {
-        if case .connected = model.phase { return model.compatibility.message != nil }
-        return true
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            line
-            if case .connected = model.phase, let behind = model.compatibility.message {
-                // Ink, with the attention colour on the symbol: as text,
-                // it is under 4.5:1 on the light sidebar (Theme.bloom).
-                Label {
-                    Text(behind)
-                        .lineLimit(4)
-                        .fixedSize(horizontal: false, vertical: true)
-                } icon: {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(theme.attention)
-                }
-                .font(theme.body(.caption2))
-                .foregroundStyle(theme.ink)
-            }
-        }
-    }
-
-    private var line: some View {
-        HStack(spacing: 6) {
-            switch model.phase {
-            case .connecting:
-                ProgressView().controlSize(.mini)
-                Text("Connecting…")
-            case .connected(let h):
-                Circle().fill(theme.good).frame(width: 7, height: 7)
-                Text("tm \(h.tm)" + (h.server.map { $0.version == h.tm ? "" : " · server \($0.version)" } ?? ""))
-                    .font(theme.mono(.caption))
-            case .failed:
-                Circle().fill(theme.attention).frame(width: 7, height: 7)
-                Text("Not connected")
-                Spacer()
-                Button("Retry") { model.connect() }
-                    .buttonStyle(.link)
-                    .foregroundStyle(theme.action)
-            }
-        }
-        .font(theme.body(.footnote))
-        .foregroundStyle(theme.muted)
-    }
-}
-
 /// The detail pane with no project to show: connecting, failed (with
 /// why), or a server with none.
 struct Placeholder: View {
@@ -702,11 +662,11 @@ struct Placeholder: View {
                     SettingsLink { Text("Settings…") }
                 }
             case .connected:
-                Text(empty ? "No projects yet" : "Pick a project")
-                    .font(theme.title(.largeTitle, .heavy))
                 if empty {
-                    Text("Create one with tm project new in a terminal.")
-                        .foregroundStyle(theme.muted)
+                    NoProjects()
+                } else {
+                    Text("Pick a project")
+                        .font(theme.title(.largeTitle, .heavy))
                 }
             }
         }

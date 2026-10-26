@@ -25,10 +25,15 @@ struct MainWindow: View {
         NavigationSplitView {
             Sidebar(needsRotor: needsRotor)
                 .sidebarText()
+                .opacity(app.lost ? Self.dimmed : 1)
                 .navigationSplitViewColumnWidth(min: 210, ideal: 240, max: 340)
         } detail: {
             detail
+                .opacity(app.lost ? Self.dimmed : 1)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .safeAreaInset(edge: .top) {
+                    if app.lost { ConnectionBanner() }
+                }
                 .background { Frost(\.glass, bar: true) }
                 // A project has no inspector: its hiding isn't the user's.
                 .inspector(isPresented: Binding(get: { app.inspector && app.selectedRef != nil },
@@ -64,6 +69,10 @@ struct MainWindow: View {
                     .disabled(!app.nav.canGoForward)
                     .help("Forward (⌘])")
             }
+            // Only when they don't fit: all well, it takes no room.
+            if app.isConnected, app.compatibility.message != nil {
+                ToolbarItem(placement: .primaryAction) { VersionBadge() }
+            }
             ToolbarItemGroup(placement: .primaryAction) {
                 Button { app.palette.toggle() } label: { Label("Search", systemImage: "magnifyingglass") }
                     .help("Search projects, threads, tasks and needs (⌘K)")
@@ -86,12 +95,16 @@ struct MainWindow: View {
             }
         }
         .sheet(isPresented: $app.shortcuts) { ShortcutsSheet() }
+        .sheet(isPresented: $app.welcome) { FirstRunSheet() }
         .sheet(isPresented: Binding(get: { app.newTask != nil }, set: { if !$0 { app.newTask = nil } })) {
             if let p = app.newTask {
                 NewTaskSheet(project: p)
             }
         }
     }
+
+    /// What the window keeps while the bridge is down shows so (lost).
+    static let dimmed = 0.5
 
     @ViewBuilder
     private var detail: some View {
