@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.53.0](https://github.com/theclifmeister/terminatr/compare/v0.52.0...v0.53.0) (2026-10-26)
+
+
+### Features
+
+* **app:** tm app bridge, the app API, and session.approve ([#796](https://github.com/theclifmeister/terminatr/issues/796)) ([182841a](https://github.com/theclifmeister/terminatr/commit/182841aefa1e637edec520b1c09d13f37e862c35))
+* **macos:** the Mac app's Swift package, bridge client and projects window ([#797](https://github.com/theclifmeister/terminatr/issues/797)) ([5b1c0f6](https://github.com/theclifmeister/terminatr/commit/5b1c0f63dbe1d92a723d650286838651348ba0e7))
+* pane.vt and transcript.watch, the macOS app's pane and conversation streams ([#795](https://github.com/theclifmeister/terminatr/issues/795)) ([8bb7168](https://github.com/theclifmeister/terminatr/commit/8bb716821319435e1ee8d201037636022a5bb502))
+* **tui:** a short prefix bar, ? for every key ([#792](https://github.com/theclifmeister/terminatr/issues/792)) ([ce02ee3](https://github.com/theclifmeister/terminatr/commit/ce02ee37c629170d0513dab0310e9b2ea733d3b2))
+
+
+### Bug Fixes
+
+* **mods:** the Memory tab shows a wikilink in a file as its text ([#794](https://github.com/theclifmeister/terminatr/issues/794)) ([03ab847](https://github.com/theclifmeister/terminatr/commit/03ab8477c523b7f45ca3622e1eab607b704234ce))
+* **tui:** the Network popup highlights the selected row across its width ([#791](https://github.com/theclifmeister/terminatr/issues/791)) ([9c5fbf4](https://github.com/theclifmeister/terminatr/commit/9c5fbf422985936abcf9b5a9f159f080029b2e5f))
+
 ## [0.52.0](https://github.com/theclifmeister/terminatr/compare/v0.51.0...v0.52.0) (2026-10-25)
 
 
