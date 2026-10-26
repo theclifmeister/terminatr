@@ -2,11 +2,12 @@ import SwiftUI
 import TerminatrKit
 
 /// The projects window: every project in a frosted sidebar, the
-/// selected one's threads as cards, all over the theme's backdrop. Rows
-/// only read; acting on a thread comes with the thread windows.
+/// selected one's threads as cards, all over the theme's backdrop. A
+/// card opens its thread's window, the header the coordinator's.
 struct ProjectsView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.theme) private var theme
+    @Environment(\.openWindow) private var openWindow
     @State private var selected: String?
 
     var body: some View {
@@ -83,6 +84,10 @@ struct ProjectsView: View {
                     }
                     ForEach(project.threads, id: \.record.id) { t in
                         ThreadCard(thread: t)
+                            .contentShape(RoundedRectangle(cornerRadius: 14))
+                            .onTapGesture { openWindow(id: TerminatrApp.sessionWindow, value: SessionRef(project: project.slug, thread: t.record.id)) }
+                            .accessibilityAddTraits(.isButton)
+                            .help("Open \(t.task?.ref ?? t.record.id)'s window")
                     }
                 }
                 .padding(.horizontal, 28)
@@ -97,8 +102,15 @@ struct ProjectsView: View {
 
     private func header(_ p: AppAPI.Project) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(p.slug)
-                .font(theme.title(30, .heavy))
+            HStack(alignment: .firstTextBaseline) {
+                Text(p.slug)
+                    .font(theme.title(30, .heavy))
+                Spacer()
+                Button("Coordinator") { openWindow(id: TerminatrApp.sessionWindow, value: SessionRef(project: p.slug)) }
+                    .buttonStyle(.borderedProminent)
+                    .tint(theme.action)
+                    .help("Open the coordinator's window")
+            }
             if !p.goal.isEmpty {
                 Text(p.goal)
                     .foregroundStyle(theme.muted)

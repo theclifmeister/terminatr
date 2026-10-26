@@ -287,6 +287,13 @@ jobs:
           xcodebuild -version
           swift --version
 
+      # SwiftTerm (the terminal tab) compiles a Metal shader; Xcode 26+
+      # ships the Metal toolchain as a separate component.
+      - name: Metal toolchain
+        run: |
+          xcrun metal --version >/dev/null 2>&1 || xcodebuild -downloadComponent MetalToolchain
+          xcrun metal --version
+
       - name: swift test
         run: make -C macos test
 

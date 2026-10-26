@@ -48,8 +48,8 @@ struct MenuBarView: View {
         .background { Backdrop() }
     }
 
-    private func open(_ project: String?) {
-        model.open(project: project)
+    private func open(_ project: String?, session: String = "") {
+        model.open(project: project, session: session)
         dismiss()
     }
 
@@ -69,7 +69,7 @@ struct MenuBarView: View {
                     ScrollView {
                         VStack(spacing: 2) {
                             ForEach(model.needs) { n in
-                                NeedRow(need: n) { open(n.project) }
+                                NeedRow(need: n) { open(n.project, session: n.session) }
                             }
                         }
                         .padding(.horizontal, 4)
@@ -185,6 +185,10 @@ struct MenuBarLabel: View {
             let open = openWindow
             model.openWindow = {
                 open(id: TerminatrApp.projectsWindow)
+                NSApp.activate()
+            }
+            model.openSession = { ref in
+                open(id: TerminatrApp.sessionWindow, value: ref)
                 NSApp.activate()
             }
         }

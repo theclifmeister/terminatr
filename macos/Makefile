@@ -10,6 +10,9 @@
 # The macOS 27 SDK's SwiftUI makes @State a macro whose plugin comes only
 # with Xcode: there, build against the 26 SDK, e.g.
 #   SDKROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX26.sdk make app
+# SwiftTerm (the terminal tab) compiles a Metal shader, so building needs
+# Xcode with its Metal toolchain (xcodebuild -downloadComponent
+# MetalToolchain); the Command Line Tools alone have no metal.
 
 SWIFT        ?= swift
 CONFIG       ?= release
@@ -30,7 +33,7 @@ app:
 	rm -rf $(APP)
 	mkdir -p $(APP)/Contents/MacOS $(APP)/Contents/Resources
 	cp "$$($(SWIFT) build -c $(CONFIG) --show-bin-path)/Terminatr" $(APP)/Contents/MacOS/
-	cp -R "$$($(SWIFT) build -c $(CONFIG) --show-bin-path)/Terminatr_Terminatr.bundle" $(APP)/Contents/Resources/
+	cp -R "$$($(SWIFT) build -c $(CONFIG) --show-bin-path)"/*.bundle $(APP)/Contents/Resources/
 	cp Info.plist $(APP)/Contents/Info.plist
 	plutil -lint $(APP)/Contents/Info.plist
 

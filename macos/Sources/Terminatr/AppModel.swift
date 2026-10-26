@@ -5,7 +5,8 @@ import TerminatrKit
 /// What the windows and the menu bar show: the bridge's state, every
 /// project (projects.watch {detail}), the sessions and the mods' notices
 /// (session.list) and the paired servers' shared projects (peer.list),
-/// and what of them needs the user.
+/// and what of them needs the user. The session windows reach the
+/// server through bridge.
 @MainActor
 @Observable
 final class AppModel {
@@ -30,9 +31,18 @@ final class AppModel {
 
     /// Told of every change to needs and notices (Notifier).
     @ObservationIgnored var onNeeds: (@MainActor (AppModel) -> Void)?
-    @ObservationIgnored private(set) var bridge: Bridge?
+    /// The bridge while it runs (the session windows follow it).
+    private(set) var bridge: Bridge?
     @ObservationIgnored private var run: Task<Void, Never>?
     @ObservationIgnored private var loaded = Loaded()
+    @ObservationIgnored private var listing: Task<Void, Never>?
+    @ObservationIgnored private var listAgain = false
+
+    /// The server's hello capabilities (pane-vt, transcript).
+    var caps: [String] {
+        if case .connected(let h) = phase { return h.server?.caps ?? [] }
+        return []
+    }
 
     /// What came since the bridge started: needs wait for all of it, so
     /// the first set is whole.
@@ -149,13 +159,54 @@ final class AppModel {
         onNeeds?(self)
     }
 
+    /// Lists the sessions now, between readSessions' rounds (a session
+    /// window's watch changed: its question or escape may have): once
+    /// at a time, and once more after it when asked meanwhile.
+    func listSessions() {
+        guard listing == nil else {
+            listAgain = true
+            return
+        }
+        listing = Task {
+            repeat {
+                listAgain = false
+                if let b = bridge, let l = try? await b.call(AppAPI.Methods.sessionList) {
+                    sessions = l.sessions
+                    notices = l.notices
+                    changed()
+                }
+            } while listAgain && !Task.isCancelled
+            listing = nil
+        }
+    }
+
+    /// The session ref names now.
+    func sessionID(_ ref: SessionRef) -> String? {
+        ref.session(in: projects, sessions: sessions)
+    }
+
+    func project(_ slug: String) -> AppAPI.Project? {
+        projects.first { $0.slug == slug }
+    }
+
+    func thread(_ ref: SessionRef) -> AppAPI.Thread? {
+        project(ref.project)?.threads.first { $0.record.id == ref.thread }
+    }
+
     /// Opens the projects window, from the menu bar or a notification:
     /// set by a view that has the scene's openWindow.
     @ObservationIgnored var openWindow: (@MainActor () -> Void)?
+    /// Opens a coordinator's or thread's window, likewise.
+    @ObservationIgnored var openSession: (@MainActor (SessionRef) -> Void)?
 
-    /// Shows project (none: as it was) in the projects window, in
-    /// front.
-    func open(project: String? = nil) {
+    /// Opens what a need or a notification names: session's window when
+    /// it is a coordinator's or a thread's, else project (none: as it
+    /// was) in the projects window, in front.
+    func open(project: String? = nil, session: String = "") {
+        if let s = sessions.first(where: { $0.id == session }), let ref = SessionRef(s), let openSession {
+            openSession(ref)
+            return
+        }
         if let project, projects.contains(where: { $0.slug == project }) {
             focus = project
         }

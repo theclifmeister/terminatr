@@ -5,13 +5,15 @@ import TerminatrKit
 
 /// terminatr for Mac (design T734): the coordinators and threads of the
 /// tm server, through tm app bridge. The projects window lists the
-/// projects and their threads; the menu bar lists what needs you, and
+/// projects and their threads, each coordinator and thread opens in a
+/// window of its own, the menu bar lists what needs you, and
 /// notifications tell it as it comes.
 @main
 struct TerminatrApp: App {
     @NSApplicationDelegateAdaptor private var delegate: AppDelegate
 
     static let projectsWindow = "projects"
+    static let sessionWindow = "session"
 
     init() {
         Fonts.register()
@@ -26,6 +28,15 @@ struct TerminatrApp: App {
         }
         .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 980, height: 620)
+
+        WindowGroup("Session", id: Self.sessionWindow, for: SessionRef.self) { $ref in
+            SessionWindow(ref: $ref)
+                .environment(delegate.model)
+                .frame(minWidth: 860, minHeight: 520)
+                .task { delegate.model.start() }
+        }
+        .windowStyle(.hiddenTitleBar)
+        .defaultSize(width: 1240, height: 780)
 
         MenuBarExtra {
             MenuBarView()

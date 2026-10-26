@@ -166,7 +166,7 @@ final class Notifier: NSObject {
             return
         }
         guard let i = r.option else {
-            model.open(project: r.project)
+            model.open(project: r.project, session: r.session)
             return
         }
         guard let session = r.answerSession, let index = r.answerIndex, let question = r.answerQuestion,
@@ -185,7 +185,7 @@ final class Notifier: NSObject {
         case UNNotificationDismissActionIdentifier:
             await model.dismiss(id)
         case UNNotificationDefaultActionIdentifier:
-            model.open(project: r.project)
+            model.open(project: r.project, session: r.session)
         default:
             guard let i = r.option, i < r.noticeButtons.count, r.noticeButtons[i].count == 3 else { return }
             let (session, question, option) = (r.noticeButtons[i][0], r.noticeButtons[i][1], r.noticeButtons[i][2])
@@ -226,6 +226,7 @@ private struct Response: Sendable {
     let action: String
     let option: Int?
     let project: String
+    let session: String
     let who: String
     let answerSession: String?
     let answerIndex: Int?
@@ -239,6 +240,7 @@ private struct Response: Sendable {
         action = r.actionIdentifier
         option = action.hasPrefix(Info.option) ? Int(action.dropFirst(Info.option.count)) : nil
         project = info[Info.project] as? String ?? ""
+        session = info[Info.session] as? String ?? ""
         who = info[Info.who] as? String ?? ""
         answerSession = info[Info.answerSession] as? String
         answerIndex = info[Info.answerIndex] as? Int
