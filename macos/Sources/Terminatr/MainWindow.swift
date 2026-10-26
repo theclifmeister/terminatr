@@ -15,10 +15,15 @@ struct MainWindow: View {
         @Bindable var app = app
         NavigationSplitView {
             Sidebar()
+                .opacity(app.lost ? Self.dimmed : 1)
                 .navigationSplitViewColumnWidth(min: 210, ideal: 240, max: 340)
         } detail: {
             detail
+                .opacity(app.lost ? Self.dimmed : 1)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .safeAreaInset(edge: .top) {
+                    if app.lost { ConnectionBanner() }
+                }
                 .background { Frost(\.glass, bar: true) }
                 // A project has no inspector: its hiding isn't the user's.
                 .inspector(isPresented: Binding(get: { app.inspector && app.selectedRef != nil },
@@ -43,6 +48,10 @@ struct MainWindow: View {
                     .disabled(!app.nav.canGoForward)
                     .help("Forward (⌘])")
             }
+            // Only when they don't fit: all well, it takes no room.
+            if app.isConnected, app.compatibility.message != nil {
+                ToolbarItem(placement: .primaryAction) { VersionBadge() }
+            }
             if app.selectedRef != nil {
                 ToolbarItem(placement: .primaryAction) {
                     Button { app.inspector.toggle() } label: { Label("Inspector", systemImage: "sidebar.right") }
@@ -62,7 +71,11 @@ struct MainWindow: View {
             }
         }
         .sheet(isPresented: $app.shortcuts) { ShortcutsSheet() }
+        .sheet(isPresented: $app.welcome) { FirstRunSheet() }
     }
+
+    /// What the window keeps while the bridge is down shows so (lost).
+    static let dimmed = 0.5
 
     @ViewBuilder
     private var detail: some View {

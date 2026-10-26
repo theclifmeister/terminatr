@@ -226,13 +226,15 @@ struct MenuBarLabel: View {
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
+        // None while the bridge is down: the window keeps the old ones.
+        let count = model.isConnected ? model.needs.count : 0
         HStack(spacing: 3) {
-            Image(systemName: model.needs.isEmpty ? "square.stack.3d.up" : "square.stack.3d.up.badge.automatic")
-            if !model.needs.isEmpty {
-                Text("\(model.needs.count)")
+            Image(systemName: count == 0 ? "square.stack.3d.up" : "square.stack.3d.up.badge.automatic")
+            if count > 0 {
+                Text("\(count)")
             }
         }
-        .accessibilityLabel(model.needs.isEmpty ? "terminatr" : "terminatr, \(model.needs.count) need you")
+        .accessibilityLabel(count == 0 ? "terminatr" : "terminatr, \(count) need you")
         .task {
             let open = openWindow
             model.showWindow = {

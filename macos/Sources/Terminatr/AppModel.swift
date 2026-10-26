@@ -17,9 +17,14 @@ final class AppModel {
         case failed(String)
     }
 
-    private(set) var phase = Phase.connecting
+    private(set) var phase = Phase.connecting {
+        didSet { showBadge() }
+    }
+    /// The hello of the last bridge that connected: kept while the
+    /// bridge is down, so the window keeps what it showed (lost).
+    private(set) var hello: AppAPI.Hello?
     /// Whether this app and the bridge's tm fit (their app API and
-    /// releases); the status line and the menu bar say which is behind.
+    /// releases); the toolbar and the menu bar say which is behind.
     private(set) var compatibility = Compatibility.ok
     private(set) var projects: [AppAPI.Project] = []
     private(set) var sessions: [AppAPI.Session] = []
@@ -32,10 +37,20 @@ final class AppModel {
             if needs.count != oldValue.count { showBadge() }
         }
     }
-    /// The Dock icon's badge: how many needs wait, none at 0.
+    /// The Dock icon's badge: how many needs wait, none at 0 or while
+    /// the bridge is down (the count may be old).
     func showBadge() {
-        NSApp?.dockTile.badgeLabel = needs.isEmpty ? nil : "\(needs.count)"
+        NSApp?.dockTile.badgeLabel = needs.isEmpty || !isConnected ? nil : "\(needs.count)"
     }
+
+    var isConnected: Bool {
+        if case .connected = phase { return true }
+        return false
+    }
+
+    /// The bridge is down (or coming back) after one connected: the
+    /// window keeps what it showed, dimmed, under a banner with Retry.
+    var lost: Bool { hello != nil && !isConnected }
 
     /// Counts the bridges started: needs of a new one are learned
     /// afresh (NeedTracker.reset).
@@ -71,6 +86,9 @@ final class AppModel {
     private(set) var paletteChoice = 0
     /// Whether the Keyboard Shortcuts sheet shows.
     var shortcuts = false
+    /// Whether the first-run sheet shows (FirstRun; Help › Getting
+    /// Started shows it again).
+    var welcome = false
     /// The need ⌥⌘↓ or ⌥⌘↑ showed last (Need.step).
     @ObservationIgnored private var lastNeed: String?
 
@@ -89,11 +107,9 @@ final class AppModel {
     @ObservationIgnored private var listing: Task<Void, Never>?
     @ObservationIgnored private var listAgain = false
 
-    /// The server's hello capabilities (pane-vt, transcript).
-    var caps: [String] {
-        if case .connected(let h) = phase { return h.server?.caps ?? [] }
-        return []
-    }
+    /// The server's hello capabilities (pane-vt, transcript): the last
+    /// bridge's while it is down, so the views stay as they were.
+    var caps: [String] { hello?.server?.caps ?? [] }
 
     /// What came since the bridge started: needs wait for all of it, so
     /// the first set is whole.
@@ -138,6 +154,7 @@ final class AppModel {
             let fit = Compatibility.check(hello, appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String)
             compatibility = fit
             if fit.blocks { throw BridgeError.closed(fit.message ?? "") }
+            self.hello = hello
             phase = .connected(hello)
             // An older tm's bridge has no peer.list: no paired servers.
             loaded.peers = !hello.methods.contains(AppAPI.Methods.peerList.name)
@@ -153,9 +170,9 @@ final class AppModel {
             }
         } catch {
             if !Task.isCancelled {
+                // The needs stay for the window (dimmed); the menu bar and
+                // the Dock badge count none while it is down.
                 phase = .failed(error.localizedDescription)
-                // Not known any more: the menu bar counts nothing.
-                needs = []
             }
         }
         await started?.close()

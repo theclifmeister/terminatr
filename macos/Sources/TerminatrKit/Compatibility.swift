@@ -60,6 +60,16 @@ public enum Compatibility: Equatable, Sendable {
         }
     }
 
+    /// The toolbar's few words, nil when they fit: message says the rest.
+    public var headline: String? {
+        switch self {
+        case .ok: return nil
+        case .tmTooOld(let tm, _): return "tm \(tm) is too old"
+        case .tmBehind(let tm, _): return "tm \(tm) is behind"
+        case .appBehind: return "This app is behind tm"
+        }
+    }
+
     private static func version(_ app: String) -> String {
         app.isEmpty || app == "0.0.0" ? "" : " (\(app))"
     }

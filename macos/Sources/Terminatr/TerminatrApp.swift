@@ -74,7 +74,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // finishes launching.
         DockIcon.apply()
         model.start()
-        Task { await notifier.authorize() }
+        Task {
+            // The first-run sheet, once: not for one who answered macOS
+            // about notifications already (an earlier release asked).
+            let asked = await Notifier.permission().map { $0 != .notDetermined } ?? false
+            if FirstRun.shows(done: UserDefaults.standard.bool(forKey: FirstRun.doneKey), notificationsAsked: asked) {
+                model.welcome = true
+            }
+        }
     }
 
     /// Closing the window leaves the menu bar running.
@@ -124,6 +131,7 @@ struct GoCommands: Commands {
                 .keyboardShortcut("f", modifiers: [.command, .option])
         }
         CommandGroup(replacing: .help) {
+            Button("Getting Started") { model.welcome = true }
             Button("Keyboard Shortcuts") { model.shortcuts = true }
                 .keyboardShortcut("/")
         }
@@ -202,6 +210,7 @@ struct SettingsView: View {
                 }
             }
             Section {
+                NotificationsRow()
                 ForEach(Need.Kind.allCases, id: \.self) { k in
                     KindToggle(kind: k)
                 }

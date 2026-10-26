@@ -33,10 +33,15 @@ final class SessionModel {
     }
 
     /// Follows the session app names for ref: a new one restarts the
-    /// streams, none stops them.
+    /// streams, none stops them. While the bridge is down the streams
+    /// stop but what they showed stays, until the next bridge.
     func follow(_ app: AppModel) {
         self.app = app
-        let id = app.bridge == nil ? nil : app.sessionID(ref)
+        guard app.bridge != nil else {
+            stop()
+            return
+        }
+        let id = app.sessionID(ref)
         guard id != sessionID || app.bridge !== bridge else { return }
         stop()
         sessionID = id
@@ -88,6 +93,9 @@ final class SessionModel {
             for try await e in sub.events {
                 transcript.apply(e.name, e.data)
             }
+        } catch BridgeError.closed {
+            // The bridge went: the conversation stays as it was, and the
+            // next bridge opens the stream again (follow).
         } catch {
             if !Task.isCancelled {
                 transcriptFailure = error.localizedDescription
@@ -99,12 +107,19 @@ final class SessionModel {
 
     enum ActError: LocalizedError {
         case noSession
+        case notConnected
 
-        var errorDescription: String? { "The session isn't running." }
+        var errorDescription: String? {
+            switch self {
+            case .noSession: "The session isn't running."
+            case .notConnected: "Not connected to terminatr."
+            }
+        }
     }
 
     private func target() throws -> (Bridge, String) {
-        guard let b = app?.bridge, let id = sessionID else { throw ActError.noSession }
+        guard let b = app?.bridge else { throw ActError.notConnected }
+        guard let id = sessionID else { throw ActError.noSession }
         return (b, id)
     }
 

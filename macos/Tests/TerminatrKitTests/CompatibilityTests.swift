@@ -34,6 +34,13 @@ private func hello(_ api: Int, _ tm: String) -> AppAPI.Hello {
     #expect(Compatibility.tmBehind(tm: "v0.53.0", app: "").message?.hasPrefix("tm v0.53.0 is older than this app:") == true)
 }
 
+@Test func compatibilityHeadlines() {
+    #expect(Compatibility.ok.headline == nil)
+    #expect(Compatibility.tmBehind(tm: "v0.53.0", app: "0.54.0").headline == "tm v0.53.0 is behind")
+    #expect(Compatibility.appBehind(tm: "v0.55.0", app: "0.54.0").headline == "This app is behind tm")
+    #expect(Compatibility.tmTooOld(tm: "v0.40.0", api: 1).headline == "tm v0.40.0 is too old")
+}
+
 @Test func releaseParsing() {
     #expect(Release("v0.54.0") == Release(major: 0, minor: 54, patch: 0))
     #expect(Release("1.2.3-rc1") == Release(major: 1, minor: 2, patch: 3))
