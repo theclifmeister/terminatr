@@ -1,13 +1,20 @@
 import SwiftUI
 import TerminatrKit
 
-/// The window's sidebar (design T746): what needs the user, then this
-/// server's projects, each with its coordinator and open threads, then
-/// each paired server's shared projects with theirs (as the TUI's
-/// sidebar has them, alias/session). A project shows its dashboard, a
-/// coordinator or thread its session; a need shows what it names. Each
-/// section folds, and stays so across launches. The selection is drawn
-/// as Bloom's violet pill, not the List's own (the system accent).
+/// The window's sidebar (design T746, lean as T748 milestone A has it):
+/// what needs the user, cut to three rows and "+N more"; then this
+/// server's projects as the TUI orders them, pinned and active ones,
+/// one line each with its coordinator's state as the dot and its needs
+/// as the badge, and the inactive ones folded under "Inactive (n)" at
+/// the bottom (⇧⌘H unfolds them); then each paired server's shared
+/// projects (as the TUI's sidebar has them, alias/session). Only the
+/// selected project and those that need the user list their
+/// coordinator (when it runs or asks) and threads (those that wait on
+/// the user, the rest folded into "N more"). A project shows its
+/// dashboard, a coordinator or thread its session; a need shows what it
+/// names. Each section folds, and stays so across launches. The
+/// selection is drawn as Bloom's violet pill, not the List's own (the
+/// system accent).
 struct Sidebar: View {
     @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
@@ -16,8 +23,13 @@ struct Sidebar: View {
         List {
             if !app.needs.isEmpty {
                 Section(isExpanded: expanded(Navigation.needsSection)) {
-                    ForEach(app.needs) { n in
+                    let all = app.nav.unfolded.contains(Navigation.moreKey())
+                    let shown = all ? app.needs : Array(app.needs.prefix(SidebarTree.needsShown))
+                    ForEach(shown) { n in
                         NeedLine(need: n) { app.open(project: n.project, session: n.session) }
+                    }
+                    if app.needs.count > SidebarTree.needsShown {
+                        more(Navigation.moreKey(), all ? "Show fewer" : SidebarTree.moreNeeds(Array(app.needs.dropFirst(SidebarTree.needsShown))), unfolded: all)
                     }
                 } header: {
                     HStack(spacing: 6) {
@@ -31,11 +43,23 @@ struct Sidebar: View {
                 }
             }
             Section(isExpanded: expanded(Navigation.sectionKey(server: ""))) {
-                ForEach(app.projects, id: \.slug) { p in
+                ForEach(app.activeProjects, id: \.slug) { p in
                     project(p)
                 }
             } header: {
-                Text("This server")
+                // "This server" only tells it from paired ones.
+                Text(app.peers.isEmpty ? "Projects" : "This server")
+            }
+            let inactive = app.inactiveProjects
+            if !inactive.isEmpty {
+                Section(isExpanded: Binding(get: { app.nav.showInactive }, set: { app.nav.showInactive = $0 })) {
+                    ForEach(inactive, id: \.slug) { p in
+                        project(p)
+                    }
+                } header: {
+                    Text("Inactive (\(inactive.count))")
+                        .help("Projects set inactive: View › Show Inactive Projects (⇧⌘H)")
+                }
             }
             ForEach(app.peers, id: \.alias) { peer in
                 Section(isExpanded: expanded(Navigation.sectionKey(server: peer.alias))) {
@@ -51,9 +75,12 @@ struct Sidebar: View {
         .scrollContentBackground(.hidden)
         .background { Frost() }
         .safeAreaInset(edge: .bottom) {
-            StatusLine()
-                .padding(12)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            // Only when something is wrong: all well, it takes no row.
+            if StatusLine.shows(app) {
+                StatusLine()
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
     }
 
@@ -66,24 +93,73 @@ struct Sidebar: View {
         )
     }
 
+    /// A "N more" row: a click unfolds what it counts, or folds it again.
+    private func more(_ key: String, _ label: String, unfolded: Bool) -> some View {
+        Button {
+            if unfolded { app.nav.unfolded.remove(key) } else { app.nav.unfolded.insert(key) }
+        } label: {
+            HStack(spacing: 6) {
+                Text(label)
+                    .font(.system(size: 12))
+                    .lineLimit(1)
+                Spacer(minLength: 4)
+                Image(systemName: unfolded ? "chevron.up" : "chevron.down")
+                    .font(.system(size: 9, weight: .semibold))
+                    .accessibilityHidden(true)
+            }
+            .foregroundStyle(theme.muted)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
     // MARK: this server's
 
+    /// A project's line, and under it, when it is selected or needs the
+    /// user, its coordinator (when it runs or asks) and its threads.
+    @ViewBuilder
     private func project(_ p: AppAPI.Project) -> some View {
         let sel = Selection.project(p.slug)
-        return DisclosureGroup(isExpanded: expanded(Navigation.sectionKey(server: "", project: p.slug))) {
-            row(.session(SessionRef(project: p.slug)), label: "Coordinator", ref: nil, tag: nil)
-            ForEach(p.threads.filter { !$0.record.done }, id: \.record.id) { t in
-                row(.session(SessionRef(project: p.slug, thread: t.record.id)), label: t.record.title, ref: t.task?.ref, tag: tag(t))
+        let needs = app.needs(of: p.slug).count
+        let coordinator = app.coordinatorSession(p.slug)
+        let state = Attention.of(coordinator: coordinator, in: p)
+        ProjectRow(project: p, dot: theme.colour(state.tone), state: state.word, needs: needs, selected: app.nav.selection == sel)
+            .selectable(sel)
+        if SidebarTree.expands(p, selection: app.nav.selection, needs: needs) {
+            if coordinator != nil || state.waits {
+                row(.session(SessionRef(project: p.slug)), label: "Coordinator", ref: nil,
+                    tag: state.waits ? (state.word, theme.colour(state.tone)) : nil, dot: theme.colour(state.tone))
             }
-        } label: {
-            ProjectRow(project: p, needs: app.needs(of: p.slug).count, selected: app.nav.selection == sel)
-                .selectable(sel)
+            let key = Navigation.moreKey(project: p.slug)
+            let all = app.nav.unfolded.contains(key)
+            let selected = app.selectedRef.flatMap { $0.server.isEmpty && $0.project == p.slug ? $0.thread : nil }
+            let (shown, more) = SidebarTree.threads(of: p, selected: selected, unfolded: all) { app.attention($0) }
+            // Keyed with the project: thread ids repeat across projects,
+            // and the List flattens every project's rows into one.
+            ForEach(shown, id: \.record.id) { t in
+                row(.session(SessionRef(project: p.slug, thread: t.record.id)), label: t.record.title, ref: t.task?.ref,
+                    tag: tag(t), dot: theme.colour(app.attention(t).tone))
+                    .id("\(p.slug)/\(t.record.id)")
+            }
+            if more > 0 {
+                self.more(key, more == 1 ? "1 more thread" : "\(more) more threads", unfolded: false)
+                    .padding(.leading, 14)
+            } else if all, !p.threads.isEmpty {
+                self.more(key, "Show fewer", unfolded: true)
+                    .padding(.leading, 14)
+            }
         }
     }
 
-    private func row(_ sel: Selection, label: String, ref: String?, tag: (String, Color)?) -> some View {
+    private func row(_ sel: Selection, label: String, ref: String?, tag: (String, Color)?, dot: Color? = nil) -> some View {
         let on = app.nav.selection == sel
         return HStack(spacing: 6) {
+            if let dot {
+                Circle()
+                    .fill(on ? theme.onAction : dot)
+                    .frame(width: 6, height: 6)
+                    .accessibilityHidden(true)
+            }
             if let ref {
                 Text(ref)
                     .font(theme.mono(11.5, .medium))
@@ -99,6 +175,7 @@ struct Sidebar: View {
                     .foregroundStyle(on ? theme.onAction : colour)
             }
         }
+        .padding(.leading, dot == nil ? 0 : 14)
         .foregroundStyle(on ? theme.onAction : theme.ink)
         .selectable(sel)
         .contextMenu {

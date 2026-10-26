@@ -161,10 +161,18 @@ private func route(_ project: String?, _ session: String = "") -> Selection? {
     n.select(.project("terminatr"))
     n.select(.session(SessionRef(project: "demo", thread: "t-0001", server: "mini")))
     n.collapsed = [Navigation.needsSection, Navigation.sectionKey(server: "mini", project: "demo")]
+    n.showInactive = true
+    n.unfolded = [Navigation.moreKey(project: "terminatr")]
     let back = Navigation.restore(n.encoded())
     #expect(back == n)
     #expect(back.selection == .session(SessionRef(project: "demo", thread: "t-0001", server: "mini")))
     #expect(back.canGoBack)
+
+    // A save from before the inactive fold and the "N more" rows.
+    let old = Navigation.restore(Data(#"{"selection": {"project": {"_0": "site", "server": ""}}, "back": [], "forward": [], "collapsed": ["needs"]}"#.utf8))
+    #expect(old.selection == .project("site"))
+    #expect(old.collapsed == ["needs"])
+    #expect(!old.showInactive && old.unfolded.isEmpty)
 
     // Nothing saved, or what this release can't read: afresh.
     #expect(Navigation.restore(nil) == Navigation())

@@ -80,9 +80,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
-/// The Go menu and the session's keys (design T746): ⌘1–⌘9 projects,
-/// ⌘[ and ⌘] back and forward, ⌘L the composer, ⌘⇧T Conversation or
-/// Terminal, ⌘⌥I the inspector.
+/// The Go menu and the session's keys (design T746): ⌘1–⌘9 the active
+/// projects, ⌘[ and ⌘] back and forward, ⌘L the composer, ⌘⇧T
+/// Conversation or Terminal, ⌘⌥I the inspector, ⇧⌘H the inactive
+/// projects.
 struct GoCommands: Commands {
     let model: AppModel
 
@@ -94,6 +95,9 @@ struct GoCommands: Commands {
             Button("Conversation or Terminal") { model.switchTab() }
                 .keyboardShortcut("t", modifiers: [.command, .shift])
                 .disabled(model.selectedRef == nil)
+            Button(model.nav.showInactive ? "Hide Inactive Projects" : "Show Inactive Projects") { model.nav.showInactive.toggle() }
+                .keyboardShortcut("h", modifiers: [.command, .shift])
+                .disabled(model.inactiveProjects.isEmpty)
         }
         CommandMenu("Go") {
             Button("Back") { model.goBack() }
@@ -107,7 +111,7 @@ struct GoCommands: Commands {
                 .keyboardShortcut("l")
                 .disabled(model.selectedRef == nil)
             Divider()
-            ForEach(Array(model.projects.prefix(9).enumerated()), id: \.element.slug) { i, p in
+            ForEach(Array(model.activeProjects.prefix(9).enumerated()), id: \.element.slug) { i, p in
                 Button(p.slug) { model.selectProject(i) }
                     .keyboardShortcut(KeyEquivalent(Character("\(i + 1)")))
             }

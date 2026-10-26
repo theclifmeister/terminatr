@@ -6,7 +6,7 @@ import TerminatrKit
 /// sessions' questions, approvals and held queues as well as its tasks,
 /// with the tasks in review as their own group), its threads as cards,
 /// the inbox items for the user and its board's counts. A card shows
-/// its thread in the window, the Coordinator button the coordinator.
+/// its thread in the window; the first, the coordinator's, its session.
 struct ProjectDashboard: View {
     @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
@@ -36,6 +36,14 @@ struct ProjectDashboard: View {
                     }
                 }
                 section("Threads") {
+                    let coordinator = SessionRef(project: project.slug)
+                    CoordinatorCard(attention: app.coordinator(of: project))
+                        .contentShape(RoundedRectangle(cornerRadius: 14))
+                        .onTapGesture { app.select(.session(coordinator)) }
+                        .accessibilityAddTraits(.isButton)
+                        .accessibilityAction { app.select(.session(coordinator)) }
+                        .help("Show the coordinator")
+                        .contextMenu { NewWindowButton(ref: coordinator) }
                     if project.threads.isEmpty {
                         Text("No threads.")
                             .foregroundStyle(theme.muted)
@@ -81,10 +89,6 @@ struct ProjectDashboard: View {
                 Text(project.slug)
                     .font(theme.title(30, .heavy))
                 Spacer()
-                Button("Coordinator") { app.select(.session(SessionRef(project: project.slug))) }
-                    .buttonStyle(.borderedProminent)
-                    .tint(theme.action)
-                    .help("Show the coordinator")
             }
             if !project.goal.isEmpty {
                 Text(project.goal)
@@ -285,24 +289,27 @@ private struct PeerSessionCard: View {
     }
 }
 
+/// A project's one line in the sidebar: its coordinator's state as the
+/// dot, its slug, and what of the needs list is its as the badge.
 struct ProjectRow: View {
     @Environment(\.theme) private var theme
     let project: AppAPI.Project
-    /// What of the needs list is the project's.
+    let dot: Color
+    /// The coordinator's state, for VoiceOver and the tooltip.
+    let state: String
     let needs: Int
     let selected: Bool
 
     var body: some View {
         HStack(spacing: 8) {
-            VStack(alignment: .leading, spacing: 1) {
-                Text(project.slug)
-                    .font(.system(size: 13, weight: .semibold))
-                    .lineLimit(1)
-                Text(summary)
-                    .font(.system(size: 11.5))
-                    .foregroundStyle(selected ? theme.onAction.opacity(0.85) : theme.muted)
-                    .lineLimit(1)
-            }
+            Circle()
+                .fill(dot)
+                .overlay(Circle().strokeBorder(selected ? theme.onAction.opacity(0.8) : .clear, lineWidth: 1))
+                .frame(width: 8, height: 8)
+                .accessibilityHidden(true)
+            Text(project.slug)
+                .font(.system(size: 13, weight: .semibold))
+                .lineLimit(1)
             Spacer(minLength: 4)
             if needs > 0 {
                 Text("\(needs)")
@@ -316,11 +323,49 @@ struct ProjectRow: View {
         }
         .padding(.vertical, 2)
         .foregroundStyle(selected ? theme.onAction : theme.ink)
+        .help("Coordinator: \(state)")
+        .accessibilityElement(children: .combine)
+        .accessibilityValue("coordinator \(state)")
     }
+}
 
-    private var summary: String {
-        let open = project.threads.filter { !$0.record.done }.count
-        return open == 1 ? "1 thread" : "\(open) threads"
+/// The project's coordinator, the dashboard's first card: its state as
+/// the dot and tag, and what it does or waits on.
+struct CoordinatorCard: View {
+    @Environment(\.theme) private var theme
+    let attention: Attention
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Circle()
+                    .fill(theme.colour(attention.tone))
+                    .frame(width: 8, height: 8)
+                    .accessibilityHidden(true)
+                Text("Coordinator")
+                    .font(theme.title(15, .bold))
+                Spacer(minLength: 8)
+                Text(attention.word)
+                    .font(theme.mono(11))
+                    .foregroundStyle(attention.waits ? theme.colour(attention.tone) : theme.muted)
+            }
+            if attention.waits {
+                Label(attention.why, systemImage: "exclamationmark.bubble")
+                    .font(.system(size: 12.5, weight: .medium))
+                    .foregroundStyle(theme.colour(attention.tone))
+                    .lineLimit(2)
+            } else if !attention.why.isEmpty {
+                Text(attention.why)
+                    .font(.system(size: 12.5))
+                    .foregroundStyle(theme.muted)
+                    .lineLimit(2)
+            }
+        }
+        .padding(14)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+        .background(theme.cardTint, in: RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(theme.edge, lineWidth: 1))
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -420,6 +465,12 @@ struct Meter: View {
 struct StatusLine: View {
     @Environment(AppModel.self) private var model
     @Environment(\.theme) private var theme
+
+    /// Whether the sidebar shows it: not while connected and all fits.
+    static func shows(_ model: AppModel) -> Bool {
+        if case .connected = model.phase { return model.compatibility.message != nil }
+        return true
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {

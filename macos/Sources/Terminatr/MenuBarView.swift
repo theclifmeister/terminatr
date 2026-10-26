@@ -2,8 +2,9 @@ import SwiftUI
 import TerminatrKit
 
 /// The menu bar's dropdown (MenuBarExtra, .window style): what needs
-/// you, then the projects, this server's and the paired servers'
-/// shared ones, over the theme's backdrop. A row shows what it names in
+/// you, then the projects, this server's active ones (the inactive ones
+/// only counted) and the paired servers' shared ones, over the theme's
+/// backdrop. A row shows what it names in
 /// the app's window.
 struct MenuBarView: View {
     @Environment(AppModel.self) private var model
@@ -104,7 +105,7 @@ struct MenuBarView: View {
                 Heading("Projects", count: nil)
                 ScrollView {
                     VStack(spacing: 2) {
-                        ForEach(Array(model.projects.enumerated()), id: \.element.slug) { i, p in
+                        ForEach(Array(model.activeProjects.enumerated()), id: \.element.slug) { i, p in
                             MenuRow(action: { open(p.slug) }) {
                                 Text(p.slug).font(.system(size: 13, weight: .semibold))
                                 Text(Self.summary(p))
@@ -119,6 +120,18 @@ struct MenuBarView: View {
                                 }
                             }
                             .keyboardShortcut(i < 9 ? KeyboardShortcut(KeyEquivalent(Character("\(i + 1)"))) : nil)
+                        }
+                        let inactive = model.inactiveProjects.count
+                        if inactive > 0 {
+                            MenuRow(action: { model.nav.showInactive = true; open(nil) }) {
+                                Text(inactive == 1 ? "1 inactive project" : "\(inactive) inactive projects")
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(theme.muted)
+                                Spacer(minLength: 6)
+                                Text("in the window")
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(theme.muted)
+                            }
                         }
                         ForEach(model.peers, id: \.alias) { peer in
                             ForEach(peer.projects, id: \.project) { p in

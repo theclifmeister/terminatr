@@ -189,10 +189,10 @@ final class AppModel {
 
     /// Once everything is listed: a selection (restored, or kept from
     /// before) that names nothing any more falls back to its project or
-    /// the first one, and so does none.
+    /// the first active one, and so does none.
     private func settleSelection() {
         var n = nav
-        n.prune(fallback: projects.first.map { .project($0.slug) }) { [projects, peers] in
+        n.prune(fallback: activeProjects.first.map { .project($0.slug) }) { [projects, peers] in
             $0.exists(projects: projects, peers: peers)
         }
         if n != nav { nav = n }
@@ -233,6 +233,24 @@ final class AppModel {
     /// What a paired server's pane allows now (RemotePane).
     func remotePane(_ ref: SessionRef) -> RemotePane {
         RemotePane.of(caps: caps, peer: peer(ref.server), alias: ref.server)
+    }
+
+    /// This server's active projects, the pinned ones first (as the
+    /// TUI's sidebar): what ⌘1–⌘9, the Go menu, the menu bar and the
+    /// first selection count.
+    var activeProjects: [AppAPI.Project] { SidebarTree.active(projects) }
+
+    /// The inactive ones, folded at the sidebar's bottom.
+    var inactiveProjects: [AppAPI.Project] { SidebarTree.inactive(projects) }
+
+    /// The project's coordinator's session, when one runs.
+    func coordinatorSession(_ project: String) -> AppAPI.Session? {
+        sessions.first { $0.role == "coordinator" && $0.project == project && $0.server.isEmpty }
+    }
+
+    /// What p's coordinator says of itself: its dot, its card.
+    func coordinator(of p: AppAPI.Project) -> Attention {
+        Attention.of(coordinator: coordinatorSession(p.slug), in: p)
     }
 
     func project(_ slug: String) -> AppAPI.Project? {
@@ -278,10 +296,11 @@ final class AppModel {
     func goBack() { nav.goBack() }
     func goForward() { nav.goForward() }
 
-    /// The n-th project of this server (⌘1–⌘9, from 0).
+    /// The n-th active project of this server (⌘1–⌘9, from 0).
     func selectProject(_ n: Int) {
-        guard n < projects.count else { return }
-        select(.project(projects[n].slug))
+        let active = activeProjects
+        guard n < active.count else { return }
+        select(.project(active[n].slug))
     }
 
     var selectedRef: SessionRef? {
