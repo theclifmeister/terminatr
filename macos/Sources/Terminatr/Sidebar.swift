@@ -113,14 +113,6 @@ struct Sidebar: View {
                 .padding(.horizontal, 12)
                 .padding(.bottom, 4)
         }
-        .safeAreaInset(edge: .bottom) {
-            // Only when something is wrong: all well, it takes no row.
-            if StatusLine.shows(app) {
-                StatusLine()
-                    .padding(12)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-        }
     }
 
     /// The List's selection is the window's: a row picked by click or

@@ -82,7 +82,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DockIcon.apply()
         Appearance.apply()
         model.start()
-        Task { await notifier.authorize() }
+        Task {
+            // The first-run sheet, once: not for one who answered macOS
+            // about notifications already (an earlier release asked).
+            let asked = await Notifier.permission().map { $0 != .notDetermined } ?? false
+            if FirstRun.shows(done: UserDefaults.standard.bool(forKey: FirstRun.doneKey), notificationsAsked: asked) {
+                model.welcome = true
+            }
+        }
     }
 
     /// Closing the window leaves the menu bar running.
@@ -206,6 +213,7 @@ struct GoCommands: Commands {
                 .keyboardShortcut("f", modifiers: [.command, .option])
         }
         CommandGroup(replacing: .help) {
+            Button("Getting Started") { model.welcome = true }
             ForEach(Self.docs, id: \.0) { title, url in
                 Button(title) {
                     if let u = URL(string: url) { NSWorkspace.shared.open(u) }

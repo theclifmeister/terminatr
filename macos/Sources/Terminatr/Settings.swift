@@ -80,6 +80,7 @@ private struct NotificationSettings: View {
     var body: some View {
         Form {
             Section {
+                NotificationsRow()
                 ForEach(Need.Kind.allCases, id: \.self) { k in
                     KindToggle(kind: k)
                 }
