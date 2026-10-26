@@ -369,6 +369,16 @@ final class AppModel {
         }
     }
 
+    /// The title bar's second line: a thread's id and its project.
+    func subtitle(_ sel: Selection?) -> String {
+        guard case .session(let ref) = sel else { return "" }
+        return subtitle(ref)
+    }
+
+    func subtitle(_ ref: SessionRef) -> String {
+        ref.isRemote || ref.isCoordinator ? "" : "\(ref.thread) · \(ref.project)"
+    }
+
     func title(_ ref: SessionRef) -> String {
         if ref.isRemote {
             let task = ref.session(in: peers)?.task ?? ""
