@@ -19,6 +19,14 @@ public struct NeedTracker: Sendable {
         return (needs.filter { !seen.contains($0.id) }, seen.subtracting(ids).sorted())
     }
 
+    /// Of the fresh needs, those that notify: not one of front, the
+    /// session shown in the key window while the app is in front, whose
+    /// card the user sees already (T748 F).
+    public static func notified(_ fresh: [Need], front: String?) -> [Need] {
+        guard let front else { return fresh }
+        return fresh.filter { $0.session != front }
+    }
+
     /// Forgets what was seen: the next update learns again (a new
     /// bridge, after the old one ended).
     public mutating func reset() {

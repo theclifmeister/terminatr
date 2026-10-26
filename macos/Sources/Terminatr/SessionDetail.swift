@@ -12,6 +12,7 @@ import TerminatrKit
 struct SessionDetail: View {
     @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
+    @Environment(\.controlActiveState) private var active
     let model: SessionModel
 
     var body: some View {
@@ -34,6 +35,9 @@ struct SessionDetail: View {
         .task(id: app.bridge == nil) { model.follow(app) }
         .onChange(of: app.sessionID(model.ref)) { model.follow(app) }
         .onChange(of: state, initial: true) { _, s in model.settle(s) }
+        // In the key window of the app in front: its needs don't notify.
+        .onChange(of: active, initial: true) { _, a in app.shown(model.ref, inFront: a == .key) }
+        .onDisappear { app.shown(model.ref, inFront: false) }
     }
 
     private func header(_ state: ConversationState) -> some View {

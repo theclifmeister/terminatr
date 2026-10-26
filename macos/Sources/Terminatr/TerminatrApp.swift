@@ -70,6 +70,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Here, not before: SwiftUI makes the app a regular one as it
+        // finishes launching.
+        DockIcon.apply()
         model.start()
         Task { await notifier.authorize() }
     }
@@ -77,6 +80,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Closing the window leaves the menu bar running.
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false
+    }
+}
+
+/// Where the app shows (T748 F1): the menu bar and the Dock, with the
+/// needs count as the Dock icon's badge; or the menu bar only, an
+/// accessory app with no Dock icon.
+enum DockIcon {
+    static let key = "dockIcon"
+
+    static var on: Bool {
+        // bool(forKey:) reads a launch argument's "NO" too.
+        UserDefaults.standard.object(forKey: key) == nil || UserDefaults.standard.bool(forKey: key)
+    }
+
+    @MainActor static func apply() {
+        NSApp.setActivationPolicy(on ? .regular : .accessory)
     }
 }
 
@@ -119,10 +138,12 @@ struct GoCommands: Commands {
     }
 }
 
-/// Where the app finds tm, what notifies, and open at login.
+/// Where the app finds tm, where it shows, what notifies, and open at
+/// login.
 struct SettingsView: View {
     @Environment(AppModel.self) private var model
     @AppStorage(AppModel.tmPathKey) private var tmPath = ""
+    @AppStorage(DockIcon.key) private var dockIcon = true
     @AppStorage(Notifier.showTextKey) private var showText = false
     @AppStorage(Notifier.noticesKey) private var notices = true
 
@@ -135,6 +156,16 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
                 Button("Reconnect") { model.connect() }
                 LoginItemToggle()
+                Picker("Show terminatr in", selection: $dockIcon) {
+                    Text("Menu bar and Dock").tag(true)
+                    Text("Menu bar only").tag(false)
+                }
+                .onChange(of: dockIcon) {
+                    DockIcon.apply()
+                    model.showBadge()
+                    // Leaving the Dock deactivates the app: Settings stays in front.
+                    NSApp.activate()
+                }
             }
             Section {
                 ForEach(Need.Kind.allCases, id: \.self) { k in
@@ -154,6 +185,19 @@ struct SettingsView: View {
                 Toggle("Show what agents ask", isOn: $showText)
             } footer: {
                 Text("Off: a notification names the project and the kind of need, never the question's words. A question's options still show as its buttons.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Section {
+                LabeledContent("Quiet times") {
+                    Button("Focus Settings…") {
+                        if let url = URL(string: "x-apple.systempreferences:com.apple.Focus-Settings.extension") {
+                            NSWorkspace.shared.open(url)
+                        }
+                    }
+                }
+            } footer: {
+                Text("terminatr follows macOS Focus: while a Focus is on, its notifications wait in Notification Centre unless that Focus allows terminatr.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
