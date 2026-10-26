@@ -63,6 +63,14 @@ func init() {
 		unary(proto.MethodSessionApprove, true, approveParams, approveResultOf),
 		unary(proto.MethodSessionKeys, true, keysParams, func(struct{}) Empty { return Empty{} }),
 		unary(proto.MethodTaskAsk, true, taskAskParams, taskAskResultOf),
+		// The task actions by name (app API 5), with the checks of tm
+		// task accept and send-back; each still only asks the
+		// coordinator. project.open starts the project's coordinator
+		// when none runs.
+		unary(proto.MethodTaskAccept, true, taskParams, taskAskResultOf),
+		unary(proto.MethodTaskSendBack, true, sendBackParams, taskAskResultOf),
+		unary(proto.MethodTaskDelegate, true, taskParams, taskAskResultOf),
+		unary(proto.MethodProjectOpen, true, projectOpenParams, projectOpenOf),
 	} {
 		methods[m.Name] = m
 	}
@@ -269,4 +277,16 @@ func transcriptAck(ev proto.TranscriptEvent) any {
 
 func taskAskParams(p TaskAskParams) proto.TaskAskParams {
 	return proto.TaskAskParams{Project: p.Project, Task: p.Task, Kind: p.Kind, Note: p.Note}
+}
+
+func taskParams(p TaskParams) proto.TaskActionParams {
+	return proto.TaskActionParams{Project: p.Project, Task: p.Task}
+}
+
+func sendBackParams(p SendBackParams) proto.TaskActionParams {
+	return proto.TaskActionParams{Project: p.Project, Task: p.Task, Note: p.Note}
+}
+
+func projectOpenParams(p ProjectOpenParams) proto.ProjectOpenParams {
+	return proto.ProjectOpenParams{Project: p.Project, Cols: p.Cols, Rows: p.Rows}
 }

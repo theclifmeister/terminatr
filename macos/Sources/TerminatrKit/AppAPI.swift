@@ -6,7 +6,7 @@ import Foundation
 /// The terminatr app API (docs/SPEC.md §3.8): what tm app bridge answers.
 public enum AppAPI {
     /// The app API version this app was generated against.
-    public static let version = 4
+    public static let version = 5
 
     public struct AnswerParams: Codable, Sendable, Hashable {
         public var id: String
@@ -626,6 +626,39 @@ public enum AppAPI {
         }
     }
 
+    public struct ProjectOpen: Codable, Sendable, Hashable {
+        public var session: String
+        public var started: Bool
+
+        public init(session: String, started: Bool = false) {
+            self.session = session
+            self.started = started
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case session
+            case started
+        }
+    }
+
+    public struct ProjectOpenParams: Codable, Sendable, Hashable {
+        public var project: String
+        public var cols: Int
+        public var rows: Int
+
+        public init(project: String, cols: Int = 0, rows: Int = 0) {
+            self.project = project
+            self.cols = cols
+            self.rows = rows
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case project
+            case cols
+            case rows
+        }
+    }
+
     public struct Projects: Codable, Sendable, Hashable {
         public var projects: [Project]
 
@@ -746,6 +779,24 @@ public enum AppAPI {
         enum CodingKeys: String, CodingKey {
             case label
             case description
+        }
+    }
+
+    public struct SendBackParams: Codable, Sendable, Hashable {
+        public var project: String
+        public var task: String
+        public var note: String
+
+        public init(project: String, task: String, note: String) {
+            self.project = project
+            self.task = task
+            self.note = note
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case project
+            case task
+            case note
         }
     }
 
@@ -995,6 +1046,21 @@ public enum AppAPI {
 
         enum CodingKeys: String, CodingKey {
             case asked
+        }
+    }
+
+    public struct TaskParams: Codable, Sendable, Hashable {
+        public var project: String
+        public var task: String
+
+        public init(project: String, task: String) {
+            self.project = project
+            self.task = task
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case project
+            case task
         }
     }
 
@@ -1422,6 +1488,7 @@ public enum AppAPI {
         public static let paneInput = Call<PaneInputParams, Empty>("pane.input", write: true, target: "pane.vt")
         public static let paneVt = Subscription<PaneParams, PaneResult, PaneEvent>("pane.vt", events: ["pane.repaint", "pane.output", "pane.resize", "pane.closed"])
         public static let peerList = Call<NoParams, PeerList>("peer.list", write: false)
+        public static let projectOpen = Call<ProjectOpenParams, ProjectOpen>("project.open", write: true)
         public static let projectsWatch = Subscription<ProjectsWatchParams, Projects, Projects>("projects.watch", events: ["projects.changed"])
         public static let sessionAnswer = Call<AnswerParams, AnswerResult>("session.answer", write: true)
         public static let sessionApprove = Call<ApproveParams, ApproveResult>("session.approve", write: true)
@@ -1429,7 +1496,10 @@ public enum AppAPI {
         public static let sessionList = Call<NoParams, SessionList>("session.list", write: false)
         public static let sessionPrompt = Call<PromptParams, PromptResult>("session.prompt", write: true)
         public static let sessionWatch = Subscription<SessionIDParams, Watch, Watch>("session.watch", events: ["watch.changed"])
+        public static let taskAccept = Call<TaskParams, TaskAskResult>("task.accept", write: true)
         public static let taskAsk = Call<TaskAskParams, TaskAskResult>("task.ask", write: true)
+        public static let taskDelegate = Call<TaskParams, TaskAskResult>("task.delegate", write: true)
+        public static let taskSendBack = Call<SendBackParams, TaskAskResult>("task.send-back", write: true)
         public static let transcriptWatch = Subscription<TranscriptParams, TranscriptResult, TranscriptEvent>("transcript.watch", events: ["transcript.reset", "transcript.items", "transcript.status", "transcript.closed"])
     }
 }
@@ -1710,6 +1780,23 @@ extension AppAPI.Project {
     }
 }
 
+extension AppAPI.ProjectOpen {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.session = try c.decode(String.self, forKey: .session)
+        self.started = try c.decodeIfPresent(Bool.self, forKey: .started) ?? false
+    }
+}
+
+extension AppAPI.ProjectOpenParams {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.project = try c.decode(String.self, forKey: .project)
+        self.cols = try c.decodeIfPresent(Int.self, forKey: .cols) ?? 0
+        self.rows = try c.decodeIfPresent(Int.self, forKey: .rows) ?? 0
+    }
+}
+
 extension AppAPI.Projects {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -1769,6 +1856,15 @@ extension AppAPI.QuestionOption {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.label = try c.decode(String.self, forKey: .label)
         self.description = try c.decodeIfPresent(String.self, forKey: .description) ?? ""
+    }
+}
+
+extension AppAPI.SendBackParams {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.project = try c.decode(String.self, forKey: .project)
+        self.task = try c.decode(String.self, forKey: .task)
+        self.note = try c.decode(String.self, forKey: .note)
     }
 }
 
@@ -1876,6 +1972,14 @@ extension AppAPI.TaskAskResult {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.asked = try c.decode(Bool.self, forKey: .asked)
+    }
+}
+
+extension AppAPI.TaskParams {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.project = try c.decode(String.self, forKey: .project)
+        self.task = try c.decode(String.self, forKey: .task)
     }
 }
 

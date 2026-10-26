@@ -93,3 +93,49 @@ type TaskAskParams struct {
 type TaskAskResult struct {
 	Asked bool `json:"asked"`
 }
+
+// The user's task actions by name (since protocol 20): task.ask's
+// kinds with the checks tm task accept and send-back apply
+// (project.AskTask), so a refusal says why in its code: "not-accept",
+// "not-send-back" or "not-delegate" for the task's status on the live
+// board, "invalid-note", "already-asked" when an ask of another kind
+// waits on the coordinator. Params TaskActionParams, result
+// TaskAskResult (false when the same ask waits already). The human's,
+// journaled as the caller.
+const (
+	MethodTaskAccept   = "task.accept"
+	MethodTaskSendBack = "task.send-back"
+	MethodTaskDelegate = "task.delegate"
+)
+
+// TaskActionParams are the params of task.accept, task.send-back and
+// task.delegate: project's task ("T12") and, for a send-back, the
+// user's note (required).
+type TaskActionParams struct {
+	Project string `json:"project"`
+	Task    string `json:"task"`
+	Note    string `json:"note,omitempty"`
+}
+
+// MethodProjectOpen opens a project's coordinator, as tm project open
+// and the dashboard's project rows do (since protocol 20): the running
+// one, else one started with the project's coordinator agent, model and
+// remote control settings; an inactive project is refused
+// ("project-inactive"), as opening never activates. The human's; a
+// start is journaled as the caller (coordinator.start).
+const MethodProjectOpen = "project.open"
+
+// ProjectOpenParams are the params of project.open: the project, and
+// the size of the pane a started coordinator gets (80x24 when unset).
+type ProjectOpenParams struct {
+	Project string `json:"project"`
+	Cols    uint16 `json:"cols,omitempty"`
+	Rows    uint16 `json:"rows,omitempty"`
+}
+
+// ProjectOpenResult is the coordinator's session, and whether this call
+// started it.
+type ProjectOpenResult struct {
+	Session string `json:"session"`
+	Started bool   `json:"started,omitempty"`
+}

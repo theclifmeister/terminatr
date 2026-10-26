@@ -1,16 +1,14 @@
 package tui
 
 import (
-	"cmp"
-	"context"
 	"errors"
 	"fmt"
 
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/mod"
-	"github.com/theclifmeister/terminatr/internal/models"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/server"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/thread"
 	"github.com/theclifmeister/terminatr/internal/ticker"
@@ -32,92 +30,33 @@ func (s *ServerSource) NewProject(slug string) (string, error) {
 	return p.Slug, nil
 }
 
-// coordinatorKickoff is the coordinator's first prompt. Its context (the
-// role rules and tm context) arrives through the agent's session-start
-// hook (docs/SPEC.md §7.8); this only asks it to speak first.
-const coordinatorKickoff = "You are this project's coordinator. Greet the user: say in a few lines where the project stands, from your context, then ask what to do next."
-
 func (s *ServerSource) OpenProject(slug string, cols, rows int) (string, error) {
 	return OpenCoordinator(s.call, slug, "", cols, rows)
 }
 
 // InactiveError is opening an inactive project's coordinator: opening
 // never activates (docs/SPEC.md §5.1).
-func InactiveError(slug string) error {
-	return &project.Error{Code: "project-inactive", Msg: slug + " is inactive: activate it first (S on it in the sidebar, or tm project activate " + slug + ")"}
-}
+func InactiveError(slug string) error { return server.InactiveError(slug) }
 
 // OpenCoordinator returns the id of the project's coordinator session,
-// starting one (agent, role coordinator, cwd the project folder) if none
-// runs: `tm project open` and the dashboard's project rows. An empty
+// starting one if none runs (server.OpenCoordinator, which project.open
+// shares): `tm project open` and the dashboard's project rows. An empty
 // agentName is the project's coordinator_agent setting (§11.2).
 func OpenCoordinator(call func(method string, params, result any) error, slug, agentName string, cols, rows int) (string, error) {
-	p, err := project.Open(slug)
-	if err != nil {
-		return "", err
+	list := func() ([]proto.SessionInfo, error) {
+		var res proto.SessionListResult
+		err := call(proto.MethodSessionList, nil, &res)
+		return res.Sessions, err
 	}
-	var res proto.SessionListResult
-	if err := call(proto.MethodSessionList, nil, &res); err != nil {
-		return "", err
-	}
-	for _, s := range res.Sessions {
-		if s.Role == proto.RoleCoordinator && s.Project == slug {
-			return s.ID, nil
+	start := func(p proto.SessionStartParams) (string, error) {
+		var started proto.SessionStartResult
+		if err := call(proto.MethodSessionStart, p, &started); err != nil {
+			return "", err
 		}
+		return started.Session.ID, nil
 	}
-	// The project's agent, model and remote control settings; a broken
-	// config.toml shows in the settings popup, it doesn't keep the
-	// coordinator from starting.
-	safety := config.Defaults
-	cfg, err := config.Load()
-	if err == nil {
-		safety, _ = cfg.Safety(slug)
-	}
-	if !safety.Active {
-		return "", InactiveError(slug)
-	}
-	name, model, err := coordinatorAgent(cfg, agentName, safety)
-	if err != nil {
-		return "", err
-	}
-	var started proto.SessionStartResult
-	err = call(proto.MethodSessionStart, proto.SessionStartParams{
-		Agent: name, Model: model, Role: proto.RoleCoordinator, Project: slug, Cwd: p.Dir,
-		Cols: uint16(cols), Rows: uint16(rows), Kickoff: coordinatorKickoff,
-		RemoteControl: safety.CoordinatorRemoteControl}, &started)
-	if err != nil {
-		return "", err
-	}
-	return started.Session.ID, nil
-}
-
-// coordinatorAgent is the agent and model a new coordinator runs: the
-// agent named (tm project open --agent), else the project's
-// coordinator_agent, else the one installed agent (docs/SPEC.md §8.2,
-// §11.2); and the project's coordinator_model while that agent offers
-// it in the project's scope, else none (the agent's own default, or the
-// user's default_model, which the server passes). An agent that isn't
-// installed, none, or several with none chosen are refused
-// (models.Error: the dashboard asks for CodeNotChosen).
-func coordinatorAgent(cfg *config.Config, flag string, safety config.Safety) (name, model string, err error) {
-	reg := models.Registry()
-	if reg == nil {
-		return "", "", errors.New("no home directory for the agent manifests")
-	}
-	installed := models.Installed(reg, nil)
-	setting := cmp.Or(flag, safety.CoordinatorAgent)
-	name, _, err = models.Resolve(reg, installed, setting, "coordinator agent")
-	if err != nil {
-		return "", "", err
-	}
-	if safety.CoordinatorModel != "" {
-		// An agent never asked (the server just started) is asked first.
-		models.Ensure(context.Background(), reg, name, nil)
-		if c, ok := models.CatalogOf(reg, cfg, name, installed); ok {
-			model = c.CoordinatorModel(safety)
-		}
-	}
-	return name, model, nil
+	id, _, err := server.OpenCoordinator(list, start, slug, agentName, uint16(cols), uint16(rows))
+	return id, err
 }
 
 func (s *ServerSource) Lifecycle(slug, verb string) (string, error) {

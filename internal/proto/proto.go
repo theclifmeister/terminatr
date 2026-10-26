@@ -33,8 +33,9 @@ import (
 // projects.watch, the sidebars' data of every project from the server.
 // 18: projects.watch {detail}, the dashboard's data of every project.
 // 19: session.approve and task.ask, and a control hello's Client (the
-// Mac app's bridge, journaled as "human (app)").
-const Protocol = 19
+// Mac app's bridge, journaled as "human (app)"). 20: task.accept,
+// task.send-back, task.delegate and project.open.
+const Protocol = 20
 
 // Kind is what a connection is for.
 type Kind string

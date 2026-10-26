@@ -21,7 +21,7 @@ import (
 // Version is the app API's version. It goes up when a method, a field or
 // a meaning is added or changes; the app reads it, and Capabilities, from
 // the bridge's hello, so an older app works with a newer tm.
-const Version = 4
+const Version = 5
 
 // Capabilities of this bridge, in its hello: what kinds of method it
 // has (Method.Write, Method.Stream). An app checks a capability, or a
@@ -30,7 +30,8 @@ const (
 	// CapRead: methods that only read.
 	CapRead = "read"
 	// CapWrite: methods that act as the human (prompts, answers,
-	// approvals, keys, task asks), journaled as "human (app)".
+	// approvals, keys, task actions, starting a coordinator),
+	// journaled as "human (app)".
 	CapWrite = "write"
 	// CapStreams: methods that stream events after their result.
 	CapStreams = "streams"

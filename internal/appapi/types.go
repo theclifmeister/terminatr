@@ -76,6 +76,26 @@ type (
 		Kind    string `json:"kind"`
 		Note    string `json:"note,omitempty"`
 	}
+	// TaskParams are task.accept's and task.delegate's: Project's task
+	// ("T12").
+	TaskParams struct {
+		Project string `json:"project"`
+		Task    string `json:"task"`
+	}
+	// SendBackParams are task.send-back's: Project's task ("T12") and
+	// the user's note, what to change (required).
+	SendBackParams struct {
+		Project string `json:"project"`
+		Task    string `json:"task"`
+		Note    string `json:"note"`
+	}
+	// ProjectOpenParams are project.open's: the project, and the size a
+	// coordinator it starts gets (80x24 when unset).
+	ProjectOpenParams struct {
+		Project string `json:"project"`
+		Cols    uint16 `json:"cols,omitempty"`
+		Rows    uint16 `json:"rows,omitempty"`
+	}
 )
 
 // Empty is the result of a method that answers nothing.
@@ -706,6 +726,17 @@ func approveResultOf(r proto.SessionApproveResult) ApproveResult {
 }
 
 func taskAskResultOf(r proto.TaskAskResult) TaskAskResult { return TaskAskResult{Asked: r.Asked} }
+
+// ProjectOpen is project.open's result: the project's coordinator
+// session, and Started when this call started it.
+type ProjectOpen struct {
+	Session string `json:"session"`
+	Started bool   `json:"started,omitempty"`
+}
+
+func projectOpenOf(r proto.ProjectOpenResult) ProjectOpen {
+	return ProjectOpen{Session: r.Session, Started: r.Started}
+}
 
 func noticeResultOf(r proto.NoticeResult) NoticeResult { return NoticeResult{OK: r.OK} }
 
