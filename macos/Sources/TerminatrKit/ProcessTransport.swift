@@ -17,12 +17,29 @@ public final class ProcessTransport: BridgeTransport, @unchecked Sendable {
     /// Keeps this much of the bridge's stderr, its last words.
     private static let stderrCap = 4096
 
+    /// What a tm session puts in its processes' environment (SPEC §3.4)
+    /// to make tm one of its agents: on the agent socket, as that
+    /// session. An app opened from a session's pane inherits them.
+    public static let sessionVariables: Set<String> = [
+        "TERMINATR", "TERMINATR_SESSION", "TERMINATR_SOCKET", "TERMINATR_BIN",
+        "TERMINATR_ROLE", "TERMINATR_PROJECT", "TERMINATR_THREAD",
+    ]
+
+    /// The bridge's environment: base without the session variables, so
+    /// the bridge dials the human socket as the human however the app
+    /// was opened. TERMINATR_HOME stays: it picks the server (a test
+    /// one, say), and a session's is its own server's home anyway.
+    public static func bridgeEnvironment(_ base: [String: String]) -> [String: String] {
+        base.filter { !sessionVariables.contains($0.key) }
+    }
+
+    /// environment nil: the app's own.
     public init(tm: URL, environment: [String: String]? = nil) throws {
         let stdout = Pipe()
         let errPipe = Pipe()
         process.executableURL = tm
         process.arguments = ["app", "bridge"]
-        if let environment { process.environment = environment }
+        process.environment = Self.bridgeEnvironment(environment ?? ProcessInfo.processInfo.environment)
         process.standardInput = stdin
         process.standardOutput = stdout
         process.standardError = errPipe

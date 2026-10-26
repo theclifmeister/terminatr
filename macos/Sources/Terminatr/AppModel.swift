@@ -2,11 +2,12 @@ import Foundation
 import Observation
 import TerminatrKit
 
-/// What the windows and the menu bar show: the bridge's state, every
+/// What the window and the menu bar show: the bridge's state, every
 /// project (projects.watch {detail}), the sessions and the mods' notices
 /// (session.list) and the paired servers' shared projects (peer.list),
-/// and what of them needs the user. The session windows reach the
-/// server through bridge.
+/// and what of them needs the user; and what the window has selected
+/// (nav), which the menu bar, notifications and cards set. The session
+/// views reach the server through bridge.
 @MainActor
 @Observable
 final class AppModel {
@@ -29,8 +30,20 @@ final class AppModel {
     /// Counts the bridges started: needs of a new one are learned
     /// afresh (NeedTracker.reset).
     @ObservationIgnored private(set) var connection = 0
-    /// The project the projects window shows; the menu bar sets it.
-    var focus: String?
+    /// The window's selection, its history and the sidebar's collapsed
+    /// sections; saved on every change, restored at launch.
+    var nav = Navigation.restore(UserDefaults.standard.data(forKey: AppModel.navKey)) {
+        didSet {
+            if nav != oldValue { UserDefaults.standard.set(nav.encoded(), forKey: Self.navKey) }
+            if let ref = selectedRef { warm(ref) }
+        }
+    }
+    /// Whether the session view shows its inspector (⌘⌥I).
+    var inspector = UserDefaults.standard.object(forKey: AppModel.inspectorKey) as? Bool ?? true {
+        didSet { UserDefaults.standard.set(inspector, forKey: Self.inspectorKey) }
+    }
+    /// Bumped by ⌘L: the shown composer takes the focus.
+    private(set) var composerFocus = 0
 
     /// Told of every change to needs and notices (Notifier).
     @ObservationIgnored var onNeeds: (@MainActor (AppModel) -> Void)?
@@ -56,6 +69,8 @@ final class AppModel {
 
     /// The settings key of the configured tm path (TMLocator.configured).
     static let tmPathKey = "tmPath"
+    static let navKey = "navigation"
+    static let inspectorKey = "inspector"
 
     /// How often session.list and peer.list are read: neither streams.
     static let sessionsEvery = Duration.seconds(2)
@@ -163,7 +178,19 @@ final class AppModel {
     private func changed() {
         guard loaded.all else { return }
         needs = Need.of(projects: projects, sessions: sessions, peers: peers)
+        settleSelection()
         onNeeds?(self)
+    }
+
+    /// Once everything is listed: a selection (restored, or kept from
+    /// before) that names nothing any more falls back to its project or
+    /// the first one, and so does none.
+    private func settleSelection() {
+        var n = nav
+        n.prune(fallback: projects.first.map { .project($0.slug) }) { [projects, peers] in
+            $0.exists(projects: projects, peers: peers)
+        }
+        if n != nav { nav = n }
     }
 
     /// Lists the sessions now, between readSessions' rounds (a session
@@ -211,24 +238,109 @@ final class AppModel {
         project(ref.project)?.threads.first { $0.record.id == ref.thread }
     }
 
-    /// Opens the projects window, from the menu bar or a notification:
-    /// set by a view that has the scene's openWindow.
-    @ObservationIgnored var openWindow: (@MainActor () -> Void)?
-    /// Opens a coordinator's or thread's window, likewise.
-    @ObservationIgnored var openSession: (@MainActor (SessionRef) -> Void)?
+    // MARK: the window
 
-    /// Opens what a need or a notification names: session's window when
-    /// it is a coordinator's or a thread's, else project (none: as it
-    /// was) in the projects window, in front.
+    /// Brings the window to the front, opening it when it was closed:
+    /// set by a view that has the scene's openWindow (MenuBarLabel).
+    @ObservationIgnored var showWindow: (@MainActor () -> Void)?
+
+    /// Shows s in the window, in front.
+    func select(_ s: Selection) {
+        nav.select(s)
+        showWindow?()
+    }
+
+    /// Shows what a need, a notification or a menu bar row names (see
+    /// Selection.route): nothing listed leaves the selection as it was.
     func open(project: String? = nil, session: String = "") {
-        if let s = sessions.first(where: { $0.id == session }), let ref = SessionRef(s), let openSession {
-            openSession(ref)
-            return
+        if let s = Selection.route(project: project, session: session, projects: projects, sessions: sessions, peers: peers) {
+            nav.select(s)
         }
-        if let project, projects.contains(where: { $0.slug == project }) {
-            focus = project
+        showWindow?()
+    }
+
+    func goBack() { nav.goBack() }
+    func goForward() { nav.goForward() }
+
+    /// The n-th project of this server (⌘1–⌘9, from 0).
+    func selectProject(_ n: Int) {
+        guard n < projects.count else { return }
+        select(.project(projects[n].slug))
+    }
+
+    var selectedRef: SessionRef? {
+        if case .session(let ref) = nav.selection { return ref }
+        return nil
+    }
+
+    /// The shown session's model, when one is shown.
+    var selectedSession: SessionModel? {
+        selectedRef.flatMap { models[$0] }
+    }
+
+    /// ⌘L: the conversation, its composer focused.
+    func focusComposer() {
+        guard let m = selectedSession, !m.ref.isRemote else { return }
+        m.pick(.conversation)
+        composerFocus += 1
+    }
+
+    /// ⌘⇧T: the other tab.
+    func switchTab() {
+        guard let m = selectedSession, !m.ref.isRemote, m.sessionID != nil else { return }
+        m.pick(m.tab == .conversation ? .terminal : .conversation)
+    }
+
+    /// The session model's session as session.list has it.
+    func session(of m: SessionModel) -> AppAPI.Session? {
+        m.sessionID.flatMap { id in sessions.first { $0.id == id } }
+    }
+
+    func conversationState(_ m: SessionModel, _ s: AppAPI.Session?) -> ConversationState {
+        ConversationState.of(caps: caps, agent: s?.agent ?? "", status: m.transcript.status,
+                             failure: m.transcriptFailure, server: m.ref.server)
+    }
+
+    /// The window's title for a selection.
+    func title(_ sel: Selection?) -> String {
+        switch sel {
+        case nil: "terminatr"
+        case .project(let slug, let server): server.isEmpty ? slug : "\(server) › \(slug)"
+        case .session(let ref): title(ref)
         }
-        openWindow?()
+    }
+
+    func title(_ ref: SessionRef) -> String {
+        if ref.isRemote {
+            let task = ref.session(in: peers)?.task ?? ""
+            return "\(ref.server) › \(ref.project) · " + (ref.isCoordinator ? "coordinator" : [task, ref.thread].filter { !$0.isEmpty }.joined(separator: " "))
+        }
+        if ref.isCoordinator { return "\(ref.project) · coordinator" }
+        let t = thread(ref)
+        return [t?.task?.ref, t?.record.title ?? ref.thread].compactMap { $0 }.joined(separator: " ")
+    }
+
+    // MARK: sessions' streams
+
+    /// The session models with their streams: the shown one and the
+    /// few shown before it (warmth), so switching back to one finds
+    /// its conversation loaded.
+    @ObservationIgnored private var models: [SessionRef: SessionModel] = [:]
+    @ObservationIgnored private var warmth = WarmSet<SessionRef>(limit: 3)
+
+    /// ref's model, made when it has none.
+    func model(_ ref: SessionRef) -> SessionModel {
+        if let m = models[ref] { return m }
+        let m = SessionModel(ref: ref)
+        models[ref] = m
+        warm(ref)
+        return m
+    }
+
+    private func warm(_ ref: SessionRef) {
+        for gone in warmth.touch(ref) {
+            models.removeValue(forKey: gone)?.stop()
+        }
     }
 
     /// Answers a question as the human, through the guarded

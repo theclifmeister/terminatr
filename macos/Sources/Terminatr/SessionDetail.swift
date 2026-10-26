@@ -1,0 +1,198 @@
+import SwiftUI
+import TerminatrKit
+
+/// A coordinator or thread in the window's detail (design T734 §6,
+/// T746): its header with the tab switch, then the tab. It opens on the
+/// conversation, and falls back to the terminal, saying why, when the
+/// conversation can't be shown (an old server, a Codex agent, a
+/// transcript tm can't read). A paired server's session opens on the
+/// terminal alone: its pane comes through the server's peer link, its
+/// transcript never does. The model, and its streams, are the app's
+/// (AppModel.model): they outlive the selection for a few switches.
+struct SessionDetail: View {
+    @Environment(AppModel.self) private var app
+    @Environment(\.theme) private var theme
+    let model: SessionModel
+
+    var body: some View {
+        let session = app.session(of: model)
+        let state = app.conversationState(model, session)
+        VStack(spacing: 0) {
+            header(state)
+            if model.sessionID == nil {
+                NotRunning(ref: model.ref)
+            } else {
+                switch model.tab {
+                case .conversation:
+                    ConversationTab(model: model, session: session, state: state)
+                case .terminal:
+                    TerminalTab(model: model, session: session)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .task(id: app.bridge == nil) { model.follow(app) }
+        .onChange(of: app.sessionID(model.ref)) { model.follow(app) }
+        .onChange(of: state, initial: true) { _, s in model.settle(s) }
+    }
+
+    private func header(_ state: ConversationState) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                HeaderTitle(ref: model.ref)
+                Spacer(minLength: 12)
+                Picker("View", selection: Binding(get: { model.tab }, set: { model.pick($0) })) {
+                    ForEach(SessionTab.allCases, id: \.self) { t in
+                        Text(t.rawValue).tag(t)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
+                .disabled(model.sessionID == nil || model.ref.isRemote)
+                .help("Conversation or Terminal (⌘⇧T)")
+            }
+            if model.sessionID != nil, case .unavailable(let why) = state {
+                Label {
+                    Text(model.tab == .terminal ? "Showing the terminal. \(why)" : why)
+                } icon: {
+                    Image(systemName: model.ref.isRemote ? "network" : "rectangle.on.rectangle.slash")
+                }
+                .font(.system(size: 12))
+                .foregroundStyle(theme.muted)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(theme.cardTint, in: RoundedRectangle(cornerRadius: 9))
+                .accessibilityElement(children: .combine)
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 12)
+        .padding(.bottom, 10)
+    }
+}
+
+/// A session the user opened in a window of its own (Open in New
+/// Window), beside the main one: the session and its inspector, with
+/// streams of its own.
+struct SessionWindow: View {
+    @Environment(AppModel.self) private var app
+    @Environment(\.theme) private var theme
+    let ref: SessionRef
+    @State private var model: SessionModel
+    @State private var inspector = true
+
+    init(ref: SessionRef) {
+        self.ref = ref
+        _model = State(initialValue: SessionModel(ref: ref))
+    }
+
+    var body: some View {
+        SessionDetail(model: model)
+            .inspector(isPresented: $inspector) {
+                Inspector(model: model, session: app.session(of: model))
+                    .inspectorColumnWidth(min: 240, ideal: 270, max: 360)
+                    .background { Frost() }
+            }
+            .foregroundStyle(theme.ink)
+            .background { Backdrop() }
+            .navigationTitle(app.title(ref))
+            .onDisappear { model.stop() }
+    }
+}
+
+struct HeaderTitle: View {
+    @Environment(AppModel.self) private var app
+    @Environment(\.theme) private var theme
+    let ref: SessionRef
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            if ref.isRemote {
+                Text(ref.server)
+                    .font(theme.mono(12, .medium))
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 1)
+                    .background(theme.cardTint, in: Capsule())
+                    .accessibilityLabel("on \(ref.server)")
+                let task = ref.session(in: app.peers)?.task ?? ""
+                if !task.isEmpty {
+                    Text(task)
+                        .font(theme.mono(14, .medium))
+                        .foregroundStyle(theme.action)
+                }
+                Text(ref.project)
+                    .font(theme.title(19, .heavy))
+                Text(ref.isCoordinator ? "coordinator" : ref.thread)
+                    .font(theme.mono(12))
+                    .foregroundStyle(theme.muted)
+                    .textSelection(.enabled)
+            } else if ref.isCoordinator {
+                Text(ref.project)
+                    .font(theme.title(19, .heavy))
+                Text("coordinator")
+                    .font(theme.mono(12))
+                    .foregroundStyle(theme.muted)
+            } else {
+                let t = app.thread(ref)
+                if let task = t?.task {
+                    Text(task.ref)
+                        .font(theme.mono(14, .medium))
+                        .foregroundStyle(theme.action)
+                }
+                Text(t?.record.title ?? ref.thread)
+                    .font(theme.title(19, .heavy))
+                    .lineLimit(1)
+                    .layoutPriority(-1)
+                Text(ref.thread)
+                    .font(theme.mono(12))
+                    .foregroundStyle(theme.muted)
+                    .textSelection(.enabled)
+                    .fixedSize()
+            }
+        }
+    }
+}
+
+/// The ref names no running session: the thread is done or stopped,
+/// the coordinator isn't running, or the bridge is down.
+struct NotRunning: View {
+    @Environment(AppModel.self) private var app
+    @Environment(\.theme) private var theme
+    let ref: SessionRef
+
+    var body: some View {
+        VStack(spacing: 8) {
+            Text(headline)
+                .font(theme.title(20, .heavy))
+            Text(detail)
+                .foregroundStyle(theme.muted)
+                .multilineTextAlignment(.center)
+        }
+        .padding(28)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18))
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var headline: String {
+        if app.bridge == nil { return "Not connected" }
+        if ref.isRemote {
+            if case .closed = app.remotePane(ref) { return "\(ref.server)'s pane can't open" }
+            return ref.isCoordinator ? "The coordinator isn't running on \(ref.server)" : "This thread has no session on \(ref.server)"
+        }
+        return ref.isCoordinator ? "The coordinator isn't running" : "This thread has no session"
+    }
+
+    private var detail: String {
+        if app.bridge == nil { return "The window follows the session again once tm app bridge is back." }
+        if ref.isRemote {
+            if case .closed(let why) = app.remotePane(ref) { return why }
+            return "The window shows it once \(ref.server) lists it again."
+        }
+        if ref.isCoordinator { return "Start it with tm in a terminal; the window shows it once it runs." }
+        if let t = app.thread(ref), t.record.done { return "The thread is done." }
+        return "Its agent isn't running. The window shows it once it runs."
+    }
+}
+

@@ -4,9 +4,10 @@ import TerminatrKit
 /// The prompt box under the conversation (design T734 §5): ↩ sends,
 /// queued until the agent is idle; ⌥↩ steers it into the running turn;
 /// Interrupt stops the turn for it, after a confirmation. ⇧↩ is a new
-/// line. A thread's composer says that sending takes the thread over:
+/// line; ⌘L focuses it. A thread's composer says that sending takes the thread over:
 /// the server raises the takeover, as typing in its pane does.
 struct Composer: View {
+    @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
     let model: SessionModel
     let session: AppAPI.Session?
@@ -85,6 +86,7 @@ struct Composer: View {
         .padding(.top, 10)
         .padding(.bottom, 14)
         .frame(maxWidth: 820)
+        .onChange(of: app.composerFocus) { focused = true }
         .confirmationDialog("Interrupt the agent's turn?", isPresented: $interrupting) {
             Button("Interrupt and Send", role: .destructive) { send(mode: "interrupt") }
             Button("Cancel", role: .cancel) {}
