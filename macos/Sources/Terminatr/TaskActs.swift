@@ -38,7 +38,7 @@ struct TaskActs: View {
             .disabled(busy)
             if let said {
                 Text(said.text)
-                    .font(.system(size: 11.5))
+                    .font(theme.body(11.5))
                     .foregroundStyle(said.failed ? theme.attention : theme.muted)
                     .lineLimit(2)
                     .multilineTextAlignment(.trailing)
@@ -95,7 +95,7 @@ struct SendBackSheet: View {
             Text("Say what to change. The coordinator passes it on to the thread.")
                 .foregroundStyle(theme.muted)
             TextEditor(text: $note)
-                .font(.system(size: 13))
+                .font(theme.body(13))
                 .frame(minHeight: 90)
                 .scrollContentBackground(.hidden)
                 .padding(6)

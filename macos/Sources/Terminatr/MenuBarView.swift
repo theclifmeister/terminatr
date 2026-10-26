@@ -28,7 +28,7 @@ struct MenuBarView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Can't reach terminatr").font(theme.title(15, .bold))
                         Text(why)
-                            .font(.system(size: 12))
+                            .font(theme.body(12))
                             .foregroundStyle(theme.muted)
                             .lineLimit(4)
                         Button("Retry") { model.connect() }
@@ -42,7 +42,7 @@ struct MenuBarView: View {
                 if let behind = model.compatibility.message {
                     Panel {
                         Label(behind, systemImage: "arrow.down.circle")
-                            .font(.system(size: 12))
+                            .font(theme.body(12))
                             .foregroundStyle(theme.attention)
                             .padding(10)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -77,7 +77,7 @@ struct MenuBarView: View {
                 Heading("Needs you", count: model.needs.count)
                 if model.needs.isEmpty {
                     Text("Nothing waits on you.")
-                        .font(.system(size: 12.5))
+                        .font(theme.body(12.5))
                         .foregroundStyle(theme.muted)
                         .padding(.horizontal, 12)
                         .padding(.bottom, 10)
@@ -90,11 +90,11 @@ struct MenuBarView: View {
                         if !rest.isEmpty {
                             MenuRow(action: { open(nil) }) {
                                 Text(SidebarTree.moreNeeds(rest))
-                                    .font(.system(size: 12))
+                                    .font(theme.body(12))
                                     .foregroundStyle(theme.muted)
                                 Spacer(minLength: 6)
                                 Text(MenuBarList.projects(of: rest))
-                                    .font(.system(size: 12))
+                                    .font(theme.body(12))
                                     .foregroundStyle(theme.muted)
                                     .lineLimit(1)
                                     .truncationMode(.middle)
@@ -120,9 +120,9 @@ struct MenuBarView: View {
                         ForEach(shown, id: \.slug) { row in
                             if let p = model.project(row.slug) {
                                 MenuRow(action: { open(p.slug) }) {
-                                    Text(p.slug).font(.system(size: 13, weight: .semibold))
+                                    Text(p.slug).font(theme.body(13, .semibold))
                                     Text(Self.summary(p))
-                                        .font(.system(size: 12))
+                                        .font(theme.body(12))
                                         .foregroundStyle(theme.muted)
                                     Spacer(minLength: 6)
                                     Flag(count: model.needs(of: p.slug).count)
@@ -140,11 +140,11 @@ struct MenuBarView: View {
                             // Only inactive ones left out: the sidebar unfolds them.
                             MenuRow(action: { if more == 0 { model.nav.showInactive = true }; open(nil) }) {
                                 Text(others)
-                                    .font(.system(size: 12))
+                                    .font(theme.body(12))
                                     .foregroundStyle(theme.muted)
                                 Spacer(minLength: 6)
                                 Text("in the window")
-                                    .font(.system(size: 12))
+                                    .font(theme.body(12))
                                     .foregroundStyle(theme.muted)
                             }
                         }
@@ -189,7 +189,7 @@ struct MenuBarView: View {
                 open(nil)
             } label: {
                 Text("Open terminatr")
-                    .font(.system(size: 12.5, weight: .semibold))
+                    .font(theme.body(12.5, .semibold))
                     .padding(.horizontal, 10)
                     .padding(.vertical, 5)
                     .background(theme.action, in: RoundedRectangle(cornerRadius: 8))
@@ -226,13 +226,15 @@ struct MenuBarLabel: View {
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
+        // None while the bridge is down: the window keeps the old ones.
+        let count = model.isConnected ? model.needs.count : 0
         HStack(spacing: 3) {
-            Image(systemName: model.needs.isEmpty ? "square.stack.3d.up" : "square.stack.3d.up.badge.automatic")
-            if !model.needs.isEmpty {
-                Text("\(model.needs.count)")
+            Image(systemName: count == 0 ? "square.stack.3d.up" : "square.stack.3d.up.badge.automatic")
+            if count > 0 {
+                Text("\(count)")
             }
         }
-        .accessibilityLabel(model.needs.isEmpty ? "terminatr" : "terminatr, \(model.needs.count) need you")
+        .accessibilityLabel(count == 0 ? "terminatr" : "terminatr, \(count) need you")
         .task {
             let open = openWindow
             model.showWindow = {
@@ -327,22 +329,22 @@ struct NeedRow: View {
     var body: some View {
         MenuRow(action: action) {
             Image(systemName: Self.symbol(need.kind))
-                .font(.system(size: 13, weight: .semibold))
+                .font(theme.body(13, .semibold))
                 .foregroundStyle(colour)
                 .frame(width: 18)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 1) {
                 Text(need.title)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(theme.body(13, .semibold))
                     .lineLimit(1)
                 Text(need.detail)
-                    .font(.system(size: 11.5))
+                    .font(theme.body(11.5))
                     .foregroundStyle(theme.muted)
                     .lineLimit(1)
             }
             Spacer(minLength: 4)
             Text(Self.verb(need.kind))
-                .font(.system(size: 11.5, weight: .semibold))
+                .font(theme.body(11.5, .semibold))
                 .foregroundStyle(theme.action)
         }
         .accessibilityElement(children: .combine)
@@ -393,9 +395,9 @@ private struct PeerRow: View {
     var body: some View {
         HStack(spacing: 8) {
             Text("\(peer.name.isEmpty ? peer.alias : peer.name)/\(project.project)")
-                .font(.system(size: 13, weight: .semibold))
+                .font(theme.body(13, .semibold))
             Text(summary)
-                .font(.system(size: 12))
+                .font(theme.body(12))
                 .foregroundStyle(theme.muted)
             Spacer(minLength: 6)
             if !project.stale {

@@ -22,7 +22,7 @@ import (
 // Params of the app's methods.
 type (
 	// ProjectsWatchParams are projects.watch's: Detail asks for the dashboard's data of each
-	// project besides the sidebar's. Lean (since app API 7) asks for the inactive projects
+	// project besides the sidebar's. Lean (since app API 8) asks for the inactive projects
 	// but Shown, the one the window shows, as their slug and settings alone; a change in
 	// them alone sends no event.
 	ProjectsWatchParams struct {
@@ -96,6 +96,13 @@ type (
 	// ProjectParams name a project (questions.open).
 	ProjectParams struct {
 		Project string `json:"project"`
+	}
+	// TaskAddParams are task.add's: the project, the new task's title
+	// (one line) and, optionally, its notes.
+	TaskAddParams struct {
+		Project string `json:"project"`
+		Title   string `json:"title"`
+		Notes   string `json:"notes,omitempty"`
 	}
 	// ProjectOpenParams are project.open's: the project, and the size a
 	// coordinator it starts gets (80x24 when unset).
@@ -739,6 +746,17 @@ func approveResultOf(r proto.SessionApproveResult) ApproveResult {
 }
 
 func taskAskResultOf(r proto.TaskAskResult) TaskAskResult { return TaskAskResult{Asked: r.Asked} }
+
+// TaskAdded is task.add's result: the task ("T12"), and Existing when
+// a task that isn't done had its title already, so none was added.
+type TaskAdded struct {
+	Task     string `json:"task"`
+	Existing bool   `json:"existing,omitempty"`
+}
+
+func taskAddedOf(r proto.TaskAddResult) TaskAdded {
+	return TaskAdded{Task: r.Task, Existing: r.Existing}
+}
 
 // ProjectOpen is project.open's result: the project's coordinator
 // session, and Started when this call started it.

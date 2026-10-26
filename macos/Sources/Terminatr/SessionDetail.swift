@@ -66,7 +66,7 @@ struct SessionDetail: View {
             } icon: {
                 Image(systemName: model.ref.isRemote ? "network" : "rectangle.on.rectangle.slash")
             }
-            .font(.system(size: 12))
+            .font(theme.body(12))
             .foregroundStyle(theme.muted)
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
@@ -97,6 +97,10 @@ struct SessionWindow: View {
 
     var body: some View {
         SessionDetail(model: model)
+            .opacity(app.lost ? MainWindow.dimmed : 1)
+            .safeAreaInset(edge: .top) {
+                if app.lost { ConnectionBanner() }
+            }
             .inspector(isPresented: $inspector) {
                 Inspector(model: model, session: app.session(of: model))
                     .inspectorColumnWidth(min: 240, ideal: 270, max: 360)
@@ -153,7 +157,7 @@ struct NotRunning: View {
         }
         if ref.isCoordinator {
             return app.project(ref.project)?.active == false
-                ? "The project is inactive: tm project active \(ref.project) turns it on."
+                ? "The project is inactive: tm project activate \(ref.project) turns it on."
                 : "Start it with the project's agent and model, as tm project open does."
         }
         if let t = app.thread(ref), t.record.done { return "The thread is done." }

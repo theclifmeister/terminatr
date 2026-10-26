@@ -7,6 +7,11 @@ struct ShortcutsSheet: View {
     @Environment(\.theme) private var theme
 
     static let groups: [(String, [(String, String)])] = [
+        ("Window", [
+            ("⌘N", "New Task: add a task to the shown project's board"),
+            ("⇧⌘O", "Open the shown session in a new window"),
+            ("⌘+  ⌘-  ⌘0", "Make text bigger, smaller, or its actual size"),
+        ]),
         ("Go", [
             ("⌘K", "Command palette: go to a project, thread, task or need"),
             ("⌥⌘↓  ⌥⌘↑", "Next and previous thing that needs you"),
@@ -54,7 +59,7 @@ struct ShortcutsSheet: View {
                                     .foregroundStyle(theme.action)
                                     .frame(minWidth: 96, alignment: .leading)
                                 Text(what)
-                                    .font(.system(size: 12.5))
+                                    .font(theme.body(12.5))
                             }
                         }
                     }

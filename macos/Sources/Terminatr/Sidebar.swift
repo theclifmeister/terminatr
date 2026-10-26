@@ -23,6 +23,9 @@ import TerminatrKit
 struct Sidebar: View {
     @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
+    @Environment(\.density) private var density
+    @Environment(\.sidebarRowSize) private var rowSize
+    @Environment(\.defaultMinListRowHeight) private var minRowHeight
     @State private var typing = TypeSelect()
     /// The List has the keys from launch, not the filter field.
     @FocusState private var listFocused: Bool
@@ -87,11 +90,14 @@ struct Sidebar: View {
             }
             if filtering, rows.isEmpty, needs.isEmpty {
                 Text("Nothing matches “\(app.filter)”")
-                    .font(.system(size: 12))
+                    .font(theme.body(12))
                     .foregroundStyle(theme.muted)
             }
         }
         .listStyle(.sidebar)
+        // Regular is the system's own (System Settings › Sidebar icon size).
+        .environment(\.sidebarRowSize, density == .compact ? .small : density == .roomy ? .large : rowSize)
+        .environment(\.defaultMinListRowHeight, density.minRowHeight ?? minRowHeight)
         .scrollContentBackground(.hidden)
         .focused($listFocused)
         .onAppear { listFocused = true }
@@ -106,14 +112,6 @@ struct Sidebar: View {
             FilterField { listFocused = true }
                 .padding(.horizontal, 12)
                 .padding(.bottom, 4)
-        }
-        .safeAreaInset(edge: .bottom) {
-            // Only when something is wrong: all well, it takes no row.
-            if StatusLine.shows(app) {
-                StatusLine()
-                    .padding(12)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
         }
     }
 
@@ -250,11 +248,11 @@ struct Sidebar: View {
         } label: {
             HStack(spacing: 6) {
                 Text(label)
-                    .font(.system(size: 12))
+                    .font(theme.body(12))
                     .lineLimit(1)
                 Spacer(minLength: 4)
                 Image(systemName: unfolded ? "chevron.up" : "chevron.down")
-                    .font(.system(size: 9, weight: .semibold))
+                    .font(theme.body(9, .semibold))
                     .accessibilityHidden(true)
             }
             .foregroundStyle(theme.muted)
@@ -315,7 +313,7 @@ struct Sidebar: View {
                     .foregroundStyle(on ? theme.onAction : theme.action)
             }
             Text(label)
-                .font(.system(size: 12.5))
+                .font(theme.body(12.5))
                 .lineLimit(1)
             Spacer(minLength: 4)
             if let (word, tone) = tag {
@@ -370,7 +368,7 @@ struct Sidebar: View {
                     .frame(width: 8, height: 8)
                     .accessibilityHidden(true)
                 Text(p.project)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(theme.body(13, .semibold))
                     .lineLimit(1)
                 Spacer(minLength: 4)
                 if p.needsYou > 0, !p.stale {
@@ -427,6 +425,7 @@ struct Sidebar: View {
 /// A need in the sidebar: a click shows what it names.
 private struct NeedLine: View {
     @Environment(\.theme) private var theme
+    @Environment(\.density) private var density
     let need: Need
     let action: () -> Void
 
@@ -439,15 +438,16 @@ private struct NeedLine: View {
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 0) {
                     Text(need.title)
-                        .font(.system(size: 12.5, weight: .medium))
+                        .font(theme.body(12.5, .medium))
                         .lineLimit(1)
                     Text(need.detail)
-                        .font(.system(size: 11))
+                        .font(theme.body(11))
                         .foregroundStyle(theme.muted)
                         .lineLimit(1)
                 }
                 Spacer(minLength: 0)
             }
+            .padding(.vertical, density.rowPadding)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -459,11 +459,13 @@ private struct NeedLine: View {
 private struct Selectable: ViewModifier {
     @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
+    @Environment(\.density) private var density
     let sel: Selection
 
     func body(content: Content) -> some View {
         let on = app.nav.selection == sel
         content
+            .padding(.vertical, density.rowPadding)
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
             .tag(sel)
@@ -499,12 +501,12 @@ private struct FilterField: View {
         @Bindable var app = app
         HStack(spacing: 6) {
             Image(systemName: "line.3.horizontal.decrease")
-                .font(.system(size: 11, weight: .semibold))
+                .font(theme.body(11, .semibold))
                 .foregroundStyle(theme.muted)
                 .accessibilityHidden(true)
             TextField("Filter", text: $app.filter)
                 .textFieldStyle(.plain)
-                .font(.system(size: 12.5))
+                .font(theme.body(12.5))
                 .focused($focused)
                 .onExitCommand {
                     app.filter = ""

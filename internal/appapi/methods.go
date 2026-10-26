@@ -75,6 +75,8 @@ func init() {
 		// in its session, where the app's question card answers them
 		// (app API 6).
 		unary(proto.MethodQuestionsOpen, true, questionsOpenParams, questionsOpenOf),
+		// A task added to a project's board, as tm task add (app API 7).
+		unary(proto.MethodTaskAdd, true, taskAddParams, taskAddedOf),
 	} {
 		methods[m.Name] = m
 	}
@@ -293,6 +295,10 @@ func sendBackParams(p SendBackParams) proto.TaskActionParams {
 
 func questionsOpenParams(p ProjectParams) proto.QuestionsOpenParams {
 	return proto.QuestionsOpenParams{Project: p.Project}
+}
+
+func taskAddParams(p TaskAddParams) proto.TaskAddParams {
+	return proto.TaskAddParams{Project: p.Project, Title: p.Title, Notes: p.Notes}
 }
 
 func projectOpenParams(p ProjectOpenParams) proto.ProjectOpenParams {

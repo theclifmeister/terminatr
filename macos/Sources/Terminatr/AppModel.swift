@@ -18,9 +18,14 @@ final class AppModel {
         case failed(String)
     }
 
-    private(set) var phase = Phase.connecting
+    private(set) var phase = Phase.connecting {
+        didSet { showBadge() }
+    }
+    /// The hello of the last bridge that connected: kept while the
+    /// bridge is down, so the window keeps what it showed (lost).
+    private(set) var hello: AppAPI.Hello?
     /// Whether this app and the bridge's tm fit (their app API and
-    /// releases); the status line and the menu bar say which is behind.
+    /// releases); the toolbar and the menu bar say which is behind.
     private(set) var compatibility = Compatibility.ok
     private(set) var projects: [AppAPI.Project] = []
     private(set) var sessions: [AppAPI.Session] = []
@@ -33,10 +38,20 @@ final class AppModel {
             if needs.count != oldValue.count { showBadge() }
         }
     }
-    /// The Dock icon's badge: how many needs wait, none at 0.
+    /// The Dock icon's badge: how many needs wait, none at 0 or while
+    /// the bridge is down (the count may be old).
     func showBadge() {
-        NSApp?.dockTile.badgeLabel = needs.isEmpty ? nil : "\(needs.count)"
+        NSApp?.dockTile.badgeLabel = needs.isEmpty || !isConnected ? nil : "\(needs.count)"
     }
+
+    var isConnected: Bool {
+        if case .connected = phase { return true }
+        return false
+    }
+
+    /// The bridge is down (or coming back) after one connected: the
+    /// window keeps what it showed, dimmed, under a banner with Retry.
+    var lost: Bool { hello != nil && !isConnected }
 
     /// Counts the bridges started: needs of a new one are learned
     /// afresh (NeedTracker.reset).
@@ -73,6 +88,13 @@ final class AppModel {
     private(set) var paletteChoice = 0
     /// Whether the Keyboard Shortcuts sheet shows.
     var shortcuts = false
+    /// Whether the first-run sheet shows (FirstRun; Help › Getting
+    /// Started shows it again).
+    var welcome = false
+    /// The project File › New Task… adds to while its sheet shows.
+    var newTask: String?
+    /// What the bridge did: Settings › Advanced shows it.
+    private(set) var log = BridgeLog()
     /// The need ⌥⌘↓ or ⌥⌘↑ showed last (Need.step).
     @ObservationIgnored private var lastNeed: String?
 
@@ -89,7 +111,7 @@ final class AppModel {
     @ObservationIgnored private var run: Task<Void, Never>?
     @ObservationIgnored private var loaded = Loaded()
     @ObservationIgnored private var listing: Task<Void, Never>?
-    /// The lean projects watch (app API 7): the inactive project it
+    /// The lean projects watch (app API 8): the inactive project it
     /// sends whole (watchedShown), and its events' task, which reshow
     /// ends so the watch opens again for the newly shown one.
     @ObservationIgnored private var lean = false
@@ -98,11 +120,9 @@ final class AppModel {
     @ObservationIgnored private var reshowing = false
     @ObservationIgnored private var listAgain = false
 
-    /// The server's hello capabilities (pane-vt, transcript).
-    var caps: [String] {
-        if case .connected(let h) = phase { return h.server?.caps ?? [] }
-        return []
-    }
+    /// The server's hello capabilities (pane-vt, transcript): the last
+    /// bridge's while it is down, so the views stay as they were.
+    var caps: [String] { hello?.server?.caps ?? [] }
 
     /// What came since the bridge started: needs wait for all of it, so
     /// the first set is whole.
@@ -128,6 +148,7 @@ final class AppModel {
     /// (Re)starts the bridge: with the configured tm, or the first one
     /// found. A bridge already running is ended first.
     func connect() {
+        if run != nil { log.add("Reconnecting") }
         run?.cancel()
         run = Task { await watch(tmPath: UserDefaults.standard.string(forKey: Self.tmPathKey)) }
     }
@@ -140,6 +161,7 @@ final class AppModel {
         var started: Bridge?
         do {
             let tm = try TMLocator(configured: tmPath).locate()
+            log.add("Starting \(tm.path) app bridge")
             let b = try await Bridge.launch(tm: tm)
             started = b
             bridge = b
@@ -147,7 +169,9 @@ final class AppModel {
             let fit = Compatibility.check(hello, appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String)
             compatibility = fit
             if fit.blocks { throw BridgeError.closed(fit.message ?? "") }
+            self.hello = hello
             phase = .connected(hello)
+            log.add(BridgeLog.connected(hello, tm: tm.lastPathComponent))
             // An older tm's bridge has no peer.list: no paired servers.
             loaded.peers = !hello.methods.contains(AppAPI.Methods.peerList.name)
             let peers = !loaded.peers
@@ -162,9 +186,10 @@ final class AppModel {
             }
         } catch {
             if !Task.isCancelled {
+                // The needs stay for the window (dimmed); the menu bar and
+                // the Dock badge count none while it is down.
+                log.add("Failed: \(error.localizedDescription)")
                 phase = .failed(error.localizedDescription)
-                // Not known any more: the menu bar counts nothing.
-                needs = []
             }
         }
         await started?.close()
@@ -174,7 +199,7 @@ final class AppModel {
     }
 
     /// Watches the projects until the bridge ends. A lean watch (app
-    /// API 7) leaves the inactive projects but the shown one out, so it
+    /// API 8) leaves the inactive projects but the shown one out, so it
     /// opens again whenever the window shows another inactive one.
     private func watchProjects(_ b: Bridge) async throws {
         lean = (await b.hello?.appApi ?? 0) >= AppAPI.leanAPI
@@ -592,6 +617,35 @@ final class AppModel {
     /// once the server checked the dialog again.
     func approve(_ params: AppAPI.ApproveParams) async throws -> AppAPI.ApproveResult {
         try await connected().call(AppAPI.Methods.sessionApprove, params)
+    }
+
+    /// Whether this tm adds tasks from the app (task.add, app API 7).
+    var canAddTask: Bool {
+        if case .connected(let h) = phase { return Compatibility.addsTasks(h) }
+        return false
+    }
+
+    /// The project File › New Task… adds to: the shown one, a paired
+    /// server's never (its board is its own).
+    var boardProject: String? {
+        switch nav.selection {
+        case .project(let slug, let server) where server.isEmpty: slug
+        case .session(let ref) where !ref.isRemote: ref.project
+        default: nil
+        }
+    }
+
+    /// File › New Task… (⌘N): the sheet for the shown project.
+    func showNewTask() {
+        guard canAddTask, let p = boardProject else { return }
+        newTask = p
+        showWindow?()
+    }
+
+    /// Adds a task to project's board as the user (task.add).
+    func addTask(_ form: NewTaskForm, project: String) async throws -> AppAPI.TaskAdded {
+        guard let bridge else { throw BridgeError.closed("Not connected to terminatr.") }
+        return try await bridge.call(AppAPI.Methods.taskAdd, form.params(project: project))
     }
 
     /// Claims mod notice id for this console: true when the app is the

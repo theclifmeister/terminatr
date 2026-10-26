@@ -73,7 +73,7 @@ struct ProjectDashboard: View {
                         }
                         if inbox.count > Self.inboxShown {
                             Text("\(inbox.count - Self.inboxShown) more in tm")
-                                .font(.system(size: 12))
+                                .font(theme.body(12))
                                 .foregroundStyle(theme.muted)
                         }
                     }
@@ -164,7 +164,7 @@ struct ProjectDashboard: View {
                 HStack(spacing: 5) {
                     Image(systemName: "chevron.right")
                         .rotationEffect(.degrees(open ? 90 : 0))
-                        .font(.system(size: 9, weight: .bold))
+                        .font(theme.body(9, .bold))
                     Text("\(title) · \(n)".uppercased())
                         .font(theme.mono(10, .medium))
                         .tracking(1)
@@ -210,7 +210,7 @@ struct CoordinatorRow: View {
                 }
                 if !attention.why.isEmpty {
                     Text(attention.why)
-                        .font(.system(size: 12.5, weight: attention.waits ? .medium : .regular))
+                        .font(theme.body(12.5, attention.waits ? .medium : .regular))
                         .foregroundStyle(attention.waits ? theme.colour(attention.tone) : theme.muted)
                         .lineLimit(2)
                 }
@@ -256,10 +256,10 @@ struct StartButton: View {
             .tint(theme.action)
             .disabled(busy || !project.active)
             .help(project.active ? "Starts the coordinator with the project's agent and model, as tm project open does"
-                                 : "The project is inactive: tm project active \(project.slug) turns it on")
+                                 : "The project is inactive: tm project activate \(project.slug) turns it on")
             if let error {
                 Text(error)
-                    .font(.system(size: 11.5))
+                    .font(theme.body(11.5))
                     .foregroundStyle(theme.attention)
                     .multilineTextAlignment(.trailing)
             }
@@ -293,7 +293,7 @@ private struct BoardRow: View {
                 .foregroundStyle(theme.action)
                 .frame(minWidth: 44, alignment: .leading)
             Text(task.title)
-                .font(.system(size: 13))
+                .font(theme.body(13))
                 .lineLimit(1)
                 .textSelection(.enabled)
             Spacer(minLength: 8)
@@ -324,11 +324,7 @@ private struct NextStepCard: View {
                 .fixedSize(horizontal: false, vertical: true)
             switch step {
             case .activate:
-                Text("tm project active \(project.slug)")
-                    .font(theme.mono(12.5))
-                    .textSelection(.enabled)
-                    .padding(8)
-                    .background(theme.command, in: RoundedRectangle(cornerRadius: 8))
+                CommandText("tm project activate \(project.slug)")
             case .start:
                 StartButton(project: project, title: "Start the Coordinator")
             case .message:
@@ -338,6 +334,25 @@ private struct NextStepCard: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(theme.action)
+            }
+            if step != .activate {
+                // The New Task sheet with a tm that adds tasks (app API
+                // 7); before it, the command that does.
+                if app.canAddTask {
+                    HStack(spacing: 8) {
+                        Text("Or add a task to its board yourself, for the coordinator to start:")
+                            .font(theme.body(12.5))
+                            .foregroundStyle(theme.muted)
+                        Button("New Task…") { app.showNewTask() }
+                    }
+                    .padding(.top, 6)
+                } else {
+                    Text("Or add a task to its board yourself, for the coordinator to start:")
+                        .font(theme.body(12.5))
+                        .foregroundStyle(theme.muted)
+                        .padding(.top, 6)
+                    CommandText(FirstRun.addTask(project.slug))
+                }
             }
         }
         .padding(18)
@@ -375,10 +390,10 @@ private struct InboxLine: View {
                 .frame(width: 6, height: 6)
                 .accessibilityHidden(true)
             Text(item.subject.isEmpty ? item.kind : item.subject)
-                .font(.system(size: 12.5, weight: .medium))
+                .font(theme.body(12.5, .medium))
                 .lineLimit(1)
             Text(item.shownSummary)
-                .font(.system(size: 12))
+                .font(theme.body(12))
                 .foregroundStyle(theme.muted)
                 .lineLimit(1)
             Spacer(minLength: 6)
@@ -468,7 +483,7 @@ private struct PeerSessionCard: View {
                 .font(theme.title(15, .bold))
             if !session.current.isEmpty {
                 Text(session.current)
-                    .font(.system(size: 12.5))
+                    .font(theme.body(12.5))
                     .foregroundStyle(theme.muted)
                     .lineLimit(1)
             }
@@ -504,7 +519,7 @@ struct ProjectRow: View {
                 .frame(width: 8, height: 8)
                 .accessibilityHidden(true)
             Text(project.slug)
-                .font(.system(size: 13, weight: .semibold))
+                .font(theme.body(13, .semibold))
                 .lineLimit(1)
             Spacer(minLength: 4)
             if needs > 0 {
@@ -556,12 +571,12 @@ struct ThreadCard: View {
             }
             if attention.waits {
                 Label(attention.why, systemImage: "exclamationmark.bubble")
-                    .font(.system(size: 12.5, weight: .medium))
+                    .font(theme.body(12.5, .medium))
                     .foregroundStyle(theme.colour(attention.tone))
                     .lineLimit(2)
             } else if !attention.why.isEmpty {
                 Text(attention.why)
-                    .font(.system(size: 12.5))
+                    .font(theme.body(12.5))
                     .foregroundStyle(theme.muted)
                     .lineLimit(2)
             }
@@ -617,61 +632,6 @@ struct Meter: View {
     }
 }
 
-/// The bridge's state at the foot of the sidebar.
-struct StatusLine: View {
-    @Environment(AppModel.self) private var model
-    @Environment(\.theme) private var theme
-
-    /// Whether the sidebar shows it: not while connected and all fits.
-    static func shows(_ model: AppModel) -> Bool {
-        if case .connected = model.phase { return model.compatibility.message != nil }
-        return true
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            line
-            if case .connected = model.phase, let behind = model.compatibility.message {
-                // Ink, with the attention colour on the symbol: as text,
-                // it is under 4.5:1 on the light sidebar (Theme.bloom).
-                Label {
-                    Text(behind)
-                        .lineLimit(4)
-                        .fixedSize(horizontal: false, vertical: true)
-                } icon: {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(theme.attention)
-                }
-                .font(.system(size: 10.5))
-                .foregroundStyle(theme.ink)
-            }
-        }
-    }
-
-    private var line: some View {
-        HStack(spacing: 6) {
-            switch model.phase {
-            case .connecting:
-                ProgressView().controlSize(.mini)
-                Text("Connecting…")
-            case .connected(let h):
-                Circle().fill(theme.good).frame(width: 7, height: 7)
-                Text("tm \(h.tm)" + (h.server.map { $0.version == h.tm ? "" : " · server \($0.version)" } ?? ""))
-                    .font(theme.mono(11))
-            case .failed:
-                Circle().fill(theme.attention).frame(width: 7, height: 7)
-                Text("Not connected")
-                Spacer()
-                Button("Retry") { model.connect() }
-                    .buttonStyle(.link)
-                    .foregroundStyle(theme.action)
-            }
-        }
-        .font(.system(size: 11.5))
-        .foregroundStyle(theme.muted)
-    }
-}
-
 /// The detail pane with no project to show: connecting, failed (with
 /// why), or a server with none.
 struct Placeholder: View {
@@ -701,11 +661,11 @@ struct Placeholder: View {
                     SettingsLink { Text("Settings…") }
                 }
             case .connected:
-                Text(empty ? "No projects yet" : "Pick a project")
-                    .font(theme.title(22, .heavy))
                 if empty {
-                    Text("Create one with tm project new in a terminal.")
-                        .foregroundStyle(theme.muted)
+                    NoProjects()
+                } else {
+                    Text("Pick a project")
+                        .font(theme.title(22, .heavy))
                 }
             }
         }

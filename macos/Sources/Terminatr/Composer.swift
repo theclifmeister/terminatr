@@ -32,7 +32,7 @@ struct Composer: View {
                     }
                     TextEditor(text: $text)
                         .scrollContentBackground(.hidden)
-                        .font(.system(size: 13))
+                        .font(theme.body(13))
                         .frame(minHeight: 20, maxHeight: 120)
                         .fixedSize(horizontal: false, vertical: true)
                         .focused($focused)
@@ -82,7 +82,7 @@ struct Composer: View {
                     .font(theme.mono(10.5))
                     .foregroundStyle(theme.muted)
             }
-            .font(.system(size: 11.5))
+            .font(theme.body(11.5))
             .padding(.horizontal, 6)
         }
         .padding(.horizontal, 22)

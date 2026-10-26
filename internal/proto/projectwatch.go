@@ -27,7 +27,7 @@ const (
 // server.ProjectsWatchEvent: they carry the thread and task records.
 // The human's (since protocol 17). With detail (since protocol 18) each
 // project carries what the dashboard shows of it too. With lean (since
-// protocol 21) the inactive projects, all but the one shown, carry
+// protocol 22) the inactive projects, all but the one shown, carry
 // their slug and settings alone, and a change in them alone sends no
 // event.
 const (

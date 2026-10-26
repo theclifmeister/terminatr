@@ -31,12 +31,16 @@ struct TerminalTab: View {
                     .multilineTextAlignment(.center)
                     .padding(28)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if let bridge = app.bridge, let id = model.sessionID {
+            } else if let id = model.sessionID {
+                // While the bridge is down the pane keeps its last
+                // screen (the window's banner says why) until the next.
                 ZStack(alignment: .bottom) {
                     PaneTerminal(controller: pane, theme: theme)
-                        .task(id: id) { await pane.run(bridge, id) }
+                        .task(id: PaneKey(session: id, bridge: app.bridge.map(ObjectIdentifier.init))) {
+                            if let bridge = app.bridge { await pane.run(bridge, id) }
+                        }
                         .onChange(of: remote, initial: true) { _, r in pane.keys = r != .view }
-                    if let closed = pane.closed {
+                    if let closed = pane.closed, app.bridge != nil {
                         Text(closed)
                             .padding(10)
                             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
@@ -60,7 +64,7 @@ struct TerminalTab: View {
                     .foregroundStyle(theme.muted)
             }
             Text(note(remote))
-                .font(.system(size: 11.5))
+                .font(theme.body(11.5))
                 .foregroundStyle(theme.muted)
             Spacer()
             Button("Fit to Window") { pane.fit() }
@@ -83,6 +87,12 @@ extension TerminalTab {
         default: return model.ref.isCoordinator ? "Keys here go to the coordinator." : "Typing here takes the thread over."
         }
     }
+}
+
+/// What the pane's stream runs for: a session on one bridge.
+private struct PaneKey: Equatable {
+    let session: String
+    let bridge: ObjectIdentifier?
 }
 
 /// The pane stream and the mirror it feeds.

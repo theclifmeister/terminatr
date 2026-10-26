@@ -6,7 +6,7 @@ import Foundation
 /// The terminatr app API (docs/SPEC.md §3.8): what tm app bridge answers.
 public enum AppAPI {
     /// The app API version this app was generated against.
-    public static let version = 7
+    public static let version = 8
 
     public struct AnswerParams: Codable, Sendable, Hashable {
         public var id: String
@@ -1055,6 +1055,39 @@ public enum AppAPI {
         }
     }
 
+    public struct TaskAddParams: Codable, Sendable, Hashable {
+        public var project: String
+        public var title: String
+        public var notes: String
+
+        public init(project: String, title: String, notes: String = "") {
+            self.project = project
+            self.title = title
+            self.notes = notes
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case project
+            case title
+            case notes
+        }
+    }
+
+    public struct TaskAdded: Codable, Sendable, Hashable {
+        public var task: String
+        public var existing: Bool
+
+        public init(task: String, existing: Bool = false) {
+            self.task = task
+            self.existing = existing
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case task
+            case existing
+        }
+    }
+
     public struct TaskAskParams: Codable, Sendable, Hashable {
         public var project: String
         public var task: String
@@ -1543,6 +1576,7 @@ public enum AppAPI {
         public static let sessionPrompt = Call<PromptParams, PromptResult>("session.prompt", write: true)
         public static let sessionWatch = Subscription<SessionIDParams, Watch, Watch>("session.watch", events: ["watch.changed"])
         public static let taskAccept = Call<TaskParams, TaskAskResult>("task.accept", write: true)
+        public static let taskAdd = Call<TaskAddParams, TaskAdded>("task.add", write: true)
         public static let taskAsk = Call<TaskAskParams, TaskAskResult>("task.ask", write: true)
         public static let taskDelegate = Call<TaskParams, TaskAskResult>("task.delegate", write: true)
         public static let taskSendBack = Call<SendBackParams, TaskAskResult>("task.send-back", write: true)
@@ -2020,6 +2054,23 @@ extension AppAPI.Task {
         self.owner = try c.decodeIfPresent(String.self, forKey: .owner) ?? ""
         self.created = try c.decodeIfPresent(String.self, forKey: .created) ?? ""
         self.updated = try c.decodeIfPresent(String.self, forKey: .updated) ?? ""
+    }
+}
+
+extension AppAPI.TaskAddParams {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.project = try c.decode(String.self, forKey: .project)
+        self.title = try c.decode(String.self, forKey: .title)
+        self.notes = try c.decodeIfPresent(String.self, forKey: .notes) ?? ""
+    }
+}
+
+extension AppAPI.TaskAdded {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.task = try c.decode(String.self, forKey: .task)
+        self.existing = try c.decodeIfPresent(Bool.self, forKey: .existing) ?? false
     }
 }
 

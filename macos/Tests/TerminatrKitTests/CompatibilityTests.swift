@@ -15,6 +15,15 @@ private func hello(_ api: Int, _ tm: String) -> AppAPI.Hello {
     #expect(!Compatibility.check(hello(4, "v0.53.0"), appVersion: "0.54.0", appAPI: 3).blocks)
 }
 
+@Test func newTaskNeedsAPI7() {
+    var h = hello(7, "v0.55.0")
+    #expect(!Compatibility.addsTasks(h))
+    h.methods = [AppAPI.Methods.taskAdd.name]
+    #expect(Compatibility.addsTasks(h))
+    h.appApi = 6
+    #expect(!Compatibility.addsTasks(h))
+}
+
 @Test func compatibilityByRelease() {
     let api = AppAPI.version
     #expect(Compatibility.check(hello(api, "v0.54.0"), appVersion: "0.54.0") == .ok)
@@ -32,6 +41,13 @@ private func hello(_ api: Int, _ tm: String) -> AppAPI.Hello {
     #expect(Compatibility.tmTooOld(tm: "v0.40.0", api: 1).message?.contains("tm update") == true)
     #expect(Compatibility.appBehind(tm: "v0.55.0", app: "0.54.0").message == "This app (0.54.0) is older than tm v0.55.0: update it with tm update.")
     #expect(Compatibility.tmBehind(tm: "v0.53.0", app: "").message?.hasPrefix("tm v0.53.0 is older than this app:") == true)
+}
+
+@Test func compatibilityHeadlines() {
+    #expect(Compatibility.ok.headline == nil)
+    #expect(Compatibility.tmBehind(tm: "v0.53.0", app: "0.54.0").headline == "tm v0.53.0 is behind")
+    #expect(Compatibility.appBehind(tm: "v0.55.0", app: "0.54.0").headline == "This app is behind tm")
+    #expect(Compatibility.tmTooOld(tm: "v0.40.0", api: 1).headline == "tm v0.40.0 is too old")
 }
 
 @Test func releaseParsing() {

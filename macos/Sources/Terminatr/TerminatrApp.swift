@@ -1,5 +1,4 @@
 import AppKit
-import ServiceManagement
 import SwiftUI
 import TerminatrKit
 
@@ -24,17 +23,24 @@ struct TerminatrApp: App {
         Window("terminatr", id: Self.mainWindow) {
             MainWindow()
                 .environment(delegate.model)
+                .themed()
                 .frame(minWidth: 980, minHeight: 540)
+                .background(WindowFrame(name: "main"))
                 .task { delegate.model.start() }
         }
         .defaultSize(width: 1280, height: 800)
-        .commands { GoCommands(model: delegate.model) }
+        .commands {
+            FileCommands(model: delegate.model)
+            ViewCommands(model: delegate.model)
+            GoCommands(model: delegate.model)
+        }
 
         // Only Open in New Window opens one: no New Window command.
         WindowGroup("Session", id: Self.sessionWindow, for: SessionRef.self) { $ref in
             if let ref {
                 SessionWindow(ref: ref)
                     .environment(delegate.model)
+                    .themed()
                     .frame(minWidth: 760, minHeight: 480)
                     .task { delegate.model.start() }
             }
@@ -45,6 +51,7 @@ struct TerminatrApp: App {
         MenuBarExtra {
             MenuBarView()
                 .environment(delegate.model)
+                .themed()
         } label: {
             MenuBarLabel()
                 .environment(delegate.model)
@@ -73,8 +80,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Here, not before: SwiftUI makes the app a regular one as it
         // finishes launching.
         DockIcon.apply()
+        Appearance.apply()
         model.start()
-        Task { await notifier.authorize() }
+        Task {
+            // The first-run sheet, once: not for one who answered macOS
+            // about notifications already (an earlier release asked).
+            let asked = await Notifier.permission().map { $0 != .notDetermined } ?? false
+            if FirstRun.shows(done: UserDefaults.standard.bool(forKey: FirstRun.doneKey), notificationsAsked: asked) {
+                model.welcome = true
+            }
+        }
     }
 
     /// Closing the window leaves the menu bar running.
@@ -99,15 +114,89 @@ enum DockIcon {
     }
 }
 
+/// The File menu (T748 milestone G): New Task… (⌘N) adds a task to the
+/// shown project's board, Open in New Window (⇧⌘O) opens the shown
+/// session beside the main window, Close (⌘W) the key window.
+struct FileCommands: Commands {
+    let model: AppModel
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some Commands {
+        CommandGroup(replacing: .newItem) {
+            Button("New Task…") { model.showNewTask() }
+                .keyboardShortcut("n")
+                .disabled(!model.canAddTask || model.boardProject == nil)
+            Button("Open in New Window") {
+                if let ref = model.selectedRef { openWindow(id: TerminatrApp.sessionWindow, value: ref) }
+            }
+            .keyboardShortcut("o", modifiers: [.command, .shift])
+            .disabled(model.selectedRef == nil)
+        }
+    }
+}
+
+/// The View menu's own items, after the sidebar's: the inspector,
+/// Conversation or Terminal, the inactive projects, the sidebar's
+/// density and the text size.
+struct ViewCommands: Commands {
+    let model: AppModel
+
+    var body: some Commands {
+        CommandGroup(after: .sidebar) {
+            Button(model.inspector ? "Hide Inspector" : "Show Inspector") { model.inspector.toggle() }
+                .keyboardShortcut("i", modifiers: [.command, .option])
+                .disabled(model.selectedRef == nil)
+            Button("Conversation or Terminal") { model.switchTab() }
+                .keyboardShortcut("t", modifiers: [.command, .shift])
+                .disabled(model.selectedRef == nil)
+            Divider()
+            Button(model.nav.showInactive ? "Hide Inactive Projects" : "Show Inactive Projects") { model.nav.showInactive.toggle() }
+                .keyboardShortcut("h", modifiers: [.command, .shift])
+                .disabled(model.inactiveProjects.isEmpty)
+            DensityPicker(label: "Sidebar Density")
+            Divider()
+            Button("Make Text Bigger") { TextSize.change(by: 1) }
+                .keyboardShortcut("+")
+            Button("Make Text Smaller") { TextSize.change(by: -1) }
+                .keyboardShortcut("-")
+            Button("Actual Size") { TextSize.change(by: 0) }
+                .keyboardShortcut("0")
+            Divider()
+        }
+    }
+}
+
+/// The sidebar's density, a menu of three in View and a picker in
+/// Settings.
+struct DensityPicker: View {
+    let label: String
+    @AppStorage(Density.key) private var density = Density.regular.rawValue
+
+    var body: some View {
+        Picker(label, selection: $density) {
+            ForEach(Density.allCases, id: \.self) { d in
+                Text(d.label).tag(d.rawValue)
+            }
+        }
+    }
+}
+
 /// The Go menu and the session's keys (design T746, T748 milestone E):
 /// ⌘1–⌘9 the active projects, ⌘[ and ⌘] back and forward, ⌘K the
 /// command palette, ⌥⌘↓ and ⌥⌘↑ the next and previous need, ⌘L the
 /// composer, ⌘↩ the open card's first choice, ⌘F find in the
-/// conversation, ⌥⌘F the sidebar's filter, ⌘⇧T Conversation or
-/// Terminal, ⌘⌥I the inspector, ⇧⌘H the inactive projects; Help ›
-/// Keyboard Shortcuts (⌘/) lists them (Shortcuts).
+/// conversation, ⌥⌘F the sidebar's filter; Help has the tm docs and
+/// Keyboard Shortcuts (⌘/), which lists them (Shortcuts).
 struct GoCommands: Commands {
     let model: AppModel
+
+    /// Help's pages of tm's docs.
+    static let docs: [(String, String)] = [
+        ("terminatr Guide", "https://github.com/theclifmeister/terminatr#readme"),
+        ("tm Reference", "https://github.com/theclifmeister/terminatr/blob/main/docs/SPEC.md"),
+        ("Operations", "https://github.com/theclifmeister/terminatr/blob/main/docs/OPERATIONS.md"),
+        ("Release Notes", "https://github.com/theclifmeister/terminatr/releases"),
+    ]
 
     var body: some Commands {
         CommandGroup(replacing: .textEditing) {
@@ -124,19 +213,15 @@ struct GoCommands: Commands {
                 .keyboardShortcut("f", modifiers: [.command, .option])
         }
         CommandGroup(replacing: .help) {
+            Button("Getting Started") { model.welcome = true }
+            ForEach(Self.docs, id: \.0) { title, url in
+                Button(title) {
+                    if let u = URL(string: url) { NSWorkspace.shared.open(u) }
+                }
+            }
+            Divider()
             Button("Keyboard Shortcuts") { model.shortcuts = true }
                 .keyboardShortcut("/")
-        }
-        CommandGroup(after: .sidebar) {
-            Button(model.inspector ? "Hide Inspector" : "Show Inspector") { model.inspector.toggle() }
-                .keyboardShortcut("i", modifiers: [.command, .option])
-                .disabled(model.selectedRef == nil)
-            Button("Conversation or Terminal") { model.switchTab() }
-                .keyboardShortcut("t", modifiers: [.command, .shift])
-                .disabled(model.selectedRef == nil)
-            Button(model.nav.showInactive ? "Hide Inactive Projects" : "Show Inactive Projects") { model.nav.showInactive.toggle() }
-                .keyboardShortcut("h", modifiers: [.command, .shift])
-                .disabled(model.inactiveProjects.isEmpty)
         }
         CommandMenu("Go") {
             Button("Command Palette…") { model.palette.toggle() }
@@ -169,144 +254,5 @@ struct GoCommands: Commands {
                     .keyboardShortcut(KeyEquivalent(Character("\(i + 1)")))
             }
         }
-    }
-}
-
-/// Where the app finds tm, where it shows, what notifies, and open at
-/// login.
-struct SettingsView: View {
-    @Environment(AppModel.self) private var model
-    @AppStorage(AppModel.tmPathKey) private var tmPath = ""
-    @AppStorage(DockIcon.key) private var dockIcon = true
-    @AppStorage(Notifier.showTextKey) private var showText = false
-    @AppStorage(Notifier.noticesKey) private var notices = true
-
-    var body: some View {
-        Form {
-            Section("terminatr") {
-                TextField("tm path", text: $tmPath, prompt: Text("/opt/homebrew/bin/tm"))
-                Text("Empty: the Homebrew prefixes, then ~/.local/bin.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Button("Reconnect") { model.connect() }
-                LoginItemToggle()
-                Picker("Show terminatr in", selection: $dockIcon) {
-                    Text("Menu bar and Dock").tag(true)
-                    Text("Menu bar only").tag(false)
-                }
-                .onChange(of: dockIcon) {
-                    DockIcon.apply()
-                    model.showBadge()
-                    // Leaving the Dock deactivates the app: Settings stays in front.
-                    NSApp.activate()
-                }
-            }
-            Section {
-                ForEach(Need.Kind.allCases, id: \.self) { k in
-                    KindToggle(kind: k)
-                }
-                Toggle("Mods' notices", isOn: $notices)
-            } header: {
-                Text("Notify when")
-            } footer: {
-                if !Bundle.main.isApp {
-                    Text("Notifications need the app bundle (make -C macos run), not swift run.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            Section {
-                Toggle("Show what agents ask", isOn: $showText)
-            } footer: {
-                Text("Off: a notification names the project and the kind of need, never the question's words. A question's options still show as its buttons.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            Section {
-                LabeledContent("Quiet times") {
-                    Button("Focus Settings…") {
-                        if let url = URL(string: "x-apple.systempreferences:com.apple.Focus-Settings.extension") {
-                            NSWorkspace.shared.open(url)
-                        }
-                    }
-                }
-            } footer: {
-                Text("terminatr follows macOS Focus: while a Focus is on, its notifications wait in Notification Centre unless that Focus allows terminatr.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .formStyle(.grouped)
-        .frame(width: 460)
-    }
-}
-
-private struct KindToggle: View {
-    let kind: Need.Kind
-    @AppStorage private var on: Bool
-
-    init(kind: Need.Kind) {
-        self.kind = kind
-        _on = AppStorage(wrappedValue: true, Notifier.key(kind))
-    }
-
-    var body: some View {
-        Toggle(Self.label(kind), isOn: $on)
-    }
-
-    static func label(_ k: Need.Kind) -> String {
-        switch k {
-        case .question: "An agent asks a question"
-        case .approval: "An agent needs approval"
-        case .review: "A task is ready to review"
-        case .blocked: "A task is blocked"
-        case .checks: "A PR's checks fail"
-        case .held: "A prompt queue is held"
-        case .network: "A paired server needs you"
-        }
-    }
-}
-
-/// Open at login (SMAppService.mainApp): the user may have to allow it
-/// in System Settings › Login Items. The server keeps its own launchd
-/// job either way.
-private struct LoginItemToggle: View {
-    @State private var status = SMAppService.mainApp.status
-    @State private var error: String?
-
-    var body: some View {
-        Toggle("Open at login", isOn: Binding(
-            get: { status == .enabled || status == .requiresApproval },
-            set: { set($0) }
-        ))
-        .disabled(!Bundle.main.isApp)
-        if status == .requiresApproval {
-            HStack {
-                Text("Allow terminatr in Login Items to finish.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Button("Open Login Items") { SMAppService.openSystemSettingsLoginItems() }
-                    .buttonStyle(.link)
-            }
-        }
-        if let error {
-            Text(error)
-                .font(.caption)
-                .foregroundStyle(.red)
-        }
-    }
-
-    private func set(_ on: Bool) {
-        do {
-            if on {
-                try SMAppService.mainApp.register()
-            } else {
-                try SMAppService.mainApp.unregister()
-            }
-            error = nil
-        } catch {
-            self.error = error.localizedDescription
-        }
-        status = SMAppService.mainApp.status
     }
 }

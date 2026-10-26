@@ -18,6 +18,14 @@ public enum Compatibility: Equatable, Sendable {
     /// peer.list the windows and the menu bar use.
     public static let minimumAPI = 2
 
+    /// The app API that has task.add: File › New Task… needs it.
+    public static let taskAddAPI = 7
+
+    /// Whether hello's tm adds tasks from the app (task.add).
+    public static func addsTasks(_ hello: AppAPI.Hello) -> Bool {
+        hello.appApi >= taskAddAPI && hello.methods.contains(AppAPI.Methods.taskAdd.name)
+    }
+
     /// Compares hello with this app, of release appVersion (its
     /// CFBundleShortVersionString, "0.54.0"; nil or 0.0.0 for a build
     /// from source, which compares by the app API only).
@@ -57,6 +65,16 @@ public enum Compatibility: Equatable, Sendable {
             return "tm \(tm) is older than this app\(Self.version(app)): some of the app's features stay off until you update it with tm update."
         case .appBehind(let tm, let app):
             return "This app\(Self.version(app)) is older than tm \(tm): update it with tm update."
+        }
+    }
+
+    /// The toolbar's few words, nil when they fit: message says the rest.
+    public var headline: String? {
+        switch self {
+        case .ok: return nil
+        case .tmTooOld(let tm, _): return "tm \(tm) is too old"
+        case .tmBehind(let tm, _): return "tm \(tm) is behind"
+        case .appBehind: return "This app is behind tm"
         }
     }
 
