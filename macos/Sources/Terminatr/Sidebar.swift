@@ -134,9 +134,12 @@ struct Sidebar: View {
             let all = app.nav.unfolded.contains(key)
             let selected = app.selectedRef.flatMap { $0.server.isEmpty && $0.project == p.slug ? $0.thread : nil }
             let (shown, more) = SidebarTree.threads(of: p, selected: selected, unfolded: all) { app.attention($0) }
+            // Keyed with the project: thread ids repeat across projects,
+            // and the List flattens every project's rows into one.
             ForEach(shown, id: \.record.id) { t in
                 row(.session(SessionRef(project: p.slug, thread: t.record.id)), label: t.record.title, ref: t.task?.ref,
                     tag: tag(t), dot: theme.colour(app.attention(t).tone))
+                    .id("\(p.slug)/\(t.record.id)")
             }
             if more > 0 {
                 self.more(key, more == 1 ? "1 more thread" : "\(more) more threads", unfolded: false)
