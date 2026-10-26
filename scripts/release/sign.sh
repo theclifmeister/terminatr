@@ -55,19 +55,5 @@ tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 # notarytool takes a zip, disk image or package, never a bare binary.
 ditto -c -k --keepParent "$bin" "$tmp/tm.zip"
-# --wait exits nonzero on anything but Accepted; --timeout keeps a stuck
-# submission from using the job's whole budget.
-rc=0
-xcrun notarytool submit "$tmp/tm.zip" \
-	--key "$TM_NOTARY_KEY" --key-id "${TM_NOTARY_KEY_ID:?}" --issuer "${TM_NOTARY_ISSUER:?}" \
-	--wait --timeout 30m >"$tmp/notary.log" 2>&1 || rc=$?
-cat "$tmp/notary.log"
-if [ "$rc" -ne 0 ] || ! grep -q 'status: Accepted' "$tmp/notary.log"; then
-	# A rejection says only "Invalid"; the reason is in Apple's log.
-	id=$(grep -oE '[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}' "$tmp/notary.log" | head -1)
-	[ -z "$id" ] || xcrun notarytool log "$id" \
-		--key "$TM_NOTARY_KEY" --key-id "$TM_NOTARY_KEY_ID" --issuer "$TM_NOTARY_ISSUER" || true
-	echo "sign: $name was not notarised" >&2
-	exit 1
-fi
+"$(dirname "$0")/notarize.sh" "$tmp/tm.zip" "$name"
 echo "sign: $name notarised"

@@ -166,7 +166,7 @@ jobs:
           fi
           files=$(git diff --name-only HEAD^1 HEAD)
           printf '%s\n' "$files"
-          hits=$(printf '%s\n' "$files" | grep -E '^(\.goreleaser\.yaml|Makefile|go\.(mod|sum)|scripts/release/|deploy/relay/|Formula/|\.github/workflows/(ci|release)\.yml|\.github/actions/|internal/(emu|version)/|cmd/tm/main\.go)' || true)
+          hits=$(printf '%s\n' "$files" | grep -E '^(\.goreleaser\.yaml|Makefile|go\.(mod|sum)|scripts/release/|deploy/relay/|Formula/|Casks/|macos/(Makefile|Info\.plist)$|\.github/workflows/(ci|release)\.yml|\.github/actions/|internal/(emu|version)/|cmd/tm/main\.go)' || true)
           echo "release-related: ${hits:-none}"
           echo "release=$([ -n "$hits" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
 
@@ -301,8 +301,9 @@ jobs:
         run: make -C macos app
 
   # The release build (.goreleaser.yaml) as a snapshot: every target
-  # cross-compiled with zig cc and archived, nothing tagged or uploaded.
-  # macOS, like the release itself: darwin targets need the macOS SDK.
+  # cross-compiled with zig cc and archived, and the Mac app unsigned
+  # (scripts/release/app.sh), nothing tagged or uploaded. macOS, like the
+  # release itself: darwin targets need the macOS SDK, the app Xcode.
   release-snapshot:
     needs: changes
     if: needs.changes.outputs.release == 'true'
@@ -323,16 +324,20 @@ jobs:
       - name: Check the archives
         run: scripts/release/check.sh dist
 
-      # The formula the release job will write for these archives, through
-      # Homebrew's own style check.
-      - name: Formula
+      # The formula and the Mac app's cask the release job will write for
+      # these archives, through Homebrew's own style check.
+      - name: Formula and cask
         run: |
-          # In a Formula/ directory, or brew style checks it as plain Ruby.
-          mkdir -p "$RUNNER_TEMP/Formula"
+          # In a Formula/ or Casks/ directory, or brew style checks it as plain Ruby.
+          mkdir -p "$RUNNER_TEMP/Formula" "$RUNNER_TEMP/Casks"
           scripts/release/formula.sh 0.0.0 dist/checksums.txt > "$RUNNER_TEMP/Formula/terminatr.rb"
+          scripts/release/cask.sh 0.0.0 dist/checksums.txt > "$RUNNER_TEMP/Casks/terminatr-app.rb"
           # One at a time: together they define the class twice.
           brew style "$RUNNER_TEMP/Formula/terminatr.rb"
           brew style Formula/terminatr.rb
+          brew style "$RUNNER_TEMP/Casks/terminatr-app.rb"
+          # The release job adds the cask with the first release that has the app.
+          if [ -f Casks/terminatr-app.rb ]; then brew style Casks/terminatr-app.rb; fi
 
       - name: Upload archives
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
@@ -341,5 +346,6 @@ jobs:
           path: |
             dist/*.tar.gz
             dist/*.zip
+            dist/*.dmg
             dist/checksums.txt
           retention-days: 7

@@ -1,8 +1,9 @@
 name: release-setup
 description: >
   What the release build (.goreleaser.yaml) needs: Go, the pinned Zig and
-  the per-target libghostty-vt builds (both cached), pkg-config and
-  goreleaser. Run after checkout, on macOS.
+  the per-target libghostty-vt builds (both cached), pkg-config,
+  goreleaser, and for the Mac app Xcode's Metal toolchain. Run after
+  checkout, on macOS.
 
 runs:
   using: composite
@@ -38,3 +39,13 @@ runs:
       with:
         install-only: true
         version: ${{ steps.pins.outputs.goreleaser }}
+
+    # The Mac app (scripts/release/app.sh): SwiftTerm compiles a Metal
+    # shader, and Xcode 26+ ships the Metal toolchain as a separate
+    # component.
+    - name: Metal toolchain
+      shell: bash
+      run: |
+        xcodebuild -version
+        xcrun metal --version >/dev/null 2>&1 || xcodebuild -downloadComponent MetalToolchain
+        xcrun metal --version

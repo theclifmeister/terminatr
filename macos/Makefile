@@ -2,7 +2,11 @@
 #
 #   make build   swift build (debug)
 #   make test    swift test
-#   make app     build/Terminatr.app, unsigned (signing comes with the release job)
+#   make app     build/Terminatr.app, unsigned (scripts/release/app.sh signs it)
+#
+# ARCHS="arm64 x86_64" builds a universal app (the release's); VERSION
+# goes into its Info.plist (CFBundleShortVersionString, CFBundleVersion),
+# which tm update reads to tell an installed app's release.
 #   make run     make app, then open it
 #
 # With only the Command Line Tools (no Xcode), Swift Testing's macros sit
@@ -19,6 +23,9 @@ CONFIG       ?= release
 CLT          := /Library/Developer/CommandLineTools
 TEST_FLAGS   := $(if $(filter $(CLT)%,$(shell xcode-select -p 2>/dev/null)),-Xswiftc -plugin-path -Xswiftc $(CLT)/usr/lib/swift/host/plugins/testing)
 APP          := build/Terminatr.app
+ARCHS        ?=
+VERSION      ?= 0.0.0
+BUILD_FLAGS  := -c $(CONFIG) $(foreach a,$(ARCHS),--arch $(a))
 
 .PHONY: build test app run clean
 
@@ -29,12 +36,14 @@ test:
 	$(SWIFT) test $(TEST_FLAGS)
 
 app:
-	$(SWIFT) build -c $(CONFIG)
+	$(SWIFT) build $(BUILD_FLAGS)
 	rm -rf $(APP)
 	mkdir -p $(APP)/Contents/MacOS $(APP)/Contents/Resources
-	cp "$$($(SWIFT) build -c $(CONFIG) --show-bin-path)/Terminatr" $(APP)/Contents/MacOS/
-	cp -R "$$($(SWIFT) build -c $(CONFIG) --show-bin-path)"/*.bundle $(APP)/Contents/Resources/
+	cp "$$($(SWIFT) build $(BUILD_FLAGS) --show-bin-path)/Terminatr" $(APP)/Contents/MacOS/
+	cp -R "$$($(SWIFT) build $(BUILD_FLAGS) --show-bin-path)"/*.bundle $(APP)/Contents/Resources/
 	cp Info.plist $(APP)/Contents/Info.plist
+	plutil -replace CFBundleShortVersionString -string $(VERSION) $(APP)/Contents/Info.plist
+	plutil -replace CFBundleVersion -string $(VERSION) $(APP)/Contents/Info.plist
 	plutil -lint $(APP)/Contents/Info.plist
 
 run: app

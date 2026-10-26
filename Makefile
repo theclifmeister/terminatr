@@ -273,7 +273,8 @@ env:
 
 # Releases (docs/OPERATIONS.md): goreleaser cross-compiles tm with zig cc
 # (darwin: Apple's clang) for darwin/linux x amd64/arm64, against one
-# libghostty-vt build per target in .build/release/ (scripts/release/). `make release-snapshot`
+# libghostty-vt build per target in .build/release/ (scripts/release/), and
+# builds the Mac app (scripts/release/app.sh, which needs Xcode). `make release-snapshot`
 # builds the archives into dist/ without a tag; `make release` is what
 # the tag-triggered release workflow runs.
 # CI installs this version too (scripts/release/pins.sh).
@@ -290,11 +291,11 @@ release-ghostty:
 
 release-snapshot: release-ghostty
 	$(RELEASE_ENV) $(GORELEASER) release --snapshot --clean
-	cp .build/release/tm-relay-docker.tar.gz dist/
+	cp .build/release/tm-relay-docker.tar.gz .build/release/app/terminatr-app.* dist/
 
 release: release-ghostty
 	$(RELEASE_ENV) $(GORELEASER) release --clean
-	cp .build/release/tm-relay-docker.tar.gz dist/
+	cp .build/release/tm-relay-docker.tar.gz .build/release/app/terminatr-app.* dist/
 
 clean:
 	rm -rf bin
