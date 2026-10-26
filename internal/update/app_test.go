@@ -103,8 +103,7 @@ func TestDownloadAndInstallApp(t *testing.T) {
 	}
 	z := appZip(t, "0.54.0")
 	sum := fmt.Sprintf("%x", sha256.Sum256(z))
-	var srv *httptest.Server
-	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/zip":
 			w.Write(z)

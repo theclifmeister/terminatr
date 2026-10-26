@@ -190,7 +190,7 @@ func VerifyApp(path, team string) (string, error) {
 	}
 	out, err := exec.Command("spctl", "--assess", "--type", "execute", "-v", path).CombinedOutput()
 	if err != nil {
-		return "", fmt.Errorf("Gatekeeper rejects it: %s", firstLine(string(out), err))
+		return "", fmt.Errorf("rejected by Gatekeeper: %s", firstLine(string(out), err))
 	}
 	if !strings.Contains(string(out), "source=Notarized Developer ID") {
 		return "", fmt.Errorf("not notarised: %s", firstLine(string(out), errors.New("no assessment")))
