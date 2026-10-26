@@ -56,7 +56,7 @@ struct CoordinatorPanel: View {
                         Button(all ? "Fewer" : "\(needs.count - shown.count) more") { all.toggle() }
                             .buttonStyle(.link)
                             .foregroundStyle(theme.action)
-                            .font(.system(size: 12))
+                            .font(theme.body(12))
                     }
                 }
                 .padding(.horizontal, 22)
@@ -86,7 +86,7 @@ private struct QuestionsCard: View {
                     Text(count == 1 ? "The coordinator has a question for you" : "The coordinator has \(count) questions for you")
                         .font(theme.title(15, .bold))
                     Text(error ?? "It asks them here, one dialog at a time, when you answer now.")
-                        .font(.system(size: 12))
+                        .font(theme.body(12))
                         .foregroundStyle(error == nil ? theme.muted : theme.attention)
                 }
                 Spacer(minLength: 8)

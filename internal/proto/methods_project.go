@@ -108,6 +108,28 @@ const (
 	MethodTaskDelegate = "task.delegate"
 )
 
+// MethodTaskAdd adds a task to a project's board as the user, as tm
+// task add does (since protocol 21): a title that matches a task that
+// isn't done answers that task instead, so a retried add adds none. Its
+// refusals carry the task store's codes ("empty-title", "invalid-title",
+// "invalid-notes"). Params TaskAddParams, result TaskAddResult. The
+// human's, journaled as the caller (task.add).
+const MethodTaskAdd = "task.add"
+
+// TaskAddParams are the params of task.add: the project, the task's
+// title and, optionally, its notes.
+type TaskAddParams struct {
+	Project string `json:"project"`
+	Title   string `json:"title"`
+	Notes   string `json:"notes,omitempty"`
+}
+
+// TaskAddResult is the task ("T12") and whether it was there already.
+type TaskAddResult struct {
+	Task     string `json:"task"`
+	Existing bool   `json:"existing,omitempty"`
+}
+
 // TaskActionParams are the params of task.accept, task.send-back and
 // task.delegate: project's task ("T12") and, for a send-back, the
 // user's note (required).

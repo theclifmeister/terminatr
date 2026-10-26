@@ -26,11 +26,11 @@ struct NeedCard: View {
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(need.what)
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(theme.body(13, .semibold))
                         .lineLimit(1)
                     if !detail.isEmpty {
                         Text(detail)
-                            .font(.system(size: 12))
+                            .font(theme.body(12))
                             .foregroundStyle(theme.muted)
                             .lineLimit(2)
                     }
@@ -40,7 +40,7 @@ struct NeedCard: View {
             }
             if let said {
                 Text(said.text)
-                    .font(.system(size: 11.5))
+                    .font(theme.body(11.5))
                     .foregroundStyle(said.failed ? theme.attention : theme.muted)
                     .padding(.leading, 24)
             }

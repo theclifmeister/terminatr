@@ -44,7 +44,7 @@ struct ConversationTab: View {
                     LazyVStack(alignment: .leading, spacing: 12) {
                         if model.transcript.skipped > 0 {
                             Text("\(model.transcript.skipped) earlier items not shown")
-                                .font(.system(size: 11.5))
+                                .font(theme.body(11.5))
                                 .foregroundStyle(theme.muted)
                                 .frame(maxWidth: .infinity)
                         }
@@ -64,12 +64,12 @@ struct ConversationTab: View {
                             ProgressView().frame(maxWidth: .infinity)
                         case .waiting:
                             Text("Waiting for the agent to name its transcript…")
-                                .font(.system(size: 12))
+                                .font(theme.body(12))
                                 .foregroundStyle(theme.muted)
                                 .frame(maxWidth: .infinity)
                         case .unavailable(let why):
                             Text(why)
-                                .font(.system(size: 12))
+                                .font(theme.body(12))
                                 .foregroundStyle(theme.muted)
                                 .frame(maxWidth: .infinity)
                         case .mapped:
@@ -77,7 +77,7 @@ struct ConversationTab: View {
                         }
                         if let closed = model.transcript.closed {
                             Text("The session ended (\(closed)).")
-                                .font(.system(size: 12))
+                                .font(theme.body(12))
                                 .foregroundStyle(theme.muted)
                                 .frame(maxWidth: .infinity)
                         }
@@ -99,7 +99,7 @@ struct ConversationTab: View {
                             flash += 1
                         } label: {
                             Label("Jump to the open card", systemImage: "arrow.down")
-                                .font(.system(size: 12, weight: .semibold))
+                                .font(theme.body(12, .semibold))
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 6)
                                 .background(.regularMaterial, in: Capsule())
@@ -125,6 +125,8 @@ struct ConversationTab: View {
             Composer(model: model, session: session)
         }
         .guardingLinks()
+        // What sets no font of its own: the system's body, scaled.
+        .font(theme.body(13))
         .onChange(of: app.find) { _, r in
             if r.step == 0 || !finding {
                 finding = true
@@ -166,7 +168,7 @@ struct ConversationTab: View {
             Button("Done") { close() }
         }
         .buttonStyle(.borderless)
-        .font(.system(size: 12.5))
+        .font(theme.body(12.5))
         .padding(.horizontal, 12)
         .padding(.vertical, 7)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
@@ -238,7 +240,7 @@ struct ReviewCard: View {
                     Text("\(task.ref) is ready to review")
                         .font(theme.title(15, .bold))
                     Text(facts)
-                        .font(.system(size: 12))
+                        .font(theme.body(12))
                         .foregroundStyle(theme.muted)
                         .lineLimit(1)
                         .textSelection(.enabled)
@@ -275,11 +277,11 @@ struct EntryView: View {
             Button { unfolded = true } label: {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 9, weight: .bold))
+                        .font(theme.body(9, .bold))
                     Text("tm")
                         .font(theme.mono(11.5, .medium))
                     Text([entry.headline, Self.clock(entry.at)].filter { !$0.isEmpty }.joined(separator: " · "))
-                        .font(.system(size: 12))
+                        .font(theme.body(12))
                         .lineLimit(1)
                     Spacer(minLength: 0)
                 }
@@ -329,7 +331,7 @@ struct EntryView: View {
             }
         case .note:
             Text(entry.text)
-                .font(.system(size: 12, weight: .medium))
+                .font(theme.body(12, .medium))
                 .foregroundStyle(theme.muted)
                 .frame(maxWidth: .infinity)
         }
@@ -355,7 +357,7 @@ struct EntryView: View {
 
     private var cut: some View {
         Text("Cut short: the rest is in the Terminal tab.")
-            .font(.system(size: 11))
+            .font(theme.body(11))
             .foregroundStyle(theme.muted)
     }
 }

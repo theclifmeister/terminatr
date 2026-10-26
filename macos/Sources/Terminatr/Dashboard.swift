@@ -73,7 +73,7 @@ struct ProjectDashboard: View {
                         }
                         if inbox.count > Self.inboxShown {
                             Text("\(inbox.count - Self.inboxShown) more in tm")
-                                .font(.system(size: 12))
+                                .font(theme.body(12))
                                 .foregroundStyle(theme.muted)
                         }
                     }
@@ -164,7 +164,7 @@ struct ProjectDashboard: View {
                 HStack(spacing: 5) {
                     Image(systemName: "chevron.right")
                         .rotationEffect(.degrees(open ? 90 : 0))
-                        .font(.system(size: 9, weight: .bold))
+                        .font(theme.body(9, .bold))
                     Text("\(title) · \(n)".uppercased())
                         .font(theme.mono(10, .medium))
                         .tracking(1)
@@ -210,7 +210,7 @@ struct CoordinatorRow: View {
                 }
                 if !attention.why.isEmpty {
                     Text(attention.why)
-                        .font(.system(size: 12.5, weight: attention.waits ? .medium : .regular))
+                        .font(theme.body(12.5, attention.waits ? .medium : .regular))
                         .foregroundStyle(attention.waits ? theme.colour(attention.tone) : theme.muted)
                         .lineLimit(2)
                 }
@@ -259,7 +259,7 @@ struct StartButton: View {
                                  : "The project is inactive: tm project active \(project.slug) turns it on")
             if let error {
                 Text(error)
-                    .font(.system(size: 11.5))
+                    .font(theme.body(11.5))
                     .foregroundStyle(theme.attention)
                     .multilineTextAlignment(.trailing)
             }
@@ -293,7 +293,7 @@ private struct BoardRow: View {
                 .foregroundStyle(theme.action)
                 .frame(minWidth: 44, alignment: .leading)
             Text(task.title)
-                .font(.system(size: 13))
+                .font(theme.body(13))
                 .lineLimit(1)
                 .textSelection(.enabled)
             Spacer(minLength: 8)
@@ -375,10 +375,10 @@ private struct InboxLine: View {
                 .frame(width: 6, height: 6)
                 .accessibilityHidden(true)
             Text(item.subject.isEmpty ? item.kind : item.subject)
-                .font(.system(size: 12.5, weight: .medium))
+                .font(theme.body(12.5, .medium))
                 .lineLimit(1)
             Text(item.shownSummary)
-                .font(.system(size: 12))
+                .font(theme.body(12))
                 .foregroundStyle(theme.muted)
                 .lineLimit(1)
             Spacer(minLength: 6)
@@ -468,7 +468,7 @@ private struct PeerSessionCard: View {
                 .font(theme.title(15, .bold))
             if !session.current.isEmpty {
                 Text(session.current)
-                    .font(.system(size: 12.5))
+                    .font(theme.body(12.5))
                     .foregroundStyle(theme.muted)
                     .lineLimit(1)
             }
@@ -504,7 +504,7 @@ struct ProjectRow: View {
                 .frame(width: 8, height: 8)
                 .accessibilityHidden(true)
             Text(project.slug)
-                .font(.system(size: 13, weight: .semibold))
+                .font(theme.body(13, .semibold))
                 .lineLimit(1)
             Spacer(minLength: 4)
             if needs > 0 {
@@ -556,12 +556,12 @@ struct ThreadCard: View {
             }
             if attention.waits {
                 Label(attention.why, systemImage: "exclamationmark.bubble")
-                    .font(.system(size: 12.5, weight: .medium))
+                    .font(theme.body(12.5, .medium))
                     .foregroundStyle(theme.colour(attention.tone))
                     .lineLimit(2)
             } else if !attention.why.isEmpty {
                 Text(attention.why)
-                    .font(.system(size: 12.5))
+                    .font(theme.body(12.5))
                     .foregroundStyle(theme.muted)
                     .lineLimit(2)
             }
@@ -642,7 +642,7 @@ struct StatusLine: View {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundStyle(theme.attention)
                 }
-                .font(.system(size: 10.5))
+                .font(theme.body(10.5))
                 .foregroundStyle(theme.ink)
             }
         }
@@ -667,7 +667,7 @@ struct StatusLine: View {
                     .foregroundStyle(theme.action)
             }
         }
-        .font(.system(size: 11.5))
+        .font(theme.body(11.5))
         .foregroundStyle(theme.muted)
     }
 }
