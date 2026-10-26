@@ -1,11 +1,12 @@
 import SwiftUI
 import TerminatrKit
 
-/// The menu bar's dropdown (MenuBarExtra, .window style): what needs
-/// you, then the projects, this server's active ones (the inactive ones
-/// only counted) and the paired servers' shared ones, over the theme's
-/// backdrop. A row shows what it names in
-/// the app's window.
+/// The menu bar's dropdown (MenuBarExtra, .window style; T748 milestone
+/// F): the first needs, each named with its project, and a line for the
+/// rest; then this server's active projects that have something going,
+/// with their ⌘1–⌘9, a line counting the others, and the paired
+/// servers' shared projects, over the theme's backdrop (MenuBarList). A
+/// row shows what it names in the app's window.
 struct MenuBarView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.theme) private var theme
@@ -81,17 +82,27 @@ struct MenuBarView: View {
                         .padding(.horizontal, 12)
                         .padding(.bottom, 10)
                 } else {
-                    ScrollView {
-                        VStack(spacing: 2) {
-                            ForEach(model.needs) { n in
-                                NeedRow(need: n) { open(n.project, session: n.session) }
+                    let (shown, rest) = MenuBarList.needs(model.needs)
+                    VStack(spacing: 2) {
+                        ForEach(shown) { n in
+                            NeedRow(need: n) { open(n.project, session: n.session) }
+                        }
+                        if !rest.isEmpty {
+                            MenuRow(action: { open(nil) }) {
+                                Text(SidebarTree.moreNeeds(rest))
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(theme.muted)
+                                Spacer(minLength: 6)
+                                Text(MenuBarList.projects(of: rest))
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(theme.muted)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
                             }
                         }
-                        .padding(.horizontal, 4)
-                        .padding(.bottom, 6)
                     }
-                    .frame(maxHeight: 260)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 4)
+                    .padding(.bottom, 6)
                 }
             }
         }
@@ -105,26 +116,30 @@ struct MenuBarView: View {
                 Heading("Projects", count: nil)
                 ScrollView {
                     VStack(spacing: 2) {
-                        ForEach(Array(model.activeProjects.enumerated()), id: \.element.slug) { i, p in
-                            MenuRow(action: { open(p.slug) }) {
-                                Text(p.slug).font(.system(size: 13, weight: .semibold))
-                                Text(Self.summary(p))
-                                    .font(.system(size: 12))
-                                    .foregroundStyle(theme.muted)
-                                Spacer(minLength: 6)
-                                Flag(count: model.needs(of: p.slug).count)
-                                if i < 9 {
-                                    Text("⌘\(i + 1)")
-                                        .font(theme.mono(11))
+                        let (shown, more) = MenuBarList.projects(model.activeProjects, needs: model.needs)
+                        ForEach(shown, id: \.slug) { row in
+                            if let p = model.project(row.slug) {
+                                MenuRow(action: { open(p.slug) }) {
+                                    Text(p.slug).font(.system(size: 13, weight: .semibold))
+                                    Text(Self.summary(p))
+                                        .font(.system(size: 12))
                                         .foregroundStyle(theme.muted)
+                                    Spacer(minLength: 6)
+                                    Flag(count: model.needs(of: p.slug).count)
+                                    if row.index < 9 {
+                                        Text("⌘\(row.index + 1)")
+                                            .font(theme.mono(11))
+                                            .foregroundStyle(theme.muted)
+                                    }
                                 }
+                                .keyboardShortcut(row.index < 9 ? KeyboardShortcut(KeyEquivalent(Character("\(row.index + 1)"))) : nil)
                             }
-                            .keyboardShortcut(i < 9 ? KeyboardShortcut(KeyEquivalent(Character("\(i + 1)"))) : nil)
                         }
                         let inactive = model.inactiveProjects.count
-                        if inactive > 0 {
-                            MenuRow(action: { model.nav.showInactive = true; open(nil) }) {
-                                Text(inactive == 1 ? "1 inactive project" : "\(inactive) inactive projects")
+                        if let others = MenuBarList.others(more: more, inactive: inactive) {
+                            // Only inactive ones left out: the sidebar unfolds them.
+                            MenuRow(action: { if more == 0 { model.nav.showInactive = true }; open(nil) }) {
+                                Text(others)
                                     .font(.system(size: 12))
                                     .foregroundStyle(theme.muted)
                                 Spacer(minLength: 6)

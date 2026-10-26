@@ -157,7 +157,7 @@ struct Inspector: View {
                     .padding(.horizontal, 8)
                     .padding(.vertical, 2)
                     .background(blocked ? theme.approval : theme.line, in: Capsule())
-                    .foregroundStyle(blocked ? theme.onAttention : theme.ink)
+                    .foregroundStyle(blocked ? theme.onApproval : theme.ink)
             }
         }
         section("Paired server") {
@@ -235,7 +235,7 @@ struct Inspector: View {
                 .padding(.horizontal, 8)
                 .padding(.vertical, 2)
                 .background(blocked ? theme.approval : theme.line, in: Capsule())
-                .foregroundStyle(blocked ? theme.onAttention : theme.ink)
+                .foregroundStyle(blocked ? theme.onApproval : theme.ink)
         }
     }
 

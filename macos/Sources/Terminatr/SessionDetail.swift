@@ -2,7 +2,8 @@ import SwiftUI
 import TerminatrKit
 
 /// A coordinator or thread in the window's detail (design T734 §6,
-/// T746): its header with the tab switch, then the tab. It opens on the
+/// T746): the tab, with its switch in the title bar beside the window's
+/// title (the session's, once, T752). It opens on the
 /// conversation, and falls back to the terminal, saying why, when the
 /// conversation can't be shown (an old server, a Codex agent, a
 /// transcript tm can't read). A paired server's session opens on the
@@ -12,13 +13,14 @@ import TerminatrKit
 struct SessionDetail: View {
     @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
+    @Environment(\.controlActiveState) private var active
     let model: SessionModel
 
     var body: some View {
         let session = app.session(of: model)
         let state = app.conversationState(model, session)
         VStack(spacing: 0) {
-            header(state)
+            notice(state)
             if model.sessionID == nil {
                 NotRunning(ref: model.ref)
             } else {
@@ -34,13 +36,13 @@ struct SessionDetail: View {
         .task(id: app.bridge == nil) { model.follow(app) }
         .onChange(of: app.sessionID(model.ref)) { model.follow(app) }
         .onChange(of: state, initial: true) { _, s in model.settle(s) }
-    }
-
-    private func header(_ state: ConversationState) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline, spacing: 10) {
-                HeaderTitle(ref: model.ref)
-                Spacer(minLength: 12)
+        // In the key window of the app in front: its needs don't notify.
+        .onChange(of: active, initial: true) { _, a in app.shown(model.ref, inFront: a == .key) }
+        .onDisappear { app.shown(model.ref, inFront: false) }
+        .toolbar {
+            // At the title bar's end: beside the title (.principal) it
+            // cuts the title at the window's narrowest.
+            ToolbarItem(placement: .primaryAction) {
                 Picker("View", selection: Binding(get: { model.tab }, set: { model.pick($0) })) {
                     ForEach(SessionTab.allCases, id: \.self) { t in
                         Text(t.rawValue).tag(t)
@@ -52,24 +54,29 @@ struct SessionDetail: View {
                 .disabled(model.sessionID == nil || model.ref.isRemote)
                 .help("Conversation or Terminal (⌘⇧T)")
             }
-            if model.sessionID != nil, case .unavailable(let why) = state {
-                Label {
-                    Text(model.tab == .terminal ? "Showing the terminal. \(why)" : why)
-                } icon: {
-                    Image(systemName: model.ref.isRemote ? "network" : "rectangle.on.rectangle.slash")
-                }
-                .font(.system(size: 12))
-                .foregroundStyle(theme.muted)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(theme.cardTint, in: RoundedRectangle(cornerRadius: 9))
-                .accessibilityElement(children: .combine)
-            }
         }
-        .padding(.horizontal, 20)
-        .padding(.top, 12)
-        .padding(.bottom, 10)
+    }
+
+    /// Why the conversation can't be shown, when it can't.
+    @ViewBuilder
+    private func notice(_ state: ConversationState) -> some View {
+        if model.sessionID != nil, case .unavailable(let why) = state {
+            Label {
+                Text(model.tab == .terminal ? "Showing the terminal. \(why)" : why)
+            } icon: {
+                Image(systemName: model.ref.isRemote ? "network" : "rectangle.on.rectangle.slash")
+            }
+            .font(.system(size: 12))
+            .foregroundStyle(theme.muted)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(theme.cardTint, in: RoundedRectangle(cornerRadius: 9))
+            .accessibilityElement(children: .combine)
+            .padding(.horizontal, 20)
+            .padding(.top, 12)
+            .padding(.bottom, 4)
+        }
     }
 }
 
@@ -96,62 +103,11 @@ struct SessionWindow: View {
                     .background { Frost() }
             }
             .foregroundStyle(theme.ink)
-            .background { Backdrop() }
+            .background { Frost(\.glass, bar: true) }
             .navigationTitle(app.title(ref))
+            .navigationSubtitle(app.subtitle(ref))
+            .toolbarBackground(.hidden, for: .windowToolbar)
             .onDisappear { model.stop() }
-    }
-}
-
-struct HeaderTitle: View {
-    @Environment(AppModel.self) private var app
-    @Environment(\.theme) private var theme
-    let ref: SessionRef
-
-    var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            if ref.isRemote {
-                Text(ref.server)
-                    .font(theme.mono(12, .medium))
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 1)
-                    .background(theme.cardTint, in: Capsule())
-                    .accessibilityLabel("on \(ref.server)")
-                let task = ref.session(in: app.peers)?.task ?? ""
-                if !task.isEmpty {
-                    Text(task)
-                        .font(theme.mono(14, .medium))
-                        .foregroundStyle(theme.action)
-                }
-                Text(ref.project)
-                    .font(theme.title(19, .heavy))
-                Text(ref.isCoordinator ? "coordinator" : ref.thread)
-                    .font(theme.mono(12))
-                    .foregroundStyle(theme.muted)
-                    .textSelection(.enabled)
-            } else if ref.isCoordinator {
-                Text(ref.project)
-                    .font(theme.title(19, .heavy))
-                Text("coordinator")
-                    .font(theme.mono(12))
-                    .foregroundStyle(theme.muted)
-            } else {
-                let t = app.thread(ref)
-                if let task = t?.task {
-                    Text(task.ref)
-                        .font(theme.mono(14, .medium))
-                        .foregroundStyle(theme.action)
-                }
-                Text(t?.record.title ?? ref.thread)
-                    .font(theme.title(19, .heavy))
-                    .lineLimit(1)
-                    .layoutPriority(-1)
-                Text(ref.thread)
-                    .font(theme.mono(12))
-                    .foregroundStyle(theme.muted)
-                    .textSelection(.enabled)
-                    .fixedSize()
-            }
-        }
     }
 }
 

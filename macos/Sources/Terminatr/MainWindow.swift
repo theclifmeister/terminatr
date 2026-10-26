@@ -19,7 +19,7 @@ struct MainWindow: View {
         } detail: {
             detail
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background { Backdrop() }
+                .background { Frost(\.glass, bar: true) }
                 // A project has no inspector: its hiding isn't the user's.
                 .inspector(isPresented: Binding(get: { app.inspector && app.selectedRef != nil },
                                                 set: { if app.selectedRef != nil { app.inspector = $0 } })) {
@@ -31,6 +31,9 @@ struct MainWindow: View {
         .tint(theme.action)
         .foregroundStyle(theme.ink)
         .navigationTitle(app.title(app.nav.selection))
+        .navigationSubtitle(app.subtitle(app.nav.selection))
+        // The detail's glass shows through: no opaque band (T752).
+        .toolbarBackground(.hidden, for: .windowToolbar)
         .toolbar {
             ToolbarItemGroup(placement: .navigation) {
                 Button { app.goBack() } label: { Label("Back", systemImage: "chevron.backward") }
@@ -107,17 +110,33 @@ struct NewWindowButton: View {
     }
 }
 
-/// The sidebar's and the inspector's ground: the theme's mesh under the
-/// system's frost and the theme's tint, as Bloom draws its side panels.
+/// A panel's ground: the theme's mesh under the system's frost and a
+/// tint of the theme, as Bloom draws its panels. The sidebar and the
+/// inspector take sidebarTint; the detail takes glass (frost in light,
+/// smoked glass in dark) and, with bar, the title bar's band over it.
 struct Frost: View {
     @Environment(\.theme) private var theme
+    let tint: KeyPath<Theme, Color>
+    let bar: Bool
+
+    init(_ tint: KeyPath<Theme, Color> = \.sidebarTint, bar: Bool = false) {
+        self.tint = tint
+        self.bar = bar
+    }
 
     var body: some View {
-        ZStack {
-            Backdrop()
-            Rectangle().fill(.ultraThinMaterial)
-            theme.sidebarTint
+        GeometryReader { g in
+            ZStack(alignment: .top) {
+                Backdrop()
+                Rectangle().fill(.ultraThinMaterial)
+                theme[keyPath: tint]
+                if bar {
+                    theme.bar
+                        .frame(height: g.safeAreaInsets.top)
+                        .overlay(alignment: .bottom) { theme.line.frame(height: 1) }
+                }
+            }
+            .ignoresSafeArea()
         }
-        .ignoresSafeArea()
     }
 }

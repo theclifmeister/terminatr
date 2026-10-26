@@ -12,12 +12,14 @@ import TerminatrKit
 /// coordinator (when it runs or asks) and threads (those that wait on
 /// the user, the rest folded into "N more"). A project shows its
 /// dashboard, a coordinator or thread its session; a need shows what it
-/// names. Each section folds, and stays so across launches. The
-/// selection is the List's (T748 milestone E): ↑ ↓ move it, letters
-/// typed select the row they begin, ← folds a project (or goes up to
-/// it from its session) and → unfolds it. It is drawn as Bloom's violet
-/// pill, not the List's own (the system accent). The filter field on
-/// top (⌥⌘F) keeps the rows that match it, every one of them.
+/// names. Each section folds, and stays so across launches. Every
+/// project and session row has its state as a dot, and what waits on
+/// the user (allow?, asks, …) as a filled pill (T752). The selection is
+/// the List's (T748 milestone E): ↑ ↓ move it, letters typed select the
+/// row they begin, ← folds a project (or goes up to it from its
+/// session) and → unfolds it. It is drawn as Bloom's violet pill, not
+/// the List's own (the system accent). The filter field on top (⌥⌘F)
+/// keeps the rows that match it, every one of them.
 struct Sidebar: View {
     @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
@@ -277,7 +279,7 @@ struct Sidebar: View {
         if l.open {
             if l.coordinator {
                 row(.session(SessionRef(project: p.slug)), label: "Coordinator", ref: nil,
-                    tag: state.waits ? (state.word, theme.colour(state.tone)) : nil, dot: theme.colour(state.tone))
+                    tag: state.waits ? (state.word, state.tone) : nil, dot: theme.colour(state.tone))
             }
             let key = Navigation.moreKey(project: p.slug)
             // Keyed with the project: thread ids repeat across projects,
@@ -297,15 +299,16 @@ struct Sidebar: View {
         }
     }
 
-    private func row(_ sel: Selection, label: String, ref: String?, tag: (String, Color)?, dot: Color? = nil) -> some View {
+    /// A session's row: its dot, task ref and title, and its tag: a
+    /// filled pill in its tone's colour, or plain muted text (PR) when it
+    /// has none.
+    private func row(_ sel: Selection, label: String, ref: String?, tag: (String, Attention.Tone?)?, dot: Color) -> some View {
         let on = app.nav.selection == sel
         return HStack(spacing: 6) {
-            if let dot {
-                Circle()
-                    .fill(on ? theme.onAction : dot)
-                    .frame(width: 6, height: 6)
-                    .accessibilityHidden(true)
-            }
+            Circle()
+                .fill(on ? theme.onAction : dot)
+                .frame(width: 6, height: 6)
+                .accessibilityHidden(true)
             if let ref {
                 Text(ref)
                     .font(theme.mono(11.5, .medium))
@@ -315,13 +318,22 @@ struct Sidebar: View {
                 .font(.system(size: 12.5))
                 .lineLimit(1)
             Spacer(minLength: 4)
-            if let (word, colour) = tag {
-                Text(word)
-                    .font(theme.mono(10.5, .medium))
-                    .foregroundStyle(on ? theme.onAction : colour)
+            if let (word, tone) = tag {
+                if let tone {
+                    Text(word)
+                        .font(theme.mono(10.5, .medium))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 1)
+                        .background(theme.colour(tone), in: Capsule())
+                        .foregroundStyle(theme.on(tone))
+                } else {
+                    Text(word)
+                        .font(theme.mono(10.5, .medium))
+                        .foregroundStyle(on ? theme.onAction : theme.muted)
+                }
             }
         }
-        .padding(.leading, dot == nil ? 0 : 14)
+        .padding(.leading, 14)
         .foregroundStyle(on ? theme.onAction : theme.ink)
         .selectable(sel)
         .contextMenu {
@@ -331,10 +343,10 @@ struct Sidebar: View {
 
     /// A word for what the thread waits on, as the mockup's: a dialog,
     /// a question, a review (Attention, as its card's); else its PR.
-    private func tag(_ t: AppAPI.Thread) -> (String, Color)? {
+    private func tag(_ t: AppAPI.Thread) -> (String, Attention.Tone?)? {
         let a = app.attention(t)
-        if a.waits { return (a.word, theme.colour(a.tone)) }
-        if t.pr > 0 { return ("PR", theme.muted) }
+        if a.waits { return (a.word, a.tone) }
+        if t.pr > 0 { return ("PR", nil) }
         return nil
     }
 
@@ -345,10 +357,18 @@ struct Sidebar: View {
         let on = app.nav.selection == sel
         return DisclosureGroup(isExpanded: expanded(Navigation.sectionKey(server: peer.alias, project: p.project))) {
             ForEach(sessions(peer, p), id: \.0.id) { s, r in
-                row(.session(r), label: r.isCoordinator ? "Coordinator" : r.thread, ref: s.task.isEmpty ? nil : s.task, tag: tag(s))
+                row(.session(r), label: r.isCoordinator ? "Coordinator" : r.thread, ref: s.task.isEmpty ? nil : s.task,
+                    tag: tag(s), dot: theme.colour(tone(s)))
             }
         } label: {
-            HStack(spacing: 6) {
+            HStack(spacing: 8) {
+                // The coordinator's state, as this server's projects have it.
+                let coordinator = p.sessions.first { SessionRef($0, of: peer.alias)?.isCoordinator == true }
+                Circle()
+                    .fill(coordinator.map { theme.colour(tone($0)) } ?? theme.idle)
+                    .overlay(Circle().strokeBorder(on ? theme.onAction.opacity(0.8) : .clear, lineWidth: 1))
+                    .frame(width: 8, height: 8)
+                    .accessibilityHidden(true)
                 Text(p.project)
                     .font(.system(size: 13, weight: .semibold))
                     .lineLimit(1)
@@ -391,10 +411,16 @@ struct Sidebar: View {
     }
 
     /// A paired server's session's word: a question or a dialog there.
-    private func tag(_ s: AppAPI.PeerSession) -> (String, Color)? {
-        if s.asking { return ("asks", theme.question) }
-        if s.state == "blocked" { return s.reason == "permission" ? ("allow?", theme.approval) : ("blocked", theme.attention) }
+    private func tag(_ s: AppAPI.PeerSession) -> (String, Attention.Tone?)? {
+        if s.asking { return ("asks", .question) }
+        if s.state == "blocked" { return s.reason == "permission" ? ("allow?", .approval) : ("blocked", .attention) }
         return nil
+    }
+
+    /// A paired server's session's dot.
+    private func tone(_ s: AppAPI.PeerSession) -> Attention.Tone {
+        if let (_, tone) = tag(s), let tone { return tone }
+        return s.state == "idle" || s.state.isEmpty ? .idle : .working
     }
 }
 

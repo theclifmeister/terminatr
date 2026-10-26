@@ -2,8 +2,10 @@ import AppKit
 import TerminatrKit
 import UserNotifications
 
-/// The app's notifications (design T734 §6, R9): one when a need
-/// appears, per kind as the settings say, withdrawn when it goes. A
+/// The app's notifications (design T734 §6, R9; T748 F): one when a
+/// need appears, per kind as the settings say, grouped by project and
+/// withdrawn when it goes; none for the session shown in front. Quiet
+/// times are macOS Focus's: nothing here holds them back. A
 /// notification names the project and the kind of need, never the
 /// agent's words unless the user opted in. A single-select question
 /// that isn't an escape's gets its options as buttons, which answer
@@ -57,7 +59,7 @@ final class Notifier: NSObject {
                 categories["answer:\(id)"] = nil
             }
         }
-        for n in fresh where Self.on(Self.key(n.kind)) {
+        for n in NeedTracker.notified(fresh, front: m.frontSession) where Self.on(Self.key(n.kind)) {
             post(n)
         }
 
