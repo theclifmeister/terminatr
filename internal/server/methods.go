@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
+	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
@@ -227,6 +228,18 @@ func init() {
 		})},
 		proto.MethodTaskAsk: {gate: gateHuman, call: typed(func(s *Server, p proto.TaskAskParams, c callCtx) (any, *proto.Error) {
 			return s.taskAsk(p, c)
+		})},
+		proto.MethodTaskAccept: {gate: gateHuman, call: typed(func(s *Server, p proto.TaskActionParams, c callCtx) (any, *proto.Error) {
+			return s.taskAction(project.KindAccept, p, c)
+		})},
+		proto.MethodTaskSendBack: {gate: gateHuman, call: typed(func(s *Server, p proto.TaskActionParams, c callCtx) (any, *proto.Error) {
+			return s.taskAction(project.KindSendBack, p, c)
+		})},
+		proto.MethodTaskDelegate: {gate: gateHuman, call: typed(func(s *Server, p proto.TaskActionParams, c callCtx) (any, *proto.Error) {
+			return s.taskAction(project.KindDelegate, p, c)
+		})},
+		proto.MethodProjectOpen: {gate: gateHuman, call: typed(func(s *Server, p proto.ProjectOpenParams, c callCtx) (any, *proto.Error) {
+			return s.projectOpen(p, c)
 		})},
 		proto.MethodSecretTest: {gate: gateHuman, call: typed(func(s *Server, p proto.SecretTestParams, _ callCtx) (any, *proto.Error) {
 			return s.secretTest(p)

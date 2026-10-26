@@ -112,6 +112,10 @@ type Server struct {
 	latest    atomic.Pointer[latestRelease]
 	checkedAt atomic.Int64 // unix time update.CachedLatest was last consulted
 
+	// openMu serializes project.open, so two calls start one
+	// coordinator.
+	openMu sync.Mutex
+
 	mu       sync.Mutex
 	sessions map[string]*session.Session
 	records  map[string]SessionRecord

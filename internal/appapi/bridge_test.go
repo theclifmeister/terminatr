@@ -219,6 +219,81 @@ func TestBridge(t *testing.T) {
 	}
 }
 
+// TestBridgeTaskActions: the task actions by name (app API 5) ask the
+// coordinator with tm task accept's and send-back's checks, their codes
+// reaching the app; project.open starts the project's coordinator once.
+// Each is journaled as "human (app)".
+func TestBridgeTaskActions(t *testing.T) {
+	p := testPaths(t)
+	if err := os.MkdirAll(p.AgentsDir(), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	manifest := "manifest_version = 1\nname = \"fake\"\n[launch]\ncommand = \"/bin/sh\"\nargs = [\"-c\", \"sleep 30\"]\n"
+	if err := os.WriteFile(filepath.Join(p.AgentsDir(), "fake.toml"), []byte(manifest), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	pr, err := project.New(project.Options{Slug: "web"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := config.SetProject("web", "coordinator_agent", "fake"); err != nil {
+		t.Fatal(err)
+	}
+	human := caller.Caller{Kind: caller.Human}
+	if _, err := pr.Tasks().Add(human, []tasks.NewTask{{Title: "Ship it"}, {Title: "Review me"}, {Title: "Review me too"}}); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []int{2, 3} {
+		if _, err := pr.Tasks().SetStatus(human, id, tasks.Review, ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	startServer(t, p)
+	c, err := bridge(t, p, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var asked appapi.TaskAskResult
+	if err := c.Call(proto.MethodTaskAccept, appapi.TaskParams{Project: "web", Task: "T2"}, &asked); err != nil || !asked.Asked {
+		t.Fatalf("task.accept: %+v %v", asked, err)
+	}
+	if err := c.Call(proto.MethodTaskSendBack, appapi.SendBackParams{Project: "web", Task: "T3", Note: "the tests fail"}, &asked); err != nil || !asked.Asked {
+		t.Fatalf("task.send-back: %+v %v", asked, err)
+	}
+	if err := c.Call(proto.MethodTaskDelegate, appapi.TaskParams{Project: "web", Task: "T1"}, &asked); err != nil || !asked.Asked {
+		t.Fatalf("task.delegate: %+v %v", asked, err)
+	}
+	for _, bad := range []struct {
+		method string
+		params any
+		code   string
+	}{
+		{proto.MethodTaskAccept, appapi.TaskParams{Project: "web", Task: "T1"}, "not-accept"},
+		{proto.MethodTaskSendBack, appapi.SendBackParams{Project: "web", Task: "T2", Note: "no"}, "already-asked"},
+		{proto.MethodTaskSendBack, appapi.SendBackParams{Project: "web", Task: "T3"}, "invalid-note"},
+		{proto.MethodTaskAccept, map[string]string{"project": "web", "task": "T2", "note": "x"}, appapi.ErrBadParams},
+	} {
+		if err := c.Call(bad.method, bad.params, nil); code(err) != bad.code {
+			t.Errorf("%s %+v: %v, want %s", bad.method, bad.params, err, bad.code)
+		}
+	}
+	var opened appapi.ProjectOpen
+	if err := c.Call(proto.MethodProjectOpen, appapi.ProjectOpenParams{Project: "web", Cols: 120, Rows: 40}, &opened); err != nil || !opened.Started || opened.Session == "" {
+		t.Fatalf("project.open: %+v %v", opened, err)
+	}
+	var again appapi.ProjectOpen
+	if err := c.Call(proto.MethodProjectOpen, appapi.ProjectOpenParams{Project: "web"}, &again); err != nil || again.Started || again.Session != opened.Session {
+		t.Fatalf("project.open again: %+v %v", again, err)
+	}
+	journal, _ := os.ReadFile(pr.Path("JOURNAL.md"))
+	for _, want := range []string{" human (app) task.accept.ask T2", " human (app) task.sendback.ask T3 the tests fail",
+		" human (app) task.delegate.ask T1", " human (app) coordinator.start " + opened.Session} {
+		if !strings.Contains(string(journal), want) {
+			t.Errorf("journal lacks %q:\n%s", want, journal)
+		}
+	}
+}
+
 // TestBridgeProjectSettings: each project's active, paused and pinned
 // reach the app (app API 4), and no other setting does.
 func TestBridgeProjectSettings(t *testing.T) {

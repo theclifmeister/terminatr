@@ -13,6 +13,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/mdfile"
+	"github.com/theclifmeister/terminatr/internal/modaction"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/textsafe"
 	"github.com/theclifmeister/terminatr/internal/vaultlink"
@@ -276,6 +277,44 @@ func (p *Project) askTask(c caller.Caller, kind, ref, summary, detail string) (b
 		return false, err
 	}
 	return true, p.Journal(c, "task."+strings.ReplaceAll(kind, "-", "")+".ask", ref, detail)
+}
+
+// AskTask is the user's ask of kind (KindDelegate, KindAccept or
+// KindSendBack, with note) on task t, after the checks tm task accept
+// and send-back apply (docs/SPEC.md §6.3), which the server's task
+// methods share: the task's status on the live board (code "not-<kind>"),
+// the note ("invalid-note") and an ask of another kind that already
+// waits on the coordinator ("already-asked"), each a *tasks.Error. The
+// same ask waiting already reports false. Who may ask is the caller's
+// check.
+func (p *Project) AskTask(c caller.Caller, t *tasks.Task, kind, note string) (bool, error) {
+	ref := t.Ref()
+	if why := modaction.NotAskable(t, kind); why != "" {
+		return false, &tasks.Error{Code: "not-" + kind, Msg: why}
+	}
+	if kind == KindSendBack {
+		var err error
+		if note, err = SendBackNote(note); err != nil {
+			return false, &tasks.Error{Code: "invalid-note", Msg: err.Error()}
+		}
+	}
+	items, err := p.Inbox()
+	if err != nil {
+		return false, err
+	}
+	if k := TaskAsked(items, ref); k != "" {
+		if k != kind {
+			return false, &tasks.Error{Code: "already-asked", Msg: fmt.Sprintf("%s waits on the coordinator already (%s)", ref, k)}
+		}
+		return false, nil
+	}
+	switch kind {
+	case KindAccept:
+		return p.AskAccept(c, ref)
+	case KindSendBack:
+		return p.AskSendBack(c, ref, note)
+	}
+	return p.AskDelegate(c, ref)
 }
 
 // TaskAsked is the kind of the unhandled delegate, accept or send-back

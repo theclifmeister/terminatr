@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
-	"github.com/theclifmeister/terminatr/internal/modaction"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 )
@@ -33,34 +32,7 @@ func taskAsk(e *Env, p *project.Project, s *tasks.Store, kind string, pos []stri
 		return err
 	}
 	ref := t.Ref()
-	if why := modaction.NotAskable(t, kind); why != "" {
-		return &tasks.Error{Code: "not-" + kind, Msg: why}
-	}
-	if kind == project.KindSendBack {
-		if note, err = project.SendBackNote(note); err != nil {
-			return &tasks.Error{Code: "invalid-note", Msg: err.Error()}
-		}
-	}
-	items, err := p.Inbox()
-	if err != nil {
-		return err
-	}
-	if k := project.TaskAsked(items, ref); k != "" {
-		if k != kind {
-			return &tasks.Error{Code: "already-asked", Msg: fmt.Sprintf("%s waits on the coordinator already (%s)", ref, k)}
-		}
-		if asJSON {
-			return e.printJSON(map[string]any{"task": ref, "kind": kind, "asked": false})
-		}
-		fmt.Fprintf(e.Stdout, "%s waits on the coordinator already (%s)\n", ref, k)
-		return nil
-	}
-	var asked bool
-	if kind == project.KindAccept {
-		asked, err = p.AskAccept(e.Caller, ref)
-	} else {
-		asked, err = p.AskSendBack(e.Caller, ref, note)
-	}
+	asked, err := p.AskTask(e.Caller, t, kind, note)
 	if err != nil {
 		return err
 	}
@@ -69,7 +41,7 @@ func taskAsk(e *Env, p *project.Project, s *tasks.Store, kind string, pos []stri
 	}
 	switch {
 	case !asked:
-		fmt.Fprintf(e.Stdout, "%s waits on the coordinator already\n", ref)
+		fmt.Fprintf(e.Stdout, "%s waits on the coordinator already (%s)\n", ref, kind)
 	case kind == project.KindAccept:
 		fmt.Fprintf(e.Stdout, "told the coordinator you accept %s; it marks it done\n", ref)
 	default:
