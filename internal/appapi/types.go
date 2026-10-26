@@ -246,7 +246,8 @@ type Projects struct {
 // behind origin, links). Error says why it doesn't open, or why its
 // board doesn't load. Active, Paused and Pinned are the project's
 // settings of those names (since app API 4), for the sidebar's order:
-// its only settings in the app API.
+// its only settings in the app API. Board are the tasks on deck and in
+// the backlog, without notes and steps (since app API 6).
 type Project struct {
 	Slug        string            `json:"slug"`
 	Active      bool              `json:"active"`
@@ -260,6 +261,7 @@ type Project struct {
 	Repos       []string          `json:"repos,omitempty"`
 	Counts      map[string]int    `json:"counts,omitempty"`
 	Error       string            `json:"error,omitempty"`
+	Board       []Task            `json:"board,omitempty"`
 	Items       []Item            `json:"items,omitempty"`
 	Usage       Usage             `json:"usage"`
 	TaskUsage   map[string]Usage  `json:"task_usage,omitempty"`
@@ -591,6 +593,9 @@ func projectOf(p server.SideProject) Project {
 	}
 	for _, t := range p.Threads {
 		out.Threads = append(out.Threads, threadOf(t))
+	}
+	for _, t := range p.Board {
+		out.Board = append(out.Board, taskOf(t))
 	}
 	for _, it := range p.Items {
 		out.Items = append(out.Items, itemOf(it))

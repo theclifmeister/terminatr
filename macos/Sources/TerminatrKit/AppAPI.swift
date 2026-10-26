@@ -6,7 +6,7 @@ import Foundation
 /// The terminatr app API (docs/SPEC.md §3.8): what tm app bridge answers.
 public enum AppAPI {
     /// The app API version this app was generated against.
-    public static let version = 5
+    public static let version = 6
 
     public struct AnswerParams: Codable, Sendable, Hashable {
         public var id: String
@@ -579,13 +579,14 @@ public enum AppAPI {
         public var repos: [String]
         public var counts: [String: Int]
         public var error: String
+        public var board: [Task]
         public var items: [Item]
         public var usage: Usage
         public var taskUsage: [String: Usage]
         public var checkouts: [String: String]
         public var links: [Link]
 
-        public init(slug: String, active: Bool, paused: Bool = false, pinned: Bool = false, needsYou: [Task] = [], questions: Int = 0, threads: [Thread] = [], prHostFails: Int = 0, goal: String = "", repos: [String] = [], counts: [String: Int] = [:], error: String = "", items: [Item] = [], usage: Usage, taskUsage: [String: Usage] = [:], checkouts: [String: String] = [:], links: [Link] = []) {
+        public init(slug: String, active: Bool, paused: Bool = false, pinned: Bool = false, needsYou: [Task] = [], questions: Int = 0, threads: [Thread] = [], prHostFails: Int = 0, goal: String = "", repos: [String] = [], counts: [String: Int] = [:], error: String = "", board: [Task] = [], items: [Item] = [], usage: Usage, taskUsage: [String: Usage] = [:], checkouts: [String: String] = [:], links: [Link] = []) {
             self.slug = slug
             self.active = active
             self.paused = paused
@@ -598,6 +599,7 @@ public enum AppAPI {
             self.repos = repos
             self.counts = counts
             self.error = error
+            self.board = board
             self.items = items
             self.usage = usage
             self.taskUsage = taskUsage
@@ -618,6 +620,7 @@ public enum AppAPI {
             case repos
             case counts
             case error
+            case board
             case items
             case usage
             case taskUsage = "task_usage"
@@ -1772,6 +1775,7 @@ extension AppAPI.Project {
         self.repos = try c.decodeIfPresent([String].self, forKey: .repos) ?? []
         self.counts = try c.decodeIfPresent([String: Int].self, forKey: .counts) ?? [:]
         self.error = try c.decodeIfPresent(String.self, forKey: .error) ?? ""
+        self.board = try c.decodeIfPresent([AppAPI.Task].self, forKey: .board) ?? []
         self.items = try c.decodeIfPresent([AppAPI.Item].self, forKey: .items) ?? []
         self.usage = try c.decode(AppAPI.Usage.self, forKey: .usage)
         self.taskUsage = try c.decodeIfPresent([String: AppAPI.Usage].self, forKey: .taskUsage) ?? [:]

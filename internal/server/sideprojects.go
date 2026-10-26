@@ -75,6 +75,10 @@ type SideProject struct {
 	// doesn't open.
 	Counts map[string]int `json:"counts,omitempty"`
 	Error  string         `json:"error,omitempty"`
+	// Board are the board's tasks on deck and in the backlog, in board
+	// order, without their notes and steps: what the dashboard lists of
+	// the tasks no thread works on yet.
+	Board []SideTask `json:"board,omitempty"`
 	// Items are the coordinator's unhandled inbox items, oldest first.
 	Items []project.Item `json:"items,omitempty"`
 	// Usage is what all the project's threads used, resolved ones
@@ -438,6 +442,13 @@ func (sn *projectSnap) detail(sp SideProject, own []string) SideProject {
 	sp.Goal, sp.Repos, sp.Own = sn.p.Meta.Goal, sn.p.Repos, own
 	if sn.board != nil {
 		sp.Counts = project.Counts(sn.board)
+		for _, t := range sn.board.Tasks {
+			if g := tasks.GroupOf(t.Status); g == tasks.OnDeck || g == tasks.Backlog {
+				st := sideTask(t)
+				st.Notes, st.Steps = "", nil
+				sp.Board = append(sp.Board, st)
+			}
+		}
 	} else if sn.boardErr != nil {
 		sp.Error = sn.boardErr.Error()
 	}

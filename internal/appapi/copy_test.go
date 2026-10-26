@@ -228,6 +228,7 @@ func TestCopies(t *testing.T) {
 		".Projects[].Own", ".Projects[].Badges",
 		// A task's archive flag: archived tasks aren't sent.
 		".Projects[].NeedsYou[].Archived", ".Projects[].Threads[].Task.Archived",
+		".Projects[].Board[].Archived",
 		// For resume, and resolved threads aren't sent.
 		".Projects[].Threads[].Record.AgentSID", ".Projects[].Threads[].Record.Prompted",
 		".Projects[].Threads[].Record.ResolvedAt",
