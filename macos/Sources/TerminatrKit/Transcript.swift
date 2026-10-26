@@ -80,6 +80,17 @@ public struct Transcript: Sendable, Equatable {
         self.status = status
     }
 
+    /// The entries the conversation draws: the last count of them, and
+    /// back to entry keep (a find's match) when it is earlier. A long
+    /// transcript then costs a switch to it no more than a short one.
+    public func tail(_ count: Int, keeping keep: Int? = nil) -> ArraySlice<Entry> {
+        var from = max(0, entries.count - count)
+        if let keep, let i = entries.firstIndex(where: { $0.id == keep }), i < from {
+            from = i
+        }
+        return entries[from...]
+    }
+
     /// The last tool call still waiting for its result: what a
     /// permission dialog asks about, while one is open.
     public var pendingTool: Entry? {

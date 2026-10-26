@@ -22,9 +22,13 @@ import (
 // Params of the app's methods.
 type (
 	// ProjectsWatchParams are projects.watch's: Detail asks for the dashboard's data of each
-	// project besides the sidebar's.
+	// project besides the sidebar's. Lean (since app API 7) asks for the inactive projects
+	// but Shown, the one the window shows, as their slug and settings alone; a change in
+	// them alone sends no event.
 	ProjectsWatchParams struct {
-		Detail bool `json:"detail,omitempty"`
+		Detail bool   `json:"detail,omitempty"`
+		Lean   bool   `json:"lean,omitempty"`
+		Shown  string `json:"shown,omitempty"`
 	}
 	// SessionIDParams name a session.
 	SessionIDParams struct {

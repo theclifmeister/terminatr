@@ -101,6 +101,25 @@ extension Transcript.Entry {
     /// thread's kickoff, the server's [tm] notes), which the user opens.
     public var folds: Bool { kind == .prompt && from == "tm" }
 
+    /// A long prompt of the user's or the coordinator's as it shows
+    /// folded: its first lines (at most lines of them, about chars
+    /// characters), the rest a click away; nil for one that isn't long,
+    /// or not a prompt (tm's fold whole, folds).
+    public func preview(lines: Int = 10, chars: Int = 800) -> String? {
+        guard kind == .prompt, !folds else { return nil }
+        let all = text.split(separator: "\n", omittingEmptySubsequences: false)
+        if all.count > lines + 2 {
+            return all.prefix(lines).joined(separator: "\n")
+        }
+        if text.count > chars + chars / 2 {
+            return String(text.prefix(chars)) + "…"
+        }
+        return nil
+    }
+
+    /// How many lines the text has.
+    public var lineCount: Int { text.reduce(1) { $1 == "\n" ? $0 + 1 : $0 } }
+
     /// A folded prompt's one line: what tm did, or its first line
     /// without the [tm] mark.
     public var headline: String {

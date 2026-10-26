@@ -6,7 +6,7 @@ import Foundation
 /// The terminatr app API (docs/SPEC.md §3.8): what tm app bridge answers.
 public enum AppAPI {
     /// The app API version this app was generated against.
-    public static let version = 6
+    public static let version = 7
 
     public struct AnswerParams: Codable, Sendable, Hashable {
         public var id: String
@@ -688,13 +688,19 @@ public enum AppAPI {
 
     public struct ProjectsWatchParams: Codable, Sendable, Hashable {
         public var detail: Bool
+        public var lean: Bool
+        public var shown: String
 
-        public init(detail: Bool = false) {
+        public init(detail: Bool = false, lean: Bool = false, shown: String = "") {
             self.detail = detail
+            self.lean = lean
+            self.shown = shown
         }
 
         enum CodingKeys: String, CodingKey {
             case detail
+            case lean
+            case shown
         }
     }
 
@@ -1856,6 +1862,8 @@ extension AppAPI.ProjectsWatchParams {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.detail = try c.decodeIfPresent(Bool.self, forKey: .detail) ?? false
+        self.lean = try c.decodeIfPresent(Bool.self, forKey: .lean) ?? false
+        self.shown = try c.decodeIfPresent(String.self, forKey: .shown) ?? ""
     }
 }
 

@@ -10,6 +10,7 @@ package server
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"net"
 	"os"
@@ -168,6 +169,17 @@ type sideLook struct {
 	looked bool
 	b      json.RawMessage // the projects, marshalled
 	ver    uint64          // counts the changes of b
+	// parts are b's projects, each marshalled whole and, for an
+	// inactive one, as its slug and settings alone (lean): what a lean
+	// watch sends. A new look replaces the slice, never its items.
+	parts []sidePart
+}
+
+// sidePart is one project of a look: whole, and lean when it is
+// inactive (nil for an active one).
+type sidePart struct {
+	slug        string
+	whole, lean json.RawMessage
 }
 
 // badgeEntry is a mod's annotations in a project (modstore.ReadBadges), with
@@ -183,6 +195,12 @@ type badgeEntry struct {
 // that changes with them. It looks again on a wake (gen) and once a
 // poll at most: the first watch to ask after that looks for all.
 func (s *Server) sideProjects(gen uint64, poll time.Duration, detail bool) (json.RawMessage, uint64) {
+	l := s.sideLook(gen, poll, detail)
+	return l.b, l.ver
+}
+
+// sideLook is the look sideProjects answers from, a copy.
+func (s *Server) sideLook(gen uint64, poll time.Duration, detail bool) sideLook {
 	h := &s.sides
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -191,15 +209,55 @@ func (s *Server) sideProjects(gen uint64, poll time.Duration, detail bool) (json
 		l = &h.out[1]
 	}
 	if l.looked && l.gen == gen && time.Since(l.at) < poll*3/4 {
-		return l.b, l.ver
+		return *l
 	}
 	l.looked, l.gen, l.at = true, gen, time.Now()
-	list := s.lookSideProjects(gen, detail)
-	b, _ := json.Marshal(list)
-	if !slices.Equal(b, l.b) {
-		l.b, l.ver = b, l.ver+1
+	parts := sideParts(s.lookSideProjects(gen, detail))
+	if b := joinParts(parts, false, ""); !slices.Equal(b, l.b) {
+		l.b, l.ver, l.parts = b, l.ver+1, parts
 	}
-	return l.b, l.ver
+	return *l
+}
+
+// sideParts are list's projects marshalled, whole and lean.
+func sideParts(list []SideProject) []sidePart {
+	parts := make([]sidePart, 0, len(list))
+	for _, sp := range list {
+		pt := sidePart{slug: sp.Slug}
+		pt.whole, _ = json.Marshal(sp)
+		if sp.Safety != nil && !sp.Safety.Active {
+			pt.lean, _ = json.Marshal(SideProject{Slug: sp.Slug, Safety: sp.Safety})
+		}
+		parts = append(parts, pt)
+	}
+	return parts
+}
+
+// joinParts is parts as a JSON array, as json.Marshal has the list.
+// With lean the inactive projects but shown are their lean selves.
+func joinParts(parts []sidePart, lean bool, shown string) json.RawMessage {
+	var b bytes.Buffer
+	b.WriteByte('[')
+	for i, pt := range parts {
+		if i > 0 {
+			b.WriteByte(',')
+		}
+		if lean && pt.lean != nil && pt.slug != shown {
+			b.Write(pt.lean)
+		} else {
+			b.Write(pt.whole)
+		}
+	}
+	b.WriteByte(']')
+	return b.Bytes()
+}
+
+// leanOf is look l as a watch with p sends it: lean when p asks.
+func leanOf(l sideLook, p proto.ProjectsWatchParams) json.RawMessage {
+	if !p.Lean {
+		return l.b
+	}
+	return joinParts(l.parts, true, p.Shown)
 }
 
 // lookSideProjects reads the projects as the sidebars show them, with
@@ -483,21 +541,27 @@ func (s *Server) serveProjectsWatch(c net.Conn, br *bufio.Reader, req proto.Requ
 	wake := s.watch.add()
 	defer s.watch.remove(wake)
 	poll := watchPollEvery()
-	b, last := s.sideProjects(s.watch.generation(), poll, p.Detail)
+	l := s.sideLook(s.watch.generation(), poll, p.Detail)
+	last, sent := l.ver, leanOf(l, p)
 	if !answer(c, req, struct {
 		Projects json.RawMessage `json:"projects"`
-	}{b}) {
+	}{sent}) {
 		return
 	}
 	pollStream(c, clientGone(br), wake, poll, func() (any, bool) {
 		if s.isStopping() {
 			return nil, true
 		}
-		b, ver := s.sideProjects(s.watch.generation(), poll, p.Detail)
-		if ver == last {
+		l := s.sideLook(s.watch.generation(), poll, p.Detail)
+		if l.ver == last {
 			return nil, false
 		}
-		last = ver
+		last = l.ver
+		b := leanOf(l, p)
+		if p.Lean && bytes.Equal(b, sent) {
+			return nil, false // a change in a lean project alone
+		}
+		sent = b
 		return struct {
 			Event    string          `json:"event"`
 			Projects json.RawMessage `json:"projects"`

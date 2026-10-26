@@ -26,7 +26,10 @@ const (
 // The answer and the events are server.ProjectsWatch and
 // server.ProjectsWatchEvent: they carry the thread and task records.
 // The human's (since protocol 17). With detail (since protocol 18) each
-// project carries what the dashboard shows of it too.
+// project carries what the dashboard shows of it too. With lean (since
+// protocol 21) the inactive projects, all but the one shown, carry
+// their slug and settings alone, and a change in them alone sends no
+// event.
 const (
 	// MethodProjectsWatch watches the projects (ProjectsWatchParams,
 	// or none).
@@ -36,9 +39,12 @@ const (
 )
 
 // ProjectsWatchParams are the params of projects.watch: Detail asks
-// for the dashboard's data besides the sidebars'.
+// for the dashboard's data besides the sidebars'; Lean for the inactive
+// projects but Shown as their slug and settings alone.
 type ProjectsWatchParams struct {
-	Detail bool `json:"detail,omitempty"`
+	Detail bool   `json:"detail,omitempty"`
+	Lean   bool   `json:"lean,omitempty"`
+	Shown  string `json:"shown,omitempty"`
 }
 
 // ProjectWatchParams are the params of project.watch.

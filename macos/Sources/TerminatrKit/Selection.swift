@@ -64,6 +64,13 @@ public enum Selection: Codable, Hashable, Sendable {
     /// Whether it still names something listed: a project of this
     /// server or a paired one's, a coordinator (shown even while it
     /// isn't running) or a thread the project has.
+    /// The inactive project of this server it shows: what a lean
+    /// projects.watch sends whole (shown); "" for any other.
+    public func shownInactive(_ projects: [AppAPI.Project]) -> String {
+        guard server.isEmpty, let p = projects.first(where: { $0.slug == project }), !p.active else { return "" }
+        return p.slug
+    }
+
     public func exists(projects: [AppAPI.Project], peers: [AppAPI.Peer]) -> Bool {
         if !server.isEmpty {
             guard let p = peers.first(where: { $0.alias == server })?.projects.first(where: { $0.project == project }) else { return false }
