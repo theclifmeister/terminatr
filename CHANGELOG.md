@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.54.0](https://github.com/theclifmeister/terminatr/compare/v0.53.0...v0.54.0) (2026-10-26)
+
+
+### Features
+
+* **app:** paired servers' panes in the Mac app, through the peer link ([#803](https://github.com/theclifmeister/terminatr/issues/803)) ([b77d3c1](https://github.com/theclifmeister/terminatr/commit/b77d3c141cb2f6d66f9ba299e9c4c5604bcf72c0))
+* **macos:** coordinator and thread windows: conversation, SwiftTerm terminal, cards, composer ([#799](https://github.com/theclifmeister/terminatr/issues/799)) ([8645930](https://github.com/theclifmeister/terminatr/commit/8645930157f452758eedcf019d3e31342d90cd36))
+* **macos:** menu bar extra, notifications, answer buttons and open at login ([#798](https://github.com/theclifmeister/terminatr/issues/798)) ([9023b8a](https://github.com/theclifmeister/terminatr/commit/9023b8a09d6ebe695a175307c9ca9553717106d8))
+* **macos:** ship the Mac app: signed, notarised release, terminatr-app cask, tm update installs it ([#802](https://github.com/theclifmeister/terminatr/issues/802)) ([0313cd5](https://github.com/theclifmeister/terminatr/commit/0313cd51e6eb07309324ca31550c977478857c12))
+
 ## [0.53.0](https://github.com/theclifmeister/terminatr/compare/v0.52.0...v0.53.0) (2026-10-26)
 
 
