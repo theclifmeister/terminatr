@@ -89,6 +89,10 @@ type (
 		Task    string `json:"task"`
 		Note    string `json:"note"`
 	}
+	// ProjectParams name a project (questions.open).
+	ProjectParams struct {
+		Project string `json:"project"`
+	}
 	// ProjectOpenParams are project.open's: the project, and the size a
 	// coordinator it starts gets (80x24 when unset).
 	ProjectOpenParams struct {
@@ -737,6 +741,19 @@ func taskAskResultOf(r proto.TaskAskResult) TaskAskResult { return TaskAskResult
 type ProjectOpen struct {
 	Session string `json:"session"`
 	Started bool   `json:"started,omitempty"`
+}
+
+// QuestionsOpen is questions.open's result: the coordinator's session
+// prompted to put its questions to the user, how the prompt went in (as
+// session.prompt's Via) and how many questions were open.
+type QuestionsOpen struct {
+	Session string `json:"session"`
+	Via     string `json:"via"`
+	Open    int    `json:"open"`
+}
+
+func questionsOpenOf(r proto.QuestionsOpenResult) QuestionsOpen {
+	return QuestionsOpen{Session: r.Session, Via: r.Via, Open: r.Open}
 }
 
 func projectOpenOf(r proto.ProjectOpenResult) ProjectOpen {

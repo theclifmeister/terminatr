@@ -268,6 +268,7 @@ func TestCopies(t *testing.T) {
 	check("session.approve", homeOf(approveResultOf), nil)
 	check("task.ask", homeOf(taskAskResultOf), nil)
 	check("project.open", homeOf(projectOpenOf), nil)
+	check("questions.open", homeOf(questionsOpenOf), nil)
 	check("notify", homeOf(noticeResultOf), nil)
 	// The window is the bridge's: it acks for the app.
 	check("pane.vt", homeOf(paneResultOf), append(sessionHome(".Session"), ".Window"))
@@ -361,7 +362,7 @@ func TestAllowlist(t *testing.T) {
 		proto.MethodSessionAnswer, proto.MethodSessionApprove, proto.MethodSessionKeys, proto.MethodSessionList,
 		proto.MethodSessionPrompt, proto.MethodSessionWatch, proto.MethodTaskAsk,
 		proto.MethodTaskAccept, proto.MethodTaskSendBack, proto.MethodTaskDelegate, proto.MethodProjectOpen,
-		proto.MethodPaneVT, proto.MethodTranscriptWatch, MethodPaneInput}
+		proto.MethodQuestionsOpen, proto.MethodPaneVT, proto.MethodTranscriptWatch, MethodPaneInput}
 	slices.Sort(want)
 	if got := MethodNames(); !slices.Equal(got, want) {
 		t.Errorf("methods %v, want %v", got, want)

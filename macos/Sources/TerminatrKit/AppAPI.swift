@@ -662,6 +662,18 @@ public enum AppAPI {
         }
     }
 
+    public struct ProjectParams: Codable, Sendable, Hashable {
+        public var project: String
+
+        public init(project: String) {
+            self.project = project
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case project
+        }
+    }
+
     public struct Projects: Codable, Sendable, Hashable {
         public var projects: [Project]
 
@@ -782,6 +794,24 @@ public enum AppAPI {
         enum CodingKeys: String, CodingKey {
             case label
             case description
+        }
+    }
+
+    public struct QuestionsOpen: Codable, Sendable, Hashable {
+        public var session: String
+        public var via: String
+        public var open: Int
+
+        public init(session: String, via: String, open: Int) {
+            self.session = session
+            self.via = via
+            self.open = open
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case session
+            case via
+            case open
         }
     }
 
@@ -1499,6 +1529,7 @@ public enum AppAPI {
         public static let peerList = Call<NoParams, PeerList>("peer.list", write: false)
         public static let projectOpen = Call<ProjectOpenParams, ProjectOpen>("project.open", write: true)
         public static let projectsWatch = Subscription<ProjectsWatchParams, Projects, Projects>("projects.watch", events: ["projects.changed"])
+        public static let questionsOpen = Call<ProjectParams, QuestionsOpen>("questions.open", write: true)
         public static let sessionAnswer = Call<AnswerParams, AnswerResult>("session.answer", write: true)
         public static let sessionApprove = Call<ApproveParams, ApproveResult>("session.approve", write: true)
         public static let sessionKeys = Call<KeysParams, Empty>("session.keys", write: true)
@@ -1807,6 +1838,13 @@ extension AppAPI.ProjectOpenParams {
     }
 }
 
+extension AppAPI.ProjectParams {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.project = try c.decode(String.self, forKey: .project)
+    }
+}
+
 extension AppAPI.Projects {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -1866,6 +1904,15 @@ extension AppAPI.QuestionOption {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.label = try c.decode(String.self, forKey: .label)
         self.description = try c.decodeIfPresent(String.self, forKey: .description) ?? ""
+    }
+}
+
+extension AppAPI.QuestionsOpen {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.session = try c.decode(String.self, forKey: .session)
+        self.via = try c.decode(String.self, forKey: .via)
+        self.open = try c.decode(Int.self, forKey: .open)
     }
 }
 
