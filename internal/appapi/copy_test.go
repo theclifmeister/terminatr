@@ -247,6 +247,15 @@ func TestCopies(t *testing.T) {
 		".Projects[].Links[].Asks.Created", ".Projects[].Links[].Asks.Out", ".Projects[].Links[].Asks.Peer",
 		".Projects[].Links[].Asks.Project", ".Projects[].Links[].Asks.State",
 	})
+	check("peer.list", homeOf(peerListOf), []string{
+		// The link's id, versions, clock and pane switches: the
+		// Network popup's. Share requests cross as their count.
+		".Peers[].ID", ".Peers[].Watch", ".Peers[].Popup", ".Peers[].Pane", ".Peers[].Panes",
+		".Peers[].Version", ".Peers[].Offset", ".Peers[].RTT", ".Peers[].Listed", ".Peers[].Shares",
+		// A shared project's snapshot: its sessions and watch stay the
+		// TUI's remote dashboard's.
+		".Peers[].Projects[].Rev", ".Peers[].Projects[].Watch", ".Peers[].Projects[].Sessions",
+	})
 	check("session.prompt", homeOf(promptResultOf), nil)
 	check("session.answer", homeOf(answerResultOf), nil)
 	check("session.approve", homeOf(approveResultOf), nil)
@@ -318,7 +327,7 @@ func TestParamsCopies(t *testing.T) {
 // joins on purpose. Settings, access, mods, views and the server's own
 // controls never do.
 func TestAllowlist(t *testing.T) {
-	want := []string{proto.MethodNotifyClaim, proto.MethodNotifyDismiss, proto.MethodProjectsWatch,
+	want := []string{proto.MethodNotifyClaim, proto.MethodNotifyDismiss, proto.MethodPeerList, proto.MethodProjectsWatch,
 		proto.MethodSessionAnswer, proto.MethodSessionApprove, proto.MethodSessionKeys, proto.MethodSessionList,
 		proto.MethodSessionPrompt, proto.MethodSessionWatch, proto.MethodTaskAsk,
 		proto.MethodPaneVT, proto.MethodTranscriptWatch, MethodPaneInput}

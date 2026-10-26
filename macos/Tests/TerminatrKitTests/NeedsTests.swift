@@ -1,0 +1,109 @@
+import Foundation
+import Testing
+@testable import TerminatrKit
+
+let t0 = Date(timeIntervalSince1970: 1_800_000_000)
+
+func session(_ id: String, task: String = "T812", state: String = "working", reason: String = "",
+             question: AppAPI.Question? = nil, escape: Bool = false, server: String = "") -> AppAPI.Session {
+    AppAPI.Session(id: id, role: "thread", project: "terminatr", thread: "t-0675", task: task, title: "Cache layer",
+                   cols: 80, rows: 24, created: t0, clients: 0, state: state, reason: reason, escape: escape,
+                   question: question, server: server)
+}
+
+func menu(_ items: [AppAPI.QuestionItem], escape: Bool = false) -> AppAPI.Question {
+    AppAPI.Question(tool: "AskUserQuestion", questions: items, since: t0, escape: escape)
+}
+
+let noUsage = AppAPI.Usage(turns: 0, input: 0, output: 0, cacheRead: 0, cacheCreation: 0, costUsd: 0)
+
+let backend = AppAPI.QuestionItem(question: "Which cache backend?", options: [.init(label: "In memory"), .init(label: "On disk")])
+
+@Test func questionNeed() throws {
+    let needs = Need.of(projects: [], sessions: [session("s-1", state: "blocked", reason: "question", question: menu([backend]))])
+    let n = try #require(needs.first)
+    #expect(needs.count == 1)
+    #expect(n.kind == .question)
+    #expect(n.title == "T812 asks a question")
+    #expect(n.detail == "terminatr · Cache layer")
+    // The question's words are text, kept off the title and detail.
+    #expect(n.text == "Which cache backend?")
+    #expect(!n.title.contains("cache backend") && !n.detail.contains("cache backend"))
+    let a = try #require(n.answer)
+    #expect(a.options == ["In memory", "On disk"])
+    #expect(a.params("On disk") == AppAPI.AnswerParams(id: "s-1", index: 0, answer: "On disk", question: "Which cache backend?"))
+}
+
+/// Buttons only for one open, single-select question of a menu that
+/// isn't an escape's.
+@Test func answerable() {
+    let multi = AppAPI.QuestionItem(question: "Which ones?", multiSelect: true, options: [.init(label: "A"), .init(label: "B")])
+    let done = AppAPI.QuestionItem(question: "First?", options: [.init(label: "Yes")], answered: true, answer: "Yes")
+    let free = AppAPI.QuestionItem(question: "Why?")
+    #expect(Need.answerable("s", menu([backend], escape: true)) == nil)
+    #expect(Need.answerable("s", menu([multi])) == nil)
+    #expect(Need.answerable("s", menu([backend, multi])) == nil)
+    #expect(Need.answerable("s", menu([free])) == nil)
+    // The one left open of two: its index is the menu's.
+    #expect(Need.answerable("s", menu([done, backend]))?.index == 1)
+    let many = AppAPI.QuestionItem(question: "Pick", options: (1...6).map { .init(label: "o\($0)") })
+    #expect(Need.answerable("s", menu([many]))?.options.count == Need.maxButtons)
+}
+
+@Test func sessionNeeds() {
+    let approval = Need.of(projects: [], sessions: [session("s-2", state: "blocked", reason: "permission")])
+    #expect(approval.map(\.id) == ["approval:s-2"])
+    #expect(approval.first?.title == "T812 needs approval")
+    let escape = Need.of(projects: [], sessions: [session("s-2", state: "blocked", reason: "permission", escape: true)])
+    #expect(escape.first?.title == "T812 asks to run outside the sandbox")
+    // A paired server's pane is its user's there.
+    #expect(Need.of(projects: [], sessions: [session("mini/s-3", state: "blocked", reason: "permission", server: "mini")]).isEmpty)
+
+    var held = session("s-4", state: "idle")
+    held.queuedPrompts = 2
+    held.queueHeld = "prompt box not empty"
+    held.queueHeldSince = t0
+    #expect(Need.of(projects: [], sessions: [held], now: t0.addingTimeInterval(30)).isEmpty)
+    let h = Need.of(projects: [], sessions: [held], now: t0.addingTimeInterval(61))
+    #expect(h.map(\.kind) == [.held])
+    #expect(h.first?.title == "T812's 2 prompts are held")
+}
+
+@Test func projectNeeds() {
+    let thread = AppAPI.Thread(record: AppAPI.ThreadRecord(id: "t-0670", title: "Sidebar CI", agent: "claude", worktree: "/w",
+                                                           state: "working", session: "s-9", created: t0, reports: 0,
+                                                           reportAcked: 0, usage: noUsage),
+                               checks: "fail", pr: 801, task: AppAPI.Task(id: 809, ref: "T809", title: "Sidebar CI", status: "doing"))
+    let p = AppAPI.Project(slug: "terminatr",
+                           needsYou: [AppAPI.Task(id: 806, ref: "T806", title: "Docs pins", status: "review"),
+                                      AppAPI.Task(id: 807, ref: "T807", title: "Paste guard", status: "blocked")],
+                           questions: 2, threads: [thread], usage: noUsage)
+    let needs = Need.of(projects: [p], sessions: [])
+    #expect(needs.map(\.title) == ["terminatr's coordinator has 2 questions", "T806 is ready to review",
+                                   "T807 is blocked", "T809 PR #801 checks fail"])
+    #expect(needs.map(\.kind) == [.question, .review, .blocked, .checks])
+    #expect(needs.last?.session == "s-9")
+}
+
+@Test func peerNeeds() {
+    let peer = AppAPI.Peer(alias: "mini", state: "up", projects: [
+        AppAPI.PeerProject(project: "acme", needsYou: 2, threads: 1, ready: 0),
+        AppAPI.PeerProject(project: "old", needsYou: 1, threads: 0, ready: 0, stale: true),
+    ], shareWaits: 1)
+    let needs = Need.of(projects: [], sessions: [], peers: [peer])
+    #expect(needs.map(\.id) == ["share:mini", "paired:mini/acme"])
+    #expect(needs.last?.title == "mini › acme: 2 need you")
+}
+
+@Test func tracker() {
+    func need(_ id: String) -> Need { Need(id: id, kind: .review, project: "p", title: id, detail: "") }
+    var t = NeedTracker()
+    // The first look learns: nothing is fresh.
+    #expect(t.update([need("a"), need("b")]).fresh.isEmpty)
+    let next = t.update([need("b"), need("c")])
+    #expect(next.fresh.map(\.id) == ["c"])
+    #expect(next.gone == ["a"])
+    #expect(t.update([need("b"), need("c")]).fresh.isEmpty)
+    t.reset()
+    #expect(t.update([need("d")]).fresh.isEmpty)
+}

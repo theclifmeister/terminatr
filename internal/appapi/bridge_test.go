@@ -153,6 +153,10 @@ func TestBridge(t *testing.T) {
 	if err := c.Call(proto.MethodSessionList, nil, &list); err != nil || list.Sessions == nil || list.Notices == nil || list.Version == "" {
 		t.Fatalf("session.list: %+v %v", list, err)
 	}
+	var peers appapi.PeerList
+	if err := c.Call(proto.MethodPeerList, nil, &peers); err != nil || peers.Peers == nil {
+		t.Fatalf("peer.list: %+v %v", peers, err)
+	}
 	var asked appapi.TaskAskResult
 	if err := c.Call(proto.MethodTaskAsk, appapi.TaskAskParams{Project: "web", Task: "T1", Kind: "accept"}, &asked); err != nil || !asked.Asked {
 		t.Fatalf("task.ask: %+v %v", asked, err)

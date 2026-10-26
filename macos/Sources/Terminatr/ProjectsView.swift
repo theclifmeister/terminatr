@@ -22,9 +22,14 @@ struct ProjectsView: View {
         .foregroundStyle(theme.ink)
         .background { Backdrop() }
         .onChange(of: model.projects.map(\.slug), initial: true) { _, slugs in
-            if selected.map({ !slugs.contains($0) }) ?? true {
+            if let f = model.focus, slugs.contains(f), selected == nil {
+                selected = f
+            } else if selected.map({ !slugs.contains($0) }) ?? true {
                 selected = slugs.first
             }
+        }
+        .onChange(of: model.focus) { _, f in
+            if let f { selected = f }
         }
     }
 
