@@ -101,6 +101,9 @@ func TestScreenFixtures(t *testing.T) {
 	}
 	for _, dir := range dirs {
 		name := filepath.Base(dir)
+		if name == "transcripts" {
+			continue // TestTranscriptDrift's
+		}
 		t.Run(name, func(t *testing.T) {
 			a, ok := reg.Get(name)
 			if !ok {
