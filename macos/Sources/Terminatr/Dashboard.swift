@@ -345,6 +345,7 @@ private struct NextStepCard: View {
                             .font(theme.body(.callout))
                             .foregroundStyle(theme.muted)
                         Button("New Task…") { app.showNewTask() }
+                            .accessibilityLabel("New task for \(project.slug)")
                     }
                     .padding(.top, 6)
                 } else {
@@ -657,6 +658,7 @@ struct Placeholder: View {
                     .frame(maxWidth: 440)
                 HStack {
                     Button("Retry") { model.connect() }
+                    .accessibilityLabel("Retry the connection to terminatr")
                         .buttonStyle(.borderedProminent)
                         .tint(theme.action)
                     SettingsLink { Text("Settings…") }

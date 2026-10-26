@@ -32,6 +32,7 @@ struct MenuBarView: View {
                             .foregroundStyle(theme.muted)
                             .lineLimit(4)
                         Button("Retry") { model.connect() }
+                            .accessibilityLabel("Retry the connection to terminatr")
                             .buttonStyle(.borderedProminent)
                             .tint(theme.action)
                     }
