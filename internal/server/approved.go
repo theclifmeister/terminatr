@@ -430,8 +430,8 @@ func envValue(env []string, key string) string {
 
 // serveCommandRun answers command.run (approved commands, above) for
 // the caller the pid walk finds.
-func (s *Server) serveCommandRun(c net.Conn, br *bufio.Reader, req proto.Request, peerPID int) {
-	s.commandRun(c, br, req, s.callerOf(peerPID))
+func (s *Server) serveCommandRun(c net.Conn, br *bufio.Reader, req proto.Request, cc callCtx) {
+	s.commandRun(c, br, req, s.callerOf(cc.peerPID))
 }
 
 // commandRun answers command.run for caller who.

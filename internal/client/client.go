@@ -69,9 +69,16 @@ type Client struct {
 }
 
 // Dial connects to the socket and performs the handshake for kind.
-func Dial(p Paths, kind proto.Kind) (*Client, error) { return dial(p, kind, proto.Protocol) }
+func Dial(p Paths, kind proto.Kind) (*Client, error) { return dial(p, kind, proto.Protocol, "") }
 
-// dial is Dial claiming protocol, which Stop lowers to an older server's.
+// DialAs is Dial for a control connection whose hello names its
+// console (proto.Hello.Client): proto.ClientApp for tm app bridge.
+func DialAs(p Paths, name string) (*Client, error) {
+	return dial(p, proto.KindControl, proto.Protocol, name)
+}
+
+// dial is Dial claiming protocol, which Stop lowers to an older server's,
+// and naming the console name in its hello.
 // A control or attach connection tries the human socket first, which
 // attach and the human-only methods need (docs/SPEC.md §11.1): where it
 // can't connect (an agent's sandbox, an older server) it uses the server
@@ -79,21 +86,26 @@ func Dial(p Paths, kind proto.Kind) (*Client, error) { return dial(p, kind, prot
 // to answer there is too slow on both. An agent's session doesn't try:
 // its sandbox would report each refused connect to the agent, as a
 // prompt to run tm outside the sandbox.
-func dial(p Paths, kind proto.Kind, protocol int) (*Client, error) {
+func dial(p Paths, kind proto.Kind, protocol int, name string) (*Client, error) {
 	if (kind == proto.KindControl || kind == proto.KindAttach) && p.Socket != "" && !caller.FromEnv().IsAgent() {
-		c, err := DialAt(p.HumanSocket(), kind, protocol)
+		c, err := dialAt(p.HumanSocket(), kind, protocol, name)
 		var ne net.Error
 		var me *proto.MismatchError
 		if err == nil || errors.As(err, &ne) && ne.Timeout() || errors.As(err, &me) {
 			return c, err
 		}
 	}
-	return DialAt(p.Socket, kind, protocol)
+	return dialAt(p.Socket, kind, protocol, name)
 }
 
 // DialAt connects to the socket at sock, claiming protocol, and
 // performs the handshake: Dial at one socket.
 func DialAt(sock string, kind proto.Kind, protocol int) (*Client, error) {
+	return dialAt(sock, kind, protocol, "")
+}
+
+// dialAt is DialAt naming the console name in its hello.
+func dialAt(sock string, kind proto.Kind, protocol int, name string) (*Client, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), UnresponsiveTimeout)
 	conn, err := ipc.Dial(ctx, ipc.Addr(sock))
 	cancel()
@@ -102,7 +114,7 @@ func DialAt(sock string, kind proto.Kind, protocol int) (*Client, error) {
 	}
 	c := &Client{conn: conn, br: bufio.NewReader(conn)}
 	conn.SetDeadline(time.Now().Add(UnresponsiveTimeout))
-	hello := proto.Hello{Protocol: protocol, Version: version.Version, Build: version.BuildID(), Kind: proto.Kind(kind)}
+	hello := proto.Hello{Protocol: protocol, Version: version.Version, Build: version.BuildID(), Kind: proto.Kind(kind), Client: name}
 	if err := proto.WriteLine(conn, hello); err != nil {
 		conn.Close()
 		return nil, err
@@ -125,8 +137,12 @@ func DialAt(sock string, kind proto.Kind, protocol int) (*Client, error) {
 
 // Connect opens a control connection, handling stale sockets and, with
 // autostart, starting the server when none is running.
-func Connect(p Paths, autostart bool) (*Client, error) {
-	c, err := Dial(p, proto.KindControl)
+func Connect(p Paths, autostart bool) (*Client, error) { return ConnectAs(p, autostart, "") }
+
+// ConnectAs is Connect whose connection names its console name in its
+// hello (DialAs).
+func ConnectAs(p Paths, autostart bool, name string) (*Client, error) {
+	c, err := DialAs(p, name)
 	if err == nil {
 		return c, nil
 	}
@@ -157,7 +173,7 @@ func Connect(p Paths, autostart bool) (*Client, error) {
 		if err := StartDetached(p); err != nil {
 			return nil, err
 		}
-		c, err := Dial(p, proto.KindControl)
+		c, err := DialAs(p, name)
 		if c != nil {
 			c.Started = true
 		}
@@ -167,7 +183,7 @@ func Connect(p Paths, autostart bool) (*Client, error) {
 		deadline := time.Now().Add(UnresponsiveTimeout)
 		for time.Now().Before(deadline) {
 			time.Sleep(50 * time.Millisecond)
-			if c, err := Dial(p, proto.KindControl); err == nil {
+			if c, err := DialAs(p, name); err == nil {
 				return c, nil
 			} else if errors.As(err, &verr) {
 				return nil, err

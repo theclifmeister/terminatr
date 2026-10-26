@@ -40,7 +40,7 @@ var paneVTWindow = proto.PaneVTWindow
 // the rest of it is left, and the repaint that replaced it follows.
 var errPaneStale = errors.New("stale")
 
-func (s *Server) servePaneVT(c net.Conn, br *bufio.Reader, req proto.Request, peerPID int) {
+func (s *Server) servePaneVT(c net.Conn, br *bufio.Reader, req proto.Request, cc callCtx) {
 	var p proto.PaneVTParams
 	if perr := decodeParams(req.Params, &p); perr != nil {
 		refuse(c, req, perr)
@@ -74,9 +74,9 @@ func (s *Server) servePaneVT(c net.Conn, br *bufio.Reader, req proto.Request, pe
 	}
 	console := p.Console
 	if console == "" {
-		console = fmt.Sprintf("pane.vt %d", peerPID)
+		console = fmt.Sprintf("pane.vt %d", cc.peerPID)
 	}
-	who := s.whoFor(peerPID)
+	who := cc.who // the Mac app's bridge journaled as such (viaApp)
 	s.log.Printf("session %s: pane.vt client attached", sess.ID())
 
 	v := &paneVT{c: c, sub: sub, window: window}

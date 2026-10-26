@@ -32,7 +32,9 @@ import (
 // "<alias>/<session>", and SessionInfo has Server and ViewOnly. 17:
 // projects.watch, the sidebars' data of every project from the server.
 // 18: projects.watch {detail}, the dashboard's data of every project.
-const Protocol = 18
+// 19: session.approve and task.ask, and a control hello's Client (the
+// Mac app's bridge, journaled as "human (app)").
+const Protocol = 19
 
 // Kind is what a connection is for.
 type Kind string
@@ -49,13 +51,21 @@ type Hello struct {
 	Version  string `json:"version"`
 	Build    string `json:"build"`          // version.BuildID()
 	Kind     Kind   `json:"kind,omitempty"` // client only
-	Bin      string `json:"bin,omitempty"`  // server only: its executable, for re-exec
-	PID      int    `json:"pid,omitempty"`  // server only
+	// Client names the console a control connection serves, client
+	// only: ClientApp for tm app bridge (docs/SPEC.md §3.8). On the
+	// human socket the server journals the connection's acts as the
+	// human's through it ("human (app)"); it grants nothing.
+	Client string `json:"client,omitempty"`
+	Bin    string `json:"bin,omitempty"` // server only: its executable, for re-exec
+	PID    int    `json:"pid,omitempty"` // server only
 	// Caps are the server's capabilities beside its protocol (CapPaneVT,
 	// CapTranscript): a client of another build checks for one before it
 	// calls what it names, without the protocol going up.
 	Caps []string `json:"caps,omitempty"` // server only
 }
+
+// ClientApp is Hello.Client for the Mac app's bridge.
+const ClientApp = "app"
 
 // The server's hello capabilities.
 const (

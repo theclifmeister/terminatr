@@ -71,3 +71,25 @@ type CLIRunResult struct {
 	Stderr string `json:"stderr"`
 	Code   int    `json:"code"`
 }
+
+// MethodTaskAsk asks a project's coordinator to act on a task, as the
+// dashboard's D, A and X do (docs/SPEC.md §4, Asking the coordinator):
+// an inbox item the coordinator takes as the user's word, checked
+// against the live board and journaled. The human's.
+const MethodTaskAsk = "task.ask"
+
+// TaskAskParams are the params of task.ask: project's task ("T12"),
+// what to ask (project.KindDelegate, KindAccept or KindSendBack) and,
+// for a send-back, the user's note.
+type TaskAskParams struct {
+	Project string `json:"project"`
+	Task    string `json:"task"`
+	Kind    string `json:"kind"`
+	Note    string `json:"note,omitempty"`
+}
+
+// TaskAskResult says whether the item was dropped: false when one
+// already asks the coordinator something of the task.
+type TaskAskResult struct {
+	Asked bool `json:"asked"`
+}
