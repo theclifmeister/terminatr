@@ -150,6 +150,9 @@ type Server struct {
 	alerts atomic.Uint64
 	// paneVTs counts the open pane.vt streams (maxPaneVTs).
 	paneVTs atomic.Int32
+	// transcripts counts the open transcript.watch streams
+	// (maxTranscripts).
+	transcripts atomic.Int32
 
 	agents    *agent.Registry
 	agentErrs []string

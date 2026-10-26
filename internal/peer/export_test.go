@@ -227,3 +227,20 @@ func TestWatchCapThroughRelay(t *testing.T) {
 		t.Error("called a server that isn't paired")
 	}
 }
+
+// TestLinkServesNoLocalStreams: a link answers peer.* methods alone, so
+// the human's local streams (transcript.watch, pane.vt) never cross one
+// (docs/SPEC.md §3.3: no transcripts across links).
+func TestLinkServesNoLocalStreams(t *testing.T) {
+	d := &dispatcher{ex: &fakeExport{}, msgs: &fakeMessages{}, panes: &fakeHost{}, panesHere: func(string) {}}
+	for m := range d.methods() {
+		if !strings.HasPrefix(m, "peer.") {
+			t.Errorf("a link serves %s", m)
+		}
+	}
+	for _, m := range []string{proto.MethodTranscriptWatch, proto.MethodPaneVT} {
+		if _, ok := d.methods()[m]; ok {
+			t.Errorf("a link serves %s", m)
+		}
+	}
+}
