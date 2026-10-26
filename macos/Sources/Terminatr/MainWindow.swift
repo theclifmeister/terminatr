@@ -20,9 +20,12 @@ struct MainWindow: View {
             detail
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background { Backdrop() }
-                .inspector(isPresented: Binding(get: { app.inspector && app.selectedRef != nil }, set: { app.inspector = $0 })) {
+                // A project has no inspector: its hiding isn't the user's.
+                .inspector(isPresented: Binding(get: { app.inspector && app.selectedRef != nil },
+                                                set: { if app.selectedRef != nil { app.inspector = $0 } })) {
                     inspector
                         .inspectorColumnWidth(min: 240, ideal: 270, max: 360)
+                        .background { Frost() }
                 }
         }
         .tint(theme.action)
@@ -89,5 +92,20 @@ struct NewWindowButton: View {
         Button("Open in New Window") {
             openWindow(id: TerminatrApp.sessionWindow, value: ref)
         }
+    }
+}
+
+/// The sidebar's and the inspector's ground: the theme's mesh under the
+/// system's frost and the theme's tint, as Bloom draws its side panels.
+struct Frost: View {
+    @Environment(\.theme) private var theme
+
+    var body: some View {
+        ZStack {
+            Backdrop()
+            Rectangle().fill(.ultraThinMaterial)
+            theme.sidebarTint
+        }
+        .ignoresSafeArea()
     }
 }

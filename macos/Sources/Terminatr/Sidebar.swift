@@ -6,13 +6,14 @@ import TerminatrKit
 /// each paired server's shared projects with theirs (as the TUI's
 /// sidebar has them, alias/session). A project shows its dashboard, a
 /// coordinator or thread its session; a need shows what it names. Each
-/// section folds, and stays so across launches.
+/// section folds, and stays so across launches. The selection is drawn
+/// as Bloom's violet pill, not the List's own (the system accent).
 struct Sidebar: View {
     @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
 
     var body: some View {
-        List(selection: Binding(get: { app.nav.selection }, set: { if let s = $0 { app.select(s) } })) {
+        List {
             if !app.needs.isEmpty {
                 Section(isExpanded: expanded(Navigation.needsSection)) {
                     ForEach(app.needs) { n in
@@ -48,14 +49,7 @@ struct Sidebar: View {
         }
         .listStyle(.sidebar)
         .scrollContentBackground(.hidden)
-        .background {
-            ZStack {
-                Backdrop()
-                Rectangle().fill(.ultraThinMaterial)
-                theme.sidebarTint
-            }
-            .ignoresSafeArea()
-        }
+        .background { Frost() }
         .safeAreaInset(edge: .bottom) {
             StatusLine()
                 .padding(12)
@@ -83,7 +77,7 @@ struct Sidebar: View {
             }
         } label: {
             ProjectRow(project: p, selected: app.nav.selection == sel)
-                .tag(sel)
+                .selectable(sel)
         }
     }
 
@@ -106,7 +100,7 @@ struct Sidebar: View {
             }
         }
         .foregroundStyle(on ? theme.onAction : theme.ink)
-        .tag(sel)
+        .selectable(sel)
         .contextMenu {
             if case .session(let r) = sel { NewWindowButton(ref: r) }
         }
@@ -150,7 +144,7 @@ struct Sidebar: View {
                 }
             }
             .foregroundStyle(on ? theme.onAction : theme.ink)
-            .tag(sel)
+            .selectable(sel)
         }
         .opacity(peer.state == "up" && !p.stale ? 1 : 0.55)
     }
@@ -213,5 +207,35 @@ private struct NeedLine: View {
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
         .accessibilityHint(NeedRow.verb(need.kind))
+    }
+}
+
+private struct Selectable: ViewModifier {
+    @Environment(AppModel.self) private var app
+    @Environment(\.theme) private var theme
+    let sel: Selection
+
+    func body(content: Content) -> some View {
+        let on = app.nav.selection == sel
+        content
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            .onTapGesture { app.select(sel) }
+            .listRowBackground(
+                RoundedRectangle(cornerRadius: 9)
+                    .fill(on ? theme.action : .clear)
+                    .shadow(color: on ? theme.action.opacity(0.5) : .clear, radius: 7, y: 4)
+                    .padding(.horizontal, 10)
+            )
+            .accessibilityAddTraits(on ? [.isButton, .isSelected] : .isButton)
+            .accessibilityAction { app.select(sel) }
+    }
+}
+
+private extension View {
+    /// A sidebar row that shows sel in the window: a click selects it,
+    /// and the selected one wears the pill.
+    func selectable(_ sel: Selection) -> some View {
+        modifier(Selectable(sel: sel))
     }
 }

@@ -24,10 +24,10 @@ struct TerminatrApp: App {
         Window("terminatr", id: Self.mainWindow) {
             MainWindow()
                 .environment(delegate.model)
-                .frame(minWidth: 860, minHeight: 520)
+                .frame(minWidth: 980, minHeight: 540)
                 .task { delegate.model.start() }
         }
-        .defaultSize(width: 1240, height: 780)
+        .defaultSize(width: 1280, height: 800)
         .commands { GoCommands(model: delegate.model) }
 
         // Only Open in New Window opens one: no New Window command.

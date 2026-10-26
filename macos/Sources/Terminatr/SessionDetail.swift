@@ -90,10 +90,10 @@ struct SessionWindow: View {
 
     var body: some View {
         SessionDetail(model: model)
-            .padding(.top, 22)
             .inspector(isPresented: $inspector) {
                 Inspector(model: model, session: app.session(of: model))
                     .inspectorColumnWidth(min: 240, ideal: 270, max: 360)
+                    .background { Frost() }
             }
             .foregroundStyle(theme.ink)
             .background { Backdrop() }
@@ -144,10 +144,12 @@ struct HeaderTitle: View {
                 Text(t?.record.title ?? ref.thread)
                     .font(theme.title(19, .heavy))
                     .lineLimit(1)
+                    .layoutPriority(-1)
                 Text(ref.thread)
                     .font(theme.mono(12))
                     .foregroundStyle(theme.muted)
                     .textSelection(.enabled)
+                    .fixedSize()
             }
         }
     }
