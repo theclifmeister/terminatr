@@ -15,27 +15,35 @@ import TerminatrKit
 /// names. Each section folds, and stays so across launches. Every
 /// project and session row has its state as a dot, and what waits on
 /// the user (allow?, asks, …) as a filled pill (T752). The selection is
-/// drawn as Bloom's violet pill, not the List's own (the system accent).
+/// the List's (T748 milestone E): ↑ ↓ move it, letters typed select the
+/// row they begin, ← folds a project (or goes up to it from its
+/// session) and → unfolds it. It is drawn as Bloom's violet pill, not
+/// the List's own (the system accent). The filter field on top (⌥⌘F)
+/// keeps the rows that match it, every one of them.
 struct Sidebar: View {
     @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
+    @State private var typing = TypeSelect()
+    /// The List has the keys from launch, not the filter field.
+    @FocusState private var listFocused: Bool
 
     var body: some View {
-        List {
-            if !app.needs.isEmpty {
+        List(selection: selection) {
+            let needs = shownNeeds
+            if !needs.isEmpty {
                 Section(isExpanded: expanded(Navigation.needsSection)) {
-                    let all = app.nav.unfolded.contains(Navigation.moreKey())
-                    let shown = all ? app.needs : Array(app.needs.prefix(SidebarTree.needsShown))
+                    let all = filtering || app.nav.unfolded.contains(Navigation.moreKey())
+                    let shown = all ? needs : Array(needs.prefix(SidebarTree.needsShown))
                     ForEach(shown) { n in
                         NeedLine(need: n) { app.open(project: n.project, session: n.session) }
                     }
-                    if app.needs.count > SidebarTree.needsShown {
-                        more(Navigation.moreKey(), all ? "Show fewer" : SidebarTree.moreNeeds(Array(app.needs.dropFirst(SidebarTree.needsShown))), unfolded: all)
+                    if !filtering, needs.count > SidebarTree.needsShown {
+                        more(Navigation.moreKey(), all ? "Show fewer" : SidebarTree.moreNeeds(Array(needs.dropFirst(SidebarTree.needsShown))), unfolded: all)
                     }
                 } header: {
                     HStack(spacing: 6) {
                         Text("Needs you")
-                        Text("\(app.needs.count)")
+                        Text("\(needs.count)")
                             .font(theme.mono(10.5, .medium))
                             .padding(.horizontal, 5)
                             .background(theme.attention, in: Capsule())
@@ -43,17 +51,20 @@ struct Sidebar: View {
                     }
                 }
             }
-            Section(isExpanded: expanded(Navigation.sectionKey(server: ""))) {
-                ForEach(app.activeProjects, id: \.slug) { p in
-                    project(p)
+            let active = shown(app.activeProjects)
+            if !filtering || !active.isEmpty {
+                Section(isExpanded: expanded(Navigation.sectionKey(server: ""))) {
+                    ForEach(active, id: \.slug) { p in
+                        project(p)
+                    }
+                } header: {
+                    // "This server" only tells it from paired ones.
+                    Text(app.peers.isEmpty ? "Projects" : "This server")
                 }
-            } header: {
-                // "This server" only tells it from paired ones.
-                Text(app.peers.isEmpty ? "Projects" : "This server")
             }
-            let inactive = app.inactiveProjects
+            let inactive = shown(app.inactiveProjects)
             if !inactive.isEmpty {
-                Section(isExpanded: Binding(get: { app.nav.showInactive }, set: { app.nav.showInactive = $0 })) {
+                Section(isExpanded: Binding(get: { filtering || app.nav.showInactive }, set: { app.nav.showInactive = $0 })) {
                     ForEach(inactive, id: \.slug) { p in
                         project(p)
                     }
@@ -63,18 +74,39 @@ struct Sidebar: View {
                 }
             }
             ForEach(app.peers, id: \.alias) { peer in
-                Section(isExpanded: expanded(Navigation.sectionKey(server: peer.alias))) {
-                    ForEach(peer.projects, id: \.project) { p in
-                        remote(peer, p)
+                let projects = shown(peer)
+                if !filtering || !projects.isEmpty {
+                    Section(isExpanded: expanded(Navigation.sectionKey(server: peer.alias))) {
+                        ForEach(projects, id: \.project) { p in
+                            remote(peer, p)
+                        }
+                    } header: {
+                        remoteHeader(peer)
                     }
-                } header: {
-                    remoteHeader(peer)
                 }
+            }
+            if filtering, rows.isEmpty, needs.isEmpty {
+                Text("Nothing matches “\(app.filter)”")
+                    .font(.system(size: 12))
+                    .foregroundStyle(theme.muted)
             }
         }
         .listStyle(.sidebar)
         .scrollContentBackground(.hidden)
+        .focused($listFocused)
+        .onAppear { listFocused = true }
+        .onKeyPress(keys: [.leftArrow, .rightArrow]) { press in
+            fold(open: press.key == .rightArrow) ? .handled : .ignored
+        }
+        .onKeyPress(characters: .alphanumerics, phases: .down) { press in
+            typeSelect(press)
+        }
         .background { Frost() }
+        .safeAreaInset(edge: .top) {
+            FilterField { listFocused = true }
+                .padding(.horizontal, 12)
+                .padding(.bottom, 4)
+        }
         .safeAreaInset(edge: .bottom) {
             // Only when something is wrong: all well, it takes no row.
             if StatusLine.shows(app) {
@@ -83,6 +115,123 @@ struct Sidebar: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
+    }
+
+    /// The List's selection is the window's: a row picked by click or
+    /// key shows its project or session.
+    private var selection: Binding<Selection?> {
+        Binding(get: { app.nav.selection }, set: { s in
+            if let s, s != app.nav.selection { app.select(s) }
+        })
+    }
+
+    // MARK: the filter
+
+    private var filtering: Bool { !app.filter.trimmingCharacters(in: .whitespaces).isEmpty }
+
+    private var shownNeeds: [Need] {
+        filtering ? app.needs.filter { SidebarTree.matches(app.filter, $0.title, $0.detail) } : app.needs
+    }
+
+    /// The projects the filter keeps: by name, or by a thread it finds.
+    private func shown(_ projects: [AppAPI.Project]) -> [AppAPI.Project] {
+        guard filtering else { return projects }
+        return projects.filter { SidebarTree.matches(app.filter, $0.slug) || !SidebarTree.threads(of: $0, matching: app.filter).isEmpty }
+    }
+
+    /// A paired server's projects the filter keeps: by name or server,
+    /// or by a session it finds.
+    private func shown(_ peer: AppAPI.Peer) -> [AppAPI.PeerProject] {
+        guard filtering else { return peer.projects }
+        return peer.projects.filter { p in
+            SidebarTree.matches(app.filter, p.project, peer.alias, peer.name) || !sessions(peer, p).isEmpty
+        }
+    }
+
+    /// A paired server's project's sessions with their refs: those the
+    /// filter finds, all of them when it finds the project.
+    private func sessions(_ peer: AppAPI.Peer, _ p: AppAPI.PeerProject) -> [(AppAPI.PeerSession, SessionRef)] {
+        let all = p.sessions.compactMap { s in SessionRef(s, of: peer.alias).map { (s, $0) } }
+        guard filtering, !SidebarTree.matches(app.filter, p.project, peer.alias, peer.name) else { return all }
+        return all.filter { s, r in SidebarTree.matches(app.filter, s.task, r.thread, r.isCoordinator ? "coordinator" : "") }
+    }
+
+    /// What a project of this server lists under it: its coordinator
+    /// row, its threads, and how many fold into "N more".
+    private func listing(_ p: AppAPI.Project) -> (open: Bool, coordinator: Bool, threads: [AppAPI.Thread], more: Int) {
+        let coordinator = app.coordinatorSession(p.slug)
+        let state = Attention.of(coordinator: coordinator, in: p)
+        if filtering {
+            let found = SidebarTree.threads(of: p, matching: app.filter)
+            return (!found.isEmpty, false, found, 0)
+        }
+        guard SidebarTree.opens(p, nav: app.nav, needs: app.needs(of: p.slug).count) else { return (false, false, [], 0) }
+        let all = app.nav.unfolded.contains(Navigation.moreKey(project: p.slug))
+        let selected = app.selectedRef.flatMap { $0.server.isEmpty && $0.project == p.slug ? $0.thread : nil }
+        let (shown, more) = SidebarTree.threads(of: p, selected: selected, unfolded: all) { app.attention($0) }
+        return (true, coordinator != nil || state.waits, shown, more)
+    }
+
+    // MARK: keys
+
+    /// The rows the List can select, in its order, with what a letter
+    /// typed matches: what type-to-select moves through.
+    private var rows: [(Selection, String)] {
+        var out: [(Selection, String)] = []
+        func add(_ projects: [AppAPI.Project]) {
+            for p in projects {
+                out.append((.project(p.slug), p.slug))
+                let l = listing(p)
+                if l.coordinator { out.append((.session(SessionRef(project: p.slug)), "Coordinator")) }
+                out += l.threads.map { (.session(SessionRef(project: p.slug, thread: $0.record.id)), $0.record.title) }
+            }
+        }
+        if !app.nav.collapsed.contains(Navigation.sectionKey(server: "")) { add(shown(app.activeProjects)) }
+        if filtering || app.nav.showInactive { add(shown(app.inactiveProjects)) }
+        for peer in app.peers where !app.nav.collapsed.contains(Navigation.sectionKey(server: peer.alias)) {
+            for p in shown(peer) {
+                out.append((.project(p.project, server: peer.alias), p.project))
+                if !app.nav.collapsed.contains(Navigation.sectionKey(server: peer.alias, project: p.project)) {
+                    out += sessions(peer, p).map { (.session($1), $1.isCoordinator ? "Coordinator" : $1.thread) }
+                }
+            }
+        }
+        return out
+    }
+
+    /// → unfolds the selected project, ← folds it, or from one of its
+    /// sessions goes up to it.
+    private func fold(open: Bool) -> Bool {
+        switch app.nav.selection {
+        case .project(let slug, let server):
+            let key = Navigation.sectionKey(server: server, project: slug)
+            if !server.isEmpty {
+                // A paired server's project is a disclosure group.
+                if open { app.nav.collapsed.remove(key) } else { app.nav.collapsed.insert(key) }
+            } else if open {
+                app.nav.unfold(key)
+            } else {
+                app.nav.fold(key)
+            }
+            return true
+        case .session(let ref) where !open:
+            app.select(.project(ref.project, server: ref.server))
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// Letters typed select the next row that begins with them.
+    private func typeSelect(_ press: KeyPress) -> KeyPress.Result {
+        guard press.modifiers.isDisjoint(with: [.command, .control, .option]) else { return .ignored }
+        let rows = rows
+        let typed = typing.type(press.characters)
+        let current = rows.firstIndex { $0.0 == app.nav.selection }
+        if let i = TypeSelect.match(typed, in: rows.map(\.1), from: current) {
+            app.select(rows[i].0)
+        }
+        return .handled
     }
 
     private func expanded(_ key: String) -> Binding<Bool> {
@@ -117,35 +266,33 @@ struct Sidebar: View {
     // MARK: this server's
 
     /// A project's line, and under it, when it is selected or needs the
-    /// user, its coordinator (when it runs or asks) and its threads.
+    /// user (or → unfolded it), its coordinator (when it runs or asks)
+    /// and its threads; while filtering, the threads the filter finds.
     @ViewBuilder
     private func project(_ p: AppAPI.Project) -> some View {
         let sel = Selection.project(p.slug)
         let needs = app.needs(of: p.slug).count
-        let coordinator = app.coordinatorSession(p.slug)
-        let state = Attention.of(coordinator: coordinator, in: p)
+        let state = Attention.of(coordinator: app.coordinatorSession(p.slug), in: p)
+        let l = listing(p)
         ProjectRow(project: p, dot: theme.colour(state.tone), state: state.word, needs: needs, selected: app.nav.selection == sel)
             .selectable(sel)
-        if SidebarTree.expands(p, selection: app.nav.selection, needs: needs) {
-            if coordinator != nil || state.waits {
+        if l.open {
+            if l.coordinator {
                 row(.session(SessionRef(project: p.slug)), label: "Coordinator", ref: nil,
                     tag: state.waits ? (state.word, state.tone) : nil, dot: theme.colour(state.tone))
             }
             let key = Navigation.moreKey(project: p.slug)
-            let all = app.nav.unfolded.contains(key)
-            let selected = app.selectedRef.flatMap { $0.server.isEmpty && $0.project == p.slug ? $0.thread : nil }
-            let (shown, more) = SidebarTree.threads(of: p, selected: selected, unfolded: all) { app.attention($0) }
             // Keyed with the project: thread ids repeat across projects,
             // and the List flattens every project's rows into one.
-            ForEach(shown, id: \.record.id) { t in
+            ForEach(l.threads, id: \.record.id) { t in
                 row(.session(SessionRef(project: p.slug, thread: t.record.id)), label: t.record.title, ref: t.task?.ref,
                     tag: tag(t), dot: theme.colour(app.attention(t).tone))
                     .id("\(p.slug)/\(t.record.id)")
             }
-            if more > 0 {
-                self.more(key, more == 1 ? "1 more thread" : "\(more) more threads", unfolded: false)
+            if l.more > 0 {
+                self.more(key, l.more == 1 ? "1 more thread" : "\(l.more) more threads", unfolded: false)
                     .padding(.leading, 14)
-            } else if all, !p.threads.isEmpty {
+            } else if !filtering, app.nav.unfolded.contains(key), !p.threads.isEmpty {
                 self.more(key, "Show fewer", unfolded: true)
                     .padding(.leading, 14)
             }
@@ -209,7 +356,7 @@ struct Sidebar: View {
         let sel = Selection.project(p.project, server: peer.alias)
         let on = app.nav.selection == sel
         return DisclosureGroup(isExpanded: expanded(Navigation.sectionKey(server: peer.alias, project: p.project))) {
-            ForEach(p.sessions.compactMap { s in SessionRef(s, of: peer.alias).map { (s, $0) } }, id: \.0.id) { s, r in
+            ForEach(sessions(peer, p), id: \.0.id) { s, r in
                 row(.session(r), label: r.isCoordinator ? "Coordinator" : r.thread, ref: s.task.isEmpty ? nil : s.task,
                     tag: tag(s), dot: theme.colour(tone(s)))
             }
@@ -319,7 +466,7 @@ private struct Selectable: ViewModifier {
         content
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
-            .onTapGesture { app.select(sel) }
+            .tag(sel)
             .listRowBackground(
                 RoundedRectangle(cornerRadius: 9)
                     .fill(on ? theme.action : .clear)
@@ -332,9 +479,55 @@ private struct Selectable: ViewModifier {
 }
 
 private extension View {
-    /// A sidebar row that shows sel in the window: a click selects it,
-    /// and the selected one wears the pill.
+    /// A sidebar row that shows sel in the window: the List selects it
+    /// (a click, ↑ ↓, a letter typed), and the selected one wears the
+    /// pill.
     func selectable(_ sel: Selection) -> some View {
         modifier(Selectable(sel: sel))
+    }
+}
+
+/// The sidebar's filter field (⌥⌘F): Esc clears it and hands the keys
+/// back to the List (done).
+private struct FilterField: View {
+    @Environment(AppModel.self) private var app
+    @Environment(\.theme) private var theme
+    let done: () -> Void
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        @Bindable var app = app
+        HStack(spacing: 6) {
+            Image(systemName: "line.3.horizontal.decrease")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(theme.muted)
+                .accessibilityHidden(true)
+            TextField("Filter", text: $app.filter)
+                .textFieldStyle(.plain)
+                .font(.system(size: 12.5))
+                .focused($focused)
+                .onExitCommand {
+                    app.filter = ""
+                    done()
+                }
+                .onSubmit(done)
+                .accessibilityLabel("Filter the sidebar")
+            if !app.filter.isEmpty {
+                Button {
+                    app.filter = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(theme.muted)
+                .help("Clear the filter (Esc)")
+            }
+        }
+        .padding(.horizontal, 9)
+        .padding(.vertical, 6)
+        .background(theme.cardTint, in: RoundedRectangle(cornerRadius: 9))
+        .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(focused ? theme.action.opacity(0.7) : theme.edge, lineWidth: 1))
+        .help("Filter the sidebar (⌥⌘F)")
+        .onChange(of: app.filterFocus) { focused = true }
     }
 }

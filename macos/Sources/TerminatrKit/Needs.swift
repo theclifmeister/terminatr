@@ -45,9 +45,11 @@ public struct Need: Identifiable, Hashable, Sendable {
     /// The answers a button may give, for a single-select, non-escape
     /// question.
     public let answer: Answer?
+    /// The task it is about ("T12"): a task in review or blocked.
+    public let task: String
 
     public init(id: String, kind: Kind, project: String, what: String, detail: String, text: String = "",
-                session: String = "", answer: Answer? = nil) {
+                session: String = "", answer: Answer? = nil, task: String = "") {
         self.id = id
         self.kind = kind
         self.project = project
@@ -56,6 +58,7 @@ public struct Need: Identifiable, Hashable, Sendable {
         self.text = text
         self.session = session
         self.answer = answer
+        self.task = task
     }
 
     /// The need named with its project, as the sidebar, the menu bar
@@ -171,11 +174,11 @@ extension Need {
             case "review":
                 out.append(Need(id: "review:\(p.slug):\(t.ref)", kind: .review, project: p.slug,
                                 what: "\(t.ref) is ready to review", detail: t.title,
-                                session: thread?.record.session ?? ""))
+                                session: thread?.record.session ?? "", task: t.ref))
             case "blocked":
                 out.append(Need(id: "blocked:\(p.slug):\(t.ref)", kind: .blocked, project: p.slug,
                                 what: "\(t.ref) is blocked", detail: t.title, text: why,
-                                session: thread?.record.session ?? ""))
+                                session: thread?.record.session ?? "", task: t.ref))
             default:
                 break
             }

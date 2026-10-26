@@ -4,22 +4,26 @@ import TerminatrKit
 /// What the session waits on, above the composer: tm's question menu
 /// (session.answer, guarded) and the agent's permission dialog
 /// (session.approve, checked first). The server re-checks each answer;
-/// these cards only offer what it would take.
+/// these cards only offer what it would take. ⌘↩ (firstChoice bumped)
+/// takes the first card's first choice, as a click on it would, with
+/// the same confirmations.
 struct Cards: View {
     let model: SessionModel
     let session: AppAPI.Session?
+    var firstChoice = 0
 
     var body: some View {
+        let first = session?.question?.questions.firstIndex { !$0.answered }
         VStack(spacing: 10) {
             if let session, let q = session.question {
                 ForEach(Array(q.questions.enumerated()), id: \.offset) { i, item in
                     if !item.answered {
-                        QuestionCard(model: model, menu: q, index: i, item: item)
+                        QuestionCard(model: model, menu: q, index: i, item: item, firstChoice: i == first ? firstChoice : nil)
                     }
                 }
             }
             if let session, session.state == "blocked", session.reason == "permission" {
-                ApprovalCard(model: model, session: session)
+                ApprovalCard(model: model, session: session, firstChoice: first == nil ? firstChoice : nil)
                     .id(session.id + (model.transcript.pendingTool?.call ?? ""))
             }
         }
@@ -65,6 +69,8 @@ struct QuestionCard: View {
     let menu: AppAPI.Question
     let index: Int
     let item: AppAPI.QuestionItem
+    /// The first card's: ⌘↩ takes its first option.
+    let firstChoice: Int?
     @State private var picked: Set<String> = []
     @State private var other = ""
     @State private var otherOpen = false
@@ -73,7 +79,8 @@ struct QuestionCard: View {
     @State private var busy = false
 
     var body: some View {
-        CardFrame(tag: menu.escape ? "Question · outside the sandbox" : (item.header.isEmpty ? "Question" : item.header), colour: theme.question, tint: theme.questionTint) {
+        let tag = menu.escape ? "Question · outside the sandbox" : (item.header.isEmpty ? "Question" : item.header)
+        CardFrame(tag: firstChoice == nil ? tag : "\(tag) · ⌘↩ answer", colour: theme.question, tint: theme.questionTint) {
             Text(item.question)
                 .font(theme.title(15, .bold))
                 .textSelection(.enabled)
@@ -116,6 +123,20 @@ struct QuestionCard: View {
             Button("Cancel", role: .cancel) {}
         } message: { _ in
             Text("This answer lets a command run outside the thread's sandbox:\n\n\(item.question)")
+        }
+        .onChange(of: firstChoice) { old, new in
+            // A card that just became the first takes nothing by itself.
+            if let old, let new, new > old { takeFirst() }
+        }
+    }
+
+    /// ⌘↩: the first option, or the options picked of a multi-select.
+    private func takeFirst() {
+        guard firstChoice != nil, !busy else { return }
+        if item.multiSelect {
+            if !picked.isEmpty { send(item.options.map(\.label).filter(picked.contains).joined(separator: ", "), guarded: false) }
+        } else if let o = item.options.first {
+            send(o.label, guarded: true)
         }
     }
 
@@ -196,6 +217,8 @@ struct ApprovalCard: View {
     @Environment(\.theme) private var theme
     let model: SessionModel
     let session: AppAPI.Session
+    /// The first card's: ⌘↩ takes the dialog's first option.
+    let firstChoice: Int?
     @State private var dialog: AppAPI.ApproveResult?
     @State private var error: String?
     @State private var confirm: Int?
@@ -203,7 +226,8 @@ struct ApprovalCard: View {
 
     var body: some View {
         let tool = model.transcript.pendingTool
-        CardFrame(tag: session.escape ? "Approval · outside the sandbox" : "Approval", colour: theme.approval, tint: theme.approvalTint) {
+        let tag = session.escape ? "Approval · outside the sandbox" : "Approval"
+        CardFrame(tag: firstChoice == nil ? tag : "\(tag) · ⌘↩ allow", colour: theme.approval, tint: theme.approvalTint) {
             Text(tool.map { "Run \($0.tool.isEmpty ? "a tool" : $0.tool)?" } ?? "The agent asks for permission")
                 .font(theme.title(15, .bold))
             if let tool, !tool.text.isEmpty {
@@ -259,6 +283,13 @@ struct ApprovalCard: View {
             Button("Cancel", role: .cancel) {}
         } message: { choice in
             Text("\(command ?? "")\n\nThis command runs with your access, not the thread's sandbox: only you answer for it. Your answer: \(option(choice)).")
+        }
+        .onChange(of: firstChoice) { old, new in
+            // As a click on the first button: only once the dialog is
+            // read, and never for a card that just became the first.
+            guard let old, let new, new > old, let dialog, !dialog.options.isEmpty, !busy,
+                  !(session.escape && command == nil) else { return }
+            pick(1)
         }
     }
 

@@ -4,9 +4,9 @@ import TerminatrKit
 /// The app's one window (design T746): the sidebar of servers, projects
 /// and their coordinators and threads; in the detail a project's
 /// dashboard or a session; the session's inspector in a trailing column
-/// (⌘⌥I). The menu bar, notifications and cards change what it shows,
-/// never open another window, unless the user asks for one (Open in New
-/// Window).
+/// (⌘⌥I); over them the command palette (⌘K). The menu bar,
+/// notifications and cards change what it shows, never open another
+/// window, unless the user asks for one (Open in New Window).
 struct MainWindow: View {
     @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
@@ -50,6 +50,18 @@ struct MainWindow: View {
                 }
             }
         }
+        .overlay(alignment: .top) {
+            if app.palette {
+                ZStack(alignment: .top) {
+                    Color.black.opacity(0.2)
+                        .ignoresSafeArea()
+                        .onTapGesture { app.palette = false }
+                    CommandPalette()
+                        .padding(.top, 64)
+                }
+            }
+        }
+        .sheet(isPresented: $app.shortcuts) { ShortcutsSheet() }
     }
 
     @ViewBuilder

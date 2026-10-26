@@ -99,14 +99,34 @@ enum DockIcon {
     }
 }
 
-/// The Go menu and the session's keys (design T746): ⌘1–⌘9 the active
-/// projects, ⌘[ and ⌘] back and forward, ⌘L the composer, ⌘⇧T
-/// Conversation or Terminal, ⌘⌥I the inspector, ⇧⌘H the inactive
-/// projects.
+/// The Go menu and the session's keys (design T746, T748 milestone E):
+/// ⌘1–⌘9 the active projects, ⌘[ and ⌘] back and forward, ⌘K the
+/// command palette, ⌥⌘↓ and ⌥⌘↑ the next and previous need, ⌘L the
+/// composer, ⌘↩ the open card's first choice, ⌘F find in the
+/// conversation, ⌥⌘F the sidebar's filter, ⌘⇧T Conversation or
+/// Terminal, ⌘⌥I the inspector, ⇧⌘H the inactive projects; Help ›
+/// Keyboard Shortcuts (⌘/) lists them (Shortcuts).
 struct GoCommands: Commands {
     let model: AppModel
 
     var body: some Commands {
+        CommandGroup(replacing: .textEditing) {
+            Button("Find in Conversation…") { model.findInConversation() }
+                .keyboardShortcut("f")
+                .disabled(model.selectedRef == nil || model.palette)
+            Button("Find Next") { model.findInConversation(1) }
+                .keyboardShortcut("g")
+                .disabled(model.selectedRef == nil || model.palette)
+            Button("Find Previous") { model.findInConversation(-1) }
+                .keyboardShortcut("g", modifiers: [.command, .shift])
+                .disabled(model.selectedRef == nil || model.palette)
+            Button("Filter Sidebar") { model.focusFilter() }
+                .keyboardShortcut("f", modifiers: [.command, .option])
+        }
+        CommandGroup(replacing: .help) {
+            Button("Keyboard Shortcuts") { model.shortcuts = true }
+                .keyboardShortcut("/")
+        }
         CommandGroup(after: .sidebar) {
             Button(model.inspector ? "Hide Inspector" : "Show Inspector") { model.inspector.toggle() }
                 .keyboardShortcut("i", modifiers: [.command, .option])
@@ -119,6 +139,20 @@ struct GoCommands: Commands {
                 .disabled(model.inactiveProjects.isEmpty)
         }
         CommandMenu("Go") {
+            Button("Command Palette…") { model.palette.toggle() }
+                .keyboardShortcut("k")
+            Divider()
+            Button("Next Need") { model.stepNeed(1) }
+                .keyboardShortcut(.downArrow, modifiers: [.command, .option])
+                .disabled(model.needs.isEmpty)
+            Button("Previous Need") { model.stepNeed(-1) }
+                .keyboardShortcut(.upArrow, modifiers: [.command, .option])
+                .disabled(model.needs.isEmpty)
+            // Off while the palette searches: its own ⌘↩ acts on its row.
+            Button("Take First Choice") { model.takeFirstChoice() }
+                .keyboardShortcut(.return)
+                .disabled(model.palette ? !model.paletteActing : !model.openCard)
+            Divider()
             Button("Back") { model.goBack() }
                 .keyboardShortcut("[")
                 .disabled(!model.nav.canGoBack)

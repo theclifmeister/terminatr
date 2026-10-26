@@ -3,59 +3,139 @@ import SwiftUI
 import TerminatrKit
 
 /// The Conversation tab: the transcript, the cards for what the session
-/// waits on (a question, a permission dialog), and the composer.
+/// waits on (a question, a permission dialog), and the composer. ⌘F
+/// opens a find bar over it: the entries that show the words wear a
+/// ring, and ↩, ⌘G and ⇧⌘G scroll from one to the next.
 struct ConversationTab: View {
+    @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
     let model: SessionModel
     let session: AppAPI.Session?
     let state: ConversationState
+    @State private var finding = false
+    @State private var query = ""
+    @State private var at = 0
+    @FocusState private var findFocused: Bool
 
     var body: some View {
+        let matches = finding ? Transcript.find(query, in: model.transcript.entries) : []
+        let found = Set(matches)
+        let current = matches.isEmpty ? nil : matches[min(at, matches.count - 1)]
         VStack(spacing: 0) {
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 12) {
-                    if model.transcript.skipped > 0 {
-                        Text("\(model.transcript.skipped) earlier items not shown")
-                            .font(.system(size: 11.5))
-                            .foregroundStyle(theme.muted)
-                            .frame(maxWidth: .infinity)
-                    }
-                    ForEach(model.transcript.entries) { e in
-                        EntryView(entry: e, agent: session?.agent ?? "agent")
-                    }
-                    switch state {
-                    case .loading:
-                        ProgressView().frame(maxWidth: .infinity)
-                    case .waiting:
-                        Text("Waiting for the agent to name its transcript…")
-                            .font(.system(size: 12))
-                            .foregroundStyle(theme.muted)
-                            .frame(maxWidth: .infinity)
-                    case .unavailable(let why):
-                        Text(why)
-                            .font(.system(size: 12))
-                            .foregroundStyle(theme.muted)
-                            .frame(maxWidth: .infinity)
-                    case .mapped:
-                        EmptyView()
-                    }
-                    if let closed = model.transcript.closed {
-                        Text("The session ended (\(closed)).")
-                            .font(.system(size: 12))
-                            .foregroundStyle(theme.muted)
-                            .frame(maxWidth: .infinity)
-                    }
-                }
-                .padding(.horizontal, 22)
-                .padding(.vertical, 14)
-                .frame(maxWidth: 820)
-                .frame(maxWidth: .infinity)
+            if finding {
+                findBar(matches.count)
             }
-            .defaultScrollAnchor(.bottom)
-            Cards(model: model, session: session)
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 12) {
+                        if model.transcript.skipped > 0 {
+                            Text("\(model.transcript.skipped) earlier items not shown")
+                                .font(.system(size: 11.5))
+                                .foregroundStyle(theme.muted)
+                                .frame(maxWidth: .infinity)
+                        }
+                        ForEach(model.transcript.entries) { e in
+                            EntryView(entry: e, agent: session?.agent ?? "agent")
+                                .overlay {
+                                    if found.contains(e.id) {
+                                        RoundedRectangle(cornerRadius: 14)
+                                            .strokeBorder(theme.action.opacity(e.id == current ? 1 : 0.4), lineWidth: e.id == current ? 2 : 1)
+                                            .padding(-3)
+                                    }
+                                }
+                                .id(e.id)
+                        }
+                        switch state {
+                        case .loading:
+                            ProgressView().frame(maxWidth: .infinity)
+                        case .waiting:
+                            Text("Waiting for the agent to name its transcript…")
+                                .font(.system(size: 12))
+                                .foregroundStyle(theme.muted)
+                                .frame(maxWidth: .infinity)
+                        case .unavailable(let why):
+                            Text(why)
+                                .font(.system(size: 12))
+                                .foregroundStyle(theme.muted)
+                                .frame(maxWidth: .infinity)
+                        case .mapped:
+                            EmptyView()
+                        }
+                        if let closed = model.transcript.closed {
+                            Text("The session ended (\(closed)).")
+                                .font(.system(size: 12))
+                                .foregroundStyle(theme.muted)
+                                .frame(maxWidth: .infinity)
+                        }
+                    }
+                    .padding(.horizontal, 22)
+                    .padding(.vertical, 14)
+                    .frame(maxWidth: 820)
+                    .frame(maxWidth: .infinity)
+                }
+                .defaultScrollAnchor(.bottom)
+                .onChange(of: current) { _, c in
+                    if let c { withAnimation { proxy.scrollTo(c, anchor: .center) } }
+                }
+            }
+            Cards(model: model, session: session, firstChoice: app.firstChoice)
             Composer(model: model, session: session)
         }
         .guardingLinks()
+        .onChange(of: app.find) { _, r in
+            if r.step == 0 || !finding {
+                finding = true
+                findFocused = true
+            } else {
+                step(r.step, of: matches.count)
+            }
+        }
+        .onChange(of: query) { at = 0 }
+    }
+
+    private func step(_ by: Int, of n: Int) {
+        guard n > 0 else { return }
+        at = ((min(at, n - 1) + by) % n + n) % n
+    }
+
+    private func findBar(_ n: Int) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(theme.muted)
+                .accessibilityHidden(true)
+            TextField("Find in the conversation", text: $query)
+                .textFieldStyle(.plain)
+                .focused($findFocused)
+                .onSubmit { step(1, of: n) }
+                .onExitCommand { close() }
+            if !query.trimmingCharacters(in: .whitespaces).isEmpty {
+                Text(n == 0 ? "No matches" : "\(min(at, n - 1) + 1) of \(n)")
+                    .font(theme.mono(11))
+                    .foregroundStyle(theme.muted)
+                    .fixedSize()
+            }
+            Button { step(-1, of: n) } label: { Image(systemName: "chevron.up") }
+                .disabled(n == 0)
+                .help("Previous match (⇧⌘G)")
+            Button { step(1, of: n) } label: { Image(systemName: "chevron.down") }
+                .disabled(n == 0)
+                .help("Next match (⌘G)")
+            Button("Done") { close() }
+        }
+        .buttonStyle(.borderless)
+        .font(.system(size: 12.5))
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(theme.edge, lineWidth: 1))
+        .padding(.horizontal, 22)
+        .padding(.bottom, 4)
+        .frame(maxWidth: 820)
+    }
+
+    private func close() {
+        finding = false
+        query = ""
     }
 }
 
