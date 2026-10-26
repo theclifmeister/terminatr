@@ -47,7 +47,9 @@ func init() {
 		input(MethodPaneInput, proto.MethodPaneVT, true, paneInput),
 
 		// The paired servers and the projects they share (the server's
-		// mirror): no session, pane or transcript of theirs.
+		// mirror), with their coordinators and threads, whose panes
+		// pane.vt opens as "<alias>/<session>" through the server's link
+		// (its caps say pane-vt-remote): no transcript of theirs.
 		unary(proto.MethodPeerList, false, noParams, peerListOf),
 
 		// The notice tray (mods' notifications): one console draws each.

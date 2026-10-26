@@ -144,6 +144,23 @@ func (p *Proxy) Attach() (*Subscriber, error) {
 	return sub, nil
 }
 
+// AttachRemote registers a pane.vt client's subscriber, as
+// Session.AttachRemote: a repaint in plain VT, then output and resizes;
+// a backlog over MaxRemotePending becomes a fresh repaint.
+func (p *Proxy) AttachRemote() (*Subscriber, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.term == nil || p.closed {
+		return nil, ErrExited
+	}
+	sub := &Subscriber{p: p, q: newFrameQueue(), remote: true, max: MaxRemotePending, full: true}
+	if !sub.start() {
+		return nil, ErrExited
+	}
+	p.subs[sub] = struct{}{}
+	return sub, nil
+}
+
 // Subscribers counts the attached consoles.
 func (p *Proxy) Subscribers() int {
 	p.mu.Lock()

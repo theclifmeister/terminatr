@@ -422,6 +422,10 @@ type PeerList struct {
 // Peer is a paired server: its alias and display name, its link's State
 // (Reason why it is down, Since when), the projects it shares with this
 // server, and ShareWaits, its share requests that wait for the user.
+// Pane: its tm has remote panes; Panes is its switch for this server
+// as it last said ("off", "view", "type"): its sessions' panes open
+// through pane.vt ("<alias>/<session>") at view or type, and take keys
+// at type.
 type Peer struct {
 	Alias      string        `json:"alias"`
 	Name       string        `json:"name,omitempty"`
@@ -430,6 +434,8 @@ type Peer struct {
 	Since      time.Time     `json:"since,omitzero"`
 	Projects   []PeerProject `json:"projects"`
 	ShareWaits int           `json:"share_waits,omitempty"`
+	Pane       bool          `json:"pane,omitempty"`
+	Panes      string        `json:"panes,omitempty"`
 }
 
 // PeerProject is a project a paired server shares: its goal line,
@@ -445,6 +451,35 @@ type PeerProject struct {
 	Ready    int       `json:"ready"`
 	Stale    bool      `json:"stale,omitempty"`
 	Synced   time.Time `json:"synced,omitzero"`
+	// Sessions are the project's coordinator and threads there, as the
+	// server last read them: their panes are the app's to open, never
+	// their transcripts.
+	Sessions []PeerSession `json:"sessions"`
+}
+
+// PeerSession is a paired server's coordinator or thread, as it lets
+// this server see it: ID is the pane's here, "<alias>/<session>";
+// Created is on this server's clock; Asking says a question menu is
+// open there, whose text stays there.
+type PeerSession struct {
+	ID            string    `json:"id"`
+	Role          string    `json:"role"`
+	Agent         string    `json:"agent,omitempty"`
+	Project       string    `json:"project"`
+	Thread        string    `json:"thread,omitempty"`
+	Task          string    `json:"task,omitempty"`
+	Created       time.Time `json:"created"`
+	State         string    `json:"state,omitempty"`
+	Reason        string    `json:"reason,omitempty"`
+	TodosDone     int       `json:"todos_done,omitempty"`
+	TodosTotal    int       `json:"todos_total,omitempty"`
+	Current       string    `json:"current,omitempty"`
+	Queued        int       `json:"queued_prompts,omitempty"`
+	RemoteControl bool      `json:"remote_control,omitempty"`
+	Model         string    `json:"model,omitempty"`
+	Asking        bool      `json:"asking,omitempty"`
+	Context       int64     `json:"context,omitempty"`
+	ContextWindow int64     `json:"context_window,omitempty"`
 }
 
 // The copies. Lists are never null.
@@ -611,21 +646,40 @@ func linkOf(r link.Row) Link {
 		Queued: r.Queued, FilesWaiting: r.FilesWaiting, FilesActive: r.FilesActive, LastAt: r.LastAt}
 }
 
-// peerListOf is l as the app sees it: a peer's id, versions, clock,
-// pane switches and share requests (but their count), and a project's
-// snapshot and sessions stay home: no transcript or pane crosses here.
+// peerListOf is l as the app sees it: a peer's id, versions, ping and
+// share requests (but their count), and a project's snapshot stay
+// home. Its coordinator and threads cross as their panes' ids, the
+// sessions a remote pane opens (remotes.find); no transcript does.
 func peerListOf(l proto.PeerList) PeerList {
 	out := PeerList{Gen: l.Gen, Peers: make([]Peer, 0, len(l.Peers))}
 	for _, p := range l.Peers {
 		peer := Peer{Alias: p.Alias, Name: p.Name, State: p.State, Reason: p.Reason, Since: p.Since,
-			Projects: make([]PeerProject, 0, len(p.Projects)), ShareWaits: proto.ShareWaits([]proto.PeerMirror{p})}
+			Projects: make([]PeerProject, 0, len(p.Projects)), ShareWaits: proto.ShareWaits([]proto.PeerMirror{p}),
+			Pane: p.Pane, Panes: p.Panes}
+		offset := time.Duration(p.Offset) * time.Millisecond
 		for _, pp := range p.Projects {
-			peer.Projects = append(peer.Projects, PeerProject{Project: pp.Project, Goal: pp.Goal, Paused: pp.Paused,
-				NeedsYou: pp.NeedsYou, Threads: pp.Threads, Ready: pp.Ready, Stale: pp.Stale, Synced: pp.Synced})
+			pr := PeerProject{Project: pp.Project, Goal: pp.Goal, Paused: pp.Paused, NeedsYou: pp.NeedsYou,
+				Threads: pp.Threads, Ready: pp.Ready, Stale: pp.Stale, Synced: pp.Synced, Sessions: []PeerSession{}}
+			for _, s := range pp.Sessions {
+				if s.Role != proto.RoleCoordinator && s.Role != proto.RoleThread {
+					continue
+				}
+				pr.Sessions = append(pr.Sessions, peerSessionOf(p.Alias, offset, s))
+			}
+			peer.Projects = append(peer.Projects, pr)
 		}
 		out.Peers = append(out.Peers, peer)
 	}
 	return out
+}
+
+// peerSessionOf is session s of the paired server alias, whose clock
+// is offset ahead of this server's.
+func peerSessionOf(alias string, offset time.Duration, s proto.PeerSession) PeerSession {
+	return PeerSession{ID: alias + "/" + s.ID, Role: s.Role, Agent: s.Agent, Project: s.Project, Thread: s.Thread,
+		Task: s.Task, Created: s.Created.Add(-offset), State: s.State, Reason: s.Reason, TodosDone: s.TodosDone,
+		TodosTotal: s.TodosTotal, Current: s.Current, Queued: s.Queued, RemoteControl: s.RemoteControl, Model: s.Model,
+		Asking: s.Asking, Context: s.Context, ContextWindow: s.ContextWindow}
 }
 
 func promptResultOf(r proto.SessionPromptResult) PromptResult {

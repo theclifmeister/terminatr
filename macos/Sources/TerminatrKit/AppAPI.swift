@@ -6,7 +6,7 @@ import Foundation
 /// The terminatr app API (docs/SPEC.md §3.8): what tm app bridge answers.
 public enum AppAPI {
     /// The app API version this app was generated against.
-    public static let version = 2
+    public static let version = 3
 
     public struct AnswerParams: Codable, Sendable, Hashable {
         public var id: String
@@ -424,8 +424,10 @@ public enum AppAPI {
         public var since: Date?
         public var projects: [PeerProject]
         public var shareWaits: Int
+        public var pane: Bool
+        public var panes: String
 
-        public init(alias: String, name: String = "", state: String, reason: String = "", since: Date? = nil, projects: [PeerProject] = [], shareWaits: Int = 0) {
+        public init(alias: String, name: String = "", state: String, reason: String = "", since: Date? = nil, projects: [PeerProject] = [], shareWaits: Int = 0, pane: Bool = false, panes: String = "") {
             self.alias = alias
             self.name = name
             self.state = state
@@ -433,6 +435,8 @@ public enum AppAPI {
             self.since = since
             self.projects = projects
             self.shareWaits = shareWaits
+            self.pane = pane
+            self.panes = panes
         }
 
         enum CodingKeys: String, CodingKey {
@@ -443,6 +447,8 @@ public enum AppAPI {
             case since
             case projects
             case shareWaits = "share_waits"
+            case pane
+            case panes
         }
     }
 
@@ -470,8 +476,9 @@ public enum AppAPI {
         public var ready: Int
         public var stale: Bool
         public var synced: Date?
+        public var sessions: [PeerSession]
 
-        public init(project: String, goal: String = "", paused: Bool = false, needsYou: Int, threads: Int, ready: Int, stale: Bool = false, synced: Date? = nil) {
+        public init(project: String, goal: String = "", paused: Bool = false, needsYou: Int, threads: Int, ready: Int, stale: Bool = false, synced: Date? = nil, sessions: [PeerSession] = []) {
             self.project = project
             self.goal = goal
             self.paused = paused
@@ -480,6 +487,7 @@ public enum AppAPI {
             self.ready = ready
             self.stale = stale
             self.synced = synced
+            self.sessions = sessions
         }
 
         enum CodingKeys: String, CodingKey {
@@ -491,6 +499,70 @@ public enum AppAPI {
             case ready
             case stale
             case synced
+            case sessions
+        }
+    }
+
+    public struct PeerSession: Codable, Sendable, Hashable, Identifiable {
+        public var id: String
+        public var role: String
+        public var agent: String
+        public var project: String
+        public var thread: String
+        public var task: String
+        public var created: Date
+        public var state: String
+        public var reason: String
+        public var todosDone: Int
+        public var todosTotal: Int
+        public var current: String
+        public var queuedPrompts: Int
+        public var remoteControl: Bool
+        public var model: String
+        public var asking: Bool
+        public var context: Int
+        public var contextWindow: Int
+
+        public init(id: String, role: String, agent: String = "", project: String, thread: String = "", task: String = "", created: Date, state: String = "", reason: String = "", todosDone: Int = 0, todosTotal: Int = 0, current: String = "", queuedPrompts: Int = 0, remoteControl: Bool = false, model: String = "", asking: Bool = false, context: Int = 0, contextWindow: Int = 0) {
+            self.id = id
+            self.role = role
+            self.agent = agent
+            self.project = project
+            self.thread = thread
+            self.task = task
+            self.created = created
+            self.state = state
+            self.reason = reason
+            self.todosDone = todosDone
+            self.todosTotal = todosTotal
+            self.current = current
+            self.queuedPrompts = queuedPrompts
+            self.remoteControl = remoteControl
+            self.model = model
+            self.asking = asking
+            self.context = context
+            self.contextWindow = contextWindow
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case id
+            case role
+            case agent
+            case project
+            case thread
+            case task
+            case created
+            case state
+            case reason
+            case todosDone = "todos_done"
+            case todosTotal = "todos_total"
+            case current
+            case queuedPrompts = "queued_prompts"
+            case remoteControl = "remote_control"
+            case model
+            case asking
+            case context
+            case contextWindow = "context_window"
         }
     }
 
@@ -1554,6 +1626,8 @@ extension AppAPI.Peer {
         self.since = try c.decodeIfPresent(Date.self, forKey: .since)
         self.projects = try c.decodeIfPresent([AppAPI.PeerProject].self, forKey: .projects) ?? []
         self.shareWaits = try c.decodeIfPresent(Int.self, forKey: .shareWaits) ?? 0
+        self.pane = try c.decodeIfPresent(Bool.self, forKey: .pane) ?? false
+        self.panes = try c.decodeIfPresent(String.self, forKey: .panes) ?? ""
     }
 }
 
@@ -1576,6 +1650,31 @@ extension AppAPI.PeerProject {
         self.ready = try c.decode(Int.self, forKey: .ready)
         self.stale = try c.decodeIfPresent(Bool.self, forKey: .stale) ?? false
         self.synced = try c.decodeIfPresent(Date.self, forKey: .synced)
+        self.sessions = try c.decodeIfPresent([AppAPI.PeerSession].self, forKey: .sessions) ?? []
+    }
+}
+
+extension AppAPI.PeerSession {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try c.decode(String.self, forKey: .id)
+        self.role = try c.decode(String.self, forKey: .role)
+        self.agent = try c.decodeIfPresent(String.self, forKey: .agent) ?? ""
+        self.project = try c.decode(String.self, forKey: .project)
+        self.thread = try c.decodeIfPresent(String.self, forKey: .thread) ?? ""
+        self.task = try c.decodeIfPresent(String.self, forKey: .task) ?? ""
+        self.created = try c.decode(Date.self, forKey: .created)
+        self.state = try c.decodeIfPresent(String.self, forKey: .state) ?? ""
+        self.reason = try c.decodeIfPresent(String.self, forKey: .reason) ?? ""
+        self.todosDone = try c.decodeIfPresent(Int.self, forKey: .todosDone) ?? 0
+        self.todosTotal = try c.decodeIfPresent(Int.self, forKey: .todosTotal) ?? 0
+        self.current = try c.decodeIfPresent(String.self, forKey: .current) ?? ""
+        self.queuedPrompts = try c.decodeIfPresent(Int.self, forKey: .queuedPrompts) ?? 0
+        self.remoteControl = try c.decodeIfPresent(Bool.self, forKey: .remoteControl) ?? false
+        self.model = try c.decodeIfPresent(String.self, forKey: .model) ?? ""
+        self.asking = try c.decodeIfPresent(Bool.self, forKey: .asking) ?? false
+        self.context = try c.decodeIfPresent(Int.self, forKey: .context) ?? 0
+        self.contextWindow = try c.decodeIfPresent(Int.self, forKey: .contextWindow) ?? 0
     }
 }
 

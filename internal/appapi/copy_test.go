@@ -248,14 +248,18 @@ func TestCopies(t *testing.T) {
 		".Projects[].Links[].Asks.Project", ".Projects[].Links[].Asks.State",
 	})
 	check("peer.list", homeOf(peerListOf), []string{
-		// The link's id, versions, clock and pane switches: the
-		// Network popup's. Share requests cross as their count.
-		".Peers[].ID", ".Peers[].Watch", ".Peers[].Popup", ".Peers[].Pane", ".Peers[].Panes",
-		".Peers[].Version", ".Peers[].Offset", ".Peers[].RTT", ".Peers[].Listed", ".Peers[].Shares",
-		// A shared project's snapshot: its sessions and watch stay the
-		// TUI's remote dashboard's.
-		".Peers[].Projects[].Rev", ".Peers[].Projects[].Watch", ".Peers[].Projects[].Sessions",
+		// The link's id, versions and ping: the Network popup's. Share
+		// requests cross as their count; the clock's offset as the
+		// sessions' times.
+		".Peers[].ID", ".Peers[].Watch", ".Peers[].Popup",
+		".Peers[].Version", ".Peers[].RTT", ".Peers[].Listed", ".Peers[].Shares",
+		// A shared project's snapshot stays the TUI's remote
+		// dashboard's. Its sessions cross as their panes, but only a
+		// coordinator or a thread, which a filled role isn't: their
+		// copy, and the clock's offset in it, are checked below.
+		".Peers[].Offset", ".Peers[].Projects[].Rev", ".Peers[].Projects[].Watch", ".Peers[].Projects[].Sessions",
 	})
+	check("peer.list sessions", homeOf(func(s proto.PeerSession) PeerSession { return peerSessionOf("mini", time.Second, s) }), nil)
 	check("session.prompt", homeOf(promptResultOf), nil)
 	check("session.answer", homeOf(answerResultOf), nil)
 	check("session.approve", homeOf(approveResultOf), nil)
@@ -366,5 +370,29 @@ func TestSafe(t *testing.T) {
 	}
 	if in.Projects[0].Slug != "a\x1b]52;c;x\x07b" {
 		t.Error("safe changed its argument's strings")
+	}
+}
+
+// TestPeerListSessions: a paired server's coordinator and threads cross
+// as their panes' ids here, on this server's clock; its other sessions
+// don't.
+func TestPeerListSessions(t *testing.T) {
+	created := time.Date(2026, 10, 26, 12, 0, 0, 0, time.UTC)
+	l := peerListOf(proto.PeerList{Peers: []proto.PeerMirror{{Alias: "mini", Pane: true, Panes: proto.PanesView, Offset: 2000,
+		Projects: []proto.PeerMirrorProject{{PeerProject: proto.PeerProject{Project: "demo"}, Sessions: []proto.PeerSession{
+			{ID: "s-1", Role: proto.RoleCoordinator, Project: "demo", Created: created},
+			{ID: "s-2", Role: proto.RoleThread, Project: "demo", Thread: "t-0001", Asking: true},
+			{ID: "s-3", Role: "shell", Project: "demo"},
+		}}}}}})
+	p := l.Peers[0]
+	if !p.Pane || p.Panes != proto.PanesView {
+		t.Fatalf("peer %+v", p)
+	}
+	ss := p.Projects[0].Sessions
+	if len(ss) != 2 || ss[0].ID != "mini/s-1" || ss[1].ID != "mini/s-2" || !ss[1].Asking {
+		t.Fatalf("sessions %+v", ss)
+	}
+	if want := created.Add(-2 * time.Second); !ss[0].Created.Equal(want) {
+		t.Fatalf("created %v, want %v", ss[0].Created, want)
 	}
 }
