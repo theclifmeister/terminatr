@@ -31,8 +31,8 @@ type Transcript struct {
 	BlockKind   string `toml:"block_kind"`
 	StringBlock string `toml:"string_block"`
 	// Ignore are block kinds that show nothing (thinking, images).
-	Ignore []string          `toml:"ignore"`
-	Items  []TranscriptRule  `toml:"items"`
+	Ignore []string         `toml:"ignore"`
+	Items  []TranscriptRule `toml:"items"`
 	// ToolArgs is the field of a call's input that its folded line
 	// shows, by tool name ("Bash" = "command"); "*" for any other tool.
 	ToolArgs map[string]string `toml:"tool_args"`
