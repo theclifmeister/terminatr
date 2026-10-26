@@ -11,6 +11,8 @@ struct Composer: View {
     @Environment(\.theme) private var theme
     let model: SessionModel
     let session: AppAPI.Session?
+    /// Takes the focus as it shows (the palette's).
+    var autofocus = false
     @State private var text = ""
     @State private var said: String?
     @State private var failed = false
@@ -35,7 +37,8 @@ struct Composer: View {
                         .fixedSize(horizontal: false, vertical: true)
                         .focused($focused)
                         .onKeyPress(.return, phases: .down) { press in
-                            if press.modifiers.contains(.shift) { return .ignored }
+                            // ⌘↩ is the open card's first choice, not a send.
+                            if press.modifiers.contains(.shift) || press.modifiers.contains(.command) { return .ignored }
                             send(mode: press.modifiers.contains(.option) ? "now" : "")
                             return .handled
                         }
@@ -87,6 +90,7 @@ struct Composer: View {
         .padding(.bottom, 14)
         .frame(maxWidth: 820)
         .onChange(of: app.composerFocus) { focused = true }
+        .onAppear { if autofocus { focused = true } }
         .confirmationDialog("Interrupt the agent's turn?", isPresented: $interrupting) {
             Button("Interrupt and Send", role: .destructive) { send(mode: "interrupt") }
             Button("Cancel", role: .cancel) {}

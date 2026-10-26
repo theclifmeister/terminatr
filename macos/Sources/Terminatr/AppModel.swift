@@ -49,6 +49,31 @@ final class AppModel {
     }
     /// Bumped by ⌘L: the shown composer takes the focus.
     private(set) var composerFocus = 0
+    /// Bumped by ⌘F, ⌘G and ⇧⌘G: the shown conversation's find bar
+    /// opens, or moves to the next or previous match.
+    private(set) var find = FindRequest(n: 0, step: 0)
+    /// Bumped by ⌘↩: the open card takes its first choice.
+    private(set) var firstChoice = 0
+    /// Bumped by ⌥⌘F: the sidebar's filter field takes the focus.
+    private(set) var filterFocus = 0
+    /// The sidebar's filter: what its rows must match.
+    var filter = ""
+    /// Whether the command palette (⌘K) shows.
+    var palette = false
+    /// Whether the palette shows a session's cards or composer (its
+    /// act): ⌘↩ is its cards' then, bumping paletteChoice.
+    var paletteActing = false
+    private(set) var paletteChoice = 0
+    /// Whether the Keyboard Shortcuts sheet shows.
+    var shortcuts = false
+    /// The need ⌥⌘↓ or ⌥⌘↑ showed last (Need.step).
+    @ObservationIgnored private var lastNeed: String?
+
+    struct FindRequest: Equatable {
+        let n: Int
+        /// 0 opens the bar, 1 the next match, -1 the previous.
+        let step: Int
+    }
 
     /// Told of every change to needs and notices (Notifier).
     @ObservationIgnored var onNeeds: (@MainActor (AppModel) -> Void)?
@@ -293,6 +318,53 @@ final class AppModel {
         showWindow?()
     }
 
+    /// Where a need takes the window (Selection.route).
+    func route(_ n: Need) -> Selection? {
+        Selection.route(project: n.project, session: n.session, projects: projects, sessions: sessions, peers: peers)
+    }
+
+    /// ⌥⌘↓ (by 1) and ⌥⌘↑ (by -1): shows the next or the previous need.
+    func stepNeed(_ by: Int) {
+        guard let n = Need.step(needs, by: by, last: lastNeed, shown: nav.selection, route: route) else { return }
+        lastNeed = n.id
+        open(project: n.project, session: n.session)
+    }
+
+    /// Whether the shown session waits on a card ⌘↩ answers: a
+    /// question tm read, or a permission dialog.
+    var openCard: Bool {
+        selectedSession.map { Self.waitsOnCard(session(of: $0)) } ?? false
+    }
+
+    /// Whether s waits on one of the cards (Cards): a question tm read,
+    /// or a permission dialog.
+    static func waitsOnCard(_ s: AppAPI.Session?) -> Bool {
+        guard let s else { return false }
+        if s.question.map({ q in q.questions.contains { !$0.answered } }) == true { return true }
+        return s.state == "blocked" && s.reason == "permission"
+    }
+
+    /// ⌘↩: the open card's first choice: the palette's while it acts.
+    func takeFirstChoice() {
+        if palette {
+            if paletteActing { paletteChoice += 1 }
+        } else if openCard {
+            firstChoice += 1
+        }
+    }
+
+    /// ⌘F (step 0), ⌘G (1), ⇧⌘G (-1): the conversation's find bar.
+    func findInConversation(_ step: Int = 0) {
+        guard let m = selectedSession, !m.ref.isRemote else { return }
+        m.pick(.conversation)
+        find = FindRequest(n: find.n + 1, step: step)
+    }
+
+    /// ⌥⌘F: the sidebar's filter field.
+    func focusFilter() {
+        filterFocus += 1
+    }
+
     func goBack() { nav.goBack() }
     func goForward() { nav.goForward() }
 
@@ -383,6 +455,13 @@ final class AppModel {
     func answer(_ params: AppAPI.AnswerParams) async throws -> AppAPI.AnswerResult {
         guard let bridge else { throw BridgeError.closed("Not connected to terminatr.") }
         return try await bridge.call(AppAPI.Methods.sessionAnswer, params)
+    }
+
+    /// Asks project's coordinator to delegate task (task.delegate, as
+    /// the dashboard's D in the TUI): false when it was asked already.
+    func delegate(project: String, task: String) async throws -> Bool {
+        guard let bridge else { throw BridgeError.closed("Not connected to terminatr.") }
+        return try await bridge.call(AppAPI.Methods.taskDelegate, AppAPI.TaskParams(project: project, task: task)).asked
     }
 
     /// Claims mod notice id for this console: true when the app is the
