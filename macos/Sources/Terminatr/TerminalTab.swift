@@ -7,7 +7,10 @@ import TerminatrKit
 /// SwiftTerm. The server's emulator stays the pane's; this one mirrors
 /// it at the pane's size and never answers the program. Keys go back
 /// through pane.input as the human's: typed text takes a thread over,
-/// and the first keys claim the pane's size for this window.
+/// and the first keys claim the pane's size for this window. A paired
+/// server's pane ("<alias>/<session>") comes the same way through the
+/// server's peer link, under that server's switch: it opens at view or
+/// write, and takes keys at write alone (the far server checks each).
 struct TerminalTab: View {
     @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
@@ -16,15 +19,23 @@ struct TerminalTab: View {
     @State private var pane = PaneController()
 
     var body: some View {
+        let remote = model.ref.isRemote ? app.remotePane(model.ref) : nil
         VStack(spacing: 0) {
             if !app.caps.contains("pane-vt") {
                 Text("This tm server doesn't stream panes to the app; tm update and tm server restart bring it.")
                     .foregroundStyle(theme.muted)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if case .closed(let why) = remote {
+                Text(why)
+                    .foregroundStyle(theme.muted)
+                    .multilineTextAlignment(.center)
+                    .padding(28)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if let bridge = app.bridge, let id = model.sessionID {
                 ZStack(alignment: .bottom) {
                     PaneTerminal(controller: pane, theme: theme)
                         .task(id: id) { await pane.run(bridge, id) }
+                        .onChange(of: remote, initial: true) { _, r in pane.keys = r != .view }
                     if let closed = pane.closed {
                         Text(closed)
                             .padding(10)
@@ -35,24 +46,25 @@ struct TerminalTab: View {
                 .background(theme.terminalBackground)
                 .clipShape(RoundedRectangle(cornerRadius: 12))
                 .padding(.horizontal, 14)
-                footer
+                footer(remote)
             }
         }
         .guardingLinks()
     }
 
-    private var footer: some View {
+    private func footer(_ remote: RemotePane?) -> some View {
         HStack(spacing: 12) {
             if let s = pane.size {
-                Text("\(s.cols)×\(s.rows)")
+                Text("\(s.cols)×\(s.rows)" + (remote == nil ? "" : " on \(model.ref.server)"))
                     .font(theme.mono(11))
                     .foregroundStyle(theme.muted)
             }
-            Text(model.ref.isCoordinator ? "Keys here go to the coordinator." : "Typing here takes the thread over.")
+            Text(note(remote))
                 .font(.system(size: 11.5))
                 .foregroundStyle(theme.muted)
             Spacer()
             Button("Fit to Window") { pane.fit() }
+                .disabled(remote == .view)
                 .help("Claims the pane's size for this window, as typing does")
             Button("Repaint") { pane.repaint() }
         }
@@ -62,12 +74,26 @@ struct TerminalTab: View {
     }
 }
 
+extension TerminalTab {
+    private func note(_ remote: RemotePane?) -> String {
+        let server = model.ref.server
+        switch remote {
+        case .view: return "View only: \(server) lets this server watch its panes, not type into them."
+        case .write: return model.ref.isCoordinator ? "Keys here go to the coordinator on \(server)." : "Typing here takes the thread over on \(server)."
+        default: return model.ref.isCoordinator ? "Keys here go to the coordinator." : "Typing here takes the thread over."
+        }
+    }
+}
+
 /// The pane stream and the mirror it feeds.
 @MainActor
 @Observable
 final class PaneController: NSObject, TerminalViewDelegate {
     private(set) var size: AppAPI.PaneSize?
     private(set) var closed: String?
+    /// Keys are sent: false while a paired server's switch is view,
+    /// where its server would drop them.
+    @ObservationIgnored var keys = true
 
     @ObservationIgnored let host = PaneHost()
     @ObservationIgnored private var bridge: Bridge?
@@ -104,7 +130,10 @@ final class PaneController: NSObject, TerminalViewDelegate {
                 case "pane.resize":
                     show(cols: e.data.cols, rows: e.data.rows)
                 case "pane.closed":
-                    closed = "The pane closed (\(e.data.reason))."
+                    // A paired server's pane says why in the server's
+                    // words, this server's in a fixed one.
+                    let why = e.data.reason
+                    closed = why.contains(" ") ? "The pane closed: \(why)." : "The pane closed (\(why))."
                 default:
                     break
                 }
@@ -138,6 +167,7 @@ final class PaneController: NSObject, TerminalViewDelegate {
     /// window's size when the pane has another, as typing in a console
     /// does: once per size.
     private func type(_ data: Data) {
+        guard keys else { return }
         if let fit = host.fitting, fit != size, fit != claimed {
             claim = fit
         }

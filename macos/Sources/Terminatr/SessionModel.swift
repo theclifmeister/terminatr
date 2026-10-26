@@ -5,7 +5,9 @@ import TerminatrKit
 /// One session window's streams: the session's watch and its
 /// transcript, (re)opened whenever the window's ref names another
 /// session, and the acts the window sends as the human. The server
-/// checks every act; the window only shows what it answered.
+/// checks every act; the window only shows what it answered. A paired
+/// server's session has neither stream: only its pane crosses the link
+/// (TerminalTab), and the window shows it on the Terminal tab.
 @MainActor
 @Observable
 final class SessionModel {
@@ -24,6 +26,7 @@ final class SessionModel {
 
     init(ref: SessionRef) {
         self.ref = ref
+        if ref.isRemote { tab = .terminal }
     }
 
     /// Follows the session app names for ref: a new one restarts the
@@ -37,7 +40,7 @@ final class SessionModel {
         watch = nil
         transcript = Transcript()
         transcriptFailure = nil
-        guard let id, let bridge = app.bridge else { return }
+        guard let id, let bridge = app.bridge, !ref.isRemote else { return }
         streams.append(Task { await self.watchSession(bridge, id) })
         if app.caps.contains("transcript") {
             streams.append(Task { await self.watchTranscript(bridge, id) })
@@ -52,7 +55,7 @@ final class SessionModel {
     /// Opens on the conversation; falls back to the terminal while it
     /// can't be shown, unless the user picked a tab.
     func settle(_ state: ConversationState) {
-        guard !tabPicked else { return }
+        guard !tabPicked || ref.isRemote else { return }
         tab = state.available ? .conversation : .terminal
     }
 
