@@ -476,11 +476,18 @@ struct StatusLine: View {
         VStack(alignment: .leading, spacing: 4) {
             line
             if case .connected = model.phase, let behind = model.compatibility.message {
-                Text(behind)
-                    .font(.system(size: 10.5))
-                    .foregroundStyle(theme.attention)
-                    .lineLimit(4)
-                    .fixedSize(horizontal: false, vertical: true)
+                // Ink, with the attention colour on the symbol: as text,
+                // it is under 4.5:1 on the light sidebar (Theme.bloom).
+                Label {
+                    Text(behind)
+                        .lineLimit(4)
+                        .fixedSize(horizontal: false, vertical: true)
+                } icon: {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(theme.attention)
+                }
+                .font(.system(size: 10.5))
+                .foregroundStyle(theme.ink)
             }
         }
     }
