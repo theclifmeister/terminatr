@@ -112,7 +112,8 @@ struct SessionWindow: View {
 }
 
 /// The ref names no running session: the thread is done or stopped,
-/// the coordinator isn't running, or the bridge is down.
+/// the coordinator isn't running (Start starts it, project.open), or
+/// the bridge is down.
 struct NotRunning: View {
     @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
@@ -125,6 +126,10 @@ struct NotRunning: View {
             Text(detail)
                 .foregroundStyle(theme.muted)
                 .multilineTextAlignment(.center)
+            if ref.isCoordinator, !ref.isRemote, app.bridge != nil, let p = app.project(ref.project) {
+                StartButton(project: p, title: "Start the Coordinator")
+                    .padding(.top, 4)
+            }
         }
         .padding(28)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18))
@@ -146,7 +151,11 @@ struct NotRunning: View {
             if case .closed(let why) = app.remotePane(ref) { return why }
             return "The window shows it once \(ref.server) lists it again."
         }
-        if ref.isCoordinator { return "Start it with tm in a terminal; the window shows it once it runs." }
+        if ref.isCoordinator {
+            return app.project(ref.project)?.active == false
+                ? "The project is inactive: tm project active \(ref.project) turns it on."
+                : "Start it with the project's agent and model, as tm project open does."
+        }
         if let t = app.thread(ref), t.record.done { return "The thread is done." }
         return "Its agent isn't running. The window shows it once it runs."
     }

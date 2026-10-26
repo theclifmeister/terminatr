@@ -6,7 +6,7 @@ import Foundation
 /// The terminatr app API (docs/SPEC.md §3.8): what tm app bridge answers.
 public enum AppAPI {
     /// The app API version this app was generated against.
-    public static let version = 6
+    public static let version = 7
 
     public struct AnswerParams: Codable, Sendable, Hashable {
         public var id: String
@@ -579,13 +579,14 @@ public enum AppAPI {
         public var repos: [String]
         public var counts: [String: Int]
         public var error: String
+        public var board: [Task]
         public var items: [Item]
         public var usage: Usage
         public var taskUsage: [String: Usage]
         public var checkouts: [String: String]
         public var links: [Link]
 
-        public init(slug: String, active: Bool, paused: Bool = false, pinned: Bool = false, needsYou: [Task] = [], questions: Int = 0, threads: [Thread] = [], prHostFails: Int = 0, goal: String = "", repos: [String] = [], counts: [String: Int] = [:], error: String = "", items: [Item] = [], usage: Usage, taskUsage: [String: Usage] = [:], checkouts: [String: String] = [:], links: [Link] = []) {
+        public init(slug: String, active: Bool, paused: Bool = false, pinned: Bool = false, needsYou: [Task] = [], questions: Int = 0, threads: [Thread] = [], prHostFails: Int = 0, goal: String = "", repos: [String] = [], counts: [String: Int] = [:], error: String = "", board: [Task] = [], items: [Item] = [], usage: Usage, taskUsage: [String: Usage] = [:], checkouts: [String: String] = [:], links: [Link] = []) {
             self.slug = slug
             self.active = active
             self.paused = paused
@@ -598,6 +599,7 @@ public enum AppAPI {
             self.repos = repos
             self.counts = counts
             self.error = error
+            self.board = board
             self.items = items
             self.usage = usage
             self.taskUsage = taskUsage
@@ -618,6 +620,7 @@ public enum AppAPI {
             case repos
             case counts
             case error
+            case board
             case items
             case usage
             case taskUsage = "task_usage"
@@ -656,6 +659,18 @@ public enum AppAPI {
             case project
             case cols
             case rows
+        }
+    }
+
+    public struct ProjectParams: Codable, Sendable, Hashable {
+        public var project: String
+
+        public init(project: String) {
+            self.project = project
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case project
         }
     }
 
@@ -779,6 +794,24 @@ public enum AppAPI {
         enum CodingKeys: String, CodingKey {
             case label
             case description
+        }
+    }
+
+    public struct QuestionsOpen: Codable, Sendable, Hashable {
+        public var session: String
+        public var via: String
+        public var open: Int
+
+        public init(session: String, via: String, open: Int) {
+            self.session = session
+            self.via = via
+            self.open = open
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case session
+            case via
+            case open
         }
     }
 
@@ -1298,8 +1331,10 @@ public enum AppAPI {
         public var error: Bool
         public var lines: Int
         public var todos: [TranscriptTodo]
+        public var at: Date?
+        public var from: String
 
-        public init(kind: String, text: String = "", truncated: Bool = false, tool: String = "", call: String = "", error: Bool = false, lines: Int = 0, todos: [TranscriptTodo] = []) {
+        public init(kind: String, text: String = "", truncated: Bool = false, tool: String = "", call: String = "", error: Bool = false, lines: Int = 0, todos: [TranscriptTodo] = [], at: Date? = nil, from: String = "") {
             self.kind = kind
             self.text = text
             self.truncated = truncated
@@ -1308,6 +1343,8 @@ public enum AppAPI {
             self.error = error
             self.lines = lines
             self.todos = todos
+            self.at = at
+            self.from = from
         }
 
         enum CodingKeys: String, CodingKey {
@@ -1319,6 +1356,8 @@ public enum AppAPI {
             case error
             case lines
             case todos
+            case at
+            case from
         }
     }
 
@@ -1523,6 +1562,7 @@ public enum AppAPI {
         public static let peerList = Call<NoParams, PeerList>("peer.list", write: false)
         public static let projectOpen = Call<ProjectOpenParams, ProjectOpen>("project.open", write: true)
         public static let projectsWatch = Subscription<ProjectsWatchParams, Projects, Projects>("projects.watch", events: ["projects.changed"])
+        public static let questionsOpen = Call<ProjectParams, QuestionsOpen>("questions.open", write: true)
         public static let sessionAnswer = Call<AnswerParams, AnswerResult>("session.answer", write: true)
         public static let sessionApprove = Call<ApproveParams, ApproveResult>("session.approve", write: true)
         public static let sessionKeys = Call<KeysParams, Empty>("session.keys", write: true)
@@ -1806,6 +1846,7 @@ extension AppAPI.Project {
         self.repos = try c.decodeIfPresent([String].self, forKey: .repos) ?? []
         self.counts = try c.decodeIfPresent([String: Int].self, forKey: .counts) ?? [:]
         self.error = try c.decodeIfPresent(String.self, forKey: .error) ?? ""
+        self.board = try c.decodeIfPresent([AppAPI.Task].self, forKey: .board) ?? []
         self.items = try c.decodeIfPresent([AppAPI.Item].self, forKey: .items) ?? []
         self.usage = try c.decode(AppAPI.Usage.self, forKey: .usage)
         self.taskUsage = try c.decodeIfPresent([String: AppAPI.Usage].self, forKey: .taskUsage) ?? [:]
@@ -1828,6 +1869,13 @@ extension AppAPI.ProjectOpenParams {
         self.project = try c.decode(String.self, forKey: .project)
         self.cols = try c.decodeIfPresent(Int.self, forKey: .cols) ?? 0
         self.rows = try c.decodeIfPresent(Int.self, forKey: .rows) ?? 0
+    }
+}
+
+extension AppAPI.ProjectParams {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.project = try c.decode(String.self, forKey: .project)
     }
 }
 
@@ -1890,6 +1938,15 @@ extension AppAPI.QuestionOption {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.label = try c.decode(String.self, forKey: .label)
         self.description = try c.decodeIfPresent(String.self, forKey: .description) ?? ""
+    }
+}
+
+extension AppAPI.QuestionsOpen {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.session = try c.decode(String.self, forKey: .session)
+        self.via = try c.decode(String.self, forKey: .via)
+        self.open = try c.decode(Int.self, forKey: .open)
     }
 }
 
@@ -2124,6 +2181,8 @@ extension AppAPI.TranscriptItem {
         self.error = try c.decodeIfPresent(Bool.self, forKey: .error) ?? false
         self.lines = try c.decodeIfPresent(Int.self, forKey: .lines) ?? 0
         self.todos = try c.decodeIfPresent([AppAPI.TranscriptTodo].self, forKey: .todos) ?? []
+        self.at = try c.decodeIfPresent(Date.self, forKey: .at)
+        self.from = try c.decodeIfPresent(String.self, forKey: .from) ?? ""
     }
 }
 

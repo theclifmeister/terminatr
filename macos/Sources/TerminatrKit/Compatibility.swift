@@ -18,6 +18,14 @@ public enum Compatibility: Equatable, Sendable {
     /// peer.list the windows and the menu bar use.
     public static let minimumAPI = 2
 
+    /// The app API that has task.add: File › New Task… needs it.
+    public static let taskAddAPI = 7
+
+    /// Whether hello's tm adds tasks from the app (task.add).
+    public static func addsTasks(_ hello: AppAPI.Hello) -> Bool {
+        hello.appApi >= taskAddAPI && hello.methods.contains(AppAPI.Methods.taskAdd.name)
+    }
+
     /// Compares hello with this app, of release appVersion (its
     /// CFBundleShortVersionString, "0.54.0"; nil or 0.0.0 for a build
     /// from source, which compares by the app API only).

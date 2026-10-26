@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/textsafe"
@@ -24,6 +25,9 @@ type Transcript struct {
 	// every version.
 	Tested       []string `toml:"tested"`
 	VersionField string   `toml:"version_field"`
+	// TimeField is the line's path that gives when it was written
+	// (RFC 3339): each of its items' At.
+	TimeField string `toml:"time_field"`
 	// Content is the path of a conversation line's blocks: a list of
 	// objects, or a string that reads as one block of StringBlock's
 	// kind. BlockKind is the path of a block's kind.
@@ -133,6 +137,12 @@ func (t *Transcript) Map(line []byte) TranscriptLine {
 	if len(rules) == 0 {
 		return out // not a conversation line
 	}
+	var at time.Time
+	if t.TimeField != "" {
+		if s, ok := lookupString(obj, t.TimeField); ok {
+			at, _ = time.Parse(time.RFC3339Nano, s)
+		}
+	}
 	var blocks []any
 	switch c, _ := lookup(obj, t.Content); c := c.(type) {
 	case string:
@@ -168,6 +178,7 @@ func (t *Transcript) Map(line []byte) TranscriptLine {
 			continue
 		}
 		if it, ok := t.item(r, obj, str); ok {
+			it.At = at
 			out.Items = append(out.Items, it)
 		}
 	}

@@ -6,8 +6,9 @@ import TerminatrKit
 /// of the window's actions. ↑ ↓ move, ↩ shows the row, ⌘↩ acts on it
 /// (E1): a session's dialog or question shows here with the cards the
 /// conversation has, and asks what they ask; a message goes through the
-/// composer; a task is delegated once the user confirms it. Esc goes
-/// back, then closes.
+/// composer; a task is delegated once the user confirms it; a task in
+/// review shows Accept and Send back…, as the dashboard's cards. Esc
+/// goes back, then closes.
 struct CommandPalette: View {
     @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
@@ -15,6 +16,7 @@ struct CommandPalette: View {
     @State private var at = 0
     @State private var acting: (item: PaletteItem, ref: SessionRef, prompt: Bool)?
     @State private var delegating: PaletteItem?
+    @State private var reviewing: PaletteItem?
     @State private var said: (text: String, failed: Bool)?
     @FocusState private var focused: Bool
 
@@ -22,6 +24,8 @@ struct CommandPalette: View {
         VStack(spacing: 0) {
             if let acting {
                 ActPanel(item: acting.item, ref: acting.ref, prompt: acting.prompt) { back() }
+            } else if let reviewing, case .review(let project, let task) = reviewing.act {
+                ReviewPanel(item: reviewing, project: project, task: task) { back() }
             } else {
                 search
             }
@@ -187,6 +191,8 @@ struct CommandPalette: View {
             acting = (r, ref, true)
         case .delegate:
             delegating = r
+        case .review:
+            reviewing = r
         case nil:
             go(r)
         }
@@ -194,6 +200,7 @@ struct CommandPalette: View {
 
     private func back() {
         acting = nil
+        reviewing = nil
         focused = true
     }
 
@@ -304,5 +311,47 @@ private struct ActPanel: View {
         }
         .task(id: app.bridge == nil) { m.follow(app) }
         .onChange(of: app.sessionID(ref)) { m.follow(app) }
+    }
+}
+
+/// The palette's act on a task in review: Accept and Send back…
+/// (TaskActs), each asking the project's coordinator.
+private struct ReviewPanel: View {
+    @Environment(AppModel.self) private var app
+    @Environment(\.theme) private var theme
+    let item: PaletteItem
+    let project: String
+    let task: String
+    let back: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                Button(action: back) {
+                    Label("Back", systemImage: "chevron.backward")
+                }
+                .buttonStyle(.borderless)
+                .keyboardShortcut(.cancelAction)
+                .help("Back to the palette (Esc)")
+                Text(item.title)
+                    .font(theme.title(15, .bold))
+                    .lineLimit(1)
+                Spacer()
+                if let go = item.go {
+                    Button("Open") {
+                        app.palette = false
+                        app.select(go)
+                    }
+                    .help("Shows it in the window")
+                }
+            }
+            HStack {
+                Text("\(project) · ready to review")
+                    .foregroundStyle(theme.muted)
+                Spacer(minLength: 8)
+                TaskActs(project: project, task: task, status: "review")
+            }
+        }
+        .padding(16)
     }
 }

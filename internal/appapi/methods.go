@@ -71,7 +71,11 @@ func init() {
 		unary(proto.MethodTaskSendBack, true, sendBackParams, taskAskResultOf),
 		unary(proto.MethodTaskDelegate, true, taskParams, taskAskResultOf),
 		unary(proto.MethodProjectOpen, true, projectOpenParams, projectOpenOf),
-		// A task added to a project's board, as tm task add (app API 6).
+		// The coordinator's open questions (tm ask), put to the user
+		// in its session, where the app's question card answers them
+		// (app API 6).
+		unary(proto.MethodQuestionsOpen, true, questionsOpenParams, questionsOpenOf),
+		// A task added to a project's board, as tm task add (app API 7).
 		unary(proto.MethodTaskAdd, true, taskAddParams, taskAddedOf),
 	} {
 		methods[m.Name] = m
@@ -287,6 +291,10 @@ func taskParams(p TaskParams) proto.TaskActionParams {
 
 func sendBackParams(p SendBackParams) proto.TaskActionParams {
 	return proto.TaskActionParams{Project: p.Project, Task: p.Task, Note: p.Note}
+}
+
+func questionsOpenParams(p ProjectParams) proto.QuestionsOpenParams {
+	return proto.QuestionsOpenParams{Project: p.Project}
 }
 
 func taskAddParams(p TaskAddParams) proto.TaskAddParams {

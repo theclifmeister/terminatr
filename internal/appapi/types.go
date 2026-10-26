@@ -89,6 +89,10 @@ type (
 		Task    string `json:"task"`
 		Note    string `json:"note"`
 	}
+	// ProjectParams name a project (questions.open).
+	ProjectParams struct {
+		Project string `json:"project"`
+	}
 	// TaskAddParams are task.add's: the project, the new task's title
 	// (one line) and, optionally, its notes.
 	TaskAddParams struct {
@@ -253,7 +257,8 @@ type Projects struct {
 // behind origin, links). Error says why it doesn't open, or why its
 // board doesn't load. Active, Paused and Pinned are the project's
 // settings of those names (since app API 4), for the sidebar's order:
-// its only settings in the app API.
+// its only settings in the app API. Board are the tasks on deck and in
+// the backlog, without notes and steps (since app API 6).
 type Project struct {
 	Slug        string            `json:"slug"`
 	Active      bool              `json:"active"`
@@ -267,6 +272,7 @@ type Project struct {
 	Repos       []string          `json:"repos,omitempty"`
 	Counts      map[string]int    `json:"counts,omitempty"`
 	Error       string            `json:"error,omitempty"`
+	Board       []Task            `json:"board,omitempty"`
 	Items       []Item            `json:"items,omitempty"`
 	Usage       Usage             `json:"usage"`
 	TaskUsage   map[string]Usage  `json:"task_usage,omitempty"`
@@ -599,6 +605,9 @@ func projectOf(p server.SideProject) Project {
 	for _, t := range p.Threads {
 		out.Threads = append(out.Threads, threadOf(t))
 	}
+	for _, t := range p.Board {
+		out.Board = append(out.Board, taskOf(t))
+	}
 	for _, it := range p.Items {
 		out.Items = append(out.Items, itemOf(it))
 	}
@@ -752,6 +761,19 @@ type ProjectOpen struct {
 	Started bool   `json:"started,omitempty"`
 }
 
+// QuestionsOpen is questions.open's result: the coordinator's session
+// prompted to put its questions to the user, how the prompt went in (as
+// session.prompt's Via) and how many questions were open.
+type QuestionsOpen struct {
+	Session string `json:"session"`
+	Via     string `json:"via"`
+	Open    int    `json:"open"`
+}
+
+func questionsOpenOf(r proto.QuestionsOpenResult) QuestionsOpen {
+	return QuestionsOpen{Session: r.Session, Via: r.Via, Open: r.Open}
+}
+
 func projectOpenOf(r proto.ProjectOpenResult) ProjectOpen {
 	return ProjectOpen{Session: r.Session, Started: r.Started}
 }
@@ -831,7 +853,9 @@ type TranscriptEvent struct {
 }
 
 // TranscriptItem is one item of a conversation: Kind "prompt", "text",
-// "tool", "result", "note" or "todos".
+// "tool", "result", "note" or "todos". At is when the agent wrote it,
+// From who sent a prompt: "tm", "coordinator", or empty for the user
+// (since app API 6).
 type TranscriptItem struct {
 	Kind      string           `json:"kind"`
 	Text      string           `json:"text,omitempty"`
@@ -841,6 +865,8 @@ type TranscriptItem struct {
 	Error     bool             `json:"error,omitempty"`
 	Lines     int              `json:"lines,omitempty"`
 	Todos     []TranscriptTodo `json:"todos,omitempty"`
+	At        time.Time        `json:"at,omitzero"`
+	From      string           `json:"from,omitempty"`
 }
 
 // TranscriptTodo is one entry of a todos item.
@@ -871,7 +897,7 @@ func transcriptEventOf(ev proto.TranscriptEvent) TranscriptEvent {
 	out := TranscriptEvent{Skipped: ev.Skipped, Reason: ev.Reason}
 	for _, it := range ev.Items {
 		ti := TranscriptItem{Kind: it.Kind, Text: it.Text, Truncated: it.Truncated, Tool: it.Tool, Call: it.Call,
-			Error: it.Error, Lines: it.Lines}
+			Error: it.Error, Lines: it.Lines, At: it.At, From: it.From}
 		for _, t := range it.Todos {
 			ti.Todos = append(ti.Todos, TranscriptTodo{Text: t.Text, Status: t.Status})
 		}

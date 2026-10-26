@@ -1,67 +1,73 @@
 import SwiftUI
 import TerminatrKit
 
-/// A project in the window's detail (design T746): its goal, what
-/// needs the user (the project's share of the one needs list: its
-/// sessions' questions, approvals and held queues as well as its tasks,
-/// with the tasks in review as their own group), its threads as cards,
-/// the inbox items for the user and its board's counts. A card shows
-/// its thread in the window; the first, the coordinator's, its session.
+/// A project in the window's detail (design T746, T748 milestone C):
+/// its goal; what needs the user, as cards that act in place (the
+/// project's share of the one needs list, the tasks in review as their
+/// own group); its coordinator, with Start when none runs; its threads
+/// grouped by state, idle and stopped ones folded; its board, on deck
+/// shown and the backlog folded (C2), each task with its action; and
+/// the inbox items for the user. An empty project offers a next step.
+/// A thread's card shows its thread in the window.
 struct ProjectDashboard: View {
     @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
     let project: AppAPI.Project
+    /// The folded groups the user opened: "idle", "stopped", "backlog".
+    @State private var unfolded: Set<String> = []
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 header
                 let needs = app.needs(of: project.slug)
+                let running = app.coordinatorSession(project.slug) != nil
+                if Dashboard.isEmpty(project, needs: needs.count) {
+                    NextStepCard(project: project, step: Dashboard.next(project, coordinatorRuns: running))
+                }
                 if !needs.isEmpty {
                     section("Needs you · \(needs.count)") {
-                        ForEach(needs.filter { !$0.isReview }) { n in
-                            NeedCard(need: n) { app.open(project: n.project, session: n.session) }
-                        }
+                        ForEach(needs.filter { !$0.isReview }) { NeedCard(need: $0) }
                         let review = needs.filter(\.isReview)
                         if !review.isEmpty {
-                            Text("REVIEW · \(review.count)")
-                                .font(theme.mono(10, .medium))
-                                .tracking(1)
-                                .foregroundStyle(theme.muted)
-                                .padding(.top, 2)
-                            ForEach(review) { n in
-                                NeedCard(need: n) { app.open(project: n.project, session: n.session) }
+                            label("Review · \(review.count)")
+                            ForEach(review) { NeedCard(need: $0) }
+                        }
+                    }
+                }
+                section("Coordinator") {
+                    CoordinatorRow(project: project, attention: app.coordinator(of: project), running: running)
+                }
+                let groups = Dashboard.groups(project.threads, attention: app.attention) { t in
+                    !t.record.session.isEmpty && app.sessions.contains { $0.id == t.record.session }
+                }
+                if !groups.isEmpty {
+                    section("Threads · \(project.threads.count)") {
+                        ForEach(groups, id: \.group) { g in
+                            fold(g.group.rawValue, g.threads.count, key: g.group.folded ? "\(g.group)" : nil) {
+                                ForEach(g.threads, id: \.record.id) { threadCard($0) }
                             }
                         }
                     }
                 }
-                section("Threads") {
-                    let coordinator = SessionRef(project: project.slug)
-                    CoordinatorCard(attention: app.coordinator(of: project))
-                        .contentShape(RoundedRectangle(cornerRadius: 14))
-                        .onTapGesture { app.select(.session(coordinator)) }
-                        .accessibilityAddTraits(.isButton)
-                        .accessibilityAction { app.select(.session(coordinator)) }
-                        .help("Show the coordinator")
-                        .contextMenu { NewWindowButton(ref: coordinator) }
-                    if project.threads.isEmpty {
-                        Text("No threads.")
-                            .foregroundStyle(theme.muted)
-                    }
-                    ForEach(project.threads, id: \.record.id) { t in
-                        let sel = Selection.card(t, in: project.slug)
-                        ThreadCard(thread: t, attention: app.attention(t))
-                            .contentShape(RoundedRectangle(cornerRadius: 14))
-                            .onTapGesture { app.select(sel) }
-                            .accessibilityAddTraits(.isButton)
-                            .accessibilityAction { app.select(sel) }
-                            .help("Show \(t.task?.ref ?? t.record.id)")
-                            .contextMenu { NewWindowButton(ref: SessionRef(project: project.slug, thread: t.record.id)) }
+                let deck = Dashboard.onDeck(project), backlog = Dashboard.backlog(project)
+                if !deck.isEmpty || !backlog.isEmpty {
+                    section("Board") {
+                        if !deck.isEmpty {
+                            fold("On deck", deck.count, key: nil) {
+                                ForEach(deck) { BoardRow(project: project.slug, task: $0) }
+                            }
+                        }
+                        if !backlog.isEmpty {
+                            fold("Backlog", backlog.count, key: "backlog") {
+                                ForEach(backlog) { BoardRow(project: project.slug, task: $0) }
+                            }
+                        }
                     }
                 }
                 let inbox = project.items.filter(\.forYou)
                 if !inbox.isEmpty {
-                    section("Inbox · \(inbox.count)") {
+                    section("Inbox · \(inbox.count) for you") {
                         ForEach(inbox.prefix(Self.inboxShown)) { it in
                             InboxLine(item: it)
                         }
@@ -82,6 +88,17 @@ struct ProjectDashboard: View {
     }
 
     static let inboxShown = 8
+
+    private func threadCard(_ t: AppAPI.Thread) -> some View {
+        let sel = Selection.card(t, in: project.slug)
+        return ThreadCard(thread: t, attention: app.attention(t))
+            .contentShape(RoundedRectangle(cornerRadius: 14))
+            .onTapGesture { app.select(sel) }
+            .accessibilityAddTraits(.isButton)
+            .accessibilityAction { app.select(sel) }
+            .help("Show \(t.task?.ref ?? t.record.id)")
+            .contextMenu { NewWindowButton(ref: SessionRef(project: project.slug, thread: t.record.id)) }
+    }
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -113,7 +130,7 @@ struct ProjectDashboard: View {
     private var board: String? {
         let c = project.counts
         guard !c.isEmpty else { return nil }
-        return "\(app.needs(of: project.slug).count) need you · \(c["in_motion"] ?? 0) in motion · \(c["on_deck"] ?? 0) on deck"
+        return "\(app.needs(of: project.slug).count) need you · \(c["in_motion"] ?? 0) in motion · \(c["on_deck"] ?? 0) on deck · \(c["backlog"] ?? 0) in the backlog"
     }
 
     private func section<C: View>(_ title: String, @ViewBuilder _ content: () -> C) -> some View {
@@ -126,44 +143,223 @@ struct ProjectDashboard: View {
             content()
         }
     }
+
+    private func label(_ title: String) -> some View {
+        Text(title.uppercased())
+            .font(theme.mono(10, .medium))
+            .tracking(1)
+            .foregroundStyle(theme.muted)
+            .padding(.top, 2)
+    }
+
+    /// A group under its label: with a key, folded until the user opens
+    /// it (the key is kept while the dashboard shows).
+    @ViewBuilder
+    private func fold<C: View>(_ title: String, _ n: Int, key: String?, @ViewBuilder _ content: () -> C) -> some View {
+        if let key {
+            let open = unfolded.contains(key)
+            Button {
+                if open { unfolded.remove(key) } else { unfolded.insert(key) }
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "chevron.right")
+                        .rotationEffect(.degrees(open ? 90 : 0))
+                        .font(theme.body(9, .bold))
+                    Text("\(title) · \(n)".uppercased())
+                        .font(theme.mono(10, .medium))
+                        .tracking(1)
+                }
+                .foregroundStyle(theme.muted)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .padding(.top, 2)
+            .accessibilityValue(open ? "open" : "folded")
+            if open { content() }
+        } else {
+            label("\(title) · \(n)")
+            content()
+        }
+    }
 }
 
-/// A need on the dashboard: what it is and its task's title; a click
-/// shows what it names.
-private struct NeedCard: View {
+/// The project's coordinator as the dashboard's row: its state as the
+/// dot and tag, what it does or waits on, and Start when none runs
+/// (project.open, as tm project open) or Open when it does.
+struct CoordinatorRow: View {
+    @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
-    let need: Need
-    let action: () -> Void
+    let project: AppAPI.Project
+    let attention: Attention
+    let running: Bool
 
     var body: some View {
-        Button(action: action) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Image(systemName: NeedRow.symbol(need.kind))
-                    .foregroundStyle(NeedRow.colour(need.kind, theme))
-                    .frame(width: 16)
-                    .accessibilityHidden(true)
-                Text(need.what)
-                    .font(theme.body(13, .semibold))
-                    .lineLimit(1)
-                Text(need.detail)
-                    .font(theme.body(12.5))
-                    .foregroundStyle(theme.muted)
-                    .lineLimit(1)
-                Spacer(minLength: 8)
-                Text(NeedRow.verb(need.kind))
-                    .font(theme.body(12, .semibold))
-                    .foregroundStyle(theme.action)
+        let ref = SessionRef(project: project.slug)
+        HStack(alignment: .center, spacing: 8) {
+            Circle()
+                .fill(theme.colour(attention.tone))
+                .frame(width: 8, height: 8)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text("Coordinator")
+                        .font(theme.title(15, .bold))
+                    Text(attention.word)
+                        .font(theme.mono(11))
+                        .foregroundStyle(attention.waits ? theme.colour(attention.tone) : theme.muted)
+                }
+                if !attention.why.isEmpty {
+                    Text(attention.why)
+                        .font(theme.body(12.5, attention.waits ? .medium : .regular))
+                        .foregroundStyle(attention.waits ? theme.colour(attention.tone) : theme.muted)
+                        .lineLimit(2)
+                }
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .contentShape(Rectangle())
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
-            .background(theme.cardTint, in: RoundedRectangle(cornerRadius: 10))
-            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(theme.edge, lineWidth: 1))
+            Spacer(minLength: 8)
+            if running {
+                Button("Open") { app.select(.session(ref)) }
+                    .help("Show the coordinator")
+            } else {
+                StartButton(project: project)
+            }
         }
-        .buttonStyle(.plain)
+        .padding(14)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+        .background(theme.cardTint, in: RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(theme.edge, lineWidth: 1))
+        .contextMenu { NewWindowButton(ref: ref) }
+    }
+}
+
+/// Starts the project's coordinator (project.open) and shows it; an
+/// inactive project is refused, since opening never activates.
+struct StartButton: View {
+    @Environment(AppModel.self) private var app
+    @Environment(\.theme) private var theme
+    let project: AppAPI.Project
+    var title = "Start"
+    @State private var busy = false
+    @State private var error: String?
+
+    var body: some View {
+        VStack(alignment: .trailing, spacing: 4) {
+            Button {
+                start()
+            } label: {
+                if busy {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Text(title)
+                }
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(theme.action)
+            .disabled(busy || !project.active)
+            .help(project.active ? "Starts the coordinator with the project's agent and model, as tm project open does"
+                                 : "The project is inactive: tm project active \(project.slug) turns it on")
+            if let error {
+                Text(error)
+                    .font(theme.body(11.5))
+                    .foregroundStyle(theme.attention)
+                    .multilineTextAlignment(.trailing)
+            }
+        }
+    }
+
+    private func start() {
+        busy = true
+        error = nil
+        Task {
+            do {
+                try await app.startCoordinator(project.slug)
+            } catch {
+                self.error = Dashboard.words(error)
+            }
+            busy = false
+        }
+    }
+}
+
+/// A task on the board: its id, title and its action (Delegate…).
+private struct BoardRow: View {
+    @Environment(\.theme) private var theme
+    let project: String
+    let task: AppAPI.Task
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 8) {
+            Text(task.ref)
+                .font(theme.mono(12, .medium))
+                .foregroundStyle(theme.action)
+                .frame(minWidth: 44, alignment: .leading)
+            Text(task.title)
+                .font(theme.body(13))
+                .lineLimit(1)
+                .textSelection(.enabled)
+            Spacer(minLength: 8)
+            TaskActs(project: project, task: task.ref, status: task.status, compact: true)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(theme.cardTint, in: RoundedRectangle(cornerRadius: 9))
+        .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(theme.edge, lineWidth: 1))
         .accessibilityElement(children: .combine)
-        .accessibilityHint(NeedRow.verb(need.kind))
+    }
+}
+
+/// An empty project's next step: turn it on, start its coordinator, or
+/// tell the coordinator what to build.
+private struct NextStepCard: View {
+    @Environment(AppModel.self) private var app
+    @Environment(\.theme) private var theme
+    let project: AppAPI.Project
+    let step: Dashboard.NextStep
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(headline)
+                .font(theme.title(18, .heavy))
+            Text(detail)
+                .foregroundStyle(theme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+            switch step {
+            case .activate:
+                Text("tm project active \(project.slug)")
+                    .font(theme.mono(12.5))
+                    .textSelection(.enabled)
+                    .padding(8)
+                    .background(theme.command, in: RoundedRectangle(cornerRadius: 8))
+            case .start:
+                StartButton(project: project, title: "Start the Coordinator")
+            case .message:
+                Button("Message the Coordinator") {
+                    app.select(.session(SessionRef(project: project.slug)))
+                    app.focusComposer()
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(theme.action)
+            }
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+        .background(theme.cardTint, in: RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(theme.edge, lineWidth: 1))
+    }
+
+    private var headline: String {
+        switch step {
+        case .activate: "This project is inactive"
+        case .start, .message: "Nothing here yet"
+        }
+    }
+
+    private var detail: String {
+        switch step {
+        case .activate: "Its coordinator and threads don't run while it is inactive. Turn it on in a terminal:"
+        case .start: "Start the coordinator and tell it what to build: it fills the board and starts threads for the tasks."
+        case .message: "Tell the coordinator what to build: it fills the board and starts threads for the tasks."
+        }
     }
 }
 
@@ -326,46 +522,6 @@ struct ProjectRow: View {
         .help("Coordinator: \(state)")
         .accessibilityElement(children: .combine)
         .accessibilityValue("coordinator \(state)")
-    }
-}
-
-/// The project's coordinator, the dashboard's first card: its state as
-/// the dot and tag, and what it does or waits on.
-struct CoordinatorCard: View {
-    @Environment(\.theme) private var theme
-    let attention: Attention
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Circle()
-                    .fill(theme.colour(attention.tone))
-                    .frame(width: 8, height: 8)
-                    .accessibilityHidden(true)
-                Text("Coordinator")
-                    .font(theme.title(15, .bold))
-                Spacer(minLength: 8)
-                Text(attention.word)
-                    .font(theme.mono(11))
-                    .foregroundStyle(attention.waits ? theme.colour(attention.tone) : theme.muted)
-            }
-            if attention.waits {
-                Label(attention.why, systemImage: "exclamationmark.bubble")
-                    .font(theme.body(12.5, .medium))
-                    .foregroundStyle(theme.colour(attention.tone))
-                    .lineLimit(2)
-            } else if !attention.why.isEmpty {
-                Text(attention.why)
-                    .font(theme.body(12.5))
-                    .foregroundStyle(theme.muted)
-                    .lineLimit(2)
-            }
-        }
-        .padding(14)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
-        .background(theme.cardTint, in: RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(theme.edge, lineWidth: 1))
-        .accessibilityElement(children: .combine)
     }
 }
 

@@ -25,6 +25,11 @@ public struct Transcript: Sendable, Equatable {
         public var call: String
         /// A tool call's result, once it came.
         public var result: Result?
+        /// When the agent wrote it, when its transcript says.
+        public var at: Date?
+        /// Who sent a prompt: "tm", "coordinator", or empty for the
+        /// user (Entry.who).
+        public var from: String = ""
     }
 
     public struct Result: Sendable, Equatable {
@@ -109,7 +114,8 @@ public struct Transcript: Sendable, Equatable {
     }
 
     private mutating func add(_ kind: Entry.Kind, _ it: AppAPI.TranscriptItem, result: Result? = nil) {
-        entries.append(Entry(id: nextID, kind: kind, text: it.text, truncated: it.truncated, tool: it.tool, call: it.call, result: result))
+        entries.append(Entry(id: nextID, kind: kind, text: it.text, truncated: it.truncated, tool: it.tool, call: it.call,
+                             result: result, at: it.at, from: it.from))
         nextID += 1
     }
 }

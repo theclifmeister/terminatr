@@ -27,6 +27,7 @@ state = "idle"
 [transcript]
 tested = ["1."]
 version_field = "version"
+time_field = "at"
 content = "content"
 block_kind = "type"
 string_block = "text"
@@ -134,7 +135,7 @@ func TestTranscriptWatch(t *testing.T) {
 	defer func(d time.Duration) { transcriptPoll = d }(transcriptPoll)
 	transcriptPoll = 20 * time.Millisecond
 	p, c := setupConv(t)
-	id, f := startConv(t, p, c, `{"type":"user","version":"1.2","content":"hello"}`+"\n"+
+	id, f := startConv(t, p, c, `{"type":"user","version":"1.2","at":"2026-10-26T20:43:05Z","content":"hello"}`+"\n"+
 		`{"type":"other"}`+"\n"+
 		`{"type":"assistant","version":"1.2","content":[{"type":"text","text":"hi \u001b[2Jthere"}]}`+"\n"+
 		`{"type":"assistant","content":[{"type":"text","text":"cut`)
@@ -145,13 +146,15 @@ func TestTranscriptWatch(t *testing.T) {
 	}
 	ev := nextEvent(t, events)
 	if ev.Event != proto.EventTranscriptReset || len(ev.Items) != 2 || ev.Items[0].Text != "hello" || ev.Items[1].Text != "hi [2Jthere" ||
+		!ev.Items[0].At.Equal(time.Date(2026, 10, 26, 20, 43, 5, 0, time.UTC)) || ev.Items[0].From != "" ||
 		ev.Status == nil || ev.Status.Version != "1.2" {
 		t.Fatalf("reset %+v", ev)
 	}
 
-	appendTo(t, f, ` short"}]}`+"\n"+`{"type":"user","content":"next"}`+"\n")
+	appendTo(t, f, ` short"}]}`+"\n"+`{"type":"user","content":"next"}`+"\n"+`{"type":"user","content":"[tm] 1 new inbox item"}`+"\n")
 	ev = nextEvent(t, events)
-	if ev.Event != proto.EventTranscriptItems || len(ev.Items) != 2 || ev.Items[0].Text != "cut short" || ev.Items[1].Text != "next" {
+	if ev.Event != proto.EventTranscriptItems || len(ev.Items) != 3 || ev.Items[0].Text != "cut short" || ev.Items[1].Text != "next" ||
+		ev.Items[1].From != "" || ev.Items[2].From != proto.FromTM {
 		t.Fatalf("items %+v", ev)
 	}
 

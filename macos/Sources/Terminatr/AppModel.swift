@@ -502,13 +502,51 @@ final class AppModel {
     /// Asks project's coordinator to delegate task (task.delegate, as
     /// the dashboard's D in the TUI): false when it was asked already.
     func delegate(project: String, task: String) async throws -> Bool {
-        guard let bridge else { throw BridgeError.closed("Not connected to terminatr.") }
-        return try await bridge.call(AppAPI.Methods.taskDelegate, AppAPI.TaskParams(project: project, task: task)).asked
+        try await connected().call(AppAPI.Methods.taskDelegate, AppAPI.TaskParams(project: project, task: task)).asked
     }
 
-    /// Whether this tm adds tasks from the app (task.add, app API 6).
+    /// Asks project's coordinator to accept task, in review
+    /// (task.accept, the TUI's A): false when it was asked already.
+    func accept(project: String, task: String) async throws -> Bool {
+        try await connected().call(AppAPI.Methods.taskAccept, AppAPI.TaskParams(project: project, task: task)).asked
+    }
+
+    /// Asks project's coordinator to send task back with the user's
+    /// note (task.send-back, the TUI's X).
+    func sendBack(project: String, task: String, note: String) async throws -> Bool {
+        try await connected().call(AppAPI.Methods.taskSendBack, AppAPI.SendBackParams(project: project, task: task, note: note)).asked
+    }
+
+    /// Starts project's coordinator unless it runs (project.open, as tm
+    /// project open), and shows it once session.list has it.
+    func startCoordinator(_ project: String) async throws {
+        _ = try await connected().call(AppAPI.Methods.projectOpen, AppAPI.ProjectOpenParams(project: project, cols: 120, rows: 36))
+        listSessions()
+        select(.session(SessionRef(project: project)))
+    }
+
+    /// Has project's coordinator put its open questions to the user
+    /// (questions.open): its question card then answers them.
+    func openQuestions(_ project: String) async throws {
+        _ = try await connected().call(AppAPI.Methods.questionsOpen, AppAPI.ProjectParams(project: project))
+        listSessions()
+    }
+
+    private func connected() throws -> Bridge {
+        guard let bridge else { throw BridgeError.closed("Not connected to terminatr.") }
+        return bridge
+    }
+
+    /// The permission dialog on a session's screen, as the human
+    /// (session.approve): what it offers (check), or an option sent,
+    /// once the server checked the dialog again.
+    func approve(_ params: AppAPI.ApproveParams) async throws -> AppAPI.ApproveResult {
+        try await connected().call(AppAPI.Methods.sessionApprove, params)
+    }
+
+    /// Whether this tm adds tasks from the app (task.add, app API 7).
     var canAddTask: Bool {
-        if case .connected(let h) = phase { return h.methods.contains(AppAPI.Methods.taskAdd.name) }
+        if case .connected(let h) = phase { return Compatibility.addsTasks(h) }
         return false
     }
 

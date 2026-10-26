@@ -15,6 +15,15 @@ private func hello(_ api: Int, _ tm: String) -> AppAPI.Hello {
     #expect(!Compatibility.check(hello(4, "v0.53.0"), appVersion: "0.54.0", appAPI: 3).blocks)
 }
 
+@Test func newTaskNeedsAPI7() {
+    var h = hello(7, "v0.55.0")
+    #expect(!Compatibility.addsTasks(h))
+    h.methods = [AppAPI.Methods.taskAdd.name]
+    #expect(Compatibility.addsTasks(h))
+    h.appApi = 6
+    #expect(!Compatibility.addsTasks(h))
+}
+
 @Test func compatibilityByRelease() {
     let api = AppAPI.version
     #expect(Compatibility.check(hello(api, "v0.54.0"), appVersion: "0.54.0") == .ok)

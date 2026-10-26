@@ -222,7 +222,7 @@ func TestBridge(t *testing.T) {
 // TestBridgeTaskActions: the task actions by name (app API 5) ask the
 // coordinator with tm task accept's and send-back's checks, their codes
 // reaching the app; project.open starts the project's coordinator once;
-// task.add (app API 6) adds a task once. Each is journaled as "human
+// task.add (app API 7) adds a task once. Each is journaled as "human
 // (app)".
 func TestBridgeTaskActions(t *testing.T) {
 	p := testPaths(t)
@@ -286,6 +286,13 @@ func TestBridgeTaskActions(t *testing.T) {
 	if err := c.Call(proto.MethodTaskAdd, appapi.TaskAddParams{Project: "web", Title: "Add docs"}, &added); err != nil || added.Task != "T4" || !added.Existing {
 		t.Fatalf("task.add again: %+v %v", added, err)
 	}
+	if _, err := pr.AddQuestion(project.Question{Question: "Which?", Options: []project.QuestionOption{{Label: "A"}, {Label: "B"}}}); err != nil {
+		t.Fatal(err)
+	}
+	// No coordinator runs to put the question to the user.
+	if err := c.Call(proto.MethodQuestionsOpen, appapi.ProjectParams{Project: "web"}, nil); code(err) != proto.ErrRefused {
+		t.Errorf("questions.open without a coordinator: %v", err)
+	}
 	var opened appapi.ProjectOpen
 	if err := c.Call(proto.MethodProjectOpen, appapi.ProjectOpenParams{Project: "web", Cols: 120, Rows: 40}, &opened); err != nil || !opened.Started || opened.Session == "" {
 		t.Fatalf("project.open: %+v %v", opened, err)
@@ -294,9 +301,14 @@ func TestBridgeTaskActions(t *testing.T) {
 	if err := c.Call(proto.MethodProjectOpen, appapi.ProjectOpenParams{Project: "web"}, &again); err != nil || again.Started || again.Session != opened.Session {
 		t.Fatalf("project.open again: %+v %v", again, err)
 	}
+	var qs appapi.QuestionsOpen
+	if err := c.Call(proto.MethodQuestionsOpen, appapi.ProjectParams{Project: "web"}, &qs); err != nil || qs.Session != opened.Session || qs.Open != 1 {
+		t.Fatalf("questions.open: %+v %v", qs, err)
+	}
 	journal, _ := os.ReadFile(pr.Path("JOURNAL.md"))
 	for _, want := range []string{" human (app) task.accept.ask T2", " human (app) task.sendback.ask T3 the tests fail",
-		" human (app) task.delegate.ask T1", " human (app) task.add T4 Add docs", " human (app) coordinator.start " + opened.Session} {
+		" human (app) task.delegate.ask T1", " human (app) task.add T4 Add docs", " human (app) coordinator.start " + opened.Session,
+		" human (app) questions.open " + opened.Session + " 1 open"} {
 		if !strings.Contains(string(journal), want) {
 			t.Errorf("journal lacks %q:\n%s", want, journal)
 		}
