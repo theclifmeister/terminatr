@@ -32,6 +32,20 @@ struct Theme: Sendable {
     var edge: Color
     var meter: [Color]
 
+    /// The user's prompts in the conversation: a gradient, and its ink.
+    var prompt: [Color]
+    var onPrompt: Color
+    /// The agent's text cards.
+    var agentCard: Color
+    /// The question and approval cards' wash, over the frost.
+    var questionTint: Color
+    var approvalTint: Color
+    /// A command or a path set in mono.
+    var command: Color
+    /// The terminal tab.
+    var terminalBackground: Color
+    var terminalForeground: Color
+
     var titleFamily: String
     var monoFamily: String
 
@@ -72,6 +86,14 @@ extension Theme {
         cardTint: .dynamic(0xffffff, 0xffffff, alpha: 0.80, darkAlpha: 0.07),
         edge: .dynamic(0xffffff, 0xffffff, alpha: 0.85, darkAlpha: 0.14),
         meter: [.dynamic(0x5a3cf0, 0xa58fff), Color(hex: 0xff5fb7), Color(hex: 0xff6b4a)],
+        prompt: [Color(hex: 0x5a3cf0), .dynamic(0x9b3cf0, 0x8a2fd6)],
+        onPrompt: Color(hex: 0xffffff),
+        agentCard: .dynamic(0xffffff, 0xffffff, alpha: 0.80, darkAlpha: 0.07),
+        questionTint: .dynamic(0xefeaff, 0x5a3cf0, alpha: 0.95, darkAlpha: 0.28),
+        approvalTint: .dynamic(0xfff1ec, 0xff6a4a, alpha: 1, darkAlpha: 0.22),
+        command: .dynamic(0x1c1433, 0x000000, alpha: 0.06, darkAlpha: 0.3),
+        terminalBackground: Color(hex: 0x1a1430),
+        terminalForeground: Color(hex: 0xefeaff),
         titleFamily: "Bricolage Grotesque",
         monoFamily: "DM Mono"
     )
