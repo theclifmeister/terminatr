@@ -3,7 +3,8 @@ import TerminatrKit
 
 /// Beside the session: a thread's task and steps, its branch, PR and
 /// context, the agent's todos; a coordinator's project and what needs
-/// the user.
+/// the user. A paired server's session shows what that server lets this
+/// one see of it (peer.list): its link, its switch, the session's state.
 struct Inspector: View {
     @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
@@ -13,7 +14,9 @@ struct Inspector: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                if model.ref.isCoordinator {
+                if model.ref.isRemote {
+                    remote
+                } else if model.ref.isCoordinator {
                     coordinator
                 } else {
                     thread
@@ -115,6 +118,75 @@ struct Inspector: View {
                 if p.questions > 0 { fact("Questions", "\(p.questions) open", mono: false) }
                 if p.usage.costUsd > 0 { fact("Cost", String(format: "$%.2f", p.usage.costUsd), mono: false) }
             }
+        }
+    }
+
+    // MARK: a paired server's
+
+    @ViewBuilder
+    private var remote: some View {
+        let ref = model.ref
+        let peer = app.peer(ref.server)
+        let s = ref.session(in: app.peers)
+        let project = peer?.projects.first { $0.project == ref.project }
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                if let task = s?.task, !task.isEmpty {
+                    Text(task).font(theme.mono(12.5, .medium)).foregroundStyle(theme.action)
+                }
+                Text(ref.isCoordinator ? "coordinator" : ref.thread).font(theme.mono(12)).foregroundStyle(theme.muted)
+            }
+            Text(ref.project).font(theme.title(16, .heavy))
+            if let goal = project?.goal, !goal.isEmpty {
+                Text(goal).font(.system(size: 12)).foregroundStyle(theme.muted)
+            }
+            if let s, !s.state.isEmpty {
+                let blocked = s.state == "blocked" || s.asking
+                Text(s.asking ? "asks" : blocked ? (s.reason.isEmpty ? "blocked" : s.reason) : s.state)
+                    .font(theme.mono(11, .medium))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 2)
+                    .background(blocked ? theme.approval : theme.line, in: Capsule())
+                    .foregroundStyle(blocked ? theme.onAttention : theme.ink)
+            }
+        }
+        section("Paired server") {
+            fact("Server", peer.map { $0.name.isEmpty ? $0.alias : "\($0.name) (\($0.alias))" } ?? ref.server, mono: false)
+            fact("Link", peer?.state ?? "not paired", mono: false)
+            fact("Panes", panes(app.remotePane(ref)), mono: false)
+            if project?.stale == true { fact("Read", "stale", mono: false) }
+            Text("Its conversation stays there: only the pane crosses the link.")
+                .font(.system(size: 11.5))
+                .foregroundStyle(theme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        if let s {
+            section("Agent") {
+                fact("Agent", [s.agent, s.model].filter { !$0.isEmpty }.joined(separator: " · "), mono: false)
+                if !s.current.isEmpty { fact("Now", s.current, mono: false) }
+                if s.todosTotal > 0 { fact("Todos", "\(s.todosDone) of \(s.todosTotal)", mono: false) }
+                if s.contextWindow > 0 {
+                    let pct = Int((Double(s.context) / Double(s.contextWindow) * 100).rounded())
+                    HStack(spacing: 8) {
+                        Text("Context").foregroundStyle(theme.muted)
+                        Meter(fraction: Double(s.context) / Double(s.contextWindow))
+                            .frame(height: 5)
+                        Text("\(pct)%").font(theme.mono(11.5))
+                    }
+                    .font(.system(size: 12))
+                }
+                if s.queuedPrompts > 0 { fact("Queued", "\(s.queuedPrompts) prompts", mono: false) }
+                fact("Started", s.created.formatted(date: .abbreviated, time: .shortened), mono: false)
+                fact("Session", s.id, mono: true)
+            }
+        }
+    }
+
+    private func panes(_ r: RemotePane) -> String {
+        switch r {
+        case .write: "write"
+        case .view: "view only"
+        case .closed: "closed"
         }
     }
 

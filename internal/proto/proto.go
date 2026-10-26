@@ -71,6 +71,9 @@ const ClientApp = "app"
 const (
 	CapPaneVT     = "pane-vt"    // pane.vt
 	CapTranscript = "transcript" // transcript.watch
+	// CapPaneVTRemote: pane.vt also opens a paired server's pane,
+	// "<alias>/<session>", through this server's link (§16.12).
+	CapPaneVTRemote = "pane-vt-remote"
 )
 
 // MismatchError says the client can't talk to this server. When ReExec is

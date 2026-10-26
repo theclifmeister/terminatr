@@ -50,6 +50,10 @@ func (s *Server) servePaneVT(c net.Conn, br *bufio.Reader, req proto.Request, cc
 		refuse(c, req, proto.Errorf(proto.ErrBadParams, "pane.vt needs a session"))
 		return
 	}
+	if _, _, ok := remoteID(p.Session); ok {
+		s.serveRemotePaneVT(c, br, req, s.remoteCanon(p.Session))
+		return
+	}
 	sess, perr := s.session(p.Session)
 	if perr != nil {
 		refuse(c, req, perr)
@@ -117,11 +121,85 @@ func (s *Server) servePaneVT(c net.Conn, br *bufio.Reader, req proto.Request, cc
 	s.log.Printf("session %s: pane.vt client left (%s, %d resyncs)", sess.ID(), reason, sub.Resyncs())
 }
 
+// serveRemotePaneVT is servePaneVT for a paired server's pane id
+// ("<alias>/<session>", its alias canonical), as serveRemoteAttach
+// serves a console: the proxy pane this server keeps of it, fed by the
+// link's stream under the far server's switch. Keys cross only while
+// the switch is write (remotePane.keys; the far server checks each
+// too); a size claim is the far pane's, as a console's typing claims
+// it; a repaint is the proxy's own, which costs the link nothing.
+func (s *Server) serveRemotePaneVT(c net.Conn, br *bufio.Reader, req proto.Request, id string) {
+	if n := s.paneVTs.Add(1); n > maxPaneVTs {
+		s.paneVTs.Add(-1)
+		refuse(c, req, proto.Errorf(proto.ErrRefused, "at most %d panes at once", maxPaneVTs))
+		return
+	}
+	defer s.paneVTs.Add(-1)
+	rp, perr := s.remotes.open(id)
+	if perr != nil {
+		refuse(c, req, perr)
+		return
+	}
+	sub, err := rp.proxy.AttachRemote()
+	if err != nil {
+		refuse(c, req, proto.Errorf(proto.ErrUnknownSession, "the pane on %s closed", rp.alias))
+		return
+	}
+	rp.attached()
+	defer rp.detached()
+	window := paneVTWindow
+	if !answer(c, req, proto.PaneVTResult{Session: rp.sessionInfo(), Window: window}) {
+		sub.Detach()
+		return
+	}
+	s.log.Printf("remote pane %s: pane.vt client attached", id)
+
+	v := &paneVT{c: c, sub: sub, window: window, remote: true}
+	v.cond = sync.NewCond(&v.mu)
+	writerDone := make(chan struct{})
+	go func() {
+		defer close(writerDone)
+		defer c.Close()
+		v.run()
+	}()
+
+	reason := "eof"
+	for {
+		var in proto.PaneVTInput
+		if err := proto.ReadLine(br, &in); err != nil {
+			break
+		}
+		if len(in.Input) > 0 {
+			rp.keys(in.Input)
+		}
+		if in.Ack > 0 {
+			v.acked(in.Ack)
+		}
+		if z := in.Size; z != nil && z.Cols > 0 && z.Rows > 0 {
+			rp.size(min(z.Cols, maxPaneVTCols), min(z.Rows, maxPaneVTRows))
+		}
+		if in.Repaint {
+			sub.Resync()
+		}
+		if in.Detach {
+			reason = "detach"
+			break
+		}
+	}
+	v.stop()
+	sub.Detach()
+	<-writerDone
+	s.log.Printf("remote pane %s: pane.vt client left (%s)", id, reason)
+}
+
 // paneVT is one pane.vt stream's writer side.
 type paneVT struct {
 	c      net.Conn
 	sub    *session.Subscriber
 	window int
+	// remote: a paired server's pane, whose closed event says why in
+	// this server's words (remotePane.end).
+	remote bool
 
 	mu       sync.Mutex
 	cond     *sync.Cond
@@ -166,7 +244,7 @@ func (v *paneVT) run() {
 				}
 			case proto.FrameClosed:
 				reason := string(p)
-				if reason != proto.PaneStopping {
+				if reason != proto.PaneStopping && (!v.remote || reason == "") {
 					reason = proto.PaneExited
 				}
 				proto.WriteLine(v.c, proto.PaneVTEvent{Event: proto.EventPaneClosed, Reason: reason})

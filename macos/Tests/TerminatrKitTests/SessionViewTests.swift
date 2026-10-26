@@ -44,6 +44,51 @@ private func status(_ state: String, reason: String = "", agent: String = "claud
     #expect(SessionRef(AppAPI.Session(id: "s5", role: "coordinator", cols: 80, rows: 24, created: created, clients: 0)) == nil)
 }
 
+@Test func remoteSessionRef() throws {
+    let created = Date(timeIntervalSince1970: 0)
+    let coord = AppAPI.PeerSession(id: "mini/s1", role: "coordinator", project: "demo", created: created)
+    let thread = AppAPI.PeerSession(id: "mini/s2", role: "thread", project: "demo", thread: "t-0001", task: "T7", created: created)
+    let shell = AppAPI.PeerSession(id: "mini/s3", role: "shell", project: "demo", created: created)
+    let peers = [AppAPI.Peer(alias: "mini", state: "up", projects: [AppAPI.PeerProject(project: "demo", needsYou: 0, threads: 1, ready: 0, sessions: [coord, thread, shell])], pane: true, panes: "view")]
+
+    let r = try #require(SessionRef(thread, of: "mini"))
+    #expect(r == SessionRef(project: "demo", thread: "t-0001", server: "mini"))
+    #expect(r.isRemote)
+    #expect(r.session(in: peers)?.id == "mini/s2")
+    #expect(SessionRef(coord, of: "mini")?.session(in: peers)?.id == "mini/s1")
+    #expect(SessionRef(shell, of: "mini") == nil)
+    #expect(SessionRef(project: "demo", thread: "t-0002", server: "mini").session(in: peers) == nil)
+    #expect(SessionRef(project: "demo", thread: "t-0001", server: "studio").session(in: peers) == nil)
+    // This server's lists never name a paired server's session.
+    #expect(r.session(in: [], sessions: [AppAPI.Session(id: "s2", role: "thread", project: "demo", thread: "t-0001", cols: 80, rows: 24, created: created, clients: 0)]) == nil)
+
+    // A window restored from an app before paired servers is this server's.
+    let old = try JSONDecoder().decode(SessionRef.self, from: Data(#"{"project":"p","thread":"t-1"}"#.utf8))
+    #expect(old == SessionRef(project: "p", thread: "t-1"))
+    let round = try JSONDecoder().decode(SessionRef.self, from: JSONEncoder().encode(r))
+    #expect(round == r)
+
+    // No transcript crosses a link: the conversation is never offered.
+    #expect(!ConversationState.of(caps: ["pane-vt", "transcript"], agent: "claude", status: status("mapped"), failure: nil, server: "mini").available)
+}
+
+@Test func remotePane() {
+    let caps = ["pane-vt", "transcript", "pane-vt-remote"]
+    func peer(_ state: String = "up", pane: Bool = true, panes: String) -> AppAPI.Peer {
+        AppAPI.Peer(alias: "mini", state: state, pane: pane, panes: panes)
+    }
+    #expect(RemotePane.of(caps: caps, peer: peer(panes: "type"), alias: "mini") == .write)
+    #expect(RemotePane.of(caps: caps, peer: peer(panes: "view"), alias: "mini") == .view)
+    for (c, p) in [(caps, peer(panes: "off")), (caps, peer(panes: "")), (caps, peer("down", panes: "type")),
+                   (caps, peer(pane: false, panes: "type")), (["pane-vt"], peer(panes: "type")), (caps, nil)] {
+        guard case .closed(let why) = RemotePane.of(caps: c, peer: p, alias: "mini") else {
+            Issue.record("opens: \(c) \(String(describing: p))")
+            continue
+        }
+        #expect(!why.isEmpty)
+    }
+}
+
 private func item(_ kind: String, _ text: String = "", tool: String = "", call: String = "", lines: Int = 0, error: Bool = false) -> AppAPI.TranscriptItem {
     AppAPI.TranscriptItem(kind: kind, text: text, tool: tool, call: call, error: error, lines: lines)
 }

@@ -184,8 +184,8 @@ wait:
 	}
 }
 
-// TestPaneVTRefusals: an unknown session, a paired server's pane and an
-// agent's caller are refused.
+// TestPaneVTRefusals: an unknown session, a pane of no paired server and
+// an agent's caller are refused.
 func TestPaneVTRefusals(t *testing.T) {
 	p := testPaths(t)
 	startServer(t, p)
