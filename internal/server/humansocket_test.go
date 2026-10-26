@@ -22,7 +22,7 @@ import (
 var humanOnlyMethods = []string{
 	proto.MethodProjectRename, proto.MethodProjectActive,
 	proto.MethodModViews, proto.MethodModViewInput, proto.MethodModCommand, proto.MethodModRestart,
-	proto.MethodLogList, proto.MethodLogRead,
+	proto.MethodLogList, proto.MethodLogRead, proto.MethodPaneVT, proto.MethodTranscriptWatch,
 	proto.MethodNotifyClaim, proto.MethodNotifyDismiss,
 	proto.MethodModActionCheck, proto.MethodModActionDone, proto.MethodSessionClear, proto.MethodSecretTest,
 	proto.MethodSessionStart, proto.MethodSessionStop, proto.MethodSessionKeys, proto.MethodSessionPrompt, proto.MethodSessionApprove, proto.MethodTaskAsk,
@@ -74,10 +74,10 @@ func gateOf(m string) gate {
 // handledElsewhere are human-only methods the loop of TestHumanSocket
 // doesn't run on the human socket: with empty params they would stop
 // the server, start a shell in the home folder, or turn the connection
-// into a view stream.
+// into a stream (a refused one ends it).
 var handledElsewhere = map[string]bool{
 	proto.MethodServerStop: true, proto.MethodSessionStart: true, proto.MethodViewSubscribe: true,
-	proto.MethodProjectsWatch: true,
+	proto.MethodProjectsWatch: true, proto.MethodPaneVT: true, proto.MethodTranscriptWatch: true,
 }
 
 // onHumanSocketOnly reports whether err is the server socket's refusal

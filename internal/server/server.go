@@ -149,6 +149,11 @@ type Server struct {
 	// raised, so clients know when to ring.
 	tick   *ticker.Ticker
 	alerts atomic.Uint64
+	// paneVTs counts the open pane.vt streams (maxPaneVTs).
+	paneVTs atomic.Int32
+	// transcripts counts the open transcript.watch streams
+	// (maxTranscripts).
+	transcripts atomic.Int32
 
 	agents    *agent.Registry
 	agentErrs []string
@@ -676,6 +681,7 @@ func (s *Server) hello() proto.Hello {
 		Build:    s.build,
 		Bin:      s.opts.Bin,
 		PID:      os.Getpid(),
+		Caps:     []string{proto.CapPaneVT, proto.CapTranscript},
 	}
 }
 
