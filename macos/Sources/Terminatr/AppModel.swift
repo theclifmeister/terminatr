@@ -180,9 +180,20 @@ final class AppModel {
         }
     }
 
-    /// The session ref names now.
+    /// The session ref names now: a paired server's as its pane's id
+    /// here, "<alias>/<session>".
     func sessionID(_ ref: SessionRef) -> String? {
-        ref.session(in: projects, sessions: sessions)
+        if ref.isRemote { return ref.session(in: peers)?.id }
+        return ref.session(in: projects, sessions: sessions)
+    }
+
+    func peer(_ alias: String) -> AppAPI.Peer? {
+        peers.first { $0.alias == alias }
+    }
+
+    /// What a paired server's pane allows now (RemotePane).
+    func remotePane(_ ref: SessionRef) -> RemotePane {
+        RemotePane.of(caps: caps, peer: peer(ref.server), alias: ref.server)
     }
 
     func project(_ slug: String) -> AppAPI.Project? {

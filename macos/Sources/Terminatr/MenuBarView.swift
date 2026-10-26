@@ -108,7 +108,16 @@ struct MenuBarView: View {
                         }
                         ForEach(model.peers, id: \.alias) { peer in
                             ForEach(peer.projects, id: \.project) { p in
-                                PeerRow(peer: peer, project: p)
+                                let coordinator = SessionRef(project: p.project, server: peer.alias)
+                                if coordinator.session(in: model.peers) != nil {
+                                    MenuRow(action: { model.openSession?(coordinator) }) {
+                                        PeerRow(peer: peer, project: p)
+                                    }
+                                } else {
+                                    PeerRow(peer: peer, project: p)
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 6)
+                                }
                             }
                         }
                     }
@@ -333,8 +342,8 @@ private struct NeedRow: View {
     }
 }
 
-/// A paired server's shared project: read-only here, its panes come
-/// through the peer link later (M7).
+/// A paired server's shared project; with a coordinator running there,
+/// a click opens its pane, through the peer link.
 private struct PeerRow: View {
     @Environment(\.theme) private var theme
     let peer: AppAPI.Peer
@@ -353,8 +362,6 @@ private struct PeerRow: View {
             }
         }
         .lineLimit(1)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 6)
         .opacity(project.stale ? 0.55 : 1)
         .help(project.goal)
     }

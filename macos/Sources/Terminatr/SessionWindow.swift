@@ -5,7 +5,9 @@ import TerminatrKit
 /// and their threads in a sidebar, the session as a Conversation or its
 /// Terminal, and the inspector. It opens on the conversation, and falls
 /// back to the terminal, saying why, when the conversation can't be
-/// shown (an old server, a Codex agent, a transcript tm can't read).
+/// shown (an old server, a Codex agent, a transcript tm can't read). A
+/// paired server's session opens on the terminal alone: its pane comes
+/// through the server's peer link, its transcript never does.
 struct SessionWindow: View {
     @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
@@ -34,6 +36,10 @@ struct SessionWindow: View {
 
     private var title: String {
         guard let ref else { return "terminatr" }
+        if ref.isRemote {
+            let task = ref.session(in: app.peers)?.task ?? ""
+            return "\(ref.server) › \(ref.project) · " + (ref.isCoordinator ? "coordinator" : [task, ref.thread].filter { !$0.isEmpty }.joined(separator: " "))
+        }
         if ref.isCoordinator { return "\(ref.project) · coordinator" }
         let t = app.thread(ref)
         return [t?.task?.ref, t?.record.title ?? ref.thread].compactMap { $0 }.joined(separator: " ")
@@ -54,7 +60,8 @@ struct SessionPane: View {
 
     var body: some View {
         let session = model.sessionID.flatMap { id in app.sessions.first { $0.id == id } }
-        let state = ConversationState.of(caps: app.caps, agent: session?.agent ?? "", status: model.transcript.status, failure: model.transcriptFailure)
+        let state = ConversationState.of(caps: app.caps, agent: session?.agent ?? "", status: model.transcript.status,
+                                         failure: model.transcriptFailure, server: model.ref.server)
         HStack(spacing: 0) {
             VStack(spacing: 0) {
                 header(state)
@@ -107,13 +114,13 @@ struct SessionPane: View {
                 .pickerStyle(.segmented)
                 .labelsHidden()
                 .fixedSize()
-                .disabled(model.sessionID == nil)
+                .disabled(model.sessionID == nil || model.ref.isRemote)
             }
             if model.sessionID != nil, case .unavailable(let why) = state {
                 Label {
                     Text(model.tab == .terminal ? "Showing the terminal. \(why)" : why)
                 } icon: {
-                    Image(systemName: "rectangle.on.rectangle.slash")
+                    Image(systemName: model.ref.isRemote ? "network" : "rectangle.on.rectangle.slash")
                 }
                 .font(.system(size: 12))
                 .foregroundStyle(theme.muted)
@@ -137,7 +144,26 @@ struct HeaderTitle: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
-            if ref.isCoordinator {
+            if ref.isRemote {
+                Text(ref.server)
+                    .font(theme.mono(12, .medium))
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 1)
+                    .background(theme.cardTint, in: Capsule())
+                    .accessibilityLabel("on \(ref.server)")
+                let task = ref.session(in: app.peers)?.task ?? ""
+                if !task.isEmpty {
+                    Text(task)
+                        .font(theme.mono(14, .medium))
+                        .foregroundStyle(theme.action)
+                }
+                Text(ref.project)
+                    .font(theme.title(19, .heavy))
+                Text(ref.isCoordinator ? "coordinator" : ref.thread)
+                    .font(theme.mono(12))
+                    .foregroundStyle(theme.muted)
+                    .textSelection(.enabled)
+            } else if ref.isCoordinator {
                 Text(ref.project)
                     .font(theme.title(19, .heavy))
                 Text("coordinator")
@@ -184,11 +210,19 @@ struct NotRunning: View {
 
     private var headline: String {
         if app.bridge == nil { return "Not connected" }
+        if ref.isRemote {
+            if case .closed = app.remotePane(ref) { return "\(ref.server)'s pane can't open" }
+            return ref.isCoordinator ? "The coordinator isn't running on \(ref.server)" : "This thread has no session on \(ref.server)"
+        }
         return ref.isCoordinator ? "The coordinator isn't running" : "This thread has no session"
     }
 
     private var detail: String {
         if app.bridge == nil { return "The window follows the session again once tm app bridge is back." }
+        if ref.isRemote {
+            if case .closed(let why) = app.remotePane(ref) { return why }
+            return "The window shows it once \(ref.server) lists it again."
+        }
         if ref.isCoordinator { return "Start it with tm in a terminal; the window shows it once it runs." }
         if let t = app.thread(ref), t.record.done { return "The thread is done." }
         return "Its agent isn't running. The window shows it once it runs."
@@ -196,7 +230,9 @@ struct NotRunning: View {
 }
 
 /// The window's sidebar: every project, its coordinator and its open
-/// threads. A click shows that session in this window.
+/// threads, then the paired servers' shared projects with theirs (as
+/// the TUI's sidebar has them, alias/session). A click shows that
+/// session in this window.
 struct SessionSidebar: View {
     @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
@@ -228,6 +264,15 @@ struct SessionSidebar: View {
                         row(SessionRef(project: p.slug), label: "Coordinator", ref: nil, tag: nil)
                         ForEach(p.threads.filter { !$0.record.done }, id: \.record.id) { t in
                             row(SessionRef(project: p.slug, thread: t.record.id), label: t.record.title, ref: t.task?.ref, tag: tag(t))
+                        }
+                    }
+                    ForEach(app.peers, id: \.alias) { peer in
+                        ForEach(peer.projects.filter { !$0.sessions.isEmpty }, id: \.project) { p in
+                            remoteHeader(peer, p)
+                            ForEach(p.sessions.compactMap { s in SessionRef(s, of: peer.alias).map { (s, $0) } }, id: \.0.id) { s, r in
+                                row(r, label: r.isCoordinator ? "Coordinator" : r.thread, ref: s.task.isEmpty ? nil : s.task, tag: tag(s, peer))
+                                    .opacity(peer.state == "up" ? 1 : 0.55)
+                            }
                         }
                     }
                 }
@@ -270,6 +315,43 @@ struct SessionSidebar: View {
         .contentShape(Rectangle())
         .onTapGesture { selected = r }
         .accessibilityAddTraits(on ? [.isButton, .isSelected] : .isButton)
+    }
+
+    /// A paired server's shared project: its alias, the project, and
+    /// whether its panes open here.
+    private func remoteHeader(_ peer: AppAPI.Peer, _ p: AppAPI.PeerProject) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: "network")
+                .font(.system(size: 10.5))
+                .foregroundStyle(theme.muted)
+            Text("\(peer.name.isEmpty ? peer.alias : peer.name)/\(p.project)")
+                .font(.system(size: 12.5, weight: .bold))
+                .lineLimit(1)
+            Spacer()
+            Text(peer.state != "up" ? "offline" : peer.panes == "type" ? "write" : peer.panes == "view" ? "view" : "off")
+                .font(theme.mono(10.5))
+                .foregroundStyle(theme.muted)
+        }
+        .padding(.horizontal, 10)
+        .padding(.top, 10)
+        .padding(.bottom, 2)
+        .help(remoteHelp(peer))
+        .accessibilityElement(children: .combine)
+    }
+
+    private func remoteHelp(_ peer: AppAPI.Peer) -> String {
+        switch RemotePane.of(caps: app.caps, peer: peer, alias: peer.alias) {
+        case .write: "\(peer.alias)'s panes open here, and take your keys."
+        case .view: "\(peer.alias)'s panes open here to watch; keys stay here."
+        case .closed(let why): why
+        }
+    }
+
+    /// A paired server's session's word: a question or a dialog there.
+    private func tag(_ s: AppAPI.PeerSession, _ peer: AppAPI.Peer) -> (String, Color)? {
+        if s.asking { return ("asks", theme.question) }
+        if s.state == "blocked" { return s.reason == "permission" ? ("allow?", theme.approval) : ("blocked", theme.attention) }
+        return nil
     }
 
     /// A word for what the thread waits on, as the mockup's: a dialog,
