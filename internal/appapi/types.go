@@ -411,6 +411,42 @@ type NoticeResult struct {
 	OK bool `json:"ok"`
 }
 
+// PeerList is peer.list's result: the paired servers, by alias, with
+// what this server last read of the projects each shares with it. Gen
+// counts the mirror's changes: the same Gen is the same answer.
+type PeerList struct {
+	Gen   uint64 `json:"gen"`
+	Peers []Peer `json:"peers"`
+}
+
+// Peer is a paired server: its alias and display name, its link's State
+// (Reason why it is down, Since when), the projects it shares with this
+// server, and ShareWaits, its share requests that wait for the user.
+type Peer struct {
+	Alias      string        `json:"alias"`
+	Name       string        `json:"name,omitempty"`
+	State      string        `json:"state"`
+	Reason     string        `json:"reason,omitempty"`
+	Since      time.Time     `json:"since,omitzero"`
+	Projects   []PeerProject `json:"projects"`
+	ShareWaits int           `json:"share_waits,omitempty"`
+}
+
+// PeerProject is a project a paired server shares: its goal line,
+// whether it is paused, its counts (NeedsYou: what waits on that
+// server's user), and Stale since Synced while the link is down or the
+// last read failed (the counts are the last ones seen).
+type PeerProject struct {
+	Project  string    `json:"project"`
+	Goal     string    `json:"goal,omitempty"`
+	Paused   bool      `json:"paused,omitempty"`
+	NeedsYou int       `json:"needs_you"`
+	Threads  int       `json:"threads"`
+	Ready    int       `json:"ready"`
+	Stale    bool      `json:"stale,omitempty"`
+	Synced   time.Time `json:"synced,omitzero"`
+}
+
 // The copies. Lists are never null.
 
 func sessionListOf(r proto.SessionListResult) SessionList {
@@ -573,6 +609,23 @@ func linkOf(r link.Row) Link {
 	return Link{Peer: r.Peer, Shown: r.Shown, State: r.Words(), HasMine: r.HasMine, HasTheirs: r.HasTheirs,
 		Send: r.Send, Receive: r.Receive, Paused: r.Paused, Remote: r.Remote, Unread: r.Unread, Held: r.Held,
 		Queued: r.Queued, FilesWaiting: r.FilesWaiting, FilesActive: r.FilesActive, LastAt: r.LastAt}
+}
+
+// peerListOf is l as the app sees it: a peer's id, versions, clock,
+// pane switches and share requests (but their count), and a project's
+// snapshot and sessions stay home: no transcript or pane crosses here.
+func peerListOf(l proto.PeerList) PeerList {
+	out := PeerList{Gen: l.Gen, Peers: make([]Peer, 0, len(l.Peers))}
+	for _, p := range l.Peers {
+		peer := Peer{Alias: p.Alias, Name: p.Name, State: p.State, Reason: p.Reason, Since: p.Since,
+			Projects: make([]PeerProject, 0, len(p.Projects)), ShareWaits: proto.ShareWaits([]proto.PeerMirror{p})}
+		for _, pp := range p.Projects {
+			peer.Projects = append(peer.Projects, PeerProject{Project: pp.Project, Goal: pp.Goal, Paused: pp.Paused,
+				NeedsYou: pp.NeedsYou, Threads: pp.Threads, Ready: pp.Ready, Stale: pp.Stale, Synced: pp.Synced})
+		}
+		out.Peers = append(out.Peers, peer)
+	}
+	return out
 }
 
 func promptResultOf(r proto.SessionPromptResult) PromptResult {
