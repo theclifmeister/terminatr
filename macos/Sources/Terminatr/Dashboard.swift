@@ -67,7 +67,7 @@ struct ProjectDashboard: View {
                         }
                         if inbox.count > Self.inboxShown {
                             Text("\(inbox.count - Self.inboxShown) more in tm")
-                                .font(.system(size: 12))
+                                .font(theme.body(12))
                                 .foregroundStyle(theme.muted)
                         }
                     }
@@ -143,15 +143,15 @@ private struct NeedCard: View {
                     .frame(width: 16)
                     .accessibilityHidden(true)
                 Text(need.what)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(theme.body(13, .semibold))
                     .lineLimit(1)
                 Text(need.detail)
-                    .font(.system(size: 12.5))
+                    .font(theme.body(12.5))
                     .foregroundStyle(theme.muted)
                     .lineLimit(1)
                 Spacer(minLength: 8)
                 Text(NeedRow.verb(need.kind))
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(theme.body(12, .semibold))
                     .foregroundStyle(theme.action)
             }
             .padding(.horizontal, 12)
@@ -179,10 +179,10 @@ private struct InboxLine: View {
                 .frame(width: 6, height: 6)
                 .accessibilityHidden(true)
             Text(item.subject.isEmpty ? item.kind : item.subject)
-                .font(.system(size: 12.5, weight: .medium))
+                .font(theme.body(12.5, .medium))
                 .lineLimit(1)
             Text(item.shownSummary)
-                .font(.system(size: 12))
+                .font(theme.body(12))
                 .foregroundStyle(theme.muted)
                 .lineLimit(1)
             Spacer(minLength: 6)
@@ -272,7 +272,7 @@ private struct PeerSessionCard: View {
                 .font(theme.title(15, .bold))
             if !session.current.isEmpty {
                 Text(session.current)
-                    .font(.system(size: 12.5))
+                    .font(theme.body(12.5))
                     .foregroundStyle(theme.muted)
                     .lineLimit(1)
             }
@@ -308,7 +308,7 @@ struct ProjectRow: View {
                 .frame(width: 8, height: 8)
                 .accessibilityHidden(true)
             Text(project.slug)
-                .font(.system(size: 13, weight: .semibold))
+                .font(theme.body(13, .semibold))
                 .lineLimit(1)
             Spacer(minLength: 4)
             if needs > 0 {
@@ -351,12 +351,12 @@ struct CoordinatorCard: View {
             }
             if attention.waits {
                 Label(attention.why, systemImage: "exclamationmark.bubble")
-                    .font(.system(size: 12.5, weight: .medium))
+                    .font(theme.body(12.5, .medium))
                     .foregroundStyle(theme.colour(attention.tone))
                     .lineLimit(2)
             } else if !attention.why.isEmpty {
                 Text(attention.why)
-                    .font(.system(size: 12.5))
+                    .font(theme.body(12.5))
                     .foregroundStyle(theme.muted)
                     .lineLimit(2)
             }
@@ -400,12 +400,12 @@ struct ThreadCard: View {
             }
             if attention.waits {
                 Label(attention.why, systemImage: "exclamationmark.bubble")
-                    .font(.system(size: 12.5, weight: .medium))
+                    .font(theme.body(12.5, .medium))
                     .foregroundStyle(theme.colour(attention.tone))
                     .lineLimit(2)
             } else if !attention.why.isEmpty {
                 Text(attention.why)
-                    .font(.system(size: 12.5))
+                    .font(theme.body(12.5))
                     .foregroundStyle(theme.muted)
                     .lineLimit(2)
             }
@@ -486,7 +486,7 @@ struct StatusLine: View {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundStyle(theme.attention)
                 }
-                .font(.system(size: 10.5))
+                .font(theme.body(10.5))
                 .foregroundStyle(theme.ink)
             }
         }
@@ -511,7 +511,7 @@ struct StatusLine: View {
                     .foregroundStyle(theme.action)
             }
         }
-        .font(.system(size: 11.5))
+        .font(theme.body(11.5))
         .foregroundStyle(theme.muted)
     }
 }

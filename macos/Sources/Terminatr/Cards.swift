@@ -114,7 +114,7 @@ struct QuestionCard: View {
             }
             if let error {
                 Text(error)
-                    .font(.system(size: 12))
+                    .font(theme.body(12))
                     .foregroundStyle(theme.attention)
             }
         }
@@ -145,7 +145,7 @@ struct QuestionCard: View {
             Text(o.label)
             if !o.description.isEmpty {
                 Text(o.description)
-                    .font(.system(size: 11.5))
+                    .font(theme.body(11.5))
                     .foregroundStyle(theme.muted)
             }
         }
@@ -259,7 +259,7 @@ struct ApprovalCard: View {
                 .lineLimit(1)
                 if session.escape && command == nil {
                     Text("The conversation doesn't show the command: read it in the Terminal tab and answer there, or press Esc.")
-                        .font(.system(size: 12))
+                        .font(theme.body(12))
                         .foregroundStyle(theme.muted)
                 }
             } else if error == nil {
@@ -268,7 +268,7 @@ struct ApprovalCard: View {
             HStack {
                 if let error {
                     Text(error)
-                        .font(.system(size: 12))
+                        .font(theme.body(12))
                         .foregroundStyle(theme.attention)
                 }
                 Spacer()

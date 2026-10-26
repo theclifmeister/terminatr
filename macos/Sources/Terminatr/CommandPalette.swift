@@ -58,7 +58,7 @@ struct CommandPalette: View {
                     .foregroundStyle(theme.muted)
                 TextField("Go to a project, thread, task or need", text: $query)
                     .textFieldStyle(.plain)
-                    .font(.system(size: 16))
+                    .font(theme.body(16))
                     .focused($focused)
                     .onKeyPress(.upArrow) { move(-1, rows.count); return .handled }
                     .onKeyPress(.downArrow) { move(1, rows.count); return .handled }
@@ -114,7 +114,7 @@ struct CommandPalette: View {
             if let said {
                 theme.line.frame(height: 1)
                 Text(said.text)
-                    .font(.system(size: 12))
+                    .font(theme.body(12))
                     .foregroundStyle(said.failed ? theme.attention : theme.muted)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 16)
@@ -132,11 +132,11 @@ struct CommandPalette: View {
                 .frame(width: 7, height: 7)
                 .accessibilityHidden(true)
             Text(r.title)
-                .font(.system(size: 13, weight: .medium))
+                .font(theme.body(13, .medium))
                 .lineLimit(1)
             if !r.detail.isEmpty {
                 Text(r.detail)
-                    .font(.system(size: 12))
+                    .font(theme.body(12))
                     .foregroundStyle(on ? theme.onAction.opacity(0.8) : theme.muted)
                     .lineLimit(1)
             }

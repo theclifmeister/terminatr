@@ -60,7 +60,7 @@ struct TerminalTab: View {
                     .foregroundStyle(theme.muted)
             }
             Text(note(remote))
-                .font(.system(size: 11.5))
+                .font(theme.body(11.5))
                 .foregroundStyle(theme.muted)
             Spacer()
             Button("Fit to Window") { pane.fit() }

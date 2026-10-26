@@ -56,13 +56,20 @@ struct Theme: Sendable {
 
     var titleFamily: String
     var monoFamily: String
+    /// Every font's size times this: Settings › Appearance › Text size.
+    var scale: CGFloat = 1
 
     func title(_ size: CGFloat, _ weight: Font.Weight = .bold) -> Font {
-        .custom(titleFamily, size: size).weight(weight)
+        .custom(titleFamily, size: size * scale).weight(weight)
     }
 
     func mono(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
-        .custom(monoFamily, size: size).weight(weight)
+        .custom(monoFamily, size: size * scale).weight(weight)
+    }
+
+    /// The body's font, SF Pro (Bloom: "body stays SF Pro").
+    func body(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
+        .system(size: size * scale, weight: weight)
     }
 }
 

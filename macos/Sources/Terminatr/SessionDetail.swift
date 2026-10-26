@@ -66,7 +66,7 @@ struct SessionDetail: View {
             } icon: {
                 Image(systemName: model.ref.isRemote ? "network" : "rectangle.on.rectangle.slash")
             }
-            .font(.system(size: 12))
+            .font(theme.body(12))
             .foregroundStyle(theme.muted)
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
