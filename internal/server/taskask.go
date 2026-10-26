@@ -81,6 +81,32 @@ func (s *Server) taskAction(kind string, p proto.TaskActionParams, cc callCtx) (
 	return proto.TaskAskResult{Asked: asked}, nil
 }
 
+// taskAdd is task.add's: tm task add's one task, as the caller, each
+// refusal with the task store's code.
+func (s *Server) taskAdd(p proto.TaskAddParams, cc callCtx) (any, *proto.Error) {
+	pr, err := project.Open(p.Project)
+	if err != nil {
+		return nil, proto.Errorf(proto.ErrBadParams, "%v", err)
+	}
+	res, err := pr.Tasks().Add(cc.who(), []tasks.NewTask{{Title: p.Title, Notes: p.Notes}})
+	if err != nil {
+		return nil, taskError(err)
+	}
+	if len(res) != 1 {
+		return nil, proto.Errorf(proto.ErrInternal, "task.add: %d results", len(res))
+	}
+	r := res[0]
+	if r.Result == "failed" {
+		code := r.Code
+		if code == "" {
+			code = proto.ErrBadParams
+		}
+		return nil, proto.Errorf(code, "%s", r.Error)
+	}
+	s.watch.wake()
+	return proto.TaskAddResult{Task: r.ID, Existing: r.Result == "existing"}, nil
+}
+
 // taskError is a task store's refusal with its code (unknown-task,
 // not-accept, invalid-note, already-asked, …), anything else internal.
 func taskError(err error) *proto.Error {

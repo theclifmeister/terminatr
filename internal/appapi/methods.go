@@ -71,6 +71,8 @@ func init() {
 		unary(proto.MethodTaskSendBack, true, sendBackParams, taskAskResultOf),
 		unary(proto.MethodTaskDelegate, true, taskParams, taskAskResultOf),
 		unary(proto.MethodProjectOpen, true, projectOpenParams, projectOpenOf),
+		// A task added to a project's board, as tm task add (app API 6).
+		unary(proto.MethodTaskAdd, true, taskAddParams, taskAddedOf),
 	} {
 		methods[m.Name] = m
 	}
@@ -285,6 +287,10 @@ func taskParams(p TaskParams) proto.TaskActionParams {
 
 func sendBackParams(p SendBackParams) proto.TaskActionParams {
 	return proto.TaskActionParams{Project: p.Project, Task: p.Task, Note: p.Note}
+}
+
+func taskAddParams(p TaskAddParams) proto.TaskAddParams {
+	return proto.TaskAddParams{Project: p.Project, Title: p.Title, Notes: p.Notes}
 }
 
 func projectOpenParams(p ProjectOpenParams) proto.ProjectOpenParams {

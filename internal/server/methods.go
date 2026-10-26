@@ -238,6 +238,9 @@ func init() {
 		proto.MethodTaskDelegate: {gate: gateHuman, call: typed(func(s *Server, p proto.TaskActionParams, c callCtx) (any, *proto.Error) {
 			return s.taskAction(project.KindDelegate, p, c)
 		})},
+		proto.MethodTaskAdd: {gate: gateHuman, call: typed(func(s *Server, p proto.TaskAddParams, c callCtx) (any, *proto.Error) {
+			return s.taskAdd(p, c)
+		})},
 		proto.MethodProjectOpen: {gate: gateHuman, call: typed(func(s *Server, p proto.ProjectOpenParams, c callCtx) (any, *proto.Error) {
 			return s.projectOpen(p, c)
 		})},

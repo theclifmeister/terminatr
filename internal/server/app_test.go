@@ -169,6 +169,52 @@ func TestTaskActions(t *testing.T) {
 	}
 }
 
+// TestTaskAdd: task.add adds a task as tm task add does, journaled as
+// the caller; the same title again answers that task, and a bad title
+// or project is refused with its code.
+func TestTaskAdd(t *testing.T) {
+	p := testPaths(t)
+	startServer(t, p)
+	pr, err := project.New(project.Options{Slug: "web"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	app, err := client.DialAs(p, proto.ClientApp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer app.Close()
+	var res proto.TaskAddResult
+	if err := app.Call(proto.MethodTaskAdd, proto.TaskAddParams{Project: "web", Title: " Ship it ", Notes: "Soon."}, &res); err != nil || res.Task != "T1" || res.Existing {
+		t.Fatalf("task.add: %+v %v", res, err)
+	}
+	if err := app.Call(proto.MethodTaskAdd, proto.TaskAddParams{Project: "web", Title: "Ship it"}, &res); err != nil || res.Task != "T1" || !res.Existing {
+		t.Fatalf("task.add again: %+v %v", res, err)
+	}
+	for _, c := range []struct {
+		p    proto.TaskAddParams
+		code string
+	}{
+		{proto.TaskAddParams{Project: "web", Title: " "}, "empty-title"},
+		{proto.TaskAddParams{Project: "web", Title: "a\nb"}, "invalid-title"},
+		{proto.TaskAddParams{Project: "web", Title: "x", Notes: "## Done"}, "invalid-notes"},
+		{proto.TaskAddParams{Project: "nope", Title: "x"}, proto.ErrBadParams},
+	} {
+		var perr *proto.Error
+		if err := app.Call(proto.MethodTaskAdd, c.p, nil); !errors.As(err, &perr) || perr.Code != c.code {
+			t.Errorf("task.add %+v: %v, want %s", c.p, err, c.code)
+		}
+	}
+	b, err := pr.Tasks().Load()
+	if err != nil || len(b.Tasks) != 1 || b.Tasks[0].Title != "Ship it" || b.Tasks[0].Notes != "Soon." {
+		t.Fatalf("board %+v %v", b, err)
+	}
+	journal, _ := os.ReadFile(pr.Path("JOURNAL.md"))
+	if want := " human (app) task.add T1 Ship it"; !strings.Contains(string(journal), want) {
+		t.Errorf("journal lacks %q:\n%s", want, journal)
+	}
+}
+
 // TestProjectOpen: project.open starts the project's coordinator with
 // its coordinator agent, journaled as the caller, answers the running
 // one after, and refuses an inactive or unknown project.

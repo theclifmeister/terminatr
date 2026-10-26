@@ -89,6 +89,13 @@ type (
 		Task    string `json:"task"`
 		Note    string `json:"note"`
 	}
+	// TaskAddParams are task.add's: the project, the new task's title
+	// (one line) and, optionally, its notes.
+	TaskAddParams struct {
+		Project string `json:"project"`
+		Title   string `json:"title"`
+		Notes   string `json:"notes,omitempty"`
+	}
 	// ProjectOpenParams are project.open's: the project, and the size a
 	// coordinator it starts gets (80x24 when unset).
 	ProjectOpenParams struct {
@@ -726,6 +733,17 @@ func approveResultOf(r proto.SessionApproveResult) ApproveResult {
 }
 
 func taskAskResultOf(r proto.TaskAskResult) TaskAskResult { return TaskAskResult{Asked: r.Asked} }
+
+// TaskAdded is task.add's result: the task ("T12"), and Existing when
+// a task that isn't done had its title already, so none was added.
+type TaskAdded struct {
+	Task     string `json:"task"`
+	Existing bool   `json:"existing,omitempty"`
+}
+
+func taskAddedOf(r proto.TaskAddResult) TaskAdded {
+	return TaskAdded{Task: r.Task, Existing: r.Existing}
+}
 
 // ProjectOpen is project.open's result: the project's coordinator
 // session, and Started when this call started it.
