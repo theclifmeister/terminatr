@@ -1,0 +1,479 @@
+import SwiftUI
+import TerminatrKit
+
+/// A project in the window's detail (design T746): its goal, what
+/// needs the user, its threads as cards, its inbox and its board's
+/// counts. A card shows its thread in the window, the Coordinator
+/// button the coordinator.
+struct ProjectDashboard: View {
+    @Environment(AppModel.self) private var app
+    @Environment(\.theme) private var theme
+    let project: AppAPI.Project
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                header
+                if !project.needsYou.isEmpty {
+                    section("Needs you · \(project.needsYou.count)") {
+                        ForEach(project.needsYou, id: \.id) { t in
+                            TaskLine(task: t) { app.select(.of(task: t, in: project)) }
+                        }
+                    }
+                }
+                section("Threads") {
+                    if project.threads.isEmpty {
+                        Text("No threads.")
+                            .foregroundStyle(theme.muted)
+                    }
+                    ForEach(project.threads, id: \.record.id) { t in
+                        let sel = Selection.card(t, in: project.slug)
+                        ThreadCard(thread: t)
+                            .contentShape(RoundedRectangle(cornerRadius: 14))
+                            .onTapGesture { app.select(sel) }
+                            .accessibilityAddTraits(.isButton)
+                            .accessibilityAction { app.select(sel) }
+                            .help("Show \(t.task?.ref ?? t.record.id)")
+                            .contextMenu { NewWindowButton(ref: SessionRef(project: project.slug, thread: t.record.id)) }
+                    }
+                }
+                if !project.items.isEmpty {
+                    section("Inbox · \(project.items.count)") {
+                        ForEach(project.items.prefix(Self.inboxShown)) { it in
+                            InboxLine(item: it)
+                        }
+                        if project.items.count > Self.inboxShown {
+                            Text("\(project.items.count - Self.inboxShown) more in tm")
+                                .font(.system(size: 12))
+                                .foregroundStyle(theme.muted)
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal, 28)
+            .padding(.top, 18)
+            .padding(.bottom, 28)
+            .frame(maxWidth: 760, alignment: .leading)
+            .frame(maxWidth: .infinity)
+        }
+    }
+
+    static let inboxShown = 8
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(project.slug)
+                    .font(theme.title(30, .heavy))
+                Spacer()
+                Button("Coordinator") { app.select(.session(SessionRef(project: project.slug))) }
+                    .buttonStyle(.borderedProminent)
+                    .tint(theme.action)
+                    .help("Show the coordinator")
+            }
+            if !project.goal.isEmpty {
+                Text(project.goal)
+                    .foregroundStyle(theme.muted)
+                    .lineLimit(2)
+            }
+            if let board = board {
+                Text(board)
+                    .font(theme.mono(11.5))
+                    .foregroundStyle(theme.muted)
+            }
+            if !project.error.isEmpty {
+                Text(project.error)
+                    .foregroundStyle(theme.attention)
+            }
+        }
+        .padding(.bottom, 4)
+    }
+
+    /// "2 need you · 3 in motion · 5 on deck", as the TUI's row.
+    private var board: String? {
+        let c = project.counts
+        guard !c.isEmpty else { return nil }
+        return "\(c["needs_you"] ?? 0) need you · \(c["in_motion"] ?? 0) in motion · \(c["on_deck"] ?? 0) on deck"
+    }
+
+    private func section<C: View>(_ title: String, @ViewBuilder _ content: () -> C) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title.uppercased())
+                .font(theme.mono(10.5, .medium))
+                .tracking(1)
+                .foregroundStyle(theme.muted)
+                .padding(.top, 6)
+            content()
+        }
+    }
+}
+
+/// A task that needs the user, on the dashboard.
+private struct TaskLine: View {
+    @Environment(\.theme) private var theme
+    let task: AppAPI.Task
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(task.ref)
+                    .font(theme.mono(12.5, .medium))
+                    .foregroundStyle(theme.attention)
+                Text(task.title)
+                    .font(.system(size: 13, weight: .medium))
+                    .lineLimit(1)
+                Spacer(minLength: 8)
+                Text(task.status)
+                    .font(theme.mono(11))
+                    .foregroundStyle(theme.muted)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .contentShape(Rectangle())
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+            .background(theme.cardTint, in: RoundedRectangle(cornerRadius: 10))
+            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(theme.edge, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+/// An item of the project's inbox: a thread's report, a link's message.
+private struct InboxLine: View {
+    @Environment(\.theme) private var theme
+    let item: AppAPI.Item
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Circle()
+                .fill(item.needsUser ? theme.attention : theme.idle)
+                .frame(width: 6, height: 6)
+                .accessibilityHidden(true)
+            Text(item.subject.isEmpty ? item.kind : item.subject)
+                .font(.system(size: 12.5, weight: .medium))
+                .lineLimit(1)
+            Text(item.summary)
+                .font(.system(size: 12))
+                .foregroundStyle(theme.muted)
+                .lineLimit(1)
+            Spacer(minLength: 6)
+            Text(item.created, format: .relative(presentation: .named))
+                .font(theme.mono(11))
+                .foregroundStyle(theme.muted)
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// A paired server's shared project in the detail: what peer.list says
+/// of it, and its coordinator and threads, each shown in the window.
+struct RemoteProjectDashboard: View {
+    @Environment(AppModel.self) private var app
+    @Environment(\.theme) private var theme
+    let peer: AppAPI.Peer
+    let project: AppAPI.PeerProject
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text(peer.name.isEmpty ? peer.alias : peer.name)
+                            .font(theme.mono(12, .medium))
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 1)
+                            .background(theme.cardTint, in: Capsule())
+                        Text(project.project)
+                            .font(theme.title(30, .heavy))
+                    }
+                    if !project.goal.isEmpty {
+                        Text(project.goal)
+                            .foregroundStyle(theme.muted)
+                            .lineLimit(2)
+                    }
+                    Text(facts)
+                        .font(theme.mono(11.5))
+                        .foregroundStyle(theme.muted)
+                }
+                if project.sessions.isEmpty {
+                    Text("Nothing runs there now.")
+                        .foregroundStyle(theme.muted)
+                }
+                ForEach(project.sessions.compactMap { s in SessionRef(s, of: peer.alias).map { (s, $0) } }, id: \.0.id) { s, ref in
+                    PeerSessionCard(session: s, ref: ref)
+                        .contentShape(RoundedRectangle(cornerRadius: 14))
+                        .onTapGesture { app.select(.session(ref)) }
+                        .accessibilityAddTraits(.isButton)
+                        .accessibilityAction { app.select(.session(ref)) }
+                        .contextMenu { NewWindowButton(ref: ref) }
+                }
+            }
+            .padding(.horizontal, 28)
+            .padding(.top, 18)
+            .padding(.bottom, 28)
+            .frame(maxWidth: 760, alignment: .leading)
+            .frame(maxWidth: .infinity)
+        }
+        .opacity(project.stale ? 0.7 : 1)
+    }
+
+    private var facts: String {
+        var f = ["paired", project.threads == 1 ? "1 thread" : "\(project.threads) threads"]
+        if project.needsYou > 0 { f.append("\(project.needsYou) need you") }
+        if project.paused { f.append("paused") }
+        if project.stale { f.append("stale") }
+        if peer.state != "up" { f.append("offline") }
+        return f.joined(separator: " · ")
+    }
+}
+
+private struct PeerSessionCard: View {
+    @Environment(\.theme) private var theme
+    let session: AppAPI.PeerSession
+    let ref: SessionRef
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            if !session.task.isEmpty {
+                Text(session.task)
+                    .font(theme.mono(12.5, .medium))
+                    .foregroundStyle(theme.action)
+            }
+            Text(ref.isCoordinator ? "Coordinator" : ref.thread)
+                .font(theme.title(15, .bold))
+            if !session.current.isEmpty {
+                Text(session.current)
+                    .font(.system(size: 12.5))
+                    .foregroundStyle(theme.muted)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 8)
+            Text(session.asking ? "asks" : session.state)
+                .font(theme.mono(11))
+                .foregroundStyle(session.asking || session.state == "blocked" ? theme.approval : theme.muted)
+        }
+        .padding(14)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+        .background(theme.cardTint, in: RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(theme.edge, lineWidth: 1))
+        .accessibilityElement(children: .combine)
+    }
+}
+
+struct ProjectRow: View {
+    @Environment(\.theme) private var theme
+    let project: AppAPI.Project
+    let selected: Bool
+
+    var body: some View {
+        HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(project.slug)
+                    .font(.system(size: 13, weight: .semibold))
+                    .lineLimit(1)
+                Text(summary)
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(selected ? theme.onAction.opacity(0.85) : theme.muted)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 4)
+            if !project.needsYou.isEmpty {
+                Text("\(project.needsYou.count)")
+                    .font(theme.mono(11, .medium))
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 1)
+                    .background(theme.attention, in: Capsule())
+                    .foregroundStyle(theme.onAttention)
+                    .accessibilityLabel("\(project.needsYou.count) need you")
+            }
+        }
+        .padding(.vertical, 2)
+        .foregroundStyle(selected ? theme.onAction : theme.ink)
+    }
+
+    private var summary: String {
+        let open = project.threads.filter { !$0.record.done }.count
+        return open == 1 ? "1 thread" : "\(open) threads"
+    }
+}
+
+struct ThreadCard: View {
+    @Environment(\.theme) private var theme
+    let thread: AppAPI.Thread
+
+    var body: some View {
+        let r = thread.record, s = thread.status
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Circle()
+                    .fill(dot)
+                    .frame(width: 8, height: 8)
+                    .accessibilityHidden(true)
+                if let task = thread.task {
+                    Text(task.ref)
+                        .font(theme.mono(12.5, .medium))
+                        .foregroundStyle(theme.action)
+                }
+                Text(r.title)
+                    .font(theme.title(15, .bold))
+                    .lineLimit(1)
+                Spacer(minLength: 8)
+                Text(r.id)
+                    .font(theme.mono(11.5))
+                    .foregroundStyle(theme.muted)
+                    .textSelection(.enabled)
+            }
+            if let needs = s?.needsYou, !needs.isEmpty {
+                Label(needs, systemImage: "exclamationmark.bubble")
+                    .font(.system(size: 12.5, weight: .medium))
+                    .foregroundStyle(theme.attention)
+                    .lineLimit(2)
+            } else if let line = s.map({ $0.current.isEmpty ? $0.activity : $0.current }), !line.isEmpty {
+                Text(line)
+                    .font(.system(size: 12.5))
+                    .foregroundStyle(theme.muted)
+                    .lineLimit(2)
+            }
+            HStack(spacing: 10) {
+                if let s {
+                    Meter(fraction: Double(s.percent) / 100)
+                        .frame(width: 120, height: 5)
+                    Text(progress(s))
+                        .font(theme.mono(11))
+                        .foregroundStyle(theme.muted)
+                }
+                Spacer(minLength: 0)
+                Text(facts)
+                    .font(theme.mono(11))
+                    .foregroundStyle(theme.muted)
+                    .lineLimit(1)
+            }
+        }
+        .padding(14)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+        .background(theme.cardTint, in: RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(theme.edge, lineWidth: 1))
+        .accessibilityElement(children: .combine)
+    }
+
+    private var dot: Color {
+        if let n = thread.status?.needsYou, !n.isEmpty { return theme.attention }
+        if thread.record.done { return theme.good }
+        return thread.record.session.isEmpty ? theme.idle : theme.question
+    }
+
+    private func progress(_ s: AppAPI.ThreadStatus) -> String {
+        s.stepsTotal > 0 ? "\(s.percent)% · step \(min(s.stepsDone + 1, s.stepsTotal)) of \(s.stepsTotal)" : "\(s.percent)%"
+    }
+
+    private var facts: String {
+        var f = [thread.record.state, thread.record.agent]
+        if thread.pr > 0 {
+            f.append("PR #\(thread.pr)" + (thread.checks.isEmpty ? "" : " · \(thread.checks)"))
+        }
+        return f.filter { !$0.isEmpty }.joined(separator: " · ")
+    }
+}
+
+struct Meter: View {
+    @Environment(\.theme) private var theme
+    let fraction: Double
+
+    var body: some View {
+        GeometryReader { g in
+            ZStack(alignment: .leading) {
+                Capsule().fill(theme.line)
+                Capsule()
+                    .fill(LinearGradient(colors: theme.meter, startPoint: .leading, endPoint: .trailing))
+                    .frame(width: g.size.width * min(max(fraction, 0), 1))
+            }
+        }
+        .accessibilityHidden(true)
+    }
+}
+
+/// The bridge's state at the foot of the sidebar.
+struct StatusLine: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.theme) private var theme
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            line
+            if case .connected = model.phase, let behind = model.compatibility.message {
+                Text(behind)
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(theme.attention)
+                    .lineLimit(4)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private var line: some View {
+        HStack(spacing: 6) {
+            switch model.phase {
+            case .connecting:
+                ProgressView().controlSize(.mini)
+                Text("Connecting…")
+            case .connected(let h):
+                Circle().fill(theme.good).frame(width: 7, height: 7)
+                Text("tm \(h.tm)" + (h.server.map { $0.version == h.tm ? "" : " · server \($0.version)" } ?? ""))
+                    .font(theme.mono(11))
+            case .failed:
+                Circle().fill(theme.attention).frame(width: 7, height: 7)
+                Text("Not connected")
+                Spacer()
+                Button("Retry") { model.connect() }
+                    .buttonStyle(.link)
+                    .foregroundStyle(theme.action)
+            }
+        }
+        .font(.system(size: 11.5))
+        .foregroundStyle(theme.muted)
+    }
+}
+
+/// The detail pane with no project to show: connecting, failed (with
+/// why), or a server with none.
+struct Placeholder: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.theme) private var theme
+    let phase: AppModel.Phase
+    let empty: Bool
+
+    var body: some View {
+        VStack(spacing: 12) {
+            switch phase {
+            case .connecting:
+                ProgressView()
+                Text("Starting tm app bridge…").foregroundStyle(theme.muted)
+            case .failed(let why):
+                Text("Can't reach terminatr")
+                    .font(theme.title(22, .heavy))
+                Text(why)
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(theme.muted)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: 440)
+                HStack {
+                    Button("Retry") { model.connect() }
+                        .buttonStyle(.borderedProminent)
+                        .tint(theme.action)
+                    SettingsLink { Text("Settings…") }
+                }
+            case .connected:
+                Text(empty ? "No projects yet" : "Pick a project")
+                    .font(theme.title(22, .heavy))
+                if empty {
+                    Text("Create one with tm project new in a terminal.")
+                        .foregroundStyle(theme.muted)
+                }
+            }
+        }
+        .padding(28)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18))
+        .padding(40)
+    }
+}

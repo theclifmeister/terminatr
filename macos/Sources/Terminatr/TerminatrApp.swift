@@ -3,16 +3,17 @@ import ServiceManagement
 import SwiftUI
 import TerminatrKit
 
-/// terminatr for Mac (design T734): the coordinators and threads of the
-/// tm server, through tm app bridge. The projects window lists the
-/// projects and their threads, each coordinator and thread opens in a
-/// window of its own, the menu bar lists what needs you, and
-/// notifications tell it as it comes.
+/// terminatr for Mac (design T734, T746): the coordinators and threads
+/// of the tm server, through tm app bridge. One window shows them all: a
+/// sidebar of the projects, their coordinators and threads, a project's
+/// dashboard or a session beside it. The menu bar lists what needs you,
+/// notifications tell it as it comes, and both show it in that window.
+/// A session opens in a window of its own only when the user asks.
 @main
 struct TerminatrApp: App {
     @NSApplicationDelegateAdaptor private var delegate: AppDelegate
 
-    static let projectsWindow = "projects"
+    static let mainWindow = "main"
     static let sessionWindow = "session"
 
     init() {
@@ -20,23 +21,26 @@ struct TerminatrApp: App {
     }
 
     var body: some Scene {
-        Window("terminatr", id: Self.projectsWindow) {
-            ProjectsView()
-                .environment(delegate.model)
-                .frame(minWidth: 720, minHeight: 440)
-                .task { delegate.model.start() }
-        }
-        .windowStyle(.hiddenTitleBar)
-        .defaultSize(width: 980, height: 620)
-
-        WindowGroup("Session", id: Self.sessionWindow, for: SessionRef.self) { $ref in
-            SessionWindow(ref: $ref)
+        Window("terminatr", id: Self.mainWindow) {
+            MainWindow()
                 .environment(delegate.model)
                 .frame(minWidth: 860, minHeight: 520)
                 .task { delegate.model.start() }
         }
-        .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 1240, height: 780)
+        .commands { GoCommands(model: delegate.model) }
+
+        // Only Open in New Window opens one: no New Window command.
+        WindowGroup("Session", id: Self.sessionWindow, for: SessionRef.self) { $ref in
+            if let ref {
+                SessionWindow(ref: ref)
+                    .environment(delegate.model)
+                    .frame(minWidth: 760, minHeight: 480)
+                    .task { delegate.model.start() }
+            }
+        }
+        .defaultSize(width: 1100, height: 720)
+        .commandsRemoved()
 
         MenuBarExtra {
             MenuBarView()
@@ -73,6 +77,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Closing the window leaves the menu bar running.
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false
+    }
+}
+
+/// The Go menu and the session's keys (design T746): ⌘1–⌘9 projects,
+/// ⌘[ and ⌘] back and forward, ⌘L the composer, ⌘⇧T Conversation or
+/// Terminal, ⌘⌥I the inspector.
+struct GoCommands: Commands {
+    let model: AppModel
+
+    var body: some Commands {
+        CommandGroup(after: .sidebar) {
+            Button(model.inspector ? "Hide Inspector" : "Show Inspector") { model.inspector.toggle() }
+                .keyboardShortcut("i", modifiers: [.command, .option])
+                .disabled(model.selectedRef == nil)
+            Button("Conversation or Terminal") { model.switchTab() }
+                .keyboardShortcut("t", modifiers: [.command, .shift])
+                .disabled(model.selectedRef == nil)
+        }
+        CommandMenu("Go") {
+            Button("Back") { model.goBack() }
+                .keyboardShortcut("[")
+                .disabled(!model.nav.canGoBack)
+            Button("Forward") { model.goForward() }
+                .keyboardShortcut("]")
+                .disabled(!model.nav.canGoForward)
+            Divider()
+            Button("Composer") { model.focusComposer() }
+                .keyboardShortcut("l")
+                .disabled(model.selectedRef == nil)
+            Divider()
+            ForEach(Array(model.projects.prefix(9).enumerated()), id: \.element.slug) { i, p in
+                Button(p.slug) { model.selectProject(i) }
+                    .keyboardShortcut(KeyEquivalent(Character("\(i + 1)")))
+            }
+        }
     }
 }
 

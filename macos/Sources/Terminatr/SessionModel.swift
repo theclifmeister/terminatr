@@ -2,9 +2,10 @@ import Foundation
 import Observation
 import TerminatrKit
 
-/// One session window's streams: the session's watch and its
-/// transcript, (re)opened whenever the window's ref names another
-/// session, and the acts the window sends as the human. The server
+/// One session's streams: its watch and its transcript, (re)opened
+/// whenever the ref names another session or the bridge restarts, and
+/// the acts the session view sends as the human. The app keeps it while
+/// the session is shown and for a few selections after (AppModel.model). The server
 /// checks every act; the window only shows what it answered. A paired
 /// server's session has neither stream: only its pane crosses the link
 /// (TerminalTab), and the window shows it on the Terminal tab.
@@ -22,6 +23,8 @@ final class SessionModel {
     var tabPicked = false
 
     @ObservationIgnored private var streams: [Task<Void, Never>] = []
+    /// The bridge the streams run on.
+    @ObservationIgnored private var bridge: Bridge?
     @ObservationIgnored private weak var app: AppModel?
 
     init(ref: SessionRef) {
@@ -34,9 +37,10 @@ final class SessionModel {
     func follow(_ app: AppModel) {
         self.app = app
         let id = app.bridge == nil ? nil : app.sessionID(ref)
-        guard id != sessionID else { return }
+        guard id != sessionID || app.bridge !== bridge else { return }
         stop()
         sessionID = id
+        bridge = app.bridge
         watch = nil
         transcript = Transcript()
         transcriptFailure = nil
@@ -50,6 +54,13 @@ final class SessionModel {
     func stop() {
         streams.forEach { $0.cancel() }
         streams = []
+        bridge = nil
+    }
+
+    /// The user picks tab: the view no longer switches it.
+    func pick(_ t: SessionTab) {
+        tab = t
+        tabPicked = true
     }
 
     /// Opens on the conversation; falls back to the terminal while it

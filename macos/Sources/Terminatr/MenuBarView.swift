@@ -3,8 +3,8 @@ import TerminatrKit
 
 /// The menu bar's dropdown (MenuBarExtra, .window style): what needs
 /// you, then the projects, this server's and the paired servers'
-/// shared ones, over the theme's backdrop. A row opens its project in
-/// the projects window.
+/// shared ones, over the theme's backdrop. A row shows what it names in
+/// the app's window.
 struct MenuBarView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.theme) private var theme
@@ -59,6 +59,11 @@ struct MenuBarView: View {
 
     private func open(_ project: String?, session: String = "") {
         model.open(project: project, session: session)
+        dismiss()
+    }
+
+    private func open(_ ref: SessionRef) {
+        model.select(.session(ref))
         dismiss()
     }
 
@@ -119,7 +124,7 @@ struct MenuBarView: View {
                             ForEach(peer.projects, id: \.project) { p in
                                 let coordinator = SessionRef(project: p.project, server: peer.alias)
                                 if coordinator.session(in: model.peers) != nil {
-                                    MenuRow(action: { model.openSession?(coordinator) }) {
+                                    MenuRow(action: { open(coordinator) }) {
                                         PeerRow(peer: peer, project: p)
                                     }
                                 } else {
@@ -186,7 +191,8 @@ struct MenuBarView: View {
 
 /// The icon in the menu bar: a template symbol, and how many needs wait.
 /// It also hands the model the scene's openWindow, since it is drawn as
-/// long as the app runs.
+/// long as the app runs: the one window comes to the front, opened
+/// again when it was closed.
 struct MenuBarLabel: View {
     @Environment(AppModel.self) private var model
     @Environment(\.openWindow) private var openWindow
@@ -201,12 +207,8 @@ struct MenuBarLabel: View {
         .accessibilityLabel(model.needs.isEmpty ? "terminatr" : "terminatr, \(model.needs.count) need you")
         .task {
             let open = openWindow
-            model.openWindow = {
-                open(id: TerminatrApp.projectsWindow)
-                NSApp.activate()
-            }
-            model.openSession = { ref in
-                open(id: TerminatrApp.sessionWindow, value: ref)
+            model.showWindow = {
+                open(id: TerminatrApp.mainWindow)
                 NSApp.activate()
             }
         }
@@ -289,7 +291,7 @@ private struct MenuRow<Content: View>: View {
     }
 }
 
-private struct NeedRow: View {
+struct NeedRow: View {
     @Environment(\.theme) private var theme
     let need: Need
     let action: () -> Void
@@ -318,8 +320,10 @@ private struct NeedRow: View {
         .accessibilityElement(children: .combine)
     }
 
-    private var colour: Color {
-        switch need.kind {
+    private var colour: Color { Self.colour(need.kind, theme) }
+
+    static func colour(_ k: Need.Kind, _ theme: Theme) -> Color {
+        switch k {
         case .question: theme.question
         case .approval: theme.approval
         case .review: theme.good
