@@ -2,9 +2,11 @@ import SwiftUI
 import TerminatrKit
 
 /// A project in the window's detail (design T746): its goal, what
-/// needs the user, its threads as cards, its inbox and its board's
-/// counts. A card shows its thread in the window, the Coordinator
-/// button the coordinator.
+/// needs the user (the project's share of the one needs list: its
+/// sessions' questions, approvals and held queues as well as its tasks,
+/// with the tasks in review as their own group), its threads as cards,
+/// the inbox items for the user and its board's counts. A card shows
+/// its thread in the window, the Coordinator button the coordinator.
 struct ProjectDashboard: View {
     @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
@@ -14,10 +16,22 @@ struct ProjectDashboard: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 header
-                if !project.needsYou.isEmpty {
-                    section("Needs you · \(project.needsYou.count)") {
-                        ForEach(project.needsYou, id: \.id) { t in
-                            TaskLine(task: t) { app.select(.of(task: t, in: project)) }
+                let needs = app.needs(of: project.slug)
+                if !needs.isEmpty {
+                    section("Needs you · \(needs.count)") {
+                        ForEach(needs.filter { !$0.isReview }) { n in
+                            NeedCard(need: n) { app.open(project: n.project, session: n.session) }
+                        }
+                        let review = needs.filter(\.isReview)
+                        if !review.isEmpty {
+                            Text("REVIEW · \(review.count)")
+                                .font(theme.mono(10, .medium))
+                                .tracking(1)
+                                .foregroundStyle(theme.muted)
+                                .padding(.top, 2)
+                            ForEach(review) { n in
+                                NeedCard(need: n) { app.open(project: n.project, session: n.session) }
+                            }
                         }
                     }
                 }
@@ -28,7 +42,7 @@ struct ProjectDashboard: View {
                     }
                     ForEach(project.threads, id: \.record.id) { t in
                         let sel = Selection.card(t, in: project.slug)
-                        ThreadCard(thread: t)
+                        ThreadCard(thread: t, attention: app.attention(t))
                             .contentShape(RoundedRectangle(cornerRadius: 14))
                             .onTapGesture { app.select(sel) }
                             .accessibilityAddTraits(.isButton)
@@ -37,13 +51,14 @@ struct ProjectDashboard: View {
                             .contextMenu { NewWindowButton(ref: SessionRef(project: project.slug, thread: t.record.id)) }
                     }
                 }
-                if !project.items.isEmpty {
-                    section("Inbox · \(project.items.count)") {
-                        ForEach(project.items.prefix(Self.inboxShown)) { it in
+                let inbox = project.items.filter(\.forYou)
+                if !inbox.isEmpty {
+                    section("Inbox · \(inbox.count)") {
+                        ForEach(inbox.prefix(Self.inboxShown)) { it in
                             InboxLine(item: it)
                         }
-                        if project.items.count > Self.inboxShown {
-                            Text("\(project.items.count - Self.inboxShown) more in tm")
+                        if inbox.count > Self.inboxShown {
+                            Text("\(inbox.count - Self.inboxShown) more in tm")
                                 .font(.system(size: 12))
                                 .foregroundStyle(theme.muted)
                         }
@@ -89,11 +104,12 @@ struct ProjectDashboard: View {
         .padding(.bottom, 4)
     }
 
-    /// "2 need you · 3 in motion · 5 on deck", as the TUI's row.
+    /// "2 need you · 3 in motion · 5 on deck", as the TUI's row; what
+    /// needs you is the needs list's count, as the sidebar's badge.
     private var board: String? {
         let c = project.counts
         guard !c.isEmpty else { return nil }
-        return "\(c["needs_you"] ?? 0) need you · \(c["in_motion"] ?? 0) in motion · \(c["on_deck"] ?? 0) on deck"
+        return "\(app.needs(of: project.slug).count) need you · \(c["in_motion"] ?? 0) in motion · \(c["on_deck"] ?? 0) on deck"
     }
 
     private func section<C: View>(_ title: String, @ViewBuilder _ content: () -> C) -> some View {
@@ -108,25 +124,31 @@ struct ProjectDashboard: View {
     }
 }
 
-/// A task that needs the user, on the dashboard.
-private struct TaskLine: View {
+/// A need on the dashboard: what it is and its task's title; a click
+/// shows what it names.
+private struct NeedCard: View {
     @Environment(\.theme) private var theme
-    let task: AppAPI.Task
+    let need: Need
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(task.ref)
-                    .font(theme.mono(12.5, .medium))
-                    .foregroundStyle(theme.attention)
-                Text(task.title)
-                    .font(.system(size: 13, weight: .medium))
+                Image(systemName: NeedRow.symbol(need.kind))
+                    .foregroundStyle(NeedRow.colour(need.kind, theme))
+                    .frame(width: 16)
+                    .accessibilityHidden(true)
+                Text(need.what)
+                    .font(.system(size: 13, weight: .semibold))
+                    .lineLimit(1)
+                Text(need.detail)
+                    .font(.system(size: 12.5))
+                    .foregroundStyle(theme.muted)
                     .lineLimit(1)
                 Spacer(minLength: 8)
-                Text(task.status)
-                    .font(theme.mono(11))
-                    .foregroundStyle(theme.muted)
+                Text(NeedRow.verb(need.kind))
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(theme.action)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
@@ -136,6 +158,8 @@ private struct TaskLine: View {
             .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(theme.edge, lineWidth: 1))
         }
         .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+        .accessibilityHint(NeedRow.verb(need.kind))
     }
 }
 
@@ -153,7 +177,7 @@ private struct InboxLine: View {
             Text(item.subject.isEmpty ? item.kind : item.subject)
                 .font(.system(size: 12.5, weight: .medium))
                 .lineLimit(1)
-            Text(item.summary)
+            Text(item.shownSummary)
                 .font(.system(size: 12))
                 .foregroundStyle(theme.muted)
                 .lineLimit(1)
@@ -264,6 +288,8 @@ private struct PeerSessionCard: View {
 struct ProjectRow: View {
     @Environment(\.theme) private var theme
     let project: AppAPI.Project
+    /// What of the needs list is the project's.
+    let needs: Int
     let selected: Bool
 
     var body: some View {
@@ -278,14 +304,14 @@ struct ProjectRow: View {
                     .lineLimit(1)
             }
             Spacer(minLength: 4)
-            if !project.needsYou.isEmpty {
-                Text("\(project.needsYou.count)")
+            if needs > 0 {
+                Text("\(needs)")
                     .font(theme.mono(11, .medium))
                     .padding(.horizontal, 6)
                     .padding(.vertical, 1)
                     .background(theme.attention, in: Capsule())
                     .foregroundStyle(theme.onAttention)
-                    .accessibilityLabel("\(project.needsYou.count) need you")
+                    .accessibilityLabel("\(needs) need you")
             }
         }
         .padding(.vertical, 2)
@@ -298,16 +324,19 @@ struct ProjectRow: View {
     }
 }
 
+/// A thread on the dashboard: its dot, tag and one line of why come
+/// from its attention, so one that waits on you says so.
 struct ThreadCard: View {
     @Environment(\.theme) private var theme
     let thread: AppAPI.Thread
+    let attention: Attention
 
     var body: some View {
         let r = thread.record, s = thread.status
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Circle()
-                    .fill(dot)
+                    .fill(theme.colour(attention.tone))
                     .frame(width: 8, height: 8)
                     .accessibilityHidden(true)
                 if let task = thread.task {
@@ -324,13 +353,13 @@ struct ThreadCard: View {
                     .foregroundStyle(theme.muted)
                     .textSelection(.enabled)
             }
-            if let needs = s?.needsYou, !needs.isEmpty {
-                Label(needs, systemImage: "exclamationmark.bubble")
+            if attention.waits {
+                Label(attention.why, systemImage: "exclamationmark.bubble")
                     .font(.system(size: 12.5, weight: .medium))
-                    .foregroundStyle(theme.attention)
+                    .foregroundStyle(theme.colour(attention.tone))
                     .lineLimit(2)
-            } else if let line = s.map({ $0.current.isEmpty ? $0.activity : $0.current }), !line.isEmpty {
-                Text(line)
+            } else if !attention.why.isEmpty {
+                Text(attention.why)
                     .font(.system(size: 12.5))
                     .foregroundStyle(theme.muted)
                     .lineLimit(2)
@@ -357,18 +386,12 @@ struct ThreadCard: View {
         .accessibilityElement(children: .combine)
     }
 
-    private var dot: Color {
-        if let n = thread.status?.needsYou, !n.isEmpty { return theme.attention }
-        if thread.record.done { return theme.good }
-        return thread.record.session.isEmpty ? theme.idle : theme.question
-    }
-
     private func progress(_ s: AppAPI.ThreadStatus) -> String {
         s.stepsTotal > 0 ? "\(s.percent)% · step \(min(s.stepsDone + 1, s.stepsTotal)) of \(s.stepsTotal)" : "\(s.percent)%"
     }
 
     private var facts: String {
-        var f = [thread.record.state, thread.record.agent]
+        var f = [attention.word, thread.record.agent]
         if thread.pr > 0 {
             f.append("PR #\(thread.pr)" + (thread.checks.isEmpty ? "" : " · \(thread.checks)"))
         }

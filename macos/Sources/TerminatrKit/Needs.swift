@@ -1,12 +1,13 @@
 import Foundation
 
-/// What waits on the user, as the menu bar lists it and notifications
-/// tell it (design T734 §6, R9): from projects.watch {detail},
-/// session.list and peer.list, in the dashboard's order.
+/// What waits on the user (design T734 §6, R9; T748 milestone B): one
+/// list, from projects.watch {detail}, session.list and peer.list, that
+/// the sidebar and its badges, the dashboard, the menu bar, the Dock
+/// badge and notifications all show, so every count agrees.
 public struct Need: Identifiable, Hashable, Sendable {
     public enum Kind: String, CaseIterable, Sendable {
-        /// A question menu open on a session, or a coordinator's open
-        /// questions (tm ask).
+        /// A question on a session (with its menu parsed or not), or a
+        /// coordinator's open questions (tm ask).
         case question
         /// A permission dialog on a session's screen.
         case approval
@@ -30,10 +31,11 @@ public struct Need: Identifiable, Hashable, Sendable {
     /// The project's slug; a paired server's is "alias/slug". Empty for
     /// a session outside the projects or a server-level need.
     public let project: String
-    /// What the need says, without the agent's words: "T812 asks a
-    /// question".
-    public let title: String
-    /// Where it is: "terminatr · Cache layer".
+    /// What the need says, without its project or the agent's words:
+    /// "T812 asks a question".
+    public let what: String
+    /// Its task's title, and where to answer when the app can't: "Cache
+    /// layer · answer in Terminal". Never the pane's title.
     public let detail: String
     /// The agent's words (a question's text, why a task is blocked):
     /// shown only when the user opts in (R9).
@@ -44,17 +46,28 @@ public struct Need: Identifiable, Hashable, Sendable {
     /// question.
     public let answer: Answer?
 
-    public init(id: String, kind: Kind, project: String, title: String, detail: String, text: String = "",
+    public init(id: String, kind: Kind, project: String, what: String, detail: String, text: String = "",
                 session: String = "", answer: Answer? = nil) {
         self.id = id
         self.kind = kind
         self.project = project
-        self.title = title
+        self.what = what
         self.detail = detail
         self.text = text
         self.session = session
         self.answer = answer
     }
+
+    /// The need named with its project, as the sidebar, the menu bar
+    /// and notifications show it: "terminatr · T812 asks a question". A
+    /// paired server's names its server already.
+    public var title: String {
+        kind == .network || project.isEmpty ? what : "\(project) · \(what)"
+    }
+
+    /// Whether it goes in the Review group under Needs you (B2): still
+    /// counted with the rest (B1).
+    public var isReview: Bool { kind == .review }
 
     /// A session.answer a notification's button sends: Question is the
     /// guard (the menu must still ask it, single-select, with the label
@@ -75,15 +88,16 @@ extension Need {
     /// At most this many option buttons on a notification.
     public static let maxButtons = 4
 
-    /// Every need, sessions' first (questions, approvals, held queues),
-    /// then each project's (its coordinator's questions, its tasks,
-    /// failing checks), then the paired servers'. A paired server's
-    /// panes (sessions with a server) are its user's there, not here.
+    /// Every need: sessions' first (questions, approvals, held queues),
+    /// then each project's (its coordinator's questions, its blocked
+    /// tasks, failing checks), then the paired servers', then the tasks
+    /// in review. A paired server's panes (sessions with a server) are
+    /// its user's there, not here.
     public static func of(projects: [AppAPI.Project], sessions: [AppAPI.Session], peers: [AppAPI.Peer] = [],
                           now: Date = Date()) -> [Need] {
         var out: [Need] = []
         for s in sessions where s.server.isEmpty {
-            out += of(session: s, now: now)
+            out += of(session: s, in: projects, now: now)
         }
         for p in projects {
             out += of(project: p)
@@ -91,32 +105,46 @@ extension Need {
         for peer in peers {
             out += of(peer: peer)
         }
+        return out.filter { !$0.isReview } + out.filter(\.isReview)
+    }
+
+    /// How many of needs are project's: its badge.
+    public static func count(_ needs: [Need], project: String) -> Int {
+        needs.reduce(0) { $0 + ($1.project == project ? 1 : 0) }
+    }
+
+    static func of(session s: AppAPI.Session, in projects: [AppAPI.Project], now: Date) -> [Need] {
+        var out: [Need] = []
+        let who = who(s), task = taskTitle(s, projects)
+        let open = s.question.map { q in q.questions.enumerated().filter { !$0.element.answered } } ?? []
+        if let q = s.question, !open.isEmpty {
+            let key = q.since.map { String(Int($0.timeIntervalSince1970)) } ?? open.map(\.element.question).joined(separator: "\n")
+            out.append(Need(id: "question:\(s.id):\(key)", kind: .question, project: s.project,
+                            what: open.count == 1 ? "\(who) asks a question" : "\(who) asks \(open.count) questions",
+                            detail: task, text: open.map(\.element.question).joined(separator: "\n"),
+                            session: s.id, answer: answerable(s.id, q)))
+        } else if s.state == "blocked" && s.reason == "question" {
+            // Blocked on a question whose menu tm didn't parse: still the
+            // user's, answered at the agent's own prompt.
+            out.append(Need(id: "question:\(s.id)", kind: .question, project: s.project,
+                            what: "\(who) asks a question", detail: line(task, "answer in Terminal"), session: s.id))
+        } else if s.state == "blocked" && s.reason == "permission" {
+            out.append(Need(id: "approval:\(s.id)", kind: .approval, project: s.project,
+                            what: s.escape ? "\(who) asks to run outside the sandbox" : "\(who) needs approval",
+                            detail: task, session: s.id))
+        }
+        if held(s, now: now), let since = s.queueHeldSince {
+            out.append(Need(id: "held:\(s.id):\(Int(since.timeIntervalSince1970))", kind: .held, project: s.project,
+                            what: s.queuedPrompts == 1 ? "\(who)'s prompt is held" : "\(who)'s \(s.queuedPrompts) prompts are held",
+                            detail: task, text: s.queueHeld, session: s.id))
+        }
         return out
     }
 
-    static func of(session s: AppAPI.Session, now: Date) -> [Need] {
-        var out: [Need] = []
-        let who = who(s), place = place(s)
-        if let q = s.question {
-            let open = q.questions.enumerated().filter { !$0.element.answered }
-            if !open.isEmpty {
-                let key = q.since.map { String(Int($0.timeIntervalSince1970)) } ?? open.map(\.element.question).joined(separator: "\n")
-                out.append(Need(id: "question:\(s.id):\(key)", kind: .question, project: s.project,
-                                title: open.count == 1 ? "\(who) asks a question" : "\(who) asks \(open.count) questions",
-                                detail: place, text: open.map(\.element.question).joined(separator: "\n"),
-                                session: s.id, answer: answerable(s.id, q)))
-            }
-        } else if s.state == "blocked" && s.reason == "permission" {
-            out.append(Need(id: "approval:\(s.id)", kind: .approval, project: s.project,
-                            title: s.escape ? "\(who) asks to run outside the sandbox" : "\(who) needs approval",
-                            detail: place, session: s.id))
-        }
-        if s.queuedPrompts > 0, !s.queueHeld.isEmpty, let since = s.queueHeldSince, now.timeIntervalSince(since) >= 60 {
-            out.append(Need(id: "held:\(s.id):\(Int(since.timeIntervalSince1970))", kind: .held, project: s.project,
-                            title: s.queuedPrompts == 1 ? "\(who)'s prompt is held" : "\(who)'s \(s.queuedPrompts) prompts are held",
-                            detail: place, text: s.queueHeld, session: s.id))
-        }
-        return out
+    /// Whether s's prompts have been held a minute or more: a need.
+    static func held(_ s: AppAPI.Session, now: Date) -> Bool {
+        guard s.queuedPrompts > 0, !s.queueHeld.isEmpty, let since = s.queueHeldSince else { return false }
+        return now.timeIntervalSince(since) >= 60
     }
 
     /// The buttons' answer: the menu's one open question, when it is
@@ -133,8 +161,8 @@ extension Need {
         var out: [Need] = []
         if p.questions > 0 {
             out.append(Need(id: "questions:\(p.slug)", kind: .question, project: p.slug,
-                            title: p.questions == 1 ? "\(p.slug)'s coordinator has a question" : "\(p.slug)'s coordinator has \(p.questions) questions",
-                            detail: "\(p.slug) · coordinator"))
+                            what: p.questions == 1 ? "coordinator has a question" : "coordinator has \(p.questions) questions",
+                            detail: "coordinator"))
         }
         for t in p.needsYou {
             let thread = p.threads.first { $0.record.id == t.thread }
@@ -142,11 +170,11 @@ extension Need {
             switch t.status {
             case "review":
                 out.append(Need(id: "review:\(p.slug):\(t.ref)", kind: .review, project: p.slug,
-                                title: "\(t.ref) is ready to review", detail: "\(p.slug) · \(t.title)",
+                                what: "\(t.ref) is ready to review", detail: t.title,
                                 session: thread?.record.session ?? ""))
             case "blocked":
                 out.append(Need(id: "blocked:\(p.slug):\(t.ref)", kind: .blocked, project: p.slug,
-                                title: "\(t.ref) is blocked", detail: "\(p.slug) · \(t.title)", text: why,
+                                what: "\(t.ref) is blocked", detail: t.title, text: why,
                                 session: thread?.record.session ?? ""))
             default:
                 break
@@ -155,7 +183,7 @@ extension Need {
         for t in p.threads where t.checks == "fail" && t.pr > 0 {
             let name = t.task?.ref ?? t.record.id
             out.append(Need(id: "checks:\(p.slug):\(t.record.id):\(t.pr)", kind: .checks, project: p.slug,
-                            title: "\(name) PR #\(t.pr) checks fail", detail: "\(p.slug) · \(t.record.title)",
+                            what: "\(name) PR #\(t.pr) checks fail", detail: t.task?.title ?? t.record.title,
                             session: t.record.session))
         }
         return out
@@ -166,28 +194,38 @@ extension Need {
         let server = peer.name.isEmpty ? peer.alias : peer.name
         if peer.shareWaits > 0 {
             out.append(Need(id: "share:\(peer.alias)", kind: .network, project: "",
-                            title: "\(server) asks you to share a project", detail: "\(server) · paired server"))
+                            what: "\(server) asks you to share a project", detail: "\(server) · paired server"))
         }
         for p in peer.projects where p.needsYou > 0 && !p.stale {
             out.append(Need(id: "paired:\(peer.alias)/\(p.project)", kind: .network, project: "\(peer.alias)/\(p.project)",
-                            title: p.needsYou == 1 ? "\(server) › \(p.project): 1 needs you" : "\(server) › \(p.project): \(p.needsYou) need you",
+                            what: p.needsYou == 1 ? "\(server) › \(p.project): 1 needs you" : "\(server) › \(p.project): \(p.needsYou) need you",
                             detail: "\(server) · paired server"))
         }
         return out
     }
 
-    /// Who a session is in a need's title: its task, its thread, its
-    /// project's coordinator, or the session.
+    /// Who a session is in a need: its task, its thread, its project's
+    /// coordinator (the title names the project), or the session.
     static func who(_ s: AppAPI.Session) -> String {
         if !s.task.isEmpty { return s.task }
         if !s.thread.isEmpty { return s.thread }
-        if s.role == "coordinator" { return s.project.isEmpty ? "The coordinator" : "\(s.project)'s coordinator" }
+        if s.role == "coordinator" { return s.project.isEmpty ? "The coordinator" : "coordinator" }
         return s.id
     }
 
-    /// Where a session is: its project and title.
-    static func place(_ s: AppAPI.Session) -> String {
-        let title = s.role == "coordinator" ? "coordinator" : s.title
-        return [s.project, title].filter { !$0.isEmpty }.joined(separator: " · ")
+    /// A session's second line: its thread's task title (or the
+    /// thread's), "coordinator", or for a plain session its title.
+    static func taskTitle(_ s: AppAPI.Session, _ projects: [AppAPI.Project]) -> String {
+        if s.role == "coordinator" { return "coordinator" }
+        if !s.thread.isEmpty {
+            let t = projects.first { $0.slug == s.project }?.threads.first { $0.record.id == s.thread }
+            return t?.task?.title ?? t?.record.title ?? ""
+        }
+        return s.title
+    }
+
+    /// The parts that aren't empty, as one second line.
+    static func line(_ parts: String...) -> String {
+        parts.filter { !$0.isEmpty }.joined(separator: " · ")
     }
 }

@@ -71,7 +71,7 @@ struct Inspector: View {
                         .font(.system(size: 12))
                         .foregroundStyle(theme.action)
                 }
-                fact("State", r.state, mono: false)
+                fact("State", app.attention(t!).word, mono: false)
                 fact("Started", r.created.formatted(date: .abbreviated, time: .shortened), mono: false)
                 if r.usage.costUsd > 0 { fact("Cost", String(format: "$%.2f", r.usage.costUsd), mono: false) }
             }
@@ -103,13 +103,23 @@ struct Inspector: View {
             pill
         }
         if let p {
-            if !p.needsYou.isEmpty {
-                section("Needs you · \(p.needsYou.count)") {
-                    ForEach(p.needsYou, id: \.id) { t in
-                        HStack(alignment: .firstTextBaseline, spacing: 6) {
-                            Text(t.ref).font(theme.mono(11.5, .medium)).foregroundStyle(theme.attention)
-                            Text(t.title).font(.system(size: 12)).lineLimit(2)
+            let needs = app.needs(of: p.slug)
+            if !needs.isEmpty {
+                section("Needs you · \(needs.count)") {
+                    ForEach(needs) { n in
+                        Button { app.open(project: n.project, session: n.session) } label: {
+                            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                                Image(systemName: NeedRow.symbol(n.kind))
+                                    .foregroundStyle(NeedRow.colour(n.kind, theme))
+                                    .accessibilityHidden(true)
+                                VStack(alignment: .leading, spacing: 0) {
+                                    Text(n.what).font(.system(size: 12, weight: .medium)).lineLimit(2)
+                                    Text(n.detail).font(.system(size: 11)).foregroundStyle(theme.muted).lineLimit(1)
+                                }
+                            }
+                            .contentShape(Rectangle())
                         }
+                        .buttonStyle(.plain)
                     }
                 }
             }

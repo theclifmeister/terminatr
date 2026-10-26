@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 import Observation
 import TerminatrKit
 
@@ -25,8 +25,13 @@ final class AppModel {
     private(set) var sessions: [AppAPI.Session] = []
     private(set) var notices: [AppAPI.Notice] = []
     private(set) var peers: [AppAPI.Peer] = []
-    /// What needs the user, once projects and sessions both came.
-    private(set) var needs: [Need] = []
+    /// What needs the user, once projects and sessions both came: the
+    /// one list every count shows (the Dock badge too).
+    private(set) var needs: [Need] = [] {
+        didSet {
+            if needs.count != oldValue.count { NSApp?.dockTile.badgeLabel = needs.isEmpty ? nil : "\(needs.count)" }
+        }
+    }
     /// Counts the bridges started: needs of a new one are learned
     /// afresh (NeedTracker.reset).
     @ObservationIgnored private(set) var connection = 0
@@ -236,6 +241,17 @@ final class AppModel {
 
     func thread(_ ref: SessionRef) -> AppAPI.Thread? {
         project(ref.project)?.threads.first { $0.record.id == ref.thread }
+    }
+
+    /// The needs of a project (its badge, its dashboard's Needs you).
+    func needs(of project: String) -> [Need] {
+        needs.filter { $0.project == project }
+    }
+
+    /// What t's card and row say of it, with its session's state.
+    func attention(_ t: AppAPI.Thread) -> Attention {
+        let s = t.record.session.isEmpty ? nil : sessions.first { $0.id == t.record.session }
+        return Attention.of(thread: t, session: s)
     }
 
     // MARK: the window
