@@ -20,6 +20,11 @@ before:
     # tm-relay-docker.tar.gz: deploy/relay's Docker files, pinned to this
     # release (an extra file below, so outside dist/, which isn't made yet).
     - '{{ .Env.TM_ROOT }}/scripts/release/relay-docker.sh {{ if .IsSnapshot }}v{{ .Version }}{{ else }}{{ .Tag }}{{ end }}'
+    # terminatr-app.zip and .dmg: the Mac app, built, signed, notarised
+    # and stapled (scripts/release/app.sh; unsigned without
+    # TM_SIGN_IDENTITY), extra files below like the relay's. goreleaser
+    # shows a before hook's output only when it fails.
+    - '{{ .Env.TM_ROOT }}/scripts/release/app.sh {{ if .IsSnapshot }}v{{ .Version }}{{ else }}{{ .Tag }}{{ end }}'
 
 builds:
   - id: tm
@@ -141,6 +146,8 @@ checksum:
   algorithm: sha256
   extra_files:
     - glob: ./.build/release/tm-relay-docker.tar.gz
+    - glob: ./.build/release/app/terminatr-app.zip
+    - glob: ./.build/release/app/terminatr-app.dmg
 
 snapshot:
   version_template: "{{ incpatch .Version }}-snapshot-{{ .ShortCommit }}"
@@ -167,8 +174,12 @@ release:
   # The installers, at releases/latest/download/install.ps1 (Windows) and
   # install.sh (Linux, macOS), and the relay's Docker files at
   # releases/latest/download/tm-relay-docker.tar.gz (docs/OPERATIONS.md,
-  # Running a relay).
+  # Running a relay), and the Mac app at
+  # releases/latest/download/terminatr-app.{zip,dmg} (docs/OPERATIONS.md,
+  # The Mac app).
   extra_files:
     - glob: ./scripts/install.ps1
     - glob: ./scripts/install.sh
     - glob: ./.build/release/tm-relay-docker.tar.gz
+    - glob: ./.build/release/app/terminatr-app.zip
+    - glob: ./.build/release/app/terminatr-app.dmg

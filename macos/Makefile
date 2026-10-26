@@ -2,8 +2,16 @@
 #
 #   make build   swift build (debug)
 #   make test    swift test
-#   make app     build/Terminatr.app, unsigned (signing comes with the release job)
+#   make app     build/Terminatr.app, unsigned (scripts/release/app.sh signs it)
 #   make run     make app, then open it
+#
+# ARCHS="arm64 x86_64" builds a universal app (the release's): one build
+# per architecture, joined by lipo. Not one `swift build --arch arm64
+# --arch x86_64`: before Xcode 27 that goes through XCBuild, which can't
+# resolve SwiftTerm's build plugin ("missing target ...
+# SwiftTermBuildInfoPlugin"). VERSION goes into its Info.plist
+# (CFBundleShortVersionString, CFBundleVersion), which tm update reads to
+# tell an installed app's release.
 #
 # With only the Command Line Tools (no Xcode), Swift Testing's macros sit
 # in a plugin directory swift test doesn't search: TEST_FLAGS adds it.
@@ -19,6 +27,9 @@ CONFIG       ?= release
 CLT          := /Library/Developer/CommandLineTools
 TEST_FLAGS   := $(if $(filter $(CLT)%,$(shell xcode-select -p 2>/dev/null)),-Xswiftc -plugin-path -Xswiftc $(CLT)/usr/lib/swift/host/plugins/testing)
 APP          := build/Terminatr.app
+ARCHS        ?=
+VERSION      ?= 0.0.0
+ARCH_DIR     := build/arch
 
 .PHONY: build test app run clean
 
@@ -28,13 +39,29 @@ build:
 test:
 	$(SWIFT) test $(TEST_FLAGS)
 
+# Each architecture's binary is copied out as soon as it is built: the
+# builds may share one products folder. The resource bundles are the
+# same for every architecture; the last build's go in.
 app:
-	$(SWIFT) build -c $(CONFIG)
-	rm -rf $(APP)
+	rm -rf $(APP) $(ARCH_DIR)
 	mkdir -p $(APP)/Contents/MacOS $(APP)/Contents/Resources
+ifeq ($(strip $(ARCHS)),)
+	$(SWIFT) build -c $(CONFIG)
 	cp "$$($(SWIFT) build -c $(CONFIG) --show-bin-path)/Terminatr" $(APP)/Contents/MacOS/
 	cp -R "$$($(SWIFT) build -c $(CONFIG) --show-bin-path)"/*.bundle $(APP)/Contents/Resources/
+else
+	set -e; for a in $(ARCHS); do \
+		$(SWIFT) build -c $(CONFIG) --arch $$a; \
+		mkdir -p $(ARCH_DIR)/$$a; \
+		cp "$$($(SWIFT) build -c $(CONFIG) --arch $$a --show-bin-path)/Terminatr" $(ARCH_DIR)/$$a/; \
+		lipo $(ARCH_DIR)/$$a/Terminatr -verify_arch $$a; \
+	done; \
+	lipo -create -output $(APP)/Contents/MacOS/Terminatr $(foreach a,$(ARCHS),$(ARCH_DIR)/$(a)/Terminatr); \
+	cp -R "$$($(SWIFT) build -c $(CONFIG) --arch $(lastword $(ARCHS)) --show-bin-path)"/*.bundle $(APP)/Contents/Resources/
+endif
 	cp Info.plist $(APP)/Contents/Info.plist
+	plutil -replace CFBundleShortVersionString -string $(VERSION) $(APP)/Contents/Info.plist
+	plutil -replace CFBundleVersion -string $(VERSION) $(APP)/Contents/Info.plist
 	plutil -lint $(APP)/Contents/Info.plist
 
 run: app

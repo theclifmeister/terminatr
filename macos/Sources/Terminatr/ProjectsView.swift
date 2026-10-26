@@ -270,6 +270,19 @@ struct StatusLine: View {
     @Environment(\.theme) private var theme
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            line
+            if case .connected = model.phase, let behind = model.compatibility.message {
+                Text(behind)
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(theme.attention)
+                    .lineLimit(4)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private var line: some View {
         HStack(spacing: 6) {
             switch model.phase {
             case .connecting:

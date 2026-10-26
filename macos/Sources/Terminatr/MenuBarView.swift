@@ -37,6 +37,15 @@ struct MenuBarView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
             case .connected:
+                if let behind = model.compatibility.message {
+                    Panel {
+                        Label(behind, systemImage: "arrow.down.circle")
+                            .font(.system(size: 12))
+                            .foregroundStyle(theme.attention)
+                            .padding(10)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
                 needs
                 projects
             }

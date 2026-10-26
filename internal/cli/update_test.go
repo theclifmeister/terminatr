@@ -37,17 +37,20 @@ func newUpdateRig(t *testing.T, tag, version, sub string, server bool) *updateRi
 	tw.Close()
 	zw.Close()
 	archive := buf.Bytes()
+	app := appZip(t, strings.TrimPrefix(version, "v"))
 	name := update.ArchiveName("linux", "amd64")
 	var srv *httptest.Server
 	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/releases/latest":
-			fmt.Fprintf(w, `{"tag_name":%q,"assets":[{"name":%q,"browser_download_url":"%s/a"},{"name":"checksums.txt","browser_download_url":"%s/sums"}]}`,
-				tag, name, srv.URL, srv.URL)
+			fmt.Fprintf(w, `{"tag_name":%q,"assets":[{"name":%q,"browser_download_url":"%s/a"},{"name":%q,"browser_download_url":"%s/app"},{"name":"checksums.txt","browser_download_url":"%s/sums"}]}`,
+				tag, name, srv.URL, update.AppArchive, srv.URL, srv.URL)
 		case "/a":
 			w.Write(archive)
+		case "/app":
+			w.Write(app)
 		case "/sums":
-			fmt.Fprintf(w, "%x  %s\n", sha256.Sum256(archive), name)
+			fmt.Fprintf(w, "%x  %s\n%x  %s\n", sha256.Sum256(archive), name, sha256.Sum256(app), update.AppArchive)
 		default:
 			http.NotFound(w, r)
 		}

@@ -11,6 +11,10 @@
 # Developer ID". `spctl --type execute` rejects every bare binary ("does
 # not seem to be an app"), so the check asks for the primary signature
 # as `--type open` does for a downloaded file.
+#
+# The Mac app (scripts/release/app.sh) is checked too: terminatr-app.zip
+# and .dmg each hold a universal Terminatr.app of the release's version;
+# with --signed, signed by tm's team, notarised and stapled.
 set -eu
 signed=
 if [ "${1:-}" = --signed ]; then
@@ -88,6 +92,7 @@ for a in "$dist"/tm_*.tar.gz "$dist"/tm_*.zip; do
 			fail "$name: Gatekeeper rejects it: $gk"
 		echo "$gk" | grep -q 'source=Notarized Developer ID' || fail "$name: not notarised: $gk"
 		echo "$name: $(echo "$info" | grep '^TeamIdentifier='), notarised"
+		team=$(echo "$info" | sed -n 's/^TeamIdentifier=//p')
 	fi
 	if [ "$os" = linux ] && command -v objdump >/dev/null; then
 		max=$(objdump -T "$d/tm" | grep -o 'GLIBC_[0-9.]*' | sed 's/GLIBC_//' | sort -t. -k1,1n -k2,2n | tail -1)
@@ -99,6 +104,7 @@ for a in "$dist"/tm_*.tar.gz "$dist"/tm_*.zip; do
 	if [ "$os/$arch" = "$host_os/$host_arch" ]; then
 		"$d/tm" selftest || fail "$name: tm selftest failed"
 		"$d/tm" version
+		tm_version=$("$d/tm" version | awk '{print $2}')
 	fi
 	echo "$name: ok ($desc)" | cut -c1-120
 done
@@ -118,3 +124,62 @@ case $pins in
 '${TM_VERSION:-v'[0-9]*'}') echo "$docker: ok (pinned to $(echo "$pins" | sed 's/.*:-//; s/}//'))" ;;
 *) fail "$docker: compose files pin TM_VERSION to '$(echo $pins)', want one release tag" ;;
 esac
+
+# The Mac app. Its CFBundleShortVersionString is the release's three
+# numbers (a snapshot's v0.54.1-snapshot-abc is 0.54.1), in an XML
+# Info.plist, which tm update reads (internal/update, app.go).
+app_version=${tm_version:-}
+app_version=${app_version#v}
+app_version=${app_version%%-*}
+check_app() { # <Terminatr.app> <where>
+	a=$1
+	where=$2
+	plist="$a/Contents/Info.plist"
+	[ -f "$plist" ] || fail "$where: no Terminatr.app/Contents/Info.plist"
+	head -c 5 "$plist" | grep -q '<?xml' || fail "$where: Info.plist is not XML"
+	id=$(plutil -extract CFBundleIdentifier raw -o - "$plist")
+	[ "$id" = dev.terminatr.app ] || fail "$where: CFBundleIdentifier is $id, want dev.terminatr.app"
+	min=$(plutil -extract LSMinimumSystemVersion raw -o - "$plist")
+	[ "$min" = 14.0 ] || fail "$where: LSMinimumSystemVersion is $min, want 14.0"
+	v=$(plutil -extract CFBundleShortVersionString raw -o - "$plist")
+	[ -z "$app_version" ] || [ "$v" = "$app_version" ] || fail "$where: version $v, want $app_version (tm's)"
+	archs=$(lipo -archs "$a/Contents/MacOS/Terminatr")
+	for arch in arm64 x86_64; do
+		case " $archs " in *" $arch "*) ;; *) fail "$where: Terminatr is $archs, want arm64 and x86_64" ;; esac
+	done
+	if [ -z "$signed" ]; then
+		echo "$where: ok (Terminatr.app $v, $archs, unsigned)"
+		return
+	fi
+	out=$(codesign --verify --deep --strict "$a" 2>&1) || fail "$where: signature: $out"
+	info=$(codesign -d --verbose=2 "$a" 2>&1)
+	echo "$info" | grep -q '^Authority=Developer ID Application' || fail "$where: not signed with a Developer ID"
+	echo "$info" | grep -q 'flags=.*runtime' || fail "$where: no hardened runtime"
+	t=$(echo "$info" | sed -n 's/^TeamIdentifier=//p')
+	[ -n "$t" ] && [ "$t" = "${team:-}" ] || fail "$where: signed by team '$t', tm by '${team:-}'"
+	gk=$(spctl --assess --type execute -v "$a" 2>&1) || fail "$where: Gatekeeper rejects it: $gk"
+	echo "$gk" | grep -q 'source=Notarized Developer ID' || fail "$where: not notarised: $gk"
+	xcrun stapler validate "$a" >/dev/null || fail "$where: no stapled ticket"
+	echo "$where: ok (Terminatr.app $v, team $t, $archs, notarised and stapled)"
+}
+for f in terminatr-app.zip terminatr-app.dmg; do
+	grep -q " $f\$" "$dist/checksums.txt" || fail "checksums.txt does not list $f"
+done
+mkdir "$tmp/app"
+ditto -x -k "$dist/terminatr-app.zip" "$tmp/app" || fail "terminatr-app.zip: not a zip"
+[ "$(ls "$tmp/app")" = Terminatr.app ] || fail "terminatr-app.zip holds $(ls "$tmp/app" | tr '\n' ' '), want Terminatr.app alone"
+check_app "$tmp/app/Terminatr.app" terminatr-app.zip
+dmg="$dist/terminatr-app.dmg"
+if [ -n "$signed" ]; then
+	gk=$(spctl --assess --type open --context context:primary-signature -v "$dmg" 2>&1) ||
+		fail "terminatr-app.dmg: Gatekeeper rejects it: $gk"
+	echo "$gk" | grep -q 'source=Notarized Developer ID' || fail "terminatr-app.dmg: not notarised: $gk"
+	xcrun stapler validate "$dmg" >/dev/null || fail "terminatr-app.dmg: no stapled ticket"
+fi
+mkdir "$tmp/dmg"
+hdiutil attach -quiet -nobrowse -readonly -mountpoint "$tmp/dmg" "$dmg" || fail "terminatr-app.dmg: does not mount"
+rc=0
+(check_app "$tmp/dmg/Terminatr.app" terminatr-app.dmg) || rc=$?
+[ -L "$tmp/dmg/Applications" ] || rc=1
+hdiutil detach -quiet "$tmp/dmg" || true
+[ "$rc" -eq 0 ] || fail "terminatr-app.dmg: the app or its Applications link is wrong"

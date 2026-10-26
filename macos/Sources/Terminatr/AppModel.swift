@@ -17,6 +17,9 @@ final class AppModel {
     }
 
     private(set) var phase = Phase.connecting
+    /// Whether this app and the bridge's tm fit (their app API and
+    /// releases); the status line and the menu bar say which is behind.
+    private(set) var compatibility = Compatibility.ok
     private(set) var projects: [AppAPI.Project] = []
     private(set) var sessions: [AppAPI.Session] = []
     private(set) var notices: [AppAPI.Notice] = []
@@ -72,6 +75,7 @@ final class AppModel {
 
     private func watch(tmPath: String?) async {
         phase = .connecting
+        compatibility = .ok
         loaded = Loaded()
         connection += 1
         var started: Bridge?
@@ -81,6 +85,9 @@ final class AppModel {
             started = b
             bridge = b
             guard let hello = await b.hello else { throw BridgeError.closed("") }
+            let fit = Compatibility.check(hello, appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String)
+            compatibility = fit
+            if fit.blocks { throw BridgeError.closed(fit.message ?? "") }
             phase = .connected(hello)
             // An older tm's bridge has no peer.list: no paired servers.
             loaded.peers = !hello.methods.contains(AppAPI.Methods.peerList.name)

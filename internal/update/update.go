@@ -123,6 +123,7 @@ var releaseFiles = []string{
 	ArchiveName("darwin", "arm64"), ArchiveName("darwin", "amd64"),
 	ArchiveName("linux", "arm64"), ArchiveName("linux", "amd64"),
 	ArchiveName("windows", "arm64"), ArchiveName("windows", "amd64"),
+	AppArchive,
 }
 
 // Client finds and downloads releases, unauthenticated: the repository
@@ -339,7 +340,16 @@ func (b Bundle) Remove() {
 // new files in dir (so they can be renamed into place). The caller
 // removes them (Bundle.Remove) after Install, and on failure.
 func (c *Client) Download(ctx context.Context, r Release, goos, goarch, dir string) (Bundle, error) {
-	name := ArchiveName(goos, goarch)
+	archive, err := c.fetchChecked(ctx, r, ArchiveName(goos, goarch))
+	if err != nil {
+		return nil, err
+	}
+	return extract(archive, goos, dir)
+}
+
+// fetchChecked downloads asset name of r and checks its sha256 against
+// the release's checksums.txt.
+func (c *Client) fetchChecked(ctx context.Context, r Release, name string) ([]byte, error) {
 	a, ok := r.asset(name)
 	if !ok {
 		return nil, fmt.Errorf("release %s has no %s", r.Tag, name)
@@ -356,15 +366,15 @@ func (c *Client) Download(ctx context.Context, r Release, goos, goarch, dir stri
 	if err != nil {
 		return nil, err
 	}
-	archive, err := c.fetch(ctx, a)
+	body, err := c.fetch(ctx, a)
 	if err != nil {
 		return nil, err
 	}
-	got := sha256.Sum256(archive)
+	got := sha256.Sum256(body)
 	if hex.EncodeToString(got[:]) != want {
 		return nil, fmt.Errorf("%s: sha256 %x does not match checksums.txt (%s)", name, got, want)
 	}
-	return extract(archive, goos, dir)
+	return body, nil
 }
 
 func checksumFor(sums []byte, name string) (string, error) {
@@ -471,30 +481,45 @@ func unzip(archive []byte, want []string, stage func(string, io.Reader) error) e
 // signing authority must be a Developer ID Application with the hardened
 // runtime, of team when it is set. It returns the team identifier.
 func Codesign(path, team string) (string, error) {
-	if out, err := exec.Command("codesign", "--verify", "--strict", path).CombinedOutput(); err != nil {
-		return "", fmt.Errorf("codesign --verify: %s", firstLine(string(out), err))
+	got, _, err := codesign(path, team)
+	return got, err
+}
+
+// codesign verifies path's signature strictly (nested code included)
+// and requires a Developer ID Application authority, the hardened
+// runtime and, when team is set, that team. It returns the team and
+// codesign's description.
+func codesign(path, team string) (string, string, error) {
+	if out, err := exec.Command("codesign", "--verify", "--deep", "--strict", path).CombinedOutput(); err != nil {
+		return "", "", fmt.Errorf("codesign --verify: %s", firstLine(string(out), err))
 	}
 	out, err := exec.Command("codesign", "-d", "--verbose=2", path).CombinedOutput()
 	if err != nil {
-		return "", fmt.Errorf("codesign -d: %s", firstLine(string(out), err))
+		return "", "", fmt.Errorf("codesign -d: %s", firstLine(string(out), err))
 	}
 	info := string(out)
 	if !strings.Contains(info, "\nAuthority=Developer ID Application:") {
-		return "", errors.New("not signed with a Developer ID")
+		return "", "", errors.New("not signed with a Developer ID")
 	}
 	if !hardened.MatchString(info) {
-		return "", errors.New("signed without the hardened runtime")
+		return "", "", errors.New("signed without the hardened runtime")
 	}
-	got := ""
+	got := infoField(info, "TeamIdentifier")
+	if team != "" && got != team {
+		return "", "", fmt.Errorf("signed by team %q, want %q", got, team)
+	}
+	return got, info, nil
+}
+
+// infoField is the value of codesign -d's "name=value" line.
+func infoField(info, name string) string {
+	v := ""
 	for _, l := range strings.Split(info, "\n") {
-		if v, ok := strings.CutPrefix(l, "TeamIdentifier="); ok {
-			got = strings.TrimSpace(v)
+		if x, ok := strings.CutPrefix(l, name+"="); ok {
+			v = strings.TrimSpace(x)
 		}
 	}
-	if team != "" && got != team {
-		return "", fmt.Errorf("signed by team %q, want %q", got, team)
-	}
-	return got, nil
+	return v
 }
 
 // hardened matches codesign's "flags=0x10000(runtime)".

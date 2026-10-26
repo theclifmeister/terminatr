@@ -39,6 +39,18 @@ tm doctor
   `scripts/install.ps1` downloads the zip for your PC, checks it against `checksums.txt`, puts the three files in `%LOCALAPPDATA%\Programs\terminatr` and adds that folder to your user PATH. Save it to pass options: `-Version v0.5.0`, `-Dir <folder>`, `-Service` (also start at login), `-NoPath`. Running it again upgrades, also while `tm` runs: a file in use can be renamed but not overwritten, so the old one moves aside (`tm.exe.old-<time>`) and is deleted by the next install or `tm update`. If a file can't be replaced it says so and changes nothing.
 - **Runtime:** git, and the agents you use (Claude Code, Codex; see [CODEX.md](CODEX.md)). For threads' sandbox Claude needs `bwrap` and `socat` on Linux. `tm doctor` checks all of these.
 
+### The Mac app
+
+The Mac app (macOS 14+, Apple silicon and Intel) shows the projects, a menu bar of what needs you, notifications, and each coordinator's and thread's conversation and terminal. It runs the `tm` you installed (it never brings its own), so install `tm` first. With Homebrew, from the same tap:
+
+```sh
+brew install --cask theclifmeister/terminatr/terminatr-app
+```
+
+Or let `tm update --app` install it: with the cask for a Homebrew `tm`, else from the release's `terminatr-app.zip` into `/Applications` (or `~/Applications` when `/Applications` isn't writable), after the same checks as an update (below). By hand: `terminatr-app.dmg` on the [releases page](https://github.com/theclifmeister/terminatr/releases); drag Terminatr onto Applications.
+
+The app is signed with the same Developer ID as `tm` (hardened runtime), notarised and stapled, the DMG as well, so Gatekeeper accepts it offline. It says at the foot of its window and in its menu bar when `tm` or the app is behind the other; `tm update` updates both. It needs a `tm` of app API 2 or later (every release that ships the app); with an older one it says so and doesn't connect.
+
 To build from source instead, see the [Contributing](../CONTRIBUTING.md#build). How releases are made: [Releasing](#releasing).
 
 ## Using tm
@@ -727,6 +739,7 @@ tm update --check    # only says whether there is one
 - **Windows:** `tm update` downloads the zip and replaces `tm.exe`, `conpty.dll` and `OpenConsole.exe` by renaming each old file to `<name>.old-<time>` and the new one into its name (a running exe can be renamed, not overwritten), so it works while `tm` and its server run; the old files are deleted by the next `tm update` once nothing runs them. If a file can't be replaced, `tm update` names the processes that hold it (the Restart Manager's list) and restores the files it had replaced; close them and run it again.
 - **Homebrew:** `tm update` never touches Homebrew's files: it shows `brew upgrade terminatr` and runs it if you say yes.
 - **Built from source:** `tm update` refuses; `git pull && make`.
+- **The Mac app** (macOS): after `tm`, `tm update` updates the app too. One the cask installed is Homebrew's: it shows `brew upgrade --cask terminatr-app` and runs it if you say yes. Any other is replaced from the release's `terminatr-app.zip` after its checksum, a Developer ID signature of `tm`'s own team (hardened runtime, everything in the bundle, identifier `dev.terminatr.app`) and Gatekeeper's verdict (`Notarized Developer ID`) check out, and its version is the release's; the new app goes in beside the old one, which is removed once it is in place. If it is open, quit and reopen it. When it isn't installed, `tm update` says so once; `tm update --app` installs it. `tm update --check` reports it on an `app` line (`app` in `--json`). A source build leaves the app alone.
 
 The running server keeps the old build until it restarts, and keeps working meanwhile: it runs from its own copy of its binary (`~/.terminatr/run/bin/tm`), so attaching and agent hooks are unaffected. Restarting switches it to the new build but stops every session: agents are resumed and lose only the turn they are in, shells are lost. So `tm update` asks before restarting (or restarts with `--restart`), and otherwise leaves it to you:
 
@@ -820,9 +833,9 @@ A tag pushed by hand (`git tag v0.2.0 && git push origin v0.2.0`) still releases
 
 1. imports the Developer ID certificate into a temporary keychain;
 2. builds and checks a snapshot (`make release-snapshot`, `scripts/release/check.sh`), unsigned;
-3. runs goreleaser (`make release`): every target cross-compiled with `zig cc`, except darwin, linked by Apple's clang and ld for chained fixups (the Windows targets as `*-windows-gnu`, their ConPTY files fetched by `scripts/release/conpty.sh`), each darwin binary signed (hardened runtime) and notarised by `scripts/release/sign.sh`; the archives, `tm-relay-docker.tar.gz` (`deploy/relay`'s Docker files with the compose files pinned to the tag, `scripts/release/relay-docker.sh`), the installers and `checksums.txt` uploaded to the draft release (release-please's, keeping its notes, or for a hand-made tag a new one without notes);
-4. checks the archives again with `--signed` (Developer ID, hardened runtime, Gatekeeper says `Notarized Developer ID`), and only then publishes the release;
-5. rewrites `Formula/terminatr.rb` from `checksums.txt` (`scripts/release/formula.sh`) and merges it through a pull request, opened and merged as the release App so that `ci.yml` runs on it. Prereleases (`v1.2.0-rc1`) skip this step.
+3. runs goreleaser (`make release`): every target cross-compiled with `zig cc`, except darwin, linked by Apple's clang and ld for chained fixups (the Windows targets as `*-windows-gnu`, their ConPTY files fetched by `scripts/release/conpty.sh`), each darwin binary signed (hardened runtime) and notarised by `scripts/release/sign.sh`; the Mac app built universal, signed with the same identity (hardened runtime), notarised and stapled, then packed as `terminatr-app.zip` and a DMG, itself signed, notarised and stapled (`scripts/release/app.sh`, Xcode and its Metal toolchain); the archives, the app's zip and DMG, `tm-relay-docker.tar.gz` (`deploy/relay`'s Docker files with the compose files pinned to the tag, `scripts/release/relay-docker.sh`), the installers and `checksums.txt` uploaded to the draft release (release-please's, keeping its notes, or for a hand-made tag a new one without notes);
+4. checks the archives again with `--signed` (Developer ID, hardened runtime, Gatekeeper says `Notarized Developer ID`; the app also of tm's team and stapled, the zip's and the DMG's), and only then publishes the release;
+5. rewrites `Formula/terminatr.rb` and `Casks/terminatr-app.rb` (the Mac app's cask; the first release with the app adds it) from `checksums.txt` (`scripts/release/formula.sh`, `cask.sh`) and merges them through one pull request, opened and merged as the release App so that `ci.yml` runs on it. Prereleases (`v1.2.0-rc1`) skip this step.
 
 To run a release again (a failed run, say), rerun its failed jobs, or Actions → release → Run workflow with Use workflow from set to the tag: on a branch it does nothing.
 
@@ -830,7 +843,7 @@ Then a second job, on a Linux runner (outside the `release` environment, which h
 
 Before you merge the release pull request (or push a tag), `ci.yml` on main has run `test` (unit tests with `-race`) and `macos` (build, unit tests, e2e smoke): wait for them to be green. Pull requests run neither macOS nor `-race`, and the release snapshot only when they touch release files; the tag run is where every release build is checked. If the repository requires status checks, require `test` (the one check every pull request runs). `macos` is main-only, so don't require it; `changes`, `mod-types` and `release-snapshot` are skipped when not needed, which counts as passed.
 
-`make release-snapshot` runs the same build locally without a tag, signing nothing: `sign: TM_SIGN_IDENTITY not set; … keeps its linker signature` in the log. To try signing locally, set `TM_SIGN_IDENTITY` to a Developer ID identity in your keychain, by its SHA-1 hash from `security find-identity -v -p codesigning` (codesign refuses a name that two certificates share, as after a renewal); add `TM_NOTARY_KEY` (path to the .p8), `TM_NOTARY_KEY_ID` and `TM_NOTARY_ISSUER` to notarise.
+`make release-snapshot` runs the same build locally without a tag, signing nothing: `sign: TM_SIGN_IDENTITY not set; … keeps its linker signature` in the log, and an unsigned app (it needs Xcode). The app's signing and notarisation use the release's existing secrets; it needs none of its own. To try signing locally, set `TM_SIGN_IDENTITY` to a Developer ID identity in your keychain, by its SHA-1 hash from `security find-identity -v -p codesigning` (codesign refuses a name that two certificates share, as after a renewal); add `TM_NOTARY_KEY` (path to the .p8), `TM_NOTARY_KEY_ID` and `TM_NOTARY_ISSUER` to notarise.
 
 ### Secrets
 

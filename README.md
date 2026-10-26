@@ -64,6 +64,8 @@ curl -fsSL https://github.com/theclifmeister/terminatr/releases/latest/download/
 irm https://github.com/theclifmeister/terminatr/releases/latest/download/install.ps1 | iex
 ```
 
+**The Mac app** (macOS 14+; it runs the `tm` installed above): `brew install --cask theclifmeister/terminatr/terminatr-app`, or `tm update --app`.
+
 Newer Homebrew refuses formulas from a tap it doesn't trust, hence `brew trust` once. Then run `tm doctor` to check the setup. Options and manual downloads: [Install in docs/OPERATIONS.md](docs/OPERATIONS.md#install).
 
 ## First steps
