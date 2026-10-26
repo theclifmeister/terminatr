@@ -29,9 +29,14 @@ final class AppModel {
     /// one list every count shows (the Dock badge too).
     private(set) var needs: [Need] = [] {
         didSet {
-            if needs.count != oldValue.count { NSApp?.dockTile.badgeLabel = needs.isEmpty ? nil : "\(needs.count)" }
+            if needs.count != oldValue.count { showBadge() }
         }
     }
+    /// The Dock icon's badge: how many needs wait, none at 0.
+    func showBadge() {
+        NSApp?.dockTile.badgeLabel = needs.isEmpty ? nil : "\(needs.count)"
+    }
+
     /// Counts the bridges started: needs of a new one are learned
     /// afresh (NeedTracker.reset).
     @ObservationIgnored private(set) var connection = 0
@@ -277,6 +282,25 @@ final class AppModel {
     /// Brings the window to the front, opening it when it was closed:
     /// set by a view that has the scene's openWindow (MenuBarLabel).
     @ObservationIgnored var showWindow: (@MainActor () -> Void)?
+
+    /// The session shown in a key window while the app is in front
+    /// (SessionDetail says): its needs don't notify.
+    @ObservationIgnored private var front: SessionRef?
+
+    /// Says whether ref is shown in the key window now (on) or not.
+    func shown(_ ref: SessionRef, inFront on: Bool) {
+        if on {
+            front = ref
+        } else if front == ref {
+            front = nil
+        }
+    }
+
+    /// The id of the session shown in front, when one is.
+    var frontSession: String? {
+        guard NSApp?.isActive == true, let front else { return nil }
+        return sessionID(front)
+    }
 
     /// Shows s in the window, in front.
     func select(_ s: Selection) {
