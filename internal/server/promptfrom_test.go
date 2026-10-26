@@ -9,9 +9,9 @@ import (
 	"github.com/theclifmeister/terminatr/internal/thread"
 )
 
-// TestPromptFrom: a thread's kickoff and tm's "[tm]" prompts are tm's,
-// a prompt its coordinator sent through session.prompt is the
-// coordinator's (compared as the transcript keeps it: its words, the
+// TestPromptFrom: a thread's or a coordinator's kickoff and tm's "[tm]"
+// prompts are tm's, a prompt its coordinator sent through
+// session.prompt is the coordinator's (compared as the transcript keeps it: its words, the
 // first sentKey bytes), and the rest the user's; another session's,
 // or a forgotten session's, record says nothing.
 func TestPromptFrom(t *testing.T) {
@@ -25,6 +25,7 @@ func TestPromptFrom(t *testing.T) {
 		{"s1", thread.Kickoff("/p/brief.md"), proto.FromTM},
 		{"s1", thread.AdoptKickoff("demo", "t-0001", "/p/brief.md"), proto.FromTM},
 		{"s1", "  [tm] 2 check(s) failed", proto.FromTM},
+		{"s1", CoordinatorKickoff, proto.FromTM},
 		{"s1", "Rebase? No: merge origin/main.", proto.FromCoordinator},
 		{"s1", long[:300] + "…", proto.FromCoordinator},
 		{"s1", "mine", ""},

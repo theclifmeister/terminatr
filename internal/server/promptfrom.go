@@ -52,11 +52,12 @@ func (sp *sentPrompts) forget(id string) {
 }
 
 // from is who sent session id the prompt text: proto.FromTM for a
-// thread's kickoff or a "[tm]" prompt, proto.FromCoordinator for one
+// thread's or a coordinator's kickoff or a "[tm]" prompt, proto.FromCoordinator for one
 // its coordinator sent, "" for the user's.
 func (sp *sentPrompts) from(id, text string) string {
 	t := strings.TrimSpace(text)
-	if strings.HasPrefix(t, "[tm]") || strings.HasPrefix(t, kickoffStart) || strings.HasPrefix(t, adoptStart) {
+	if strings.HasPrefix(t, "[tm]") || strings.HasPrefix(t, kickoffStart) || strings.HasPrefix(t, adoptStart) ||
+		t == CoordinatorKickoff {
 		return proto.FromTM
 	}
 	k := promptKey(text)
@@ -70,7 +71,8 @@ func (sp *sentPrompts) from(id, text string) string {
 	return ""
 }
 
-// The first words of the prompts tm starts a thread with.
+// The first words of the prompts tm starts a thread with (a
+// coordinator's, CoordinatorKickoff, is whole).
 var (
 	kickoffStart = cutAt(thread.Kickoff("\x00"), "\x00")
 	adoptStart   = cutAt(thread.AdoptKickoff("", "\x00", ""), "\x00")

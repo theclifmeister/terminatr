@@ -107,6 +107,7 @@ extension Transcript.Entry {
         let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if t.hasPrefix("Start on your task.") { return "started the thread · brief and rules" }
         if t.hasPrefix("You are now thread ") { return "adopted this session · brief and rules" }
+        if t.hasPrefix("You are this project's coordinator.") { return "started the coordinator" }
         var line = t.split(separator: "\n", maxSplits: 1).first.map(String.init) ?? ""
         if line.hasPrefix("[tm]") { line = String(line.dropFirst(4)).trimmingCharacters(in: .whitespaces) }
         return line

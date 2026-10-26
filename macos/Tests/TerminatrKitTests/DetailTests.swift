@@ -82,6 +82,7 @@ private func entry(_ kind: Transcript.Entry.Kind, _ text: String, from: String =
     let kickoff = entry(.prompt, "Start on your task. Your brief (/p/brief.md) and your rules…", from: "tm")
     #expect(kickoff.folds)
     #expect(kickoff.headline == "started the thread · brief and rules")
+    #expect(entry(.prompt, "You are this project's coordinator. Greet the user…", from: "tm").headline == "started the coordinator")
     let note = entry(.prompt, "[tm] 2 check(s) failed on your PR #7. Read them…\nmore", from: "tm")
     #expect(note.headline == "2 check(s) failed on your PR #7. Read them…")
     #expect(!entry(.prompt, "[tm] typed by the user").folds)
