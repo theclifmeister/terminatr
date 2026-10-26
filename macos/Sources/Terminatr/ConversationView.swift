@@ -3,7 +3,11 @@ import SwiftUI
 import TerminatrKit
 
 /// The Conversation tab: the transcript, the cards for what the session
-/// waits on (a question, a permission dialog), and the composer. ⌘F
+/// waits on (a question, a permission dialog, a task in review), and
+/// the composer, always at the foot. A coordinator's open questions and
+/// its project's needs lead, above the transcript (CoordinatorPanel); a
+/// thread's cards sit over the composer, and while one is open and the
+/// transcript is scrolled up, Jump to the open card brings it back. ⌘F
 /// opens a find bar over it: the entries that show the words wear a
 /// ring, and ↩, ⌘G and ⇧⌘G scroll from one to the next.
 struct ConversationTab: View {
@@ -16,14 +20,24 @@ struct ConversationTab: View {
     @State private var query = ""
     @State private var at = 0
     @FocusState private var findFocused: Bool
+    /// Whether the transcript's end is out of sight (macOS 15).
+    @State private var scrolledUp = false
+    /// Bumped by Jump to the open card: the cards flash.
+    @State private var flash = 0
 
     var body: some View {
         let matches = finding ? Transcript.find(query, in: model.transcript.entries) : []
         let found = Set(matches)
         let current = matches.isEmpty ? nil : matches[min(at, matches.count - 1)]
+        let coordinator = model.ref.isCoordinator
+        let review = coordinator ? nil : app.thread(model.ref).flatMap { t in t.task?.status == "review" ? t : nil }
+        let open = AppModel.waitsOnCard(session) || review != nil
         VStack(spacing: 0) {
             if finding {
                 findBar(matches.count)
+            }
+            if coordinator {
+                CoordinatorPanel(model: model, session: session)
             }
             ScrollViewReader { proxy in
                 ScrollView {
@@ -74,11 +88,40 @@ struct ConversationTab: View {
                     .frame(maxWidth: .infinity)
                 }
                 .defaultScrollAnchor(.bottom)
+                .modifier(ScrolledUp(up: $scrolledUp))
                 .onChange(of: current) { _, c in
                     if let c { withAnimation { proxy.scrollTo(c, anchor: .center) } }
                 }
+                .overlay(alignment: .bottom) {
+                    if open && scrolledUp && !coordinator {
+                        Button {
+                            if let last = model.transcript.entries.last { withAnimation { proxy.scrollTo(last.id, anchor: .bottom) } }
+                            flash += 1
+                        } label: {
+                            Label("Jump to the open card", systemImage: "arrow.down")
+                                .font(.system(size: 12, weight: .semibold))
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background(.regularMaterial, in: Capsule())
+                                .overlay(Capsule().strokeBorder(theme.edge, lineWidth: 1))
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.bottom, 10)
+                        .help("Scrolls to the end, where the card waits")
+                    }
+                }
             }
-            Cards(model: model, session: session, firstChoice: app.firstChoice)
+            VStack(spacing: 10) {
+                if let review, let task = review.task {
+                    ReviewCard(project: model.ref.project, thread: review, task: task)
+                        .padding(.horizontal, 22)
+                        .frame(maxWidth: 820)
+                }
+                if !coordinator {
+                    Cards(model: model, session: session, firstChoice: app.firstChoice)
+                }
+            }
+            .modifier(Flash(n: flash))
             Composer(model: model, session: session)
         }
         .guardingLinks()
@@ -139,18 +182,121 @@ struct ConversationTab: View {
     }
 }
 
-/// One entry of the conversation.
+/// While the transcript's end is out of sight: on macOS 15, from its
+/// scroll geometry; never on 14, which has none to read.
+struct ScrolledUp: ViewModifier {
+    @Binding var up: Bool
+
+    func body(content: Content) -> some View {
+        if #available(macOS 15, *) {
+            content.onScrollGeometryChange(for: Bool.self) { g in
+                g.contentOffset.y + g.containerSize.height < g.contentSize.height - 80
+            } action: { _, new in
+                up = new
+            }
+        } else {
+            content
+        }
+    }
+}
+
+/// The open cards flash once when the user jumps to them.
+struct Flash: ViewModifier {
+    @Environment(\.theme) private var theme
+    let n: Int
+    @State private var on = false
+
+    func body(content: Content) -> some View {
+        content
+            .overlay {
+                RoundedRectangle(cornerRadius: 16)
+                    .strokeBorder(theme.action, lineWidth: 2)
+                    .padding(.horizontal, 16)
+                    .opacity(on ? 1 : 0)
+                    .allowsHitTesting(false)
+            }
+            .onChange(of: n) {
+                withAnimation(.easeOut(duration: 0.2)) { on = true }
+                withAnimation(.easeIn(duration: 0.6).delay(0.8)) { on = false }
+            }
+    }
+}
+
+/// A thread whose task is in review, over its composer: the task, its
+/// PR, and Accept or Send back… (task.accept, task.send-back), which
+/// ask the coordinator as the dashboard's do.
+struct ReviewCard: View {
+    @Environment(\.theme) private var theme
+    let project: String
+    let thread: AppAPI.Thread
+    let task: AppAPI.Task
+
+    var body: some View {
+        CardFrame(tag: "Review", colour: theme.good, tint: theme.cardTint) {
+            HStack(alignment: .center, spacing: 10) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("\(task.ref) is ready to review")
+                        .font(theme.title(15, .bold))
+                    Text(facts)
+                        .font(.system(size: 12))
+                        .foregroundStyle(theme.muted)
+                        .lineLimit(1)
+                        .textSelection(.enabled)
+                }
+                Spacer(minLength: 8)
+                TaskActs(project: project, task: task.ref, status: task.status)
+            }
+        }
+    }
+
+    private var facts: String {
+        var f = [task.title]
+        if thread.pr > 0 {
+            f.append("PR #\(thread.pr)" + (thread.checks.isEmpty ? "" : " · checks \(thread.checks)"))
+        } else if !thread.reportPr.isEmpty {
+            f.append(thread.reportPr)
+        }
+        return f.joined(separator: " · ")
+    }
+}
+
+/// One entry of the conversation: each turn says who and when ("you ·
+/// 20:45", "claude · 20:45"); tm's prompts fold to one line the user
+/// opens (the thread's kickoff, the server's notes).
 struct EntryView: View {
     @Environment(\.theme) private var theme
     let entry: Transcript.Entry
     let agent: String
+    @State private var unfolded = false
 
     var body: some View {
         switch entry.kind {
+        case .prompt where entry.folds && !unfolded:
+            Button { unfolded = true } label: {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 9, weight: .bold))
+                    Text("tm")
+                        .font(theme.mono(11.5, .medium))
+                    Text([entry.headline, Self.clock(entry.at)].filter { !$0.isEmpty }.joined(separator: " · "))
+                        .font(.system(size: 12))
+                        .lineLimit(1)
+                    Spacer(minLength: 0)
+                }
+                .foregroundStyle(theme.muted)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Show what tm sent")
+            .accessibilityHint("Shows the prompt tm sent")
         case .prompt:
             HStack {
                 Spacer(minLength: 80)
                 VStack(alignment: .trailing, spacing: 4) {
+                    turn
+                        .onTapGesture { if entry.folds { unfolded = false } }
                     Text(entry.text)
                         .textSelection(.enabled)
                         .foregroundStyle(theme.onPrompt)
@@ -162,9 +308,7 @@ struct EntryView: View {
             }
         case .text:
             VStack(alignment: .leading, spacing: 6) {
-                Text(agent)
-                    .font(theme.mono(11, .medium))
-                    .foregroundStyle(theme.muted)
+                turn
                 MarkdownView(text: entry.text)
                 if entry.truncated { cut }
             }
@@ -189,6 +333,24 @@ struct EntryView: View {
                 .foregroundStyle(theme.muted)
                 .frame(maxWidth: .infinity)
         }
+    }
+
+    /// Who wrote the turn, and when: "you · 20:45".
+    private var turn: some View {
+        Text([entry.who(agent: agent), Self.clock(entry.at)].filter { !$0.isEmpty }.joined(separator: " · "))
+            .font(theme.mono(11, .medium))
+            .foregroundStyle(theme.muted)
+    }
+
+    /// When a turn was: its time today, else its day and time.
+    static func clock(_ at: Date?, now: Date = Date()) -> String {
+        guard let at else { return "" }
+        let cal = Calendar.current
+        if cal.isDate(at, inSameDayAs: now) { return at.formatted(date: .omitted, time: .shortened) }
+        if let days = cal.dateComponents([.day], from: at, to: now).day, days < 6 {
+            return at.formatted(.dateTime.weekday(.abbreviated).hour().minute())
+        }
+        return at.formatted(.dateTime.day().month(.abbreviated).hour().minute())
     }
 
     private var cut: some View {

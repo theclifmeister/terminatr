@@ -2,7 +2,8 @@ import Foundation
 
 /// A row of the command palette (⌘K, T748 milestone E): somewhere to go
 /// (↩) and, for some, something to do there (⌘↩): allow a dialog,
-/// answer a question, message a session, delegate a task. The window
+/// answer a question, message a session, delegate a task, accept or
+/// send back one in review. The window
 /// asks the same as its cards before it acts (E1).
 public struct PaletteItem: Identifiable, Hashable, Sendable {
     public enum Group: String, CaseIterable, Sendable {
@@ -23,6 +24,9 @@ public struct PaletteItem: Identifiable, Hashable, Sendable {
         case prompt(SessionRef)
         /// Asks project's coordinator to delegate task (task.delegate).
         case delegate(project: String, task: String)
+        /// A task in review: accept it or send it back (task.accept,
+        /// task.send-back), as the dashboard's cards do.
+        case review(project: String, task: String)
 
         /// The row's hint: "⌘↩ allow".
         public var verb: String {
@@ -31,6 +35,7 @@ public struct PaletteItem: Identifiable, Hashable, Sendable {
             case .answer: "answer"
             case .prompt: "message"
             case .delegate: "delegate"
+            case .review: "review"
             }
         }
     }
@@ -78,7 +83,8 @@ public enum Palette {
     /// Every place the palette goes, with what it may do there: the
     /// needs, this server's projects (inactive ones too) and a paired
     /// server's, each project's coordinator and open threads, and the
-    /// tasks the app knows (those that need the user, and the threads').
+    /// tasks the app knows: those that need the user, the threads', and
+    /// with the board (app API 6) those on deck and in the backlog.
     public static func items(projects: [AppAPI.Project], sessions: [AppAPI.Session], peers: [AppAPI.Peer],
                              needs: [Need], now: Date = Date()) -> [PaletteItem] {
         var out: [PaletteItem] = []
@@ -116,12 +122,14 @@ public enum Palette {
             }
             var seen: Set<String> = []
             // A thread's task goes to that thread.
+            // A thread's task goes to that thread; a board's to the
+            // project.
             let tasks = p.needsYou.map { ($0, Selection.of(task: $0, in: p)) }
                 + p.threads.compactMap { th in th.task.map { ($0, Selection.card(th, in: p.slug)) } }
+                + p.board.map { ($0, Selection.project(p.slug)) }
             for (t, go) in tasks where seen.insert(t.ref).inserted && t.status != "done" {
                 out.append(PaletteItem(id: "task:\(p.slug)/\(t.ref)", group: .tasks, title: "\(t.ref) \(t.title)",
-                                       detail: "\(p.slug) · \(words(t.status))", go: go,
-                                       act: delegable(t.status) ? .delegate(project: p.slug, task: t.ref) : nil))
+                                       detail: "\(p.slug) · \(words(t.status))", go: go, act: act(task: t.ref, t.status, in: p.slug)))
             }
         }
         for peer in peers {
@@ -162,13 +170,16 @@ public enum Palette {
     }
 
     /// What ⌘↩ does on a need: allow its dialog, answer its question
-    /// when tm read the menu, delegate its blocked task.
+    /// when tm read the menu, delegate its blocked task, review the task
+    /// in review.
     static func act(_ n: Need, _ s: AppAPI.Session?) -> PaletteItem.Act? {
         switch n.kind {
         case .approval, .question:
             return s.flatMap { s in SessionRef(s).flatMap { act($0, s) } }
         case .blocked where !n.task.isEmpty:
             return .delegate(project: n.project, task: n.task)
+        case .review where !n.task.isEmpty:
+            return .review(project: n.project, task: n.task)
         default:
             return nil
         }
@@ -183,9 +194,15 @@ public enum Palette {
         return .prompt(ref)
     }
 
+    /// What ⌘↩ does on a task of status: review it, or delegate it.
+    static func act(task: String, _ status: String, in project: String) -> PaletteItem.Act? {
+        if status == "review" { return .review(project: project, task: task) }
+        return delegable(status) ? .delegate(project: project, task: task) : nil
+    }
+
     /// Whether the coordinator may be asked to delegate a task of this
     /// status: tm's check (modaction.NotDelegable).
-    static func delegable(_ status: String) -> Bool {
+    public static func delegable(_ status: String) -> Bool {
         ["open", "ready", "blocked"].contains(status)
     }
 
@@ -193,6 +210,7 @@ public enum Palette {
         switch status {
         case "ready": "on deck"
         case "started": "in motion"
+        case "open": "backlog"
         default: status
         }
     }
