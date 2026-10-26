@@ -151,6 +151,8 @@ func commandUsage(name string) string {
 		return accessUsage
 	case "agent":
 		return agentUsage
+	case "app":
+		return appUsage
 	case "ask":
 		return askUsage
 	case "attach":

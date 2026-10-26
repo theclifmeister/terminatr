@@ -1,0 +1,593 @@
+package appapi
+
+import (
+	"fmt"
+	"time"
+
+	"github.com/theclifmeister/terminatr/internal/agent"
+	"github.com/theclifmeister/terminatr/internal/link"
+	"github.com/theclifmeister/terminatr/internal/modnotify"
+	"github.com/theclifmeister/terminatr/internal/project"
+	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/server"
+	"github.com/theclifmeister/terminatr/internal/tasks"
+	"github.com/theclifmeister/terminatr/internal/thread"
+)
+
+// The app's types: what each method's result and events carry, copied
+// field by field from the server's (the *Of functions). A field the
+// server's records gain stays home until it is copied here; the test
+// that lists what stays home fails until it is decided.
+
+// Params of the app's methods.
+type (
+	// ProjectsWatchParams: Detail asks for the dashboard's data of each
+	// project besides the sidebar's.
+	ProjectsWatchParams struct {
+		Detail bool `json:"detail,omitempty"`
+	}
+	// SessionIDParams name a session.
+	SessionIDParams struct {
+		ID string `json:"id"`
+	}
+	// NoticeParams name a mod's notice.
+	NoticeParams struct {
+		ID string `json:"id"`
+	}
+	// PromptParams: Text for session ID, queued, or Mode "now" (steer
+	// into the running turn) or "interrupt".
+	PromptParams struct {
+		ID   string `json:"id"`
+		Text string `json:"text"`
+		Mode string `json:"mode,omitempty"`
+	}
+	// AnswerParams: question Index (from 0) of session ID's open
+	// question gets Answer. Question, when set, is the text that
+	// question must still ask, single-select, with Answer one of its
+	// options' labels: refused otherwise (a notification's button sets
+	// it).
+	AnswerParams struct {
+		ID       string `json:"id"`
+		Index    int    `json:"index"`
+		Answer   string `json:"answer"`
+		Question string `json:"question,omitempty"`
+	}
+	// ApproveParams: option Choice (from 1, default 1) of the
+	// permission dialog on session ID's screen. Check answers without
+	// sending. Escape: the user confirmed, in words naming the
+	// command, a command that runs outside the sandbox.
+	ApproveParams struct {
+		ID     string `json:"id"`
+		Choice int    `json:"choice,omitempty"`
+		Check  bool   `json:"check,omitempty"`
+		Escape bool   `json:"escape,omitempty"`
+	}
+	// KeysParams: Data written to session ID's terminal as if typed;
+	// text typed into a thread's prompt box takes it over.
+	KeysParams struct {
+		ID   string `json:"id"`
+		Data string `json:"data"`
+	}
+	// TaskAskParams: ask Project's coordinator to "delegate", "accept"
+	// or "send-back" (with Note) Task ("T12").
+	TaskAskParams struct {
+		Project string `json:"project"`
+		Task    string `json:"task"`
+		Kind    string `json:"kind"`
+		Note    string `json:"note,omitempty"`
+	}
+)
+
+// Empty is the result of a method that answers nothing.
+type Empty struct{}
+
+// SessionList is session.list's result: the sessions, the server's
+// alert count (it goes up on a notification), the mods' notices still
+// in the tray, and the server's version and the newer release it found.
+type SessionList struct {
+	Sessions []Session `json:"sessions"`
+	Alerts   uint64    `json:"alerts"`
+	Notices  []Notice  `json:"notices"`
+	Version  string    `json:"version,omitempty"`
+	Build    string    `json:"build,omitempty"`
+	Latest   string    `json:"latest,omitempty"`
+	Upgrade  string    `json:"upgrade,omitempty"`
+}
+
+// Session is one session: its role and place, its agent's state, its
+// open question and queue, its context use. A paired server's pane has
+// Server (its id is "<alias>/<id>").
+type Session struct {
+	ID             string    `json:"id"`
+	Role           string    `json:"role"`
+	Agent          string    `json:"agent,omitempty"`
+	Project        string    `json:"project,omitempty"`
+	Thread         string    `json:"thread,omitempty"`
+	Task           string    `json:"task,omitempty"`
+	Title          string    `json:"title,omitempty"`
+	Cols           uint16    `json:"cols"`
+	Rows           uint16    `json:"rows"`
+	Created        time.Time `json:"created"`
+	Clients        int       `json:"clients"`
+	State          string    `json:"state,omitempty"`
+	Reason         string    `json:"reason,omitempty"`
+	Escape         bool      `json:"escape,omitempty"`
+	TodosDone      int       `json:"todos_done,omitempty"`
+	TodosTotal     int       `json:"todos_total,omitempty"`
+	Current        string    `json:"current,omitempty"`
+	Queued         int       `json:"queued_prompts,omitempty"`
+	QueuedSince    time.Time `json:"queued_since,omitzero"`
+	QueueHeld      string    `json:"queue_held,omitempty"`
+	QueueHeldSince time.Time `json:"queue_held_since,omitzero"`
+	RemoteControl  bool      `json:"remote_control,omitempty"`
+	Model          string    `json:"model,omitempty"`
+	Question       *Question `json:"question,omitempty"`
+	Context        int64     `json:"context,omitempty"`
+	ContextWindow  int64     `json:"context_window,omitempty"`
+	Server         string    `json:"server,omitempty"`
+	ViewOnly       bool      `json:"view_only,omitempty"`
+}
+
+// Question is a question menu open on a session; Escape: only the user
+// answers it.
+type Question struct {
+	Tool      string         `json:"tool,omitempty"`
+	Questions []QuestionItem `json:"questions"`
+	Since     time.Time      `json:"since,omitzero"`
+	Escape    bool           `json:"escape,omitempty"`
+}
+
+// QuestionItem is one question of a menu, Answered once it has Answer.
+type QuestionItem struct {
+	Question    string           `json:"question"`
+	Header      string           `json:"header,omitempty"`
+	MultiSelect bool             `json:"multi_select,omitempty"`
+	Options     []QuestionOption `json:"options"`
+	Answered    bool             `json:"answered,omitempty"`
+	Answer      string           `json:"answer,omitempty"`
+}
+
+// QuestionOption is one option of a question.
+type QuestionOption struct {
+	Label       string `json:"label"`
+	Description string `json:"description,omitempty"`
+}
+
+// Notice is a mod's notification in the tray; Drawn once a console drew
+// it (notify.claim).
+type Notice struct {
+	ID      string         `json:"id"`
+	Mod     string         `json:"mod"`
+	Title   string         `json:"title"`
+	Text    string         `json:"text,omitempty"`
+	Level   string         `json:"level"`
+	At      time.Time      `json:"at"`
+	Buttons []NoticeButton `json:"buttons,omitempty"`
+	Drawn   bool           `json:"drawn,omitempty"`
+}
+
+// NoticeButton is a notice's button: a core action id on a task
+// (Project, Task) or a session's question (Session, Question, Option).
+type NoticeButton struct {
+	ID       string `json:"id"`
+	Label    string `json:"label"`
+	Project  string `json:"project,omitempty"`
+	Task     int    `json:"task,omitempty"`
+	Session  string `json:"session,omitempty"`
+	Question string `json:"question,omitempty"`
+	Option   string `json:"option,omitempty"`
+}
+
+// Watch is a session's state (session.watch): the session, its
+// thread's task and PR, and its project's waiting work. State "exited"
+// is the last.
+type Watch struct {
+	Session   WatchSession `json:"session"`
+	Task      *WatchTask   `json:"task,omitempty"`
+	PR        string       `json:"pr,omitempty"`
+	PRURL     string       `json:"pr_url,omitempty"`
+	NeedsYou  int          `json:"needs_you"`
+	Inbox     int          `json:"inbox"`
+	Queued    int          `json:"queued_prompts"`
+	Questions int          `json:"questions,omitempty"`
+}
+
+// WatchSession is the session of a Watch.
+type WatchSession struct {
+	ID       string `json:"id"`
+	Role     string `json:"role"`
+	Agent    string `json:"agent,omitempty"`
+	Project  string `json:"project,omitempty"`
+	Thread   string `json:"thread,omitempty"`
+	State    string `json:"state,omitempty"`
+	Reason   string `json:"reason,omitempty"`
+	NeedsYou string `json:"needs_you,omitempty"`
+}
+
+// WatchTask is the task of a Watch.
+type WatchTask struct {
+	ID         string `json:"id"`
+	Title      string `json:"title"`
+	Status     string `json:"status"`
+	StepsDone  int    `json:"steps_done"`
+	StepsTotal int    `json:"steps_total"`
+	Current    string `json:"current,omitempty"`
+}
+
+// Projects is projects.watch's result and each event's data: every
+// project, in slug order, the archived ones left out.
+type Projects struct {
+	Projects []Project `json:"projects"`
+}
+
+// Project is one project: what the sidebar shows (its tasks that need
+// the user, open questions, threads), and with detail what the
+// dashboard shows too (goal, repos, board counts, inbox, usage, repos
+// behind origin, links). Error says why it doesn't open, or why its
+// board doesn't load.
+type Project struct {
+	Slug        string            `json:"slug"`
+	NeedsYou    []Task            `json:"needs_you"`
+	Questions   int               `json:"questions,omitempty"`
+	Threads     []Thread          `json:"threads"`
+	PRHostFails int               `json:"pr_host_fails,omitempty"`
+	Goal        string            `json:"goal,omitempty"`
+	Repos       []string          `json:"repos,omitempty"`
+	Counts      map[string]int    `json:"counts,omitempty"`
+	Error       string            `json:"error,omitempty"`
+	Items       []Item            `json:"items,omitempty"`
+	Usage       Usage             `json:"usage"`
+	TaskUsage   map[string]Usage  `json:"task_usage,omitempty"`
+	Checkouts   map[string]string `json:"checkouts,omitempty"`
+	Links       []Link            `json:"links,omitempty"`
+}
+
+// Task is a task on the board; Ref is its id as the user reads it
+// ("T12").
+type Task struct {
+	ID      int    `json:"id"`
+	Ref     string `json:"ref"`
+	Title   string `json:"title"`
+	Status  string `json:"status"`
+	Notes   string `json:"notes,omitempty"`
+	Steps   []Step `json:"steps,omitempty"`
+	Thread  string `json:"thread,omitempty"`
+	Owner   string `json:"owner,omitempty"`
+	Created string `json:"created,omitempty"`
+	Updated string `json:"updated,omitempty"`
+}
+
+// Step is one step of a task.
+type Step struct {
+	N    int    `json:"n"`
+	Text string `json:"text"`
+	Done bool   `json:"done"`
+}
+
+// Thread is an unresolved thread: its record, its status (nil before
+// it reported any), its PR's checks and number as the ticker last saw
+// them, and with detail its report's PR line and its task.
+type Thread struct {
+	Record   ThreadRecord  `json:"record"`
+	Status   *ThreadStatus `json:"status,omitempty"`
+	Checks   string        `json:"checks,omitempty"`
+	PR       int           `json:"pr,omitempty"`
+	ReportPR string        `json:"report_pr,omitempty"`
+	Task     *Task         `json:"task,omitempty"`
+}
+
+// ThreadRecord is a thread's record.
+type ThreadRecord struct {
+	ID         string    `json:"id"`
+	Title      string    `json:"title"`
+	Task       string    `json:"task,omitempty"`
+	Agent      string    `json:"agent"`
+	Model      string    `json:"model,omitempty"`
+	Repo       string    `json:"repo,omitempty"`
+	Base       string    `json:"base,omitempty"`
+	Branch     string    `json:"branch,omitempty"`
+	Worktree   string    `json:"worktree"`
+	State      string    `json:"state"`
+	Session    string    `json:"session,omitempty"`
+	Created    time.Time `json:"created"`
+	LastPrompt time.Time `json:"last_prompt,omitzero"`
+	Reports    int       `json:"reports"`
+	ReportAt   time.Time `json:"report_at,omitzero"`
+	ReportAck  int       `json:"report_acked"`
+	Done       bool      `json:"done,omitempty"`
+	DoneAt     time.Time `json:"done_at,omitzero"`
+	Adopted    bool      `json:"adopted,omitempty"`
+	Checkout   bool      `json:"checkout,omitempty"`
+	Usage      Usage     `json:"usage"`
+}
+
+// ThreadStatus is a thread's STATUS.md: its progress, current item,
+// last activity, the question it waits on the user for, and its todos.
+type ThreadStatus struct {
+	Percent       int       `json:"percent"`
+	PercentSource string    `json:"percent_source,omitempty"`
+	Current       string    `json:"current,omitempty"`
+	StepsDone     int       `json:"steps_done"`
+	StepsTotal    int       `json:"steps_total"`
+	TodosDone     int       `json:"todos_done"`
+	TodosTotal    int       `json:"todos_total"`
+	Activity      string    `json:"activity,omitempty"`
+	NeedsYou      string    `json:"needs_you,omitempty"`
+	SelfPercent   int       `json:"self_percent"`
+	SelfAt        time.Time `json:"self_at,omitzero"`
+	Done          bool      `json:"done,omitempty"`
+	Updated       time.Time `json:"updated"`
+	Todos         []Todo    `json:"todos,omitempty"`
+}
+
+// Todo is one of an agent's todos.
+type Todo struct {
+	ID         string `json:"id,omitempty"`
+	Text       string `json:"text"`
+	ActiveText string `json:"active_text,omitempty"`
+	Status     string `json:"status"`
+}
+
+// Usage is what turns used: tokens, dollars where known, and a plan's
+// share for agents on a subscription.
+type Usage struct {
+	Turns         int     `json:"turns"`
+	Input         int64   `json:"input"`
+	Output        int64   `json:"output"`
+	CacheRead     int64   `json:"cache_read"`
+	CacheCreation int64   `json:"cache_creation"`
+	CostUSD       float64 `json:"cost_usd"`
+	PlanPct       float64 `json:"plan_pct,omitempty"`
+	HasPlan       bool    `json:"has_plan,omitempty"`
+	Uncosted      int64   `json:"uncosted,omitempty"`
+}
+
+// Item is one of the coordinator's unhandled inbox items.
+type Item struct {
+	ID        string    `json:"id"`
+	Kind      string    `json:"kind"`
+	Subject   string    `json:"subject"`
+	Created   time.Time `json:"created"`
+	Summary   string    `json:"summary"`
+	NeedsUser bool      `json:"needs_user"`
+	Thread    string    `json:"thread,omitempty"`
+}
+
+// Link is a link to another project's coordinator: State in words,
+// which way messages go, and its counts.
+type Link struct {
+	Peer         string    `json:"peer"`
+	Shown        string    `json:"shown,omitempty"`
+	State        string    `json:"state"`
+	HasMine      bool      `json:"has_mine"`
+	HasTheirs    bool      `json:"has_theirs"`
+	Send         bool      `json:"send"`
+	Receive      bool      `json:"receive"`
+	Paused       bool      `json:"paused,omitempty"`
+	Remote       bool      `json:"remote,omitempty"`
+	Unread       int       `json:"unread"`
+	Held         int       `json:"held"`
+	Queued       int       `json:"queued,omitempty"`
+	FilesWaiting int       `json:"files_waiting,omitempty"`
+	FilesActive  int       `json:"files_active,omitempty"`
+	LastAt       time.Time `json:"last_at,omitzero"`
+}
+
+// PromptResult says how a prompt went in: Via "channel", "queued",
+// "steered" or "interrupted"; Why a Mode's prompt went another way;
+// Running: queued while the turn runs on.
+type PromptResult struct {
+	Via     string `json:"via"`
+	Why     string `json:"why,omitempty"`
+	Running bool   `json:"running,omitempty"`
+}
+
+// AnswerResult counts the questions still unanswered; at 0 the answers
+// went to the asker.
+type AnswerResult struct {
+	Remaining int `json:"remaining"`
+}
+
+// ApproveResult is the dialog as the screen shows it: its question, the
+// chosen option and every option. Escape: it asks to run a command
+// outside the sandbox. Sent: the key went (not for Check).
+type ApproveResult struct {
+	Question string   `json:"question,omitempty"`
+	Option   string   `json:"option"`
+	Options  []string `json:"options"`
+	Escape   bool     `json:"escape,omitempty"`
+	Sent     bool     `json:"sent,omitempty"`
+}
+
+// TaskAskResult: Asked false when an item already asks the coordinator
+// something of the task.
+type TaskAskResult struct {
+	Asked bool `json:"asked"`
+}
+
+// NoticeResult: OK for the first console to claim a notice, and for a
+// dismiss that took it out.
+type NoticeResult struct {
+	OK bool `json:"ok"`
+}
+
+// The copies. Lists are never null.
+
+func sessionListOf(r proto.SessionListResult) SessionList {
+	out := SessionList{Sessions: make([]Session, 0, len(r.Sessions)), Notices: make([]Notice, 0, len(r.ModNotices)),
+		Alerts: r.Alerts, Version: r.Version, Build: r.Build, Latest: r.Latest, Upgrade: r.Upgrade}
+	for _, s := range r.Sessions {
+		out.Sessions = append(out.Sessions, sessionOf(s))
+	}
+	for _, n := range r.ModNotices {
+		out.Notices = append(out.Notices, noticeOf(n))
+	}
+	return out
+}
+
+func sessionOf(s proto.SessionInfo) Session {
+	return Session{ID: s.ID, Role: s.Role, Agent: s.Agent, Project: s.Project, Thread: s.Thread, Task: s.Task,
+		Title: s.Title, Cols: s.Cols, Rows: s.Rows, Created: s.Created, Clients: s.Clients, State: s.State,
+		Reason: s.Reason, Escape: s.Escape, TodosDone: s.TodosDone, TodosTotal: s.TodosTotal, Current: s.Current,
+		Queued: s.Queued, QueuedSince: s.QueuedSince, QueueHeld: s.QueueHeld, QueueHeldSince: s.QueueHeldSince,
+		RemoteControl: s.RemoteControl, Model: s.Model, Question: questionOf(s.Question), Context: s.Context,
+		ContextWindow: s.ContextWindow, Server: s.Server, ViewOnly: s.ViewOnly}
+}
+
+func questionOf(q *proto.Question) *Question {
+	if q == nil {
+		return nil
+	}
+	out := &Question{Tool: q.Tool, Since: q.Since, Escape: q.Escape, Questions: make([]QuestionItem, 0, len(q.Questions))}
+	for _, it := range q.Questions {
+		qi := QuestionItem{Question: it.Question, Header: it.Header, MultiSelect: it.MultiSelect,
+			Answered: it.Answered, Answer: it.Answer, Options: make([]QuestionOption, 0, len(it.Options))}
+		for _, o := range it.Options {
+			qi.Options = append(qi.Options, QuestionOption{Label: o.Label, Description: o.Description})
+		}
+		out.Questions = append(out.Questions, qi)
+	}
+	return out
+}
+
+func noticeOf(n modnotify.Notice) Notice {
+	out := Notice{ID: n.ID, Mod: n.Mod, Title: n.Title, Text: n.Text, Level: n.Level, At: n.At, Drawn: n.Drawn}
+	for _, b := range n.Buttons {
+		out.Buttons = append(out.Buttons, NoticeButton{ID: b.ID, Label: b.Label, Project: b.Project, Task: b.Task,
+			Session: b.Session, Question: b.Question, Option: b.Option})
+	}
+	return out
+}
+
+func watchOf(w proto.Watch) Watch {
+	out := Watch{Session: WatchSession{ID: w.Session.ID, Role: w.Session.Role, Agent: w.Session.Agent,
+		Project: w.Session.Project, Thread: w.Session.Thread, State: w.Session.State, Reason: w.Session.Reason,
+		NeedsYou: w.Session.NeedsYou}, PR: w.PR, PRURL: w.PRURL, NeedsYou: w.NeedsYou, Inbox: w.Inbox,
+		Queued: w.Queued, Questions: w.Questions}
+	if t := w.Task; t != nil {
+		out.Task = &WatchTask{ID: t.ID, Title: t.Title, Status: t.Status, StepsDone: t.StepsDone,
+			StepsTotal: t.StepsTotal, Current: t.Current}
+	}
+	return out
+}
+
+func projectsOf(w server.ProjectsWatch) Projects {
+	out := Projects{Projects: make([]Project, 0, len(w.Projects))}
+	for _, p := range w.Projects {
+		out.Projects = append(out.Projects, projectOf(p))
+	}
+	return out
+}
+
+// projectOf is p as the app sees it. Its settings (Safety, Own) and the
+// mods' badges stay home: settings and mods are never in the app API.
+func projectOf(p server.SideProject) Project {
+	out := Project{Slug: p.Slug, NeedsYou: make([]Task, 0, len(p.NeedsYou)), Questions: p.Questions,
+		Threads: make([]Thread, 0, len(p.Threads)), PRHostFails: p.PRHostFails, Goal: p.Goal, Repos: p.Repos,
+		Counts: p.Counts, Error: p.Error, Usage: usageOf(p.Usage), Checkouts: p.Checkouts}
+	for _, t := range p.NeedsYou {
+		out.NeedsYou = append(out.NeedsYou, taskOf(t))
+	}
+	for _, t := range p.Threads {
+		out.Threads = append(out.Threads, threadOf(t))
+	}
+	for _, it := range p.Items {
+		out.Items = append(out.Items, itemOf(it))
+	}
+	if len(p.TaskUsage) > 0 {
+		out.TaskUsage = make(map[string]Usage, len(p.TaskUsage))
+		for id, u := range p.TaskUsage {
+			out.TaskUsage[fmt.Sprintf("T%d", id)] = usageOf(u)
+		}
+	}
+	for _, l := range p.Links {
+		out.Links = append(out.Links, linkOf(l))
+	}
+	return out
+}
+
+func taskOf(t server.SideTask) Task {
+	out := Task{ID: t.ID, Ref: (&tasks.Task{ID: t.ID}).Ref(), Title: t.Title, Status: string(t.Status), Notes: t.Notes,
+		Thread: t.Thread, Owner: t.Owner, Created: t.Created, Updated: t.Updated}
+	for _, s := range t.Steps {
+		out.Steps = append(out.Steps, Step{N: s.N, Text: s.Text, Done: s.Done})
+	}
+	return out
+}
+
+func threadOf(t server.SideThread) Thread {
+	out := Thread{Checks: t.Checks, PR: t.PR, ReportPR: t.ReportPR}
+	if r := t.Record; r != nil {
+		out.Record = recordOf(*r)
+	}
+	if st := t.Status; st != nil {
+		out.Status = statusOf(*st)
+	}
+	if t.Task != nil {
+		task := taskOf(*t.Task)
+		out.Task = &task
+	}
+	return out
+}
+
+// recordOf is r as the app sees it; the agent's own session id and
+// whether it was ever prompted (for resume) stay home.
+func recordOf(r thread.Record) ThreadRecord {
+	return ThreadRecord{ID: r.ID, Title: r.Title, Task: r.Task, Agent: r.Agent, Model: r.Model, Repo: r.Repo,
+		Base: r.Base, Branch: r.Branch, Worktree: r.Worktree, State: r.State, Session: r.Session,
+		Created: r.Created, LastPrompt: r.LastPrompt, Reports: r.Reports, ReportAt: r.ReportAt,
+		ReportAck: r.ReportAck, Done: r.Done, DoneAt: r.DoneAt, Adopted: r.Adopted, Checkout: r.Checkout,
+		Usage: usageOf(r.Usage)}
+}
+
+func statusOf(s thread.Status) *ThreadStatus {
+	out := &ThreadStatus{Percent: s.Percent, PercentSource: s.PercentSource, Current: s.Current,
+		StepsDone: s.StepsDone, StepsTotal: s.StepsTotal, TodosDone: s.TodosDone, TodosTotal: s.TodosTotal,
+		Activity: s.Activity, NeedsYou: s.NeedsYou, SelfPercent: s.SelfPercent, SelfAt: s.SelfAt, Done: s.Done,
+		Updated: s.Updated}
+	for _, t := range s.Todos {
+		out.Todos = append(out.Todos, todoOf(t))
+	}
+	return out
+}
+
+func todoOf(t agent.Todo) Todo {
+	return Todo{ID: t.ID, Text: t.Text, ActiveText: t.ActiveText, Status: string(t.Status)}
+}
+
+func usageOf(u thread.Usage) Usage {
+	return Usage{Turns: u.Turns, Input: u.Input, Output: u.Output, CacheRead: u.CacheRead,
+		CacheCreation: u.CacheCreation, CostUSD: u.CostUSD, PlanPct: u.PlanPct, HasPlan: u.HasPlan, Uncosted: u.Uncosted}
+}
+
+// itemOf is it as the app sees it: a vault item's place and a link
+// item's message stay home.
+func itemOf(it project.Item) Item {
+	return Item{ID: it.ID, Kind: it.Kind, Subject: it.Subject, Created: it.Created, Summary: it.Summary,
+		NeedsUser: it.NeedsUser, Thread: it.Thread}
+}
+
+// linkOf is r as the app sees it: each side's entry (settings) and the
+// link requests waiting stay home.
+func linkOf(r link.Row) Link {
+	return Link{Peer: r.Peer, Shown: r.Shown, State: r.Words(), HasMine: r.HasMine, HasTheirs: r.HasTheirs,
+		Send: r.Send, Receive: r.Receive, Paused: r.Paused, Remote: r.Remote, Unread: r.Unread, Held: r.Held,
+		Queued: r.Queued, FilesWaiting: r.FilesWaiting, FilesActive: r.FilesActive, LastAt: r.LastAt}
+}
+
+func promptResultOf(r proto.SessionPromptResult) PromptResult {
+	return PromptResult{Via: r.Via, Why: r.Why, Running: r.Running}
+}
+
+func answerResultOf(r proto.SessionAnswerResult) AnswerResult {
+	return AnswerResult{Remaining: r.Remaining}
+}
+
+func approveResultOf(r proto.SessionApproveResult) ApproveResult {
+	return ApproveResult{Question: r.Question, Option: r.Option, Options: append([]string{}, r.Options...),
+		Escape: r.Escape, Sent: r.Sent}
+}
+
+func taskAskResultOf(r proto.TaskAskResult) TaskAskResult { return TaskAskResult{Asked: r.Asked} }
+
+func noticeResultOf(r proto.NoticeResult) NoticeResult { return NoticeResult{OK: r.OK} }
