@@ -76,7 +76,7 @@ struct Sidebar: View {
                 row(.session(SessionRef(project: p.slug, thread: t.record.id)), label: t.record.title, ref: t.task?.ref, tag: tag(t))
             }
         } label: {
-            ProjectRow(project: p, selected: app.nav.selection == sel)
+            ProjectRow(project: p, needs: app.needs(of: p.slug).count, selected: app.nav.selection == sel)
                 .selectable(sel)
         }
     }
@@ -107,13 +107,10 @@ struct Sidebar: View {
     }
 
     /// A word for what the thread waits on, as the mockup's: a dialog,
-    /// a question, a PR.
+    /// a question, a review (Attention, as its card's); else its PR.
     private func tag(_ t: AppAPI.Thread) -> (String, Color)? {
-        let s = app.sessions.first { $0.id == t.record.session }
-        if s?.state == "blocked" {
-            return s?.reason == "permission" ? ("allow?", theme.approval) : ("asks", theme.question)
-        }
-        if let n = t.status?.needsYou, !n.isEmpty { return ("needs you", theme.attention) }
+        let a = app.attention(t)
+        if a.waits { return (a.word, theme.colour(a.tone)) }
         if t.pr > 0 { return ("PR", theme.muted) }
         return nil
     }

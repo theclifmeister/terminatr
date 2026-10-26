@@ -111,7 +111,7 @@ struct MenuBarView: View {
                                     .font(.system(size: 12))
                                     .foregroundStyle(theme.muted)
                                 Spacer(minLength: 6)
-                                Flag(count: p.needsYou.count + p.questions)
+                                Flag(count: model.needs(of: p.slug).count)
                                 if i < 9 {
                                     Text("⌘\(i + 1)")
                                         .font(theme.mono(11))

@@ -1,6 +1,7 @@
 import AppKit
 import CoreText
 import SwiftUI
+import TerminatrKit
 
 /// The app's look as named tokens. Views read only these, never a
 /// colour of their own, so another concept (design T744's Afterglow,
@@ -160,5 +161,19 @@ enum Fonts {
             }
         }
         return nil
+    }
+}
+
+extension Theme {
+    /// An attention tone's colour: the dot, the tag.
+    func colour(_ tone: Attention.Tone) -> Color {
+        switch tone {
+        case .approval: approval
+        case .question: question
+        case .attention: attention
+        case .review, .done: good
+        case .working: action
+        case .idle: idle
+        }
     }
 }
