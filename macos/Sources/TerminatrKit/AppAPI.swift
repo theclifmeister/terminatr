@@ -1268,8 +1268,10 @@ public enum AppAPI {
         public var error: Bool
         public var lines: Int
         public var todos: [TranscriptTodo]
+        public var at: Date?
+        public var from: String
 
-        public init(kind: String, text: String = "", truncated: Bool = false, tool: String = "", call: String = "", error: Bool = false, lines: Int = 0, todos: [TranscriptTodo] = []) {
+        public init(kind: String, text: String = "", truncated: Bool = false, tool: String = "", call: String = "", error: Bool = false, lines: Int = 0, todos: [TranscriptTodo] = [], at: Date? = nil, from: String = "") {
             self.kind = kind
             self.text = text
             self.truncated = truncated
@@ -1278,6 +1280,8 @@ public enum AppAPI {
             self.error = error
             self.lines = lines
             self.todos = todos
+            self.at = at
+            self.from = from
         }
 
         enum CodingKeys: String, CodingKey {
@@ -1289,6 +1293,8 @@ public enum AppAPI {
             case error
             case lines
             case todos
+            case at
+            case from
         }
     }
 
@@ -2077,6 +2083,8 @@ extension AppAPI.TranscriptItem {
         self.error = try c.decodeIfPresent(Bool.self, forKey: .error) ?? false
         self.lines = try c.decodeIfPresent(Int.self, forKey: .lines) ?? 0
         self.todos = try c.decodeIfPresent([AppAPI.TranscriptTodo].self, forKey: .todos) ?? []
+        self.at = try c.decodeIfPresent(Date.self, forKey: .at)
+        self.from = try c.decodeIfPresent(String.self, forKey: .from) ?? ""
     }
 }
 

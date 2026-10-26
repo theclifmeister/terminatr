@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/theclifmeister/terminatr/internal/proto"
 )
@@ -106,6 +107,8 @@ func TestTranscriptMap(t *testing.T) {
 	}{
 		{"typed prompt", `{"type":"user","isSidechain":false,"message":{"role":"user","content":"fix the \u001b[31mbug\u001b[0m\u202e"},"version":"2.1.310"}`,
 			[]proto.TranscriptItem{{Kind: "prompt", Text: "fix the [31mbug[0m"}}},
+		{"timed prompt", `{"type":"user","timestamp":"2026-10-26T20:43:05.123Z","message":{"content":"go"}}`,
+			[]proto.TranscriptItem{{Kind: "prompt", Text: "go", At: time.Date(2026, 10, 26, 20, 43, 5, 123e6, time.UTC)}}},
 		{"long prompt", `{"type":"user","message":{"content":"` + long + `"}}`,
 			[]proto.TranscriptItem{{Kind: "prompt", Text: long[:proto.TranscriptItemText] + "…", Truncated: true}}},
 		{"prompt as blocks", `{"type":"user","message":{"content":[{"type":"text","text":"look"},{"type":"image","source":{}}]}}`,

@@ -158,6 +158,9 @@ type Server struct {
 	// transcripts counts the open transcript.watch streams
 	// (maxTranscripts).
 	transcripts atomic.Int32
+	// sent are the prompts coordinators sent their sessions, for the
+	// conversations' senders.
+	sent sentPrompts
 
 	agents    *agent.Registry
 	agentErrs []string
@@ -863,6 +866,9 @@ func (s *Server) keysBy(p proto.SessionKeysParams, cc callCtx) (any, *proto.Erro
 // and is journaled.
 func (s *Server) promptBy(p proto.SessionPromptParams, cc callCtx) (any, *proto.Error) {
 	res, perr := s.prompt(p)
+	if perr == nil {
+		s.sent.add(p.ID, cc.who(), p.Text)
+	}
 	if perr != nil || !cc.app {
 		return res, perr
 	}
@@ -1176,6 +1182,7 @@ func (s *Server) sessionExited(sess *session.Session) {
 	delete(s.adoptAsks, sess.ID())
 	delete(s.told, sess.ID())
 	s.guard.forget(sess.ID())
+	s.sent.forget(sess.ID())
 	if s.tick != nil {
 		s.tick.Kick()
 	}

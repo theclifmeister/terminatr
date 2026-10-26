@@ -520,6 +520,7 @@ text_field = "message.content"
 [transcript]
 tested = ["2."]
 version_field = "version"
+time_field = "timestamp"
 content = "message.content"
 block_kind = "type"
 string_block = "text"

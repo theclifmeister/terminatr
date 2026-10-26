@@ -1,5 +1,7 @@
 package proto
 
+import "time"
+
 // A session's conversation (docs/SPEC.md §3.3, Transcript): the agent's
 // transcript, the file its manifest's [jsonl_tail] follows, read as
 // typed items through the manifest's [transcript] table, for a client
@@ -114,7 +116,21 @@ type TranscriptItem struct {
 	Lines int  `json:"lines,omitempty"`
 	// Todos is a todos item's list.
 	Todos []TranscriptTodo `json:"todos,omitempty"`
+	// At is when the agent wrote the item's line (its manifest's
+	// [transcript] time_field); zero when the line doesn't say.
+	At time.Time `json:"at,omitzero"`
+	// From is who sent a prompt, as far as the server knows: FromTM
+	// (a thread's kickoff, a "[tm]" prompt) or FromCoordinator (sent
+	// through session.prompt by the project's coordinator); empty for
+	// the user's own.
+	From string `json:"from,omitempty"`
 }
+
+// The senders of a prompt (TranscriptItem.From).
+const (
+	FromTM          = "tm"
+	FromCoordinator = "coordinator"
+)
 
 // TranscriptTodo is one entry of a todos item: its text and status
 // (pending, in_progress, completed).

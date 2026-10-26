@@ -818,7 +818,9 @@ type TranscriptEvent struct {
 }
 
 // TranscriptItem is one item of a conversation: Kind "prompt", "text",
-// "tool", "result", "note" or "todos".
+// "tool", "result", "note" or "todos". At is when the agent wrote it,
+// From who sent a prompt: "tm", "coordinator", or empty for the user
+// (since app API 6).
 type TranscriptItem struct {
 	Kind      string           `json:"kind"`
 	Text      string           `json:"text,omitempty"`
@@ -828,6 +830,8 @@ type TranscriptItem struct {
 	Error     bool             `json:"error,omitempty"`
 	Lines     int              `json:"lines,omitempty"`
 	Todos     []TranscriptTodo `json:"todos,omitempty"`
+	At        time.Time        `json:"at,omitzero"`
+	From      string           `json:"from,omitempty"`
 }
 
 // TranscriptTodo is one entry of a todos item.
@@ -858,7 +862,7 @@ func transcriptEventOf(ev proto.TranscriptEvent) TranscriptEvent {
 	out := TranscriptEvent{Skipped: ev.Skipped, Reason: ev.Reason}
 	for _, it := range ev.Items {
 		ti := TranscriptItem{Kind: it.Kind, Text: it.Text, Truncated: it.Truncated, Tool: it.Tool, Call: it.Call,
-			Error: it.Error, Lines: it.Lines}
+			Error: it.Error, Lines: it.Lines, At: it.At, From: it.From}
 		for _, t := range it.Todos {
 			ti.Todos = append(ti.Todos, TranscriptTodo{Text: t.Text, Status: t.Status})
 		}
