@@ -13,9 +13,9 @@ private func record(_ id: String, session: String = "") -> AppAPI.ThreadRecord {
 private let blocked = AppAPI.Task(id: 3, ref: "T3", title: "Licence", status: "blocked", thread: "t-0675")
 private let review = AppAPI.Task(id: 4, ref: "T4", title: "Docs", status: "review")
 private let projects = [
-    AppAPI.Project(slug: "terminatr", needsYou: [blocked, review],
+    AppAPI.Project(slug: "terminatr", active: true, needsYou: [blocked, review],
                    threads: [AppAPI.Thread(record: record("t-0675", session: "s-1"), task: blocked)], usage: noUsage),
-    AppAPI.Project(slug: "site", usage: noUsage),
+    AppAPI.Project(slug: "site", active: true, usage: noUsage),
 ]
 private let sessions = [
     session("s-1", state: "blocked", reason: "question",

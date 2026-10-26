@@ -82,7 +82,7 @@ func started(_ t: ScriptTransport) async throws -> Bridge {
         switch req["method"] as! String {
         case "projects.watch":
             return [
-                #"{"id":\#(id),"result":{"projects":[{"slug":"a","needs_you":null,"threads":null,"usage":{"turns":0,"input":0,"output":0,"cache_read":0,"cache_creation":0,"cost_usd":0}}]}}"#,
+                #"{"id":\#(id),"result":{"projects":[{"slug":"a","active":true,"needs_you":null,"threads":null,"usage":{"turns":0,"input":0,"output":0,"cache_read":0,"cache_creation":0,"cost_usd":0}}]}}"#,
                 #"{"id":\#(id),"event":"projects.changed","data":{"projects":[]}}"#,
             ]
         case "cancel":

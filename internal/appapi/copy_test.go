@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
@@ -221,9 +222,10 @@ func TestCopies(t *testing.T) {
 		".Sessions[].RemoteHeld", ".Sessions[].ModelNext", ".Sessions[].ModelPending",
 	})
 	check("session.watch", homeOf(watchOf), nil)
-	check("projects.watch", homeOf(projectsOf), []string{
-		// Settings and mods are never in the app API.
-		".Projects[].Safety", ".Projects[].Own", ".Projects[].Badges",
+	check("projects.watch", homeOf(projectsOf), append(settingsHome(".Projects[].Safety"),
+		// Settings and mods are never in the app API, but for the
+		// sidebar's three (settingsHome).
+		".Projects[].Own", ".Projects[].Badges",
 		// A task's archive flag: archived tasks aren't sent.
 		".Projects[].NeedsYou[].Archived", ".Projects[].Threads[].Task.Archived",
 		// For resume, and resolved threads aren't sent.
@@ -246,7 +248,7 @@ func TestCopies(t *testing.T) {
 		".Projects[].Links[].Asks.Answered", ".Projects[].Links[].Asks.Ask", ".Projects[].Links[].Asks.Code",
 		".Projects[].Links[].Asks.Created", ".Projects[].Links[].Asks.Out", ".Projects[].Links[].Asks.Peer",
 		".Projects[].Links[].Asks.Project", ".Projects[].Links[].Asks.State",
-	})
+	))
 	check("peer.list", homeOf(peerListOf), []string{
 		// The link's id, versions and ping: the Network popup's. Share
 		// requests cross as their count; the clock's offset as the
@@ -284,6 +286,18 @@ func sessionHome(path string) []string {
 	var out []string
 	for _, f := range []string{"Cells", "Argv", "Cwd", "PID", "StateSources", "AgentSID", "Identified", "RemoteHeld", "ModelNext", "ModelPending"} {
 		out = append(out, path+"."+f)
+	}
+	return out
+}
+
+// settingsHome is what of a project's settings at path stays home: all
+// but Active, Paused and Pinned, which the sidebar orders by.
+func settingsHome(path string) []string {
+	var out []string
+	for f := range reflect.TypeFor[config.Safety]().Fields() {
+		if f.IsExported() && !slices.Contains([]string{"Active", "Paused", "Pinned"}, f.Name) {
+			out = append(out, path+"."+f.Name)
+		}
 	}
 	return out
 }

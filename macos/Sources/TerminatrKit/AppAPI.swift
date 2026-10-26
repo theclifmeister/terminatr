@@ -6,7 +6,7 @@ import Foundation
 /// The terminatr app API (docs/SPEC.md §3.8): what tm app bridge answers.
 public enum AppAPI {
     /// The app API version this app was generated against.
-    public static let version = 3
+    public static let version = 4
 
     public struct AnswerParams: Codable, Sendable, Hashable {
         public var id: String
@@ -568,6 +568,9 @@ public enum AppAPI {
 
     public struct Project: Codable, Sendable, Hashable {
         public var slug: String
+        public var active: Bool
+        public var paused: Bool
+        public var pinned: Bool
         public var needsYou: [Task]
         public var questions: Int
         public var threads: [Thread]
@@ -582,8 +585,11 @@ public enum AppAPI {
         public var checkouts: [String: String]
         public var links: [Link]
 
-        public init(slug: String, needsYou: [Task] = [], questions: Int = 0, threads: [Thread] = [], prHostFails: Int = 0, goal: String = "", repos: [String] = [], counts: [String: Int] = [:], error: String = "", items: [Item] = [], usage: Usage, taskUsage: [String: Usage] = [:], checkouts: [String: String] = [:], links: [Link] = []) {
+        public init(slug: String, active: Bool, paused: Bool = false, pinned: Bool = false, needsYou: [Task] = [], questions: Int = 0, threads: [Thread] = [], prHostFails: Int = 0, goal: String = "", repos: [String] = [], counts: [String: Int] = [:], error: String = "", items: [Item] = [], usage: Usage, taskUsage: [String: Usage] = [:], checkouts: [String: String] = [:], links: [Link] = []) {
             self.slug = slug
+            self.active = active
+            self.paused = paused
+            self.pinned = pinned
             self.needsYou = needsYou
             self.questions = questions
             self.threads = threads
@@ -601,6 +607,9 @@ public enum AppAPI {
 
         enum CodingKeys: String, CodingKey {
             case slug
+            case active
+            case paused
+            case pinned
             case needsYou = "needs_you"
             case questions
             case threads
@@ -1682,6 +1691,9 @@ extension AppAPI.Project {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.slug = try c.decode(String.self, forKey: .slug)
+        self.active = try c.decode(Bool.self, forKey: .active)
+        self.paused = try c.decodeIfPresent(Bool.self, forKey: .paused) ?? false
+        self.pinned = try c.decodeIfPresent(Bool.self, forKey: .pinned) ?? false
         self.needsYou = try c.decodeIfPresent([AppAPI.Task].self, forKey: .needsYou) ?? []
         self.questions = try c.decodeIfPresent(Int.self, forKey: .questions) ?? 0
         self.threads = try c.decodeIfPresent([AppAPI.Thread].self, forKey: .threads) ?? []
