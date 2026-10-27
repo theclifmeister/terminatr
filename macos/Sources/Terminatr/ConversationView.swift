@@ -106,10 +106,8 @@ struct ConversationTab: View {
                                 .frame(maxWidth: .infinity)
                         }
                     }
-                    .padding(.horizontal, 22)
+                    .padding(.horizontal, Page.edge)
                     .padding(.vertical, 14)
-                    .frame(maxWidth: 820)
-                    .frame(maxWidth: .infinity)
                 }
                 .defaultScrollAnchor(.bottom)
                 // Streamed text lands in place: no implicit animation.
@@ -129,8 +127,7 @@ struct ConversationTab: View {
                         VStack(spacing: 10) {
                             if let review, let task = review.task {
                                 ReviewCard(project: model.ref.project, thread: review, task: task)
-                                    .padding(.horizontal, 22)
-                                    .frame(maxWidth: 820)
+                                    .padding(.horizontal, Page.edge)
                             }
                             if !coordinator {
                                 Cards(model: model, session: session, firstChoice: app.firstChoice)
@@ -223,9 +220,8 @@ struct ConversationTab: View {
         .padding(.vertical, 7)
         .frosted(RoundedRectangle(cornerRadius: 10))
         .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(theme.edge, lineWidth: 1))
-        .padding(.horizontal, 22)
+        .padding(.horizontal, Page.edge)
         .padding(.bottom, 4)
-        .frame(maxWidth: 820)
     }
 
     private func close() {

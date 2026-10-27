@@ -19,9 +19,9 @@ struct TerminalTab: View {
     let session: AppAPI.Session?
     @State private var pane = PaneController()
 
-    /// The terminal box's side edges and corners, which the session's
-    /// notice above it and the view-only note under it share.
-    static let edge: CGFloat = 14
+    /// The terminal box's corners, which the session's notice above it
+    /// shares; its side edges, and the view-only note's, are the pages'
+    /// (Page.edge).
     static let corner: CGFloat = 12
 
     var body: some View {
@@ -56,8 +56,8 @@ struct TerminalTab: View {
                 }
                 .background(theme.terminalBackground)
                 .clipShape(RoundedRectangle(cornerRadius: Self.corner))
-                .padding(.horizontal, Self.edge)
-                .padding(.bottom, remote == .view ? 0 : Self.edge)
+                .padding(.horizontal, Page.edge)
+                .padding(.bottom, remote == .view ? 0 : Page.edge)
                 if remote == .view { viewOnly }
             }
         }
@@ -72,7 +72,7 @@ struct TerminalTab: View {
             .font(theme.body(.footnote))
             .foregroundStyle(theme.muted)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, Self.edge)
+            .padding(.horizontal, Page.edge)
             .padding(.vertical, 8)
     }
 }

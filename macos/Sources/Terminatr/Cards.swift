@@ -31,8 +31,7 @@ struct Cards: View {
                     .id(session.id + (model.transcript.pendingTool?.call ?? ""))
             }
         }
-        .padding(.horizontal, 22)
-        .frame(maxWidth: 820)
+        .padding(.horizontal, Page.edge)
     }
 }
 
