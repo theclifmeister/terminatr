@@ -24,7 +24,7 @@ struct TerminatrApp: App {
             MainWindow()
                 .environment(delegate.model)
                 .themed()
-                .frame(minWidth: 980, minHeight: 540)
+                .frame(minWidth: WindowColumns.window, minHeight: 540)
                 .background(WindowFrame(name: "main"))
                 .task { delegate.model.start() }
         }
@@ -41,7 +41,7 @@ struct TerminatrApp: App {
                 SessionWindow(ref: ref)
                     .environment(delegate.model)
                     .themed()
-                    .frame(minWidth: 760, minHeight: 480)
+                    .frame(minWidth: WindowColumns.sessionWindow, minHeight: 480)
                     .task { delegate.model.start() }
             }
         }

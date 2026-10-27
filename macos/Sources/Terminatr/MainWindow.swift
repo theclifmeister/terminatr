@@ -26,7 +26,8 @@ struct MainWindow: View {
             Sidebar(needsRotor: needsRotor)
                 .sidebarText()
                 .opacity(app.lost ? Self.dimmed : 1)
-                .navigationSplitViewColumnWidth(min: 210, ideal: 240, max: 340)
+                .column(min: WindowColumns.sidebarMin)
+                .navigationSplitViewColumnWidth(min: WindowColumns.sidebarMin, ideal: WindowColumns.sidebarIdeal, max: WindowColumns.sidebarMax)
         } detail: {
             detail
                 .opacity(app.lost ? Self.dimmed : 1)
@@ -35,10 +36,12 @@ struct MainWindow: View {
                     if app.lost { ConnectionBanner() }
                 }
                 .background { Frost(\.glass, bar: true) }
+                .column(min: WindowColumns.detailMin)
                 // A project has no inspector: its hiding isn't the user's.
                 .inspector(isPresented: Binding(get: { app.inspector && app.selectedRef != nil },
                                                 set: { if app.selectedRef != nil { app.inspector = $0 } })) {
                     inspector
+                        .column(min: InspectorColumn.min)
                         .inspectorColumnWidth(min: InspectorColumn.min, ideal: Self.inspectorWidth, max: InspectorColumn.max)
                         .background { Frost() }
                         .background(InspectorWidth(key: Self.inspectorWidthKey))

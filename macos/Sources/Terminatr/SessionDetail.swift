@@ -105,8 +105,10 @@ struct SessionWindow: View {
             .safeAreaInset(edge: .top) {
                 if app.lost { ConnectionBanner() }
             }
+            .column(min: WindowColumns.detailMin)
             .inspector(isPresented: $inspector) {
                 Inspector(model: model, session: app.session(of: model))
+                    .column(min: InspectorColumn.min)
                     .inspectorColumnWidth(min: InspectorColumn.min, ideal: InspectorColumn.min, max: InspectorColumn.max)
                     .background { Frost() }
             }
