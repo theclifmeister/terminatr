@@ -55,12 +55,7 @@ public final class ProcessTransport: BridgeTransport, @unchecked Sendable {
                 h.readabilityHandler = nil
                 return
             }
-            self.lock.withLock {
-                self.stderr.append(d)
-                if self.stderr.count > Self.stderrCap {
-                    self.stderr = self.stderr.suffix(Self.stderrCap)
-                }
-            }
+            self.keep(d)
         }
         stdout.fileHandleForReading.readabilityHandler = { [weak self] h in
             let d = h.availableData
@@ -68,6 +63,10 @@ public final class ProcessTransport: BridgeTransport, @unchecked Sendable {
             if d.isEmpty {
                 h.readabilityHandler = nil
                 self.process.waitUntilExit()
+                // Stderr's handler may not have read the bridge's last
+                // words yet: the process is gone, so the rest is there.
+                errPipe.fileHandleForReading.readabilityHandler = nil
+                self.keep(errPipe.fileHandleForReading.readDataToEndOfFile())
                 sink.finish(throwing: self.ended())
                 return
             }
@@ -93,6 +92,16 @@ public final class ProcessTransport: BridgeTransport, @unchecked Sendable {
     public func close() {
         lock.withLock { closing = true }
         try? stdin.fileHandleForWriting.close()
+    }
+
+    /// Keeps d, the bridge's stderr, up to its last stderrCap bytes.
+    private func keep(_ d: Data) {
+        lock.withLock {
+            stderr.append(d)
+            if stderr.count > Self.stderrCap {
+                stderr = stderr.suffix(Self.stderrCap)
+            }
+        }
     }
 
     /// The complete lines in buffer plus d; the rest waits for more.

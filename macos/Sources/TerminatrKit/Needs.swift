@@ -22,6 +22,9 @@ public struct Need: Identifiable, Hashable, Sendable {
         /// A paired server: a shared project that needs its user, or a
         /// share request.
         case network
+        /// A project's link: a message held for the OK, a file offered,
+        /// a paired server's link request (app API 16).
+        case link
     }
 
     /// Stable while the need lasts; a new question on the same session
@@ -47,9 +50,11 @@ public struct Need: Identifiable, Hashable, Sendable {
     public let answer: Answer?
     /// The task it is about ("T12"): a task in review or blocked.
     public let task: String
+    /// What its buttons answer in place: a link need, a share request.
+    public let link: LinkAct?
 
     public init(id: String, kind: Kind, project: String, what: String, detail: String, text: String = "",
-                session: String = "", answer: Answer? = nil, task: String = "") {
+                session: String = "", answer: Answer? = nil, task: String = "", link: LinkAct? = nil) {
         self.id = id
         self.kind = kind
         self.project = project
@@ -59,6 +64,7 @@ public struct Need: Identifiable, Hashable, Sendable {
         self.session = session
         self.answer = answer
         self.task = task
+        self.link = link
     }
 
     /// The need named with its project, as the sidebar, the menu bar
@@ -93,9 +99,10 @@ extension Need {
 
     /// Every need: sessions' first (questions, approvals, held queues),
     /// then each project's (its coordinator's questions, its blocked
-    /// tasks, failing checks), then the paired servers', then the tasks
-    /// in review. A paired server's panes (sessions with a server) are
-    /// its user's there, not here.
+    /// tasks, failing checks, its links'), then the paired servers'
+    /// (share requests, their projects'), then the tasks in review. A
+    /// paired server's panes (sessions with a server) are its user's
+    /// there, not here.
     public static func of(projects: [AppAPI.Project], sessions: [AppAPI.Session], peers: [AppAPI.Peer] = [],
                           now: Date = Date()) -> [Need] {
         var out: [Need] = []
@@ -189,16 +196,13 @@ extension Need {
                             what: "\(name) PR #\(t.pr) checks fail", detail: t.task?.title ?? t.record.title,
                             session: t.record.session))
         }
-        return out
+        return out + links(of: p)
     }
 
     static func of(peer: AppAPI.Peer) -> [Need] {
         var out: [Need] = []
         let server = peer.name.isEmpty ? peer.alias : peer.name
-        if peer.shareWaits > 0 {
-            out.append(Need(id: "share:\(peer.alias)", kind: .network, project: "",
-                            what: "\(server) asks you to share a project", detail: "\(server) · paired server"))
-        }
+        out += shares(of: peer, server: server)
         for p in peer.projects where p.needsYou > 0 && !p.stale {
             out.append(Need(id: "paired:\(peer.alias)/\(p.project)", kind: .network, project: "\(peer.alias)/\(p.project)",
                             what: p.needsYou == 1 ? "\(server) › \(p.project): 1 needs you" : "\(server) › \(p.project): \(p.needsYou) need you",
