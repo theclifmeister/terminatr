@@ -6,7 +6,7 @@ import Foundation
 /// The terminatr app API (docs/SPEC.md §3.8): what tm app bridge answers.
 public enum AppAPI {
     /// The app API version this app was generated against.
-    public static let version = 12
+    public static let version = 13
 
     public struct AnswerParams: Codable, Sendable, Hashable {
         public var id: String
@@ -95,6 +95,18 @@ public enum AppAPI {
 
         enum CodingKeys: String, CodingKey {
             case id
+        }
+    }
+
+    public struct CoordinatorClear: Codable, Sendable, Hashable {
+        public var session: String
+
+        public init(session: String) {
+            self.session = session
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case session
         }
     }
 
@@ -674,6 +686,42 @@ public enum AppAPI {
             case taskUsage = "task_usage"
             case checkouts
             case links
+        }
+    }
+
+    public struct ProjectActive: Codable, Sendable, Hashable {
+        public var changed: Bool
+        public var stopped: [String]
+        public var resumed: [String]
+        public var lost: [String]
+
+        public init(changed: Bool, stopped: [String] = [], resumed: [String] = [], lost: [String] = []) {
+            self.changed = changed
+            self.stopped = stopped
+            self.resumed = resumed
+            self.lost = lost
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case changed
+            case stopped
+            case resumed
+            case lost
+        }
+    }
+
+    public struct ProjectActiveParams: Codable, Sendable, Hashable {
+        public var project: String
+        public var active: Bool
+
+        public init(project: String, active: Bool) {
+            self.project = project
+            self.active = active
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case project
+            case active
         }
     }
 
@@ -1693,11 +1741,13 @@ public enum AppAPI {
 
     /// Every method of the app API, by name.
     public enum Methods {
+        public static let coordinatorClear = Call<ProjectParams, CoordinatorClear>("coordinator.clear", write: true)
         public static let notifyClaim = Call<NoticeParams, NoticeResult>("notify.claim", write: false)
         public static let notifyDismiss = Call<NoticeParams, NoticeResult>("notify.dismiss", write: false)
         public static let paneInput = Call<PaneInputParams, Empty>("pane.input", write: true, target: "pane.vt")
         public static let paneVt = Subscription<PaneParams, PaneResult, PaneEvent>("pane.vt", events: ["pane.repaint", "pane.output", "pane.resize", "pane.closed"])
         public static let peerList = Call<NoParams, PeerList>("peer.list", write: false)
+        public static let projectActive = Call<ProjectActiveParams, ProjectActive>("project.active", write: true)
         public static let projectOpen = Call<ProjectOpenParams, ProjectOpen>("project.open", write: true)
         public static let projectsWatch = Subscription<ProjectsWatchParams, Projects, Projects>("projects.watch", events: ["projects.changed"])
         public static let questionsOpen = Call<ProjectParams, QuestionsOpen>("questions.open", write: true)
@@ -1759,6 +1809,13 @@ extension AppAPI.CancelParams {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.id = try c.decode(Int.self, forKey: .id)
+    }
+}
+
+extension AppAPI.CoordinatorClear {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.session = try c.decode(String.self, forKey: .session)
     }
 }
 
@@ -2010,6 +2067,24 @@ extension AppAPI.Project {
         self.taskUsage = try c.decodeIfPresent([String: AppAPI.Usage].self, forKey: .taskUsage) ?? [:]
         self.checkouts = try c.decodeIfPresent([String: String].self, forKey: .checkouts) ?? [:]
         self.links = try c.decodeIfPresent([AppAPI.Link].self, forKey: .links) ?? []
+    }
+}
+
+extension AppAPI.ProjectActive {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.changed = try c.decode(Bool.self, forKey: .changed)
+        self.stopped = try c.decodeIfPresent([String].self, forKey: .stopped) ?? []
+        self.resumed = try c.decodeIfPresent([String].self, forKey: .resumed) ?? []
+        self.lost = try c.decodeIfPresent([String].self, forKey: .lost) ?? []
+    }
+}
+
+extension AppAPI.ProjectActiveParams {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.project = try c.decode(String.self, forKey: .project)
+        self.active = try c.decode(Bool.self, forKey: .active)
     }
 }
 

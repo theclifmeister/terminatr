@@ -279,6 +279,8 @@ func TestCopies(t *testing.T) {
 	check("session.approve", homeOf(approveResultOf), nil)
 	check("task.ask", homeOf(taskAskResultOf), nil)
 	check("project.open", homeOf(projectOpenOf), nil)
+	check("coordinator.clear", homeOf(coordinatorClearOf), nil)
+	check("project.active", homeOf(projectActiveOf), nil)
 	check("task.add", homeOf(taskAddedOf), nil)
 	check("questions.open", homeOf(questionsOpenOf), nil)
 	check("notify", homeOf(noticeResultOf), nil)
@@ -361,6 +363,19 @@ func TestParamsCopies(t *testing.T) {
 	if want := (proto.TaskActionParams{Project: "web", Task: "T2", Note: "x"}); err != nil || p != want {
 		t.Errorf("send-back params %+v %v", p, err)
 	}
+	m, _ = Lookup(proto.MethodProjectActive)
+	p, err = m.toServer(json.RawMessage(`{"project":"web","active":true}`))
+	if want := (proto.ProjectActiveParams{Project: "web", Active: true}); err != nil || p != want {
+		t.Errorf("project.active params %+v %v", p, err)
+	}
+	m, _ = Lookup(proto.MethodCoordinatorClear)
+	p, err = m.toServer(json.RawMessage(`{"project":"web"}`))
+	if want := (proto.CoordinatorClearParams{Project: "web"}); err != nil || p != want {
+		t.Errorf("coordinator.clear params %+v %v", p, err)
+	}
+	if _, err := m.toServer(json.RawMessage(`{"project":"web","session":"s-1"}`)); err == nil {
+		t.Error("coordinator.clear took a session")
+	}
 	// session.file takes a ref, never a path.
 	m, _ = Lookup(proto.MethodSessionFile)
 	p, err = m.toServer(json.RawMessage(`{"session":"s-1","ref":"0.0123456789abcdef.1.0","offset":5,"stat":true}`))
@@ -390,7 +405,7 @@ func TestAllowlist(t *testing.T) {
 		proto.MethodSessionPrompt, proto.MethodSessionWatch, proto.MethodTaskAsk,
 		proto.MethodTaskAccept, proto.MethodTaskSendBack, proto.MethodTaskDelegate, proto.MethodProjectOpen,
 		proto.MethodQuestionsOpen, proto.MethodTaskAdd, proto.MethodPaneVT, proto.MethodTranscriptWatch, MethodPaneInput,
-		proto.MethodSessionFile}
+		proto.MethodSessionFile, proto.MethodCoordinatorClear, proto.MethodProjectActive}
 	slices.Sort(want)
 	if got := MethodNames(); !slices.Equal(got, want) {
 		t.Errorf("methods %v, want %v", got, want)
@@ -407,7 +422,7 @@ func TestAllowlist(t *testing.T) {
 		}
 	}
 	for name, write := range map[string]bool{MethodPaneInput: true, proto.MethodPaneVT: false, proto.MethodTranscriptWatch: false,
-		proto.MethodSessionFile: false} {
+		proto.MethodSessionFile: false, proto.MethodCoordinatorClear: true, proto.MethodProjectActive: true} {
 		if m, _ := Lookup(name); m.Write != write {
 			t.Errorf("%s: write %v", name, m.Write)
 		}

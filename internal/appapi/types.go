@@ -93,7 +93,7 @@ type (
 		Task    string `json:"task"`
 		Note    string `json:"note"`
 	}
-	// ProjectParams name a project (questions.open).
+	// ProjectParams name a project (questions.open, coordinator.clear).
 	ProjectParams struct {
 		Project string `json:"project"`
 	}
@@ -110,6 +110,12 @@ type (
 		Project string `json:"project"`
 		Cols    uint16 `json:"cols,omitempty"`
 		Rows    uint16 `json:"rows,omitempty"`
+	}
+	// ProjectActiveParams are project.active's: the project, and whether
+	// to activate it (false: deactivate it).
+	ProjectActiveParams struct {
+		Project string `json:"project"`
+		Active  bool   `json:"active"`
 	}
 )
 
@@ -823,6 +829,23 @@ type ProjectOpen struct {
 	Started bool   `json:"started,omitempty"`
 }
 
+// CoordinatorClear is coordinator.clear's result: the coordinator
+// session asked to save what it learned, cleared at its next idle moment
+// after that.
+type CoordinatorClear struct {
+	Session string `json:"session"`
+}
+
+// ProjectActive is project.active's result: whether the setting
+// changed, and the sessions it stopped, resumed (or started fresh) and
+// dropped, by name (coordinator, a thread id).
+type ProjectActive struct {
+	Changed bool     `json:"changed"`
+	Stopped []string `json:"stopped,omitempty"`
+	Resumed []string `json:"resumed,omitempty"`
+	Lost    []string `json:"lost,omitempty"`
+}
+
 // QuestionsOpen is questions.open's result: the coordinator's session
 // prompted to put its questions to the user, how the prompt went in (as
 // session.prompt's Via) and how many questions were open.
@@ -838,6 +861,14 @@ func questionsOpenOf(r proto.QuestionsOpenResult) QuestionsOpen {
 
 func projectOpenOf(r proto.ProjectOpenResult) ProjectOpen {
 	return ProjectOpen{Session: r.Session, Started: r.Started}
+}
+
+func coordinatorClearOf(r proto.CoordinatorClearResult) CoordinatorClear {
+	return CoordinatorClear{Session: r.Session}
+}
+
+func projectActiveOf(r proto.ProjectActiveResult) ProjectActive {
+	return ProjectActive{Changed: r.Changed, Stopped: r.Stopped, Resumed: r.Resumed, Lost: r.Lost}
 }
 
 func noticeResultOf(r proto.NoticeResult) NoticeResult { return NoticeResult{OK: r.OK} }
