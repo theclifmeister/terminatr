@@ -6,7 +6,7 @@ import Foundation
 /// The terminatr app API (docs/SPEC.md §3.8): what tm app bridge answers.
 public enum AppAPI {
     /// The app API version this app was generated against.
-    public static let version = 10
+    public static let version = 11
 
     public struct AnswerParams: Codable, Sendable, Hashable {
         public var id: String
@@ -1001,6 +1001,57 @@ public enum AppAPI {
         }
     }
 
+    public struct SessionFile: Codable, Sendable, Hashable {
+        public var name: String
+        public var type: String
+        public var size: Int
+        public var mtime: Date?
+        public var sendable: Bool
+        public var offset: Int
+        public var data: Data
+
+        public init(name: String, type: String = "", size: Int, mtime: Date? = nil, sendable: Bool, offset: Int, data: Data = Data()) {
+            self.name = name
+            self.type = type
+            self.size = size
+            self.mtime = mtime
+            self.sendable = sendable
+            self.offset = offset
+            self.data = data
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case name
+            case type
+            case size
+            case mtime
+            case sendable
+            case offset
+            case data
+        }
+    }
+
+    public struct SessionFileParams: Codable, Sendable, Hashable {
+        public var session: String
+        public var ref: String
+        public var offset: Int
+        public var stat: Bool
+
+        public init(session: String, ref: String, offset: Int = 0, stat: Bool = false) {
+            self.session = session
+            self.ref = ref
+            self.offset = offset
+            self.stat = stat
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case session
+            case ref
+            case offset
+            case stat
+        }
+    }
+
     public struct SessionIDParams: Codable, Sendable, Hashable {
         public var id: String
 
@@ -1376,6 +1427,27 @@ public enum AppAPI {
         }
     }
 
+    public struct TranscriptFile: Codable, Sendable, Hashable {
+        public var ref: String
+        public var name: String
+        public var path: String
+        public var type: String
+
+        public init(ref: String, name: String, path: String = "", type: String = "") {
+            self.ref = ref
+            self.name = name
+            self.path = path
+            self.type = type
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case ref
+            case name
+            case path
+            case type
+        }
+    }
+
     public struct TranscriptItem: Codable, Sendable, Hashable {
         public var kind: String
         public var text: String
@@ -1387,8 +1459,10 @@ public enum AppAPI {
         public var todos: [TranscriptTodo]
         public var at: Date?
         public var from: String
+        public var files: [TranscriptFile]
+        public var display: String
 
-        public init(kind: String, text: String = "", truncated: Bool = false, tool: String = "", call: String = "", error: Bool = false, lines: Int = 0, todos: [TranscriptTodo] = [], at: Date? = nil, from: String = "") {
+        public init(kind: String, text: String = "", truncated: Bool = false, tool: String = "", call: String = "", error: Bool = false, lines: Int = 0, todos: [TranscriptTodo] = [], at: Date? = nil, from: String = "", files: [TranscriptFile] = [], display: String = "") {
             self.kind = kind
             self.text = text
             self.truncated = truncated
@@ -1399,6 +1473,8 @@ public enum AppAPI {
             self.todos = todos
             self.at = at
             self.from = from
+            self.files = files
+            self.display = display
         }
 
         enum CodingKeys: String, CodingKey {
@@ -1412,6 +1488,8 @@ public enum AppAPI {
             case todos
             case at
             case from
+            case files
+            case display
         }
     }
 
@@ -1619,6 +1697,7 @@ public enum AppAPI {
         public static let questionsOpen = Call<ProjectParams, QuestionsOpen>("questions.open", write: true)
         public static let sessionAnswer = Call<AnswerParams, AnswerResult>("session.answer", write: true)
         public static let sessionApprove = Call<ApproveParams, ApproveResult>("session.approve", write: true)
+        public static let sessionFile = Call<SessionFileParams, SessionFile>("session.file", write: false)
         public static let sessionKeys = Call<KeysParams, Empty>("session.keys", write: true)
         public static let sessionList = Call<NoParams, SessionList>("session.list", write: false)
         public static let sessionPrompt = Call<PromptParams, PromptResult>("session.prompt", write: true)
@@ -2078,6 +2157,29 @@ extension AppAPI.Session {
     }
 }
 
+extension AppAPI.SessionFile {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.name = try c.decode(String.self, forKey: .name)
+        self.type = try c.decodeIfPresent(String.self, forKey: .type) ?? ""
+        self.size = try c.decode(Int.self, forKey: .size)
+        self.mtime = try c.decodeIfPresent(Date.self, forKey: .mtime)
+        self.sendable = try c.decode(Bool.self, forKey: .sendable)
+        self.offset = try c.decode(Int.self, forKey: .offset)
+        self.data = try c.decodeIfPresent(Data.self, forKey: .data) ?? Data()
+    }
+}
+
+extension AppAPI.SessionFileParams {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.session = try c.decode(String.self, forKey: .session)
+        self.ref = try c.decode(String.self, forKey: .ref)
+        self.offset = try c.decodeIfPresent(Int.self, forKey: .offset) ?? 0
+        self.stat = try c.decodeIfPresent(Bool.self, forKey: .stat) ?? false
+    }
+}
+
 extension AppAPI.SessionIDParams {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -2245,6 +2347,16 @@ extension AppAPI.TranscriptEvent {
     }
 }
 
+extension AppAPI.TranscriptFile {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.ref = try c.decode(String.self, forKey: .ref)
+        self.name = try c.decode(String.self, forKey: .name)
+        self.path = try c.decodeIfPresent(String.self, forKey: .path) ?? ""
+        self.type = try c.decodeIfPresent(String.self, forKey: .type) ?? ""
+    }
+}
+
 extension AppAPI.TranscriptItem {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -2258,6 +2370,8 @@ extension AppAPI.TranscriptItem {
         self.todos = try c.decodeIfPresent([AppAPI.TranscriptTodo].self, forKey: .todos) ?? []
         self.at = try c.decodeIfPresent(Date.self, forKey: .at)
         self.from = try c.decodeIfPresent(String.self, forKey: .from) ?? ""
+        self.files = try c.decodeIfPresent([AppAPI.TranscriptFile].self, forKey: .files) ?? []
+        self.display = try c.decodeIfPresent(String.self, forKey: .display) ?? ""
     }
 }
 

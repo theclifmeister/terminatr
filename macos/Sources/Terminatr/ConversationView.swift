@@ -74,7 +74,7 @@ struct ConversationTab: View {
                         ForEach(rows) { row in
                             switch row {
                             case .entry(let e):
-                                EntryView(entry: e, agent: session?.agent ?? "agent",
+                                EntryView(entry: e, agent: session?.agent ?? "agent", session: session?.id,
                                           answer: asking && e.id == pending ? { flash += 1 } : nil)
                                     .modifier(FoundRing(found: found.contains(e.id), current: e.id == current))
                                     .id(e.id)
@@ -331,11 +331,13 @@ struct ReviewCard: View {
 /// One entry of the conversation: each turn says who and when ("you ·
 /// 20:45", "claude · 20:45"); tm's prompts fold to one line the user
 /// opens (the thread's kickoff, the server's notes), and long prompts to
-/// their first lines.
+/// their first lines. Files sent or pasted show as attachments.
 struct EntryView: View {
     @Environment(\.theme) private var theme
     let entry: Transcript.Entry
     let agent: String
+    /// The session's id, which reads its files.
+    var session: String?
     /// The question card's link, for the AskUserQuestion call it answers.
     var answer: (() -> Void)? = nil
     @State private var unfolded = false
@@ -369,12 +371,17 @@ struct EntryView: View {
                 VStack(alignment: .trailing, spacing: 4) {
                     turn
                         .onTapGesture { if entry.folds || entry.preview() != nil { unfolded = false } }
-                    Text(preview ?? entry.text)
-                        .textSelection(.enabled)
-                        .foregroundStyle(theme.onPrompt)
-                        .padding(.horizontal, 13)
-                        .padding(.vertical, 9)
-                        .background(LinearGradient(colors: theme.prompt, startPoint: .topLeading, endPoint: .bottomTrailing), in: RoundedRectangle(cornerRadius: 14))
+                    if !entry.text.isEmpty || entry.files.isEmpty {
+                        Text(preview ?? entry.text)
+                            .textSelection(.enabled)
+                            .foregroundStyle(theme.onPrompt)
+                            .padding(.horizontal, 13)
+                            .padding(.vertical, 9)
+                            .background(LinearGradient(colors: theme.prompt, startPoint: .topLeading, endPoint: .bottomTrailing), in: RoundedRectangle(cornerRadius: 14))
+                    }
+                    if !entry.files.isEmpty {
+                        Attachments(files: entry.attachments, session: session, alignment: .trailing)
+                    }
                     if preview != nil {
                         Button("Show all \(entry.lineCount) lines") { unfolded = true }
                             .buttonStyle(.borderless)
@@ -397,6 +404,9 @@ struct EntryView: View {
             .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(theme.edge, lineWidth: 1))
         case .tool:
             ToolLine(entry: entry, answer: answer)
+        case .files:
+            AttachmentCard(entry: entry, session: session,
+                           turn: [entry.who(agent: agent), Self.clock(entry.at)].filter { !$0.isEmpty }.joined(separator: " · "))
         case .result:
             if let r = entry.result {
                 Text("\(r.text)\(r.lines > 1 ? " · \(r.lines) lines" : "")")

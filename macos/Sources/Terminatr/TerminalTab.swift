@@ -357,17 +357,44 @@ final class MirrorTerminalView: TerminalView {
     @objc private func repaintFromMenu() { onRepaint?() }
 }
 
+/// The pane's terminal in the theme's colours (T770): its ANSI palette,
+/// cursor and selection, set again when the theme or the appearance
+/// changes.
 struct PaneTerminal: NSViewRepresentable {
     let controller: PaneController
     let theme: Theme
+    @Environment(\.colorScheme) private var scheme
 
     func makeNSView(context: Context) -> PaneHost {
         let h = controller.host
-        h.terminal.nativeBackgroundColor = NSColor(theme.terminalBackground)
-        h.terminal.nativeForegroundColor = NSColor(theme.terminalForeground)
         h.terminal.optionAsMetaKey = false
+        paint(h, context.coordinator)
         return h
     }
 
-    func updateNSView(_ nsView: PaneHost, context: Context) {}
+    func updateNSView(_ nsView: PaneHost, context: Context) {
+        paint(nsView, context.coordinator)
+    }
+
+    func makeCoordinator() -> Painted { Painted() }
+
+    /// What the terminal was last painted in.
+    final class Painted {
+        var with: (TerminalColours, Bool)?
+    }
+
+    private func paint(_ h: PaneHost, _ painted: Painted) {
+        let c = theme.colours.terminal, dark = scheme == .dark
+        if let w = painted.with, w.0 == c, w.1 == dark { return }
+        painted.with = (c, dark)
+        let t = h.terminal
+        t.nativeBackgroundColor = NSColor(c.background, dark: dark)
+        t.nativeForegroundColor = NSColor(c.foreground, dark: dark)
+        t.caretColor = NSColor(c.cursor, dark: dark)
+        t.selectedTextBackgroundColor = NSColor(c.selection, dark: dark)
+        t.installColors(c.ansi.map { s in
+            let x = s.hex(dark: dark)
+            return SwiftTerm.Color(red8: UInt16((x >> 16) & 0xff), green8: UInt16((x >> 8) & 0xff), blue8: UInt16(x & 0xff))
+        })
+    }
 }

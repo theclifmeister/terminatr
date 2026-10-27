@@ -35,6 +35,10 @@ func init() {
 			func(ev proto.TranscriptEvent) (string, TranscriptEvent, bool) {
 				return ev.Event, transcriptEventOf(ev), slices.Contains(transcriptEvents, ev.Event)
 			}, transcriptAck),
+		// The bytes of a file the conversation puts in front of the user
+		// (app API 11; the server's caps say session-file), by the ref its
+		// item gave: only what the transcript's line names there.
+		unary(proto.MethodSessionFile, false, sessionFileParams, sessionFileOf),
 
 		// A pane in plain VT (the server's caps say pane-vt): repaints,
 		// output and resizes; the bridge acks the bytes it wrote to the
@@ -254,6 +258,10 @@ func paneParams(p PaneParams) proto.PaneVTParams { return proto.PaneVTParams{Ses
 
 func transcriptParams(p TranscriptParams) proto.TranscriptWatchParams {
 	return proto.TranscriptWatchParams{Session: p.Session}
+}
+
+func sessionFileParams(p SessionFileParams) proto.SessionFileParams {
+	return proto.SessionFileParams{Session: p.Session, Ref: p.Ref, Offset: p.Offset, Stat: p.Stat}
 }
 
 // paneInput copies the app's input; its acks are the bridge's (paneAck).

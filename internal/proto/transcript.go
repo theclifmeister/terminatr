@@ -119,11 +119,30 @@ type TranscriptItem struct {
 	// At is when the agent wrote the item's line (its manifest's
 	// [transcript] time_field); zero when the line doesn't say.
 	At time.Time `json:"at,omitzero"`
+	// Files are what the item puts in front of the user: a prompt's
+	// pasted images, the files a call sends (Claude's SendUserFile),
+	// shown as its Display says ("render" inline, "attach" as a card
+	// without a preview; empty is render). session.file serves each by
+	// its Ref. Text is then the call's caption.
+	Files   []TranscriptFile `json:"files,omitempty"`
+	Display string           `json:"display,omitempty"`
 	// From is who sent a prompt, as far as the server knows: FromTM
 	// (a thread's kickoff, a "[tm]" prompt) or FromCoordinator (sent
 	// through session.prompt by the project's coordinator); empty for
 	// the user's own.
 	From string `json:"from,omitempty"`
+}
+
+// TranscriptFile is a file an item puts in front of the user: Ref names
+// it to session.file, Name is its name (a sent file's base name, "Image
+// #1"), Path a sent file's path as the call gives it (empty for a pasted
+// image), Type the media type session.file sends it as (empty: it
+// doesn't send that file's bytes).
+type TranscriptFile struct {
+	Ref  string `json:"ref"`
+	Name string `json:"name"`
+	Path string `json:"path,omitempty"`
+	Type string `json:"type,omitempty"`
 }
 
 // The senders of a prompt (TranscriptItem.From).
@@ -144,4 +163,49 @@ type TranscriptTodo struct {
 type TranscriptInput struct {
 	Ack    int  `json:"ack,omitempty"`
 	Detach bool `json:"detach,omitempty"`
+}
+
+// MethodSessionFile reads a file a session's conversation puts in front
+// of the user (SessionFileParams): a SessionFileResult. The human's
+// only, and only a file the session's transcript names at the item's
+// Ref: a call of its files tool's path, symlinks evaluated, a regular
+// file of a type tm sends (agent.SentFileType) and at most MaxSentFile
+// bytes; or an image pasted into a prompt. ErrFileGone when the file,
+// or the line naming it, is no longer there. The server's hello lists
+// CapSessionFile.
+const MethodSessionFile = "session.file"
+
+// CapSessionFile says the server answers session.file.
+const CapSessionFile = "session-file"
+
+// Bounds of session.file: a file of at most MaxSentFile bytes, read
+// SentFileChunk bytes at a time.
+const (
+	MaxSentFile   = 25 << 20
+	SentFileChunk = 1 << 20
+)
+
+// SessionFileParams name a file of session's conversation by its Ref
+// (TranscriptFile.Ref), and the chunk of it to read from Offset; Stat
+// asks only for its name, type and size.
+type SessionFileParams struct {
+	Session string `json:"session"`
+	Ref     string `json:"ref"`
+	Offset  int64  `json:"offset,omitempty"`
+	Stat    bool   `json:"stat,omitempty"`
+}
+
+// SessionFileResult is a file's chunk: Data from Offset (at most
+// SentFileChunk bytes; empty for a stat) of Size bytes, last modified at
+// MTime (a pasted image's is zero). Type is the media type; Sendable
+// says whether its bytes may be read (a stat answers a file of another
+// type, or a larger one, without them).
+type SessionFileResult struct {
+	Name     string    `json:"name"`
+	Type     string    `json:"type,omitempty"`
+	Size     int64     `json:"size"`
+	MTime    time.Time `json:"mtime,omitzero"`
+	Sendable bool      `json:"sendable"`
+	Offset   int64     `json:"offset"`
+	Data     []byte    `json:"data,omitempty"`
 }
