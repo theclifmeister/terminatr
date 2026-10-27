@@ -105,6 +105,20 @@ struct MainWindow: View {
                 NewTaskSheet(project: p)
             }
         }
+        // Save & Clear, Activate and Deactivate, from wherever the user
+        // picked them: asked here, in the TUI's words.
+        .confirmationDialog(app.asking?.title ?? "", isPresented: Binding(get: { app.asking != nil }, set: { if !$0 { app.asking = nil } }),
+                            presenting: app.asking) { a in
+            Button(a.verb) { app.act(a) }
+            Button("Cancel", role: .cancel) {}
+        } message: { a in
+            Text(a.message)
+        }
+        .alert(app.askSaid?.title ?? "", isPresented: Binding(get: { app.askSaid != nil }, set: { if !$0 { app.askSaid = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(app.askSaid?.text ?? "")
+        }
     }
 
     /// What the window keeps while the bridge is down shows so (lost).
