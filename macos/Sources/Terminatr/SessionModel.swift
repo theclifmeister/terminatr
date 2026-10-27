@@ -24,6 +24,9 @@ final class SessionModel {
     /// Repaints asked for from View › Repaint Terminal: the shown
     /// Terminal tab asks its server for one each time this goes up.
     private(set) var repaints = 0
+    /// The groups of tool calls the user unfolded, by their first
+    /// call's id (Transcript.ToolRun), while the transcript lasts.
+    var unfoldedRuns: Set<Int> = []
 
     @ObservationIgnored private var streams: [Task<Void, Never>] = []
     /// The bridge the streams run on.
@@ -51,6 +54,7 @@ final class SessionModel {
         bridge = app.bridge
         watch = nil
         transcript = Transcript()
+        unfoldedRuns = []
         transcriptFailure = nil
         guard let id, let bridge = app.bridge, !ref.isRemote else { return }
         streams.append(Task { await self.watchSession(bridge, id) })
