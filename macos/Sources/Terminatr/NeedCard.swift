@@ -5,7 +5,8 @@ import TerminatrKit
 /// approval's dialog as the server reads it (Allow, the last option,
 /// Open), a question tm read with its options, the coordinator's open
 /// questions (Answer now), a task in review (Accept, Send back…) or
-/// blocked (Delegate…). What the card can't answer safely (an escape's
+/// blocked (Delegate…), a link's held message, offered file or link
+/// request, or a share request (LinkActs). What the card can't answer safely (an escape's
 /// dialog or question, which needs the command named, a question tm
 /// couldn't read, several options) opens the session instead. The
 /// server checks every answer, as it checks the session's own cards.
@@ -42,6 +43,10 @@ struct NeedCard: View {
                 Text(said.text)
                     .font(theme.body(.footnote))
                     .foregroundStyle(said.failed ? theme.attention : theme.muted)
+                    .padding(.leading, 24)
+            }
+            if let o = app.linkOutcomes[need.id] {
+                LinkOutcomeRow(outcome: o)
                     .padding(.leading, 24)
             }
             if !need.task.isEmpty, need.kind == .review || need.kind == .blocked {
@@ -106,7 +111,13 @@ struct NeedCard: View {
                     TaskActs(project: need.project, task: need.task, status: need.kind == .review ? "review" : "blocked", compact: true)
                 }
                 if !need.session.isEmpty { open("Open") }
-            case .checks, .held, .network:
+            case .link, .network:
+                if let l = need.link {
+                    LinkActs(need: need, act: l)
+                } else {
+                    open("Open")
+                }
+            case .checks, .held:
                 open("Open")
             }
         }

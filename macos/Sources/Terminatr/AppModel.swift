@@ -48,6 +48,10 @@ final class AppModel {
     /// TaskAsk.key: every card that shows the task shows its outcome
     /// row, and keeps its buttons away while the ask stands (T769).
     var asks: [String: TaskAsk] = [:]
+    /// What came of the link needs the window answered, by need id: the
+    /// card's outcome row while the need stands, and a done one's for a
+    /// moment after it went (T778).
+    var linkOutcomes: [String: LinkOutcome] = [:]
     /// The Dock icon's badge: how many needs wait, none at 0 or while
     /// the bridge is down (the count may be old).
     func showBadge() {
@@ -645,7 +649,7 @@ final class AppModel {
         listSessions()
     }
 
-    private func connected() throws -> Bridge {
+    func connected() throws -> Bridge {
         guard let bridge else { throw BridgeError.closed("Not connected to terminatr.") }
         return bridge
     }
