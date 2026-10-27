@@ -511,7 +511,8 @@ private struct PeerSessionCard: View {
 /// dot, its slug, and what of the needs list is its as the badge.
 struct ProjectRow: View {
     @Environment(\.theme) private var theme
-    let project: AppAPI.Project
+    /// Its slug: this server's project's, or a paired server's.
+    let name: String
     let dot: Color
     /// The coordinator's state, for VoiceOver and the tooltip.
     let state: String
@@ -525,7 +526,7 @@ struct ProjectRow: View {
                 .overlay(Circle().strokeBorder(selected ? theme.onAction.opacity(0.8) : .clear, lineWidth: 1))
                 .frame(width: 8, height: 8)
                 .accessibilityHidden(true)
-            Text(project.slug)
+            Text(name)
                 .font(theme.body(.body, .semibold))
                 .lineLimit(1)
             Spacer(minLength: 4)
