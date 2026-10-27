@@ -85,6 +85,7 @@ struct ProjectDashboard: View {
             .frame(maxWidth: 760, alignment: .leading)
             .frame(maxWidth: .infinity)
         }
+        .scrollEdges()
     }
 
     static let inboxShown = 8
@@ -459,6 +460,7 @@ struct RemoteProjectDashboard: View {
             .frame(maxWidth: 760, alignment: .leading)
             .frame(maxWidth: .infinity)
         }
+        .scrollEdges()
         .opacity(project.stale ? 0.7 : 1)
     }
 

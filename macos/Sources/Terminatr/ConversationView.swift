@@ -116,37 +116,34 @@ struct ConversationTab: View {
                     if row != c { model.unfoldedRuns.insert(row) }
                     withAnimation(motion) { proxy.scrollTo(row, anchor: .center) }
                 }
-                .overlay(alignment: .bottom) {
-                    if open && scrolledUp && !coordinator {
-                        Button {
-                            if let last = model.transcript.entries.last { withAnimation(motion) { proxy.scrollTo(last.id, anchor: .bottom) } }
-                            flash += 1
-                        } label: {
-                            Label("Jump to the open card", systemImage: "arrow.down")
-                                .font(theme.body(.subheadline, .semibold))
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 6)
-                                .frosted(Capsule())
-                                .overlay(Capsule().strokeBorder(theme.edge, lineWidth: 1))
+                .scrollEdges()
+                // The cards and the composer at the foot: the transcript
+                // ends above them and scrolls behind them under the edge.
+                .footBar(
+                    VStack(spacing: 10) {
+                        VStack(spacing: 10) {
+                            if let review, let task = review.task {
+                                ReviewCard(project: model.ref.project, thread: review, task: task)
+                                    .padding(.horizontal, 22)
+                                    .frame(maxWidth: 820)
+                            }
+                            if !coordinator {
+                                Cards(model: model, session: session, firstChoice: app.firstChoice)
+                            }
                         }
-                        .buttonStyle(.plain)
-                        .padding(.bottom, 10)
-                        .help("Scrolls to the end, where the card waits")
+                        .modifier(Flash(n: flash))
+                        Composer(model: model, session: session)
                     }
-                }
+                    .overlay(alignment: .top) {
+                        if open && scrolledUp && !coordinator {
+                            // Above the bar, over the transcript's edge.
+                            jump(proxy)
+                                .padding(.bottom, 8)
+                                .frame(height: 0, alignment: .bottom)
+                        }
+                    }
+                )
             }
-            VStack(spacing: 10) {
-                if let review, let task = review.task {
-                    ReviewCard(project: model.ref.project, thread: review, task: task)
-                        .padding(.horizontal, 22)
-                        .frame(maxWidth: 820)
-                }
-                if !coordinator {
-                    Cards(model: model, session: session, firstChoice: app.firstChoice)
-                }
-            }
-            .modifier(Flash(n: flash))
-            Composer(model: model, session: session)
         }
         .guardingLinks()
         // What sets no font of its own: the system's body, scaled.
@@ -164,6 +161,25 @@ struct ConversationTab: View {
 
     /// A scroll's animation: none with Reduce Motion.
     private var motion: Animation? { reduceMotion ? nil : .default }
+
+    /// Jump to the open card: frosted, with a shadow, so it reads over
+    /// whatever scrolls behind it.
+    private func jump(_ proxy: ScrollViewProxy) -> some View {
+        Button {
+            if let last = model.transcript.entries.last { withAnimation(motion) { proxy.scrollTo(last.id, anchor: .bottom) } }
+            flash += 1
+        } label: {
+            Label("Jump to the open card", systemImage: "arrow.down")
+                .font(theme.body(.subheadline, .semibold))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .frosted(Capsule())
+                .overlay(Capsule().strokeBorder(theme.edge, lineWidth: 1))
+                .shadow(color: .black.opacity(0.18), radius: 8, y: 3)
+        }
+        .buttonStyle(.plain)
+        .help("Scrolls to the end, where the card waits")
+    }
 
     private func step(_ by: Int, of n: Int) {
         guard n > 0 else { return }
