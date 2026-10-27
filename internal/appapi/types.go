@@ -871,6 +871,49 @@ type TranscriptItem struct {
 	Todos     []TranscriptTodo `json:"todos,omitempty"`
 	At        time.Time        `json:"at,omitzero"`
 	From      string           `json:"from,omitempty"`
+	Files     []TranscriptFile `json:"files,omitempty"`
+	Display   string           `json:"display,omitempty"`
+}
+
+// TranscriptFile is a file an item puts in front of the user (since app
+// API 9): a prompt's pasted image, a file a call sends (Claude's
+// SendUserFile; the item's Text is its caption, Display "render" or
+// "attach"). Ref names it to session.file; Path is a sent file's path
+// (empty for a pasted image); Type the media type session.file sends it
+// as (empty: it doesn't send its bytes).
+type TranscriptFile struct {
+	Ref  string `json:"ref"`
+	Name string `json:"name"`
+	Path string `json:"path,omitempty"`
+	Type string `json:"type,omitempty"`
+}
+
+// SessionFileParams are session.file's (app API 9): the file of
+// session's conversation its Ref names, the chunk from Offset; Stat
+// asks for its name, type and size only.
+type SessionFileParams struct {
+	Session string `json:"session"`
+	Ref     string `json:"ref"`
+	Offset  int64  `json:"offset,omitempty"`
+	Stat    bool   `json:"stat,omitempty"`
+}
+
+// SessionFile is a chunk of a file: Data from Offset (at most 1 MiB;
+// none for a stat) of Size bytes, last modified at MTime. Sendable says
+// whether its bytes may be read: a type tm sends, at most 25 MiB. A file
+// no longer there answers the error "gone".
+type SessionFile struct {
+	Name     string    `json:"name"`
+	Type     string    `json:"type,omitempty"`
+	Size     int64     `json:"size"`
+	MTime    time.Time `json:"mtime,omitzero"`
+	Sendable bool      `json:"sendable"`
+	Offset   int64     `json:"offset"`
+	Data     []byte    `json:"data,omitempty"`
+}
+
+func sessionFileOf(r proto.SessionFileResult) SessionFile {
+	return SessionFile{Name: r.Name, Type: r.Type, Size: r.Size, MTime: r.MTime, Sendable: r.Sendable, Offset: r.Offset, Data: r.Data}
 }
 
 // TranscriptTodo is one entry of a todos item.
@@ -901,9 +944,12 @@ func transcriptEventOf(ev proto.TranscriptEvent) TranscriptEvent {
 	out := TranscriptEvent{Skipped: ev.Skipped, Reason: ev.Reason}
 	for _, it := range ev.Items {
 		ti := TranscriptItem{Kind: it.Kind, Text: it.Text, Truncated: it.Truncated, Tool: it.Tool, Call: it.Call,
-			Error: it.Error, Lines: it.Lines, At: it.At, From: it.From}
+			Error: it.Error, Lines: it.Lines, At: it.At, From: it.From, Display: it.Display}
 		for _, t := range it.Todos {
 			ti.Todos = append(ti.Todos, TranscriptTodo{Text: t.Text, Status: t.Status})
+		}
+		for _, f := range it.Files {
+			ti.Files = append(ti.Files, TranscriptFile{Ref: f.Ref, Name: f.Name, Path: f.Path, Type: f.Type})
 		}
 		out.Items = append(out.Items, ti)
 	}

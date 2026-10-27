@@ -276,6 +276,7 @@ func TestCopies(t *testing.T) {
 	check("pane.vt events", homeOf(paneEventOf), []string{".Event"})
 	check("transcript.watch", homeOf(transcriptResultOf), append(sessionHome(".Session"), ".Window"))
 	check("transcript.watch events", homeOf(transcriptEventOf), []string{".Event"})
+	check("session.file", homeOf(sessionFileOf), nil)
 	// The app's pane input, into the line: its id picks the stream
 	// (TestParamsCopies).
 	check("pane.input", homeOf(func(in PaneInputParams) proto.PaneVTInput {
@@ -349,6 +350,15 @@ func TestParamsCopies(t *testing.T) {
 	if want := (proto.TaskActionParams{Project: "web", Task: "T2", Note: "x"}); err != nil || p != want {
 		t.Errorf("send-back params %+v %v", p, err)
 	}
+	// session.file takes a ref, never a path.
+	m, _ = Lookup(proto.MethodSessionFile)
+	p, err = m.toServer(json.RawMessage(`{"session":"s-1","ref":"0.0123456789abcdef.1.0","offset":5,"stat":true}`))
+	if want := (proto.SessionFileParams{Session: "s-1", Ref: "0.0123456789abcdef.1.0", Offset: 5, Stat: true}); err != nil || p != want {
+		t.Errorf("session.file params %+v %v", p, err)
+	}
+	if _, err := m.toServer(json.RawMessage(`{"session":"s-1","path":"/etc/passwd"}`)); err == nil {
+		t.Error("session.file took a path")
+	}
 	m, _ = Lookup(proto.MethodSessionList)
 	for _, raw := range []string{"", "null", "{}"} {
 		if _, err := m.toServer(json.RawMessage(raw)); err != nil {
@@ -368,7 +378,8 @@ func TestAllowlist(t *testing.T) {
 		proto.MethodSessionAnswer, proto.MethodSessionApprove, proto.MethodSessionKeys, proto.MethodSessionList,
 		proto.MethodSessionPrompt, proto.MethodSessionWatch, proto.MethodTaskAsk,
 		proto.MethodTaskAccept, proto.MethodTaskSendBack, proto.MethodTaskDelegate, proto.MethodProjectOpen,
-		proto.MethodQuestionsOpen, proto.MethodTaskAdd, proto.MethodPaneVT, proto.MethodTranscriptWatch, MethodPaneInput}
+		proto.MethodQuestionsOpen, proto.MethodTaskAdd, proto.MethodPaneVT, proto.MethodTranscriptWatch, MethodPaneInput,
+		proto.MethodSessionFile}
 	slices.Sort(want)
 	if got := MethodNames(); !slices.Equal(got, want) {
 		t.Errorf("methods %v, want %v", got, want)
@@ -384,7 +395,8 @@ func TestAllowlist(t *testing.T) {
 			}
 		}
 	}
-	for name, write := range map[string]bool{MethodPaneInput: true, proto.MethodPaneVT: false, proto.MethodTranscriptWatch: false} {
+	for name, write := range map[string]bool{MethodPaneInput: true, proto.MethodPaneVT: false, proto.MethodTranscriptWatch: false,
+		proto.MethodSessionFile: false} {
 		if m, _ := Lookup(name); m.Write != write {
 			t.Errorf("%s: write %v", name, m.Write)
 		}
