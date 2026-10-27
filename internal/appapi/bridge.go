@@ -9,6 +9,7 @@ import (
 	"io"
 	"sync"
 
+	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/version"
@@ -34,6 +35,10 @@ type Options struct {
 	// on macOS through the launchd job (client.StartDetached), never as
 	// the bridge's child.
 	Autostart bool
+	// Caller is who the environment says runs the bridge. The guard's
+	// methods answer only the human, by it and as the server places the
+	// bridge (caller.who): the guard's log is the human's.
+	Caller caller.Caller
 }
 
 // Serve is tm app bridge: it reaches the server, writes its Hello to out,
@@ -87,6 +92,9 @@ type bridge struct {
 	wg      sync.WaitGroup
 	// idle are control connections free for a call.
 	idle chan *client.Client
+	// whoKnown: the server placed the bridge's caller, whoHuman as the
+	// human (human).
+	whoKnown, whoHuman bool
 }
 
 // openStream is a stream the app opened: its method, what cancels it,
@@ -274,6 +282,15 @@ func (b *bridge) release(c *client.Client, broken bool) {
 // call answers request id of unary method m. A call is never retried:
 // a write may have reached the server before its connection broke.
 func (b *bridge) call(id int64, m Method, params any) {
+	if m.local != nil {
+		res, err := m.local(b, params)
+		if e, ok := err.(*Error); ok {
+			b.fail(id, e.Code, "%s", e.Message)
+			return
+		}
+		b.answer(id, res)
+		return
+	}
 	c, err := b.conn()
 	if err != nil {
 		b.fail(id, ErrServer, "%v", err)
@@ -293,6 +310,42 @@ func (b *bridge) call(id int64, m Method, params any) {
 		return
 	}
 	b.answer(id, res)
+}
+
+// human: the bridge's caller is the human, by Options.Caller and as
+// the server places it, asked once it answers.
+func (b *bridge) human() bool {
+	if b.o.Caller.IsAgent() {
+		return false
+	}
+	b.mu.Lock()
+	known, human := b.whoKnown, b.whoHuman
+	b.mu.Unlock()
+	if known {
+		return human
+	}
+	var info proto.CallerInfo
+	if b.serverCall(proto.MethodCallerWho, nil, &info) != nil {
+		return false
+	}
+	human = !caller.Caller{Kind: caller.Kind(info.Kind)}.IsAgent()
+	b.mu.Lock()
+	b.whoKnown, b.whoHuman = true, human
+	b.mu.Unlock()
+	return human
+}
+
+// serverCall calls the server for a method of the bridge's own: method
+// with params into res, on a control connection of the bridge's.
+func (b *bridge) serverCall(method string, params, res any) error {
+	c, err := b.conn()
+	if err != nil {
+		return err
+	}
+	err = c.Call(method, params, res)
+	var perr *proto.Error
+	b.release(c, err != nil && !errors.As(err, &perr))
+	return err
 }
 
 // serverError answers request id with the server's error, its code

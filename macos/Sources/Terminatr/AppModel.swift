@@ -31,6 +31,9 @@ final class AppModel {
     private(set) var sessions: [AppAPI.Session] = []
     private(set) var notices: [AppAPI.Notice] = []
     private(set) var peers: [AppAPI.Peer] = []
+    /// The guard's refusals waiting on the user (guard.refusals, app
+    /// API 18): needs whose cards answer them.
+    private(set) var refusals: [AppAPI.GuardRefusal] = []
     /// [ui] needs_first, as the last session list said: the sidebar
     /// lists the projects that need the user first, as the TUI's.
     private(set) var needsFirst = false
@@ -156,8 +159,8 @@ final class AppModel {
     /// What came since the bridge started: needs wait for all of it, so
     /// the first set is whole.
     private struct Loaded {
-        var projects = false, sessions = false, peers = false
-        var all: Bool { projects && sessions && peers }
+        var projects = false, sessions = false, peers = false, refusals = false
+        var all: Bool { projects && sessions && peers && refusals }
     }
 
     /// The settings key of the configured tm path (TMLocator.configured).
@@ -168,6 +171,9 @@ final class AppModel {
     /// How often session.list and peer.list are read: neither streams.
     static let sessionsEvery = Duration.seconds(2)
     static let peersEvery = Duration.seconds(5)
+    /// How often guard.refusals is read: the bridge reads the guard's
+    /// log, a small file, itself.
+    static let refusalsEvery = Duration.seconds(3)
 
     /// Starts the bridge unless it runs.
     func start() {
@@ -205,11 +211,17 @@ final class AppModel {
             // An older tm's bridge has no peer.list: no paired servers.
             loaded.peers = !hello.methods.contains(AppAPI.Methods.peerList.name)
             let peers = !loaded.peers
+            // An older tm's bridge has no guard.refusals: none to answer.
+            loaded.refusals = !Compatibility.answersRefusals(hello)
+            let refusals = !loaded.refusals
             try await withThrowingTaskGroup(of: Void.self) { g in
                 g.addTask { try await self.watchProjects(b) }
                 g.addTask { try await self.readSessions(b) }
                 if peers {
                     g.addTask { try await self.readPeers(b) }
+                }
+                if refusals {
+                    g.addTask { try await self.readRefusals(b) }
                 }
                 // Until one throws: the projects' stream ends only so.
                 for try await _ in g {}
@@ -326,9 +338,31 @@ final class AppModel {
         }
     }
 
+    /// Reads guard.refusals until the bridge ends; a refusal (a bridge
+    /// that isn't the user's) leaves them out.
+    private func readRefusals(_ b: Bridge) async throws {
+        while true {
+            let l: AppAPI.GuardRefusals
+            do {
+                l = try await b.call(AppAPI.Methods.guardRefusals)
+            } catch let e as AppAPI.Error {
+                log.add("Guard refusals: \(e.message)")
+                loaded.refusals = true
+                changed()
+                return
+            }
+            if l.refusals != refusals || !loaded.refusals {
+                refusals = l.refusals
+                loaded.refusals = true
+                changed()
+            }
+            try await Task.sleep(for: Self.refusalsEvery)
+        }
+    }
+
     private func changed() {
         guard loaded.all else { return }
-        needs = Need.of(projects: projects, sessions: sessions, peers: peers)
+        needs = Need.of(projects: projects, sessions: sessions, peers: peers, refusals: refusals)
         settleSelection()
         onNeeds?(self)
     }
@@ -728,6 +762,26 @@ final class AppModel {
     /// once the server checked the dialog again.
     func approve(_ params: AppAPI.ApproveParams) async throws -> AppAPI.ApproveResult {
         try await connected().call(AppAPI.Methods.sessionApprove, params)
+    }
+
+    /// Answers refusal id of the guard as the user (guard.decide): how
+    /// is "here" (allow it in its project), "all" (in all projects) or
+    /// "keep" (keep refusing). It leaves the needs at once, and so does
+    /// one answered elsewhere (gone). Returns what tm says it did.
+    func decide(refusal id: String, how: String) async throws -> String {
+        do {
+            let r = try await connected().call(AppAPI.Methods.guardDecide, AppAPI.GuardDecideParams(id: id, how: how))
+            drop(refusal: id)
+            return r.message
+        } catch let e as AppAPI.Error where e.code == "gone" {
+            drop(refusal: id)
+            throw e
+        }
+    }
+
+    private func drop(refusal id: String) {
+        refusals.removeAll { $0.id == id }
+        changed()
     }
 
     /// Whether this tm adds tasks from the app (task.add, app API 7).

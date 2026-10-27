@@ -6,7 +6,9 @@ import TerminatrKit
 /// Open), a question tm read with its options, the coordinator's open
 /// questions (Answer now), a task in review (Accept, Send back…) or
 /// blocked (Delegate…), a link's held message, offered file or link
-/// request, or a share request (LinkActs). What the card can't answer safely (an escape's
+/// request, or a share request (LinkActs), a call the guard refused with
+/// its whole command (Allow here, All projects… after a confirmation, Keep
+/// refusing; the floor's only kept). What the card can't answer safely (an escape's
 /// dialog or question, which needs the command named, a question tm
 /// couldn't read, several options) opens the session instead. The
 /// server checks every answer, as it checks the session's own cards.
@@ -17,6 +19,7 @@ struct NeedCard: View {
     @State private var dialog: AppAPI.ApproveResult?
     @State private var busy = false
     @State private var said: (text: String, failed: Bool)?
+    @State private var confirmAll = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -38,6 +41,10 @@ struct NeedCard: View {
                 }
                 Spacer(minLength: 8)
                 acts
+            }
+            if let r = need.refusal {
+                RefusedCall(refusal: r)
+                    .padding(.leading, 24)
             }
             if let said {
                 Text(said.text)
@@ -62,6 +69,16 @@ struct NeedCard: View {
         .accessibilityElement(children: .contain)
         .accessibilityLabel(need.title)
         .task(id: need.id) { await check() }
+        .confirmationDialog("Allow this \(need.refusal?.path == true ? "file" : "command") for all projects?", isPresented: $confirmAll) {
+            if let r = need.refusal {
+                Button("Allow for All Projects") { decide(r, "all") }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            if let r = need.refusal {
+                Text("The guard lets every project's agents run it as it is, from now on:\n\n\(r.subject)")
+            }
+        }
     }
 
     private var words: some View {
@@ -133,6 +150,20 @@ struct NeedCard: View {
                     TaskActs(project: need.project, task: need.task, status: need.kind == .review ? "review" : "blocked", compact: true)
                 }
                 if !need.session.isEmpty { open("Open") }
+            case .refusal:
+                if let r = need.refusal {
+                    if !r.floor {
+                        Button("Allow Here") { decide(r, "here") }
+                            .accessibilityLabel(named("Allow in \(r.project)"))
+                            .help("Allows this exact \(r.path ? "file" : "command") in \(r.project); the thread is told it may retry")
+                        Button("All Projects…") { confirmAll = true }
+                            .accessibilityLabel(named("Allow for all projects"))
+                            .help("Allows this exact \(r.path ? "file" : "command") in every project, after you confirm")
+                    }
+                    Button("Keep Refusing") { decide(r, "keep") }
+                        .accessibilityLabel(named("Keep refusing"))
+                        .help("The guard keeps refusing it, and it is no longer listed")
+                }
             case .link, .network:
                 if let l = need.link {
                     LinkActs(need: need, act: l)
@@ -188,6 +219,14 @@ struct NeedCard: View {
         }
     }
 
+    /// Answers refusal r of the guard (guard.decide): the need leaves
+    /// once tm wrote it.
+    private func decide(_ r: AppAPI.GuardRefusal, _ how: String) {
+        act {
+            try await app.decide(refusal: r.id, how: how)
+        }
+    }
+
     private func answerQuestions() {
         act {
             try await app.openQuestions(need.project)
@@ -208,6 +247,35 @@ struct NeedCard: View {
                 said = (Dashboard.words(error), true)
             }
             busy = false
+        }
+    }
+}
+
+/// A refused call's whole command (or file), as the guard's log keeps it
+/// and an allowance names it, selectable; and for the floor's, why the
+/// guard never allows it.
+struct RefusedCall: View {
+    @Environment(\.theme) private var theme
+    let refusal: AppAPI.GuardRefusal
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ScrollView(.vertical) {
+                Text(refusal.subject)
+                    .font(.system(.callout, design: .monospaced))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(6)
+            }
+            .frame(maxHeight: 120)
+            .fixedSize(horizontal: false, vertical: true)
+            .background(theme.muted.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+            .accessibilityLabel(refusal.path ? "File: \(refusal.subject)" : "Command: \(refusal.subject)")
+            if refusal.floor {
+                Text("Never allowed: \(Need.floorWhy(refusal.rule))")
+                    .font(theme.body(.footnote))
+                    .foregroundStyle(theme.attention)
+            }
         }
     }
 }

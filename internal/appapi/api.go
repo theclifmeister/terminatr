@@ -21,7 +21,7 @@ import (
 // Version is the app API's version. It goes up when a method, a field or
 // a meaning is added or changes; the app reads it, and Capabilities, from
 // the bridge's hello, so an older app works with a newer tm.
-const Version = 17
+const Version = 18
 
 // Capabilities of this bridge, in its hello: what kinds of method it
 // has (Method.Write, Method.Stream). An app checks a capability, or a
@@ -154,4 +154,8 @@ type Method struct {
 	result   func(json.RawMessage) (any, error)
 	event    func(json.RawMessage) (name string, data any, keep bool, ack any, err error)
 	toStream func(json.RawMessage) (int64, any, error)
+	// local answers a method the bridge answers itself, without the
+	// server (the guard's, guard.go), from the app's params as toServer
+	// decoded them; its error is an *Error.
+	local func(b *bridge, params any) (any, error)
 }

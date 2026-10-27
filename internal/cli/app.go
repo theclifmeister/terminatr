@@ -30,7 +30,7 @@ func appCmd(e *Env, args []string) error {
 		if err != nil {
 			return srvFail("app bridge", err)
 		}
-		if err := appapi.Serve(e.Stdin, e.Stdout, appapi.Options{Paths: p, Autostart: true}); err != nil {
+		if err := appapi.Serve(e.Stdin, e.Stdout, appapi.Options{Paths: p, Autostart: true, Caller: e.Caller}); err != nil {
 			return srvFail("app bridge", err)
 		}
 		return nil
