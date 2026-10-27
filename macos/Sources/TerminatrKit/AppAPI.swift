@@ -46,12 +46,14 @@ public enum AppAPI {
         public var choice: Int
         public var check: Bool
         public var escape: Bool
+        public var session: Bool
 
-        public init(id: String, choice: Int = 0, check: Bool = false, escape: Bool = false) {
+        public init(id: String, choice: Int = 0, check: Bool = false, escape: Bool = false, session: Bool = false) {
             self.id = id
             self.choice = choice
             self.check = check
             self.escape = escape
+            self.session = session
         }
 
         enum CodingKeys: String, CodingKey {
@@ -59,6 +61,7 @@ public enum AppAPI {
             case choice
             case check
             case escape
+            case session
         }
     }
 
@@ -66,13 +69,15 @@ public enum AppAPI {
         public var question: String
         public var option: String
         public var options: [String]
+        public var scopes: [String]
         public var escape: Bool
         public var sent: Bool
 
-        public init(question: String = "", option: String, options: [String] = [], escape: Bool = false, sent: Bool = false) {
+        public init(question: String = "", option: String, options: [String] = [], scopes: [String] = [], escape: Bool = false, sent: Bool = false) {
             self.question = question
             self.option = option
             self.options = options
+            self.scopes = scopes
             self.escape = escape
             self.sent = sent
         }
@@ -81,6 +86,7 @@ public enum AppAPI {
             case question
             case option
             case options
+            case scopes
             case escape
             case sent
         }
@@ -1741,6 +1747,7 @@ extension AppAPI.ApproveParams {
         self.choice = try c.decodeIfPresent(Int.self, forKey: .choice) ?? 0
         self.check = try c.decodeIfPresent(Bool.self, forKey: .check) ?? false
         self.escape = try c.decodeIfPresent(Bool.self, forKey: .escape) ?? false
+        self.session = try c.decodeIfPresent(Bool.self, forKey: .session) ?? false
     }
 }
 
@@ -1750,6 +1757,7 @@ extension AppAPI.ApproveResult {
         self.question = try c.decodeIfPresent(String.self, forKey: .question) ?? ""
         self.option = try c.decode(String.self, forKey: .option)
         self.options = try c.decodeIfPresent([String].self, forKey: .options) ?? []
+        self.scopes = try c.decodeIfPresent([String].self, forKey: .scopes) ?? []
         self.escape = try c.decodeIfPresent(Bool.self, forKey: .escape) ?? false
         self.sent = try c.decodeIfPresent(Bool.self, forKey: .sent) ?? false
     }

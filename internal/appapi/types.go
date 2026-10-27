@@ -59,12 +59,15 @@ type (
 	// ApproveParams are session.approve's: option Choice (from 1, default 1) of the
 	// permission dialog on session ID's screen. Check answers without
 	// sending. Escape: the user confirmed, in words naming the
-	// command, a command that runs outside the sandbox.
+	// command, a command that runs outside the sandbox. Session: the
+	// user confirmed, naming the tool or command, an option that allows
+	// it for the rest of the agent's session.
 	ApproveParams struct {
-		ID     string `json:"id"`
-		Choice int    `json:"choice,omitempty"`
-		Check  bool   `json:"check,omitempty"`
-		Escape bool   `json:"escape,omitempty"`
+		ID      string `json:"id"`
+		Choice  int    `json:"choice,omitempty"`
+		Check   bool   `json:"check,omitempty"`
+		Escape  bool   `json:"escape,omitempty"`
+		Session bool   `json:"session,omitempty"`
 	}
 	// KeysParams are session.keys's: Data written to session ID's terminal as if typed;
 	// text typed into a thread's prompt box takes it over.
@@ -439,12 +442,14 @@ type AnswerResult struct {
 }
 
 // ApproveResult is the dialog as the screen shows it: its question, the
-// chosen option and every option. Escape: it asks to run a command
-// outside the sandbox. Sent: the key went (not for Check).
+// chosen option and every option, with how long each allows ("once",
+// "session" or "persistent"). Escape: it asks to run a command outside
+// the sandbox. Sent: the key went (not for Check).
 type ApproveResult struct {
 	Question string   `json:"question,omitempty"`
 	Option   string   `json:"option"`
 	Options  []string `json:"options"`
+	Scopes   []string `json:"scopes,omitempty"`
 	Escape   bool     `json:"escape,omitempty"`
 	Sent     bool     `json:"sent,omitempty"`
 }
@@ -800,7 +805,7 @@ func answerResultOf(r proto.SessionAnswerResult) AnswerResult {
 
 func approveResultOf(r proto.SessionApproveResult) ApproveResult {
 	return ApproveResult{Question: r.Question, Option: r.Option, Options: append([]string{}, r.Options...),
-		Escape: r.Escape, Sent: r.Sent}
+		Scopes: append([]string(nil), r.Scopes...), Escape: r.Escape, Sent: r.Sent}
 }
 
 func taskAskResultOf(r proto.TaskAskResult) TaskAskResult { return TaskAskResult{Asked: r.Asked} }
