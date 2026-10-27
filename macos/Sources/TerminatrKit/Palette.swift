@@ -41,8 +41,10 @@ public struct PaletteItem: Identifiable, Hashable, Sendable {
     }
 
     /// The window's own commands, the Actions group.
-    public enum Command: String, CaseIterable, Sendable {
+    public enum Command: Hashable, Sendable {
         case nextNeed, previousNeed, inactive, tab, inspector, find, filter, back, forward, shortcuts
+        /// Picks a theme (T770).
+        case theme(ThemeName)
     }
 
     public let id: String
@@ -73,6 +75,11 @@ public struct PaletteItem: Identifiable, Hashable, Sendable {
         self.command = command
         self.keys = keys
         self.keywords = keywords
+    }
+
+    var picksTheme: Bool {
+        if case .theme = command { return true }
+        return false
     }
 }
 
@@ -159,7 +166,8 @@ public enum Palette {
             let rows = items.filter { $0.group == g }
             if q.isEmpty {
                 if g == .threads || g == .tasks { continue }
-                out += g == .actions ? rows : Array(rows.prefix(perGroup))
+                // The themes wait for a word ("theme", "dusk").
+                out += g == .actions ? rows.filter { !$0.picksTheme } : Array(rows.prefix(perGroup))
                 continue
             }
             let found = rows.filter { SidebarTree.matches(q, $0.title, $0.detail, $0.keywords) }
@@ -167,6 +175,16 @@ public enum Palette {
             out += Array((first + found.filter { !first.contains($0) }).prefix(perGroup))
         }
         return out
+    }
+
+    /// The Actions group's themes, "Theme: Dusk", the one in use said
+    /// so: found by "theme" or a theme's name.
+    public static func themes(current: ThemeName) -> [PaletteItem] {
+        ThemeName.allCases.map { t in
+            PaletteItem(id: "cmd:theme:\(t.rawValue)", group: .actions, title: "Theme: \(t.label)",
+                        detail: t == current ? "\(t.mood) · in use" : t.mood, command: .theme(t),
+                        keywords: "theme appearance colours colors look")
+        }
     }
 
     /// What ⌘↩ does on a need: allow its dialog, answer its question
