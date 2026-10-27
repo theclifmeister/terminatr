@@ -17,6 +17,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/appapi"
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/client"
+	"github.com/theclifmeister/terminatr/internal/device"
 	"github.com/theclifmeister/terminatr/internal/plat/proc"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/server"
@@ -298,6 +299,9 @@ func serverStatus(e *Env, args []string) error {
 	fmt.Fprintf(e.Stdout, "home      %s\n", st.Home)
 	for _, l := range peerLines(st.Link, time.Now()) {
 		fmt.Fprintln(e.Stdout, l)
+	}
+	for _, d := range st.Devices {
+		fmt.Fprintf(e.Stdout, "device    %s  %s · %s\n", textsafe.Line(d.Name, device.MaxName), deviceLinkWords(d, time.Now()), d.Effective)
 	}
 	if st.PreviousShutdown == "crash" {
 		fmt.Fprintf(e.Stdout, "note      the previous server crashed; lost sessions: %s\n", strings.Join(st.Lost, " "))
