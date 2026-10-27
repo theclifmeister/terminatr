@@ -13,7 +13,8 @@
 # as `--type open` does for a downloaded file.
 #
 # The Mac app (scripts/release/app.sh) is checked too: terminatr-app.zip
-# and .dmg each hold a universal Terminatr.app of the release's version;
+# and .dmg each hold a universal Terminatr.app of the release's version,
+# with the icon its Info.plist names;
 # with --signed, signed by tm's team, notarised and stapled.
 set -eu
 signed=
@@ -147,6 +148,12 @@ check_app() { # <Terminatr.app> <where>
 	for arch in arm64 x86_64; do
 		case " $archs " in *" $arch "*) ;; *) fail "$where: Terminatr is $archs, want arm64 and x86_64" ;; esac
 	done
+	# The icon (macos/Icon): the .icns for macOS 14 and 15, Assets.car's for 26+.
+	icns=$(plutil -extract CFBundleIconFile raw -o - "$plist")
+	[ -f "$a/Contents/Resources/${icns%.icns}.icns" ] || fail "$where: no Resources/${icns%.icns}.icns (CFBundleIconFile)"
+	icon=$(plutil -extract CFBundleIconName raw -o - "$plist")
+	xcrun assetutil --info "$a/Contents/Resources/Assets.car" | grep -q "\"Name\" : \"$icon\"" ||
+		fail "$where: Assets.car has no icon $icon (CFBundleIconName)"
 	if [ -z "$signed" ]; then
 		echo "$where: ok (Terminatr.app $v, $archs, unsigned)"
 		return
@@ -181,5 +188,7 @@ hdiutil attach -quiet -nobrowse -readonly -mountpoint "$tmp/dmg" "$dmg" || fail 
 rc=0
 (check_app "$tmp/dmg/Terminatr.app" terminatr-app.dmg) || rc=$?
 [ -L "$tmp/dmg/Applications" ] || rc=1
+# The volume's icon: .VolumeIcon.icns and the root's custom-icon flag (C).
+[ -f "$tmp/dmg/.VolumeIcon.icns" ] && GetFileInfo -a "$tmp/dmg" | grep -q C || rc=1
 hdiutil detach -quiet "$tmp/dmg" || true
-[ "$rc" -eq 0 ] || fail "terminatr-app.dmg: the app or its Applications link is wrong"
+[ "$rc" -eq 0 ] || fail "terminatr-app.dmg: the app, its Applications link or the volume's icon is wrong"

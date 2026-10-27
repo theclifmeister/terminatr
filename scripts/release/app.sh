@@ -69,11 +69,20 @@ fi
 # the bundle, so it must come before the zip).
 ditto -c -k --keepParent "$app" "$out/terminatr-app.zip"
 
-# The DMG: the app and a link to /Applications to drag it onto.
-mkdir "$tmp/dmg"
+# The DMG: the app and a link to /Applications to drag it onto, the
+# app's icon as the volume's. Finder shows .VolumeIcon.icns only with
+# the root's custom-icon flag, which hdiutil create doesn't carry from
+# the source folder: it is set on the image mounted read-write, before
+# the image is compressed.
+mkdir "$tmp/dmg" "$tmp/mnt"
 ditto "$app" "$tmp/dmg/Terminatr.app"
 ln -s /Applications "$tmp/dmg/Applications"
-hdiutil create -quiet -volname terminatr -srcfolder "$tmp/dmg" -fs HFS+ -format UDZO -ov "$out/terminatr-app.dmg"
+cp "$app/Contents/Resources/AppIcon.icns" "$tmp/dmg/.VolumeIcon.icns"
+hdiutil create -quiet -volname terminatr -srcfolder "$tmp/dmg" -fs HFS+ -format UDRW -ov "$tmp/rw.dmg"
+hdiutil attach -quiet -nobrowse -mountpoint "$tmp/mnt" "$tmp/rw.dmg"
+SetFile -a C "$tmp/mnt" || { hdiutil detach -quiet "$tmp/mnt"; exit 1; }
+hdiutil detach -quiet "$tmp/mnt"
+hdiutil convert -quiet "$tmp/rw.dmg" -format UDZO -ov -o "$out/terminatr-app.dmg"
 if [ -n "$signed" ]; then
 	codesign --force --sign "$TM_SIGN_IDENTITY" --timestamp "$out/terminatr-app.dmg"
 	codesign --verify --strict --verbose=2 "$out/terminatr-app.dmg"
