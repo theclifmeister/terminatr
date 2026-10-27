@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"syscall"
 	"testing"
 
 	"github.com/theclifmeister/terminatr/internal/client"
@@ -129,9 +128,7 @@ func TestSessionFile(t *testing.T) {
 	sub := filepath.Join(dir, "sub.png")
 	os.Mkdir(sub, 0o700)
 	fifo := filepath.Join(dir, "pipe.png")
-	if err := syscall.Mkfifo(fifo, 0o600); err != nil {
-		t.Fatal(err)
-	}
+	testMkfifo(t, fifo)
 	traversal := dir + "/sub.png/../shot.png"
 
 	imgLine := `{"type":"user","content":[{"type":"text","text":"look"},{"type":"image","source":{"type":"base64","media_type":"image/png","data":"` +
