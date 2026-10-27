@@ -75,7 +75,7 @@ public enum Selection: Codable, Hashable, Sendable {
         if !server.isEmpty {
             guard let p = peers.first(where: { $0.alias == server })?.projects.first(where: { $0.project == project }) else { return false }
             if case .session(let ref) = self, !ref.isCoordinator {
-                return p.sessions.contains { $0.role == "thread" && $0.thread == ref.thread }
+                return p.sessions.contains { $0.role == "thread" && $0.thread == ref.thread } || p.watched.contains { $0.id == ref.thread }
             }
             return true
         }

@@ -8,17 +8,45 @@ public enum SidebarTree {
     public static let needsShown = 3
 
     /// The active projects as the TUI lists them (SPEC §5.1): the
-    /// pinned ones first, each group in the server's order. ⌘1–⌘9, the
-    /// Go menu, the menu bar and the first selection count only these.
-    public static func active(_ projects: [AppAPI.Project]) -> [AppAPI.Project] {
+    /// pinned ones first, each group in the server's order; with [ui]
+    /// needs_first (SessionList.needsFirst), in each group those that
+    /// need the user (needs) first. ⌘1–⌘9, the Go menu, the menu bar
+    /// and the first selection count only these.
+    public static func active(_ projects: [AppAPI.Project], needsFirst: Bool = false, sessions: [AppAPI.Session] = []) -> [AppAPI.Project] {
         let active = projects.filter(\.active)
-        return active.filter(\.pinned) + active.filter { !$0.pinned }
+        // An active project's threads count, folded or not: nav is moot.
+        let first = { (ps: [AppAPI.Project]) in needsFirst ? needing(ps, sessions: sessions, nav: Navigation()) : ps }
+        return first(active.filter(\.pinned)) + first(active.filter { !$0.pinned })
     }
 
     /// The inactive projects, folded under "Inactive (n)" at the bottom,
-    /// pinned or not.
-    public static func inactive(_ projects: [AppAPI.Project]) -> [AppAPI.Project] {
-        projects.filter { !$0.active }
+    /// pinned or not; with needs_first, those that need the user first.
+    public static func inactive(_ projects: [AppAPI.Project], needsFirst: Bool = false, sessions: [AppAPI.Session] = [],
+                                nav: Navigation = Navigation()) -> [AppAPI.Project] {
+        let gone = projects.filter { !$0.active }
+        return needsFirst ? needing(gone, sessions: sessions, nav: nav) : gone
+    }
+
+    /// ps, those that need the user first, each part in its order.
+    static func needing(_ ps: [AppAPI.Project], sessions: [AppAPI.Session], nav: Navigation) -> [AppAPI.Project] {
+        let need = ps.map { needs($0, sessions: sessions, nav: nav) }
+        return zip(ps, need).filter { $1 }.map { $0.0 } + zip(ps, need).filter { !$1 }.map { $0.0 }
+    }
+
+    /// Whether this server's project p needs the user, as the TUI's
+    /// project row's hint (projectRows), which needs_first orders by:
+    /// tasks in its board's Needs you, its coordinator's open questions,
+    /// or a thread waiting on the user (group 0); an inactive project's
+    /// threads only once → expanded it.
+    static func needs(_ p: AppAPI.Project, sessions: [AppAPI.Session], nav: Navigation) -> Bool {
+        if (p.counts["needs_you"] ?? 0) > 0 || p.questions > 0 { return true }
+        guard p.active || nav.unfolded.contains(Navigation.sectionKey(server: "", project: p.slug)) else { return false }
+        return p.threads.contains { group($0, session($0, in: sessions)) == 0 }
+    }
+
+    /// Thread t's session as session.list has it, nil when none runs.
+    static func session(_ t: AppAPI.Thread, in sessions: [AppAPI.Session]) -> AppAPI.Session? {
+        t.record.session.isEmpty ? nil : sessions.first { $0.id == t.record.session }
     }
 
     /// The threads a project lists under its coordinator, as the TUI's
@@ -51,34 +79,57 @@ public enum SidebarTree {
         return p.active ? !nav.collapsed.contains(key) : nav.unfolded.contains(key)
     }
 
-    /// This server's tree as the TUI keys its rows (treeRow.key): "p:"
-    /// a project, "c:" its coordinator, "t:<slug>/<id>" a thread, and
-    /// "d:inactive" the inactive divider, the inactive projects under it
-    /// while nav.showInactive. The sidebar draws these rows; the shared
-    /// fixture (internal/tui/testdata/sidebar-app.json) pins them to the
-    /// TUI's buildTree.
-    public static func rows(_ projects: [AppAPI.Project], sessions: [AppAPI.Session], nav: Navigation) -> [String] {
-        func session(_ t: AppAPI.Thread) -> AppAPI.Session? {
-            t.record.session.isEmpty ? nil : sessions.first { $0.id == t.record.session }
-        }
+    /// The tree as the TUI keys its rows (treeRow.key): "p:" a project,
+    /// "c:" its coordinator, "t:<slug>/<id>" a thread, and "d:inactive"
+    /// the inactive divider, the inactive projects under it while
+    /// nav.showInactive; with paired servers, "g:" this server's group
+    /// first, then each paired one's, "g:<alias>", with its projects,
+    /// "r:<alias>/<slug>", their coordinators, "rc:", and threads,
+    /// "rt:<alias>/<slug>/<id>" (sessions(of:)), above the divider.
+    /// watched is the bridge's PeerProject.watched (app API 10). The
+    /// sidebar draws these rows; the shared fixture
+    /// (internal/tui/testdata/sidebar-app.json) pins them to the TUI's
+    /// buildTree.
+    public static func rows(_ projects: [AppAPI.Project], sessions: [AppAPI.Session], peers: [AppAPI.Peer] = [],
+                            nav: Navigation, needsFirst: Bool = false, watched: Bool = true) -> [String] {
         func add(_ p: AppAPI.Project) -> [String] {
             guard opens(p, nav: nav) else { return ["p:\(p.slug)"] }
-            return ["p:\(p.slug)", "c:\(p.slug)"] + threads(of: p, session: session).map { "t:\(p.slug)/\($0.record.id)" }
+            return ["p:\(p.slug)", "c:\(p.slug)"] + threads(of: p) { session($0, in: sessions) }.map { "t:\(p.slug)/\($0.record.id)" }
         }
-        let gone = inactive(projects)
-        return active(projects).flatMap(add) + (gone.isEmpty ? [] : ["d:inactive"])
-            + (nav.showInactive ? gone.flatMap(add) : [])
+        var remote: [String] = []
+        for peer in peers {
+            remote.append("g:\(peer.alias)")
+            guard !nav.collapsed.contains(Navigation.sectionKey(server: peer.alias)) else { continue }
+            for p in peer.projects {
+                remote.append("r:\(peer.alias)/\(p.project)")
+                guard !nav.collapsed.contains(Navigation.sectionKey(server: peer.alias, project: p.project)) else { continue }
+                remote += SidebarTree.sessions(of: p, alias: peer.alias, watched: watched).map { s in
+                    s.ref.isCoordinator ? "rc:\(peer.alias)/\(p.project)" : "rt:\(peer.alias)/\(p.project)/\(s.ref.thread)"
+                }
+            }
+        }
+        let gone = inactive(projects, needsFirst: needsFirst, sessions: sessions, nav: nav)
+        return (peers.isEmpty ? [] : ["g:"]) + active(projects, needsFirst: needsFirst, sessions: sessions).flatMap(add) + remote
+            + (gone.isEmpty ? [] : ["d:inactive"]) + (nav.showInactive ? gone.flatMap(add) : [])
     }
 
     /// What a paired server's shared project lists under it, as the
     /// TUI's peerProjectRows: nothing while stale; else its coordinator,
-    /// running there or not, then its threads, those the app API lists
-    /// (the ones a session runs).
-    public static func sessions(of p: AppAPI.PeerProject, alias: String) -> [(session: AppAPI.PeerSession?, ref: SessionRef)] {
+    /// running there or not, then its threads, each with its session
+    /// there (nil when none runs) and its task. With watched (a bridge
+    /// of app API 10 or later) those are the watched ones, running or
+    /// not, in their order; an older bridge lists only the ones a
+    /// session runs.
+    public static func sessions(of p: AppAPI.PeerProject, alias: String, watched: Bool = true)
+        -> [(session: AppAPI.PeerSession?, ref: SessionRef, task: String)] {
         guard !p.stale else { return [] }
-        let all = p.sessions.compactMap { s in SessionRef(s, of: alias).map { (session: Optional(s), ref: $0) } }
-        let coordinator = all.first { $0.ref.isCoordinator } ?? (nil, SessionRef(project: p.project, server: alias))
-        return [coordinator] + all.filter { !$0.ref.isCoordinator }
+        let all = p.sessions.compactMap { s in SessionRef(s, of: alias).map { (session: Optional(s), ref: $0, task: s.task) } }
+        let coordinator = all.first { $0.ref.isCoordinator } ?? (nil, SessionRef(project: p.project, server: alias), "")
+        guard watched else { return [coordinator] + all.filter { !$0.ref.isCoordinator } }
+        return [coordinator] + p.watched.map { t in
+            let s = t.session.isEmpty ? nil : p.sessions.first { $0.id == t.session }
+            return (s, SessionRef(project: p.project, thread: t.id, server: alias), t.task.isEmpty ? s?.task ?? "" : t.task)
+        }
     }
 
     /// "+4 more: 2 review, 2 blocked": the needs past the shown ones,
@@ -142,5 +193,32 @@ extension Attention {
         default:
             return Attention(word: s.state, tone: .idle, why: s.current, waits: false)
         }
+    }
+}
+
+/// What a paired server's sidebar header says of it, after its name:
+/// offline, or what its panes let this server do (its switch, Panes).
+public struct PeerTag: Equatable, Sendable {
+    /// The tag's word: "offline", "write", "view" or "off".
+    public let word: String
+    /// Its SF Symbol; nil for offline, which has a dot instead.
+    public let symbol: String?
+    /// What VoiceOver says after "<name>, paired server, ".
+    public let spoken: String
+    public var offline: Bool { symbol == nil }
+
+    public static func of(_ peer: AppAPI.Peer) -> PeerTag {
+        if peer.state != "up" { return PeerTag(word: "offline", symbol: nil, spoken: "offline") }
+        switch peer.panes {
+        case "type": return PeerTag(word: "write", symbol: "keyboard", spoken: "write access")
+        case "view": return PeerTag(word: "view", symbol: "eye", spoken: "view only")
+        default: return PeerTag(word: "off", symbol: "eye.slash", spoken: "panes off")
+        }
+    }
+
+    /// The header's VoiceOver label: "work-laptop, paired server, write
+    /// access".
+    public static func label(_ peer: AppAPI.Peer) -> String {
+        "\(peer.name.isEmpty ? peer.alias : peer.name), paired server, \(of(peer).spoken)"
     }
 }

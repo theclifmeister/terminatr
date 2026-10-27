@@ -71,7 +71,9 @@ extension Transcript {
     }
 
     /// The rows for entries: each run of two or more consecutive tool
-    /// calls as one, the rest as they are.
+    /// calls as one, the rest as they are. A call that asks the user
+    /// (AskUserQuestion) is never folded into a run: it is the user's
+    /// turn, and its line links to the question card.
     public static func rows(_ entries: some Collection<Entry>) -> [Row] {
         var rows: [Row] = []
         var run: [Entry] = []
@@ -84,7 +86,7 @@ extension Transcript {
             run = []
         }
         for e in entries {
-            if e.kind == .tool {
+            if e.kind == .tool && !e.asksUser {
                 run.append(e)
             } else {
                 flush()

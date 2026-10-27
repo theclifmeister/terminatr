@@ -44,6 +44,9 @@ struct ConversationTab: View {
         let review = coordinator ? nil : app.thread(model.ref).flatMap { t in t.task?.status == "review" ? t : nil }
         let open = AppModel.waitsOnCard(session) || review != nil
         let entries = model.transcript.tail(drawn, keeping: current)
+        // The AskUserQuestion call the open question card answers.
+        let asking = session?.question != nil && AppModel.waitsOnCard(session)
+        let pending = model.transcript.pendingTool?.id
         let earlier = model.transcript.entries.count - entries.count
         let rows = Transcript.rows(entries)
         VStack(spacing: 0) {
@@ -52,6 +55,7 @@ struct ConversationTab: View {
             }
             if coordinator {
                 CoordinatorPanel(model: model, session: session)
+                    .modifier(Flash(n: flash))
             }
             ScrollViewReader { proxy in
                 ScrollView {
@@ -70,7 +74,8 @@ struct ConversationTab: View {
                         ForEach(rows) { row in
                             switch row {
                             case .entry(let e):
-                                EntryView(entry: e, agent: session?.agent ?? "agent", session: session?.id)
+                                EntryView(entry: e, agent: session?.agent ?? "agent", session: session?.id,
+                                          answer: asking && e.id == pending ? { flash += 1 } : nil)
                                     .modifier(FoundRing(found: found.contains(e.id), current: e.id == current))
                                     .id(e.id)
                             case .tools(let run):
@@ -337,6 +342,8 @@ struct EntryView: View {
     let agent: String
     /// The session's id, which reads its files.
     var session: String?
+    /// The question card's link, for the AskUserQuestion call it answers.
+    var answer: (() -> Void)? = nil
     @State private var unfolded = false
 
     var body: some View {
@@ -400,7 +407,7 @@ struct EntryView: View {
             .background(theme.agentCard, in: RoundedRectangle(cornerRadius: 14))
             .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(theme.edge, lineWidth: 1))
         case .tool:
-            ToolLine(entry: entry)
+            ToolLine(entry: entry, answer: answer)
         case .files:
             AttachmentCard(entry: entry, session: session,
                            turn: [entry.who(agent: agent), Self.clock(entry.at)].filter { !$0.isEmpty }.joined(separator: " · "))
@@ -544,10 +551,13 @@ struct ToolRunView: View {
 }
 
 /// A tool call folded to one line: the tool, its main argument and its
-/// result's first line.
+/// result's first line. An AskUserQuestion call without its answer
+/// waits on the user, not on a spinner: it says so, with a link that
+/// shows the question card.
 struct ToolLine: View {
     @Environment(\.theme) private var theme
     let entry: Transcript.Entry
+    var answer: (() -> Void)? = nil
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -564,6 +574,18 @@ struct ToolLine: View {
                     .font(theme.mono(.footnote))
                     .foregroundStyle(r.error ? theme.attention : theme.muted)
                     .lineLimit(1)
+            } else if entry.asksUser {
+                Text("· Waiting for your answer")
+                    .font(theme.mono(.footnote))
+                    .foregroundStyle(theme.question)
+                    .lineLimit(1)
+                if let answer {
+                    Button("Answer", action: answer)
+                        .buttonStyle(.link)
+                        .font(theme.body(.footnote, .semibold))
+                        .foregroundStyle(theme.action)
+                        .help("Shows the question card")
+                }
             } else {
                 ProgressView().controlSize(.mini)
             }

@@ -332,9 +332,13 @@ disable_dialog = { contains = "Disconnect this session", keys = "\u001b[A\u001b[
 # tm thread answer (docs/SPEC.md §11.2): the coordinator relays the
 # user's answer to an AskUserQuestion menu. A number picks that option;
 # the last one, "Type something.", is a text field once focused: its
-# number focuses it, then the text and Enter.
+# number focuses it, then the text and Enter. The menu itself comes in
+# AskUserQuestion's PreToolUse input (questions[], kept for the guard):
+# the server shows it as the session's open question, and session.answer
+# answers it with the same keys, one question at a time.
 [answer]
 rule = "blocked-question"
+tool = "AskUserQuestion"
 text_option = "Type something"
 submit = "\r"
 

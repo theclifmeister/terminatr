@@ -482,6 +482,704 @@
         "t:eps/t-9",
         "d:inactive"
       ]
+    },
+    {
+      "name": "needs first off",
+      "projects": [
+        {
+          "slug": "n-none",
+          "active": true
+        },
+        {
+          "slug": "n-pin",
+          "active": true,
+          "pinned": true
+        },
+        {
+          "slug": "n-q",
+          "active": true,
+          "questions": 1
+        },
+        {
+          "slug": "n-task",
+          "active": true,
+          "needs_you": 2
+        },
+        {
+          "slug": "n-blocked",
+          "active": true,
+          "threads": [
+            {
+              "id": "t-1",
+              "session": "s-b"
+            },
+            {
+              "id": "t-2"
+            }
+          ]
+        },
+        {
+          "slug": "n-pin-asks",
+          "active": true,
+          "pinned": true,
+          "threads": [
+            {
+              "id": "t-1",
+              "needs_you": "go?"
+            }
+          ]
+        },
+        {
+          "slug": "i-none",
+          "active": false
+        },
+        {
+          "slug": "i-t",
+          "active": false,
+          "threads": [
+            {
+              "id": "t-1",
+              "needs_you": "go?"
+            }
+          ]
+        },
+        {
+          "slug": "i-q",
+          "active": false,
+          "pinned": true,
+          "questions": 1
+        }
+      ],
+      "sessions": [
+        {
+          "id": "s-b",
+          "role": "thread",
+          "project": "n-blocked",
+          "state": "blocked"
+        }
+      ],
+      "inactive_open": true,
+      "rows": [
+        "p:n-pin",
+        "c:n-pin",
+        "p:n-pin-asks",
+        "c:n-pin-asks",
+        "t:n-pin-asks/t-1",
+        "p:n-none",
+        "c:n-none",
+        "p:n-q",
+        "c:n-q",
+        "p:n-task",
+        "c:n-task",
+        "p:n-blocked",
+        "c:n-blocked",
+        "t:n-blocked/t-1",
+        "t:n-blocked/t-2",
+        "d:inactive",
+        "p:i-none",
+        "p:i-t",
+        "p:i-q"
+      ]
+    },
+    {
+      "name": "needs first",
+      "projects": [
+        {
+          "slug": "n-none",
+          "active": true
+        },
+        {
+          "slug": "n-pin",
+          "active": true,
+          "pinned": true
+        },
+        {
+          "slug": "n-q",
+          "active": true,
+          "questions": 1
+        },
+        {
+          "slug": "n-task",
+          "active": true,
+          "needs_you": 2
+        },
+        {
+          "slug": "n-blocked",
+          "active": true,
+          "threads": [
+            {
+              "id": "t-1",
+              "session": "s-b"
+            },
+            {
+              "id": "t-2"
+            }
+          ]
+        },
+        {
+          "slug": "n-pin-asks",
+          "active": true,
+          "pinned": true,
+          "threads": [
+            {
+              "id": "t-1",
+              "needs_you": "go?"
+            }
+          ]
+        },
+        {
+          "slug": "i-none",
+          "active": false
+        },
+        {
+          "slug": "i-t",
+          "active": false,
+          "threads": [
+            {
+              "id": "t-1",
+              "needs_you": "go?"
+            }
+          ]
+        },
+        {
+          "slug": "i-q",
+          "active": false,
+          "pinned": true,
+          "questions": 1
+        }
+      ],
+      "sessions": [
+        {
+          "id": "s-b",
+          "role": "thread",
+          "project": "n-blocked",
+          "state": "blocked"
+        }
+      ],
+      "inactive_open": true,
+      "needs_first": true,
+      "rows": [
+        "p:n-pin-asks",
+        "c:n-pin-asks",
+        "t:n-pin-asks/t-1",
+        "p:n-pin",
+        "c:n-pin",
+        "p:n-q",
+        "c:n-q",
+        "p:n-task",
+        "c:n-task",
+        "p:n-blocked",
+        "c:n-blocked",
+        "t:n-blocked/t-1",
+        "t:n-blocked/t-2",
+        "p:n-none",
+        "c:n-none",
+        "d:inactive",
+        "p:i-q",
+        "p:i-none",
+        "p:i-t"
+      ]
+    },
+    {
+      "name": "needs first, folded and expanded",
+      "projects": [
+        {
+          "slug": "n-none",
+          "active": true
+        },
+        {
+          "slug": "n-pin",
+          "active": true,
+          "pinned": true
+        },
+        {
+          "slug": "n-q",
+          "active": true,
+          "questions": 1
+        },
+        {
+          "slug": "n-task",
+          "active": true,
+          "needs_you": 2
+        },
+        {
+          "slug": "n-blocked",
+          "active": true,
+          "threads": [
+            {
+              "id": "t-1",
+              "session": "s-b"
+            },
+            {
+              "id": "t-2"
+            }
+          ]
+        },
+        {
+          "slug": "n-pin-asks",
+          "active": true,
+          "pinned": true,
+          "threads": [
+            {
+              "id": "t-1",
+              "needs_you": "go?"
+            }
+          ]
+        },
+        {
+          "slug": "i-none",
+          "active": false
+        },
+        {
+          "slug": "i-t",
+          "active": false,
+          "threads": [
+            {
+              "id": "t-1",
+              "needs_you": "go?"
+            }
+          ]
+        },
+        {
+          "slug": "i-q",
+          "active": false,
+          "pinned": true,
+          "questions": 1
+        }
+      ],
+      "sessions": [
+        {
+          "id": "s-b",
+          "role": "thread",
+          "project": "n-blocked",
+          "state": "blocked"
+        }
+      ],
+      "folded": [
+        "n-q"
+      ],
+      "expanded": [
+        "i-t"
+      ],
+      "inactive_open": true,
+      "needs_first": true,
+      "rows": [
+        "p:n-pin-asks",
+        "c:n-pin-asks",
+        "t:n-pin-asks/t-1",
+        "p:n-pin",
+        "c:n-pin",
+        "p:n-q",
+        "p:n-task",
+        "c:n-task",
+        "p:n-blocked",
+        "c:n-blocked",
+        "t:n-blocked/t-1",
+        "t:n-blocked/t-2",
+        "p:n-none",
+        "c:n-none",
+        "d:inactive",
+        "p:i-t",
+        "c:i-t",
+        "t:i-t/t-1",
+        "p:i-q",
+        "p:i-none"
+      ]
+    },
+    {
+      "name": "paired",
+      "projects": [
+        {
+          "slug": "gamma",
+          "active": true,
+          "pinned": true
+        }
+      ],
+      "sessions": null,
+      "peers": [
+        {
+          "alias": "mini",
+          "projects": [
+            {
+              "project": "demo",
+              "sessions": [
+                {
+                  "id": "s-1",
+                  "role": "coordinator",
+                  "project": "demo",
+                  "state": "working"
+                },
+                {
+                  "id": "s-2",
+                  "role": "thread",
+                  "project": "demo",
+                  "thread": "t-2",
+                  "state": "blocked"
+                },
+                {
+                  "id": "s-9",
+                  "role": "thread",
+                  "project": "demo",
+                  "thread": "t-9"
+                }
+              ],
+              "threads": [
+                {
+                  "id": "t-1"
+                },
+                {
+                  "id": "t-2",
+                  "session": "s-2"
+                },
+                {
+                  "id": "t-3",
+                  "done": true
+                }
+              ]
+            },
+            {
+              "project": "old",
+              "stale": true,
+              "threads": [
+                {
+                  "id": "t-1"
+                }
+              ]
+            },
+            {
+              "project": "new",
+              "sessions": [
+                {
+                  "id": "s-3",
+                  "role": "thread",
+                  "project": "new",
+                  "thread": "t-1"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "alias": "far",
+          "projects": [
+            {
+              "project": "x",
+              "threads": [
+                {
+                  "id": "t-1"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "rows": [
+        "g:",
+        "p:gamma",
+        "c:gamma",
+        "g:mini",
+        "r:mini/demo",
+        "rc:mini/demo",
+        "rt:mini/demo/t-1",
+        "rt:mini/demo/t-2",
+        "rt:mini/demo/t-3",
+        "r:mini/old",
+        "r:mini/new",
+        "rc:mini/new",
+        "g:far",
+        "r:far/x",
+        "rc:far/x",
+        "rt:far/x/t-1"
+      ]
+    },
+    {
+      "name": "paired, folded",
+      "projects": [
+        {
+          "slug": "gamma",
+          "active": true,
+          "pinned": true
+        }
+      ],
+      "sessions": null,
+      "peers": [
+        {
+          "alias": "mini",
+          "projects": [
+            {
+              "project": "demo",
+              "sessions": [
+                {
+                  "id": "s-1",
+                  "role": "coordinator",
+                  "project": "demo",
+                  "state": "working"
+                },
+                {
+                  "id": "s-2",
+                  "role": "thread",
+                  "project": "demo",
+                  "thread": "t-2",
+                  "state": "blocked"
+                },
+                {
+                  "id": "s-9",
+                  "role": "thread",
+                  "project": "demo",
+                  "thread": "t-9"
+                }
+              ],
+              "threads": [
+                {
+                  "id": "t-1"
+                },
+                {
+                  "id": "t-2",
+                  "session": "s-2"
+                },
+                {
+                  "id": "t-3",
+                  "done": true
+                }
+              ]
+            },
+            {
+              "project": "old",
+              "stale": true,
+              "threads": [
+                {
+                  "id": "t-1"
+                }
+              ]
+            },
+            {
+              "project": "new",
+              "sessions": [
+                {
+                  "id": "s-3",
+                  "role": "thread",
+                  "project": "new",
+                  "thread": "t-1"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "alias": "far",
+          "projects": [
+            {
+              "project": "x",
+              "threads": [
+                {
+                  "id": "t-1"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "folded": [
+        "@mini/demo",
+        "@far"
+      ],
+      "rows": [
+        "g:",
+        "p:gamma",
+        "c:gamma",
+        "g:mini",
+        "r:mini/demo",
+        "r:mini/old",
+        "r:mini/new",
+        "rc:mini/new",
+        "g:far"
+      ]
+    },
+    {
+      "name": "paired, needs first",
+      "projects": [
+        {
+          "slug": "n-none",
+          "active": true
+        },
+        {
+          "slug": "n-pin",
+          "active": true,
+          "pinned": true
+        },
+        {
+          "slug": "n-q",
+          "active": true,
+          "questions": 1
+        },
+        {
+          "slug": "n-task",
+          "active": true,
+          "needs_you": 2
+        },
+        {
+          "slug": "n-blocked",
+          "active": true,
+          "threads": [
+            {
+              "id": "t-1",
+              "session": "s-b"
+            },
+            {
+              "id": "t-2"
+            }
+          ]
+        },
+        {
+          "slug": "n-pin-asks",
+          "active": true,
+          "pinned": true,
+          "threads": [
+            {
+              "id": "t-1",
+              "needs_you": "go?"
+            }
+          ]
+        },
+        {
+          "slug": "i-none",
+          "active": false
+        },
+        {
+          "slug": "i-t",
+          "active": false,
+          "threads": [
+            {
+              "id": "t-1",
+              "needs_you": "go?"
+            }
+          ]
+        },
+        {
+          "slug": "i-q",
+          "active": false,
+          "pinned": true,
+          "questions": 1
+        }
+      ],
+      "sessions": [
+        {
+          "id": "s-b",
+          "role": "thread",
+          "project": "n-blocked",
+          "state": "blocked"
+        }
+      ],
+      "peers": [
+        {
+          "alias": "mini",
+          "projects": [
+            {
+              "project": "demo",
+              "sessions": [
+                {
+                  "id": "s-1",
+                  "role": "coordinator",
+                  "project": "demo",
+                  "state": "working"
+                },
+                {
+                  "id": "s-2",
+                  "role": "thread",
+                  "project": "demo",
+                  "thread": "t-2",
+                  "state": "blocked"
+                },
+                {
+                  "id": "s-9",
+                  "role": "thread",
+                  "project": "demo",
+                  "thread": "t-9"
+                }
+              ],
+              "threads": [
+                {
+                  "id": "t-1"
+                },
+                {
+                  "id": "t-2",
+                  "session": "s-2"
+                },
+                {
+                  "id": "t-3",
+                  "done": true
+                }
+              ]
+            },
+            {
+              "project": "old",
+              "stale": true,
+              "threads": [
+                {
+                  "id": "t-1"
+                }
+              ]
+            },
+            {
+              "project": "new",
+              "sessions": [
+                {
+                  "id": "s-3",
+                  "role": "thread",
+                  "project": "new",
+                  "thread": "t-1"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "alias": "far",
+          "projects": [
+            {
+              "project": "x",
+              "threads": [
+                {
+                  "id": "t-1"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "needs_first": true,
+      "rows": [
+        "g:",
+        "p:n-pin-asks",
+        "c:n-pin-asks",
+        "t:n-pin-asks/t-1",
+        "p:n-pin",
+        "c:n-pin",
+        "p:n-q",
+        "c:n-q",
+        "p:n-task",
+        "c:n-task",
+        "p:n-blocked",
+        "c:n-blocked",
+        "t:n-blocked/t-1",
+        "t:n-blocked/t-2",
+        "p:n-none",
+        "c:n-none",
+        "g:mini",
+        "r:mini/demo",
+        "rc:mini/demo",
+        "rt:mini/demo/t-1",
+        "rt:mini/demo/t-2",
+        "rt:mini/demo/t-3",
+        "r:mini/old",
+        "r:mini/new",
+        "rc:mini/new",
+        "g:far",
+        "r:far/x",
+        "rc:far/x",
+        "rt:far/x/t-1",
+        "d:inactive"
+      ]
     }
   ]
 }
