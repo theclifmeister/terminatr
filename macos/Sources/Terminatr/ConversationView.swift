@@ -112,10 +112,8 @@ struct ConversationTab: View {
                                 .frame(maxWidth: .infinity)
                         }
                     }
-                    .padding(.horizontal, 22)
+                    .padding(.horizontal, Page.edge)
                     .padding(.vertical, 14)
-                    .frame(maxWidth: 820)
-                    .frame(maxWidth: .infinity)
                 }
                 .defaultScrollAnchor(.bottom)
                 // Streamed text lands in place: no implicit animation.
@@ -135,8 +133,7 @@ struct ConversationTab: View {
                         VStack(spacing: 10) {
                             if let review, let task = review.task {
                                 ReviewCard(project: model.ref.project, thread: review, task: task)
-                                    .padding(.horizontal, 22)
-                                    .frame(maxWidth: 820)
+                                    .padding(.horizontal, Page.edge)
                             }
                             if remote != nil {
                                 if peerSession?.asking == true {
@@ -237,9 +234,8 @@ struct ConversationTab: View {
         .padding(.vertical, 7)
         .frosted(RoundedRectangle(cornerRadius: 10))
         .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(theme.edge, lineWidth: 1))
-        .padding(.horizontal, 22)
+        .padding(.horizontal, Page.edge)
         .padding(.bottom, 4)
-        .frame(maxWidth: 820)
     }
 
     private func close() {
@@ -265,8 +261,7 @@ struct RemoteQuestionCard: View {
                 .tint(theme.action)
                 .help("Opens the session's pane")
         }
-        .padding(.horizontal, 22)
-        .frame(maxWidth: 820)
+        .padding(.horizontal, Page.edge)
     }
 }
 
@@ -280,10 +275,10 @@ struct ViewOnlyLine: View {
         Label("View only: \(server) lets this server read this session, not send to it", systemImage: "eye")
             .font(theme.body(.footnote))
             .foregroundStyle(theme.muted)
-            .padding(.horizontal, 22)
+            .padding(.horizontal, Page.edge)
             .padding(.top, 10)
             .padding(.bottom, 14)
-            .frame(maxWidth: 820, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

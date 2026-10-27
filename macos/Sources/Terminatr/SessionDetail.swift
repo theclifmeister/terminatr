@@ -76,8 +76,8 @@ struct SessionDetail: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(theme.cardTint, in: RoundedRectangle(cornerRadius: terminal ? TerminalTab.corner : 9))
             .accessibilityElement(children: .combine)
-            // Over the terminal, at its box's edges.
-            .padding(.horizontal, terminal ? TerminalTab.edge : 20)
+            // At the pages' edges: over the terminal, its box's.
+            .padding(.horizontal, Page.edge)
             .padding(.top, 12)
             .padding(.bottom, 4)
         }
