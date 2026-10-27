@@ -229,10 +229,12 @@ func TestWatchCapThroughRelay(t *testing.T) {
 }
 
 // TestLinkServesNoLocalStreams: a link answers peer.* methods alone, so
-// the human's local streams (transcript.watch, pane.vt) never cross one
-// (docs/SPEC.md §3.3: no transcripts across links).
+// the human's local streams (transcript.watch, pane.vt) never cross one:
+// a conversation crosses only as peer.transcript, gated (docs/SPEC.md
+// §16.14).
 func TestLinkServesNoLocalStreams(t *testing.T) {
-	d := &dispatcher{ex: &fakeExport{}, msgs: &fakeMessages{}, panes: &fakeHost{}, panesHere: func(string) {}}
+	d := &dispatcher{ex: &fakeExport{}, msgs: &fakeMessages{}, panes: &fakeHost{}, transcripts: &fakeTranscripts{}, convOn: func() bool { return true },
+		panesHere: func(proto.PeerPanesParams) {}}
 	for m := range d.methods() {
 		if !strings.HasPrefix(m, "peer.") {
 			t.Errorf("a link serves %s", m)

@@ -40,6 +40,10 @@ type Options struct {
 	// Files serves the files this server offered paired servers
 	// (peer.file.fetch); nil serves none and leaves out CapFile.
 	Files FileHost
+	// Transcripts serves this server's conversations to paired servers
+	// whose switches allow it (peer.transcript); nil serves none and
+	// leaves out CapTranscript.
+	Transcripts TranscriptHost
 	// noPaneLevel plays tm v0.27.0 (tests): no CapPaneLevel, no
 	// peer.panes.
 	noPaneLevel bool
@@ -57,7 +61,7 @@ type Manager struct {
 	id      *Identity
 	err     error
 	links   map[ID]*running
-	onPanes func(id ID, level string)
+	onPanes func(id ID, p proto.PeerPanesParams)
 	// fileSlots bounds the file streams served over all links.
 	fileSlots chan struct{}
 }
@@ -129,6 +133,9 @@ func (m *Manager) Reload() error {
 			if p.PanesLevel() != r.l.panesLevel() {
 				r.l.setPanes(p.PanesLevel())
 			}
+			if p.ConversationsOn() != r.l.convOn() {
+				r.l.setConversations(p.ConversationsOn())
+			}
 			if p.Name != r.l.status().Name {
 				r.l.setName(p.Name)
 			}
@@ -152,9 +159,15 @@ func (m *Manager) add(id *Identity, cert tls.Certificate, p Peer) {
 		logf:      m.opts.Logf,
 		backoff:   m.opts.Backoff,
 		fileSlots: m.fileSlots,
+		// The switches go together on peer.panes only to a peer that
+		// knows them: needs the pane host too, for the level.
+		conversations: m.opts.Transcripts != nil && m.opts.Panes != nil,
 	}
 	d := &dispatcher{ex: m.opts.Export, msgs: m.opts.Messages, panes: m.opts.Panes, files: m.opts.Files, caller: caller.ForPeer(p.Alias),
-		peer: p.ID(), level: l.panesLevel, panesHere: func(level string) { m.panesHere(p.ID(), level) }}
+		peer: p.ID(), level: l.panesLevel, panesHere: func(pp proto.PeerPanesParams) { m.panesHere(p.ID(), pp) }}
+	if l.conversations {
+		d.transcripts, d.convOn = m.opts.Transcripts, l.convOn
+	}
 	if m.opts.noPaneLevel {
 		d.panesHere = nil
 	}
@@ -188,26 +201,29 @@ func (m *Manager) caps() []string {
 	if m.opts.Files != nil {
 		caps = append(caps, CapFile)
 	}
+	if m.opts.Transcripts != nil && m.opts.Panes != nil {
+		caps = append(caps, CapTranscript)
+	}
 	if m.opts.noPaneLevel {
 		return caps
 	}
 	return append(caps, CapPaneLevel)
 }
 
-// OnPanes sets f to hear a paired server's word that its pane switch
-// for this server changed (peer.panes): the mirror's. f mustn't block.
-func (m *Manager) OnPanes(f func(id ID, level string)) {
+// OnPanes sets f to hear a paired server's word that its switches for
+// this server changed (peer.panes): the mirror's. f mustn't block.
+func (m *Manager) OnPanes(f func(id ID, p proto.PeerPanesParams)) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.onPanes = f
 }
 
-func (m *Manager) panesHere(id ID, level string) {
+func (m *Manager) panesHere(id ID, p proto.PeerPanesParams) {
 	m.mu.Lock()
 	f := m.onPanes
 	m.mu.Unlock()
 	if f != nil {
-		f(id, level)
+		f(id, p)
 	}
 }
 
@@ -237,6 +253,21 @@ func (m *Manager) OpenPane(ctx context.Context, alias string, p proto.PeerAttach
 		return nil, fmt.Errorf("no paired server %q", alias)
 	}
 	return l.openPane(ctx, p, sink)
+}
+
+// OpenTranscript opens a stream on the conversation p.Session of the
+// paired server alias (docs/SPEC.md §16.14), its events to sink:
+// ErrNoTranscripts when that server's tm shares none, else
+// peer.transcript's error (proto.ErrConversationsOff …).
+func (m *Manager) OpenTranscript(ctx context.Context, alias string, p proto.PeerTranscriptParams, sink TranscriptSink) (*TranscriptConn, error) {
+	if m == nil {
+		return nil, errNotUp
+	}
+	l := m.link(alias)
+	if l == nil {
+		return nil, fmt.Errorf("no paired server %q", alias)
+	}
+	return l.openTranscript(ctx, p, sink)
 }
 
 // link is the link to the paired server alias, or the one named so;

@@ -3,8 +3,8 @@ package server
 // transcript.watch (docs/SPEC.md §3.3, Transcript): a session's
 // conversation as typed items, read from the file its agent's
 // [jsonl_tail] follows through the manifest's [transcript] table. The
-// human's only, and never a paired server's (peer.Exporter doesn't
-// carry it). Bounded: a reset reads at most transcriptBacklogRead of the
+// human's only; a paired server reads the same stream only through
+// peer.transcript, gated (peertranscript.go, §16.14). Bounded: a reset reads at most transcriptBacklogRead of the
 // file's end and sends the last proto.TranscriptBacklog items, and the
 // stream reads on only while fewer than its window of items are unacked:
 // the file is the backlog, so a slow client costs the server an offset.
@@ -57,6 +57,10 @@ func (s *Server) serveTranscript(c net.Conn, br *bufio.Reader, req proto.Request
 		refuse(c, req, proto.Errorf(proto.ErrBadParams, "transcript.watch needs a session"))
 		return
 	}
+	if _, _, ok := remoteID(p.Session); ok {
+		s.serveRemoteTranscript(c, br, req, s.remoteCanon(p.Session))
+		return
+	}
 	sess, perr := s.session(p.Session)
 	if perr != nil {
 		refuse(c, req, perr)
@@ -68,14 +72,7 @@ func (s *Server) serveTranscript(c net.Conn, br *bufio.Reader, req proto.Request
 		return
 	}
 	defer s.transcripts.Add(-1)
-	w := &transcriptWatch{s: s, sess: sess, c: c, window: transcriptWindow, wake: make(chan struct{}, 1)}
-	if a := sess.Agent(); a != nil {
-		w.agent = a.Name()
-		if m := agent.ManifestOf(a); m != nil {
-			w.tr = m.Transcript
-		}
-	}
-	w.root, w.path = sess.Transcript()
+	w := s.newTranscriptWatch(sess, func(ev proto.TranscriptEvent) error { return proto.WriteLine(c, ev) })
 	st := w.status()
 	if !answer(c, req, proto.TranscriptWatchResult{Session: s.info(sess), Status: st, Window: w.window}) {
 		return
@@ -96,14 +93,32 @@ func (s *Server) serveTranscript(c net.Conn, br *bufio.Reader, req proto.Request
 	w.run(gone)
 }
 
+// newTranscriptWatch is a stream of sess's conversation, its events to
+// send.
+func (s *Server) newTranscriptWatch(sess *session.Session, send func(proto.TranscriptEvent) error) *transcriptWatch {
+	w := &transcriptWatch{s: s, sess: sess, send: send, window: transcriptWindow, wake: make(chan struct{}, 1)}
+	if a := sess.Agent(); a != nil {
+		w.agent = a.Name()
+		if m := agent.ManifestOf(a); m != nil {
+			w.tr = m.Transcript
+		}
+	}
+	w.root, w.path = sess.Transcript()
+	return w
+}
+
 // transcriptWatch is one transcript.watch stream. Only run's goroutine
 // touches it, but for inflight.
 type transcriptWatch struct {
 	s     *Server
 	sess  *session.Session
-	c     net.Conn
+	send  func(proto.TranscriptEvent) error
 	tr    *agent.Transcript // nil: unmapped
 	agent string
+	// shared, when set, is asked every paneShareCheck whether the
+	// stream may go on: "" yes, else the closed reason (a paired
+	// server's, whose project may stop being shared).
+	shared func() string
 
 	root, path string
 	off        int64
@@ -124,6 +139,12 @@ type transcriptWatch struct {
 func (w *transcriptWatch) run(gone <-chan struct{}) {
 	t := time.NewTicker(transcriptPoll)
 	defer t.Stop()
+	var share <-chan time.Time
+	if w.shared != nil {
+		st := time.NewTicker(paneShareCheck)
+		defer st.Stop()
+		share = st.C
+	}
 	if !w.reset() {
 		return
 	}
@@ -136,8 +157,14 @@ func (w *transcriptWatch) run(gone <-chan struct{}) {
 			if w.s.isStopping() {
 				reason = proto.PaneStopping
 			}
-			proto.WriteLine(w.c, proto.TranscriptEvent{Event: proto.EventTranscriptClosed, Reason: reason})
+			w.send(proto.TranscriptEvent{Event: proto.EventTranscriptClosed, Reason: reason})
 			return
+		case <-share:
+			if reason := w.shared(); reason != "" {
+				w.send(proto.TranscriptEvent{Event: proto.EventTranscriptClosed, Reason: reason})
+				return
+			}
+			continue
 		case <-t.C:
 		case <-w.wake:
 		}
@@ -164,13 +191,13 @@ func (w *transcriptWatch) look() bool {
 	items = append(items, w.todosChanged()...)
 	if len(items) > 0 {
 		w.took(len(items))
-		if proto.WriteLine(w.c, proto.TranscriptEvent{Event: proto.EventTranscriptItems, Items: items}) != nil {
+		if w.send(proto.TranscriptEvent{Event: proto.EventTranscriptItems, Items: items}) != nil {
 			return false
 		}
 	}
 	if st := w.status(); st != w.sent {
 		w.sent = st
-		return proto.WriteLine(w.c, proto.TranscriptEvent{Event: proto.EventTranscriptStatus, Status: &st}) == nil
+		return w.send(proto.TranscriptEvent{Event: proto.EventTranscriptStatus, Status: &st}) == nil
 	}
 	return true
 }
@@ -191,7 +218,7 @@ func (w *transcriptWatch) reset() bool {
 	st := w.status()
 	w.sent = st
 	w.took(len(items))
-	return proto.WriteLine(w.c, proto.TranscriptEvent{Event: proto.EventTranscriptReset, Items: items, Skipped: skipped, Status: &st}) == nil
+	return w.send(proto.TranscriptEvent{Event: proto.EventTranscriptReset, Items: items, Skipped: skipped, Status: &st}) == nil
 }
 
 // backlog reads the items of the file's last transcriptBacklogRead

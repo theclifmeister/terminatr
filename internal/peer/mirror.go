@@ -73,6 +73,9 @@ type mirrorPeer struct {
 	// panes is the peer's pane switch for this server, as its last
 	// peer.projects said.
 	panes string
+	// conversations is its conversations switch for this server
+	// (proto.ConversationsOn …), as it last said; "" for unsaid.
+	conversations string
 	// listed: projects are a peer.projects answer, the last one while
 	// the link is down.
 	listed   bool
@@ -98,7 +101,10 @@ type mirrorProject struct {
 // Close.
 func StartMirror(l *Manager, opts MirrorOptions) *Mirror {
 	m := startMirror(l, opts)
-	l.OnPanes(func(id ID, level string) { m.SetPanes(id.String(), level) })
+	l.OnPanes(func(id ID, p proto.PeerPanesParams) {
+		m.SetPanes(id.String(), p.Panes)
+		m.setConversations(id.String(), p.Conversations)
+	})
 	return m
 }
 
@@ -109,6 +115,20 @@ func (m *Mirror) SetPanes(id, level string) {
 	defer m.mu.Unlock()
 	if p := m.peers[id]; p != nil {
 		m.setPanes(p, level)
+	}
+}
+
+// setConversations takes the peer id's word on its conversations switch
+// for this server; "" says nothing.
+func (m *Mirror) setConversations(id, conv string) {
+	if conv != proto.ConversationsOn && conv != proto.ConversationsNot {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if p := m.peers[id]; p != nil && p.conversations != conv {
+		p.conversations = conv
+		m.changed()
 	}
 }
 
@@ -298,6 +318,9 @@ func (m *Mirror) setProjects(ctx context.Context, id, alias string, ps proto.Pee
 	}
 	changed := m.measure(p, ps.Now, recv)
 	m.setPanes(p, ps.Panes)
+	if c := ps.Conversations; (c == proto.ConversationsOn || c == proto.ConversationsNot) && c != p.conversations {
+		p.conversations, changed = c, true
+	}
 	if !p.listed {
 		p.listed, changed = true, true
 	}
@@ -465,10 +488,13 @@ func (m *Mirror) List() proto.PeerList {
 	for _, l := range st.Peers {
 		pm := proto.PeerMirror{Alias: l.Alias, Name: l.Name, ID: l.ID, State: l.State, Reason: l.Reason, Since: l.Since, RTT: l.RTT,
 			Watch: slices.Contains(l.Caps, CapWatch), Popup: slices.Contains(l.Caps, CapPopup), Pane: slices.Contains(l.Caps, CapPane), Version: l.Version,
-			Projects: []proto.PeerMirrorProject{}}
+			Transcript: slices.Contains(l.Caps, CapTranscript), Projects: []proto.PeerMirrorProject{}}
 		if p := m.peers[l.ID]; p != nil {
 			if pm.Pane {
 				pm.Panes = p.panes
+			}
+			if pm.Transcript {
+				pm.Conversations = p.conversations
 			}
 			pm.Listed = p.listed
 			if p.hasOffset {

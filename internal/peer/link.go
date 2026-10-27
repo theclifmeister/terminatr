@@ -48,6 +48,9 @@ type link struct {
 	backoff func(n int) time.Duration
 	// fileSlots bounds the file streams the server serves (Manager's).
 	fileSlots chan struct{}
+	// conversations: the server serves conversations (§16.14), so
+	// peer.panes says its conversations switch too.
+	conversations bool
 
 	mu sync.Mutex
 	st proto.PeerLink
@@ -65,31 +68,71 @@ func (l *link) panesLevel() string {
 	return l.peer.PanesLevel()
 }
 
+// convOn is this server's conversations switch for the peer now.
+func (l *link) convOn() bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.peer.ConversationsOn()
+}
+
 // setPanes changes the pane switch for the peer: at once for its open
-// streams, which off closes; view stops their keys at the next one, and
-// type lets them type. A peer that takes peer.panes hears of it now, so
-// its open panes follow (docs/SPEC.md §16.12).
+// streams, which off closes, conversations too; view stops their keys at
+// the next one, and type lets them type. A peer that takes peer.panes
+// hears of it now, so its open panes follow (docs/SPEC.md §16.12).
 func (l *link) setPanes(level string) {
 	l.mu.Lock()
 	l.peer.Panes = level
 	level = l.peer.PanesLevel()
-	s, tell := l.sess, slices.Contains(l.st.Caps, CapPaneLevel)
+	s := l.sess
 	l.mu.Unlock()
 	if s == nil {
 		return
 	}
 	if level == proto.PanesOff {
 		s.panes.closeServed(proto.PaneOff)
+		s.transcripts.closeServed(proto.PaneOff)
 	}
-	if tell {
-		go func() {
-			ctx, cancel := context.WithTimeout(context.Background(), helloTimeout)
-			defer cancel()
-			if err := s.call(ctx, proto.MethodPeerPanes, proto.PeerPanesParams{Panes: level}, nil); err != nil && l.logf != nil {
-				l.logf("peer %s: peer.panes: %v", l.peer.Alias, err)
-			}
-		}()
+	l.tellSwitches(s)
+}
+
+// setConversations turns the conversations switch for the peer on or
+// off (§16.14): off closes its open conversations at once.
+func (l *link) setConversations(on bool) {
+	l.mu.Lock()
+	l.peer.Conversations = ""
+	if !on {
+		l.peer.Conversations = proto.ConversationsNot
 	}
+	s := l.sess
+	l.mu.Unlock()
+	if s == nil {
+		return
+	}
+	if !on {
+		s.transcripts.closeServed(proto.ConversationsOff)
+	}
+	l.tellSwitches(s)
+}
+
+// tellSwitches says the switches to a peer that takes peer.panes.
+func (l *link) tellSwitches(s *session) {
+	l.mu.Lock()
+	p := proto.PeerPanesParams{Panes: l.peer.PanesLevel()}
+	if l.conversations {
+		p.Conversations = map[bool]string{true: proto.ConversationsOn, false: proto.ConversationsNot}[l.peer.ConversationsOn()]
+	}
+	tell := slices.Contains(l.st.Caps, CapPaneLevel)
+	l.mu.Unlock()
+	if !tell {
+		return
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), helloTimeout)
+		defer cancel()
+		if err := s.call(ctx, proto.MethodPeerPanes, p, nil); err != nil && l.logf != nil {
+			l.logf("peer %s: peer.panes: %v", l.peer.Alias, err)
+		}
+	}()
 }
 
 // openPane opens a stream on the peer's pane p.Session (docs/SPEC.md
@@ -106,6 +149,25 @@ func (l *link) openPane(ctx context.Context, p proto.PeerAttachParams, sink Pane
 	}
 	return s.panes.open(ctx, p, sink)
 }
+
+// openTranscript opens a stream on the peer's conversation p.Session
+// (§16.14), events to sink.
+func (l *link) openTranscript(ctx context.Context, p proto.PeerTranscriptParams, sink TranscriptSink) (*TranscriptConn, error) {
+	l.mu.Lock()
+	s, caps := l.sess, l.st.Caps
+	l.mu.Unlock()
+	if s == nil {
+		return nil, errNotUp
+	}
+	if !slices.Contains(caps, CapTranscript) {
+		return nil, ErrNoTranscripts
+	}
+	return s.transcripts.open(ctx, p, sink)
+}
+
+// ErrNoTranscripts means the peer's tm shares no conversations (its
+// hello doesn't list CapTranscript).
+var ErrNoTranscripts = errors.New("the paired server's tm shares no conversations")
 
 // ErrNoPanes means the peer's tm has no remote panes (its hello doesn't list
 // CapPane).

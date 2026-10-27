@@ -77,6 +77,10 @@ const (
 	// CapPaneVTRemote: pane.vt also opens a paired server's pane,
 	// "<alias>/<session>", through this server's link (§16.12).
 	CapPaneVTRemote = "pane-vt-remote"
+	// CapTranscriptRemote: transcript.watch also reads a paired
+	// server's conversation, "<alias>/<session>", through this server's
+	// link (§16.14).
+	CapTranscriptRemote = "transcript-remote"
 )
 
 // MismatchError says the client can't talk to this server. When ReExec is

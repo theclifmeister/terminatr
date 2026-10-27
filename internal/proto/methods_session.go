@@ -381,7 +381,8 @@ const (
 // the agent's structured channel, which may not confirm delivery),
 // "queued" (pasted once the agent is idle with an empty prompt box), and
 // for a Mode, "steered" (pasted into the running turn) or "interrupted"
-// (the turn stopped for it). Why says why a Mode's prompt went another
+// (the turn stopped for it); "typed" for a paired server's session
+// (typed into its pane as a paste and Enter, §16.14). Why says why a Mode's prompt went another
 // way (the agent idle, a draft in its prompt box, no interrupt key). A
 // PromptInterrupt that can't stop the turn (a draft, a dialog) is
 // refused (ErrRefused): nothing is sent or queued.
