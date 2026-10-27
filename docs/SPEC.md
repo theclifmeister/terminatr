@@ -180,7 +180,7 @@ The types are in `internal/proto`.
 {"protocol": 9, "version": "v0.8.1", "build": "v0.8.1+33da6848d63b+3f2a…", "bin": "~/.terminatr/run/bin/tm", "pid": 4242, "caps": ["pane-vt", "transcript"]}
 ```
 
-The server's `caps` name what it serves beside its protocol, so a client of another build (the macOS app, through `tm app bridge`) checks for a feature without the protocol going up: `pane-vt` (`pane.vt`, **Pane VT** below), `transcript` (`transcript.watch`, **Transcript** below) and `pane-vt-remote` (`pane.vt` also opens a paired server's pane, `alias/session`). A server without them has neither.
+The server's `caps` name what it serves beside its protocol, so a client of another build (the macOS app, through `tm app bridge`) checks for a feature without the protocol going up: `pane-vt` (`pane.vt`, **Pane VT** below), `transcript` (`transcript.watch`, **Transcript** below) `pane-vt-remote` (`pane.vt` also opens a paired server's pane, `alias/session`) and `transcript-remote` (`transcript.watch` also reads a paired server's conversation, `alias/session`, and `session.prompt` types into its pane, §16.14). A server without them has neither.
 
 `build` is `version.BuildID()`: the version, the Ghostty commit, and a hash of the executable. A control client may name the console it serves with `client` (since protocol 19): `"app"` for the Mac app's bridge (§3.8). On the human socket the server then journals the connection's human calls as `human (app)`; the field grants nothing, and on the server socket it changes nothing.
 
@@ -245,7 +245,7 @@ What the server changes itself wakes every watch at once: agent state changes, s
 
 **Pane VT.** `pane.vt {session, console}` (`internal/server/panevt.go`, human-only) streams one of this server's panes to a client that isn't tm's own build, which can't read an attach's libghostty snapshot, as remote panes stream one to a paired server (§16.12). It answers `{session, window}` (the `SessionInfo`; `window` is 256 KiB) and the connection then carries NDJSON both ways. The server sends `{"event":"pane.repaint","cols","rows","data"}` (a fresh emulator of that size, fed `data`, `emu.Repaint` in plain VT that any emulator reads, the whole scrollback the first time and on request, the last 200 rows in place of a backlog over 1 MiB, at most one per 250 ms), `{"event":"pane.output","data"}` (PTY output, or the rest of a repaint, in order), `{"event":"pane.resize","cols","rows"}` and last `{"event":"pane.closed","reason"}` (`exited` or `stopping`); `data` is base64, at most 64 KiB an event, and the server sends at most `window` bytes of it past the client's acks. The client sends lines with any of `input` (keys, base64, already encoded for the pane's modes: the human's, as an attach's, so typed text raises a thread's takeover once per `console`, the client's process when it gives none, §4), `ack` (data bytes taken), `size {cols, rows}` (claims the pane's size, as typing in a console does; at most 1000 × 500), `repaint` (asks for a fresh one) and `detach`. The server's emulator stays the one that answers the program's queries; the client's mustn't. At most 32 streams at once (`refused`). A paired server's coordinator or thread (`alias/session`, since `pane-vt-remote`) streams the same way from the proxy pane this server keeps of it, which a console's attach shares (§16.12): it opens under the far server's switch and the link's state with an attach's refusals (`panes-off`, `not-shared`, `unknown-session`, `refused` when the link is down or the peer's tm has no panes), `session.view_only` says the switch is `view`, keys cross only while it is `type` (the far server checks them and raises its own takeover; this server journals nothing), `size` claims the far pane's size as typing does, `repaint` repaints from the proxy without asking the link, and `pane.closed`'s `reason` is this server's sentence (`mini turned its panes off for this server`) rather than a fixed word. A dropped link freezes the pane until the stream is back. Transcripts don't cross: `transcript.watch` refuses such an id.
 
-**Transcript.** `transcript.watch {session}` (`internal/server/transcript.go`, human-only) is a session's conversation as typed items, for a client that shows one rather than a terminal (the macOS app). They are read from the file the agent's `[jsonl_tail]` follows, through the manifest's `[transcript]` table (§8.2), so no agent's format is in the core; only Claude's manifest has one, and a Codex session shows unmapped. It answers `{session, status, window}` (`window`: 500 items) and streams `{"event":"transcript.reset","items","skipped","status"}` first and whenever the agent moves to another transcript (`/clear`) or the file shrinks (the last 200 items of the file's last 4 MiB, `skipped` the earlier ones left out, then the todo list), `{"event":"transcript.items","items"}` with the items appended and a `todos` item when the agent's todo list changed, `{"event":"transcript.status","status"}` when the status changed, and last `{"event":"transcript.closed","reason"}` (`exited`, `stopping`). The client acks the items it took (`{"ack": n}`) and may `{"detach": true}`; the server reads the file on only while fewer than `window` items are unacked, so the file is the backlog and a stuck client costs an offset. An item (`proto.TranscriptItem`) is `{kind, text, truncated, tool, call, error, lines, todos, at, from}`, `at` when the agent wrote its line (the table's `time_field`, left out when the line doesn't say): `prompt` (the user's, or tm's pasted for them; `from` says who sent it as far as the server knows: `tm` for a thread's or a coordinator's kickoff and a `[tm]` prompt, `coordinator` for one the project's coordinator sent through `session.prompt` (the server keeps each session's last 32 of them, compared by their first 240 bytes of words), none for the user's), `text` (the agent's), `tool` (a call folded to its `tool` and main argument as `text`: Bash's command, Read's path, from the table's `tool_args`; `call` its id), `result` (the call's first line as `text`, its `lines`, `error`), `note` (`Interrupted`) and `todos` (`[{text, status}]`, at most 100). Every string goes through `textsafe` (`internal/textsafe`) and is bounded: a prompt's or text's at 8 KiB (`truncated`), a summary at 200 characters on one line. `status` is `{state, reason, agent, version}`: `mapped`; `waiting` (the agent hasn't named its transcript yet); or `unmapped`, the client's cue to show the terminal (`pane.vt`) instead, when the agent has no `[transcript]`, the transcript's version isn't one the table was checked on (`tested`), or at least 3 and a quarter of the last 64 blocks are ones the table doesn't know (the format changed). Transcripts never cross a link: a link's dispatcher serves `peer.*` methods alone (§16.9). At most 32 streams at once.
+**Transcript.** `transcript.watch {session}` (`internal/server/transcript.go`, human-only) is a session's conversation as typed items, for a client that shows one rather than a terminal (the macOS app). They are read from the file the agent's `[jsonl_tail]` follows, through the manifest's `[transcript]` table (§8.2), so no agent's format is in the core; only Claude's manifest has one, and a Codex session shows unmapped. It answers `{session, status, window}` (`window`: 500 items) and streams `{"event":"transcript.reset","items","skipped","status"}` first and whenever the agent moves to another transcript (`/clear`) or the file shrinks (the last 200 items of the file's last 4 MiB, `skipped` the earlier ones left out, then the todo list), `{"event":"transcript.items","items"}` with the items appended and a `todos` item when the agent's todo list changed, `{"event":"transcript.status","status"}` when the status changed, and last `{"event":"transcript.closed","reason"}` (`exited`, `stopping`). The client acks the items it took (`{"ack": n}`) and may `{"detach": true}`; the server reads the file on only while fewer than `window` items are unacked, so the file is the backlog and a stuck client costs an offset. An item (`proto.TranscriptItem`) is `{kind, text, truncated, tool, call, error, lines, todos, at, from}`, `at` when the agent wrote its line (the table's `time_field`, left out when the line doesn't say): `prompt` (the user's, or tm's pasted for them; `from` says who sent it as far as the server knows: `tm` for a thread's or a coordinator's kickoff and a `[tm]` prompt, `coordinator` for one the project's coordinator sent through `session.prompt` (the server keeps each session's last 32 of them, compared by their first 240 bytes of words), none for the user's), `text` (the agent's), `tool` (a call folded to its `tool` and main argument as `text`: Bash's command, Read's path, from the table's `tool_args`; `call` its id), `result` (the call's first line as `text`, its `lines`, `error`), `note` (`Interrupted`) and `todos` (`[{text, status}]`, at most 100). Every string goes through `textsafe` (`internal/textsafe`) and is bounded: a prompt's or text's at 8 KiB (`truncated`), a summary at 200 characters on one line. `status` is `{state, reason, agent, version}`: `mapped`; `waiting` (the agent hasn't named its transcript yet); or `unmapped`, the client's cue to show the terminal (`pane.vt`) instead, when the agent has no `[transcript]`, the transcript's version isn't one the table was checked on (`tested`), or at least 3 and a quarter of the last 64 blocks are ones the table doesn't know (the format changed). `transcript.watch` itself never crosses a link: a link's dispatcher serves `peer.*` methods alone (§16.9), and a paired server reads the same stream only through `peer.transcript`, gated (§16.14); `transcript.watch` on `alias/session` relays that. At most 32 streams at once, a paired server's among them.
 
 **Attach connections: mirror emulators.** The server keeps the **authoritative** emulator for every pane. Each attached client keeps its **own mirror**: it is restored from a snapshot, then fed exactly the same bytes in the same order. The client renders from its mirror and encodes input against the mirror's modes. As a result:
 - the server parses each byte once and only forwards it;
@@ -2517,6 +2517,7 @@ asks a running server to read it again (`peer.reload`).
 | `tm peer name ALIAS\|NAME NEW\|""` | gives the peer a display name here, or a new one; `""` (or its alias) clears it and the alias shows again (below) |
 | `tm peer rotate [--yes]` | a new identity key, after a `y`; every peer must pair again |
 | `tm peer panes ALIAS off\|view\|write` | what the peer may do with this server's panes (§16.12); off by default |
+| `tm peer conversations ALIAS on\|off` | whether the peer reads the shared projects' conversations at its pane switch's level (§16.14); on by default |
 | `tm peer relay ALIAS ADDRESS` | the relay the peer's link goes through: it moved, or has a new key (§16.1) |
 | `tm peer relay-update ALIAS` | asks the relay of the peer's link to update itself to the latest official release (§16.2): it says what came of it, exit 1 with `relay-update-<result>` when not `queued` |
 | `tm peer ask-share ALIAS [--for PROJECT] [--note TEXT]` | asks the peer's user to share a project with this server (§16.9, Asking for a share) |
@@ -3226,3 +3227,80 @@ and closes when it ends. Nothing changes on the relay.
   `link.file-accept`, `link.file-received … (4.2 MB, 4 s)`,
   `link.file-failed … (stalled)`); the server log one line per
   transfer start and end.
+
+### 16.14 Remote conversations
+
+A paired server's coordinator and thread conversations, shown in this
+server's Mac app as its own are (§3.3 **Transcript**), beside their
+remote panes (§16.12). The far server's human decides what crosses.
+
+- **The gate.** The far server serves a conversation only while three
+  things hold, checked when it opens and kept while it runs: the
+  project is shared (§16.9; checked every 2 s, as an open pane is), the
+  pane switch for that peer is `view` or `write` (§16.12), and the
+  peer's **conversations switch** is on. The conversations switch is per
+  paired server, the far human's, on by default for new and existing
+  pairings: `tm peer conversations ALIAS on|off`, `C` on the server in
+  the Network popup or its `chats` row in the details (§4); turning it on
+  asks first, off doesn't. In `peers.json` it is `"conversations":
+  "off"` on the peer's entry, no key for on; pairing again keeps it. `tm
+  peer list` adds `conversations off` beside a server's panes, and `tm
+  network` lists both sides' switches (`conversations`,
+  `their_conversations`). Only a shared project's coordinator and
+  threads cross; another session answers as one that isn't there.
+- **The stream.** `peer.transcript {project, session, stream}`
+  (`internal/peer/transcript.go`), behind the link capability
+  `transcript` (a server lists it with its pane host): the answer is
+  `{session, input, status, window}`, the session as `peer.watch` shows
+  it, `input` while the pane switch is `write`, and the stream's status
+  and window as `transcript.watch`'s; then exactly the events the far
+  server would give its own app with `transcript.watch` (the same reset,
+  tail, `skipped`, todo list and window), each event's JSON in binary
+  frames of at most 16 KiB (types 40, more follow, and 41, the last; at
+  most 8 MiB an event, else the near end detaches). The near end acks
+  the items its app took (type 42, u32) and detaches (type 43). A link
+  serves at most 8 at once. Either switch going off ends the open
+  streams at once with a closed event: `conversations-off` for the
+  conversations switch, `panes-off` for the pane switch; a project no
+  longer shared ends them with `not-shared`, the session's end with
+  `exited`, the far server stopping with `stopping`. The refusals are
+  `conversations-off` (`<server> doesn't share conversations with this
+  server`), `not-shared` and `unknown-session`.
+- **The far server tells.** `peer.projects` answers carry
+  `conversations` (`on`, `off`) beside `panes`, and `peer.panes` carries
+  it beside the level when either switch changes, so the near server's
+  mirror has it at once (`peer.list`: `transcript`, the peer serves
+  conversations, and `conversations`, its switch for this server).
+- **The near server.** The app reads `alias/session` with
+  `transcript.watch` (cap `transcript-remote`); the server opens the
+  stream on the link and relays it, the app's acks back, and answers
+  with the session as a remote pane's (`server`, `view_only` at `view`).
+  A peer whose tm has no `transcript` capability is refused: `<server>
+  runs tm <version>, which doesn't share conversations; update tm there
+  to read them here`. A link that drops opens the stream again once it
+  is back, which starts with a reset; a refusal then ends the app's
+  stream with its word. Everything the far server sends is checked as it
+  arrives: events and item kinds this tm doesn't know are dropped, every
+  string goes through `textsafe` and the item bounds (§3.3), ids are
+  checked against their pattern, and a closed reason is one of the fixed
+  words.
+- **Sending.** `session.prompt` on `alias/session` types the text into
+  the far pane as a paste (bracketed when the agent asked for it) and
+  Enter, through the remote pane's stream (§16.12), as typing in its
+  pane does: only while the far pane switch is `write`, which the far
+  server checks at each key, and a thread's first prompt tells its
+  coordinator there. Nothing queues on this side (no `mode`); the result
+  says `typed`. The app replaces its composer with a muted `View only`
+  at `view`. Answering a paired session's question isn't offered: its
+  text stays home (`PeerSession` says only `asking`), so the app's card
+  says a question is open and `Answer in Terminal`.
+- **What crosses.** A conversation is the transcript as tm reads it:
+  the prompts, the agent's text, each tool call's main argument (a
+  command, a path), each result's first line and line count, and the
+  todo list. What an agent read or ran shows in it, as it would to the
+  far user: a file's lines in the agent's text, a command's output's
+  first line. Nothing else of the far server crosses: no file of the
+  project, nothing from its `uploads/`, no path outside the transcript,
+  no question text, no attachment. A file attached to a session (T772,
+  `session.file`) doesn't cross yet; it would go through the same gate
+  as its own peer request.

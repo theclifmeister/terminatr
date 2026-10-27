@@ -69,18 +69,18 @@
 │                                                           │   ○ sees nothing: you share no project       │
 │                                                           │   ● watches your shared panes and popups     │
 │                                                           │   ○ types in them                            │
+│                                                           │   ● reads their conversations, in its Mac    │
+│                                                           │     app                                      │
 │                                                           │   panes (V)   off · [view] · write           │
 │                                                           │               it can watch the coordinators  │
 │                                                           │               and threads of the projects    │
 │                                                           │               you share, not type            │
-│                                                           │ AND THE OTHER WAY                            │
-│                                                           │   work lets you watch its panes; its popups  │
-│                                                           │   open here, read-only                       │
-│                                                           │   it shares acme-api, infra                  │
-│                                                           │                                              │
+│                                                           │   chats (C)   [on] · off                     │
+│                                                           │               its Mac app reads the          │
+│                                                           │               conversations of what it may   │
 │                                                                                                          │
-│ S ask to share · E name · V panes · U update relay · X unpair · enter fold · tab details · P pair        │
-│ J join · ? keys · esc close                                                                              │
+│ S ask to share · E name · V panes · C conversations · U update relay · X unpair · enter fold             │
+│ tab details · P pair · J join · ? keys · esc close                                                       │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 == t:mini/acme-api
 ╭─ Network · studio + 2 paired ────────────────────────────────────────────────────────────────────────────╮

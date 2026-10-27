@@ -244,6 +244,8 @@ func (nv *networkView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 		case "V":
 			i := (slices.Index(panesLevels, panesLevel(e)) + 1) % len(panesLevels)
 			return nv.setPanes(m, e, panesLevels[i])
+		case "C":
+			return nv.setConversations(m, e, e.ConversationsOff)
 		case "U":
 			nv.relayUpdate(m, e)
 		case "X":
@@ -279,6 +281,10 @@ func (nv *networkView) panelKey(m *dash, r netRow, ok bool, s string) (tea.Cmd, 
 		e := nv.list.Peers[r.peer]
 		i := slices.Index(panesLevels, panesLevel(e)) + map[string]int{"left": -1, "right": 1, "enter": 1}[s]
 		return nv.setPanes(m, e, panesLevels[min(max(i, 0), len(panesLevels)-1)]), true
+	case item == itemConv && (s == "left" || s == "right" || s == "enter"):
+		e := nv.list.Peers[r.peer]
+		on := map[string]bool{"left": true, "right": false, "enter": e.ConversationsOff}[s]
+		return nv.setConversations(m, e, on), true
 	case item == itemShare && (s == "enter" || s == "space" || s == " "):
 		return nv.toggle(m, r.slug), true
 	case (item == itemDir || item == itemAsk || item == itemFiles) && (s == "left" || s == "right"):
@@ -582,6 +588,36 @@ func (nv *networkView) setPanes(m *dash, e PeerEntry, to string) tea.Cmd {
 	}[to]
 	m.confirmNo("Panes for "+name, q, "panes unchanged for "+name, set)
 	return nil
+}
+
+// setConversations turns server e's conversations switch on or off:
+// asking first when on, at once when off.
+func (nv *networkView) setConversations(m *dash, e PeerEntry, on bool) tea.Cmd {
+	if on == !e.ConversationsOff {
+		return nil
+	}
+	name := netName(e)
+	set := func() tea.Cmd {
+		src, alias := m.src, e.Alias
+		return m.act(func() actionMsg {
+			err := src.SetPeerConversations(alias, on)
+			return actionMsg{err: err, msg: "conversations " + convWord(on) + " for " + name, then: nv.reload}
+		})
+	}
+	if !on {
+		return set()
+	}
+	m.confirmNo("Conversations for "+name, fmt.Sprintf("Let %s read the conversations of the coordinators and threads of the projects this server shares, in its Mac app, while its panes are view or write? They hold everything the agents ran and read: command output and file contents.", name),
+		"conversations unchanged for "+name, set)
+	return nil
+}
+
+// convWord is the conversations switch as people read it.
+func convWord(on bool) string {
+	if on {
+		return proto.ConversationsOn
+	}
+	return proto.ConversationsNot
 }
 
 // relayWords is a relay as people read it: its host for wss://, and

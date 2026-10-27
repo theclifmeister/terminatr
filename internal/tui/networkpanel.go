@@ -41,6 +41,7 @@ const (
 	itemName  // a paired server's display name: enter edits it
 	itemRelay // its relay: enter edits it
 	itemPanes // its pane switch: ← → or a click on a word
+	itemConv  // its conversations switch: ← → or enter
 	itemShare // a project's share box: enter, space or a click
 )
 
@@ -161,8 +162,15 @@ func (nv *networkView) panelLines(m *dash, r netRow, ok bool, w int) []panelLine
 		}
 		rung(lv >= 1, "watches your shared panes and popups")
 		rung(lv >= 2, "types in them")
+		rung(lv >= 1 && !e.ConversationsOff, "reads their conversations, in its Mac app")
 		out = append(out, panelLine{text: "  " + fit(th().Faint.Render("panes (V)"), panelLabel-2) + panesChoices(level, true), item: itemPanes, x: panelLabel})
 		under(panesWhat(level))
+		out = append(out, panelLine{text: "  " + fit(th().Faint.Render("chats (C)"), panelLabel-2) + convChoices(!e.ConversationsOff), item: itemConv, x: panelLabel})
+		if e.ConversationsOff {
+			under("its Mac app reads no conversation of yours")
+		} else {
+			under("its Mac app reads the conversations of what it may watch")
+		}
 		add(itemNone, th().Faint.Render("AND THE OTHER WAY"))
 		for _, l := range wrapLines(theirWords(mirror(m, e), name), max(w-2, 8)) {
 			add(itemNone, "  "+l)
@@ -272,6 +280,15 @@ func panesChoices(level string, styled bool) string {
 		sep = th().Faint.Render(sep)
 	}
 	return strings.Join(parts, sep)
+}
+
+// convChoices is the conversations switch's words, on · off, the
+// current one in brackets and the accent.
+func convChoices(on bool) string {
+	words := []string{th().Faint.Render(proto.ConversationsOn), th().Faint.Render(proto.ConversationsNot)}
+	i := map[bool]int{true: 0, false: 1}[on]
+	words[i] = th().Accent.Render("[" + []string{proto.ConversationsOn, proto.ConversationsNot}[i] + "]")
+	return strings.Join(words, th().Faint.Render(" · "))
 }
 
 // panesAt is the level whose word a click at col is on, the switch's

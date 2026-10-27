@@ -71,6 +71,7 @@ type fakeSource struct {
 	popups       []string
 	unpinned     []string // aliases unpaired in the Network popup
 	panesSet     []string // "alias level" set in the Network popup
+	convSet      []string // "alias on" set in the Network popup
 	relaySet     []string // "alias relay" set in the Network popup
 	namesSet     []string // "alias name" set in the Network popup
 	relayUpdates []string // aliases whose relay u asked to update
@@ -338,6 +339,15 @@ func (f *fakeSource) SetPeerPanes(alias, level string) error {
 	for i := range f.peers.Peers {
 		if f.peers.Peers[i].Alias == alias {
 			f.peers.Peers[i].Panes = level
+		}
+	}
+	return nil
+}
+func (f *fakeSource) SetPeerConversations(alias string, on bool) error {
+	f.convSet = append(f.convSet, fmt.Sprintf("%s %v", alias, on))
+	for i := range f.peers.Peers {
+		if f.peers.Peers[i].Alias == alias {
+			f.peers.Peers[i].ConversationsOff = !on
 		}
 	}
 	return nil

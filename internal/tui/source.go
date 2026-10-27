@@ -373,6 +373,10 @@ type PeerSource interface {
 	// server's panes (proto.PanesOff, PanesView, PanesType; §16.12), as
 	// tm peer panes does, and has the server read the peers again.
 	SetPeerPanes(alias, level string) error
+	// SetPeerConversations turns the paired server alias's
+	// conversations switch on or off (§16.14), as tm peer
+	// conversations does, and has the server read the peers again.
+	SetPeerConversations(alias string, on bool) error
 	// SetPeerName gives the paired server alias a display name, or
 	// clears it with "", as tm peer name does (§16.8), and has the
 	// server read the peers again.

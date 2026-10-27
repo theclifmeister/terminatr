@@ -355,6 +355,9 @@ func (nv *networkView) rowLines(m *dash, r netRow, w int) []string {
 		right := ""
 		if w >= 50 {
 			right = th().Faint.Render("panes ") + th().Accent.Render(proto.PanesWord(panesLevel(e)))
+			if e.ConversationsOff && panesLevel(e) != proto.PanesOff {
+				right += th().Faint.Render(" · no conversations")
+			}
 		}
 		return []string{spread(left, right, w)}
 	case netLink:
@@ -542,7 +545,7 @@ func (nv *networkView) rowKeys(m *dash, r netRow, ok bool) string {
 				u = "U update relay"
 			}
 		}
-		return joinKeys("S ask to share", "E name", "V panes", u, "X unpair", "enter fold", "tab details", "P pair", "J join", tail)
+		return joinKeys("S ask to share", "E name", "V panes", "C conversations", u, "X unpair", "enter fold", "tab details", "P pair", "J join", tail)
 	case r.kind == netProject && shared(m, r.slug):
 		return "space unshare · L link · tab details · " + tail
 	case r.kind == netProject:

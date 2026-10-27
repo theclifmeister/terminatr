@@ -32,6 +32,7 @@ const peerUsage = `usage: tm peer pair [--relay URL] [--as ALIAS]
        tm peer name ALIAS|NAME NEW|""
        tm peer rotate [--yes]
        tm peer panes ALIAS off|view|write
+       tm peer conversations ALIAS on|off
        tm peer relay ALIAS ADDRESS
        tm peer relay-update ALIAS
        tm peer ask-share ALIAS [--for PROJECT] [--note TEXT]
@@ -79,7 +80,7 @@ func runPeer(e *Env, args []string) error {
 			return usagef("tm peer %s takes no --%s\n%s", args[0], name, peerUsage)
 		}
 	}
-	npos := map[string]int{"pair": 0, "join": 1, "list": 0, "remove": 1, "rotate": 0, "panes": 2, "relay": 2, "relay-update": 1, "name": 2,
+	npos := map[string]int{"pair": 0, "join": 1, "list": 0, "remove": 1, "rotate": 0, "panes": 2, "conversations": 2, "relay": 2, "relay-update": 1, "name": 2,
 		"ask-share": 1, "requests": 0, "decline": 1}
 	if n, ok := npos[args[0]]; !ok || len(pos) != n {
 		return usagef("%s", peerUsage)
@@ -111,6 +112,8 @@ func runPeer(e *Env, args []string) error {
 		return e.peerRemove(dir, pos[0])
 	case "panes":
 		return e.peerPanes(dir, pos[0], pos[1])
+	case "conversations":
+		return e.peerConversations(dir, pos[0], pos[1])
 	case "relay":
 		return e.peerRelay(dir, pos[0], pos[1])
 	case "relay-update":
@@ -405,6 +408,9 @@ type peerEntry struct {
 	// Panes is this server's pane switch for the peer (docs/SPEC.md
 	// §16.12), as the user says it: off, view or write.
 	Panes string `json:"panes"`
+	// Conversations is this server's conversations switch for the peer
+	// (§16.14): on or off.
+	Conversations string `json:"conversations"`
 }
 
 func (e *Env) peerList(dir string, asJSON bool) error {
@@ -425,7 +431,8 @@ func (e *Env) peerList(dir string, asJSON bool) error {
 	}
 	entries := []peerEntry{}
 	for _, p := range peers {
-		pe := peerEntry{Alias: p.Alias, Name: p.Name, ID: p.ID().String(), Short: p.ID().Short(), Relay: p.Relay, Panes: proto.PanesWord(p.PanesLevel())}
+		pe := peerEntry{Alias: p.Alias, Name: p.Name, ID: p.ID().String(), Short: p.ID().Short(), Relay: p.Relay, Panes: proto.PanesWord(p.PanesLevel()),
+			Conversations: convWord(p.ConversationsOn())}
 		if l, ok := links[pe.ID]; ok {
 			pe.Link = &l
 		}
@@ -461,6 +468,9 @@ func (e *Env) peerList(dir string, asJSON bool) error {
 		}
 		if pe.Panes != proto.PanesOff {
 			state += "; panes: " + pe.Panes
+			if pe.Conversations == proto.ConversationsNot {
+				state += ", conversations off"
+			}
 		}
 		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", peer.Both(pe.Name, pe.Alias), pe.Short, relayHost(pe.Relay), state)
 	}
@@ -502,6 +512,49 @@ func (e *Env) peerPanes(dir, alias, level string) error {
 		fmt.Fprintf(e.Stdout, "Panes view for %s: it can watch the coordinator and thread panes of the projects this server shares, without typing.\n", alias)
 	default:
 		fmt.Fprintf(e.Stdout, "Panes write for %s: it can watch and type into the coordinator and thread panes of the projects this server shares; the first keys into a thread tell its coordinator.\n", alias)
+	}
+	e.reload()
+	return nil
+}
+
+// convWord is the conversations switch as the user says it.
+func convWord(on bool) string {
+	if on {
+		return proto.ConversationsOn
+	}
+	return proto.ConversationsNot
+}
+
+// peerConversations turns the conversations switch for the paired server
+// alias on or off (docs/SPEC.md §16.14): on (the default), it reads the
+// conversations of the shared projects' coordinators and threads at its
+// pane switch's level; off, none.
+func (e *Env) peerConversations(dir, alias, word string) error {
+	if word != proto.ConversationsOn && word != proto.ConversationsNot {
+		return usagef("tm peer conversations ALIAS on|off: %q isn't one", word)
+	}
+	on := word == proto.ConversationsOn
+	found, err := peer.SetConversations(dir, alias, on)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return &project.Error{Code: "unknown-peer", Msg: fmt.Sprintf("no peer %q (tm peer list)", alias)}
+	}
+	peers, _ := peer.LoadPeers(dir)
+	level := proto.PanesOff
+	for _, p := range peers {
+		if p.Alias == peer.NamesOf(peers).Alias(alias) {
+			level = p.PanesLevel()
+		}
+	}
+	switch {
+	case !on:
+		fmt.Fprintf(e.Stdout, "Conversations off for %s: it can't read the conversations of this server's sessions, and those it has open close.\n", alias)
+	case level == proto.PanesOff:
+		fmt.Fprintf(e.Stdout, "Conversations on for %s; its panes are off, so it reads none until tm peer panes %s view, or write.\n", alias, alias)
+	default:
+		fmt.Fprintf(e.Stdout, "Conversations on for %s: it can read the conversations of the shared projects' coordinators and threads (tool output and the files the agents read included), at panes %s.\n", alias, proto.PanesWord(level))
 	}
 	e.reload()
 	return nil

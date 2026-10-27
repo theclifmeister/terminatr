@@ -104,11 +104,16 @@ type (
 		Version    string          `json:"version,omitempty"`
 		// Panes is this server's switch for it; TheirPanes its switch
 		// for this one, as it last said ("" unknown).
-		Panes      string               `json:"panes"`
-		TheirPanes string               `json:"their_panes,omitempty"`
-		Listed     bool                 `json:"listed,omitempty"`
-		Projects   []networkTheirs      `json:"projects"`
-		Shares     []proto.ShareRequest `json:"shares,omitempty"`
+		Panes      string `json:"panes"`
+		TheirPanes string `json:"their_panes,omitempty"`
+		// Conversations is this server's conversations switch for it
+		// (on, off; §16.14); TheirConversations its switch for this
+		// one, as it last said ("" unknown).
+		Conversations      string               `json:"conversations"`
+		TheirConversations string               `json:"their_conversations,omitempty"`
+		Listed             bool                 `json:"listed,omitempty"`
+		Projects           []networkTheirs      `json:"projects"`
+		Shares             []proto.ShareRequest `json:"shares,omitempty"`
 	}
 	// networkTheirs is a project a paired server shares: from the
 	// mirror (stale while it is offline), and this server's projects
@@ -242,7 +247,7 @@ func readNetwork() (*networkTree, error) {
 	}
 	for _, p := range peers {
 		np := networkPeer{Alias: p.Alias, Name: p.Name, ID: p.ID().String(), Short: p.ID().Short(), Relay: p.Relay,
-			Panes: proto.PanesWord(p.PanesLevel()), Projects: []networkTheirs{}, Shares: shares[p.Alias]}
+			Panes: proto.PanesWord(p.PanesLevel()), Conversations: convWord(p.ConversationsOn()), Projects: []networkTheirs{}, Shares: shares[p.Alias]}
 		if c, ok := conns[np.ID]; ok {
 			np.Connection = &c
 			np.Version = c.Version
@@ -251,6 +256,9 @@ func readNetwork() (*networkTree, error) {
 			np.Version = cmp.Or(pm.Version, np.Version)
 			if pm.Pane {
 				np.TheirPanes = proto.PanesWord(cmp.Or(pm.Panes, proto.PanesOff))
+			}
+			if pm.Transcript {
+				np.TheirConversations = pm.Conversations
 			}
 			np.Listed = pm.Listed
 			for _, mp := range pm.Projects {
