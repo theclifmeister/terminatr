@@ -60,14 +60,23 @@ type callCtx struct {
 	params  any
 	peerPID int
 	human   bool // on the human socket
-	// app: the Mac app's bridge on the human socket (proto.ClientApp).
+	// app: the Mac app's bridge on the human socket (proto.ClientApp),
+	// or a paired device's app API.
 	app bool
-	who func() caller.Caller
+	// device is the paired device whose app API calls (§16.15).
+	device string
+	who    func() caller.Caller
 }
 
 // console is the caller's console as a thread's takeover counts it
-// (consoleTakeover): the Mac app's bridge by its pid.
-func (c callCtx) console() string { return "app:" + strconv.Itoa(c.peerPID) }
+// (consoleTakeover): the Mac app's bridge by its pid, a device by its
+// name.
+func (c callCtx) console() string {
+	if c.device != "" {
+		return "device:" + c.device
+	}
+	return "app:" + strconv.Itoa(c.peerPID)
+}
 
 // handler answers one request.
 type handler func(s *Server, req proto.Request, c callCtx) (any, *proto.Error)
@@ -208,6 +217,7 @@ func init() {
 		// The human's.
 		proto.MethodPaneVT:          {gate: gateHuman, stream: (*Server).servePaneVT},
 		proto.MethodTranscriptWatch: {gate: gateHuman, stream: stream((*Server).serveTranscript)},
+		proto.MethodTranscriptPage:  {gate: gateHuman, call: typed((*Server).transcriptPage)},
 		proto.MethodSessionFile: {gate: gateHuman, call: typed(func(s *Server, p proto.SessionFileParams, _ callCtx) (any, *proto.Error) {
 			return s.sessionFile(p)
 		})},
@@ -226,6 +236,9 @@ func init() {
 		proto.MethodSessionPrompt: {gate: gateHuman, call: typed(func(s *Server, p proto.SessionPromptParams, c callCtx) (any, *proto.Error) {
 			return s.promptBy(p, c)
 		})},
+		proto.MethodSessionUpload: {gate: gateHuman, call: typed(func(s *Server, p proto.SessionUploadParams, c callCtx) (any, *proto.Error) {
+			return s.upload(p, c)
+		})},
 		proto.MethodSessionApprove: {gate: gateHuman, call: typed(func(s *Server, p proto.SessionApproveParams, c callCtx) (any, *proto.Error) {
 			return s.approve(p, c)
 		})},
@@ -240,6 +253,9 @@ func init() {
 		})},
 		proto.MethodTaskDelegate: {gate: gateHuman, call: typed(func(s *Server, p proto.TaskActionParams, c callCtx) (any, *proto.Error) {
 			return s.taskAction(project.KindDelegate, p, c)
+		})},
+		proto.MethodTaskGet: {gate: gateHuman, call: typed(func(s *Server, p proto.TaskGetParams, _ callCtx) (any, *proto.Error) {
+			return s.taskGet(p)
 		})},
 		proto.MethodTaskAdd: {gate: gateHuman, call: typed(func(s *Server, p proto.TaskAddParams, c callCtx) (any, *proto.Error) {
 			return s.taskAdd(p, c)
@@ -288,12 +304,17 @@ func init() {
 			s.peers.Reload()
 			return s.peers.Status()
 		})},
+		proto.MethodDeviceReload: {gate: gateHuman, call: plain(func(s *Server, _ callCtx) any {
+			s.devices.Reload()
+			return s.devices.Status()
+		})},
 		proto.MethodPeerList: {gate: gateHuman, call: plain(func(s *Server, _ callCtx) any { return s.peerList() })},
 		proto.MethodPeerPopupRead: {gate: gateHuman, call: typed(func(s *Server, p proto.PeerPopupReadParams, _ callCtx) (any, *proto.Error) {
 			return s.readPeerPopup(p)
 		})},
 		proto.MethodPeerShareAsk:    {gate: gateHuman, call: typed((*Server).askShare)},
 		proto.MethodPeerShareAnswer: {gate: gateHuman, call: typed((*Server).answerShare)},
+		proto.MethodLinkAct:         {gate: gateHuman, call: typed((*Server).linkAct)},
 		proto.MethodModViews: {gate: gateHuman, call: typed(func(s *Server, p proto.ModViewsParams, c callCtx) (any, *proto.Error) {
 			return s.modViews(p, c.peerPID, c.who())
 		})},

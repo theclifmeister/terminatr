@@ -44,6 +44,9 @@ type (
 		ID   string `json:"id"`
 		Text string `json:"text"`
 		Mode string `json:"mode,omitempty"`
+		// Files are refs session.upload answered (app API 15): the
+		// server names each after Text, which may then be empty.
+		Files []string `json:"files,omitempty"`
 	}
 	// AnswerParams are session.answer's: question Index (from 0) of session ID's open
 	// question gets Answer. Question, when set, is the text that
@@ -59,12 +62,15 @@ type (
 	// ApproveParams are session.approve's: option Choice (from 1, default 1) of the
 	// permission dialog on session ID's screen. Check answers without
 	// sending. Escape: the user confirmed, in words naming the
-	// command, a command that runs outside the sandbox.
+	// command, a command that runs outside the sandbox. Session (since
+	// app API 17): the user confirmed, naming the tool or command, an
+	// option that allows it for the rest of the agent's session.
 	ApproveParams struct {
-		ID     string `json:"id"`
-		Choice int    `json:"choice,omitempty"`
-		Check  bool   `json:"check,omitempty"`
-		Escape bool   `json:"escape,omitempty"`
+		ID      string `json:"id"`
+		Choice  int    `json:"choice,omitempty"`
+		Check   bool   `json:"check,omitempty"`
+		Escape  bool   `json:"escape,omitempty"`
+		Session bool   `json:"session,omitempty"`
 	}
 	// KeysParams are session.keys's: Data written to session ID's terminal as if typed;
 	// text typed into a thread's prompt box takes it over.
@@ -93,6 +99,12 @@ type (
 		Task    string `json:"task"`
 		Note    string `json:"note"`
 	}
+	// TaskGetParams are task.get's (app API 14): Project's task
+	// ("T12").
+	TaskGetParams struct {
+		Project string `json:"project"`
+		Task    string `json:"task"`
+	}
 	// ProjectParams name a project (questions.open, coordinator.clear).
 	ProjectParams struct {
 		Project string `json:"project"`
@@ -110,6 +122,24 @@ type (
 		Project string `json:"project"`
 		Cols    uint16 `json:"cols,omitempty"`
 		Rows    uint16 `json:"rows,omitempty"`
+	}
+	// LinkActParams are link.act's: Action ("approve", "drop",
+	// "accept-file", "decline-file", "cancel-file", "accept",
+	// "decline") on ID of Project's links; accepting a link request
+	// sets this side to Allow ("both", "send", "receive") with Ask.
+	LinkActParams struct {
+		Project string `json:"project"`
+		Action  string `json:"action"`
+		ID      string `json:"id"`
+		Allow   string `json:"allow,omitempty"`
+		Ask     bool   `json:"ask,omitempty"`
+	}
+	// ShareAnswerParams are peer.share-answer's: Accept shares Project
+	// for request ID; without it the request is declined.
+	ShareAnswerParams struct {
+		ID      string `json:"id"`
+		Accept  bool   `json:"accept,omitempty"`
+		Project string `json:"project,omitempty"`
 	}
 	// ProjectActiveParams are project.active's: the project, and whether
 	// to activate it (false: deactivate it).
@@ -279,13 +309,18 @@ type Projects struct {
 // behind origin, links). Error says why it doesn't open, or why its
 // board doesn't load. Active, Paused and Pinned are the project's
 // settings of those names (since app API 4), for the sidebar's order:
-// its only settings in the app API. Board are the tasks on deck and in
-// the backlog, without notes and steps (since app API 6).
+// its only settings in the app API, with Shared (since app API 16): it
+// is shared with the paired servers, so a share request can't be
+// answered with it. Board are the tasks on deck and in the backlog,
+// without notes and steps (since app API 6). LinkNeeds (since app API
+// 13) are what its links wait on the user for, by the ids link.act
+// takes.
 type Project struct {
 	Slug        string            `json:"slug"`
 	Active      bool              `json:"active"`
 	Paused      bool              `json:"paused,omitempty"`
 	Pinned      bool              `json:"pinned,omitempty"`
+	Shared      bool              `json:"shared,omitempty"`
 	NeedsYou    []Task            `json:"needs_you"`
 	Questions   int               `json:"questions,omitempty"`
 	Threads     []Thread          `json:"threads"`
@@ -300,6 +335,7 @@ type Project struct {
 	TaskUsage   map[string]Usage  `json:"task_usage,omitempty"`
 	Checkouts   map[string]string `json:"checkouts,omitempty"`
 	Links       []Link            `json:"links,omitempty"`
+	LinkNeeds   []LinkNeed        `json:"link_needs,omitempty"`
 }
 
 // Task is a task on the board; Ref is its id as the user reads it
@@ -326,7 +362,9 @@ type Step struct {
 
 // Thread is an unresolved thread: its record, its status (nil before
 // it reported any), its PR's checks and number as the ticker last saw
-// them, and with detail its report's PR line and its task.
+// them, and with detail its report's PR line and its task; since app
+// API 14 also its report's Check (how the user checks the work) and
+// where its PR stands, PRState: OPEN, CLOSED or MERGED.
 type Thread struct {
 	Record   ThreadRecord  `json:"record"`
 	Status   *ThreadStatus `json:"status,omitempty"`
@@ -334,6 +372,8 @@ type Thread struct {
 	PR       int           `json:"pr,omitempty"`
 	ReportPR string        `json:"report_pr,omitempty"`
 	Task     *Task         `json:"task,omitempty"`
+	Check    []string      `json:"check,omitempty"`
+	PRState  string        `json:"pr_state,omitempty"`
 }
 
 // ThreadRecord is a thread's record.
@@ -433,6 +473,54 @@ type Link struct {
 	LastAt       time.Time `json:"last_at,omitzero"`
 }
 
+// LinkNeed is one thing a project's link waits on the user for (app
+// API 16): Kind "held", a message of the coordinator's waiting for the
+// OK (link.act approve or drop); "file", a file offered to the project
+// (accept-file or decline-file); "request", a paired server's link
+// request (accept with this side's Allow and Ask, or decline). Peer is
+// the project at the link's other end ("mini/api" on a paired server),
+// Shown it by the server's display name. Title is a held message's
+// first line, the coordinator's words; Bytes its size. File and Size
+// are the file a held message carries, or the file offered. Allow is a
+// request's asking side's entry: its mirror is the answer it expects.
+type LinkNeed struct {
+	Kind    string    `json:"kind"`
+	Peer    string    `json:"peer"`
+	Shown   string    `json:"shown,omitempty"`
+	ID      string    `json:"id"`
+	Created time.Time `json:"created"`
+	Title   string    `json:"title,omitempty"`
+	Bytes   int       `json:"bytes,omitempty"`
+	File    string    `json:"file,omitempty"`
+	Size    int64     `json:"size,omitempty"`
+	Allow   string    `json:"allow,omitempty"`
+}
+
+// LinkActResult is link.act's: what came of it, in words.
+type LinkActResult struct {
+	Words string `json:"words"`
+}
+
+// ShareRequest is a paired server's request that this server share a
+// project with it (app API 16), waiting for the user: For is the asking
+// project there ("" for none in particular), Note the asking user's
+// line. peer.share-answer answers it: accepting shares one of this
+// server's active projects that isn't shared yet.
+type ShareRequest struct {
+	ID      string    `json:"id"`
+	For     string    `json:"for,omitempty"`
+	Note    string    `json:"note,omitempty"`
+	Created time.Time `json:"created"`
+}
+
+// ShareAnswer is peer.share-answer's: the request's ID, its State
+// ("accepted" or "declined") and the Project it shared.
+type ShareAnswer struct {
+	ID      string `json:"id"`
+	State   string `json:"state"`
+	Project string `json:"project,omitempty"`
+}
+
 // PromptResult says how a prompt went in: Via "channel", "queued",
 // "steered" or "interrupted"; Why a Mode's prompt went another way;
 // Running: queued while the turn runs on.
@@ -449,12 +537,14 @@ type AnswerResult struct {
 }
 
 // ApproveResult is the dialog as the screen shows it: its question, the
-// chosen option and every option. Escape: it asks to run a command
-// outside the sandbox. Sent: the key went (not for Check).
+// chosen option and every option, with how long each allows (Scopes,
+// since app API 17: "once", "session" or "persistent"). Escape: it asks
+// to run a command outside the sandbox. Sent: the key went (not for Check).
 type ApproveResult struct {
 	Question string   `json:"question,omitempty"`
 	Option   string   `json:"option"`
 	Options  []string `json:"options"`
+	Scopes   []string `json:"scopes,omitempty"`
 	Escape   bool     `json:"escape,omitempty"`
 	Sent     bool     `json:"sent,omitempty"`
 }
@@ -481,7 +571,8 @@ type PeerList struct {
 
 // Peer is a paired server: its alias and display name, its link's State
 // (Reason why it is down, Since when), the projects it shares with this
-// server, and ShareWaits, its share requests that wait for the user.
+// server, and ShareWaits, its share requests that wait for the user
+// (ShareRequests, since app API 16).
 // Pane: its tm has remote panes; Panes is its switch for this server
 // as it last said ("off", "view", "type"): its sessions' panes open
 // through pane.vt ("<alias>/<session>") at view or type, and take keys
@@ -491,17 +582,18 @@ type PeerList struct {
 // through transcript.watch ("<alias>/<session>", the server's caps say
 // transcript-remote) while Panes is view or type and it is on.
 type Peer struct {
-	Alias         string        `json:"alias"`
-	Name          string        `json:"name,omitempty"`
-	State         string        `json:"state"`
-	Reason        string        `json:"reason,omitempty"`
-	Since         time.Time     `json:"since,omitzero"`
-	Projects      []PeerProject `json:"projects"`
-	ShareWaits    int           `json:"share_waits,omitempty"`
-	Pane          bool          `json:"pane,omitempty"`
-	Panes         string        `json:"panes,omitempty"`
-	Transcript    bool          `json:"transcript,omitempty"`
-	Conversations string        `json:"conversations,omitempty"`
+	Alias         string         `json:"alias"`
+	Name          string         `json:"name,omitempty"`
+	State         string         `json:"state"`
+	Reason        string         `json:"reason,omitempty"`
+	Since         time.Time      `json:"since,omitzero"`
+	Projects      []PeerProject  `json:"projects"`
+	ShareWaits    int            `json:"share_waits,omitempty"`
+	ShareRequests []ShareRequest `json:"share_requests,omitempty"`
+	Pane          bool           `json:"pane,omitempty"`
+	Panes         string         `json:"panes,omitempty"`
+	Transcript    bool           `json:"transcript,omitempty"`
+	Conversations string         `json:"conversations,omitempty"`
 }
 
 // PeerProject is a project a paired server shares: its goal line,
@@ -649,7 +741,7 @@ func projectOf(p server.SideProject) Project {
 		Threads: make([]Thread, 0, len(p.Threads)), PRHostFails: p.PRHostFails, Goal: p.Goal, Repos: p.Repos,
 		Counts: p.Counts, Error: p.Error, Usage: usageOf(p.Usage), Checkouts: p.Checkouts}
 	if s := p.Safety; s != nil {
-		out.Active, out.Paused, out.Pinned = s.Active, s.Paused, s.Pinned
+		out.Active, out.Paused, out.Pinned, out.Shared = s.Active, s.Paused, s.Pinned, s.Share
 	}
 	for _, t := range p.NeedsYou {
 		out.NeedsYou = append(out.NeedsYou, taskOf(t))
@@ -669,8 +761,14 @@ func projectOf(p server.SideProject) Project {
 			out.TaskUsage[fmt.Sprintf("T%d", id)] = usageOf(u)
 		}
 	}
+	shown := map[string]string{}
 	for _, l := range p.Links {
 		out.Links = append(out.Links, linkOf(l))
+		shown[l.Peer] = l.Shown
+	}
+	for _, n := range p.LinkNeeds {
+		out.LinkNeeds = append(out.LinkNeeds, LinkNeed{Kind: n.Kind, Peer: n.Peer, Shown: shown[n.Peer], ID: n.ID, Created: n.Created,
+			Title: n.Title, Bytes: n.Bytes, File: n.File, Size: n.Size, Allow: n.Allow})
 	}
 	return out
 }
@@ -685,7 +783,7 @@ func taskOf(t server.SideTask) Task {
 }
 
 func threadOf(t server.SideThread) Thread {
-	out := Thread{Checks: t.Checks, PR: t.PR, ReportPR: t.ReportPR}
+	out := Thread{Checks: t.Checks, PR: t.PR, ReportPR: t.ReportPR, Check: t.Check, PRState: t.PRState}
 	if r := t.Record; r != nil {
 		out.Record = recordOf(*r)
 	}
@@ -755,6 +853,11 @@ func peerListOf(l proto.PeerList) PeerList {
 		peer := Peer{Alias: p.Alias, Name: p.Name, State: p.State, Reason: p.Reason, Since: p.Since,
 			Projects: make([]PeerProject, 0, len(p.Projects)), ShareWaits: proto.ShareWaits([]proto.PeerMirror{p}),
 			Pane: p.Pane, Panes: p.Panes, Transcript: p.Transcript, Conversations: p.Conversations}
+		for _, q := range p.Shares {
+			if !q.Out && q.Pending() {
+				peer.ShareRequests = append(peer.ShareRequests, shareRequestOf(q))
+			}
+		}
 		offset := time.Duration(p.Offset) * time.Millisecond
 		for _, pp := range p.Projects {
 			pr := PeerProject{Project: pp.Project, Goal: pp.Goal, Paused: pp.Paused, NeedsYou: pp.NeedsYou,
@@ -801,6 +904,20 @@ func peerSessionOf(alias string, offset time.Duration, s proto.PeerSession) Peer
 		Asking: s.Asking, Context: s.Context, ContextWindow: s.ContextWindow}
 }
 
+// shareRequestOf is a paired server's share request that waits for the
+// user: what answers it.
+func shareRequestOf(q proto.ShareRequest) ShareRequest {
+	return ShareRequest{ID: q.ID, For: q.For, Note: q.Note, Created: q.Created}
+}
+
+func linkActOf(r proto.LinkActResult) LinkActResult { return LinkActResult{Words: r.Words} }
+
+// shareAnswerOf is the answer as the app sees it: of the request, its
+// id, state and the project shared; the rest is peer.list's.
+func shareAnswerOf(r proto.ShareRequest) ShareAnswer {
+	return ShareAnswer{ID: r.ID, State: r.State, Project: r.Project}
+}
+
 func promptResultOf(r proto.SessionPromptResult) PromptResult {
 	return PromptResult{Via: r.Via, Why: r.Why, Running: r.Running}
 }
@@ -811,7 +928,7 @@ func answerResultOf(r proto.SessionAnswerResult) AnswerResult {
 
 func approveResultOf(r proto.SessionApproveResult) ApproveResult {
 	return ApproveResult{Question: r.Question, Option: r.Option, Options: append([]string{}, r.Options...),
-		Escape: r.Escape, Sent: r.Sent}
+		Scopes: append([]string(nil), r.Scopes...), Escape: r.Escape, Sent: r.Sent}
 }
 
 func taskAskResultOf(r proto.TaskAskResult) TaskAskResult { return TaskAskResult{Asked: r.Asked} }
@@ -917,9 +1034,29 @@ type PaneSize struct {
 }
 
 // TranscriptParams are transcript.watch's: the session whose
-// conversation to stream.
+// conversation to stream. Tail (app API 19; the server's caps say
+// transcript-tail) is how many of the last items a reset carries, at
+// most 200; transcript.page reads the earlier ones. A paired server's
+// conversation takes no tail yet.
 type TranscriptParams struct {
 	Session string `json:"session"`
+	Tail    int    `json:"tail,omitempty"`
+}
+
+// TranscriptPageParams are transcript.page's (app API 19): the session,
+// the cursor (a reset's or a page's Before) and how many items, at most
+// 200 (0 is that).
+type TranscriptPageParams struct {
+	Session string `json:"session"`
+	Before  string `json:"before"`
+	Limit   int    `json:"limit,omitempty"`
+}
+
+// TranscriptPage are the items just before the cursor, oldest first,
+// and the cursor for those before them (empty for none).
+type TranscriptPage struct {
+	Items  []TranscriptItem `json:"items"`
+	Before string           `json:"before,omitempty"`
 }
 
 // TranscriptResult is transcript.watch's result: the session, and
@@ -941,11 +1078,13 @@ type TranscriptStatus struct {
 
 // TranscriptEvent is a transcript.watch event's data: for
 // transcript.reset the conversation's last Items (Skipped earlier ones
-// left out), for transcript.items the new ones, for transcript.status
-// the new Status, for transcript.closed why it ended (Reason).
+// left out; Before, app API 19, the cursor transcript.page reads them
+// from), for transcript.items the new ones, for transcript.status the
+// new Status, for transcript.closed why it ended (Reason).
 type TranscriptEvent struct {
 	Items   []TranscriptItem  `json:"items,omitempty"`
 	Skipped int               `json:"skipped,omitempty"`
+	Before  string            `json:"before,omitempty"`
 	Status  *TranscriptStatus `json:"status,omitempty"`
 	Reason  string            `json:"reason,omitempty"`
 }
@@ -1006,6 +1145,36 @@ type SessionFile struct {
 	Data     []byte    `json:"data,omitempty"`
 }
 
+// UploadParams are session.upload's (app API 15): a chunk of a file
+// for session's prompt, at most 512 KiB of Data. The first (no Upload,
+// Offset 0) names the file (Name, whose extension gives its type) and
+// its Size; each next one gives the Upload id the first answered and
+// its Offset, the bytes taken so far. The app sends bytes, never a path.
+type UploadParams struct {
+	Session string `json:"session"`
+	Upload  string `json:"upload,omitempty"`
+	Name    string `json:"name,omitempty"`
+	Size    int64  `json:"size,omitempty"`
+	Offset  int64  `json:"offset,omitempty"`
+	Data    []byte `json:"data,omitempty"`
+}
+
+// Upload is where an upload stands: Received bytes of Upload; once all
+// are in, Ref for session.prompt's Files and the stored file's Name,
+// Type and Size.
+type Upload struct {
+	Upload   string `json:"upload"`
+	Received int64  `json:"received"`
+	Ref      string `json:"ref,omitempty"`
+	Name     string `json:"name,omitempty"`
+	Type     string `json:"type,omitempty"`
+	Size     int64  `json:"size,omitempty"`
+}
+
+func uploadOf(r proto.SessionUploadResult) Upload {
+	return Upload{Upload: r.Upload, Received: r.Received, Ref: r.Ref, Name: r.Name, Type: r.Type, Size: r.Size}
+}
+
 func sessionFileOf(r proto.SessionFileResult) SessionFile {
 	return SessionFile{Name: r.Name, Type: r.Type, Size: r.Size, MTime: r.MTime, Sendable: r.Sendable, Offset: r.Offset, Data: r.Data}
 }
@@ -1035,8 +1204,17 @@ func transcriptStatusOf(s proto.TranscriptStatus) TranscriptStatus {
 }
 
 func transcriptEventOf(ev proto.TranscriptEvent) TranscriptEvent {
-	out := TranscriptEvent{Skipped: ev.Skipped, Reason: ev.Reason}
-	for _, it := range ev.Items {
+	out := TranscriptEvent{Skipped: ev.Skipped, Before: ev.Before, Reason: ev.Reason, Items: transcriptItemsOf(ev.Items)}
+	if ev.Status != nil {
+		st := transcriptStatusOf(*ev.Status)
+		out.Status = &st
+	}
+	return out
+}
+
+func transcriptItemsOf(items []proto.TranscriptItem) []TranscriptItem {
+	var out []TranscriptItem
+	for _, it := range items {
 		ti := TranscriptItem{Kind: it.Kind, Text: it.Text, Truncated: it.Truncated, Tool: it.Tool, Call: it.Call,
 			Error: it.Error, Lines: it.Lines, At: it.At, From: it.From, Display: it.Display}
 		for _, t := range it.Todos {
@@ -1045,11 +1223,15 @@ func transcriptEventOf(ev proto.TranscriptEvent) TranscriptEvent {
 		for _, f := range it.Files {
 			ti.Files = append(ti.Files, TranscriptFile{Ref: f.Ref, Name: f.Name, Path: f.Path, Type: f.Type})
 		}
-		out.Items = append(out.Items, ti)
+		out = append(out, ti)
 	}
-	if ev.Status != nil {
-		st := transcriptStatusOf(*ev.Status)
-		out.Status = &st
+	return out
+}
+
+func transcriptPageOf(r proto.TranscriptPageResult) TranscriptPage {
+	out := TranscriptPage{Items: transcriptItemsOf(r.Items), Before: r.Before}
+	if out.Items == nil {
+		out.Items = []TranscriptItem{}
 	}
 	return out
 }

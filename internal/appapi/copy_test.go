@@ -244,18 +244,21 @@ func TestCopies(t *testing.T) {
 		".Projects[].Items[].Part", ".Projects[].Items[].Source", ".Projects[].Items[].Vault",
 		".Projects[].Items[].Tags", ".Projects[].Items[].CSSClasses",
 		// Each side's link entry (settings), the newest message's id,
-		// the link requests waiting (answered in the TUI): of the one
-		// the paired server asks, State's words name only its id.
+		// the link requests waiting: the one the paired server asks
+		// crosses as a link need (LinkNeeds).
 		".Projects[].Links[].Mine", ".Projects[].Links[].Theirs", ".Projects[].Links[].Last",
 		".Projects[].Links[].Asked", ".Projects[].Links[].Asks.Allow", ".Projects[].Links[].Asks.Answer",
 		".Projects[].Links[].Asks.Answered", ".Projects[].Links[].Asks.Ask", ".Projects[].Links[].Asks.Code",
 		".Projects[].Links[].Asks.Created", ".Projects[].Links[].Asks.Out", ".Projects[].Links[].Asks.Peer",
 		".Projects[].Links[].Asks.Project", ".Projects[].Links[].Asks.State",
+		// An offered file's message: link.act takes the file's id.
+		".Projects[].LinkNeeds[].Message",
 	))
 	check("peer.list", homeOf(peerListOf), []string{
 		// The link's id, versions and ping: the Network popup's. Share
-		// requests cross as their count; the clock's offset as the
-		// sessions' times.
+		// requests cross as their count, and those that wait for the
+		// user as what answers them (checked below); the clock's
+		// offset as the sessions' times.
 		".Peers[].ID", ".Peers[].Watch", ".Peers[].Popup",
 		".Peers[].Version", ".Peers[].RTT", ".Peers[].Listed", ".Peers[].Shares",
 		// A shared project's snapshot stays the TUI's remote
@@ -273,8 +276,13 @@ func TestCopies(t *testing.T) {
 		".Peers[].Projects[].Watch.Threads[].Task.Title", ".Peers[].Projects[].Watch.Threads[].Task.Status",
 		".Peers[].Projects[].Watch.Threads[].Task.Current",
 	})
+	// Of a request that waits, what answers it: its state, the project
+	// it shared, its end are none yet.
+	check("peer.list shares", homeOf(shareRequestOf), []string{".Out", ".Peer", ".State", ".Project", ".Answered", ".Code",
+		".Summary"})
 	check("peer.list sessions", homeOf(func(s proto.PeerSession) PeerSession { return peerSessionOf("mini", time.Second, s) }), nil)
 	check("session.prompt", homeOf(promptResultOf), nil)
+	check("session.upload", homeOf(uploadOf), nil)
 	check("session.answer", homeOf(answerResultOf), nil)
 	check("session.approve", homeOf(approveResultOf), nil)
 	check("task.ask", homeOf(taskAskResultOf), nil)
@@ -282,6 +290,11 @@ func TestCopies(t *testing.T) {
 	check("coordinator.clear", homeOf(coordinatorClearOf), nil)
 	check("project.active", homeOf(projectActiveOf), nil)
 	check("task.add", homeOf(taskAddedOf), nil)
+	check("link.act", homeOf(linkActOf), nil)
+	// The request's other fields are peer.list's.
+	check("peer.share-answer", homeOf(shareAnswerOf), []string{".Out", ".Peer", ".For", ".Note", ".Created", ".Answered",
+		".Code", ".Summary"})
+	check("task.get", homeOf(taskOf), []string{".Archived"})
 	check("questions.open", homeOf(questionsOpenOf), nil)
 	check("notify", homeOf(noticeResultOf), nil)
 	// The window is the bridge's: it acks for the app.
@@ -290,6 +303,9 @@ func TestCopies(t *testing.T) {
 	check("transcript.watch", homeOf(transcriptResultOf), append(sessionHome(".Session"), ".Window"))
 	check("transcript.watch events", homeOf(transcriptEventOf), []string{".Event"})
 	check("session.file", homeOf(sessionFileOf), nil)
+	// The session refused it is the bridge's to tell; an answered
+	// refusal isn't listed.
+	check("guard.refusals", homeOf(guardRefusalOf), []string{".Session", ".Decision"})
 	// The app's pane input, into the line: its id picks the stream
 	// (TestParamsCopies).
 	check("pane.input", homeOf(func(in PaneInputParams) proto.PaneVTInput {
@@ -309,11 +325,12 @@ func sessionHome(path string) []string {
 }
 
 // settingsHome is what of a project's settings at path stays home: all
-// but Active, Paused and Pinned, which the sidebar orders by.
+// but Active, Paused and Pinned, which the sidebar orders by, and Share,
+// which a share request's answer can't pick.
 func settingsHome(path string) []string {
 	var out []string
 	for f := range reflect.TypeFor[config.Safety]().Fields() {
-		if f.IsExported() && !slices.Contains([]string{"Active", "Paused", "Pinned"}, f.Name) {
+		if f.IsExported() && !slices.Contains([]string{"Active", "Paused", "Pinned", "Share"}, f.Name) {
 			out = append(out, path+"."+f.Name)
 		}
 	}
@@ -331,8 +348,8 @@ func TestParamsCopies(t *testing.T) {
 		}
 	}
 	m, _ := Lookup(proto.MethodSessionApprove)
-	p, err := m.toServer(json.RawMessage(`{"id":"s-1","choice":2,"escape":true}`))
-	if want := (proto.SessionApproveParams{ID: "s-1", Choice: 2, Escape: true}); err != nil || p != want {
+	p, err := m.toServer(json.RawMessage(`{"id":"s-1","choice":2,"escape":true,"session":true}`))
+	if want := (proto.SessionApproveParams{ID: "s-1", Choice: 2, Escape: true, Session: true}); err != nil || p != want {
 		t.Errorf("approve params %+v %v", p, err)
 	}
 	// The console a pane's takeover counts is the server's to name.
@@ -385,6 +402,37 @@ func TestParamsCopies(t *testing.T) {
 	if _, err := m.toServer(json.RawMessage(`{"session":"s-1","path":"/etc/passwd"}`)); err == nil {
 		t.Error("session.file took a path")
 	}
+	// link.act's params cross as the app's; the server checks the
+	// action, and refuses a message's text.
+	m, _ = Lookup(proto.MethodLinkAct)
+	p, err = m.toServer(json.RawMessage(`{"project":"web","action":"accept","id":"R-AB-1","allow":"both","ask":true}`))
+	if want := (proto.LinkActParams{Project: "web", Action: "accept", ID: "R-AB-1", Allow: "both", Ask: true}); err != nil || p != want {
+		t.Errorf("link.act params %+v %v", p, err)
+	}
+	if _, err := m.toServer(json.RawMessage(`{"project":"web","action":"send","id":"api","text":"hi"}`)); err == nil {
+		t.Error("link.act took a message's text")
+	}
+	m, _ = Lookup(proto.MethodPeerShareAnswer)
+	p, err = m.toServer(json.RawMessage(`{"id":"S-AB-1","accept":true,"project":"web"}`))
+	if want := (proto.PeerShareAnswerParams{ID: "S-AB-1", Accept: true, Project: "web"}); err != nil || p != want {
+		t.Errorf("peer.share-answer params %+v %v", p, err)
+	}
+	// session.upload takes bytes and a name, never a path; a prompt's
+	// files are refs.
+	m, _ = Lookup(proto.MethodSessionUpload)
+	p, err = m.toServer(json.RawMessage(`{"session":"s-1","upload":"ab","name":"shot.png","size":9,"offset":2,"data":"aGk="}`))
+	if up, ok := p.(proto.SessionUploadParams); err != nil || !ok || up.Session != "s-1" || up.Upload != "ab" || up.Name != "shot.png" ||
+		up.Size != 9 || up.Offset != 2 || string(up.Data) != "hi" {
+		t.Errorf("session.upload params %+v %v", p, err)
+	}
+	if _, err := m.toServer(json.RawMessage(`{"session":"s-1","path":"/etc/passwd"}`)); err == nil {
+		t.Error("session.upload took a path")
+	}
+	m, _ = Lookup(proto.MethodSessionPrompt)
+	p, err = m.toServer(json.RawMessage(`{"id":"s-1","text":"look","files":["1-a.png"]}`))
+	if pp, ok := p.(proto.SessionPromptParams); err != nil || !ok || pp.Text != "look" || !slices.Equal(pp.Files, []string{"1-a.png"}) {
+		t.Errorf("session.prompt params %+v %v", p, err)
+	}
 	m, _ = Lookup(proto.MethodSessionList)
 	for _, raw := range []string{"", "null", "{}"} {
 		if _, err := m.toServer(json.RawMessage(raw)); err != nil {
@@ -404,14 +452,15 @@ func TestAllowlist(t *testing.T) {
 		proto.MethodSessionAnswer, proto.MethodSessionApprove, proto.MethodSessionKeys, proto.MethodSessionList,
 		proto.MethodSessionPrompt, proto.MethodSessionWatch, proto.MethodTaskAsk,
 		proto.MethodTaskAccept, proto.MethodTaskSendBack, proto.MethodTaskDelegate, proto.MethodProjectOpen,
-		proto.MethodQuestionsOpen, proto.MethodTaskAdd, proto.MethodPaneVT, proto.MethodTranscriptWatch, MethodPaneInput,
-		proto.MethodSessionFile, proto.MethodCoordinatorClear, proto.MethodProjectActive}
+		proto.MethodQuestionsOpen, proto.MethodTaskAdd, proto.MethodTaskGet, proto.MethodPaneVT, proto.MethodTranscriptWatch, MethodPaneInput,
+		proto.MethodSessionFile, proto.MethodCoordinatorClear, proto.MethodProjectActive, proto.MethodSessionUpload,
+		proto.MethodLinkAct, proto.MethodPeerShareAnswer, MethodGuardRefusals, MethodGuardDecide, proto.MethodTranscriptPage}
 	slices.Sort(want)
 	if got := MethodNames(); !slices.Equal(got, want) {
 		t.Errorf("methods %v, want %v", got, want)
 	}
 	for _, m := range Methods() {
-		if m.Stream != (len(m.Events) > 0 && m.Data != nil && m.event != nil) || m.Result == nil || m.result == nil ||
+		if m.Stream != (len(m.Events) > 0 && m.Data != nil && m.event != nil) || m.Result == nil || (m.result == nil) == (m.local == nil) ||
 			(m.Target != "") != (m.toStream != nil) {
 			t.Errorf("%s: incomplete %+v", m.Name, m)
 		}
@@ -422,7 +471,8 @@ func TestAllowlist(t *testing.T) {
 		}
 	}
 	for name, write := range map[string]bool{MethodPaneInput: true, proto.MethodPaneVT: false, proto.MethodTranscriptWatch: false,
-		proto.MethodSessionFile: false, proto.MethodCoordinatorClear: true, proto.MethodProjectActive: true} {
+		proto.MethodSessionFile: false, proto.MethodCoordinatorClear: true, proto.MethodProjectActive: true,
+		proto.MethodLinkAct: true, proto.MethodPeerShareAnswer: true, MethodGuardRefusals: false, MethodGuardDecide: true} {
 		if m, _ := Lookup(name); m.Write != write {
 			t.Errorf("%s: write %v", name, m.Write)
 		}

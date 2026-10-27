@@ -63,6 +63,8 @@ type projectSnap struct {
 	status   map[string]*thread.Status // by thread id; nil for unreadable
 	// reportPR is an unresolved thread's report's PR link, "" for none.
 	reportPR map[string]string
+	// reportCheck is its report's ## Check lines, nil for none.
+	reportCheck map[string][]string
 	// usage is what all the threads used, resolved ones included;
 	// taskUsage splits it by task number (thread.TaskUsage).
 	usage     thread.Usage
@@ -79,13 +81,16 @@ type projectSnap struct {
 	// links are the project's links to other projects' coordinators
 	// (docs/SPEC.md §7.9).
 	links []link.Row
+	// linkNeeds are what they wait on the user for (link.Needs).
+	linkNeeds []link.Need
 }
 
 // readProjectSnap reads project p's files, the ticker's state file at
 // tickerState and the config, each once.
 func readProjectSnap(p *project.Project, tickerState string) *projectSnap {
 	sn := &projectSnap{p: p, status: map[string]*thread.Status{}, reportPR: map[string]string{},
-		hint: config.DefaultContextHint, prPoll: config.DefaultPRPollSeconds}
+		reportCheck: map[string][]string{},
+		hint:        config.DefaultContextHint, prPoll: config.DefaultPRPollSeconds}
 	sn.items, _ = p.Inbox()
 	if sn.board, sn.boardErr = p.Tasks().Load(); sn.boardErr != nil {
 		sn.board = nil
@@ -100,8 +105,13 @@ func readProjectSnap(p *project.Project, tickerState string) *projectSnap {
 			continue
 		}
 		sn.status[r.ID], _ = thread.ReadStatus(p, r.ID)
-		if rep, _ := thread.ReadReport(p, r.ID); rep != nil && rep.PR != "" {
-			sn.reportPR[r.ID] = rep.PR
+		if rep, _ := thread.ReadReport(p, r.ID); rep != nil {
+			if rep.PR != "" {
+				sn.reportPR[r.ID] = rep.PR
+			}
+			if len(rep.Check) > 0 {
+				sn.reportCheck[r.ID] = rep.Check
+			}
 		}
 	}
 	if qs, err := p.Questions(); err == nil {
@@ -113,6 +123,7 @@ func readProjectSnap(p *project.Project, tickerState string) *projectSnap {
 			sn.prPoll = s.PRPollSeconds
 		}
 		sn.links = link.Rows(cfg, p)
+		sn.linkNeeds = link.Needs(p, sn.links)
 	}
 	sn.noPRHost = NoPRHost(p)
 	return sn

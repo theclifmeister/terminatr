@@ -165,6 +165,8 @@ func commandUsage(name string) string {
 		return `usage: tm done ["summary"] [--project <slug>] [--thread <id>]`
 	case "design":
 		return designUsage
+	case "device":
+		return deviceUsage
 	case "doctor":
 		return doctorUsage
 	case "inbox":

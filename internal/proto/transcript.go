@@ -55,9 +55,41 @@ const (
 	TranscriptTodos    = 100
 )
 
-// TranscriptWatchParams are the params of transcript.watch.
+// TranscriptWatchParams are the params of transcript.watch. Tail, when
+// set (the server's caps say CapTranscriptTail), is how many of the last
+// items a reset carries, at most TranscriptBacklog; transcript.page reads
+// the earlier ones. A paired server's conversation takes no tail yet.
 type TranscriptWatchParams struct {
 	Session string `json:"session"`
+	Tail    int    `json:"tail,omitempty"`
+}
+
+// CapTranscriptTail says transcript.watch takes a tail and its resets a
+// Before cursor, and the server answers transcript.page.
+const CapTranscriptTail = "transcript-tail"
+
+// MethodTranscriptPage reads the items of a session's conversation
+// before a cursor (TranscriptPageParams): a TranscriptPageResult. The
+// human's only, as transcript.watch; not for a paired server's
+// conversation.
+const MethodTranscriptPage = "transcript.page"
+
+// TranscriptPageParams name the session, the cursor (a reset's or a
+// page's Before) and how many items to read, at most TranscriptBacklog
+// (0 is that).
+type TranscriptPageParams struct {
+	Session string `json:"session"`
+	Before  string `json:"before"`
+	Limit   int    `json:"limit,omitempty"`
+}
+
+// TranscriptPageResult are the items just before the cursor, oldest
+// first, and the cursor for the ones before them ("" when there are
+// none). The cursor names a place in the transcript file: after the
+// file is replaced (a reset), it reads the new one's.
+type TranscriptPageResult struct {
+	Items  []TranscriptItem `json:"items"`
+	Before string           `json:"before,omitempty"`
 }
 
 // TranscriptWatchResult is transcript.watch's answer.
@@ -80,11 +112,14 @@ type TranscriptStatus struct {
 // TranscriptEvent is one line of a transcript.watch stream after the
 // answer.
 type TranscriptEvent struct {
-	Event   string            `json:"event"`
-	Items   []TranscriptItem  `json:"items,omitempty"`
-	Skipped int               `json:"skipped,omitempty"`
-	Status  *TranscriptStatus `json:"status,omitempty"`
-	Reason  string            `json:"reason,omitempty"`
+	Event   string           `json:"event"`
+	Items   []TranscriptItem `json:"items,omitempty"`
+	Skipped int              `json:"skipped,omitempty"`
+	// Before, on a reset with earlier items than it carries, is the
+	// cursor transcript.page reads them from (CapTranscriptTail).
+	Before string            `json:"before,omitempty"`
+	Status *TranscriptStatus `json:"status,omitempty"`
+	Reason string            `json:"reason,omitempty"`
 }
 
 // The kinds of a TranscriptItem.

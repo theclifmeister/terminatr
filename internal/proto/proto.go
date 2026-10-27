@@ -36,8 +36,9 @@ import (
 // Mac app's bridge, journaled as "human (app)"). 20: task.accept,
 // task.send-back, task.delegate and project.open. 21: task.add. 22:
 // projects.watch {lean, shown}, the inactive projects as their slug and
-// settings.
-const Protocol = 22
+// settings. 23: task.get, and projects.watch {detail}'s threads' check
+// and pr_state.
+const Protocol = 23
 
 // Kind is what a connection is for.
 type Kind string
@@ -69,6 +70,11 @@ type Hello struct {
 
 // ClientApp is Hello.Client for the Mac app's bridge.
 const ClientApp = "app"
+
+// ClientDevice is Hello.Client for a paired device's app API, which the
+// server runs on its side of the device's link over a connection of its
+// own, never a socket (docs/SPEC.md §16.15).
+const ClientDevice = "device"
 
 // The server's hello capabilities.
 const (

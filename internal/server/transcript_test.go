@@ -1,6 +1,7 @@
 package server
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -237,5 +238,71 @@ func TestTranscriptUnmappedAgent(t *testing.T) {
 	_, res, _ = watchTranscript(t, p, started.Session.ID)
 	if res.Status.State != proto.TranscriptWaiting {
 		t.Fatalf("answer %+v", res)
+	}
+}
+
+// TestTranscriptTail: a tail reset carries the last items and a cursor;
+// transcript.page reads the earlier ones, oldest first, down to the
+// start, a line's items split where the cursor falls in it.
+func TestTranscriptTail(t *testing.T) {
+	p, c := setupConv(t)
+	var lines []byte
+	for i := range 30 {
+		lines = append(lines, `{"type":"user","content":"p`+strconv.Itoa(i)+`"}`+"\n"...)
+	}
+	lines = append(lines, `{"type":"assistant","content":[{"type":"text","text":"a"},{"type":"text","text":"b"}]}`+"\n"...)
+	id, _ := startConv(t, p, c, string(lines))
+	w, err := client.Connect(p, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+	var res proto.TranscriptWatchResult
+	if err := w.Call(proto.MethodTranscriptWatch, proto.TranscriptWatchParams{Session: id, Tail: 1}, &res); err != nil {
+		t.Fatal(err)
+	}
+	var ev proto.TranscriptEvent
+	if err := w.ReadLine(&ev); err != nil {
+		t.Fatal(err)
+	}
+	texts := func(items []proto.TranscriptItem) string {
+		var out []string
+		for _, it := range items {
+			out = append(out, it.Text)
+		}
+		return fmt.Sprint(out)
+	}
+	if ev.Event != proto.EventTranscriptReset || texts(ev.Items) != "[b]" || ev.Skipped != 31 || ev.Before == "" {
+		t.Fatalf("reset %+v", ev)
+	}
+	page := func(before string, limit int) proto.TranscriptPageResult {
+		t.Helper()
+		var pr proto.TranscriptPageResult
+		call(t, c, proto.MethodTranscriptPage, proto.TranscriptPageParams{Session: id, Before: before, Limit: limit}, &pr)
+		return pr
+	}
+	pr := page(ev.Before, 3)
+	if texts(pr.Items) != "[p28 p29 a]" || pr.Before == "" {
+		t.Fatalf("page 1 %s %q", texts(pr.Items), pr.Before)
+	}
+	pr = page(pr.Before, 25)
+	if texts(pr.Items)[:8] != "[p3 p4 p" || len(pr.Items) != 25 || pr.Before == "" {
+		t.Fatalf("page 2 %s %q", texts(pr.Items), pr.Before)
+	}
+	pr = page(pr.Before, 0)
+	if texts(pr.Items) != "[p0 p1 p2]" || pr.Before != "" {
+		t.Fatalf("page 3 %s %q", texts(pr.Items), pr.Before)
+	}
+	var perr *proto.Error
+	for _, bad := range []string{"", "x", "1.-1", "999999999.0"} {
+		err := c.Call(proto.MethodTranscriptPage, proto.TranscriptPageParams{Session: id, Before: bad}, nil)
+		if !errors.As(err, &perr) || perr.Code != proto.ErrBadParams {
+			t.Errorf("before %q: %v", bad, err)
+		}
+	}
+	// Without a tail, a reset that holds everything has no cursor.
+	_, _, events := watchTranscript(t, p, id)
+	if ev := nextEvent(t, events); len(ev.Items) != 32 || ev.Before != "" {
+		t.Fatalf("full reset: %d items, before %q", len(ev.Items), ev.Before)
 	}
 }

@@ -1,7 +1,8 @@
 import Foundation
 
 /// What waits on the user (design T734 §6, R9; T748 milestone B): one
-/// list, from projects.watch {detail}, session.list and peer.list, that
+/// list, from projects.watch {detail}, session.list, peer.list and
+/// guard.refusals, that
 /// the sidebar and its badges, the dashboard, the menu bar, the Dock
 /// badge and notifications all show, so every count agrees.
 public struct Need: Identifiable, Hashable, Sendable {
@@ -22,6 +23,13 @@ public struct Need: Identifiable, Hashable, Sendable {
         /// A paired server: a shared project that needs its user, or a
         /// share request.
         case network
+        /// A project's link: a message held for the OK, a file offered,
+        /// a paired server's link request (app API 16).
+        case link
+        /// A call the guard refused, waiting on the user's answer: allow
+        /// it in its project or all projects, or keep refusing it
+        /// (guard.refusals, app API 18).
+        case refusal
     }
 
     /// Stable while the need lasts; a new question on the same session
@@ -47,9 +55,14 @@ public struct Need: Identifiable, Hashable, Sendable {
     public let answer: Answer?
     /// The task it is about ("T12"): a task in review or blocked.
     public let task: String
+    /// What its buttons answer in place: a link need, a share request.
+    public let link: LinkAct?
+    /// The refused call a refusal's card answers, its whole command.
+    public let refusal: AppAPI.GuardRefusal?
 
     public init(id: String, kind: Kind, project: String, what: String, detail: String, text: String = "",
-                session: String = "", answer: Answer? = nil, task: String = "") {
+                session: String = "", answer: Answer? = nil, task: String = "", link: LinkAct? = nil,
+                refusal: AppAPI.GuardRefusal? = nil) {
         self.id = id
         self.kind = kind
         self.project = project
@@ -59,6 +72,8 @@ public struct Need: Identifiable, Hashable, Sendable {
         self.session = session
         self.answer = answer
         self.task = task
+        self.link = link
+        self.refusal = refusal
     }
 
     /// The need named with its project, as the sidebar, the menu bar
@@ -93,17 +108,21 @@ extension Need {
 
     /// Every need: sessions' first (questions, approvals, held queues),
     /// then each project's (its coordinator's questions, its blocked
-    /// tasks, failing checks), then the paired servers', then the tasks
-    /// in review. A paired server's panes (sessions with a server) are
-    /// its user's there, not here.
+    /// tasks, failing checks, its links'), then the guard's refusals,
+    /// then the paired servers' (share requests, their projects'), then
+    /// the tasks in review. A paired server's panes (sessions with a
+    /// server) are its user's there, not here.
     public static func of(projects: [AppAPI.Project], sessions: [AppAPI.Session], peers: [AppAPI.Peer] = [],
-                          now: Date = Date()) -> [Need] {
+                          refusals: [AppAPI.GuardRefusal] = [], now: Date = Date()) -> [Need] {
         var out: [Need] = []
         for s in sessions where s.server.isEmpty {
             out += of(session: s, in: projects, now: now)
         }
         for p in projects {
             out += of(project: p)
+        }
+        for r in refusals {
+            out.append(of(refusal: r, sessions: sessions))
         }
         for peer in peers {
             out += of(peer: peer)
@@ -189,16 +208,51 @@ extension Need {
                             what: "\(name) PR #\(t.pr) checks fail", detail: t.task?.title ?? t.record.title,
                             session: t.record.session))
         }
-        return out
+        return out + links(of: p)
+    }
+
+    /// A refused call: who was refused (its thread's task, its thread,
+    /// its session's role) and under which rule. It opens its project,
+    /// whose Needs you card answers it, never the thread.
+    static func of(refusal r: AppAPI.GuardRefusal, sessions: [AppAPI.Session]) -> Need {
+        let s = r.thread.isEmpty ? nil : sessions.first {
+            $0.server.isEmpty && $0.project == r.project && $0.thread == r.thread && $0.role == "thread"
+        }
+        let who = !(s?.task ?? "").isEmpty ? s!.task : !r.thread.isEmpty ? r.thread : !r.role.isEmpty ? r.role : "a session"
+        let times = r.count > 1 ? " · \(r.count) times" : ""
+        return Need(id: "refusal:\(r.id)", kind: .refusal, project: r.project,
+                    what: "\(who)'s \(r.tool) call was refused",
+                    detail: line(ruleWord(r.rule), r.summary) + times, refusal: r)
+    }
+
+    /// A guard rule in the user's words, as the TUI's Guard refusals
+    /// names it; a mod's rule as it is named.
+    public static func ruleWord(_ rule: String) -> String {
+        switch rule {
+        case "force-push": "force-pushing"
+        case "push-default": "pushing to the default branch"
+        case "worktree-only": "threads write only in their worktree"
+        case "delete-branch": "deleting branches and worktrees"
+        case "merge": "threads merging"
+        case "credentials": "reading credentials"
+        default: rule
+        }
+    }
+
+    /// Why the guard never allows a refusal of the floor, as the TUI
+    /// says it.
+    public static func floorWhy(_ rule: String) -> String {
+        switch rule {
+        case "merge": "a thread doesn't merge while the coordinator merges"
+        case "force-push": "it force-pushes to a protected branch"
+        default: "it reads tm's own files or prints a secret variable"
+        }
     }
 
     static func of(peer: AppAPI.Peer) -> [Need] {
         var out: [Need] = []
         let server = peer.name.isEmpty ? peer.alias : peer.name
-        if peer.shareWaits > 0 {
-            out.append(Need(id: "share:\(peer.alias)", kind: .network, project: "",
-                            what: "\(server) asks you to share a project", detail: "\(server) · paired server"))
-        }
+        out += shares(of: peer, server: server)
         for p in peer.projects where p.needsYou > 0 && !p.stale {
             out.append(Need(id: "paired:\(peer.alias)/\(p.project)", kind: .network, project: "\(peer.alias)/\(p.project)",
                             what: p.needsYou == 1 ? "\(server) › \(p.project): 1 needs you" : "\(server) › \(p.project): \(p.needsYou) need you",

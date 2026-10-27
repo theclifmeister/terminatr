@@ -14,8 +14,11 @@ import (
 	"bytes"
 	"cmp"
 	"fmt"
+	"io"
 	"net"
 	"slices"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -73,6 +76,9 @@ func (s *Server) serveTranscript(c net.Conn, br *bufio.Reader, req proto.Request
 	}
 	defer s.transcripts.Add(-1)
 	w := s.newTranscriptWatch(sess, func(ev proto.TranscriptEvent) error { return proto.WriteLine(c, ev) })
+	if p.Tail > 0 {
+		w.tail = min(p.Tail, proto.TranscriptBacklog)
+	}
 	st := w.status()
 	if !answer(c, req, proto.TranscriptWatchResult{Session: s.info(sess), Status: st, Window: w.window}) {
 		return
@@ -96,7 +102,7 @@ func (s *Server) serveTranscript(c net.Conn, br *bufio.Reader, req proto.Request
 // newTranscriptWatch is a stream of sess's conversation, its events to
 // send.
 func (s *Server) newTranscriptWatch(sess *session.Session, send func(proto.TranscriptEvent) error) *transcriptWatch {
-	w := &transcriptWatch{s: s, sess: sess, send: send, window: transcriptWindow, wake: make(chan struct{}, 1)}
+	w := &transcriptWatch{s: s, sess: sess, send: send, window: transcriptWindow, tail: proto.TranscriptBacklog, wake: make(chan struct{}, 1)}
 	if a := sess.Agent(); a != nil {
 		w.agent = a.Name()
 		if m := agent.ManifestOf(a); m != nil {
@@ -128,7 +134,9 @@ type transcriptWatch struct {
 	todos      []agent.Todo
 	sent       proto.TranscriptStatus
 
-	window   int
+	window int
+	// tail is how many of the last items a reset sends.
+	tail     int
 	wake     chan struct{}
 	mu       sync.Mutex
 	inflight int
@@ -207,54 +215,161 @@ func (w *transcriptWatch) look() bool {
 func (w *transcriptWatch) reset() bool {
 	w.off, w.skip, w.version, w.units, w.todos = 0, false, "", nil, nil
 	var items []proto.TranscriptItem
+	var at []itemAt
+	var from int64
 	if w.tr != nil && w.path != "" {
-		items = w.backlog()
+		items, at, from = w.backlog()
 	}
-	skipped := max(0, len(items)-proto.TranscriptBacklog)
+	skipped := max(0, len(items)-w.tail)
 	items = items[skipped:]
+	before := ""
+	switch {
+	case skipped > 0:
+		before = at[skipped].String()
+	case from > 0:
+		before = itemAt{off: from}.String()
+	}
 	if w.tr != nil {
 		items = append(items, w.todosChanged()...)
 	}
 	st := w.status()
 	w.sent = st
 	w.took(len(items))
-	return w.send(proto.TranscriptEvent{Event: proto.EventTranscriptReset, Items: items, Skipped: skipped, Status: &st}) == nil
+	return w.send(proto.TranscriptEvent{Event: proto.EventTranscriptReset, Items: items, Skipped: skipped, Before: before, Status: &st}) == nil
+}
+
+// itemAt is where an item is in the transcript: the n-th item of the
+// line at off. As a cursor (Before) it means the items before it.
+type itemAt struct {
+	off int64
+	n   int
+}
+
+func (a itemAt) String() string { return strconv.FormatInt(a.off, 10) + "." + strconv.Itoa(a.n) }
+
+// parseItemAt reads a cursor back.
+func parseItemAt(s string) (itemAt, bool) {
+	o, n, ok := strings.Cut(s, ".")
+	off, err1 := strconv.ParseInt(o, 10, 64)
+	i, err2 := strconv.Atoi(n)
+	return itemAt{off, i}, ok && err1 == nil && err2 == nil && off >= 0 && i >= 0
 }
 
 // backlog reads the items of the file's last transcriptBacklogRead
-// bytes, and sets off after them.
-func (w *transcriptWatch) backlog() []proto.TranscriptItem {
+// bytes, and sets off after them: the items, where each is, and where
+// the first whole line read starts (0: the file's start).
+func (w *transcriptWatch) backlog() ([]proto.TranscriptItem, []itemAt, int64) {
 	f, fi, err := session.OpenTranscript(w.root, w.path)
 	if err != nil {
-		return nil
+		return nil, nil, 0
 	}
 	defer f.Close()
-	start := max(0, fi.Size()-transcriptBacklogRead)
-	data := make([]byte, fi.Size()-start)
+	items, at, from, end := w.readItems(f, max(0, fi.Size()-transcriptBacklogRead), fi.Size(), nil)
+	w.off = end
+	return items, at, from
+}
+
+// readItems maps the whole lines of f between start and stop (a cut
+// first line skipped when start isn't 0), the items before before only
+// when it is set. It returns the items, where each is, where the first
+// whole line starts, and where the last ends.
+func (w *transcriptWatch) readItems(f io.ReaderAt, start, stop int64, before *itemAt) ([]proto.TranscriptItem, []itemAt, int64, int64) {
+	data := make([]byte, stop-start)
 	n, _ := f.ReadAt(data, start)
 	data = data[:n]
 	if start > 0 {
 		// The first line is likely cut: from the next.
 		i := bytes.IndexByte(data, '\n')
 		if i < 0 {
-			w.off = start + int64(n)
-			return nil
+			return nil, nil, start + int64(n), start + int64(n)
 		}
 		data, start = data[i+1:], start+int64(i)+1
 	}
 	end := bytes.LastIndexByte(data, '\n')
 	if end < 0 {
-		w.off = start
-		return nil
+		return nil, nil, start, start
 	}
 	var items []proto.TranscriptItem
+	var at []itemAt
 	off := start
 	for line := range bytes.SplitSeq(data[:end], []byte{'\n'}) {
-		items = append(items, w.mapLine(line, off)...)
+		if before != nil && off > before.off {
+			break
+		}
+		got := w.mapLine(line, off)
+		if before != nil && off == before.off {
+			got = got[:min(len(got), before.n)]
+		}
+		for i := range got {
+			at = append(at, itemAt{off, i})
+		}
+		items = append(items, got...)
 		off += int64(len(line)) + 1
 	}
-	w.off = start + int64(end) + 1
-	return items
+	return items, at, start, start + int64(end) + 1
+}
+
+// transcriptPage is transcript.page's: the items of p.Session's
+// conversation before the cursor p.Before.
+func (s *Server) transcriptPage(p proto.TranscriptPageParams, _ callCtx) (any, *proto.Error) {
+	if _, _, ok := remoteID(p.Session); ok {
+		return nil, proto.Errorf(proto.ErrRefused, "transcript.page doesn't read a paired server's conversation yet")
+	}
+	before, ok := parseItemAt(p.Before)
+	if !ok {
+		return nil, proto.Errorf(proto.ErrBadParams, "before %q isn't a reset's or a page's cursor", p.Before)
+	}
+	limit := proto.TranscriptBacklog
+	if p.Limit > 0 {
+		limit = min(p.Limit, limit)
+	}
+	sess, perr := s.session(p.Session)
+	if perr != nil {
+		return nil, perr
+	}
+	w := s.newTranscriptWatch(sess, nil)
+	res := proto.TranscriptPageResult{Items: []proto.TranscriptItem{}}
+	if w.tr == nil || w.path == "" {
+		return res, nil
+	}
+	f, fi, err := session.OpenTranscript(w.root, w.path)
+	if err != nil {
+		return res, nil
+	}
+	defer f.Close()
+	if before.off > fi.Size() {
+		return nil, proto.Errorf(proto.ErrBadParams, "before %q is past the transcript's end: it was replaced; reset", p.Before)
+	}
+	// The cursor's own line, when some of its items come before it.
+	stop := before.off
+	if before.n > 0 {
+		var line [64 << 10]byte
+		for stop < fi.Size() {
+			n, _ := f.ReadAt(line[:min(int64(len(line)), fi.Size()-stop)], stop)
+			if i := bytes.IndexByte(line[:n], '\n'); i >= 0 {
+				stop += int64(i) + 1
+				break
+			}
+			if n == 0 {
+				break
+			}
+			stop += int64(n)
+		}
+	}
+	start := max(0, before.off-transcriptBacklogRead)
+	items, at, from, _ := w.readItems(f, start, stop, &before)
+	cut := max(0, len(items)-limit)
+	res.Items = items[cut:]
+	switch {
+	case cut > 0:
+		res.Before = at[cut].String()
+	case from > 0 && len(items) > 0:
+		res.Before = at[0].String()
+	case start > 0:
+		// nothing whole in the window (a line longer than it): before it
+		res.Before = itemAt{off: start}.String()
+	}
+	return res, nil
 }
 
 // follow reads the whole lines appended since off, while the window

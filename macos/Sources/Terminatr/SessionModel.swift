@@ -149,9 +149,18 @@ final class SessionModel {
 
     /// Sends a prompt: queued (mode ""), steered into the running turn
     /// ("now") or interrupting it ("interrupt").
-    func prompt(_ text: String, mode: String = "") async throws -> AppAPI.PromptResult {
+    /// files are refs upload answered: tm names each after the text.
+    func prompt(_ text: String, mode: String = "", files: [String] = []) async throws -> AppAPI.PromptResult {
         let (b, id) = try target()
-        return try await b.call(AppAPI.Methods.sessionPrompt, AppAPI.PromptParams(id: id, text: text, mode: mode))
+        return try await b.call(AppAPI.Methods.sessionPrompt, AppAPI.PromptParams(id: id, text: text, mode: mode, files: files))
+    }
+
+    /// Sends a file for a prompt to tm (session.upload), which stores it
+    /// in the project's uploads/: the last answer has its ref.
+    func upload(_ data: Data, name: String, progress: (Int) -> Void) async throws -> AppAPI.Upload {
+        let (b, id) = try target()
+        return try await ComposerFiles.upload(data, name: name, session: id,
+                                              call: { try await b.call(AppAPI.Methods.sessionUpload, $0) }, progress: progress)
     }
 
     /// Answers question index of the open menu. guarded: the server
@@ -163,10 +172,12 @@ final class SessionModel {
     }
 
     /// Asks the server what option choice of the dialog on screen would
-    /// answer, sending nothing (check), or sends it.
-    func approve(choice: Int, check: Bool, escape: Bool = false) async throws -> AppAPI.ApproveResult {
+    /// answer, sending nothing (check), or sends it. Escape and session:
+    /// the user confirmed a command outside the sandbox, an option that
+    /// allows for the rest of the session.
+    func approve(choice: Int, check: Bool, escape: Bool = false, session: Bool = false) async throws -> AppAPI.ApproveResult {
         let (b, id) = try target()
-        return try await b.call(AppAPI.Methods.sessionApprove, AppAPI.ApproveParams(id: id, choice: choice, check: check, escape: escape))
+        return try await b.call(AppAPI.Methods.sessionApprove, AppAPI.ApproveParams(id: id, choice: choice, check: check, escape: escape, session: session))
     }
 
     /// Writes data to the session's terminal as if typed ("\u{1b}": Esc).

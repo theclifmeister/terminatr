@@ -6,7 +6,7 @@ import Foundation
 /// The terminatr app API (docs/SPEC.md §3.8): what tm app bridge answers.
 public enum AppAPI {
     /// The app API version this app was generated against.
-    public static let version = 13
+    public static let version = 19
 
     public struct AnswerParams: Codable, Sendable, Hashable {
         public var id: String
@@ -46,12 +46,14 @@ public enum AppAPI {
         public var choice: Int
         public var check: Bool
         public var escape: Bool
+        public var session: Bool
 
-        public init(id: String, choice: Int = 0, check: Bool = false, escape: Bool = false) {
+        public init(id: String, choice: Int = 0, check: Bool = false, escape: Bool = false, session: Bool = false) {
             self.id = id
             self.choice = choice
             self.check = check
             self.escape = escape
+            self.session = session
         }
 
         enum CodingKeys: String, CodingKey {
@@ -59,6 +61,7 @@ public enum AppAPI {
             case choice
             case check
             case escape
+            case session
         }
     }
 
@@ -66,13 +69,15 @@ public enum AppAPI {
         public var question: String
         public var option: String
         public var options: [String]
+        public var scopes: [String]
         public var escape: Bool
         public var sent: Bool
 
-        public init(question: String = "", option: String, options: [String] = [], escape: Bool = false, sent: Bool = false) {
+        public init(question: String = "", option: String, options: [String] = [], scopes: [String] = [], escape: Bool = false, sent: Bool = false) {
             self.question = question
             self.option = option
             self.options = options
+            self.scopes = scopes
             self.escape = escape
             self.sent = sent
         }
@@ -81,6 +86,7 @@ public enum AppAPI {
             case question
             case option
             case options
+            case scopes
             case escape
             case sent
         }
@@ -131,19 +137,108 @@ public enum AppAPI {
         }
     }
 
+    public struct GuardDecideParams: Codable, Sendable, Hashable {
+        public var id: String
+        public var how: String
+
+        public init(id: String, how: String) {
+            self.id = id
+            self.how = how
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case id
+            case how
+        }
+    }
+
+    public struct GuardDecided: Codable, Sendable, Hashable {
+        public var message: String
+
+        public init(message: String) {
+            self.message = message
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case message
+        }
+    }
+
+    public struct GuardRefusal: Codable, Sendable, Hashable, Identifiable {
+        public var id: String
+        public var project: String
+        public var thread: String
+        public var role: String
+        public var rule: String
+        public var tool: String
+        public var summary: String
+        public var subject: String
+        public var path: Bool
+        public var floor: Bool
+        public var first: Date
+        public var last: Date
+        public var count: Int
+
+        public init(id: String, project: String, thread: String = "", role: String = "", rule: String, tool: String, summary: String = "", subject: String, path: Bool = false, floor: Bool = false, first: Date, last: Date, count: Int) {
+            self.id = id
+            self.project = project
+            self.thread = thread
+            self.role = role
+            self.rule = rule
+            self.tool = tool
+            self.summary = summary
+            self.subject = subject
+            self.path = path
+            self.floor = floor
+            self.first = first
+            self.last = last
+            self.count = count
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case id
+            case project
+            case thread
+            case role
+            case rule
+            case tool
+            case summary
+            case subject
+            case path
+            case floor
+            case first
+            case last
+            case count
+        }
+    }
+
+    public struct GuardRefusals: Codable, Sendable, Hashable {
+        public var refusals: [GuardRefusal]
+
+        public init(refusals: [GuardRefusal] = []) {
+            self.refusals = refusals
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case refusals
+        }
+    }
+
     public struct Hello: Codable, Sendable, Hashable {
         public var appApi: Int
         public var tm: String
         public var build: String
+        public var level: String
         public var capabilities: [String]
         public var methods: [String]
         public var server: Server?
         public var error: Error?
 
-        public init(appApi: Int, tm: String, build: String, capabilities: [String] = [], methods: [String] = [], server: Server? = nil, error: Error? = nil) {
+        public init(appApi: Int, tm: String, build: String, level: String = "", capabilities: [String] = [], methods: [String] = [], server: Server? = nil, error: Error? = nil) {
             self.appApi = appApi
             self.tm = tm
             self.build = build
+            self.level = level
             self.capabilities = capabilities
             self.methods = methods
             self.server = server
@@ -154,6 +249,7 @@ public enum AppAPI {
             case appApi = "app_api"
             case tm
             case build
+            case level
             case capabilities
             case methods
             case server
@@ -257,6 +353,81 @@ public enum AppAPI {
             case filesWaiting = "files_waiting"
             case filesActive = "files_active"
             case lastAt = "last_at"
+        }
+    }
+
+    public struct LinkActParams: Codable, Sendable, Hashable {
+        public var project: String
+        public var action: String
+        public var id: String
+        public var allow: String
+        public var ask: Bool
+
+        public init(project: String, action: String, id: String, allow: String = "", ask: Bool = false) {
+            self.project = project
+            self.action = action
+            self.id = id
+            self.allow = allow
+            self.ask = ask
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case project
+            case action
+            case id
+            case allow
+            case ask
+        }
+    }
+
+    public struct LinkActResult: Codable, Sendable, Hashable {
+        public var words: String
+
+        public init(words: String) {
+            self.words = words
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case words
+        }
+    }
+
+    public struct LinkNeed: Codable, Sendable, Hashable, Identifiable {
+        public var kind: String
+        public var peer: String
+        public var shown: String
+        public var id: String
+        public var created: Date
+        public var title: String
+        public var bytes: Int
+        public var file: String
+        public var size: Int
+        public var allow: String
+
+        public init(kind: String, peer: String, shown: String = "", id: String, created: Date, title: String = "", bytes: Int = 0, file: String = "", size: Int = 0, allow: String = "") {
+            self.kind = kind
+            self.peer = peer
+            self.shown = shown
+            self.id = id
+            self.created = created
+            self.title = title
+            self.bytes = bytes
+            self.file = file
+            self.size = size
+            self.allow = allow
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case kind
+            case peer
+            case shown
+            case id
+            case created
+            case title
+            case bytes
+            case file
+            case size
+            case allow
         }
     }
 
@@ -436,12 +607,13 @@ public enum AppAPI {
         public var since: Date?
         public var projects: [PeerProject]
         public var shareWaits: Int
+        public var shareRequests: [ShareRequest]
         public var pane: Bool
         public var panes: String
         public var transcript: Bool
         public var conversations: String
 
-        public init(alias: String, name: String = "", state: String, reason: String = "", since: Date? = nil, projects: [PeerProject] = [], shareWaits: Int = 0, pane: Bool = false, panes: String = "", transcript: Bool = false, conversations: String = "") {
+        public init(alias: String, name: String = "", state: String, reason: String = "", since: Date? = nil, projects: [PeerProject] = [], shareWaits: Int = 0, shareRequests: [ShareRequest] = [], pane: Bool = false, panes: String = "", transcript: Bool = false, conversations: String = "") {
             self.alias = alias
             self.name = name
             self.state = state
@@ -449,6 +621,7 @@ public enum AppAPI {
             self.since = since
             self.projects = projects
             self.shareWaits = shareWaits
+            self.shareRequests = shareRequests
             self.pane = pane
             self.panes = panes
             self.transcript = transcript
@@ -463,6 +636,7 @@ public enum AppAPI {
             case since
             case projects
             case shareWaits = "share_waits"
+            case shareRequests = "share_requests"
             case pane
             case panes
             case transcript
@@ -631,6 +805,7 @@ public enum AppAPI {
         public var active: Bool
         public var paused: Bool
         public var pinned: Bool
+        public var shared: Bool
         public var needsYou: [Task]
         public var questions: Int
         public var threads: [Thread]
@@ -645,12 +820,14 @@ public enum AppAPI {
         public var taskUsage: [String: Usage]
         public var checkouts: [String: String]
         public var links: [Link]
+        public var linkNeeds: [LinkNeed]
 
-        public init(slug: String, active: Bool, paused: Bool = false, pinned: Bool = false, needsYou: [Task] = [], questions: Int = 0, threads: [Thread] = [], prHostFails: Int = 0, goal: String = "", repos: [String] = [], counts: [String: Int] = [:], error: String = "", board: [Task] = [], items: [Item] = [], usage: Usage, taskUsage: [String: Usage] = [:], checkouts: [String: String] = [:], links: [Link] = []) {
+        public init(slug: String, active: Bool, paused: Bool = false, pinned: Bool = false, shared: Bool = false, needsYou: [Task] = [], questions: Int = 0, threads: [Thread] = [], prHostFails: Int = 0, goal: String = "", repos: [String] = [], counts: [String: Int] = [:], error: String = "", board: [Task] = [], items: [Item] = [], usage: Usage, taskUsage: [String: Usage] = [:], checkouts: [String: String] = [:], links: [Link] = [], linkNeeds: [LinkNeed] = []) {
             self.slug = slug
             self.active = active
             self.paused = paused
             self.pinned = pinned
+            self.shared = shared
             self.needsYou = needsYou
             self.questions = questions
             self.threads = threads
@@ -665,6 +842,7 @@ public enum AppAPI {
             self.taskUsage = taskUsage
             self.checkouts = checkouts
             self.links = links
+            self.linkNeeds = linkNeeds
         }
 
         enum CodingKeys: String, CodingKey {
@@ -672,6 +850,7 @@ public enum AppAPI {
             case active
             case paused
             case pinned
+            case shared
             case needsYou = "needs_you"
             case questions
             case threads
@@ -686,6 +865,7 @@ public enum AppAPI {
             case taskUsage = "task_usage"
             case checkouts
             case links
+            case linkNeeds = "link_needs"
         }
     }
 
@@ -804,17 +984,20 @@ public enum AppAPI {
         public var id: String
         public var text: String
         public var mode: String
+        public var files: [String]
 
-        public init(id: String, text: String, mode: String = "") {
+        public init(id: String, text: String, mode: String = "", files: [String] = []) {
             self.id = id
             self.text = text
             self.mode = mode
+            self.files = files
         }
 
         enum CodingKeys: String, CodingKey {
             case id
             case text
             case mode
+            case files
         }
     }
 
@@ -1154,6 +1337,63 @@ public enum AppAPI {
         }
     }
 
+    public struct ShareAnswer: Codable, Sendable, Hashable, Identifiable {
+        public var id: String
+        public var state: String
+        public var project: String
+
+        public init(id: String, state: String, project: String = "") {
+            self.id = id
+            self.state = state
+            self.project = project
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case id
+            case state
+            case project
+        }
+    }
+
+    public struct ShareAnswerParams: Codable, Sendable, Hashable {
+        public var id: String
+        public var accept: Bool
+        public var project: String
+
+        public init(id: String, accept: Bool = false, project: String = "") {
+            self.id = id
+            self.accept = accept
+            self.project = project
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case id
+            case accept
+            case project
+        }
+    }
+
+    public struct ShareRequest: Codable, Sendable, Hashable, Identifiable {
+        public var id: String
+        public var `for`: String
+        public var note: String
+        public var created: Date
+
+        public init(id: String, `for`: String = "", note: String = "", created: Date) {
+            self.id = id
+            self.for = `for`
+            self.note = note
+            self.created = created
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case id
+            case `for`
+            case note
+            case created
+        }
+    }
+
     public struct Step: Codable, Sendable, Hashable {
         public var n: Int
         public var text: String
@@ -1277,6 +1517,21 @@ public enum AppAPI {
         }
     }
 
+    public struct TaskGetParams: Codable, Sendable, Hashable {
+        public var project: String
+        public var task: String
+
+        public init(project: String, task: String) {
+            self.project = project
+            self.task = task
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case project
+            case task
+        }
+    }
+
     public struct TaskParams: Codable, Sendable, Hashable {
         public var project: String
         public var task: String
@@ -1299,14 +1554,18 @@ public enum AppAPI {
         public var pr: Int
         public var reportPr: String
         public var task: Task?
+        public var check: [String]
+        public var prState: String
 
-        public init(record: ThreadRecord, status: ThreadStatus? = nil, checks: String = "", pr: Int = 0, reportPr: String = "", task: Task? = nil) {
+        public init(record: ThreadRecord, status: ThreadStatus? = nil, checks: String = "", pr: Int = 0, reportPr: String = "", task: Task? = nil, check: [String] = [], prState: String = "") {
             self.record = record
             self.status = status
             self.checks = checks
             self.pr = pr
             self.reportPr = reportPr
             self.task = task
+            self.check = check
+            self.prState = prState
         }
 
         enum CodingKeys: String, CodingKey {
@@ -1316,6 +1575,8 @@ public enum AppAPI {
             case pr
             case reportPr = "report_pr"
             case task
+            case check
+            case prState = "pr_state"
         }
     }
 
@@ -1466,12 +1727,14 @@ public enum AppAPI {
     public struct TranscriptEvent: Codable, Sendable, Hashable {
         public var items: [TranscriptItem]
         public var skipped: Int
+        public var before: String
         public var status: TranscriptStatus?
         public var reason: String
 
-        public init(items: [TranscriptItem] = [], skipped: Int = 0, status: TranscriptStatus? = nil, reason: String = "") {
+        public init(items: [TranscriptItem] = [], skipped: Int = 0, before: String = "", status: TranscriptStatus? = nil, reason: String = "") {
             self.items = items
             self.skipped = skipped
+            self.before = before
             self.status = status
             self.reason = reason
         }
@@ -1479,6 +1742,7 @@ public enum AppAPI {
         enum CodingKeys: String, CodingKey {
             case items
             case skipped
+            case before
             case status
             case reason
         }
@@ -1550,15 +1814,51 @@ public enum AppAPI {
         }
     }
 
-    public struct TranscriptParams: Codable, Sendable, Hashable {
-        public var session: String
+    public struct TranscriptPage: Codable, Sendable, Hashable {
+        public var items: [TranscriptItem]
+        public var before: String
 
-        public init(session: String) {
+        public init(items: [TranscriptItem] = [], before: String = "") {
+            self.items = items
+            self.before = before
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case items
+            case before
+        }
+    }
+
+    public struct TranscriptPageParams: Codable, Sendable, Hashable {
+        public var session: String
+        public var before: String
+        public var limit: Int
+
+        public init(session: String, before: String, limit: Int = 0) {
             self.session = session
+            self.before = before
+            self.limit = limit
         }
 
         enum CodingKeys: String, CodingKey {
             case session
+            case before
+            case limit
+        }
+    }
+
+    public struct TranscriptParams: Codable, Sendable, Hashable {
+        public var session: String
+        public var tail: Int
+
+        public init(session: String, tail: Int = 0) {
+            self.session = session
+            self.tail = tail
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case session
+            case tail
         }
     }
 
@@ -1610,6 +1910,60 @@ public enum AppAPI {
         enum CodingKeys: String, CodingKey {
             case text
             case status
+        }
+    }
+
+    public struct Upload: Codable, Sendable, Hashable {
+        public var upload: String
+        public var received: Int
+        public var ref: String
+        public var name: String
+        public var type: String
+        public var size: Int
+
+        public init(upload: String, received: Int, ref: String = "", name: String = "", type: String = "", size: Int = 0) {
+            self.upload = upload
+            self.received = received
+            self.ref = ref
+            self.name = name
+            self.type = type
+            self.size = size
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case upload
+            case received
+            case ref
+            case name
+            case type
+            case size
+        }
+    }
+
+    public struct UploadParams: Codable, Sendable, Hashable {
+        public var session: String
+        public var upload: String
+        public var name: String
+        public var size: Int
+        public var offset: Int
+        public var data: Data
+
+        public init(session: String, upload: String = "", name: String = "", size: Int = 0, offset: Int = 0, data: Data = Data()) {
+            self.session = session
+            self.upload = upload
+            self.name = name
+            self.size = size
+            self.offset = offset
+            self.data = data
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case session
+            case upload
+            case name
+            case size
+            case offset
+            case data
         }
     }
 
@@ -1745,11 +2099,15 @@ public enum AppAPI {
     /// Every method of the app API, by name.
     public enum Methods {
         public static let coordinatorClear = Call<ProjectParams, CoordinatorClear>("coordinator.clear", write: true)
+        public static let guardDecide = Call<GuardDecideParams, GuardDecided>("guard.decide", write: true)
+        public static let guardRefusals = Call<NoParams, GuardRefusals>("guard.refusals", write: false)
+        public static let linkAct = Call<LinkActParams, LinkActResult>("link.act", write: true)
         public static let notifyClaim = Call<NoticeParams, NoticeResult>("notify.claim", write: false)
         public static let notifyDismiss = Call<NoticeParams, NoticeResult>("notify.dismiss", write: false)
         public static let paneInput = Call<PaneInputParams, Empty>("pane.input", write: true, target: "pane.vt")
         public static let paneVt = Subscription<PaneParams, PaneResult, PaneEvent>("pane.vt", events: ["pane.repaint", "pane.output", "pane.resize", "pane.closed"])
         public static let peerList = Call<NoParams, PeerList>("peer.list", write: false)
+        public static let peerShareAnswer = Call<ShareAnswerParams, ShareAnswer>("peer.share-answer", write: true)
         public static let projectActive = Call<ProjectActiveParams, ProjectActive>("project.active", write: true)
         public static let projectOpen = Call<ProjectOpenParams, ProjectOpen>("project.open", write: true)
         public static let projectsWatch = Subscription<ProjectsWatchParams, Projects, Projects>("projects.watch", events: ["projects.changed"])
@@ -1760,12 +2118,15 @@ public enum AppAPI {
         public static let sessionKeys = Call<KeysParams, Empty>("session.keys", write: true)
         public static let sessionList = Call<NoParams, SessionList>("session.list", write: false)
         public static let sessionPrompt = Call<PromptParams, PromptResult>("session.prompt", write: true)
+        public static let sessionUpload = Call<UploadParams, Upload>("session.upload", write: true)
         public static let sessionWatch = Subscription<SessionIDParams, Watch, Watch>("session.watch", events: ["watch.changed"])
         public static let taskAccept = Call<TaskParams, TaskAskResult>("task.accept", write: true)
         public static let taskAdd = Call<TaskAddParams, TaskAdded>("task.add", write: true)
         public static let taskAsk = Call<TaskAskParams, TaskAskResult>("task.ask", write: true)
         public static let taskDelegate = Call<TaskParams, TaskAskResult>("task.delegate", write: true)
+        public static let taskGet = Call<TaskGetParams, Task>("task.get", write: false)
         public static let taskSendBack = Call<SendBackParams, TaskAskResult>("task.send-back", write: true)
+        public static let transcriptPage = Call<TranscriptPageParams, TranscriptPage>("transcript.page", write: false)
         public static let transcriptWatch = Subscription<TranscriptParams, TranscriptResult, TranscriptEvent>("transcript.watch", events: ["transcript.reset", "transcript.items", "transcript.status", "transcript.closed"])
     }
 }
@@ -1794,6 +2155,7 @@ extension AppAPI.ApproveParams {
         self.choice = try c.decodeIfPresent(Int.self, forKey: .choice) ?? 0
         self.check = try c.decodeIfPresent(Bool.self, forKey: .check) ?? false
         self.escape = try c.decodeIfPresent(Bool.self, forKey: .escape) ?? false
+        self.session = try c.decodeIfPresent(Bool.self, forKey: .session) ?? false
     }
 }
 
@@ -1803,6 +2165,7 @@ extension AppAPI.ApproveResult {
         self.question = try c.decodeIfPresent(String.self, forKey: .question) ?? ""
         self.option = try c.decode(String.self, forKey: .option)
         self.options = try c.decodeIfPresent([String].self, forKey: .options) ?? []
+        self.scopes = try c.decodeIfPresent([String].self, forKey: .scopes) ?? []
         self.escape = try c.decodeIfPresent(Bool.self, forKey: .escape) ?? false
         self.sent = try c.decodeIfPresent(Bool.self, forKey: .sent) ?? false
     }
@@ -1830,12 +2193,54 @@ extension AppAPI.Error {
     }
 }
 
+extension AppAPI.GuardDecideParams {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try c.decode(String.self, forKey: .id)
+        self.how = try c.decode(String.self, forKey: .how)
+    }
+}
+
+extension AppAPI.GuardDecided {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.message = try c.decode(String.self, forKey: .message)
+    }
+}
+
+extension AppAPI.GuardRefusal {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try c.decode(String.self, forKey: .id)
+        self.project = try c.decode(String.self, forKey: .project)
+        self.thread = try c.decodeIfPresent(String.self, forKey: .thread) ?? ""
+        self.role = try c.decodeIfPresent(String.self, forKey: .role) ?? ""
+        self.rule = try c.decode(String.self, forKey: .rule)
+        self.tool = try c.decode(String.self, forKey: .tool)
+        self.summary = try c.decodeIfPresent(String.self, forKey: .summary) ?? ""
+        self.subject = try c.decode(String.self, forKey: .subject)
+        self.path = try c.decodeIfPresent(Bool.self, forKey: .path) ?? false
+        self.floor = try c.decodeIfPresent(Bool.self, forKey: .floor) ?? false
+        self.first = try c.decode(Date.self, forKey: .first)
+        self.last = try c.decode(Date.self, forKey: .last)
+        self.count = try c.decode(Int.self, forKey: .count)
+    }
+}
+
+extension AppAPI.GuardRefusals {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.refusals = try c.decodeIfPresent([AppAPI.GuardRefusal].self, forKey: .refusals) ?? []
+    }
+}
+
 extension AppAPI.Hello {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.appApi = try c.decode(Int.self, forKey: .appApi)
         self.tm = try c.decode(String.self, forKey: .tm)
         self.build = try c.decode(String.self, forKey: .build)
+        self.level = try c.decodeIfPresent(String.self, forKey: .level) ?? ""
         self.capabilities = try c.decodeIfPresent([String].self, forKey: .capabilities) ?? []
         self.methods = try c.decodeIfPresent([String].self, forKey: .methods) ?? []
         self.server = try c.decodeIfPresent(AppAPI.Server.self, forKey: .server)
@@ -1882,6 +2287,40 @@ extension AppAPI.Link {
         self.filesWaiting = try c.decodeIfPresent(Int.self, forKey: .filesWaiting) ?? 0
         self.filesActive = try c.decodeIfPresent(Int.self, forKey: .filesActive) ?? 0
         self.lastAt = try c.decodeIfPresent(Date.self, forKey: .lastAt)
+    }
+}
+
+extension AppAPI.LinkActParams {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.project = try c.decode(String.self, forKey: .project)
+        self.action = try c.decode(String.self, forKey: .action)
+        self.id = try c.decode(String.self, forKey: .id)
+        self.allow = try c.decodeIfPresent(String.self, forKey: .allow) ?? ""
+        self.ask = try c.decodeIfPresent(Bool.self, forKey: .ask) ?? false
+    }
+}
+
+extension AppAPI.LinkActResult {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.words = try c.decode(String.self, forKey: .words)
+    }
+}
+
+extension AppAPI.LinkNeed {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.kind = try c.decode(String.self, forKey: .kind)
+        self.peer = try c.decode(String.self, forKey: .peer)
+        self.shown = try c.decodeIfPresent(String.self, forKey: .shown) ?? ""
+        self.id = try c.decode(String.self, forKey: .id)
+        self.created = try c.decode(Date.self, forKey: .created)
+        self.title = try c.decodeIfPresent(String.self, forKey: .title) ?? ""
+        self.bytes = try c.decodeIfPresent(Int.self, forKey: .bytes) ?? 0
+        self.file = try c.decodeIfPresent(String.self, forKey: .file) ?? ""
+        self.size = try c.decodeIfPresent(Int.self, forKey: .size) ?? 0
+        self.allow = try c.decodeIfPresent(String.self, forKey: .allow) ?? ""
     }
 }
 
@@ -1978,6 +2417,7 @@ extension AppAPI.Peer {
         self.since = try c.decodeIfPresent(Date.self, forKey: .since)
         self.projects = try c.decodeIfPresent([AppAPI.PeerProject].self, forKey: .projects) ?? []
         self.shareWaits = try c.decodeIfPresent(Int.self, forKey: .shareWaits) ?? 0
+        self.shareRequests = try c.decodeIfPresent([AppAPI.ShareRequest].self, forKey: .shareRequests) ?? []
         self.pane = try c.decodeIfPresent(Bool.self, forKey: .pane) ?? false
         self.panes = try c.decodeIfPresent(String.self, forKey: .panes) ?? ""
         self.transcript = try c.decodeIfPresent(Bool.self, forKey: .transcript) ?? false
@@ -2056,6 +2496,7 @@ extension AppAPI.Project {
         self.active = try c.decode(Bool.self, forKey: .active)
         self.paused = try c.decodeIfPresent(Bool.self, forKey: .paused) ?? false
         self.pinned = try c.decodeIfPresent(Bool.self, forKey: .pinned) ?? false
+        self.shared = try c.decodeIfPresent(Bool.self, forKey: .shared) ?? false
         self.needsYou = try c.decodeIfPresent([AppAPI.Task].self, forKey: .needsYou) ?? []
         self.questions = try c.decodeIfPresent(Int.self, forKey: .questions) ?? 0
         self.threads = try c.decodeIfPresent([AppAPI.Thread].self, forKey: .threads) ?? []
@@ -2070,6 +2511,7 @@ extension AppAPI.Project {
         self.taskUsage = try c.decodeIfPresent([String: AppAPI.Usage].self, forKey: .taskUsage) ?? [:]
         self.checkouts = try c.decodeIfPresent([String: String].self, forKey: .checkouts) ?? [:]
         self.links = try c.decodeIfPresent([AppAPI.Link].self, forKey: .links) ?? []
+        self.linkNeeds = try c.decodeIfPresent([AppAPI.LinkNeed].self, forKey: .linkNeeds) ?? []
     }
 }
 
@@ -2137,6 +2579,7 @@ extension AppAPI.PromptParams {
         self.id = try c.decode(String.self, forKey: .id)
         self.text = try c.decode(String.self, forKey: .text)
         self.mode = try c.decodeIfPresent(String.self, forKey: .mode) ?? ""
+        self.files = try c.decodeIfPresent([String].self, forKey: .files) ?? []
     }
 }
 
@@ -2288,6 +2731,34 @@ extension AppAPI.SessionList {
     }
 }
 
+extension AppAPI.ShareAnswer {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try c.decode(String.self, forKey: .id)
+        self.state = try c.decode(String.self, forKey: .state)
+        self.project = try c.decodeIfPresent(String.self, forKey: .project) ?? ""
+    }
+}
+
+extension AppAPI.ShareAnswerParams {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try c.decode(String.self, forKey: .id)
+        self.accept = try c.decodeIfPresent(Bool.self, forKey: .accept) ?? false
+        self.project = try c.decodeIfPresent(String.self, forKey: .project) ?? ""
+    }
+}
+
+extension AppAPI.ShareRequest {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try c.decode(String.self, forKey: .id)
+        self.for = try c.decodeIfPresent(String.self, forKey: .for) ?? ""
+        self.note = try c.decodeIfPresent(String.self, forKey: .note) ?? ""
+        self.created = try c.decode(Date.self, forKey: .created)
+    }
+}
+
 extension AppAPI.Step {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -2347,6 +2818,14 @@ extension AppAPI.TaskAskResult {
     }
 }
 
+extension AppAPI.TaskGetParams {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.project = try c.decode(String.self, forKey: .project)
+        self.task = try c.decode(String.self, forKey: .task)
+    }
+}
+
 extension AppAPI.TaskParams {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -2364,6 +2843,8 @@ extension AppAPI.Thread {
         self.pr = try c.decodeIfPresent(Int.self, forKey: .pr) ?? 0
         self.reportPr = try c.decodeIfPresent(String.self, forKey: .reportPr) ?? ""
         self.task = try c.decodeIfPresent(AppAPI.Task.self, forKey: .task)
+        self.check = try c.decodeIfPresent([String].self, forKey: .check) ?? []
+        self.prState = try c.decodeIfPresent(String.self, forKey: .prState) ?? ""
     }
 }
 
@@ -2429,6 +2910,7 @@ extension AppAPI.TranscriptEvent {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.items = try c.decodeIfPresent([AppAPI.TranscriptItem].self, forKey: .items) ?? []
         self.skipped = try c.decodeIfPresent(Int.self, forKey: .skipped) ?? 0
+        self.before = try c.decodeIfPresent(String.self, forKey: .before) ?? ""
         self.status = try c.decodeIfPresent(AppAPI.TranscriptStatus.self, forKey: .status)
         self.reason = try c.decodeIfPresent(String.self, forKey: .reason) ?? ""
     }
@@ -2462,10 +2944,28 @@ extension AppAPI.TranscriptItem {
     }
 }
 
+extension AppAPI.TranscriptPage {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.items = try c.decodeIfPresent([AppAPI.TranscriptItem].self, forKey: .items) ?? []
+        self.before = try c.decodeIfPresent(String.self, forKey: .before) ?? ""
+    }
+}
+
+extension AppAPI.TranscriptPageParams {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.session = try c.decode(String.self, forKey: .session)
+        self.before = try c.decode(String.self, forKey: .before)
+        self.limit = try c.decodeIfPresent(Int.self, forKey: .limit) ?? 0
+    }
+}
+
 extension AppAPI.TranscriptParams {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.session = try c.decode(String.self, forKey: .session)
+        self.tail = try c.decodeIfPresent(Int.self, forKey: .tail) ?? 0
     }
 }
 
@@ -2492,6 +2992,30 @@ extension AppAPI.TranscriptTodo {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.text = try c.decode(String.self, forKey: .text)
         self.status = try c.decode(String.self, forKey: .status)
+    }
+}
+
+extension AppAPI.Upload {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.upload = try c.decode(String.self, forKey: .upload)
+        self.received = try c.decode(Int.self, forKey: .received)
+        self.ref = try c.decodeIfPresent(String.self, forKey: .ref) ?? ""
+        self.name = try c.decodeIfPresent(String.self, forKey: .name) ?? ""
+        self.type = try c.decodeIfPresent(String.self, forKey: .type) ?? ""
+        self.size = try c.decodeIfPresent(Int.self, forKey: .size) ?? 0
+    }
+}
+
+extension AppAPI.UploadParams {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.session = try c.decode(String.self, forKey: .session)
+        self.upload = try c.decodeIfPresent(String.self, forKey: .upload) ?? ""
+        self.name = try c.decodeIfPresent(String.self, forKey: .name) ?? ""
+        self.size = try c.decodeIfPresent(Int.self, forKey: .size) ?? 0
+        self.offset = try c.decodeIfPresent(Int.self, forKey: .offset) ?? 0
+        self.data = try c.decodeIfPresent(Data.self, forKey: .data) ?? Data()
     }
 }
 

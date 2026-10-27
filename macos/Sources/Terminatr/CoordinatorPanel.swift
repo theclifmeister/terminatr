@@ -25,10 +25,11 @@ struct CoordinatorPanel: View {
             !n.id.hasPrefix("questions:") && (n.session.isEmpty || n.session != session?.id)
         }
         let shown = all ? needs : Array(needs.prefix(Self.shown))
-        if carded || kept > 0 || !needs.isEmpty {
+        let settled = app.settledLinks(model.ref.project)
+        if carded || kept > 0 || !needs.isEmpty || !settled.isEmpty {
             ViewThatFits(in: .vertical) {
-                content(kept: kept, needs: needs, shown: shown)
-                ScrollView { content(kept: kept, needs: needs, shown: shown) }
+                content(kept: kept, needs: needs, shown: shown, settled: settled)
+                ScrollView { content(kept: kept, needs: needs, shown: shown, settled: settled) }
                     .frame(maxHeight: 280)
             }
             .padding(.top, 10)
@@ -38,20 +39,21 @@ struct CoordinatorPanel: View {
 
     static let shown = 3
 
-    private func content(kept: Int, needs: [Need], shown: [Need]) -> some View {
+    private func content(kept: Int, needs: [Need], shown: [Need], settled: [(id: String, outcome: LinkOutcome)]) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Cards(model: model, session: session, firstChoice: app.firstChoice)
             if kept > 0 {
                 QuestionsCard(project: model.ref.project, count: kept)
                     .padding(.horizontal, Page.edge)
             }
-            if !needs.isEmpty {
+            if !needs.isEmpty || !settled.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Needs you in \(model.ref.project) · \(needs.count)".uppercased())
                         .font(theme.mono(.label, .medium))
                         .tracking(1)
                         .foregroundStyle(theme.muted)
                     ForEach(shown) { NeedCard(need: $0) }
+                    ForEach(settled, id: \.id) { LinkOutcomeRow(outcome: $0.outcome, settled: true) }
                     if needs.count > shown.count || all && needs.count > Self.shown {
                         Button(all ? "Fewer" : "\(needs.count - shown.count) more") { all.toggle() }
                             .buttonStyle(.link)

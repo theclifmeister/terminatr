@@ -106,6 +106,7 @@ struct MainWindow: View {
                 NewTaskSheet(project: p)
             }
         }
+        .sheet(item: $app.taskShown) { TaskSheet(shown: $0) }
         // Save & Clear, Activate and Deactivate, from wherever the user
         // picked them: asked here, in the TUI's words.
         .confirmationDialog(app.asking?.title ?? "", isPresented: Binding(get: { app.asking != nil }, set: { if !$0 { app.asking = nil } }),

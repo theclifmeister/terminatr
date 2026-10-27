@@ -9,6 +9,7 @@ import (
 	"io"
 	"sync"
 
+	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/version"
@@ -21,6 +22,9 @@ const (
 	// MaxStreams bounds the streams open at once: each holds a
 	// connection to the server.
 	MaxStreams = 32
+	// MaxDeviceStreams bounds a device's: a phone shows one session at
+	// a time.
+	MaxDeviceStreams = 8
 	// idleConns is how many control connections the bridge keeps for
 	// calls between them.
 	idleConns = 4
@@ -34,6 +38,19 @@ type Options struct {
 	// on macOS through the launchd job (client.StartDetached), never as
 	// the bridge's child.
 	Autostart bool
+	// Dial, when set, opens the bridge's control connections in place
+	// of the server's socket: a device's, on the server's own side.
+	Dial func() (*client.Client, error)
+	// Level, when set, is the device level the bridge serves at now
+	// (device.LevelView …) and a channel closed when it changes; nil is
+	// the Mac app's, every method.
+	Level func() (string, <-chan struct{})
+	// MaxStreams bounds the streams open at once; 0 is MaxStreams.
+	MaxStreams int
+	// Caller is who the environment says runs the bridge. The guard's
+	// methods answer only the human, by it and as the server places the
+	// bridge (caller.who): the guard's log is the human's.
+	Caller caller.Caller
 }
 
 // Serve is tm app bridge: it reaches the server, writes its Hello to out,
@@ -41,10 +58,14 @@ type Options struct {
 // error that kept it from reaching the server, after a Hello saying so,
 // or what broke in or out.
 func Serve(in io.Reader, out io.Writer, o Options) error {
+	if o.MaxStreams <= 0 {
+		o.MaxStreams = MaxStreams
+	}
 	b := &bridge{o: o, w: json.NewEncoder(out), open: map[int64]bool{}, streams: map[int64]*openStream{},
 		idle: make(chan *client.Client, idleConns)}
-	c, err := client.ConnectAs(o.Paths, o.Autostart, proto.ClientApp)
-	hello := &Hello{AppAPI: Version, TM: version.Version, Build: version.BuildID(), Capabilities: Capabilities, Methods: MethodNames()}
+	c, err := b.dial()
+	level, changed := b.level()
+	hello := helloAt(level)
 	if err != nil {
 		hello.Error = connectError(err)
 		b.write(Out{Hello: hello})
@@ -52,14 +73,79 @@ func Serve(in io.Reader, out io.Writer, o Options) error {
 	}
 	hello.Server = &Server{Version: c.Server.Version, Protocol: c.Server.Protocol, PID: c.Server.PID, Started: c.Started,
 		Caps: append([]string{}, c.Server.Caps...)}
+	b.server = hello.Server
 	b.idle <- c
 	if err := b.write(Out{Hello: hello}); err != nil {
 		c.Close()
 		return err
 	}
+	done := make(chan struct{})
+	if changed != nil {
+		go b.follow(changed, done)
+	}
 	err = b.serve(in)
+	close(done)
 	b.close()
 	return err
+}
+
+// helloAt is the hello of a bridge at device level ("" for the Mac
+// app's): the capabilities and methods the level allows.
+func helloAt(level string) *Hello {
+	h := &Hello{AppAPI: Version, TM: version.Version, Build: version.BuildID(), Level: level}
+	for _, c := range Capabilities {
+		if c != CapWrite || allowsWrite(level) {
+			h.Capabilities = append(h.Capabilities, c)
+		}
+	}
+	for _, m := range Methods() {
+		if Allowed(m, level) {
+			h.Methods = append(h.Methods, m.Name)
+		}
+	}
+	return h
+}
+
+// level is the bridge's device level now, and the channel closed when
+// it changes: "" and nil for the Mac app's.
+func (b *bridge) level() (string, <-chan struct{}) {
+	if b.o.Level == nil {
+		return "", nil
+	}
+	return b.o.Level()
+}
+
+// follow acts on each change of the device's level until done: a new
+// hello lists what the level allows now, and the open streams of methods
+// it no longer allows end.
+func (b *bridge) follow(changed <-chan struct{}, done <-chan struct{}) {
+	for {
+		select {
+		case <-done:
+			return
+		case <-changed:
+		}
+		var level string
+		level, changed = b.level()
+		h := helloAt(level)
+		h.Server = b.server
+		b.mu.Lock()
+		for _, st := range b.streams {
+			if m, ok := Lookup(st.method); ok && !Allowed(m, level) {
+				st.cancel()
+			}
+		}
+		b.mu.Unlock()
+		b.write(Out{Hello: h})
+	}
+}
+
+// dial is a new control connection to the server.
+func (b *bridge) dial() (*client.Client, error) {
+	if b.o.Dial != nil {
+		return b.o.Dial()
+	}
+	return client.ConnectAs(b.o.Paths, b.o.Autostart, proto.ClientApp)
 }
 
 // connectError is err, which kept the bridge from the server, as the
@@ -87,6 +173,11 @@ type bridge struct {
 	wg      sync.WaitGroup
 	// idle are control connections free for a call.
 	idle chan *client.Client
+	// server is the server the hello said.
+	server *Server
+	// whoKnown: the server placed the bridge's caller, whoHuman as the
+	// human (human).
+	whoKnown, whoHuman bool
 }
 
 // openStream is a stream the app opened: its method, what cancels it,
@@ -177,6 +268,10 @@ func (b *bridge) handle(req Request) {
 		b.fail(req.ID, ErrUnknownMethod, "%s is not in the app API", req.Method)
 		return
 	}
+	if level, _ := b.level(); !Allowed(m, level) {
+		b.fail(req.ID, ErrLevel, "%s needs a higher level than this device's (%s): tm device access on the server raises it", req.Method, level)
+		return
+	}
 	if m.Target != "" {
 		b.streamInput(req, m)
 		return
@@ -192,9 +287,9 @@ func (b *bridge) handle(req Request) {
 		b.mu.Unlock()
 		b.fail(req.ID, ErrBadRequest, "request %d is still open", req.ID)
 		return
-	case m.Stream && len(b.streams) >= MaxStreams:
+	case m.Stream && len(b.streams) >= b.o.MaxStreams:
 		b.mu.Unlock()
-		b.fail(req.ID, ErrTooMany, "%d streams are open; cancel one first", MaxStreams)
+		b.fail(req.ID, ErrTooMany, "%d streams are open; cancel one first", b.o.MaxStreams)
 		return
 	}
 	b.open[req.ID] = true
@@ -255,7 +350,7 @@ func (b *bridge) conn() (*client.Client, error) {
 	case c := <-b.idle:
 		return c, nil
 	default:
-		return client.ConnectAs(b.o.Paths, b.o.Autostart, proto.ClientApp)
+		return b.dial()
 	}
 }
 
@@ -274,6 +369,15 @@ func (b *bridge) release(c *client.Client, broken bool) {
 // call answers request id of unary method m. A call is never retried:
 // a write may have reached the server before its connection broke.
 func (b *bridge) call(id int64, m Method, params any) {
+	if m.local != nil {
+		res, err := m.local(b, params)
+		if e, ok := err.(*Error); ok {
+			b.fail(id, e.Code, "%s", e.Message)
+			return
+		}
+		b.answer(id, res)
+		return
+	}
 	c, err := b.conn()
 	if err != nil {
 		b.fail(id, ErrServer, "%v", err)
@@ -293,6 +397,45 @@ func (b *bridge) call(id int64, m Method, params any) {
 		return
 	}
 	b.answer(id, res)
+}
+
+// human: the bridge's caller is the human, by Options.Caller and as
+// the server places it, asked once it answers.
+func (b *bridge) human() bool {
+	// A device's bridge runs in the server, as the device: never the
+	// human at a computer (Allowed already keeps it from the local
+	// methods).
+	if b.o.Caller.IsAgent() || b.o.Level != nil {
+		return false
+	}
+	b.mu.Lock()
+	known, human := b.whoKnown, b.whoHuman
+	b.mu.Unlock()
+	if known {
+		return human
+	}
+	var info proto.CallerInfo
+	if b.serverCall(proto.MethodCallerWho, nil, &info) != nil {
+		return false
+	}
+	human = !caller.Caller{Kind: caller.Kind(info.Kind)}.IsAgent()
+	b.mu.Lock()
+	b.whoKnown, b.whoHuman = true, human
+	b.mu.Unlock()
+	return human
+}
+
+// serverCall calls the server for a method of the bridge's own: method
+// with params into res, on a control connection of the bridge's.
+func (b *bridge) serverCall(method string, params, res any) error {
+	c, err := b.conn()
+	if err != nil {
+		return err
+	}
+	err = c.Call(method, params, res)
+	var perr *proto.Error
+	b.release(c, err != nil && !errors.As(err, &perr))
+	return err
 }
 
 // serverError answers request id with the server's error, its code
@@ -322,7 +465,7 @@ func (b *bridge) answer(id int64, v any) {
 // the server wants acked is acked once it is written to the app, so a
 // slow app holds the server at its window.
 func (b *bridge) stream(ctx context.Context, id int64, m Method, params any, st *openStream) {
-	c, err := client.ConnectAs(b.o.Paths, b.o.Autostart, proto.ClientApp)
+	c, err := b.dial()
 	if err != nil {
 		b.fail(id, ErrServer, "%v", err)
 		return

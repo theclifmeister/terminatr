@@ -26,9 +26,11 @@ struct ProjectDashboard: View {
                 if Dashboard.isEmpty(project, needs: needs.count) {
                     NextStepCard(project: project, step: Dashboard.next(project, coordinatorRuns: running))
                 }
-                if !needs.isEmpty {
+                let settled = app.settledLinks(project.slug)
+                if !needs.isEmpty || !settled.isEmpty {
                     section("Needs you · \(needs.count)") {
                         CardGrid { ForEach(needs.filter { !$0.isReview }) { NeedCard(need: $0) } }
+                        ForEach(settled, id: \.id) { LinkOutcomeRow(outcome: $0.outcome, settled: true) }
                         let review = needs.filter(\.isReview)
                         if !review.isEmpty {
                             label("Review · \(review.count)")
@@ -325,8 +327,10 @@ struct StartButton: View {
     }
 }
 
-/// A task on the board: its id, title and its action (Delegate…).
+/// A task on the board: its id, title and its action (Delegate…); its
+/// words show it in the task view.
 private struct BoardRow: View {
+    @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
     let project: String
     let task: AppAPI.Task
@@ -334,14 +338,20 @@ private struct BoardRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .center, spacing: 8) {
-                Text(task.ref)
-                    .font(theme.mono(.subheadline, .medium))
-                    .foregroundStyle(theme.action)
-                    .frame(minWidth: 44, alignment: .leading)
-                Text(task.title)
-                    .font(theme.body(.body))
-                    .lineLimit(1)
-                    .textSelection(.enabled)
+                Button { app.showTask(project: project, task: task.ref) } label: {
+                    HStack(alignment: .center, spacing: 8) {
+                        Text(task.ref)
+                            .font(theme.mono(.subheadline, .medium))
+                            .foregroundStyle(theme.action)
+                            .frame(minWidth: 44, alignment: .leading)
+                        Text(task.title)
+                            .font(theme.body(.body))
+                            .lineLimit(1)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("Shows \(task.ref) in full: its steps and notes")
                 Spacer(minLength: 8)
                 TaskActs(project: project, task: task.ref, status: task.status, compact: true)
             }

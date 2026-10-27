@@ -21,6 +21,10 @@ public enum Compatibility: Equatable, Sendable {
     /// The app API that has task.add: File › New Task… needs it.
     public static let taskAddAPI = 7
 
+    /// The app API that has task.get and the threads' check and
+    /// pr_state: the task view's notes for a board task need it.
+    public static let taskGetAPI = 14
+
     /// The app API that has session.file: the attachment cards need it.
     public static let sessionFileAPI = 11
 
@@ -36,6 +40,18 @@ public enum Compatibility: Equatable, Sendable {
             && hello.methods.contains(AppAPI.Methods.projectActive.name)
     }
 
+    /// The app API that has session.upload: the composer's files need it.
+    public static let uploadAPI = 15
+
+    /// Whether hello's tm takes files for a prompt (session.upload).
+    public static func takesFiles(_ hello: AppAPI.Hello) -> Bool {
+        hello.appApi >= uploadAPI && hello.methods.contains(AppAPI.Methods.sessionUpload.name)
+    }
+
+    /// The app API that has guard.refusals and guard.decide: the
+    /// refusals' cards under Needs you need it.
+    public static let guardAPI = 18
+
     /// Whether hello's tm sends the conversation's files (session.file),
     /// its server too.
     public static func sendsFiles(_ hello: AppAPI.Hello) -> Bool {
@@ -43,9 +59,20 @@ public enum Compatibility: Equatable, Sendable {
             && (hello.server?.caps ?? []).contains("session-file")
     }
 
+    /// Whether hello's tm lists the guard's refusals and answers them
+    /// from the app (guard.refusals, guard.decide).
+    public static func answersRefusals(_ hello: AppAPI.Hello) -> Bool {
+        hello.appApi >= guardAPI && hello.methods.contains(AppAPI.Methods.guardDecide.name)
+    }
+
     /// Whether hello's tm adds tasks from the app (task.add).
     public static func addsTasks(_ hello: AppAPI.Hello) -> Bool {
         hello.appApi >= taskAddAPI && hello.methods.contains(AppAPI.Methods.taskAdd.name)
+    }
+
+    /// Whether hello's tm reads a task whole (task.get).
+    public static func getsTasks(_ hello: AppAPI.Hello) -> Bool {
+        hello.appApi >= taskGetAPI && hello.methods.contains(AppAPI.Methods.taskGet.name)
     }
 
     /// Compares hello with this app, of release appVersion (its

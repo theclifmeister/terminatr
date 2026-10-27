@@ -83,7 +83,8 @@ type SessionAnswerResult struct {
 // screen with one of its numbered options (SessionApproveParams), once
 // the server has checked what tm thread approve checks: the agent's
 // state is blocked on a permission, the screen shows the dialog and has
-// the option, which allows once only. An escape's prompt (a command
+// the option, which allows once only (or for the session, from the
+// user in the Mac app, with Session). An escape's prompt (a command
 // outside the sandbox) is the user's alone, and needs Escape. The
 // server journals the answer as thread.approve. The human's; tm's own
 // command sends it for the coordinator with Relay.
@@ -102,6 +103,13 @@ const (
 	// ErrEscapeUnconfirmed: the prompt asks to run a command outside
 	// the sandbox and the call didn't say the user confirmed that.
 	ErrEscapeUnconfirmed = "escape-unconfirmed"
+	// ErrDeviceEscapeOff: a paired device asked to answer a prompt that
+	// runs a command outside the sandbox, which devices never answer
+	// (docs/SPEC.md §16.15).
+	ErrDeviceEscapeOff = "device-escape-off"
+	// ErrSessionUnconfirmed: the option allows for the rest of the
+	// session and the call didn't say the user confirmed that.
+	ErrSessionUnconfirmed = "session-unconfirmed"
 )
 
 // SessionApproveParams are the params of session.approve: option
@@ -117,6 +125,11 @@ type SessionApproveParams struct {
 	// it runs outside the sandbox: an escape's prompt is refused
 	// without it.
 	Escape bool `json:"escape,omitempty"`
+	// Session says the user confirmed, in words naming the tool or
+	// command, that the agent may run it for the rest of its session
+	// without asking: an option that allows for the session is refused
+	// without it, and from anyone but the user in the Mac app.
+	Session bool `json:"session,omitempty"`
 	// Relay is the role whose answer this is, when tm's own commands
 	// send it for an agent (the coordinator's tm thread approve):
 	// "coordinator" is refused on an escape's prompt, and unless the
@@ -126,12 +139,14 @@ type SessionApproveParams struct {
 
 // SessionApproveResult is the dialog as the screen shows it: its
 // question, the chosen option and every option, in order. Escape: the
-// prompt asks to run a command outside the sandbox. Sent: the key went
-// (not for Check).
+// prompt asks to run a command outside the sandbox. Scopes: how long
+// each option allows, "once", "session" or "persistent" (agent.Scope).
+// Sent: the key went (not for Check).
 type SessionApproveResult struct {
 	Question string   `json:"question,omitempty"`
 	Option   string   `json:"option"`
 	Options  []string `json:"options"`
+	Scopes   []string `json:"scopes,omitempty"`
 	Escape   bool     `json:"escape,omitempty"`
 	Sent     bool     `json:"sent,omitempty"`
 }

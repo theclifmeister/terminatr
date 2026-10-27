@@ -51,10 +51,18 @@ type Caller struct {
 	// docs/SPEC.md §3.8). The rights are the human's; only the journal
 	// tells them apart.
 	Via string
+	// Device is the paired device a human's call came from, through its
+	// link's app API on the server (docs/SPEC.md §16.15): journaled as
+	// "human (iphone: <name>)". Its rights are its level's, which the
+	// device's app API enforces; the server refuses it escape approvals.
+	Device string
 }
 
 // ViaApp is Via for the Mac app's calls, journaled as "human (app)".
 const ViaApp = "app"
+
+// ForDevice is the caller for the paired device name's calls.
+func ForDevice(name string) Caller { return Caller{Kind: Human, Via: "iphone: " + name, Device: name} }
 
 // ForMod is the caller for mod id's brokered calls.
 func ForMod(id string) Caller { return Caller{Kind: Mod, Mod: id} }
