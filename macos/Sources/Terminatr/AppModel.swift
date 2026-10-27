@@ -509,6 +509,18 @@ final class AppModel {
         m.pick(m.tab == .conversation ? .terminal : .conversation)
     }
 
+    /// A Terminal tab is shown, for View › Repaint Terminal.
+    var terminalShown: Bool {
+        guard let m = selectedSession else { return false }
+        return m.tab == .terminal && m.sessionID != nil
+    }
+
+    /// ⌥⌘R: the shown terminal asks its server for a fresh repaint.
+    func repaintTerminal() {
+        guard terminalShown, let m = selectedSession else { return }
+        m.askRepaint()
+    }
+
     /// The session model's session as session.list has it.
     func session(of m: SessionModel) -> AppAPI.Session? {
         m.sessionID.flatMap { id in sessions.first { $0.id == id } }

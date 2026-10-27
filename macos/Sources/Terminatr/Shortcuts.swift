@@ -31,6 +31,7 @@ struct ShortcutsSheet: View {
             ("↩  ⌥↩  ⇧↩", "Send (queued), steer into the running turn, new line"),
             ("⌘F", "Find in the conversation; ⌘G and ⇧⌘G the next and previous match"),
             ("⇧⌘T", "Conversation or Terminal"),
+            ("⌥⌘R", "Repaint the terminal from its server"),
             ("⌥⌘I", "Show or hide the inspector"),
         ]),
         ("Palette", [

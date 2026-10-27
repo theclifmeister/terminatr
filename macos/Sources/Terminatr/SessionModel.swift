@@ -21,6 +21,9 @@ final class SessionModel {
     var tab = SessionTab.conversation
     /// The user picked the tab: the window no longer switches it.
     var tabPicked = false
+    /// Repaints asked for from View › Repaint Terminal: the shown
+    /// Terminal tab asks its server for one each time this goes up.
+    private(set) var repaints = 0
 
     @ObservationIgnored private var streams: [Task<Void, Never>] = []
     /// The bridge the streams run on.
@@ -66,6 +69,11 @@ final class SessionModel {
     func pick(_ t: SessionTab) {
         tab = t
         tabPicked = true
+    }
+
+    /// ⌥⌘R: a fresh repaint of the shown pane.
+    func askRepaint() {
+        repaints += 1
     }
 
     /// Opens on the conversation; falls back to the terminal while it
