@@ -26,7 +26,7 @@ public enum Compatibility: Equatable, Sendable {
 
     /// The app API that has guard.refusals and guard.decide: the
     /// refusals' cards under Needs you need it.
-    public static let guardAPI = 15
+    public static let guardAPI = 18
 
     /// Whether hello's tm sends the conversation's files (session.file),
     /// its server too.

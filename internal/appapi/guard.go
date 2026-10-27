@@ -9,7 +9,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
-// The guard's refusals (app API 15): the one exception to settings and
+// The guard's refusals (app API 18): the one exception to settings and
 // access staying out of the app API (docs/SPEC.md §3.8). The guard's log
 // is the human's, so the bridge reads and answers it itself, in its own
 // process as the console does, never through the server, and only when

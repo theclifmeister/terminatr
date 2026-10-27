@@ -323,7 +323,7 @@ func TestBridgeTaskActions(t *testing.T) {
 }
 
 // TestBridgeGuard: the app lists the guard's refusals with the whole
-// command and answers one at a time (app API 15), as the console's
+// command and answers one at a time (app API 18), as the console's
 // Guard refusals do: the allowance in the project's settings or all
 // projects', journaled as "human (app)" without the command; the floor's
 // is only kept; an answer given elsewhere is gone. An agent's bridge

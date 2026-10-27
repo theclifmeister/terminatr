@@ -210,7 +210,7 @@ func thread(_ id: String, task: AppAPI.Task? = nil, session: String = "", checks
     #expect(item("x", true, "plain (no command)").shownSummary == "plain (no command)")
 }
 
-/// A guard refusal (app API 15) is a need of its project, after the
+/// A guard refusal (app API 18) is a need of its project, after the
 /// projects' and before the paired servers': named by its thread's task
 /// while one runs, with the rule in the user's words, the whole command
 /// on the card's refusal only, and no session to open (its card is the

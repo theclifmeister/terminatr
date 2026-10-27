@@ -32,7 +32,7 @@ final class AppModel {
     private(set) var notices: [AppAPI.Notice] = []
     private(set) var peers: [AppAPI.Peer] = []
     /// The guard's refusals waiting on the user (guard.refusals, app
-    /// API 15): needs whose cards answer them.
+    /// API 18): needs whose cards answer them.
     private(set) var refusals: [AppAPI.GuardRefusal] = []
     /// [ui] needs_first, as the last session list said: the sidebar
     /// lists the projects that need the user first, as the TUI's.

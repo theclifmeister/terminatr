@@ -25,7 +25,7 @@ public struct Need: Identifiable, Hashable, Sendable {
         case network
         /// A call the guard refused, waiting on the user's answer: allow
         /// it in its project or all projects, or keep refusing it
-        /// (guard.refusals, app API 15).
+        /// (guard.refusals, app API 18).
         case refusal
     }
 
