@@ -99,7 +99,7 @@ type (
 		Project string `json:"project"`
 		Task    string `json:"task"`
 	}
-		// ProjectParams name a project (questions.open, coordinator.clear).
+	// ProjectParams name a project (questions.open, coordinator.clear).
 	ProjectParams struct {
 		Project string `json:"project"`
 	}
