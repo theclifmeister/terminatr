@@ -6,7 +6,7 @@ import Foundation
 /// The terminatr app API (docs/SPEC.md §3.8): what tm app bridge answers.
 public enum AppAPI {
     /// The app API version this app was generated against.
-    public static let version = 14
+    public static let version = 15
 
     public struct AnswerParams: Codable, Sendable, Hashable {
         public var id: String
@@ -804,17 +804,20 @@ public enum AppAPI {
         public var id: String
         public var text: String
         public var mode: String
+        public var files: [String]
 
-        public init(id: String, text: String, mode: String = "") {
+        public init(id: String, text: String, mode: String = "", files: [String] = []) {
             self.id = id
             self.text = text
             self.mode = mode
+            self.files = files
         }
 
         enum CodingKeys: String, CodingKey {
             case id
             case text
             case mode
+            case files
         }
     }
 
@@ -1634,6 +1637,60 @@ public enum AppAPI {
         }
     }
 
+    public struct Upload: Codable, Sendable, Hashable {
+        public var upload: String
+        public var received: Int
+        public var ref: String
+        public var name: String
+        public var type: String
+        public var size: Int
+
+        public init(upload: String, received: Int, ref: String = "", name: String = "", type: String = "", size: Int = 0) {
+            self.upload = upload
+            self.received = received
+            self.ref = ref
+            self.name = name
+            self.type = type
+            self.size = size
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case upload
+            case received
+            case ref
+            case name
+            case type
+            case size
+        }
+    }
+
+    public struct UploadParams: Codable, Sendable, Hashable {
+        public var session: String
+        public var upload: String
+        public var name: String
+        public var size: Int
+        public var offset: Int
+        public var data: Data
+
+        public init(session: String, upload: String = "", name: String = "", size: Int = 0, offset: Int = 0, data: Data = Data()) {
+            self.session = session
+            self.upload = upload
+            self.name = name
+            self.size = size
+            self.offset = offset
+            self.data = data
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case session
+            case upload
+            case name
+            case size
+            case offset
+            case data
+        }
+    }
+
     public struct Usage: Codable, Sendable, Hashable {
         public var turns: Int
         public var input: Int
@@ -1781,6 +1838,7 @@ public enum AppAPI {
         public static let sessionKeys = Call<KeysParams, Empty>("session.keys", write: true)
         public static let sessionList = Call<NoParams, SessionList>("session.list", write: false)
         public static let sessionPrompt = Call<PromptParams, PromptResult>("session.prompt", write: true)
+        public static let sessionUpload = Call<UploadParams, Upload>("session.upload", write: true)
         public static let sessionWatch = Subscription<SessionIDParams, Watch, Watch>("session.watch", events: ["watch.changed"])
         public static let taskAccept = Call<TaskParams, TaskAskResult>("task.accept", write: true)
         public static let taskAdd = Call<TaskAddParams, TaskAdded>("task.add", write: true)
@@ -2159,6 +2217,7 @@ extension AppAPI.PromptParams {
         self.id = try c.decode(String.self, forKey: .id)
         self.text = try c.decode(String.self, forKey: .text)
         self.mode = try c.decodeIfPresent(String.self, forKey: .mode) ?? ""
+        self.files = try c.decodeIfPresent([String].self, forKey: .files) ?? []
     }
 }
 
@@ -2524,6 +2583,30 @@ extension AppAPI.TranscriptTodo {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.text = try c.decode(String.self, forKey: .text)
         self.status = try c.decode(String.self, forKey: .status)
+    }
+}
+
+extension AppAPI.Upload {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.upload = try c.decode(String.self, forKey: .upload)
+        self.received = try c.decode(Int.self, forKey: .received)
+        self.ref = try c.decodeIfPresent(String.self, forKey: .ref) ?? ""
+        self.name = try c.decodeIfPresent(String.self, forKey: .name) ?? ""
+        self.type = try c.decodeIfPresent(String.self, forKey: .type) ?? ""
+        self.size = try c.decodeIfPresent(Int.self, forKey: .size) ?? 0
+    }
+}
+
+extension AppAPI.UploadParams {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.session = try c.decode(String.self, forKey: .session)
+        self.upload = try c.decodeIfPresent(String.self, forKey: .upload) ?? ""
+        self.name = try c.decodeIfPresent(String.self, forKey: .name) ?? ""
+        self.size = try c.decodeIfPresent(Int.self, forKey: .size) ?? 0
+        self.offset = try c.decodeIfPresent(Int.self, forKey: .offset) ?? 0
+        self.data = try c.decodeIfPresent(Data.self, forKey: .data) ?? Data()
     }
 }
 

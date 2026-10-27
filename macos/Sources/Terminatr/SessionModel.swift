@@ -149,9 +149,18 @@ final class SessionModel {
 
     /// Sends a prompt: queued (mode ""), steered into the running turn
     /// ("now") or interrupting it ("interrupt").
-    func prompt(_ text: String, mode: String = "") async throws -> AppAPI.PromptResult {
+    /// files are refs upload answered: tm names each after the text.
+    func prompt(_ text: String, mode: String = "", files: [String] = []) async throws -> AppAPI.PromptResult {
         let (b, id) = try target()
-        return try await b.call(AppAPI.Methods.sessionPrompt, AppAPI.PromptParams(id: id, text: text, mode: mode))
+        return try await b.call(AppAPI.Methods.sessionPrompt, AppAPI.PromptParams(id: id, text: text, mode: mode, files: files))
+    }
+
+    /// Sends a file for a prompt to tm (session.upload), which stores it
+    /// in the project's uploads/: the last answer has its ref.
+    func upload(_ data: Data, name: String, progress: (Int) -> Void) async throws -> AppAPI.Upload {
+        let (b, id) = try target()
+        return try await ComposerFiles.upload(data, name: name, session: id,
+                                              call: { try await b.call(AppAPI.Methods.sessionUpload, $0) }, progress: progress)
     }
 
     /// Answers question index of the open menu. guarded: the server

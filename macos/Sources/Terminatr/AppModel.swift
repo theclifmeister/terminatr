@@ -104,6 +104,13 @@ final class AppModel {
     /// Whether the first-run sheet shows (FirstRun; Help › Getting
     /// Started shows it again).
     var welcome = false
+    /// Whether this tm takes files for a prompt (session.upload, app API
+    /// 15).
+    var canAttach: Bool {
+        if case .connected(let h) = phase { return Compatibility.takesFiles(h) }
+        return false
+    }
+
     /// The project File › New Task… adds to while its sheet shows.
     var newTask: String?
     /// The task the task view shows (TaskSheet), nil for none.
