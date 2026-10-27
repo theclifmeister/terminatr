@@ -357,6 +357,7 @@ private struct KindToggle: View {
         case .checks: "A PR's checks fail"
         case .held: "A prompt queue is held"
         case .network: "A paired server needs you"
+        case .refusal: "The guard refused a call"
         }
     }
 }

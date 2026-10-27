@@ -24,11 +24,21 @@ public enum Compatibility: Equatable, Sendable {
     /// The app API that has session.file: the attachment cards need it.
     public static let sessionFileAPI = 11
 
+    /// The app API that has guard.refusals and guard.decide: the
+    /// refusals' cards under Needs you need it.
+    public static let guardAPI = 15
+
     /// Whether hello's tm sends the conversation's files (session.file),
     /// its server too.
     public static func sendsFiles(_ hello: AppAPI.Hello) -> Bool {
         hello.appApi >= sessionFileAPI && hello.methods.contains(AppAPI.Methods.sessionFile.name)
             && (hello.server?.caps ?? []).contains("session-file")
+    }
+
+    /// Whether hello's tm lists the guard's refusals and answers them
+    /// from the app (guard.refusals, guard.decide).
+    public static func answersRefusals(_ hello: AppAPI.Hello) -> Bool {
+        hello.appApi >= guardAPI && hello.methods.contains(AppAPI.Methods.guardDecide.name)
     }
 
     /// Whether hello's tm adds tasks from the app (task.add).

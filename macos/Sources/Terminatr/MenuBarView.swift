@@ -399,7 +399,7 @@ struct NeedRow: View {
         case .question: theme.question
         case .approval: theme.approval
         case .review: theme.good
-        case .blocked, .checks: theme.attention
+        case .blocked, .checks, .refusal: theme.attention
         case .held, .network: theme.muted
         }
     }
@@ -413,6 +413,7 @@ struct NeedRow: View {
         case .checks: "xmark.circle"
         case .held: "pause.circle"
         case .network: "point.3.connected.trianglepath.dotted"
+        case .refusal: "shield.lefthalf.filled"
         }
     }
 
@@ -422,6 +423,7 @@ struct NeedRow: View {
         case .question: "Answer"
         case .approval: "Approve"
         case .review: "Review"
+        case .refusal: "Answer"
         case .blocked, .checks, .held, .network: "Open"
         }
     }

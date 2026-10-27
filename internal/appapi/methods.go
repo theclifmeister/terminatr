@@ -87,7 +87,7 @@ func init() {
 		unary(proto.MethodTaskAdd, true, taskAddParams, taskAddedOf),
 
 		// The guard's refusals, read and answered one at a time (app
-		// API 13): the bridge's own, from the human's log (guard.go).
+		// API 15): the bridge's own, from the human's log (guard.go).
 		// No other setting or access joins.
 		local(MethodGuardRefusals, false, guardRefusals),
 		local(MethodGuardDecide, true, guardDecide),

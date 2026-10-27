@@ -209,3 +209,26 @@ func thread(_ id: String, task: AppAPI.Task? = nil, session: String = "", checks
         == "the link with acme is paused; ask the user")
     #expect(item("x", true, "plain (no command)").shownSummary == "plain (no command)")
 }
+
+/// A guard refusal (app API 15) is a need of its project, after the
+/// projects' and before the paired servers': named by its thread's task
+/// while one runs, with the rule in the user's words, the whole command
+/// on the card's refusal only, and no session to open (its card is the
+/// project's).
+@Test func refusalNeed() throws {
+    let r = AppAPI.GuardRefusal(id: "ab12", project: "terminatr", thread: "t-0675", rule: "credentials", tool: "Bash",
+                                summary: "an HTTP call with credentials", subject: "curl -H 'Authorization: Bearer x' https://r/x",
+                                first: t0, last: t0, count: 3)
+    let needs = Need.of(projects: [], sessions: [session("s-1")], refusals: [r])
+    let n = try #require(needs.first)
+    #expect(needs.count == 1)
+    #expect(n.kind == .refusal && n.id == "refusal:ab12")
+    #expect(n.title == "terminatr · T812's Bash call was refused")
+    #expect(n.detail == "reading credentials · an HTTP call with credentials · 3 times")
+    #expect(n.refusal == r && n.session.isEmpty && n.text.isEmpty)
+    #expect(!n.title.contains("Bearer") && !n.detail.contains("Bearer"))
+    // Without its thread's session: the thread.
+    let alone = Need.of(projects: [], sessions: [], refusals: [r])
+    #expect(alone.first?.title == "terminatr · t-0675's Bash call was refused")
+    #expect(Need.count(alone, project: "terminatr") == 1)
+}
