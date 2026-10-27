@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.55.0](https://github.com/theclifmeister/terminatr/compare/v0.54.0...v0.55.0) (2026-10-27)
+
+
+### Features
+
+* **app:** a lean sidebar that leaves inactive projects out ([#810](https://github.com/theclifmeister/terminatr/issues/810)) ([b3f9990](https://github.com/theclifmeister/terminatr/commit/b3f9990d78b46c062f764295fa0c47b219913ab6))
+* **app:** accessibility ([#817](https://github.com/theclifmeister/terminatr/issues/817)) ([9adeea0](https://github.com/theclifmeister/terminatr/commit/9adeea0d86f0a6523291b2181915278e8119f9a5))
+* **app:** app API 4 carries each project's active, paused and pinned ([#807](https://github.com/theclifmeister/terminatr/issues/807)) ([352db5f](https://github.com/theclifmeister/terminatr/commit/352db5f6c7a58125f1fb4d23bf645d32a6d5b6bd))
+* **app:** app API task actions and project.open ([#809](https://github.com/theclifmeister/terminatr/issues/809)) ([9774289](https://github.com/theclifmeister/terminatr/commit/977428983fa94612eeefceb8ffa5b9e402a2a2dc))
+* **app:** Bloom in both themes ([#812](https://github.com/theclifmeister/terminatr/issues/812)) ([2a2abe5](https://github.com/theclifmeister/terminatr/commit/2a2abe52f3acf230b5c703b22a3497b3304d4104))
+* **app:** first run, empty and error states ([#816](https://github.com/theclifmeister/terminatr/issues/816)) ([6bd3c60](https://github.com/theclifmeister/terminatr/commit/6bd3c6043b97fbe54f4be6af5edac5de8e363c33))
+* **app:** keyboard navigation and a command palette ([#813](https://github.com/theclifmeister/terminatr/issues/813)) ([bf2855e](https://github.com/theclifmeister/terminatr/commit/bf2855e96866fbcc04e5e0de28e2370d2d24087a))
+* **app:** Mac menus, toolbar and Settings ([#815](https://github.com/theclifmeister/terminatr/issues/815)) ([7f81814](https://github.com/theclifmeister/terminatr/commit/7f81814cad28e669b9b461bfc6d7d1237885a716))
+* **app:** notifications, menu bar and Dock badge ([#811](https://github.com/theclifmeister/terminatr/issues/811)) ([aea6fae](https://github.com/theclifmeister/terminatr/commit/aea6faeec0722b503ee853168bc33cffb6b858ea))
+* **app:** one attention model for needs ([#808](https://github.com/theclifmeister/terminatr/issues/808)) ([cae2aef](https://github.com/theclifmeister/terminatr/commit/cae2aeff94435d3ea9d05d646b4bf5b67865a462))
+* **app:** project, thread and coordinator detail you can act from ([#814](https://github.com/theclifmeister/terminatr/issues/814)) ([ed24c32](https://github.com/theclifmeister/terminatr/commit/ed24c32884aed9322c15b48a7a816039eeee317d))
+* **macos:** one window for everything: sidebar, dashboard, coordinator, thread ([#804](https://github.com/theclifmeister/terminatr/issues/804)) ([faa598e](https://github.com/theclifmeister/terminatr/commit/faa598ef02d12071436faf44789f38f03ac6aa81))
+
+
+### Performance
+
+* **app:** a lean projects watch, and conversations drawn from their end ([#818](https://github.com/theclifmeister/terminatr/issues/818)) ([9c36554](https://github.com/theclifmeister/terminatr/commit/9c36554abc089ed998140bb149e87285976bd09f))
+
 ## [0.54.0](https://github.com/theclifmeister/terminatr/compare/v0.53.0...v0.54.0) (2026-10-26)
 
 
