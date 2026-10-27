@@ -415,6 +415,27 @@ region = "bottom:16"
 regex = '(?m)^\s*Question \d+/\d+'
 contains = ["enter to submit"]
 
+# session.approve (docs/SPEC.md §11.2): what an approval's option
+# allows, read off 0.163.0. "For this session" approvals live in the
+# running Codex only; "commands that start with" adds an exec-policy
+# rule to the user's rules files, "in the future" a network rule. "Yes,
+# and don't ask again for these files" (an edit's) names no scope: it
+# matches nothing below, so it counts as persistent.
+[approve]
+persistent = ["commands that start with", "in the future", "don't ask me again", "^Always allow", "for future"]
+session = [
+  '^Yes, and allow this host for this conversation',
+  '^Yes, and allow these permissions for this session',
+  "^Yes, and don't ask again for this command in this session",
+  '^Yes, grant these permissions for this session',
+  '^Allow for this session',
+  '^Allow this request and remember this choice for this session',
+]
+once = [
+  '^Yes, proceed', '^Yes, just this once', '^Yes, grant these permissions for this turn', '^Yes, grant for this turn',
+  '^Allow$', '^Allow this request and continue', '^No\b', '^Cancel', '^Decline',
+]
+
 # Free text is the last option, "None of the above" (checked live, 0.160):
 # a number submits its option at once, even this one, without notes. So
 # Down moves to it, Tab opens the notes, then the words and Enter.

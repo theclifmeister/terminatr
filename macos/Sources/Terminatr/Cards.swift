@@ -301,7 +301,10 @@ struct FlowButtons: View {
 /// dialog on screen offers (session.approve with check) and shows the
 /// tool call from the conversation; a click sends that option, once
 /// the server has checked again. An escape's dialog (a command outside
-/// the sandbox) needs the user's confirmation naming the command.
+/// the sandbox) needs the user's confirmation naming the command, and
+/// so does an option that allows for the rest of the agent's session
+/// (naming the tool or command). One that allows beyond the session is
+/// the user's to pick in the Terminal tab.
 struct ApprovalCard: View {
     @Environment(\.theme) private var theme
     let model: SessionModel
@@ -311,6 +314,7 @@ struct ApprovalCard: View {
     @State private var dialog: AppAPI.ApproveResult?
     @State private var error: String?
     @State private var confirm: Int?
+    @State private var confirmSession: Int?
     @State private var busy = false
 
     var body: some View {
@@ -338,10 +342,11 @@ struct ApprovalCard: View {
                             Button(o) { pick(i + 1) }
                                 .buttonStyle(.borderedProminent)
                                 .tint(theme.action)
-                                .disabled(busy || (session.escape && command == nil))
+                                .disabled(busy || !can(i + 1))
                         } else {
                             Button(o) { pick(i + 1) }
-                                .disabled(busy || (session.escape && command == nil))
+                                .disabled(busy || !can(i + 1))
+                                .help(help(i + 1))
                         }
                     }
                 }
@@ -374,6 +379,12 @@ struct ApprovalCard: View {
         } message: { choice in
             Text("\(command ?? "")\n\nThis command runs with your access, not the thread's sandbox: only you answer for it. Your answer: \(option(choice)).")
         }
+        .alert("Allow for the rest of this session?", isPresented: Binding(get: { confirmSession != nil }, set: { if !$0 { confirmSession = nil } }), presenting: confirmSession) { choice in
+            Button("Allow \(toolName) for this session") { send(choice, escape: session.escape, session: true) }
+            Button("Cancel", role: .cancel) {}
+        } message: { choice in
+            Text("\(named ?? "")\n\nThe agent may run \(toolName) like this again without asking you, until its session ends\(session.escape ? ", outside the thread's sandbox, with your access" : ""). Your answer: \(option(choice)).")
+        }
         .onChange(of: firstChoice) { old, new in
             // As a click on the first button: only once the dialog is
             // read, and never for a card that just became the first.
@@ -387,6 +398,44 @@ struct ApprovalCard: View {
     private var command: String? {
         guard let t = model.transcript.pendingTool, !t.text.isEmpty else { return nil }
         return t.text
+    }
+
+    /// The tool and its command, as the conversation shows them: what a
+    /// session-long allowance names.
+    private var named: String? {
+        guard let t = model.transcript.pendingTool, !(t.tool.isEmpty && t.text.isEmpty) else { return nil }
+        return [t.tool, t.text].filter { !$0.isEmpty }.joined(separator: ": ")
+    }
+
+    private var toolName: String {
+        guard let t = model.transcript.pendingTool, !t.tool.isEmpty else { return "this" }
+        return t.tool
+    }
+
+    /// How long option choice allows: "once", "session" or "persistent"
+    /// ("once" from a server that doesn't say).
+    private func scope(_ choice: Int) -> String {
+        guard let s = dialog?.scopes, choice <= s.count else { return "once" }
+        return s[choice - 1]
+    }
+
+    /// Whether the card may send option choice: never one that allows
+    /// beyond the session, and only with the tool or command named for
+    /// a confirmation.
+    private func can(_ choice: Int) -> Bool {
+        switch scope(choice) {
+        case "persistent": false
+        case "session": named != nil && !(session.escape && command == nil)
+        default: !(session.escape && command == nil)
+        }
+    }
+
+    private func help(_ choice: Int) -> String {
+        switch scope(choice) {
+        case "persistent": "Allows beyond this session: only you pick it, in the Terminal tab"
+        case "session": "Allows it for the rest of the agent's session, once you confirm"
+        default: ""
+        }
     }
 
     private func check() async {
@@ -403,25 +452,31 @@ struct ApprovalCard: View {
     }
 
     /// An escape's dialog takes any answer only with the user's
-    /// confirmation naming the command; the server refuses it without.
+    /// confirmation naming the command, and a session-long option only
+    /// with one naming the tool or command; the server refuses either
+    /// without.
     private func pick(_ choice: Int) {
-        if session.escape {
+        if scope(choice) == "session" {
+            confirmSession = choice
+        } else if session.escape {
             confirm = choice
         } else {
             send(choice, escape: false)
         }
     }
 
-    private func send(_ choice: Int, escape: Bool) {
+    private func send(_ choice: Int, escape: Bool, session allows: Bool = false) {
         busy = true
         error = nil
         Task {
             do {
-                _ = try await model.approve(choice: choice, check: false, escape: escape)
+                _ = try await model.approve(choice: choice, check: false, escape: escape, session: allows)
             } catch let e as AppAPI.Error where e.code == "always-allow" {
                 error = "That option allows more than once: only you pick it, in the Terminal tab."
             } catch let e as AppAPI.Error where e.code == "escape-unconfirmed" {
                 confirm = choice
+            } catch let e as AppAPI.Error where e.code == "session-unconfirmed" {
+                confirmSession = choice
             } catch {
                 self.error = error.localizedDescription
             }
