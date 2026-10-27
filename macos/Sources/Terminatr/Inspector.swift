@@ -45,12 +45,12 @@ struct Inspector: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
                 if let task = t?.task {
-                    Text(task.ref).font(theme.mono(12.5, .medium)).foregroundStyle(theme.action)
+                    Text(task.ref).font(theme.mono(.callout, .medium)).foregroundStyle(theme.action)
                 }
-                Text(model.ref.thread).font(theme.mono(12)).foregroundStyle(theme.muted)
+                Text(model.ref.thread).font(theme.mono(.subheadline)).foregroundStyle(theme.muted)
             }
             Text(t?.task?.title ?? t?.record.title ?? model.ref.thread)
-                .font(theme.title(16, .heavy))
+                .font(theme.title(.title3, .heavy))
                 .fixedSize(horizontal: false, vertical: true)
             pill
         }
@@ -68,7 +68,7 @@ struct Inspector: View {
                 fact("PR", pr(t!), mono: false)
                 if let url = prURL(t!) {
                     Link("Open the PR", destination: url)
-                        .font(theme.body(12))
+                        .font(theme.body(.subheadline))
                         .foregroundStyle(theme.action)
                 }
                 fact("State", app.attention(t!).word, mono: false)
@@ -96,9 +96,9 @@ struct Inspector: View {
     private var coordinator: some View {
         let p = app.project(model.ref.project)
         VStack(alignment: .leading, spacing: 6) {
-            Text(model.ref.project).font(theme.title(16, .heavy))
+            Text(model.ref.project).font(theme.title(.title3, .heavy))
             if let goal = p?.goal, !goal.isEmpty {
-                Text(goal).font(theme.body(12)).foregroundStyle(theme.muted)
+                Text(goal).font(theme.body(.subheadline)).foregroundStyle(theme.muted)
             }
             pill
         }
@@ -113,8 +113,8 @@ struct Inspector: View {
                                     .foregroundStyle(NeedRow.colour(n.kind, theme))
                                     .accessibilityHidden(true)
                                 VStack(alignment: .leading, spacing: 0) {
-                                    Text(n.what).font(theme.body(12, .medium)).lineLimit(2)
-                                    Text(n.detail).font(theme.body(11)).foregroundStyle(theme.muted).lineLimit(1)
+                                    Text(n.what).font(theme.body(.subheadline, .medium)).lineLimit(2)
+                                    Text(n.detail).font(theme.body(.caption)).foregroundStyle(theme.muted).lineLimit(1)
                                 }
                             }
                             .contentShape(Rectangle())
@@ -142,18 +142,18 @@ struct Inspector: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
                 if let task = s?.task, !task.isEmpty {
-                    Text(task).font(theme.mono(12.5, .medium)).foregroundStyle(theme.action)
+                    Text(task).font(theme.mono(.callout, .medium)).foregroundStyle(theme.action)
                 }
-                Text(ref.isCoordinator ? "coordinator" : ref.thread).font(theme.mono(12)).foregroundStyle(theme.muted)
+                Text(ref.isCoordinator ? "coordinator" : ref.thread).font(theme.mono(.subheadline)).foregroundStyle(theme.muted)
             }
-            Text(ref.project).font(theme.title(16, .heavy))
+            Text(ref.project).font(theme.title(.title3, .heavy))
             if let goal = project?.goal, !goal.isEmpty {
-                Text(goal).font(theme.body(12)).foregroundStyle(theme.muted)
+                Text(goal).font(theme.body(.subheadline)).foregroundStyle(theme.muted)
             }
             if let s, !s.state.isEmpty {
                 let blocked = s.state == "blocked" || s.asking
                 Text(s.asking ? "asks" : blocked ? (s.reason.isEmpty ? "blocked" : s.reason) : s.state)
-                    .font(theme.mono(11, .medium))
+                    .font(theme.mono(.caption, .medium))
                     .padding(.horizontal, 8)
                     .padding(.vertical, 2)
                     .background(blocked ? theme.approval : theme.line, in: Capsule())
@@ -166,7 +166,7 @@ struct Inspector: View {
             fact("Panes", panes(app.remotePane(ref)), mono: false)
             if project?.stale == true { fact("Read", "stale", mono: false) }
             Text("Its conversation stays there: only the pane crosses the link.")
-                .font(theme.body(11.5))
+                .font(theme.body(.footnote))
                 .foregroundStyle(theme.muted)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -181,9 +181,9 @@ struct Inspector: View {
                         Text("Context").foregroundStyle(theme.muted)
                         Meter(fraction: Double(s.context) / Double(s.contextWindow))
                             .frame(height: 5)
-                        Text("\(pct)%").font(theme.mono(11.5))
+                        Text("\(pct)%").font(theme.mono(.footnote))
                     }
-                    .font(theme.body(12))
+                    .font(theme.body(.subheadline))
                 }
                 if s.queuedPrompts > 0 { fact("Queued", "\(s.queuedPrompts) prompts", mono: false) }
                 fact("Started", s.created.formatted(date: .abbreviated, time: .shortened), mono: false)
@@ -213,9 +213,9 @@ struct Inspector: View {
                         Text("Context").foregroundStyle(theme.muted)
                         Meter(fraction: Double(s.context) / Double(s.contextWindow))
                             .frame(height: 5)
-                        Text("\(pct)%").font(theme.mono(11.5))
+                        Text("\(pct)%").font(theme.mono(.footnote))
                     }
-                    .font(theme.body(12))
+                    .font(theme.body(.subheadline))
                 }
                 if s.queuedPrompts > 0 { fact("Queued", "\(s.queuedPrompts) prompts", mono: false) }
                 fact("Session", s.id, mono: true)
@@ -231,7 +231,7 @@ struct Inspector: View {
             let blocked = s.state == "blocked"
             let word = blocked ? (s.reason == "permission" ? "needs approval" : s.reason.isEmpty ? "blocked" : s.reason) : s.state
             Text(word)
-                .font(theme.mono(11, .medium))
+                .font(theme.mono(.caption, .medium))
                 .padding(.horizontal, 8)
                 .padding(.vertical, 2)
                 .background(blocked ? theme.approval : theme.line, in: Capsule())
@@ -242,7 +242,7 @@ struct Inspector: View {
     private func section<C: View>(_ title: String, @ViewBuilder _ content: () -> C) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title.uppercased())
-                .font(theme.mono(10.5, .medium))
+                .font(theme.mono(.caption2, .medium))
                 .tracking(1)
                 .foregroundStyle(theme.muted)
             content()
@@ -253,9 +253,9 @@ struct Inspector: View {
         HStack(alignment: .firstTextBaseline, spacing: 7) {
             Image(systemName: done ? "checkmark.circle.fill" : current ? "circle.inset.filled" : "circle")
                 .foregroundStyle(done ? theme.good : current ? theme.action : theme.idle)
-                .font(theme.body(11))
+                .font(theme.body(.caption))
             Text(text)
-                .font(theme.body(12, current ? .semibold : .regular))
+                .font(theme.body(.subheadline, current ? .semibold : .regular))
                 .foregroundStyle(done ? theme.muted : theme.ink)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -267,11 +267,11 @@ struct Inspector: View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text(label).foregroundStyle(theme.muted)
             Text(value)
-                .font(mono ? theme.mono(11.5) : theme.body(12))
+                .font(mono ? theme.mono(.footnote) : theme.body(.subheadline))
                 .lineLimit(2)
                 .truncationMode(.middle)
                 .textSelection(.enabled)
         }
-        .font(theme.body(12))
+        .font(theme.body(.subheadline))
     }
 }

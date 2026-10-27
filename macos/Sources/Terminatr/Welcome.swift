@@ -18,7 +18,7 @@ struct FirstRunSheet: View {
         VStack(alignment: .leading, spacing: 14) {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Welcome to terminatr")
-                    .font(theme.title(24, .heavy))
+                    .font(theme.title(.sheetTitle, .heavy))
                 Text("The app shows the projects, coordinators and threads of the tm server on this Mac, and tells you when an agent needs you.")
                     .foregroundStyle(theme.muted)
                     .fixedSize(horizontal: false, vertical: true)
@@ -27,7 +27,7 @@ struct FirstRunSheet: View {
             case .success(let url):
                 Step(mark: .done, title: "tm is installed") {
                     Text(url.path)
-                        .font(theme.mono(12))
+                        .font(theme.mono(.subheadline))
                         .foregroundStyle(theme.muted)
                         .lineLimit(1)
                         .truncationMode(.middle)
@@ -62,7 +62,7 @@ struct FirstRunSheet: View {
                     .tint(theme.action)
             }
         }
-        .font(theme.body(13))
+        .font(theme.body(.body))
         .padding(24)
         .frame(width: 600)
         .onDisappear { UserDefaults.standard.set(true, forKey: FirstRun.doneKey) }
@@ -74,7 +74,7 @@ struct FirstRunSheet: View {
         case .connected(let h):
             Step(mark: .done, title: "The server is running") {
                 Text("tm \(h.tm)" + (h.server.map { " · server \($0.version)" } ?? ""))
-                    .font(theme.mono(12))
+                    .font(theme.mono(.subheadline))
                     .foregroundStyle(theme.muted)
             }
         case .connecting:
@@ -90,6 +90,7 @@ struct FirstRunSheet: View {
                         .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
                     Button("Retry") { app.connect() }
+                    .accessibilityLabel("Retry the connection to terminatr")
                 }
             }
         }
@@ -110,9 +111,10 @@ private struct Step<Content: View>: View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
             icon
                 .frame(width: 18)
+                .accessibilityLabel(markWord)
             VStack(alignment: .leading, spacing: 6) {
                 Text(title)
-                    .font(theme.title(15, .bold))
+                    .font(theme.title(.headline, .bold))
                 content
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -120,6 +122,17 @@ private struct Step<Content: View>: View {
         .padding(12)
         .background(theme.cardTint, in: RoundedRectangle(cornerRadius: 12))
         .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(theme.edge, lineWidth: 1))
+    }
+
+    /// What VoiceOver says of the step's mark.
+    private var markWord: String {
+        switch mark {
+        case .done: "Done"
+        case .busy: "In progress"
+        case .problem: "Problem"
+        case .waiting: "Waiting"
+        case .info: "Note"
+        }
     }
 
     @ViewBuilder
@@ -153,6 +166,8 @@ struct NotificationPermission: View {
                             await refresh()
                         }
                     }
+                    .accessibilityLabel("Allow notifications from terminatr")
+                    .accessibilityHint("macOS asks you next")
                     Text("macOS asks you next.")
                         .foregroundStyle(theme.muted)
                 case .denied:
@@ -164,9 +179,11 @@ struct NotificationPermission: View {
                             NSWorkspace.shared.open(url)
                         }
                     }
+                    .accessibilityLabel("Open terminatr's notification settings")
                 default:
                     Label("On", systemImage: "checkmark")
                         .foregroundStyle(theme.good)
+                        .accessibilityLabel("Notifications are on")
                 }
             } else {
                 Text("They need the app bundle (make -C macos run).")
@@ -202,7 +219,7 @@ struct CommandText: View {
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
             Text(command)
-                .font(theme.mono(12))
+                .font(theme.mono(.subheadline))
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -215,7 +232,8 @@ struct CommandText: View {
             }
             .buttonStyle(.borderless)
             .help("Copy")
-            .accessibilityLabel("Copy the command")
+            .accessibilityLabel("Copy \(command)")
+            .accessibilityValue(copied ? "copied" : "")
         }
         .padding(8)
         .background(theme.command, in: RoundedRectangle(cornerRadius: 8))
@@ -233,35 +251,38 @@ struct ConnectionBanner: View {
             if case .failed(let why) = app.phase {
                 Image(systemName: "bolt.horizontal.circle.fill")
                     .foregroundStyle(theme.attention)
-                    .font(theme.body(16))
+                    .font(theme.body(.title3))
+                    .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Lost the connection to terminatr")
-                        .font(theme.body(13, .semibold))
+                        .font(theme.body(.body, .semibold))
                     Text("What shows is from before. \(why)")
-                        .font(theme.body(12))
+                        .font(theme.body(.subheadline))
                         .foregroundStyle(theme.muted)
                         .lineLimit(2)
                         .textSelection(.enabled)
                 }
                 Spacer(minLength: 8)
                 Button("Retry") { app.connect() }
+                    .accessibilityLabel("Retry the connection to terminatr")
                     .buttonStyle(.borderedProminent)
                     .tint(theme.action)
             } else {
                 ProgressView().controlSize(.small)
                 Text("Reconnecting to terminatr…")
-                    .font(theme.body(13, .semibold))
+                    .font(theme.body(.body, .semibold))
                 Spacer(minLength: 8)
             }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+        .frosted(RoundedRectangle(cornerRadius: 12))
         .background(theme.cardTint, in: RoundedRectangle(cornerRadius: 12))
         .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(theme.edge, lineWidth: 1))
         .padding(.horizontal, 20)
         .padding(.top, 10)
         .accessibilityElement(children: .contain)
+        .accessibilityLabel("Connection")
     }
 }
 
@@ -280,17 +301,20 @@ struct VersionBadge: View {
                 } icon: {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundStyle(theme.attention)
+                        .accessibilityHidden(true)
                 }
                 .labelStyle(.titleAndIcon)
             }
             .help(message)
+            .accessibilityLabel("\(headline): version mismatch")
+            .accessibilityHint("Shows what doesn't fit and the command that fixes it")
             .popover(isPresented: $open, arrowEdge: .bottom) {
                 VStack(alignment: .leading, spacing: 10) {
                     Text(message)
                         .fixedSize(horizontal: false, vertical: true)
                     CommandText("tm update")
                 }
-                .font(theme.body(13))
+                .font(theme.body(.body))
                 .padding(16)
                 .frame(width: 320)
             }
@@ -306,7 +330,7 @@ struct NoProjects: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("No projects yet")
-                .font(theme.title(22, .heavy))
+                .font(theme.title(.largeTitle, .heavy))
             Text("A project is a goal and the repositories its agents work in. Make one in a terminal:")
                 .foregroundStyle(theme.muted)
                 .fixedSize(horizontal: false, vertical: true)
@@ -315,7 +339,7 @@ struct NoProjects: View {
                 .foregroundStyle(theme.muted)
                 .fixedSize(horizontal: false, vertical: true)
             Text("tm doctor checks that tm and an agent are set up.")
-                .font(theme.body(12))
+                .font(theme.body(.subheadline))
                 .foregroundStyle(theme.muted)
         }
         // A set width: with maxWidth its texts' ideal width made the

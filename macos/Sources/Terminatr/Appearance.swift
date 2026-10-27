@@ -36,13 +36,15 @@ extension EnvironmentValues {
 }
 
 /// A window's content with the user's text size and density: Bloom
-/// scaled, and the sidebar's rows as close as asked.
+/// scaled, and the sidebar's rows as close as asked; with Increase
+/// Contrast, Bloom's opaque panels.
 struct Themed: ViewModifier {
     @AppStorage(TextSize.key) private var scale = TextSize.standard
     @AppStorage(Density.key) private var density = Density.regular.rawValue
+    @Environment(\.colorSchemeContrast) private var contrast
 
     func body(content: Content) -> some View {
-        var theme = Theme.bloom
+        var theme = contrast == .increased ? Theme.bloom.increasedContrast() : Theme.bloom
         theme.scale = TextSize.of(scale)
         let d = Density.of(density)
         return content
@@ -54,6 +56,52 @@ struct Themed: ViewModifier {
 extension View {
     func themed() -> some View {
         modifier(Themed())
+    }
+
+    /// The sidebar's text: the theme's scale times the system's sidebar
+    /// size (System Settings › Appearance › Sidebar icon size).
+    func sidebarText() -> some View {
+        modifier(SidebarText())
+    }
+
+    /// A panel's frost behind the content: the system material, or with
+    /// Increase Contrast the theme's opaque card.
+    func frosted<S: Shape>(_ shape: S) -> some View {
+        modifier(Frosted(shape: shape))
+    }
+}
+
+private struct SidebarText: ViewModifier {
+    @Environment(\.theme) private var theme
+    @Environment(\.sidebarRowSize) private var rowSize
+
+    func body(content: Content) -> some View {
+        var t = theme
+        t.scale *= CGFloat(SidebarSize(rowSize).scale)
+        return content.environment(\.theme, t)
+    }
+}
+
+extension SidebarSize {
+    init(_ size: SidebarRowSize) {
+        switch size {
+        case .small: self = .small
+        case .large: self = .large
+        default: self = .medium
+        }
+    }
+}
+
+private struct Frosted<S: Shape>: ViewModifier {
+    @Environment(\.theme) private var theme
+    let shape: S
+
+    func body(content: Content) -> some View {
+        if theme.contrast {
+            content.background(theme.cardTint, in: shape)
+        } else {
+            content.background(.regularMaterial, in: shape)
+        }
     }
 }
 
@@ -181,9 +229,9 @@ struct NewTaskSheet: View {
         VStack(alignment: .leading, spacing: 14) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("New Task")
-                    .font(theme.title(20, .heavy))
+                    .font(theme.title(.title, .heavy))
                 Text("Adds a task to \(project)'s board. Its coordinator picks it up from there.")
-                    .font(theme.body(12))
+                    .font(theme.body(.subheadline))
                     .foregroundStyle(theme.muted)
             }
             Form {
@@ -196,11 +244,11 @@ struct NewTaskSheet: View {
             .scrollDisabled(true)
             if let error {
                 Text(error)
-                    .font(theme.body(12))
+                    .font(theme.body(.subheadline))
                     .foregroundStyle(theme.attention)
             } else if let added {
                 Label(added, systemImage: "checkmark.circle.fill")
-                    .font(theme.body(12, .medium))
+                    .font(theme.body(.subheadline, .medium))
                     .foregroundStyle(theme.good)
             }
             HStack {

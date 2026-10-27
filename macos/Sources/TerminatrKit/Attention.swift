@@ -18,6 +18,13 @@ public struct Attention: Hashable, Sendable {
     /// Whether it waits on the user.
     public let waits: Bool
 
+    /// What VoiceOver says after the row's name (T748 J): what it waits
+    /// on in words ("needs approval", not "allow?"), else its state.
+    public var spoken: String {
+        let s = waits && !why.isEmpty ? why : word
+        return s.replacingOccurrences(of: " · ", with: ", ")
+    }
+
     public init(word: String, tone: Tone, why: String, waits: Bool) {
         self.word = word
         self.tone = tone

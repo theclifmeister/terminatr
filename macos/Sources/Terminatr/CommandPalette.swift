@@ -31,7 +31,7 @@ struct CommandPalette: View {
             }
         }
         .frame(width: 620)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+        .frosted(RoundedRectangle(cornerRadius: 16))
         .background(theme.cardTint, in: RoundedRectangle(cornerRadius: 16))
         .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(theme.edge, lineWidth: 1))
         .shadow(color: .black.opacity(0.35), radius: 30, y: 14)
@@ -58,11 +58,11 @@ struct CommandPalette: View {
         return VStack(spacing: 0) {
             HStack(spacing: 10) {
                 Text("⌘K")
-                    .font(theme.mono(12, .medium))
+                    .font(theme.mono(.subheadline, .medium))
                     .foregroundStyle(theme.muted)
                 TextField("Go to a project, thread, task or need", text: $query)
                     .textFieldStyle(.plain)
-                    .font(theme.body(16))
+                    .font(theme.body(.title3))
                     .focused($focused)
                     .onKeyPress(.upArrow) { move(-1, rows.count); return .handled }
                     .onKeyPress(.downArrow) { move(1, rows.count); return .handled }
@@ -74,7 +74,7 @@ struct CommandPalette: View {
                     }
                     .onExitCommand { app.palette = false }
                 Text("esc")
-                    .font(theme.mono(10.5))
+                    .font(theme.mono(.caption2))
                     .padding(.horizontal, 5)
                     .padding(.vertical, 1)
                     .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(theme.edge, lineWidth: 1))
@@ -89,7 +89,7 @@ struct CommandPalette: View {
                         ForEach(Array(rows.enumerated()), id: \.element.id) { i, r in
                             if i == 0 || rows[i - 1].group != r.group {
                                 Text(r.group.rawValue.uppercased())
-                                    .font(theme.mono(10, .medium))
+                                    .font(theme.mono(.label, .medium))
                                     .tracking(1)
                                     .foregroundStyle(theme.muted)
                                     .padding(.horizontal, 10)
@@ -118,7 +118,7 @@ struct CommandPalette: View {
             if let said {
                 theme.line.frame(height: 1)
                 Text(said.text)
-                    .font(theme.body(12))
+                    .font(theme.body(.subheadline))
                     .foregroundStyle(said.failed ? theme.attention : theme.muted)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 16)
@@ -136,17 +136,17 @@ struct CommandPalette: View {
                 .frame(width: 7, height: 7)
                 .accessibilityHidden(true)
             Text(r.title)
-                .font(theme.body(13, .medium))
+                .font(theme.body(.body, .medium))
                 .lineLimit(1)
             if !r.detail.isEmpty {
                 Text(r.detail)
-                    .font(theme.body(12))
+                    .font(theme.body(.subheadline))
                     .foregroundStyle(on ? theme.onAction.opacity(0.8) : theme.muted)
                     .lineLimit(1)
             }
             Spacer(minLength: 8)
             Text(hint(r, on: on))
-                .font(theme.mono(11))
+                .font(theme.mono(.caption))
                 .foregroundStyle(on ? theme.onAction : theme.muted)
                 .fixedSize()
         }
@@ -286,7 +286,7 @@ private struct ActPanel: View {
                 .keyboardShortcut(.cancelAction)
                 .help("Back to the palette (Esc)")
                 Text(app.title(ref))
-                    .font(theme.title(15, .bold))
+                    .font(theme.title(.headline, .bold))
                     .lineLimit(1)
                 Spacer()
                 Button("Open") {
@@ -334,7 +334,7 @@ private struct ReviewPanel: View {
                 .keyboardShortcut(.cancelAction)
                 .help("Back to the palette (Esc)")
                 Text(item.title)
-                    .font(theme.title(15, .bold))
+                    .font(theme.title(.headline, .bold))
                     .lineLimit(1)
                 Spacer()
                 if let go = item.go {

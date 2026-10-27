@@ -56,20 +56,47 @@ struct Theme: Sendable {
 
     var titleFamily: String
     var monoFamily: String
-    /// Every font's size times this: Settings › Appearance › Text size.
+    /// Increase Contrast is on: panels are opaque, and the system
+    /// material under them is left out.
+    var contrast = false
+    /// Every font's size times this: Settings › Appearance › Text size,
+    /// and in the sidebar the system's sidebar size as well.
     var scale: CGFloat = 1
 
-    func title(_ size: CGFloat, _ weight: Font.Weight = .bold) -> Font {
-        .custom(titleFamily, size: size * scale).weight(weight)
+    func size(_ style: TextStyle) -> CGFloat {
+        CGFloat(style.points) * scale
     }
 
-    func mono(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
-        .custom(monoFamily, size: size * scale).weight(weight)
+    func title(_ style: TextStyle, _ weight: Font.Weight = .bold) -> Font {
+        .custom(titleFamily, size: size(style)).weight(weight)
+    }
+
+    func mono(_ style: TextStyle, _ weight: Font.Weight = .regular) -> Font {
+        .custom(monoFamily, size: size(style)).weight(weight)
     }
 
     /// The body's font, SF Pro (Bloom: "body stays SF Pro").
-    func body(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
-        .system(size: size * scale, weight: weight)
+    func body(_ style: TextStyle, _ weight: Font.Weight = .regular) -> Font {
+        .system(size: size(style), weight: weight)
+    }
+
+    /// The theme as Increase Contrast wants it (T748 J): the panels
+    /// opaque, so no mesh shows through, and their edges and rules
+    /// drawn in the muted ink.
+    func increasedContrast() -> Theme {
+        var t = self
+        t.sidebarTint = .dynamic(0xffffff, 0x120e24)
+        t.glass = .dynamic(0xffffff, 0x120e24)
+        t.bar = .dynamic(0xf6f2ff, 0x1c1638)
+        t.cardTint = .dynamic(0xffffff, 0x221a40)
+        t.agentCard = t.cardTint
+        t.questionTint = .dynamic(0xefeaff, 0x2b2160)
+        t.approvalTint = .dynamic(0xfff1ec, 0x3a1a1c)
+        t.edge = .dynamic(0x4f4670, 0xc9c0ea)
+        t.line = .dynamic(0x1c1433, 0xf6f2ff, alpha: 0.45)
+        t.muted = .dynamic(0x3a3258, 0xddd6f5)
+        t.contrast = true
+        return t
     }
 }
 

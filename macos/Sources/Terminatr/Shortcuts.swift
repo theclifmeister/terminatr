@@ -44,22 +44,22 @@ struct ShortcutsSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Keyboard Shortcuts")
-                .font(theme.title(20, .heavy))
+                .font(theme.title(.title, .heavy))
             ForEach(Self.groups, id: \.0) { group, keys in
                 VStack(alignment: .leading, spacing: 6) {
                     Text(group.uppercased())
-                        .font(theme.mono(10.5, .medium))
+                        .font(theme.mono(.caption2, .medium))
                         .tracking(1)
                         .foregroundStyle(theme.muted)
                     Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 5) {
                         ForEach(keys, id: \.0) { key, what in
                             GridRow {
                                 Text(key)
-                                    .font(theme.mono(12.5, .medium))
+                                    .font(theme.mono(.callout, .medium))
                                     .foregroundStyle(theme.action)
                                     .frame(minWidth: 96, alignment: .leading)
                                 Text(what)
-                                    .font(theme.body(12.5))
+                                    .font(theme.body(.callout))
                             }
                         }
                     }

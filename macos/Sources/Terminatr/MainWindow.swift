@@ -17,11 +17,14 @@ struct MainWindow: View {
     /// read once: its ideal stays put while the user drags it.
     private static let inspectorWidth = UserDefaults.standard.object(forKey: inspectorWidthKey) as? Double ?? 270
     static let inspectorWidthKey = "inspectorWidth"
+    /// The needs rotor's entries are the sidebar's need rows.
+    @Namespace private var needsRotor
 
     var body: some View {
         @Bindable var app = app
         NavigationSplitView {
-            Sidebar()
+            Sidebar(needsRotor: needsRotor)
+                .sidebarText()
                 .opacity(app.lost ? Self.dimmed : 1)
                 .navigationSplitViewColumnWidth(min: 210, ideal: 240, max: 340)
         } detail: {
@@ -43,6 +46,16 @@ struct MainWindow: View {
         }
         .tint(theme.action)
         .foregroundStyle(theme.ink)
+        // VoiceOver's rotor (VO-U) lists what needs the user, from anywhere
+        // in the window; picking one unfolds the sidebar's list to it.
+        .accessibilityRotor("Needs you") {
+            ForEach(app.needs) { n in
+                AccessibilityRotorEntry(Text(n.title), id: n.id, in: needsRotor) {
+                    app.nav.collapsed.remove(Navigation.needsSection)
+                    app.nav.unfolded.insert(Navigation.moreKey())
+                }
+            }
+        }
         .navigationTitle(app.title(app.nav.selection))
         .navigationSubtitle(app.subtitle(app.nav.selection))
         // The detail's glass shows through: no opaque band (T752).
