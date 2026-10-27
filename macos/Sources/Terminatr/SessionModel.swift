@@ -22,6 +22,9 @@ final class SessionModel {
     var tab = SessionTab.conversation
     /// The user picked the tab: the window no longer switches it.
     var tabPicked = false
+    /// Repaints asked for from View › Repaint Terminal: the shown
+    /// Terminal tab asks its server for one each time this goes up.
+    private(set) var repaints = 0
     /// The groups of tool calls the user unfolded, by their first
     /// call's id (Transcript.ToolRun), while the transcript lasts.
     var unfoldedRuns: Set<Int> = []
@@ -80,6 +83,11 @@ final class SessionModel {
     func pick(_ t: SessionTab) {
         tab = t
         tabPicked = true
+    }
+
+    /// ⌥⌘R: a fresh repaint of the shown pane.
+    func askRepaint() {
+        repaints += 1
     }
 
     /// Opens on the conversation; falls back to the terminal while it
