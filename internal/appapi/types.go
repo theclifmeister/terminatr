@@ -44,6 +44,9 @@ type (
 		ID   string `json:"id"`
 		Text string `json:"text"`
 		Mode string `json:"mode,omitempty"`
+		// Files are refs session.upload answered (app API 13): the
+		// server names each after Text, which may then be empty.
+		Files []string `json:"files,omitempty"`
 	}
 	// AnswerParams are session.answer's: question Index (from 0) of session ID's open
 	// question gets Answer. Question, when set, is the text that
@@ -968,6 +971,36 @@ type SessionFile struct {
 	Sendable bool      `json:"sendable"`
 	Offset   int64     `json:"offset"`
 	Data     []byte    `json:"data,omitempty"`
+}
+
+// UploadParams are session.upload's (app API 13): a chunk of a file
+// for session's prompt, at most 512 KiB of Data. The first (no Upload,
+// Offset 0) names the file (Name, whose extension gives its type) and
+// its Size; each next one gives the Upload id the first answered and
+// its Offset, the bytes taken so far. The app sends bytes, never a path.
+type UploadParams struct {
+	Session string `json:"session"`
+	Upload  string `json:"upload,omitempty"`
+	Name    string `json:"name,omitempty"`
+	Size    int64  `json:"size,omitempty"`
+	Offset  int64  `json:"offset,omitempty"`
+	Data    []byte `json:"data,omitempty"`
+}
+
+// Upload is where an upload stands: Received bytes of Upload; once all
+// are in, Ref for session.prompt's Files and the stored file's Name,
+// Type and Size.
+type Upload struct {
+	Upload   string `json:"upload"`
+	Received int64  `json:"received"`
+	Ref      string `json:"ref,omitempty"`
+	Name     string `json:"name,omitempty"`
+	Type     string `json:"type,omitempty"`
+	Size     int64  `json:"size,omitempty"`
+}
+
+func uploadOf(r proto.SessionUploadResult) Upload {
+	return Upload{Upload: r.Upload, Received: r.Received, Ref: r.Ref, Name: r.Name, Type: r.Type, Size: r.Size}
 }
 
 func sessionFileOf(r proto.SessionFileResult) SessionFile {
