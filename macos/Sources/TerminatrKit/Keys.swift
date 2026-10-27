@@ -113,12 +113,13 @@ extension Navigation {
 extension Transcript {
     /// ⌘F: the entries of the conversation that show query, by id in
     /// their order: a prompt's or the agent's words, a tool call with
-    /// its argument and result. Case and accents don't count.
+    /// its argument and result, the files it shows by name. Case and
+    /// accents don't count.
     public static func find(_ query: String, in entries: [Entry]) -> [Int] {
         let q = query.trimmingCharacters(in: .whitespaces)
         guard !q.isEmpty else { return [] }
         return entries.filter { e in
-            [e.text, e.tool, e.result?.text ?? ""].contains { $0.range(of: q, options: [.caseInsensitive, .diacriticInsensitive]) != nil }
+            ([e.text, e.tool, e.result?.text ?? ""] + e.files.map(\.name)).contains { $0.range(of: q, options: [.caseInsensitive, .diacriticInsensitive]) != nil }
         }.map(\.id)
     }
 }

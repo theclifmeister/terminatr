@@ -3,7 +3,8 @@ import Foundation
 /// A session's conversation as the window shows it, built from
 /// transcript.watch's events (docs/SPEC.md §3.3, Transcript): the
 /// prompts, the agent's text, each tool call with its result folded in,
-/// and notes. The todo list is kept apart, for the inspector.
+/// files a call sends (an attachment card, never folded into a run of
+/// tool calls) and notes. The todo list is kept apart, for the inspector.
 public struct Transcript: Sendable, Equatable {
     public struct Entry: Sendable, Equatable, Identifiable {
         public enum Kind: Sendable, Equatable {
@@ -14,6 +15,9 @@ public struct Transcript: Sendable, Equatable {
             /// before the items the server sent).
             case result
             case note
+            /// A call that sends the user files (Claude's SendUserFile):
+            /// text is its caption, files what it sends.
+            case files
         }
 
         public let id: Int
@@ -30,6 +34,11 @@ public struct Transcript: Sendable, Equatable {
         /// Who sent a prompt: "tm", "coordinator", or empty for the
         /// user (Entry.who).
         public var from: String = ""
+        /// The files a prompt's pasted images or a files call put in
+        /// front of the user, and how a call shows them: "attach" draws
+        /// no preview (Entry.attachments).
+        public var files: [AppAPI.TranscriptFile] = []
+        public var display: String = ""
     }
 
     public struct Result: Sendable, Equatable {
@@ -104,14 +113,14 @@ public struct Transcript: Sendable, Equatable {
             case "todos":
                 todos = it.todos
             case "result":
-                if !it.call.isEmpty, let i = entries.lastIndex(where: { $0.kind == .tool && $0.call == it.call }) {
+                if !it.call.isEmpty, let i = entries.lastIndex(where: { ($0.kind == .tool || $0.kind == .files) && $0.call == it.call }) {
                     entries[i].result = Result(text: it.text, lines: it.lines, error: it.error)
                 } else {
                     add(.result, it, result: Result(text: it.text, lines: it.lines, error: it.error))
                 }
             case "prompt": add(.prompt, it)
             case "text": add(.text, it)
-            case "tool": add(.tool, it)
+            case "tool": add(it.files.isEmpty ? .tool : .files, it)
             case "note": add(.note, it)
             default:
                 break // a kind this app doesn't know yet
@@ -126,7 +135,7 @@ public struct Transcript: Sendable, Equatable {
 
     private mutating func add(_ kind: Entry.Kind, _ it: AppAPI.TranscriptItem, result: Result? = nil) {
         entries.append(Entry(id: nextID, kind: kind, text: it.text, truncated: it.truncated, tool: it.tool, call: it.call,
-                             result: result, at: it.at, from: it.from))
+                             result: result, at: it.at, from: it.from, files: it.files, display: it.display))
         nextID += 1
     }
 }

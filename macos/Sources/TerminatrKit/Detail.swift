@@ -92,7 +92,7 @@ extension Transcript.Entry {
     public func who(agent: String) -> String {
         switch kind {
         case .prompt: from.isEmpty ? "you" : from
-        case .text: agent
+        case .text, .files: agent
         default: ""
         }
     }

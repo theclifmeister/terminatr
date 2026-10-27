@@ -21,6 +21,16 @@ public enum Compatibility: Equatable, Sendable {
     /// The app API that has task.add: File › New Task… needs it.
     public static let taskAddAPI = 7
 
+    /// The app API that has session.file: the attachment cards need it.
+    public static let sessionFileAPI = 9
+
+    /// Whether hello's tm sends the conversation's files (session.file),
+    /// its server too.
+    public static func sendsFiles(_ hello: AppAPI.Hello) -> Bool {
+        hello.appApi >= sessionFileAPI && hello.methods.contains(AppAPI.Methods.sessionFile.name)
+            && (hello.server?.caps ?? []).contains("session-file")
+    }
+
     /// Whether hello's tm adds tasks from the app (task.add).
     public static func addsTasks(_ hello: AppAPI.Hello) -> Bool {
         hello.appApi >= taskAddAPI && hello.methods.contains(AppAPI.Methods.taskAdd.name)

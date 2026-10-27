@@ -112,6 +112,9 @@ final class AppModel {
     @ObservationIgnored var onNeeds: (@MainActor (AppModel) -> Void)?
     /// The bridge while it runs (the session windows follow it).
     private(set) var bridge: Bridge?
+    /// The conversations' files (session.file), while the bridge runs and
+    /// its tm sends them: the attachment cards read through it.
+    private(set) var files: FileStore?
     @ObservationIgnored private var run: Task<Void, Never>?
     @ObservationIgnored private var loaded = Loaded()
     @ObservationIgnored private var listing: Task<Void, Never>?
@@ -174,6 +177,7 @@ final class AppModel {
             compatibility = fit
             if fit.blocks { throw BridgeError.closed(fit.message ?? "") }
             self.hello = hello
+            files = Compatibility.sendsFiles(hello) ? FileStore { p in try await b.call(AppAPI.Methods.sessionFile, p) } : nil
             phase = .connected(hello)
             log.add(BridgeLog.connected(hello, tm: tm.lastPathComponent))
             // An older tm's bridge has no peer.list: no paired servers.
@@ -199,6 +203,7 @@ final class AppModel {
         await started?.close()
         if bridge === started {
             bridge = nil
+            files = nil
         }
     }
 
