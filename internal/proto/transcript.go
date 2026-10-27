@@ -112,14 +112,14 @@ type TranscriptStatus struct {
 // TranscriptEvent is one line of a transcript.watch stream after the
 // answer.
 type TranscriptEvent struct {
-	Event   string            `json:"event"`
-	Items   []TranscriptItem  `json:"items,omitempty"`
-	Skipped int               `json:"skipped,omitempty"`
+	Event   string           `json:"event"`
+	Items   []TranscriptItem `json:"items,omitempty"`
+	Skipped int              `json:"skipped,omitempty"`
 	// Before, on a reset with earlier items than it carries, is the
 	// cursor transcript.page reads them from (CapTranscriptTail).
-	Before string `json:"before,omitempty"`
-	Status  *TranscriptStatus `json:"status,omitempty"`
-	Reason  string            `json:"reason,omitempty"`
+	Before string            `json:"before,omitempty"`
+	Status *TranscriptStatus `json:"status,omitempty"`
+	Reason string            `json:"reason,omitempty"`
 }
 
 // The kinds of a TranscriptItem.
