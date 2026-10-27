@@ -28,7 +28,7 @@ var humanOnlyMethods = []string{
 	proto.MethodSessionStart, proto.MethodSessionStop, proto.MethodSessionKeys, proto.MethodSessionPrompt, proto.MethodSessionUpload, proto.MethodSessionApprove, proto.MethodTaskAsk,
 	proto.MethodTaskAccept, proto.MethodTaskSendBack, proto.MethodTaskDelegate, proto.MethodTaskAdd, proto.MethodTaskGet, proto.MethodProjectOpen,
 	proto.MethodSessionAdopt, proto.MethodSessionAdoptAsk, proto.MethodSessionRemote, proto.MethodSessionModel, proto.MethodQuestionsOpen, proto.MethodCoordinatorClear,
-	proto.MethodServerStop, proto.MethodAgentReload, proto.MethodPeerReload, proto.MethodPeerList, proto.MethodPeerPopupRead, proto.MethodPeerShareAsk, proto.MethodPeerShareAnswer, proto.MethodProjectsWatch,
+	proto.MethodServerStop, proto.MethodAgentReload, proto.MethodPeerReload, proto.MethodPeerList, proto.MethodPeerPopupRead, proto.MethodPeerShareAsk, proto.MethodPeerShareAnswer, proto.MethodLinkAct, proto.MethodProjectsWatch,
 	proto.MethodViewSubscribe, proto.MethodViewAttach, proto.MethodViewDashboard, proto.MethodViewProject,
 	proto.MethodViewSelect, proto.MethodViewSideSel, proto.MethodViewExpand, proto.MethodViewTree, proto.MethodViewSections,
 	proto.MethodViewSidebar, proto.MethodViewInfo, proto.MethodViewColumns, proto.MethodViewSize,

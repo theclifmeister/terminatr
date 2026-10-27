@@ -300,6 +300,7 @@ func init() {
 		})},
 		proto.MethodPeerShareAsk:    {gate: gateHuman, call: typed((*Server).askShare)},
 		proto.MethodPeerShareAnswer: {gate: gateHuman, call: typed((*Server).answerShare)},
+		proto.MethodLinkAct:         {gate: gateHuman, call: typed((*Server).linkAct)},
 		proto.MethodModViews: {gate: gateHuman, call: typed(func(s *Server, p proto.ModViewsParams, c callCtx) (any, *proto.Error) {
 			return s.modViews(p, c.peerPID, c.who())
 		})},

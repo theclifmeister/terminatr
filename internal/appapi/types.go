@@ -123,6 +123,24 @@ type (
 		Cols    uint16 `json:"cols,omitempty"`
 		Rows    uint16 `json:"rows,omitempty"`
 	}
+	// LinkActParams are link.act's: Action ("approve", "drop",
+	// "accept-file", "decline-file", "cancel-file", "accept",
+	// "decline") on ID of Project's links; accepting a link request
+	// sets this side to Allow ("both", "send", "receive") with Ask.
+	LinkActParams struct {
+		Project string `json:"project"`
+		Action  string `json:"action"`
+		ID      string `json:"id"`
+		Allow   string `json:"allow,omitempty"`
+		Ask     bool   `json:"ask,omitempty"`
+	}
+	// ShareAnswerParams are peer.share-answer's: Accept shares Project
+	// for request ID; without it the request is declined.
+	ShareAnswerParams struct {
+		ID      string `json:"id"`
+		Accept  bool   `json:"accept,omitempty"`
+		Project string `json:"project,omitempty"`
+	}
 	// ProjectActiveParams are project.active's: the project, and whether
 	// to activate it (false: deactivate it).
 	ProjectActiveParams struct {
@@ -291,13 +309,18 @@ type Projects struct {
 // behind origin, links). Error says why it doesn't open, or why its
 // board doesn't load. Active, Paused and Pinned are the project's
 // settings of those names (since app API 4), for the sidebar's order:
-// its only settings in the app API. Board are the tasks on deck and in
-// the backlog, without notes and steps (since app API 6).
+// its only settings in the app API, with Shared (since app API 16): it
+// is shared with the paired servers, so a share request can't be
+// answered with it. Board are the tasks on deck and in the backlog,
+// without notes and steps (since app API 6). LinkNeeds (since app API
+// 13) are what its links wait on the user for, by the ids link.act
+// takes.
 type Project struct {
 	Slug        string            `json:"slug"`
 	Active      bool              `json:"active"`
 	Paused      bool              `json:"paused,omitempty"`
 	Pinned      bool              `json:"pinned,omitempty"`
+	Shared      bool              `json:"shared,omitempty"`
 	NeedsYou    []Task            `json:"needs_you"`
 	Questions   int               `json:"questions,omitempty"`
 	Threads     []Thread          `json:"threads"`
@@ -312,6 +335,7 @@ type Project struct {
 	TaskUsage   map[string]Usage  `json:"task_usage,omitempty"`
 	Checkouts   map[string]string `json:"checkouts,omitempty"`
 	Links       []Link            `json:"links,omitempty"`
+	LinkNeeds   []LinkNeed        `json:"link_needs,omitempty"`
 }
 
 // Task is a task on the board; Ref is its id as the user reads it
@@ -449,6 +473,54 @@ type Link struct {
 	LastAt       time.Time `json:"last_at,omitzero"`
 }
 
+// LinkNeed is one thing a project's link waits on the user for (app
+// API 16): Kind "held", a message of the coordinator's waiting for the
+// OK (link.act approve or drop); "file", a file offered to the project
+// (accept-file or decline-file); "request", a paired server's link
+// request (accept with this side's Allow and Ask, or decline). Peer is
+// the project at the link's other end ("mini/api" on a paired server),
+// Shown it by the server's display name. Title is a held message's
+// first line, the coordinator's words; Bytes its size. File and Size
+// are the file a held message carries, or the file offered. Allow is a
+// request's asking side's entry: its mirror is the answer it expects.
+type LinkNeed struct {
+	Kind    string    `json:"kind"`
+	Peer    string    `json:"peer"`
+	Shown   string    `json:"shown,omitempty"`
+	ID      string    `json:"id"`
+	Created time.Time `json:"created"`
+	Title   string    `json:"title,omitempty"`
+	Bytes   int       `json:"bytes,omitempty"`
+	File    string    `json:"file,omitempty"`
+	Size    int64     `json:"size,omitempty"`
+	Allow   string    `json:"allow,omitempty"`
+}
+
+// LinkActResult is link.act's: what came of it, in words.
+type LinkActResult struct {
+	Words string `json:"words"`
+}
+
+// ShareRequest is a paired server's request that this server share a
+// project with it (app API 16), waiting for the user: For is the asking
+// project there ("" for none in particular), Note the asking user's
+// line. peer.share-answer answers it: accepting shares one of this
+// server's active projects that isn't shared yet.
+type ShareRequest struct {
+	ID      string    `json:"id"`
+	For     string    `json:"for,omitempty"`
+	Note    string    `json:"note,omitempty"`
+	Created time.Time `json:"created"`
+}
+
+// ShareAnswer is peer.share-answer's: the request's ID, its State
+// ("accepted" or "declined") and the Project it shared.
+type ShareAnswer struct {
+	ID      string `json:"id"`
+	State   string `json:"state"`
+	Project string `json:"project,omitempty"`
+}
+
 // PromptResult says how a prompt went in: Via "channel", "queued",
 // "steered" or "interrupted"; Why a Mode's prompt went another way;
 // Running: queued while the turn runs on.
@@ -499,7 +571,8 @@ type PeerList struct {
 
 // Peer is a paired server: its alias and display name, its link's State
 // (Reason why it is down, Since when), the projects it shares with this
-// server, and ShareWaits, its share requests that wait for the user.
+// server, and ShareWaits, its share requests that wait for the user
+// (ShareRequests, since app API 16).
 // Pane: its tm has remote panes; Panes is its switch for this server
 // as it last said ("off", "view", "type"): its sessions' panes open
 // through pane.vt ("<alias>/<session>") at view or type, and take keys
@@ -509,17 +582,18 @@ type PeerList struct {
 // through transcript.watch ("<alias>/<session>", the server's caps say
 // transcript-remote) while Panes is view or type and it is on.
 type Peer struct {
-	Alias         string        `json:"alias"`
-	Name          string        `json:"name,omitempty"`
-	State         string        `json:"state"`
-	Reason        string        `json:"reason,omitempty"`
-	Since         time.Time     `json:"since,omitzero"`
-	Projects      []PeerProject `json:"projects"`
-	ShareWaits    int           `json:"share_waits,omitempty"`
-	Pane          bool          `json:"pane,omitempty"`
-	Panes         string        `json:"panes,omitempty"`
-	Transcript    bool          `json:"transcript,omitempty"`
-	Conversations string        `json:"conversations,omitempty"`
+	Alias         string         `json:"alias"`
+	Name          string         `json:"name,omitempty"`
+	State         string         `json:"state"`
+	Reason        string         `json:"reason,omitempty"`
+	Since         time.Time      `json:"since,omitzero"`
+	Projects      []PeerProject  `json:"projects"`
+	ShareWaits    int            `json:"share_waits,omitempty"`
+	ShareRequests []ShareRequest `json:"share_requests,omitempty"`
+	Pane          bool           `json:"pane,omitempty"`
+	Panes         string         `json:"panes,omitempty"`
+	Transcript    bool           `json:"transcript,omitempty"`
+	Conversations string         `json:"conversations,omitempty"`
 }
 
 // PeerProject is a project a paired server shares: its goal line,
@@ -667,7 +741,7 @@ func projectOf(p server.SideProject) Project {
 		Threads: make([]Thread, 0, len(p.Threads)), PRHostFails: p.PRHostFails, Goal: p.Goal, Repos: p.Repos,
 		Counts: p.Counts, Error: p.Error, Usage: usageOf(p.Usage), Checkouts: p.Checkouts}
 	if s := p.Safety; s != nil {
-		out.Active, out.Paused, out.Pinned = s.Active, s.Paused, s.Pinned
+		out.Active, out.Paused, out.Pinned, out.Shared = s.Active, s.Paused, s.Pinned, s.Share
 	}
 	for _, t := range p.NeedsYou {
 		out.NeedsYou = append(out.NeedsYou, taskOf(t))
@@ -687,8 +761,14 @@ func projectOf(p server.SideProject) Project {
 			out.TaskUsage[fmt.Sprintf("T%d", id)] = usageOf(u)
 		}
 	}
+	shown := map[string]string{}
 	for _, l := range p.Links {
 		out.Links = append(out.Links, linkOf(l))
+		shown[l.Peer] = l.Shown
+	}
+	for _, n := range p.LinkNeeds {
+		out.LinkNeeds = append(out.LinkNeeds, LinkNeed{Kind: n.Kind, Peer: n.Peer, Shown: shown[n.Peer], ID: n.ID, Created: n.Created,
+			Title: n.Title, Bytes: n.Bytes, File: n.File, Size: n.Size, Allow: n.Allow})
 	}
 	return out
 }
@@ -773,6 +853,11 @@ func peerListOf(l proto.PeerList) PeerList {
 		peer := Peer{Alias: p.Alias, Name: p.Name, State: p.State, Reason: p.Reason, Since: p.Since,
 			Projects: make([]PeerProject, 0, len(p.Projects)), ShareWaits: proto.ShareWaits([]proto.PeerMirror{p}),
 			Pane: p.Pane, Panes: p.Panes, Transcript: p.Transcript, Conversations: p.Conversations}
+		for _, q := range p.Shares {
+			if !q.Out && q.Pending() {
+				peer.ShareRequests = append(peer.ShareRequests, shareRequestOf(q))
+			}
+		}
 		offset := time.Duration(p.Offset) * time.Millisecond
 		for _, pp := range p.Projects {
 			pr := PeerProject{Project: pp.Project, Goal: pp.Goal, Paused: pp.Paused, NeedsYou: pp.NeedsYou,
@@ -817,6 +902,20 @@ func peerSessionOf(alias string, offset time.Duration, s proto.PeerSession) Peer
 		Task: s.Task, Created: s.Created.Add(-offset), State: s.State, Reason: s.Reason, TodosDone: s.TodosDone,
 		TodosTotal: s.TodosTotal, Current: s.Current, Queued: s.Queued, RemoteControl: s.RemoteControl, Model: s.Model,
 		Asking: s.Asking, Context: s.Context, ContextWindow: s.ContextWindow}
+}
+
+// shareRequestOf is a paired server's share request that waits for the
+// user: what answers it.
+func shareRequestOf(q proto.ShareRequest) ShareRequest {
+	return ShareRequest{ID: q.ID, For: q.For, Note: q.Note, Created: q.Created}
+}
+
+func linkActOf(r proto.LinkActResult) LinkActResult { return LinkActResult{Words: r.Words} }
+
+// shareAnswerOf is the answer as the app sees it: of the request, its
+// id, state and the project shared; the rest is peer.list's.
+func shareAnswerOf(r proto.ShareRequest) ShareAnswer {
+	return ShareAnswer{ID: r.ID, State: r.State, Project: r.Project}
 }
 
 func promptResultOf(r proto.SessionPromptResult) PromptResult {

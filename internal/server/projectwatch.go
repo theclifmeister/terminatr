@@ -81,6 +81,8 @@ type projectSnap struct {
 	// links are the project's links to other projects' coordinators
 	// (docs/SPEC.md §7.9).
 	links []link.Row
+	// linkNeeds are what they wait on the user for (link.Needs).
+	linkNeeds []link.Need
 }
 
 // readProjectSnap reads project p's files, the ticker's state file at
@@ -121,6 +123,7 @@ func readProjectSnap(p *project.Project, tickerState string) *projectSnap {
 			sn.prPoll = s.PRPollSeconds
 		}
 		sn.links = link.Rows(cfg, p)
+		sn.linkNeeds = link.Needs(p, sn.links)
 	}
 	sn.noPRHost = NoPRHost(p)
 	return sn
