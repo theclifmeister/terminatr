@@ -112,6 +112,17 @@ func dialAt(sock string, kind proto.Kind, protocol int, name string) (*Client, e
 	if err != nil {
 		return nil, err
 	}
+	return handshake(conn, kind, protocol, name)
+}
+
+// Over is a control connection on conn, which some other end serves as
+// the server's socket does: the handshake, naming the console name (a
+// device's app API, over the server's own pipe).
+func Over(conn net.Conn, name string) (*Client, error) {
+	return handshake(conn, proto.KindControl, proto.Protocol, name)
+}
+
+func handshake(conn net.Conn, kind proto.Kind, protocol int, name string) (*Client, error) {
 	c := &Client{conn: conn, br: bufio.NewReader(conn)}
 	conn.SetDeadline(time.Now().Add(UnresponsiveTimeout))
 	hello := proto.Hello{Protocol: protocol, Version: version.Version, Build: version.BuildID(), Kind: proto.Kind(kind), Client: name}

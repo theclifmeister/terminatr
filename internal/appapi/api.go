@@ -21,7 +21,7 @@ import (
 // Version is the app API's version. It goes up when a method, a field or
 // a meaning is added or changes; the app reads it, and Capabilities, from
 // the bridge's hello, so an older app works with a newer tm.
-const Version = 13
+const Version = 19
 
 // Capabilities of this bridge, in its hello: what kinds of method it
 // has (Method.Write, Method.Stream). An app checks a capability, or a
@@ -67,6 +67,9 @@ const (
 	// ErrServerMismatch: the running server is older than this tm
 	// (hello only); tm server restart switches it.
 	ErrServerMismatch = "server-mismatch"
+	// ErrLevel: the method needs a higher level than the device's
+	// (app API 19, devices only).
+	ErrLevel = "device-level"
 )
 
 // Request is a line the app writes: a call of Method with Params,
@@ -107,11 +110,14 @@ func (e *Error) Error() string { return e.Code + ": " + e.Message }
 
 // Hello is the bridge's first line: the app API it speaks, the tm it
 // is and the server it reached. Error, when set, says why it reached
-// none; the bridge exits after it.
+// none; the bridge exits after it. On a device's link (app API 19)
+// Level is the device's level, Capabilities and Methods only what it
+// allows, and a new Hello line comes whenever the level changes.
 type Hello struct {
 	AppAPI       int      `json:"app_api"`
 	TM           string   `json:"tm"`
 	Build        string   `json:"build"`
+	Level        string   `json:"level,omitempty"`
 	Capabilities []string `json:"capabilities"`
 	Methods      []string `json:"methods"`
 	Server       *Server  `json:"server,omitempty"`

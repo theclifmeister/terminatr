@@ -60,14 +60,23 @@ type callCtx struct {
 	params  any
 	peerPID int
 	human   bool // on the human socket
-	// app: the Mac app's bridge on the human socket (proto.ClientApp).
+	// app: the Mac app's bridge on the human socket (proto.ClientApp),
+	// or a paired device's app API.
 	app bool
-	who func() caller.Caller
+	// device is the paired device whose app API calls (§16.15).
+	device string
+	who    func() caller.Caller
 }
 
 // console is the caller's console as a thread's takeover counts it
-// (consoleTakeover): the Mac app's bridge by its pid.
-func (c callCtx) console() string { return "app:" + strconv.Itoa(c.peerPID) }
+// (consoleTakeover): the Mac app's bridge by its pid, a device by its
+// name.
+func (c callCtx) console() string {
+	if c.device != "" {
+		return "device:" + c.device
+	}
+	return "app:" + strconv.Itoa(c.peerPID)
+}
 
 // handler answers one request.
 type handler func(s *Server, req proto.Request, c callCtx) (any, *proto.Error)
@@ -287,6 +296,10 @@ func init() {
 		proto.MethodPeerReload: {gate: gateHuman, call: plain(func(s *Server, _ callCtx) any {
 			s.peers.Reload()
 			return s.peers.Status()
+		})},
+		proto.MethodDeviceReload: {gate: gateHuman, call: plain(func(s *Server, _ callCtx) any {
+			s.devices.Reload()
+			return s.devices.Status()
 		})},
 		proto.MethodPeerList: {gate: gateHuman, call: plain(func(s *Server, _ callCtx) any { return s.peerList() })},
 		proto.MethodPeerPopupRead: {gate: gateHuman, call: typed(func(s *Server, p proto.PeerPopupReadParams, _ callCtx) (any, *proto.Error) {

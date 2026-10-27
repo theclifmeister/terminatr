@@ -70,6 +70,11 @@ type Hello struct {
 // ClientApp is Hello.Client for the Mac app's bridge.
 const ClientApp = "app"
 
+// ClientDevice is Hello.Client for a paired device's app API, which the
+// server runs on its side of the device's link over a connection of its
+// own, never a socket (docs/SPEC.md §16.15).
+const ClientDevice = "device"
+
 // The server's hello capabilities.
 const (
 	CapPaneVT     = "pane-vt"    // pane.vt

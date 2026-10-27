@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/theclifmeister/terminatr/internal/appapi"
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/plat/proc"
@@ -137,7 +138,7 @@ func serverRun(e *Env, args []string) error {
 		os.Unsetenv(k)
 	}
 	bin, _ := os.Executable()
-	opts := server.Options{Paths: p, Log: logger, Bin: bin, Source: source, RunCLI: RunInServer}
+	opts := server.Options{Paths: p, Log: logger, Bin: bin, Source: source, RunCLI: RunInServer, DeviceAPI: appapi.ServeDevice}
 	if len(os.Args) > 2 && os.Args[1] == "server" && os.Args[2] == "run" {
 		// This process is `tm server run` (not a test calling in): the
 		// server runs from its pin (docs/SPEC.md §3.6).

@@ -303,7 +303,9 @@ func (m *Manager) Status() []proto.DeviceLink {
 		out = append(out, l.st)
 		l.mu.Unlock()
 	}
-	slices.SortFunc(out, func(a, b proto.DeviceLink) int { return strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name)) })
+	slices.SortFunc(out, func(a, b proto.DeviceLink) int {
+		return strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name))
+	})
 	return out
 }
 

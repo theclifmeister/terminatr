@@ -21,6 +21,9 @@ type Client struct {
 	wm sync.Mutex
 	// Hello is the bridge's hello.
 	Hello appapi.Hello
+	// Hellos are the hellos after the first: a device's, whose level
+	// changed (the last 8 kept).
+	Hellos chan appapi.Hello
 
 	mu   sync.Mutex
 	next int64
@@ -43,7 +46,7 @@ func New(r io.Reader, w io.Writer) (*Client, error) {
 	if err := json.Unmarshal(line, &first); err != nil || first.Hello == nil {
 		return nil, fmt.Errorf("the bridge's first line isn't a hello: %q", line)
 	}
-	c := &Client{w: w, Hello: *first.Hello, waiting: map[int64]chan appapi.Out{}, done: make(chan struct{})}
+	c := &Client{w: w, Hello: *first.Hello, Hellos: make(chan appapi.Hello, 8), waiting: map[int64]chan appapi.Out{}, done: make(chan struct{})}
 	if c.Hello.Error != nil {
 		return c, c.Hello.Error
 	}
@@ -68,6 +71,13 @@ func (c *Client) read(br *bufio.Reader) {
 		}
 		var o appapi.Out
 		if err := json.Unmarshal(line, &o); err != nil {
+			continue
+		}
+		if o.ID == 0 && o.Hello != nil {
+			select {
+			case c.Hellos <- *o.Hello:
+			default:
+			}
 			continue
 		}
 		c.mu.Lock()
