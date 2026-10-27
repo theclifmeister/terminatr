@@ -1127,8 +1127,9 @@ public enum AppAPI {
         public var latest: String
         public var upgrade: String
         public var needsFirst: Bool
+        public var contextHint: Int
 
-        public init(sessions: [Session] = [], alerts: Int, notices: [Notice] = [], version: String = "", build: String = "", latest: String = "", upgrade: String = "", needsFirst: Bool = false) {
+        public init(sessions: [Session] = [], alerts: Int, notices: [Notice] = [], version: String = "", build: String = "", latest: String = "", upgrade: String = "", needsFirst: Bool = false, contextHint: Int = 0) {
             self.sessions = sessions
             self.alerts = alerts
             self.notices = notices
@@ -1137,6 +1138,7 @@ public enum AppAPI {
             self.latest = latest
             self.upgrade = upgrade
             self.needsFirst = needsFirst
+            self.contextHint = contextHint
         }
 
         enum CodingKeys: String, CodingKey {
@@ -1148,6 +1150,7 @@ public enum AppAPI {
             case latest
             case upgrade
             case needsFirst = "needs_first"
+            case contextHint = "context_hint"
         }
     }
 
@@ -2281,6 +2284,7 @@ extension AppAPI.SessionList {
         self.latest = try c.decodeIfPresent(String.self, forKey: .latest) ?? ""
         self.upgrade = try c.decodeIfPresent(String.self, forKey: .upgrade) ?? ""
         self.needsFirst = try c.decodeIfPresent(Bool.self, forKey: .needsFirst) ?? false
+        self.contextHint = try c.decodeIfPresent(Int.self, forKey: .contextHint) ?? 0
     }
 }
 

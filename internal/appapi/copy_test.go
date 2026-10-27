@@ -493,25 +493,27 @@ func TestPeerListWatched(t *testing.T) {
 	}
 }
 
-// TestSessionListNeedsFirst: session.list carries [ui] needs_first as
-// the config says it now, false without one.
-func TestSessionListNeedsFirst(t *testing.T) {
+// TestSessionListUIHints: session.list carries [ui] needs_first and
+// context_hint as the config says them now: false and the default hint
+// without one, nothing for a hint that is off.
+func TestSessionListUIHints(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("TERMINATR_HOME", dir)
-	if sessionListOf(proto.SessionListResult{}).NeedsFirst {
-		t.Fatal("needs_first without a config")
+	if l := sessionListOf(proto.SessionListResult{}); l.NeedsFirst || l.ContextHint != config.DefaultContextHint {
+		t.Fatalf("without a config: %+v", l)
 	}
 	path := filepath.Join(dir, "config.toml")
-	if err := os.WriteFile(path, []byte("[ui]\nneeds_first = true\n"), 0o600); err != nil {
+	if err := os.WriteFile(path, []byte("[ui]\nneeds_first = true\ncontext_hint = 60\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if !sessionListOf(proto.SessionListResult{}).NeedsFirst {
-		t.Fatal("needs_first set but not sent")
+	if l := sessionListOf(proto.SessionListResult{}); !l.NeedsFirst || l.ContextHint != 60 {
+		t.Fatalf("set but not sent: %+v", l)
 	}
-	if err := os.WriteFile(path, []byte("[ui]\nneeds_first = false\n"), 0o600); err != nil {
+	if err := os.WriteFile(path, []byte("[ui]\nneeds_first = false\ncontext_hint = 0\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if sessionListOf(proto.SessionListResult{}).NeedsFirst {
-		t.Fatal("needs_first unset but sent")
+	l := sessionListOf(proto.SessionListResult{})
+	if raw, _ := json.Marshal(l); l.NeedsFirst || strings.Contains(string(raw), "context_hint") {
+		t.Fatalf("unset but sent: %s", raw)
 	}
 }

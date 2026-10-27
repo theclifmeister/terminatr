@@ -127,17 +127,21 @@ type Empty struct{}
 // in the tray, and the server's version and the newer release it found.
 // NeedsFirst is [ui] needs_first, which the bridge reads from the
 // config as the TUI's sidebar does (since app API 10): the sidebar lists
-// the projects that need the user first. It is the one setting of the
-// config the app API has, read only.
+// the projects that need the user first. ContextHint is [ui]
+// context_hint (app API 13; absent for never): the percent of its
+// context window from which a coordinator's sidebar row warns and offers
+// its save and clear. They are the only settings of the config the app
+// API has, read only.
 type SessionList struct {
-	Sessions   []Session `json:"sessions"`
-	Alerts     uint64    `json:"alerts"`
-	Notices    []Notice  `json:"notices"`
-	Version    string    `json:"version,omitempty"`
-	Build      string    `json:"build,omitempty"`
-	Latest     string    `json:"latest,omitempty"`
-	Upgrade    string    `json:"upgrade,omitempty"`
-	NeedsFirst bool      `json:"needs_first,omitempty"`
+	Sessions    []Session `json:"sessions"`
+	Alerts      uint64    `json:"alerts"`
+	Notices     []Notice  `json:"notices"`
+	Version     string    `json:"version,omitempty"`
+	Build       string    `json:"build,omitempty"`
+	Latest      string    `json:"latest,omitempty"`
+	Upgrade     string    `json:"upgrade,omitempty"`
+	NeedsFirst  bool      `json:"needs_first,omitempty"`
+	ContextHint int       `json:"context_hint,omitempty"`
 }
 
 // Session is one session: its role and place, its agent's state, its
@@ -570,8 +574,9 @@ type PeerSession struct {
 // The copies. Lists are never null.
 
 func sessionListOf(r proto.SessionListResult) SessionList {
+	first, hint := uiHints()
 	out := SessionList{Sessions: make([]Session, 0, len(r.Sessions)), Notices: make([]Notice, 0, len(r.ModNotices)),
-		Alerts: r.Alerts, Version: r.Version, Build: r.Build, Latest: r.Latest, Upgrade: r.Upgrade, NeedsFirst: needsFirst()}
+		Alerts: r.Alerts, Version: r.Version, Build: r.Build, Latest: r.Latest, Upgrade: r.Upgrade, NeedsFirst: first, ContextHint: hint}
 	for _, s := range r.Sessions {
 		out.Sessions = append(out.Sessions, sessionOf(s))
 	}
