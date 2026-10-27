@@ -146,7 +146,7 @@ type LineFile struct {
 	Type string
 }
 
-// ErrNoLineFile: the line names no file there.
+// ErrNoLineFile is FileAt's error: the line names no file there.
 var ErrNoLineFile = errors.New("the transcript names no such file")
 
 // FileAt is the file line names at block and n, as Map's items give it

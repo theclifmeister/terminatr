@@ -175,7 +175,7 @@ type TranscriptInput struct {
 // CapSessionFile.
 const MethodSessionFile = "session.file"
 
-// CapSessionFile: the server answers session.file.
+// CapSessionFile says the server answers session.file.
 const CapSessionFile = "session-file"
 
 // Bounds of session.file: a file of at most MaxSentFile bytes, read
