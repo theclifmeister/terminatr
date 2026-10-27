@@ -134,3 +134,7 @@ func writeIdentity(dir string) (*Identity, error) {
 	}
 	return newIdentity(k), nil
 }
+
+// IdentityOf is the identity of the key k: a device's, which keeps its
+// own key (docs/SPEC.md §16.15), or a test's.
+func IdentityOf(k ed25519.PrivateKey) *Identity { return newIdentity(k) }

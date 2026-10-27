@@ -57,6 +57,9 @@ func (s Secret) String() string {
 	return b.String()
 }
 
+// ParseSecret reads a secret as String writes it, as parseSecret does.
+func ParseSecret(s string) (Secret, bool) { return parseSecret(s) }
+
 // parseSecret reads 16 Crockford digits, ignoring case, hyphens and
 // spaces, with O for 0 and I or L for 1.
 func parseSecret(s string) (Secret, bool) {
@@ -172,9 +175,23 @@ func RelayURL(s string) (string, error) {
 	return u.String(), nil
 }
 
-// pairRoom is the pair room T names; the relay can't get T from it.
-func pairRoom(t Secret) [32]byte {
-	return sha256.Sum256(append([]byte("tm-pair room v1\n"), t[:]...))
+// PurposeDevice is PairOptions.Purpose for pairing a device (a phone)
+// with this server (docs/SPEC.md §16.15) rather than two servers.
+const PurposeDevice = "device"
+
+// pairLabel is the label of purpose's pair rooms and proofs: a device's
+// code never pairs two servers, nor a server's a device.
+func pairLabel(purpose string) string {
+	if purpose == PurposeDevice {
+		return "tm-device-pair"
+	}
+	return "tm-pair"
+}
+
+// pairRoom is the pair room T names for purpose; the relay can't get T
+// from it.
+func pairRoom(t Secret, purpose string) [32]byte {
+	return sha256.Sum256(append([]byte(pairLabel(purpose)+" room v1\n"), t[:]...))
 }
 
 // Pairing roles.
@@ -183,11 +200,11 @@ const (
 	roleJoin = "join"
 )
 
-// pairProof is role's proof that it knows t, bound to both keys and to
-// this TLS session (exp).
-func pairProof(t Secret, role string, pairer, joiner ID, exp []byte) []byte {
+// pairProof is role's proof that it knows t, bound to both keys, to
+// this TLS session (exp) and to purpose.
+func pairProof(t Secret, purpose, role string, pairer, joiner ID, exp []byte) []byte {
 	m := hmac.New(sha256.New, t[:])
-	m.Write([]byte("tm-pair proof v1\n"))
+	m.Write([]byte(pairLabel(purpose) + " proof v1\n"))
 	m.Write([]byte(role))
 	m.Write([]byte{0})
 	m.Write(pairer[:])
@@ -207,7 +224,8 @@ func CheckDigits(pairer, joiner ID) string {
 	return fmt.Sprintf("%03d %03d", n/1000, n%1000)
 }
 
-// Offer is what a person confirms: the other server and the check.
+// Offer is what a person confirms: the other server and the check (none
+// for a device: the code carried this server's key).
 type Offer struct {
 	Name    string // its host name, as it said
 	Version string // its tm release
@@ -232,16 +250,22 @@ type PairOptions struct {
 	// Waiting is called once the pairer waits in the room: from then on
 	// the code works, so that is when to show it.
 	Waiting func()
+	// Purpose is "" for two servers, PurposeDevice for a device.
+	Purpose string
+	// Expect, when set, is the only key the joiner takes: the server id
+	// a device's code carries, so the camera is the check.
+	Expect *ID
 }
 
 // Pairing errors people see.
 var (
-	ErrNoPairer   = errors.New("nobody is pairing with this code: it was mistyped, has expired (10 minutes) or was used")
-	ErrBadCode    = errors.New("the code doesn't match: the other side used another code, or someone in between doesn't know it")
-	ErrDeclined   = errors.New("not paired: the digits weren't confirmed here")
-	ErrPeerNo     = errors.New("not paired: the other side said no")
-	ErrOwnKey     = errors.New("that's this server's own pairing")
-	errPairFormat = errors.New("the other side sent something unexpected")
+	ErrNoPairer    = errors.New("nobody is pairing with this code: it was mistyped, has expired (10 minutes) or was used")
+	ErrBadCode     = errors.New("the code doesn't match: the other side used another code, or someone in between doesn't know it")
+	ErrDeclined    = errors.New("not paired: the digits weren't confirmed here")
+	ErrPeerNo      = errors.New("not paired: the other side said no")
+	ErrOwnKey      = errors.New("that's this server's own pairing")
+	ErrNotExpected = errors.New("the other side's key isn't the one the code names: someone in between, or another server")
+	errPairFormat  = errors.New("the other side sent something unexpected")
 )
 
 // pairTimeout bounds the exchange once mated: the relay's 2 minutes for
@@ -281,7 +305,7 @@ func Join(ctx context.Context, id *Identity, code Code, o PairOptions) (*Paired,
 }
 
 func dialPair(ctx context.Context, id *Identity, code Code, o PairOptions, onWait func()) (net.Conn, error) {
-	d := relay.Dialer{Key: id.Key, Kind: relay.KindPair, Room: pairRoom(code.Secret), TLS: o.RelayTLS, OnWait: onWait}
+	d := relay.Dialer{Key: id.Key, Kind: relay.KindPair, Room: pairRoom(code.Secret, o.Purpose), TLS: o.RelayTLS, OnWait: onWait}
 	c, err := d.Dial(ctx, code.Relay)
 	if err != nil {
 		var ce *relay.CloseError
@@ -338,6 +362,9 @@ func runPair(raw net.Conn, id *Identity, t Secret, role string, o PairOptions) (
 	if otherID == id.ID {
 		return nil, ErrOwnKey
 	}
+	if o.Expect != nil && otherID != *o.Expect {
+		return nil, ErrNotExpected
+	}
 	pairer, joiner, otherRole := id.ID, otherID, roleJoin
 	if role == roleJoin {
 		pairer, joiner, otherRole = otherID, id.ID, rolePair
@@ -358,14 +385,14 @@ func runPair(raw net.Conn, id *Identity, t Secret, role string, o PairOptions) (
 		}
 		return m, nil
 	}
-	if err := enc.Encode(pairMsg{Proof: pairProof(t, role, pairer, joiner, exp)}); err != nil {
+	if err := enc.Encode(pairMsg{Proof: pairProof(t, o.Purpose, role, pairer, joiner, exp)}); err != nil {
 		return nil, err
 	}
 	m, err := recv()
 	if err != nil {
 		return nil, err
 	}
-	if !hmac.Equal(m.Proof, pairProof(t, otherRole, pairer, joiner, exp)) {
+	if !hmac.Equal(m.Proof, pairProof(t, o.Purpose, otherRole, pairer, joiner, exp)) {
 		return nil, ErrBadCode
 	}
 	if err := enc.Encode(pairMsg{Name: o.Name, Version: o.Version}); err != nil {
@@ -379,7 +406,10 @@ func runPair(raw net.Conn, id *Identity, t Secret, role string, o PairOptions) (
 	}
 	// the other side's words are shown beside the check digits: one
 	// short line of plain text each, so they can't hide or forge them
-	offer := Offer{Name: textsafe.Line(m.Name, maxNameRunes), Version: textsafe.Line(m.Version, maxVersionRunes), ID: otherID, Check: CheckDigits(pairer, joiner)}
+	offer := Offer{Name: textsafe.Line(m.Name, maxNameRunes), Version: textsafe.Line(m.Version, maxVersionRunes), ID: otherID}
+	if o.Purpose == "" {
+		offer.Check = CheckDigits(pairer, joiner)
+	}
 	yes, err := o.Confirm(offer)
 	if err != nil {
 		return nil, err
