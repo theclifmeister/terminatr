@@ -8,6 +8,10 @@
 	<string>terminatr</string>
 	<key>CFBundleExecutable</key>
 	<string>Terminatr</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
+	<key>CFBundleIconName</key>
+	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
 	<string>dev.terminatr.app</string>
 	<key>CFBundleInfoDictionaryVersion</key>
