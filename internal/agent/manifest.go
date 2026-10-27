@@ -189,7 +189,12 @@ type RemoteControl struct {
 type Answer struct {
 	// Rule names the screen rule that matches a question menu; tm
 	// answers only while it is the screen's settled match.
-	Rule       string `toml:"rule"`
+	Rule string `toml:"rule"`
+	// Tool names the agent's tool whose call input holds the menu
+	// (MenuOf): the server keeps it as the session's open question
+	// while the agent is blocked on it, and session.answer answers it
+	// by keys. Empty: the menu is read off the screen only.
+	Tool       string `toml:"tool"`
 	TextOption string `toml:"text_option"` // part of the free-text option's label
 	TextFocus  string `toml:"text_focus"`  // key that moves down one option, in place of the number, e.g. "\x1b[B"
 	TextKey    string `toml:"text_key"`    // keys after the option's number that open its text field, e.g. "\t"
