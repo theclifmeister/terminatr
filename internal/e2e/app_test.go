@@ -4,7 +4,9 @@ package e2e
 // a fake app (apptest) as the app runs it, over its stdin and stdout.
 
 import (
+	"bytes"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -167,5 +169,87 @@ func TestAppBridgePane(t *testing.T) {
 	journal, _ := os.ReadFile(filepath.Join(projDir, "JOURNAL.md"))
 	if !strings.Contains(string(journal), "human (app) thread.takeover t-0001") {
 		t.Errorf("journal:\n%s", journal)
+	}
+}
+
+// TestAppBridgeSentFile: the fake Claude sends the user a scratch image
+// with SendUserFile; the app sees the call's file in the conversation and
+// reads its bytes through session.file by the ref the item gave, in
+// chunks; a forged ref, and the file once deleted, are gone.
+func TestAppBridgeSentFile(t *testing.T) {
+	env, projDir, _ := threadEnv(t)
+	shot := filepath.Join(t.TempDir(), "shot.png")
+	img := append([]byte("\x89PNG\r\n\x1a\n"), make([]byte, proto.SentFileChunk+100)...)
+	if err := os.WriteFile(shot, img, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	script := fmt.Sprintf(`
+[[step]]
+do = "transcript"
+payload = { type = "assistant", message = { role = "assistant", content = [{ type = "tool_use", id = "toolu_f", name = "SendUserFile", input = { files = [%q], caption = "the shot", display = "render" } }] } }
+
+[[step]]
+do = "stream"
+ms = 50
+text = "SENT-DONE"
+`, shot)
+	for _, kv := range env.Vars {
+		if v, ok := strings.CutPrefix(kv, "FAKEAGENT_SCRIPTS="); ok {
+			os.WriteFile(filepath.Join(v, "thread-send.toml"), []byte(script), 0o644)
+		}
+	}
+	th := startThread(t, env, projDir)
+	b := runBridge(t, env)
+	if !slices.Contains(b.Hello.Methods, proto.MethodSessionFile) || !slices.Contains(b.Hello.Server.Caps, proto.CapSessionFile) {
+		t.Fatalf("hello %+v", b.Hello)
+	}
+	var tr appapi.TranscriptResult
+	ts, err := b.Stream(proto.MethodTranscriptWatch, appapi.TranscriptParams{Session: th.ID}, &tr)
+	if err != nil {
+		t.Fatalf("transcript.watch: %v", err)
+	}
+	defer ts.Cancel()
+	env.MustCLI("thread", "prompt", "t-0001", "run thread-send", "--project", "demo")
+
+	var sent *appapi.TranscriptItem
+	for sent == nil {
+		var ev appapi.TranscriptEvent
+		if _, err := ts.Next(&ev); err != nil {
+			t.Fatalf("transcript: %v", err)
+		}
+		for i, it := range ev.Items {
+			if it.Tool == "SendUserFile" && len(it.Files) > 0 {
+				sent = &ev.Items[i]
+			}
+		}
+	}
+	f := sent.Files[0]
+	if sent.Text != "the shot" || sent.Display != "render" || f.Path != shot || f.Name != "shot.png" || f.Type != "image/png" {
+		t.Fatalf("item %+v", sent)
+	}
+	var st appapi.SessionFile
+	if err := b.Call(proto.MethodSessionFile, appapi.SessionFileParams{Session: th.ID, Ref: f.Ref, Stat: true}, &st); err != nil ||
+		!st.Sendable || st.Size != int64(len(img)) || len(st.Data) != 0 {
+		t.Fatalf("stat %+v %v", st, err)
+	}
+	var got []byte
+	for int64(len(got)) < st.Size {
+		var c appapi.SessionFile
+		if err := b.Call(proto.MethodSessionFile, appapi.SessionFileParams{Session: th.ID, Ref: f.Ref, Offset: int64(len(got))}, &c); err != nil || len(c.Data) == 0 {
+			t.Fatalf("chunk at %d: %v", len(got), err)
+		}
+		got = append(got, c.Data...)
+	}
+	if !bytes.Equal(got, img) {
+		t.Fatal("the bytes differ")
+	}
+	parts := strings.SplitN(f.Ref, ".", 2)
+	forged := "0." + parts[1]
+	if err := b.Call(proto.MethodSessionFile, appapi.SessionFileParams{Session: th.ID, Ref: forged}, nil); appCode(err) != proto.ErrFileGone {
+		t.Errorf("forged ref: %v", err)
+	}
+	os.Remove(shot)
+	if err := b.Call(proto.MethodSessionFile, appapi.SessionFileParams{Session: th.ID, Ref: f.Ref, Stat: true}, nil); appCode(err) != proto.ErrFileGone {
+		t.Errorf("deleted: %v", err)
 	}
 }

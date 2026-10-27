@@ -595,6 +595,18 @@ Skill = "skill"
 TaskCreate = "subject"
 TaskUpdate = "subject"
 ToolSearch = "query"
+SendUserFile = "caption"
+
+# What the conversation puts in front of the user (the app's attachment
+# cards, session.file): SendUserFile's files, and images pasted into a
+# prompt (their base64 bytes are in the line).
+[transcript.files]
+tool = "SendUserFile"
+paths = "files"
+display = "display"
+image_block = "image"
+image_type = "source.media_type"
+image_data = "source.data"
 
 # Hook → state: edges and details (who is asking for what).
 [[hooks]]
