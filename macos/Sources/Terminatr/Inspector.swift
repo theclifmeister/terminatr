@@ -34,6 +34,7 @@ struct Inspector: View {
             .padding(.top, 22)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .scrollEdges()
         .guardingLinks()
     }
 

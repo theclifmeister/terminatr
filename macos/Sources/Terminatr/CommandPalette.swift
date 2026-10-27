@@ -351,6 +351,7 @@ private struct ReviewPanel: View {
                 Spacer(minLength: 8)
                 TaskActs(project: project, task: task, status: "review")
             }
+            TaskOutcome(project: project, task: task)
         }
         .padding(16)
     }

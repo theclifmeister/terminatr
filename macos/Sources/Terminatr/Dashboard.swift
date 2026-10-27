@@ -85,6 +85,7 @@ struct ProjectDashboard: View {
             .frame(maxWidth: 760, alignment: .leading)
             .frame(maxWidth: .infinity)
         }
+        .scrollEdges()
     }
 
     static let inboxShown = 8
@@ -288,17 +289,20 @@ private struct BoardRow: View {
     let task: AppAPI.Task
 
     var body: some View {
-        HStack(alignment: .center, spacing: 8) {
-            Text(task.ref)
-                .font(theme.mono(.subheadline, .medium))
-                .foregroundStyle(theme.action)
-                .frame(minWidth: 44, alignment: .leading)
-            Text(task.title)
-                .font(theme.body(.body))
-                .lineLimit(1)
-                .textSelection(.enabled)
-            Spacer(minLength: 8)
-            TaskActs(project: project, task: task.ref, status: task.status, compact: true)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .center, spacing: 8) {
+                Text(task.ref)
+                    .font(theme.mono(.subheadline, .medium))
+                    .foregroundStyle(theme.action)
+                    .frame(minWidth: 44, alignment: .leading)
+                Text(task.title)
+                    .font(theme.body(.body))
+                    .lineLimit(1)
+                    .textSelection(.enabled)
+                Spacer(minLength: 8)
+                TaskActs(project: project, task: task.ref, status: task.status, compact: true)
+            }
+            TaskOutcome(project: project, task: task.ref)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
@@ -456,6 +460,7 @@ struct RemoteProjectDashboard: View {
             .frame(maxWidth: 760, alignment: .leading)
             .frame(maxWidth: .infinity)
         }
+        .scrollEdges()
         .opacity(project.stale ? 0.7 : 1)
     }
 

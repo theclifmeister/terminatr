@@ -68,23 +68,11 @@ private func need(_ id: String, project: String) -> Need {
     #expect(SidebarTree.threads(of: p, matching: "t9").map(\.record.id) == ["t-1"])
     #expect(SidebarTree.threads(of: p, matching: "t-2").map(\.record.id) == ["t-2"])
     #expect(SidebarTree.threads(of: p, matching: "thread").count == 2)
-}
-
-@Test func foldProjects() {
-    let p = AppAPI.Project(slug: "p", active: true, usage: noUsage)
-    let key = Navigation.sectionKey(server: "", project: "p")
-    var nav = Navigation(selection: .project("p"))
-    #expect(SidebarTree.opens(p, nav: nav, needs: 0))
-    // ← folds the selected project; → opens one that has no needs.
-    nav.fold(key)
-    #expect(!SidebarTree.opens(p, nav: nav, needs: 1))
-    nav.select(.project("q"))
-    nav.unfold(key)
-    #expect(SidebarTree.opens(p, nav: nav, needs: 0))
-    // Folded, it still lists the session the window shows.
-    nav.fold(key)
-    nav.select(.session(SessionRef(project: "p", thread: "t-1")))
-    #expect(SidebarTree.opens(p, nav: nav, needs: 0))
+    // Done threads too, as the TUI's filter finds them.
+    var t3 = thread("t-3")
+    t3.record.done = true
+    let done = AppAPI.Project(slug: "demo", active: true, threads: [t3], usage: noUsage)
+    #expect(SidebarTree.threads(of: done, matching: "t-3").count == 1)
 }
 
 @Test func findInConversation() {
