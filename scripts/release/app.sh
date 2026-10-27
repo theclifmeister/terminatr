@@ -30,7 +30,9 @@ version=${version%%-*}
 out="$root/.build/release/app"
 app="$root/macos/build/Terminatr.app"
 
-make -C "$root/macos" app ARCHS="arm64 x86_64" VERSION="$version"
+# WERROR=0: a warning a newer Xcode brings doesn't stop a release; CI's
+# macos-app job fails on it (macos/Makefile).
+make -C "$root/macos" app ARCHS="arm64 x86_64" VERSION="$version" WERROR=0
 rm -rf "$out"
 mkdir -p "$out"
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/tm-app.XXXXXX")

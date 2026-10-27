@@ -6,6 +6,14 @@
 #   make icon-check  Terminatr.app has the icon its Info.plist names
 #   make run     make app, then open it
 #
+# A warning from our targets fails build, test and app (WERROR=1, the
+# default): Package.swift makes them errors (-warnings-as-errors, not
+# SwiftTerm's), and warnings.sh fails on any a build prints from
+# Sources/ or Tests/, as a warning @preconcurrency downgrades (AppKit's
+# Sendable callbacks) stays one under -warnings-as-errors. Swift prints
+# a warning only when its file compiles: CI's clean build sees them all.
+# scripts/release/app.sh builds with WERROR=0.
+#
 # ARCHS="arm64 x86_64" builds a universal app (the release's): one build
 # per architecture, joined by lipo. Not one `swift build --arch arm64
 # --arch x86_64`: before Xcode 27 that goes through XCBuild, which can't
@@ -34,14 +42,17 @@ APP          := build/Terminatr.app
 ARCHS        ?=
 VERSION      ?= 0.0.0
 ARCH_DIR     := build/arch
+WERROR       ?= 1
+export TERMINATR_WERROR := $(WERROR)
+CHECK        := $(if $(filter 1,$(WERROR)),./warnings.sh)
 
 .PHONY: build test app icon-check run clean
 
 build:
-	$(SWIFT) build
+	$(CHECK) $(SWIFT) build
 
 test:
-	$(SWIFT) test $(TEST_FLAGS)
+	$(CHECK) $(SWIFT) test $(TEST_FLAGS)
 
 # Each architecture's binary is copied out as soon as it is built: the
 # builds may share one products folder. The resource bundles are the
@@ -50,12 +61,12 @@ app:
 	rm -rf $(APP) $(ARCH_DIR)
 	mkdir -p $(APP)/Contents/MacOS $(APP)/Contents/Resources
 ifeq ($(strip $(ARCHS)),)
-	$(SWIFT) build -c $(CONFIG)
+	$(CHECK) $(SWIFT) build -c $(CONFIG)
 	cp "$$($(SWIFT) build -c $(CONFIG) --show-bin-path)/Terminatr" $(APP)/Contents/MacOS/
 	cp -R "$$($(SWIFT) build -c $(CONFIG) --show-bin-path)"/*.bundle $(APP)/Contents/Resources/
 else
 	set -e; for a in $(ARCHS); do \
-		$(SWIFT) build -c $(CONFIG) --arch $$a; \
+		$(CHECK) $(SWIFT) build -c $(CONFIG) --arch $$a; \
 		mkdir -p $(ARCH_DIR)/$$a; \
 		cp "$$($(SWIFT) build -c $(CONFIG) --arch $$a --show-bin-path)/Terminatr" $(ARCH_DIR)/$$a/; \
 		lipo $(ARCH_DIR)/$$a/Terminatr -verify_arch $$a; \

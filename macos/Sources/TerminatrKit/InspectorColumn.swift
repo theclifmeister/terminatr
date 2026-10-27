@@ -16,4 +16,10 @@ public enum InspectorColumn {
         guard let saved else { return min }
         return Swift.min(max, Swift.max(min, saved))
     }
+
+    /// The width to keep when the column is width points wide, or nil:
+    /// a width outside the range is the column sliding in or out.
+    public static func saving(_ width: Double) -> Double? {
+        (min...max).contains(width) ? width.rounded() : nil
+    }
 }
