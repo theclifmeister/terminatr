@@ -6,8 +6,9 @@ import TerminatrKit
 /// The Terminal tab: the session's pane through pane.vt, drawn by
 /// SwiftTerm. The server's emulator stays the pane's; this one mirrors
 /// it at the pane's size and never answers the program. Keys go back
-/// through pane.input as the human's: typed text takes a thread over,
-/// and the first keys claim the pane's size for this window. A paired
+/// through pane.input as the human's: typed text takes a thread over.
+/// The tab claims the pane's size for its room when it opens, when the
+/// room changes and settles, and on keys (PaneFit). A paired
 /// server's pane ("<alias>/<session>") comes the same way through the
 /// server's peer link, under that server's switch: it opens at view or
 /// write, and takes keys at write alone (the far server checks each).
@@ -67,9 +68,6 @@ struct TerminalTab: View {
                 .font(theme.body(.footnote))
                 .foregroundStyle(theme.muted)
             Spacer()
-            Button("Fit to Window") { pane.fit() }
-                .disabled(remote == .view)
-                .help("Claims the pane's size for this window, as typing does")
             Button("Repaint") { pane.repaint() }
         }
         .controlSize(.small)
@@ -110,13 +108,13 @@ final class PaneController: NSObject, TerminalViewDelegate {
     @ObservationIgnored private var stream: Int?
     @ObservationIgnored private var pending = Data()
     @ObservationIgnored private var claim: AppAPI.PaneSize?
-    /// The size these keys last claimed.
-    @ObservationIgnored private var claimed: AppAPI.PaneSize?
+    @ObservationIgnored private var fits = PaneFit()
     @ObservationIgnored private var sending = false
 
     override init() {
         super.init()
         host.terminal.terminalDelegate = self
+        host.roomChanged = { [weak self] in self?.roomChanged() }
     }
 
     /// Streams session id's pane into the mirror until cancelled or
@@ -127,7 +125,9 @@ final class PaneController: NSObject, TerminalViewDelegate {
         do {
             let sub = try await bridge.subscribe(AppAPI.Methods.paneVt, AppAPI.PaneParams(session: id))
             stream = sub.id
+            fits.opened()
             show(cols: sub.result.session.cols, rows: sub.result.session.rows)
+            fit()
             for try await e in sub.events {
                 switch e.name {
                 case "pane.repaint":
@@ -162,10 +162,22 @@ final class PaneController: NSObject, TerminalViewDelegate {
         host.mirror(cols: cols, rows: rows)
     }
 
-    /// Claims the size that fills the window.
-    func fit() {
-        claim = host.fitting
+    /// Claims the size that fills the tab, when PaneFit says to.
+    private func fit() {
+        guard let c = fits.claim(fitting: host.fitting, pane: size, keys: keys, open: stream != nil) else { return }
+        claim = c
         flush()
+    }
+
+    /// The tab's room changed (the window resized, the inspector or the
+    /// sidebar shown or hidden): claims once it settles.
+    private func roomChanged() {
+        let move = fits.moved()
+        Task { [weak self] in
+            try? await Task.sleep(for: PaneFit.settle)
+            guard let self, self.fits.settled(move) else { return }
+            self.fit()
+        }
     }
 
     func repaint() {
@@ -178,8 +190,8 @@ final class PaneController: NSObject, TerminalViewDelegate {
     /// does: once per size.
     private func type(_ data: Data) {
         guard keys else { return }
-        if let fit = host.fitting, fit != size, fit != claimed {
-            claim = fit
+        if let c = fits.claim(fitting: host.fitting, pane: size, keys: keys, open: stream != nil) {
+            claim = c
         }
         pending.append(data)
         flush()
@@ -193,7 +205,6 @@ final class PaneController: NSObject, TerminalViewDelegate {
                 let input = pending, size = claim
                 pending = Data()
                 claim = nil
-                if let size { claimed = size }
                 _ = try? await bridge.call(AppAPI.Methods.paneInput, AppAPI.PaneInputParams(id: stream, input: input, size: size))
             }
             sending = false
@@ -260,10 +271,18 @@ final class PaneHost: NSView {
     /// Room between the cells and the tab's rounded edge.
     static let inset = CGSize(width: 10, height: 8)
 
+    /// Called when the view's size changed, not on every layout.
+    var roomChanged: (() -> Void)?
+    private var laidOut: CGSize?
+
     override func layout() {
         super.layout()
         terminal.setFrameOrigin(CGPoint(x: Self.inset.width, y: Self.inset.height))
         terminal.setFrameSize(room)
+        if laidOut != bounds.size {
+            laidOut = bounds.size
+            roomChanged?()
+        }
     }
 
     private var room: CGSize {
