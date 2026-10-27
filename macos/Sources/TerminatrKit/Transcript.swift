@@ -83,10 +83,15 @@ public struct Transcript: Sendable, Equatable {
     /// The entries the conversation draws: the last count of them, and
     /// back to entry keep (a find's match) when it is earlier. A long
     /// transcript then costs a switch to it no more than a short one.
+    /// It never starts within a run of tool calls, so the run's group
+    /// (rows) keeps its first call, its id.
     public func tail(_ count: Int, keeping keep: Int? = nil) -> ArraySlice<Entry> {
         var from = max(0, entries.count - count)
         if let keep, let i = entries.firstIndex(where: { $0.id == keep }), i < from {
             from = i
+        }
+        while from > 0, from < entries.count, entries[from].kind == .tool, entries[from - 1].kind == .tool {
+            from -= 1
         }
         return entries[from...]
     }
