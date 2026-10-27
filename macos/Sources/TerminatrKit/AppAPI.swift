@@ -6,7 +6,7 @@ import Foundation
 /// The terminatr app API (docs/SPEC.md §3.8): what tm app bridge answers.
 public enum AppAPI {
     /// The app API version this app was generated against.
-    public static let version = 15
+    public static let version = 16
 
     public struct AnswerParams: Codable, Sendable, Hashable {
         public var id: String
@@ -260,6 +260,81 @@ public enum AppAPI {
         }
     }
 
+    public struct LinkActParams: Codable, Sendable, Hashable {
+        public var project: String
+        public var action: String
+        public var id: String
+        public var allow: String
+        public var ask: Bool
+
+        public init(project: String, action: String, id: String, allow: String = "", ask: Bool = false) {
+            self.project = project
+            self.action = action
+            self.id = id
+            self.allow = allow
+            self.ask = ask
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case project
+            case action
+            case id
+            case allow
+            case ask
+        }
+    }
+
+    public struct LinkActResult: Codable, Sendable, Hashable {
+        public var words: String
+
+        public init(words: String) {
+            self.words = words
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case words
+        }
+    }
+
+    public struct LinkNeed: Codable, Sendable, Hashable, Identifiable {
+        public var kind: String
+        public var peer: String
+        public var shown: String
+        public var id: String
+        public var created: Date
+        public var title: String
+        public var bytes: Int
+        public var file: String
+        public var size: Int
+        public var allow: String
+
+        public init(kind: String, peer: String, shown: String = "", id: String, created: Date, title: String = "", bytes: Int = 0, file: String = "", size: Int = 0, allow: String = "") {
+            self.kind = kind
+            self.peer = peer
+            self.shown = shown
+            self.id = id
+            self.created = created
+            self.title = title
+            self.bytes = bytes
+            self.file = file
+            self.size = size
+            self.allow = allow
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case kind
+            case peer
+            case shown
+            case id
+            case created
+            case title
+            case bytes
+            case file
+            case size
+            case allow
+        }
+    }
+
     public struct Notice: Codable, Sendable, Hashable, Identifiable {
         public var id: String
         public var mod: String
@@ -436,12 +511,13 @@ public enum AppAPI {
         public var since: Date?
         public var projects: [PeerProject]
         public var shareWaits: Int
+        public var shareRequests: [ShareRequest]
         public var pane: Bool
         public var panes: String
         public var transcript: Bool
         public var conversations: String
 
-        public init(alias: String, name: String = "", state: String, reason: String = "", since: Date? = nil, projects: [PeerProject] = [], shareWaits: Int = 0, pane: Bool = false, panes: String = "", transcript: Bool = false, conversations: String = "") {
+        public init(alias: String, name: String = "", state: String, reason: String = "", since: Date? = nil, projects: [PeerProject] = [], shareWaits: Int = 0, shareRequests: [ShareRequest] = [], pane: Bool = false, panes: String = "", transcript: Bool = false, conversations: String = "") {
             self.alias = alias
             self.name = name
             self.state = state
@@ -449,6 +525,7 @@ public enum AppAPI {
             self.since = since
             self.projects = projects
             self.shareWaits = shareWaits
+            self.shareRequests = shareRequests
             self.pane = pane
             self.panes = panes
             self.transcript = transcript
@@ -463,6 +540,7 @@ public enum AppAPI {
             case since
             case projects
             case shareWaits = "share_waits"
+            case shareRequests = "share_requests"
             case pane
             case panes
             case transcript
@@ -631,6 +709,7 @@ public enum AppAPI {
         public var active: Bool
         public var paused: Bool
         public var pinned: Bool
+        public var shared: Bool
         public var needsYou: [Task]
         public var questions: Int
         public var threads: [Thread]
@@ -645,12 +724,14 @@ public enum AppAPI {
         public var taskUsage: [String: Usage]
         public var checkouts: [String: String]
         public var links: [Link]
+        public var linkNeeds: [LinkNeed]
 
-        public init(slug: String, active: Bool, paused: Bool = false, pinned: Bool = false, needsYou: [Task] = [], questions: Int = 0, threads: [Thread] = [], prHostFails: Int = 0, goal: String = "", repos: [String] = [], counts: [String: Int] = [:], error: String = "", board: [Task] = [], items: [Item] = [], usage: Usage, taskUsage: [String: Usage] = [:], checkouts: [String: String] = [:], links: [Link] = []) {
+        public init(slug: String, active: Bool, paused: Bool = false, pinned: Bool = false, shared: Bool = false, needsYou: [Task] = [], questions: Int = 0, threads: [Thread] = [], prHostFails: Int = 0, goal: String = "", repos: [String] = [], counts: [String: Int] = [:], error: String = "", board: [Task] = [], items: [Item] = [], usage: Usage, taskUsage: [String: Usage] = [:], checkouts: [String: String] = [:], links: [Link] = [], linkNeeds: [LinkNeed] = []) {
             self.slug = slug
             self.active = active
             self.paused = paused
             self.pinned = pinned
+            self.shared = shared
             self.needsYou = needsYou
             self.questions = questions
             self.threads = threads
@@ -665,6 +746,7 @@ public enum AppAPI {
             self.taskUsage = taskUsage
             self.checkouts = checkouts
             self.links = links
+            self.linkNeeds = linkNeeds
         }
 
         enum CodingKeys: String, CodingKey {
@@ -672,6 +754,7 @@ public enum AppAPI {
             case active
             case paused
             case pinned
+            case shared
             case needsYou = "needs_you"
             case questions
             case threads
@@ -686,6 +769,7 @@ public enum AppAPI {
             case taskUsage = "task_usage"
             case checkouts
             case links
+            case linkNeeds = "link_needs"
         }
     }
 
@@ -1154,6 +1238,63 @@ public enum AppAPI {
             case upgrade
             case needsFirst = "needs_first"
             case contextHint = "context_hint"
+        }
+    }
+
+    public struct ShareAnswer: Codable, Sendable, Hashable, Identifiable {
+        public var id: String
+        public var state: String
+        public var project: String
+
+        public init(id: String, state: String, project: String = "") {
+            self.id = id
+            self.state = state
+            self.project = project
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case id
+            case state
+            case project
+        }
+    }
+
+    public struct ShareAnswerParams: Codable, Sendable, Hashable {
+        public var id: String
+        public var accept: Bool
+        public var project: String
+
+        public init(id: String, accept: Bool = false, project: String = "") {
+            self.id = id
+            self.accept = accept
+            self.project = project
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case id
+            case accept
+            case project
+        }
+    }
+
+    public struct ShareRequest: Codable, Sendable, Hashable, Identifiable {
+        public var id: String
+        public var `for`: String
+        public var note: String
+        public var created: Date
+
+        public init(id: String, `for`: String = "", note: String = "", created: Date) {
+            self.id = id
+            self.for = `for`
+            self.note = note
+            self.created = created
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case id
+            case `for`
+            case note
+            case created
         }
     }
 
@@ -1823,11 +1964,13 @@ public enum AppAPI {
     /// Every method of the app API, by name.
     public enum Methods {
         public static let coordinatorClear = Call<ProjectParams, CoordinatorClear>("coordinator.clear", write: true)
+        public static let linkAct = Call<LinkActParams, LinkActResult>("link.act", write: true)
         public static let notifyClaim = Call<NoticeParams, NoticeResult>("notify.claim", write: false)
         public static let notifyDismiss = Call<NoticeParams, NoticeResult>("notify.dismiss", write: false)
         public static let paneInput = Call<PaneInputParams, Empty>("pane.input", write: true, target: "pane.vt")
         public static let paneVt = Subscription<PaneParams, PaneResult, PaneEvent>("pane.vt", events: ["pane.repaint", "pane.output", "pane.resize", "pane.closed"])
         public static let peerList = Call<NoParams, PeerList>("peer.list", write: false)
+        public static let peerShareAnswer = Call<ShareAnswerParams, ShareAnswer>("peer.share-answer", write: true)
         public static let projectActive = Call<ProjectActiveParams, ProjectActive>("project.active", write: true)
         public static let projectOpen = Call<ProjectOpenParams, ProjectOpen>("project.open", write: true)
         public static let projectsWatch = Subscription<ProjectsWatchParams, Projects, Projects>("projects.watch", events: ["projects.changed"])
@@ -1965,6 +2108,40 @@ extension AppAPI.Link {
     }
 }
 
+extension AppAPI.LinkActParams {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.project = try c.decode(String.self, forKey: .project)
+        self.action = try c.decode(String.self, forKey: .action)
+        self.id = try c.decode(String.self, forKey: .id)
+        self.allow = try c.decodeIfPresent(String.self, forKey: .allow) ?? ""
+        self.ask = try c.decodeIfPresent(Bool.self, forKey: .ask) ?? false
+    }
+}
+
+extension AppAPI.LinkActResult {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.words = try c.decode(String.self, forKey: .words)
+    }
+}
+
+extension AppAPI.LinkNeed {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.kind = try c.decode(String.self, forKey: .kind)
+        self.peer = try c.decode(String.self, forKey: .peer)
+        self.shown = try c.decodeIfPresent(String.self, forKey: .shown) ?? ""
+        self.id = try c.decode(String.self, forKey: .id)
+        self.created = try c.decode(Date.self, forKey: .created)
+        self.title = try c.decodeIfPresent(String.self, forKey: .title) ?? ""
+        self.bytes = try c.decodeIfPresent(Int.self, forKey: .bytes) ?? 0
+        self.file = try c.decodeIfPresent(String.self, forKey: .file) ?? ""
+        self.size = try c.decodeIfPresent(Int.self, forKey: .size) ?? 0
+        self.allow = try c.decodeIfPresent(String.self, forKey: .allow) ?? ""
+    }
+}
+
 extension AppAPI.Notice {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -2058,6 +2235,7 @@ extension AppAPI.Peer {
         self.since = try c.decodeIfPresent(Date.self, forKey: .since)
         self.projects = try c.decodeIfPresent([AppAPI.PeerProject].self, forKey: .projects) ?? []
         self.shareWaits = try c.decodeIfPresent(Int.self, forKey: .shareWaits) ?? 0
+        self.shareRequests = try c.decodeIfPresent([AppAPI.ShareRequest].self, forKey: .shareRequests) ?? []
         self.pane = try c.decodeIfPresent(Bool.self, forKey: .pane) ?? false
         self.panes = try c.decodeIfPresent(String.self, forKey: .panes) ?? ""
         self.transcript = try c.decodeIfPresent(Bool.self, forKey: .transcript) ?? false
@@ -2136,6 +2314,7 @@ extension AppAPI.Project {
         self.active = try c.decode(Bool.self, forKey: .active)
         self.paused = try c.decodeIfPresent(Bool.self, forKey: .paused) ?? false
         self.pinned = try c.decodeIfPresent(Bool.self, forKey: .pinned) ?? false
+        self.shared = try c.decodeIfPresent(Bool.self, forKey: .shared) ?? false
         self.needsYou = try c.decodeIfPresent([AppAPI.Task].self, forKey: .needsYou) ?? []
         self.questions = try c.decodeIfPresent(Int.self, forKey: .questions) ?? 0
         self.threads = try c.decodeIfPresent([AppAPI.Thread].self, forKey: .threads) ?? []
@@ -2150,6 +2329,7 @@ extension AppAPI.Project {
         self.taskUsage = try c.decodeIfPresent([String: AppAPI.Usage].self, forKey: .taskUsage) ?? [:]
         self.checkouts = try c.decodeIfPresent([String: String].self, forKey: .checkouts) ?? [:]
         self.links = try c.decodeIfPresent([AppAPI.Link].self, forKey: .links) ?? []
+        self.linkNeeds = try c.decodeIfPresent([AppAPI.LinkNeed].self, forKey: .linkNeeds) ?? []
     }
 }
 
@@ -2366,6 +2546,34 @@ extension AppAPI.SessionList {
         self.upgrade = try c.decodeIfPresent(String.self, forKey: .upgrade) ?? ""
         self.needsFirst = try c.decodeIfPresent(Bool.self, forKey: .needsFirst) ?? false
         self.contextHint = try c.decodeIfPresent(Int.self, forKey: .contextHint) ?? 0
+    }
+}
+
+extension AppAPI.ShareAnswer {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try c.decode(String.self, forKey: .id)
+        self.state = try c.decode(String.self, forKey: .state)
+        self.project = try c.decodeIfPresent(String.self, forKey: .project) ?? ""
+    }
+}
+
+extension AppAPI.ShareAnswerParams {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try c.decode(String.self, forKey: .id)
+        self.accept = try c.decodeIfPresent(Bool.self, forKey: .accept) ?? false
+        self.project = try c.decodeIfPresent(String.self, forKey: .project) ?? ""
+    }
+}
+
+extension AppAPI.ShareRequest {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try c.decode(String.self, forKey: .id)
+        self.for = try c.decodeIfPresent(String.self, forKey: .for) ?? ""
+        self.note = try c.decodeIfPresent(String.self, forKey: .note) ?? ""
+        self.created = try c.decode(Date.self, forKey: .created)
     }
 }
 

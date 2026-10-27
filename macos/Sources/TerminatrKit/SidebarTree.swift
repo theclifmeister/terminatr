@@ -153,6 +153,7 @@ public enum SidebarTree {
         case .checks: "CI failing"
         case .held: "held"
         case .network: "paired"
+        case .link: "on links"
         }
     }
 }

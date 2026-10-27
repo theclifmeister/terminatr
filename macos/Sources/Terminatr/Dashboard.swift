@@ -25,9 +25,11 @@ struct ProjectDashboard: View {
                 if Dashboard.isEmpty(project, needs: needs.count) {
                     NextStepCard(project: project, step: Dashboard.next(project, coordinatorRuns: running))
                 }
-                if !needs.isEmpty {
+                let settled = app.settledLinks(project.slug)
+                if !needs.isEmpty || !settled.isEmpty {
                     section("Needs you · \(needs.count)") {
                         CardGrid { ForEach(needs.filter { !$0.isReview }) { NeedCard(need: $0) } }
+                        ForEach(settled, id: \.id) { LinkOutcomeRow(outcome: $0.outcome, settled: true) }
                         let review = needs.filter(\.isReview)
                         if !review.isEmpty {
                             label("Review · \(review.count)")

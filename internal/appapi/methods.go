@@ -96,6 +96,15 @@ func init() {
 		// One task with its notes and steps, which the board's tasks
 		// come without, for the task view (app API 14).
 		unary(proto.MethodTaskGet, false, taskGetParams, taskOf),
+		// What a project's link waits on the user for, answered in place
+		// (app API 16; the server's caps say link-act), with tm link's
+		// checks: a held message approved or dropped, a file accepted,
+		// declined or cancelled, a paired server's link request accepted
+		// or declined. A message is never written through it. And a
+		// paired server's share request accepted, which shares one of
+		// this server's projects, or declined.
+		unary(proto.MethodLinkAct, true, linkActParams, linkActOf),
+		unary(proto.MethodPeerShareAnswer, true, shareAnswerParams, shareAnswerOf),
 	} {
 		methods[m.Name] = m
 	}
@@ -342,4 +351,12 @@ func projectActiveParams(p ProjectActiveParams) proto.ProjectActiveParams {
 
 func projectOpenParams(p ProjectOpenParams) proto.ProjectOpenParams {
 	return proto.ProjectOpenParams{Project: p.Project, Cols: p.Cols, Rows: p.Rows}
+}
+
+func linkActParams(p LinkActParams) proto.LinkActParams {
+	return proto.LinkActParams{Project: p.Project, Action: p.Action, ID: p.ID, Allow: p.Allow, Ask: p.Ask}
+}
+
+func shareAnswerParams(p ShareAnswerParams) proto.PeerShareAnswerParams {
+	return proto.PeerShareAnswerParams{ID: p.ID, Accept: p.Accept, Project: p.Project}
 }

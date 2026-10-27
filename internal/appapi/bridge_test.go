@@ -21,12 +21,14 @@ import (
 	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/home/hometest"
+	"github.com/theclifmeister/terminatr/internal/link"
 	"github.com/theclifmeister/terminatr/internal/plat/ipc/ipctest"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/server"
 	"github.com/theclifmeister/terminatr/internal/service/servicetest"
 	"github.com/theclifmeister/terminatr/internal/tasks"
+	"github.com/theclifmeister/terminatr/internal/thread"
 )
 
 func TestMain(m *testing.M) {
@@ -358,6 +360,108 @@ func TestBridgeTaskActions(t *testing.T) {
 		if !strings.Contains(string(journal), want) {
 			t.Errorf("journal lacks %q:\n%s", want, journal)
 		}
+	}
+}
+
+// TestBridgeLinkActs: what a project's links wait on the user for
+// reaches the app by the ids link.act takes (app API 16); acting on
+// them is journaled as "human (app)", with tm link's checks; a message
+// is never written through it.
+func TestBridgeLinkActs(t *testing.T) {
+	p := testPaths(t)
+	if err := os.WriteFile(filepath.Join(os.Getenv("TERMINATR_HOME"), "config.toml"),
+		[]byte("[projects.a.links]\nb = { allow = \"both\", ask = true }\n\n[projects.b.links]\na = \"both\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	a, err := project.New(project.Options{Slug: "a"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := project.New(project.Options{Slug: "b"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	lib := thread.Path(b, "t-0001", "library")
+	if err := os.MkdirAll(lib, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(lib, "x.txt"), []byte("hello"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	f, err := link.Send(caller.Caller{Kind: caller.Coordinator, Project: "b"}, b, "a", link.Opts{Text: "a file", File: "t-0001/x.txt"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	coord := caller.Caller{Kind: caller.Coordinator, Project: "a"}
+	h1, err := link.Send(coord, a, "b", link.Opts{Text: "Hello b\nmore"})
+	if err != nil || h1.State != link.StateHeld {
+		t.Fatalf("send: %+v %v", h1, err)
+	}
+	h2, _ := link.Send(coord, a, "b", link.Opts{Text: "Second"})
+	startServer(t, p)
+	c, err := bridge(t, p, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(c.Hello.Server.Caps, proto.CapLinkAct) {
+		t.Errorf("caps %v", c.Hello.Server.Caps)
+	}
+	var ps appapi.Projects
+	st, err := c.Stream(proto.MethodProjectsWatch, appapi.ProjectsWatchParams{Detail: true}, &ps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Cancel()
+	var needs []appapi.LinkNeed
+	for _, pr := range ps.Projects {
+		if pr.Slug == "a" {
+			needs = pr.LinkNeeds
+		}
+	}
+	if len(needs) != 3 || needs[0].Kind != "held" || needs[0].ID != h1.ID || needs[0].Peer != "b" || needs[0].Title != "Hello b" ||
+		needs[1].ID != h2.ID || needs[2].Kind != "file" || needs[2].ID != f.Transfer || needs[2].File != "x.txt" || needs[2].Size != 5 {
+		t.Fatalf("link needs %+v", needs)
+	}
+	var res appapi.LinkActResult
+	if err := c.Call(proto.MethodLinkAct, appapi.LinkActParams{Project: "a", Action: "approve", ID: h1.ID}, &res); err != nil ||
+		!strings.Contains(res.Words, h1.ID) {
+		t.Fatalf("approve: %+v %v", res, err)
+	}
+	if err := c.Call(proto.MethodLinkAct, appapi.LinkActParams{Project: "a", Action: "drop", ID: h2.ID}, &res); err != nil ||
+		res.Words != "dropped "+h2.ID+"; it is never sent" {
+		t.Fatalf("drop: %+v %v", res, err)
+	}
+	if err := c.Call(proto.MethodLinkAct, appapi.LinkActParams{Project: "a", Action: "accept-file", ID: f.Transfer}, &res); err != nil ||
+		res.Words != "accepted x.txt: it is in place" {
+		t.Fatalf("accept-file: %+v %v", res, err)
+	}
+	for _, bad := range []struct {
+		params any
+		code   string
+	}{
+		{appapi.LinkActParams{Project: "a", Action: "approve", ID: h1.ID}, "not-held"},
+		{appapi.LinkActParams{Project: "a", Action: "decline-file", ID: f.Transfer}, "not-offered"},
+		{appapi.LinkActParams{Project: "a", Action: "send", ID: "b"}, proto.ErrBadParams},
+		{appapi.LinkActParams{Project: "a", Action: "resume", ID: "b"}, proto.ErrBadParams},
+		{appapi.LinkActParams{Project: "a", Action: "drop", ID: h1.ID, Allow: "both"}, proto.ErrBadParams},
+		{appapi.LinkActParams{Project: "a", Action: "decline", ID: "R-0123456789ABCDEF-1"}, "unknown-request"},
+		{map[string]string{"project": "a", "action": "send", "id": "b", "text": "hi"}, appapi.ErrBadParams},
+	} {
+		if err := c.Call(proto.MethodLinkAct, bad.params, nil); code(err) != bad.code {
+			t.Errorf("link.act %+v: %v, want %s", bad.params, err, bad.code)
+		}
+	}
+	journal, _ := os.ReadFile(a.Path("JOURNAL.md"))
+	for _, want := range []string{" human (app) link.approve b " + h1.ID, " human (app) link.drop b " + h2.ID,
+		" human (app) link.file-accept b " + f.Transfer} {
+		if !strings.Contains(string(journal), want) {
+			t.Errorf("journal lacks %q:\n%s", want, journal)
+		}
+	}
+	// A share request that isn't there: the server's refusal, its code
+	// kept.
+	if err := c.Call(proto.MethodPeerShareAnswer, appapi.ShareAnswerParams{ID: "S-0123456789ABCDEF-1"}, nil); code(err) != "unknown-request" {
+		t.Errorf("peer.share-answer: %v", err)
 	}
 }
 

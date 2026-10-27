@@ -87,6 +87,14 @@ struct MenuBarView: View {
                     VStack(spacing: 2) {
                         ForEach(shown) { n in
                             NeedRow(need: n) { open(n.project, session: n.session) }
+                            if let o = model.linkOutcomes[n.id] {
+                                LinkOutcomeRow(outcome: o)
+                                    .padding(.horizontal, 8)
+                            }
+                        }
+                        ForEach(model.settledLinks(nil), id: \.id) {
+                            LinkOutcomeRow(outcome: $0.outcome, settled: true)
+                                .padding(.horizontal, 8)
                         }
                         if !rest.isEmpty {
                             MenuRow(action: { open(nil) }) {
@@ -363,12 +371,28 @@ private struct MenuRow<Content: View>: View {
     }
 }
 
+/// A need in the dropdown: a click shows it in the window; a link need
+/// or a share request has its buttons beside it, outside the row's
+/// click (LinkActs).
 struct NeedRow: View {
     @Environment(\.theme) private var theme
     let need: Need
     let action: () -> Void
 
     var body: some View {
+        if let l = need.link {
+            HStack(spacing: 4) {
+                row(verb: false)
+                LinkActs(need: need, act: l)
+                    .controlSize(.small)
+                    .padding(.trailing, 8)
+            }
+        } else {
+            row(verb: true)
+        }
+    }
+
+    private func row(verb: Bool) -> some View {
         MenuRow(action: action) {
             Image(systemName: Self.symbol(need.kind))
                 .font(theme.body(.body, .semibold))
@@ -385,9 +409,11 @@ struct NeedRow: View {
                     .lineLimit(1)
             }
             Spacer(minLength: 4)
-            Text(Self.verb(need.kind))
-                .font(theme.body(.footnote, .semibold))
-                .foregroundStyle(theme.action)
+            if verb {
+                Text(Self.verb(need.kind))
+                    .font(theme.body(.footnote, .semibold))
+                    .foregroundStyle(theme.action)
+            }
         }
         .accessibilityElement(children: .combine)
     }
@@ -401,6 +427,7 @@ struct NeedRow: View {
         case .review: theme.good
         case .blocked, .checks: theme.attention
         case .held, .network: theme.muted
+        case .link: theme.action
         }
     }
 
@@ -413,6 +440,7 @@ struct NeedRow: View {
         case .checks: "xmark.circle"
         case .held: "pause.circle"
         case .network: "point.3.connected.trianglepath.dotted"
+        case .link: "envelope.badge"
         }
     }
 
@@ -422,7 +450,7 @@ struct NeedRow: View {
         case .question: "Answer"
         case .approval: "Approve"
         case .review: "Review"
-        case .blocked, .checks, .held, .network: "Open"
+        case .blocked, .checks, .held, .network, .link: "Open"
         }
     }
 }
