@@ -1,0 +1,487 @@
+{
+  "cases": [
+    {
+      "name": "unfolded",
+      "projects": [
+        {
+          "slug": "alpha",
+          "active": true,
+          "threads": [
+            {
+              "id": "t-1"
+            },
+            {
+              "id": "t-2",
+              "session": "s-2"
+            },
+            {
+              "id": "t-3",
+              "needs_you": "which one?"
+            },
+            {
+              "id": "t-4",
+              "done": true
+            },
+            {
+              "id": "t-5",
+              "reports": 2,
+              "report_acked": 1
+            },
+            {
+              "id": "t-6",
+              "session": "s-6"
+            },
+            {
+              "id": "t-7",
+              "session": "s-7"
+            },
+            {
+              "id": "t-8",
+              "session": "s-8",
+              "done": true
+            }
+          ]
+        },
+        {
+          "slug": "beta",
+          "active": false,
+          "pinned": true,
+          "threads": [
+            {
+              "id": "t-1"
+            },
+            {
+              "id": "t-2",
+              "done": true
+            }
+          ]
+        },
+        {
+          "slug": "gamma",
+          "active": true,
+          "pinned": true
+        },
+        {
+          "slug": "delta",
+          "active": false
+        },
+        {
+          "slug": "eps",
+          "active": true,
+          "threads": [
+            {
+              "id": "t-9",
+              "done": true
+            }
+          ]
+        }
+      ],
+      "sessions": [
+        {
+          "id": "s-c",
+          "role": "coordinator",
+          "project": "alpha",
+          "state": "working"
+        },
+        {
+          "id": "s-2",
+          "role": "thread",
+          "project": "alpha",
+          "state": "working"
+        },
+        {
+          "id": "s-6",
+          "role": "thread",
+          "project": "alpha",
+          "state": "idle"
+        },
+        {
+          "id": "s-7",
+          "role": "thread",
+          "project": "alpha",
+          "state": "blocked"
+        },
+        {
+          "id": "s-8",
+          "role": "thread",
+          "project": "alpha",
+          "state": "working"
+        }
+      ],
+      "rows": [
+        "p:gamma",
+        "c:gamma",
+        "p:alpha",
+        "c:alpha",
+        "t:alpha/t-3",
+        "t:alpha/t-7",
+        "t:alpha/t-5",
+        "t:alpha/t-2",
+        "t:alpha/t-8",
+        "t:alpha/t-6",
+        "t:alpha/t-1",
+        "t:alpha/t-4",
+        "p:eps",
+        "c:eps",
+        "t:eps/t-9",
+        "d:inactive"
+      ]
+    },
+    {
+      "name": "inactive open",
+      "projects": [
+        {
+          "slug": "alpha",
+          "active": true,
+          "threads": [
+            {
+              "id": "t-1"
+            },
+            {
+              "id": "t-2",
+              "session": "s-2"
+            },
+            {
+              "id": "t-3",
+              "needs_you": "which one?"
+            },
+            {
+              "id": "t-4",
+              "done": true
+            },
+            {
+              "id": "t-5",
+              "reports": 2,
+              "report_acked": 1
+            },
+            {
+              "id": "t-6",
+              "session": "s-6"
+            },
+            {
+              "id": "t-7",
+              "session": "s-7"
+            },
+            {
+              "id": "t-8",
+              "session": "s-8",
+              "done": true
+            }
+          ]
+        },
+        {
+          "slug": "beta",
+          "active": false,
+          "pinned": true,
+          "threads": [
+            {
+              "id": "t-1"
+            },
+            {
+              "id": "t-2",
+              "done": true
+            }
+          ]
+        },
+        {
+          "slug": "gamma",
+          "active": true,
+          "pinned": true
+        },
+        {
+          "slug": "delta",
+          "active": false
+        },
+        {
+          "slug": "eps",
+          "active": true,
+          "threads": [
+            {
+              "id": "t-9",
+              "done": true
+            }
+          ]
+        }
+      ],
+      "sessions": [
+        {
+          "id": "s-c",
+          "role": "coordinator",
+          "project": "alpha",
+          "state": "working"
+        },
+        {
+          "id": "s-2",
+          "role": "thread",
+          "project": "alpha",
+          "state": "working"
+        },
+        {
+          "id": "s-6",
+          "role": "thread",
+          "project": "alpha",
+          "state": "idle"
+        },
+        {
+          "id": "s-7",
+          "role": "thread",
+          "project": "alpha",
+          "state": "blocked"
+        },
+        {
+          "id": "s-8",
+          "role": "thread",
+          "project": "alpha",
+          "state": "working"
+        }
+      ],
+      "inactive_open": true,
+      "rows": [
+        "p:gamma",
+        "c:gamma",
+        "p:alpha",
+        "c:alpha",
+        "t:alpha/t-3",
+        "t:alpha/t-7",
+        "t:alpha/t-5",
+        "t:alpha/t-2",
+        "t:alpha/t-8",
+        "t:alpha/t-6",
+        "t:alpha/t-1",
+        "t:alpha/t-4",
+        "p:eps",
+        "c:eps",
+        "t:eps/t-9",
+        "d:inactive",
+        "p:beta",
+        "p:delta"
+      ]
+    },
+    {
+      "name": "folds",
+      "projects": [
+        {
+          "slug": "alpha",
+          "active": true,
+          "threads": [
+            {
+              "id": "t-1"
+            },
+            {
+              "id": "t-2",
+              "session": "s-2"
+            },
+            {
+              "id": "t-3",
+              "needs_you": "which one?"
+            },
+            {
+              "id": "t-4",
+              "done": true
+            },
+            {
+              "id": "t-5",
+              "reports": 2,
+              "report_acked": 1
+            },
+            {
+              "id": "t-6",
+              "session": "s-6"
+            },
+            {
+              "id": "t-7",
+              "session": "s-7"
+            },
+            {
+              "id": "t-8",
+              "session": "s-8",
+              "done": true
+            }
+          ]
+        },
+        {
+          "slug": "beta",
+          "active": false,
+          "pinned": true,
+          "threads": [
+            {
+              "id": "t-1"
+            },
+            {
+              "id": "t-2",
+              "done": true
+            }
+          ]
+        },
+        {
+          "slug": "gamma",
+          "active": true,
+          "pinned": true
+        },
+        {
+          "slug": "delta",
+          "active": false
+        },
+        {
+          "slug": "eps",
+          "active": true,
+          "threads": [
+            {
+              "id": "t-9",
+              "done": true
+            }
+          ]
+        }
+      ],
+      "sessions": [
+        {
+          "id": "s-c",
+          "role": "coordinator",
+          "project": "alpha",
+          "state": "working"
+        },
+        {
+          "id": "s-2",
+          "role": "thread",
+          "project": "alpha",
+          "state": "working"
+        },
+        {
+          "id": "s-6",
+          "role": "thread",
+          "project": "alpha",
+          "state": "idle"
+        },
+        {
+          "id": "s-7",
+          "role": "thread",
+          "project": "alpha",
+          "state": "blocked"
+        },
+        {
+          "id": "s-8",
+          "role": "thread",
+          "project": "alpha",
+          "state": "working"
+        }
+      ],
+      "folded": [
+        "alpha"
+      ],
+      "expanded": [
+        "beta"
+      ],
+      "inactive_open": true,
+      "rows": [
+        "p:gamma",
+        "c:gamma",
+        "p:alpha",
+        "p:eps",
+        "c:eps",
+        "t:eps/t-9",
+        "d:inactive",
+        "p:beta",
+        "c:beta",
+        "t:beta/t-1",
+        "t:beta/t-2",
+        "p:delta"
+      ]
+    },
+    {
+      "name": "nothing runs",
+      "projects": [
+        {
+          "slug": "alpha",
+          "active": true,
+          "threads": [
+            {
+              "id": "t-1"
+            },
+            {
+              "id": "t-2",
+              "session": "s-2"
+            },
+            {
+              "id": "t-3",
+              "needs_you": "which one?"
+            },
+            {
+              "id": "t-4",
+              "done": true
+            },
+            {
+              "id": "t-5",
+              "reports": 2,
+              "report_acked": 1
+            },
+            {
+              "id": "t-6",
+              "session": "s-6"
+            },
+            {
+              "id": "t-7",
+              "session": "s-7"
+            },
+            {
+              "id": "t-8",
+              "session": "s-8",
+              "done": true
+            }
+          ]
+        },
+        {
+          "slug": "beta",
+          "active": false,
+          "pinned": true,
+          "threads": [
+            {
+              "id": "t-1"
+            },
+            {
+              "id": "t-2",
+              "done": true
+            }
+          ]
+        },
+        {
+          "slug": "gamma",
+          "active": true,
+          "pinned": true
+        },
+        {
+          "slug": "delta",
+          "active": false
+        },
+        {
+          "slug": "eps",
+          "active": true,
+          "threads": [
+            {
+              "id": "t-9",
+              "done": true
+            }
+          ]
+        }
+      ],
+      "sessions": null,
+      "rows": [
+        "p:gamma",
+        "c:gamma",
+        "p:alpha",
+        "c:alpha",
+        "t:alpha/t-3",
+        "t:alpha/t-5",
+        "t:alpha/t-1",
+        "t:alpha/t-2",
+        "t:alpha/t-4",
+        "t:alpha/t-6",
+        "t:alpha/t-7",
+        "t:alpha/t-8",
+        "p:eps",
+        "c:eps",
+        "t:eps/t-9",
+        "d:inactive"
+      ]
+    }
+  ]
+}
