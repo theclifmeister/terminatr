@@ -410,6 +410,15 @@ func (d *dispatcher) transcript(ctx context.Context, raw json.RawMessage) (any, 
 
 // conversations says whether the peer may read conversations now: the
 // pane switch is view or write and the conversations switch is on.
+//
+// TODO(T772): session.file (a file a session's transcript names, SPEC
+// §3.3) doesn't cross yet. Across a link it would be its own peer
+// request (peer.session-file {project, session, ref}) on this
+// dispatcher, refused unless conversations() holds and the host checks
+// the project is shared and the session is its coordinator's or a
+// thread's (as TranscriptHost.OpenTranscript), streamed over frames as
+// the files of §16.13 are; the near server's session.file on
+// "<alias>/<session>" would relay it, as serveRemoteTranscript does.
 func (d *dispatcher) conversations() bool {
 	lv := d.level()
 	return (lv == proto.PanesView || lv == proto.PanesType) && d.convOn != nil && d.convOn()

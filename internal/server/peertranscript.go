@@ -101,6 +101,8 @@ func (t *transcriptSource) Close() {
 const remoteTranscriptQueue = 4 * proto.TranscriptWindow
 
 // serveRemoteTranscript is serveTranscript for a paired server's session.
+// session.file on "<alias>/<session>" is refused for now (T772): the
+// hook for it is at peer's dispatcher.conversations.
 func (s *Server) serveRemoteTranscript(c net.Conn, br *bufio.Reader, req proto.Request, id string) {
 	alias, sid, _ := remoteID(id)
 	if n := s.transcripts.Add(1); n > maxTranscripts {
