@@ -1,25 +1,29 @@
 import SwiftUI
 import TerminatrKit
 
-/// What the session waits on, above the composer: tm's question menu
+/// What the session waits on, above the composer: a question menu
 /// (session.answer, guarded) and the agent's permission dialog
 /// (session.approve, checked first). The server re-checks each answer;
 /// these cards only offer what it would take. ⌘↩ (firstChoice bumped)
 /// takes the first card's first choice, as a click on it would, with
-/// the same confirmations.
+/// the same confirmations. The agent's own menu (Claude's
+/// AskUserQuestion) shows one question at a time, as its screen does.
 struct Cards: View {
     let model: SessionModel
     let session: AppAPI.Session?
     var firstChoice = 0
 
     var body: some View {
-        let first = session?.question?.questions.firstIndex { !$0.answered }
+        let shown = session?.question.map(QuestionPlan.shown) ?? []
+        let first = shown.first
         VStack(spacing: 10) {
             if let session, let q = session.question {
-                ForEach(Array(q.questions.enumerated()), id: \.offset) { i, item in
-                    if !item.answered {
-                        QuestionCard(model: model, menu: q, index: i, item: item, firstChoice: i == first ? firstChoice : nil)
-                    }
+                ForEach(shown, id: \.self) { i in
+                    QuestionCard(model: model, menu: q, index: i, item: q.questions[i], firstChoice: i == first ? firstChoice : nil)
+                        .id("\(session.id) \(q.since?.timeIntervalSince1970 ?? 0) \(i)")
+                }
+                if shown.isEmpty, let words = QuestionPlan.allAnswered(q) {
+                    AnsweredCard(model: model, words: words, screen: q.screen)
                 }
             }
             if let session, session.state == "blocked", session.reason == "permission" {
@@ -60,12 +64,15 @@ struct CardFrame<Content: View>: View {
     }
 }
 
-/// One question of tm's open menu. A single-select option goes with the
-/// Question guard: the server refuses it unless the menu still asks
-/// this, so a menu replaced meanwhile gets no stale answer. Several
-/// options, or words of the user's, can't be guarded that way (the
-/// guard takes one option's label) and go as the question's answer.
-/// An escape's question names its command in a confirmation first.
+/// One question of the session's open menu (QuestionPlan). A
+/// single-select option goes with the Question guard: the server
+/// refuses it unless the menu still asks this, so a menu replaced
+/// meanwhile gets no stale answer. Several options, or words of the
+/// user's, can't be guarded that way (the guard takes one option's
+/// label) and go as the question's answer. An escape's question names
+/// its command in a confirmation first. The agent's own menu takes no
+/// multi-select from here: the card shows its options and sends the
+/// user to the Terminal tab. The first card's options answer ⌥⌘1–⌥⌘9.
 struct QuestionCard: View {
     @Environment(\.theme) private var theme
     let model: SessionModel
@@ -79,46 +86,72 @@ struct QuestionCard: View {
     @State private var otherOpen = false
     @State private var confirm: (answer: String, guarded: Bool)?
     @State private var error: String?
+    /// The error is one the Terminal tab answers (QuestionPlan.useTerminal).
+    @State private var terminal = false
+    /// The answer in flight, then sent, in words.
+    @State private var status: String?
     @State private var busy = false
 
     var body: some View {
-        let tag = menu.escape ? "Question · outside the sandbox" : (item.header.isEmpty ? "Question" : item.header)
-        CardFrame(tag: firstChoice == nil ? tag : "\(tag) · ⌘↩ answer", colour: theme.question, tint: theme.questionTint) {
+        let plan = QuestionPlan(menu, index: index)
+        let tag = QuestionPlan.tag(menu, index: index)
+        CardFrame(tag: firstChoice == nil || plan.paneOnly ? tag : "\(tag) · ⌘↩ answer", colour: theme.question, tint: theme.questionTint) {
             Text(item.question)
                 .font(theme.title(.headline, .bold))
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
-            if item.multiSelect {
-                ForEach(item.options, id: \.label) { o in
+            if plan.checkboxes {
+                ForEach(Array(item.options.enumerated()), id: \.offset) { i, o in
                     Toggle(isOn: Binding(get: { picked.contains(o.label) }, set: { on in if on { picked.insert(o.label) } else { picked.remove(o.label) } })) {
                         option(o)
                     }
                     .toggleStyle(.checkbox)
+                    .disabled(plan.paneOnly || busy)
+                    .accessibilityLabel(QuestionPlan.spoken(item, option: i))
                 }
-                Button("Answer") { send(item.options.map(\.label).filter(picked.contains).joined(separator: ", "), guarded: false) }
-                    .buttonStyle(.borderedProminent)
-                    .tint(theme.action)
-                    .disabled(picked.isEmpty || busy)
+                if !plan.paneOnly {
+                    Button("Submit") { send(QuestionPlan.joined(item, picked: picked), guarded: false) }
+                        .buttonStyle(.borderedProminent)
+                        .tint(theme.action)
+                        .disabled(picked.isEmpty || busy)
+                        .accessibilityHint("Answers with the options checked")
+                }
             } else {
-                FlowButtons(options: item.options, busy: busy) { send($0, guarded: true) }
+                FlowButtons(item: item, busy: busy, numbered: firstChoice != nil) { send($0, guarded: true) }
             }
-            if otherOpen {
-                HStack {
-                    TextField("Your answer", text: $other)
-                        .textFieldStyle(.roundedBorder)
-                        .onSubmit { sendOther() }
-                    Button("Send") { sendOther() }
-                        .disabled(other.trimmingCharacters(in: .whitespaces).isEmpty || busy)
+            if let note = plan.note {
+                terminalNote(note)
+            }
+            if plan.words {
+                if otherOpen {
+                    HStack {
+                        TextField("Your answer", text: $other)
+                            .textFieldStyle(.roundedBorder)
+                            .onSubmit { sendOther() }
+                            .accessibilityLabel("Your own answer to: \(item.question)")
+                        Button("Send") { sendOther() }
+                            .disabled(other.trimmingCharacters(in: .whitespaces).isEmpty || busy)
+                    }
+                } else {
+                    Button("Other…") { otherOpen = true }
+                        .buttonStyle(.link)
+                        .foregroundStyle(theme.action)
+                        .accessibilityHint("Answers in your own words")
                 }
-            } else {
-                Button("Other…") { otherOpen = true }
-                    .buttonStyle(.link)
-                    .foregroundStyle(theme.action)
+            }
+            if let status, error == nil {
+                Text(status)
+                    .font(theme.body(.subheadline))
+                    .foregroundStyle(theme.muted)
             }
             if let error {
-                Text(error)
-                    .font(theme.body(.subheadline))
-                    .foregroundStyle(theme.attention)
+                if terminal {
+                    terminalNote(error)
+                } else {
+                    Text(error)
+                        .font(theme.body(.subheadline))
+                        .foregroundStyle(theme.attention)
+                }
             }
         }
         .alert("Answer this question?", isPresented: Binding(get: { confirm != nil }, set: { if !$0 { confirm = nil } }), presenting: confirm) { c in
@@ -133,11 +166,25 @@ struct QuestionCard: View {
         }
     }
 
+    /// Why the Terminal tab answers this, with its button.
+    private func terminalNote(_ words: String) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(words)
+                .font(theme.body(.subheadline))
+                .foregroundStyle(theme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 8)
+            Button("Open in Terminal") { model.pick(.terminal) }
+                .help("Shows the agent's menu in the Terminal tab, to answer there")
+        }
+    }
+
     /// ⌘↩: the first option, or the options picked of a multi-select.
     private func takeFirst() {
-        guard firstChoice != nil, !busy else { return }
-        if item.multiSelect {
-            if !picked.isEmpty { send(item.options.map(\.label).filter(picked.contains).joined(separator: ", "), guarded: false) }
+        let plan = QuestionPlan(menu, index: index)
+        guard firstChoice != nil, !busy, !plan.paneOnly else { return }
+        if plan.checkboxes {
+            if !picked.isEmpty { send(QuestionPlan.joined(item, picked: picked), guarded: false) }
         } else if let o = item.options.first {
             send(o.label, guarded: true)
         }
@@ -170,9 +217,15 @@ struct QuestionCard: View {
     private func go(_ answer: String, guarded: Bool) {
         busy = true
         error = nil
+        terminal = false
+        status = QuestionPlan.sending(answer, screen: menu.screen)
         Task {
             do {
                 _ = try await model.answer(index: index, answer: answer, question: item.question, guarded: guarded)
+                status = "Answered “\(answer)”."
+            } catch let e as AppAPI.Error where menu.screen && QuestionPlan.useTerminal(e.code) {
+                self.error = "\(e.message). Answer it in the Terminal tab."
+                terminal = true
             } catch {
                 self.error = error.localizedDescription
             }
@@ -181,20 +234,50 @@ struct QuestionCard: View {
     }
 }
 
-/// A menu's options as buttons, wrapped onto lines.
+/// Every question of the menu has its answer, but the menu is still
+/// open: says so in words, with the Terminal tab to finish it there.
+struct AnsweredCard: View {
+    @Environment(\.theme) private var theme
+    let model: SessionModel
+    let words: String
+    let screen: Bool
+
+    var body: some View {
+        CardFrame(tag: "Question · answered", colour: theme.question, tint: theme.questionTint) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(words)
+                    .font(theme.body(.subheadline))
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 8)
+                if screen {
+                    Button("Open in Terminal") { model.pick(.terminal) }
+                }
+            }
+        }
+    }
+}
+
+/// A question's options as buttons, one per line, each with its
+/// description; numbered (⌥⌘1–⌥⌘9) on the first card.
 struct FlowButtons: View {
     @Environment(\.theme) private var theme
-    let options: [AppAPI.QuestionOption]
+    let item: AppAPI.QuestionItem
     let busy: Bool
+    var numbered = false
     let pick: (String) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            ForEach(options, id: \.label) { o in
+            ForEach(Array(item.options.enumerated()), id: \.offset) { i, o in
                 Button {
                     pick(o.label)
                 } label: {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        if numbered && i < 9 {
+                            Text("\(i + 1)")
+                                .font(theme.mono(.caption, .medium))
+                                .foregroundStyle(theme.muted)
+                        }
                         Text(o.label).fontWeight(.semibold)
                         if !o.description.isEmpty {
                             Text(o.description)
@@ -206,6 +289,9 @@ struct FlowButtons: View {
                 }
                 .buttonStyle(.bordered)
                 .disabled(busy)
+                .keyboardShortcut(numbered && i < 9 ? KeyboardShortcut(KeyEquivalent(Character("\(i + 1)")), modifiers: [.command, .option]) : nil)
+                .accessibilityLabel(QuestionPlan.spoken(item, option: i))
+                .help(numbered && i < 9 ? "Answers “\(o.label)” (⌥⌘\(i + 1))" : "Answers “\(o.label)”")
             }
         }
     }

@@ -20,7 +20,8 @@ struct TerminalTab: View {
     @State private var pane = PaneController()
 
     /// The terminal box's corners, which the session's notice above it
-    /// shares; its side edges are the pages' (Page.edge).
+    /// shares; its side edges, and the view-only note's, are the pages'
+    /// (Page.edge).
     static let corner: CGFloat = 12
 
     var body: some View {
@@ -45,6 +46,7 @@ struct TerminalTab: View {
                             if let bridge = app.bridge { await pane.run(bridge, id) }
                         }
                         .onChange(of: remote, initial: true) { _, r in pane.keys = r != .view }
+                        .onChange(of: model.repaints) { pane.repaint() }
                     if let closed = pane.closed, app.bridge != nil {
                         Text(closed)
                             .padding(10)
@@ -55,39 +57,23 @@ struct TerminalTab: View {
                 .background(theme.terminalBackground)
                 .clipShape(RoundedRectangle(cornerRadius: Self.corner))
                 .padding(.horizontal, Page.edge)
-                footer(remote)
+                .padding(.bottom, remote == .view ? 0 : Page.edge)
+                if remote == .view { viewOnly }
             }
         }
         .guardingLinks()
     }
 
-    private func footer(_ remote: RemotePane?) -> some View {
-        HStack(spacing: 12) {
-            if let s = pane.size {
-                Text("\(s.cols)×\(s.rows)" + (remote == nil ? "" : " on \(model.ref.server)"))
-                    .font(theme.mono(.caption))
-                    .foregroundStyle(theme.muted)
-            }
-            Text(note(remote))
-                .font(theme.body(.footnote))
-                .foregroundStyle(theme.muted)
-            Spacer()
-            Button("Repaint") { pane.repaint() }
-        }
-        .controlSize(.small)
-        .padding(.horizontal, Page.edge)
-        .padding(.vertical, 8)
-    }
-}
-
-extension TerminalTab {
-    private func note(_ remote: RemotePane?) -> String {
-        let server = model.ref.server
-        switch remote {
-        case .view: return "View only: \(server) lets this server watch its panes, not type into them."
-        case .write: return model.ref.isCoordinator ? "Keys here go to the coordinator on \(server)." : "Typing here takes the thread over on \(server)."
-        default: return model.ref.isCoordinator ? "Keys here go to the coordinator." : "Typing here takes the thread over."
-        }
+    /// At `view`, the one note the tab has: typing there does nothing.
+    /// Repaint is in the terminal's context menu and View › Repaint
+    /// Terminal (⌥⌘R).
+    private var viewOnly: some View {
+        Text("View only: \(model.ref.server) lets this server watch its panes, not type into them.")
+            .font(theme.body(.footnote))
+            .foregroundStyle(theme.muted)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, Page.edge)
+            .padding(.vertical, 8)
     }
 }
 
@@ -118,6 +104,7 @@ final class PaneController: NSObject, TerminalViewDelegate {
     override init() {
         super.init()
         host.terminal.terminalDelegate = self
+        host.terminal.onRepaint = { [weak self] in self?.repaint() }
         host.roomChanged = { [weak self] in self?.roomChanged() }
     }
 
@@ -357,6 +344,17 @@ final class MirrorTerminalView: TerminalView {
     }
 
     override func send(source: Terminal, data: ArraySlice<UInt8>) {}
+
+    /// The context menu's Repaint, as View › Repaint Terminal.
+    var onRepaint: (() -> Void)?
+
+    override func menu(for event: NSEvent) -> NSMenu? {
+        let m = NSMenu()
+        m.addItem(withTitle: "Repaint", action: #selector(repaintFromMenu), keyEquivalent: "").target = self
+        return m
+    }
+
+    @objc private func repaintFromMenu() { onRepaint?() }
 }
 
 struct PaneTerminal: NSViewRepresentable {

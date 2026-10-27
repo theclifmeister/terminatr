@@ -26,34 +26,41 @@ type script struct {
 
 // step is one [[step]] table; which fields matter depends on Do.
 type step struct {
-	Do          string         `toml:"do"`
-	MS          int            `toml:"ms"`
-	Text        string         `toml:"text"`
-	Tool        string         `toml:"tool"`
-	Input       map[string]any `toml:"input"`
-	Response    map[string]any `toml:"response"`
-	Ask         bool           `toml:"ask"`
-	Subject     string         `toml:"subject"`
-	Header      string         `toml:"header"`
-	Question    string         `toml:"question"`
-	Options     []string       `toml:"options"`
-	Style       string         `toml:"style"` // question: "codex" draws Codex's menu
-	At          int            `toml:"at"`    // codex question: its number k of "Question k/N"
-	Of          int            `toml:"of"`    // codex question: N
-	Type        string         `toml:"type"`
-	Message     string         `toml:"message"`
-	AfterMS     int            `toml:"after_ms"`
-	Description string         `toml:"description"`
-	ActiveForm  string         `toml:"active_form"`
-	ID          any            `toml:"id"`
-	Status      string         `toml:"status"`
-	WaitingFor  string         `toml:"waiting_for"`
-	Tools       *int           `toml:"tools"`
-	Event       string         `toml:"event"`
-	Payload     map[string]any `toml:"payload"`
-	Cmd         string         `toml:"cmd"`
-	Path        string         `toml:"path"`
-	Code        int            `toml:"code"`
+	Do       string         `toml:"do"`
+	MS       int            `toml:"ms"`
+	Text     string         `toml:"text"`
+	Tool     string         `toml:"tool"`
+	Input    map[string]any `toml:"input"`
+	Response map[string]any `toml:"response"`
+	Ask      bool           `toml:"ask"`
+	Subject  string         `toml:"subject"`
+	Header   string         `toml:"header"`
+	Question string         `toml:"question"`
+	Options  []string       `toml:"options"`
+	// question: Descriptions are the options' descriptions, in order;
+	// Multi makes it a multi-select; More are the further questions of
+	// the same AskUserQuestion call (their header, question, options,
+	// descriptions and multi), asked one after another.
+	Descriptions []string       `toml:"descriptions"`
+	Multi        bool           `toml:"multi"`
+	More         []step         `toml:"more"`
+	Style        string         `toml:"style"` // question: "codex" draws Codex's menu
+	At           int            `toml:"at"`    // codex question: its number k of "Question k/N"
+	Of           int            `toml:"of"`    // codex question: N
+	Type         string         `toml:"type"`
+	Message      string         `toml:"message"`
+	AfterMS      int            `toml:"after_ms"`
+	Description  string         `toml:"description"`
+	ActiveForm   string         `toml:"active_form"`
+	ID           any            `toml:"id"`
+	Status       string         `toml:"status"`
+	WaitingFor   string         `toml:"waiting_for"`
+	Tools        *int           `toml:"tools"`
+	Event        string         `toml:"event"`
+	Payload      map[string]any `toml:"payload"`
+	Cmd          string         `toml:"cmd"`
+	Path         string         `toml:"path"`
+	Code         int            `toml:"code"`
 }
 
 // steps lists every known step kind.
@@ -442,7 +449,9 @@ func (a *app) toolStep(ctx context.Context, st step) error {
 	return nil
 }
 
-// questionStep is AskUserQuestion.
+// questionStep is AskUserQuestion: one call with st's question and
+// st.More's, drawn one at a time as Claude does (the headers on top),
+// each answered before the next shows.
 func (a *app) questionStep(ctx context.Context, st step) error {
 	opts := st.Options
 	if len(opts) == 0 {
@@ -451,13 +460,22 @@ func (a *app) questionStep(ctx context.Context, st step) error {
 	if a.cx != nil {
 		return a.codexQuestion(ctx, st, opts)
 	}
-	var optList []any
-	for _, o := range opts {
-		optList = append(optList, map[string]any{"label": o, "description": ""})
+	all := append([]step{st}, st.More...)
+	all[0].Options = opts
+	var qs, headers []any
+	for _, q := range all {
+		var optList []any
+		for i, o := range q.Options {
+			desc := ""
+			if i < len(q.Descriptions) {
+				desc = q.Descriptions[i]
+			}
+			optList = append(optList, map[string]any{"label": o, "description": desc})
+		}
+		qs = append(qs, map[string]any{"question": q.Question, "header": q.Header, "options": optList, "multiSelect": q.Multi})
+		headers = append(headers, q.Header)
 	}
-	input := map[string]any{"questions": []any{map[string]any{
-		"question": st.Question, "header": st.Header, "options": optList, "multiSelect": false,
-	}}}
+	input := map[string]any{"questions": qs}
 	id := randID("toolu_", 24)
 	a.say("⏺ ", "AskUserQuestion("+st.Header+")")
 	a.setInTool(true)
@@ -467,29 +485,68 @@ func (a *app) questionStep(ctx context.Context, st step) error {
 	if _, err := a.fireHook(ctx, "PermissionRequest", map[string]any{"tool_name": "AskUserQuestion", "tool_input": input, "tool_use_id": id}); err != nil {
 		return err
 	}
-	all := append(append([]string(nil), opts...), "Type something.")
-	d := &dialog{kind: "question", header: st.Header, question: st.Question, options: all, textOpt: len(all) - 1}
-	if st.Style == "codex" {
-		all = append(append([]string(nil), opts...), "None of the above")
-		d = &dialog{kind: "codexq", question: st.Question, options: all, textOpt: len(all) - 1, at: max(st.At, 1), of: max(st.Of, 1)}
+	answers := map[string]any{}
+	var said []string
+	for k, q := range all {
+		answer, err := a.askOne(ctx, st.Style, q, k, len(all), headers)
+		if err != nil {
+			return err
+		}
+		answers[q.Question] = answer
+		said = append(said, "· "+q.Question+" → "+answer)
 	}
-	n, err := a.waitDialog(ctx, d)
-	if err != nil {
-		return err
-	}
-	answer := all[n-1]
-	if n-1 == d.textOpt {
-		a.mu.Lock()
-		answer = string(d.text)
-		a.mu.Unlock()
-	}
-	resp := map[string]any{"questions": input["questions"], "answers": map[string]any{st.Question: answer}}
+	resp := map[string]any{"questions": qs, "answers": answers}
 	if _, err := a.fireHook(ctx, "PostToolUse", map[string]any{"tool_name": "AskUserQuestion", "tool_input": input, "tool_response": resp, "tool_use_id": id}); err != nil {
 		return err
 	}
-	a.say("  ⎿  ", "· "+st.Question+" → "+answer)
+	a.say("  ⎿  ", strings.Join(said, " "))
 	a.setInTool(false)
 	return nil
+}
+
+// askOne draws question k of n of a call and waits for its answer: an
+// option's label, the labels a multi-select toggled, or the text.
+func (a *app) askOne(ctx context.Context, style string, st step, k, n int, headers []any) (string, error) {
+	opts := st.Options
+	all := append(append([]string(nil), opts...), "Type something.")
+	tabs := ""
+	if n > 1 {
+		for i, h := range headers {
+			mark := "☐"
+			if i < k {
+				mark = "☒"
+			}
+			tabs += fmt.Sprintf("%s %v  ", mark, h)
+		}
+	}
+	d := &dialog{kind: "question", header: st.Header, tabs: strings.TrimSpace(tabs), question: st.Question, options: all,
+		descriptions: st.Descriptions, textOpt: len(all) - 1}
+	if st.Multi {
+		d.checked = map[int]bool{}
+	}
+	if style == "codex" {
+		all = append(append([]string(nil), opts...), "None of the above")
+		d = &dialog{kind: "codexq", question: st.Question, options: all, textOpt: len(all) - 1, at: max(st.At, 1), of: max(st.Of, 1)}
+	}
+	c, err := a.waitDialog(ctx, d)
+	if err != nil {
+		return "", err
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if c-1 == d.textOpt {
+		return string(d.text), nil
+	}
+	if d.checked != nil {
+		var picked []string
+		for i, o := range opts {
+			if d.checked[i] {
+				picked = append(picked, o)
+			}
+		}
+		return strings.Join(picked, ", "), nil
+	}
+	return all[c-1], nil
 }
 
 func (a *app) currentTaskDir() string {

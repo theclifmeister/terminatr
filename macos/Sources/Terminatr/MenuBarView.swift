@@ -232,7 +232,7 @@ struct MenuBarLabel: View {
         // None while the bridge is down: the window keeps the old ones.
         let count = model.isConnected ? model.needs.count : 0
         HStack(spacing: 3) {
-            Image(systemName: count == 0 ? "square.stack.3d.up" : "square.stack.3d.up.badge.automatic")
+            Image(nsImage: count == 0 ? MenuBarGlyph.plain : MenuBarGlyph.needs)
             if count > 0 {
                 Text("\(count)")
             }
@@ -245,6 +245,42 @@ struct MenuBarLabel: View {
                 NSApp.activate()
             }
         }
+    }
+}
+
+/// The menu bar's glyph (T766): the app icon's ›_ (macos/Icon,
+/// site/favicon.svg) on an 18 pt box, one colour, a template image so the
+/// menu bar draws it in its own colour, light or dark. needs adds a dot
+/// at the top right, cut clear of the ›_, while something needs the user.
+enum MenuBarGlyph {
+    static let plain = image(dot: false)
+    static let needs = image(dot: true)
+
+    private static func image(dot: Bool) -> NSImage {
+        let image = NSImage(size: NSSize(width: 18, height: 18), flipped: true) { _ in
+            let glyph = NSBezierPath()
+            glyph.move(to: NSPoint(x: 3, y: 4.5))
+            glyph.line(to: NSPoint(x: 7.5, y: 9))
+            glyph.line(to: NSPoint(x: 3, y: 13.5))
+            glyph.move(to: NSPoint(x: 9.5, y: 13.5))
+            glyph.line(to: NSPoint(x: 15.5, y: 13.5))
+            glyph.lineWidth = 2
+            glyph.lineCapStyle = .round
+            glyph.lineJoinStyle = .round
+            NSColor.black.set()
+            glyph.stroke()
+            if dot {
+                // The ring clears the ›_ under the dot; the dot fills it.
+                NSGraphicsContext.current?.compositingOperation = .clear
+                NSBezierPath(ovalIn: NSRect(x: 15 - 4.3, y: 4 - 4.3, width: 8.6, height: 8.6)).fill()
+                NSGraphicsContext.current?.compositingOperation = .sourceOver
+                NSBezierPath(ovalIn: NSRect(x: 15 - 2.8, y: 4 - 2.8, width: 5.6, height: 5.6)).fill()
+            }
+            return true
+        }
+        image.isTemplate = true
+        image.accessibilityDescription = "terminatr"
+        return image
     }
 }
 

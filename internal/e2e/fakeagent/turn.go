@@ -506,6 +506,10 @@ func (a *app) dialogKeyLocked(d *dialog, k key) {
 			if d.kind == "question" && d.sel == d.textOpt {
 				return // focused: type the text next
 			}
+			if d.checked != nil {
+				d.checked[d.sel] = !d.checked[d.sel] // a multi-select's number toggles
+				return
+			}
 			choose(d.sel + 1)
 		}
 	case kUp:
@@ -517,6 +521,10 @@ func (a *app) dialogKeyLocked(d *dialog, k key) {
 			d.sel++
 		}
 	case kEnter:
+		if d.checked != nil && d.sel != d.textOpt {
+			choose(len(d.options) + 1) // a multi-select submits what it toggled
+			return
+		}
 		choose(d.sel + 1)
 	case kEsc, kCtrlC:
 		switch d.kind {

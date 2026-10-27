@@ -148,7 +148,7 @@ func (l *liveActions) Asked(slug, ref string) string {
 }
 
 func (l *liveActions) Menu(id string) []modaction.MenuQuestion {
-	return menuOf(l.s.asks.of(id))
+	return menuOf(l.s.questionOf(id))
 }
 
 // menuOf is question menu q as a precondition sees it.
