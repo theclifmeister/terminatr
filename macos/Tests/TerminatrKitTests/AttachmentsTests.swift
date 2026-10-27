@@ -172,3 +172,23 @@ private func png(_ w: Int, _ h: Int) -> Data {
     h = AppAPI.Hello(appApi: 8, tm: "0.55.0", build: "", capabilities: [], methods: [], server: caps)
     #expect(!Compatibility.sendsFiles(h))
 }
+
+/// Tool runs (#822) never fold a SendUserFile call: it stays its own row
+/// between the runs it splits.
+@Test func sentFilesSplitToolRuns() {
+    var t = Transcript()
+    t.apply("transcript.reset", AppAPI.TranscriptEvent(items: [
+        AppAPI.TranscriptItem(kind: "tool", text: "a", tool: "Read", call: "1"),
+        AppAPI.TranscriptItem(kind: "tool", text: "b", tool: "Read", call: "2"),
+        AppAPI.TranscriptItem(kind: "tool", tool: "SendUserFile", call: "3", files: [file("0.a.0.0", "a.png", path: "/a.png", type: "image/png")]),
+        AppAPI.TranscriptItem(kind: "tool", text: "c", tool: "Read", call: "4"),
+        AppAPI.TranscriptItem(kind: "tool", text: "d", tool: "Read", call: "5"),
+    ]))
+    let rows = Transcript.rows(t.entries)
+    #expect(rows.count == 3)
+    guard rows.count == 3, case .entry(let e) = rows[1] else {
+        Issue.record("no card row: \(rows)")
+        return
+    }
+    #expect(e.kind == .files)
+}
