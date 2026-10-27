@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -193,8 +194,8 @@ func TestSideHubShared(t *testing.T) {
 }
 
 // TestSideHubDetail: the dashboard's look (detail) carries the
-// project's goal, counts, inbox, usage, its threads' report PR and
-// task, and the tasks on deck and in the backlog without their notes
+// project's goal, counts, inbox, usage, its threads' report PR, task,
+// report's Check and PR state, and the tasks on deck and in the backlog without their notes
 // and steps; the sidebars' look carries none of it.
 func TestSideHubDetail(t *testing.T) {
 	paths := testPaths(t)
@@ -208,7 +209,14 @@ func TestSideHubDetail(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := thread.StoreReport(p, rec.ID, "PR: https://github.com/o/r/pull/3\n## Report\nDone.\n## Next\nMerge it\n", nil, time.Now()); err != nil {
+	if _, err := thread.StoreReport(p, rec.ID, "PR: https://github.com/o/r/pull/3\n## Report\nDone.\n## Next\nMerge it\n## Check\nRun tm x\n", nil, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	ts := ticker.StatePath(paths.Sessions)
+	if err := os.MkdirAll(filepath.Dir(ts), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(ts, []byte(`{"threads": {"`+p.Slug+`/`+rec.ID+`": {"pr": {"number": 3, "state": "OPEN", "merge": "abc"}}}}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := p.AddItem("report", rec.ID, "T1: reported", false); err != nil {
@@ -226,7 +234,8 @@ func TestSideHubDetail(t *testing.T) {
 	}
 	d := look(true)
 	if d.Counts["in_motion"] != 1 || len(d.Items) != 1 || len(d.Threads) != 1 ||
-		d.Threads[0].ReportPR != "https://github.com/o/r/pull/3" || d.Threads[0].Task == nil || len(d.Threads[0].Task.Steps) != 1 {
+		d.Threads[0].ReportPR != "https://github.com/o/r/pull/3" || d.Threads[0].Task == nil || len(d.Threads[0].Task.Steps) != 1 ||
+		!slices.Equal(d.Threads[0].Check, []string{"Run tm x"}) || d.Threads[0].PRState != "MERGED" {
 		t.Errorf("detail: %+v", d)
 	}
 	if len(d.Board) != 2 || d.Board[0].Title != "Next" || d.Board[0].Status != tasks.Ready || d.Board[0].Notes != "" ||
@@ -234,7 +243,8 @@ func TestSideHubDetail(t *testing.T) {
 		t.Errorf("detail's board: %+v", d.Board)
 	}
 	sp := look(false)
-	if sp.Counts != nil || sp.Items != nil || sp.Board != nil || len(sp.Threads) != 1 || sp.Threads[0].ReportPR != "" || sp.Threads[0].Task != nil {
+	if sp.Counts != nil || sp.Items != nil || sp.Board != nil || len(sp.Threads) != 1 || sp.Threads[0].ReportPR != "" || sp.Threads[0].Task != nil ||
+		sp.Threads[0].Check != nil || sp.Threads[0].PRState != "" {
 		t.Errorf("the sidebars' look has the dashboard's: %+v", sp)
 	}
 }

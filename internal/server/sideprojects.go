@@ -103,7 +103,10 @@ type SideProject struct {
 // number as the ticker last saw them.
 //
 // With detail, ReportPR is its latest report's PR line and Task its
-// task, for the steps.
+// task, for the steps; Check is that report's ## Check (how the user
+// checks the work) and PRState where its PR stands as the ticker last
+// saw it, OPEN, CLOSED or MERGED (since protocol 23), for the task
+// view's review.
 type SideThread struct {
 	Record   *thread.Record `json:"record"`
 	Status   *thread.Status `json:"status,omitempty"`
@@ -111,6 +114,8 @@ type SideThread struct {
 	PR       int            `json:"pr,omitempty"`
 	ReportPR string         `json:"report_pr,omitempty"`
 	Task     *SideTask      `json:"task,omitempty"`
+	Check    []string       `json:"check,omitempty"`
+	PRState  string         `json:"pr_state,omitempty"`
 }
 
 // SideTask is a task (tasks.Task) on the wire.
@@ -518,7 +523,8 @@ func (sn *projectSnap) detail(sp SideProject, own []string) SideProject {
 	sp.Links = sn.links
 	for i := range sp.Threads {
 		th := &sp.Threads[i]
-		th.ReportPR = sn.reportPR[th.Record.ID]
+		th.ReportPR, th.Check = sn.reportPR[th.Record.ID], sn.reportCheck[th.Record.ID]
+		th.PRState = prState(sn.prs[th.Record.ID])
 		if sn.board != nil && th.Record.TaskID() > 0 {
 			if t := sn.board.Find(th.Record.TaskID()); t != nil {
 				st := sideTask(t)
@@ -527,6 +533,15 @@ func (sn *projectSnap) detail(sp SideProject, own []string) SideProject {
 		}
 	}
 	return sp
+}
+
+// prState is where pr stands, OPEN, CLOSED or MERGED; MERGED once the
+// ticker saw its merge commit, "" when it hasn't seen the PR.
+func prState(pr ticker.PR) string {
+	if pr.Merge != "" {
+		return "MERGED"
+	}
+	return pr.State
 }
 
 // serveProjectsWatch answers projects.watch and then streams the

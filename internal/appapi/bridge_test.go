@@ -223,7 +223,7 @@ func TestBridge(t *testing.T) {
 // coordinator with tm task accept's and send-back's checks, their codes
 // reaching the app; project.open starts the project's coordinator once;
 // task.add (app API 7) adds a task once. Each is journaled as "human
-// (app)".
+// (app)". task.get (app API 13) reads a task with its notes.
 func TestBridgeTaskActions(t *testing.T) {
 	p := testPaths(t)
 	if err := os.MkdirAll(p.AgentsDir(), 0o700); err != nil {
@@ -285,6 +285,14 @@ func TestBridgeTaskActions(t *testing.T) {
 	}
 	if err := c.Call(proto.MethodTaskAdd, appapi.TaskAddParams{Project: "web", Title: "Add docs"}, &added); err != nil || added.Task != "T4" || !added.Existing {
 		t.Fatalf("task.add again: %+v %v", added, err)
+	}
+	var got appapi.Task
+	if err := c.Call(proto.MethodTaskGet, appapi.TaskGetParams{Project: "web", Task: "T4"}, &got); err != nil ||
+		got.Ref != "T4" || got.Title != "Add docs" || got.Notes != "From the app." {
+		t.Fatalf("task.get: %+v %v", got, err)
+	}
+	if err := c.Call(proto.MethodTaskGet, appapi.TaskGetParams{Project: "web", Task: "T9"}, nil); code(err) != "unknown-task" {
+		t.Errorf("task.get of no task: %v", err)
 	}
 	if _, err := pr.AddQuestion(project.Question{Question: "Which?", Options: []project.QuestionOption{{Label: "A"}, {Label: "B"}}}); err != nil {
 		t.Fatal(err)

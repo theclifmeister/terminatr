@@ -93,6 +93,12 @@ type (
 		Task    string `json:"task"`
 		Note    string `json:"note"`
 	}
+	// TaskGetParams are task.get's (app API 13): Project's task
+	// ("T12").
+	TaskGetParams struct {
+		Project string `json:"project"`
+		Task    string `json:"task"`
+	}
 	// ProjectParams name a project (questions.open).
 	ProjectParams struct {
 		Project string `json:"project"`
@@ -316,7 +322,9 @@ type Step struct {
 
 // Thread is an unresolved thread: its record, its status (nil before
 // it reported any), its PR's checks and number as the ticker last saw
-// them, and with detail its report's PR line and its task.
+// them, and with detail its report's PR line and its task; since app
+// API 13 also its report's Check (how the user checks the work) and
+// where its PR stands, PRState: OPEN, CLOSED or MERGED.
 type Thread struct {
 	Record   ThreadRecord  `json:"record"`
 	Status   *ThreadStatus `json:"status,omitempty"`
@@ -324,6 +332,8 @@ type Thread struct {
 	PR       int           `json:"pr,omitempty"`
 	ReportPR string        `json:"report_pr,omitempty"`
 	Task     *Task         `json:"task,omitempty"`
+	Check    []string      `json:"check,omitempty"`
+	PRState  string        `json:"pr_state,omitempty"`
 }
 
 // ThreadRecord is a thread's record.
@@ -674,7 +684,7 @@ func taskOf(t server.SideTask) Task {
 }
 
 func threadOf(t server.SideThread) Thread {
-	out := Thread{Checks: t.Checks, PR: t.PR, ReportPR: t.ReportPR}
+	out := Thread{Checks: t.Checks, PR: t.PR, ReportPR: t.ReportPR, Check: t.Check, PRState: t.PRState}
 	if r := t.Record; r != nil {
 		out.Record = recordOf(*r)
 	}
