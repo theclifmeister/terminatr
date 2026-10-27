@@ -60,9 +60,10 @@ struct SessionDetail: View {
     /// Why the conversation can't be shown, when it can't.
     @ViewBuilder
     private func notice(_ state: ConversationState) -> some View {
+        let terminal = model.tab == .terminal
         if model.sessionID != nil, case .unavailable(let why) = state {
             Label {
-                Text(model.tab == .terminal ? "Showing the terminal. \(why)" : why)
+                Text(terminal ? "Showing the terminal. \(why)" : why)
             } icon: {
                 Image(systemName: model.ref.isRemote ? "network" : "rectangle.on.rectangle.slash")
             }
@@ -71,9 +72,10 @@ struct SessionDetail: View {
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(theme.cardTint, in: RoundedRectangle(cornerRadius: 9))
+            .background(theme.cardTint, in: RoundedRectangle(cornerRadius: terminal ? TerminalTab.corner : 9))
             .accessibilityElement(children: .combine)
-            .padding(.horizontal, 20)
+            // Over the terminal, at its box's edges.
+            .padding(.horizontal, terminal ? TerminalTab.edge : 20)
             .padding(.top, 12)
             .padding(.bottom, 4)
         }
@@ -103,7 +105,7 @@ struct SessionWindow: View {
             }
             .inspector(isPresented: $inspector) {
                 Inspector(model: model, session: app.session(of: model))
-                    .inspectorColumnWidth(min: 240, ideal: 270, max: 360)
+                    .inspectorColumnWidth(min: InspectorColumn.min, ideal: InspectorColumn.min, max: InspectorColumn.max)
                     .background { Frost() }
             }
             .foregroundStyle(theme.ink)
