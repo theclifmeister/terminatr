@@ -161,6 +161,8 @@ type Server struct {
 	// sent are the prompts coordinators sent their sessions, for the
 	// conversations' senders.
 	sent sentPrompts
+	// uploads are the files session.upload is taking, by id.
+	uploads uploads
 
 	agents    *agent.Registry
 	agentErrs []string
@@ -688,7 +690,7 @@ func (s *Server) hello() proto.Hello {
 		Build:    s.build,
 		Bin:      s.opts.Bin,
 		PID:      os.Getpid(),
-		Caps:     []string{proto.CapPaneVT, proto.CapTranscript, proto.CapPaneVTRemote, proto.CapSessionFile, proto.CapTranscriptRemote},
+		Caps:     []string{proto.CapPaneVT, proto.CapTranscript, proto.CapPaneVTRemote, proto.CapSessionFile, proto.CapTranscriptRemote, proto.CapLinkAct},
 	}
 }
 
@@ -866,7 +868,20 @@ func (s *Server) keysBy(p proto.SessionKeysParams, cc callCtx) (any, *proto.Erro
 // and is journaled.
 func (s *Server) promptBy(p proto.SessionPromptParams, cc callCtx) (any, *proto.Error) {
 	if _, _, ok := remoteID(p.ID); ok {
+		if len(p.Files) > 0 {
+			return nil, proto.Errorf(proto.ErrRefused, "a paired server's session takes no files")
+		}
 		return s.remotes.prompt(s.remoteCanon(p.ID), p)
+	}
+	if len(p.Files) > 0 {
+		sess, perr := s.session(p.ID)
+		if perr != nil {
+			return nil, perr
+		}
+		if p.Text, perr = promptFiles(sess.Info().Project, p.Text, p.Files); perr != nil {
+			return nil, perr
+		}
+		p.Files = nil
 	}
 	res, perr := s.prompt(p)
 	if perr == nil {

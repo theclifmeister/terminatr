@@ -67,6 +67,10 @@ func init() {
 		// Acting as the human; the server checks each as it checks the
 		// TUI's, and journals it as "human (app)".
 		unary(proto.MethodSessionPrompt, true, promptParams, promptResultOf),
+		// A file for a prompt (app API 15): its bytes, stored in the
+		// session's project's uploads/; session.prompt's files name its
+		// ref. This server's sessions only.
+		unary(proto.MethodSessionUpload, true, uploadParams, uploadOf),
 		unary(proto.MethodSessionAnswer, true, answerParams, answerResultOf),
 		unary(proto.MethodSessionApprove, true, approveParams, approveResultOf),
 		unary(proto.MethodSessionKeys, true, keysParams, func(struct{}) Empty { return Empty{} }),
@@ -85,6 +89,23 @@ func init() {
 		unary(proto.MethodQuestionsOpen, true, questionsOpenParams, questionsOpenOf),
 		// A task added to a project's board, as tm task add (app API 7).
 		unary(proto.MethodTaskAdd, true, taskAddParams, taskAddedOf),
+		// The coordinator's save and clear (tm clear, prefix+C), and a
+		// project activated or deactivated (tm project activate, S in
+		// the sidebar), each asked first in the app (app API 13).
+		unary(proto.MethodCoordinatorClear, true, coordinatorClearParams, coordinatorClearOf),
+		unary(proto.MethodProjectActive, true, projectActiveParams, projectActiveOf),
+		// One task with its notes and steps, which the board's tasks
+		// come without, for the task view (app API 14).
+		unary(proto.MethodTaskGet, false, taskGetParams, taskOf),
+		// What a project's link waits on the user for, answered in place
+		// (app API 16; the server's caps say link-act), with tm link's
+		// checks: a held message approved or dropped, a file accepted,
+		// declined or cancelled, a paired server's link request accepted
+		// or declined. A message is never written through it. And a
+		// paired server's share request accepted, which shares one of
+		// this server's projects, or declined.
+		unary(proto.MethodLinkAct, true, linkActParams, linkActOf),
+		unary(proto.MethodPeerShareAnswer, true, shareAnswerParams, shareAnswerOf),
 
 		// The guard's refusals, read and answered one at a time (app
 		// API 18): the bridge's own, from the human's log (guard.go).
@@ -256,7 +277,11 @@ func sessionIDParams(p SessionIDParams) proto.SessionIDParams { return proto.Ses
 func noticeParams(p NoticeParams) proto.NoticeParams { return proto.NoticeParams{ID: p.ID} }
 
 func promptParams(p PromptParams) proto.SessionPromptParams {
-	return proto.SessionPromptParams{ID: p.ID, Text: p.Text, Mode: p.Mode}
+	return proto.SessionPromptParams{ID: p.ID, Text: p.Text, Mode: p.Mode, Files: append([]string(nil), p.Files...)}
+}
+
+func uploadParams(p UploadParams) proto.SessionUploadParams {
+	return proto.SessionUploadParams{Session: p.Session, Upload: p.Upload, Name: p.Name, Size: p.Size, Offset: p.Offset, Data: p.Data}
 }
 
 func answerParams(p AnswerParams) proto.SessionAnswerParams {
@@ -264,7 +289,7 @@ func answerParams(p AnswerParams) proto.SessionAnswerParams {
 }
 
 func approveParams(p ApproveParams) proto.SessionApproveParams {
-	return proto.SessionApproveParams{ID: p.ID, Choice: p.Choice, Check: p.Check, Escape: p.Escape}
+	return proto.SessionApproveParams{ID: p.ID, Choice: p.Choice, Check: p.Check, Escape: p.Escape, Session: p.Session}
 }
 
 func keysParams(p KeysParams) proto.SessionKeysParams {
@@ -324,10 +349,30 @@ func questionsOpenParams(p ProjectParams) proto.QuestionsOpenParams {
 	return proto.QuestionsOpenParams{Project: p.Project}
 }
 
+func taskGetParams(p TaskGetParams) proto.TaskGetParams {
+	return proto.TaskGetParams{Project: p.Project, Task: p.Task}
+}
+
 func taskAddParams(p TaskAddParams) proto.TaskAddParams {
 	return proto.TaskAddParams{Project: p.Project, Title: p.Title, Notes: p.Notes}
 }
 
+func coordinatorClearParams(p ProjectParams) proto.CoordinatorClearParams {
+	return proto.CoordinatorClearParams{Project: p.Project}
+}
+
+func projectActiveParams(p ProjectActiveParams) proto.ProjectActiveParams {
+	return proto.ProjectActiveParams{Project: p.Project, Active: p.Active}
+}
+
 func projectOpenParams(p ProjectOpenParams) proto.ProjectOpenParams {
 	return proto.ProjectOpenParams{Project: p.Project, Cols: p.Cols, Rows: p.Rows}
+}
+
+func linkActParams(p LinkActParams) proto.LinkActParams {
+	return proto.LinkActParams{Project: p.Project, Action: p.Action, ID: p.ID, Allow: p.Allow, Ask: p.Ask}
+}
+
+func shareAnswerParams(p ShareAnswerParams) proto.PeerShareAnswerParams {
+	return proto.PeerShareAnswerParams{ID: p.ID, Accept: p.Accept, Project: p.Project}
 }

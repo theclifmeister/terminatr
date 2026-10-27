@@ -1,6 +1,7 @@
 package appapi_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -21,12 +22,14 @@ import (
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/guardlog"
 	"github.com/theclifmeister/terminatr/internal/home/hometest"
+	"github.com/theclifmeister/terminatr/internal/link"
 	"github.com/theclifmeister/terminatr/internal/plat/ipc/ipctest"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/server"
 	"github.com/theclifmeister/terminatr/internal/service/servicetest"
 	"github.com/theclifmeister/terminatr/internal/tasks"
+	"github.com/theclifmeister/terminatr/internal/thread"
 )
 
 func TestMain(m *testing.M) {
@@ -229,8 +232,10 @@ func TestBridge(t *testing.T) {
 // TestBridgeTaskActions: the task actions by name (app API 5) ask the
 // coordinator with tm task accept's and send-back's checks, their codes
 // reaching the app; project.open starts the project's coordinator once;
-// task.add (app API 7) adds a task once. Each is journaled as "human
-// (app)".
+// task.add (app API 7) adds a task once; coordinator.clear's refusals
+// reach the app, and project.active (app API 13) stops the coordinator
+// and resumes it. Each is journaled as "human (app)".
+// task.get (app API 14) reads a task with its notes.
 func TestBridgeTaskActions(t *testing.T) {
 	p := testPaths(t)
 	if err := os.MkdirAll(p.AgentsDir(), 0o700); err != nil {
@@ -293,6 +298,14 @@ func TestBridgeTaskActions(t *testing.T) {
 	if err := c.Call(proto.MethodTaskAdd, appapi.TaskAddParams{Project: "web", Title: "Add docs"}, &added); err != nil || added.Task != "T4" || !added.Existing {
 		t.Fatalf("task.add again: %+v %v", added, err)
 	}
+	var got appapi.Task
+	if err := c.Call(proto.MethodTaskGet, appapi.TaskGetParams{Project: "web", Task: "T4"}, &got); err != nil ||
+		got.Ref != "T4" || got.Title != "Add docs" || got.Notes != "From the app." {
+		t.Fatalf("task.get: %+v %v", got, err)
+	}
+	if err := c.Call(proto.MethodTaskGet, appapi.TaskGetParams{Project: "web", Task: "T9"}, nil); code(err) != "unknown-task" {
+		t.Errorf("task.get of no task: %v", err)
+	}
 	if _, err := pr.AddQuestion(project.Question{Question: "Which?", Options: []project.QuestionOption{{Label: "A"}, {Label: "B"}}}); err != nil {
 		t.Fatal(err)
 	}
@@ -312,13 +325,150 @@ func TestBridgeTaskActions(t *testing.T) {
 	if err := c.Call(proto.MethodQuestionsOpen, appapi.ProjectParams{Project: "web"}, &qs); err != nil || qs.Session != opened.Session || qs.Open != 1 {
 		t.Fatalf("questions.open: %+v %v", qs, err)
 	}
+	// A file for the coordinator's prompt lands in the project's uploads/.
+	png := append([]byte("\x89PNG\r\n\x1a\n"), make([]byte, 32)...)
+	var up appapi.Upload
+	if err := c.Call(proto.MethodSessionUpload, appapi.UploadParams{Session: opened.Session, Name: "shot.png", Size: int64(len(png)), Data: png}, &up); err != nil ||
+		!strings.HasSuffix(up.Ref, "-shot.png") || up.Type != "image/png" {
+		t.Fatalf("session.upload: %+v %v", up, err)
+	}
+	if got, err := os.ReadFile(pr.Path("uploads", up.Ref)); err != nil || !bytes.Equal(got, png) {
+		t.Errorf("uploaded: %v", err)
+	}
+	if err := c.Call(proto.MethodSessionPrompt, appapi.PromptParams{ID: opened.Session, Files: []string{"../PROJECT.md"}}, nil); code(err) != proto.ErrBadParams {
+		t.Errorf("session.prompt with a bad ref: %v", err)
+	}
+	// The fake agent has no clear prompt: the save and clear is refused
+	// at once, its code reaching the app.
+	if err := c.Call(proto.MethodCoordinatorClear, appapi.ProjectParams{Project: "web"}, nil); code(err) != proto.ErrRefused {
+		t.Errorf("coordinator.clear without a clear prompt: %v", err)
+	}
+	var off appapi.ProjectActive
+	if err := c.Call(proto.MethodProjectActive, appapi.ProjectActiveParams{Project: "web"}, &off); err != nil || !off.Changed ||
+		!slices.Equal(off.Stopped, []string{"coordinator"}) {
+		t.Fatalf("project.active off: %+v %v", off, err)
+	}
+	if err := c.Call(proto.MethodProjectActive, appapi.ProjectActiveParams{Project: "web"}, &off); err != nil || off.Changed {
+		t.Fatalf("project.active off again: %+v %v", off, err)
+	}
+	if err := c.Call(proto.MethodCoordinatorClear, appapi.ProjectParams{Project: "web"}, nil); code(err) != proto.ErrRefused {
+		t.Errorf("coordinator.clear with none running: %v", err)
+	}
+	var on appapi.ProjectActive
+	if err := c.Call(proto.MethodProjectActive, appapi.ProjectActiveParams{Project: "web", Active: true}, &on); err != nil || !on.Changed ||
+		!slices.Equal(on.Resumed, []string{"coordinator"}) {
+		t.Fatalf("project.active on: %+v %v", on, err)
+	}
 	journal, _ := os.ReadFile(pr.Path("JOURNAL.md"))
-	for _, want := range []string{" human (app) task.accept.ask T2", " human (app) task.sendback.ask T3 the tests fail",
+	for _, want := range []string{" human (app) session.upload ", " human (app) task.accept.ask T2", " human (app) task.sendback.ask T3 the tests fail",
 		" human (app) task.delegate.ask T1", " human (app) task.add T4 Add docs", " human (app) coordinator.start " + opened.Session,
-		" human (app) questions.open " + opened.Session + " 1 open"} {
+		" human (app) questions.open " + opened.Session + " 1 open", " human (app) project.deactivate web",
+		" human (app) project.activate web"} {
 		if !strings.Contains(string(journal), want) {
 			t.Errorf("journal lacks %q:\n%s", want, journal)
 		}
+	}
+}
+
+// TestBridgeLinkActs: what a project's links wait on the user for
+// reaches the app by the ids link.act takes (app API 16); acting on
+// them is journaled as "human (app)", with tm link's checks; a message
+// is never written through it.
+func TestBridgeLinkActs(t *testing.T) {
+	p := testPaths(t)
+	if err := os.WriteFile(filepath.Join(os.Getenv("TERMINATR_HOME"), "config.toml"),
+		[]byte("[projects.a.links]\nb = { allow = \"both\", ask = true }\n\n[projects.b.links]\na = \"both\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	a, err := project.New(project.Options{Slug: "a"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := project.New(project.Options{Slug: "b"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	lib := thread.Path(b, "t-0001", "library")
+	if err := os.MkdirAll(lib, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(lib, "x.txt"), []byte("hello"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	f, err := link.Send(caller.Caller{Kind: caller.Coordinator, Project: "b"}, b, "a", link.Opts{Text: "a file", File: "t-0001/x.txt"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	coord := caller.Caller{Kind: caller.Coordinator, Project: "a"}
+	h1, err := link.Send(coord, a, "b", link.Opts{Text: "Hello b\nmore"})
+	if err != nil || h1.State != link.StateHeld {
+		t.Fatalf("send: %+v %v", h1, err)
+	}
+	h2, _ := link.Send(coord, a, "b", link.Opts{Text: "Second"})
+	startServer(t, p)
+	c, err := bridge(t, p, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(c.Hello.Server.Caps, proto.CapLinkAct) {
+		t.Errorf("caps %v", c.Hello.Server.Caps)
+	}
+	var ps appapi.Projects
+	st, err := c.Stream(proto.MethodProjectsWatch, appapi.ProjectsWatchParams{Detail: true}, &ps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Cancel()
+	var needs []appapi.LinkNeed
+	for _, pr := range ps.Projects {
+		if pr.Slug == "a" {
+			needs = pr.LinkNeeds
+		}
+	}
+	if len(needs) != 3 || needs[0].Kind != "held" || needs[0].ID != h1.ID || needs[0].Peer != "b" || needs[0].Title != "Hello b" ||
+		needs[1].ID != h2.ID || needs[2].Kind != "file" || needs[2].ID != f.Transfer || needs[2].File != "x.txt" || needs[2].Size != 5 {
+		t.Fatalf("link needs %+v", needs)
+	}
+	var res appapi.LinkActResult
+	if err := c.Call(proto.MethodLinkAct, appapi.LinkActParams{Project: "a", Action: "approve", ID: h1.ID}, &res); err != nil ||
+		!strings.Contains(res.Words, h1.ID) {
+		t.Fatalf("approve: %+v %v", res, err)
+	}
+	if err := c.Call(proto.MethodLinkAct, appapi.LinkActParams{Project: "a", Action: "drop", ID: h2.ID}, &res); err != nil ||
+		res.Words != "dropped "+h2.ID+"; it is never sent" {
+		t.Fatalf("drop: %+v %v", res, err)
+	}
+	if err := c.Call(proto.MethodLinkAct, appapi.LinkActParams{Project: "a", Action: "accept-file", ID: f.Transfer}, &res); err != nil ||
+		res.Words != "accepted x.txt: it is in place" {
+		t.Fatalf("accept-file: %+v %v", res, err)
+	}
+	for _, bad := range []struct {
+		params any
+		code   string
+	}{
+		{appapi.LinkActParams{Project: "a", Action: "approve", ID: h1.ID}, "not-held"},
+		{appapi.LinkActParams{Project: "a", Action: "decline-file", ID: f.Transfer}, "not-offered"},
+		{appapi.LinkActParams{Project: "a", Action: "send", ID: "b"}, proto.ErrBadParams},
+		{appapi.LinkActParams{Project: "a", Action: "resume", ID: "b"}, proto.ErrBadParams},
+		{appapi.LinkActParams{Project: "a", Action: "drop", ID: h1.ID, Allow: "both"}, proto.ErrBadParams},
+		{appapi.LinkActParams{Project: "a", Action: "decline", ID: "R-0123456789ABCDEF-1"}, "unknown-request"},
+		{map[string]string{"project": "a", "action": "send", "id": "b", "text": "hi"}, appapi.ErrBadParams},
+	} {
+		if err := c.Call(proto.MethodLinkAct, bad.params, nil); code(err) != bad.code {
+			t.Errorf("link.act %+v: %v, want %s", bad.params, err, bad.code)
+		}
+	}
+	journal, _ := os.ReadFile(a.Path("JOURNAL.md"))
+	for _, want := range []string{" human (app) link.approve b " + h1.ID, " human (app) link.drop b " + h2.ID,
+		" human (app) link.file-accept b " + f.Transfer} {
+		if !strings.Contains(string(journal), want) {
+			t.Errorf("journal lacks %q:\n%s", want, journal)
+		}
+	}
+	// A share request that isn't there: the server's refusal, its code
+	// kept.
+	if err := c.Call(proto.MethodPeerShareAnswer, appapi.ShareAnswerParams{ID: "S-0123456789ABCDEF-1"}, nil); code(err) != "unknown-request" {
+		t.Errorf("peer.share-answer: %v", err)
 	}
 }
 

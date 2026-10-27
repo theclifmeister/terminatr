@@ -40,11 +40,25 @@ public struct PaletteItem: Identifiable, Hashable, Sendable {
         }
     }
 
+    /// A task the row shows in the task view (↩).
+    public struct TaskKey: Hashable, Sendable {
+        public let project: String
+        public let task: String
+
+        public init(project: String, task: String) {
+            self.project = project
+            self.task = task
+        }
+    }
+
     /// The window's own commands, the Actions group.
     public enum Command: Hashable, Sendable {
         case nextNeed, previousNeed, inactive, tab, inspector, find, filter, back, forward, shortcuts
         /// Picks a theme (T770).
         case theme(ThemeName)
+        /// The shown project's Save & Clear, Activate or Deactivate (app
+        /// API 13), asked first as the window asks.
+        case ask(ProjectAsk)
     }
 
     public let id: String
@@ -55,6 +69,9 @@ public struct PaletteItem: Identifiable, Hashable, Sendable {
     public let tone: Attention.Tone?
     /// Where ↩ goes.
     public let go: Selection?
+    /// The task ↩ shows in the task view instead (T780): a task's row,
+    /// a task in review's or a blocked one's need. Its Open goes to go.
+    public let task: TaskKey?
     public let act: Act?
     public let command: Command?
     /// The key the row's command has, shown on its right: "⌥⌘↓".
@@ -63,7 +80,7 @@ public struct PaletteItem: Identifiable, Hashable, Sendable {
     public let keywords: String
 
     public init(id: String, group: Group, title: String, detail: String = "", tone: Attention.Tone? = nil,
-                go: Selection? = nil, act: Act? = nil, command: Command? = nil, keys: String = "",
+                go: Selection? = nil, task: TaskKey? = nil, act: Act? = nil, command: Command? = nil, keys: String = "",
                 keywords: String = "") {
         self.id = id
         self.group = group
@@ -71,6 +88,7 @@ public struct PaletteItem: Identifiable, Hashable, Sendable {
         self.detail = detail
         self.tone = tone
         self.go = go
+        self.task = task
         self.act = act
         self.command = command
         self.keys = keys
@@ -100,8 +118,10 @@ public enum Palette {
         }
         for n in needs {
             let go = Selection.route(project: n.project, session: n.session, projects: projects, sessions: sessions, peers: peers)
+            let task = (n.kind == .review || n.kind == .blocked) && !n.task.isEmpty
+                ? PaletteItem.TaskKey(project: n.project, task: n.task) : nil
             out.append(PaletteItem(id: "need:\(n.id)", group: .needs, title: n.title, detail: n.detail,
-                                   tone: tone(n.kind), go: go, act: act(n, session(n.session))))
+                                   tone: tone(n.kind), go: go, task: task, act: act(n, session(n.session))))
         }
         let ordered = SidebarTree.active(projects) + SidebarTree.inactive(projects)
         for p in ordered {
@@ -128,15 +148,15 @@ public enum Palette {
                                        act: s.flatMap { act(ref, $0) }, keywords: t.task?.title ?? ""))
             }
             var seen: Set<String> = []
-            // A thread's task goes to that thread.
-            // A thread's task goes to that thread; a board's to the
-            // project.
+            // ↩ shows a task in the task view; its Open goes to its
+            // thread, or a board's task to the project.
             let tasks = p.needsYou.map { ($0, Selection.of(task: $0, in: p)) }
                 + p.threads.compactMap { th in th.task.map { ($0, Selection.card(th, in: p.slug)) } }
                 + p.board.map { ($0, Selection.project(p.slug)) }
             for (t, go) in tasks where seen.insert(t.ref).inserted && t.status != "done" {
                 out.append(PaletteItem(id: "task:\(p.slug)/\(t.ref)", group: .tasks, title: "\(t.ref) \(t.title)",
-                                       detail: "\(p.slug) · \(words(t.status))", go: go, act: act(task: t.ref, t.status, in: p.slug)))
+                                       detail: "\(p.slug) · \(words(t.status))", go: go,
+                                       task: PaletteItem.TaskKey(project: p.slug, task: t.ref), act: act(task: t.ref, t.status, in: p.slug)))
             }
         }
         for peer in peers {
@@ -174,6 +194,24 @@ public enum Palette {
             let first = found.filter { $0.title.range(of: q, options: [.caseInsensitive, .diacriticInsensitive, .anchored]) != nil }
             out += Array((first + found.filter { !first.contains($0) }).prefix(perGroup))
         }
+        return out
+    }
+
+    /// The Actions group's rows for project p, shown, with this tm's
+    /// project controls (app API 13): Save & Clear while its coordinator
+    /// runs (coordinator, its session), and Activate or Deactivate.
+    public static func projectActions(_ p: AppAPI.Project, coordinator: AppAPI.Session?, sessions: [AppAPI.Session],
+                                      hint: Int) -> [PaletteItem] {
+        var out: [PaletteItem] = []
+        if coordinator != nil {
+            let ctx = ContextUse.of(coordinator, hint: hint)
+            out.append(PaletteItem(id: "cmd:saveclear", group: .actions, title: "Save & clear \(p.slug)'s coordinator",
+                                   detail: ctx.map { "context \($0.word)" } ?? "", tone: ctx?.tone,
+                                   command: .ask(.saveClear(project: p.slug)), keywords: "save clear context tm clear saveclear"))
+        }
+        let a = ProjectAsk.toggle(p, sessions: sessions)
+        out.append(PaletteItem(id: "cmd:active", group: .actions, title: "\(a.verb) \(p.slug)", command: .ask(a),
+                               keywords: "activate deactivate project pause resume on off"))
         return out
     }
 

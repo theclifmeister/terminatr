@@ -5,9 +5,10 @@ import TerminatrKit
 /// approval's dialog as the server reads it (Allow, the last option,
 /// Open), a question tm read with its options, the coordinator's open
 /// questions (Answer now), a task in review (Accept, Send back…) or
-/// blocked (Delegate…), a call the guard refused with its whole command
-/// (Allow here, All projects… after a confirmation, Keep refusing; the
-/// floor's only kept). What the card can't answer safely (an escape's
+/// blocked (Delegate…), a link's held message, offered file or link
+/// request, or a share request (LinkActs), a call the guard refused with
+/// its whole command (Allow here, All projects… after a confirmation, Keep
+/// refusing; the floor's only kept). What the card can't answer safely (an escape's
 /// dialog or question, which needs the command named, a question tm
 /// couldn't read, several options) opens the session instead. The
 /// server checks every answer, as it checks the session's own cards.
@@ -27,16 +28,16 @@ struct NeedCard: View {
                     .foregroundStyle(NeedRow.colour(need.kind, theme))
                     .frame(width: 16)
                     .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(need.what)
-                        .font(theme.body(.body, .semibold))
-                        .lineLimit(1)
-                    if !detail.isEmpty {
-                        Text(detail)
-                            .font(theme.body(.subheadline))
-                            .foregroundStyle(theme.muted)
-                            .lineLimit(2)
+                if showsTask {
+                    // A button, so Full Keyboard Access reaches it.
+                    Button { app.showTask(project: need.project, task: need.task) } label: {
+                        words.contentShape(Rectangle())
                     }
+                    .buttonStyle(.plain)
+                    .help("Shows \(need.task) in full: how to check it, its PR, steps and notes")
+                    .accessibilityHint("Shows the task in full")
+                } else {
+                    words
                 }
                 Spacer(minLength: 8)
                 acts
@@ -49,6 +50,10 @@ struct NeedCard: View {
                 Text(said.text)
                     .font(theme.body(.footnote))
                     .foregroundStyle(said.failed ? theme.attention : theme.muted)
+                    .padding(.leading, 24)
+            }
+            if let o = app.linkOutcomes[need.id] {
+                LinkOutcomeRow(outcome: o)
                     .padding(.leading, 24)
             }
             if !need.task.isEmpty, need.kind == .review || need.kind == .blocked {
@@ -76,6 +81,26 @@ struct NeedCard: View {
         }
     }
 
+    private var words: some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(need.what)
+                .font(theme.body(.body, .semibold))
+                .lineLimit(1)
+            if !detail.isEmpty {
+                Text(detail)
+                    .font(theme.body(.subheadline))
+                    .foregroundStyle(theme.muted)
+                    .lineLimit(2)
+            }
+        }
+    }
+
+    /// Whether the card's words show its task in the task view (T780):
+    /// a task in review's or a blocked one's.
+    private var showsTask: Bool {
+        !need.task.isEmpty && (need.kind == .review || need.kind == .blocked)
+    }
+
     /// The second line: the task's title, and an approval's question
     /// once the server read it.
     private var detail: String {
@@ -88,12 +113,14 @@ struct NeedCard: View {
         HStack(spacing: 6) {
             switch need.kind {
             case .approval:
-                if let dialog, !dialog.escape, let first = dialog.options.first {
+                // Options that allow once only: one for the session needs
+                // the confirmation the session's own card asks.
+                if let dialog, !dialog.escape, let first = dialog.options.first, once(dialog, 1) {
                     Button(first) { approve(1) }
                         .accessibilityLabel(named(first))
                         .buttonStyle(.borderedProminent)
                         .tint(theme.action)
-                    if dialog.options.count > 1, let last = dialog.options.last {
+                    if dialog.options.count > 1, let last = dialog.options.last, once(dialog, dialog.options.count) {
                         Button(last) { approve(dialog.options.count) }
                             .accessibilityLabel(named(last))
                     }
@@ -137,7 +164,13 @@ struct NeedCard: View {
                         .accessibilityLabel(named("Keep refusing"))
                         .help("The guard keeps refusing it, and it is no longer listed")
                 }
-            case .checks, .held, .network:
+            case .link, .network:
+                if let l = need.link {
+                    LinkActs(need: need, act: l)
+                } else {
+                    open("Open")
+                }
+            case .checks, .held:
                 open("Open")
             }
         }
@@ -160,6 +193,10 @@ struct NeedCard: View {
     private func openTerminal() {
         app.open(project: need.project, session: need.session)
         if let ref = app.selectedRef { app.model(ref).pick(.terminal) }
+    }
+
+    private func once(_ d: AppAPI.ApproveResult, _ choice: Int) -> Bool {
+        choice > d.scopes.count || d.scopes[choice - 1] == "once"
     }
 
     /// Asks the server what the dialog on screen offers (check).

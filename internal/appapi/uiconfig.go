@@ -7,27 +7,28 @@ import (
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 )
 
-// needsFirst is the config's [ui] needs_first, as the TUI's sidebar
-// reads it (tui configCache): config.toml loaded again only when its
-// stat stamp changed, so a session.list costs a stat. A config that
-// doesn't load says false, as in the TUI.
-var needsFirst = func() func() bool {
+// uiHints are the config's [ui] needs_first and context_hint, as the
+// TUI's sidebar reads them (tui configCache): config.toml loaded again
+// only when its stat stamp changed, so a session.list costs a stat. A
+// config that doesn't load says false and the default hint, as in the
+// TUI.
+var uiHints = func() func() (needsFirst bool, ctxHint int) {
 	var mu sync.Mutex
 	var stamp uint64
-	loaded, on := false, false
-	return func() bool {
+	loaded, on, hint := false, false, config.DefaultContextHint
+	return func() (bool, int) {
 		path, err := config.Path()
 		if err != nil {
-			return false
+			return false, config.DefaultContextHint
 		}
 		mu.Lock()
 		defer mu.Unlock()
 		if st := fsx.StatStamp(path); !loaded || st != stamp {
-			loaded, stamp, on = true, st, false
+			loaded, stamp, on, hint = true, st, false, config.DefaultContextHint
 			if cfg, err := config.Load(); err == nil {
-				on = cfg.NeedsFirst
+				on, hint = cfg.NeedsFirst, cfg.ContextHint
 			}
 		}
-		return on
+		return on, hint
 	}
 }()
