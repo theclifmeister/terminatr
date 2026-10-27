@@ -485,13 +485,19 @@ The bridge acks both streams itself, each event once it is written to its stdout
 Results and events are decoded into the server's types and copied field by field into the app's (`appapi/types.go`): a field the server gains stays home until a copy names it, and `TestCopies` zeroes every field of each source in turn and fails on one that is neither copied nor listed as staying home.
 Home stay, among others: a project's settings (`safety`, `own`) but `active`, `paused` and `pinned` and the mods' badges and cells, a session's argv, cwd and pid, the agent's own session id, a link's entries and requests, and where a vault item's text is.
 Every string of a result or an event goes through `textsafe.Text` on the way out (escapes and invisible characters go, newlines and tabs stay).
-`tm app schema` prints the API as JSON Schema (2020-12): every type under `$defs`, each method's params, result and stream data by reference, and the envelope, for the app's Codable types: the app (`macos/`, a Swift package for macOS 14+, built and tested by CI's `macos-app` job when `macos/` or `internal/appapi` changes) keeps them in `macos/Sources/TerminatrKit/AppAPI.swift`, generated from the schema (`go test ./internal/appapi -update` rewrites it, and the test fails while it differs).
+`tm app schema` prints the API as JSON Schema (2020-12): every type under `$defs`, each method's params, result and stream data by reference, and the envelope, for the app's Codable types: the app (`macos/`, a Swift package for macOS 14+, built and tested by CI's `macos-app` job when `macos/`, `ios/` or `internal/appapi` changes) keeps them in `macos/Sources/TerminatrKit/AppAPI.swift`, generated from the schema (`go test ./internal/appapi -update` rewrites it, and the test fails while it differs).
 The app finds tm at the path set in its Settings, else in the Homebrew prefixes (`/opt/homebrew/bin`, `/usr/local/bin`), else `~/.local/bin`, and never embeds one.
 
 **Versions** (`TerminatrKit/Compatibility.swift`).
 From the hello the app compares tm's `app_api` with its own (`AppAPI.version`, the schema it was generated from), then tm's release with its own (`CFBundleShortVersionString`; a build from source, `0.0.0`, and a tm built from source compare by the API only).
 Below the oldest app API it works with (`Compatibility.minimumAPI`, 2) it doesn't connect and says to run `tm update`; otherwise the window's toolbar (`tm v0.53.0 is behind`, the whole message and `tm update` in its popover) and the menu bar say which is behind: `tm v0.53.0 is older than this app (0.54.0): some of the app's features stay off until you update it with tm update`, or `This app (0.53.0) is older than tm v0.54.0: update it with tm update`.
 An older app keeps working with a newer tm.
+
+**The iPhone app** (`ios/`, T788, stage 1: read only, no push).
+An Xcode project (`ios/Terminatr.xcodeproj`, scheme `Terminatr-iOS`, bundle id `dev.terminatr.ios`, iOS 17+) on the same Swift package: `TerminatrKit` builds for iOS without `ProcessTransport` and `TMLocator` (macOS only), and `TerminatrUI` holds what both apps draw (the theme, the card frame, a need's summary, a question's options, tool-run headers and lines, Markdown).
+It shows Needs you (its start screen), the projects as `SidebarTree` lists them, a project's coordinator and threads, and a session's conversation, each pulled to refresh.
+It talks to a `Bridge` on any `BridgeTransport`: until device links land, only the built-in demo's (`DemoTransport`), which plays back a recording of bridge lines (`ios/Terminatr/Demo/demo.json`, checked against the app API by `swift test`) and refuses every write.
+`make -C ios build` builds it for the Simulator, unsigned; `make -C ios run DEVICE=…` opens it there in the demo (`-demo YES`, and `-open project:SLUG` or `-open session:SLUG/THREAD` for a screen).
 
 **Shipping** (§10.1).
 Releases carry the app as `terminatr-app.zip` and `terminatr-app.dmg` (`scripts/release/app.sh`): universal, signed with tm's Developer ID team (`version.TeamID`) with the hardened runtime and no entitlements, notarised and stapled; the DMG signed, notarised and stapled too.

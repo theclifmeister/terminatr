@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import TerminatrKit
+import TerminatrUI
 
 /// terminatr for Mac (design T734, T746): the coordinators and threads
 /// of the tm server, through tm app bridge. One window shows them all: a

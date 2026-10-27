@@ -1,5 +1,9 @@
 import Foundation
 
+// The Mac app's only: iOS runs no child processes (the phone's
+// transport is a device link, docs/SPEC.md §3.8).
+#if os(macOS)
+
 /// Finds the installed tm the bridge runs. The app never embeds tm: one
 /// tm per machine keeps one server, one pin and one tm update. It looks,
 /// in order, at the path the user configured, the Homebrew prefixes and
@@ -59,3 +63,4 @@ public struct TMNotFound: Error, LocalizedError, Equatable {
         return "No tm found in \(looked.joined(separator: ", ")). Install it with Homebrew (brew install terminatr, from the theclifmeister/terminatr tap) or the install script, or set its path in Settings."
     }
 }
+#endif

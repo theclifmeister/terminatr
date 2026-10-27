@@ -1,5 +1,6 @@
 import SwiftUI
 import TerminatrKit
+import TerminatrUI
 
 /// The command palette (⌘K, T748 milestone E), over the window: words
 /// typed find a need, a project, a thread or a task (Palette), or one

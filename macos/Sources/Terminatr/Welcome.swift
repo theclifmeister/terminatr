@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import TerminatrKit
+import TerminatrUI
 import UserNotifications
 
 /// The first-run sheet (T748 milestone H): tm found, or how to install

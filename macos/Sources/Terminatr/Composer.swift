@@ -1,5 +1,6 @@
 import SwiftUI
 import TerminatrKit
+import TerminatrUI
 
 /// The prompt box under the conversation (design T734 §5): ↩ sends,
 /// queued until the agent is idle; ⌥↩ steers it into the running turn;

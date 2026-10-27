@@ -1,5 +1,6 @@
 import SwiftUI
 import TerminatrKit
+import TerminatrUI
 
 /// Beside the session: a thread's task and steps, its branch, PR and
 /// context, the agent's todos; a coordinator's project and what needs
@@ -110,8 +111,8 @@ struct Inspector: View {
                     ForEach(needs) { n in
                         Button { app.open(project: n.project, session: n.session) } label: {
                             HStack(alignment: .firstTextBaseline, spacing: 6) {
-                                Image(systemName: NeedRow.symbol(n.kind))
-                                    .foregroundStyle(NeedRow.colour(n.kind, theme))
+                                Image(systemName: n.kind.symbol)
+                                    .foregroundStyle(theme.colour(n.kind))
                                     .accessibilityHidden(true)
                                 VStack(alignment: .leading, spacing: 0) {
                                     Text(n.what).font(theme.body(.subheadline, .medium)).lineLimit(2)
