@@ -102,7 +102,7 @@ final class AppModel {
     /// Started shows it again).
     var welcome = false
     /// Whether this tm takes files for a prompt (session.upload, app API
-    /// 13).
+    /// 15).
     var canAttach: Bool {
         if case .connected(let h) = phase { return Compatibility.takesFiles(h) }
         return false

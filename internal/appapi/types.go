@@ -44,7 +44,7 @@ type (
 		ID   string `json:"id"`
 		Text string `json:"text"`
 		Mode string `json:"mode,omitempty"`
-		// Files are refs session.upload answered (app API 13): the
+		// Files are refs session.upload answered (app API 15): the
 		// server names each after Text, which may then be empty.
 		Files []string `json:"files,omitempty"`
 	}
@@ -973,7 +973,7 @@ type SessionFile struct {
 	Data     []byte    `json:"data,omitempty"`
 }
 
-// UploadParams are session.upload's (app API 13): a chunk of a file
+// UploadParams are session.upload's (app API 15): a chunk of a file
 // for session's prompt, at most 512 KiB of Data. The first (no Upload,
 // Offset 0) names the file (Name, whose extension gives its type) and
 // its Size; each next one gives the Upload id the first answered and

@@ -5,12 +5,12 @@ import Testing
 import UniformTypeIdentifiers
 @testable import TerminatrKit
 
-@Test func attachingNeedsAPI13() {
-    var h = AppAPI.Hello(appApi: 13, tm: "v0.57.0", build: "x")
+@Test func attachingNeedsAPI15() {
+    var h = AppAPI.Hello(appApi: 15, tm: "v0.57.0", build: "x")
     #expect(!Compatibility.takesFiles(h))
     h.methods = [AppAPI.Methods.sessionUpload.name]
     #expect(Compatibility.takesFiles(h))
-    h.appApi = 12
+    h.appApi = 14
     #expect(!Compatibility.takesFiles(h))
 }
 

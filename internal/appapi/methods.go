@@ -66,7 +66,7 @@ func init() {
 		// Acting as the human; the server checks each as it checks the
 		// TUI's, and journals it as "human (app)".
 		unary(proto.MethodSessionPrompt, true, promptParams, promptResultOf),
-		// A file for a prompt (app API 13): its bytes, stored in the
+		// A file for a prompt (app API 15): its bytes, stored in the
 		// session's project's uploads/; session.prompt's files name its
 		// ref. This server's sessions only.
 		unary(proto.MethodSessionUpload, true, uploadParams, uploadOf),

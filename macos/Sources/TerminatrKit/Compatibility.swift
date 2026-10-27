@@ -25,7 +25,7 @@ public enum Compatibility: Equatable, Sendable {
     public static let sessionFileAPI = 11
 
     /// The app API that has session.upload: the composer's files need it.
-    public static let uploadAPI = 13
+    public static let uploadAPI = 15
 
     /// Whether hello's tm takes files for a prompt (session.upload).
     public static func takesFiles(_ hello: AppAPI.Hello) -> Bool {
