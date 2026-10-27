@@ -22,3 +22,30 @@ struct CardGrid<Content: View>: View {
         }
     }
 }
+
+/// A split view column's content at the column's size (T777): its least
+/// width is min and its height any, whatever the content would take, so
+/// the column's least and greatest sizes never change with what it
+/// shows. Content wider than the column runs past its edge rather than
+/// widening it.
+struct ColumnFit: Layout {
+    let min: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        CGSize(width: Swift.max(min, proposal.width ?? min), height: proposal.height ?? 0)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        for s in subviews {
+            s.place(at: bounds.origin, anchor: .topLeading, proposal: ProposedViewSize(bounds.size))
+        }
+    }
+}
+
+extension View {
+    /// This view as a split view column's content, at least min wide
+    /// (ColumnFit).
+    func column(min: Double) -> some View {
+        ColumnFit(min: min) { self }
+    }
+}
