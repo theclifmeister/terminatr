@@ -21,6 +21,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 	"github.com/theclifmeister/terminatr/internal/plat/proc"
 	"github.com/theclifmeister/terminatr/internal/plat/shell"
+	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
 // AgentConfig attaches an agent to a session: the session then runs the
@@ -215,6 +216,11 @@ type agentRT struct {
 	// evaluation; escapeDialog: the one that says it runs a command
 	// outside the sandbox ([guard] escape_rule).
 	permDialog, escapeDialog bool
+	// menu is the question menu of the agent's [answer] tool call
+	// menuCall, from its PreToolUse input (trackMenu): the session's
+	// open question while the agent is blocked on a question (Menu).
+	menu     *proto.Question
+	menuCall string
 
 	keys        map[string]string // rule id -> the keys that answer its dialog (agent.Rule.Keys)
 	answerRule  string            // the keyed rule that is the screen's match
@@ -298,6 +304,9 @@ type AgentState struct {
 	// run outside its sandbox (T574 case 6): the user answers it, never
 	// the coordinator.
 	Escape bool
+	// Menu is the agent's own question menu while it is blocked on it
+	// (trackMenu), answered by keys on its screen (Question.Screen).
+	Menu *proto.Question
 }
 
 // AgentState returns the agent's merged state; ok is false for a session
@@ -316,19 +325,96 @@ func (s *Session) AgentState() (st AgentState, ok bool) {
 	held, heldSince := rt.heldWhy, rt.heldSince
 	escape := len(rt.escapes) > 0 || rt.cfg.PromptsEscape || rt.escapeDialog
 	dialog := rt.permDialog
+	menu := copyMenu(rt.menu)
 	var remote, known bool
 	if m := agent.ManifestOf(rt.a); m != nil && m.ObservesRemote() && rt.fields != nil {
 		remote, known = rt.fields[m.RemoteControl.StatusField] != "", true
 	}
 	rt.mu.Unlock()
 	m := rt.tr.State()
+	if m.State != agent.StateBlocked || m.Reason != "question" {
+		menu = nil
+	}
 	return AgentState{
 		Agent: rt.a.Name(), Observed: rt.observed, Merged: m,
 		AgentSID: rt.tr.AgentSID(), Todos: rt.tr.Todos(), Queued: queued,
 		QueuedSince: since, Held: held, HeldSince: heldSince,
 		RemoteControl: remote, RemoteKnown: known,
 		Escape: escape && (m.State == agent.StateBlocked && m.Reason == "permission" || dialog),
+		Menu:   menu,
 	}, true
+}
+
+// trackMenu keeps the menu of the agent's [answer] tool call from its
+// PreToolUse input; the call's end, or the turn's, takes it down.
+func (rt *agentRT) trackMenu(event string, payload map[string]any, callID string) {
+	ans := agent.AnswerOf(rt.a)
+	if ans == nil || ans.Tool == "" {
+		return
+	}
+	var h agent.HookTrim
+	if rt.src != nil {
+		h = rt.src.Hook
+	}
+	tool, _ := payload[h.ToolField()].(string)
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	switch event {
+	case "PreToolUse":
+		if tool != ans.Tool {
+			return
+		}
+		input, _ := payload[h.InputField()].(map[string]any)
+		if q := agent.MenuOf(tool, input); q != nil {
+			q.Since, q.Screen = time.Now().UTC(), true
+			rt.menu, rt.menuCall = q, callID
+		}
+	case "PostToolUse", "PostToolUseFailure", "PermissionDenied":
+		if callID == "" || callID == rt.menuCall {
+			rt.menu, rt.menuCall = nil, ""
+		}
+	case "Stop", "UserPromptSubmit", "SessionStart", "SessionEnd":
+		rt.menu, rt.menuCall = nil, ""
+	}
+}
+
+func copyMenu(q *proto.Question) *proto.Question {
+	if q == nil {
+		return nil
+	}
+	c := *q
+	c.Questions = slices.Clone(q.Questions)
+	return &c
+}
+
+// Menu is the agent's open question menu (its [answer] tool's call)
+// while the agent is blocked on a question, and that call's id; nil
+// otherwise.
+func (s *Session) Menu() (*proto.Question, string) {
+	st, ok := s.AgentState()
+	if !ok || st.Menu == nil {
+		return nil, ""
+	}
+	rt := s.agentRT()
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	return st.Menu, rt.menuCall
+}
+
+// MenuAnswered records answer to question i of the menu of call: tm
+// typed it on the agent's screen. False when that menu is gone.
+func (s *Session) MenuAnswered(call string, i int, answer string) bool {
+	rt := s.agentRT()
+	if rt == nil {
+		return false
+	}
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	if rt.menu == nil || rt.menuCall != call || i < 0 || i >= len(rt.menu.Questions) {
+		return false
+	}
+	rt.menu.Questions[i].Answered, rt.menu.Questions[i].Answer = true, answer
+	return true
 }
 
 // escapeMark is an escape's call: when it ended (zero while it runs).
@@ -497,6 +583,7 @@ func (s *Session) Hook(event string, payload map[string]any) (agent.HookResult, 
 		// The call ended; an escape's mark with it.
 		rt.setEscape(callID, false)
 	}
+	rt.trackMenu(event, payload, callID)
 	if c := rt.cfg.Context; c != nil {
 		env.Context = func() ([]byte, error) { return c(payload) }
 	}

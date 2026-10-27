@@ -3,6 +3,7 @@
 #   make build   swift build (debug)
 #   make test    swift test
 #   make app     build/Terminatr.app, unsigned (scripts/release/app.sh signs it)
+#   make icon-check  Terminatr.app has the icon its Info.plist names
 #   make run     make app, then open it
 #
 # ARCHS="arm64 x86_64" builds a universal app (the release's): one build
@@ -18,6 +19,9 @@
 # The macOS 27 SDK's SwiftUI makes @State a macro whose plugin comes only
 # with Xcode: there, build against the 26 SDK, e.g.
 #   SDKROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX26.sdk make app
+# The app icon (Icon/, made by Icon/icon.sh from Icon/AppIcon.icon) is
+# copied in as built: AppIcon.icns (CFBundleIconFile, macOS 14 and 15)
+# and Assets.car (CFBundleIconName, macOS 26+).
 # SwiftTerm (the terminal tab) compiles a Metal shader, so building needs
 # Xcode with its Metal toolchain (xcodebuild -downloadComponent
 # MetalToolchain); the Command Line Tools alone have no metal.
@@ -31,7 +35,7 @@ ARCHS        ?=
 VERSION      ?= 0.0.0
 ARCH_DIR     := build/arch
 
-.PHONY: build test app run clean
+.PHONY: build test app icon-check run clean
 
 build:
 	$(SWIFT) build
@@ -59,10 +63,24 @@ else
 	lipo -create -output $(APP)/Contents/MacOS/Terminatr $(foreach a,$(ARCHS),$(ARCH_DIR)/$(a)/Terminatr); \
 	cp -R "$$($(SWIFT) build -c $(CONFIG) --arch $(lastword $(ARCHS)) --show-bin-path)"/*.bundle $(APP)/Contents/Resources/
 endif
+	cp Icon/AppIcon.icns Icon/Assets.car $(APP)/Contents/Resources/
 	cp Info.plist $(APP)/Contents/Info.plist
 	plutil -replace CFBundleShortVersionString -string $(VERSION) $(APP)/Contents/Info.plist
 	plutil -replace CFBundleVersion -string $(VERSION) $(APP)/Contents/Info.plist
 	plutil -lint $(APP)/Contents/Info.plist
+	$(MAKE) icon-check
+
+# CFBundleIconFile names an .icns in Resources, and CFBundleIconName an
+# icon in Resources/Assets.car: otherwise Finder, the Dock and the
+# notifications show the generic app.
+icon-check:
+	@set -e; plist=$(APP)/Contents/Info.plist; res=$(APP)/Contents/Resources; \
+	file=$$(plutil -extract CFBundleIconFile raw $$plist); \
+	name=$$(plutil -extract CFBundleIconName raw $$plist); \
+	[ -f "$$res/$${file%.icns}.icns" ] || { echo "icon-check: no $$res/$${file%.icns}.icns (CFBundleIconFile)" >&2; exit 1; }; \
+	xcrun assetutil --info "$$res/Assets.car" | grep -q "\"Name\" : \"$$name\"" || \
+		{ echo "icon-check: $$res/Assets.car has no icon $$name (CFBundleIconName)" >&2; exit 1; }; \
+	echo "icon-check: ok ($$file.icns, $$name in Assets.car)"
 
 run: app
 	open $(APP)

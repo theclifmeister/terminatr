@@ -79,7 +79,10 @@ func questionLines(q *proto.Question) []string {
 		if it.Header != "" {
 			l = fmt.Sprintf("%d. [%s] %s", i+1, it.Header, it.Question)
 		}
-		if it.MultiSelect {
+		switch {
+		case it.MultiSelect && q.Screen:
+			l += " (several: the user picks them in its pane)"
+		case it.MultiSelect:
 			l += " (several: --choice 1,3)"
 		}
 		if it.Answered {
@@ -127,7 +130,9 @@ func (e *Env) threadAnswer(p *project.Project, id string, a answerArgs) error {
 		return err
 	}
 	a.text = strings.TrimSpace(textsafe.Clean(a.text, false))
-	if info.Question != nil {
+	// The agent's own menu (Screen) is typed on its screen from here,
+	// by number, as before the server kept it.
+	if info.Question != nil && !info.Question.Screen {
 		return e.answerOpen(p, id, r.Session, info.Question, a)
 	}
 	if len(a.choices) != 1 {
@@ -264,34 +269,21 @@ func (e *Env) answerByKeys(p *project.Project, id string, r *thread.Record, info
 	case isText && text == "":
 		return &tasks.Error{Code: "needs-text", Msg: fmt.Sprintf("option %d (%s) takes the user's words: add --text", choice, option)}
 	}
-	keys := func(data string) error {
-		return e.call(proto.MethodSessionKeys, proto.SessionKeysParams{ID: r.Session, Data: data, Relay: e.relay()}, nil)
+	words := ""
+	if isText {
+		words = text
 	}
-	if isText && ans.TextFocus != "" {
-		// The number would submit the option without the words.
-		if err := keys(strings.Repeat(ans.TextFocus, choice-1)); err != nil {
+	for i, k := range agent.MenuKeys(ans, choice, words) {
+		if i > 0 {
+			time.Sleep(answerPause)
+		}
+		if err := e.call(proto.MethodSessionKeys, proto.SessionKeysParams{ID: r.Session, Data: k, Relay: e.relay()}, nil); err != nil {
 			return err
 		}
-	} else if err := keys(strconv.Itoa(choice)); err != nil {
-		return err
 	}
 	// Codex draws each option's description in a column after it.
 	answer, _, _ := strings.Cut(option, "  ")
 	if isText {
-		if ans.TextKey != "" {
-			time.Sleep(answerPause)
-			if err := keys(ans.TextKey); err != nil {
-				return err
-			}
-		}
-		time.Sleep(answerPause)
-		if err := keys(text); err != nil {
-			return err
-		}
-		time.Sleep(answerPause)
-		if err := keys(ans.Submit); err != nil {
-			return err
-		}
 		answer = strconv.Quote(text)
 	}
 	if err := p.Journal(e.Caller, "thread.answer", id, textsafe.Line(question+" → "+answer, 160)); err != nil {
