@@ -367,6 +367,52 @@ type SessionPromptParams struct {
 	// Mode is "" (queued), PromptNow or PromptInterrupt (docs/SPEC.md
 	// §8.6, Priority prompts).
 	Mode string `json:"mode,omitempty"`
+	// Files are the refs session.upload gave, of files in the session's
+	// project's uploads/: the server names each by its path after Text
+	// (an "Attached: <path>" line), so Text may be empty with files. At
+	// most MaxPromptFiles; a paired server's session takes none.
+	Files []string `json:"files,omitempty"`
+}
+
+// MethodSessionUpload stores a file the human gives a session's prompt
+// (the Mac app's composer, docs/SPEC.md §3.8) in its project's uploads/,
+// chunk by chunk (SessionUploadParams), and answers its ref once the
+// last chunk is in: session.prompt's Files name it. The human's only;
+// a session in a project, of this server.
+const MethodSessionUpload = "session.upload"
+
+// Bounds of session.upload: a file of at most MaxUpload bytes, sent
+// UploadChunk bytes at a time (a chunk's base64 fits the app bridge's
+// line); at most MaxPromptFiles files to one prompt.
+const (
+	MaxUpload      = 25 << 20
+	UploadChunk    = 512 << 10
+	MaxPromptFiles = 10
+)
+
+// SessionUploadParams are a chunk of a file for session's prompt: the
+// first (Upload empty, Offset 0) names the file (Name, whose extension
+// gives its type) and its Size; each next one carries the Upload id the
+// first answered and the Offset of its Data, the bytes taken so far.
+type SessionUploadParams struct {
+	Session string `json:"session"`
+	Upload  string `json:"upload,omitempty"`
+	Name    string `json:"name,omitempty"`
+	Size    int64  `json:"size,omitempty"`
+	Offset  int64  `json:"offset,omitempty"`
+	Data    []byte `json:"data,omitempty"`
+}
+
+// SessionUploadResult is where an upload stands: Received bytes of its
+// Upload; once all are in, Ref (the stored file's name in uploads/, for
+// session.prompt's Files), its Name there, Type and Size.
+type SessionUploadResult struct {
+	Upload   string `json:"upload"`
+	Received int64  `json:"received"`
+	Ref      string `json:"ref,omitempty"`
+	Name     string `json:"name,omitempty"`
+	Type     string `json:"type,omitempty"`
+	Size     int64  `json:"size,omitempty"`
 }
 
 // session.prompt modes.

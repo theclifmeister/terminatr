@@ -164,7 +164,7 @@ struct CommandPalette: View {
     private func hint(_ r: PaletteItem, on: Bool) -> String {
         if !r.keys.isEmpty { return r.keys }
         guard on else { return r.act.map { "⌘↩ \($0.verb)" } ?? "" }
-        return ["↩ open", r.act.map { "⌘↩ \($0.verb)" }].compactMap { $0 }.joined(separator: "  ")
+        return [r.task == nil ? "↩ open" : "↩ details", r.act.map { "⌘↩ \($0.verb)" }].compactMap { $0 }.joined(separator: "  ")
     }
 
     private func move(_ by: Int, _ n: Int) {
@@ -178,6 +178,8 @@ struct CommandPalette: View {
         app.palette = false
         if let c = r.command {
             run(c)
+        } else if let t = r.task {
+            app.showTask(project: t.project, task: t.task)
         } else if let s = r.go {
             app.select(s)
         }
@@ -320,7 +322,8 @@ private struct ActPanel: View {
 }
 
 /// The palette's act on a task in review: Accept and Send back…
-/// (TaskActs), each asking the project's coordinator.
+/// (TaskActs), each asking the project's coordinator, and Details…,
+/// the task view.
 private struct ReviewPanel: View {
     @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
@@ -342,6 +345,8 @@ private struct ReviewPanel: View {
                     .font(theme.title(.headline, .bold))
                     .lineLimit(1)
                 Spacer()
+                Button("Details…") { app.showTask(project: project, task: task) }
+                    .help("Shows \(task) in full: how to check it, its PR, steps and notes")
                 if let go = item.go {
                     Button("Open") {
                         app.palette = false

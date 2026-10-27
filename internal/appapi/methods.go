@@ -69,6 +69,10 @@ func init() {
 		// Acting as the human; the server checks each as it checks the
 		// TUI's, and journals it as "human (app)".
 		unary(proto.MethodSessionPrompt, true, promptParams, promptResultOf),
+		// A file for a prompt (app API 15): its bytes, stored in the
+		// session's project's uploads/; session.prompt's files name its
+		// ref. This server's sessions only.
+		unary(proto.MethodSessionUpload, true, uploadParams, uploadOf),
 		unary(proto.MethodSessionAnswer, true, answerParams, answerResultOf),
 		unary(proto.MethodSessionApprove, true, approveParams, approveResultOf),
 		unary(proto.MethodSessionKeys, true, keysParams, func(struct{}) Empty { return Empty{} }),
@@ -92,6 +96,9 @@ func init() {
 		// the sidebar), each asked first in the app (app API 13).
 		unary(proto.MethodCoordinatorClear, true, coordinatorClearParams, coordinatorClearOf),
 		unary(proto.MethodProjectActive, true, projectActiveParams, projectActiveOf),
+		// One task with its notes and steps, which the board's tasks
+		// come without, for the task view (app API 14).
+		unary(proto.MethodTaskGet, false, taskGetParams, taskOf),
 	} {
 		methods[m.Name] = m
 	}
@@ -248,7 +255,11 @@ func sessionIDParams(p SessionIDParams) proto.SessionIDParams { return proto.Ses
 func noticeParams(p NoticeParams) proto.NoticeParams { return proto.NoticeParams{ID: p.ID} }
 
 func promptParams(p PromptParams) proto.SessionPromptParams {
-	return proto.SessionPromptParams{ID: p.ID, Text: p.Text, Mode: p.Mode}
+	return proto.SessionPromptParams{ID: p.ID, Text: p.Text, Mode: p.Mode, Files: append([]string(nil), p.Files...)}
+}
+
+func uploadParams(p UploadParams) proto.SessionUploadParams {
+	return proto.SessionUploadParams{Session: p.Session, Upload: p.Upload, Name: p.Name, Size: p.Size, Offset: p.Offset, Data: p.Data}
 }
 
 func answerParams(p AnswerParams) proto.SessionAnswerParams {
@@ -318,6 +329,10 @@ func sendBackParams(p SendBackParams) proto.TaskActionParams {
 
 func questionsOpenParams(p ProjectParams) proto.QuestionsOpenParams {
 	return proto.QuestionsOpenParams{Project: p.Project}
+}
+
+func taskGetParams(p TaskGetParams) proto.TaskGetParams {
+	return proto.TaskGetParams{Project: p.Project, Task: p.Task}
 }
 
 func taskAddParams(p TaskAddParams) proto.TaskAddParams {

@@ -44,6 +44,9 @@ type (
 		ID   string `json:"id"`
 		Text string `json:"text"`
 		Mode string `json:"mode,omitempty"`
+		// Files are refs session.upload answered (app API 15): the
+		// server names each after Text, which may then be empty.
+		Files []string `json:"files,omitempty"`
 	}
 	// AnswerParams are session.answer's: question Index (from 0) of session ID's open
 	// question gets Answer. Question, when set, is the text that
@@ -92,6 +95,12 @@ type (
 		Project string `json:"project"`
 		Task    string `json:"task"`
 		Note    string `json:"note"`
+	}
+	// TaskGetParams are task.get's (app API 14): Project's task
+	// ("T12").
+	TaskGetParams struct {
+		Project string `json:"project"`
+		Task    string `json:"task"`
 	}
 	// ProjectParams name a project (questions.open, coordinator.clear).
 	ProjectParams struct {
@@ -326,7 +335,9 @@ type Step struct {
 
 // Thread is an unresolved thread: its record, its status (nil before
 // it reported any), its PR's checks and number as the ticker last saw
-// them, and with detail its report's PR line and its task.
+// them, and with detail its report's PR line and its task; since app
+// API 14 also its report's Check (how the user checks the work) and
+// where its PR stands, PRState: OPEN, CLOSED or MERGED.
 type Thread struct {
 	Record   ThreadRecord  `json:"record"`
 	Status   *ThreadStatus `json:"status,omitempty"`
@@ -334,6 +345,8 @@ type Thread struct {
 	PR       int           `json:"pr,omitempty"`
 	ReportPR string        `json:"report_pr,omitempty"`
 	Task     *Task         `json:"task,omitempty"`
+	Check    []string      `json:"check,omitempty"`
+	PRState  string        `json:"pr_state,omitempty"`
 }
 
 // ThreadRecord is a thread's record.
@@ -685,7 +698,7 @@ func taskOf(t server.SideTask) Task {
 }
 
 func threadOf(t server.SideThread) Thread {
-	out := Thread{Checks: t.Checks, PR: t.PR, ReportPR: t.ReportPR}
+	out := Thread{Checks: t.Checks, PR: t.PR, ReportPR: t.ReportPR, Check: t.Check, PRState: t.PRState}
 	if r := t.Record; r != nil {
 		out.Record = recordOf(*r)
 	}
@@ -1026,6 +1039,36 @@ type SessionFile struct {
 	Sendable bool      `json:"sendable"`
 	Offset   int64     `json:"offset"`
 	Data     []byte    `json:"data,omitempty"`
+}
+
+// UploadParams are session.upload's (app API 15): a chunk of a file
+// for session's prompt, at most 512 KiB of Data. The first (no Upload,
+// Offset 0) names the file (Name, whose extension gives its type) and
+// its Size; each next one gives the Upload id the first answered and
+// its Offset, the bytes taken so far. The app sends bytes, never a path.
+type UploadParams struct {
+	Session string `json:"session"`
+	Upload  string `json:"upload,omitempty"`
+	Name    string `json:"name,omitempty"`
+	Size    int64  `json:"size,omitempty"`
+	Offset  int64  `json:"offset,omitempty"`
+	Data    []byte `json:"data,omitempty"`
+}
+
+// Upload is where an upload stands: Received bytes of Upload; once all
+// are in, Ref for session.prompt's Files and the stored file's Name,
+// Type and Size.
+type Upload struct {
+	Upload   string `json:"upload"`
+	Received int64  `json:"received"`
+	Ref      string `json:"ref,omitempty"`
+	Name     string `json:"name,omitempty"`
+	Type     string `json:"type,omitempty"`
+	Size     int64  `json:"size,omitempty"`
+}
+
+func uploadOf(r proto.SessionUploadResult) Upload {
+	return Upload{Upload: r.Upload, Received: r.Received, Ref: r.Ref, Name: r.Name, Type: r.Type, Size: r.Size}
 }
 
 func sessionFileOf(r proto.SessionFileResult) SessionFile {

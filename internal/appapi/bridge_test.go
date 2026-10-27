@@ -1,6 +1,7 @@
 package appapi_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -225,6 +226,7 @@ func TestBridge(t *testing.T) {
 // task.add (app API 7) adds a task once; coordinator.clear's refusals
 // reach the app, and project.active (app API 13) stops the coordinator
 // and resumes it. Each is journaled as "human (app)".
+// task.get (app API 14) reads a task with its notes.
 func TestBridgeTaskActions(t *testing.T) {
 	p := testPaths(t)
 	if err := os.MkdirAll(p.AgentsDir(), 0o700); err != nil {
@@ -287,6 +289,14 @@ func TestBridgeTaskActions(t *testing.T) {
 	if err := c.Call(proto.MethodTaskAdd, appapi.TaskAddParams{Project: "web", Title: "Add docs"}, &added); err != nil || added.Task != "T4" || !added.Existing {
 		t.Fatalf("task.add again: %+v %v", added, err)
 	}
+	var got appapi.Task
+	if err := c.Call(proto.MethodTaskGet, appapi.TaskGetParams{Project: "web", Task: "T4"}, &got); err != nil ||
+		got.Ref != "T4" || got.Title != "Add docs" || got.Notes != "From the app." {
+		t.Fatalf("task.get: %+v %v", got, err)
+	}
+	if err := c.Call(proto.MethodTaskGet, appapi.TaskGetParams{Project: "web", Task: "T9"}, nil); code(err) != "unknown-task" {
+		t.Errorf("task.get of no task: %v", err)
+	}
 	if _, err := pr.AddQuestion(project.Question{Question: "Which?", Options: []project.QuestionOption{{Label: "A"}, {Label: "B"}}}); err != nil {
 		t.Fatal(err)
 	}
@@ -305,6 +315,19 @@ func TestBridgeTaskActions(t *testing.T) {
 	var qs appapi.QuestionsOpen
 	if err := c.Call(proto.MethodQuestionsOpen, appapi.ProjectParams{Project: "web"}, &qs); err != nil || qs.Session != opened.Session || qs.Open != 1 {
 		t.Fatalf("questions.open: %+v %v", qs, err)
+	}
+	// A file for the coordinator's prompt lands in the project's uploads/.
+	png := append([]byte("\x89PNG\r\n\x1a\n"), make([]byte, 32)...)
+	var up appapi.Upload
+	if err := c.Call(proto.MethodSessionUpload, appapi.UploadParams{Session: opened.Session, Name: "shot.png", Size: int64(len(png)), Data: png}, &up); err != nil ||
+		!strings.HasSuffix(up.Ref, "-shot.png") || up.Type != "image/png" {
+		t.Fatalf("session.upload: %+v %v", up, err)
+	}
+	if got, err := os.ReadFile(pr.Path("uploads", up.Ref)); err != nil || !bytes.Equal(got, png) {
+		t.Errorf("uploaded: %v", err)
+	}
+	if err := c.Call(proto.MethodSessionPrompt, appapi.PromptParams{ID: opened.Session, Files: []string{"../PROJECT.md"}}, nil); code(err) != proto.ErrBadParams {
+		t.Errorf("session.prompt with a bad ref: %v", err)
 	}
 	// The fake agent has no clear prompt: the save and clear is refused
 	// at once, its code reaching the app.
@@ -328,7 +351,7 @@ func TestBridgeTaskActions(t *testing.T) {
 		t.Fatalf("project.active on: %+v %v", on, err)
 	}
 	journal, _ := os.ReadFile(pr.Path("JOURNAL.md"))
-	for _, want := range []string{" human (app) task.accept.ask T2", " human (app) task.sendback.ask T3 the tests fail",
+	for _, want := range []string{" human (app) session.upload ", " human (app) task.accept.ask T2", " human (app) task.sendback.ask T3 the tests fail",
 		" human (app) task.delegate.ask T1", " human (app) task.add T4 Add docs", " human (app) coordinator.start " + opened.Session,
 		" human (app) questions.open " + opened.Session + " 1 open", " human (app) project.deactivate web",
 		" human (app) project.activate web"} {

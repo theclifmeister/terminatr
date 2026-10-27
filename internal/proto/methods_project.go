@@ -116,6 +116,19 @@ const (
 // human's, journaled as the caller (task.add).
 const MethodTaskAdd = "task.add"
 
+// MethodTaskGet reads one task of a project's board, notes and steps
+// included (since protocol 23): what projects.watch leaves out of the
+// tasks on deck and in the backlog, for a console's task view. Params
+// TaskGetParams, result the task (server.SideTask); refusals carry the
+// task store's codes ("unknown-task"). The human's.
+const MethodTaskGet = "task.get"
+
+// TaskGetParams are the params of task.get: project's task ("T12").
+type TaskGetParams struct {
+	Project string `json:"project"`
+	Task    string `json:"task"`
+}
+
 // TaskAddParams are the params of task.add: the project, the task's
 // title and, optionally, its notes.
 type TaskAddParams struct {

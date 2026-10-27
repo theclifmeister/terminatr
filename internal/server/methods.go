@@ -236,6 +236,9 @@ func init() {
 		proto.MethodSessionPrompt: {gate: gateHuman, call: typed(func(s *Server, p proto.SessionPromptParams, c callCtx) (any, *proto.Error) {
 			return s.promptBy(p, c)
 		})},
+		proto.MethodSessionUpload: {gate: gateHuman, call: typed(func(s *Server, p proto.SessionUploadParams, c callCtx) (any, *proto.Error) {
+			return s.upload(p, c)
+		})},
 		proto.MethodSessionApprove: {gate: gateHuman, call: typed(func(s *Server, p proto.SessionApproveParams, c callCtx) (any, *proto.Error) {
 			return s.approve(p, c)
 		})},
@@ -250,6 +253,9 @@ func init() {
 		})},
 		proto.MethodTaskDelegate: {gate: gateHuman, call: typed(func(s *Server, p proto.TaskActionParams, c callCtx) (any, *proto.Error) {
 			return s.taskAction(project.KindDelegate, p, c)
+		})},
+		proto.MethodTaskGet: {gate: gateHuman, call: typed(func(s *Server, p proto.TaskGetParams, _ callCtx) (any, *proto.Error) {
+			return s.taskGet(p)
 		})},
 		proto.MethodTaskAdd: {gate: gateHuman, call: typed(func(s *Server, p proto.TaskAddParams, c callCtx) (any, *proto.Error) {
 			return s.taskAdd(p, c)
