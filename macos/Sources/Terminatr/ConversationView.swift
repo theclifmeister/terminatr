@@ -9,7 +9,9 @@ import TerminatrKit
 /// thread's cards sit over the composer, and while one is open and the
 /// transcript is scrolled up, Jump to the open card brings it back. ⌘F
 /// opens a find bar over it: the entries that show the words wear a
-/// ring, and ↩, ⌘G and ⇧⌘G scroll from one to the next.
+/// ring, and ↩, ⌘G and ⇧⌘G scroll from one to the next. A long
+/// transcript draws its last turns (drawn), and more on a click, so
+/// showing it costs no more than a short one.
 struct ConversationTab: View {
     @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
@@ -27,6 +29,11 @@ struct ConversationTab: View {
     @State private var scrolledUp = false
     /// Bumped by Jump to the open card: the cards flash.
     @State private var flash = 0
+    /// How many of the last entries the transcript draws.
+    @State private var drawn = Self.page
+
+    /// The entries drawn at first, and added by each Show earlier.
+    static let page = 60
 
     var body: some View {
         let matches = finding ? Transcript.find(query, in: model.transcript.entries) : []
@@ -35,6 +42,8 @@ struct ConversationTab: View {
         let coordinator = model.ref.isCoordinator
         let review = coordinator ? nil : app.thread(model.ref).flatMap { t in t.task?.status == "review" ? t : nil }
         let open = AppModel.waitsOnCard(session) || review != nil
+        let entries = model.transcript.tail(drawn, keeping: current)
+        let earlier = model.transcript.entries.count - entries.count
         VStack(spacing: 0) {
             if finding {
                 findBar(matches.count)
@@ -45,13 +54,18 @@ struct ConversationTab: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 12) {
-                        if model.transcript.skipped > 0 {
+                        if earlier > 0 {
+                            Button("Show \(min(earlier, Self.page)) earlier of \(earlier)") { drawn += Self.page }
+                                .buttonStyle(.borderless)
+                                .font(theme.body(.footnote))
+                                .frame(maxWidth: .infinity)
+                        } else if model.transcript.skipped > 0 {
                             Text("\(model.transcript.skipped) earlier items not shown")
                                 .font(theme.body(.footnote))
                                 .foregroundStyle(theme.muted)
                                 .frame(maxWidth: .infinity)
                         }
-                        ForEach(model.transcript.entries) { e in
+                        ForEach(entries) { e in
                             EntryView(entry: e, agent: session?.agent ?? "agent")
                                 .overlay {
                                     if found.contains(e.id) {
@@ -276,7 +290,8 @@ struct ReviewCard: View {
 
 /// One entry of the conversation: each turn says who and when ("you ·
 /// 20:45", "claude · 20:45"); tm's prompts fold to one line the user
-/// opens (the thread's kickoff, the server's notes).
+/// opens (the thread's kickoff, the server's notes), and long prompts to
+/// their first lines.
 struct EntryView: View {
     @Environment(\.theme) private var theme
     let entry: Transcript.Entry
@@ -306,17 +321,24 @@ struct EntryView: View {
             .help("Show what tm sent")
             .accessibilityHint("Shows the prompt tm sent")
         case .prompt:
+            let preview = unfolded ? nil : entry.preview()
             HStack {
                 Spacer(minLength: 80)
                 VStack(alignment: .trailing, spacing: 4) {
                     turn
-                        .onTapGesture { if entry.folds { unfolded = false } }
-                    Text(entry.text)
+                        .onTapGesture { if entry.folds || entry.preview() != nil { unfolded = false } }
+                    Text(preview ?? entry.text)
                         .textSelection(.enabled)
                         .foregroundStyle(theme.onPrompt)
                         .padding(.horizontal, 13)
                         .padding(.vertical, 9)
                         .background(LinearGradient(colors: theme.prompt, startPoint: .topLeading, endPoint: .bottomTrailing), in: RoundedRectangle(cornerRadius: 14))
+                    if preview != nil {
+                        Button("Show all \(entry.lineCount) lines") { unfolded = true }
+                            .buttonStyle(.borderless)
+                            .font(theme.body(.footnote))
+                            .accessibilityHint("Shows the whole prompt")
+                    }
                     if entry.truncated { cut }
                 }
             }
@@ -424,7 +446,7 @@ struct MarkdownView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            ForEach(Array(SafeMarkdown.blocks(text).enumerated()), id: \.offset) { _, b in
+            ForEach(Array(SafeMarkdown.cached(text).enumerated()), id: \.offset) { _, b in
                 block(b)
             }
         }

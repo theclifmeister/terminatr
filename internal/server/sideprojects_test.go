@@ -7,8 +7,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/project"
+	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/thread"
 	"github.com/theclifmeister/terminatr/internal/ticker"
@@ -296,5 +298,78 @@ func TestReadProjects(t *testing.T) {
 	}
 	if ps, err := ReadProjects(ts, nil); err == nil || ps == nil || len(ps) != 0 {
 		t.Errorf("a broken config.toml: %v, %v", ps, err)
+	}
+}
+
+// TestProjectsWatchLean: a lean watch sends an inactive project as its
+// slug and settings alone, unless it is the one shown, and a change in
+// such a project alone sends no event; a change in an active one does.
+func TestProjectsWatchLean(t *testing.T) {
+	paths := testPaths(t)
+	p := newWatchProject(t)
+	parked, err := project.New(project.Options{Slug: "parked"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, q := range []*project.Project{p, parked} {
+		if _, err := thread.Create(q, thread.Record{Title: "work"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := config.SetProject("parked", "active", false); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(envWatchPoll, "50ms")
+	startServer(t, paths)
+	open := func(shown string) (*client.Client, []SideProject) {
+		t.Helper()
+		var w ProjectsWatch
+		c, err := client.OpenStream(paths, proto.MethodProjectsWatch, proto.ProjectsWatchParams{Detail: true, Lean: true, Shown: shown}, &w)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { c.Close() })
+		return c, w.Projects
+	}
+	c, ps := open("")
+	if len(ps) != 2 || len(ps[0].Threads) != 1 || ps[0].Counts == nil {
+		t.Fatalf("lean: the active project isn't whole: %+v", ps)
+	}
+	if lp := ps[1]; lp.Slug != "parked" || lp.Safety == nil || lp.Safety.Active || lp.Threads != nil || lp.Counts != nil {
+		t.Fatalf("lean: the inactive project: %+v, want its slug and settings alone", lp)
+	}
+	if _, shown := open("parked"); len(shown[1].Threads) != 1 || shown[1].Counts == nil {
+		t.Errorf("shown: the inactive project isn't whole: %+v", shown[1])
+	}
+
+	events := make(chan []SideProject, 16)
+	go func() {
+		for {
+			ev, err := client.NextEvent(c, func(ev ProjectsWatchEvent) bool { return ev.Event == proto.EventProjectsChanged })
+			if err != nil {
+				close(events)
+				return
+			}
+			events <- ev.Projects
+		}
+	}()
+	if _, err := parked.Tasks().Add(human, []tasks.NewTask{{Title: "Parked work"}}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case ps := <-events:
+		t.Fatalf("a change in the inactive project sent an event: %+v", ps)
+	case <-time.After(400 * time.Millisecond):
+	}
+	if _, err := p.Tasks().Add(human, []tasks.NewTask{{Title: "Work"}}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case ps := <-events:
+		if len(ps[0].Board) != 1 {
+			t.Errorf("the active project's change: %+v", ps[0])
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("no event for a change in the active project")
 	}
 }

@@ -22,6 +22,28 @@ public enum SafeMarkdown {
     /// The link schemes a click may open.
     public static let schemes: Set<String> = ["http", "https", "mailto"]
 
+    /// blocks(text), kept for the texts drawn lately: a conversation
+    /// shown again, or scrolled back to, doesn't parse its turns again.
+    public static func cached(_ text: String) -> [Block] {
+        let key = text as NSString
+        if let hit = cache.object(forKey: key) { return hit.blocks }
+        let b = blocks(text)
+        cache.setObject(Parsed(blocks: b), forKey: key, cost: text.utf8.count)
+        return b
+    }
+
+    private final class Parsed {
+        let blocks: [Block]
+        init(blocks: [Block]) { self.blocks = blocks }
+    }
+
+    /// NSCache is thread-safe; it holds a few MB of parsed text.
+    nonisolated(unsafe) private static let cache: NSCache<NSString, Parsed> = {
+        let c = NSCache<NSString, Parsed>()
+        c.totalCostLimit = 4 << 20
+        return c
+    }()
+
     public static func blocks(_ text: String) -> [Block] {
         var out: [Block] = []
         var para: [String] = []

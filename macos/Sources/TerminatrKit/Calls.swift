@@ -65,3 +65,21 @@ extension AppAPI {
         return e
     }
 }
+
+extension AppAPI {
+    /// projects.watch's params as a bridge before app API 8 takes them:
+    /// detail alone, since it refuses lean and shown as unknown.
+    public struct DetailParams: Encodable, Sendable, Hashable {
+        public var detail: Bool
+
+        public init(detail: Bool) {
+            self.detail = detail
+        }
+    }
+
+    /// projects.watch for a bridge before app API 8 (DetailParams).
+    public static let projectsWatchDetail = Subscription<DetailParams, Projects, Projects>("projects.watch", events: ["projects.changed"])
+
+    /// The app API that has projects.watch {lean, shown}.
+    public static let leanAPI = 8
+}

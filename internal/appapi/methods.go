@@ -225,7 +225,7 @@ func resultOf[SR, AR any](of func(SR) AR) func(json.RawMessage) (any, error) {
 func noParams(struct{}) any { return nil }
 
 func projectsWatchParams(p ProjectsWatchParams) proto.ProjectsWatchParams {
-	return proto.ProjectsWatchParams{Detail: p.Detail}
+	return proto.ProjectsWatchParams{Detail: p.Detail, Lean: p.Lean, Shown: p.Shown}
 }
 
 func sessionIDParams(p SessionIDParams) proto.SessionIDParams { return proto.SessionIDParams{ID: p.ID} }

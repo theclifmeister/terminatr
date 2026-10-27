@@ -3,7 +3,8 @@ import Observation
 import TerminatrKit
 
 /// What the window and the menu bar show: the bridge's state, every
-/// project (projects.watch {detail}), the sessions and the mods' notices
+/// project (projects.watch {detail, lean}: an inactive one but the
+/// shown as its slug and settings alone), the sessions and the mods' notices
 /// (session.list) and the paired servers' shared projects (peer.list),
 /// and what of them needs the user; and what the window has selected
 /// (nav), which the menu bar, notifications and cards set. The session
@@ -61,6 +62,7 @@ final class AppModel {
         didSet {
             if nav != oldValue { UserDefaults.standard.set(nav.encoded(), forKey: Self.navKey) }
             if let ref = selectedRef { warm(ref) }
+            reshow()
         }
     }
     /// Whether the session view shows its inspector (⌘⌥I).
@@ -109,6 +111,13 @@ final class AppModel {
     @ObservationIgnored private var run: Task<Void, Never>?
     @ObservationIgnored private var loaded = Loaded()
     @ObservationIgnored private var listing: Task<Void, Never>?
+    /// The lean projects watch (app API 8): the inactive project it
+    /// sends whole (watchedShown), and its events' task, which reshow
+    /// ends so the watch opens again for the newly shown one.
+    @ObservationIgnored private var lean = false
+    @ObservationIgnored private var watchedShown = ""
+    @ObservationIgnored private var projectEvents: Task<Void, any Error>?
+    @ObservationIgnored private var reshowing = false
     @ObservationIgnored private var listAgain = false
 
     /// The server's hello capabilities (pane-vt, transcript): the last
@@ -189,16 +198,65 @@ final class AppModel {
         }
     }
 
+    /// Watches the projects until the bridge ends. A lean watch (app
+    /// API 8) leaves the inactive projects but the shown one out, so it
+    /// opens again whenever the window shows another inactive one.
     private func watchProjects(_ b: Bridge) async throws {
-        let sub = try await b.subscribe(AppAPI.Methods.projectsWatch, AppAPI.ProjectsWatchParams(detail: true))
-        projects = sub.result.projects
+        lean = (await b.hello?.appApi ?? 0) >= AppAPI.leanAPI
+        guard lean else {
+            let sub = try await b.subscribe(AppAPI.projectsWatchDetail, AppAPI.DetailParams(detail: true))
+            took(sub.result.projects)
+            for try await e in sub.events {
+                took(e.data.projects)
+            }
+            throw BridgeError.closed("The server stopped sending the projects.")
+        }
+        while true {
+            let shown = nav.selection?.shownInactive(projects) ?? ""
+            watchedShown = shown
+            let sub = try await b.subscribe(AppAPI.Methods.projectsWatch, AppAPI.ProjectsWatchParams(detail: true, lean: true, shown: shown))
+            took(sub.result.projects)
+            let events = Task { @MainActor in
+                for try await e in sub.events {
+                    self.took(e.data.projects)
+                }
+            }
+            projectEvents = events
+            reshowing = false
+            reshow()
+            try await withTaskCancellationHandler {
+                try await events.value
+            } onCancel: {
+                events.cancel()
+            }
+            projectEvents = nil
+            guard reshowing, !Task.isCancelled else {
+                throw BridgeError.closed("The server stopped sending the projects.")
+            }
+        }
+    }
+
+    private func took(_ ps: [AppAPI.Project]) {
+        projects = ps
         loaded.projects = true
         changed()
-        for try await e in sub.events {
-            projects = e.data.projects
-            changed()
-        }
-        throw BridgeError.closed("The server stopped sending the projects.")
+        reshow()
+    }
+
+    /// Ends the lean watch's events when the window shows an inactive
+    /// project it doesn't send whole, or no longer shows the one it
+    /// does: watchProjects opens it again.
+    private func reshow() {
+        guard lean, !reshowing, let events = projectEvents,
+              (nav.selection?.shownInactive(projects) ?? "") != watchedShown else { return }
+        reshowing = true
+        events.cancel()
+    }
+
+    /// Whether the lean watch leaves s's project out: an inactive one
+    /// it doesn't send whole, so its threads aren't known.
+    private func leftOut(_ s: Selection) -> Bool {
+        lean && s.server.isEmpty && s.project != watchedShown && project(s.project)?.active == false
     }
 
     private func readSessions(_ b: Bridge) async throws {
@@ -248,7 +306,7 @@ final class AppModel {
     private func settleSelection() {
         var n = nav
         n.prune(fallback: activeProjects.first.map { .project($0.slug) }) { [projects, peers] in
-            $0.exists(projects: projects, peers: peers)
+            $0.exists(projects: projects, peers: peers) || self.leftOut($0)
         }
         if n != nav { nav = n }
     }
