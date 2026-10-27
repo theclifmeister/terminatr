@@ -222,10 +222,7 @@ struct Sidebar: View {
         switch app.nav.selection {
         case .project(let slug, let server):
             let key = Navigation.sectionKey(server: server, project: slug)
-            if !server.isEmpty {
-                // A paired server's project is a disclosure group.
-                if open { app.nav.collapsed.remove(key) } else { app.nav.collapsed.insert(key) }
-            } else if open {
+            if open {
                 app.nav.unfold(key)
             } else {
                 app.nav.fold(key)
@@ -292,7 +289,7 @@ struct Sidebar: View {
         let needs = app.needs(of: p.slug).count
         let state = Attention.of(coordinator: app.coordinatorSession(p.slug), in: p)
         let l = listing(p)
-        ProjectRow(project: p, dot: theme.colour(state.tone), state: state.word, needs: needs, selected: app.nav.selection == sel)
+        ProjectRow(name: p.slug, dot: theme.colour(state.tone), state: state.word, needs: needs, selected: app.nav.selection == sel)
             .selectable(sel)
         if l.open {
             if l.coordinator {
@@ -377,42 +374,28 @@ struct Sidebar: View {
 
     // MARK: a paired server's
 
+    /// A paired server's project: its line as this server's projects'
+    /// (ProjectRow), and under it, unless ← folded it, its coordinator,
+    /// running there or not, and its threads, as the TUI's. Dimmed while
+    /// its server is offline or its listing stale.
+    @ViewBuilder
     private func remote(_ peer: AppAPI.Peer, _ p: AppAPI.PeerProject) -> some View {
         let sel = Selection.project(p.project, server: peer.alias)
-        let on = app.nav.selection == sel
-        return DisclosureGroup(isExpanded: expanded(Navigation.sectionKey(server: peer.alias, project: p.project))) {
-            // Its coordinator, running there or not (s nil), as the TUI's.
+        let dim = peer.state == "up" && !p.stale ? 1.0 : 0.55
+        // The coordinator's state, as this server's projects have it.
+        let coordinator = p.sessions.first { SessionRef($0, of: peer.alias)?.isCoordinator == true }
+        ProjectRow(name: p.project, dot: coordinator.map { theme.colour(tone($0)) } ?? theme.idle,
+                   state: coordinator.map(spoken) ?? "not running", needs: p.stale ? 0 : p.needsYou,
+                   selected: app.nav.selection == sel)
+            .selectable(sel)
+            .opacity(dim)
+        if !app.nav.collapsed.contains(Navigation.sectionKey(server: peer.alias, project: p.project)) {
             ForEach(sessions(peer, p), id: \.ref) { s, r, task in
                 row(.session(r), label: r.isCoordinator ? "Coordinator" : r.thread, ref: task.isEmpty ? nil : task,
                     tag: s.flatMap(tag), dot: theme.colour(s.map(tone) ?? .idle), spoken: s.map(spoken) ?? "not running")
+                    .opacity(dim)
             }
-        } label: {
-            HStack(spacing: 8) {
-                // The coordinator's state, as this server's projects have it.
-                let coordinator = p.sessions.first { SessionRef($0, of: peer.alias)?.isCoordinator == true }
-                Circle()
-                    .fill(coordinator.map { theme.colour(tone($0)) } ?? theme.idle)
-                    .overlay(Circle().strokeBorder(on ? theme.onAction.opacity(0.8) : .clear, lineWidth: 1))
-                    .frame(width: 8, height: 8)
-                    .accessibilityHidden(true)
-                Text(p.project)
-                    .font(theme.body(.body, .semibold))
-                    .lineLimit(1)
-                Spacer(minLength: 4)
-                if p.needsYou > 0, !p.stale {
-                    Text("\(p.needsYou)")
-                        .font(theme.mono(.caption, .medium))
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 1)
-                        .background(theme.attention, in: Capsule())
-                        .foregroundStyle(theme.onAttention)
-                        .accessibilityLabel("\(p.needsYou) need you")
-                }
-            }
-            .foregroundStyle(on ? theme.onAction : theme.ink)
-            .selectable(sel)
         }
-        .opacity(peer.state == "up" && !p.stale ? 1 : 0.55)
     }
 
     /// A paired server: its name, then its tag (PeerTag) right after it,
