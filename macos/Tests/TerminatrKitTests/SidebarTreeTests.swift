@@ -6,9 +6,11 @@ import Testing
 // and threads, in its order, folded as it folds them; the needs on top
 // are the app's own, cut to three.
 
-private func project(_ slug: String, active: Bool = true, pinned: Bool = false, questions: Int = 0,
+/// needsYou counts its board's Needs you tasks (counts).
+private func project(_ slug: String, active: Bool = true, pinned: Bool = false, needsYou: Int = 0, questions: Int = 0,
                      threads: [AppAPI.Thread] = []) -> AppAPI.Project {
-    AppAPI.Project(slug: slug, active: active, pinned: pinned, questions: questions, threads: threads, usage: noUsage)
+    AppAPI.Project(slug: slug, active: active, pinned: pinned, questions: questions, threads: threads,
+                   counts: needsYou > 0 ? ["needs_you": needsYou] : [:], usage: noUsage)
 }
 
 private func thread(_ id: String, done: Bool = false, session: String = "") -> AppAPI.Thread {
@@ -38,6 +40,8 @@ private struct TreeCase: Decodable {
         let slug: String
         let active: Bool
         let pinned: Bool?
+        let needs_you: Int?
+        let questions: Int?
         let threads: [T]?
     }
     struct T: Decodable {
@@ -52,14 +56,27 @@ private struct TreeCase: Decodable {
         let id: String
         let role: String
         let project: String
+        let thread: String?
         let state: String?
+    }
+    struct Peer: Decodable {
+        let alias: String
+        let projects: [PP]
+    }
+    struct PP: Decodable {
+        let project: String
+        let stale: Bool?
+        let sessions: [S]?
+        let threads: [T]?
     }
     let name: String
     let projects: [P]
     let sessions: [S]?
+    let peers: [Peer]?
     let folded: [String]?
     let expanded: [String]?
     let inactive_open: Bool?
+    let needs_first: Bool?
     let rows: [String]
 }
 
@@ -70,10 +87,11 @@ private struct TreeCase: Decodable {
         .appendingPathComponent("../../../internal/tui/testdata/sidebar-app.json").standardized
     struct File: Decodable { let cases: [TreeCase] }
     let cases = try JSONDecoder().decode(File.self, from: Data(contentsOf: url)).cases
-    #expect(cases.count >= 4)
+    #expect(cases.count >= 10)
     for c in cases {
         let ps = c.projects.map { p in
-            project(p.slug, active: p.active, pinned: p.pinned ?? false, threads: (p.threads ?? []).map { t in
+            project(p.slug, active: p.active, pinned: p.pinned ?? false, needsYou: p.needs_you ?? 0, questions: p.questions ?? 0,
+                    threads: (p.threads ?? []).map { t in
                 var th = thread(t.id, done: t.done ?? false, session: t.session ?? "")
                 th.record.reports = t.reports ?? 0
                 th.record.reportAcked = t.report_acked ?? 0
@@ -87,11 +105,33 @@ private struct TreeCase: Decodable {
         let ss = (c.sessions ?? []).map { s in
             AppAPI.Session(id: s.id, role: s.role, project: s.project, cols: 80, rows: 24, created: t0, clients: 0, state: s.state ?? "")
         }
+        // The bridge's copy of the mirror: a pane's id is "<alias>/<id>".
+        let peers = (c.peers ?? []).map { pe in
+            AppAPI.Peer(alias: pe.alias, state: "up", projects: pe.projects.map { pp in
+                AppAPI.PeerProject(project: pp.project, needsYou: 0, threads: 0, ready: 0, stale: pp.stale ?? false,
+                                   sessions: (pp.sessions ?? []).map { s in
+                                       AppAPI.PeerSession(id: "\(pe.alias)/\(s.id)", role: s.role, project: s.project,
+                                                          thread: s.thread ?? "", created: t0, state: s.state ?? "")
+                                   },
+                                   watched: (pp.threads ?? []).map { t in
+                                       AppAPI.PeerThread(id: t.id, title: t.id, session: t.session.map { "\(pe.alias)/\($0)" } ?? "",
+                                                         needsYou: t.needs_you != nil, done: t.done ?? false)
+                                   })
+            })
+        }
         var nav = Navigation()
-        for slug in c.folded ?? [] { nav.fold(Navigation.sectionKey(server: "", project: slug)) }
+        for f in c.folded ?? [] {
+            if f.hasPrefix("@") {
+                // A paired server's group, or its project: "@<alias>[/<slug>]".
+                let parts = f.dropFirst().split(separator: "/", maxSplits: 1).map(String.init)
+                nav.collapsed.insert(Navigation.sectionKey(server: parts[0], project: parts.count > 1 ? parts[1] : ""))
+            } else {
+                nav.fold(Navigation.sectionKey(server: "", project: f))
+            }
+        }
         for slug in c.expanded ?? [] { nav.unfold(Navigation.sectionKey(server: "", project: slug)) }
         nav.showInactive = c.inactive_open ?? false
-        #expect(SidebarTree.rows(ps, sessions: ss, nav: nav) == c.rows, "\(c.name)")
+        #expect(SidebarTree.rows(ps, sessions: ss, peers: peers, nav: nav, needsFirst: c.needs_first ?? false) == c.rows, "\(c.name)")
     }
 }
 
@@ -116,21 +156,49 @@ private struct TreeCase: Decodable {
 
 @Test func pairedRows() {
     let s = { (id: String, role: String, thread: String) in
-        AppAPI.PeerSession(id: "mini/\(id)", role: role, project: "acme", thread: thread, created: t0)
+        AppAPI.PeerSession(id: "mini/\(id)", role: role, project: "acme", thread: thread, task: thread.isEmpty ? "" : "T1", created: t0)
     }
     var p = AppAPI.PeerProject(project: "acme", needsYou: 0, threads: 2, ready: 0,
-                               sessions: [s("s-1", "thread", "t-1"), s("s-c", "coordinator", "")])
-    // Its coordinator first, then the threads a session runs.
+                               sessions: [s("s-1", "thread", "t-1"), s("s-c", "coordinator", "")],
+                               watched: [AppAPI.PeerThread(id: "t-0", title: "idle", task: "T9"),
+                                         AppAPI.PeerThread(id: "t-1", title: "runs", session: "mini/s-1")])
+    // Its coordinator first, then its watched threads, running or not.
     var rows = SidebarTree.sessions(of: p, alias: "mini")
+    #expect(rows.map(\.ref) == [SessionRef(project: "acme", server: "mini"), SessionRef(project: "acme", thread: "t-0", server: "mini"),
+                                SessionRef(project: "acme", thread: "t-1", server: "mini")])
+    #expect(rows[0].session?.id == "mini/s-c" && rows[1].session == nil && rows[2].session?.id == "mini/s-1")
+    #expect(rows.map(\.task) == ["", "T9", "T1"])
+    // A bridge before app API 9: the threads a session runs.
+    rows = SidebarTree.sessions(of: p, alias: "mini", watched: false)
     #expect(rows.map(\.ref) == [SessionRef(project: "acme", server: "mini"), SessionRef(project: "acme", thread: "t-1", server: "mini")])
-    #expect(rows[0].session?.id == "mini/s-c")
     // None runs: its row still shows, as the TUI's.
     p.sessions = [s("s-1", "thread", "t-1")]
     rows = SidebarTree.sessions(of: p, alias: "mini")
-    #expect(rows.count == 2 && rows[0].session == nil && rows[0].ref.isCoordinator)
+    #expect(rows.count == 3 && rows[0].session == nil && rows[0].ref.isCoordinator)
+    // A watched thread that doesn't run stays selectable.
+    let peers = [AppAPI.Peer(alias: "mini", state: "up", projects: [p])]
+    #expect(Selection.session(SessionRef(project: "acme", thread: "t-0", server: "mini")).exists(projects: [], peers: peers))
+    #expect(!Selection.session(SessionRef(project: "acme", thread: "t-7", server: "mini")).exists(projects: [], peers: peers))
     // Stale: the project's row alone.
     p.stale = true
     #expect(SidebarTree.sessions(of: p, alias: "mini").isEmpty)
+}
+
+@Test func needsFirstOrder() {
+    // As the TUI's needsFirstOrder: in each group, below the pinned
+    // ones, those that need you first; an inactive project's threads
+    // count only once it is expanded.
+    var asks = thread("t-1")
+    asks.status = AppAPI.ThreadStatus(percent: 0, stepsDone: 0, stepsTotal: 0, todosDone: 0, todosTotal: 0,
+                                      needsYou: "go?", selfPercent: -1, updated: t0)
+    let ps = [project("a"), project("b", questions: 1), project("c", pinned: true), project("d", pinned: true, threads: [asks]),
+              project("i", active: false), project("j", active: false, threads: [asks])]
+    #expect(SidebarTree.active(ps).map(\.slug) == ["c", "d", "a", "b"])
+    #expect(SidebarTree.active(ps, needsFirst: true).map(\.slug) == ["d", "c", "b", "a"])
+    var nav = Navigation()
+    #expect(SidebarTree.inactive(ps, needsFirst: true, nav: nav).map(\.slug) == ["i", "j"])
+    nav.unfold(Navigation.sectionKey(server: "", project: "j"))
+    #expect(SidebarTree.inactive(ps, needsFirst: true, nav: nav).map(\.slug) == ["j", "i"])
 }
 
 @Test func moreNeeds() {

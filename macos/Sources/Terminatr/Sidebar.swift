@@ -7,9 +7,10 @@ import TerminatrKit
 /// (SidebarTree, T762): this server's active projects, pinned ones
 /// first, each with its coordinator's state as the dot and its needs as
 /// the badge, and under it its coordinator, running or not, and every
-/// unresolved thread, done ones too, in the dashboard's order; then
-/// each paired server's shared projects, its coordinator and the
-/// threads a session runs there; and at the bottom the inactive ones
+/// unresolved thread, done ones too, in the dashboard's order, with
+/// [ui] needs_first the projects that need the user first; then each
+/// paired server's shared projects, its coordinator and its unresolved
+/// threads, running there or not (T768); and at the bottom the inactive ones
 /// folded under "Inactive (n)" (⇧⌘H unfolds them), each folded until →
 /// expands it, dormant. A project shows its dashboard, a coordinator or
 /// thread its session; a need shows what it names. Each section and
@@ -165,10 +166,10 @@ struct Sidebar: View {
     /// A paired server's project's rows under it (SidebarTree), with
     /// their sessions: those the filter finds, all of them when it finds
     /// the project.
-    private func sessions(_ peer: AppAPI.Peer, _ p: AppAPI.PeerProject) -> [(session: AppAPI.PeerSession?, ref: SessionRef)] {
-        let all = SidebarTree.sessions(of: p, alias: peer.alias)
+    private func sessions(_ peer: AppAPI.Peer, _ p: AppAPI.PeerProject) -> [(session: AppAPI.PeerSession?, ref: SessionRef, task: String)] {
+        let all = SidebarTree.sessions(of: p, alias: peer.alias, watched: app.watched)
         guard filtering, !SidebarTree.matches(app.filter, p.project, peer.alias, peer.name) else { return all }
-        return all.filter { s, r in SidebarTree.matches(app.filter, s?.task ?? "", r.thread, r.isCoordinator ? "coordinator" : "") }
+        return all.filter { _, r, task in SidebarTree.matches(app.filter, task, r.thread, r.isCoordinator ? "coordinator" : "") }
     }
 
     /// What a project of this server lists under it (SidebarTree):
@@ -207,7 +208,7 @@ struct Sidebar: View {
             for p in shown(peer) {
                 out.append((.project(p.project, server: peer.alias), p.project))
                 if !app.nav.collapsed.contains(Navigation.sectionKey(server: peer.alias, project: p.project)) {
-                    out += sessions(peer, p).map { (.session($1), $1.isCoordinator ? "Coordinator" : $1.thread) }
+                    out += sessions(peer, p).map { (.session($0.ref), $0.ref.isCoordinator ? "Coordinator" : $0.ref.thread) }
                 }
             }
         }
@@ -381,8 +382,8 @@ struct Sidebar: View {
         let on = app.nav.selection == sel
         return DisclosureGroup(isExpanded: expanded(Navigation.sectionKey(server: peer.alias, project: p.project))) {
             // Its coordinator, running there or not (s nil), as the TUI's.
-            ForEach(sessions(peer, p), id: \.ref) { s, r in
-                row(.session(r), label: r.isCoordinator ? "Coordinator" : r.thread, ref: (s?.task ?? "").isEmpty ? nil : s?.task,
+            ForEach(sessions(peer, p), id: \.ref) { s, r, task in
+                row(.session(r), label: r.isCoordinator ? "Coordinator" : r.thread, ref: task.isEmpty ? nil : task,
                     tag: s.flatMap(tag), dot: theme.colour(s.map(tone) ?? .idle), spoken: s.map(spoken) ?? "not running")
             }
         } label: {
