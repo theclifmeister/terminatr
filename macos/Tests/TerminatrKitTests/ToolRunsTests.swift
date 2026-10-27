@@ -85,3 +85,15 @@ private let failed = Transcript.Result(text: "no such file", lines: 1, error: tr
     #expect(t.tail(1).map(\.id) == [11])
     #expect(t.tail(60).first?.id == 0)
 }
+
+@Test func askUserQuestionStandsAlone() {
+    let rows = Transcript.rows([
+        entry(1, .tool, tool: "Read", result: ok),
+        entry(2, .tool, tool: "Read", result: ok),
+        entry(3, .tool, tool: "AskUserQuestion"),
+        entry(4, .tool, tool: "Bash", result: ok),
+    ])
+    #expect(rows.map(\.id) == [1, 3, 4])
+    guard case .entry(let e) = rows[1] else { Issue.record("AskUserQuestion grouped"); return }
+    #expect(e.asksUser && e.result == nil)
+}

@@ -5,7 +5,8 @@ import "time"
 // Open questions (docs/SPEC.md §3.3, Ask): tm's own question on a
 // session, which the server keeps there (SessionInfo.Question) until it
 // is answered through session.answer or goes: a thread's approved
-// command that asks first (tm run).
+// command that asks first (tm run). The agent's own question menu
+// (Question.Screen) shows there too while the agent is blocked on it.
 const (
 	// MethodSessionAnswer answers one question of a session's open one
 	// (SessionAnswerParams) and returns SessionAnswerResult.
@@ -28,6 +29,11 @@ type Question struct {
 	// agent (tm's own question before an approved command that asks
 	// first runs outside the sandbox).
 	Escape bool `json:"escape,omitempty"`
+	// Screen: the agent's own menu (its [answer] tool's call, Claude's
+	// AskUserQuestion), open on its screen: session.answer types the
+	// answer there, one question at a time in order, a single option or
+	// free text (a multi-select's options are picked in its pane).
+	Screen bool `json:"screen,omitempty"`
 }
 
 // QuestionItem is one question of a menu. Answered says whether
