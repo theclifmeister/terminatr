@@ -62,33 +62,21 @@ struct TerminalTab: View {
         .guardingLinks()
     }
 
+    /// Repaint, and at `view` the one note that changes what the user
+    /// can do: typing there does nothing.
     private func footer(_ remote: RemotePane?) -> some View {
         HStack(spacing: 12) {
-            if let s = pane.size {
-                Text("\(s.cols)×\(s.rows)" + (remote == nil ? "" : " on \(model.ref.server)"))
-                    .font(theme.mono(.caption))
+            if remote == .view {
+                Text("View only: \(model.ref.server) lets this server watch its panes, not type into them.")
+                    .font(theme.body(.footnote))
                     .foregroundStyle(theme.muted)
             }
-            Text(note(remote))
-                .font(theme.body(.footnote))
-                .foregroundStyle(theme.muted)
             Spacer()
             Button("Repaint") { pane.repaint() }
         }
         .controlSize(.small)
         .padding(.horizontal, Self.edge)
         .padding(.vertical, 8)
-    }
-}
-
-extension TerminalTab {
-    private func note(_ remote: RemotePane?) -> String {
-        let server = model.ref.server
-        switch remote {
-        case .view: return "View only: \(server) lets this server watch its panes, not type into them."
-        case .write: return model.ref.isCoordinator ? "Keys here go to the coordinator on \(server)." : "Typing here takes the thread over on \(server)."
-        default: return model.ref.isCoordinator ? "Keys here go to the coordinator." : "Typing here takes the thread over."
-        }
     }
 }
 
