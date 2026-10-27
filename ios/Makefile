@@ -9,10 +9,11 @@
 #   make run     build, install and open it in the Simulator DEVICE
 #                (a name or UDID; booted if it isn't), in demo mode
 #
-# Warnings are errors, ours and the package's (TERMINATR_WERROR, as
-# macos/Makefile). Xcode 26 suppresses a package's warnings, which
-# conflicts with -warnings-as-errors, so the build turns that off
-# (SWIFT_SUPPRESS_WARNINGS=NO; the package is ours). Signing, TestFlight and a device build come later:
+# The app's warnings are errors (SWIFT_TREAT_WARNINGS_AS_ERRORS in the
+# project). The package's aren't here: Xcode 26 builds it as a dependency
+# with -suppress-warnings, which TERMINATR_WERROR's -warnings-as-errors
+# conflicts with, so the build unsets it; macos/Makefile keeps its
+# warnings errors. Signing, TestFlight and a device build come later:
 # nothing here signs for a device or holds a team.
 
 DEVICE       ?= iPhone 17
@@ -20,7 +21,7 @@ CONFIG       ?= Debug
 DERIVED      ?= build/DerivedData
 APP          := $(DERIVED)/Build/Products/$(CONFIG)-iphonesimulator/Terminatr.app
 BUNDLE_ID    := dev.terminatr.ios
-export TERMINATR_WERROR := 1
+unexport TERMINATR_WERROR
 
 .PHONY: build run clean
 
@@ -29,7 +30,7 @@ export TERMINATR_WERROR := 1
 # builds for iOS and fails (on SwiftTerm's plugin, then on AppKit).
 build:
 	xcodebuild -project Terminatr.xcodeproj -scheme Terminatr-iOS -configuration $(CONFIG) \
-		-destination 'generic/platform=iOS Simulator' -derivedDataPath $(DERIVED) SWIFT_SUPPRESS_WARNINGS=NO $(if $(ARCHS),ARCHS="$(ARCHS)") build
+		-destination 'generic/platform=iOS Simulator' -derivedDataPath $(DERIVED) $(if $(ARCHS),ARCHS="$(ARCHS)") build
 
 run: build
 	xcrun simctl boot "$(DEVICE)" 2>/dev/null || true
