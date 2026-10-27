@@ -59,9 +59,9 @@ type (
 	// ApproveParams are session.approve's: option Choice (from 1, default 1) of the
 	// permission dialog on session ID's screen. Check answers without
 	// sending. Escape: the user confirmed, in words naming the
-	// command, a command that runs outside the sandbox. Session: the
-	// user confirmed, naming the tool or command, an option that allows
-	// it for the rest of the agent's session.
+	// command, a command that runs outside the sandbox. Session (since
+	// app API 15): the user confirmed, naming the tool or command, an
+	// option that allows it for the rest of the agent's session.
 	ApproveParams struct {
 		ID      string `json:"id"`
 		Choice  int    `json:"choice,omitempty"`
@@ -452,9 +452,9 @@ type AnswerResult struct {
 }
 
 // ApproveResult is the dialog as the screen shows it: its question, the
-// chosen option and every option, with how long each allows ("once",
-// "session" or "persistent"). Escape: it asks to run a command outside
-// the sandbox. Sent: the key went (not for Check).
+// chosen option and every option, with how long each allows (Scopes,
+// since app API 15: "once", "session" or "persistent"). Escape: it asks
+// to run a command outside the sandbox. Sent: the key went (not for Check).
 type ApproveResult struct {
 	Question string   `json:"question,omitempty"`
 	Option   string   `json:"option"`
