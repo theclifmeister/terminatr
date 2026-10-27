@@ -60,7 +60,7 @@ type (
 	// permission dialog on session ID's screen. Check answers without
 	// sending. Escape: the user confirmed, in words naming the
 	// command, a command that runs outside the sandbox. Session (since
-	// app API 15): the user confirmed, naming the tool or command, an
+	// app API 17): the user confirmed, naming the tool or command, an
 	// option that allows it for the rest of the agent's session.
 	ApproveParams struct {
 		ID      string `json:"id"`
@@ -453,7 +453,7 @@ type AnswerResult struct {
 
 // ApproveResult is the dialog as the screen shows it: its question, the
 // chosen option and every option, with how long each allows (Scopes,
-// since app API 15: "once", "session" or "persistent"). Escape: it asks
+// since app API 17: "once", "session" or "persistent"). Escape: it asks
 // to run a command outside the sandbox. Sent: the key went (not for Check).
 type ApproveResult struct {
 	Question string   `json:"question,omitempty"`
