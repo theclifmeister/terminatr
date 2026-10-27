@@ -256,7 +256,7 @@ extension AppModel {
         showWindow?()
     }
 
-    /// Whether this tm reads a task whole (task.get, app API 13).
+    /// Whether this tm reads a task whole (task.get, app API 14).
     var canGetTask: Bool {
         if case .connected(let h) = phase { return Compatibility.getsTasks(h) }
         return false

@@ -42,6 +42,18 @@ struct SessionDetail: View {
         .onChange(of: active, initial: true) { _, a in app.shown(model.ref, inFront: a == .key) }
         .onDisappear { app.shown(model.ref, inFront: false) }
         .toolbar {
+            // A running coordinator's save and clear, as the TUI's
+            // prefix+C (app API 13); its context use says when.
+            if model.ref.isCoordinator, !model.ref.isRemote, model.sessionID != nil, app.controlsProjects {
+                ToolbarItem(placement: .primaryAction) {
+                    let ctx = ContextUse.of(session, hint: app.contextHint)
+                    Button { app.ask(.saveClear(project: model.ref.project)) } label: {
+                        Label("Save & Clear", systemImage: "eraser")
+                    }
+                    .help(["Save & Clear: the coordinator saves what it learned, then its conversation is cleared, as tm clear does",
+                           ctx.map { "(\($0.spoken))" }].compactMap { $0 }.joined(separator: " "))
+                }
+            }
             // At the title bar's end: beside the title (.principal) it
             // cuts the title at the window's narrowest.
             ToolbarItem(placement: .primaryAction) {
@@ -137,8 +149,15 @@ struct NotRunning: View {
                 .foregroundStyle(theme.muted)
                 .multilineTextAlignment(.center)
             if ref.isCoordinator, !ref.isRemote, app.bridge != nil, let p = app.project(ref.project) {
-                StartButton(project: p, title: "Start the Coordinator")
-                    .padding(.top, 4)
+                if !p.active, app.controlsProjects {
+                    Button("Activate \(p.slug)") { app.ask(.activate(project: p.slug)) }
+                        .buttonStyle(.borderedProminent)
+                        .tint(theme.action)
+                        .padding(.top, 4)
+                } else {
+                    StartButton(project: p, title: "Start the Coordinator")
+                        .padding(.top, 4)
+                }
             }
         }
         .padding(28)
@@ -163,7 +182,8 @@ struct NotRunning: View {
         }
         if ref.isCoordinator {
             return app.project(ref.project)?.active == false
-                ? "The project is inactive: tm project activate \(ref.project) turns it on."
+                ? app.controlsProjects ? "The project is inactive: activate it to start its coordinator and resume its threads."
+                    : "The project is inactive: tm project activate \(ref.project) turns it on."
                 : "Start it with the project's agent and model, as tm project open does."
         }
         if let t = app.thread(ref), t.record.done { return "The thread is done." }

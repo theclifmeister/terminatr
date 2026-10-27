@@ -239,6 +239,9 @@ struct CommandPalette: View {
             out.append(PaletteItem(id: "cmd:inspector", group: .actions, title: app.inspector ? "Hide the inspector" : "Show the inspector",
                                    command: .inspector, keys: "⌥⌘I"))
         }
+        if app.controlsProjects, let p = app.shownProject {
+            out += Palette.projectActions(p, coordinator: app.coordinatorSession(p.slug), sessions: app.sessions, hint: app.contextHint)
+        }
         out += [
             PaletteItem(id: "cmd:filter", group: .actions, title: "Filter the sidebar", command: .filter, keys: "⌥⌘F"),
             PaletteItem(id: "cmd:back", group: .actions, title: "Back", command: .back, keys: "⌘["),
@@ -261,6 +264,7 @@ struct CommandPalette: View {
         case .forward: app.goForward()
         case .shortcuts: app.shortcuts = true
         case .theme(let t): UserDefaults.standard.set(t.rawValue, forKey: ThemeName.key)
+        case .ask(let a): app.ask(a)
         }
     }
 }

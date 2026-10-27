@@ -222,8 +222,10 @@ func TestBridge(t *testing.T) {
 // TestBridgeTaskActions: the task actions by name (app API 5) ask the
 // coordinator with tm task accept's and send-back's checks, their codes
 // reaching the app; project.open starts the project's coordinator once;
-// task.add (app API 7) adds a task once. Each is journaled as "human
-// (app)". task.get (app API 13) reads a task with its notes.
+// task.add (app API 7) adds a task once; coordinator.clear's refusals
+// reach the app, and project.active (app API 13) stops the coordinator
+// and resumes it. Each is journaled as "human (app)".
+// task.get (app API 14) reads a task with its notes.
 func TestBridgeTaskActions(t *testing.T) {
 	p := testPaths(t)
 	if err := os.MkdirAll(p.AgentsDir(), 0o700); err != nil {
@@ -313,10 +315,32 @@ func TestBridgeTaskActions(t *testing.T) {
 	if err := c.Call(proto.MethodQuestionsOpen, appapi.ProjectParams{Project: "web"}, &qs); err != nil || qs.Session != opened.Session || qs.Open != 1 {
 		t.Fatalf("questions.open: %+v %v", qs, err)
 	}
+	// The fake agent has no clear prompt: the save and clear is refused
+	// at once, its code reaching the app.
+	if err := c.Call(proto.MethodCoordinatorClear, appapi.ProjectParams{Project: "web"}, nil); code(err) != proto.ErrRefused {
+		t.Errorf("coordinator.clear without a clear prompt: %v", err)
+	}
+	var off appapi.ProjectActive
+	if err := c.Call(proto.MethodProjectActive, appapi.ProjectActiveParams{Project: "web"}, &off); err != nil || !off.Changed ||
+		!slices.Equal(off.Stopped, []string{"coordinator"}) {
+		t.Fatalf("project.active off: %+v %v", off, err)
+	}
+	if err := c.Call(proto.MethodProjectActive, appapi.ProjectActiveParams{Project: "web"}, &off); err != nil || off.Changed {
+		t.Fatalf("project.active off again: %+v %v", off, err)
+	}
+	if err := c.Call(proto.MethodCoordinatorClear, appapi.ProjectParams{Project: "web"}, nil); code(err) != proto.ErrRefused {
+		t.Errorf("coordinator.clear with none running: %v", err)
+	}
+	var on appapi.ProjectActive
+	if err := c.Call(proto.MethodProjectActive, appapi.ProjectActiveParams{Project: "web", Active: true}, &on); err != nil || !on.Changed ||
+		!slices.Equal(on.Resumed, []string{"coordinator"}) {
+		t.Fatalf("project.active on: %+v %v", on, err)
+	}
 	journal, _ := os.ReadFile(pr.Path("JOURNAL.md"))
 	for _, want := range []string{" human (app) task.accept.ask T2", " human (app) task.sendback.ask T3 the tests fail",
 		" human (app) task.delegate.ask T1", " human (app) task.add T4 Add docs", " human (app) coordinator.start " + opened.Session,
-		" human (app) questions.open " + opened.Session + " 1 open"} {
+		" human (app) questions.open " + opened.Session + " 1 open", " human (app) project.deactivate web",
+		" human (app) project.activate web"} {
 		if !strings.Contains(string(journal), want) {
 			t.Errorf("journal lacks %q:\n%s", want, journal)
 		}

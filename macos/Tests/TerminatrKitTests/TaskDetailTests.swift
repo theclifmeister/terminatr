@@ -65,11 +65,11 @@ private func task(_ n: Int, _ status: String, notes: String = "", steps: [AppAPI
     #expect(TaskDetail(project: "p", task: task(1, "started", steps: steps)).stepsDone == "1 of 2 steps done")
 }
 
-@Test func taskViewNeedsAPI13() {
-    var h = AppAPI.Hello(appApi: 13, tm: "v0.57.0", build: "x")
+@Test func taskViewNeedsAPI14() {
+    var h = AppAPI.Hello(appApi: 14, tm: "v0.57.0", build: "x")
     #expect(!Compatibility.getsTasks(h))
     h.methods = [AppAPI.Methods.taskGet.name]
     #expect(Compatibility.getsTasks(h))
-    h.appApi = 12
+    h.appApi = 13
     #expect(!Compatibility.getsTasks(h))
 }

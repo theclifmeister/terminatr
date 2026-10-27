@@ -6,7 +6,7 @@ import Foundation
 /// The terminatr app API (docs/SPEC.md §3.8): what tm app bridge answers.
 public enum AppAPI {
     /// The app API version this app was generated against.
-    public static let version = 13
+    public static let version = 14
 
     public struct AnswerParams: Codable, Sendable, Hashable {
         public var id: String
@@ -95,6 +95,18 @@ public enum AppAPI {
 
         enum CodingKeys: String, CodingKey {
             case id
+        }
+    }
+
+    public struct CoordinatorClear: Codable, Sendable, Hashable {
+        public var session: String
+
+        public init(session: String) {
+            self.session = session
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case session
         }
     }
 
@@ -677,6 +689,42 @@ public enum AppAPI {
         }
     }
 
+    public struct ProjectActive: Codable, Sendable, Hashable {
+        public var changed: Bool
+        public var stopped: [String]
+        public var resumed: [String]
+        public var lost: [String]
+
+        public init(changed: Bool, stopped: [String] = [], resumed: [String] = [], lost: [String] = []) {
+            self.changed = changed
+            self.stopped = stopped
+            self.resumed = resumed
+            self.lost = lost
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case changed
+            case stopped
+            case resumed
+            case lost
+        }
+    }
+
+    public struct ProjectActiveParams: Codable, Sendable, Hashable {
+        public var project: String
+        public var active: Bool
+
+        public init(project: String, active: Bool) {
+            self.project = project
+            self.active = active
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case project
+            case active
+        }
+    }
+
     public struct ProjectOpen: Codable, Sendable, Hashable {
         public var session: String
         public var started: Bool
@@ -1079,8 +1127,9 @@ public enum AppAPI {
         public var latest: String
         public var upgrade: String
         public var needsFirst: Bool
+        public var contextHint: Int
 
-        public init(sessions: [Session] = [], alerts: Int, notices: [Notice] = [], version: String = "", build: String = "", latest: String = "", upgrade: String = "", needsFirst: Bool = false) {
+        public init(sessions: [Session] = [], alerts: Int, notices: [Notice] = [], version: String = "", build: String = "", latest: String = "", upgrade: String = "", needsFirst: Bool = false, contextHint: Int = 0) {
             self.sessions = sessions
             self.alerts = alerts
             self.notices = notices
@@ -1089,6 +1138,7 @@ public enum AppAPI {
             self.latest = latest
             self.upgrade = upgrade
             self.needsFirst = needsFirst
+            self.contextHint = contextHint
         }
 
         enum CodingKeys: String, CodingKey {
@@ -1100,6 +1150,7 @@ public enum AppAPI {
             case latest
             case upgrade
             case needsFirst = "needs_first"
+            case contextHint = "context_hint"
         }
     }
 
@@ -1714,11 +1765,13 @@ public enum AppAPI {
 
     /// Every method of the app API, by name.
     public enum Methods {
+        public static let coordinatorClear = Call<ProjectParams, CoordinatorClear>("coordinator.clear", write: true)
         public static let notifyClaim = Call<NoticeParams, NoticeResult>("notify.claim", write: false)
         public static let notifyDismiss = Call<NoticeParams, NoticeResult>("notify.dismiss", write: false)
         public static let paneInput = Call<PaneInputParams, Empty>("pane.input", write: true, target: "pane.vt")
         public static let paneVt = Subscription<PaneParams, PaneResult, PaneEvent>("pane.vt", events: ["pane.repaint", "pane.output", "pane.resize", "pane.closed"])
         public static let peerList = Call<NoParams, PeerList>("peer.list", write: false)
+        public static let projectActive = Call<ProjectActiveParams, ProjectActive>("project.active", write: true)
         public static let projectOpen = Call<ProjectOpenParams, ProjectOpen>("project.open", write: true)
         public static let projectsWatch = Subscription<ProjectsWatchParams, Projects, Projects>("projects.watch", events: ["projects.changed"])
         public static let questionsOpen = Call<ProjectParams, QuestionsOpen>("questions.open", write: true)
@@ -1781,6 +1834,13 @@ extension AppAPI.CancelParams {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.id = try c.decode(Int.self, forKey: .id)
+    }
+}
+
+extension AppAPI.CoordinatorClear {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.session = try c.decode(String.self, forKey: .session)
     }
 }
 
@@ -2035,6 +2095,24 @@ extension AppAPI.Project {
     }
 }
 
+extension AppAPI.ProjectActive {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.changed = try c.decode(Bool.self, forKey: .changed)
+        self.stopped = try c.decodeIfPresent([String].self, forKey: .stopped) ?? []
+        self.resumed = try c.decodeIfPresent([String].self, forKey: .resumed) ?? []
+        self.lost = try c.decodeIfPresent([String].self, forKey: .lost) ?? []
+    }
+}
+
+extension AppAPI.ProjectActiveParams {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.project = try c.decode(String.self, forKey: .project)
+        self.active = try c.decode(Bool.self, forKey: .active)
+    }
+}
+
 extension AppAPI.ProjectOpen {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -2228,6 +2306,7 @@ extension AppAPI.SessionList {
         self.latest = try c.decodeIfPresent(String.self, forKey: .latest) ?? ""
         self.upgrade = try c.decodeIfPresent(String.self, forKey: .upgrade) ?? ""
         self.needsFirst = try c.decodeIfPresent(Bool.self, forKey: .needsFirst) ?? false
+        self.contextHint = try c.decodeIfPresent(Int.self, forKey: .contextHint) ?? 0
     }
 }
 

@@ -116,7 +116,9 @@ enum DockIcon {
 
 /// The File menu (T748 milestone G): New Task… (⌘N) adds a task to the
 /// shown project's board, Open in New Window (⇧⌘O) opens the shown
-/// session beside the main window, Close (⌘W) the key window.
+/// session beside the main window, Save & Clear Coordinator… and
+/// Activate or Deactivate Project act on the shown project, Close (⌘W)
+/// the key window.
 struct FileCommands: Commands {
     let model: AppModel
     @Environment(\.openWindow) private var openWindow
@@ -131,6 +133,19 @@ struct FileCommands: Commands {
             }
             .keyboardShortcut("o", modifiers: [.command, .shift])
             .disabled(model.selectedRef == nil)
+            // The shown project's, as the TUI's prefix+C and S (app API
+            // 13); a paired server's never.
+            Divider()
+            let p = model.shownProject
+            Button("Save & Clear Coordinator…") {
+                if let p { model.ask(.saveClear(project: p.slug)) }
+            }
+            .disabled(!model.controlsProjects || p.flatMap { model.coordinatorSession($0.slug) } == nil)
+            let toggle = p.map { ProjectAsk.toggle($0, sessions: model.sessions) }
+            Button(toggle.map { $0.asks ? "\($0.verb) Project…" : "\($0.verb) Project" } ?? "Activate Project") {
+                if let toggle { model.ask(toggle) }
+            }
+            .disabled(!model.controlsProjects || toggle == nil)
         }
     }
 }

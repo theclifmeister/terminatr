@@ -84,8 +84,13 @@ func init() {
 		unary(proto.MethodQuestionsOpen, true, questionsOpenParams, questionsOpenOf),
 		// A task added to a project's board, as tm task add (app API 7).
 		unary(proto.MethodTaskAdd, true, taskAddParams, taskAddedOf),
+		// The coordinator's save and clear (tm clear, prefix+C), and a
+		// project activated or deactivated (tm project activate, S in
+		// the sidebar), each asked first in the app (app API 13).
+		unary(proto.MethodCoordinatorClear, true, coordinatorClearParams, coordinatorClearOf),
+		unary(proto.MethodProjectActive, true, projectActiveParams, projectActiveOf),
 		// One task with its notes and steps, which the board's tasks
-		// come without, for the task view (app API 13).
+		// come without, for the task view (app API 14).
 		unary(proto.MethodTaskGet, false, taskGetParams, taskOf),
 	} {
 		methods[m.Name] = m
@@ -317,6 +322,14 @@ func taskGetParams(p TaskGetParams) proto.TaskGetParams {
 
 func taskAddParams(p TaskAddParams) proto.TaskAddParams {
 	return proto.TaskAddParams{Project: p.Project, Title: p.Title, Notes: p.Notes}
+}
+
+func coordinatorClearParams(p ProjectParams) proto.CoordinatorClearParams {
+	return proto.CoordinatorClearParams{Project: p.Project}
+}
+
+func projectActiveParams(p ProjectActiveParams) proto.ProjectActiveParams {
+	return proto.ProjectActiveParams{Project: p.Project, Active: p.Active}
 }
 
 func projectOpenParams(p ProjectOpenParams) proto.ProjectOpenParams {

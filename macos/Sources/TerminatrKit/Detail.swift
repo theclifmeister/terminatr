@@ -55,7 +55,8 @@ public enum Dashboard {
 
     /// The next step an empty project offers.
     public enum NextStep: Equatable, Sendable {
-        /// The project is inactive: tm project activate turns it on.
+        /// The project is inactive: Activate (or tm project activate)
+        /// turns it on.
         case activate
         /// No coordinator runs: start it.
         case start
@@ -79,7 +80,7 @@ public enum Dashboard {
         case "not-accept", "not-send-back": return "\(t) isn't in review any more."
         case "not-delegate": return "\(t) can't be delegated now: it's in motion, in review or done."
         case "unknown-task": return "\(t) isn't on the board any more."
-        case "project-inactive": return "The project is inactive: turn it on with tm project activate first."
+        case "project-inactive": return "The project is inactive: activate it first (Activate on its page, or tm project activate)."
         default: return e.localizedDescription
         }
     }
