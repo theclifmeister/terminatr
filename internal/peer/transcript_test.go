@@ -2,6 +2,7 @@ package peer
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -347,4 +348,65 @@ func TestTranscriptEventTooBig(t *testing.T) {
 	}
 	testwait.Eventually(t, "the stream closed", func() bool { return sk.closed() != "" })
 	testwait.Eventually(t, "the source closed", h.last().isClosed)
+}
+
+// TestSetConversations: the switch is on by default, off is kept in
+// peers.json and through pairing again, and a word that isn't on or off
+// doesn't load.
+func TestSetConversations(t *testing.T) {
+	a, b := newServer(t), newServer(t)
+	b.pair(t, "studio", a, "wss://relay.example.net")
+	ps, _ := LoadPeers(b.dir)
+	if !ps[0].ConversationsOn() || ps[0].Conversations != "" {
+		t.Fatalf("default %+v", ps[0])
+	}
+	if ok, err := SetConversations(b.dir, "studio", false); !ok || err != nil {
+		t.Fatalf("off: %v %v", ok, err)
+	}
+	if ok, _ := SetConversations(b.dir, "nobody", false); ok {
+		t.Error("set the switch of a peer that isn't paired")
+	}
+	if _, err := Pin(b.dir, pub(a.id.Key), "wss://relay.example.net", "studio", ""); err != nil {
+		t.Fatal(err)
+	}
+	if ps, _ = LoadPeers(b.dir); len(ps) != 1 || ps[0].ConversationsOn() || ps[0].Conversations != proto.ConversationsNot {
+		t.Fatalf("after pairing again: %+v", ps)
+	}
+	SetConversations(b.dir, "studio", true)
+	if ps, _ = LoadPeers(b.dir); ps[0].Conversations != "" {
+		t.Fatalf("on: %+v", ps[0])
+	}
+	bad := ps[0]
+	bad.Conversations = "maybe"
+	if err := SavePeers(b.dir, []Peer{bad}); err == nil {
+		t.Error("saved a switch that is neither on nor off")
+	}
+}
+
+// TestConversationsTold: the far server says its conversations switch
+// in peer.projects and, when it changes, in peer.panes, so the near
+// server's mirror has it; a link without a transcript host says neither.
+func TestConversationsTold(t *testing.T) {
+	var got []proto.PeerPanesParams
+	var mu sync.Mutex
+	d := &dispatcher{transcripts: &fakeTranscripts{}, panes: &fakeHost{}, ex: &fakeExport{},
+		level: func() string { return proto.PanesView }, convOn: func() bool { return false },
+		panesHere: func(p proto.PeerPanesParams) { mu.Lock(); got = append(got, p); mu.Unlock() }}
+	res, err := d.projects(context.Background(), nil)
+	if err != nil || res.(proto.PeerProjects).Conversations != proto.ConversationsNot || res.(proto.PeerProjects).Panes != proto.PanesView {
+		t.Fatalf("peer.projects: %+v %v", res, err)
+	}
+	d.transcripts = nil
+	if res, _ := d.projects(context.Background(), nil); res.(proto.PeerProjects).Conversations != "" {
+		t.Fatalf("without a transcript host: %+v", res)
+	}
+	for _, raw := range []string{`{"panes":"view","conversations":"off"}`, `{"panes":"type","conversations":"pwned"}`, `{"panes":"view"}`} {
+		if _, err := d.panesChanged(context.Background(), []byte(raw)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want := []proto.PeerPanesParams{{Panes: "view", Conversations: "off"}, {Panes: "type"}, {Panes: "view"}}
+	if !slices.Equal(got, want) {
+		t.Fatalf("told %+v, want %+v", got, want)
+	}
 }

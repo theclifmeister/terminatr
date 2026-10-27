@@ -64,10 +64,10 @@ func TestAppBridgeRemotePane(t *testing.T) {
 		t.Fatalf("pane.vt with panes off: %v", err)
 	}
 
-	// No transcript crosses a link, whatever the switch.
+	// Nor its conversation (TestAppBridgeRemoteConversation).
 	var tr appapi.TranscriptResult
-	if _, err := b.Stream(proto.MethodTranscriptWatch, appapi.TranscriptParams{Session: remote}, &tr); appCode(err) != proto.ErrRefused {
-		t.Fatalf("transcript.watch of a remote session: %v", err)
+	if _, err := b.Stream(proto.MethodTranscriptWatch, appapi.TranscriptParams{Session: remote}, &tr); appCode(err) != proto.ErrConversationsOff {
+		t.Fatalf("transcript.watch of a remote session with panes off: %v", err)
 	}
 
 	// View: the pane shows, view-only; keys are dropped.
