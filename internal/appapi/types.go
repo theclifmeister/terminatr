@@ -287,7 +287,7 @@ type Projects struct {
 // behind origin, links). Error says why it doesn't open, or why its
 // board doesn't load. Active, Paused and Pinned are the project's
 // settings of those names (since app API 4), for the sidebar's order:
-// its only settings in the app API, with Shared (since app API 13): it
+// its only settings in the app API, with Shared (since app API 15): it
 // is shared with the paired servers, so a share request can't be
 // answered with it. Board are the tasks on deck and in the backlog,
 // without notes and steps (since app API 6). LinkNeeds (since app API
@@ -448,7 +448,7 @@ type Link struct {
 }
 
 // LinkNeed is one thing a project's link waits on the user for (app
-// API 13): Kind "held", a message of the coordinator's waiting for the
+// API 15): Kind "held", a message of the coordinator's waiting for the
 // OK (link.act approve or drop); "file", a file offered to the project
 // (accept-file or decline-file); "request", a paired server's link
 // request (accept with this side's Allow and Ask, or decline). Peer is
@@ -476,7 +476,7 @@ type LinkActResult struct {
 }
 
 // ShareRequest is a paired server's request that this server share a
-// project with it (app API 13), waiting for the user: For is the asking
+// project with it (app API 15), waiting for the user: For is the asking
 // project there ("" for none in particular), Note the asking user's
 // line. peer.share-answer answers it: accepting shares one of this
 // server's active projects that isn't shared yet.
@@ -544,7 +544,7 @@ type PeerList struct {
 // Peer is a paired server: its alias and display name, its link's State
 // (Reason why it is down, Since when), the projects it shares with this
 // server, and ShareWaits, its share requests that wait for the user
-// (ShareRequests, since app API 13).
+// (ShareRequests, since app API 15).
 // Pane: its tm has remote panes; Panes is its switch for this server
 // as it last said ("off", "view", "type"): its sessions' panes open
 // through pane.vt ("<alias>/<session>") at view or type, and take keys

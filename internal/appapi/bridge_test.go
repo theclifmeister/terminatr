@@ -318,7 +318,7 @@ func TestBridgeTaskActions(t *testing.T) {
 }
 
 // TestBridgeLinkActs: what a project's links wait on the user for
-// reaches the app by the ids link.act takes (app API 13); acting on
+// reaches the app by the ids link.act takes (app API 15); acting on
 // them is journaled as "human (app)", with tm link's checks; a message
 // is never written through it.
 func TestBridgeLinkActs(t *testing.T) {

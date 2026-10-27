@@ -85,7 +85,7 @@ func init() {
 		// A task added to a project's board, as tm task add (app API 7).
 		unary(proto.MethodTaskAdd, true, taskAddParams, taskAddedOf),
 		// What a project's link waits on the user for, answered in place
-		// (app API 13; the server's caps say link-act), with tm link's
+		// (app API 15; the server's caps say link-act), with tm link's
 		// checks: a held message approved or dropped, a file accepted,
 		// declined or cancelled, a paired server's link request accepted
 		// or declined. A message is never written through it. And a
