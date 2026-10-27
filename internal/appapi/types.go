@@ -876,7 +876,7 @@ type TranscriptItem struct {
 }
 
 // TranscriptFile is a file an item puts in front of the user (since app
-// API 9): a prompt's pasted image, a file a call sends (Claude's
+// API 11): a prompt's pasted image, a file a call sends (Claude's
 // SendUserFile; the item's Text is its caption, Display "render" or
 // "attach"). Ref names it to session.file; Path is a sent file's path
 // (empty for a pasted image); Type the media type session.file sends it
@@ -888,7 +888,7 @@ type TranscriptFile struct {
 	Type string `json:"type,omitempty"`
 }
 
-// SessionFileParams are session.file's (app API 9): the file of
+// SessionFileParams are session.file's (app API 11): the file of
 // session's conversation its Ref names, the chunk from Offset; Stat
 // asks for its name, type and size only.
 type SessionFileParams struct {

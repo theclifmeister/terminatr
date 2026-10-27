@@ -36,7 +36,7 @@ func init() {
 				return ev.Event, transcriptEventOf(ev), slices.Contains(transcriptEvents, ev.Event)
 			}, transcriptAck),
 		// The bytes of a file the conversation puts in front of the user
-		// (app API 9; the server's caps say session-file), by the ref its
+		// (app API 11; the server's caps say session-file), by the ref its
 		// item gave: only what the transcript's line names there.
 		unary(proto.MethodSessionFile, false, sessionFileParams, sessionFileOf),
 

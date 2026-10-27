@@ -22,7 +22,7 @@ public enum Compatibility: Equatable, Sendable {
     public static let taskAddAPI = 7
 
     /// The app API that has session.file: the attachment cards need it.
-    public static let sessionFileAPI = 9
+    public static let sessionFileAPI = 11
 
     /// Whether hello's tm sends the conversation's files (session.file),
     /// its server too.

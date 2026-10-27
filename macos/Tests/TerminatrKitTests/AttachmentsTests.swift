@@ -163,13 +163,13 @@ private func png(_ w: Int, _ h: Int) -> Data {
     if case .success(let none) = await s.thumbnail("s-1", "bad", maxPixel: 400) { #expect(none == nil) } else { Issue.record("bad image") }
 }
 
-@Test func filesNeedAPI9() {
+@Test func filesNeedAPI11() {
     let caps = AppAPI.Server(version: "0.56.0", protocol: 22, caps: ["transcript", "session-file"])
-    var h = AppAPI.Hello(appApi: 9, tm: "0.56.0", build: "", capabilities: [], methods: ["session.file"], server: caps)
+    var h = AppAPI.Hello(appApi: 11, tm: "0.56.0", build: "", capabilities: [], methods: ["session.file"], server: caps)
     #expect(Compatibility.sendsFiles(h))
     h.server?.caps = ["transcript"]
     #expect(!Compatibility.sendsFiles(h))
-    h = AppAPI.Hello(appApi: 8, tm: "0.55.0", build: "", capabilities: [], methods: [], server: caps)
+    h = AppAPI.Hello(appApi: 10, tm: "0.55.0", build: "", capabilities: [], methods: [], server: caps)
     #expect(!Compatibility.sendsFiles(h))
 }
 
