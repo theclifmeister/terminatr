@@ -110,7 +110,7 @@ struct SessionWindow: View {
             .background { Frost(\.glass, bar: true) }
             .navigationTitle(app.title(ref))
             .navigationSubtitle(app.subtitle(ref))
-            .toolbarBackground(.hidden, for: .windowToolbar)
+            .glassToolbar()
             .onDisappear { model.stop() }
     }
 }

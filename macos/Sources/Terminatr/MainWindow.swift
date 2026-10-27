@@ -58,8 +58,9 @@ struct MainWindow: View {
         }
         .navigationTitle(app.title(app.nav.selection))
         .navigationSubtitle(app.subtitle(app.nav.selection))
-        // The detail's glass shows through: no opaque band (T752).
-        .toolbarBackground(.hidden, for: .windowToolbar)
+        // The detail's glass shows through: no opaque band (T752);
+        // on macOS 26 the scroll edge effect under it (T764).
+        .glassToolbar()
         .toolbar {
             ToolbarItemGroup(placement: .navigation) {
                 Button { app.goBack() } label: { Label("Back", systemImage: "chevron.backward") }
