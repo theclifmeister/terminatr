@@ -787,12 +787,14 @@ public enum AppAPI {
         public var questions: [QuestionItem]
         public var since: Date?
         public var escape: Bool
+        public var screen: Bool
 
-        public init(tool: String = "", questions: [QuestionItem] = [], since: Date? = nil, escape: Bool = false) {
+        public init(tool: String = "", questions: [QuestionItem] = [], since: Date? = nil, escape: Bool = false, screen: Bool = false) {
             self.tool = tool
             self.questions = questions
             self.since = since
             self.escape = escape
+            self.screen = screen
         }
 
         enum CodingKeys: String, CodingKey {
@@ -800,6 +802,7 @@ public enum AppAPI {
             case questions
             case since
             case escape
+            case screen
         }
     }
 
@@ -1988,6 +1991,7 @@ extension AppAPI.Question {
         self.questions = try c.decodeIfPresent([AppAPI.QuestionItem].self, forKey: .questions) ?? []
         self.since = try c.decodeIfPresent(Date.self, forKey: .since)
         self.escape = try c.decodeIfPresent(Bool.self, forKey: .escape) ?? false
+        self.screen = try c.decodeIfPresent(Bool.self, forKey: .screen) ?? false
     }
 }
 

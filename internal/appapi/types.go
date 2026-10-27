@@ -169,12 +169,15 @@ type Session struct {
 }
 
 // Question is a question menu open on a session; Escape: only the user
-// answers it.
+// answers it. Screen (since app API 9): the agent's own menu (Claude's
+// AskUserQuestion), which session.answer types on its screen, one
+// question at a time in order, a single option or free text.
 type Question struct {
 	Tool      string         `json:"tool,omitempty"`
 	Questions []QuestionItem `json:"questions"`
 	Since     time.Time      `json:"since,omitzero"`
 	Escape    bool           `json:"escape,omitempty"`
+	Screen    bool           `json:"screen,omitempty"`
 }
 
 // QuestionItem is one question of a menu, Answered once it has Answer.
@@ -579,7 +582,7 @@ func questionOf(q *proto.Question) *Question {
 	if q == nil {
 		return nil
 	}
-	out := &Question{Tool: q.Tool, Since: q.Since, Escape: q.Escape, Questions: make([]QuestionItem, 0, len(q.Questions))}
+	out := &Question{Tool: q.Tool, Since: q.Since, Escape: q.Escape, Screen: q.Screen, Questions: make([]QuestionItem, 0, len(q.Questions))}
 	for _, it := range q.Questions {
 		qi := QuestionItem{Question: it.Question, Header: it.Header, MultiSelect: it.MultiSelect,
 			Answered: it.Answered, Answer: it.Answer, Options: make([]QuestionOption, 0, len(it.Options))}

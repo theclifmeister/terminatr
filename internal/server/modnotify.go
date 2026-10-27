@@ -61,7 +61,7 @@ func (s *Server) modNotify(_ context.Context, c *modbroker.Call) (any, error) {
 			if err := s.modActionScope(c.Mod, spec, t); err != nil {
 				return nil, err
 			}
-			if why := modaction.NotAnswerable(menuOf(s.asks.of(t.Session)), t.Question, t.Option); why != "" {
+			if why := modaction.NotAnswerable(menuOf(s.questionOf(t.Session)), t.Question, t.Option); why != "" {
 				return nil, modbroker.BadParams("ui.notify: %s: %s", act.ID, why)
 			}
 			req.Buttons = append(req.Buttons, modnotify.Button{ID: act.ID, Session: t.Session, Question: t.Question, Option: t.Option})
