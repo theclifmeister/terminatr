@@ -10,3 +10,13 @@ import Testing
     #expect(InspectorColumn.ideal(saved: 450) == 450)
     #expect(InspectorColumn.ideal(saved: 900) == InspectorColumn.max)
 }
+
+@Test func inspectorColumnSavesOnlyWidthsInItsRange() {
+    #expect(InspectorColumn.saving(InspectorColumn.min) == InspectorColumn.min)
+    #expect(InspectorColumn.saving(450.4) == 450)
+    #expect(InspectorColumn.saving(InspectorColumn.max) == InspectorColumn.max)
+    // Sliding in or out: none kept.
+    #expect(InspectorColumn.saving(0) == nil)
+    #expect(InspectorColumn.saving(300) == nil)
+    #expect(InspectorColumn.saving(InspectorColumn.max + 1) == nil)
+}

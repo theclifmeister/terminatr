@@ -7,6 +7,12 @@
 // `make -C macos app` wraps the app in Terminatr.app (Info.plist).
 import PackageDescription
 
+// TERMINATR_WERROR=1 (macos/Makefile's default) makes our targets'
+// warnings errors; SwiftTerm's stay warnings, as target settings apply
+// to their own target only. Release builds (scripts/release/app.sh) go
+// without, so a newer Xcode's new warning doesn't stop a release.
+let werror: [SwiftSetting] = Context.environment["TERMINATR_WERROR"] == "1" ? [.unsafeFlags(["-warnings-as-errors"])] : []
+
 let package = Package(
     name: "Terminatr",
     platforms: [.macOS(.v14)],
@@ -18,12 +24,13 @@ let package = Package(
         .package(url: "https://github.com/migueldeicaza/SwiftTerm", exact: "1.20.0"),
     ],
     targets: [
-        .target(name: "TerminatrKit"),
+        .target(name: "TerminatrKit", swiftSettings: werror),
         .executableTarget(
             name: "Terminatr",
             dependencies: ["TerminatrKit", .product(name: "SwiftTerm", package: "SwiftTerm")],
-            resources: [.copy("Resources/Fonts")]
+            resources: [.copy("Resources/Fonts")],
+            swiftSettings: werror
         ),
-        .testTarget(name: "TerminatrKitTests", dependencies: ["TerminatrKit"]),
+        .testTarget(name: "TerminatrKitTests", dependencies: ["TerminatrKit"], swiftSettings: werror),
     ]
 )

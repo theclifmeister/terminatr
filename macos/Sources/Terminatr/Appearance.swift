@@ -204,11 +204,10 @@ struct InspectorWidth: NSViewRepresentable {
             while let s = v, !(s.superview is NSSplitView) { v = s.superview }
             guard let column = v else { return }
             column.postsFrameChangedNotifications = true
-            watching = NotificationCenter.default.addObserver(forName: NSView.frameDidChangeNotification, object: column, queue: .main) { [key] n in
-                guard let w = (n.object as? NSView)?.frame.width, w > 0 else { return }
-                // A width outside its range is it sliding in or out.
+            watching = NotificationCenter.default.addObserver(forName: NSView.frameDidChangeNotification, object: column, queue: .main) { [key, weak column] _ in
                 MainActor.assumeIsolated {
-                    if (240...360).contains(w) { UserDefaults.standard.set(w.rounded(), forKey: key) }
+                    guard let w = column?.frame.width, let keep = InspectorColumn.saving(w) else { return }
+                    UserDefaults.standard.set(keep, forKey: key)
                 }
             }
         }
