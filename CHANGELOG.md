@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.56.0](https://github.com/theclifmeister/terminatr/compare/v0.55.0...v0.56.0) (2026-10-27)
+
+
+### Features
+
+* **app:** a clear outcome row after Accept, Send back or Delegate ([#824](https://github.com/theclifmeister/terminatr/issues/824)) ([1a48ad5](https://github.com/theclifmeister/terminatr/commit/1a48ad5dc30afef925288cbf6180227b78189c2f))
+* **app:** app icon and a menu bar glyph ([#825](https://github.com/theclifmeister/terminatr/issues/825)) ([23e3a50](https://github.com/theclifmeister/terminatr/commit/23e3a5059768793c9359c17bc9ea873560d66781))
+* **app:** AskUserQuestion shows a real answer card, not a spinner ([#828](https://github.com/theclifmeister/terminatr/issues/828)) ([4993fc4](https://github.com/theclifmeister/terminatr/commit/4993fc4dc0412468f5ab92703b97e2be4e24ff86))
+* **app:** auto-fit the terminal, align its boxes, and widen the inspector to its toolbar ([#820](https://github.com/theclifmeister/terminatr/issues/820)) ([0016168](https://github.com/theclifmeister/terminatr/commit/0016168d4a62447c43f0b2e2f1e586d26f6868bb))
+* **app:** group consecutive tool calls in the conversation ([#822](https://github.com/theclifmeister/terminatr/issues/822)) ([47afa33](https://github.com/theclifmeister/terminatr/commit/47afa332a6dfdd83fa6d1423dd1d696ac7474ff7))
+* **app:** no Terminal tab footer; Repaint in the context menu and View (⌥⌘R) ([#827](https://github.com/theclifmeister/terminatr/issues/827)) ([9b481ed](https://github.com/theclifmeister/terminatr/commit/9b481edc29e5b9ae2dc78b4b59752bad8d59b430))
+* **app:** pages use the full window width ([#832](https://github.com/theclifmeister/terminatr/issues/832)) ([635113f](https://github.com/theclifmeister/terminatr/commit/635113fda01ef0e0a7781fbf4d94b43d6e7743d3))
+* **app:** paired projects' watched threads and needs_first in the sidebar ([#830](https://github.com/theclifmeister/terminatr/issues/830)) ([c1ca69c](https://github.com/theclifmeister/terminatr/commit/c1ca69cc65bdaba1b792aa79cfdc4b9f54285711))
+* **app:** SendUserFile files and pasted images show inline in the conversation ([#831](https://github.com/theclifmeister/terminatr/issues/831)) ([f3f7b1c](https://github.com/theclifmeister/terminatr/commit/f3f7b1cf8aa8b3f30808494d51aef195eae46dea))
+* **app:** six more themes beside Bloom, with a picker and a contrast test ([#829](https://github.com/theclifmeister/terminatr/issues/829)) ([c226bfe](https://github.com/theclifmeister/terminatr/commit/c226bfe3c9cf7bcf5a8a31ed10be924e7079013b))
+* **app:** the sidebar lists the TUI's projects, coordinators and threads ([#821](https://github.com/theclifmeister/terminatr/issues/821)) ([5de2e19](https://github.com/theclifmeister/terminatr/commit/5de2e19e5ca3ccd6b0c1d2ba737104ac1bec412a))
+* paired servers' conversations in the Mac app, gated by a per-pairing switch ([#833](https://github.com/theclifmeister/terminatr/issues/833)) ([abb2e1b](https://github.com/theclifmeister/terminatr/commit/abb2e1bf9d78a2a9066a09662044e5fd3b1bbaff))
+
+
+### Bug Fixes
+
+* **app:** clean scroll edges under the toolbar and above the pinned cards ([#826](https://github.com/theclifmeister/terminatr/issues/826)) ([8c24117](https://github.com/theclifmeister/terminatr/commit/8c24117ed9f7ca6c0f6bf81e772bfb0dd88d55d4))
+* **app:** the inspector width watcher's warning and range; our Swift warnings fail the build ([#835](https://github.com/theclifmeister/terminatr/issues/835)) ([950fb8b](https://github.com/theclifmeister/terminatr/commit/950fb8be21041b8c2f66918f748293ec16333785))
+
 ## [0.55.0](https://github.com/theclifmeister/terminatr/compare/v0.54.0...v0.55.0) (2026-10-27)
 
 
