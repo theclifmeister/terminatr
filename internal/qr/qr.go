@@ -36,7 +36,7 @@ var (
 // eccFormatBits is level M's two bits in the format information.
 const eccFormatBits = 0
 
-// ErrTooLong: the data doesn't fit a version 40 code.
+// ErrTooLong says the data doesn't fit a version 40 code.
 var ErrTooLong = errors.New("qr: too much data for a QR code")
 
 // rawModules is how many modules of version v hold data and error

@@ -248,12 +248,12 @@ func find(devices []Device, name string) int {
 	return at
 }
 
-// UnknownError: no device has that name.
+// UnknownError says no device has that name.
 type UnknownError struct{ Name string }
 
 func (e *UnknownError) Error() string { return fmt.Sprintf("no device %q (tm device list)", e.Name) }
 
-// TakenError: another device has that name.
+// TakenError says another device has that name.
 type TakenError struct{ Name string }
 
 func (e *TakenError) Error() string {
