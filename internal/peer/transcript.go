@@ -137,7 +137,9 @@ func (m *trMux) end() {
 	}
 }
 
-// closeServed ends every served stream, telling the peer why.
+// closeServed ends every served stream, telling the peer why. The
+// closed events go after the events being sent, off the caller (the
+// Manager's Reload, under its lock): a reset can take a while to write.
 func (m *trMux) closeServed(reason string) {
 	m.mu.Lock()
 	ss := m.served
@@ -145,7 +147,7 @@ func (m *trMux) closeServed(reason string) {
 	m.closes++
 	m.mu.Unlock()
 	for _, sv := range ss {
-		sv.stop(reason)
+		go sv.stop(reason)
 	}
 }
 
