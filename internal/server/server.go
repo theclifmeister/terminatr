@@ -914,7 +914,12 @@ func (s *Server) answer(p proto.SessionAnswerParams, cc callCtx) (any, *proto.Er
 	if !byHuman && sess.Info().Escape {
 		return nil, proto.Errorf(proto.ErrRefused, "session %s asks to run a command outside its sandbox: only the user answers that prompt", p.ID)
 	}
-	res, perr := s.asks.answer(p.ID, p.Index, p.Answer, p.Question, byHuman)
+	var res proto.SessionAnswerResult
+	if q, call := sess.Menu(); q != nil && s.asks.of(p.ID) == nil {
+		res, perr = s.answerMenu(sess, q, call, p)
+	} else {
+		res, perr = s.asks.answer(p.ID, p.Index, p.Answer, p.Question, byHuman)
+	}
 	if perr == nil && (p.Question != "" || cc.app) {
 		s.journalAnswer(p, c)
 	}
@@ -992,7 +997,9 @@ func (s *Server) sessionList() proto.SessionListResult {
 // info is sess's info with its thread's task.
 func (s *Server) info(sess *session.Session) proto.SessionInfo {
 	info := sess.Info()
-	info.Question = s.asks.of(info.ID)
+	if q := s.asks.of(info.ID); q != nil {
+		info.Question = q
+	}
 	if v, ok := s.ctxOf.Load(info.ID); ok {
 		c := v.(ctxUse)
 		info.Context, info.ContextWindow = c.tokens, c.window

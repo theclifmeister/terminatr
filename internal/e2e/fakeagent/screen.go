@@ -194,20 +194,25 @@ func (a *app) bottomLocked(now time.Time, cols int) []string {
 
 // dialog is a modal choice that replaces the input box.
 type dialog struct {
-	kind     string // trust, bypass, permission, question
-	title    string // permission: "Create file", "Bash command", ...
-	subject  string // permission: "create x.txt"
-	header   string // question
-	question string
-	options  []string
-	sel      int
-	textOpt  int    // question: the option that is a text field once focused, or -1
-	text     []rune // what was typed into it
-	notes    bool   // codexq: Tab opened the notes field
-	at, of   int    // codexq: "Question at/of"
-	shownAt  time.Time
-	debounce time.Duration
-	result   chan int // the chosen option, 1-based; 0 to exit
+	kind    string // trust, bypass, permission, question
+	title   string // permission: "Create file", "Bash command", ...
+	subject string // permission: "create x.txt"
+	header  string // question
+	tabs    string // question: the call's questions' headers, when it has several
+	// question: the options' descriptions, drawn under them; checked,
+	// a multi-select's toggled options (nil for a single-select).
+	descriptions []string
+	checked      map[int]bool
+	question     string
+	options      []string
+	sel          int
+	textOpt      int    // question: the option that is a text field once focused, or -1
+	text         []rune // what was typed into it
+	notes        bool   // codexq: Tab opened the notes field
+	at, of       int    // codexq: "Question at/of"
+	shownAt      time.Time
+	debounce     time.Duration
+	result       chan int // the chosen option, 1-based; 0 to exit
 }
 
 // lines are the dialog's rows, with ❯ on the selected option.
@@ -226,7 +231,17 @@ func (d *dialog) lines() []string {
 			if d.kind == "question" && i == d.textOpt && len(d.text) > 0 {
 				o = string(d.text)
 			}
+			if d.checked != nil && i != d.textOpt {
+				box := "[ ]"
+				if d.checked[i] {
+					box = "[✔]"
+				}
+				o = box + " " + o
+			}
 			out = append(out, fmt.Sprintf(" %s%d. %s", mark, i+1, o))
+			if i < len(d.descriptions) && d.descriptions[i] != "" {
+				out = append(out, "      "+d.descriptions[i])
+			}
 		}
 	}
 	switch d.kind {
@@ -286,7 +301,11 @@ func (d *dialog) lines() []string {
 			out = append(out, "  tab to add notes | enter to submit all | ←/→ to navigate questions | esc to interrupt")
 		}
 	case "question":
-		out = append(out, " ☐ "+d.header, " "+d.question)
+		if d.tabs != "" {
+			out = append(out, " ← "+d.tabs+" →", " "+d.question)
+		} else {
+			out = append(out, " ☐ "+d.header, " "+d.question)
+		}
 		opts()
 		out = append(out, " Enter to select · ↑/↓ to navigate · Esc to cancel")
 	}
