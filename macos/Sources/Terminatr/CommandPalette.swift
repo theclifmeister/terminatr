@@ -164,7 +164,7 @@ struct CommandPalette: View {
     private func hint(_ r: PaletteItem, on: Bool) -> String {
         if !r.keys.isEmpty { return r.keys }
         guard on else { return r.act.map { "⌘↩ \($0.verb)" } ?? "" }
-        return ["↩ open", r.act.map { "⌘↩ \($0.verb)" }].compactMap { $0 }.joined(separator: "  ")
+        return [r.task == nil ? "↩ open" : "↩ details", r.act.map { "⌘↩ \($0.verb)" }].compactMap { $0 }.joined(separator: "  ")
     }
 
     private func move(_ by: Int, _ n: Int) {
@@ -178,6 +178,8 @@ struct CommandPalette: View {
         app.palette = false
         if let c = r.command {
             run(c)
+        } else if let t = r.task {
+            app.showTask(project: t.project, task: t.task)
         } else if let s = r.go {
             app.select(s)
         }
@@ -237,6 +239,9 @@ struct CommandPalette: View {
             out.append(PaletteItem(id: "cmd:inspector", group: .actions, title: app.inspector ? "Hide the inspector" : "Show the inspector",
                                    command: .inspector, keys: "⌥⌘I"))
         }
+        if app.controlsProjects, let p = app.shownProject {
+            out += Palette.projectActions(p, coordinator: app.coordinatorSession(p.slug), sessions: app.sessions, hint: app.contextHint)
+        }
         out += [
             PaletteItem(id: "cmd:filter", group: .actions, title: "Filter the sidebar", command: .filter, keys: "⌥⌘F"),
             PaletteItem(id: "cmd:back", group: .actions, title: "Back", command: .back, keys: "⌘["),
@@ -259,6 +264,7 @@ struct CommandPalette: View {
         case .forward: app.goForward()
         case .shortcuts: app.shortcuts = true
         case .theme(let t): UserDefaults.standard.set(t.rawValue, forKey: ThemeName.key)
+        case .ask(let a): app.ask(a)
         }
     }
 }
@@ -316,7 +322,8 @@ private struct ActPanel: View {
 }
 
 /// The palette's act on a task in review: Accept and Send back…
-/// (TaskActs), each asking the project's coordinator.
+/// (TaskActs), each asking the project's coordinator, and Details…,
+/// the task view.
 private struct ReviewPanel: View {
     @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
@@ -338,6 +345,8 @@ private struct ReviewPanel: View {
                     .font(theme.title(.headline, .bold))
                     .lineLimit(1)
                 Spacer()
+                Button("Details…") { app.showTask(project: project, task: task) }
+                    .help("Shows \(task) in full: how to check it, its PR, steps and notes")
                 if let go = item.go {
                     Button("Open") {
                         app.palette = false

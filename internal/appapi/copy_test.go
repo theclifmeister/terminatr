@@ -280,7 +280,10 @@ func TestCopies(t *testing.T) {
 	check("session.approve", homeOf(approveResultOf), nil)
 	check("task.ask", homeOf(taskAskResultOf), nil)
 	check("project.open", homeOf(projectOpenOf), nil)
+	check("coordinator.clear", homeOf(coordinatorClearOf), nil)
+	check("project.active", homeOf(projectActiveOf), nil)
 	check("task.add", homeOf(taskAddedOf), nil)
+	check("task.get", homeOf(taskOf), []string{".Archived"})
 	check("questions.open", homeOf(questionsOpenOf), nil)
 	check("notify", homeOf(noticeResultOf), nil)
 	// The window is the bridge's: it acks for the app.
@@ -362,6 +365,19 @@ func TestParamsCopies(t *testing.T) {
 	if want := (proto.TaskActionParams{Project: "web", Task: "T2", Note: "x"}); err != nil || p != want {
 		t.Errorf("send-back params %+v %v", p, err)
 	}
+	m, _ = Lookup(proto.MethodProjectActive)
+	p, err = m.toServer(json.RawMessage(`{"project":"web","active":true}`))
+	if want := (proto.ProjectActiveParams{Project: "web", Active: true}); err != nil || p != want {
+		t.Errorf("project.active params %+v %v", p, err)
+	}
+	m, _ = Lookup(proto.MethodCoordinatorClear)
+	p, err = m.toServer(json.RawMessage(`{"project":"web"}`))
+	if want := (proto.CoordinatorClearParams{Project: "web"}); err != nil || p != want {
+		t.Errorf("coordinator.clear params %+v %v", p, err)
+	}
+	if _, err := m.toServer(json.RawMessage(`{"project":"web","session":"s-1"}`)); err == nil {
+		t.Error("coordinator.clear took a session")
+	}
 	// session.file takes a ref, never a path.
 	m, _ = Lookup(proto.MethodSessionFile)
 	p, err = m.toServer(json.RawMessage(`{"session":"s-1","ref":"0.0123456789abcdef.1.0","offset":5,"stat":true}`))
@@ -406,8 +422,8 @@ func TestAllowlist(t *testing.T) {
 		proto.MethodSessionAnswer, proto.MethodSessionApprove, proto.MethodSessionKeys, proto.MethodSessionList,
 		proto.MethodSessionPrompt, proto.MethodSessionWatch, proto.MethodTaskAsk,
 		proto.MethodTaskAccept, proto.MethodTaskSendBack, proto.MethodTaskDelegate, proto.MethodProjectOpen,
-		proto.MethodQuestionsOpen, proto.MethodTaskAdd, proto.MethodPaneVT, proto.MethodTranscriptWatch, MethodPaneInput,
-		proto.MethodSessionFile, proto.MethodSessionUpload}
+		proto.MethodQuestionsOpen, proto.MethodTaskAdd, proto.MethodTaskGet, proto.MethodPaneVT, proto.MethodTranscriptWatch, MethodPaneInput,
+		proto.MethodSessionFile, proto.MethodCoordinatorClear, proto.MethodProjectActive, proto.MethodSessionUpload}
 	slices.Sort(want)
 	if got := MethodNames(); !slices.Equal(got, want) {
 		t.Errorf("methods %v, want %v", got, want)
@@ -424,7 +440,7 @@ func TestAllowlist(t *testing.T) {
 		}
 	}
 	for name, write := range map[string]bool{MethodPaneInput: true, proto.MethodPaneVT: false, proto.MethodTranscriptWatch: false,
-		proto.MethodSessionFile: false} {
+		proto.MethodSessionFile: false, proto.MethodCoordinatorClear: true, proto.MethodProjectActive: true} {
 		if m, _ := Lookup(name); m.Write != write {
 			t.Errorf("%s: write %v", name, m.Write)
 		}
@@ -495,25 +511,27 @@ func TestPeerListWatched(t *testing.T) {
 	}
 }
 
-// TestSessionListNeedsFirst: session.list carries [ui] needs_first as
-// the config says it now, false without one.
-func TestSessionListNeedsFirst(t *testing.T) {
+// TestSessionListUIHints: session.list carries [ui] needs_first and
+// context_hint as the config says them now: false and the default hint
+// without one, nothing for a hint that is off.
+func TestSessionListUIHints(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("TERMINATR_HOME", dir)
-	if sessionListOf(proto.SessionListResult{}).NeedsFirst {
-		t.Fatal("needs_first without a config")
+	if l := sessionListOf(proto.SessionListResult{}); l.NeedsFirst || l.ContextHint != config.DefaultContextHint {
+		t.Fatalf("without a config: %+v", l)
 	}
 	path := filepath.Join(dir, "config.toml")
-	if err := os.WriteFile(path, []byte("[ui]\nneeds_first = true\n"), 0o600); err != nil {
+	if err := os.WriteFile(path, []byte("[ui]\nneeds_first = true\ncontext_hint = 60\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if !sessionListOf(proto.SessionListResult{}).NeedsFirst {
-		t.Fatal("needs_first set but not sent")
+	if l := sessionListOf(proto.SessionListResult{}); !l.NeedsFirst || l.ContextHint != 60 {
+		t.Fatalf("set but not sent: %+v", l)
 	}
-	if err := os.WriteFile(path, []byte("[ui]\nneeds_first = false\n"), 0o600); err != nil {
+	if err := os.WriteFile(path, []byte("[ui]\nneeds_first = false\ncontext_hint = 0\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if sessionListOf(proto.SessionListResult{}).NeedsFirst {
-		t.Fatal("needs_first unset but sent")
+	l := sessionListOf(proto.SessionListResult{})
+	if raw, _ := json.Marshal(l); l.NeedsFirst || strings.Contains(string(raw), "context_hint") {
+		t.Fatalf("unset but sent: %s", raw)
 	}
 }

@@ -96,7 +96,13 @@ type (
 		Task    string `json:"task"`
 		Note    string `json:"note"`
 	}
-	// ProjectParams name a project (questions.open).
+	// TaskGetParams are task.get's (app API 14): Project's task
+	// ("T12").
+	TaskGetParams struct {
+		Project string `json:"project"`
+		Task    string `json:"task"`
+	}
+	// ProjectParams name a project (questions.open, coordinator.clear).
 	ProjectParams struct {
 		Project string `json:"project"`
 	}
@@ -114,6 +120,12 @@ type (
 		Cols    uint16 `json:"cols,omitempty"`
 		Rows    uint16 `json:"rows,omitempty"`
 	}
+	// ProjectActiveParams are project.active's: the project, and whether
+	// to activate it (false: deactivate it).
+	ProjectActiveParams struct {
+		Project string `json:"project"`
+		Active  bool   `json:"active"`
+	}
 )
 
 // Empty is the result of a method that answers nothing.
@@ -124,17 +136,21 @@ type Empty struct{}
 // in the tray, and the server's version and the newer release it found.
 // NeedsFirst is [ui] needs_first, which the bridge reads from the
 // config as the TUI's sidebar does (since app API 10): the sidebar lists
-// the projects that need the user first. It is the one setting of the
-// config the app API has, read only.
+// the projects that need the user first. ContextHint is [ui]
+// context_hint (app API 13; absent for never): the percent of its
+// context window from which a coordinator's sidebar row warns and offers
+// its save and clear. They are the only settings of the config the app
+// API has, read only.
 type SessionList struct {
-	Sessions   []Session `json:"sessions"`
-	Alerts     uint64    `json:"alerts"`
-	Notices    []Notice  `json:"notices"`
-	Version    string    `json:"version,omitempty"`
-	Build      string    `json:"build,omitempty"`
-	Latest     string    `json:"latest,omitempty"`
-	Upgrade    string    `json:"upgrade,omitempty"`
-	NeedsFirst bool      `json:"needs_first,omitempty"`
+	Sessions    []Session `json:"sessions"`
+	Alerts      uint64    `json:"alerts"`
+	Notices     []Notice  `json:"notices"`
+	Version     string    `json:"version,omitempty"`
+	Build       string    `json:"build,omitempty"`
+	Latest      string    `json:"latest,omitempty"`
+	Upgrade     string    `json:"upgrade,omitempty"`
+	NeedsFirst  bool      `json:"needs_first,omitempty"`
+	ContextHint int       `json:"context_hint,omitempty"`
 }
 
 // Session is one session: its role and place, its agent's state, its
@@ -319,7 +335,9 @@ type Step struct {
 
 // Thread is an unresolved thread: its record, its status (nil before
 // it reported any), its PR's checks and number as the ticker last saw
-// them, and with detail its report's PR line and its task.
+// them, and with detail its report's PR line and its task; since app
+// API 14 also its report's Check (how the user checks the work) and
+// where its PR stands, PRState: OPEN, CLOSED or MERGED.
 type Thread struct {
 	Record   ThreadRecord  `json:"record"`
 	Status   *ThreadStatus `json:"status,omitempty"`
@@ -327,6 +345,8 @@ type Thread struct {
 	PR       int           `json:"pr,omitempty"`
 	ReportPR string        `json:"report_pr,omitempty"`
 	Task     *Task         `json:"task,omitempty"`
+	Check    []string      `json:"check,omitempty"`
+	PRState  string        `json:"pr_state,omitempty"`
 }
 
 // ThreadRecord is a thread's record.
@@ -567,8 +587,9 @@ type PeerSession struct {
 // The copies. Lists are never null.
 
 func sessionListOf(r proto.SessionListResult) SessionList {
+	first, hint := uiHints()
 	out := SessionList{Sessions: make([]Session, 0, len(r.Sessions)), Notices: make([]Notice, 0, len(r.ModNotices)),
-		Alerts: r.Alerts, Version: r.Version, Build: r.Build, Latest: r.Latest, Upgrade: r.Upgrade, NeedsFirst: needsFirst()}
+		Alerts: r.Alerts, Version: r.Version, Build: r.Build, Latest: r.Latest, Upgrade: r.Upgrade, NeedsFirst: first, ContextHint: hint}
 	for _, s := range r.Sessions {
 		out.Sessions = append(out.Sessions, sessionOf(s))
 	}
@@ -677,7 +698,7 @@ func taskOf(t server.SideTask) Task {
 }
 
 func threadOf(t server.SideThread) Thread {
-	out := Thread{Checks: t.Checks, PR: t.PR, ReportPR: t.ReportPR}
+	out := Thread{Checks: t.Checks, PR: t.PR, ReportPR: t.ReportPR, Check: t.Check, PRState: t.PRState}
 	if r := t.Record; r != nil {
 		out.Record = recordOf(*r)
 	}
@@ -826,6 +847,23 @@ type ProjectOpen struct {
 	Started bool   `json:"started,omitempty"`
 }
 
+// CoordinatorClear is coordinator.clear's result: the coordinator
+// session asked to save what it learned, cleared at its next idle moment
+// after that.
+type CoordinatorClear struct {
+	Session string `json:"session"`
+}
+
+// ProjectActive is project.active's result: whether the setting
+// changed, and the sessions it stopped, resumed (or started fresh) and
+// dropped, by name (coordinator, a thread id).
+type ProjectActive struct {
+	Changed bool     `json:"changed"`
+	Stopped []string `json:"stopped,omitempty"`
+	Resumed []string `json:"resumed,omitempty"`
+	Lost    []string `json:"lost,omitempty"`
+}
+
 // QuestionsOpen is questions.open's result: the coordinator's session
 // prompted to put its questions to the user, how the prompt went in (as
 // session.prompt's Via) and how many questions were open.
@@ -841,6 +879,14 @@ func questionsOpenOf(r proto.QuestionsOpenResult) QuestionsOpen {
 
 func projectOpenOf(r proto.ProjectOpenResult) ProjectOpen {
 	return ProjectOpen{Session: r.Session, Started: r.Started}
+}
+
+func coordinatorClearOf(r proto.CoordinatorClearResult) CoordinatorClear {
+	return CoordinatorClear{Session: r.Session}
+}
+
+func projectActiveOf(r proto.ProjectActiveResult) ProjectActive {
+	return ProjectActive{Changed: r.Changed, Stopped: r.Stopped, Resumed: r.Resumed, Lost: r.Lost}
 }
 
 func noticeResultOf(r proto.NoticeResult) NoticeResult { return NoticeResult{OK: r.OK} }

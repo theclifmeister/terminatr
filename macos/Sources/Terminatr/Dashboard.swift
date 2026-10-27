@@ -107,6 +107,13 @@ struct ProjectDashboard: View {
                 Text(project.slug)
                     .font(theme.title(.display, .heavy))
                 Spacer()
+                // As S in the TUI's sidebar (app API 13).
+                if app.controlsProjects {
+                    let a = ProjectAsk.toggle(project, sessions: app.sessions)
+                    Button(a.verb) { app.ask(a) }
+                        .help(project.active ? "Stops its coordinator and threads, to resume when you activate it"
+                                             : "Turns it on: its coordinator starts, and its threads resume")
+                }
             }
             if !project.goal.isEmpty {
                 Text(project.goal)
@@ -208,6 +215,12 @@ struct CoordinatorRow: View {
                     Text(attention.word)
                         .font(theme.mono(.caption))
                         .foregroundStyle(attention.waits ? theme.colour(attention.tone) : theme.muted)
+                    if running, let ctx = ContextUse.of(app.coordinatorSession(project.slug), hint: app.contextHint) {
+                        Text("context \(ctx.word)")
+                            .font(theme.mono(.caption, ctx.tone == nil ? .regular : .semibold))
+                            .foregroundStyle(ctx.tone.map { theme.colour($0) } ?? theme.muted)
+                            .help(ctx.spoken)
+                    }
                 }
                 if !attention.why.isEmpty {
                     Text(attention.why)
@@ -218,6 +231,10 @@ struct CoordinatorRow: View {
             }
             Spacer(minLength: 8)
             if running {
+                if app.controlsProjects {
+                    Button("Save & Clear") { app.ask(.saveClear(project: project.slug)) }
+                        .help("Asks the coordinator to save what it learned, then clears its conversation, as tm clear does")
+                }
                 Button("Open") { app.select(.session(ref)) }
                     .help("Show the coordinator")
             } else {
@@ -228,7 +245,32 @@ struct CoordinatorRow: View {
         .frosted(RoundedRectangle(cornerRadius: 14))
         .background(theme.cardTint, in: RoundedRectangle(cornerRadius: 14))
         .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(theme.edge, lineWidth: 1))
-        .contextMenu { NewWindowButton(ref: ref) }
+        .contextMenu {
+            NewWindowButton(ref: ref)
+            ProjectMenu(project: project, coordinator: running)
+        }
+    }
+}
+
+/// The project's actions in a context menu, as the TUI's prefix+C and S
+/// (app API 13): Save & Clear while its coordinator runs, and Activate
+/// or Deactivate. Nothing with an older tm.
+struct ProjectMenu: View {
+    @Environment(AppModel.self) private var app
+    let project: AppAPI.Project
+    var coordinator: Bool
+    /// Under a divider, after the menu's other items.
+    var divided = true
+
+    var body: some View {
+        if app.controlsProjects {
+            if divided { Divider() }
+            if coordinator {
+                Button("Save & Clear Coordinator…") { app.ask(.saveClear(project: project.slug)) }
+            }
+            let a = ProjectAsk.toggle(project, sessions: app.sessions)
+            Button(a.asks ? "\(a.verb) \(project.slug)…" : "\(a.verb) \(project.slug)") { app.ask(a) }
+        }
     }
 }
 
@@ -257,6 +299,7 @@ struct StartButton: View {
             .tint(theme.action)
             .disabled(busy || !project.active)
             .help(project.active ? "Starts the coordinator with the project's agent and model, as tm project open does"
+                                 : app.controlsProjects ? "The project is inactive: Activate turns it on"
                                  : "The project is inactive: tm project activate \(project.slug) turns it on")
             if let error {
                 Text(error)
@@ -281,8 +324,10 @@ struct StartButton: View {
     }
 }
 
-/// A task on the board: its id, title and its action (Delegate…).
+/// A task on the board: its id, title and its action (Delegate…); its
+/// words show it in the task view.
 private struct BoardRow: View {
+    @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
     let project: String
     let task: AppAPI.Task
@@ -290,14 +335,20 @@ private struct BoardRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .center, spacing: 8) {
-                Text(task.ref)
-                    .font(theme.mono(.subheadline, .medium))
-                    .foregroundStyle(theme.action)
-                    .frame(minWidth: 44, alignment: .leading)
-                Text(task.title)
-                    .font(theme.body(.body))
-                    .lineLimit(1)
-                    .textSelection(.enabled)
+                Button { app.showTask(project: project, task: task.ref) } label: {
+                    HStack(alignment: .center, spacing: 8) {
+                        Text(task.ref)
+                            .font(theme.mono(.subheadline, .medium))
+                            .foregroundStyle(theme.action)
+                            .frame(minWidth: 44, alignment: .leading)
+                        Text(task.title)
+                            .font(theme.body(.body))
+                            .lineLimit(1)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("Shows \(task.ref) in full: its steps and notes")
                 Spacer(minLength: 8)
                 TaskActs(project: project, task: task.ref, status: task.status, compact: true)
             }
@@ -328,7 +379,13 @@ private struct NextStepCard: View {
                 .fixedSize(horizontal: false, vertical: true)
             switch step {
             case .activate:
-                CommandText("tm project activate \(project.slug)")
+                if app.controlsProjects {
+                    Button("Activate") { app.ask(.activate(project: project.slug)) }
+                        .buttonStyle(.borderedProminent)
+                        .tint(theme.action)
+                } else {
+                    CommandText("tm project activate \(project.slug)")
+                }
             case .start:
                 StartButton(project: project, title: "Start the Coordinator")
             case .message:
@@ -376,7 +433,8 @@ private struct NextStepCard: View {
 
     private var detail: String {
         switch step {
-        case .activate: "Its coordinator and threads don't run while it is inactive. Turn it on in a terminal:"
+        case .activate: app.controlsProjects ? "Its coordinator and threads don't run while it is inactive. Turn it on to start them:"
+            : "Its coordinator and threads don't run while it is inactive. Turn it on in a terminal:"
         case .start: "Start the coordinator and tell it what to build: it fills the board and starts threads for the tasks."
         case .message: "Tell the coordinator what to build: it fills the board and starts threads for the tasks."
         }

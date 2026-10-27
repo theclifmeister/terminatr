@@ -98,6 +98,18 @@ public enum AppAPI {
         }
     }
 
+    public struct CoordinatorClear: Codable, Sendable, Hashable {
+        public var session: String
+
+        public init(session: String) {
+            self.session = session
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case session
+        }
+    }
+
     public struct Empty: Codable, Sendable, Hashable {
 
         public init() {
@@ -677,6 +689,42 @@ public enum AppAPI {
         }
     }
 
+    public struct ProjectActive: Codable, Sendable, Hashable {
+        public var changed: Bool
+        public var stopped: [String]
+        public var resumed: [String]
+        public var lost: [String]
+
+        public init(changed: Bool, stopped: [String] = [], resumed: [String] = [], lost: [String] = []) {
+            self.changed = changed
+            self.stopped = stopped
+            self.resumed = resumed
+            self.lost = lost
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case changed
+            case stopped
+            case resumed
+            case lost
+        }
+    }
+
+    public struct ProjectActiveParams: Codable, Sendable, Hashable {
+        public var project: String
+        public var active: Bool
+
+        public init(project: String, active: Bool) {
+            self.project = project
+            self.active = active
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case project
+            case active
+        }
+    }
+
     public struct ProjectOpen: Codable, Sendable, Hashable {
         public var session: String
         public var started: Bool
@@ -1082,8 +1130,9 @@ public enum AppAPI {
         public var latest: String
         public var upgrade: String
         public var needsFirst: Bool
+        public var contextHint: Int
 
-        public init(sessions: [Session] = [], alerts: Int, notices: [Notice] = [], version: String = "", build: String = "", latest: String = "", upgrade: String = "", needsFirst: Bool = false) {
+        public init(sessions: [Session] = [], alerts: Int, notices: [Notice] = [], version: String = "", build: String = "", latest: String = "", upgrade: String = "", needsFirst: Bool = false, contextHint: Int = 0) {
             self.sessions = sessions
             self.alerts = alerts
             self.notices = notices
@@ -1092,6 +1141,7 @@ public enum AppAPI {
             self.latest = latest
             self.upgrade = upgrade
             self.needsFirst = needsFirst
+            self.contextHint = contextHint
         }
 
         enum CodingKeys: String, CodingKey {
@@ -1103,6 +1153,7 @@ public enum AppAPI {
             case latest
             case upgrade
             case needsFirst = "needs_first"
+            case contextHint = "context_hint"
         }
     }
 
@@ -1229,6 +1280,21 @@ public enum AppAPI {
         }
     }
 
+    public struct TaskGetParams: Codable, Sendable, Hashable {
+        public var project: String
+        public var task: String
+
+        public init(project: String, task: String) {
+            self.project = project
+            self.task = task
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case project
+            case task
+        }
+    }
+
     public struct TaskParams: Codable, Sendable, Hashable {
         public var project: String
         public var task: String
@@ -1251,14 +1317,18 @@ public enum AppAPI {
         public var pr: Int
         public var reportPr: String
         public var task: Task?
+        public var check: [String]
+        public var prState: String
 
-        public init(record: ThreadRecord, status: ThreadStatus? = nil, checks: String = "", pr: Int = 0, reportPr: String = "", task: Task? = nil) {
+        public init(record: ThreadRecord, status: ThreadStatus? = nil, checks: String = "", pr: Int = 0, reportPr: String = "", task: Task? = nil, check: [String] = [], prState: String = "") {
             self.record = record
             self.status = status
             self.checks = checks
             self.pr = pr
             self.reportPr = reportPr
             self.task = task
+            self.check = check
+            self.prState = prState
         }
 
         enum CodingKeys: String, CodingKey {
@@ -1268,6 +1338,8 @@ public enum AppAPI {
             case pr
             case reportPr = "report_pr"
             case task
+            case check
+            case prState = "pr_state"
         }
     }
 
@@ -1750,11 +1822,13 @@ public enum AppAPI {
 
     /// Every method of the app API, by name.
     public enum Methods {
+        public static let coordinatorClear = Call<ProjectParams, CoordinatorClear>("coordinator.clear", write: true)
         public static let notifyClaim = Call<NoticeParams, NoticeResult>("notify.claim", write: false)
         public static let notifyDismiss = Call<NoticeParams, NoticeResult>("notify.dismiss", write: false)
         public static let paneInput = Call<PaneInputParams, Empty>("pane.input", write: true, target: "pane.vt")
         public static let paneVt = Subscription<PaneParams, PaneResult, PaneEvent>("pane.vt", events: ["pane.repaint", "pane.output", "pane.resize", "pane.closed"])
         public static let peerList = Call<NoParams, PeerList>("peer.list", write: false)
+        public static let projectActive = Call<ProjectActiveParams, ProjectActive>("project.active", write: true)
         public static let projectOpen = Call<ProjectOpenParams, ProjectOpen>("project.open", write: true)
         public static let projectsWatch = Subscription<ProjectsWatchParams, Projects, Projects>("projects.watch", events: ["projects.changed"])
         public static let questionsOpen = Call<ProjectParams, QuestionsOpen>("questions.open", write: true)
@@ -1770,6 +1844,7 @@ public enum AppAPI {
         public static let taskAdd = Call<TaskAddParams, TaskAdded>("task.add", write: true)
         public static let taskAsk = Call<TaskAskParams, TaskAskResult>("task.ask", write: true)
         public static let taskDelegate = Call<TaskParams, TaskAskResult>("task.delegate", write: true)
+        public static let taskGet = Call<TaskGetParams, Task>("task.get", write: false)
         public static let taskSendBack = Call<SendBackParams, TaskAskResult>("task.send-back", write: true)
         public static let transcriptWatch = Subscription<TranscriptParams, TranscriptResult, TranscriptEvent>("transcript.watch", events: ["transcript.reset", "transcript.items", "transcript.status", "transcript.closed"])
     }
@@ -1817,6 +1892,13 @@ extension AppAPI.CancelParams {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.id = try c.decode(Int.self, forKey: .id)
+    }
+}
+
+extension AppAPI.CoordinatorClear {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.session = try c.decode(String.self, forKey: .session)
     }
 }
 
@@ -2071,6 +2153,24 @@ extension AppAPI.Project {
     }
 }
 
+extension AppAPI.ProjectActive {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.changed = try c.decode(Bool.self, forKey: .changed)
+        self.stopped = try c.decodeIfPresent([String].self, forKey: .stopped) ?? []
+        self.resumed = try c.decodeIfPresent([String].self, forKey: .resumed) ?? []
+        self.lost = try c.decodeIfPresent([String].self, forKey: .lost) ?? []
+    }
+}
+
+extension AppAPI.ProjectActiveParams {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.project = try c.decode(String.self, forKey: .project)
+        self.active = try c.decode(Bool.self, forKey: .active)
+    }
+}
+
 extension AppAPI.ProjectOpen {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -2265,6 +2365,7 @@ extension AppAPI.SessionList {
         self.latest = try c.decodeIfPresent(String.self, forKey: .latest) ?? ""
         self.upgrade = try c.decodeIfPresent(String.self, forKey: .upgrade) ?? ""
         self.needsFirst = try c.decodeIfPresent(Bool.self, forKey: .needsFirst) ?? false
+        self.contextHint = try c.decodeIfPresent(Int.self, forKey: .contextHint) ?? 0
     }
 }
 
@@ -2327,6 +2428,14 @@ extension AppAPI.TaskAskResult {
     }
 }
 
+extension AppAPI.TaskGetParams {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.project = try c.decode(String.self, forKey: .project)
+        self.task = try c.decode(String.self, forKey: .task)
+    }
+}
+
 extension AppAPI.TaskParams {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -2344,6 +2453,8 @@ extension AppAPI.Thread {
         self.pr = try c.decodeIfPresent(Int.self, forKey: .pr) ?? 0
         self.reportPr = try c.decodeIfPresent(String.self, forKey: .reportPr) ?? ""
         self.task = try c.decodeIfPresent(AppAPI.Task.self, forKey: .task)
+        self.check = try c.decodeIfPresent([String].self, forKey: .check) ?? []
+        self.prState = try c.decodeIfPresent(String.self, forKey: .prState) ?? ""
     }
 }
 

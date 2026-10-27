@@ -289,13 +289,19 @@ struct Sidebar: View {
         let needs = app.needs(of: p.slug).count
         let state = Attention.of(coordinator: app.coordinatorSession(p.slug), in: p)
         let l = listing(p)
+        let coordinator = app.coordinatorSession(p.slug)
         ProjectRow(name: p.slug, dot: theme.colour(state.tone), state: state.word, needs: needs, selected: app.nav.selection == sel)
             .selectable(sel)
+            .contextMenu { ProjectMenu(project: p, coordinator: coordinator != nil, divided: false) }
         if l.open {
             if l.coordinator {
+                // Its context use, as the TUI's row: warn from [ui]
+                // context_hint, high from 80% (with app API 13's hint).
+                let ctx = l.dormant ? nil : ContextUse.of(coordinator, hint: app.contextHint)
                 row(.session(SessionRef(project: p.slug)), label: "Coordinator", ref: nil,
                     tag: state.waits && !l.dormant ? (state.word, state.tone) : nil, dot: theme.colour(l.dormant ? .idle : state.tone),
-                    spoken: l.dormant ? "inactive" : state.spoken, dormant: l.dormant)
+                    spoken: l.dormant ? "inactive" : state.spoken, dormant: l.dormant, context: ctx,
+                    menu: coordinator == nil ? nil : p)
             }
             // Keyed with the project: thread ids repeat across projects,
             // and the List flattens every project's rows into one.
@@ -311,8 +317,10 @@ struct Sidebar: View {
     /// A session's row: its dot, task ref and title, and its tag: a
     /// filled pill in its tone's colour, or plain muted text (PR) when it
     /// has none. A dormant one (an inactive project's) is muted.
+    /// A running coordinator's row has its context use, and Save & Clear
+    /// in its menu (menu, its project).
     private func row(_ sel: Selection, label: String, ref: String?, tag: (String, Attention.Tone?)?, dot: Color, spoken: String,
-                     dormant: Bool = false) -> some View {
+                     dormant: Bool = false, context: ContextUse? = nil, menu: AppAPI.Project? = nil) -> some View {
         let on = app.nav.selection == sel
         return HStack(spacing: 6) {
             Circle()
@@ -328,6 +336,12 @@ struct Sidebar: View {
                 .font(theme.body(.callout))
                 .lineLimit(1)
             Spacer(minLength: 4)
+            if let context {
+                Text(context.word)
+                    .font(theme.mono(.caption2, context.tone == nil ? .regular : .semibold))
+                    .foregroundStyle(on ? theme.onAction : context.tone.map { theme.colour($0) } ?? theme.muted)
+                    .help(context.spoken)
+            }
             if let (word, tone) = tag {
                 if let tone {
                     Text(word)
@@ -349,10 +363,11 @@ struct Sidebar: View {
         // polish, needs approval".
         .accessibilityElement(children: .ignore)
         .accessibilityLabel([ref, label].compactMap { $0 }.joined(separator: " "))
-        .accessibilityValue(spoken)
+        .accessibilityValue([spoken, context?.spoken].compactMap { $0 }.joined(separator: ", "))
         .selectable(sel)
         .contextMenu {
             if case .session(let r) = sel { NewWindowButton(ref: r) }
+            if let menu { ProjectMenu(project: menu, coordinator: true) }
         }
     }
 

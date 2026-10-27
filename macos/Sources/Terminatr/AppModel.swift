@@ -34,6 +34,9 @@ final class AppModel {
     /// [ui] needs_first, as the last session list said: the sidebar
     /// lists the projects that need the user first, as the TUI's.
     private(set) var needsFirst = false
+    /// [ui] context_hint, as the last session list said (app API 13; 0
+    /// for never): a coordinator's row warns from it.
+    private(set) var contextHint = 0
     /// The bridge sends a paired project's watched threads (app API 10):
     /// the sidebar lists them, not only the ones a session runs.
     var watched: Bool { (hello?.appApi ?? 0) >= AppAPI.watchedAPI }
@@ -110,6 +113,8 @@ final class AppModel {
 
     /// The project File › New Task… adds to while its sheet shows.
     var newTask: String?
+    /// The task the task view shows (TaskSheet), nil for none.
+    var taskShown: TaskShown?
     /// What the bridge did: Settings › Advanced shows it.
     private(set) var log = BridgeLog()
     /// The need ⌥⌘↓ or ⌥⌘↑ showed last (Need.step).
@@ -287,6 +292,7 @@ final class AppModel {
             sessions = l.sessions
             notices = l.notices
             needsFirst = l.needsFirst
+            contextHint = l.contextHint
             loaded.sessions = true
             changed()
             try await Task.sleep(for: Self.sessionsEvery)
@@ -349,6 +355,7 @@ final class AppModel {
                     sessions = l.sessions
                     notices = l.notices
                     needsFirst = l.needsFirst
+                    contextHint = l.contextHint
                     changed()
                 }
             } while listAgain && !Task.isCancelled
@@ -631,6 +638,12 @@ final class AppModel {
         try await connected().call(AppAPI.Methods.taskAccept, AppAPI.TaskParams(project: project, task: task)).asked
     }
 
+    /// Reads task of project whole, its notes and steps too (task.get,
+    /// app API 14): a board task comes without them in the watch.
+    func getTask(project: String, task: String) async throws -> AppAPI.Task {
+        try await connected().call(AppAPI.Methods.taskGet, AppAPI.TaskGetParams(project: project, task: task))
+    }
+
     /// Asks project's coordinator to send task back with the user's
     /// note (task.send-back, the TUI's X).
     func sendBack(project: String, task: String, note: String) async throws -> Bool {
@@ -651,6 +664,55 @@ final class AppModel {
         _ = try await connected().call(AppAPI.Methods.questionsOpen, AppAPI.ProjectParams(project: project))
         listSessions()
     }
+
+    /// Whether this tm saves and clears coordinators and activates
+    /// projects from the app (app API 13).
+    var controlsProjects: Bool {
+        if case .connected(let h) = phase { return Compatibility.controlsProjects(h) }
+        return false
+    }
+
+    /// The project action the window asks about, in its confirmation.
+    var asking: ProjectAsk?
+    /// Why the last project action failed, or what it couldn't do: the
+    /// window's alert.
+    var askSaid: (title: String, text: String)?
+
+    /// Asks about a, or does it when it asks nothing (activating, or
+    /// deactivating a project that runs nothing).
+    func ask(_ a: ProjectAsk) {
+        guard controlsProjects else { return }
+        if a.asks {
+            asking = a
+            showWindow?()
+        } else {
+            act(a)
+        }
+    }
+
+    /// Does a, once the user said so: coordinator.clear or project.active.
+    func act(_ a: ProjectAsk) {
+        Task {
+            do {
+                switch a {
+                case .saveClear(let p):
+                    _ = try await connected().call(AppAPI.Methods.coordinatorClear, AppAPI.ProjectParams(project: p))
+                case .activate(let p), .deactivate(let p, _):
+                    let on: Bool
+                    if case .activate = a { on = true } else { on = false }
+                    let r = try await connected().call(AppAPI.Methods.projectActive, AppAPI.ProjectActiveParams(project: p, active: on))
+                    if let lost = ProjectAsk.words(r, project: p) { askSaid = ("Not everything resumed", lost) }
+                    listSessions()
+                }
+            } catch {
+                askSaid = ("\(a.verb) didn't work", Dashboard.words(error))
+            }
+        }
+    }
+
+    /// The project the window's Save & Clear, Activate and Deactivate act
+    /// on: the shown one, a paired server's never.
+    var shownProject: AppAPI.Project? { boardProject.flatMap { project($0) } }
 
     private func connected() throws -> Bridge {
         guard let bridge else { throw BridgeError.closed("Not connected to terminatr.") }
