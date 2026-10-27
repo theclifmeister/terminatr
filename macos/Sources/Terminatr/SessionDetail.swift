@@ -6,9 +6,10 @@ import TerminatrKit
 /// title (the session's, once, T752). It opens on the
 /// conversation, and falls back to the terminal, saying why, when the
 /// conversation can't be shown (an old server, a Codex agent, a
-/// transcript tm can't read). A paired server's session opens on the
-/// terminal alone: its pane comes through the server's peer link, its
-/// transcript never does. The model, and its streams, are the app's
+/// transcript tm can't read). A paired server's session opens the same
+/// way while that server shares its conversation (RemoteConversation),
+/// else on the terminal alone, its pane through the server's peer link.
+/// The model, and its streams, are the app's
 /// (AppModel.model): they outlive the selection for a few switches.
 struct SessionDetail: View {
     @Environment(AppModel.self) private var app
@@ -35,6 +36,7 @@ struct SessionDetail: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .task(id: app.bridge == nil) { model.follow(app) }
         .onChange(of: app.sessionID(model.ref)) { model.follow(app) }
+        .onChange(of: model.ref.isRemote ? app.remoteConversation(model.ref) : nil) { model.follow(app) }
         .onChange(of: state, initial: true) { _, s in model.settle(s) }
         // In the key window of the app in front: its needs don't notify.
         .onChange(of: active, initial: true) { _, a in app.shown(model.ref, inFront: a == .key) }
@@ -51,7 +53,7 @@ struct SessionDetail: View {
                 .pickerStyle(.segmented)
                 .labelsHidden()
                 .fixedSize()
-                .disabled(model.sessionID == nil || model.ref.isRemote)
+                .disabled(model.sessionID == nil)
                 .help("Conversation or Terminal (⌘⇧T)")
             }
         }

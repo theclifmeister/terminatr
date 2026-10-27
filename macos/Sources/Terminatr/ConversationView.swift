@@ -12,7 +12,10 @@ import TerminatrKit
 /// ring, and ↩, ⌘G and ⇧⌘G scroll from one to the next. A long
 /// transcript draws its last turns (drawn), and more on a click, so
 /// showing it costs no more than a short one. Consecutive tool calls
-/// fold into one group (ToolRunView).
+/// fold into one group (ToolRunView). A paired server's session shows
+/// its conversation alone: no card of this server's, a question open
+/// there as Answer in Terminal (its text stays there), and the composer
+/// at write, else a muted View only line.
 struct ConversationTab: View {
     @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
@@ -41,8 +44,10 @@ struct ConversationTab: View {
         let found = Set(matches)
         let current = matches.isEmpty ? nil : matches[min(at, matches.count - 1)]
         let coordinator = model.ref.isCoordinator
-        let review = coordinator ? nil : app.thread(model.ref).flatMap { t in t.task?.status == "review" ? t : nil }
-        let open = AppModel.waitsOnCard(session) || review != nil
+        let remote = model.ref.isRemote ? app.remoteConversation(model.ref) : nil
+        let peerSession = model.ref.session(in: app.peers)
+        let review = coordinator || remote != nil ? nil : app.thread(model.ref).flatMap { t in t.task?.status == "review" ? t : nil }
+        let open = AppModel.waitsOnCard(session) || review != nil || peerSession?.asking == true
         let entries = model.transcript.tail(drawn, keeping: current)
         // The AskUserQuestion call the open question card answers.
         let asking = session?.question != nil && AppModel.waitsOnCard(session)
@@ -53,7 +58,7 @@ struct ConversationTab: View {
             if finding {
                 findBar(matches.count)
             }
-            if coordinator {
+            if coordinator && remote == nil {
                 CoordinatorPanel(model: model, session: session)
                     .modifier(Flash(n: flash))
             }
@@ -74,7 +79,7 @@ struct ConversationTab: View {
                         ForEach(rows) { row in
                             switch row {
                             case .entry(let e):
-                                EntryView(entry: e, agent: session?.agent ?? "agent",
+                                EntryView(entry: e, agent: session?.agent ?? peerSession?.agent ?? "agent",
                                           answer: asking && e.id == pending ? { flash += 1 } : nil)
                                     .modifier(FoundRing(found: found.contains(e.id), current: e.id == current))
                                     .id(e.id)
@@ -100,7 +105,7 @@ struct ConversationTab: View {
                             EmptyView()
                         }
                         if let closed = model.transcript.closed {
-                            Text("The session ended (\(closed)).")
+                            Text(model.ref.isRemote ? RemoteConversation.ended(closed, alias: model.ref.server) : "The session ended (\(closed)).")
                                 .font(theme.body(.subheadline))
                                 .foregroundStyle(theme.muted)
                                 .frame(maxWidth: .infinity)
@@ -132,15 +137,23 @@ struct ConversationTab: View {
                                     .padding(.horizontal, 22)
                                     .frame(maxWidth: 820)
                             }
-                            if !coordinator {
+                            if remote != nil {
+                                if peerSession?.asking == true {
+                                    RemoteQuestionCard(model: model)
+                                }
+                            } else if !coordinator {
                                 Cards(model: model, session: session, firstChoice: app.firstChoice)
                             }
                         }
                         .modifier(Flash(n: flash))
-                        Composer(model: model, session: session)
+                        if let remote, !remote.sends {
+                            ViewOnlyLine(server: model.ref.server)
+                        } else {
+                            Composer(model: model, session: session)
+                        }
                     }
                     .overlay(alignment: .top) {
-                        if open && scrolledUp && !coordinator {
+                        if open && scrolledUp && (!coordinator || remote != nil) {
                             // Above the bar, over the transcript's edge.
                             jump(proxy)
                                 .padding(.bottom, 8)
@@ -231,6 +244,45 @@ struct ConversationTab: View {
     private func close() {
         finding = false
         query = ""
+    }
+}
+
+/// A question open in a paired server's session: its text stays on that
+/// server (peer.list says only that one is open), so the card sends the
+/// user to the session's pane, where the question shows and its keys
+/// answer it.
+struct RemoteQuestionCard: View {
+    @Environment(\.theme) private var theme
+    let model: SessionModel
+
+    var body: some View {
+        CardFrame(tag: "Question on \(model.ref.server)", colour: theme.question, tint: theme.questionTint) {
+            Text("A question is open in this session. Its text stays on \(model.ref.server): it shows in the pane, where your keys answer it.")
+                .fixedSize(horizontal: false, vertical: true)
+            Button("Answer in Terminal") { model.pick(.terminal) }
+                .buttonStyle(.borderedProminent)
+                .tint(theme.action)
+                .help("Opens the session's pane")
+        }
+        .padding(.horizontal, 22)
+        .frame(maxWidth: 820)
+    }
+}
+
+/// The composer's place on a paired server's session at view: that
+/// server lets this one read, not send.
+struct ViewOnlyLine: View {
+    @Environment(\.theme) private var theme
+    let server: String
+
+    var body: some View {
+        Label("View only: \(server) lets this server read this session, not send to it", systemImage: "eye")
+            .font(theme.body(.footnote))
+            .foregroundStyle(theme.muted)
+            .padding(.horizontal, 22)
+            .padding(.top, 10)
+            .padding(.bottom, 14)
+            .frame(maxWidth: 820, alignment: .leading)
     }
 }
 

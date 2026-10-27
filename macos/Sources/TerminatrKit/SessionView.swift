@@ -2,8 +2,8 @@ import Foundation
 
 /// What a session window shows: a project's coordinator (thread empty)
 /// or one of its threads, this server's or, with server set, a paired
-/// server's (its alias), whose pane comes through the server's peer
-/// link. It names the session by its place, not its id, so the window
+/// server's (its alias), whose pane and conversation come through the
+/// server's peer link. It names the session by its place, not its id, so the window
 /// outlives a restart of the agent.
 public struct SessionRef: Codable, Hashable, Sendable {
     public var project: String
@@ -27,8 +27,8 @@ public struct SessionRef: Codable, Hashable, Sendable {
 
     public var isCoordinator: Bool { thread.isEmpty }
 
-    /// A paired server's session: Terminal only, since no transcript
-    /// crosses a link.
+    /// A paired server's session: its conversation crosses the link
+    /// only under that server's switches (RemoteConversation).
     public var isRemote: Bool { !server.isEmpty }
 
     /// The window of a paired server's session s, of peer alias; nil
@@ -102,11 +102,12 @@ public enum ConversationState: Equatable, Sendable {
 
     /// caps are the server's hello capabilities, agent the session's,
     /// status the transcript stream's last, failure why the stream
-    /// broke or was refused, server the paired server's alias for its
-    /// session (design T734, q10: no transcript crosses a link).
-    public static func of(caps: [String], agent: String, status: AppAPI.TranscriptStatus?, failure: String?, server: String = "") -> ConversationState {
-        if !server.isEmpty {
-            return .unavailable("Conversations stay on \(server): only its pane crosses the link.")
+    /// broke or was refused, remote what a paired server's session
+    /// allows (nil for this server's): one that can't open is
+    /// terminal-only until a stream answered.
+    public static func of(caps: [String], agent: String, status: AppAPI.TranscriptStatus?, failure: String?, remote: RemoteConversation? = nil) -> ConversationState {
+        if case .closed(let why) = remote, status == nil {
+            return .unavailable(why)
         }
         if !caps.contains("transcript") {
             return .unavailable("This tm server doesn't serve conversations; tm update and tm server restart bring them.")
@@ -125,6 +126,65 @@ public enum ConversationState: Equatable, Sendable {
             let who = [status.agent.isEmpty ? agent : status.agent, status.version].filter { !$0.isEmpty }.joined(separator: " ")
             let why = status.reason.isEmpty ? "" : " (\(status.reason))"
             return .unavailable("tm can't read this \(who.isEmpty ? "agent" : who)'s transcript\(why), so the terminal shows it.")
+        }
+    }
+}
+
+/// Whether a paired server's conversation can be read, and what the
+/// window may do with it (T773): the far server shares it while its pane
+/// switch for this server is view or write and its conversations switch
+/// is on; the far server checks both again on every open, and every
+/// prompt goes into its pane as typing does, at write only.
+public enum RemoteConversation: Equatable, Sendable {
+    /// Read, and the composer types into the far pane.
+    case write
+    /// Read only: the composer is a muted View only line.
+    case view
+    /// Terminal only, with the window's words for why.
+    case closed(String)
+
+    /// caps are this server's, peer the paired server as peer.list last
+    /// had it (nil: not paired any more).
+    public static func of(caps: [String], peer: AppAPI.Peer?, alias: String) -> RemoteConversation {
+        guard caps.contains("transcript-remote") else {
+            return .closed("Conversations stay on \(alias): this tm server doesn't show paired servers' conversations; tm update and tm server restart bring them.")
+        }
+        guard let peer else { return .closed("\(alias) isn't paired with this server any more.") }
+        guard peer.state == "up" else {
+            return .closed("\(alias) is offline\(peer.reason.isEmpty ? "" : " (\(peer.reason))"); the conversation opens once its link is back.")
+        }
+        guard peer.transcript else {
+            return .closed("Conversations stay on \(alias): its tm needs an update to share them; only its pane crosses the link.")
+        }
+        guard peer.panes == "view" || peer.panes == "type" else {
+            return .closed("\(alias) doesn't share conversations with this server: on \(alias), tm peer panes <this server> view, or write.")
+        }
+        guard peer.conversations != "off" else {
+            return .closed("\(alias) doesn't share conversations with this server: on \(alias), tm peer conversations <this server> on.")
+        }
+        return peer.panes == "type" ? .write : .view
+    }
+
+    /// The composer sends: at write only.
+    public var sends: Bool { self == .write }
+
+    /// The conversation can be read.
+    public var reads: Bool {
+        if case .closed = self { return false }
+        return true
+    }
+
+    /// Why a paired server's stream ended, in the window's words, from
+    /// the server's fixed word (transcript.closed's reason).
+    public static func ended(_ reason: String, alias: String) -> String {
+        switch reason {
+        case "exited": "The session ended on \(alias)."
+        case "stopping": "\(alias)'s tm server is stopping."
+        case "not-shared": "\(alias) stopped sharing this project."
+        case "panes-off": "\(alias) turned its panes off for this server, and its conversations with them."
+        case "conversations-off": "\(alias) stopped sharing conversations with this server."
+        case "link": "The link to \(alias) dropped."
+        default: "The conversation on \(alias) closed (\(reason))."
         }
     }
 }

@@ -7,8 +7,9 @@ import TerminatrKit
 /// the acts the session view sends as the human. The app keeps it while
 /// the session is shown and for a few selections after (AppModel.model). The server
 /// checks every act; the window only shows what it answered. A paired
-/// server's session has neither stream: only its pane crosses the link
-/// (TerminalTab), and the window shows it on the Terminal tab.
+/// server's session has no watch: its pane crosses the link
+/// (TerminalTab), and its transcript too while that server shares it
+/// (RemoteConversation), through this server.
 @MainActor
 @Observable
 final class SessionModel {
@@ -26,13 +27,15 @@ final class SessionModel {
     var unfoldedRuns: Set<Int> = []
 
     @ObservationIgnored private var streams: [Task<Void, Never>] = []
+    /// A transcript stream runs, or ran to its end without one since:
+    /// a paired server's opens again once it shares it again.
+    @ObservationIgnored private var reading = false
     /// The bridge the streams run on.
     @ObservationIgnored private var bridge: Bridge?
     @ObservationIgnored private weak var app: AppModel?
 
     init(ref: SessionRef) {
         self.ref = ref
-        if ref.isRemote { tab = .terminal }
     }
 
     /// Follows the session app names for ref: a new one restarts the
@@ -45,7 +48,10 @@ final class SessionModel {
             return
         }
         let id = app.sessionID(ref)
-        guard id != sessionID || app.bridge !== bridge else { return }
+        let reads = ref.isRemote ? app.remoteConversation(ref).reads : app.caps.contains("transcript")
+        // A paired server that stops sharing keeps what it showed: its
+        // stream ends by itself, and opens again once it shares again.
+        guard id != sessionID || app.bridge !== bridge || (reads && !reading) else { return }
         stop()
         sessionID = id
         bridge = app.bridge
@@ -53,9 +59,13 @@ final class SessionModel {
         transcript = Transcript()
         unfoldedRuns = []
         transcriptFailure = nil
-        guard let id, let bridge = app.bridge, !ref.isRemote else { return }
-        streams.append(Task { await self.watchSession(bridge, id) })
-        if app.caps.contains("transcript") {
+        reading = false
+        guard let id, let bridge = app.bridge else { return }
+        if !ref.isRemote {
+            streams.append(Task { await self.watchSession(bridge, id) })
+        }
+        if reads {
+            reading = true
             streams.append(Task { await self.watchTranscript(bridge, id) })
         }
     }
@@ -75,7 +85,7 @@ final class SessionModel {
     /// Opens on the conversation; falls back to the terminal while it
     /// can't be shown, unless the user picked a tab.
     func settle(_ state: ConversationState) {
-        guard !tabPicked || ref.isRemote else { return }
+        guard !tabPicked else { return }
         tab = state.available ? .conversation : .terminal
     }
 
@@ -97,12 +107,14 @@ final class SessionModel {
             for try await e in sub.events {
                 transcript.apply(e.name, e.data)
             }
+            if ref.isRemote { reading = false }
         } catch BridgeError.closed {
             // The bridge went: the conversation stays as it was, and the
             // next bridge opens the stream again (follow).
         } catch {
             if !Task.isCancelled {
                 transcriptFailure = error.localizedDescription
+                if ref.isRemote { reading = false }
             }
         }
     }

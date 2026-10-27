@@ -6,7 +6,7 @@ import Foundation
 /// The terminatr app API (docs/SPEC.md §3.8): what tm app bridge answers.
 public enum AppAPI {
     /// The app API version this app was generated against.
-    public static let version = 9
+    public static let version = 12
 
     public struct AnswerParams: Codable, Sendable, Hashable {
         public var id: String
@@ -426,8 +426,10 @@ public enum AppAPI {
         public var shareWaits: Int
         public var pane: Bool
         public var panes: String
+        public var transcript: Bool
+        public var conversations: String
 
-        public init(alias: String, name: String = "", state: String, reason: String = "", since: Date? = nil, projects: [PeerProject] = [], shareWaits: Int = 0, pane: Bool = false, panes: String = "") {
+        public init(alias: String, name: String = "", state: String, reason: String = "", since: Date? = nil, projects: [PeerProject] = [], shareWaits: Int = 0, pane: Bool = false, panes: String = "", transcript: Bool = false, conversations: String = "") {
             self.alias = alias
             self.name = name
             self.state = state
@@ -437,6 +439,8 @@ public enum AppAPI {
             self.shareWaits = shareWaits
             self.pane = pane
             self.panes = panes
+            self.transcript = transcript
+            self.conversations = conversations
         }
 
         enum CodingKeys: String, CodingKey {
@@ -449,6 +453,8 @@ public enum AppAPI {
             case shareWaits = "share_waits"
             case pane
             case panes
+            case transcript
+            case conversations
         }
     }
 
@@ -1790,6 +1796,8 @@ extension AppAPI.Peer {
         self.shareWaits = try c.decodeIfPresent(Int.self, forKey: .shareWaits) ?? 0
         self.pane = try c.decodeIfPresent(Bool.self, forKey: .pane) ?? false
         self.panes = try c.decodeIfPresent(String.self, forKey: .panes) ?? ""
+        self.transcript = try c.decodeIfPresent(Bool.self, forKey: .transcript) ?? false
+        self.conversations = try c.decodeIfPresent(String.self, forKey: .conversations) ?? ""
     }
 }
 

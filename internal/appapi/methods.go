@@ -49,7 +49,10 @@ func init() {
 		// The paired servers and the projects they share (the server's
 		// mirror), with their coordinators and threads, whose panes
 		// pane.vt opens as "<alias>/<session>" through the server's link
-		// (its caps say pane-vt-remote): no transcript of theirs.
+		// (its caps say pane-vt-remote), and whose conversations
+		// transcript.watch reads so under the far server's switches (its
+		// caps say transcript-remote; app API 12), where session.prompt
+		// types into the pane.
 		unary(proto.MethodPeerList, false, noParams, peerListOf),
 
 		// The notice tray (mods' notifications): one console draws each.
