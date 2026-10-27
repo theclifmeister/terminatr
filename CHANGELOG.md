@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.56.1](https://github.com/theclifmeister/terminatr/compare/v0.56.0...v0.56.1) (2026-10-27)
+
+
+### Bug Fixes
+
+* **app:** a paired server's projects in the sidebar look and fold as this server's ([#837](https://github.com/theclifmeister/terminatr/issues/837)) ([2625be5](https://github.com/theclifmeister/terminatr/commit/2625be5ac281c8e05328ce63a3a585dc4ebb64d7))
+* **app:** split view columns' least widths are fixed, never their content's ([#839](https://github.com/theclifmeister/terminatr/issues/839)) ([84ae134](https://github.com/theclifmeister/terminatr/commit/84ae1340d04365226b5ee9456ea547479571c58c))
+
 ## [0.56.0](https://github.com/theclifmeister/terminatr/compare/v0.55.0...v0.56.0) (2026-10-27)
 
 
