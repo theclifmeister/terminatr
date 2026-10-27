@@ -163,10 +163,12 @@ final class SessionModel {
     }
 
     /// Asks the server what option choice of the dialog on screen would
-    /// answer, sending nothing (check), or sends it.
-    func approve(choice: Int, check: Bool, escape: Bool = false) async throws -> AppAPI.ApproveResult {
+    /// answer, sending nothing (check), or sends it. Escape and session:
+    /// the user confirmed a command outside the sandbox, an option that
+    /// allows for the rest of the session.
+    func approve(choice: Int, check: Bool, escape: Bool = false, session: Bool = false) async throws -> AppAPI.ApproveResult {
         let (b, id) = try target()
-        return try await b.call(AppAPI.Methods.sessionApprove, AppAPI.ApproveParams(id: id, choice: choice, check: check, escape: escape))
+        return try await b.call(AppAPI.Methods.sessionApprove, AppAPI.ApproveParams(id: id, choice: choice, check: check, escape: escape, session: session))
     }
 
     /// Writes data to the session's terminal as if typed ("\u{1b}": Esc).

@@ -71,12 +71,14 @@ struct NeedCard: View {
         HStack(spacing: 6) {
             switch need.kind {
             case .approval:
-                if let dialog, !dialog.escape, let first = dialog.options.first {
+                // Options that allow once only: one for the session needs
+                // the confirmation the session's own card asks.
+                if let dialog, !dialog.escape, let first = dialog.options.first, once(dialog, 1) {
                     Button(first) { approve(1) }
                         .accessibilityLabel(named(first))
                         .buttonStyle(.borderedProminent)
                         .tint(theme.action)
-                    if dialog.options.count > 1, let last = dialog.options.last {
+                    if dialog.options.count > 1, let last = dialog.options.last, once(dialog, dialog.options.count) {
                         Button(last) { approve(dialog.options.count) }
                             .accessibilityLabel(named(last))
                     }
@@ -129,6 +131,10 @@ struct NeedCard: View {
     private func openTerminal() {
         app.open(project: need.project, session: need.session)
         if let ref = app.selectedRef { app.model(ref).pick(.terminal) }
+    }
+
+    private func once(_ d: AppAPI.ApproveResult, _ choice: Int) -> Bool {
+        choice > d.scopes.count || d.scopes[choice - 1] == "once"
     }
 
     /// Asks the server what the dialog on screen offers (check).
