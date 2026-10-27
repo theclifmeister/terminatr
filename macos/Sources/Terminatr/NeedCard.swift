@@ -44,6 +44,10 @@ struct NeedCard: View {
                     .foregroundStyle(said.failed ? theme.attention : theme.muted)
                     .padding(.leading, 24)
             }
+            if !need.task.isEmpty, need.kind == .review || need.kind == .blocked {
+                TaskOutcome(project: need.project, task: need.task)
+                    .padding(.leading, 24)
+            }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 9)
