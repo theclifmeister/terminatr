@@ -154,6 +154,7 @@ public enum SidebarTree {
         case .held: "held"
         case .network: "paired"
         case .link: "on links"
+        case .refusal: "refused"
         }
     }
 }

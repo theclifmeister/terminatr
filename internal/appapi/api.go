@@ -160,4 +160,8 @@ type Method struct {
 	result   func(json.RawMessage) (any, error)
 	event    func(json.RawMessage) (name string, data any, keep bool, ack any, err error)
 	toStream func(json.RawMessage) (int64, any, error)
+	// local answers a method the bridge answers itself, without the
+	// server (the guard's, guard.go), from the app's params as toServer
+	// decoded them; its error is an *Error.
+	local func(b *bridge, params any) (any, error)
 }

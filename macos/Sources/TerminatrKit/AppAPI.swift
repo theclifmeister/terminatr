@@ -137,6 +137,93 @@ public enum AppAPI {
         }
     }
 
+    public struct GuardDecideParams: Codable, Sendable, Hashable {
+        public var id: String
+        public var how: String
+
+        public init(id: String, how: String) {
+            self.id = id
+            self.how = how
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case id
+            case how
+        }
+    }
+
+    public struct GuardDecided: Codable, Sendable, Hashable {
+        public var message: String
+
+        public init(message: String) {
+            self.message = message
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case message
+        }
+    }
+
+    public struct GuardRefusal: Codable, Sendable, Hashable, Identifiable {
+        public var id: String
+        public var project: String
+        public var thread: String
+        public var role: String
+        public var rule: String
+        public var tool: String
+        public var summary: String
+        public var subject: String
+        public var path: Bool
+        public var floor: Bool
+        public var first: Date
+        public var last: Date
+        public var count: Int
+
+        public init(id: String, project: String, thread: String = "", role: String = "", rule: String, tool: String, summary: String = "", subject: String, path: Bool = false, floor: Bool = false, first: Date, last: Date, count: Int) {
+            self.id = id
+            self.project = project
+            self.thread = thread
+            self.role = role
+            self.rule = rule
+            self.tool = tool
+            self.summary = summary
+            self.subject = subject
+            self.path = path
+            self.floor = floor
+            self.first = first
+            self.last = last
+            self.count = count
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case id
+            case project
+            case thread
+            case role
+            case rule
+            case tool
+            case summary
+            case subject
+            case path
+            case floor
+            case first
+            case last
+            case count
+        }
+    }
+
+    public struct GuardRefusals: Codable, Sendable, Hashable {
+        public var refusals: [GuardRefusal]
+
+        public init(refusals: [GuardRefusal] = []) {
+            self.refusals = refusals
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case refusals
+        }
+    }
+
     public struct Hello: Codable, Sendable, Hashable {
         public var appApi: Int
         public var tm: String
@@ -2012,6 +2099,8 @@ public enum AppAPI {
     /// Every method of the app API, by name.
     public enum Methods {
         public static let coordinatorClear = Call<ProjectParams, CoordinatorClear>("coordinator.clear", write: true)
+        public static let guardDecide = Call<GuardDecideParams, GuardDecided>("guard.decide", write: true)
+        public static let guardRefusals = Call<NoParams, GuardRefusals>("guard.refusals", write: false)
         public static let linkAct = Call<LinkActParams, LinkActResult>("link.act", write: true)
         public static let notifyClaim = Call<NoticeParams, NoticeResult>("notify.claim", write: false)
         public static let notifyDismiss = Call<NoticeParams, NoticeResult>("notify.dismiss", write: false)
@@ -2101,6 +2190,47 @@ extension AppAPI.Error {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.code = try c.decode(String.self, forKey: .code)
         self.message = try c.decode(String.self, forKey: .message)
+    }
+}
+
+extension AppAPI.GuardDecideParams {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try c.decode(String.self, forKey: .id)
+        self.how = try c.decode(String.self, forKey: .how)
+    }
+}
+
+extension AppAPI.GuardDecided {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.message = try c.decode(String.self, forKey: .message)
+    }
+}
+
+extension AppAPI.GuardRefusal {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try c.decode(String.self, forKey: .id)
+        self.project = try c.decode(String.self, forKey: .project)
+        self.thread = try c.decodeIfPresent(String.self, forKey: .thread) ?? ""
+        self.role = try c.decodeIfPresent(String.self, forKey: .role) ?? ""
+        self.rule = try c.decode(String.self, forKey: .rule)
+        self.tool = try c.decode(String.self, forKey: .tool)
+        self.summary = try c.decodeIfPresent(String.self, forKey: .summary) ?? ""
+        self.subject = try c.decode(String.self, forKey: .subject)
+        self.path = try c.decodeIfPresent(Bool.self, forKey: .path) ?? false
+        self.floor = try c.decodeIfPresent(Bool.self, forKey: .floor) ?? false
+        self.first = try c.decode(Date.self, forKey: .first)
+        self.last = try c.decode(Date.self, forKey: .last)
+        self.count = try c.decode(Int.self, forKey: .count)
+    }
+}
+
+extension AppAPI.GuardRefusals {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.refusals = try c.decodeIfPresent([AppAPI.GuardRefusal].self, forKey: .refusals) ?? []
     }
 }
 

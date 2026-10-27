@@ -358,6 +358,7 @@ private struct KindToggle: View {
         case .held: "A prompt queue is held"
         case .network: "A paired server needs you"
         case .link: "A link waits for you (a held message, a file, a link request)"
+        case .refusal: "The guard refused a call"
         }
     }
 }

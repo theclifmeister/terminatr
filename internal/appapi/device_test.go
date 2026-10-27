@@ -25,8 +25,11 @@ import (
 // write everything; the Mac app's bridge has every method.
 func TestAllowed(t *testing.T) {
 	for _, m := range appapi.Methods() {
-		if !appapi.Allowed(m, "") || !appapi.Allowed(m, device.LevelWrite) {
-			t.Errorf("%s: not the Mac app's or write's", m.Name)
+		if !appapi.Allowed(m, "") || appapi.Allowed(m, device.LevelWrite) == (m.Name == appapi.MethodGuardDecide) {
+			t.Errorf("%s: the Mac app's %v, write's %v", m.Name, appapi.Allowed(m, ""), appapi.Allowed(m, device.LevelWrite))
+		}
+		if m.Name == appapi.MethodGuardDecide {
+			continue
 		}
 		if appapi.Allowed(m, device.LevelView) == m.Write {
 			t.Errorf("%s: view %v, write %v", m.Name, appapi.Allowed(m, device.LevelView), m.Write)

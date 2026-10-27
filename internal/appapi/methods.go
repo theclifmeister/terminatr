@@ -14,7 +14,8 @@ import (
 // methods is the app API: the control methods the app may call, by name.
 // A method joins on purpose, here, with its copies; nothing reaches the
 // server that isn't listed. Settings, access, mods and the server's own
-// controls are never here: they stay the TUI's and the CLI's.
+// controls are never here: they stay the TUI's and the CLI's, but for
+// the one exception named in the spec, answering a guard refusal.
 var methods = map[string]Method{}
 
 func init() {
@@ -108,6 +109,12 @@ func init() {
 		// this server's projects, or declined.
 		unary(proto.MethodLinkAct, true, linkActParams, linkActOf),
 		unary(proto.MethodPeerShareAnswer, true, shareAnswerParams, shareAnswerOf),
+
+		// The guard's refusals, read and answered one at a time (app
+		// API 18): the bridge's own, from the human's log (guard.go).
+		// No other setting or access joins.
+		local(MethodGuardRefusals, false, guardRefusals),
+		local(MethodGuardDecide, true, guardDecide),
 	} {
 		methods[m.Name] = m
 	}
@@ -203,6 +210,15 @@ func input[AP any](name, target string, write bool, f func(AP) (int64, any)) Met
 		return il.id, il.line, nil
 	}
 	m.result = func(json.RawMessage) (any, error) { return Empty{}, nil }
+	return m
+}
+
+// local is a method the bridge answers itself (Method.local): f gets
+// the app's params AP, decoded as strictly as a server method's.
+func local[AP, AR any](name string, write bool, f func(*bridge, AP) (AR, error)) Method {
+	m := Method{Name: name, Write: write, Result: reflect.TypeFor[AR]()}
+	m.toServer, m.Params = paramsOf(func(ap AP) AP { return ap })
+	m.local = func(b *bridge, params any) (any, error) { return f(b, params.(AP)) }
 	return m
 }
 
