@@ -269,6 +269,7 @@ func (s *Session) Info() proto.SessionInfo {
 	if st, ok := s.AgentState(); ok {
 		info.Agent = st.Agent
 		info.State, info.Reason, info.StateSources, info.Escape = string(st.State), st.Reason, st.Sources, st.Escape
+		info.Question = st.Menu
 		info.AgentSID, info.Identified, info.Queued = st.AgentSID, st.Observed, st.Queued
 		info.QueuedSince, info.QueueHeld, info.QueueHeldSince = st.QueuedSince, st.Held, st.HeldSince
 		if st.RemoteKnown {
