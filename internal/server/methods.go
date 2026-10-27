@@ -217,6 +217,7 @@ func init() {
 		// The human's.
 		proto.MethodPaneVT:          {gate: gateHuman, stream: (*Server).servePaneVT},
 		proto.MethodTranscriptWatch: {gate: gateHuman, stream: stream((*Server).serveTranscript)},
+		proto.MethodTranscriptPage:  {gate: gateHuman, call: typed((*Server).transcriptPage)},
 		proto.MethodSessionFile: {gate: gateHuman, call: typed(func(s *Server, p proto.SessionFileParams, _ callCtx) (any, *proto.Error) {
 			return s.sessionFile(p)
 		})},

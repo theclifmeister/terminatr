@@ -39,6 +39,9 @@ func init() {
 		// (app API 11; the server's caps say session-file), by the ref its
 		// item gave: only what the transcript's line names there.
 		unary(proto.MethodSessionFile, false, sessionFileParams, sessionFileOf),
+		// The items before a reset's tail (app API 19; the server's caps
+		// say transcript-tail), a page at a time.
+		unary(proto.MethodTranscriptPage, false, transcriptPageParams, transcriptPageOf),
 
 		// A pane in plain VT (the server's caps say pane-vt): repaints,
 		// output and resizes; the bridge acks the bytes it wrote to the
@@ -265,7 +268,11 @@ func keysParams(p KeysParams) proto.SessionKeysParams {
 func paneParams(p PaneParams) proto.PaneVTParams { return proto.PaneVTParams{Session: p.Session} }
 
 func transcriptParams(p TranscriptParams) proto.TranscriptWatchParams {
-	return proto.TranscriptWatchParams{Session: p.Session}
+	return proto.TranscriptWatchParams{Session: p.Session, Tail: p.Tail}
+}
+
+func transcriptPageParams(p TranscriptPageParams) proto.TranscriptPageParams {
+	return proto.TranscriptPageParams{Session: p.Session, Before: p.Before, Limit: p.Limit}
 }
 
 func sessionFileParams(p SessionFileParams) proto.SessionFileParams {
