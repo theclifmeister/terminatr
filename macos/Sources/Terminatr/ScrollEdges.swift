@@ -42,6 +42,7 @@ extension View {
     func footBar<Bar: View>(_ bar: Bar) -> some View {
         safeAreaInset(edge: .bottom, spacing: 0) {
             bar
+                .frame(maxWidth: .infinity)
                 .padding(.top, EdgeFade.fade)
                 .background { EdgeFade(edge: .bottom) }
         }
@@ -52,7 +53,7 @@ extension View {
 /// bar material and the theme's bar, opaque where the toolbar (top) or
 /// the bar (bottom) is and fading into the content over fade points:
 /// below the toolbar, within the bar's top. With Increase Contrast or
-/// Reduce Transparency, the theme's base, opaque.
+/// Reduce Transparency, opaque: the theme's bar over its base.
 struct EdgeFade: View {
     @Environment(\.theme) private var theme
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
@@ -84,7 +85,11 @@ struct EdgeFade: View {
     @ViewBuilder
     private var ground: some View {
         if theme.contrast || reduceTransparency {
-            theme.base
+            // With Increase Contrast the bar is opaque: the title bar's.
+            ZStack {
+                theme.base
+                theme.bar
+            }
         } else {
             ZStack {
                 Rectangle().fill(.bar)
