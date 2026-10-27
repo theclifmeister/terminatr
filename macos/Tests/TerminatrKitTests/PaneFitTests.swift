@@ -56,3 +56,14 @@ private let wide = AppAPI.PaneSize(cols: 160, rows: 40)
     f.opened()
     #expect(f.settled(m))
 }
+
+@Test func paneFitCentresTheRemainder() {
+    // A fitted pane: less than a cell left over, split evenly.
+    #expect(PaneFit.centre(room: 600, used: 594, cell: 7.5) == 3)
+    #expect(PaneFit.centre(room: 600, used: 595, cell: 7.5) == 2.5)
+    // Fills it exactly, or overflows: no offset.
+    #expect(PaneFit.centre(room: 600, used: 600, cell: 7.5) == 0)
+    #expect(PaneFit.centre(room: 600, used: 640, cell: 7.5) == 0)
+    // A pane smaller than the room (another client's size) stays put.
+    #expect(PaneFit.centre(room: 600, used: 400, cell: 7.5) == 0)
+}

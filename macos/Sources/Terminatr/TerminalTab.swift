@@ -19,6 +19,11 @@ struct TerminalTab: View {
     let session: AppAPI.Session?
     @State private var pane = PaneController()
 
+    /// The terminal box's side edges and corners, which the session's
+    /// notice above it and the footer under it share.
+    static let edge: CGFloat = 14
+    static let corner: CGFloat = 12
+
     var body: some View {
         let remote = model.ref.isRemote ? app.remotePane(model.ref) : nil
         VStack(spacing: 0) {
@@ -49,8 +54,8 @@ struct TerminalTab: View {
                     }
                 }
                 .background(theme.terminalBackground)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-                .padding(.horizontal, 14)
+                .clipShape(RoundedRectangle(cornerRadius: Self.corner))
+                .padding(.horizontal, Self.edge)
                 footer(remote)
             }
         }
@@ -71,7 +76,7 @@ struct TerminalTab: View {
             Button("Repaint") { pane.repaint() }
         }
         .controlSize(.small)
-        .padding(.horizontal, 18)
+        .padding(.horizontal, Self.edge)
         .padding(.vertical, 8)
     }
 }
@@ -277,8 +282,14 @@ final class PaneHost: NSView {
 
     override func layout() {
         super.layout()
-        terminal.setFrameOrigin(CGPoint(x: Self.inset.width, y: Self.inset.height))
+        let room = self.room
         terminal.setFrameSize(room)
+        // A fitted pane's cells leave less than a cell of the room: split
+        // it evenly around them.
+        let cell = terminal.cell
+        let dx = PaneFit.centre(room: room.width, used: terminal.frame.width, cell: cell.width)
+        let dy = PaneFit.centre(room: room.height, used: terminal.frame.height, cell: cell.height)
+        terminal.setFrameOrigin(CGPoint(x: Self.inset.width + dx, y: Self.inset.height + dy))
         if laidOut != bounds.size {
             laidOut = bounds.size
             roomChanged?()
@@ -299,7 +310,8 @@ final class PaneHost: NSView {
         let cell = terminal.cell
         let room = self.room
         guard cell.width > 0, cell.height > 0, room.width > 0 else { return nil }
-        let w = room.width - NSScroller.scrollerWidth(for: .regular, scrollerStyle: NSScroller.preferredScrollerStyle)
+        // The scroller SwiftTerm reserves beside the cells.
+        let w = room.width - NSScroller.scrollerWidth(for: .regular, scrollerStyle: terminal.scrollerStyle)
         let cols = min(1000, max(20, Int(w / cell.width)))
         let rows = min(500, max(5, Int(room.height / cell.height)))
         return AppAPI.PaneSize(cols: cols, rows: rows)

@@ -34,6 +34,16 @@ public struct PaneFit: Sendable {
         move == moves
     }
 
+    /// Where cells that use `used` of `room` start, for an even margin
+    /// around them: half the remainder when it is under a cell (a fitted
+    /// pane), else 0, keeping a smaller pane at the top left. Rounded
+    /// down to a half point.
+    public static func centre(room: Double, used: Double, cell: Double) -> Double {
+        let slack = room - used
+        guard slack > 0, slack < cell else { return 0 }
+        return (slack / 2 * 2).rounded(.down) / 2
+    }
+
     /// The size to claim for the room's fitting while the pane has size,
     /// nil for none: not with keys off, no stream open, either size
     /// unknown, the pane at it already, or once claimed.
