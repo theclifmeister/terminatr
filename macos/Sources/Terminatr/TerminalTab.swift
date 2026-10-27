@@ -19,9 +19,8 @@ struct TerminalTab: View {
     let session: AppAPI.Session?
     @State private var pane = PaneController()
 
-    /// The terminal box's side edges and corners, which the session's
-    /// notice above it and the footer under it share.
-    static let edge: CGFloat = 14
+    /// The terminal box's corners, which the session's notice above it
+    /// shares; its side edges are the pages' (Page.edge).
     static let corner: CGFloat = 12
 
     var body: some View {
@@ -55,7 +54,7 @@ struct TerminalTab: View {
                 }
                 .background(theme.terminalBackground)
                 .clipShape(RoundedRectangle(cornerRadius: Self.corner))
-                .padding(.horizontal, Self.edge)
+                .padding(.horizontal, Page.edge)
                 footer(remote)
             }
         }
@@ -76,7 +75,7 @@ struct TerminalTab: View {
             Button("Repaint") { pane.repaint() }
         }
         .controlSize(.small)
-        .padding(.horizontal, Self.edge)
+        .padding(.horizontal, Page.edge)
         .padding(.vertical, 8)
     }
 }

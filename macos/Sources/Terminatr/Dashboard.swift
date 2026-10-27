@@ -27,16 +27,16 @@ struct ProjectDashboard: View {
                 }
                 if !needs.isEmpty {
                     section("Needs you · \(needs.count)") {
-                        ForEach(needs.filter { !$0.isReview }) { NeedCard(need: $0) }
+                        CardGrid { ForEach(needs.filter { !$0.isReview }) { NeedCard(need: $0) } }
                         let review = needs.filter(\.isReview)
                         if !review.isEmpty {
                             label("Review · \(review.count)")
-                            ForEach(review) { NeedCard(need: $0) }
+                            CardGrid { ForEach(review) { NeedCard(need: $0) } }
                         }
                     }
                 }
                 section("Coordinator") {
-                    CoordinatorRow(project: project, attention: app.coordinator(of: project), running: running)
+                    CardGrid { CoordinatorRow(project: project, attention: app.coordinator(of: project), running: running) }
                 }
                 let groups = Dashboard.groups(project.threads, attention: app.attention) { t in
                     !t.record.session.isEmpty && app.sessions.contains { $0.id == t.record.session }
@@ -45,7 +45,7 @@ struct ProjectDashboard: View {
                     section("Threads · \(project.threads.count)") {
                         ForEach(groups, id: \.group) { g in
                             fold(g.group.rawValue, g.threads.count, key: g.group.folded ? "\(g.group)" : nil) {
-                                ForEach(g.threads, id: \.record.id) { threadCard($0) }
+                                CardGrid { ForEach(g.threads, id: \.record.id) { threadCard($0) } }
                             }
                         }
                     }
@@ -55,12 +55,12 @@ struct ProjectDashboard: View {
                     section("Board") {
                         if !deck.isEmpty {
                             fold("On deck", deck.count, key: nil) {
-                                ForEach(deck) { BoardRow(project: project.slug, task: $0) }
+                                CardGrid { ForEach(deck) { BoardRow(project: project.slug, task: $0) } }
                             }
                         }
                         if !backlog.isEmpty {
                             fold("Backlog", backlog.count, key: "backlog") {
-                                ForEach(backlog) { BoardRow(project: project.slug, task: $0) }
+                                CardGrid { ForEach(backlog) { BoardRow(project: project.slug, task: $0) } }
                             }
                         }
                     }
@@ -82,8 +82,7 @@ struct ProjectDashboard: View {
             .padding(.horizontal, 28)
             .padding(.top, 18)
             .padding(.bottom, 28)
-            .frame(maxWidth: 760, alignment: .leading)
-            .frame(maxWidth: .infinity)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .scrollEdges()
     }
@@ -445,20 +444,21 @@ struct RemoteProjectDashboard: View {
                     Text("Nothing runs there now.")
                         .foregroundStyle(theme.muted)
                 }
-                ForEach(project.sessions.compactMap { s in SessionRef(s, of: peer.alias).map { (s, $0) } }, id: \.0.id) { s, ref in
-                    Button { app.select(.session(ref)) } label: {
-                        PeerSessionCard(session: s, ref: ref)
-                            .contentShape(RoundedRectangle(cornerRadius: 14))
+                CardGrid {
+                    ForEach(project.sessions.compactMap { s in SessionRef(s, of: peer.alias).map { (s, $0) } }, id: \.0.id) { s, ref in
+                        Button { app.select(.session(ref)) } label: {
+                            PeerSessionCard(session: s, ref: ref)
+                                .contentShape(RoundedRectangle(cornerRadius: 14))
+                        }
+                        .buttonStyle(.plain)
+                            .contextMenu { NewWindowButton(ref: ref) }
                     }
-                    .buttonStyle(.plain)
-                        .contextMenu { NewWindowButton(ref: ref) }
                 }
             }
             .padding(.horizontal, 28)
             .padding(.top, 18)
             .padding(.bottom, 28)
-            .frame(maxWidth: 760, alignment: .leading)
-            .frame(maxWidth: .infinity)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .scrollEdges()
         .opacity(project.stale ? 0.7 : 1)

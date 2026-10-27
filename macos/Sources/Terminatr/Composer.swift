@@ -85,10 +85,9 @@ struct Composer: View {
             .font(theme.body(.footnote))
             .padding(.horizontal, 6)
         }
-        .padding(.horizontal, 22)
+        .padding(.horizontal, Page.edge)
         .padding(.top, 10)
         .padding(.bottom, 14)
-        .frame(maxWidth: 820)
         .onChange(of: app.composerFocus) { focused = true }
         .onAppear { if autofocus { focused = true } }
         .confirmationDialog("Interrupt the agent's turn?", isPresented: $interrupting) {

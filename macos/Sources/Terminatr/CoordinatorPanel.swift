@@ -42,8 +42,7 @@ struct CoordinatorPanel: View {
             Cards(model: model, session: session, firstChoice: app.firstChoice)
             if kept > 0 {
                 QuestionsCard(project: model.ref.project, count: kept)
-                    .padding(.horizontal, 22)
-                    .frame(maxWidth: 820)
+                    .padding(.horizontal, Page.edge)
             }
             if !needs.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
@@ -59,8 +58,7 @@ struct CoordinatorPanel: View {
                             .font(theme.body(.subheadline))
                     }
                 }
-                .padding(.horizontal, 22)
-                .frame(maxWidth: 820)
+                .padding(.horizontal, Page.edge)
             }
         }
         .padding(.bottom, 10)
