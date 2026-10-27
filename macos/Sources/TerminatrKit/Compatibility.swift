@@ -21,6 +21,10 @@ public enum Compatibility: Equatable, Sendable {
     /// The app API that has task.add: File › New Task… needs it.
     public static let taskAddAPI = 7
 
+    /// The app API that has task.get and the threads' check and
+    /// pr_state: the task view's notes for a board task need it.
+    public static let taskGetAPI = 14
+
     /// The app API that has session.file: the attachment cards need it.
     public static let sessionFileAPI = 11
 
@@ -46,6 +50,11 @@ public enum Compatibility: Equatable, Sendable {
     /// Whether hello's tm adds tasks from the app (task.add).
     public static func addsTasks(_ hello: AppAPI.Hello) -> Bool {
         hello.appApi >= taskAddAPI && hello.methods.contains(AppAPI.Methods.taskAdd.name)
+    }
+
+    /// Whether hello's tm reads a task whole (task.get).
+    public static func getsTasks(_ hello: AppAPI.Hello) -> Bool {
+        hello.appApi >= taskGetAPI && hello.methods.contains(AppAPI.Methods.taskGet.name)
     }
 
     /// Compares hello with this app, of release appVersion (its

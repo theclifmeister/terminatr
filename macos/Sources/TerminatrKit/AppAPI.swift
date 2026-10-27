@@ -1283,6 +1283,21 @@ public enum AppAPI {
         }
     }
 
+    public struct TaskGetParams: Codable, Sendable, Hashable {
+        public var project: String
+        public var task: String
+
+        public init(project: String, task: String) {
+            self.project = project
+            self.task = task
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case project
+            case task
+        }
+    }
+
     public struct TaskParams: Codable, Sendable, Hashable {
         public var project: String
         public var task: String
@@ -1305,14 +1320,18 @@ public enum AppAPI {
         public var pr: Int
         public var reportPr: String
         public var task: Task?
+        public var check: [String]
+        public var prState: String
 
-        public init(record: ThreadRecord, status: ThreadStatus? = nil, checks: String = "", pr: Int = 0, reportPr: String = "", task: Task? = nil) {
+        public init(record: ThreadRecord, status: ThreadStatus? = nil, checks: String = "", pr: Int = 0, reportPr: String = "", task: Task? = nil, check: [String] = [], prState: String = "") {
             self.record = record
             self.status = status
             self.checks = checks
             self.pr = pr
             self.reportPr = reportPr
             self.task = task
+            self.check = check
+            self.prState = prState
         }
 
         enum CodingKeys: String, CodingKey {
@@ -1322,6 +1341,8 @@ public enum AppAPI {
             case pr
             case reportPr = "report_pr"
             case task
+            case check
+            case prState = "pr_state"
         }
     }
 
@@ -1771,6 +1792,7 @@ public enum AppAPI {
         public static let taskAdd = Call<TaskAddParams, TaskAdded>("task.add", write: true)
         public static let taskAsk = Call<TaskAskParams, TaskAskResult>("task.ask", write: true)
         public static let taskDelegate = Call<TaskParams, TaskAskResult>("task.delegate", write: true)
+        public static let taskGet = Call<TaskGetParams, Task>("task.get", write: false)
         public static let taskSendBack = Call<SendBackParams, TaskAskResult>("task.send-back", write: true)
         public static let transcriptWatch = Subscription<TranscriptParams, TranscriptResult, TranscriptEvent>("transcript.watch", events: ["transcript.reset", "transcript.items", "transcript.status", "transcript.closed"])
     }
@@ -2355,6 +2377,14 @@ extension AppAPI.TaskAskResult {
     }
 }
 
+extension AppAPI.TaskGetParams {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.project = try c.decode(String.self, forKey: .project)
+        self.task = try c.decode(String.self, forKey: .task)
+    }
+}
+
 extension AppAPI.TaskParams {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -2372,6 +2402,8 @@ extension AppAPI.Thread {
         self.pr = try c.decodeIfPresent(Int.self, forKey: .pr) ?? 0
         self.reportPr = try c.decodeIfPresent(String.self, forKey: .reportPr) ?? ""
         self.task = try c.decodeIfPresent(AppAPI.Task.self, forKey: .task)
+        self.check = try c.decodeIfPresent([String].self, forKey: .check) ?? []
+        self.prState = try c.decodeIfPresent(String.self, forKey: .prState) ?? ""
     }
 }
 

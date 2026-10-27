@@ -89,6 +89,9 @@ func init() {
 		// the sidebar), each asked first in the app (app API 13).
 		unary(proto.MethodCoordinatorClear, true, coordinatorClearParams, coordinatorClearOf),
 		unary(proto.MethodProjectActive, true, projectActiveParams, projectActiveOf),
+		// One task with its notes and steps, which the board's tasks
+		// come without, for the task view (app API 14).
+		unary(proto.MethodTaskGet, false, taskGetParams, taskOf),
 	} {
 		methods[m.Name] = m
 	}
@@ -311,6 +314,10 @@ func sendBackParams(p SendBackParams) proto.TaskActionParams {
 
 func questionsOpenParams(p ProjectParams) proto.QuestionsOpenParams {
 	return proto.QuestionsOpenParams{Project: p.Project}
+}
+
+func taskGetParams(p TaskGetParams) proto.TaskGetParams {
+	return proto.TaskGetParams{Project: p.Project, Task: p.Task}
 }
 
 func taskAddParams(p TaskAddParams) proto.TaskAddParams {
