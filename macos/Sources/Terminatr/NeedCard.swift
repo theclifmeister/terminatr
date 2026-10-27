@@ -25,16 +25,16 @@ struct NeedCard: View {
                     .foregroundStyle(NeedRow.colour(need.kind, theme))
                     .frame(width: 16)
                     .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(need.what)
-                        .font(theme.body(.body, .semibold))
-                        .lineLimit(1)
-                    if !detail.isEmpty {
-                        Text(detail)
-                            .font(theme.body(.subheadline))
-                            .foregroundStyle(theme.muted)
-                            .lineLimit(2)
+                if showsTask {
+                    // A button, so Full Keyboard Access reaches it.
+                    Button { app.showTask(project: need.project, task: need.task) } label: {
+                        words.contentShape(Rectangle())
                     }
+                    .buttonStyle(.plain)
+                    .help("Shows \(need.task) in full: how to check it, its PR, steps and notes")
+                    .accessibilityHint("Shows the task in full")
+                } else {
+                    words
                 }
                 Spacer(minLength: 8)
                 acts
@@ -62,6 +62,26 @@ struct NeedCard: View {
         .accessibilityElement(children: .contain)
         .accessibilityLabel(need.title)
         .task(id: need.id) { await check() }
+    }
+
+    private var words: some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(need.what)
+                .font(theme.body(.body, .semibold))
+                .lineLimit(1)
+            if !detail.isEmpty {
+                Text(detail)
+                    .font(theme.body(.subheadline))
+                    .foregroundStyle(theme.muted)
+                    .lineLimit(2)
+            }
+        }
+    }
+
+    /// Whether the card's words show its task in the task view (T780):
+    /// a task in review's or a blocked one's.
+    private var showsTask: Bool {
+        !need.task.isEmpty && (need.kind == .review || need.kind == .blocked)
     }
 
     /// The second line: the task's title, and an approval's question

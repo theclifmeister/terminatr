@@ -81,6 +81,24 @@ func (s *Server) taskAction(kind string, p proto.TaskActionParams, cc callCtx) (
 	return proto.TaskAskResult{Asked: asked}, nil
 }
 
+// taskGet is task.get's: one task of the board as it is now, notes and
+// steps included.
+func (s *Server) taskGet(p proto.TaskGetParams) (any, *proto.Error) {
+	id, ok := tasks.ParseRef(p.Task)
+	if !ok {
+		return nil, proto.Errorf(proto.ErrBadParams, "%q is no task", p.Task)
+	}
+	pr, err := project.Open(p.Project)
+	if err != nil {
+		return nil, proto.Errorf(proto.ErrBadParams, "%v", err)
+	}
+	t, err := pr.Tasks().Get(id)
+	if err != nil {
+		return nil, taskError(err)
+	}
+	return sideTask(t), nil
+}
+
 // taskAdd is task.add's: tm task add's one task, as the caller, each
 // refusal with the task store's code.
 func (s *Server) taskAdd(p proto.TaskAddParams, cc callCtx) (any, *proto.Error) {

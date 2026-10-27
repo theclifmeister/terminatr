@@ -36,8 +36,9 @@ import (
 // Mac app's bridge, journaled as "human (app)"). 20: task.accept,
 // task.send-back, task.delegate and project.open. 21: task.add. 22:
 // projects.watch {lean, shown}, the inactive projects as their slug and
-// settings.
-const Protocol = 22
+// settings. 23: task.get, and projects.watch {detail}'s threads' check
+// and pr_state.
+const Protocol = 23
 
 // Kind is what a connection is for.
 type Kind string

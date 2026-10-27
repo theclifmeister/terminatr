@@ -1173,6 +1173,10 @@ func (s *Server) promptWith(p proto.SessionPromptParams, o session.PromptOptions
 	if strings.TrimSpace(p.Text) == "" {
 		return nil, proto.Errorf(proto.ErrBadParams, "empty prompt")
 	}
+	if len(p.Files) > 0 {
+		// Only promptBy names the files, in the text.
+		return nil, proto.Errorf(proto.ErrBadParams, "session.prompt: files are the human's")
+	}
 	var via, why string
 	var err error
 	switch p.Mode {
