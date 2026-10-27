@@ -274,6 +274,7 @@ struct ReviewCard: View {
                 Spacer(minLength: 8)
                 TaskActs(project: project, task: task.ref, status: task.status)
             }
+            TaskOutcome(project: project, task: task.ref)
         }
     }
 

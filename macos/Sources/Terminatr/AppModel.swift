@@ -44,6 +44,10 @@ final class AppModel {
             if needs.count != oldValue.count { showBadge() }
         }
     }
+    /// The asks the window put to coordinators about tasks, by
+    /// TaskAsk.key: every card that shows the task shows its outcome
+    /// row, and keeps its buttons away while the ask stands (T769).
+    var asks: [String: TaskAsk] = [:]
     /// The Dock icon's badge: how many needs wait, none at 0 or while
     /// the bridge is down (the count may be old).
     func showBadge() {
