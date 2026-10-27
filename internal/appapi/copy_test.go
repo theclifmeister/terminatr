@@ -2,6 +2,8 @@ package appapi
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
@@ -257,10 +259,19 @@ func TestCopies(t *testing.T) {
 		".Peers[].ID", ".Peers[].Watch", ".Peers[].Popup",
 		".Peers[].Version", ".Peers[].RTT", ".Peers[].Listed", ".Peers[].Shares",
 		// A shared project's snapshot stays the TUI's remote
-		// dashboard's. Its sessions cross as their panes, but only a
+		// dashboard's, but for what the sidebar lists of its threads
+		// (Watched). Its sessions cross as their panes, but only a
 		// coordinator or a thread, which a filled role isn't: their
 		// copy, and the clock's offset in it, are checked below.
-		".Peers[].Offset", ".Peers[].Projects[].Rev", ".Peers[].Projects[].Watch", ".Peers[].Projects[].Sessions",
+		".Peers[].Offset", ".Peers[].Projects[].Rev", ".Peers[].Projects[].Sessions",
+		".Peers[].Projects[].Watch.Project", ".Peers[].Projects[].Watch.NeedsYou", ".Peers[].Projects[].Watch.Inbox",
+		".Peers[].Projects[].Watch.Ready", ".Peers[].Projects[].Watch.Context", ".Peers[].Projects[].Watch.Questions",
+		".Peers[].Projects[].Watch.Ticker", ".Peers[].Projects[].Watch.Cells", ".Peers[].Projects[].Watch.Links",
+		".Peers[].Projects[].Watch.Threads[].Reason", ".Peers[].Projects[].Watch.Threads[].Reports",
+		".Peers[].Projects[].Watch.Threads[].PR", ".Peers[].Projects[].Watch.Threads[].PRURL",
+		".Peers[].Projects[].Watch.Threads[].PRBad", ".Peers[].Projects[].Watch.Threads[].PRChecked",
+		".Peers[].Projects[].Watch.Threads[].Task.Title", ".Peers[].Projects[].Watch.Threads[].Task.Status",
+		".Peers[].Projects[].Watch.Threads[].Task.Current",
 	})
 	check("peer.list sessions", homeOf(func(s proto.PeerSession) PeerSession { return peerSessionOf("mini", time.Second, s) }), nil)
 	check("session.prompt", homeOf(promptResultOf), nil)
@@ -276,6 +287,7 @@ func TestCopies(t *testing.T) {
 	check("pane.vt events", homeOf(paneEventOf), []string{".Event"})
 	check("transcript.watch", homeOf(transcriptResultOf), append(sessionHome(".Session"), ".Window"))
 	check("transcript.watch events", homeOf(transcriptEventOf), []string{".Event"})
+	check("session.file", homeOf(sessionFileOf), nil)
 	// The app's pane input, into the line: its id picks the stream
 	// (TestParamsCopies).
 	check("pane.input", homeOf(func(in PaneInputParams) proto.PaneVTInput {
@@ -349,6 +361,15 @@ func TestParamsCopies(t *testing.T) {
 	if want := (proto.TaskActionParams{Project: "web", Task: "T2", Note: "x"}); err != nil || p != want {
 		t.Errorf("send-back params %+v %v", p, err)
 	}
+	// session.file takes a ref, never a path.
+	m, _ = Lookup(proto.MethodSessionFile)
+	p, err = m.toServer(json.RawMessage(`{"session":"s-1","ref":"0.0123456789abcdef.1.0","offset":5,"stat":true}`))
+	if want := (proto.SessionFileParams{Session: "s-1", Ref: "0.0123456789abcdef.1.0", Offset: 5, Stat: true}); err != nil || p != want {
+		t.Errorf("session.file params %+v %v", p, err)
+	}
+	if _, err := m.toServer(json.RawMessage(`{"session":"s-1","path":"/etc/passwd"}`)); err == nil {
+		t.Error("session.file took a path")
+	}
 	m, _ = Lookup(proto.MethodSessionList)
 	for _, raw := range []string{"", "null", "{}"} {
 		if _, err := m.toServer(json.RawMessage(raw)); err != nil {
@@ -368,7 +389,8 @@ func TestAllowlist(t *testing.T) {
 		proto.MethodSessionAnswer, proto.MethodSessionApprove, proto.MethodSessionKeys, proto.MethodSessionList,
 		proto.MethodSessionPrompt, proto.MethodSessionWatch, proto.MethodTaskAsk,
 		proto.MethodTaskAccept, proto.MethodTaskSendBack, proto.MethodTaskDelegate, proto.MethodProjectOpen,
-		proto.MethodQuestionsOpen, proto.MethodTaskAdd, proto.MethodPaneVT, proto.MethodTranscriptWatch, MethodPaneInput}
+		proto.MethodQuestionsOpen, proto.MethodTaskAdd, proto.MethodPaneVT, proto.MethodTranscriptWatch, MethodPaneInput,
+		proto.MethodSessionFile}
 	slices.Sort(want)
 	if got := MethodNames(); !slices.Equal(got, want) {
 		t.Errorf("methods %v, want %v", got, want)
@@ -384,7 +406,8 @@ func TestAllowlist(t *testing.T) {
 			}
 		}
 	}
-	for name, write := range map[string]bool{MethodPaneInput: true, proto.MethodPaneVT: false, proto.MethodTranscriptWatch: false} {
+	for name, write := range map[string]bool{MethodPaneInput: true, proto.MethodPaneVT: false, proto.MethodTranscriptWatch: false,
+		proto.MethodSessionFile: false} {
 		if m, _ := Lookup(name); m.Write != write {
 			t.Errorf("%s: write %v", name, m.Write)
 		}
@@ -428,5 +451,52 @@ func TestPeerListSessions(t *testing.T) {
 	}
 	if want := created.Add(-2 * time.Second); !ss[0].Created.Equal(want) {
 		t.Fatalf("created %v, want %v", ss[0].Created, want)
+	}
+	if w := p.Projects[0].Watched; w == nil || len(w) != 0 {
+		t.Fatalf("watched %+v before a watch", w)
+	}
+}
+
+// TestPeerListWatched: a paired server's watched threads cross, running
+// or not, in its order, a running one with its pane's id here; whether
+// one waits on that server's user, never its question.
+func TestPeerListWatched(t *testing.T) {
+	l := peerListOf(proto.PeerList{Peers: []proto.PeerMirror{{Alias: "mini",
+		Projects: []proto.PeerMirrorProject{{PeerProject: proto.PeerProject{Project: "demo"}, Watch: &proto.ProjectWatch{
+			Threads: []proto.WatchThread{
+				{ID: "t-0001", Title: "first", Session: "s-2", State: "working", PRChecks: "fail",
+					Task: &proto.WatchTask{ID: "T7", StepsDone: 1, StepsTotal: 3}},
+				{ID: "t-0002", Title: "second", NeedsYou: proto.PeerQuestion, Done: true},
+			}}}}}}})
+	w := l.Peers[0].Projects[0].Watched
+	want := []PeerThread{
+		{ID: "t-0001", Title: "first", Task: "T7", StepsDone: 1, StepsTotal: 3, Session: "mini/s-2", State: "working", PRChecks: "fail"},
+		{ID: "t-0002", Title: "second", NeedsYou: true, Done: true},
+	}
+	if !slices.Equal(w, want) {
+		t.Fatalf("watched %+v", w)
+	}
+}
+
+// TestSessionListNeedsFirst: session.list carries [ui] needs_first as
+// the config says it now, false without one.
+func TestSessionListNeedsFirst(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("TERMINATR_HOME", dir)
+	if sessionListOf(proto.SessionListResult{}).NeedsFirst {
+		t.Fatal("needs_first without a config")
+	}
+	path := filepath.Join(dir, "config.toml")
+	if err := os.WriteFile(path, []byte("[ui]\nneeds_first = true\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if !sessionListOf(proto.SessionListResult{}).NeedsFirst {
+		t.Fatal("needs_first set but not sent")
+	}
+	if err := os.WriteFile(path, []byte("[ui]\nneeds_first = false\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if sessionListOf(proto.SessionListResult{}).NeedsFirst {
+		t.Fatal("needs_first unset but sent")
 	}
 }

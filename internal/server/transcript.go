@@ -248,8 +248,10 @@ func (w *transcriptWatch) backlog() []proto.TranscriptItem {
 		return nil
 	}
 	var items []proto.TranscriptItem
+	off := start
 	for line := range bytes.SplitSeq(data[:end], []byte{'\n'}) {
-		items = append(items, w.mapLine(line)...)
+		items = append(items, w.mapLine(line, off)...)
+		off += int64(len(line)) + 1
 	}
 	w.off = start + int64(end) + 1
 	return items
@@ -300,16 +302,17 @@ func (w *transcriptWatch) follow() ([]proto.TranscriptItem, bool) {
 		if len(items) >= w.room() {
 			break // the rest waits for acks
 		}
-		items = append(items, w.mapLine(line)...)
+		items = append(items, w.mapLine(line, off)...)
 		off += int64(len(line)) + 1
 	}
 	w.off = off
 	return items, true
 }
 
-// mapLine is one line's items, keeping its version and its blocks for
-// the drift check.
-func (w *transcriptWatch) mapLine(line []byte) []proto.TranscriptItem {
+// mapLine is one line's items, the line at off, keeping its version and
+// its blocks for the drift check. Their files' refs name the line
+// (fileRef).
+func (w *transcriptWatch) mapLine(line []byte, off int64) []proto.TranscriptItem {
 	l := w.tr.Map(line)
 	if l.Version != "" {
 		w.version = l.Version
@@ -320,9 +323,17 @@ func (w *transcriptWatch) mapLine(line []byte) []proto.TranscriptItem {
 	if over := len(w.units) - driftUnits; over > 0 {
 		w.units = w.units[over:]
 	}
+	ref := ""
 	for i := range l.Items {
-		if it := &l.Items[i]; it.Kind == proto.ItemPrompt {
+		it := &l.Items[i]
+		if it.Kind == proto.ItemPrompt {
 			it.From = w.s.sent.from(w.sess.ID(), it.Text)
+		}
+		for j := range it.Files {
+			if ref == "" {
+				ref = lineRef(line, off)
+			}
+			it.Files[j].Ref = ref + it.Files[j].Ref
 		}
 	}
 	return l.Items

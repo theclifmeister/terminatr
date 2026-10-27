@@ -34,9 +34,11 @@ type Transcript struct {
 	Content     string `toml:"content"`
 	BlockKind   string `toml:"block_kind"`
 	StringBlock string `toml:"string_block"`
-	// Ignore are block kinds that show nothing (thinking, images).
+	// Ignore are block kinds that show nothing (thinking).
 	Ignore []string         `toml:"ignore"`
 	Items  []TranscriptRule `toml:"items"`
+	// Files are the files the conversation puts in front of the user.
+	Files *TranscriptFiles `toml:"files"`
 	// ToolArgs is the field of a call's input that its folded line
 	// shows, by tool name ("Bash" = "command"); "*" for any other tool.
 	ToolArgs map[string]string `toml:"tool_args"`
@@ -86,6 +88,11 @@ func (t *Transcript) validate() error {
 			errs = append(errs, fmt.Errorf("items[%d]: prefix needs text", i))
 		}
 	}
+	if t.Files != nil {
+		if err := t.Files.validate(); err != nil {
+			errs = append(errs, err)
+		}
+	}
 	return errors.Join(errs...)
 }
 
@@ -115,7 +122,9 @@ type TranscriptLine struct {
 }
 
 // Map reads one line. Its items' strings are clean (textsafe) and
-// bounded (proto.TranscriptItemText, proto.TranscriptSummary).
+// bounded (proto.TranscriptItemText, proto.TranscriptSummary). The files
+// its items put in front of the user (Files) have a Ref that names them
+// in the line, for FileAt.
 func (t *Transcript) Map(line []byte) TranscriptLine {
 	var out TranscriptLine
 	var obj map[string]any
@@ -128,12 +137,7 @@ func (t *Transcript) Map(line []byte) TranscriptLine {
 	if t.VersionField != "" {
 		out.Version, _ = lookupString(obj, t.VersionField)
 	}
-	var rules []*TranscriptRule
-	for i := range t.Items {
-		if matches(t.Items[i].Match, obj) {
-			rules = append(rules, &t.Items[i])
-		}
-	}
+	rules := t.rulesOf(obj)
 	if len(rules) == 0 {
 		return out // not a conversation line
 	}
@@ -143,21 +147,14 @@ func (t *Transcript) Map(line []byte) TranscriptLine {
 			at, _ = time.Parse(time.RFC3339Nano, s)
 		}
 	}
-	var blocks []any
-	switch c, _ := lookup(obj, t.Content); c := c.(type) {
-	case string:
-		if t.StringBlock == "" {
-			out.Units, out.Unknown = 1, 1
-			return out
-		}
-		blocks = []any{c}
-	case []any:
-		blocks = c
-	default:
+	blocks, ok := t.blocksOf(obj)
+	if !ok {
 		out.Units, out.Unknown = 1, 1
 		return out
 	}
-	for _, b := range blocks {
+	var images []proto.TranscriptFile
+	prompt := -1
+	for i, b := range blocks {
 		out.Units++
 		kind, obj, str := t.StringBlock, map[string]any(nil), ""
 		switch b := b.(type) {
@@ -170,6 +167,12 @@ func (t *Transcript) Map(line []byte) TranscriptLine {
 			out.Unknown++
 			continue
 		}
+		if f := t.Files; f != nil && f.ImageBlock != "" && kind == f.ImageBlock && obj != nil && slices.ContainsFunc(rules, isPrompt) {
+			if img, ok := f.imageOf(obj, i, len(images)+1); ok && len(images) < MaxSentFiles {
+				images = append(images, img)
+			}
+			continue
+		}
 		r := t.rule(rules, kind, obj, str)
 		if r == nil {
 			if !slices.Contains(t.Ignore, kind) {
@@ -177,12 +180,61 @@ func (t *Transcript) Map(line []byte) TranscriptLine {
 			}
 			continue
 		}
-		if it, ok := t.item(r, obj, str); ok {
+		if it, ok := t.item(r, obj, str, i); ok {
 			it.At = at
+			if it.Kind == proto.ItemPrompt {
+				prompt = len(out.Items)
+			}
 			out.Items = append(out.Items, it)
 		}
 	}
+	if len(images) > 0 {
+		// Pasted images go with the line's prompt, or are one.
+		if prompt < 0 {
+			prompt = len(out.Items)
+			out.Items = append(out.Items, proto.TranscriptItem{Kind: proto.ItemPrompt, At: at})
+		}
+		out.Items[prompt].Files = images
+	}
 	return out
+}
+
+// rulesOf are the rules whose Match takes a line's obj: none for a line
+// that isn't a conversation line.
+func (t *Transcript) rulesOf(obj map[string]any) []*TranscriptRule {
+	var rules []*TranscriptRule
+	for i := range t.Items {
+		if matches(t.Items[i].Match, obj) {
+			rules = append(rules, &t.Items[i])
+		}
+	}
+	return rules
+}
+
+// blocksOf are a line's blocks; false when its content is neither a
+// list nor a string that reads as one block.
+func (t *Transcript) blocksOf(obj map[string]any) ([]any, bool) {
+	switch c, _ := lookup(obj, t.Content); c := c.(type) {
+	case string:
+		if t.StringBlock == "" {
+			return nil, false
+		}
+		return []any{c}, true
+	case []any:
+		return c, true
+	}
+	return nil, false
+}
+
+// lineBlocks is a line as an object and its blocks; a nil object for
+// one that isn't JSON.
+func (t *Transcript) lineBlocks(line []byte) (map[string]any, []any) {
+	var obj map[string]any
+	if json.Unmarshal(line, &obj) != nil || obj == nil {
+		return nil, nil
+	}
+	blocks, _ := t.blocksOf(obj)
+	return obj, blocks
 }
 
 // rule is the first of rules that takes a block of kind (obj, or the
@@ -203,9 +255,9 @@ func (t *Transcript) rule(rules []*TranscriptRule, kind string, obj map[string]a
 	return nil
 }
 
-// item is r's item of a block; false for a skip, or a block with nothing
-// to show.
-func (t *Transcript) item(r *TranscriptRule, obj map[string]any, str string) (proto.TranscriptItem, bool) {
+// item is r's item of a block, the line's block'th; false for a skip, or
+// a block with nothing to show.
+func (t *Transcript) item(r *TranscriptRule, obj map[string]any, str string, block int) (proto.TranscriptItem, bool) {
 	it := proto.TranscriptItem{Kind: r.Kind}
 	field := func(path string) string {
 		if obj == nil || path == "" {
@@ -238,6 +290,7 @@ func (t *Transcript) item(r *TranscriptRule, obj map[string]any, str string) (pr
 				s, _ := lookupString(m, arg)
 				it.Text = textsafe.Line(s, proto.TranscriptSummary)
 			}
+			it.Files, it.Display = t.Files.filesOfCall(field(r.Name), in, block)
 		}
 	case proto.ItemResult:
 		it.Call = textsafe.Line(field(r.ID), proto.TranscriptSummary)

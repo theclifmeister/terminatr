@@ -30,3 +30,6 @@ func testSh(t testing.TB) string {
 	t.Skip("no POSIX sh: install Git for Windows")
 	return ""
 }
+
+// testMkfifo: Windows has no FIFOs (TestSessionFile skips there).
+func testMkfifo(t testing.TB, path string) { t.Skip("no FIFOs") }

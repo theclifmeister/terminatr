@@ -483,8 +483,9 @@ public enum AppAPI {
         public var stale: Bool
         public var synced: Date?
         public var sessions: [PeerSession]
+        public var watched: [PeerThread]
 
-        public init(project: String, goal: String = "", paused: Bool = false, needsYou: Int, threads: Int, ready: Int, stale: Bool = false, synced: Date? = nil, sessions: [PeerSession] = []) {
+        public init(project: String, goal: String = "", paused: Bool = false, needsYou: Int, threads: Int, ready: Int, stale: Bool = false, synced: Date? = nil, sessions: [PeerSession] = [], watched: [PeerThread] = []) {
             self.project = project
             self.goal = goal
             self.paused = paused
@@ -494,6 +495,7 @@ public enum AppAPI {
             self.stale = stale
             self.synced = synced
             self.sessions = sessions
+            self.watched = watched
         }
 
         enum CodingKeys: String, CodingKey {
@@ -506,6 +508,7 @@ public enum AppAPI {
             case stale
             case synced
             case sessions
+            case watched
         }
     }
 
@@ -569,6 +572,45 @@ public enum AppAPI {
             case asking
             case context
             case contextWindow = "context_window"
+        }
+    }
+
+    public struct PeerThread: Codable, Sendable, Hashable, Identifiable {
+        public var id: String
+        public var title: String
+        public var task: String
+        public var stepsDone: Int
+        public var stepsTotal: Int
+        public var session: String
+        public var state: String
+        public var needsYou: Bool
+        public var prChecks: String
+        public var done: Bool
+
+        public init(id: String, title: String, task: String = "", stepsDone: Int = 0, stepsTotal: Int = 0, session: String = "", state: String = "", needsYou: Bool = false, prChecks: String = "", done: Bool = false) {
+            self.id = id
+            self.title = title
+            self.task = task
+            self.stepsDone = stepsDone
+            self.stepsTotal = stepsTotal
+            self.session = session
+            self.state = state
+            self.needsYou = needsYou
+            self.prChecks = prChecks
+            self.done = done
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case id
+            case title
+            case task
+            case stepsDone = "steps_done"
+            case stepsTotal = "steps_total"
+            case session
+            case state
+            case needsYou = "needs_you"
+            case prChecks = "pr_checks"
+            case done
         }
     }
 
@@ -965,6 +1007,57 @@ public enum AppAPI {
         }
     }
 
+    public struct SessionFile: Codable, Sendable, Hashable {
+        public var name: String
+        public var type: String
+        public var size: Int
+        public var mtime: Date?
+        public var sendable: Bool
+        public var offset: Int
+        public var data: Data
+
+        public init(name: String, type: String = "", size: Int, mtime: Date? = nil, sendable: Bool, offset: Int, data: Data = Data()) {
+            self.name = name
+            self.type = type
+            self.size = size
+            self.mtime = mtime
+            self.sendable = sendable
+            self.offset = offset
+            self.data = data
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case name
+            case type
+            case size
+            case mtime
+            case sendable
+            case offset
+            case data
+        }
+    }
+
+    public struct SessionFileParams: Codable, Sendable, Hashable {
+        public var session: String
+        public var ref: String
+        public var offset: Int
+        public var stat: Bool
+
+        public init(session: String, ref: String, offset: Int = 0, stat: Bool = false) {
+            self.session = session
+            self.ref = ref
+            self.offset = offset
+            self.stat = stat
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case session
+            case ref
+            case offset
+            case stat
+        }
+    }
+
     public struct SessionIDParams: Codable, Sendable, Hashable {
         public var id: String
 
@@ -985,8 +1078,9 @@ public enum AppAPI {
         public var build: String
         public var latest: String
         public var upgrade: String
+        public var needsFirst: Bool
 
-        public init(sessions: [Session] = [], alerts: Int, notices: [Notice] = [], version: String = "", build: String = "", latest: String = "", upgrade: String = "") {
+        public init(sessions: [Session] = [], alerts: Int, notices: [Notice] = [], version: String = "", build: String = "", latest: String = "", upgrade: String = "", needsFirst: Bool = false) {
             self.sessions = sessions
             self.alerts = alerts
             self.notices = notices
@@ -994,6 +1088,7 @@ public enum AppAPI {
             self.build = build
             self.latest = latest
             self.upgrade = upgrade
+            self.needsFirst = needsFirst
         }
 
         enum CodingKeys: String, CodingKey {
@@ -1004,6 +1099,7 @@ public enum AppAPI {
             case build
             case latest
             case upgrade
+            case needsFirst = "needs_first"
         }
     }
 
@@ -1337,6 +1433,27 @@ public enum AppAPI {
         }
     }
 
+    public struct TranscriptFile: Codable, Sendable, Hashable {
+        public var ref: String
+        public var name: String
+        public var path: String
+        public var type: String
+
+        public init(ref: String, name: String, path: String = "", type: String = "") {
+            self.ref = ref
+            self.name = name
+            self.path = path
+            self.type = type
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case ref
+            case name
+            case path
+            case type
+        }
+    }
+
     public struct TranscriptItem: Codable, Sendable, Hashable {
         public var kind: String
         public var text: String
@@ -1348,8 +1465,10 @@ public enum AppAPI {
         public var todos: [TranscriptTodo]
         public var at: Date?
         public var from: String
+        public var files: [TranscriptFile]
+        public var display: String
 
-        public init(kind: String, text: String = "", truncated: Bool = false, tool: String = "", call: String = "", error: Bool = false, lines: Int = 0, todos: [TranscriptTodo] = [], at: Date? = nil, from: String = "") {
+        public init(kind: String, text: String = "", truncated: Bool = false, tool: String = "", call: String = "", error: Bool = false, lines: Int = 0, todos: [TranscriptTodo] = [], at: Date? = nil, from: String = "", files: [TranscriptFile] = [], display: String = "") {
             self.kind = kind
             self.text = text
             self.truncated = truncated
@@ -1360,6 +1479,8 @@ public enum AppAPI {
             self.todos = todos
             self.at = at
             self.from = from
+            self.files = files
+            self.display = display
         }
 
         enum CodingKeys: String, CodingKey {
@@ -1373,6 +1494,8 @@ public enum AppAPI {
             case todos
             case at
             case from
+            case files
+            case display
         }
     }
 
@@ -1580,6 +1703,7 @@ public enum AppAPI {
         public static let questionsOpen = Call<ProjectParams, QuestionsOpen>("questions.open", write: true)
         public static let sessionAnswer = Call<AnswerParams, AnswerResult>("session.answer", write: true)
         public static let sessionApprove = Call<ApproveParams, ApproveResult>("session.approve", write: true)
+        public static let sessionFile = Call<SessionFileParams, SessionFile>("session.file", write: false)
         public static let sessionKeys = Call<KeysParams, Empty>("session.keys", write: true)
         public static let sessionList = Call<NoParams, SessionList>("session.list", write: false)
         public static let sessionPrompt = Call<PromptParams, PromptResult>("session.prompt", write: true)
@@ -1821,6 +1945,7 @@ extension AppAPI.PeerProject {
         self.stale = try c.decodeIfPresent(Bool.self, forKey: .stale) ?? false
         self.synced = try c.decodeIfPresent(Date.self, forKey: .synced)
         self.sessions = try c.decodeIfPresent([AppAPI.PeerSession].self, forKey: .sessions) ?? []
+        self.watched = try c.decodeIfPresent([AppAPI.PeerThread].self, forKey: .watched) ?? []
     }
 }
 
@@ -1845,6 +1970,22 @@ extension AppAPI.PeerSession {
         self.asking = try c.decodeIfPresent(Bool.self, forKey: .asking) ?? false
         self.context = try c.decodeIfPresent(Int.self, forKey: .context) ?? 0
         self.contextWindow = try c.decodeIfPresent(Int.self, forKey: .contextWindow) ?? 0
+    }
+}
+
+extension AppAPI.PeerThread {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try c.decode(String.self, forKey: .id)
+        self.title = try c.decode(String.self, forKey: .title)
+        self.task = try c.decodeIfPresent(String.self, forKey: .task) ?? ""
+        self.stepsDone = try c.decodeIfPresent(Int.self, forKey: .stepsDone) ?? 0
+        self.stepsTotal = try c.decodeIfPresent(Int.self, forKey: .stepsTotal) ?? 0
+        self.session = try c.decodeIfPresent(String.self, forKey: .session) ?? ""
+        self.state = try c.decodeIfPresent(String.self, forKey: .state) ?? ""
+        self.needsYou = try c.decodeIfPresent(Bool.self, forKey: .needsYou) ?? false
+        self.prChecks = try c.decodeIfPresent(String.self, forKey: .prChecks) ?? ""
+        self.done = try c.decodeIfPresent(Bool.self, forKey: .done) ?? false
     }
 }
 
@@ -2024,6 +2165,29 @@ extension AppAPI.Session {
     }
 }
 
+extension AppAPI.SessionFile {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.name = try c.decode(String.self, forKey: .name)
+        self.type = try c.decodeIfPresent(String.self, forKey: .type) ?? ""
+        self.size = try c.decode(Int.self, forKey: .size)
+        self.mtime = try c.decodeIfPresent(Date.self, forKey: .mtime)
+        self.sendable = try c.decode(Bool.self, forKey: .sendable)
+        self.offset = try c.decode(Int.self, forKey: .offset)
+        self.data = try c.decodeIfPresent(Data.self, forKey: .data) ?? Data()
+    }
+}
+
+extension AppAPI.SessionFileParams {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.session = try c.decode(String.self, forKey: .session)
+        self.ref = try c.decode(String.self, forKey: .ref)
+        self.offset = try c.decodeIfPresent(Int.self, forKey: .offset) ?? 0
+        self.stat = try c.decodeIfPresent(Bool.self, forKey: .stat) ?? false
+    }
+}
+
 extension AppAPI.SessionIDParams {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -2041,6 +2205,7 @@ extension AppAPI.SessionList {
         self.build = try c.decodeIfPresent(String.self, forKey: .build) ?? ""
         self.latest = try c.decodeIfPresent(String.self, forKey: .latest) ?? ""
         self.upgrade = try c.decodeIfPresent(String.self, forKey: .upgrade) ?? ""
+        self.needsFirst = try c.decodeIfPresent(Bool.self, forKey: .needsFirst) ?? false
     }
 }
 
@@ -2190,6 +2355,16 @@ extension AppAPI.TranscriptEvent {
     }
 }
 
+extension AppAPI.TranscriptFile {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.ref = try c.decode(String.self, forKey: .ref)
+        self.name = try c.decode(String.self, forKey: .name)
+        self.path = try c.decodeIfPresent(String.self, forKey: .path) ?? ""
+        self.type = try c.decodeIfPresent(String.self, forKey: .type) ?? ""
+    }
+}
+
 extension AppAPI.TranscriptItem {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -2203,6 +2378,8 @@ extension AppAPI.TranscriptItem {
         self.todos = try c.decodeIfPresent([AppAPI.TranscriptTodo].self, forKey: .todos) ?? []
         self.at = try c.decodeIfPresent(Date.self, forKey: .at)
         self.from = try c.decodeIfPresent(String.self, forKey: .from) ?? ""
+        self.files = try c.decodeIfPresent([AppAPI.TranscriptFile].self, forKey: .files) ?? []
+        self.display = try c.decodeIfPresent(String.self, forKey: .display) ?? ""
     }
 }
 
