@@ -119,14 +119,19 @@ type Empty struct{}
 // SessionList is session.list's result: the sessions, the server's
 // alert count (it goes up on a notification), the mods' notices still
 // in the tray, and the server's version and the newer release it found.
+// NeedsFirst is [ui] needs_first, which the bridge reads from the
+// config as the TUI's sidebar does (since app API 10): the sidebar lists
+// the projects that need the user first. It is the one setting of the
+// config the app API has, read only.
 type SessionList struct {
-	Sessions []Session `json:"sessions"`
-	Alerts   uint64    `json:"alerts"`
-	Notices  []Notice  `json:"notices"`
-	Version  string    `json:"version,omitempty"`
-	Build    string    `json:"build,omitempty"`
-	Latest   string    `json:"latest,omitempty"`
-	Upgrade  string    `json:"upgrade,omitempty"`
+	Sessions   []Session `json:"sessions"`
+	Alerts     uint64    `json:"alerts"`
+	Notices    []Notice  `json:"notices"`
+	Version    string    `json:"version,omitempty"`
+	Build      string    `json:"build,omitempty"`
+	Latest     string    `json:"latest,omitempty"`
+	Upgrade    string    `json:"upgrade,omitempty"`
+	NeedsFirst bool      `json:"needs_first,omitempty"`
 }
 
 // Session is one session: its role and place, its agent's state, its
@@ -500,6 +505,29 @@ type PeerProject struct {
 	// server last read them: their panes are the app's to open, never
 	// their transcripts.
 	Sessions []PeerSession `json:"sessions"`
+	// Watched are its unresolved threads as the server last read them
+	// (since app API 10), running or not, in id order: what the TUI's
+	// sidebar lists under its coordinator. None before the first read,
+	// or when the paired server's tm doesn't export them.
+	Watched []PeerThread `json:"watched"`
+}
+
+// PeerThread is an unresolved thread of a paired server's project, as
+// it lets this server see it: Session is its pane's id here
+// ("<alias>/<session>", as PeerSession.ID) while a session runs it,
+// State that session's agent state; NeedsYou says it waits on that
+// server's user, whose question stays there.
+type PeerThread struct {
+	ID         string `json:"id"`
+	Title      string `json:"title"`
+	Task       string `json:"task,omitempty"`
+	StepsDone  int    `json:"steps_done,omitempty"`
+	StepsTotal int    `json:"steps_total,omitempty"`
+	Session    string `json:"session,omitempty"`
+	State      string `json:"state,omitempty"`
+	NeedsYou   bool   `json:"needs_you,omitempty"`
+	PRChecks   string `json:"pr_checks,omitempty"`
+	Done       bool   `json:"done,omitempty"`
 }
 
 // PeerSession is a paired server's coordinator or thread, as it lets
@@ -531,7 +559,7 @@ type PeerSession struct {
 
 func sessionListOf(r proto.SessionListResult) SessionList {
 	out := SessionList{Sessions: make([]Session, 0, len(r.Sessions)), Notices: make([]Notice, 0, len(r.ModNotices)),
-		Alerts: r.Alerts, Version: r.Version, Build: r.Build, Latest: r.Latest, Upgrade: r.Upgrade}
+		Alerts: r.Alerts, Version: r.Version, Build: r.Build, Latest: r.Latest, Upgrade: r.Upgrade, NeedsFirst: needsFirst()}
 	for _, s := range r.Sessions {
 		out.Sessions = append(out.Sessions, sessionOf(s))
 	}
@@ -701,8 +729,9 @@ func linkOf(r link.Row) Link {
 
 // peerListOf is l as the app sees it: a peer's id, versions, ping and
 // share requests (but their count), and a project's snapshot stay
-// home. Its coordinator and threads cross as their panes' ids, the
-// sessions a remote pane opens (remotes.find); no transcript does.
+// home but its threads (Watched). Its coordinator and threads cross as
+// their panes' ids, the sessions a remote pane opens (remotes.find); no
+// transcript does.
 func peerListOf(l proto.PeerList) PeerList {
 	out := PeerList{Gen: l.Gen, Peers: make([]Peer, 0, len(l.Peers))}
 	for _, p := range l.Peers {
@@ -712,7 +741,13 @@ func peerListOf(l proto.PeerList) PeerList {
 		offset := time.Duration(p.Offset) * time.Millisecond
 		for _, pp := range p.Projects {
 			pr := PeerProject{Project: pp.Project, Goal: pp.Goal, Paused: pp.Paused, NeedsYou: pp.NeedsYou,
-				Threads: pp.Threads, Ready: pp.Ready, Stale: pp.Stale, Synced: pp.Synced, Sessions: []PeerSession{}}
+				Threads: pp.Threads, Ready: pp.Ready, Stale: pp.Stale, Synced: pp.Synced, Sessions: []PeerSession{},
+				Watched: []PeerThread{}}
+			if pp.Watch != nil {
+				for _, w := range pp.Watch.Threads {
+					pr.Watched = append(pr.Watched, peerThreadOf(p.Alias, w))
+				}
+			}
 			for _, s := range pp.Sessions {
 				if s.Role != proto.RoleCoordinator && s.Role != proto.RoleThread {
 					continue
@@ -724,6 +759,20 @@ func peerListOf(l proto.PeerList) PeerList {
 		out.Peers = append(out.Peers, peer)
 	}
 	return out
+}
+
+// peerThreadOf is thread w of the paired server alias: of its watch
+// row, what the sidebar lists; its reason, reports and PR stay the
+// remote dashboard's.
+func peerThreadOf(alias string, w proto.WatchThread) PeerThread {
+	t := PeerThread{ID: w.ID, Title: w.Title, State: w.State, NeedsYou: w.NeedsYou != "", PRChecks: w.PRChecks, Done: w.Done}
+	if w.Session != "" {
+		t.Session = alias + "/" + w.Session
+	}
+	if w.Task != nil {
+		t.Task, t.StepsDone, t.StepsTotal = w.Task.ID, w.Task.StepsDone, w.Task.StepsTotal
+	}
+	return t
 }
 
 // peerSessionOf is session s of the paired server alias, whose clock

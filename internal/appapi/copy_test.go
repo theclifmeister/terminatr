@@ -2,6 +2,8 @@ package appapi
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
@@ -257,10 +259,19 @@ func TestCopies(t *testing.T) {
 		".Peers[].ID", ".Peers[].Watch", ".Peers[].Popup",
 		".Peers[].Version", ".Peers[].RTT", ".Peers[].Listed", ".Peers[].Shares",
 		// A shared project's snapshot stays the TUI's remote
-		// dashboard's. Its sessions cross as their panes, but only a
+		// dashboard's, but for what the sidebar lists of its threads
+		// (Watched). Its sessions cross as their panes, but only a
 		// coordinator or a thread, which a filled role isn't: their
 		// copy, and the clock's offset in it, are checked below.
-		".Peers[].Offset", ".Peers[].Projects[].Rev", ".Peers[].Projects[].Watch", ".Peers[].Projects[].Sessions",
+		".Peers[].Offset", ".Peers[].Projects[].Rev", ".Peers[].Projects[].Sessions",
+		".Peers[].Projects[].Watch.Project", ".Peers[].Projects[].Watch.NeedsYou", ".Peers[].Projects[].Watch.Inbox",
+		".Peers[].Projects[].Watch.Ready", ".Peers[].Projects[].Watch.Context", ".Peers[].Projects[].Watch.Questions",
+		".Peers[].Projects[].Watch.Ticker", ".Peers[].Projects[].Watch.Cells", ".Peers[].Projects[].Watch.Links",
+		".Peers[].Projects[].Watch.Threads[].Reason", ".Peers[].Projects[].Watch.Threads[].Reports",
+		".Peers[].Projects[].Watch.Threads[].PR", ".Peers[].Projects[].Watch.Threads[].PRURL",
+		".Peers[].Projects[].Watch.Threads[].PRBad", ".Peers[].Projects[].Watch.Threads[].PRChecked",
+		".Peers[].Projects[].Watch.Threads[].Task.Title", ".Peers[].Projects[].Watch.Threads[].Task.Status",
+		".Peers[].Projects[].Watch.Threads[].Task.Current",
 	})
 	check("peer.list sessions", homeOf(func(s proto.PeerSession) PeerSession { return peerSessionOf("mini", time.Second, s) }), nil)
 	check("session.prompt", homeOf(promptResultOf), nil)
@@ -428,5 +439,52 @@ func TestPeerListSessions(t *testing.T) {
 	}
 	if want := created.Add(-2 * time.Second); !ss[0].Created.Equal(want) {
 		t.Fatalf("created %v, want %v", ss[0].Created, want)
+	}
+	if w := p.Projects[0].Watched; w == nil || len(w) != 0 {
+		t.Fatalf("watched %+v before a watch", w)
+	}
+}
+
+// TestPeerListWatched: a paired server's watched threads cross, running
+// or not, in its order, a running one with its pane's id here; whether
+// one waits on that server's user, never its question.
+func TestPeerListWatched(t *testing.T) {
+	l := peerListOf(proto.PeerList{Peers: []proto.PeerMirror{{Alias: "mini",
+		Projects: []proto.PeerMirrorProject{{PeerProject: proto.PeerProject{Project: "demo"}, Watch: &proto.ProjectWatch{
+			Threads: []proto.WatchThread{
+				{ID: "t-0001", Title: "first", Session: "s-2", State: "working", PRChecks: "fail",
+					Task: &proto.WatchTask{ID: "T7", StepsDone: 1, StepsTotal: 3}},
+				{ID: "t-0002", Title: "second", NeedsYou: proto.PeerQuestion, Done: true},
+			}}}}}}})
+	w := l.Peers[0].Projects[0].Watched
+	want := []PeerThread{
+		{ID: "t-0001", Title: "first", Task: "T7", StepsDone: 1, StepsTotal: 3, Session: "mini/s-2", State: "working", PRChecks: "fail"},
+		{ID: "t-0002", Title: "second", NeedsYou: true, Done: true},
+	}
+	if !slices.Equal(w, want) {
+		t.Fatalf("watched %+v", w)
+	}
+}
+
+// TestSessionListNeedsFirst: session.list carries [ui] needs_first as
+// the config says it now, false without one.
+func TestSessionListNeedsFirst(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("TERMINATR_HOME", dir)
+	if sessionListOf(proto.SessionListResult{}).NeedsFirst {
+		t.Fatal("needs_first without a config")
+	}
+	path := filepath.Join(dir, "config.toml")
+	if err := os.WriteFile(path, []byte("[ui]\nneeds_first = true\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if !sessionListOf(proto.SessionListResult{}).NeedsFirst {
+		t.Fatal("needs_first set but not sent")
+	}
+	if err := os.WriteFile(path, []byte("[ui]\nneeds_first = false\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if sessionListOf(proto.SessionListResult{}).NeedsFirst {
+		t.Fatal("needs_first unset but sent")
 	}
 }
