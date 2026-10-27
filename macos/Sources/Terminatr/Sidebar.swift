@@ -2,17 +2,18 @@ import SwiftUI
 import TerminatrKit
 
 /// The window's sidebar (design T746, lean as T748 milestone A has it):
-/// what needs the user, cut to three rows and "+N more"; then this
-/// server's projects as the TUI orders them, pinned and active ones,
-/// one line each with its coordinator's state as the dot and its needs
-/// as the badge, and the inactive ones folded under "Inactive (n)" at
-/// the bottom (⇧⌘H unfolds them); then each paired server's shared
-/// projects (as the TUI's sidebar has them, alias/session). Only the
-/// selected project and those that need the user list their
-/// coordinator (when it runs or asks) and threads (those that wait on
-/// the user, the rest folded into "N more"). A project shows its
-/// dashboard, a coordinator or thread its session; a need shows what it
-/// names. Each section folds, and stays so across launches. Every
+/// what needs the user, cut to three rows and "+N more" (the app's own:
+/// the TUI has its ⚑ and W instead); then the rows of the TUI's sidebar
+/// (SidebarTree, T762): this server's active projects, pinned ones
+/// first, each with its coordinator's state as the dot and its needs as
+/// the badge, and under it its coordinator, running or not, and every
+/// unresolved thread, done ones too, in the dashboard's order; then
+/// each paired server's shared projects, its coordinator and the
+/// threads a session runs there; and at the bottom the inactive ones
+/// folded under "Inactive (n)" (⇧⌘H unfolds them), each folded until →
+/// expands it, dormant. A project shows its dashboard, a coordinator or
+/// thread its session; a need shows what it names. Each section and
+/// project folds, and stays so across launches. Every
 /// project and session row has its state as a dot, and what waits on
 /// the user (allow?, asks, …) as a filled pill (T752). The selection is
 /// the List's (T748 milestone E): ↑ ↓ move it, letters typed select the
@@ -71,18 +72,6 @@ struct Sidebar: View {
                         .font(theme.body(.caption, .semibold))
                 }
             }
-            let inactive = shown(app.inactiveProjects)
-            if !inactive.isEmpty {
-                Section(isExpanded: Binding(get: { filtering || app.nav.showInactive }, set: { app.nav.showInactive = $0 })) {
-                    ForEach(inactive, id: \.slug) { p in
-                        project(p)
-                    }
-                } header: {
-                    Text("Inactive (\(inactive.count))")
-                        .font(theme.body(.caption, .semibold))
-                        .help("Projects set inactive: View › Show Inactive Projects (⇧⌘H)")
-                }
-            }
             ForEach(app.peers, id: \.alias) { peer in
                 let projects = shown(peer)
                 if !filtering || !projects.isEmpty {
@@ -94,6 +83,19 @@ struct Sidebar: View {
                         remoteHeader(peer)
                             .font(theme.body(.caption, .semibold))
                     }
+                }
+            }
+            // At the bottom, after the paired servers, as the TUI pins it.
+            let inactive = shown(app.inactiveProjects)
+            if !inactive.isEmpty {
+                Section(isExpanded: Binding(get: { filtering || app.nav.showInactive }, set: { app.nav.showInactive = $0 })) {
+                    ForEach(inactive, id: \.slug) { p in
+                        project(p)
+                    }
+                } header: {
+                    Text("Inactive (\(inactive.count))")
+                        .font(theme.body(.caption, .semibold))
+                        .help("Projects set inactive: View › Show Inactive Projects (⇧⌘H)")
                 }
             }
             if filtering, rows.isEmpty, needs.isEmpty {
@@ -139,10 +141,16 @@ struct Sidebar: View {
         filtering ? app.needs.filter { SidebarTree.matches(app.filter, $0.title, $0.detail) } : app.needs
     }
 
-    /// The projects the filter keeps: by name, or by a thread it finds.
+    /// Whether the filter finds a coordinator: by its word, as the TUI's.
+    private var findsCoordinator: Bool { SidebarTree.matches(app.filter, "coordinator") }
+
+    /// The projects the filter keeps: by name, or by a row it finds
+    /// under them.
     private func shown(_ projects: [AppAPI.Project]) -> [AppAPI.Project] {
         guard filtering else { return projects }
-        return projects.filter { SidebarTree.matches(app.filter, $0.slug) || !SidebarTree.threads(of: $0, matching: app.filter).isEmpty }
+        return projects.filter {
+            findsCoordinator || SidebarTree.matches(app.filter, $0.slug) || !SidebarTree.threads(of: $0, matching: app.filter).isEmpty
+        }
     }
 
     /// A paired server's projects the filter keeps: by name or server,
@@ -154,28 +162,30 @@ struct Sidebar: View {
         }
     }
 
-    /// A paired server's project's sessions with their refs: those the
-    /// filter finds, all of them when it finds the project.
-    private func sessions(_ peer: AppAPI.Peer, _ p: AppAPI.PeerProject) -> [(AppAPI.PeerSession, SessionRef)] {
-        let all = p.sessions.compactMap { s in SessionRef(s, of: peer.alias).map { (s, $0) } }
+    /// A paired server's project's rows under it (SidebarTree), with
+    /// their sessions: those the filter finds, all of them when it finds
+    /// the project.
+    private func sessions(_ peer: AppAPI.Peer, _ p: AppAPI.PeerProject) -> [(session: AppAPI.PeerSession?, ref: SessionRef)] {
+        let all = SidebarTree.sessions(of: p, alias: peer.alias)
         guard filtering, !SidebarTree.matches(app.filter, p.project, peer.alias, peer.name) else { return all }
-        return all.filter { s, r in SidebarTree.matches(app.filter, s.task, r.thread, r.isCoordinator ? "coordinator" : "") }
+        return all.filter { s, r in SidebarTree.matches(app.filter, s?.task ?? "", r.thread, r.isCoordinator ? "coordinator" : "") }
     }
 
-    /// What a project of this server lists under it: its coordinator
-    /// row, its threads, and how many fold into "N more".
-    private func listing(_ p: AppAPI.Project) -> (open: Bool, coordinator: Bool, threads: [AppAPI.Thread], more: Int) {
-        let coordinator = app.coordinatorSession(p.slug)
-        let state = Attention.of(coordinator: coordinator, in: p)
+    /// What a project of this server lists under it (SidebarTree):
+    /// whether its coordinator's row and its threads show, which
+    /// threads, and whether they are dormant (an inactive project's,
+    /// expanded: nothing of it runs). While filtering, what the filter
+    /// finds, every project unfolded, as the TUI's.
+    private func listing(_ p: AppAPI.Project) -> (open: Bool, coordinator: Bool, threads: [AppAPI.Thread], dormant: Bool) {
         if filtering {
             let found = SidebarTree.threads(of: p, matching: app.filter)
-            return (!found.isEmpty, false, found, 0)
+            return (!found.isEmpty || findsCoordinator, findsCoordinator, found, !p.active)
         }
-        guard SidebarTree.opens(p, nav: app.nav, needs: app.needs(of: p.slug).count) else { return (false, false, [], 0) }
-        let all = app.nav.unfolded.contains(Navigation.moreKey(project: p.slug))
-        let selected = app.selectedRef.flatMap { $0.server.isEmpty && $0.project == p.slug ? $0.thread : nil }
-        let (shown, more) = SidebarTree.threads(of: p, selected: selected, unfolded: all) { app.attention($0) }
-        return (true, coordinator != nil || state.waits, shown, more)
+        guard SidebarTree.opens(p, nav: app.nav) else { return (false, false, [], false) }
+        let threads = SidebarTree.threads(of: p) { t in
+            t.record.session.isEmpty ? nil : app.sessions.first { $0.id == t.record.session }
+        }
+        return (true, true, threads, !p.active)
     }
 
     // MARK: keys
@@ -193,7 +203,6 @@ struct Sidebar: View {
             }
         }
         if !app.nav.collapsed.contains(Navigation.sectionKey(server: "")) { add(shown(app.activeProjects)) }
-        if filtering || app.nav.showInactive { add(shown(app.inactiveProjects)) }
         for peer in app.peers where !app.nav.collapsed.contains(Navigation.sectionKey(server: peer.alias)) {
             for p in shown(peer) {
                 out.append((.project(p.project, server: peer.alias), p.project))
@@ -202,6 +211,7 @@ struct Sidebar: View {
                 }
             }
         }
+        if filtering || app.nav.showInactive { add(shown(app.inactiveProjects)) }
         return out
     }
 
@@ -271,9 +281,10 @@ struct Sidebar: View {
 
     // MARK: this server's
 
-    /// A project's line, and under it, when it is selected or needs the
-    /// user (or → unfolded it), its coordinator (when it runs or asks)
-    /// and its threads; while filtering, the threads the filter finds.
+    /// A project's line, and under it, unless it is folded (an inactive
+    /// one until → expands it), its coordinator and its threads, as the
+    /// TUI's tree; while filtering, the rows the filter finds. An
+    /// inactive project's are dormant: nothing of it runs.
     @ViewBuilder
     private func project(_ p: AppAPI.Project) -> some View {
         let sel = Selection.project(p.slug)
@@ -285,30 +296,25 @@ struct Sidebar: View {
         if l.open {
             if l.coordinator {
                 row(.session(SessionRef(project: p.slug)), label: "Coordinator", ref: nil,
-                    tag: state.waits ? (state.word, state.tone) : nil, dot: theme.colour(state.tone), spoken: state.spoken)
+                    tag: state.waits && !l.dormant ? (state.word, state.tone) : nil, dot: theme.colour(l.dormant ? .idle : state.tone),
+                    spoken: l.dormant ? "inactive" : state.spoken, dormant: l.dormant)
             }
-            let key = Navigation.moreKey(project: p.slug)
             // Keyed with the project: thread ids repeat across projects,
             // and the List flattens every project's rows into one.
             ForEach(l.threads, id: \.record.id) { t in
                 row(.session(SessionRef(project: p.slug, thread: t.record.id)), label: t.record.title, ref: t.task?.ref,
-                    tag: tag(t), dot: theme.colour(app.attention(t).tone), spoken: spoken(t))
+                    tag: l.dormant ? nil : tag(t), dot: theme.colour(l.dormant ? .idle : app.attention(t).tone),
+                    spoken: l.dormant ? "inactive" : spoken(t), dormant: l.dormant)
                     .id("\(p.slug)/\(t.record.id)")
-            }
-            if l.more > 0 {
-                self.more(key, l.more == 1 ? "1 more thread" : "\(l.more) more threads", unfolded: false)
-                    .padding(.leading, 14)
-            } else if !filtering, app.nav.unfolded.contains(key), !p.threads.isEmpty {
-                self.more(key, "Show fewer", unfolded: true)
-                    .padding(.leading, 14)
             }
         }
     }
 
     /// A session's row: its dot, task ref and title, and its tag: a
     /// filled pill in its tone's colour, or plain muted text (PR) when it
-    /// has none.
-    private func row(_ sel: Selection, label: String, ref: String?, tag: (String, Attention.Tone?)?, dot: Color, spoken: String) -> some View {
+    /// has none. A dormant one (an inactive project's) is muted.
+    private func row(_ sel: Selection, label: String, ref: String?, tag: (String, Attention.Tone?)?, dot: Color, spoken: String,
+                     dormant: Bool = false) -> some View {
         let on = app.nav.selection == sel
         return HStack(spacing: 6) {
             Circle()
@@ -340,7 +346,7 @@ struct Sidebar: View {
             }
         }
         .padding(.leading, 14)
-        .foregroundStyle(on ? theme.onAction : theme.ink)
+        .foregroundStyle(on ? theme.onAction : dormant ? theme.muted : theme.ink)
         // One element that says the row and its state: "T6 Network popup
         // polish, needs approval".
         .accessibilityElement(children: .ignore)
@@ -374,9 +380,10 @@ struct Sidebar: View {
         let sel = Selection.project(p.project, server: peer.alias)
         let on = app.nav.selection == sel
         return DisclosureGroup(isExpanded: expanded(Navigation.sectionKey(server: peer.alias, project: p.project))) {
-            ForEach(sessions(peer, p), id: \.0.id) { s, r in
-                row(.session(r), label: r.isCoordinator ? "Coordinator" : r.thread, ref: s.task.isEmpty ? nil : s.task,
-                    tag: tag(s), dot: theme.colour(tone(s)), spoken: spoken(s))
+            // Its coordinator, running there or not (s nil), as the TUI's.
+            ForEach(sessions(peer, p), id: \.ref) { s, r in
+                row(.session(r), label: r.isCoordinator ? "Coordinator" : r.thread, ref: (s?.task ?? "").isEmpty ? nil : s?.task,
+                    tag: s.flatMap(tag), dot: theme.colour(s.map(tone) ?? .idle), spoken: s.map(spoken) ?? "not running")
             }
         } label: {
             HStack(spacing: 8) {

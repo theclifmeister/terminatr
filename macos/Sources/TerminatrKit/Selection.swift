@@ -98,7 +98,9 @@ public struct Navigation: Codable, Equatable, Sendable {
     public var collapsed: Set<String> = []
     /// Whether the sidebar unfolds its inactive projects (⇧⌘H).
     public var showInactive = false
-    /// The sidebar's "N more" rows unfolded, by moreKey.
+    /// What → unfolded in the sidebar: the needs' "+N more" (moreKey),
+    /// and the inactive projects expanded (sectionKey), as the TUI's
+    /// view.Tree has them.
     public var unfolded: Set<String> = []
 
     /// How many steps back are kept.
@@ -183,11 +185,8 @@ public struct Navigation: Codable, Equatable, Sendable {
 
     public static let needsSection = "needs"
 
-    /// A "N more" row of the sidebar: a project's threads, or the needs
-    /// (project empty).
-    public static func moreKey(project: String = "") -> String {
-        project.isEmpty ? "more:needs" : "more:\(project)"
-    }
+    /// The needs' "+N more" row of the sidebar.
+    public static func moreKey() -> String { "more:needs" }
 }
 
 private extension Array where Element: Equatable {

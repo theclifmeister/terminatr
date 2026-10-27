@@ -1,9 +1,8 @@
 import Foundation
 
-/// What the window's sidebar lists (T748 milestone A), kept lean: the
-/// projects in the TUI's order, a coordinator row only when it runs or
-/// asks, under a project only the threads worth a row, and the needs
-/// cut to a few.
+/// What the window's sidebar lists: the rows of the TUI's sidebar
+/// (internal/tui buildTree, docs/SPEC.md §4), in its order and folded as
+/// it folds them, under the app's own Needs you, cut to a few.
 public enum SidebarTree {
     /// The needs the sidebar's Needs you shows before "+N more" (A3).
     public static let needsShown = 3
@@ -22,21 +21,64 @@ public enum SidebarTree {
         projects.filter { !$0.active }
     }
 
-    /// The open threads a shown project lists (A4), in its order: those
-    /// that wait on the user always, and the selected one; the rest fold
-    /// into "N more" (more) unless unfolded.
-    public static func threads(of p: AppAPI.Project, selected: String?, unfolded: Bool,
-                               attention: (AppAPI.Thread) -> Attention) -> (shown: [AppAPI.Thread], more: Int) {
-        let open = p.threads.filter { !$0.record.done }
-        if unfolded { return (open, 0) }
-        let shown = open.filter { $0.record.id == selected || attention($0).waits }
-        return (shown, open.count - shown.count)
+    /// The threads a project lists under its coordinator, as the TUI's
+    /// sidebar has them (internal/tui projectRows, orderedThreads): every
+    /// unresolved one, done ones too, ordered as §7.4 orders them:
+    /// waiting on the user, a report to read, working, running, then the
+    /// rest, each group in the server's order. session is a thread's
+    /// session as session.list has it (nil when none runs).
+    public static func threads(of p: AppAPI.Project, session: (AppAPI.Thread) -> AppAPI.Session?) -> [AppAPI.Thread] {
+        let ranked = p.threads.enumerated().map { (group($0.element, session($0.element)), $0.offset, $0.element) }
+        return ranked.sorted { ($0.0, $0.1) < ($1.0, $1.1) }.map { $0.2 }
     }
 
-    /// Whether a project lists its coordinator and threads: the one
-    /// selected (or one of its sessions), and one that needs the user.
-    public static func expands(_ p: AppAPI.Project, selection: Selection?, needs: Int) -> Bool {
-        needs > 0 || (selection?.server == "" && selection?.project == p.slug)
+    /// A thread's group in that order, as the TUI's threadGroup.
+    static func group(_ t: AppAPI.Thread, _ s: AppAPI.Session?) -> Int {
+        if s?.state == "blocked" || !(t.status?.needsYou ?? "").isEmpty { return 0 }
+        if t.record.reportAcked < t.record.reports { return 1 }
+        if s?.state == "working" { return 2 }
+        return s == nil ? 4 : 3
+    }
+
+    /// Whether this server's project p lists its coordinator and threads,
+    /// as the TUI's tree folds (view.Tree): an active project unless ←
+    /// folded it, an inactive one only once → expanded it; and, the
+    /// app's own, always while one of its sessions is shown, so the
+    /// List's selection has its row.
+    public static func opens(_ p: AppAPI.Project, nav: Navigation) -> Bool {
+        if case .session(let ref) = nav.selection, ref.server.isEmpty, ref.project == p.slug { return true }
+        let key = Navigation.sectionKey(server: "", project: p.slug)
+        return p.active ? !nav.collapsed.contains(key) : nav.unfolded.contains(key)
+    }
+
+    /// This server's tree as the TUI keys its rows (treeRow.key): "p:"
+    /// a project, "c:" its coordinator, "t:<slug>/<id>" a thread, and
+    /// "d:inactive" the inactive divider, the inactive projects under it
+    /// while nav.showInactive. The sidebar draws these rows; the shared
+    /// fixture (internal/tui/testdata/sidebar-app.json) pins them to the
+    /// TUI's buildTree.
+    public static func rows(_ projects: [AppAPI.Project], sessions: [AppAPI.Session], nav: Navigation) -> [String] {
+        func session(_ t: AppAPI.Thread) -> AppAPI.Session? {
+            t.record.session.isEmpty ? nil : sessions.first { $0.id == t.record.session }
+        }
+        func add(_ p: AppAPI.Project) -> [String] {
+            guard opens(p, nav: nav) else { return ["p:\(p.slug)"] }
+            return ["p:\(p.slug)", "c:\(p.slug)"] + threads(of: p, session: session).map { "t:\(p.slug)/\($0.record.id)" }
+        }
+        let gone = inactive(projects)
+        return active(projects).flatMap(add) + (gone.isEmpty ? [] : ["d:inactive"])
+            + (nav.showInactive ? gone.flatMap(add) : [])
+    }
+
+    /// What a paired server's shared project lists under it, as the
+    /// TUI's peerProjectRows: nothing while stale; else its coordinator,
+    /// running there or not, then its threads, those the app API lists
+    /// (the ones a session runs).
+    public static func sessions(of p: AppAPI.PeerProject, alias: String) -> [(session: AppAPI.PeerSession?, ref: SessionRef)] {
+        guard !p.stale else { return [] }
+        let all = p.sessions.compactMap { s in SessionRef(s, of: alias).map { (session: Optional(s), ref: $0) } }
+        let coordinator = all.first { $0.ref.isCoordinator } ?? (nil, SessionRef(project: p.project, server: alias))
+        return [coordinator] + all.filter { !$0.ref.isCoordinator }
     }
 
     /// "+4 more: 2 review, 2 blocked": the needs past the shown ones,
@@ -65,10 +107,10 @@ public enum SidebarTree {
 }
 
 extension Attention {
-    /// What a project's coordinator says of itself, its project's dot:
-    /// with s its session as session.list has it (nil when none runs).
-    /// It has a sidebar row only when it runs or waits on the user
-    /// (A2): its open questions (tm ask) wait even while none runs.
+    /// What a project's coordinator says of itself, its project's dot
+    /// and its row's: with s its session as session.list has it (nil
+    /// when none runs). Its open questions (tm ask) wait even while none
+    /// runs.
     public static func of(coordinator s: AppAPI.Session?, in p: AppAPI.Project, now: Date = Date()) -> Attention {
         if let s {
             let menu = s.question.map { q in q.questions.contains { !$0.answered } } ?? false
