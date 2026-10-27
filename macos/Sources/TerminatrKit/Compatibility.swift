@@ -40,6 +40,14 @@ public enum Compatibility: Equatable, Sendable {
             && hello.methods.contains(AppAPI.Methods.projectActive.name)
     }
 
+    /// The app API that has session.upload: the composer's files need it.
+    public static let uploadAPI = 15
+
+    /// Whether hello's tm takes files for a prompt (session.upload).
+    public static func takesFiles(_ hello: AppAPI.Hello) -> Bool {
+        hello.appApi >= uploadAPI && hello.methods.contains(AppAPI.Methods.sessionUpload.name)
+    }
+
     /// Whether hello's tm sends the conversation's files (session.file),
     /// its server too.
     public static func sendsFiles(_ hello: AppAPI.Hello) -> Bool {

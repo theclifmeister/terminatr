@@ -275,6 +275,7 @@ func TestCopies(t *testing.T) {
 	})
 	check("peer.list sessions", homeOf(func(s proto.PeerSession) PeerSession { return peerSessionOf("mini", time.Second, s) }), nil)
 	check("session.prompt", homeOf(promptResultOf), nil)
+	check("session.upload", homeOf(uploadOf), nil)
 	check("session.answer", homeOf(answerResultOf), nil)
 	check("session.approve", homeOf(approveResultOf), nil)
 	check("task.ask", homeOf(taskAskResultOf), nil)
@@ -386,6 +387,22 @@ func TestParamsCopies(t *testing.T) {
 	if _, err := m.toServer(json.RawMessage(`{"session":"s-1","path":"/etc/passwd"}`)); err == nil {
 		t.Error("session.file took a path")
 	}
+	// session.upload takes bytes and a name, never a path; a prompt's
+	// files are refs.
+	m, _ = Lookup(proto.MethodSessionUpload)
+	p, err = m.toServer(json.RawMessage(`{"session":"s-1","upload":"ab","name":"shot.png","size":9,"offset":2,"data":"aGk="}`))
+	if up, ok := p.(proto.SessionUploadParams); err != nil || !ok || up.Session != "s-1" || up.Upload != "ab" || up.Name != "shot.png" ||
+		up.Size != 9 || up.Offset != 2 || string(up.Data) != "hi" {
+		t.Errorf("session.upload params %+v %v", p, err)
+	}
+	if _, err := m.toServer(json.RawMessage(`{"session":"s-1","path":"/etc/passwd"}`)); err == nil {
+		t.Error("session.upload took a path")
+	}
+	m, _ = Lookup(proto.MethodSessionPrompt)
+	p, err = m.toServer(json.RawMessage(`{"id":"s-1","text":"look","files":["1-a.png"]}`))
+	if pp, ok := p.(proto.SessionPromptParams); err != nil || !ok || pp.Text != "look" || !slices.Equal(pp.Files, []string{"1-a.png"}) {
+		t.Errorf("session.prompt params %+v %v", p, err)
+	}
 	m, _ = Lookup(proto.MethodSessionList)
 	for _, raw := range []string{"", "null", "{}"} {
 		if _, err := m.toServer(json.RawMessage(raw)); err != nil {
@@ -406,7 +423,7 @@ func TestAllowlist(t *testing.T) {
 		proto.MethodSessionPrompt, proto.MethodSessionWatch, proto.MethodTaskAsk,
 		proto.MethodTaskAccept, proto.MethodTaskSendBack, proto.MethodTaskDelegate, proto.MethodProjectOpen,
 		proto.MethodQuestionsOpen, proto.MethodTaskAdd, proto.MethodTaskGet, proto.MethodPaneVT, proto.MethodTranscriptWatch, MethodPaneInput,
-		proto.MethodSessionFile, proto.MethodCoordinatorClear, proto.MethodProjectActive}
+		proto.MethodSessionFile, proto.MethodCoordinatorClear, proto.MethodProjectActive, proto.MethodSessionUpload}
 	slices.Sort(want)
 	if got := MethodNames(); !slices.Equal(got, want) {
 		t.Errorf("methods %v, want %v", got, want)
