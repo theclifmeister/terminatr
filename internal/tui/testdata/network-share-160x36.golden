@@ -15,8 +15,12 @@
 │ ▾ ○ nas · offline 4m · relay                                        panes off │   ○ sees nothing: you share no project                       │
 │      shares nothing with you yet                                              │   ○ watches your shared panes and popups                     │
 │      └─ asked to share (S-4F2A-33, for terminatr)       waiting on nas's user │   ○ types in them                                            │
+│                                                                               │   ○ reads their conversations, in its Mac app                │
 │                                                                               │   panes (V)   [off] · view · write                           │
 │                                                                               │               it can't open this server's panes              │
+│                                                                               │   chats (C)   [on] · off                                     │
+│                                                                               │               its Mac app reads the conversations of what it │
+│                                                                               │               may watch                                      │
 │                                                                               │ AND THE OTHER WAY                                            │
 │                                                                               │   mini's tm has no remote panes                              │
 │                                                                               │   it shares acme-api, infra                                  │
@@ -24,12 +28,8 @@
 │                                                                               │                                                              │
 │                                                                               │                                                              │
 │                                                                               │                                                              │
-│                                                                               │                                                              │
-│                                                                               │                                                              │
-│                                                                               │                                                              │
-│                                                                               │                                                              │
 │                                                                                                                                              │
-│ S ask to share · E name · V panes · X unpair · enter fold · tab details · P pair · J join · ? keys · esc close                               │
+│ S ask to share · E name · V panes · C conversations · X unpair · enter fold · tab details · P pair · J join · ? keys · esc close             │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 == s:mini:S-91C3-7
 ╭─ Network · studio + 2 paired ────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮

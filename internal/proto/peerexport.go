@@ -25,6 +25,10 @@ type PeerProjects struct {
 	// (PanesOff, PanesView, PanesType; docs/SPEC.md §16.12), from a
 	// server whose hello lists pane-vt.
 	Panes string `json:"panes,omitempty"`
+	// Conversations is the answering server's conversations switch for
+	// the caller (ConversationsOn, ConversationsNot; docs/SPEC.md
+	// §16.14), from a server whose hello lists transcript.
+	Conversations string `json:"conversations,omitempty"`
 	// Now is the peer's clock as it answered: the reader's mirror
 	// measures the offset between the two clocks from it.
 	Now time.Time `json:"now,omitzero"`

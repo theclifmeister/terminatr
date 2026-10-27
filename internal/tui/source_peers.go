@@ -41,6 +41,8 @@ type PeerEntry struct {
 	Link                          *proto.PeerLink
 	// Panes is this server's pane switch for it (proto.PanesOff …).
 	Panes string
+	// ConversationsOff: its conversations switch is off (§16.14).
+	ConversationsOff bool
 }
 
 func (s *ServerSource) Peers() (PeerList, error) {
@@ -72,7 +74,8 @@ func (s *ServerSource) Peers() (PeerList, error) {
 		}
 	}
 	for _, p := range peers {
-		e := PeerEntry{Alias: p.Alias, Name: p.Name, ID: p.ID().String(), Short: p.ID().Short(), Relay: p.Relay, Panes: p.PanesLevel()}
+		e := PeerEntry{Alias: p.Alias, Name: p.Name, ID: p.ID().String(), Short: p.ID().Short(), Relay: p.Relay, Panes: p.PanesLevel(),
+			ConversationsOff: !p.ConversationsOn()}
 		if pl, ok := links[e.ID]; ok {
 			e.Link = &pl
 		}
@@ -111,6 +114,24 @@ func (s *ServerSource) RemovePeer(alias string) error {
 	var st *proto.LinkStatus
 	if err := s.call(proto.MethodPeerReload, nil, &st); err != nil && !errors.Is(err, tmclient.ErrNotRunning) {
 		return fmt.Errorf("removed %s, but the server didn't read the peers again (%v); tm server restart does", alias, err)
+	}
+	return nil
+}
+
+func (s *ServerSource) SetPeerConversations(alias string, on bool) error {
+	if s.Caller.IsAgent() {
+		return errHumanOnly
+	}
+	found, err := peer.SetConversations(peer.DirIn(s.Paths.Home), alias, on)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return fmt.Errorf("no paired server %s (tm peer list)", alias)
+	}
+	var st *proto.LinkStatus
+	if err := s.call(proto.MethodPeerReload, nil, &st); err != nil && !errors.Is(err, tmclient.ErrNotRunning) {
+		return fmt.Errorf("set, but the server didn't read the peers again (%v); tm server restart does", err)
 	}
 	return nil
 }

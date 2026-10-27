@@ -382,7 +382,7 @@ func TestFileCaps(t *testing.T) {
 	if d := (&dispatcher{files: &fileFarm{}}).methods(); d[proto.MethodPeerFileFetch] == nil {
 		t.Fatal("no peer.file.fetch")
 	}
-	if d := (&dispatcher{msgs: nil, panesHere: func(string) {}}).methods(); d[proto.MethodPeerFileFetch] != nil {
+	if d := (&dispatcher{msgs: nil, panesHere: func(proto.PeerPanesParams) {}}).methods(); d[proto.MethodPeerFileFetch] != nil {
 		t.Fatal("peer.file.fetch without a host")
 	}
 }

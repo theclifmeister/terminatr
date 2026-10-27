@@ -36,7 +36,15 @@ type Peer struct {
 	// docs/SPEC.md §16.12). tm writes "type", which tm v0.27.0 reads too,
 	// and reads "write" as well.
 	Panes string `json:"panes,omitempty"`
+	// Conversations is the conversations switch for the peer
+	// (docs/SPEC.md §16.14): "off" shares no conversation; on, the
+	// default when empty, shares the shared projects' coordinator and
+	// thread conversations while Panes is view or write.
+	Conversations string `json:"conversations,omitempty"`
 }
+
+// ConversationsOn says whether p's conversations switch is on.
+func (p Peer) ConversationsOn() bool { return p.Conversations != proto.ConversationsNot }
 
 // PanesLevel is p's pane switch, off when unset.
 func (p Peer) PanesLevel() string {
@@ -81,6 +89,9 @@ func (p Peer) check() error {
 	}
 	if p.Panes != "" && !proto.ValidPanes(p.Panes) {
 		return fmt.Errorf("peer %s: panes %q is not off, view or write", p.Alias, p.Panes)
+	}
+	if p.Conversations != "" && p.Conversations != proto.ConversationsOn && p.Conversations != proto.ConversationsNot {
+		return fmt.Errorf("peer %s: conversations %q is not on or off", p.Alias, p.Conversations)
 	}
 	u, err := url.Parse(p.Relay)
 	if err != nil || (u.Scheme != "wss" && u.Scheme != "ws") || u.Host == "" {
@@ -261,8 +272,8 @@ func Pin(dir string, key ed25519.PublicKey, relayURL, name, as string) (Peer, er
 				if as == "" {
 					p.Alias = q.Alias
 				}
-				// Pairing again keeps the pane switch and the name.
-				p.Panes, p.Name = q.Panes, q.Name
+				// Pairing again keeps the switches and the name.
+				p.Panes, p.Conversations, p.Name = q.Panes, q.Conversations, q.Name
 			case q.Alias == as:
 			default:
 				kept = append(kept, q)
@@ -309,6 +320,27 @@ func SetPanes(dir, alias, word string) (bool, error) {
 				peers[i].Panes = level
 				if level == proto.PanesOff {
 					peers[i].Panes = ""
+				}
+			}
+		}
+		return peers, nil
+	})
+	return found, err
+}
+
+// SetConversations turns the conversations switch for the peer called
+// alias, or named so, on or off (docs/SPEC.md §16.14); false when there
+// is none.
+func SetConversations(dir, alias string, on bool) (bool, error) {
+	found := false
+	err := change(dir, func(peers []Peer) ([]Peer, error) {
+		alias := NamesOf(peers).Alias(alias)
+		for i := range peers {
+			if peers[i].Alias == alias {
+				found = true
+				peers[i].Conversations = ""
+				if !on {
+					peers[i].Conversations = proto.ConversationsNot
 				}
 			}
 		}

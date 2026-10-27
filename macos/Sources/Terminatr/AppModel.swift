@@ -360,6 +360,12 @@ final class AppModel {
         peers.first { $0.alias == alias }
     }
 
+    /// What a paired server's conversation allows now
+    /// (RemoteConversation).
+    func remoteConversation(_ ref: SessionRef) -> RemoteConversation {
+        RemoteConversation.of(caps: caps, peer: peer(ref.server), alias: ref.server)
+    }
+
     /// What a paired server's pane allows now (RemotePane).
     func remotePane(_ ref: SessionRef) -> RemotePane {
         RemotePane.of(caps: caps, peer: peer(ref.server), alias: ref.server)
@@ -482,7 +488,7 @@ final class AppModel {
 
     /// ⌘F (step 0), ⌘G (1), ⇧⌘G (-1): the conversation's find bar.
     func findInConversation(_ step: Int = 0) {
-        guard let m = selectedSession, !m.ref.isRemote else { return }
+        guard let m = selectedSession, !m.ref.isRemote || m.transcript.status != nil else { return }
         m.pick(.conversation)
         find = FindRequest(n: find.n + 1, step: step)
     }
@@ -514,14 +520,14 @@ final class AppModel {
 
     /// ⌘L: the conversation, its composer focused.
     func focusComposer() {
-        guard let m = selectedSession, !m.ref.isRemote else { return }
+        guard let m = selectedSession, !m.ref.isRemote || remoteConversation(m.ref).sends else { return }
         m.pick(.conversation)
         composerFocus += 1
     }
 
     /// ⌘⇧T: the other tab.
     func switchTab() {
-        guard let m = selectedSession, !m.ref.isRemote, m.sessionID != nil else { return }
+        guard let m = selectedSession, m.sessionID != nil else { return }
         m.pick(m.tab == .conversation ? .terminal : .conversation)
     }
 
@@ -543,8 +549,8 @@ final class AppModel {
     }
 
     func conversationState(_ m: SessionModel, _ s: AppAPI.Session?) -> ConversationState {
-        ConversationState.of(caps: caps, agent: s?.agent ?? "", status: m.transcript.status,
-                             failure: m.transcriptFailure, server: m.ref.server)
+        ConversationState.of(caps: caps, agent: s?.agent ?? m.ref.session(in: peers)?.agent ?? "", status: m.transcript.status,
+                             failure: m.transcriptFailure, remote: m.ref.isRemote ? remoteConversation(m.ref) : nil)
     }
 
     /// The window's title for a selection.

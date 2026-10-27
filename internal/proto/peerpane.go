@@ -57,9 +57,12 @@ func PanesWord(level string) string {
 const MethodPeerPanes = "peer.panes"
 
 // PeerPanesParams are the params of peer.panes: the level now (PanesOff,
-// PanesView, PanesType).
+// PanesView, PanesType), and the conversations switch now
+// (ConversationsOn, ConversationsNot; §16.14) from a server whose hello
+// lists transcript.
 type PeerPanesParams struct {
-	Panes string `json:"panes"`
+	Panes         string `json:"panes"`
+	Conversations string `json:"conversations,omitempty"`
 }
 
 // PeerAttachParams are the params of peer.attach: the session (a

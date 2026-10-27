@@ -475,12 +475,18 @@ func (rp *remotePane) repaint() {
 func (rp *remotePane) sessionInfo() proto.SessionInfo {
 	rp.mu.Lock()
 	defer rp.mu.Unlock()
-	s := rp.info
-	cols, rows := rp.proxy.Size()
-	return proto.SessionInfo{ID: rp.id, Role: s.Role, Agent: s.Agent, Project: s.Project, Thread: s.Thread, Task: s.Task,
-		Cols: cols, Rows: rows, Created: s.Created, State: s.State, Reason: s.Reason, TodosDone: s.TodosDone,
+	info := remoteSessionInfo(rp.id, rp.alias, rp.info, !rp.input)
+	info.Cols, info.Rows = rp.proxy.Size()
+	return info
+}
+
+// remoteSessionInfo is the paired server alias's session s, shown here
+// as id, as a SessionInfo for the console.
+func remoteSessionInfo(id, alias string, s proto.PeerSession, viewOnly bool) proto.SessionInfo {
+	return proto.SessionInfo{ID: id, Role: s.Role, Agent: s.Agent, Project: s.Project, Thread: s.Thread, Task: s.Task,
+		Created: s.Created, State: s.State, Reason: s.Reason, TodosDone: s.TodosDone,
 		TodosTotal: s.TodosTotal, Current: s.Current, Model: s.Model, Context: s.Context, ContextWindow: s.ContextWindow,
-		Server: rp.alias, ViewOnly: !rp.input}
+		Server: alias, ViewOnly: viewOnly}
 }
 
 // serveRemoteAttach is serveAttach for a remote pane: the console gets
@@ -543,6 +549,53 @@ loop:
 	sub.Detach()
 	<-writerDone
 	s.log.Printf("remote pane %s: client left (%s)", id, reason)
+}
+
+// remotePasteEnter is the wait between a prompt's paste and its Enter,
+// as session.paste's: text and CR in one write is taken as the paste's.
+var remotePasteEnter = 150 * time.Millisecond
+
+// prompt types a prompt into the paired server's pane id as its console
+// would: the text as a paste, then Enter (docs/SPEC.md §16.14: the app's
+// composer on a paired session). The keys go the way a console's keys
+// go, so only while the far server's pane switch is write, which it
+// checks again at each key; a thread's first keys tell its coordinator
+// there. Nothing queues here: the prompt is typed now.
+func (r *remotes) prompt(id string, p proto.SessionPromptParams) (any, *proto.Error) {
+	if strings.TrimSpace(p.Text) == "" {
+		return nil, proto.Errorf(proto.ErrBadParams, "empty prompt")
+	}
+	if p.Mode != "" {
+		return nil, proto.Errorf(proto.ErrRefused, "a paired server's session takes a prompt as typed: no %s", p.Mode)
+	}
+	rp, perr := r.open(id)
+	if perr != nil {
+		return nil, perr
+	}
+	rp.attached()
+	defer rp.detached()
+	rp.mu.Lock()
+	conn, input := rp.conn, rp.input
+	rp.mu.Unlock()
+	if conn == nil {
+		return nil, proto.Errorf(proto.ErrRefused, "%s is offline", rp.alias)
+	}
+	if !input {
+		return nil, proto.Errorf(proto.ErrPanesOff, "%s shares this session view only", rp.alias)
+	}
+	b, err := rp.proxy.Paste(p.Text)
+	if err != nil {
+		return nil, proto.Errorf(proto.ErrUnknownSession, "the pane on %s closed", rp.alias)
+	}
+	if err := conn.Input(b); err != nil {
+		return nil, proto.Errorf(proto.ErrRefused, "%s: the link dropped", rp.alias)
+	}
+	time.Sleep(remotePasteEnter)
+	if err := conn.Input([]byte("\r")); err != nil {
+		return nil, proto.Errorf(proto.ErrRefused, "%s: the link dropped", rp.alias)
+	}
+	r.s.log.Printf("remote pane %s: the app typed a prompt", id)
+	return proto.SessionPromptResult{Via: "typed"}, nil
 }
 
 // remoteRefusal refuses a session.* method on a remote pane: only keys

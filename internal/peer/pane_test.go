@@ -451,7 +451,7 @@ func TestPaneRaiseTold(t *testing.T) {
 			ma := Start(Options{Dir: a.dir, Version: "0.27.0", Logf: t.Logf, RelayTLS: tc, noPaneLevel: old,
 				Backoff: func(int) time.Duration { return 20 * time.Millisecond }})
 			t.Cleanup(ma.Close)
-			ma.OnPanes(func(_ ID, level string) { mu.Lock(); told = append(told, level); mu.Unlock() })
+			ma.OnPanes(func(_ ID, p proto.PeerPanesParams) { mu.Lock(); told = append(told, p.Panes); mu.Unlock() })
 			h := &fakeHost{}
 			mb := Start(Options{Dir: b.dir, Version: "0.28.0", RelayTLS: tc, Panes: h,
 				Logf:    func(f string, a ...any) { mu.Lock(); farLog = append(farLog, fmt.Sprintf(f, a...)); mu.Unlock() },

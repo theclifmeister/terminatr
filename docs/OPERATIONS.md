@@ -642,6 +642,17 @@ Panes write for studio: it can watch and type into the coordinator and thread pa
 
 (`view` lets `studio` watch without typing; `view` and `write` also let it open your shared projects' popups, read-only (above); `off`, the default, shows nothing; the Network popup (`N`) sets it too: `V` on the server, or `←` `→` or a click on its panes switch in the details. `write` was `type` in tm 0.27.0, which `tm peer panes` still takes; a 0.27.0 server pairs and works with a newer one either way. A change reaches panes already open on `studio` at once.) Only projects `mini` shares cross. On `studio`, the sidebar's `mini` group then opens a remote coordinator or thread with `enter` or a click, and `tm attach mini/s-41` opens one by its id there. The status bar starts with `mini ›` and says `remote · connected 38 ms` (`view-only` at `view`, where the wheel still scrolls the pane here and a drag copies, and with `mini`'s size when it isn't your window's: `view-only · 120×40 on mini`); `prefix+R` asks `mini` for a fresh repaint if the pane ever looks off. Typing into a thread tells `mini`'s coordinator, as typing into one of your own threads does. While the link is down the pane keeps its last screen, your keys are dropped (never sent later), and it comes back by itself. Actions on the session (stop, model, remote control) stay on `mini`. Both servers can run different tm releases, as long as both have remote panes (SPEC §16.12).
 
+### Remote conversations
+
+The Mac app on `studio` also shows a paired server's coordinator or thread as a conversation, as it shows its own: the Conversation tab with tool runs, search and the todo list. It follows the panes switch above: at `view` it reads, and the composer says `View only`; at `write` the composer types into the session's pane on `mini` (a paste and Enter, as typing in its Terminal tab does, so a thread's first prompt tells its coordinator there). A question card from `mini` shows that a question is open and says `Answer in Terminal`. On top of the panes switch, `mini` has a conversations switch per paired server, on by default:
+
+```
+$ tm peer conversations studio off
+Conversations off for studio: it can't read the conversations of this server's sessions, and those it has open close.
+```
+
+A conversation is the session's whole transcript as tm reads it: prompts, the agent's text, each tool call and its result's first line, and the todo list, so what an agent read or ran (a file's lines, a command's output) shows in it. Nothing else crosses: no file of the project, nothing from its uploads, no path outside the transcript. `tm peer list` adds `conversations off` to a server's panes when it is off, the Network popup (`N`) shows and turns it with `C`, and `tm network` lists both sides' switches. A server that runs an older tm shares no conversations: the app says it needs an update and shows the Terminal tab (SPEC §16.14).
+
 ### The servers' side
 
 Each paired server keeps a link to the relay by itself; nothing to start. `tm server status` shows the server's id and each link:

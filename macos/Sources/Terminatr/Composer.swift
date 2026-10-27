@@ -5,7 +5,9 @@ import TerminatrKit
 /// queued until the agent is idle; ⌥↩ steers it into the running turn;
 /// Interrupt stops the turn for it, after a confirmation. ⇧↩ is a new
 /// line; ⌘L focuses it. A thread's composer says that sending takes the thread over:
-/// the server raises the takeover, as typing in its pane does.
+/// the server raises the takeover, as typing in its pane does. On a
+/// paired server's session (at write) a prompt is typed into its pane
+/// there, now: no steering, no queue.
 struct Composer: View {
     @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
@@ -39,14 +41,14 @@ struct Composer: View {
                         .onKeyPress(.return, phases: .down) { press in
                             // ⌘↩ is the open card's first choice, not a send.
                             if press.modifiers.contains(.shift) || press.modifiers.contains(.command) { return .ignored }
-                            send(mode: press.modifiers.contains(.option) ? "now" : "")
+                            send(mode: press.modifiers.contains(.option) && !model.ref.isRemote ? "now" : "")
                             return .handled
                         }
                         .accessibilityLabel(placeholder)
                         .modifier(NoWritingTools())
                 }
                 .padding(.vertical, 2)
-                if running {
+                if running && !model.ref.isRemote {
                     Button("Interrupt") { interrupting = true }
                         .disabled(empty || busy)
                         .help("Stops the agent's turn for this prompt")
@@ -78,7 +80,7 @@ struct Composer: View {
                         .foregroundStyle(theme.attention)
                 }
                 Spacer()
-                Text("⌥↩ steer · ⇧↩ new line")
+                Text(model.ref.isRemote ? "⇧↩ new line" : "⌥↩ steer · ⇧↩ new line")
                     .font(theme.mono(.caption2))
                     .foregroundStyle(theme.muted)
             }
@@ -103,6 +105,10 @@ struct Composer: View {
     private var running: Bool { session?.state == "working" }
 
     private var placeholder: String {
+        if model.ref.isRemote {
+            let who = model.ref.isCoordinator ? "the coordinator" : model.ref.thread
+            return "Message \(who) on \(model.ref.server) · typed into its pane"
+        }
         if model.ref.isCoordinator { return "Message the coordinator" }
         let who = model.ref.thread
         return "Message \(who) · sending takes the thread over"
@@ -134,6 +140,7 @@ struct Composer: View {
         case "steered": s = "Steered into the running turn."
         case "interrupted": s = "The turn stopped for it."
         case "channel": s = "Sent."
+        case "typed": s = "Typed into its pane."
         default: s = r.via.isEmpty ? "Sent." : "Sent (\(r.via))."
         }
         if !r.why.isEmpty { s += " " + r.why }

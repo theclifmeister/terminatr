@@ -60,7 +60,7 @@ var notHumanOnly = map[string]gate{
 var notControl = map[string]bool{
 	proto.MethodPeerProjects: true, proto.MethodPeerWatch: true, proto.MethodPeerAttach: true,
 	proto.MethodPeerPanes: true, proto.MethodPeerMessage: true, proto.MethodPeerPopup: true,
-	proto.MethodPeerFileFetch: true,
+	proto.MethodPeerFileFetch: true, proto.MethodPeerTranscript: true,
 }
 
 // gateOf is method m's gate, an attach connection's among them.

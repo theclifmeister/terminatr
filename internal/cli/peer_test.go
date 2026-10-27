@@ -115,7 +115,30 @@ func TestPeerListRemoveRotate(t *testing.T) {
 	if ps, _ := peer.LoadPeers(dir); ps[0].Panes != proto.PanesType {
 		t.Fatalf("after panes type: %+v", ps)
 	}
+	// The conversations switch (§16.14): on by default, off kept in
+	// peers.json, on again with no key.
+	h.expect(2, "on|off", human, "peer", "conversations", "mini", "maybe")
+	h.expect(1, "unknown-peer", human, "peer", "conversations", "studio", "off")
+	if out := h.ok(human, "peer", "conversations", "mini", "off"); !strings.Contains(out, "Conversations off for mini") {
+		t.Fatalf("conversations off: %q", out)
+	}
+	if ps, _ := peer.LoadPeers(dir); ps[0].Conversations != proto.ConversationsNot || ps[0].ConversationsOn() || ps[0].Panes != proto.PanesType {
+		t.Fatalf("after conversations off: %+v", ps)
+	}
+	if out := h.ok(human, "peer", "list"); !strings.Contains(out, "panes: write, conversations off") {
+		t.Fatalf("list with conversations off: %q", out)
+	}
+	if out := h.ok(human, "peer", "conversations", "mini", "on"); !strings.Contains(out, "it can read the conversations") || !strings.Contains(out, "at panes write") {
+		t.Fatalf("conversations on: %q", out)
+	}
+	if ps, _ := peer.LoadPeers(dir); ps[0].Conversations != "" {
+		t.Fatalf("after conversations on: %+v", ps)
+	}
 	h.ok(human, "peer", "panes", "mini", "off")
+	if out := h.ok(human, "peer", "conversations", "mini", "on"); !strings.Contains(out, "its panes are off") {
+		t.Fatalf("conversations on, panes off: %q", out)
+	}
+	h.expect(1, "human-only", coord, "peer", "conversations", "mini", "off")
 	*reloads = 0
 
 	h.expect(1, "unknown-peer", human, "peer", "remove", "studio")

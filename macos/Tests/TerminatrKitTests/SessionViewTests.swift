@@ -68,8 +68,44 @@ private func status(_ state: String, reason: String = "", agent: String = "claud
     let round = try JSONDecoder().decode(SessionRef.self, from: JSONEncoder().encode(r))
     #expect(round == r)
 
-    // No transcript crosses a link: the conversation is never offered.
-    #expect(!ConversationState.of(caps: ["pane-vt", "transcript"], agent: "claude", status: status("mapped"), failure: nil, server: "mini").available)
+    // A paired session whose conversation can't open is terminal-only;
+    // one that can reads as this server's do.
+    let closed = RemoteConversation.closed("no")
+    #expect(ConversationState.of(caps: ["pane-vt", "transcript"], agent: "claude", status: nil, failure: nil, remote: closed) == .unavailable("no"))
+    #expect(ConversationState.of(caps: ["pane-vt", "transcript"], agent: "claude", status: nil, failure: nil, remote: .view) == .loading)
+    #expect(ConversationState.of(caps: ["pane-vt", "transcript"], agent: "claude", status: status("mapped"), failure: nil, remote: .write) == .mapped)
+    // One that opened stays shown when the link drops (the server opens
+    // it again), and a refusal says why.
+    #expect(ConversationState.of(caps: ["pane-vt", "transcript"], agent: "claude", status: status("mapped"), failure: nil, remote: closed) == .mapped)
+    #expect(!ConversationState.of(caps: ["pane-vt", "transcript"], agent: "claude", status: nil, failure: "mini doesn't share conversations with this server", remote: .view).available)
+}
+
+@Test func remoteConversation() {
+    let caps = ["pane-vt", "transcript", "pane-vt-remote", "transcript-remote"]
+    func peer(_ state: String = "up", transcript: Bool = true, panes: String, conversations: String = "on") -> AppAPI.Peer {
+        AppAPI.Peer(alias: "mini", state: state, pane: true, panes: panes, transcript: transcript, conversations: conversations)
+    }
+    #expect(RemoteConversation.of(caps: caps, peer: peer(panes: "type"), alias: "mini") == .write)
+    #expect(RemoteConversation.of(caps: caps, peer: peer(panes: "view"), alias: "mini") == .view)
+    // Unsaid (an answer from before the switch was read) is on.
+    #expect(RemoteConversation.of(caps: caps, peer: peer(panes: "view", conversations: ""), alias: "mini") == .view)
+    #expect(RemoteConversation.of(caps: caps, peer: peer(panes: "type"), alias: "mini").sends)
+    #expect(!RemoteConversation.of(caps: caps, peer: peer(panes: "view"), alias: "mini").sends)
+    #expect(RemoteConversation.of(caps: caps, peer: peer(panes: "view"), alias: "mini").reads)
+    for (c, p, words) in [(caps, peer(panes: "off"), "tm peer panes"), (caps, peer(panes: "type", conversations: "off"), "tm peer conversations"),
+                          (caps, peer("down", panes: "type"), "offline"), (caps, peer(transcript: false, panes: "type"), "needs an update"),
+                          (["pane-vt", "transcript", "pane-vt-remote"], peer(panes: "type"), "tm update"), (caps, nil, "isn't paired")] {
+        let rc = RemoteConversation.of(caps: c, peer: p, alias: "mini")
+        guard case .closed(let why) = rc else {
+            Issue.record("opens: \(c) \(String(describing: p))")
+            continue
+        }
+        #expect(why.contains(words), "\(why)")
+        #expect(!rc.reads && !rc.sends)
+    }
+    #expect(RemoteConversation.ended("conversations-off", alias: "mini") == "mini stopped sharing conversations with this server.")
+    #expect(RemoteConversation.ended("exited", alias: "mini").contains("ended on mini"))
+    #expect(RemoteConversation.ended("odd", alias: "mini").contains("(odd)"))
 }
 
 @Test func remotePane() {

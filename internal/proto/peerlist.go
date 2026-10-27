@@ -42,6 +42,13 @@ type PeerMirror struct {
 	Pane    bool   `json:"pane,omitempty"`
 	Panes   string `json:"panes,omitempty"`
 	Version string `json:"version,omitempty"`
+	// Transcript: the peer shares conversations (its hello lists
+	// transcript), and Conversations is its conversations switch for
+	// this server as it last said (ConversationsOn, ConversationsNot;
+	// docs/SPEC.md §16.14): it reads them while Panes is view or type
+	// and Conversations is on.
+	Transcript    bool   `json:"transcript,omitempty"`
+	Conversations string `json:"conversations,omitempty"`
 	// Offset is the peer's clock minus this server's, in milliseconds,
 	// as last measured; the peer's times (a session's created, the
 	// ticker's) less Offset are this server's. Unset (and 0) until a

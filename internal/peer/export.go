@@ -45,18 +45,22 @@ var watchPoll = 2 * time.Second
 // dispatcher answers a paired server's requests from the Exporter, and
 // hands its messages to Messages.
 type dispatcher struct {
-	ex     Exporter
-	msgs   Messages
-	panes  PaneHost
-	files  FileHost
-	caller caller.Caller
-	peer   ID
+	ex    Exporter
+	msgs  Messages
+	panes PaneHost
+	files FileHost
+	// transcripts serves conversations (peer.transcript); convOn is
+	// this server's conversations switch for the peer now.
+	transcripts TranscriptHost
+	convOn      func() bool
+	caller      caller.Caller
+	peer        ID
 	// level is this server's pane switch for the peer now
 	// (proto.PanesOff …).
 	level func() string
-	// panesHere takes the peer's pane switch for this server, which it
-	// says when it changes (peer.panes).
-	panesHere func(level string)
+	// panesHere takes the peer's switches for this server, which it
+	// says when they change (peer.panes).
+	panesHere func(p proto.PeerPanesParams)
 }
 
 // methods are the peer.* methods a paired server may call: nothing
@@ -65,9 +69,10 @@ type dispatcher struct {
 // which delivers a message to a linked project (§16.11), and peer.attach,
 // whose stream may type while the pane switch says so (§16.12);
 // peer.file.fetch reads only a file this server offered the peer
-// (§16.13).
+// (§16.13); peer.transcript reads a conversation only while both the
+// pane switch and the conversations switch let the peer (§16.14).
 func (d *dispatcher) methods() map[string]handler {
-	if d == nil || (d.ex == nil && d.msgs == nil && d.panes == nil && d.files == nil && d.panesHere == nil) {
+	if d == nil || (d.ex == nil && d.msgs == nil && d.panes == nil && d.files == nil && d.transcripts == nil && d.panesHere == nil) {
 		return nil
 	}
 	m := map[string]handler{}
@@ -90,6 +95,9 @@ func (d *dispatcher) methods() map[string]handler {
 	if d.files != nil {
 		m[proto.MethodPeerFileFetch] = d.fileFetch
 	}
+	if d.transcripts != nil {
+		m[proto.MethodPeerTranscript] = d.transcript
+	}
 	return m
 }
 
@@ -104,6 +112,9 @@ func (d *dispatcher) projects(ctx context.Context, _ json.RawMessage) (any, erro
 	out := proto.PeerProjects{Projects: ps, Now: time.Now()}
 	if d.panes != nil && d.level != nil {
 		out.Panes = d.level()
+	}
+	if d.transcripts != nil && d.convOn != nil {
+		out.Conversations = map[bool]string{true: proto.ConversationsOn, false: proto.ConversationsNot}[d.convOn()]
 	}
 	return out, nil
 }
@@ -179,6 +190,10 @@ func (d *dispatcher) panesChanged(_ context.Context, params json.RawMessage) (an
 	if !ok {
 		return nil, proto.Errorf(proto.ErrBadParams, "peer.panes: %q is no level", p.Panes)
 	}
-	d.panesHere(level)
+	p.Panes = level
+	if p.Conversations != proto.ConversationsOn && p.Conversations != proto.ConversationsNot {
+		p.Conversations = ""
+	}
+	d.panesHere(p)
 	return struct{}{}, nil
 }

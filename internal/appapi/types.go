@@ -475,17 +475,23 @@ type PeerList struct {
 // Pane: its tm has remote panes; Panes is its switch for this server
 // as it last said ("off", "view", "type"): its sessions' panes open
 // through pane.vt ("<alias>/<session>") at view or type, and take keys
-// at type.
+// at type. Transcript (app API 12): its tm shares conversations;
+// Conversations is its conversations switch for this server as it last
+// said ("on", "off", "" unsaid): its sessions' conversations open
+// through transcript.watch ("<alias>/<session>", the server's caps say
+// transcript-remote) while Panes is view or type and it is on.
 type Peer struct {
-	Alias      string        `json:"alias"`
-	Name       string        `json:"name,omitempty"`
-	State      string        `json:"state"`
-	Reason     string        `json:"reason,omitempty"`
-	Since      time.Time     `json:"since,omitzero"`
-	Projects   []PeerProject `json:"projects"`
-	ShareWaits int           `json:"share_waits,omitempty"`
-	Pane       bool          `json:"pane,omitempty"`
-	Panes      string        `json:"panes,omitempty"`
+	Alias         string        `json:"alias"`
+	Name          string        `json:"name,omitempty"`
+	State         string        `json:"state"`
+	Reason        string        `json:"reason,omitempty"`
+	Since         time.Time     `json:"since,omitzero"`
+	Projects      []PeerProject `json:"projects"`
+	ShareWaits    int           `json:"share_waits,omitempty"`
+	Pane          bool          `json:"pane,omitempty"`
+	Panes         string        `json:"panes,omitempty"`
+	Transcript    bool          `json:"transcript,omitempty"`
+	Conversations string        `json:"conversations,omitempty"`
 }
 
 // PeerProject is a project a paired server shares: its goal line,
@@ -502,8 +508,8 @@ type PeerProject struct {
 	Stale    bool      `json:"stale,omitempty"`
 	Synced   time.Time `json:"synced,omitzero"`
 	// Sessions are the project's coordinator and threads there, as the
-	// server last read them: their panes are the app's to open, never
-	// their transcripts.
+	// server last read them: their panes are the app's to open, and
+	// their conversations under the peer's switches.
 	Sessions []PeerSession `json:"sessions"`
 	// Watched are its unresolved threads as the server last read them
 	// (since app API 10), running or not, in id order: what the TUI's
@@ -730,14 +736,14 @@ func linkOf(r link.Row) Link {
 // peerListOf is l as the app sees it: a peer's id, versions, ping and
 // share requests (but their count), and a project's snapshot stay
 // home but its threads (Watched). Its coordinator and threads cross as
-// their panes' ids, the sessions a remote pane opens (remotes.find); no
-// transcript does.
+// their panes' ids, the sessions a remote pane and a remote
+// conversation open (remotes.find).
 func peerListOf(l proto.PeerList) PeerList {
 	out := PeerList{Gen: l.Gen, Peers: make([]Peer, 0, len(l.Peers))}
 	for _, p := range l.Peers {
 		peer := Peer{Alias: p.Alias, Name: p.Name, State: p.State, Reason: p.Reason, Since: p.Since,
 			Projects: make([]PeerProject, 0, len(p.Projects)), ShareWaits: proto.ShareWaits([]proto.PeerMirror{p}),
-			Pane: p.Pane, Panes: p.Panes}
+			Pane: p.Pane, Panes: p.Panes, Transcript: p.Transcript, Conversations: p.Conversations}
 		offset := time.Duration(p.Offset) * time.Millisecond
 		for _, pp := range p.Projects {
 			pr := PeerProject{Project: pp.Project, Goal: pp.Goal, Paused: pp.Paused, NeedsYou: pp.NeedsYou,

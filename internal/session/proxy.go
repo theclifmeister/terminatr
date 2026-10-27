@@ -195,6 +195,17 @@ func (p *Proxy) Screen() (string, error) {
 	return p.term.Screen()
 }
 
+// Paste is text as the far program takes a paste now: bracketed if it
+// asked for it, its control characters neutralised otherwise.
+func (p *Proxy) Paste(text string) ([]byte, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.term == nil {
+		return nil, ErrExited
+	}
+	return emu.Paste(p.term, []byte(text))
+}
+
 // The proxy as a subscriber's pane.
 
 func (p *Proxy) lock()                   { p.mu.Lock() }

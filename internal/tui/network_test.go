@@ -153,6 +153,37 @@ func TestNetworkShare(t *testing.T) {
 	}
 }
 
+// TestNetworkConversations: C turns a paired server's conversations
+// switch off at once and on after asking; the panel shows it and its
+// row takes ← →.
+func TestNetworkConversations(t *testing.T) {
+	m, src := netDash(t, 120, 30)
+	nv := netOpen(t, m)
+	nv.sel = "g:mini"
+	if out := netBox(m); !strings.Contains(out, "[on] · off") {
+		t.Fatalf("on by default:\n%s", out)
+	}
+	drain(t, m, press(m, "C"))
+	if _, ok := m.top().(*confirmView); ok {
+		t.Fatal("turning it off asked")
+	}
+	if out := netBox(m); !strings.Contains(out, "on · [off]") {
+		t.Errorf("after off:\n%s", out)
+	}
+	press(m, "C")
+	cv, ok := m.top().(*confirmView)
+	if !ok || !strings.Contains(cv.question, "Let mini read the conversations") || !strings.Contains(cv.question, "file contents") {
+		t.Fatalf("C: %T", m.top())
+	}
+	drain(t, m, press(m, "Y"))
+	tab(m)
+	press(m, "down", "down", "down")
+	drain(t, m, press(m, "right"))
+	if !slices.Equal(src.convSet, []string{"mini false", "mini true", "mini false"}) {
+		t.Fatalf("set %v", src.convSet)
+	}
+}
+
 // TestNetworkPanes: V moves a paired server's panes along off · view ·
 // write, asking before each raise (N keeps it), lowering at once; the
 // panel's switch takes ← → and a click on a word.

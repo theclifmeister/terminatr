@@ -136,6 +136,8 @@ type session struct {
 	// streams (§16.13).
 	panes *paneMux
 	files *fileMux
+	// transcripts are its conversation streams, both ways (§16.14).
+	transcripts *trMux
 	// pinged is the last link.ping's round trip, in nanoseconds: the
 	// link's round trip without a file, for a file's pace.
 	pinged atomic.Int64
@@ -157,6 +159,7 @@ func newSession(c net.Conn) *session {
 	s.ctx = context.WithValue(ctx, sessionKey{}, s)
 	s.panes = newPaneMux(s)
 	s.files = newFileMux(s)
+	s.transcripts = newTrMux(s)
 	return s
 }
 
@@ -339,6 +342,7 @@ func (s *session) serve(rtt func(time.Duration)) error {
 	s.cancel()
 	s.panes.end()
 	s.files.end()
+	s.transcripts.end()
 	s.mu.Lock()
 	s.err = err
 	for id, ch := range s.pending {
@@ -357,9 +361,12 @@ func (s *session) loop() error {
 			if err != nil {
 				return err
 			}
-			if typ >= frameFileData && typ <= frameFileAbort {
+			switch {
+			case typ >= frameFileData && typ <= frameFileAbort:
 				s.files.frame(stream, typ, payload)
-			} else {
+			case typ >= frameTrPart && typ <= frameTrDetach:
+				s.transcripts.frame(stream, typ, payload)
+			default:
 				s.panes.frame(stream, typ, payload)
 			}
 			continue

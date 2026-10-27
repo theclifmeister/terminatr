@@ -372,7 +372,7 @@ func Run(ctx context.Context, opts Options) error {
 	// The links to paired servers: each its own goroutine, which no
 	// local call waits on (docs/SPEC.md §16.7). They read the shared
 	// projects through peerExport (§16.9), nothing else.
-	s.peers = peer.Start(peer.Options{Dir: peer.DirIn(p.Home), Version: version.Version, Logf: logger.Printf, Export: s.peerExport(), Messages: peerMessages{}, Panes: peerPanes{s}, Files: link.Files()})
+	s.peers = peer.Start(peer.Options{Dir: peer.DirIn(p.Home), Version: version.Version, Logf: logger.Printf, Export: s.peerExport(), Messages: peerMessages{}, Panes: peerPanes{s}, Files: link.Files(), Transcripts: peerTranscripts{s}})
 	defer s.peers.Close()
 	// What they share, for the consoles (§16.10); a peer's pane switch
 	// reaches the remote panes open here at once (§16.12).
@@ -688,7 +688,7 @@ func (s *Server) hello() proto.Hello {
 		Build:    s.build,
 		Bin:      s.opts.Bin,
 		PID:      os.Getpid(),
-		Caps:     []string{proto.CapPaneVT, proto.CapTranscript, proto.CapPaneVTRemote, proto.CapSessionFile},
+		Caps:     []string{proto.CapPaneVT, proto.CapTranscript, proto.CapPaneVTRemote, proto.CapSessionFile, proto.CapTranscriptRemote},
 	}
 }
 
@@ -865,6 +865,9 @@ func (s *Server) keysBy(p proto.SessionKeysParams, cc callCtx) (any, *proto.Erro
 // prompt to a thread takes it over, as text typed into its pane does,
 // and is journaled.
 func (s *Server) promptBy(p proto.SessionPromptParams, cc callCtx) (any, *proto.Error) {
+	if _, _, ok := remoteID(p.ID); ok {
+		return s.remotes.prompt(s.remoteCanon(p.ID), p)
+	}
 	res, perr := s.prompt(p)
 	if perr == nil {
 		s.sent.add(p.ID, cc.who(), p.Text)
