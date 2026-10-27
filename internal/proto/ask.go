@@ -103,6 +103,10 @@ const (
 	// ErrEscapeUnconfirmed: the prompt asks to run a command outside
 	// the sandbox and the call didn't say the user confirmed that.
 	ErrEscapeUnconfirmed = "escape-unconfirmed"
+	// ErrDeviceEscapeOff: a paired device asked to answer a prompt that
+	// runs a command outside the sandbox, which devices never answer
+	// (docs/SPEC.md §16.15).
+	ErrDeviceEscapeOff = "device-escape-off"
 	// ErrSessionUnconfirmed: the option allows for the rest of the
 	// session and the call didn't say the user confirmed that.
 	ErrSessionUnconfirmed = "session-unconfirmed"

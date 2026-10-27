@@ -57,6 +57,33 @@ type ServerStatus struct {
 	// Link is this server's links to its paired servers (docs/SPEC.md
 	// §16.7); nil until it has an identity key.
 	Link *LinkStatus `json:"link,omitempty"`
+	// Devices are this server's links to its paired devices
+	// (docs/SPEC.md §16.15), by name.
+	Devices []DeviceLink `json:"devices,omitempty"`
+}
+
+// MethodDeviceReload has the server read its identity key and devices
+// again (docs/SPEC.md §16.15): tm device pair, remove, access and name
+// call it after changing them, and a removed device's link closes at
+// once. The result is the devices' links after the reload. The human's.
+const MethodDeviceReload = "device.reload"
+
+// DeviceLink is the link to one paired device. A device dials when it
+// likes (the app in front), so offline with reason peer is its usual
+// state while the server waits in its room.
+type DeviceLink struct {
+	Name string `json:"name"`
+	ID   string `json:"id"`
+	// Level is the device's level as devices.json has it; Effective the
+	// one its link runs at (only view in this release).
+	Level     string `json:"level"`
+	Effective string `json:"effective"`
+	State     string `json:"state"`
+	Reason    string `json:"reason,omitempty"`
+	// Since is when the link went into its state.
+	Since time.Time `json:"since"`
+	// Error is the last failure, for people.
+	Error string `json:"error,omitempty"`
 }
 
 // MethodPeerReload has the server read its identity key and peers again

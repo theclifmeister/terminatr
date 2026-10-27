@@ -71,3 +71,14 @@ func tlsConfig(cert tls.Certificate, peer ed25519.PublicKey) *tls.Config {
 		SessionTicketsDisabled: true,
 	}
 }
+
+// LinkTLS is the TLS of a link between id and the key other, as a
+// server's link to a peer has it: for a device's link (docs/SPEC.md
+// §16.15). client says which end is the TLS client.
+func LinkTLS(id *Identity, other ed25519.PublicKey) (cfg *tls.Config, client bool, err error) {
+	cert, err := certificate(id)
+	if err != nil {
+		return nil, false, err
+	}
+	return tlsConfig(cert, other), tlsClient(id.ID, IDOf(other)), nil
+}

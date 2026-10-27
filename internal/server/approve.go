@@ -47,6 +47,9 @@ func (s *Server) approve(p proto.SessionApproveParams, cc callCtx) (any, *proto.
 	// A command that asks to run outside the sandbox is the user's to
 	// allow, whoever else may answer prompts (T574 case 6), and the
 	// user's only once they confirmed it, naming the command.
+	if info.Escape && cc.who().Device != "" {
+		return nil, proto.Errorf(proto.ErrDeviceEscapeOff, "session %s asks to run a command outside its sandbox: a paired device doesn't answer that prompt; answer it on this computer", p.ID)
+	}
 	if info.Escape && byCoord {
 		return nil, proto.Errorf("human-only", "session %s asks to run a command outside its sandbox: only the user answers that prompt", p.ID)
 	}

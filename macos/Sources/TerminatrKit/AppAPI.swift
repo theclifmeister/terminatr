@@ -6,7 +6,7 @@ import Foundation
 /// The terminatr app API (docs/SPEC.md §3.8): what tm app bridge answers.
 public enum AppAPI {
     /// The app API version this app was generated against.
-    public static let version = 18
+    public static let version = 19
 
     public struct AnswerParams: Codable, Sendable, Hashable {
         public var id: String
@@ -228,15 +228,17 @@ public enum AppAPI {
         public var appApi: Int
         public var tm: String
         public var build: String
+        public var level: String
         public var capabilities: [String]
         public var methods: [String]
         public var server: Server?
         public var error: Error?
 
-        public init(appApi: Int, tm: String, build: String, capabilities: [String] = [], methods: [String] = [], server: Server? = nil, error: Error? = nil) {
+        public init(appApi: Int, tm: String, build: String, level: String = "", capabilities: [String] = [], methods: [String] = [], server: Server? = nil, error: Error? = nil) {
             self.appApi = appApi
             self.tm = tm
             self.build = build
+            self.level = level
             self.capabilities = capabilities
             self.methods = methods
             self.server = server
@@ -247,6 +249,7 @@ public enum AppAPI {
             case appApi = "app_api"
             case tm
             case build
+            case level
             case capabilities
             case methods
             case server
@@ -1724,12 +1727,14 @@ public enum AppAPI {
     public struct TranscriptEvent: Codable, Sendable, Hashable {
         public var items: [TranscriptItem]
         public var skipped: Int
+        public var before: String
         public var status: TranscriptStatus?
         public var reason: String
 
-        public init(items: [TranscriptItem] = [], skipped: Int = 0, status: TranscriptStatus? = nil, reason: String = "") {
+        public init(items: [TranscriptItem] = [], skipped: Int = 0, before: String = "", status: TranscriptStatus? = nil, reason: String = "") {
             self.items = items
             self.skipped = skipped
+            self.before = before
             self.status = status
             self.reason = reason
         }
@@ -1737,6 +1742,7 @@ public enum AppAPI {
         enum CodingKeys: String, CodingKey {
             case items
             case skipped
+            case before
             case status
             case reason
         }
@@ -1808,15 +1814,51 @@ public enum AppAPI {
         }
     }
 
-    public struct TranscriptParams: Codable, Sendable, Hashable {
-        public var session: String
+    public struct TranscriptPage: Codable, Sendable, Hashable {
+        public var items: [TranscriptItem]
+        public var before: String
 
-        public init(session: String) {
+        public init(items: [TranscriptItem] = [], before: String = "") {
+            self.items = items
+            self.before = before
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case items
+            case before
+        }
+    }
+
+    public struct TranscriptPageParams: Codable, Sendable, Hashable {
+        public var session: String
+        public var before: String
+        public var limit: Int
+
+        public init(session: String, before: String, limit: Int = 0) {
             self.session = session
+            self.before = before
+            self.limit = limit
         }
 
         enum CodingKeys: String, CodingKey {
             case session
+            case before
+            case limit
+        }
+    }
+
+    public struct TranscriptParams: Codable, Sendable, Hashable {
+        public var session: String
+        public var tail: Int
+
+        public init(session: String, tail: Int = 0) {
+            self.session = session
+            self.tail = tail
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case session
+            case tail
         }
     }
 
@@ -2084,6 +2126,7 @@ public enum AppAPI {
         public static let taskDelegate = Call<TaskParams, TaskAskResult>("task.delegate", write: true)
         public static let taskGet = Call<TaskGetParams, Task>("task.get", write: false)
         public static let taskSendBack = Call<SendBackParams, TaskAskResult>("task.send-back", write: true)
+        public static let transcriptPage = Call<TranscriptPageParams, TranscriptPage>("transcript.page", write: false)
         public static let transcriptWatch = Subscription<TranscriptParams, TranscriptResult, TranscriptEvent>("transcript.watch", events: ["transcript.reset", "transcript.items", "transcript.status", "transcript.closed"])
     }
 }
@@ -2197,6 +2240,7 @@ extension AppAPI.Hello {
         self.appApi = try c.decode(Int.self, forKey: .appApi)
         self.tm = try c.decode(String.self, forKey: .tm)
         self.build = try c.decode(String.self, forKey: .build)
+        self.level = try c.decodeIfPresent(String.self, forKey: .level) ?? ""
         self.capabilities = try c.decodeIfPresent([String].self, forKey: .capabilities) ?? []
         self.methods = try c.decodeIfPresent([String].self, forKey: .methods) ?? []
         self.server = try c.decodeIfPresent(AppAPI.Server.self, forKey: .server)
@@ -2866,6 +2910,7 @@ extension AppAPI.TranscriptEvent {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.items = try c.decodeIfPresent([AppAPI.TranscriptItem].self, forKey: .items) ?? []
         self.skipped = try c.decodeIfPresent(Int.self, forKey: .skipped) ?? 0
+        self.before = try c.decodeIfPresent(String.self, forKey: .before) ?? ""
         self.status = try c.decodeIfPresent(AppAPI.TranscriptStatus.self, forKey: .status)
         self.reason = try c.decodeIfPresent(String.self, forKey: .reason) ?? ""
     }
@@ -2899,10 +2944,28 @@ extension AppAPI.TranscriptItem {
     }
 }
 
+extension AppAPI.TranscriptPage {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.items = try c.decodeIfPresent([AppAPI.TranscriptItem].self, forKey: .items) ?? []
+        self.before = try c.decodeIfPresent(String.self, forKey: .before) ?? ""
+    }
+}
+
+extension AppAPI.TranscriptPageParams {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.session = try c.decode(String.self, forKey: .session)
+        self.before = try c.decode(String.self, forKey: .before)
+        self.limit = try c.decodeIfPresent(Int.self, forKey: .limit) ?? 0
+    }
+}
+
 extension AppAPI.TranscriptParams {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.session = try c.decode(String.self, forKey: .session)
+        self.tail = try c.decodeIfPresent(Int.self, forKey: .tail) ?? 0
     }
 }
 

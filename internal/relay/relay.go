@@ -88,7 +88,7 @@ func DefaultConfig() Config {
 		MaxConns: 1024, MaxPerIP: 16,
 		ConnRate: 0.5, ConnBurst: 10,
 		BytesRate: 4 << 20, BytesBurst: 8 << 20,
-		MaxWaitingPerIP: 4,
+		MaxWaitingPerIP: 16,
 		TotalBytesRate:  16 << 20, TotalBytesBurst: 32 << 20,
 		RoomBytesRate: 2 << 20, RoomBytesBurst: 64 << 20,
 		ControlRate: 0.2, ControlBurst: 10,

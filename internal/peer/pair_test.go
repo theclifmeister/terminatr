@@ -357,3 +357,56 @@ func TestPairReadIsBounded(t *testing.T) {
 		t.Fatal("still reading")
 	}
 }
+
+// A device's pairing and a server's never meet: their rooms differ, and
+// over one stream their proofs don't match.
+func TestPairPurposeSeparates(t *testing.T) {
+	var sec Secret
+	if pairRoom(sec, "") == pairRoom(sec, PurposeDevice) {
+		t.Fatal("one room for both purposes")
+	}
+	a, b := newServer(t), newServer(t)
+	ca, cb := tcpPipe(t)
+	never := func(Offer) (bool, error) { t.Error("asked"); return false, nil }
+	errs := make(chan error, 1)
+	go func() {
+		_, err := runPair(ca, a.id, sec, rolePair, PairOptions{Purpose: PurposeDevice, Confirm: never})
+		errs <- err
+	}()
+	_, eb := runPair(cb, b.id, sec, roleJoin, PairOptions{Confirm: never})
+	if ea := <-errs; !errors.Is(ea, ErrBadCode) && !errors.Is(eb, ErrBadCode) {
+		t.Fatalf("got %v / %v", ea, eb)
+	}
+}
+
+// A joiner that expects a key (a device's code names the server's)
+// takes no other, before any proof; with the right one there are no
+// check digits.
+func TestPairExpect(t *testing.T) {
+	var sec Secret
+	run := func(expect ID) (Offer, error, error) {
+		a, b := newServer(t), newServer(t)
+		if expect == (ID{}) {
+			expect = a.id.ID
+		}
+		ca, cb := tcpPipe(t)
+		var offer Offer
+		errs := make(chan error, 1)
+		go func() {
+			_, err := runPair(ca, a.id, sec, rolePair, PairOptions{Purpose: PurposeDevice,
+				Confirm: func(o Offer) (bool, error) { offer = o; return true, nil }})
+			errs <- err
+		}()
+		_, eb := runPair(cb, b.id, sec, roleJoin, PairOptions{Purpose: PurposeDevice, Expect: &expect,
+			Confirm: func(Offer) (bool, error) { return true, nil }})
+		return offer, <-errs, eb
+	}
+	other := IDOf(pub(newKey(t)))
+	if _, _, eb := run(other); !errors.Is(eb, ErrNotExpected) {
+		t.Fatalf("another key: %v", eb)
+	}
+	offer, ea, eb := run(ID{})
+	if ea != nil || eb != nil || offer.Check != "" {
+		t.Fatalf("the expected key: %v / %v, offer %+v", ea, eb, offer)
+	}
+}

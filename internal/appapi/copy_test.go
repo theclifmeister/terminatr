@@ -454,7 +454,7 @@ func TestAllowlist(t *testing.T) {
 		proto.MethodTaskAccept, proto.MethodTaskSendBack, proto.MethodTaskDelegate, proto.MethodProjectOpen,
 		proto.MethodQuestionsOpen, proto.MethodTaskAdd, proto.MethodTaskGet, proto.MethodPaneVT, proto.MethodTranscriptWatch, MethodPaneInput,
 		proto.MethodSessionFile, proto.MethodCoordinatorClear, proto.MethodProjectActive, proto.MethodSessionUpload,
-		proto.MethodLinkAct, proto.MethodPeerShareAnswer, MethodGuardRefusals, MethodGuardDecide}
+		proto.MethodLinkAct, proto.MethodPeerShareAnswer, MethodGuardRefusals, MethodGuardDecide, proto.MethodTranscriptPage}
 	slices.Sort(want)
 	if got := MethodNames(); !slices.Equal(got, want) {
 		t.Errorf("methods %v, want %v", got, want)

@@ -1034,9 +1034,29 @@ type PaneSize struct {
 }
 
 // TranscriptParams are transcript.watch's: the session whose
-// conversation to stream.
+// conversation to stream. Tail (app API 19; the server's caps say
+// transcript-tail) is how many of the last items a reset carries, at
+// most 200; transcript.page reads the earlier ones. A paired server's
+// conversation takes no tail yet.
 type TranscriptParams struct {
 	Session string `json:"session"`
+	Tail    int    `json:"tail,omitempty"`
+}
+
+// TranscriptPageParams are transcript.page's (app API 19): the session,
+// the cursor (a reset's or a page's Before) and how many items, at most
+// 200 (0 is that).
+type TranscriptPageParams struct {
+	Session string `json:"session"`
+	Before  string `json:"before"`
+	Limit   int    `json:"limit,omitempty"`
+}
+
+// TranscriptPage are the items just before the cursor, oldest first,
+// and the cursor for those before them (empty for none).
+type TranscriptPage struct {
+	Items  []TranscriptItem `json:"items"`
+	Before string           `json:"before,omitempty"`
 }
 
 // TranscriptResult is transcript.watch's result: the session, and
@@ -1058,11 +1078,13 @@ type TranscriptStatus struct {
 
 // TranscriptEvent is a transcript.watch event's data: for
 // transcript.reset the conversation's last Items (Skipped earlier ones
-// left out), for transcript.items the new ones, for transcript.status
-// the new Status, for transcript.closed why it ended (Reason).
+// left out; Before, app API 19, the cursor transcript.page reads them
+// from), for transcript.items the new ones, for transcript.status the
+// new Status, for transcript.closed why it ended (Reason).
 type TranscriptEvent struct {
 	Items   []TranscriptItem  `json:"items,omitempty"`
 	Skipped int               `json:"skipped,omitempty"`
+	Before  string            `json:"before,omitempty"`
 	Status  *TranscriptStatus `json:"status,omitempty"`
 	Reason  string            `json:"reason,omitempty"`
 }
@@ -1182,8 +1204,17 @@ func transcriptStatusOf(s proto.TranscriptStatus) TranscriptStatus {
 }
 
 func transcriptEventOf(ev proto.TranscriptEvent) TranscriptEvent {
-	out := TranscriptEvent{Skipped: ev.Skipped, Reason: ev.Reason}
-	for _, it := range ev.Items {
+	out := TranscriptEvent{Skipped: ev.Skipped, Before: ev.Before, Reason: ev.Reason, Items: transcriptItemsOf(ev.Items)}
+	if ev.Status != nil {
+		st := transcriptStatusOf(*ev.Status)
+		out.Status = &st
+	}
+	return out
+}
+
+func transcriptItemsOf(items []proto.TranscriptItem) []TranscriptItem {
+	var out []TranscriptItem
+	for _, it := range items {
 		ti := TranscriptItem{Kind: it.Kind, Text: it.Text, Truncated: it.Truncated, Tool: it.Tool, Call: it.Call,
 			Error: it.Error, Lines: it.Lines, At: it.At, From: it.From, Display: it.Display}
 		for _, t := range it.Todos {
@@ -1192,11 +1223,15 @@ func transcriptEventOf(ev proto.TranscriptEvent) TranscriptEvent {
 		for _, f := range it.Files {
 			ti.Files = append(ti.Files, TranscriptFile{Ref: f.Ref, Name: f.Name, Path: f.Path, Type: f.Type})
 		}
-		out.Items = append(out.Items, ti)
+		out = append(out, ti)
 	}
-	if ev.Status != nil {
-		st := transcriptStatusOf(*ev.Status)
-		out.Status = &st
+	return out
+}
+
+func transcriptPageOf(r proto.TranscriptPageResult) TranscriptPage {
+	out := TranscriptPage{Items: transcriptItemsOf(r.Items), Before: r.Before}
+	if out.Items == nil {
+		out.Items = []TranscriptItem{}
 	}
 	return out
 }

@@ -653,6 +653,36 @@ Conversations off for studio: it can't read the conversations of this server's s
 
 A conversation is the session's whole transcript as tm reads it: prompts, the agent's text, each tool call and its result's first line, and the todo list, so what an agent read or ran (a file's lines, a command's output) shows in it. Nothing else crosses: no file of the project, nothing from its uploads, no path outside the transcript. `tm peer list` adds `conversations off` to a server's panes when it is off, the Network popup (`N`) shows and turns it with `C`, and `tm network` lists both sides' switches. A server that runs an older tm shares no conversations: the app says it needs an update and shows the Terminal tab (SPEC §16.14).
 
+### Pairing a phone
+
+A phone with the terminatr app pairs with one server as a **device**: it reads what that server's consoles read, the projects its paired servers share too, and nothing else of it. It meets the server on the same relay, so the server still opens no port. In this release a device is **view-only**: it sees projects, sessions, conversations and panes, and acts on nothing.
+
+```
+$ tm device pair
+Scan this with the terminatr app on the phone (it works once, for 10 minutes):
+
+  (a QR code)
+
+This server: server id 4F2A-91C3, through relay.example.net.
+Waiting…
+
+The phone: "Clif's iPhone", device id 91C3-77AB, app 1.0
+Add it as "Clif's iPhone", a view-only device? [y/N] y
+Paired Clif's iPhone (device id 91C3-77AB, view-only) through relay.example.net.
+```
+
+The relay is the one your paired servers use, or `--relay URL`. The QR code holds the relay (with its pin), the one-time secret and this server's key fingerprint, so the phone checks the server's key itself and nobody compares digits; the code works once, and nothing is pinned until you say yes here. Show it only to your own phone.
+
+```
+$ tm device list
+Clif's iPhone  91C3-77AB  view  relay.example.net  waiting for it
+$ tm device name "clif's iphone" "Work phone"
+$ tm device remove "work phone"
+Removed Work phone; its link closes now and its key is no longer taken. On the phone, Forget this server deletes its keys.
+```
+
+A device is `waiting for it` while the app isn't open: the server keeps a connection waiting in the device's room on the relay (one per device; the relay lets one address wait in 16 rooms). Removing a device cuts it off at once. Its acts are journaled as `human (iphone: NAME)`; it never answers a prompt to run a command outside the sandbox. `tm device access NAME view|answer|write` is there for later stages: only `view` is enabled now. Rotating this server's key (`tm peer rotate`) means every device pairs again (SPEC §16.15).
+
 ### The servers' side
 
 Each paired server keeps a link to the relay by itself; nothing to start. `tm server status` shows the server's id and each link:

@@ -23,6 +23,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/codehost"
+	"github.com/theclifmeister/terminatr/internal/device"
 	"github.com/theclifmeister/terminatr/internal/emu"
 	"github.com/theclifmeister/terminatr/internal/keychain"
 	"github.com/theclifmeister/terminatr/internal/link"
@@ -88,6 +89,11 @@ type Options struct {
 	// RunCLI runs a project command for cli.run (set by package cli,
 	// which imports this one). Nil refuses cli.run.
 	RunCLI func(p proto.CLIRunParams, c caller.Caller) proto.CLIRunResult
+	// DeviceAPI runs the app API for a paired device over conn, its
+	// link past TLS, at level (set by package cli: appapi imports this
+	// package). dial opens a control connection of the server's own as
+	// the device. Nil gives devices' links nothing to serve.
+	DeviceAPI func(ctx context.Context, conn net.Conn, d device.Device, level *device.Level, dial func() (*client.Client, error)) error
 }
 
 // Server owns every session and the control socket.
@@ -229,6 +235,9 @@ type Server struct {
 	// peers are the links to paired servers (internal/peer); set before
 	// Run serves.
 	peers *peer.Manager
+	// devices are the links to paired devices (internal/device); set
+	// before Run serves.
+	devices *device.Manager
 	// mirror is what the links last read of the paired servers' shared
 	// projects (peer.list); set before Run serves.
 	mirror *peer.Mirror
@@ -342,6 +351,9 @@ func Run(ctx context.Context, opts Options) error {
 		logger.Printf("test hook %s: protocol %d, deaf %v", testHelloEnv, s.protocol, s.deaf)
 	}
 	s.watchOwner()
+	if onRun != nil {
+		onRun(s)
+	}
 	s.watchGone()
 	s.views = newViews(s, filepath.Join(filepath.Dir(p.Sessions), "views.json"), logger.Printf)
 	s.loadAgents()
@@ -379,6 +391,10 @@ func Run(ctx context.Context, opts Options) error {
 	// What they share, for the consoles (§16.10); a peer's pane switch
 	// reaches the remote panes open here at once (§16.12).
 	s.remotes = newRemotes(s)
+	// And the links to paired devices, each running the app API as the
+	// device on the server's side (§16.15).
+	s.devices = device.Start(device.Options{Dir: device.DirIn(p.Home), PeerDir: peer.DirIn(p.Home), Logf: logger.Printf, Serve: s.serveDeviceLink})
+	defer s.devices.Close()
 	s.mirror = peer.StartMirror(s.peers, peer.MirrorOptions{Logf: logger.Printf, Changed: s.watch.wake, Panes: s.remotes.setLevel})
 	defer s.mirror.Close()
 	defer s.remotes.closeAll()
@@ -674,7 +690,7 @@ func (s *Server) handle(c net.Conn, human bool) {
 	}
 	switch hello.Kind {
 	case proto.KindControl, proto.KindHook:
-		s.serveControl(c, br, pid, human, human && hello.Kind == proto.KindControl && hello.Client == proto.ClientApp)
+		s.serveControl(c, br, pid, human, human && hello.Kind == proto.KindControl && hello.Client == proto.ClientApp, "")
 	case proto.KindAttach:
 		s.serveAttach(c, br, pid, human)
 	default:
@@ -690,14 +706,16 @@ func (s *Server) hello() proto.Hello {
 		Build:    s.build,
 		Bin:      s.opts.Bin,
 		PID:      os.Getpid(),
-		Caps:     []string{proto.CapPaneVT, proto.CapTranscript, proto.CapPaneVTRemote, proto.CapSessionFile, proto.CapTranscriptRemote, proto.CapLinkAct},
+		Caps:     []string{proto.CapPaneVT, proto.CapTranscript, proto.CapPaneVTRemote, proto.CapSessionFile, proto.CapTranscriptRemote, proto.CapLinkAct, proto.CapTranscriptTail},
 	}
 }
 
 // serveControl serves a control connection's requests; app is the Mac
 // app's bridge on the human socket (proto.ClientApp), whose human calls
-// are journaled as made through it (caller.ViaApp).
-func (s *Server) serveControl(c net.Conn, br *bufio.Reader, peerPID int, human, app bool) {
+// are journaled as made through it (caller.ViaApp). device, when set,
+// is the paired device whose app API the connection serves (a pipe of
+// the server's own, deviceConn): its caller is the device, never a pid's.
+func (s *Server) serveControl(c net.Conn, br *bufio.Reader, peerPID int, human, app bool, device string) {
 	for {
 		var req proto.Request
 		if err := proto.ReadLine(br, &req); err != nil {
@@ -706,6 +724,10 @@ func (s *Server) serveControl(c net.Conn, br *bufio.Reader, peerPID int, human, 
 		who := s.whoFor(peerPID)
 		if app {
 			who = viaApp(who)
+		}
+		if device != "" {
+			app = true
+			who = func() caller.Caller { return caller.ForDevice(device) }
 		}
 		m, known := methodOf(req.Method)
 		perr := mayCall(req.Method, m.gate, human, who)
@@ -723,12 +745,12 @@ func (s *Server) serveControl(c net.Conn, br *bufio.Reader, peerPID int, human, 
 			continue
 		}
 		if m.stream != nil {
-			m.stream(s, c, br, req, callCtx{method: req.Method, params: params, peerPID: peerPID, human: human, app: app, who: who})
+			m.stream(s, c, br, req, callCtx{method: req.Method, params: params, peerPID: peerPID, human: human, app: app, device: device, who: who})
 			return
 		}
 		var result any
 		if known {
-			result, perr = m.call(s, req, callCtx{method: req.Method, params: params, peerPID: peerPID, human: human, app: app, who: who})
+			result, perr = m.call(s, req, callCtx{method: req.Method, params: params, peerPID: peerPID, human: human, app: app, device: device, who: who})
 		} else {
 			perr = proto.Errorf(proto.ErrUnknownMethod, "unknown method %q", req.Method)
 		}
@@ -924,8 +946,9 @@ func (s *Server) answer(p proto.SessionAnswerParams, cc callCtx) (any, *proto.Er
 		return nil, perr
 	}
 	// Only the human answers while an escape's prompt is open: not an
-	// agent, nor tm's commands answering for the coordinator.
-	byHuman := cc.human && p.Relay != proto.RoleCoordinator && !c.IsAgent()
+	// agent, nor tm's commands answering for the coordinator, nor a
+	// paired device (§16.15).
+	byHuman := cc.human && p.Relay != proto.RoleCoordinator && !c.IsAgent() && c.Device == ""
 	if !byHuman && sess.Info().Escape {
 		return nil, proto.Errorf(proto.ErrRefused, "session %s asks to run a command outside its sandbox: only the user answers that prompt", p.ID)
 	}
@@ -960,6 +983,7 @@ func (s *Server) status() proto.ServerStatus {
 		Lost:             s.lost,
 		Resumed:          s.resumed,
 		Link:             link,
+		Devices:          s.devices.Status(),
 	}
 }
 
