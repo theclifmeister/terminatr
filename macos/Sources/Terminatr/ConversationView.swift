@@ -11,7 +11,8 @@ import TerminatrKit
 /// opens a find bar over it: the entries that show the words wear a
 /// ring, and ↩, ⌘G and ⇧⌘G scroll from one to the next. A long
 /// transcript draws its last turns (drawn), and more on a click, so
-/// showing it costs no more than a short one.
+/// showing it costs no more than a short one. Consecutive tool calls
+/// fold into one group (ToolRunView).
 struct ConversationTab: View {
     @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
@@ -44,6 +45,7 @@ struct ConversationTab: View {
         let open = AppModel.waitsOnCard(session) || review != nil
         let entries = model.transcript.tail(drawn, keeping: current)
         let earlier = model.transcript.entries.count - entries.count
+        let rows = Transcript.rows(entries)
         VStack(spacing: 0) {
             if finding {
                 findBar(matches.count)
@@ -65,16 +67,16 @@ struct ConversationTab: View {
                                 .foregroundStyle(theme.muted)
                                 .frame(maxWidth: .infinity)
                         }
-                        ForEach(entries) { e in
-                            EntryView(entry: e, agent: session?.agent ?? "agent")
-                                .overlay {
-                                    if found.contains(e.id) {
-                                        RoundedRectangle(cornerRadius: 14)
-                                            .strokeBorder(theme.action.opacity(e.id == current ? 1 : 0.4), lineWidth: e.id == current ? 2 : 1)
-                                            .padding(-3)
-                                    }
-                                }
-                                .id(e.id)
+                        ForEach(rows) { row in
+                            switch row {
+                            case .entry(let e):
+                                EntryView(entry: e, agent: session?.agent ?? "agent")
+                                    .modifier(FoundRing(found: found.contains(e.id), current: e.id == current))
+                                    .id(e.id)
+                            case .tools(let run):
+                                ToolRunView(run: run, model: model, found: found, current: current)
+                                    .id(run.id)
+                            }
                         }
                         switch state {
                         case .loading:
@@ -109,39 +111,39 @@ struct ConversationTab: View {
                 .transaction { if reduceMotion { $0.animation = nil } }
                 .modifier(ScrolledUp(up: $scrolledUp))
                 .onChange(of: current) { _, c in
-                    if let c { withAnimation(motion) { proxy.scrollTo(c, anchor: .center) } }
+                    guard let c, let row = Transcript.row(of: c, in: rows) else { return }
+                    // A match in a folded group unfolds it, and it stays so.
+                    if row != c { model.unfoldedRuns.insert(row) }
+                    withAnimation(motion) { proxy.scrollTo(row, anchor: .center) }
                 }
-                .overlay(alignment: .bottom) {
-                    if open && scrolledUp && !coordinator {
-                        Button {
-                            if let last = model.transcript.entries.last { withAnimation(motion) { proxy.scrollTo(last.id, anchor: .bottom) } }
-                            flash += 1
-                        } label: {
-                            Label("Jump to the open card", systemImage: "arrow.down")
-                                .font(theme.body(.subheadline, .semibold))
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 6)
-                                .frosted(Capsule())
-                                .overlay(Capsule().strokeBorder(theme.edge, lineWidth: 1))
+                .scrollEdges()
+                // The cards and the composer at the foot: the transcript
+                // ends above them and scrolls behind them under the edge.
+                .footBar(
+                    VStack(spacing: 10) {
+                        VStack(spacing: 10) {
+                            if let review, let task = review.task {
+                                ReviewCard(project: model.ref.project, thread: review, task: task)
+                                    .padding(.horizontal, 22)
+                                    .frame(maxWidth: 820)
+                            }
+                            if !coordinator {
+                                Cards(model: model, session: session, firstChoice: app.firstChoice)
+                            }
                         }
-                        .buttonStyle(.plain)
-                        .padding(.bottom, 10)
-                        .help("Scrolls to the end, where the card waits")
+                        .modifier(Flash(n: flash))
+                        Composer(model: model, session: session)
                     }
-                }
+                    .overlay(alignment: .top) {
+                        if open && scrolledUp && !coordinator {
+                            // Above the bar, over the transcript's edge.
+                            jump(proxy)
+                                .padding(.bottom, 8)
+                                .frame(height: 0, alignment: .bottom)
+                        }
+                    }
+                )
             }
-            VStack(spacing: 10) {
-                if let review, let task = review.task {
-                    ReviewCard(project: model.ref.project, thread: review, task: task)
-                        .padding(.horizontal, 22)
-                        .frame(maxWidth: 820)
-                }
-                if !coordinator {
-                    Cards(model: model, session: session, firstChoice: app.firstChoice)
-                }
-            }
-            .modifier(Flash(n: flash))
-            Composer(model: model, session: session)
         }
         .guardingLinks()
         // What sets no font of its own: the system's body, scaled.
@@ -159,6 +161,25 @@ struct ConversationTab: View {
 
     /// A scroll's animation: none with Reduce Motion.
     private var motion: Animation? { reduceMotion ? nil : .default }
+
+    /// Jump to the open card: frosted, with a shadow, so it reads over
+    /// whatever scrolls behind it.
+    private func jump(_ proxy: ScrollViewProxy) -> some View {
+        Button {
+            if let last = model.transcript.entries.last { withAnimation(motion) { proxy.scrollTo(last.id, anchor: .bottom) } }
+            flash += 1
+        } label: {
+            Label("Jump to the open card", systemImage: "arrow.down")
+                .font(theme.body(.subheadline, .semibold))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .frosted(Capsule())
+                .overlay(Capsule().strokeBorder(theme.edge, lineWidth: 1))
+                .shadow(color: .black.opacity(0.18), radius: 8, y: 3)
+        }
+        .buttonStyle(.plain)
+        .help("Scrolls to the end, where the card waits")
+    }
 
     private func step(_ by: Int, of n: Int) {
         guard n > 0 else { return }
@@ -222,6 +243,23 @@ struct ScrolledUp: ViewModifier {
             }
         } else {
             content
+        }
+    }
+}
+
+/// A find's match wears a ring: a strong one on the current match.
+struct FoundRing: ViewModifier {
+    @Environment(\.theme) private var theme
+    let found: Bool
+    let current: Bool
+
+    func body(content: Content) -> some View {
+        content.overlay {
+            if found {
+                RoundedRectangle(cornerRadius: 14)
+                    .strokeBorder(theme.action.opacity(current ? 1 : 0.4), lineWidth: current ? 2 : 1)
+                    .padding(-3)
+            }
         }
     }
 }
@@ -394,6 +432,104 @@ struct EntryView: View {
         Text("Cut short: the rest is in the Terminal tab.")
             .font(theme.body(.caption))
             .foregroundStyle(theme.muted)
+    }
+}
+
+/// Consecutive tool calls as one box: a header that counts them by tool
+/// ("Read ×5 · Bash ×3") with their state, folded until the user opens
+/// it (a click, space, → and ←, VoiceOver's action) to their ToolLines.
+/// Folded, a last call still running shows under the header. A group
+/// with a find's match shows open; the user's unfolding is kept on the
+/// session's model, by the run's first call, so streaming calls never
+/// refold it.
+struct ToolRunView: View {
+    @Environment(\.theme) private var theme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let run: Transcript.ToolRun
+    let model: SessionModel
+    let found: Set<Int>
+    let current: Int?
+
+    var body: some View {
+        let unfolded = model.unfoldedRuns.contains(run.id)
+        let open = unfolded || run.calls.contains { found.contains($0.id) }
+        VStack(alignment: .leading, spacing: 6) {
+            Button { fold(open: !unfolded) } label: {
+                header(open: open)
+            }
+            .buttonStyle(.plain)
+            .onKeyPress(keys: [.leftArrow, .rightArrow]) { press in
+                fold(open: press.key == .rightArrow)
+                return .handled
+            }
+            .help(open ? "Fold the tool calls" : "Show each tool call")
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(run.spoken + ", " + stateWord)
+            .accessibilityValue(open ? "expanded" : "collapsed")
+            .accessibilityHint(open ? "Folds the tool calls" : "Shows each tool call")
+            .accessibilityAddTraits(.isButton)
+            .accessibilityAction(named: open ? "Collapse" : "Expand") { fold(open: !unfolded) }
+            if open {
+                ForEach(run.calls) { c in
+                    ToolLine(entry: c)
+                        .modifier(FoundRing(found: found.contains(c.id), current: c.id == current))
+                }
+                .padding(.leading, 14)
+            } else if let live = run.live {
+                ToolLine(entry: live)
+                    .padding(.leading, 14)
+            }
+        }
+    }
+
+    private func header(open: Bool) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Image(systemName: "chevron.right")
+                .font(theme.body(.glyph, .bold))
+                .foregroundStyle(theme.muted)
+                .rotationEffect(.degrees(open ? 90 : 0))
+            Text(run.headline)
+                .font(theme.mono(.subheadline, .medium))
+                .foregroundStyle(theme.action)
+                .lineLimit(1)
+                .truncationMode(.tail)
+            switch run.state {
+            case .running:
+                ProgressView().controlSize(.mini)
+            case .failed:
+                Text("· failed")
+                    .font(theme.mono(.footnote))
+                    .foregroundStyle(theme.attention)
+            case .done:
+                Text("· done")
+                    .font(theme.mono(.footnote))
+                    .foregroundStyle(theme.muted)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
+        .background(theme.command, in: RoundedRectangle(cornerRadius: 9))
+        .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(theme.edge, lineWidth: 1))
+        .contentShape(Rectangle())
+    }
+
+    private var stateWord: String {
+        switch run.state {
+        case .running: "running"
+        case .failed: "failed"
+        case .done: "done"
+        }
+    }
+
+    private func fold(open: Bool) {
+        withAnimation(reduceMotion ? nil : .snappy(duration: 0.2)) {
+            if open {
+                model.unfoldedRuns.insert(run.id)
+            } else {
+                model.unfoldedRuns.remove(run.id)
+            }
+        }
     }
 }
 
