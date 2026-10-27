@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- Bloom's mesh (dark; Theme.bloom, Backdrop.swift): coral, violet, lime and lagoon from the corners, bubblegum at the centre, over the base. -->
+  <defs>
+    <radialGradient id="coral" cx="100" cy="100" r="560" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#c2365a"/><stop offset="1" stop-color="#c2365a" stop-opacity="0"/></radialGradient>
+    <radialGradient id="violet" cx="924" cy="100" r="560" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#4b2fb8"/><stop offset="1" stop-color="#4b2fb8" stop-opacity="0"/></radialGradient>
+    <radialGradient id="lime" cx="100" cy="924" r="560" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#5b7a10"/><stop offset="1" stop-color="#5b7a10" stop-opacity="0"/></radialGradient>
+    <radialGradient id="lagoon" cx="924" cy="924" r="560" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#0f6e6a"/><stop offset="1" stop-color="#0f6e6a" stop-opacity="0"/></radialGradient>
+    <radialGradient id="bubblegum" cx="560" cy="470" r="380" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#5a1d52"/><stop offset="1" stop-color="#5a1d52" stop-opacity="0"/></radialGradient>
+  </defs>
+  <rect width="1024" height="1024" fill="#160f2c"/>
+  <rect width="1024" height="1024" fill="url(#coral)"/>
+  <rect width="1024" height="1024" fill="url(#violet)"/>
+  <rect width="1024" height="1024" fill="url(#lime)"/>
+  <rect width="1024" height="1024" fill="url(#lagoon)"/>
+  <rect width="1024" height="1024" fill="url(#bubblegum)"/>
+</svg>
