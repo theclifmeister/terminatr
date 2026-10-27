@@ -23,7 +23,7 @@ public struct Need: Identifiable, Hashable, Sendable {
         /// share request.
         case network
         /// A project's link: a message held for the OK, a file offered,
-        /// a paired server's link request (app API 15).
+        /// a paired server's link request (app API 16).
         case link
     }
 

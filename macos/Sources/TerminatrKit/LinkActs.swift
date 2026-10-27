@@ -206,7 +206,7 @@ public struct LinkOutcome: Equatable, Sendable {
 }
 
 extension Need {
-    /// The link needs of project p (app API 15), each link's oldest
+    /// The link needs of project p (app API 16), each link's oldest
     /// first: a held message's words are the coordinator's (text).
     static func links(of p: AppAPI.Project) -> [Need] {
         p.linkNeeds.compactMap { n in
@@ -233,7 +233,7 @@ extension Need {
     }
 
     /// A paired server's share requests that wait for the user, each
-    /// its own need; a tm before app API 15 sends only their count.
+    /// its own need; a tm before app API 16 sends only their count.
     static func shares(of peer: AppAPI.Peer, server: String) -> [Need] {
         guard !peer.shareRequests.isEmpty else {
             guard peer.shareWaits > 0 else { return [] }
