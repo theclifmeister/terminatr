@@ -137,7 +137,7 @@ struct FileCommands: Commands {
 
 /// The View menu's own items, after the sidebar's: the inspector,
 /// Conversation or Terminal, the inactive projects, the sidebar's
-/// density and the text size.
+/// density, the theme and the text size.
 struct ViewCommands: Commands {
     let model: AppModel
 
@@ -154,6 +154,7 @@ struct ViewCommands: Commands {
                 .keyboardShortcut("h", modifiers: [.command, .shift])
                 .disabled(model.inactiveProjects.isEmpty)
             DensityPicker(label: "Sidebar Density")
+            ThemeMenu()
             Divider()
             Button("Make Text Bigger") { TextSize.change(by: 1) }
                 .keyboardShortcut("+")
@@ -176,6 +177,19 @@ struct DensityPicker: View {
         Picker(label, selection: $density) {
             ForEach(Density.allCases, id: \.self) { d in
                 Text(d.label).tag(d.rawValue)
+            }
+        }
+    }
+}
+
+/// View › Theme: the themes, the stored one checked.
+struct ThemeMenu: View {
+    @AppStorage(ThemeName.key) private var name = ThemeName.bloom.rawValue
+
+    var body: some View {
+        Picker("Theme", selection: $name) {
+            ForEach(ThemeName.allCases, id: \.self) { t in
+                Text(t.label).tag(t.rawValue)
             }
         }
     }

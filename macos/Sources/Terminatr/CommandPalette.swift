@@ -243,7 +243,7 @@ struct CommandPalette: View {
             PaletteItem(id: "cmd:forward", group: .actions, title: "Forward", command: .forward, keys: "⌘]"),
             PaletteItem(id: "cmd:shortcuts", group: .actions, title: "Keyboard shortcuts", command: .shortcuts, keys: "⌘/"),
         ]
-        return out
+        return out + Palette.themes(current: ThemeName.of(UserDefaults.standard.string(forKey: ThemeName.key)))
     }
 
     private func run(_ c: PaletteItem.Command) {
@@ -258,6 +258,7 @@ struct CommandPalette: View {
         case .back: app.goBack()
         case .forward: app.goForward()
         case .shortcuts: app.shortcuts = true
+        case .theme(let t): UserDefaults.standard.set(t.rawValue, forKey: ThemeName.key)
         }
     }
 }

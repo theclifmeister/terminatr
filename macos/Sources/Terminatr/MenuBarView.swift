@@ -248,7 +248,9 @@ struct MenuBarLabel: View {
     }
 }
 
-/// A frosted block of the dropdown.
+/// A frosted block of the dropdown: a card over the theme's glass, as
+/// in the window (over the material alone, dark text read under 3:1 on
+/// the mesh's brighter corners).
 private struct Panel<Content: View>: View {
     @Environment(\.theme) private var theme
     @ViewBuilder let content: Content
@@ -256,8 +258,9 @@ private struct Panel<Content: View>: View {
     var body: some View {
         content
             .frame(maxWidth: .infinity, alignment: .leading)
-            .frosted(RoundedRectangle(cornerRadius: 12))
             .background(theme.cardTint, in: RoundedRectangle(cornerRadius: 12))
+            .background(theme.glass, in: RoundedRectangle(cornerRadius: 12))
+            .frosted(RoundedRectangle(cornerRadius: 12))
             .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(theme.edge, lineWidth: 1))
     }
 }

@@ -4,9 +4,9 @@ import SwiftUI
 import TerminatrKit
 
 /// The app's look as named tokens. Views read only these, never a
-/// colour of their own, so another concept (design T744's Afterglow,
-/// Signal, Prism) is one more Theme value. Each colour has a light and
-/// a dark value and follows the system appearance.
+/// colour of their own, so a theme is one more ThemeColours (T770:
+/// Bloom, Calm, Graphite, Dusk, Aurora, Sunset, Solar). Each colour has
+/// a light and a dark value and follows the system appearance.
 struct Theme: Sendable {
     /// The backdrop's mesh: four corners, then the centre.
     var mesh: [Color]
@@ -54,25 +54,69 @@ struct Theme: Sendable {
     var terminalBackground: Color
     var terminalForeground: Color
 
-    var titleFamily: String
-    var monoFamily: String
+    /// Which theme, and its colours as data: the terminal takes its
+    /// ANSI colours from there.
+    var name: ThemeName
+    var colours: ThemeColours
     /// Increase Contrast is on: panels are opaque, and the system
     /// material under them is left out.
-    var contrast = false
+    var contrast: Bool
     /// Every font's size times this: Settings › Appearance › Text size,
     /// and in the sidebar the system's sidebar size as well.
     var scale: CGFloat = 1
+
+    init(_ name: ThemeName, colours: ThemeColours? = nil) {
+        let c = colours ?? name.colours
+        func k(_ s: Swatch) -> Color { Color(s) }
+        mesh = c.mesh.map(k)
+        base = k(c.base)
+        ink = k(c.ink)
+        muted = k(c.muted)
+        line = k(c.line)
+        action = k(c.action)
+        onAction = k(c.onAction)
+        good = k(c.good)
+        onGood = k(c.onGood)
+        idle = k(c.idle)
+        attention = k(c.attention)
+        onAttention = k(c.onAttention)
+        question = k(c.question)
+        onQuestion = k(c.onQuestion)
+        approval = k(c.approval)
+        onApproval = k(c.onApproval)
+        sidebarTint = k(c.sidebarTint)
+        glass = k(c.glass)
+        bar = k(c.bar)
+        cardTint = k(c.cardTint)
+        edge = k(c.edge)
+        meter = c.meter.map(k)
+        prompt = c.prompt.map(k)
+        onPrompt = k(c.onPrompt)
+        agentCard = k(c.agentCard)
+        questionTint = k(c.questionTint)
+        approvalTint = k(c.approvalTint)
+        command = k(c.command)
+        terminalBackground = k(c.terminal.background)
+        terminalForeground = k(c.terminal.foreground)
+        self.name = name
+        self.colours = c
+        contrast = c.contrast
+    }
 
     func size(_ style: TextStyle) -> CGFloat {
         CGFloat(style.points) * scale
     }
 
+    /// The theme's display face (Bloom's Bricolage Grotesque), or SF Pro.
     func title(_ style: TextStyle, _ weight: Font.Weight = .bold) -> Font {
-        .custom(titleFamily, size: size(style)).weight(weight)
+        guard let f = colours.titleFamily else { return .system(size: size(style), weight: weight) }
+        return .custom(f, size: size(style)).weight(weight)
     }
 
+    /// The theme's mono (Bloom's DM Mono), or SF Mono.
     func mono(_ style: TextStyle, _ weight: Font.Weight = .regular) -> Font {
-        .custom(monoFamily, size: size(style)).weight(weight)
+        guard let f = colours.monoFamily else { return .system(size: size(style), weight: weight, design: .monospaced) }
+        return .custom(f, size: size(style)).weight(weight)
     }
 
     /// The body's font, SF Pro (Bloom: "body stays SF Pro").
@@ -82,107 +126,22 @@ struct Theme: Sendable {
 
     /// The theme as Increase Contrast wants it (T748 J): the panels
     /// opaque, so no mesh shows through, and their edges and rules
-    /// drawn in the muted ink.
+    /// drawn in the muted ink (ThemeColours.increasedContrast).
     func increasedContrast() -> Theme {
-        var t = self
-        t.sidebarTint = .dynamic(0xffffff, 0x120e24)
-        t.glass = .dynamic(0xffffff, 0x120e24)
-        t.bar = .dynamic(0xf6f2ff, 0x1c1638)
-        t.cardTint = .dynamic(0xffffff, 0x221a40)
-        t.agentCard = t.cardTint
-        t.questionTint = .dynamic(0xefeaff, 0x2b2160)
-        t.approvalTint = .dynamic(0xfff1ec, 0x3a1a1c)
-        t.edge = .dynamic(0x4f4670, 0xc9c0ea)
-        t.line = .dynamic(0x1c1433, 0xf6f2ff, alpha: 0.45)
-        t.muted = .dynamic(0x3a3258, 0xddd6f5)
-        t.contrast = true
+        var t = Theme(name, colours: colours.increasedContrast())
+        t.scale = scale
         return t
     }
-}
 
-extension Theme {
-    /// Bloom (design T744, concept 02): a vivid gradient mesh under
-    /// frosted panels, smoked glass in dark. No text sits on the raw
-    /// mesh: the sidebar and inspector have their frost, the detail its
-    /// glass, the cards theirs over it.
-    ///
-    /// Contrast (T752), each text pair over its worst spot: the mesh's
-    /// five colours and its base, under the surface's layers, with the
-    /// system material taken as 40% white (light) or 40% #1e1e1e (dark),
-    /// as the sidebar measures in the app. WCAG asks 4.5:1 of text.
-    ///
-    ///                                light           dark
-    ///     ink on the sidebar         12.9 (violet)   11.1 (lime)
-    ///     muted on the sidebar        6.3 (violet)    7.1 (lime)
-    ///     action on the sidebar       4.6 (violet)    4.6 (lime)
-    ///     ink on the glass           14.0 (violet)   14.5 (lime)
-    ///     muted on the glass          6.8 (violet)    9.3 (lime)
-    ///     action on the glass         5.0 (violet)    6.1 (lime)
-    ///     attention on the glass      4.8 (violet)    7.0 (lime)
-    ///     ink on the title bar       15.1 (violet)   13.0 (lime)
-    ///     muted on the title bar      7.4 (violet)    8.3 (lime)
-    ///     ink on a card              17.1 (violet)   12.0 (lime)
-    ///     muted on a card             8.4 (violet)    7.7 (lime)
-    ///     action, question on a card  6.1 (violet)    5.0 (lime)
-    ///     approval on a card          5.1 (violet)    6.4 (lime)
-    ///     attention on a card         5.4 (violet)    5.8 (lime)
-    ///     good on a card              5.2 (violet)    8.0 (lime)
-    ///     approval on its card        4.7 (coral)     5.6 (coral)
-    ///     question on its card        5.4 (violet)    6.4 (lime)
-    ///     onAction on action          6.3             6.9
-    ///     onAttention on attention    5.5             7.9
-    ///     onApproval on approval      5.2             8.7
-    ///     onQuestion on question      6.3             8.8
-    ///     onGood on good              5.4             9.4
-    ///     onPrompt on prompt          4.9             6.1
-    ///
-    /// So the tones' colours (approval, attention, good) are never text
-    /// on the sidebar (3.8–4.4:1 there in light): a tag there is a filled
-    /// pill. Against Bloom's page: light approval, attention and good are
-    /// darker (Bloom's e2541c, d83a22, 0e9f6e read 3.5–4.3:1 on the
-    /// cards), the light sidebar's tint 60% (30%) and the dark one smoked
-    /// glass (black 18%), since here the sidebar has no window glass
-    /// under it; dark bubblegum, the mesh's centre, is calmer (8c1f6e).
-    static let bloom = Theme(
-        mesh: [
-            .dynamic(0xff6b4a, 0xc2365a), // coral
-            .dynamic(0x7b5cff, 0x4b2fb8), // violet
-            .dynamic(0xc6f432, 0x5b7a10), // lime
-            .dynamic(0x29d3c3, 0x0f6e6a), // lagoon
-            .dynamic(0xff5fb7, 0x5a1d52), // bubblegum
-        ],
-        base: .dynamic(0xf3d7ff, 0x160f2c),
-        ink: .dynamic(0x1c1433, 0xf6f2ff),
-        muted: .dynamic(0x4f4670, 0xc9c0ea),
-        line: .dynamic(0x1c1433, 0xf6f2ff, alpha: 0.12),
-        action: .dynamic(0x5a3cf0, 0xa58fff),
-        onAction: .dynamic(0xffffff, 0x160f33),
-        good: .dynamic(0x0a7a54, 0x5fe0a8),
-        onGood: .dynamic(0xffffff, 0x062a1c),
-        idle: .dynamic(0xa49cc0, 0x6c6390),
-        attention: .dynamic(0xbb2e18, 0xff8a73),
-        onAttention: .dynamic(0xffffff, 0x2a0c06),
-        question: .dynamic(0x5a3cf0, 0xb9a8ff),
-        onQuestion: .dynamic(0xffffff, 0x160f33),
-        approval: .dynamic(0xc2410c, 0xff9a6b),
-        onApproval: .dynamic(0xffffff, 0x2a0c06),
-        sidebarTint: .dynamic(0xffffff, 0x120e24, alpha: 0.60, darkAlpha: 0.40),
-        glass: .dynamic(0xffffff, 0x120e24, alpha: 0.70, darkAlpha: 0.72),
-        bar: .dynamic(0xffffff, 0xffffff, alpha: 0.35, darkAlpha: 0.04),
-        cardTint: .dynamic(0xffffff, 0xffffff, alpha: 0.80, darkAlpha: 0.07),
-        edge: .dynamic(0xffffff, 0xffffff, alpha: 0.85, darkAlpha: 0.14),
-        meter: [.dynamic(0x5a3cf0, 0xa58fff), Color(hex: 0xff5fb7), Color(hex: 0xff6b4a)],
-        prompt: [Color(hex: 0x5a3cf0), .dynamic(0x9b3cf0, 0x8a2fd6)],
-        onPrompt: Color(hex: 0xffffff),
-        agentCard: .dynamic(0xffffff, 0xffffff, alpha: 0.80, darkAlpha: 0.07),
-        questionTint: .dynamic(0xefeaff, 0x5a3cf0, alpha: 0.95, darkAlpha: 0.28),
-        approvalTint: .dynamic(0xfff1ec, 0xff6a4a, alpha: 1, darkAlpha: 0.22),
-        command: .dynamic(0x1c1433, 0x000000, alpha: 0.06, darkAlpha: 0.3),
-        terminalBackground: Color(hex: 0x1a1430),
-        terminalForeground: Color(hex: 0xefeaff),
-        titleFamily: "Bricolage Grotesque",
-        monoFamily: "DM Mono"
-    )
+    /// Bloom (design T744, concept 02), the first theme and the default.
+    static let bloom = Theme(.bloom)
+
+    private static let all = Dictionary(uniqueKeysWithValues: ThemeName.allCases.map { ($0, Theme($0)) })
+
+    /// The theme by name, its colours made once.
+    static func named(_ n: ThemeName) -> Theme {
+        all[n] ?? bloom
+    }
 }
 
 private struct ThemeKey: EnvironmentKey {
@@ -209,6 +168,23 @@ extension Color {
                 ? NSColor(hex: dark, alpha: darkAlpha ?? alpha)
                 : NSColor(hex: light, alpha: alpha)
         })
+    }
+
+    /// A theme's swatch: one colour when light and dark agree.
+    init(_ s: Swatch) {
+        if s.light == s.dark && s.alpha == s.darkAlpha {
+            self.init(hex: s.light, alpha: s.alpha)
+        } else {
+            self = .dynamic(s.light, s.dark, alpha: s.alpha, darkAlpha: s.darkAlpha)
+        }
+    }
+}
+
+extension NSColor {
+    /// A theme's swatch as drawn in light or dark (the terminal's, set
+    /// once per appearance).
+    convenience init(_ s: Swatch, dark: Bool) {
+        self.init(hex: s.hex(dark: dark), alpha: s.alpha(dark: dark))
     }
 }
 

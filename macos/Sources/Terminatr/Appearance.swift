@@ -35,16 +35,20 @@ extension EnvironmentValues {
     }
 }
 
-/// A window's content with the user's text size and density: Bloom
-/// scaled, and the sidebar's rows as close as asked; with Increase
-/// Contrast, Bloom's opaque panels.
+/// A window's content with the user's theme (Bloom unless they picked
+/// another), text size and density: the theme scaled, and the sidebar's
+/// rows as close as asked; with Increase Contrast, its opaque panels.
+/// Every window, the menu bar's dropdown and the terminal read the
+/// stored choice here, so a new one shows in all of them at once.
 struct Themed: ViewModifier {
+    @AppStorage(ThemeName.key) private var name = ThemeName.bloom.rawValue
     @AppStorage(TextSize.key) private var scale = TextSize.standard
     @AppStorage(Density.key) private var density = Density.regular.rawValue
     @Environment(\.colorSchemeContrast) private var contrast
 
     func body(content: Content) -> some View {
-        var theme = contrast == .increased ? Theme.bloom.increasedContrast() : Theme.bloom
+        let picked = Theme.named(ThemeName.of(name))
+        var theme = contrast == .increased ? picked.increasedContrast() : picked
         theme.scale = TextSize.of(scale)
         let d = Density.of(density)
         return content
