@@ -96,6 +96,9 @@ type SideProject struct {
 	// Links are the project's links to other projects' coordinators
 	// (link.Rows).
 	Links []link.Row `json:"links,omitempty"`
+	// LinkNeeds are what those links wait on the user for, by the ids
+	// link.act takes (link.Needs).
+	LinkNeeds []link.Need `json:"link_needs,omitempty"`
 }
 
 // SideThread is one unresolved thread: its record (thread.toml), its
@@ -515,7 +518,7 @@ func (sn *projectSnap) detail(sp SideProject, own []string) SideProject {
 	if len(sn.checkouts) > 0 {
 		sp.Checkouts = sn.checkouts
 	}
-	sp.Links = sn.links
+	sp.Links, sp.LinkNeeds = sn.links, sn.linkNeeds
 	for i := range sp.Threads {
 		th := &sp.Threads[i]
 		th.ReportPR = sn.reportPR[th.Record.ID]
