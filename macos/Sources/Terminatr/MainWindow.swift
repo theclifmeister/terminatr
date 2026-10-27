@@ -105,6 +105,7 @@ struct MainWindow: View {
                 NewTaskSheet(project: p)
             }
         }
+        .sheet(item: $app.taskShown) { TaskSheet(shown: $0) }
     }
 
     /// What the window keeps while the bridge is down shows so (lost).
