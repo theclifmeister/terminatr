@@ -85,5 +85,5 @@ extension AppAPI {
 
     /// The app API that has a paired project's watched threads
     /// (PeerProject.watched) and [ui] needs_first (SessionList).
-    public static let watchedAPI = 9
+    public static let watchedAPI = 10
 }

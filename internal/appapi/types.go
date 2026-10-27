@@ -120,7 +120,7 @@ type Empty struct{}
 // alert count (it goes up on a notification), the mods' notices still
 // in the tray, and the server's version and the newer release it found.
 // NeedsFirst is [ui] needs_first, which the bridge reads from the
-// config as the TUI's sidebar does (since app API 9): the sidebar lists
+// config as the TUI's sidebar does (since app API 10): the sidebar lists
 // the projects that need the user first. It is the one setting of the
 // config the app API has, read only.
 type SessionList struct {
@@ -503,7 +503,7 @@ type PeerProject struct {
 	// their transcripts.
 	Sessions []PeerSession `json:"sessions"`
 	// Watched are its unresolved threads as the server last read them
-	// (since app API 9), running or not, in id order: what the TUI's
+	// (since app API 10), running or not, in id order: what the TUI's
 	// sidebar lists under its coordinator. None before the first read,
 	// or when the paired server's tm doesn't export them.
 	Watched []PeerThread `json:"watched"`

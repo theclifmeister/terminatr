@@ -34,7 +34,7 @@ final class AppModel {
     /// [ui] needs_first, as the last session list said: the sidebar
     /// lists the projects that need the user first, as the TUI's.
     private(set) var needsFirst = false
-    /// The bridge sends a paired project's watched threads (app API 9):
+    /// The bridge sends a paired project's watched threads (app API 10):
     /// the sidebar lists them, not only the ones a session runs.
     var watched: Bool { (hello?.appApi ?? 0) >= AppAPI.watchedAPI }
     /// What needs the user, once projects and sessions both came: the

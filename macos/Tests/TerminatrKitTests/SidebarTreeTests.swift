@@ -168,7 +168,7 @@ private struct TreeCase: Decodable {
                                 SessionRef(project: "acme", thread: "t-1", server: "mini")])
     #expect(rows[0].session?.id == "mini/s-c" && rows[1].session == nil && rows[2].session?.id == "mini/s-1")
     #expect(rows.map(\.task) == ["", "T9", "T1"])
-    // A bridge before app API 9: the threads a session runs.
+    // A bridge before app API 10: the threads a session runs.
     rows = SidebarTree.sessions(of: p, alias: "mini", watched: false)
     #expect(rows.map(\.ref) == [SessionRef(project: "acme", server: "mini"), SessionRef(project: "acme", thread: "t-1", server: "mini")])
     // None runs: its row still shows, as the TUI's.

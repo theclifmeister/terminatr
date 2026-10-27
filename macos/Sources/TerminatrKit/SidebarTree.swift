@@ -86,7 +86,7 @@ public enum SidebarTree {
     /// first, then each paired one's, "g:<alias>", with its projects,
     /// "r:<alias>/<slug>", their coordinators, "rc:", and threads,
     /// "rt:<alias>/<slug>/<id>" (sessions(of:)), above the divider.
-    /// watched is the bridge's PeerProject.watched (app API 9). The
+    /// watched is the bridge's PeerProject.watched (app API 10). The
     /// sidebar draws these rows; the shared fixture
     /// (internal/tui/testdata/sidebar-app.json) pins them to the TUI's
     /// buildTree.
@@ -117,7 +117,7 @@ public enum SidebarTree {
     /// TUI's peerProjectRows: nothing while stale; else its coordinator,
     /// running there or not, then its threads, each with its session
     /// there (nil when none runs) and its task. With watched (a bridge
-    /// of app API 9 or later) those are the watched ones, running or
+    /// of app API 10 or later) those are the watched ones, running or
     /// not, in their order; an older bridge lists only the ones a
     /// session runs.
     public static func sessions(of p: AppAPI.PeerProject, alias: String, watched: Bool = true)
