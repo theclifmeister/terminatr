@@ -136,8 +136,8 @@ struct FileCommands: Commands {
 }
 
 /// The View menu's own items, after the sidebar's: the inspector,
-/// Conversation or Terminal, the inactive projects, the sidebar's
-/// density, the theme and the text size.
+/// Conversation or Terminal, Repaint Terminal, the inactive projects,
+/// the sidebar's density, the theme and the text size.
 struct ViewCommands: Commands {
     let model: AppModel
 
@@ -149,6 +149,9 @@ struct ViewCommands: Commands {
             Button("Conversation or Terminal") { model.switchTab() }
                 .keyboardShortcut("t", modifiers: [.command, .shift])
                 .disabled(model.selectedRef == nil)
+            Button("Repaint Terminal") { model.repaintTerminal() }
+                .keyboardShortcut("r", modifiers: [.command, .option])
+                .disabled(!model.terminalShown)
             Divider()
             Button(model.nav.showInactive ? "Hide Inactive Projects" : "Show Inactive Projects") { model.nav.showInactive.toggle() }
                 .keyboardShortcut("h", modifiers: [.command, .shift])
