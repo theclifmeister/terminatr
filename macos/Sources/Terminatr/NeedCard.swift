@@ -26,11 +26,11 @@ struct NeedCard: View {
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(need.what)
-                        .font(theme.body(13, .semibold))
+                        .font(theme.body(.body, .semibold))
                         .lineLimit(1)
                     if !detail.isEmpty {
                         Text(detail)
-                            .font(theme.body(12))
+                            .font(theme.body(.subheadline))
                             .foregroundStyle(theme.muted)
                             .lineLimit(2)
                     }
@@ -40,17 +40,18 @@ struct NeedCard: View {
             }
             if let said {
                 Text(said.text)
-                    .font(theme.body(11.5))
+                    .font(theme.body(.footnote))
                     .foregroundStyle(said.failed ? theme.attention : theme.muted)
                     .padding(.leading, 24)
             }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 9)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+        .frosted(RoundedRectangle(cornerRadius: 10))
         .background(theme.cardTint, in: RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(NeedRow.colour(need.kind, theme).opacity(0.35), lineWidth: 1))
+        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(NeedRow.colour(need.kind, theme).opacity(theme.contrast ? 1 : 0.35), lineWidth: 1))
         .accessibilityElement(children: .contain)
+        .accessibilityLabel(need.title)
         .task(id: need.id) { await check() }
     }
 
@@ -68,15 +69,18 @@ struct NeedCard: View {
             case .approval:
                 if let dialog, !dialog.escape, let first = dialog.options.first {
                     Button(first) { approve(1) }
+                        .accessibilityLabel(named(first))
                         .buttonStyle(.borderedProminent)
                         .tint(theme.action)
                     if dialog.options.count > 1, let last = dialog.options.last {
                         Button(last) { approve(dialog.options.count) }
+                            .accessibilityLabel(named(last))
                     }
                 }
                 open("Open")
             case .question where need.id.hasPrefix("questions:"):
                 Button("Answer now") { answerQuestions() }
+                    .accessibilityLabel(named("Answer now"))
                     .buttonStyle(.borderedProminent)
                     .tint(theme.action)
                     .help("The coordinator puts its questions to you in its conversation")
@@ -84,10 +88,12 @@ struct NeedCard: View {
                 if let a = need.answer {
                     ForEach(a.options, id: \.self) { o in
                         Button(o) { answer(a, o) }
+                            .accessibilityLabel(named(o))
                     }
                     open("Open")
                 } else if need.detail.hasSuffix("answer in Terminal") {
                     Button("Open Terminal") { openTerminal() }
+                        .accessibilityLabel(named("Open Terminal"))
                 } else {
                     open("Answer…")
                 }
@@ -107,6 +113,13 @@ struct NeedCard: View {
     private func open(_ title: String) -> some View {
         Button(title) { app.open(project: need.project, session: need.session) }
             .help("Shows it in the window")
+            .accessibilityLabel(named(title))
+    }
+
+    /// A button's name for VoiceOver: its title and the need it acts on
+    /// ("Yes: T1 needs approval"), since a card's buttons read alike.
+    private func named(_ title: String) -> String {
+        "\(title): \(need.what)"
     }
 
     private func openTerminal() {

@@ -145,11 +145,11 @@ private struct AppearanceSettings: View {
             Section {
                 LabeledContent("Text size") {
                     HStack(spacing: 8) {
-                        Text("A").font(.system(size: 10))
+                        Text("A").font(.system(size: 10)).accessibilityHidden(true)
                         Slider(value: Binding(get: { TextSize.of(scale) }, set: { scale = $0 }),
                                in: TextSize.steps.first!...TextSize.steps.last!, step: 0.05)
                             .frame(width: 180)
-                        Text("A").font(.system(size: 16))
+                        Text("A").font(.system(size: 16)).accessibilityHidden(true)
                         Text(TextSize.label(TextSize.of(scale)))
                             .monospacedDigit()
                             .frame(width: 44, alignment: .trailing)
@@ -199,7 +199,7 @@ private struct AdvancedSettings: View {
                         LazyVStack(alignment: .leading, spacing: 3) {
                             ForEach(model.log.entries) { e in
                                 Text("\(Self.time.string(from: e.time))  \(e.text)")
-                                    .font(.system(size: 11, design: .monospaced))
+                                    .font(.system(.caption, design: .monospaced))
                                     .textSelection(.enabled)
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                     .id(e.id)

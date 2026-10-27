@@ -53,3 +53,23 @@ import Testing
     #expect(Set(log.entries.map(\.id)).count == 3)
     #expect(log.text { _ in "t" } == "t  line 3\nt  line 4\nt  line 5")
 }
+
+// Accessibility (T748 J): text styles keep Bloom's sizes at 100%, run
+// from largest to smallest, and the sidebar follows the system's size.
+@Test func textStyles() {
+    #expect(TextStyle.body.points == 13)
+    #expect(TextStyle.display.points == 30)
+    let sizes = TextStyle.allCases.map(\.points)
+    #expect(sizes == sizes.sorted(by: >))
+    #expect(Set(sizes).count == sizes.count)
+    #expect(SidebarSize.medium.scale == 1)
+    #expect(SidebarSize.small.scale < 1 && SidebarSize.large.scale > 1)
+}
+
+@Test func spokenAttention() {
+    #expect(Attention(word: "allow?", tone: .approval, why: "needs approval", waits: true).spoken == "needs approval")
+    #expect(Attention(word: "asks", tone: .question, why: "asks a question · answer in Terminal", waits: true).spoken
+        == "asks a question, answer in Terminal")
+    #expect(Attention(word: "working", tone: .working, why: "Running tests", waits: false).spoken == "working")
+    #expect(Attention(word: "blocked", tone: .attention, why: "", waits: true).spoken == "blocked")
+}

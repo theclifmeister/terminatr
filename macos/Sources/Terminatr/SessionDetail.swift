@@ -66,7 +66,7 @@ struct SessionDetail: View {
             } icon: {
                 Image(systemName: model.ref.isRemote ? "network" : "rectangle.on.rectangle.slash")
             }
-            .font(theme.body(12))
+            .font(theme.body(.subheadline))
             .foregroundStyle(theme.muted)
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
@@ -126,7 +126,7 @@ struct NotRunning: View {
     var body: some View {
         VStack(spacing: 8) {
             Text(headline)
-                .font(theme.title(20, .heavy))
+                .font(theme.title(.title, .heavy))
             Text(detail)
                 .foregroundStyle(theme.muted)
                 .multilineTextAlignment(.center)
@@ -136,7 +136,7 @@ struct NotRunning: View {
             }
         }
         .padding(28)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18))
+        .frosted(RoundedRectangle(cornerRadius: 18))
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 

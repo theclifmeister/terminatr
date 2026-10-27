@@ -26,6 +26,8 @@ struct Sidebar: View {
     @Environment(\.density) private var density
     @Environment(\.sidebarRowSize) private var rowSize
     @Environment(\.defaultMinListRowHeight) private var minRowHeight
+    /// Where the window's needs rotor finds the need rows.
+    let needsRotor: Namespace.ID
     @State private var typing = TypeSelect()
     /// The List has the keys from launch, not the filter field.
     @FocusState private var listFocused: Bool
@@ -39,6 +41,7 @@ struct Sidebar: View {
                     let shown = all ? needs : Array(needs.prefix(SidebarTree.needsShown))
                     ForEach(shown) { n in
                         NeedLine(need: n) { app.open(project: n.project, session: n.session) }
+                            .accessibilityRotorEntry(id: n.id, in: needsRotor)
                     }
                     if !filtering, needs.count > SidebarTree.needsShown {
                         more(Navigation.moreKey(), all ? "Show fewer" : SidebarTree.moreNeeds(Array(needs.dropFirst(SidebarTree.needsShown))), unfolded: all)
@@ -47,11 +50,13 @@ struct Sidebar: View {
                     HStack(spacing: 6) {
                         Text("Needs you")
                         Text("\(needs.count)")
-                            .font(theme.mono(10.5, .medium))
+                            .font(theme.mono(.caption2, .medium))
                             .padding(.horizontal, 5)
                             .background(theme.attention, in: Capsule())
                             .foregroundStyle(theme.onAttention)
                     }
+                    .font(theme.body(.caption, .semibold))
+                    .accessibilityElement(children: .combine)
                 }
             }
             let active = shown(app.activeProjects)
@@ -63,6 +68,7 @@ struct Sidebar: View {
                 } header: {
                     // "This server" only tells it from paired ones.
                     Text(app.peers.isEmpty ? "Projects" : "This server")
+                        .font(theme.body(.caption, .semibold))
                 }
             }
             let inactive = shown(app.inactiveProjects)
@@ -73,6 +79,7 @@ struct Sidebar: View {
                     }
                 } header: {
                     Text("Inactive (\(inactive.count))")
+                        .font(theme.body(.caption, .semibold))
                         .help("Projects set inactive: View › Show Inactive Projects (⇧⌘H)")
                 }
             }
@@ -85,12 +92,13 @@ struct Sidebar: View {
                         }
                     } header: {
                         remoteHeader(peer)
+                            .font(theme.body(.caption, .semibold))
                     }
                 }
             }
             if filtering, rows.isEmpty, needs.isEmpty {
                 Text("Nothing matches “\(app.filter)”")
-                    .font(theme.body(12))
+                    .font(theme.body(.subheadline))
                     .foregroundStyle(theme.muted)
             }
         }
@@ -248,11 +256,11 @@ struct Sidebar: View {
         } label: {
             HStack(spacing: 6) {
                 Text(label)
-                    .font(theme.body(12))
+                    .font(theme.body(.subheadline))
                     .lineLimit(1)
                 Spacer(minLength: 4)
                 Image(systemName: unfolded ? "chevron.up" : "chevron.down")
-                    .font(theme.body(9, .semibold))
+                    .font(theme.body(.glyph, .semibold))
                     .accessibilityHidden(true)
             }
             .foregroundStyle(theme.muted)
@@ -277,14 +285,14 @@ struct Sidebar: View {
         if l.open {
             if l.coordinator {
                 row(.session(SessionRef(project: p.slug)), label: "Coordinator", ref: nil,
-                    tag: state.waits ? (state.word, state.tone) : nil, dot: theme.colour(state.tone))
+                    tag: state.waits ? (state.word, state.tone) : nil, dot: theme.colour(state.tone), spoken: state.spoken)
             }
             let key = Navigation.moreKey(project: p.slug)
             // Keyed with the project: thread ids repeat across projects,
             // and the List flattens every project's rows into one.
             ForEach(l.threads, id: \.record.id) { t in
                 row(.session(SessionRef(project: p.slug, thread: t.record.id)), label: t.record.title, ref: t.task?.ref,
-                    tag: tag(t), dot: theme.colour(app.attention(t).tone))
+                    tag: tag(t), dot: theme.colour(app.attention(t).tone), spoken: spoken(t))
                     .id("\(p.slug)/\(t.record.id)")
             }
             if l.more > 0 {
@@ -300,7 +308,7 @@ struct Sidebar: View {
     /// A session's row: its dot, task ref and title, and its tag: a
     /// filled pill in its tone's colour, or plain muted text (PR) when it
     /// has none.
-    private func row(_ sel: Selection, label: String, ref: String?, tag: (String, Attention.Tone?)?, dot: Color) -> some View {
+    private func row(_ sel: Selection, label: String, ref: String?, tag: (String, Attention.Tone?)?, dot: Color, spoken: String) -> some View {
         let on = app.nav.selection == sel
         return HStack(spacing: 6) {
             Circle()
@@ -309,34 +317,46 @@ struct Sidebar: View {
                 .accessibilityHidden(true)
             if let ref {
                 Text(ref)
-                    .font(theme.mono(11.5, .medium))
+                    .font(theme.mono(.footnote, .medium))
                     .foregroundStyle(on ? theme.onAction : theme.action)
             }
             Text(label)
-                .font(theme.body(12.5))
+                .font(theme.body(.callout))
                 .lineLimit(1)
             Spacer(minLength: 4)
             if let (word, tone) = tag {
                 if let tone {
                     Text(word)
-                        .font(theme.mono(10.5, .medium))
+                        .font(theme.mono(.caption2, .medium))
                         .padding(.horizontal, 6)
                         .padding(.vertical, 1)
                         .background(theme.colour(tone), in: Capsule())
                         .foregroundStyle(theme.on(tone))
                 } else {
                     Text(word)
-                        .font(theme.mono(10.5, .medium))
+                        .font(theme.mono(.caption2, .medium))
                         .foregroundStyle(on ? theme.onAction : theme.muted)
                 }
             }
         }
         .padding(.leading, 14)
         .foregroundStyle(on ? theme.onAction : theme.ink)
+        // One element that says the row and its state: "T6 Network popup
+        // polish, needs approval".
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel([ref, label].compactMap { $0 }.joined(separator: " "))
+        .accessibilityValue(spoken)
         .selectable(sel)
         .contextMenu {
             if case .session(let r) = sel { NewWindowButton(ref: r) }
         }
+    }
+
+    /// What VoiceOver says of a thread after its name: what it waits
+    /// on, else its state, and its PR.
+    private func spoken(_ t: AppAPI.Thread) -> String {
+        let a = app.attention(t).spoken
+        return t.pr > 0 ? "\(a), PR \(t.pr)" : a
     }
 
     /// A word for what the thread waits on, as the mockup's: a dialog,
@@ -356,7 +376,7 @@ struct Sidebar: View {
         return DisclosureGroup(isExpanded: expanded(Navigation.sectionKey(server: peer.alias, project: p.project))) {
             ForEach(sessions(peer, p), id: \.0.id) { s, r in
                 row(.session(r), label: r.isCoordinator ? "Coordinator" : r.thread, ref: s.task.isEmpty ? nil : s.task,
-                    tag: tag(s), dot: theme.colour(tone(s)))
+                    tag: tag(s), dot: theme.colour(tone(s)), spoken: spoken(s))
             }
         } label: {
             HStack(spacing: 8) {
@@ -368,12 +388,12 @@ struct Sidebar: View {
                     .frame(width: 8, height: 8)
                     .accessibilityHidden(true)
                 Text(p.project)
-                    .font(theme.body(13, .semibold))
+                    .font(theme.body(.body, .semibold))
                     .lineLimit(1)
                 Spacer(minLength: 4)
                 if p.needsYou > 0, !p.stale {
                     Text("\(p.needsYou)")
-                        .font(theme.mono(11, .medium))
+                        .font(theme.mono(.caption, .medium))
                         .padding(.horizontal, 6)
                         .padding(.vertical, 1)
                         .background(theme.attention, in: Capsule())
@@ -394,7 +414,7 @@ struct Sidebar: View {
             Text(peer.name.isEmpty ? peer.alias : peer.name)
             Spacer()
             Text(peer.state != "up" ? "offline" : peer.panes == "type" ? "write" : peer.panes == "view" ? "view" : "off")
-                .font(theme.mono(10.5))
+                .font(theme.mono(.caption2))
         }
         .help(remoteHelp(peer))
         .accessibilityElement(children: .combine)
@@ -413,6 +433,13 @@ struct Sidebar: View {
         if s.asking { return ("asks", .question) }
         if s.state == "blocked" { return s.reason == "permission" ? ("allow?", .approval) : ("blocked", .attention) }
         return nil
+    }
+
+    /// What VoiceOver says of a paired server's session after its name.
+    private func spoken(_ s: AppAPI.PeerSession) -> String {
+        if s.asking { return "asks a question" }
+        if s.state == "blocked" { return s.reason == "permission" ? "needs approval" : "blocked" }
+        return s.state.isEmpty ? "running" : s.state
     }
 
     /// A paired server's session's dot.
@@ -438,10 +465,10 @@ private struct NeedLine: View {
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 0) {
                     Text(need.title)
-                        .font(theme.body(12.5, .medium))
+                        .font(theme.body(.callout, .medium))
                         .lineLimit(1)
                     Text(need.detail)
-                        .font(theme.body(11))
+                        .font(theme.body(.caption))
                         .foregroundStyle(theme.muted)
                         .lineLimit(1)
                 }
@@ -501,12 +528,12 @@ private struct FilterField: View {
         @Bindable var app = app
         HStack(spacing: 6) {
             Image(systemName: "line.3.horizontal.decrease")
-                .font(theme.body(11, .semibold))
+                .font(theme.body(.caption, .semibold))
                 .foregroundStyle(theme.muted)
                 .accessibilityHidden(true)
             TextField("Filter", text: $app.filter)
                 .textFieldStyle(.plain)
-                .font(theme.body(12.5))
+                .font(theme.body(.callout))
                 .focused($focused)
                 .onExitCommand {
                     app.filter = ""
@@ -520,6 +547,7 @@ private struct FilterField: View {
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                 }
+                .accessibilityLabel("Clear the filter")
                 .buttonStyle(.plain)
                 .foregroundStyle(theme.muted)
                 .help("Clear the filter (Esc)")

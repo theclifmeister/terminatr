@@ -13,6 +13,9 @@ import TerminatrKit
 struct ConversationTab: View {
     @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
+    /// Reduce Motion (T748 J): the transcript grows and scrolls without
+    /// animating.
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let model: SessionModel
     let session: AppAPI.Session?
     let state: ConversationState
@@ -44,7 +47,7 @@ struct ConversationTab: View {
                     LazyVStack(alignment: .leading, spacing: 12) {
                         if model.transcript.skipped > 0 {
                             Text("\(model.transcript.skipped) earlier items not shown")
-                                .font(theme.body(11.5))
+                                .font(theme.body(.footnote))
                                 .foregroundStyle(theme.muted)
                                 .frame(maxWidth: .infinity)
                         }
@@ -64,12 +67,12 @@ struct ConversationTab: View {
                             ProgressView().frame(maxWidth: .infinity)
                         case .waiting:
                             Text("Waiting for the agent to name its transcript…")
-                                .font(theme.body(12))
+                                .font(theme.body(.subheadline))
                                 .foregroundStyle(theme.muted)
                                 .frame(maxWidth: .infinity)
                         case .unavailable(let why):
                             Text(why)
-                                .font(theme.body(12))
+                                .font(theme.body(.subheadline))
                                 .foregroundStyle(theme.muted)
                                 .frame(maxWidth: .infinity)
                         case .mapped:
@@ -77,7 +80,7 @@ struct ConversationTab: View {
                         }
                         if let closed = model.transcript.closed {
                             Text("The session ended (\(closed)).")
-                                .font(theme.body(12))
+                                .font(theme.body(.subheadline))
                                 .foregroundStyle(theme.muted)
                                 .frame(maxWidth: .infinity)
                         }
@@ -88,21 +91,23 @@ struct ConversationTab: View {
                     .frame(maxWidth: .infinity)
                 }
                 .defaultScrollAnchor(.bottom)
+                // Streamed text lands in place: no implicit animation.
+                .transaction { if reduceMotion { $0.animation = nil } }
                 .modifier(ScrolledUp(up: $scrolledUp))
                 .onChange(of: current) { _, c in
-                    if let c { withAnimation { proxy.scrollTo(c, anchor: .center) } }
+                    if let c { withAnimation(motion) { proxy.scrollTo(c, anchor: .center) } }
                 }
                 .overlay(alignment: .bottom) {
                     if open && scrolledUp && !coordinator {
                         Button {
-                            if let last = model.transcript.entries.last { withAnimation { proxy.scrollTo(last.id, anchor: .bottom) } }
+                            if let last = model.transcript.entries.last { withAnimation(motion) { proxy.scrollTo(last.id, anchor: .bottom) } }
                             flash += 1
                         } label: {
                             Label("Jump to the open card", systemImage: "arrow.down")
-                                .font(theme.body(12, .semibold))
+                                .font(theme.body(.subheadline, .semibold))
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 6)
-                                .background(.regularMaterial, in: Capsule())
+                                .frosted(Capsule())
                                 .overlay(Capsule().strokeBorder(theme.edge, lineWidth: 1))
                         }
                         .buttonStyle(.plain)
@@ -126,7 +131,7 @@ struct ConversationTab: View {
         }
         .guardingLinks()
         // What sets no font of its own: the system's body, scaled.
-        .font(theme.body(13))
+        .font(theme.body(.body))
         .onChange(of: app.find) { _, r in
             if r.step == 0 || !finding {
                 finding = true
@@ -137,6 +142,9 @@ struct ConversationTab: View {
         }
         .onChange(of: query) { at = 0 }
     }
+
+    /// A scroll's animation: none with Reduce Motion.
+    private var motion: Animation? { reduceMotion ? nil : .default }
 
     private func step(_ by: Int, of n: Int) {
         guard n > 0 else { return }
@@ -155,23 +163,25 @@ struct ConversationTab: View {
                 .onExitCommand { close() }
             if !query.trimmingCharacters(in: .whitespaces).isEmpty {
                 Text(n == 0 ? "No matches" : "\(min(at, n - 1) + 1) of \(n)")
-                    .font(theme.mono(11))
+                    .font(theme.mono(.caption))
                     .foregroundStyle(theme.muted)
                     .fixedSize()
             }
             Button { step(-1, of: n) } label: { Image(systemName: "chevron.up") }
+                .accessibilityLabel("Previous match")
                 .disabled(n == 0)
                 .help("Previous match (⇧⌘G)")
             Button { step(1, of: n) } label: { Image(systemName: "chevron.down") }
+                .accessibilityLabel("Next match")
                 .disabled(n == 0)
                 .help("Next match (⌘G)")
             Button("Done") { close() }
         }
         .buttonStyle(.borderless)
-        .font(theme.body(12.5))
+        .font(theme.body(.callout))
         .padding(.horizontal, 12)
         .padding(.vertical, 7)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+        .frosted(RoundedRectangle(cornerRadius: 10))
         .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(theme.edge, lineWidth: 1))
         .padding(.horizontal, 22)
         .padding(.bottom, 4)
@@ -205,6 +215,7 @@ struct ScrolledUp: ViewModifier {
 /// The open cards flash once when the user jumps to them.
 struct Flash: ViewModifier {
     @Environment(\.theme) private var theme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let n: Int
     @State private var on = false
 
@@ -218,8 +229,9 @@ struct Flash: ViewModifier {
                     .allowsHitTesting(false)
             }
             .onChange(of: n) {
-                withAnimation(.easeOut(duration: 0.2)) { on = true }
-                withAnimation(.easeIn(duration: 0.6).delay(0.8)) { on = false }
+                // With Reduce Motion the ring shows and goes, without a fade.
+                withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) { on = true }
+                withAnimation(reduceMotion ? .linear(duration: 0).delay(1) : .easeIn(duration: 0.6).delay(0.8)) { on = false }
             }
     }
 }
@@ -238,9 +250,9 @@ struct ReviewCard: View {
             HStack(alignment: .center, spacing: 10) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("\(task.ref) is ready to review")
-                        .font(theme.title(15, .bold))
+                        .font(theme.title(.headline, .bold))
                     Text(facts)
-                        .font(theme.body(12))
+                        .font(theme.body(.subheadline))
                         .foregroundStyle(theme.muted)
                         .lineLimit(1)
                         .textSelection(.enabled)
@@ -277,11 +289,11 @@ struct EntryView: View {
             Button { unfolded = true } label: {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Image(systemName: "chevron.right")
-                        .font(theme.body(9, .bold))
+                        .font(theme.body(.glyph, .bold))
                     Text("tm")
-                        .font(theme.mono(11.5, .medium))
+                        .font(theme.mono(.footnote, .medium))
                     Text([entry.headline, Self.clock(entry.at)].filter { !$0.isEmpty }.joined(separator: " · "))
-                        .font(theme.body(12))
+                        .font(theme.body(.subheadline))
                         .lineLimit(1)
                     Spacer(minLength: 0)
                 }
@@ -316,7 +328,7 @@ struct EntryView: View {
             }
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+            .frosted(RoundedRectangle(cornerRadius: 14))
             .background(theme.agentCard, in: RoundedRectangle(cornerRadius: 14))
             .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(theme.edge, lineWidth: 1))
         case .tool:
@@ -324,14 +336,14 @@ struct EntryView: View {
         case .result:
             if let r = entry.result {
                 Text("\(r.text)\(r.lines > 1 ? " · \(r.lines) lines" : "")")
-                    .font(theme.mono(11.5))
+                    .font(theme.mono(.footnote))
                     .foregroundStyle(r.error ? theme.attention : theme.muted)
                     .lineLimit(1)
                     .padding(.leading, 12)
             }
         case .note:
             Text(entry.text)
-                .font(theme.body(12, .medium))
+                .font(theme.body(.subheadline, .medium))
                 .foregroundStyle(theme.muted)
                 .frame(maxWidth: .infinity)
         }
@@ -340,7 +352,7 @@ struct EntryView: View {
     /// Who wrote the turn, and when: "you · 20:45".
     private var turn: some View {
         Text([entry.who(agent: agent), Self.clock(entry.at)].filter { !$0.isEmpty }.joined(separator: " · "))
-            .font(theme.mono(11, .medium))
+            .font(theme.mono(.caption, .medium))
             .foregroundStyle(theme.muted)
     }
 
@@ -357,7 +369,7 @@ struct EntryView: View {
 
     private var cut: some View {
         Text("Cut short: the rest is in the Terminal tab.")
-            .font(theme.body(11))
+            .font(theme.body(.caption))
             .foregroundStyle(theme.muted)
     }
 }
@@ -371,16 +383,16 @@ struct ToolLine: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text(entry.tool.isEmpty ? "tool" : entry.tool)
-                .font(theme.mono(12, .medium))
+                .font(theme.mono(.subheadline, .medium))
                 .foregroundStyle(theme.action)
             Text(entry.text)
-                .font(theme.mono(12))
+                .font(theme.mono(.subheadline))
                 .lineLimit(1)
                 .truncationMode(.middle)
                 .textSelection(.enabled)
             if let r = entry.result {
                 Text(summary(r))
-                    .font(theme.mono(11.5))
+                    .font(theme.mono(.footnote))
                     .foregroundStyle(r.error ? theme.attention : theme.muted)
                     .lineLimit(1)
             } else {
@@ -427,7 +439,7 @@ struct MarkdownView: View {
             Text(s).fixedSize(horizontal: false, vertical: true)
         case .heading(let level, let s):
             Text(s)
-                .font(theme.title(level <= 1 ? 18 : level == 2 ? 16 : 14.5, .bold))
+                .font(theme.title(level <= 1 ? .title2 : level == 2 ? .title3 : .heading, .bold))
                 .padding(.top, 2)
         case .item(let marker, let depth, let s):
             HStack(alignment: .firstTextBaseline, spacing: 6) {
@@ -445,7 +457,7 @@ struct MarkdownView: View {
         case .code(_, let code):
             ScrollView(.horizontal) {
                 Text(code)
-                    .font(theme.mono(12))
+                    .font(theme.mono(.subheadline))
                     .padding(10)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
