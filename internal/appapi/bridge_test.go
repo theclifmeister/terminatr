@@ -1,6 +1,7 @@
 package appapi_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -305,8 +306,21 @@ func TestBridgeTaskActions(t *testing.T) {
 	if err := c.Call(proto.MethodQuestionsOpen, appapi.ProjectParams{Project: "web"}, &qs); err != nil || qs.Session != opened.Session || qs.Open != 1 {
 		t.Fatalf("questions.open: %+v %v", qs, err)
 	}
+	// A file for the coordinator's prompt lands in the project's uploads/.
+	png := append([]byte("\x89PNG\r\n\x1a\n"), make([]byte, 32)...)
+	var up appapi.Upload
+	if err := c.Call(proto.MethodSessionUpload, appapi.UploadParams{Session: opened.Session, Name: "shot.png", Size: int64(len(png)), Data: png}, &up); err != nil ||
+		!strings.HasSuffix(up.Ref, "-shot.png") || up.Type != "image/png" {
+		t.Fatalf("session.upload: %+v %v", up, err)
+	}
+	if got, err := os.ReadFile(pr.Path("uploads", up.Ref)); err != nil || !bytes.Equal(got, png) {
+		t.Errorf("uploaded: %v", err)
+	}
+	if err := c.Call(proto.MethodSessionPrompt, appapi.PromptParams{ID: opened.Session, Files: []string{"../PROJECT.md"}}, nil); code(err) != proto.ErrBadParams {
+		t.Errorf("session.prompt with a bad ref: %v", err)
+	}
 	journal, _ := os.ReadFile(pr.Path("JOURNAL.md"))
-	for _, want := range []string{" human (app) task.accept.ask T2", " human (app) task.sendback.ask T3 the tests fail",
+	for _, want := range []string{" human (app) session.upload ", " human (app) task.accept.ask T2", " human (app) task.sendback.ask T3 the tests fail",
 		" human (app) task.delegate.ask T1", " human (app) task.add T4 Add docs", " human (app) coordinator.start " + opened.Session,
 		" human (app) questions.open " + opened.Session + " 1 open"} {
 		if !strings.Contains(string(journal), want) {
