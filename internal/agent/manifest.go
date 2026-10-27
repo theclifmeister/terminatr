@@ -116,6 +116,11 @@ type Manifest struct {
 	// Without a rule the agent's menus are answered in its pane only.
 	Answer Answer `toml:"answer"`
 
+	// Approve: how the agent words its permission dialog's options, so
+	// session.approve tells one that allows once from one that allows
+	// for the session or beyond it (OptionScope, docs/SPEC.md §11.2).
+	Approve Approve `toml:"approve"`
+
 	// ListModels is how tm asks the installed agent for the models the
 	// user can use (docs/SPEC.md §8.2, Models); nil: the agent can't
 	// tell, so threads run its own default. It needs model_args.
@@ -199,6 +204,21 @@ type Answer struct {
 	TextFocus  string `toml:"text_focus"`  // key that moves down one option, in place of the number, e.g. "\x1b[B"
 	TextKey    string `toml:"text_key"`    // keys after the option's number that open its text field, e.g. "\t"
 	Submit     string `toml:"submit"`      // keys after the text, e.g. "\r"
+}
+
+// Approve is a manifest's [approve] table: regular expressions,
+// matched case-insensitively against an option's first line as the
+// screen shows it, apostrophes plain. An option that matches none of
+// them allows beyond the session.
+type Approve struct {
+	// Persistent: options that allow beyond the session (settings, rules
+	// files, "in the future"), checked first.
+	Persistent []string `toml:"persistent"`
+	// Session: options that allow for the rest of the agent's session
+	// only, in memory, and no more than the one tool or command asked.
+	Session []string `toml:"session"`
+	// Once: options that allow this call only, or refuse it.
+	Once []string `toml:"once"`
 }
 
 // Guard is a manifest's [guard] table. Each entry is a path relative to
@@ -697,6 +717,13 @@ func (m *Manifest) validate() error {
 		if r.Regex != "" {
 			if _, err := regexp.Compile(r.Regex); err != nil {
 				errs = append(errs, fmt.Errorf("rules[%d] %s: %w", i, r.ID, err))
+			}
+		}
+	}
+	for i, list := range [][]string{m.Approve.Persistent, m.Approve.Session, m.Approve.Once} {
+		for _, p := range list {
+			if _, err := regexp.Compile("(?i)" + p); err != nil {
+				errs = append(errs, fmt.Errorf("approve.%s: %w", []string{"persistent", "session", "once"}[i], err))
 			}
 		}
 	}

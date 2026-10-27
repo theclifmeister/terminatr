@@ -345,8 +345,8 @@ func TestParamsCopies(t *testing.T) {
 		}
 	}
 	m, _ := Lookup(proto.MethodSessionApprove)
-	p, err := m.toServer(json.RawMessage(`{"id":"s-1","choice":2,"escape":true}`))
-	if want := (proto.SessionApproveParams{ID: "s-1", Choice: 2, Escape: true}); err != nil || p != want {
+	p, err := m.toServer(json.RawMessage(`{"id":"s-1","choice":2,"escape":true,"session":true}`))
+	if want := (proto.SessionApproveParams{ID: "s-1", Choice: 2, Escape: true, Session: true}); err != nil || p != want {
 		t.Errorf("approve params %+v %v", p, err)
 	}
 	// The console a pane's takeover counts is the server's to name.

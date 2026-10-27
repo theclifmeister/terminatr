@@ -17,7 +17,8 @@ import (
 
 // approve is session.approve's: the agent's state says it is blocked on
 // a permission prompt, its screen shows the dialog with the option,
-// which allows once only, and an escape's prompt is the user's (Relay
+// which allows once only (for the session too, from the user in the Mac
+// app, confirmed: scopeAllowed), and an escape's prompt is the user's (Relay
 // coordinator is refused there, anyone else needs Escape). Then it
 // sends the option's number and journals it as the caller's, or the
 // coordinator's for Relay.
@@ -72,10 +73,15 @@ func (s *Server) approve(p proto.SessionApproveParams, cc callCtx) (any, *proto.
 	if option == "" {
 		return nil, proto.Errorf(proto.ErrNoDialog, "the dialog on session %s's screen has no option %d", p.ID, choice)
 	}
-	if agent.AllowsAlways(option) {
-		return nil, proto.Errorf(proto.ErrAlwaysAllow, "option %d (%s) allows more than once; only the user may choose it, in the agent's pane", choice, textsafe.Line(option, 80))
+	m := agent.ManifestOf(sess.Agent())
+	scope := agent.OptionScope(m, option)
+	if perr := scopeAllowed(scope, choice, option, p, cc.app && !byCoord); perr != nil {
+		return nil, perr
 	}
 	res := proto.SessionApproveResult{Question: question, Option: option, Options: agent.DialogOptions(screen.Text), Escape: info.Escape}
+	for _, o := range res.Options {
+		res.Scopes = append(res.Scopes, string(agent.OptionScope(m, o)))
+	}
 	if p.Check {
 		return res, nil
 	}
@@ -91,9 +97,33 @@ func (s *Server) approve(p proto.SessionApproveParams, cc callCtx) (any, *proto.
 	if ref == "" {
 		ref = info.ID
 	}
-	s.journalIn(info.Project, who, "thread.approve", ref, textsafe.Line(question+" → "+option, 160))
+	detail := question + " → " + option
+	if scope == agent.ScopeSession {
+		detail += " (for this session)"
+	}
+	s.journalIn(info.Project, who, "thread.approve", ref, textsafe.Line(detail, 160))
 	s.watch.wake()
 	return res, nil
+}
+
+// scopeAllowed refuses an option by how long it allows: one beyond the
+// session always (the user's to pick, in the agent's pane), one for the
+// session unless the user picks it in the Mac app (app) and confirmed
+// it, naming the tool or command (Session). Check needs no
+// confirmation: it sends nothing.
+func scopeAllowed(scope agent.Scope, choice int, option string, p proto.SessionApproveParams, app bool) *proto.Error {
+	switch scope {
+	case agent.ScopePersistent:
+		return proto.Errorf(proto.ErrAlwaysAllow, "option %d (%s) allows more than once; only the user may choose it, in the agent's pane", choice, textsafe.Line(option, 80))
+	case agent.ScopeSession:
+		if !app {
+			return proto.Errorf(proto.ErrAlwaysAllow, "option %d (%s) allows for the rest of the session; only the user may choose it, in the agent's pane or the Mac app", choice, textsafe.Line(option, 80))
+		}
+		if !p.Session && !p.Check {
+			return proto.Errorf(proto.ErrSessionUnconfirmed, "option %d (%s) allows for the rest of the session: choose it only once the user confirmed that, naming the tool or command", choice, textsafe.Line(option, 80))
+		}
+	}
+	return nil
 }
 
 // coordinatorApproves refuses an answer sent for project slug's

@@ -276,7 +276,7 @@ func answerParams(p AnswerParams) proto.SessionAnswerParams {
 }
 
 func approveParams(p ApproveParams) proto.SessionApproveParams {
-	return proto.SessionApproveParams{ID: p.ID, Choice: p.Choice, Check: p.Check, Escape: p.Escape}
+	return proto.SessionApproveParams{ID: p.ID, Choice: p.Choice, Check: p.Check, Escape: p.Escape, Session: p.Session}
 }
 
 func keysParams(p KeysParams) proto.SessionKeysParams {

@@ -342,6 +342,20 @@ tool = "AskUserQuestion"
 text_option = "Type something"
 submit = "\r"
 
+# session.approve (docs/SPEC.md §11.2): what a permission dialog's
+# option allows. Read off 2.1.312's dialogs. The session ones are
+# Claude's "during this session" rules, in memory only; Bash, MCP and
+# WebFetch offer none ("don't ask again" writes .claude/settings.local.json).
+# "for this session" options that edit Claude's own .claude folders, or
+# switch the permission mode ("Yes, and switch to … for this session",
+# "auto-accept edits"), allow more than the call asked: they match
+# nothing below, so they count as persistent. So does any wording not
+# listed ("Yes, and allow access to … commands", "keep allowing").
+[approve]
+persistent = ["don't ask again", "always", "from this project", "from now on", "remember"]
+session = ['^Yes, allow reading from .+ during this session']
+once = ['^Yes$', '^Yes, but ask again next time', '^No\b']
+
 # The models (docs/SPEC.md §8.2, Models): tm ships none and asks Claude
 # Code, as the Agent SDK does: a headless session's initialize control
 # request answers with Claude's own /model list for this user (their
