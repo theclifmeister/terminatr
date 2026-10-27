@@ -31,6 +31,12 @@ final class AppModel {
     private(set) var sessions: [AppAPI.Session] = []
     private(set) var notices: [AppAPI.Notice] = []
     private(set) var peers: [AppAPI.Peer] = []
+    /// [ui] needs_first, as the last session list said: the sidebar
+    /// lists the projects that need the user first, as the TUI's.
+    private(set) var needsFirst = false
+    /// The bridge sends a paired project's watched threads (app API 10):
+    /// the sidebar lists them, not only the ones a session runs.
+    var watched: Bool { (hello?.appApi ?? 0) >= AppAPI.watchedAPI }
     /// What needs the user, once projects and sessions both came: the
     /// one list every count shows (the Dock badge too).
     private(set) var needs: [Need] = [] {
@@ -268,6 +274,7 @@ final class AppModel {
             let l = try await b.call(AppAPI.Methods.sessionList)
             sessions = l.sessions
             notices = l.notices
+            needsFirst = l.needsFirst
             loaded.sessions = true
             changed()
             try await Task.sleep(for: Self.sessionsEvery)
@@ -329,6 +336,7 @@ final class AppModel {
                 if let b = bridge, let l = try? await b.call(AppAPI.Methods.sessionList) {
                     sessions = l.sessions
                     notices = l.notices
+                    needsFirst = l.needsFirst
                     changed()
                 }
             } while listAgain && !Task.isCancelled
@@ -352,13 +360,16 @@ final class AppModel {
         RemotePane.of(caps: caps, peer: peer(ref.server), alias: ref.server)
     }
 
-    /// This server's active projects, the pinned ones first (as the
-    /// TUI's sidebar): what ⌘1–⌘9, the Go menu, the menu bar and the
-    /// first selection count.
-    var activeProjects: [AppAPI.Project] { SidebarTree.active(projects) }
+    /// This server's active projects, the pinned ones first, with [ui]
+    /// needs_first those that need the user first in each (as the TUI's
+    /// sidebar): what ⌘1–⌘9, the Go menu, the menu bar and the first
+    /// selection count.
+    var activeProjects: [AppAPI.Project] { SidebarTree.active(projects, needsFirst: needsFirst, sessions: sessions) }
 
     /// The inactive ones, folded at the sidebar's bottom.
-    var inactiveProjects: [AppAPI.Project] { SidebarTree.inactive(projects) }
+    var inactiveProjects: [AppAPI.Project] {
+        SidebarTree.inactive(projects, needsFirst: needsFirst, sessions: sessions, nav: nav)
+    }
 
     /// The project's coordinator's session, when one runs.
     func coordinatorSession(_ project: String) -> AppAPI.Session? {

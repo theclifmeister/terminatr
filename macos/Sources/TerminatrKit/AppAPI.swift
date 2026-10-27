@@ -6,7 +6,7 @@ import Foundation
 /// The terminatr app API (docs/SPEC.md §3.8): what tm app bridge answers.
 public enum AppAPI {
     /// The app API version this app was generated against.
-    public static let version = 9
+    public static let version = 10
 
     public struct AnswerParams: Codable, Sendable, Hashable {
         public var id: String
@@ -477,8 +477,9 @@ public enum AppAPI {
         public var stale: Bool
         public var synced: Date?
         public var sessions: [PeerSession]
+        public var watched: [PeerThread]
 
-        public init(project: String, goal: String = "", paused: Bool = false, needsYou: Int, threads: Int, ready: Int, stale: Bool = false, synced: Date? = nil, sessions: [PeerSession] = []) {
+        public init(project: String, goal: String = "", paused: Bool = false, needsYou: Int, threads: Int, ready: Int, stale: Bool = false, synced: Date? = nil, sessions: [PeerSession] = [], watched: [PeerThread] = []) {
             self.project = project
             self.goal = goal
             self.paused = paused
@@ -488,6 +489,7 @@ public enum AppAPI {
             self.stale = stale
             self.synced = synced
             self.sessions = sessions
+            self.watched = watched
         }
 
         enum CodingKeys: String, CodingKey {
@@ -500,6 +502,7 @@ public enum AppAPI {
             case stale
             case synced
             case sessions
+            case watched
         }
     }
 
@@ -563,6 +566,45 @@ public enum AppAPI {
             case asking
             case context
             case contextWindow = "context_window"
+        }
+    }
+
+    public struct PeerThread: Codable, Sendable, Hashable, Identifiable {
+        public var id: String
+        public var title: String
+        public var task: String
+        public var stepsDone: Int
+        public var stepsTotal: Int
+        public var session: String
+        public var state: String
+        public var needsYou: Bool
+        public var prChecks: String
+        public var done: Bool
+
+        public init(id: String, title: String, task: String = "", stepsDone: Int = 0, stepsTotal: Int = 0, session: String = "", state: String = "", needsYou: Bool = false, prChecks: String = "", done: Bool = false) {
+            self.id = id
+            self.title = title
+            self.task = task
+            self.stepsDone = stepsDone
+            self.stepsTotal = stepsTotal
+            self.session = session
+            self.state = state
+            self.needsYou = needsYou
+            self.prChecks = prChecks
+            self.done = done
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case id
+            case title
+            case task
+            case stepsDone = "steps_done"
+            case stepsTotal = "steps_total"
+            case session
+            case state
+            case needsYou = "needs_you"
+            case prChecks = "pr_checks"
+            case done
         }
     }
 
@@ -979,8 +1021,9 @@ public enum AppAPI {
         public var build: String
         public var latest: String
         public var upgrade: String
+        public var needsFirst: Bool
 
-        public init(sessions: [Session] = [], alerts: Int, notices: [Notice] = [], version: String = "", build: String = "", latest: String = "", upgrade: String = "") {
+        public init(sessions: [Session] = [], alerts: Int, notices: [Notice] = [], version: String = "", build: String = "", latest: String = "", upgrade: String = "", needsFirst: Bool = false) {
             self.sessions = sessions
             self.alerts = alerts
             self.notices = notices
@@ -988,6 +1031,7 @@ public enum AppAPI {
             self.build = build
             self.latest = latest
             self.upgrade = upgrade
+            self.needsFirst = needsFirst
         }
 
         enum CodingKeys: String, CodingKey {
@@ -998,6 +1042,7 @@ public enum AppAPI {
             case build
             case latest
             case upgrade
+            case needsFirst = "needs_first"
         }
     }
 
@@ -1813,6 +1858,7 @@ extension AppAPI.PeerProject {
         self.stale = try c.decodeIfPresent(Bool.self, forKey: .stale) ?? false
         self.synced = try c.decodeIfPresent(Date.self, forKey: .synced)
         self.sessions = try c.decodeIfPresent([AppAPI.PeerSession].self, forKey: .sessions) ?? []
+        self.watched = try c.decodeIfPresent([AppAPI.PeerThread].self, forKey: .watched) ?? []
     }
 }
 
@@ -1837,6 +1883,22 @@ extension AppAPI.PeerSession {
         self.asking = try c.decodeIfPresent(Bool.self, forKey: .asking) ?? false
         self.context = try c.decodeIfPresent(Int.self, forKey: .context) ?? 0
         self.contextWindow = try c.decodeIfPresent(Int.self, forKey: .contextWindow) ?? 0
+    }
+}
+
+extension AppAPI.PeerThread {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try c.decode(String.self, forKey: .id)
+        self.title = try c.decode(String.self, forKey: .title)
+        self.task = try c.decodeIfPresent(String.self, forKey: .task) ?? ""
+        self.stepsDone = try c.decodeIfPresent(Int.self, forKey: .stepsDone) ?? 0
+        self.stepsTotal = try c.decodeIfPresent(Int.self, forKey: .stepsTotal) ?? 0
+        self.session = try c.decodeIfPresent(String.self, forKey: .session) ?? ""
+        self.state = try c.decodeIfPresent(String.self, forKey: .state) ?? ""
+        self.needsYou = try c.decodeIfPresent(Bool.self, forKey: .needsYou) ?? false
+        self.prChecks = try c.decodeIfPresent(String.self, forKey: .prChecks) ?? ""
+        self.done = try c.decodeIfPresent(Bool.self, forKey: .done) ?? false
     }
 }
 
@@ -2033,6 +2095,7 @@ extension AppAPI.SessionList {
         self.build = try c.decodeIfPresent(String.self, forKey: .build) ?? ""
         self.latest = try c.decodeIfPresent(String.self, forKey: .latest) ?? ""
         self.upgrade = try c.decodeIfPresent(String.self, forKey: .upgrade) ?? ""
+        self.needsFirst = try c.decodeIfPresent(Bool.self, forKey: .needsFirst) ?? false
     }
 }
 
