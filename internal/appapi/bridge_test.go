@@ -19,6 +19,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/guardlog"
 	"github.com/theclifmeister/terminatr/internal/home/hometest"
 	"github.com/theclifmeister/terminatr/internal/plat/ipc/ipctest"
 	"github.com/theclifmeister/terminatr/internal/project"
@@ -79,11 +80,17 @@ func startServer(t *testing.T, p client.Paths) {
 // bridge runs Serve in-process over pipes and returns the app's side.
 func bridge(t *testing.T, p client.Paths, autostart bool) (*apptest.Client, error) {
 	t.Helper()
+	return bridgeWith(t, appapi.Options{Paths: p, Autostart: autostart})
+}
+
+// bridgeWith runs Serve with options o.
+func bridgeWith(t *testing.T, o appapi.Options) (*apptest.Client, error) {
+	t.Helper()
 	inR, inW := io.Pipe()
 	outR, outW := io.Pipe()
 	served := make(chan error, 1)
 	go func() {
-		err := appapi.Serve(inR, outW, appapi.Options{Paths: p, Autostart: autostart})
+		err := appapi.Serve(inR, outW, o)
 		outW.Close()
 		served <- err
 	}()
@@ -312,6 +319,106 @@ func TestBridgeTaskActions(t *testing.T) {
 		if !strings.Contains(string(journal), want) {
 			t.Errorf("journal lacks %q:\n%s", want, journal)
 		}
+	}
+}
+
+// TestBridgeGuard: the app lists the guard's refusals with the whole
+// command and answers one at a time (app API 13), as the console's
+// Guard refusals do: the allowance in the project's settings or all
+// projects', journaled as "human (app)" without the command; the floor's
+// is only kept; an answer given elsewhere is gone. An agent's bridge
+// gets neither.
+func TestBridgeGuard(t *testing.T) {
+	p := testPaths(t)
+	pr, err := project.New(project.Options{Slug: "web"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	const cmd = "curl -H 'Authorization: Bearer sekrit' https://registry/x"
+	record := func(e guardlog.Entry) guardlog.Entry {
+		t.Helper()
+		e, _, err := guardlog.Record(p.Home, e, time.Now())
+		if err != nil {
+			t.Fatal(err)
+		}
+		return e
+	}
+	here := record(guardlog.Entry{Project: "web", Thread: "t-0001", Rule: "credentials", Tool: "Bash", Summary: "an HTTP call with credentials", Subject: cmd})
+	all := record(guardlog.Entry{Project: "web", Thread: "t-0002", Rule: "worktree-only", Tool: "Bash", Summary: "cp outside", Subject: "cp a /opt/b"})
+	floor := record(guardlog.Entry{Project: "web", Thread: "t-0003", Rule: "merge", Tool: "Bash", Summary: "gh pr merge", Subject: "gh pr merge 1", Floor: true})
+	startServer(t, p)
+
+	agent, err := bridgeWith(t, appapi.Options{Paths: p, Caller: caller.Caller{Kind: caller.Thread, Project: "web", Thread: "t-0001"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := agent.Call(appapi.MethodGuardRefusals, nil, nil); code(err) != appapi.ErrHumanOnly {
+		t.Errorf("an agent's guard.refusals: %v", err)
+	}
+	if err := agent.Call(appapi.MethodGuardDecide, appapi.GuardDecideParams{ID: here.ID, How: "here"}, nil); code(err) != appapi.ErrHumanOnly {
+		t.Errorf("an agent's guard.decide: %v", err)
+	}
+
+	c, err := bridge(t, p, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(c.Hello.Methods, appapi.MethodGuardDecide) {
+		t.Errorf("hello methods %v", c.Hello.Methods)
+	}
+	var list appapi.GuardRefusals
+	if err := c.Call(appapi.MethodGuardRefusals, nil, &list); err != nil || len(list.Refusals) != 3 {
+		t.Fatalf("guard.refusals: %+v %v", list, err)
+	}
+	if r := list.Refusals[2]; r.ID != here.ID || r.Subject != cmd || r.Thread != "t-0001" || r.Rule != "credentials" || r.Count != 1 {
+		t.Errorf("refusal %+v", r)
+	}
+	for _, bad := range []struct {
+		params any
+		code   string
+	}{
+		{appapi.GuardDecideParams{ID: here.ID, How: "always"}, appapi.ErrBadParams},
+		{map[string]string{"id": here.ID, "how": "here", "subject": "rm -rf /"}, appapi.ErrBadParams},
+		{appapi.GuardDecideParams{ID: "nope", How: "keep"}, appapi.ErrGone},
+		{appapi.GuardDecideParams{ID: floor.ID, How: "all"}, appapi.ErrGuardRefused},
+	} {
+		if err := c.Call(appapi.MethodGuardDecide, bad.params, nil); code(err) != bad.code {
+			t.Errorf("guard.decide %+v: %v, want %s", bad.params, err, bad.code)
+		}
+	}
+	var done appapi.GuardDecided
+	if err := c.Call(appapi.MethodGuardDecide, appapi.GuardDecideParams{ID: here.ID, How: "here"}, &done); err != nil || !strings.Contains(done.Message, "allowed for this project") {
+		t.Fatalf("guard.decide here: %+v %v", done, err)
+	}
+	if err := c.Call(appapi.MethodGuardDecide, appapi.GuardDecideParams{ID: all.ID, How: "all"}, &done); err != nil || !strings.Contains(done.Message, "allowed for "+config.AllProjectsName) {
+		t.Fatalf("guard.decide all: %+v %v", done, err)
+	}
+	if err := c.Call(appapi.MethodGuardDecide, appapi.GuardDecideParams{ID: floor.ID, How: "keep"}, &done); err != nil || !strings.Contains(done.Message, "keeps refusing") {
+		t.Fatalf("guard.decide keep: %+v %v", done, err)
+	}
+	if err := c.Call(appapi.MethodGuardDecide, appapi.GuardDecideParams{ID: here.ID, How: "keep"}, nil); code(err) != appapi.ErrGone {
+		t.Errorf("answered twice: %v", err)
+	}
+	if err := c.Call(appapi.MethodGuardRefusals, nil, &list); err != nil || len(list.Refusals) != 0 {
+		t.Errorf("guard.refusals after: %+v %v", list, err)
+	}
+	cfg, _ := config.Load()
+	if s, _ := cfg.Safety("web"); !slices.Contains(config.OwnAllows(s.GuardAllow), config.GuardAllow{Rule: "credentials", Command: cmd, Exact: true}) {
+		t.Errorf("project's allowances %+v", s.GuardAllow)
+	}
+	if a, _ := cfg.AllProjects(); !slices.Contains(a.GuardAllow, config.GuardAllow{Rule: "worktree-only", Command: "cp a /opt/b", Exact: true}) {
+		t.Errorf("all projects' allowances %+v", a.GuardAllow)
+	}
+	journal, _ := os.ReadFile(pr.Path("JOURNAL.md"))
+	for _, want := range []string{" human (app) guard.allow t-0001 credentials Bash: an HTTP call with credentials (this project)",
+		" human (app) guard.allow t-0002 worktree-only Bash: cp outside (" + config.AllProjectsName + ")",
+		" human (app) guard.keep t-0003 merge Bash: gh pr merge"} {
+		if !strings.Contains(string(journal), want) {
+			t.Errorf("journal lacks %q:\n%s", want, journal)
+		}
+	}
+	if strings.Contains(string(journal), "sekrit") {
+		t.Errorf("the command reached the journal:\n%s", journal)
 	}
 }
 

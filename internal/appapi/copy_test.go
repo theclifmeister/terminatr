@@ -288,6 +288,9 @@ func TestCopies(t *testing.T) {
 	check("transcript.watch", homeOf(transcriptResultOf), append(sessionHome(".Session"), ".Window"))
 	check("transcript.watch events", homeOf(transcriptEventOf), []string{".Event"})
 	check("session.file", homeOf(sessionFileOf), nil)
+	// The session refused it is the bridge's to tell; an answered
+	// refusal isn't listed.
+	check("guard.refusals", homeOf(guardRefusalOf), []string{".Session", ".Decision"})
 	// The app's pane input, into the line: its id picks the stream
 	// (TestParamsCopies).
 	check("pane.input", homeOf(func(in PaneInputParams) proto.PaneVTInput {
@@ -390,13 +393,13 @@ func TestAllowlist(t *testing.T) {
 		proto.MethodSessionPrompt, proto.MethodSessionWatch, proto.MethodTaskAsk,
 		proto.MethodTaskAccept, proto.MethodTaskSendBack, proto.MethodTaskDelegate, proto.MethodProjectOpen,
 		proto.MethodQuestionsOpen, proto.MethodTaskAdd, proto.MethodPaneVT, proto.MethodTranscriptWatch, MethodPaneInput,
-		proto.MethodSessionFile}
+		proto.MethodSessionFile, MethodGuardRefusals, MethodGuardDecide}
 	slices.Sort(want)
 	if got := MethodNames(); !slices.Equal(got, want) {
 		t.Errorf("methods %v, want %v", got, want)
 	}
 	for _, m := range Methods() {
-		if m.Stream != (len(m.Events) > 0 && m.Data != nil && m.event != nil) || m.Result == nil || m.result == nil ||
+		if m.Stream != (len(m.Events) > 0 && m.Data != nil && m.event != nil) || m.Result == nil || (m.result == nil) == (m.local == nil) ||
 			(m.Target != "") != (m.toStream != nil) {
 			t.Errorf("%s: incomplete %+v", m.Name, m)
 		}
@@ -407,7 +410,7 @@ func TestAllowlist(t *testing.T) {
 		}
 	}
 	for name, write := range map[string]bool{MethodPaneInput: true, proto.MethodPaneVT: false, proto.MethodTranscriptWatch: false,
-		proto.MethodSessionFile: false} {
+		proto.MethodSessionFile: false, MethodGuardRefusals: false, MethodGuardDecide: true} {
 		if m, _ := Lookup(name); m.Write != write {
 			t.Errorf("%s: write %v", name, m.Write)
 		}
