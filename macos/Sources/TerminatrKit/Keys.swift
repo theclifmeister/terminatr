@@ -85,35 +85,25 @@ extension SidebarTree {
         return words.allSatisfy { text.range(of: $0, options: [.caseInsensitive, .diacriticInsensitive]) != nil }
     }
 
-    /// The open threads of p the filter finds: by title, id, or its
-    /// task's ref and title.
+    /// The threads of p the filter finds, done ones too as the TUI's
+    /// filter does: by title, id, or its task's ref and title.
     public static func threads(of p: AppAPI.Project, matching query: String) -> [AppAPI.Thread] {
         p.threads.filter { t in
-            !t.record.done && matches(query, t.record.title, t.record.id, t.task?.ref ?? "", t.task?.title ?? "")
+            matches(query, t.record.title, t.record.id, t.task?.ref ?? "", t.task?.title ?? "")
         }
     }
 }
 
-extension SidebarTree {
-    /// Whether this server's project p lists its coordinator and threads:
-    /// always while one of its sessions is shown; else not once ← folded
-    /// it, and when → unfolded it or it expands (needs, selection).
-    public static func opens(_ p: AppAPI.Project, nav: Navigation, needs: Int) -> Bool {
-        if case .session(let ref) = nav.selection, ref.server.isEmpty, ref.project == p.slug { return true }
-        let key = Navigation.sectionKey(server: "", project: p.slug)
-        if nav.collapsed.contains(key) { return false }
-        return nav.unfolded.contains(key) || expands(p, selection: nav.selection, needs: needs)
-    }
-}
-
 extension Navigation {
-    /// ← on a project row: it no longer lists its sessions.
+    /// ← on a project row: it no longer lists its sessions (an active
+    /// one's fold, an inactive one's expand undone, as view.Tree's).
     public mutating func fold(_ key: String) {
         collapsed.insert(key)
         unfolded.remove(key)
     }
 
-    /// → on a project row: it lists them, needs or not.
+    /// → on a project row: it lists them again, or an inactive one
+    /// lists them dormant.
     public mutating func unfold(_ key: String) {
         collapsed.remove(key)
         unfolded.insert(key)

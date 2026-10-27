@@ -162,7 +162,7 @@ private func route(_ project: String?, _ session: String = "") -> Selection? {
     n.select(.session(SessionRef(project: "demo", thread: "t-0001", server: "mini")))
     n.collapsed = [Navigation.needsSection, Navigation.sectionKey(server: "mini", project: "demo")]
     n.showInactive = true
-    n.unfolded = [Navigation.moreKey(project: "terminatr")]
+    n.unfolded = [Navigation.moreKey(), Navigation.sectionKey(server: "", project: "old")]
     let back = Navigation.restore(n.encoded())
     #expect(back == n)
     #expect(back.selection == .session(SessionRef(project: "demo", thread: "t-0001", server: "mini")))
