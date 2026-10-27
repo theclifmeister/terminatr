@@ -195,3 +195,30 @@ extension Attention {
         }
     }
 }
+
+/// What a paired server's sidebar header says of it, after its name:
+/// offline, or what its panes let this server do (its switch, Panes).
+public struct PeerTag: Equatable, Sendable {
+    /// The tag's word: "offline", "write", "view" or "off".
+    public let word: String
+    /// Its SF Symbol; nil for offline, which has a dot instead.
+    public let symbol: String?
+    /// What VoiceOver says after "<name>, paired server, ".
+    public let spoken: String
+    public var offline: Bool { symbol == nil }
+
+    public static func of(_ peer: AppAPI.Peer) -> PeerTag {
+        if peer.state != "up" { return PeerTag(word: "offline", symbol: nil, spoken: "offline") }
+        switch peer.panes {
+        case "type": return PeerTag(word: "write", symbol: "keyboard", spoken: "write access")
+        case "view": return PeerTag(word: "view", symbol: "eye", spoken: "view only")
+        default: return PeerTag(word: "off", symbol: "eye.slash", spoken: "panes off")
+        }
+    }
+
+    /// The header's VoiceOver label: "work-laptop, paired server, write
+    /// access".
+    public static func label(_ peer: AppAPI.Peer) -> String {
+        "\(peer.name.isEmpty ? peer.alias : peer.name), paired server, \(of(peer).spoken)"
+    }
+}

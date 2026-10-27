@@ -222,3 +222,19 @@ private struct TreeCase: Decodable {
     let a = Attention.of(coordinator: coordinator(state: "blocked", reason: "permission"), in: p)
     #expect(a.waits && a.word == "allow?")
 }
+
+@Test func peerTag() {
+    // The header's tag after the server's name: offline first, else
+    // what its panes allow here, and VoiceOver hears it whole.
+    var p = AppAPI.Peer(alias: "work-laptop", state: "up", panes: "type")
+    #expect(PeerTag.of(p).word == "write" && !PeerTag.of(p).offline)
+    #expect(PeerTag.label(p) == "work-laptop, paired server, write access")
+    p.panes = "view"
+    #expect(PeerTag.of(p).word == "view")
+    p.panes = "off"
+    #expect(PeerTag.of(p).word == "off")
+    p.state = "connecting"
+    #expect(PeerTag.of(p).offline && PeerTag.label(p) == "work-laptop, paired server, offline")
+    p.name = "Work laptop"
+    #expect(PeerTag.label(p).hasPrefix("Work laptop, "))
+}
