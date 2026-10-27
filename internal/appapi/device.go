@@ -22,20 +22,18 @@ import (
 var answerMethods = []string{proto.MethodSessionAnswer, proto.MethodSessionApprove, proto.MethodTaskAccept,
 	proto.MethodTaskSendBack, proto.MethodQuestionsOpen}
 
-// neverDevice are methods no device level has: answering a guard refusal
-// changes the access rules, which stay the human's on a computer.
-var neverDevice = []string{MethodGuardDecide}
-
 // Allowed says whether a bridge at device level may call m; "" is the
-// Mac app's, which may call every method. view reads (every method
-// that isn't Write, the notice tray's and the guard's refusals too),
-// answer adds answerMethods, write everything but neverDevice; an
-// unknown level is view's.
+// Mac app's, which may call every method. No level has a method the
+// bridge answers in its own process (Local: the guard's refusals, whose
+// log and answers are the human's on a computer, and change the access
+// rules): on a device's link that process is the server. Otherwise view
+// reads (every method that isn't Write, the notice tray's too), answer
+// adds answerMethods, write everything; an unknown level is view's.
 func Allowed(m Method, level string) bool {
 	switch {
 	case level == "":
 		return true
-	case slices.Contains(neverDevice, m.Name):
+	case m.Local():
 		return false
 	case level == device.LevelWrite || !m.Write:
 		return true

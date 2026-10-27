@@ -165,3 +165,7 @@ type Method struct {
 	// decoded them; its error is an *Error.
 	local func(b *bridge, params any) (any, error)
 }
+
+// Local says whether the bridge answers m in its own process, never
+// through the server (the guard's refusals).
+func (m Method) Local() bool { return m.local != nil }

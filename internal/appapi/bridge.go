@@ -402,7 +402,10 @@ func (b *bridge) call(id int64, m Method, params any) {
 // human: the bridge's caller is the human, by Options.Caller and as
 // the server places it, asked once it answers.
 func (b *bridge) human() bool {
-	if b.o.Caller.IsAgent() {
+	// A device's bridge runs in the server, as the device: never the
+	// human at a computer (Allowed already keeps it from the local
+	// methods).
+	if b.o.Caller.IsAgent() || b.o.Level != nil {
 		return false
 	}
 	b.mu.Lock()

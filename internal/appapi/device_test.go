@@ -25,11 +25,19 @@ import (
 // write everything; the Mac app's bridge has every method.
 func TestAllowed(t *testing.T) {
 	for _, m := range appapi.Methods() {
-		if !appapi.Allowed(m, "") || appapi.Allowed(m, device.LevelWrite) == (m.Name == appapi.MethodGuardDecide) {
-			t.Errorf("%s: the Mac app's %v, write's %v", m.Name, appapi.Allowed(m, ""), appapi.Allowed(m, device.LevelWrite))
+		if !appapi.Allowed(m, "") {
+			t.Errorf("%s: not the Mac app's", m.Name)
 		}
-		if m.Name == appapi.MethodGuardDecide {
+		if m.Local() {
+			for _, l := range append(slices.Clone(device.Levels), "bogus") {
+				if appapi.Allowed(m, l) {
+					t.Errorf("%s answers in the bridge's process, and level %s has it", m.Name, l)
+				}
+			}
 			continue
+		}
+		if !appapi.Allowed(m, device.LevelWrite) {
+			t.Errorf("%s: not write's", m.Name)
 		}
 		if appapi.Allowed(m, device.LevelView) == m.Write {
 			t.Errorf("%s: view %v, write %v", m.Name, appapi.Allowed(m, device.LevelView), m.Write)
@@ -173,6 +181,28 @@ func TestDeviceLink(t *testing.T) {
 	if err := c.Call(proto.MethodTaskAdd, appapi.TaskAddParams{Project: "web", Title: "x"}, nil); code(err) != appapi.ErrLevel {
 		t.Fatalf("task.add at view: %v", err)
 	}
+	// The methods the bridge answers in its own process (the guard's
+	// refusals) are the human's at a computer: on a device's link that
+	// process is the server, so the hello lacks them and a call answers
+	// device-level, whatever the params.
+	locals := 0
+	for _, m := range appapi.Methods() {
+		if !m.Local() {
+			continue
+		}
+		locals++
+		if slices.Contains(c.Hello.Methods, m.Name) {
+			t.Errorf("the device's hello lists %s", m.Name)
+		}
+		for _, params := range []any{nil, map[string]string{"id": "G1", "how": "all"}} {
+			if err := c.Call(m.Name, params, nil); code(err) != appapi.ErrLevel && code(err) != appapi.ErrHumanOnly {
+				t.Errorf("%s from a device: %v", m.Name, err)
+			}
+		}
+	}
+	if locals < 2 || !slices.Contains(c.Hello.Methods, proto.MethodSessionList) {
+		t.Fatalf("%d local methods; hello %v", locals, c.Hello.Methods)
+	}
 	// The status shows the link up, as the device.
 	sc, err := client.Connect(p, false)
 	if err != nil {
@@ -195,5 +225,34 @@ func TestDeviceLink(t *testing.T) {
 	conn.SetReadDeadline(time.Now().Add(5 * time.Second))
 	if err := c.Call(proto.MethodSessionList, nil, nil); err == nil {
 		t.Fatal("the removed device's link still answers")
+	}
+}
+
+// TestDeviceBridgeNeverHuman: the second check behind Allowed. A bridge
+// that serves a device (Options.Level set) never counts its caller as
+// the human for the methods it answers in its own process, even with a
+// level that would let a call through.
+func TestDeviceBridgeNeverHuman(t *testing.T) {
+	p := testPaths(t)
+	startServer(t, p)
+	inR, inW := io.Pipe()
+	outR, outW := io.Pipe()
+	go func() {
+		appapi.Serve(inR, outW, appapi.Options{Level: func() (string, <-chan struct{}) { return "", nil },
+			Dial: func() (*client.Client, error) { return client.ConnectAs(p, false, proto.ClientApp) }})
+		outW.Close()
+	}()
+	t.Cleanup(func() { inW.Close() })
+	c, err := apptest.New(outR, inW)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, m := range appapi.Methods() {
+		if !m.Local() {
+			continue
+		}
+		if err := c.Call(m.Name, nil, nil); code(err) != appapi.ErrHumanOnly {
+			t.Errorf("%s: %v", m.Name, err)
+		}
 	}
 }
