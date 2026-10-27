@@ -15,7 +15,7 @@ struct MainWindow: View {
     @Environment(\.theme) private var theme
     /// The inspector's width as it was left (InspectorWidth saves it),
     /// read once: its ideal stays put while the user drags it.
-    private static let inspectorWidth = UserDefaults.standard.object(forKey: inspectorWidthKey) as? Double ?? 270
+    private static let inspectorWidth = InspectorColumn.ideal(saved: UserDefaults.standard.object(forKey: inspectorWidthKey) as? Double)
     static let inspectorWidthKey = "inspectorWidth"
     /// The needs rotor's entries are the sidebar's need rows.
     @Namespace private var needsRotor
@@ -39,7 +39,7 @@ struct MainWindow: View {
                 .inspector(isPresented: Binding(get: { app.inspector && app.selectedRef != nil },
                                                 set: { if app.selectedRef != nil { app.inspector = $0 } })) {
                     inspector
-                        .inspectorColumnWidth(min: 240, ideal: Self.inspectorWidth, max: 360)
+                        .inspectorColumnWidth(min: InspectorColumn.min, ideal: Self.inspectorWidth, max: InspectorColumn.max)
                         .background { Frost() }
                         .background(InspectorWidth(key: Self.inspectorWidthKey))
                 }
