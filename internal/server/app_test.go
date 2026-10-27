@@ -215,6 +215,43 @@ func TestTaskAdd(t *testing.T) {
 	}
 }
 
+// TestTaskGet: task.get reads a task of the board with its notes and
+// steps; an unknown task or project is refused with its code.
+func TestTaskGet(t *testing.T) {
+	p := testPaths(t)
+	startServer(t, p)
+	pr, err := project.New(project.Options{Slug: "web"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pr.Tasks().Add(human, []tasks.NewTask{{Title: "Later", Status: "open", Notes: "Why.", Steps: []string{"a", "b"}}}); err != nil {
+		t.Fatal(err)
+	}
+	app, err := client.DialAs(p, proto.ClientApp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer app.Close()
+	var res SideTask
+	if err := app.Call(proto.MethodTaskGet, proto.TaskGetParams{Project: "web", Task: "T1"}, &res); err != nil ||
+		res.ID != 1 || res.Title != "Later" || res.Notes != "Why." || len(res.Steps) != 2 || res.Steps[1].Text != "b" {
+		t.Fatalf("task.get: %+v %v", res, err)
+	}
+	for _, c := range []struct {
+		p    proto.TaskGetParams
+		code string
+	}{
+		{proto.TaskGetParams{Project: "web", Task: "T9"}, "unknown-task"},
+		{proto.TaskGetParams{Project: "web", Task: "x"}, proto.ErrBadParams},
+		{proto.TaskGetParams{Project: "nope", Task: "T1"}, proto.ErrBadParams},
+	} {
+		var perr *proto.Error
+		if err := app.Call(proto.MethodTaskGet, c.p, nil); !errors.As(err, &perr) || perr.Code != c.code {
+			t.Errorf("task.get %+v: %v, want %s", c.p, err, c.code)
+		}
+	}
+}
+
 // TestProjectOpen: project.open starts the project's coordinator with
 // its coordinator agent, journaled as the caller, answers the running
 // one after, and refuses an inactive or unknown project.

@@ -55,6 +55,10 @@ private func item(_ id: String) -> PaletteItem? {
     #expect(review.act == .review(project: "demo", task: "T1"))
     #expect(review.act?.verb == "review")
     #expect(review.go == .project("demo"))
+    // ↩ on either shows its task in the task view; an approval has none.
+    #expect(review.task == PaletteItem.TaskKey(project: "demo", task: "T1"))
+    #expect(item("need:blocked:demo:T3")?.task == PaletteItem.TaskKey(project: "demo", task: "T3"))
+    #expect(approval.task == nil)
 }
 
 @Test func paletteSessions() throws {
@@ -86,6 +90,8 @@ private func item(_ id: String) -> PaletteItem? {
     #expect(tasks[2].go == .session(SessionRef(project: "demo", thread: "t-1")))
     #expect(tasks[3].go == .session(SessionRef(project: "demo", thread: "t-2")))
     #expect(tasks[4].go == .project("demo"))
+    // ↩ shows each in the task view; Open goes as above.
+    #expect(tasks.allSatisfy { $0.task?.project == "demo" && $0.task?.task == $0.id.replacingOccurrences(of: "task:demo/", with: "") })
 }
 
 @Test func paletteSearch() {

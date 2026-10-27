@@ -106,6 +106,8 @@ final class AppModel {
     var welcome = false
     /// The project File › New Task… adds to while its sheet shows.
     var newTask: String?
+    /// The task the task view shows (TaskSheet), nil for none.
+    var taskShown: TaskShown?
     /// What the bridge did: Settings › Advanced shows it.
     private(set) var log = BridgeLog()
     /// The need ⌥⌘↓ or ⌥⌘↑ showed last (Need.step).
@@ -627,6 +629,12 @@ final class AppModel {
     /// (task.accept, the TUI's A): false when it was asked already.
     func accept(project: String, task: String) async throws -> Bool {
         try await connected().call(AppAPI.Methods.taskAccept, AppAPI.TaskParams(project: project, task: task)).asked
+    }
+
+    /// Reads task of project whole, its notes and steps too (task.get,
+    /// app API 14): a board task comes without them in the watch.
+    func getTask(project: String, task: String) async throws -> AppAPI.Task {
+        try await connected().call(AppAPI.Methods.taskGet, AppAPI.TaskGetParams(project: project, task: task))
     }
 
     /// Asks project's coordinator to send task back with the user's
