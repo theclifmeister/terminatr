@@ -105,7 +105,7 @@ struct SessionWindow: View {
             }
             .inspector(isPresented: $inspector) {
                 Inspector(model: model, session: app.session(of: model))
-                    .inspectorColumnWidth(min: 240, ideal: 270, max: 360)
+                    .inspectorColumnWidth(min: InspectorColumn.min, ideal: InspectorColumn.min, max: InspectorColumn.max)
                     .background { Frost() }
             }
             .foregroundStyle(theme.ink)
