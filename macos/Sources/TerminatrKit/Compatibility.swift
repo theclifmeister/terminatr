@@ -24,6 +24,18 @@ public enum Compatibility: Equatable, Sendable {
     /// The app API that has session.file: the attachment cards need it.
     public static let sessionFileAPI = 11
 
+    /// The app API that has coordinator.clear, project.active and
+    /// session.list's context_hint: Save & Clear, Activate and Deactivate
+    /// need it.
+    public static let projectControlsAPI = 13
+
+    /// Whether hello's tm saves and clears coordinators and activates
+    /// projects from the app.
+    public static func controlsProjects(_ hello: AppAPI.Hello) -> Bool {
+        hello.appApi >= projectControlsAPI && hello.methods.contains(AppAPI.Methods.coordinatorClear.name)
+            && hello.methods.contains(AppAPI.Methods.projectActive.name)
+    }
+
     /// Whether hello's tm sends the conversation's files (session.file),
     /// its server too.
     public static func sendsFiles(_ hello: AppAPI.Hello) -> Bool {

@@ -45,6 +45,9 @@ public struct PaletteItem: Identifiable, Hashable, Sendable {
         case nextNeed, previousNeed, inactive, tab, inspector, find, filter, back, forward, shortcuts
         /// Picks a theme (T770).
         case theme(ThemeName)
+        /// The shown project's Save & Clear, Activate or Deactivate (app
+        /// API 13), asked first as the window asks.
+        case ask(ProjectAsk)
     }
 
     public let id: String
@@ -174,6 +177,24 @@ public enum Palette {
             let first = found.filter { $0.title.range(of: q, options: [.caseInsensitive, .diacriticInsensitive, .anchored]) != nil }
             out += Array((first + found.filter { !first.contains($0) }).prefix(perGroup))
         }
+        return out
+    }
+
+    /// The Actions group's rows for project p, shown, with this tm's
+    /// project controls (app API 13): Save & Clear while its coordinator
+    /// runs (coordinator, its session), and Activate or Deactivate.
+    public static func projectActions(_ p: AppAPI.Project, coordinator: AppAPI.Session?, sessions: [AppAPI.Session],
+                                      hint: Int) -> [PaletteItem] {
+        var out: [PaletteItem] = []
+        if coordinator != nil {
+            let ctx = ContextUse.of(coordinator, hint: hint)
+            out.append(PaletteItem(id: "cmd:saveclear", group: .actions, title: "Save & clear \(p.slug)'s coordinator",
+                                   detail: ctx.map { "context \($0.word)" } ?? "", tone: ctx?.tone,
+                                   command: .ask(.saveClear(project: p.slug)), keywords: "save clear context tm clear saveclear"))
+        }
+        let a = ProjectAsk.toggle(p, sessions: sessions)
+        out.append(PaletteItem(id: "cmd:active", group: .actions, title: "\(a.verb) \(p.slug)", command: .ask(a),
+                               keywords: "activate deactivate project pause resume on off"))
         return out
     }
 
