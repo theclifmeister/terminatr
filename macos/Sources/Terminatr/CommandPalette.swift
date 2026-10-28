@@ -243,6 +243,13 @@ struct CommandPalette: View {
         if app.controlsProjects, let p = app.shownProject {
             out += Palette.projectActions(p, coordinator: app.coordinatorSession(p.slug), sessions: app.sessions, hint: app.contextHint)
         }
+        if app.actsOnSidebar {
+            if let p = app.shownProject {
+                out += Palette.sideActions(p, coordinator: app.coordinatorSession(p.slug), remote: app.controlsRemote)
+            }
+            out.append(PaletteItem(id: "cmd:newproject", group: .actions, title: "New project", command: .newProject,
+                                   keys: "⇧⌘N", keywords: "create add make project"))
+        }
         out += [
             PaletteItem(id: "cmd:filter", group: .actions, title: "Filter the sidebar", command: .filter, keys: "⌥⌘F"),
             PaletteItem(id: "cmd:back", group: .actions, title: "Back", command: .back, keys: "⌘["),
@@ -266,6 +273,8 @@ struct CommandPalette: View {
         case .shortcuts: app.shortcuts = true
         case .theme(let t): UserDefaults.standard.set(t.rawValue, forKey: ThemeName.key)
         case .ask(let a): app.ask(a)
+        case .newProject: app.showNewProject()
+        case .writeLink(let slug): if let p = app.project(slug) { app.showLinkMessage(p) }
         }
     }
 }

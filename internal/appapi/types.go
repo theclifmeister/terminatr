@@ -149,6 +149,39 @@ type (
 		Project string `json:"project"`
 		Active  bool   `json:"active"`
 	}
+	// ProjectPinParams are project.pin's (app API 22): the project, and
+	// whether to pin it to the top of the sidebar (false: unpin it).
+	ProjectPinParams struct {
+		Project string `json:"project"`
+		Pinned  bool   `json:"pinned"`
+	}
+	// ProjectNewParams are project.new's (app API 22): its name, which
+	// becomes a lower-case slug, and the folders of its repos, if any.
+	ProjectNewParams struct {
+		Project string   `json:"project"`
+		Repos   []string `json:"repos,omitempty"`
+	}
+	// AdoptRequestParams are session.adopt.request's (app API 22): ask
+	// Project's coordinator to adopt session ID, an agent session
+	// outside the projects, as a thread; Withdraw takes that back.
+	AdoptRequestParams struct {
+		ID       string `json:"id"`
+		Project  string `json:"project"`
+		Withdraw bool   `json:"withdraw,omitempty"`
+	}
+	// RemoteParams are session.remote's (app API 22): turn remote
+	// control of coordinator session ID on or off.
+	RemoteParams struct {
+		ID string `json:"id"`
+		On bool   `json:"on"`
+	}
+	// LinkSendParams are link.send's (app API 22): the user's message
+	// Text from Project to Peer, a project it is linked with.
+	LinkSendParams struct {
+		Project string `json:"project"`
+		Peer    string `json:"peer"`
+		Text    string `json:"text"`
+	}
 )
 
 // Empty is the result of a method that answers nothing.
@@ -1031,6 +1064,50 @@ func projectOpenOf(r proto.ProjectOpenResult) ProjectOpen {
 
 func coordinatorClearOf(r proto.CoordinatorClearResult) CoordinatorClear {
 	return CoordinatorClear{Session: r.Session}
+}
+
+// ProjectPinned is project.pin's result: whether the setting changed.
+type ProjectPinned struct {
+	Changed bool `json:"changed"`
+}
+
+// ProjectNew is project.new's result: the project's slug, and NoAgent
+// when no agent is installed to run its coordinator.
+type ProjectNew struct {
+	Project string `json:"project"`
+	NoAgent bool   `json:"no_agent,omitempty"`
+}
+
+// AdoptRequested is session.adopt.request's result: false when an item
+// already asks the coordinator (or after a withdraw).
+type AdoptRequested struct {
+	Asked bool `json:"asked"`
+}
+
+// Remote is session.remote's result: the coordinator's remote control
+// now, How it was applied ("unchanged", "prompted", "restarted"), and
+// Held when it stays off against the project's setting until the
+// coordinator is started anew.
+type Remote struct {
+	RemoteControl bool   `json:"remote_control"`
+	How           string `json:"how"`
+	Held          bool   `json:"held,omitempty"`
+}
+
+func projectPinnedOf(r proto.ProjectPinResult) ProjectPinned {
+	return ProjectPinned{Changed: r.Changed}
+}
+
+func projectNewOf(r proto.ProjectNewResult) ProjectNew {
+	return ProjectNew{Project: r.Project, NoAgent: r.NoAgent}
+}
+
+func adoptRequestedOf(r proto.SessionAdoptAskResult) AdoptRequested {
+	return AdoptRequested{Asked: r.Asked}
+}
+
+func remoteOf(r proto.SessionRemoteResult) Remote {
+	return Remote{RemoteControl: r.RemoteControl, How: r.How, Held: r.Held}
 }
 
 func projectActiveOf(r proto.ProjectActiveResult) ProjectActive {

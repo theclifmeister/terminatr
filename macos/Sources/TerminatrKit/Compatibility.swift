@@ -56,6 +56,24 @@ public enum Compatibility: Equatable, Sendable {
     /// refusals' cards under Needs you need it.
     public static let guardAPI = 18
 
+    /// The app API that has project.pin, project.new,
+    /// session.adopt.request, session.remote and link.send: the sidebar's
+    /// and the sessions' acts (the TUI's P, +, O, prefix+r and M) need it.
+    public static let sideActsAPI = 22
+
+    /// Whether hello's tm pins, makes and adopts into projects and
+    /// writes on their links from the app; its server too (side-acts).
+    public static func actsOnSidebar(_ hello: AppAPI.Hello) -> Bool {
+        hello.appApi >= sideActsAPI && hello.methods.contains(AppAPI.Methods.projectPin.name)
+            && (hello.server?.caps ?? []).contains("side-acts")
+    }
+
+    /// Whether hello's tm turns a coordinator's remote control on or off
+    /// from the app (session.remote).
+    public static func controlsRemote(_ hello: AppAPI.Hello) -> Bool {
+        hello.appApi >= sideActsAPI && hello.methods.contains(AppAPI.Methods.sessionRemote.name)
+    }
+
     /// Whether hello's tm sends the conversation's files (session.file),
     /// its server too.
     public static func sendsFiles(_ hello: AppAPI.Hello) -> Bool {

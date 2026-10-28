@@ -183,11 +183,7 @@ func (s *ServerSource) WithdrawAdopt(slug, id string) error {
 // adoptWhere says what runs in session s and where, for an adopt ask:
 // "claude in /src/app on fix-login"; home, when set, is shortened to ~.
 func adoptWhere(s proto.SessionInfo, home string) string {
-	out := s.Agent + " in " + shortHome(s.Cwd, home)
-	if pl, ok := worktree.Locate(s.Cwd); ok && pl.Branch != "" {
-		out += " on " + pl.Branch
-	}
-	return out
+	return server.AdoptWhere(s, shortHome(s.Cwd, home))
 }
 
 func (s *ServerSource) OpenQuestions(slug string) (proto.QuestionsOpenResult, error) {

@@ -57,8 +57,13 @@ public struct PaletteItem: Identifiable, Hashable, Sendable {
         /// Picks a theme (T770).
         case theme(ThemeName)
         /// The shown project's Save & Clear, Activate or Deactivate (app
-        /// API 13), asked first as the window asks.
+        /// API 13), Pin or Unpin and remote control (app API 22), asked
+        /// first as the window asks.
         case ask(ProjectAsk)
+        /// New Project… and the shown project's Write to Linked
+        /// Project… (app API 22): their sheets.
+        case newProject
+        case writeLink(project: String)
     }
 
     public let id: String
@@ -212,6 +217,26 @@ public enum Palette {
         let a = ProjectAsk.toggle(p, sessions: sessions)
         out.append(PaletteItem(id: "cmd:active", group: .actions, title: "\(a.verb) \(p.slug)", command: .ask(a),
                                keywords: "activate deactivate project pause resume on off"))
+        return out
+    }
+
+    /// The Actions group's rows for project p, shown, with this tm's
+    /// sidebar acts (app API 22): Pin or Unpin, Write to Linked Project
+    /// while a link of it sends, and, with remote (session.remote), its
+    /// running coordinator's remote control on or off.
+    public static func sideActions(_ p: AppAPI.Project, coordinator: AppAPI.Session?, remote: Bool) -> [PaletteItem] {
+        let pin = ProjectAsk.pinToggle(p)
+        var out = [PaletteItem(id: "cmd:pin", group: .actions, title: "\(pin.verb): \(p.slug)", command: .ask(pin),
+                               keywords: "pin unpin top sidebar order")]
+        if remote, let coordinator {
+            let r = ProjectAsk.remoteToggle(coordinator)
+            out.append(PaletteItem(id: "cmd:remote", group: .actions, title: "\(r.verb) for \(p.slug)", command: .ask(r),
+                                   keywords: "remote control device continue"))
+        }
+        if !LinkMessageForm.writable(p).isEmpty {
+            out.append(PaletteItem(id: "cmd:writelink", group: .actions, title: "Write to a project linked with \(p.slug)",
+                                   command: .writeLink(project: p.slug), keywords: "link message write send network"))
+        }
         return out
     }
 

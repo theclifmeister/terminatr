@@ -123,6 +123,17 @@ func init() {
 		// this server's projects, or declined.
 		unary(proto.MethodLinkAct, true, linkActParams, linkActOf),
 		unary(proto.MethodPeerShareAnswer, true, shareAnswerParams, shareAnswerOf),
+		// The sidebar's and the sessions' acts (app API 22; the server's
+		// caps say side-acts, but for session.remote): a project pinned
+		// or unpinned (P), a project made (+), an agent session outside
+		// the projects offered to a coordinator to adopt (O), a
+		// coordinator's remote control turned on or off (prefix+r), and a
+		// message written as the user on a project's link (M).
+		unary(proto.MethodProjectPin, true, projectPinParams, projectPinnedOf),
+		unary(proto.MethodProjectNew, true, projectNewParams, projectNewOf),
+		unary(proto.MethodSessionAdoptRequest, true, adoptRequestParams, adoptRequestedOf),
+		unary(proto.MethodSessionRemote, true, remoteParams, remoteOf),
+		unary(proto.MethodLinkSend, true, linkSendParams, linkActOf),
 
 		// The guard's refusals, read and answered one at a time (app
 		// API 18): the bridge's own, from the human's log (guard.go).
@@ -400,6 +411,26 @@ func linkActParams(p LinkActParams) proto.LinkActParams {
 
 func shareAnswerParams(p ShareAnswerParams) proto.PeerShareAnswerParams {
 	return proto.PeerShareAnswerParams{ID: p.ID, Accept: p.Accept, Project: p.Project}
+}
+
+func projectPinParams(p ProjectPinParams) proto.ProjectPinParams {
+	return proto.ProjectPinParams{Project: p.Project, Pinned: p.Pinned}
+}
+
+func projectNewParams(p ProjectNewParams) proto.ProjectNewParams {
+	return proto.ProjectNewParams{Project: p.Project, Repos: append([]string(nil), p.Repos...)}
+}
+
+func adoptRequestParams(p AdoptRequestParams) proto.SessionAdoptRequestParams {
+	return proto.SessionAdoptRequestParams{ID: p.ID, Project: p.Project, Withdraw: p.Withdraw}
+}
+
+func remoteParams(p RemoteParams) proto.SessionRemoteParams {
+	return proto.SessionRemoteParams{ID: p.ID, On: p.On}
+}
+
+func linkSendParams(p LinkSendParams) proto.LinkSendParams {
+	return proto.LinkSendParams{Project: p.Project, Peer: p.Peer, Text: p.Text}
 }
 
 func memoryListParams(p ProjectParams) proto.ProjectFilesParams {

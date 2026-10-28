@@ -6,7 +6,37 @@ import Foundation
 /// The terminatr app API (docs/SPEC.md §3.8): what tm app bridge answers.
 public enum AppAPI {
     /// The app API version this app was generated against.
-    public static let version = 21
+    public static let version = 22
+
+    public struct AdoptRequestParams: Codable, Sendable, Hashable {
+        public var id: String
+        public var project: String
+        public var withdraw: Bool
+
+        public init(id: String, project: String, withdraw: Bool = false) {
+            self.id = id
+            self.project = project
+            self.withdraw = withdraw
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case id
+            case project
+            case withdraw
+        }
+    }
+
+    public struct AdoptRequested: Codable, Sendable, Hashable {
+        public var asked: Bool
+
+        public init(asked: Bool) {
+            self.asked = asked
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case asked
+        }
+    }
 
     public struct AnswerParams: Codable, Sendable, Hashable {
         public var id: String
@@ -533,6 +563,24 @@ public enum AppAPI {
             case file
             case size
             case allow
+        }
+    }
+
+    public struct LinkSendParams: Codable, Sendable, Hashable {
+        public var project: String
+        public var peer: String
+        public var text: String
+
+        public init(project: String, peer: String, text: String) {
+            self.project = project
+            self.peer = peer
+            self.text = text
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case project
+            case peer
+            case text
         }
     }
 
@@ -1073,6 +1121,36 @@ public enum AppAPI {
         }
     }
 
+    public struct ProjectNew: Codable, Sendable, Hashable {
+        public var project: String
+        public var noAgent: Bool
+
+        public init(project: String, noAgent: Bool = false) {
+            self.project = project
+            self.noAgent = noAgent
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case project
+            case noAgent = "no_agent"
+        }
+    }
+
+    public struct ProjectNewParams: Codable, Sendable, Hashable {
+        public var project: String
+        public var repos: [String]
+
+        public init(project: String, repos: [String] = []) {
+            self.project = project
+            self.repos = repos
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case project
+            case repos
+        }
+    }
+
     public struct ProjectOpen: Codable, Sendable, Hashable {
         public var session: String
         public var started: Bool
@@ -1115,6 +1193,33 @@ public enum AppAPI {
 
         enum CodingKeys: String, CodingKey {
             case project
+        }
+    }
+
+    public struct ProjectPinParams: Codable, Sendable, Hashable {
+        public var project: String
+        public var pinned: Bool
+
+        public init(project: String, pinned: Bool) {
+            self.project = project
+            self.pinned = pinned
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case project
+            case pinned
+        }
+    }
+
+    public struct ProjectPinned: Codable, Sendable, Hashable {
+        public var changed: Bool
+
+        public init(changed: Bool) {
+            self.changed = changed
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case changed
         }
     }
 
@@ -1268,6 +1373,39 @@ public enum AppAPI {
             case session
             case via
             case open
+        }
+    }
+
+    public struct Remote: Codable, Sendable, Hashable {
+        public var remoteControl: Bool
+        public var how: String
+        public var held: Bool
+
+        public init(remoteControl: Bool, how: String, held: Bool = false) {
+            self.remoteControl = remoteControl
+            self.how = how
+            self.held = held
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case remoteControl = "remote_control"
+            case how
+            case held
+        }
+    }
+
+    public struct RemoteParams: Codable, Sendable, Hashable {
+        public var id: String
+        public var on: Bool
+
+        public init(id: String, on: Bool) {
+            self.id = id
+            self.on = on
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case id
+            case on
         }
     }
 
@@ -2317,6 +2455,7 @@ public enum AppAPI {
         public static let libraryList = Call<ProjectParams, Library>("library.list", write: false)
         public static let libraryRead = Call<LibraryReadParams, LibraryChunk>("library.read", write: false)
         public static let linkAct = Call<LinkActParams, LinkActResult>("link.act", write: true)
+        public static let linkSend = Call<LinkSendParams, LinkActResult>("link.send", write: true)
         public static let memoryList = Call<ProjectParams, MemoryFiles>("memory.list", write: false)
         public static let memoryRead = Call<MemoryReadParams, MemoryText>("memory.read", write: false)
         public static let notifyClaim = Call<NoticeParams, NoticeResult>("notify.claim", write: false)
@@ -2326,15 +2465,19 @@ public enum AppAPI {
         public static let peerList = Call<NoParams, PeerList>("peer.list", write: false)
         public static let peerShareAnswer = Call<ShareAnswerParams, ShareAnswer>("peer.share-answer", write: true)
         public static let projectActive = Call<ProjectActiveParams, ProjectActive>("project.active", write: true)
+        public static let projectNew = Call<ProjectNewParams, ProjectNew>("project.new", write: true)
         public static let projectOpen = Call<ProjectOpenParams, ProjectOpen>("project.open", write: true)
+        public static let projectPin = Call<ProjectPinParams, ProjectPinned>("project.pin", write: true)
         public static let projectsWatch = Subscription<ProjectsWatchParams, Projects, Projects>("projects.watch", events: ["projects.changed"])
         public static let questionsOpen = Call<ProjectParams, QuestionsOpen>("questions.open", write: true)
+        public static let sessionAdoptRequest = Call<AdoptRequestParams, AdoptRequested>("session.adopt.request", write: true)
         public static let sessionAnswer = Call<AnswerParams, AnswerResult>("session.answer", write: true)
         public static let sessionApprove = Call<ApproveParams, ApproveResult>("session.approve", write: true)
         public static let sessionFile = Call<SessionFileParams, SessionFile>("session.file", write: false)
         public static let sessionKeys = Call<KeysParams, Empty>("session.keys", write: true)
         public static let sessionList = Call<NoParams, SessionList>("session.list", write: false)
         public static let sessionPrompt = Call<PromptParams, PromptResult>("session.prompt", write: true)
+        public static let sessionRemote = Call<RemoteParams, Remote>("session.remote", write: true)
         public static let sessionUpload = Call<UploadParams, Upload>("session.upload", write: true)
         public static let sessionWatch = Subscription<SessionIDParams, Watch, Watch>("session.watch", events: ["watch.changed"])
         public static let taskAccept = Call<TaskParams, TaskAskResult>("task.accept", write: true)
@@ -2347,6 +2490,22 @@ public enum AppAPI {
         public static let taskTemplates = Call<ProjectParams, Templates>("task.templates", write: false)
         public static let transcriptPage = Call<TranscriptPageParams, TranscriptPage>("transcript.page", write: false)
         public static let transcriptWatch = Subscription<TranscriptParams, TranscriptResult, TranscriptEvent>("transcript.watch", events: ["transcript.reset", "transcript.items", "transcript.status", "transcript.closed"])
+    }
+}
+
+extension AppAPI.AdoptRequestParams {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try c.decode(String.self, forKey: .id)
+        self.project = try c.decode(String.self, forKey: .project)
+        self.withdraw = try c.decodeIfPresent(Bool.self, forKey: .withdraw) ?? false
+    }
+}
+
+extension AppAPI.AdoptRequested {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.asked = try c.decode(Bool.self, forKey: .asked)
     }
 }
 
@@ -2593,6 +2752,15 @@ extension AppAPI.LinkNeed {
     }
 }
 
+extension AppAPI.LinkSendParams {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.project = try c.decode(String.self, forKey: .project)
+        self.peer = try c.decode(String.self, forKey: .peer)
+        self.text = try c.decode(String.self, forKey: .text)
+    }
+}
+
 extension AppAPI.MemoryFile {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -2835,6 +3003,22 @@ extension AppAPI.ProjectActiveParams {
     }
 }
 
+extension AppAPI.ProjectNew {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.project = try c.decode(String.self, forKey: .project)
+        self.noAgent = try c.decodeIfPresent(Bool.self, forKey: .noAgent) ?? false
+    }
+}
+
+extension AppAPI.ProjectNewParams {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.project = try c.decode(String.self, forKey: .project)
+        self.repos = try c.decodeIfPresent([String].self, forKey: .repos) ?? []
+    }
+}
+
 extension AppAPI.ProjectOpen {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -2856,6 +3040,21 @@ extension AppAPI.ProjectParams {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.project = try c.decode(String.self, forKey: .project)
+    }
+}
+
+extension AppAPI.ProjectPinParams {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.project = try c.decode(String.self, forKey: .project)
+        self.pinned = try c.decode(Bool.self, forKey: .pinned)
+    }
+}
+
+extension AppAPI.ProjectPinned {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.changed = try c.decode(Bool.self, forKey: .changed)
     }
 }
 
@@ -2931,6 +3130,23 @@ extension AppAPI.QuestionsOpen {
         self.session = try c.decode(String.self, forKey: .session)
         self.via = try c.decode(String.self, forKey: .via)
         self.open = try c.decode(Int.self, forKey: .open)
+    }
+}
+
+extension AppAPI.Remote {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.remoteControl = try c.decode(Bool.self, forKey: .remoteControl)
+        self.how = try c.decode(String.self, forKey: .how)
+        self.held = try c.decodeIfPresent(Bool.self, forKey: .held) ?? false
+    }
+}
+
+extension AppAPI.RemoteParams {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try c.decode(String.self, forKey: .id)
+        self.on = try c.decode(Bool.self, forKey: .on)
     }
 }
 

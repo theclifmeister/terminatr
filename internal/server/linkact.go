@@ -44,10 +44,7 @@ func linkAction(c callCtx, pr *project.Project, p proto.LinkActParams) (string, 
 		if err != nil {
 			return "", err
 		}
-		if !m.Due.IsZero() {
-			return fmt.Sprintf("queued %s for %s: over the link's rate, it goes in order %s", m.ID, link.Shown(m.Peer), link.DueWords(m)), nil
-		}
-		return "sent " + m.ID + " to " + link.Shown(m.Peer), nil
+		return sentWords(m), nil
 	case proto.LinkDrop:
 		m, err := link.Drop(who, pr, p.ID, false)
 		if err != nil {

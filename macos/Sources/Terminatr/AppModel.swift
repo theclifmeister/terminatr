@@ -754,10 +754,33 @@ final class AppModel {
     /// window's alert.
     var askSaid: (title: String, text: String)?
 
+    /// Whether this tm pins, makes and adopts into projects and writes
+    /// on their links from the app (app API 22).
+    var actsOnSidebar: Bool {
+        if case .connected(let h) = phase { return Compatibility.actsOnSidebar(h) }
+        return false
+    }
+
+    /// Whether this tm turns a coordinator's remote control on or off
+    /// from the app (app API 22).
+    var controlsRemote: Bool {
+        if case .connected(let h) = phase { return Compatibility.controlsRemote(h) }
+        return false
+    }
+
+    /// Whether this tm does a.
+    func can(_ a: ProjectAsk) -> Bool {
+        switch a {
+        case .remote: controlsRemote
+        case .pin, .adopt, .withdrawAdopt: actsOnSidebar
+        default: controlsProjects
+        }
+    }
+
     /// Asks about a, or does it when it asks nothing (activating, or
-    /// deactivating a project that runs nothing).
+    /// deactivating a project that runs nothing, pinning).
     func ask(_ a: ProjectAsk) {
-        guard controlsProjects else { return }
+        guard can(a) else { return }
         if a.asks {
             asking = a
             showWindow?()
@@ -766,7 +789,8 @@ final class AppModel {
         }
     }
 
-    /// Does a, once the user said so: coordinator.clear or project.active.
+    /// Does a, once the user said so: coordinator.clear, project.active,
+    /// project.pin, session.remote or session.adopt.request.
     func act(_ a: ProjectAsk) {
         Task {
             do {
@@ -779,6 +803,22 @@ final class AppModel {
                     let r = try await connected().call(AppAPI.Methods.projectActive, AppAPI.ProjectActiveParams(project: p, active: on))
                     if let lost = ProjectAsk.words(r, project: p) { askSaid = ("Not everything resumed", lost) }
                     listSessions()
+                case .pin(let p, let on):
+                    _ = try await connected().call(AppAPI.Methods.projectPin, AppAPI.ProjectPinParams(project: p, pinned: on))
+                case .remote(let p, let id, let on):
+                    let r = try await connected().call(AppAPI.Methods.sessionRemote, AppAPI.RemoteParams(id: id, on: on))
+                    // Said when the coordinator restarted or stays off
+                    // against the setting; else the row shows it.
+                    if r.how == "restarted" || r.held || r.how == "unchanged" {
+                        askSaid = ("Remote control", ProjectAsk.words(r, project: p))
+                    }
+                    listSessions()
+                case .adopt(let p, let id, _):
+                    let r = try await connected().call(AppAPI.Methods.sessionAdoptRequest, AppAPI.AdoptRequestParams(id: id, project: p))
+                    if !r.asked { askSaid = ("Already asked", "\(id) is already waiting on \(p)'s coordinator to adopt it.") }
+                case .withdrawAdopt(let p, let id):
+                    _ = try await connected().call(AppAPI.Methods.sessionAdoptRequest,
+                                                   AppAPI.AdoptRequestParams(id: id, project: p, withdraw: true))
                 }
             } catch {
                 askSaid = ("\(a.verb) didn't work", Dashboard.words(error))
@@ -836,6 +876,41 @@ final class AppModel {
         case .session(let ref) where !ref.isRemote: ref.project
         default: nil
         }
+    }
+
+    /// File › New Project… (⇧⌘N): its sheet, shown.
+    var newProject = false
+
+    /// The project and link the Write to Linked Project sheet writes
+    /// from and to.
+    var linkMessage: (project: String, peer: String)?
+
+    /// File › New Project…: the sheet.
+    func showNewProject() {
+        guard actsOnSidebar else { return }
+        newProject = true
+        showWindow?()
+    }
+
+    /// Makes a project as the user (project.new) and shows it.
+    func makeProject(_ form: NewProjectForm) async throws -> AppAPI.ProjectNew {
+        let r = try await connected().call(AppAPI.Methods.projectNew, form.params)
+        select(.project(r.project))
+        return r
+    }
+
+    /// Write to Linked Project…: the sheet for project p, to first or
+    /// the first link that sends.
+    func showLinkMessage(_ p: AppAPI.Project, to first: String = "") {
+        guard actsOnSidebar, let l = LinkMessageForm.writable(p, first: first).first else { return }
+        linkMessage = (p.slug, l.peer)
+        showWindow?()
+    }
+
+    /// Writes the user's message on project's link (link.send); returns
+    /// what tm says it did.
+    func sendLinkMessage(_ form: LinkMessageForm, project: String) async throws -> String {
+        try await connected().call(AppAPI.Methods.linkSend, form.params(project: project)).words
     }
 
     /// File › New Task… (⌘N): the sheet for the shown project.
