@@ -166,11 +166,11 @@ struct ConversationScreen: View {
     private func waiting(_ s: AppAPI.Session) -> some View {
         if let q = s.question {
             ForEach(QuestionPlan.shown(q), id: \.self) { i in
-                QuestionSummary(menu: q, index: i)
+                QuestionSummary(menu: q, index: i, waiting: "question \(s.id) \(q.since?.timeIntervalSince1970 ?? 0) \(i)")
             }
         }
         if s.state == "blocked", s.reason == "permission" {
-            CardFrame(tag: s.escape ? "Approval · outside the sandbox" : "Approval", colour: theme.approval, tint: theme.approvalTint) {
+            CardFrame(tag: s.escape ? "Approval · outside the sandbox" : "Approval", colour: theme.approval, tint: theme.approvalTint, waiting: "approval \(s.id) \(transcript.pendingTool?.call ?? "")") {
                 Text(transcript.pendingTool.map { "\($0.tool): \($0.text)" } ?? "The agent asks to go on.")
                     .font(theme.mono(.subheadline))
                     .fixedSize(horizontal: false, vertical: true)

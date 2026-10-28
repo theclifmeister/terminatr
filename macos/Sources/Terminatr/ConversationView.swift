@@ -288,7 +288,7 @@ struct RemoteQuestionCard: View {
     let model: SessionModel
 
     var body: some View {
-        CardFrame(tag: "Question on \(model.ref.server)", colour: theme.question, tint: theme.questionTint) {
+        CardFrame(tag: "Question on \(model.ref.server)", colour: theme.question, tint: theme.questionTint, waiting: "remote question \(model.ref.card)") {
             Text("A question is open in this session. Its text stays on \(model.ref.server): it shows in the pane, where your keys answer it.")
                 .fixedSize(horizontal: false, vertical: true)
             Button("Answer in Terminal") { model.pick(.terminal) }
@@ -402,7 +402,7 @@ struct ReviewCard: View {
     let task: AppAPI.Task
 
     var body: some View {
-        CardFrame(tag: "Review", colour: theme.good, tint: theme.cardTint) {
+        CardFrame(tag: "Review", colour: theme.good, tint: theme.cardTint, waiting: "review \(project) \(task.ref)") {
             HStack(alignment: .center, spacing: 10) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("\(task.ref) is ready to review")
