@@ -9,7 +9,9 @@ import TerminatrUI
 /// server it paired with (tm device pair), or the built-in demo. The
 /// link is up while the app is in front. Launched with -demo YES it
 /// opens the demo at once, and -open ROUTE (Route.parse) on that
-/// screen: the Simulator's screenshots. A terminatr://pair link (the
+/// screen: the Simulator's screenshots; with -pair CODE it pairs with
+/// that code at once, as this phone (the Simulator has no camera:
+/// internal/appapi TestPhoneDev's codes). A terminatr://pair link (the
 /// Camera app's scan of the code) opens the pairing screen.
 @main
 struct TerminatrApp: App {
@@ -34,6 +36,13 @@ struct TerminatrApp: App {
                 .task {
                     if UserDefaults.standard.bool(forKey: "demo"), model.source == .none {
                         await model.startDemo()
+                    }
+                    if let s = UserDefaults.standard.string(forKey: "pair"), let c = try? PairingCode(s) {
+                        do {
+                            try await model.pair(c, name: UIDevice.current.name)
+                        } catch {
+                            model.failed(error)
+                        }
                     }
                     model.openPaired()
                 }

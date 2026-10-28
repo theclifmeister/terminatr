@@ -3340,6 +3340,12 @@ Push notifications aren't here yet.
   The mated pair room's limits (two minutes, 256 KiB, §16.4) bound the user's answer too.
 - **The link.** For each device the server keeps a connection waiting in their link room on the device's relay (§16.3: the room is the hash of the two keys, which the relay checks), dialling again as a peer's link does; the phone mates it when it opens, then both run TLS 1.3 inside with both keys pinned (§16.7, the lower id the TLS client).
   Past the TLS the stream is the app API's NDJSON (§3.8), the server's hello first; the phone needs no link protocol of its own.
+  There is no keepalive past the TLS: the relay's WebSocket pings (every 30 s) keep the connection, and the phone counts 90 s without a frame from the relay as a dead link, as a server's dialer does.
+- **The phone's side** (`ios/`, `ios/TerminatrLink`): it pairs by the camera or a pasted `terminatr://pair` link (the Camera app's scan opens the app too) and keeps its key and the server's name, relay and key in the Keychain, on that device only.
+  It holds the link while the app is in front: it closes it when the app goes to the back and dials again (relay, TLS, hello, its streams afresh) when it comes back or the link drops, waiting 1 s doubling to 30 s between failures.
+  While the relay says the server isn't in the room, the app shows the server `asleep or offline` and keeps waiting there.
+  The TCP connection and the relay's own TLS are Network.framework's (so iOS brings up cellular and VPNs); the link's TLS is BoringSSL's, which holds Ed25519 keys, the pairing's exporter taken from its key log (`EXPORTER_SECRET`, RFC 8446 §7.5).
+  A conversation opens from its last items (`transcript.watch {tail}`) and reads earlier ones a page at a time (`transcript.page`).
   A device is usually offline with reason `peer`: the server is waiting for it (`tm device list` says `waiting for it`).
   The relay's per-address waiting cap (§16.4, 16) is why one server can wait for several devices beside its offline peers.
 - **The app API as the device.** The bridge's control connections are pipes inside the server, never a socket: nothing else can open one, and their caller is the device (`caller.ForDevice`), the human on the human's gates, journaled `human (iphone: <name>)`, its console for a thread's takeover `device:<name>`.

@@ -130,6 +130,11 @@ final class PhoneModel {
         open(s)
     }
 
+    /// Says why something failed, on the screen at hand.
+    func failed(_ error: any Error) {
+        failure = error.localizedDescription
+    }
+
     /// Forgets the server and the device key, back to the welcome screen.
     func forget() async {
         await disconnect()
