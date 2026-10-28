@@ -232,3 +232,25 @@ func thread(_ id: String, task: AppAPI.Task? = nil, session: String = "", checks
     #expect(alone.first?.title == "terminatr · t-0675's Bash call was refused")
     #expect(Need.count(alone, project: "terminatr") == 1)
 }
+
+/// A refusal the user can't allow (the floor's, tm's files', app API 23's
+/// fixed) is no need: only keeping it refusing is left, so it stays in
+/// the guard's log; one refused again is still one need, counted.
+@Test func refusalNeedOnlyWhenAllowable() throws {
+    func refusal(_ id: String, _ rule: String, floor: Bool = false, fixed: Bool = false) -> AppAPI.GuardRefusal {
+        AppAPI.GuardRefusal(id: id, project: "terminatr", thread: "t-0675", rule: rule, tool: "Bash",
+                            subject: "cmd \(id)", floor: floor, fixed: fixed, first: t0, last: t0, count: 5)
+    }
+    let refusals = [refusal("a", "tm-files", floor: true), refusal("b", "tm-files", fixed: true),
+                    refusal("c", "merge", floor: true), refusal("d", "force-push")]
+    let needs = Need.of(projects: [], sessions: [], refusals: refusals)
+    #expect(needs.map(\.id) == ["refusal:d"])
+    #expect(needs.first?.detail == "force-pushing · 5 times")
+    #expect(Need.count(needs, project: "terminatr") == 1)
+    // An older tm sends no fixed: its floor's refusals are still left out.
+    let old = try AppAPI.decoder().decode(AppAPI.GuardRefusal.self, from: Data("""
+        {"id":"e","project":"terminatr","rule":"tm-files","tool":"Bash","subject":"x","floor":true,
+         "first":"2026-10-28T10:00:00Z","last":"2026-10-28T10:00:00Z","count":1}
+        """.utf8))
+    #expect(!old.fixed && !old.actionable)
+}

@@ -55,6 +55,10 @@ type GuardRefusals struct {
 // session's role), under which rule, with which tool, the journal's
 // Summary and the whole Subject (the command line, or the file when
 // Path) an allowance names. Floor: it is never allowed, only kept.
+// Fixed (app API 23): no allowance lifts it either (tm's files, a rule
+// none names, a write folder's), so keeping it refusing is all there is
+// (not guardlog.Entry.Actionable); Needs you leaves both out, the
+// guard's log keeps every one.
 type GuardRefusal struct {
 	ID      string    `json:"id"`
 	Project string    `json:"project"`
@@ -66,6 +70,7 @@ type GuardRefusal struct {
 	Subject string    `json:"subject"`
 	Path    bool      `json:"path,omitempty"`
 	Floor   bool      `json:"floor,omitempty"`
+	Fixed   bool      `json:"fixed,omitempty"`
 	First   time.Time `json:"first"`
 	Last    time.Time `json:"last"`
 	Count   int       `json:"count"`
@@ -78,7 +83,7 @@ type GuardDecided struct {
 
 func guardRefusalOf(e guardlog.Entry) GuardRefusal {
 	return GuardRefusal{ID: e.ID, Project: e.Project, Thread: e.Thread, Role: e.Role, Rule: e.Rule, Tool: e.Tool,
-		Summary: e.Summary, Subject: e.Subject, Path: e.Path, Floor: e.Floor, First: e.First, Last: e.Last, Count: e.Count}
+		Summary: e.Summary, Subject: e.Subject, Path: e.Path, Floor: e.Floor, Fixed: !e.Actionable(), First: e.First, Last: e.Last, Count: e.Count}
 }
 
 // guardRefusals answers guard.refusals from the log.

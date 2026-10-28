@@ -41,22 +41,8 @@ func Answer(who caller.Caller, home string, e Entry, how string, tell func(strin
 	default:
 		return "", fmt.Errorf("unknown answer %q: %s, %s or %s", how, AllowHere, AllowAll, Keep)
 	}
-	if e.Floor {
-		return "", errors.New("the guard never allows this one: keep refusing it")
-	}
-	if e.Rule == "worktree-only" && e.Path {
-		// One rule for a folder besides the worktree (T574 case 2).
-		return "", errors.New("a write outside the worktree is allowed by a write folder now (Access, Write folders), for the guard and the sandbox alike: add its folder there")
-	}
-	// The call the user saw, exactly: a * in it is the call's own, not a
-	// wildcard.
-	a := config.GuardAllow{Rule: e.Rule, Exact: true}
-	if e.Path {
-		a.Path = e.Subject
-	} else {
-		a.Command = e.Subject
-	}
-	if err := config.CheckGuardAllow(a); err != nil {
+	a, err := e.allowance()
+	if err != nil {
 		return "", err
 	}
 	cfg, err := config.Load()
@@ -84,4 +70,35 @@ func Answer(who caller.Caller, home string, e Entry, how string, tell func(strin
 	journal("guard.allow", what+" ("+scope+")")
 	tell(fmt.Sprintf("[tm] The user allowed the %s call the guard refused (%s: %s), for %s: you may retry it.", e.Tool, e.Rule, e.Summary, scope))
 	return "allowed for " + scope + "; " + e.Label() + " is told it may retry", nil
+}
+
+// Actionable: an allowance can lift refusal e, so the user has a real
+// choice; otherwise (the floor, tm's files, a rule no allowance names)
+// keeping it refusing is all there is. What Answer allows.
+func (e Entry) Actionable() bool {
+	_, err := e.allowance()
+	return err == nil
+}
+
+// allowance is the allowance that lifts refusal e: the call the user
+// saw, exactly (a * in it is the call's own, not a wildcard), or why
+// none can.
+func (e Entry) allowance() (config.GuardAllow, error) {
+	if e.Floor {
+		return config.GuardAllow{}, errors.New("the guard never allows this one: keep refusing it")
+	}
+	if e.Rule == "worktree-only" && e.Path {
+		// One rule for a folder besides the worktree (T574 case 2).
+		return config.GuardAllow{}, errors.New("a write outside the worktree is allowed by a write folder now (Access, Write folders), for the guard and the sandbox alike: add its folder there")
+	}
+	a := config.GuardAllow{Rule: e.Rule, Exact: true}
+	if e.Path {
+		a.Path = e.Subject
+	} else {
+		a.Command = e.Subject
+	}
+	if err := config.CheckGuardAllow(a); err != nil {
+		return config.GuardAllow{}, err
+	}
+	return a, nil
 }
