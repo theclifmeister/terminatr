@@ -10,12 +10,15 @@ import (
 	"crypto/rand"
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -319,10 +322,26 @@ func TestLink(t *testing.T) {
 	if _, err := Add(devDir, pub(phone), wk, "iPhone", url); err != nil {
 		t.Fatal(err)
 	}
-	m := Start(Options{Dir: devDir, PeerDir: peerDir, Serve: echo, Logf: t.Logf, RelayTLS: tc,
+	var logMu sync.Mutex
+	var logged []string
+	logf := func(format string, a ...any) {
+		t.Logf(format, a...)
+		logMu.Lock()
+		logged = append(logged, fmt.Sprintf(format, a...))
+		logMu.Unlock()
+	}
+	m := Start(Options{Dir: devDir, PeerDir: peerDir, Serve: echo, Logf: logf, RelayTLS: tc,
 		Backoff: func(int) time.Duration { return 20 * time.Millisecond }})
 	t.Cleanup(m.Close)
 	waitState(t, m, "iPhone", proto.LinkOffline) // waiting for the phone
+	// The log names the room as the relay's log does (T809).
+	room := relay.LinkRoom(srv.ID, phone.ID)
+	want := fmt.Sprintf("device iPhone: waiting for it in link room %x on relay ", room[:4])
+	logMu.Lock()
+	if !slices.ContainsFunc(logged, func(l string) bool { return strings.HasPrefix(l, want) }) {
+		t.Errorf("log %q, want a line %q…", logged, want)
+	}
+	logMu.Unlock()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

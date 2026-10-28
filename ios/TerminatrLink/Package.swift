@@ -33,6 +33,8 @@ let package = Package(
         .testTarget(name: "TerminatrLinkTests", dependencies: [
             "TerminatrLink",
             .product(name: "NIOPosix", package: "swift-nio"),
+            .product(name: "NIOEmbedded", package: "swift-nio"),
+            .product(name: "NIOWebSocket", package: "swift-nio"),
             .product(name: "NIOSSL", package: "swift-nio-ssl"),
         ]),
     ]

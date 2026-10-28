@@ -8,6 +8,7 @@ import (
 	"net"
 	"regexp"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 	"unicode/utf8"
@@ -268,6 +269,43 @@ func TestPairOwnKey(t *testing.T) {
 	if ea := <-errs; !errors.Is(ea, ErrOwnKey) || !errors.Is(eb, ErrOwnKey) {
 		t.Fatalf("got %v / %v", ea, eb)
 	}
+}
+
+// The pairer leaves after the joiner: the joiner reads the pairer's ok
+// last, and the relay's peer-gone must not come with it (T809: the
+// phone's TLS dropped an ok that came in one read with the close).
+func TestPairerLeavesLast(t *testing.T) {
+	a, b := newServer(t), newServer(t)
+	ca, cb := tcpPipe(t)
+	var sec Secret
+	yes := PairOptions{Confirm: func(Offer) (bool, error) { return true, nil }}
+	jc := &lateClose{Conn: cb}
+	errs := make(chan error, 1)
+	go func() {
+		_, err := runPair(jc, b.id, sec, roleJoin, yes)
+		errs <- err
+	}()
+	if _, err := runPair(ca, a.id, sec, rolePair, yes); err != nil {
+		t.Fatal(err)
+	}
+	if !jc.closed.Load() {
+		t.Error("the pairer left before the joiner")
+	}
+	if err := <-errs; err != nil {
+		t.Fatal(err)
+	}
+}
+
+// lateClose closes a while after it is asked to.
+type lateClose struct {
+	net.Conn
+	closed atomic.Bool
+}
+
+func (c *lateClose) Close() error {
+	time.Sleep(300 * time.Millisecond)
+	c.closed.Store(true)
+	return c.Conn.Close()
 }
 
 // tcpPipe is two ends of a loopback TCP connection: buffered, as the

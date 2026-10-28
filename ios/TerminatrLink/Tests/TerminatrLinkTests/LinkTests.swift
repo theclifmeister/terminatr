@@ -20,6 +20,35 @@ import Testing
     #expect(linkRoom(a, b) != linkRoom(a, a))
 }
 
+// relay.TestLinkRoomVector's keys and room: the server and the phone
+// meet in one room whatever the relay's URL, a domain relay with a CA's
+// certificate (no pin) or a self-signed one with its pin (T809).
+@Test func linkRoomMatchesGo() throws {
+    let phone = try LinkIdentity(seed: Data(repeating: 1, count: 32))
+    let server = try LinkIdentity(seed: Data(repeating: 2, count: 32))
+    #expect(RelayWire.hex(phone.publicKey) == "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c")
+    #expect(RelayWire.hex(phone.id) == "34750f98bd59fcfc946da45aaabe933be154a4b5094e1c4abf42866505f3c97e")
+    #expect(RelayWire.hex(server.id) == "6a3803d5f059902a1c6dafbc9ba4729212f7caac08634cc3ae76b27529f03827")
+    let room = "22ed17da5164dceb7740c36d584c64b5a797ca9c6c7c2e7b9d8840eb5d1c152b"
+    for relay in ["wss%3A%2F%2Fterminatr-relay.example.com", "terminatr-relay.example.com",
+                  "wss%3A%2F%2Frelay.example.net%23sha256%3D" + String(repeating: "0f", count: 32)] {
+        let code = try PairingCode("terminatr://pair?v=1&relay=\(relay)&secret=7Q4M-K2XD-9HVA-PT3C&server=\(RelayWire.hex(server.id))")
+        let ep = LinkTransport.Endpoint(relay: code.relay, serverKey: server.publicKey)
+        #expect(RelayWire.hex(linkRoom(phone.id, LinkIdentity.id(of: ep.serverKey))) == room, "\(relay)")
+    }
+    #expect(RelayWire.hex(linkRoom(server.id, phone.id)) == room)
+}
+
+// A domain relay with a CA's certificate, as peer.RelayURL keeps it and
+// relay.Dialer dials it: port 443, path /v1, no pin.
+@Test func domainRelayAddress() throws {
+    let a = try RelayAddress(try #require(PairingCode.relayURL("terminatr-relay.example.com")))
+    #expect(a.host == "terminatr-relay.example.com" && a.port == 443 && a.path == "/v1")
+    #expect(a.hostHeader == "terminatr-relay.example.com" && a.tls && a.pin == nil)
+    let b = try RelayAddress(try #require(URL(string: "wss://terminatr-relay.example.com:8443/tm")))
+    #expect(b.port == 8443 && b.path == "/tm" && b.hostHeader == "terminatr-relay.example.com:8443")
+}
+
 @Test func pinRefusesAnotherKey() async throws {
     let want = LinkIdentity(), other = LinkIdentity()
     let cert = try NIOSSLCertificate(bytes: other.certificate(name: "x"), format: .der)

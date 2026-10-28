@@ -190,6 +190,7 @@ public enum DevicePairing {
         let answer = try await recv()
         guard let ok = answer.ok else { throw LinkError.protocolError("the server sent something unexpected") }
         guard ok else { throw LinkError.declined }
+        linkLog.debug("paired with server \(RelayWire.hex(serverID.prefix(4)), privacy: .public): link room \(RelayWire.hex(linkRoom(identity.id, serverID).prefix(4)), privacy: .public)")
         return Server(name: clean(about.name ?? ""), version: clean(about.version ?? ""),
                       endpoint: .init(relay: code.relay, serverKey: serverKey))
     }

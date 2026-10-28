@@ -1,11 +1,13 @@
 package peer
 
 import (
+	"bytes"
 	"context"
 	"crypto/ed25519"
 	"crypto/tls"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/fs"
 	"net"
 	"net/http"
@@ -495,5 +497,26 @@ func TestSessionDuplicateResponses(t *testing.T) {
 	close(res.release)
 	if err := <-called; err != nil {
 		t.Errorf("the call: %v", err)
+	}
+}
+
+// A link's room is its two keys' (relay.LinkRoom), whatever form the
+// relay's URL takes: a domain relay with a CA's certificate (no pin), a
+// self-signed one with its pin, a port, a path (T809). The phone has the
+// same vector (ios/TerminatrLink LinkTests linkRoomMatchesGo).
+func TestRelayTransportRoomIsTheKeys(t *testing.T) {
+	own := newIdentity(ed25519.NewKeyFromSeed(bytes.Repeat([]byte{1}, 32)))
+	other := IDOf(ed25519.NewKeyFromSeed(bytes.Repeat([]byte{2}, 32)).Public().(ed25519.PublicKey))
+	for _, u := range []string{
+		"wss://terminatr-relay.example.com",
+		"wss://terminatr-relay.example.com/",
+		"wss://terminatr-relay.example.com:443/v1",
+		"wss://relay.example.net#sha256=" + strings.Repeat("0f", 32),
+		"ws://127.0.0.1:8080",
+	} {
+		tr := RelayTransport(u, own, other, nil).(*relayTransport)
+		if got := fmt.Sprintf("%x", tr.d.Room); got != "22ed17da5164dceb7740c36d584c64b5a797ca9c6c7c2e7b9d8840eb5d1c152b" {
+			t.Errorf("%s: room %s", u, got)
+		}
 	}
 }

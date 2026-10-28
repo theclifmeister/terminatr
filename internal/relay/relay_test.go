@@ -185,6 +185,25 @@ func TestPeerGoneClosesTheOtherSide(t *testing.T) {
 	}
 }
 
+// The link room of two keys made from fixed seeds: the phone's
+// linkRoom (ios/TerminatrLink LinkTests linkRoomMatchesGo) has the same
+// vector, so a server and a phone meet in one room (T809).
+func TestLinkRoomVector(t *testing.T) {
+	a := ed25519.NewKeyFromSeed(bytes.Repeat([]byte{1}, 32)).Public().(ed25519.PublicKey)
+	b := ed25519.NewKeyFromSeed(bytes.Repeat([]byte{2}, 32)).Public().(ed25519.PublicKey)
+	fa, fb := Fingerprint(a), Fingerprint(b)
+	for _, c := range []struct{ got, want string }{
+		{hex.EncodeToString(fa[:]), "34750f98bd59fcfc946da45aaabe933be154a4b5094e1c4abf42866505f3c97e"},
+		{hex.EncodeToString(fb[:]), "6a3803d5f059902a1c6dafbc9ba4729212f7caac08634cc3ae76b27529f03827"},
+		{fmt.Sprintf("%x", LinkRoom(fa, fb)), "22ed17da5164dceb7740c36d584c64b5a797ca9c6c7c2e7b9d8840eb5d1c152b"},
+		{fmt.Sprintf("%x", LinkRoom(fb, fa)), "22ed17da5164dceb7740c36d584c64b5a797ca9c6c7c2e7b9d8840eb5d1c152b"},
+	} {
+		if c.got != c.want {
+			t.Errorf("got %s, want %s", c.got, c.want)
+		}
+	}
+}
+
 func TestLinkRoomRefusesAWrongRoom(t *testing.T) {
 	_, url, tc := relayFor(t, DefaultConfig())
 	a, b, c := newKey(t), newKey(t), newKey(t)
