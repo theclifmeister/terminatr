@@ -46,9 +46,9 @@ const (
 // maxFileStreams streams at once, over all its links. A mux keeps its
 // own window and stall (tests shorten them).
 const (
-	fileWindow   = 128 << 10
-	fileAckEvery = 32 << 10
-	fileStall    = 60 * time.Second
+	fileWindow     = 128 << 10
+	fileAckEvery   = 32 << 10
+	fileStall      = 60 * time.Second
 	maxFileStreams = 2
 	// fileData is the most of a file one data frame carries.
 	fileData = frameChunk - 8
