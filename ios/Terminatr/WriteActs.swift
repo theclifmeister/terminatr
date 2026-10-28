@@ -75,6 +75,7 @@ struct NewTaskSheet: View {
             }
         }
         .onAppear { titleFocused = true }
+        .kept($form, "new task \(project)")
         .task { templates = (try? await model.templates(project)) ?? [] }
     }
 

@@ -58,6 +58,8 @@ struct PhoneComposer: View {
         .padding(.top, 8)
         .padding(.bottom, 6)
         .background(.bar)
+        .kept($text, "prompt \(ref)")
+        .kept($keys, "keys \(ref)")
     }
 
     private var field: some View {
@@ -177,6 +179,7 @@ struct TerminalKeys: View {
             }
         }
         .disabled(busy)
+        .kept($typed, "typed \(session)")
     }
 
     private func type(enter: Bool) {

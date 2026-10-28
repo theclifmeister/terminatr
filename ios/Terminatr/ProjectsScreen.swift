@@ -16,14 +16,14 @@ struct ProjectsScreen: View {
             if let f = model.failure { Failure(text: f) }
             Section(model.peers.isEmpty ? "" : "This server") {
                 ForEach(model.activeProjects, id: \.slug) { p in
-                    NavigationLink(value: Route.project(p.slug)) { line(p) }
+                    RouteLink(value: Route.project(p.slug)) { line(p) }
                 }
             }
             ForEach(model.peers, id: \.alias) { peer in
                 Section("\(peer.name.isEmpty ? peer.alias : peer.name) · \(PeerTag.of(peer).word)") {
                     ForEach(peer.projects, id: \.project) { p in
                         let coordinator = p.sessions.first { SessionRef($0, of: peer.alias)?.isCoordinator == true }
-                        NavigationLink(value: Route.peerProject(alias: peer.alias, project: p.project)) {
+                        RouteLink(value: Route.peerProject(alias: peer.alias, project: p.project)) {
                             ProjectLine(name: p.project, state: .of(peer: coordinator), needs: p.stale ? 0 : p.needsYou,
                                         dim: peer.state != "up" || p.stale)
                         }
@@ -35,7 +35,7 @@ struct ProjectsScreen: View {
                 Section {
                     DisclosureGroup("Inactive (\(gone.count))", isExpanded: $showInactive) {
                         ForEach(gone, id: \.slug) { p in
-                            NavigationLink(value: Route.project(p.slug)) { line(p).opacity(0.7) }
+                            RouteLink(value: Route.project(p.slug)) { line(p).opacity(0.7) }
                         }
                     }
                     .font(theme.body(.body, .medium))
@@ -44,6 +44,8 @@ struct ProjectsScreen: View {
             }
         }
         .refreshable { await model.refresh() }
+        .keepsPlace("projects")
+        .kept($showInactive, "inactive")
         .navigationTitle("Projects")
         .toolbar { SettingsButton() }
         .backdrop()
@@ -75,7 +77,7 @@ struct ProjectScreen: View {
                         .listRowBackground(Color.clear)
                 }
                 Section {
-                    NavigationLink(value: Route.session(SessionRef(project: slug))) {
+                    RouteLink(value: Route.session(SessionRef(project: slug))) {
                         let c = model.coordinatorSession(slug)
                         SessionLine(label: "Coordinator", ref: nil, state: .of(coordinator: c, in: p),
                                     busy: Busy.of(coordinator: c, in: p), dormant: dormant)
@@ -87,7 +89,7 @@ struct ProjectScreen: View {
                 pages(p)
                 Section("Threads") {
                     ForEach(SidebarTree.threads(of: p) { model.session($0) }, id: \.record.id) { t in
-                        NavigationLink(value: Route.session(SessionRef(project: slug, thread: t.record.id))) {
+                        RouteLink(value: Route.session(SessionRef(project: slug, thread: t.record.id))) {
                             SessionLine(label: t.record.title, ref: t.task?.ref, state: model.attention(t), busy: model.busy(t),
                                         pr: t.pr, dormant: dormant)
                         }
@@ -98,6 +100,7 @@ struct ProjectScreen: View {
             }
         }
         .refreshable { await model.refresh() }
+        .keepsPlace(Route.project(slug).listKey)
         .navigationTitle(slug)
         .backdrop()
     }
@@ -108,8 +111,8 @@ struct ProjectScreen: View {
         let pages = model.pages
         let board = [Dashboard.onDeck(p).count, Dashboard.backlog(p).count, model.listsDone ? Dashboard.doneCount(p) : 0]
         return Section("Project") {
-            NavigationLink(value: Route.overview(slug)) { Label("Overview", systemImage: "info.circle") }
-            NavigationLink(value: Route.board(slug)) {
+            RouteLink(value: Route.overview(slug)) { Label("Overview", systemImage: "info.circle") }
+            RouteLink(value: Route.board(slug)) {
                 LabeledContent {
                     Text(Self.boardWords(board)).font(theme.mono(.caption))
                 } label: {
@@ -117,10 +120,10 @@ struct ProjectScreen: View {
                 }
             }
             if pages.contains(.memory) {
-                NavigationLink(value: Route.memory(slug)) { Label("Memory", systemImage: "brain") }
+                RouteLink(value: Route.memory(slug)) { Label("Memory", systemImage: "brain") }
             }
             if pages.contains(.library) {
-                NavigationLink(value: Route.library(slug)) { Label("Library", systemImage: "books.vertical") }
+                RouteLink(value: Route.library(slug)) { Label("Library", systemImage: "books.vertical") }
             }
         }
         .font(theme.body(.body))
@@ -143,7 +146,7 @@ struct PeerProjectScreen: View {
         List {
             if let p = model.peers.first(where: { $0.alias == alias })?.projects.first(where: { $0.project == project }) {
                 ForEach(SidebarTree.sessions(of: p, alias: alias), id: \.ref) { s, ref, task, title in
-                    NavigationLink(value: Route.session(ref)) {
+                    RouteLink(value: Route.session(ref)) {
                         SessionLine(label: ref.isCoordinator ? "Coordinator" : title.isEmpty ? ref.thread : title, ref: task.isEmpty ? nil : task,
                                     state: .of(peer: s))
                     }
@@ -151,6 +154,7 @@ struct PeerProjectScreen: View {
             }
         }
         .refreshable { await model.refresh() }
+        .keepsPlace(Route.peerProject(alias: alias, project: project).listKey)
         .navigationTitle(project)
         .backdrop()
     }

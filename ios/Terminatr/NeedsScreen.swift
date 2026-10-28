@@ -27,6 +27,7 @@ struct NeedsScreen: View {
             .padding(16)
         }
         .refreshable { await model.refresh() }
+        .keepsPlace("needs")
         .navigationTitle("Needs you")
         .backdrop()
     }
@@ -48,12 +49,13 @@ struct NeedsScreen: View {
 /// buttons (NeedActs).
 struct NeedTile: View {
     @Environment(\.theme) private var theme
+    @Environment(\.navigate) private var navigate
     let need: Need
     let route: Route
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            NavigationLink(value: route) {
+            PlainRouteLink(value: route) {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
                         Text(need.project)
@@ -86,9 +88,12 @@ struct NeedTile: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .frosted(RoundedRectangle(cornerRadius: 12))
         .background(theme.cardTint, in: RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(theme.colour(need.kind).opacity(theme.contrast ? 1 : 0.35), lineWidth: 1))
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(theme.colour(need.kind).opacity(theme.contrast || open ? 1 : 0.35), lineWidth: open ? 2.5 : 1))
         .accessibilityElement(children: .contain)
     }
+
+    /// Its route is open beside the list (Columns).
+    private var open: Bool { navigate?.open == route }
 }
 
 /// What the screens are of, on the start screen: the demo (and the way
