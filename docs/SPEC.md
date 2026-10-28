@@ -2531,7 +2531,7 @@ waiting):
 
 | Limit | Default | Over it |
 |---|---|---|
-| connections from one address | 16 (`--max-per-ip`) | HTTP 429 |
+| connections from one address | 32 (`--max-per-ip`) | HTTP 429 |
 | new connections from one address | 30 a minute, burst 10 | HTTP 429 |
 | connections in all | 1024 (`--max-conns`); without the flag, fewer when the memory limit (`GOMEMLIMIT`, or three quarters of the cgroup's) holds less at 160 KiB each, at least 16 | HTTP 429 |
 | TCP connections, before TLS | from one address: `--max-per-ip` + 4; in all: `--max-conns` + a quarter (a `--trusted-proxy` counts only in all) | closed at once |
@@ -2558,7 +2558,9 @@ connection that mates a waiting one never needs a place: it doesn't
 wait. The cap per address is 16 (older relays: 4) because a server
 waits once in each room it keeps: one per paired server that's offline
 and one per paired device (§16.15). The waiting still count among the
-address's connections (`--max-per-ip`).
+address's connections (`--max-per-ip`), which is 32 (older relays: 16)
+so that an address waiting in all 16 rooms can still mate as many: a
+phone on the server's own network mates from the server's address.
 
 **What the limits guarantee**: a server's link through the relay
 always finds connections to mate in, and at most a few waiters from

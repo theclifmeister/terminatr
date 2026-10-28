@@ -2,7 +2,11 @@ package appapi_test
 
 import (
 	"context"
+	"crypto/ecdsa"
 	"crypto/ed25519"
+	"crypto/elliptic"
+	"crypto/rand"
+	"encoding/json"
 	"io"
 	"log"
 	"net/http/httptest"
@@ -25,6 +29,12 @@ import (
 // write everything; the Mac app's bridge has every method.
 func TestAllowed(t *testing.T) {
 	for _, m := range appapi.Methods() {
+		if m.DeviceOnly() {
+			if appapi.Allowed(m, "") || appapi.Allowed(m, device.LevelView) || !appapi.Allowed(m, device.LevelAnswer) || !appapi.Allowed(m, device.LevelWrite) {
+				t.Errorf("%s: devices' own, at the levels that sign", m.Name)
+			}
+			continue
+		}
 		if !appapi.Allowed(m, "") {
 			t.Errorf("%s: not the Mac app's", m.Name)
 		}
@@ -97,14 +107,16 @@ func TestBridgeLevel(t *testing.T) {
 	level.Set(device.LevelAnswer)
 	select {
 	case h := <-c.Hellos:
-		if h.Level != device.LevelAnswer || !slices.Contains(h.Methods, proto.MethodSessionApprove) || slices.Contains(h.Methods, proto.MethodSessionPrompt) {
+		if h.Level != device.LevelAnswer || !h.Sign || !slices.Contains(h.Methods, proto.MethodSessionApprove) || slices.Contains(h.Methods, proto.MethodSessionPrompt) {
 			t.Fatalf("hello at answer %+v", h)
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("no hello after the level changed")
 	}
-	if err := c.Call(proto.MethodSessionApprove, appapi.ApproveParams{ID: "s-99"}, nil); code(err) != proto.ErrUnknownSession {
-		t.Fatalf("approve at answer reaches the server: %v", err)
+	// Unsigned, a write is refused; this bridge has no write key, so
+	// signed ones are too.
+	if err := c.Call(proto.MethodSessionApprove, appapi.ApproveParams{ID: "s-99"}, nil); code(err) != appapi.ErrSignature {
+		t.Fatalf("unsigned approve at answer: %v", err)
 	}
 	// More streams than a device's bound are refused.
 	var streams []*apptest.Stream
@@ -139,7 +151,9 @@ func TestDeviceLink(t *testing.T) {
 	_, k, _ := ed25519.GenerateKey(nil)
 	phone := peer.IdentityOf(k)
 	devDir := device.DirIn(p.Home)
-	if _, err := device.Add(devDir, k.Public().(ed25519.PublicKey), "Clif's iPhone", url); err != nil {
+	wk, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	wkb, _ := wk.PublicKey.Bytes()
+	if _, err := device.Add(devDir, k.Public().(ed25519.PublicKey), wkb, "Clif's iPhone", url); err != nil {
 		t.Fatal(err)
 	}
 	// The access is write, which this release runs at view.
@@ -187,7 +201,7 @@ func TestDeviceLink(t *testing.T) {
 	// device-level, whatever the params.
 	locals := 0
 	for _, m := range appapi.Methods() {
-		if !m.Local() {
+		if !m.Local() || m.DeviceOnly() {
 			continue
 		}
 		locals++
@@ -248,11 +262,121 @@ func TestDeviceBridgeNeverHuman(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, m := range appapi.Methods() {
-		if !m.Local() {
+		if !m.Local() || m.DeviceOnly() {
 			continue
 		}
-		if err := c.Call(m.Name, nil, nil); code(err) != appapi.ErrHumanOnly {
+		// a write is stopped before, at its signature
+		if err := c.Call(m.Name, nil, nil); code(err) != appapi.ErrHumanOnly && !(m.Write && code(err) == appapi.ErrSignature) {
 			t.Errorf("%s: %v", m.Name, err)
 		}
+	}
+}
+
+// deviceBridge is a bridge as a device's link runs it, at level with
+// the write key wk (nil for none), on the server at p.
+func deviceBridge(t *testing.T, p client.Paths, level *device.Level, wk *ecdsa.PublicKey) *apptest.Client {
+	t.Helper()
+	inR, inW := io.Pipe()
+	outR, outW := io.Pipe()
+	go func() {
+		appapi.Serve(inR, outW, appapi.Options{Level: level.Get, MaxStreams: appapi.MaxDeviceStreams, WriteKey: wk,
+			Dial: func() (*client.Client, error) { return client.ConnectAs(p, false, proto.ClientApp) }})
+		outW.Close()
+	}()
+	t.Cleanup(func() { inW.Close() })
+	c, err := apptest.New(outR, inW)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return c
+}
+
+// TestSignedWrites: at answer a device's hello says writes are signed
+// and lists device.nonce; a write goes on only with the write key's
+// signature over its method, params and a nonce the bridge gave, each
+// nonce once. Reads need nothing.
+func TestSignedWrites(t *testing.T) {
+	p := testPaths(t)
+	startServer(t, p)
+	wk, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := deviceBridge(t, p, device.NewLevel(device.LevelAnswer), &wk.PublicKey)
+	if h := c.Hello; !h.Sign || !slices.Contains(h.Methods, appapi.MethodDeviceNonce) {
+		t.Fatalf("hello at answer %+v", h)
+	}
+	if err := c.Call(proto.MethodSessionList, nil, nil); err != nil {
+		t.Fatalf("a read: %v", err)
+	}
+	approve := appapi.ApproveParams{ID: "s-99"}
+	if err := c.Call(proto.MethodSessionApprove, approve, nil); code(err) != appapi.ErrSignature {
+		t.Fatalf("unsigned: %v", err)
+	}
+	// Signed by the write key: it reaches the server.
+	c.Sign = apptest.Signer(wk)
+	if err := c.Call(proto.MethodSessionApprove, approve, nil); code(err) != proto.ErrUnknownSession {
+		t.Fatalf("signed: %v", err)
+	}
+	c.Sign = nil
+
+	var n appapi.DeviceNonce
+	if err := c.Call(appapi.MethodDeviceNonce, nil, &n); err != nil || len(n.Nonce) != appapi.NonceSize {
+		t.Fatalf("nonce: %v %v", n, err)
+	}
+	raw, _ := json.Marshal(approve)
+	sign := func(k *ecdsa.PrivateKey, method string, nonce, params []byte) []byte {
+		sig, err := apptest.Signer(k)(appapi.SignedMessage(method, nonce, params))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return sig
+	}
+	send := c.Raw
+	other, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	for _, bad := range []struct {
+		what string
+		req  appapi.Request
+	}{
+		{"another key's signature", appapi.Request{Method: proto.MethodSessionApprove, Params: raw,
+			Auth: &appapi.Auth{Nonce: n.Nonce, Sig: sign(other, proto.MethodSessionApprove, n.Nonce, raw)}}},
+		{"the nonce again", appapi.Request{Method: proto.MethodSessionApprove, Params: raw,
+			Auth: &appapi.Auth{Nonce: n.Nonce, Sig: sign(wk, proto.MethodSessionApprove, n.Nonce, raw)}}},
+	} {
+		if err := send(bad.req); code(err) != appapi.ErrSignature {
+			t.Errorf("%s: %v", bad.what, err)
+		}
+	}
+	// A signature over other params, or another method, doesn't carry.
+	for _, m := range []string{proto.MethodSessionApprove, proto.MethodSessionAnswer} {
+		var n appapi.DeviceNonce
+		c.Call(appapi.MethodDeviceNonce, nil, &n)
+		sig := sign(wk, proto.MethodSessionApprove, n.Nonce, []byte(`{"id":"s-1"}`))
+		if m == proto.MethodSessionAnswer {
+			sig = sign(wk, proto.MethodSessionApprove, n.Nonce, raw)
+		}
+		if err := send(appapi.Request{Method: m, Params: raw, Auth: &appapi.Auth{Nonce: n.Nonce, Sig: sig}}); code(err) != appapi.ErrSignature {
+			t.Errorf("%s with a signature over something else: %v", m, err)
+		}
+	}
+	// A nonce the bridge never gave.
+	if err := send(appapi.Request{Method: proto.MethodSessionApprove, Params: raw,
+		Auth: &appapi.Auth{Nonce: make([]byte, appapi.NonceSize), Sig: sign(wk, proto.MethodSessionApprove, make([]byte, appapi.NonceSize), raw)}}); code(err) != appapi.ErrSignature {
+		t.Errorf("a made-up nonce: %v", err)
+	}
+
+	// A bridge without a write key refuses every write, signed or not;
+	// at view there is no nonce to sign with.
+	nokey := deviceBridge(t, p, device.NewLevel(device.LevelAnswer), nil)
+	nokey.Sign = apptest.Signer(wk)
+	if err := nokey.Call(proto.MethodSessionApprove, approve, nil); code(err) != appapi.ErrSignature {
+		t.Errorf("no write key: %v", err)
+	}
+	view := deviceBridge(t, p, device.NewLevel(device.LevelView), &wk.PublicKey)
+	if view.Hello.Sign || slices.Contains(view.Hello.Methods, appapi.MethodDeviceNonce) {
+		t.Errorf("hello at view %+v", view.Hello)
+	}
+	if err := view.Call(appapi.MethodDeviceNonce, nil, nil); code(err) != appapi.ErrLevel {
+		t.Errorf("nonce at view: %v", err)
 	}
 }

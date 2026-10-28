@@ -21,7 +21,7 @@ import (
 // Version is the app API's version. It goes up when a method, a field or
 // a meaning is added or changes; the app reads it, and Capabilities, from
 // the bridge's hello, so an older app works with a newer tm.
-const Version = 22
+const Version = 23
 
 // Capabilities of this bridge, in its hello: what kinds of method it
 // has (Method.Write, Method.Stream). An app checks a capability, or a
@@ -74,11 +74,13 @@ const (
 
 // Request is a line the app writes: a call of Method with Params,
 // answered by Out lines with the same ID (from 1, unique among the
-// requests still open).
+// requests still open). Auth is a device's signature on a write (app
+// API 23, sign.go), which a device's bridge needs on every write.
 type Request struct {
 	ID     int64           `json:"id"`
 	Method string          `json:"method"`
 	Params json.RawMessage `json:"params,omitempty"`
+	Auth   *Auth           `json:"auth,omitempty"`
 }
 
 // CancelParams name the stream MethodCancel ends.
@@ -112,12 +114,15 @@ func (e *Error) Error() string { return e.Code + ": " + e.Message }
 // is and the server it reached. Error, when set, says why it reached
 // none; the bridge exits after it. On a device's link (app API 19)
 // Level is the device's level, Capabilities and Methods only what it
-// allows, and a new Hello line comes whenever the level changes.
+// allows, and a new Hello line comes whenever the level changes. Sign
+// (app API 23) says every write needs Request.Auth: a device's at the
+// levels that write.
 type Hello struct {
 	AppAPI       int      `json:"app_api"`
 	TM           string   `json:"tm"`
 	Build        string   `json:"build"`
 	Level        string   `json:"level,omitempty"`
+	Sign         bool     `json:"sign,omitempty"`
 	Capabilities []string `json:"capabilities"`
 	Methods      []string `json:"methods"`
 	Server       *Server  `json:"server,omitempty"`
@@ -164,8 +169,14 @@ type Method struct {
 	// server (the guard's, guard.go), from the app's params as toServer
 	// decoded them; its error is an *Error.
 	local func(b *bridge, params any) (any, error)
+	// device: only a device's bridge has it, at the levels that sign
+	// (device.nonce).
+	device bool
 }
 
 // Local says whether the bridge answers m in its own process, never
 // through the server (the guard's refusals).
 func (m Method) Local() bool { return m.local != nil }
+
+// DeviceOnly says whether only a device's bridge has m (device.nonce).
+func (m Method) DeviceOnly() bool { return m.device }

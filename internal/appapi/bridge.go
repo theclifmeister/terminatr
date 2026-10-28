@@ -3,6 +3,7 @@ package appapi
 import (
 	"bufio"
 	"context"
+	"crypto/ecdsa"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -47,6 +48,9 @@ type Options struct {
 	Level func() (string, <-chan struct{})
 	// MaxStreams bounds the streams open at once; 0 is MaxStreams.
 	MaxStreams int
+	// WriteKey is a device's write key: with Level set, every write
+	// needs its signature (sign.go); nil refuses them all.
+	WriteKey *ecdsa.PublicKey
 	// Caller is who the environment says runs the bridge. The guard's
 	// methods answer only the human, by it and as the server places the
 	// bridge (caller.who): the guard's log is the human's.
@@ -92,7 +96,7 @@ func Serve(in io.Reader, out io.Writer, o Options) error {
 // helloAt is the hello of a bridge at device level ("" for the Mac
 // app's): the capabilities and methods the level allows.
 func helloAt(level string) *Hello {
-	h := &Hello{AppAPI: Version, TM: version.Version, Build: version.BuildID(), Level: level}
+	h := &Hello{AppAPI: Version, TM: version.Version, Build: version.BuildID(), Level: level, Sign: signs(level)}
 	for _, c := range Capabilities {
 		if c != CapWrite || allowsWrite(level) {
 			h.Capabilities = append(h.Capabilities, c)
@@ -178,6 +182,8 @@ type bridge struct {
 	// whoKnown: the server placed the bridge's caller, whoHuman as the
 	// human (human).
 	whoKnown, whoHuman bool
+	// nonces are the ones device.nonce gave out.
+	nonces nonces
 }
 
 // openStream is a stream the app opened: its method, what cancels it,
@@ -271,6 +277,12 @@ func (b *bridge) handle(req Request) {
 	if level, _ := b.level(); !Allowed(m, level) {
 		b.fail(req.ID, ErrLevel, "%s needs a higher level than this device's (%s): tm device access on the server raises it", req.Method, level)
 		return
+	}
+	if m.Write && b.o.Level != nil {
+		if e := b.checkAuth(req); e != nil {
+			b.fail(req.ID, e.Code, "%s", e.Message)
+			return
+		}
 	}
 	if m.Target != "" {
 		b.streamInput(req, m)

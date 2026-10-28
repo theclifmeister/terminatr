@@ -33,7 +33,7 @@ import (
 // -pair launch argument takes it), and it watches two files: asleep,
 // while it exists, stops the server (the phone shows it asleep or
 // offline); stop ends the test. It runs at most TM_PHONE_DEV_MINUTES
-// (default 20).
+// (default 20). A phone that pairs with a write key is set to answer.
 func TestPhoneDev(t *testing.T) {
 	dir := os.Getenv("TM_PHONE_DEV_DIR")
 	if dir == "" {
@@ -114,12 +114,19 @@ func TestPhoneDev(t *testing.T) {
 				t.Logf("pair: %v", err)
 				continue
 			}
-			d, err := device.Add(devDir, paired.Key, paired.Name, url)
+			d, err := device.Add(devDir, paired.Key, paired.WriteKey, paired.Name, url)
 			if err != nil {
 				t.Logf("pair: %v", err)
 				continue
 			}
-			t.Logf("paired %s", d.Name)
+			// A phone that signs its acts answers here (T791): the
+			// dev server is the user's own.
+			if d.WriteKey != nil {
+				if d, err = device.SetLevel(devDir, d.Name, device.LevelAnswer); err != nil {
+					t.Logf("pair: %v", err)
+				}
+			}
+			t.Logf("paired %s at %s", d.Name, d.Effective())
 			if c, err := client.Connect(p, false); err == nil {
 				c.Call(proto.MethodDeviceReload, nil, nil)
 				c.Close()

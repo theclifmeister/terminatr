@@ -85,7 +85,9 @@ type Config struct {
 // DefaultConfig is the relay's limits unless flags say otherwise.
 func DefaultConfig() Config {
 	return Config{
-		MaxConns: 1024, MaxPerIP: 16,
+		// An address may wait in 16 rooms and still mate as many: a
+		// phone on the server's own network mates from its address.
+		MaxConns: 1024, MaxPerIP: 32,
 		ConnRate: 0.5, ConnBurst: 10,
 		BytesRate: 4 << 20, BytesBurst: 8 << 20,
 		MaxWaitingPerIP: 16,

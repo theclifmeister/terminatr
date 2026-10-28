@@ -5,6 +5,9 @@ package apptest
 
 import (
 	"bufio"
+	"crypto/ecdsa"
+	"crypto/rand"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -24,6 +27,10 @@ type Client struct {
 	// Hellos are the hellos after the first: a device's, whose level
 	// changed (the last 8 kept).
 	Hellos chan appapi.Hello
+	// Sign, when set, signs every write as a device does (app API 23):
+	// a nonce from device.nonce first, then Sign's signature of the
+	// signed message in the request's auth.
+	Sign func(msg []byte) ([]byte, error)
 
 	mu   sync.Mutex
 	next int64
@@ -100,6 +107,18 @@ func (c *Client) Send(method string, params any) (int64, chan appapi.Out, error)
 		}
 		raw = b
 	}
+	var auth *appapi.Auth
+	if m, ok := appapi.Lookup(method); ok && m.Write && c.Sign != nil {
+		var n appapi.DeviceNonce
+		if err := c.Call(appapi.MethodDeviceNonce, nil, &n); err != nil {
+			return 0, nil, err
+		}
+		sig, err := c.Sign(appapi.SignedMessage(method, n.Nonce, raw))
+		if err != nil {
+			return 0, nil, err
+		}
+		auth = &appapi.Auth{Nonce: n.Nonce, Sig: sig}
+	}
 	c.mu.Lock()
 	if c.err != nil {
 		c.mu.Unlock()
@@ -110,7 +129,39 @@ func (c *Client) Send(method string, params any) (int64, chan appapi.Out, error)
 	ch := make(chan appapi.Out, 64)
 	c.waiting[id] = ch
 	c.mu.Unlock()
-	return id, ch, c.WriteLine(appapi.Request{ID: id, Method: method, Params: raw})
+	return id, ch, c.WriteLine(appapi.Request{ID: id, Method: method, Params: raw, Auth: auth})
+}
+
+// Raw writes req as it is, under a new id, and decodes its answer: a
+// request the client wouldn't make (a test's forged auth).
+func (c *Client) Raw(req appapi.Request) error {
+	c.mu.Lock()
+	if c.err != nil {
+		c.mu.Unlock()
+		return c.err
+	}
+	c.next++
+	req.ID = c.next
+	ch := make(chan appapi.Out, 64)
+	c.waiting[req.ID] = ch
+	c.mu.Unlock()
+	defer c.forget(req.ID)
+	if err := c.WriteLine(req); err != nil {
+		return err
+	}
+	o, ok := <-ch
+	if !ok {
+		return c.readErr()
+	}
+	return decode(o, nil)
+}
+
+// Signer is Client.Sign for the write key k.
+func Signer(k *ecdsa.PrivateKey) func([]byte) ([]byte, error) {
+	return func(msg []byte) ([]byte, error) {
+		h := sha256.Sum256(msg)
+		return ecdsa.SignASN1(rand.Reader, k, h[:])
+	}
 }
 
 // WriteLine writes v as one line to the bridge.
