@@ -53,7 +53,8 @@ final class PhoneModel {
     /// Why the last load failed, in words.
     private(set) var failure: String?
     private(set) var bridge: Bridge?
-    /// The bridge's hello as last read: its level and methods.
+    /// The bridge's hello as last read: what its tm has (Compatibility),
+    /// its level and methods.
     private(set) var hello: AppAPI.Hello?
     private var watching: Task<Void, Never>?
 
@@ -282,11 +283,6 @@ final class PhoneModel {
         await reread()
     }
 
-    private func connected() throws -> Bridge {
-        guard let b = bridge else { throw LinkError.closed }
-        return b
-    }
-
     /// The sessions again, after an act: their needs change at once.
     private func reread() async {
         guard let b = bridge, let l = try? await b.call(AppAPI.Methods.sessionList) else { return }
@@ -326,5 +322,52 @@ final class PhoneModel {
     func title(_ ref: SessionRef) -> String {
         if ref.isCoordinator { return "Coordinator" }
         return project(ref.project)?.threads.first { $0.record.id == ref.thread }?.record.title ?? ref.thread
+    }
+
+    // MARK: A project's pages, read only, as the Mac app reads them
+
+    /// The pages this tm has (Memory and Library need app API 21).
+    var pages: [ProjectPage] { ProjectPage.pages(hello) }
+
+    /// Whether this tm lists the board's done tasks (task.done, app API 20).
+    var listsDone: Bool { hello.map(Compatibility.listsDone) ?? false }
+
+    /// Whether this tm reads a task whole (task.get, app API 14).
+    var getsTasks: Bool { hello.map(Compatibility.getsTasks) ?? false }
+
+    private func connected() throws -> Bridge {
+        guard let bridge else { throw LinkError.closed }
+        return bridge
+    }
+
+    /// The project's memory files (memory.list).
+    func memoryFiles(_ project: String) async throws -> [AppAPI.MemoryFile] {
+        try await connected().call(AppAPI.Methods.memoryList, AppAPI.ProjectParams(project: project)).files
+    }
+
+    /// A memory file's Markdown, by its path in the project (memory.read).
+    func memoryText(_ project: String, path: String) async throws -> String {
+        try await connected().call(AppAPI.Methods.memoryRead, AppAPI.MemoryReadParams(project: project, path: path)).text
+    }
+
+    /// The project's library, newest first (library.list).
+    func library(_ project: String) async throws -> [AppAPI.LibraryFile] {
+        try await connected().call(AppAPI.Methods.libraryList, AppAPI.ProjectParams(project: project)).files
+    }
+
+    /// A library file's bytes (library.read, a chunk at a time).
+    func libraryData(_ project: String, _ f: AppAPI.LibraryFile) async -> FileOutcome {
+        guard let b = bridge else { return .unavailable("the link is down") }
+        return await LibraryPage.read({ p in try await b.call(AppAPI.Methods.libraryRead, p) }, project: project, file: f)
+    }
+
+    /// The done tasks of project's board, in board order (task.done).
+    func doneTasks(_ project: String) async throws -> [AppAPI.Task] {
+        try await connected().call(AppAPI.Methods.taskDone, AppAPI.ProjectParams(project: project)).tasks
+    }
+
+    /// Reads task of project whole, its notes and steps too (task.get).
+    func getTask(project: String, task: String) async throws -> AppAPI.Task {
+        try await connected().call(AppAPI.Methods.taskGet, AppAPI.TaskGetParams(project: project, task: task))
     }
 }

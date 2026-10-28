@@ -1,5 +1,518 @@
 {
+ "answers": {
+  "library.list": [
+   {
+    "params": {
+     "project": "acme-web"
+    },
+    "result": {
+     "files": [
+      {
+       "message": "",
+       "name": "cdn-benchmark.md",
+       "peer": "",
+       "size": 183,
+       "state": "",
+       "task": "T15",
+       "thread": "t-0103",
+       "time": "2026-10-27T09:10:00Z",
+       "title": "Image CDN migration"
+      },
+      {
+       "message": "",
+       "name": "cdn-costs.csv",
+       "peer": "",
+       "size": 77,
+       "state": "",
+       "task": "T15",
+       "thread": "t-0103",
+       "time": "2026-10-27T09:05:00Z",
+       "title": "Image CDN migration"
+      },
+      {
+       "message": "",
+       "name": "dark-surface.png",
+       "peer": "",
+       "size": 178,
+       "state": "",
+       "task": "T11",
+       "thread": "t-0105",
+       "time": "2026-10-26T16:00:00Z",
+       "title": "Dark mode colour tokens"
+      },
+      {
+       "message": "m-0007",
+       "name": "charges-api.md",
+       "peer": "billing-api",
+       "size": 93,
+       "state": "",
+       "task": "",
+       "thread": "",
+       "time": "2026-10-25T14:00:00Z",
+       "title": ""
+      },
+      {
+       "message": "",
+       "name": "tokens-review.md",
+       "peer": "",
+       "size": 74,
+       "state": "archived",
+       "task": "T8",
+       "thread": "t-0098",
+       "time": "2026-10-23T11:00:00Z",
+       "title": "Design tokens package"
+      }
+     ]
+    }
+   }
+  ],
+  "library.read": [
+   {
+    "params": {
+     "id": "t-0103",
+     "name": "cdn-benchmark.md",
+     "project": "acme-web"
+    },
+    "result": {
+     "data": "IyBJbWFnZSBDRE4gYmVuY2htYXJrCgp8IFBhZ2UgfCBCZWZvcmUgfCBBZnRlciB8CnwtLS18LS0tfC0tLXwKfCBIb21lIHwgMi40IHMgfCAxLjEgcyB8CnwgUHJvZHVjdCB8IDMuMCBzIHwgMS4zIHMgfAoKTGFyZ2VzdCBjb250ZW50ZnVsIHBhaW50LCBtZWRpYW4gb2YgMjAgcnVucyBvbiBhIG1pZC1yYW5nZSBwaG9uZS4K",
+     "mtime": "2026-10-27T09:10:00Z",
+     "name": "cdn-benchmark.md",
+     "offset": 0,
+     "size": 183
+    }
+   },
+   {
+    "params": {
+     "id": "t-0103",
+     "name": "cdn-costs.csv",
+     "project": "acme-web"
+    },
+    "result": {
+     "data": "bW9udGgsb2xkX2Nkbl91c2QsbmV3X2Nkbl91c2QKMjAyNi0wOCwxMjQwLDAKMjAyNi0wOSwxMzEwLDAKMjAyNi0xMCwxMTgwLDYxMAo=",
+     "mtime": "2026-10-27T09:05:00Z",
+     "name": "cdn-costs.csv",
+     "offset": 0,
+     "size": 77
+    }
+   },
+   {
+    "params": {
+     "id": "t-0105",
+     "name": "dark-surface.png",
+     "project": "acme-web"
+    },
+    "result": {
+     "data": "iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAeUlEQVR4nO3PwQkAIBDAsNtDX+4/pEP4CEKhA6Sz1/m64YIGtKABLWhACxrQgga0oAEtaEALGtCCBrSgAS1oQAsa0IIGtKABLWhACxrQgga0oAEtaEALGtCCBrSgAS1oQAsa0IIGtKABLWhACxrQgga0oAEtaEALHrutl5BM/ISsxQAAAABJRU5ErkJggg==",
+     "mtime": "2026-10-26T16:00:00Z",
+     "name": "dark-surface.png",
+     "offset": 0,
+     "size": 178
+    }
+   },
+   {
+    "params": {
+     "id": "t-0098",
+     "name": "tokens-review.md",
+     "project": "acme-web"
+    },
+    "result": {
+     "data": "IyBUb2tlbnMgcmV2aWV3CgpBbGwgNDIgdG9rZW5zIGhhdmUgbGlnaHQsIGRhcmsgYW5kIGhpZ2gtY29udHJhc3QgdmFsdWVzLgo=",
+     "mtime": "2026-10-23T11:00:00Z",
+     "name": "tokens-review.md",
+     "offset": 0,
+     "size": 74
+    }
+   },
+   {
+    "params": {
+     "id": "m-0007",
+     "name": "charges-api.md",
+     "project": "acme-web"
+    },
+    "result": {
+     "data": "IyBDaGFyZ2VzIEFQSQoKYFBPU1QgL2NoYXJnZXNgIHRha2VzIGFuIGFtb3VudCBpbiBjZW50cywgYSBjdXJyZW5jeSBhbmQgYSBwYXltZW50IG1ldGhvZCBpZC4K",
+     "mtime": "2026-10-25T14:00:00Z",
+     "name": "charges-api.md",
+     "offset": 0,
+     "size": 93
+    }
+   }
+  ],
+  "memory.list": [
+   {
+    "params": {
+     "project": "acme-web"
+    },
+    "result": {
+     "files": [
+      {
+       "bytes": 350,
+       "path": "CONTEXT.md",
+       "title": "Context"
+      },
+      {
+       "bytes": 242,
+       "path": "MEMORY.md",
+       "title": "Memory"
+      },
+      {
+       "bytes": 293,
+       "path": "memory/design-system.md",
+       "title": "Design system",
+       "touches": [
+        "packages/tokens"
+       ]
+      },
+      {
+       "bytes": 251,
+       "path": "memory/checkout.md",
+       "title": "Checkout",
+       "touches": [
+        "apps/web/checkout"
+       ]
+      },
+      {
+       "bytes": 184,
+       "path": "memory/testing.md",
+       "title": "Testing"
+      }
+     ]
+    }
+   }
+  ],
+  "memory.read": [
+   {
+    "params": {
+     "path": "CONTEXT.md",
+     "project": "acme-web"
+    },
+    "result": {
+     "path": "CONTEXT.md",
+     "text": "# acme-web\n\nThe storefront for Acme, rebuilt on the new design system (@acme/tokens and @acme/ui).\n\n## Where things are\n\n- `apps/web`: the Next.js storefront\n- `packages/ui`: shared components\n- `packages/tokens`: colours, type and spacing\n\n## Now\n\nThe checkout's Apple Pay button (T12), search ranking (T14) and the image CDN move (T15, in review).\n"
+    }
+   },
+   {
+    "params": {
+     "path": "MEMORY.md",
+     "project": "acme-web"
+    },
+    "result": {
+     "path": "MEMORY.md",
+     "text": "# Memory\n\n- [Design system](memory/design-system.md): tokens first, no raw colours\n- [Checkout](memory/checkout.md): payments go through the billing-api\n- [Testing](memory/testing.md): run the cart tests three times before calling them fixed\n"
+    }
+   },
+   {
+    "params": {
+     "path": "memory/design-system.md",
+     "project": "acme-web"
+    },
+    "result": {
+     "path": "memory/design-system.md",
+     "text": "# Design system\n\n## Decided\n\n- Every colour comes from `@acme/tokens`; a raw hex in a component fails lint.\n- Dark mode follows the system setting; there is no in-app switch (user, 2026-10-24).\n\n## Watch out\n\n- The high-contrast set is its own token file: a new token needs a value there too.\n"
+    }
+   },
+   {
+    "params": {
+     "path": "memory/checkout.md",
+     "project": "acme-web"
+    },
+    "result": {
+     "path": "memory/checkout.md",
+     "text": "# Checkout\n\n## Decided\n\n- Payments go through billing-api's `/charges`, never Stripe directly from the web app.\n- Apple Pay shows only on Safari with a card in the wallet.\n\n## Ruled out\n\n- A one-page checkout: the address step stays separate for tax.\n"
+    }
+   },
+   {
+    "params": {
+     "path": "memory/testing.md",
+     "project": "acme-web"
+    },
+    "result": {
+     "path": "memory/testing.md",
+     "text": "# Testing\n\n- `pnpm test` runs everything; `pnpm test --filter web` just the storefront.\n- The cart tests are timing-sensitive: run them **three times** before calling one fixed (T16).\n"
+    }
+   }
+  ],
+  "task.done": [
+   {
+    "params": {
+     "project": "acme-web"
+    },
+    "result": {
+     "tasks": [
+      {
+       "id": 5,
+       "ref": "T5",
+       "status": "done",
+       "title": "Set up the monorepo"
+      },
+      {
+       "id": 8,
+       "ref": "T8",
+       "status": "done",
+       "title": "Design tokens package"
+      },
+      {
+       "id": 10,
+       "ref": "T10",
+       "status": "done",
+       "title": "Header and footer components"
+      },
+      {
+       "id": 11,
+       "ref": "T11",
+       "status": "done",
+       "title": "Dark mode colour tokens"
+      }
+     ]
+    }
+   }
+  ],
+  "task.get": [
+   {
+    "params": {
+     "project": "acme-web",
+     "task": "T17"
+    },
+    "result": {
+     "created": "2026-10-20",
+     "id": 17,
+     "notes": "A page listing what the shopper saved, with Add to cart on each.\n\nSaved items sync across devices once signed in.",
+     "ref": "T17",
+     "status": "ready",
+     "steps": [
+      {
+       "done": false,
+       "n": 1,
+       "text": "Saved-items API"
+      },
+      {
+       "done": false,
+       "n": 2,
+       "text": "Wishlist page"
+      },
+      {
+       "done": false,
+       "n": 3,
+       "text": "Heart button on product cards"
+      }
+     ],
+     "title": "Wishlist page",
+     "updated": "2026-10-26"
+    }
+   },
+   {
+    "params": {
+     "project": "acme-web",
+     "task": "T18"
+    },
+    "result": {
+     "created": "2026-10-20",
+     "id": 18,
+     "notes": "Gift card codes at checkout, applied before tax. Partial balances stay on the card.",
+     "ref": "T18",
+     "status": "ready",
+     "steps": [],
+     "title": "Gift cards at checkout",
+     "updated": "2026-10-26"
+    }
+   },
+   {
+    "params": {
+     "project": "acme-web",
+     "task": "T19"
+    },
+    "result": {
+     "created": "2026-10-20",
+     "id": 19,
+     "notes": "The last eight products viewed, under the product's details.",
+     "ref": "T19",
+     "status": "open",
+     "steps": [],
+     "title": "Recently viewed strip on the product page",
+     "updated": "2026-10-26"
+    }
+   },
+   {
+    "params": {
+     "project": "acme-web",
+     "task": "T20"
+    },
+    "result": {
+     "created": "2026-10-20",
+     "id": 20,
+     "notes": "Run axe and VoiceOver over the product page; file a task for each finding.",
+     "ref": "T20",
+     "status": "open",
+     "steps": [],
+     "title": "Accessibility audit of the product page",
+     "updated": "2026-10-26"
+    }
+   },
+   {
+    "params": {
+     "project": "acme-web",
+     "task": "T21"
+    },
+    "result": {
+     "created": "2026-10-20",
+     "id": 21,
+     "notes": "Show prices in the shopper's currency from their locale; checkout still charges in USD.",
+     "ref": "T21",
+     "status": "open",
+     "steps": [],
+     "title": "Prices in the shopper's currency",
+     "updated": "2026-10-26"
+    }
+   },
+   {
+    "params": {
+     "project": "acme-web",
+     "task": "T5"
+    },
+    "result": {
+     "created": "2026-10-20",
+     "id": 5,
+     "notes": "done (2026-10-21): pnpm workspaces, one CI job per package.",
+     "owner": "me",
+     "ref": "T5",
+     "status": "done",
+     "steps": [
+      {
+       "done": true,
+       "n": 1,
+       "text": "Workspaces and shared tsconfig"
+      },
+      {
+       "done": true,
+       "n": 2,
+       "text": "CI per package"
+      }
+     ],
+     "title": "Set up the monorepo",
+     "updated": "2026-10-26"
+    }
+   },
+   {
+    "params": {
+     "project": "acme-web",
+     "task": "T8"
+    },
+    "result": {
+     "created": "2026-10-20",
+     "id": 8,
+     "notes": "done (2026-10-23): @acme/tokens publishes CSS variables and a TS map. Merged in PR #33.",
+     "ref": "T8",
+     "status": "done",
+     "steps": [
+      {
+       "done": true,
+       "n": 1,
+       "text": "Token schema"
+      },
+      {
+       "done": true,
+       "n": 2,
+       "text": "CSS and TS outputs"
+      },
+      {
+       "done": true,
+       "n": 3,
+       "text": "Publish to the registry"
+      }
+     ],
+     "title": "Design tokens package",
+     "updated": "2026-10-26"
+    }
+   },
+   {
+    "params": {
+     "project": "acme-web",
+     "task": "T10"
+    },
+    "result": {
+     "created": "2026-10-20",
+     "id": 10,
+     "notes": "done (2026-10-24): header with search and cart count; footer with the sitemap links. Merged in PR #36.",
+     "ref": "T10",
+     "status": "done",
+     "steps": [
+      {
+       "done": true,
+       "n": 1,
+       "text": "Header"
+      },
+      {
+       "done": true,
+       "n": 2,
+       "text": "Footer"
+      },
+      {
+       "done": true,
+       "n": 3,
+       "text": "Visual tests"
+      }
+     ],
+     "title": "Header and footer components",
+     "updated": "2026-10-26"
+    }
+   },
+   {
+    "params": {
+     "project": "acme-web",
+     "task": "T11"
+    },
+    "result": {
+     "created": "2026-10-20",
+     "id": 11,
+     "notes": "done (2026-10-26): merged in PR #41; the tokens build for light, dark and high contrast.",
+     "ref": "T11",
+     "status": "done",
+     "steps": [
+      {
+       "done": true,
+       "n": 1,
+       "text": "Token names for every surface"
+      },
+      {
+       "done": true,
+       "n": 2,
+       "text": "Dark values checked for contrast (AA)"
+      },
+      {
+       "done": true,
+       "n": 3,
+       "text": "Switch with the system setting"
+      }
+     ],
+     "title": "Dark mode colour tokens",
+     "updated": "2026-10-26"
+    }
+   },
+   {
+    "params": {
+     "project": "billing-api",
+     "task": "T10"
+    },
+    "result": {
+     "created": "2026-10-20",
+     "id": 10,
+     "notes": "Email the customer on day 1, 3 and 7 after a failed payment, then pause the subscription.",
+     "ref": "T10",
+     "status": "ready",
+     "steps": [],
+     "title": "Dunning emails for failed payments",
+     "updated": "2026-10-26"
+    }
+   }
+  ]
+ },
  "calls": {
+  "library.list": {
+   "files": []
+  },
+  "memory.list": {
+   "files": []
+  },
   "peer.list": {
    "gen": 1,
    "peers": []
@@ -117,6 +630,9 @@
      "title": ""
     }
    ]
+  },
+  "task.done": {
+   "tasks": []
   }
  },
  "hello": {
@@ -130,11 +646,18 @@
    "projects.watch",
    "session.list",
    "peer.list",
-   "transcript.watch"
+   "transcript.watch",
+   "memory.list",
+   "memory.read",
+   "library.list",
+   "library.read",
+   "task.done",
+   "task.get"
   ],
   "server": {
    "caps": [
-    "transcript"
+    "transcript",
+    "project-files"
    ],
    "protocol": 1,
    "version": "0.56.1"
@@ -147,8 +670,51 @@
     "projects": [
      {
       "active": true,
+      "board": [
+       {
+        "id": 17,
+        "ref": "T17",
+        "status": "ready",
+        "title": "Wishlist page",
+        "updated": "2026-10-26"
+       },
+       {
+        "id": 18,
+        "ref": "T18",
+        "status": "ready",
+        "title": "Gift cards at checkout",
+        "updated": "2026-10-26"
+       },
+       {
+        "id": 19,
+        "ref": "T19",
+        "status": "open",
+        "title": "Recently viewed strip on the product page",
+        "updated": "2026-10-26"
+       },
+       {
+        "id": 20,
+        "ref": "T20",
+        "status": "open",
+        "title": "Accessibility audit of the product page",
+        "updated": "2026-10-26"
+       },
+       {
+        "id": 21,
+        "ref": "T21",
+        "status": "open",
+        "title": "Prices in the shopper's currency",
+        "updated": "2026-10-26"
+       }
+      ],
+      "checkouts": {
+       "~/work/acme-design": "behind origin by 2"
+      },
       "counts": {
-       "needs_you": 1
+       "done": 4,
+       "in_motion": 3,
+       "needs_you": 1,
+       "on_deck": 2
       },
       "goal": "Rebuild the storefront on the new design system",
       "needs_you": [
@@ -162,6 +728,10 @@
       ],
       "pinned": true,
       "questions": 0,
+      "repos": [
+       "~/work/acme-web",
+       "~/work/acme-design"
+      ],
       "slug": "acme-web",
       "threads": [
        {
@@ -378,10 +948,29 @@
         },
         "task": {
          "id": 11,
+         "notes": "done (2026-10-26): merged in PR #41; the tokens build for light, dark and high contrast.",
          "ref": "T11",
          "status": "done",
+         "steps": [
+          {
+           "done": true,
+           "n": 1,
+           "text": "Token names for every surface"
+          },
+          {
+           "done": true,
+           "n": 2,
+           "text": "Dark values checked for contrast (AA)"
+          },
+          {
+           "done": true,
+           "n": 3,
+           "text": "Switch with the system setting"
+          }
+         ],
          "thread": "t-0105",
-         "title": "Dark mode colour tokens"
+         "title": "Dark mode colour tokens",
+         "updated": "2026-10-26"
         }
        }
       ],
@@ -396,8 +985,20 @@
      },
      {
       "active": true,
+      "board": [
+       {
+        "id": 10,
+        "ref": "T10",
+        "status": "ready",
+        "title": "Dunning emails for failed payments",
+        "updated": "2026-10-26"
+       }
+      ],
       "counts": {
-       "needs_you": 1
+       "done": 0,
+       "in_motion": 1,
+       "needs_you": 1,
+       "on_deck": 1
       },
       "goal": "Invoices and payments",
       "needs_you": [
@@ -410,6 +1011,9 @@
        }
       ],
       "questions": 1,
+      "repos": [
+       "~/work/billing-api"
+      ],
       "slug": "billing-api",
       "threads": [
        {

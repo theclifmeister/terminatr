@@ -11,19 +11,32 @@ import Foundation
 ///
 ///     {"hello": {...},
 ///      "calls": {"session.list": {...}, ...},
+///      "answers": {"memory.read": [{"params": {"path": "CONTEXT.md"}, "result": {...}}, ...]},
 ///      "streams": {"projects.watch": {"result": {...}, "events": [{"event": "...", "data": {...}}]}},
 ///      "transcripts": {"<session id>": {"result": {...}, "events": [...]}}}
 ///
+/// answers are a method's results by its params: the first whose params
+/// the request's has, each the same, answers it, before calls'.
 /// transcripts are transcript.watch's, by its params' session.
 public final class DemoTransport: BridgeTransport, @unchecked Sendable {
     public let lines: AsyncThrowingStream<Data, any Error>
 
     private let sink: AsyncThrowingStream<Data, any Error>.Continuation
     private let calls: [String: Data]
+    private let answers: [String: [Answer]]
     private let streams: [String: Stream]
     private let transcripts: [String: Stream]
     private let lock = NSLock()
     private var closed = false
+
+    private struct Answer {
+        var params: [String: Any]
+        var result: Data
+
+        func fits(_ p: [String: Any]) -> Bool {
+            params.allSatisfy { k, v in (p[k] as? NSObject)?.isEqual(v) == true }
+        }
+    }
 
     private struct Stream {
         var result: Data
@@ -51,6 +64,12 @@ public final class DemoTransport: BridgeTransport, @unchecked Sendable {
             return Stream(result: try json(result), events: events)
         }
         calls = try (r["calls"] as? [String: Any] ?? [:]).mapValues(json)
+        answers = try (r["answers"] as? [String: [[String: Any]]] ?? [:]).mapValues { list in
+            try list.map { a in
+                guard let result = a["result"] else { throw BridgeError.badLine("a demo answer has a result") }
+                return Answer(params: a["params"] as? [String: Any] ?? [:], result: try json(result))
+            }
+        }
         streams = try (r["streams"] as? [String: Any] ?? [:]).mapValues(stream)
         transcripts = try (r["transcripts"] as? [String: Any] ?? [:]).mapValues(stream)
         (lines, sink) = AsyncThrowingStream<Data, any Error>.makeStream()
@@ -78,6 +97,8 @@ public final class DemoTransport: BridgeTransport, @unchecked Sendable {
                 l.append(e.dropFirst())
                 yield(l)
             }
+        } else if let a = answers[method]?.first(where: { $0.fits(params) }) {
+            reply(id, result: a.result)
         } else if let result = calls[method] {
             reply(id, result: result)
         } else {
