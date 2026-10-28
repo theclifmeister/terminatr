@@ -1,4 +1,5 @@
-# Keeps Go modules and GitHub Actions up to date with weekly PRs.
+# Keeps Go modules, GitHub Actions and the relay's pinned image digests
+# (deploy/relay) up to date with weekly PRs.
 #
 # go.mitchellh.com/libghostty is excluded: it must move together with
 # GHOSTTY_REV in the Makefile (the bindings track one Ghostty commit, and
@@ -27,3 +28,17 @@ updates:
         patterns: ["*"]
     commit-message:
       prefix: ci
+
+  - package-ecosystem: docker
+    directory: /deploy/relay
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: deps
+
+  - package-ecosystem: docker-compose
+    directory: /deploy/relay
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: deps

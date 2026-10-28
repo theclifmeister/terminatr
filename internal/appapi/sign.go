@@ -32,8 +32,9 @@ const ErrSignature = "device-signature"
 const (
 	// NonceSize is a nonce's length, in bytes.
 	NonceSize = 32
-	// nonceLife is how long a nonce may wait for its write: the Face ID
-	// prompt comes between.
+	// nonceLife is how long a nonce may wait for its write: the signing
+	// is prompt-free, so this is a slow link's round trip with room to
+	// spare.
 	nonceLife = 2 * time.Minute
 	// maxNonces bounds the nonces given out and not yet used; a new one
 	// past it drops the oldest.
@@ -131,7 +132,7 @@ func signs(level string) bool { return level == device.LevelAnswer || level == d
 // readsOnly says whether a write's request only reads, so it needs no
 // signature: session.approve {check}, which reads the dialog off the
 // screen and answers nothing (a phone checks each approval it shows, and
-// Face ID for each would be noise).
+// a signature round trip for each would be noise).
 func readsOnly(m Method, raw []byte) bool {
 	if m.Name != proto.MethodSessionApprove {
 		return false

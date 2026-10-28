@@ -75,9 +75,13 @@ func SelfSignedPin(dir string) (string, error) {
 	return KeyPin(key.Public())
 }
 
-// readRegular reads path unless it is a link or other non-regular file:
-// the state directory belongs to the relay's user, so root reading from
-// it follows no link planted there.
+// maxStateFile bounds a key or certificate file read from the state
+// directory; each is well under 2 KiB.
+const maxStateFile = 64 << 10
+
+// readRegular reads path unless it is a link or other non-regular file,
+// or over maxStateFile: the state directory belongs to the relay's user,
+// so root reading from it follows no link planted there.
 func readRegular(path string) ([]byte, error) {
 	li, err := os.Lstat(path)
 	if err != nil {
@@ -94,7 +98,11 @@ func readRegular(path string) ([]byte, error) {
 	if fi, err := f.Stat(); err != nil || !os.SameFile(li, fi) {
 		return nil, fmt.Errorf("%s changed while it was opened", path)
 	}
-	return io.ReadAll(f)
+	b, err := io.ReadAll(io.LimitReader(f, maxStateFile+1))
+	if err == nil && len(b) > maxStateFile {
+		return nil, fmt.Errorf("%s is over %d bytes", path, maxStateFile)
+	}
+	return b, err
 }
 
 func loadKey(path string) (*ecdsa.PrivateKey, error) {
@@ -126,7 +134,7 @@ func writeKey(path string, k *ecdsa.PrivateKey) error {
 }
 
 func loadCert(path string) (*x509.Certificate, error) {
-	b, err := os.ReadFile(path)
+	b, err := readRegular(path)
 	if err != nil {
 		return nil, err
 	}

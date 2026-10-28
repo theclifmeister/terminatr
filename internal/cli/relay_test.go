@@ -157,6 +157,42 @@ func TestRelayDeployFilesUseRealFlags(t *testing.T) {
 	}
 }
 
+// Every image the deploy files pull is pinned: third-party ones by
+// digest, the relay's by a TM_VERSION they require (a release's copies
+// default it to the release, scripts/release/relay-docker.sh).
+func TestRelayDeployImagesArePinned(t *testing.T) {
+	dir := filepath.Join("..", "..", "deploy", "relay")
+	for _, f := range []string{"Dockerfile", "compose.yaml", "compose.acme.yaml", "compose.selfsigned.yaml"} {
+		b, err := os.ReadFile(filepath.Join(dir, f))
+		if err != nil {
+			t.Fatal(err)
+		}
+		images := 0
+		for _, l := range strings.Split(string(b), "\n") {
+			l = strings.TrimSpace(l)
+			if !strings.HasPrefix(l, "#") && strings.Contains(l, "latest") {
+				t.Errorf("%s follows latest: %s", f, l)
+			}
+			ref, ok := strings.CutPrefix(l, "image: ")
+			if !ok {
+				if ref, ok = strings.CutPrefix(l, "FROM "); ok {
+					ref, _, _ = strings.Cut(ref, " ")
+				}
+			}
+			if !ok {
+				continue
+			}
+			images++
+			if !strings.Contains(ref, "@sha256:") && !strings.HasPrefix(ref, "ghcr.io/theclifmeister/tm-relay:${TM_VERSION:?") {
+				t.Errorf("%s: %s is not pinned", f, ref)
+			}
+		}
+		if images == 0 {
+			t.Errorf("%s: no image", f)
+		}
+	}
+}
+
 // The unit tm relay install writes is the one in deploy/relay, for
 // another name.
 func TestRelayUnitIsTheDeployFile(t *testing.T) {
