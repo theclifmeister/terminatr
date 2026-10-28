@@ -123,7 +123,9 @@ struct ConversationTab: View {
                 .modifier(FollowAnchor())
                 // Streamed text lands in place: no implicit animation.
                 .transaction { if reduceMotion { $0.animation = nil } }
-                .modifier(FollowGeometry(follow: $follow, newest: model.transcript.entries.last?.id))
+                .modifier(FollowGeometry(follow: $follow, newest: model.transcript.entries.last?.id) {
+                    proxy.scrollTo(Self.end, anchor: .bottom)
+                })
                 // New output, or a growing last entry: the follower goes
                 // to the end; one scrolled up stays, and counts it.
                 .onChange(of: Self.tail(model.transcript)) {
@@ -135,7 +137,7 @@ struct ConversationTab: View {
                 }
                 // A prompt sent: back to the end.
                 .onChange(of: model.sent) {
-                    follow.follow(newest: model.transcript.entries.last?.id)
+                    follow.jump(newest: model.transcript.entries.last?.id)
                     withAnimation(motion) { proxy.scrollTo(Self.end, anchor: .bottom) }
                 }
                 .onChange(of: current) { _, c in
@@ -218,7 +220,7 @@ struct ConversationTab: View {
     /// behind it. Either follows the end again.
     private func jump(_ proxy: ScrollViewProxy, toCard: Bool) -> some View {
         Button {
-            follow.follow(newest: model.transcript.entries.last?.id)
+            follow.jump(newest: model.transcript.entries.last?.id)
             withAnimation(motion) { proxy.scrollTo(Self.end, anchor: .bottom) }
             if toCard { flash += 1 }
         } label: {
@@ -319,18 +321,23 @@ struct ViewOnlyLine: View {
     }
 }
 
-/// The scroll geometry into Follow: on macOS 15; 14 has none to read,
-/// and its conversation always follows.
+/// The scroll geometry and phases into Follow: on macOS 15; 14 has none
+/// to read, and its conversation always follows. A jump that trackpad
+/// momentum carries up is pulled back to the end (toEnd, T829).
 struct FollowGeometry: ViewModifier {
     @Binding var follow: Follow
     let newest: Int?
+    let toEnd: () -> Void
 
     func body(content: Content) -> some View {
         if #available(macOS 15, *) {
             content.onScrollGeometryChange(for: [Double].self) { g in
                 [g.contentOffset.y, g.visibleRect.height, g.contentSize.height, g.contentInsets.bottom]
             } action: { _, g in
-                follow.scrolled(offset: g[0], visible: g[1], content: g[2], inset: g[3], newest: newest)
+                if follow.scrolled(offset: g[0], visible: g[1], content: g[2], inset: g[3], newest: newest) { toEnd() }
+            }
+            .onScrollPhaseChange { _, p in
+                follow.moved(by: p == .tracking || p == .interacting, resting: p == .idle)
             }
         } else {
             content

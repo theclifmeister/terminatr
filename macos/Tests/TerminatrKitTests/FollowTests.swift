@@ -67,9 +67,13 @@ private func at(_ f: inout Follow, _ offset: Double, content: Double, newest: In
     at(&f, 100, content: 1000, newest: 1)
     _ = f.arrived([0, 1, 2, 3])
     #expect(f.unseen == 2)
-    f.follow(newest: 3)
+    f.jump(newest: 3)
     #expect(f.following)
     #expect(f.unseen == 0)
+    // The jump's scroll ends at the end, at rest.
+    at(&f, 1100, content: 1600, newest: 3)
+    f.moved(by: false, resting: true)
+    #expect(!f.jumping)
     at(&f, 100, content: 1600, newest: 3)
     at(&f, 50, content: 1600, newest: 3)
     #expect(!f.following)
@@ -97,4 +101,47 @@ private func at(_ f: inout Follow, _ offset: Double, content: Double, newest: In
     // A taller bar (an open card) under a follower: still following.
     f.scrolled(offset: 1835, visible: 600, content: 2269, inset: 420, newest: 1)
     #expect(f.following)
+}
+
+/// Jump to latest tapped while a flick still decelerates up (T829): the
+/// momentum's scrolls up don't stop the follow, each says to pull back
+/// to the end, until the scroll comes to rest. A drag after it is the
+/// user's own again.
+@Test func jumpWinsOverMomentum() {
+    var f = Follow()
+    _ = f.arrived([0, 1])
+    at(&f, 9500, content: 10000, newest: 1)
+    at(&f, 7900, content: 10000, newest: 1)
+    #expect(!f.following)
+    f.jump(newest: 1)
+    #expect(f.following && f.jumping)
+    // The momentum carries on up: still following, pulled back.
+    let pull = f.scrolled(offset: 7890, visible: 500, content: 10000, newest: 1)
+    #expect(pull)
+    #expect(f.following)
+    // Pulled to the end; the momentum ebbs; at rest the jump is over.
+    let atEnd = f.scrolled(offset: 9500, visible: 500, content: 10000, newest: 1)
+    let ebb = f.scrolled(offset: 9497, visible: 500, content: 10000, newest: 1)
+    #expect(!atEnd && !ebb)
+    f.moved(by: false, resting: false)
+    #expect(f.jumping)
+    f.moved(by: false, resting: true)
+    #expect(!f.jumping && f.following)
+    // The user's own scroll up after it stops following.
+    at(&f, 9000, content: 10000, newest: 1)
+    #expect(!f.following)
+}
+
+/// The user taking hold of the scroll mid-jump ends it: their scroll up
+/// stops the follow, and nothing pulls them back.
+@Test func grabEndsAJump() {
+    var f = Follow()
+    _ = f.arrived([0, 1])
+    at(&f, 500, content: 2000, newest: 1)
+    f.jump(newest: 1)
+    f.moved(by: true, resting: false)
+    #expect(!f.jumping)
+    let pull = f.scrolled(offset: 400, visible: 500, content: 2000, newest: 1)
+    #expect(!pull)
+    #expect(!f.following)
 }
