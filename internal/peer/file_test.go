@@ -81,7 +81,8 @@ func randomFile(n int) *fakeFile {
 
 // filePair is two sessions over loopback TCP, b serving h's files to
 // a's fetches, as the TLS server would; the conns are theirs to cut.
-func filePair(t *testing.T, h FileHost) (a, b *session, ca, cb net.Conn) {
+// set changes both ends' muxes before they serve.
+func filePair(t *testing.T, h FileHost, set ...func(*fileMux)) (a, b *session, ca, cb net.Conn) {
 	t.Helper()
 	ca, cb, err := tcpPair()
 	if err != nil {
@@ -92,6 +93,10 @@ func filePair(t *testing.T, h FileHost) (a, b *session, ca, cb net.Conn) {
 	b.methods = (&dispatcher{files: h, caller: caller.ForPeer("studio")}).methods()
 	b.files.slots = make(chan struct{}, maxFileStreams)
 	b.files.top = 1 << 31
+	for _, f := range set {
+		f(a.files)
+		f(b.files)
+	}
 	go a.serve(func(time.Duration) {})
 	go b.serve(func(time.Duration) {})
 	t.Cleanup(func() { ca.Close(); cb.Close() })
@@ -254,11 +259,9 @@ func (w *blockWriter) Write(p []byte) (int, error) {
 // TestFileWindow: a near end that doesn't write (so doesn't ack) holds
 // the far end to its window; let go, the rest comes.
 func TestFileWindow(t *testing.T) {
-	old := fileWindow
-	fileWindow = 64 << 10
-	t.Cleanup(func() { fileWindow = old })
+	const window = 64 << 10
 	f := randomFile(512 << 10)
-	a, _, _, _ := filePair(t, &fileFarm{files: map[string]*fakeFile{"X-1": f}})
+	a, _, _, _ := filePair(t, &fileFarm{files: map[string]*fakeFile{"X-1": f}}, func(m *fileMux) { m.window = window })
 	w := &blockWriter{gate: make(chan struct{})}
 	done := make(chan error, 1)
 	go func() {
@@ -266,8 +269,8 @@ func TestFileWindow(t *testing.T) {
 		done <- err
 	}()
 	time.Sleep(300 * time.Millisecond)
-	if _, read, _ := f.state(); read > int64(fileWindow)+fileData {
-		t.Fatalf("read %d bytes with nothing acked, window %d", read, fileWindow)
+	if _, read, _ := f.state(); read > window+fileData {
+		t.Fatalf("read %d bytes with nothing acked, window %d", read, window)
 	}
 	close(w.gate)
 	if err := <-done; err != nil || !bytes.Equal(w.buf.Bytes(), f.data) {
@@ -278,11 +281,8 @@ func TestFileWindow(t *testing.T) {
 // TestFileStall: a near end that stops acking is given up as stalled;
 // the far end says so, and the near end hears it.
 func TestFileStall(t *testing.T) {
-	old := fileStall
-	fileStall = 300 * time.Millisecond
-	t.Cleanup(func() { fileStall = old })
 	f := randomFile(512 << 10)
-	a, _, _, _ := filePair(t, &fileFarm{files: map[string]*fakeFile{"X-1": f}})
+	a, _, _, _ := filePair(t, &fileFarm{files: map[string]*fakeFile{"X-1": f}}, func(m *fileMux) { m.stall = 300 * time.Millisecond })
 	w := &blockWriter{gate: make(chan struct{})}
 	time.AfterFunc(time.Second, func() { close(w.gate) })
 	_, err := a.files.fetch(context.Background(), "X-1", 0, w)
