@@ -57,7 +57,9 @@ struct PhoneComposer: View {
         .padding(.horizontal, 12)
         .padding(.top, 8)
         .padding(.bottom, 6)
-        .background(.bar)
+        // To the bottom edge only: on iPhone Duo (T824) the bars sit on
+        // a side, which this stops at.
+        .background(.bar, ignoresSafeAreaEdges: .bottom)
     }
 
     private var field: some View {
