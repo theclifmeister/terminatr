@@ -65,6 +65,9 @@ func fakeTM(_ body: String) throws -> URL {
         "TERMINATR_HOME": "/Users/u/.terminatr",
     ])
     #expect(ProcessTransport.bridgeEnvironment(["PATH": "/bin"]) == ["PATH": "/bin"])
+    // Half a session still counts as one: its socket is dropped.
+    #expect(ProcessTransport.bridgeEnvironment(["TERMINATR_SESSION": "s-1", "TERMINATR_SOCKET": "/s"]) == [:])
+    #expect(ProcessTransport.bridgeEnvironment(["TERMINATR": "1", "TERMINATR_SOCKET": "/s"]) == [:])
 
     // The child gets that environment, whichever the app passed.
     let tm = try fakeTM("""
@@ -76,5 +79,26 @@ func fakeTM(_ body: String) throws -> URL {
     } throws: { error in
         let why = "\(error)"
         return why.contains("TERMINATR_HOME=/Users/u/.terminatr") && !why.contains("TERMINATR_SOCKET") && !why.contains("TERMINATR_SESSION")
+    }
+}
+
+/// An app opened by a human whose server runs on a socket of its own
+/// (a dev server, say): the bridge dials that server, not a second,
+/// empty one it would start beside it.
+@Test func bridgeEnvironmentKeepsTheHumansSocket() async throws {
+    let inherited = [
+        "PATH": "/usr/bin:/bin", "TERMINATR_SOCKET": "/Users/u/dev/run/tm.sock",
+        "TERMINATR_HOME": "/Users/u/dev",
+    ]
+    #expect(ProcessTransport.bridgeEnvironment(inherited) == inherited)
+
+    let tm = try fakeTM("""
+    env | grep '^TERMINATR_SOCKET' >&2
+    exit 3
+    """)
+    await #expect {
+        _ = try await Bridge.launch(tm: tm, environment: inherited)
+    } throws: { error in
+        "\(error)".contains("TERMINATR_SOCKET=/Users/u/dev/run/tm.sock")
     }
 }

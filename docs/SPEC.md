@@ -458,7 +458,7 @@ Each enabled code mod runs in its own `tm mod host` child of the server: the sam
 
 The Mac app (design T734) reaches the server the way the TUI does, over the human socket, and opens nothing new: no TCP port, no socket of its own.
 It runs the installed tm as its child, `tm app bridge`, and speaks NDJSON on that child's stdin and stdout (`internal/appapi`).
-The child starts without a session's variables (`TERMINATR`, `TERMINATR_SESSION`, `_SOCKET`, `_BIN`, `_ROLE`, `_PROJECT`, `_THREAD`, §3.4), so an app opened from a session's pane is still the human; `TERMINATR_HOME` stays, since it picks the server.
+The child starts without a session's variables (`TERMINATR`, `TERMINATR_SESSION`, `_SOCKET`, `_BIN`, `_ROLE`, `_PROJECT`, `_THREAD`, §3.4), so an app opened from a session's pane is still the human; `TERMINATR_HOME` stays, since it picks the server, and so does `TERMINATR_SOCKET` when no session set it (neither `TERMINATR` nor `TERMINATR_SESSION`): the human's server on a socket of its own, which the bridge would otherwise miss and start a second, empty one beside.
 The bridge dials the human socket like any CLI call, with `client: "app"` in its hello (§3.3), so the app has the human's rights and every server-side check the TUI's acts go through, and the journal tells its acts apart: `human (app)`.
 When no server answers, the bridge starts it as the CLI does (`client.StartDetached`): on macOS through the launchd job, never as the bridge's or the app's child, so the server outlives the app and keeps the pinned binary's privacy grants.
 A bridge started inside an agent's session tree is placed in that session by the pid walk and refused the human-only methods, as any process there is.
