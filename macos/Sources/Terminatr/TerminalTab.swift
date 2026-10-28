@@ -94,8 +94,10 @@ final class PaneController: NSObject, TerminalViewDelegate {
     private(set) var size: AppAPI.PaneSize?
     private(set) var closed: String?
     /// Keys are sent: false while a paired server's switch is view,
-    /// where its server would drop them.
-    @ObservationIgnored var keys = true
+    /// where its server would drop them, and the mouse stays the tab's.
+    @ObservationIgnored var keys = true {
+        didSet { host.terminal.allowMouseReporting = keys }
+    }
 
     @ObservationIgnored let host = PaneHost()
     @ObservationIgnored private var bridge: Bridge?
@@ -256,6 +258,7 @@ final class PaneHost: NSView {
 
     override init(frame: NSRect) {
         super.init(frame: frame)
+        terminal.changeScrollback(PaneScroll.lines)
         addSubview(terminal)
     }
 
@@ -314,7 +317,10 @@ final class PaneHost: NSView {
 
 /// SwiftTerm's view as a mirror: its size is the pane's, not its
 /// frame's, and the replies its emulator would send the program are
-/// dropped (the server's emulator answers them).
+/// dropped (the server's emulator answers them); its mouse reports, the
+/// wheel and clicks of a program that tracks the mouse, go to the
+/// program as keys do. Shift+PgUp/PgDn scroll its scrollback on the main
+/// screen (PaneScroll).
 final class MirrorTerminalView: TerminalView {
     var pane: (cols: Int, rows: Int)? {
         didSet {
@@ -347,7 +353,33 @@ final class MirrorTerminalView: TerminalView {
         super.setFrameSize(NSSize(width: r.width + 0.5, height: r.height + 0.5))
     }
 
-    override func send(source: Terminal, data: ArraySlice<UInt8>) {}
+    override func send(source: Terminal, data: ArraySlice<UInt8>) {
+        if PaneScroll.isMouseReport(data) {
+            terminalDelegate?.send(source: self, data: data)
+        }
+    }
+
+    private var pageKeys: Any?
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if let m = pageKeys {
+            NSEvent.removeMonitor(m)
+            pageKeys = nil
+        }
+        guard window != nil else { return }
+        // SwiftTerm sends Shift+PgUp/PgDn to the program, and its keyDown
+        // can't be overridden from here: take them before it.
+        pageKeys = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] e in
+            guard let self, e.window === self.window, self.window?.firstResponder === self,
+                  e.keyCode == 116 || e.keyCode == 121,
+                  e.modifierFlags.intersection([.shift, .control, .option, .command]) == .shift else { return e }
+            let t = getTerminal()
+            guard let n = PaneScroll.page(rows: t.rows, alternate: t.isCurrentBufferAlternate) else { return e }
+            if e.keyCode == 116 { scrollUp(lines: n) } else { scrollDown(lines: n) }
+            return nil
+        }
+    }
 
     /// The context menu's Repaint, as View › Repaint Terminal.
     var onRepaint: (() -> Void)?
