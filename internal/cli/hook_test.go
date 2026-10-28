@@ -415,6 +415,12 @@ func TestHookLog(t *testing.T) {
 	}
 
 	os.Remove(log)
+	// The listener is up, so the dial can only miss its 50 ms when the
+	// runner starves this process; a loaded CI run did (T833). The test
+	// is about what gets logged, not the dial budget.
+	old := hookDial
+	hookDial = 5 * time.Second
+	t.Cleanup(func() { hookDial = old })
 	fakeServer(t, sock, 0, "", nil)
 	e.Stdin = strings.NewReader(`{"hook_event_name":"Stop","session_id":"a"}`)
 	runHookTimed(t, e, "--agent", "claude")
