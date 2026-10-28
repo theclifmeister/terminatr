@@ -234,6 +234,7 @@ type Session struct {
 	QueuedSince    time.Time `json:"queued_since,omitzero"`
 	QueueHeld      string    `json:"queue_held,omitempty"`
 	QueueHeldSince time.Time `json:"queue_held_since,omitzero"`
+	TurnSince      time.Time `json:"turn_since,omitzero"` // since app API 26
 	RemoteControl  bool      `json:"remote_control,omitempty"`
 	Model          string    `json:"model,omitempty"`
 	Question       *Question `json:"question,omitempty"`
@@ -718,7 +719,7 @@ func sessionOf(s proto.SessionInfo) Session {
 		Title: s.Title, Cols: s.Cols, Rows: s.Rows, Created: s.Created, Clients: s.Clients, State: s.State,
 		Reason: s.Reason, Escape: s.Escape, TodosDone: s.TodosDone, TodosTotal: s.TodosTotal, Current: s.Current,
 		Queued: s.Queued, QueuedSince: s.QueuedSince, QueueHeld: s.QueueHeld, QueueHeldSince: s.QueueHeldSince,
-		RemoteControl: s.RemoteControl, Model: s.Model, Question: questionOf(s.Question), Context: s.Context,
+		TurnSince: s.TurnSince, RemoteControl: s.RemoteControl, Model: s.Model, Question: questionOf(s.Question), Context: s.Context,
 		ContextWindow: s.ContextWindow, Server: s.Server, ViewOnly: s.ViewOnly}
 }
 

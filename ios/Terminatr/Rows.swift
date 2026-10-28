@@ -43,21 +43,21 @@ struct ProjectLine: View {
 
 /// A session's row: its dot, task ref and title, and what waits on the
 /// user as a filled pill (allow?, asks, review…), else its PR in plain
-/// muted text, as the Mac sidebar's rows.
+/// muted text, as the Mac sidebar's rows. A working one (busy) has the
+/// activity mark for its dot and how long its turn has run.
 struct SessionLine: View {
     @Environment(\.theme) private var theme
     let label: String
     let ref: String?
     let state: Attention
+    var busy: Busy?
     var pr = 0
     var dormant = false
 
     var body: some View {
+        let busy = dormant ? nil : busy
         HStack(spacing: 8) {
-            Circle()
-                .fill(theme.colour(dormant ? .idle : state.tone))
-                .frame(width: 7, height: 7)
-                .accessibilityHidden(true)
+            StateDot(tone: dormant ? .idle : state.tone, busy: busy != nil, size: 7)
             if let ref {
                 Text(ref)
                     .font(theme.mono(.subheadline, .medium))
@@ -75,6 +75,9 @@ struct SessionLine: View {
                 }
             }
             Spacer(minLength: 4)
+            if let busy {
+                BusyLabel(busy: busy).fixedSize()
+            }
             if !dormant, state.waits {
                 Text(state.word)
                     .font(theme.mono(.caption2, .medium))
@@ -91,7 +94,8 @@ struct SessionLine: View {
         .foregroundStyle(dormant ? theme.muted : theme.ink)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel([ref, label].compactMap { $0 }.joined(separator: " "))
-        .accessibilityValue(dormant ? "inactive" : pr > 0 ? "\(state.spoken), PR \(pr)" : state.spoken)
+        .accessibilityValue(dormant ? "inactive" : [busy.map { $0.spoken(now: Date()) } ?? state.spoken, pr > 0 ? "PR \(pr)" : nil]
+            .compactMap { $0 }.joined(separator: ", "))
     }
 }
 

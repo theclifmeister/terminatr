@@ -308,6 +308,11 @@ final class PhoneModel {
         Attention.of(thread: t, session: session(t))
     }
 
+    /// t's turn while its agent works: its row's activity mark (T803).
+    func busy(_ t: AppAPI.Thread) -> Busy? {
+        Busy.of(thread: t, session: session(t))
+    }
+
     func project(_ slug: String) -> AppAPI.Project? {
         projects.first { $0.slug == slug }
     }

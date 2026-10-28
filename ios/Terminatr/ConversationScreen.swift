@@ -50,12 +50,20 @@ struct ConversationScreen: View {
         }
         .safeAreaInset(edge: .bottom) {
             if id != nil {
-                Label("Read only: answer and send from your Mac for now", systemImage: "eye")
-                    .font(theme.body(.footnote))
-                    .foregroundStyle(theme.muted)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 8)
-                    .background(.bar)
+                VStack(spacing: 0) {
+                    // While the agent has its turn, as the Mac's (T803).
+                    if let busy = Busy.of(session) {
+                        WorkingBar(busy: busy, activity: Activity.of(transcript, current: session?.current ?? ""))
+                            .padding(.horizontal, 16)
+                            .padding(.bottom, 8)
+                    }
+                    Label("Read only: answer and send from your Mac for now", systemImage: "eye")
+                        .font(theme.body(.footnote))
+                        .foregroundStyle(theme.muted)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                        .background(.bar)
+                }
             }
         }
         .refreshable { await model.refresh() }

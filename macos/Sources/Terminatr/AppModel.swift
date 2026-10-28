@@ -474,6 +474,17 @@ final class AppModel {
         return Attention.of(thread: t, session: s)
     }
 
+    /// t's turn while its agent works: its row's and card's activity
+    /// mark (T803).
+    func busy(_ t: AppAPI.Thread) -> Busy? {
+        Busy.of(thread: t, session: t.record.session.isEmpty ? nil : sessions.first { $0.id == t.record.session })
+    }
+
+    /// The coordinator's turn, as busy(_:) a thread's.
+    func busy(coordinator p: AppAPI.Project) -> Busy? {
+        Busy.of(coordinator: coordinatorSession(p.slug), in: p)
+    }
+
     // MARK: the window
 
     /// Brings the window to the front, opening it when it was closed:

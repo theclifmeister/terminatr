@@ -302,14 +302,14 @@ struct Sidebar: View {
                 row(.session(SessionRef(project: p.slug)), label: "Coordinator", ref: nil,
                     tag: state.waits && !l.dormant ? (state.word, state.tone) : nil, dot: theme.colour(l.dormant ? .idle : state.tone),
                     spoken: l.dormant ? "inactive" : state.spoken, dormant: l.dormant, context: ctx,
-                    menu: coordinator == nil ? nil : p)
+                    busy: l.dormant ? nil : app.busy(coordinator: p), menu: coordinator == nil ? nil : p)
             }
             // Keyed with the project: thread ids repeat across projects,
             // and the List flattens every project's rows into one.
             ForEach(l.threads, id: \.record.id) { t in
                 row(.session(SessionRef(project: p.slug, thread: t.record.id)), label: t.record.title, ref: t.task?.ref,
                     tag: l.dormant ? nil : tag(t), dot: theme.colour(l.dormant ? .idle : app.attention(t).tone),
-                    spoken: l.dormant ? "inactive" : spoken(t), dormant: l.dormant)
+                    spoken: l.dormant ? "inactive" : spoken(t), dormant: l.dormant, busy: l.dormant ? nil : app.busy(t))
                     .id("\(p.slug)/\(t.record.id)")
             }
         }
@@ -319,15 +319,21 @@ struct Sidebar: View {
     /// filled pill in its tone's colour, or plain muted text (PR) when it
     /// has none. A dormant one (an inactive project's) is muted.
     /// A running coordinator's row has its context use, and Save & Clear
-    /// in its menu (menu, its project).
+    /// in its menu (menu, its project). A working one (busy) has the
+    /// activity mark for its dot and how long its turn has run.
     private func row(_ sel: Selection, label: String, ref: String?, tag: (String, Attention.Tone?)?, dot: Color, spoken: String,
-                     dormant: Bool = false, context: ContextUse? = nil, menu: AppAPI.Project? = nil) -> some View {
+                     dormant: Bool = false, context: ContextUse? = nil, busy: Busy? = nil, menu: AppAPI.Project? = nil) -> some View {
         let on = app.nav.selection == sel
         return HStack(spacing: 6) {
-            Circle()
-                .fill(on ? theme.onAction : dot)
-                .frame(width: 6, height: 6)
-                .accessibilityHidden(true)
+            if busy != nil {
+                BusyMark(size: 6, colour: on ? theme.onAction : nil)
+                    .frame(width: 6, height: 6)
+            } else {
+                Circle()
+                    .fill(on ? theme.onAction : dot)
+                    .frame(width: 6, height: 6)
+                    .accessibilityHidden(true)
+            }
             if let ref {
                 Text(ref)
                     .font(theme.mono(.footnote, .medium))
@@ -337,6 +343,10 @@ struct Sidebar: View {
                 .font(theme.body(.callout))
                 .lineLimit(1)
             Spacer(minLength: 4)
+            if let busy {
+                BusyLabel(busy: busy, colour: on ? theme.onAction : nil)
+                    .fixedSize()
+            }
             if let context {
                 Text(context.word)
                     .font(theme.mono(.caption2, context.tone == nil ? .regular : .semibold))
@@ -364,7 +374,7 @@ struct Sidebar: View {
         // polish, needs approval".
         .accessibilityElement(children: .ignore)
         .accessibilityLabel([ref, label].compactMap { $0 }.joined(separator: " "))
-        .accessibilityValue([spoken, context?.spoken].compactMap { $0 }.joined(separator: ", "))
+        .accessibilityValue([busy.map { $0.spoken(now: Date()) } ?? spoken, context?.spoken].compactMap { $0 }.joined(separator: ", "))
         .selectable(sel)
         .contextMenu {
             if case .session(let r) = sel { NewWindowButton(ref: r) }

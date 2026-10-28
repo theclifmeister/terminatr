@@ -172,6 +172,10 @@ type SessionInfo struct {
 	// (docs/SPEC.md §8.6), so this never lasts.
 	QueueHeld      string    `json:"queue_held,omitempty"`
 	QueueHeldSince time.Time `json:"queue_held_since,omitzero"`
+	// TurnSince is when the agent's current turn began, while it is
+	// working or blocked within that turn; zero otherwise (since
+	// protocol 25).
+	TurnSince time.Time `json:"turn_since,omitzero"`
 	// RemoteControl: the agent is reachable from another device.
 	RemoteControl bool `json:"remote_control,omitempty"`
 	// RemoteHeld: the user turned the coordinator's remote control off

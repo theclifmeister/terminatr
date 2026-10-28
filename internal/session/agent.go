@@ -188,6 +188,7 @@ type agentRT struct {
 	heldWhy    string
 	stallAt    time.Time // the queued-at of the head prompt whose stall was logged
 	lastState  agent.Merged
+	turnSince  time.Time // when the current turn began (AgentState.TurnSince)
 	lastSID    string
 	lastTodos  []agent.Todo
 	// escapes are the calls, by id, that asked to run outside the
@@ -307,6 +308,9 @@ type AgentState struct {
 	// Menu is the agent's own question menu while it is blocked on it
 	// (trackMenu), answered by keys on its screen (Question.Screen).
 	Menu *proto.Question
+	// TurnSince is when the agent's current turn began, while it works
+	// or is blocked within the turn; zero otherwise.
+	TurnSince time.Time
 }
 
 // AgentState returns the agent's merged state; ok is false for a session
@@ -326,6 +330,7 @@ func (s *Session) AgentState() (st AgentState, ok bool) {
 	escape := len(rt.escapes) > 0 || rt.cfg.PromptsEscape || rt.escapeDialog
 	dialog := rt.permDialog
 	menu := copyMenu(rt.menu)
+	turn := rt.turnSince
 	var remote, known bool
 	if m := agent.ManifestOf(rt.a); m != nil && m.ObservesRemote() && rt.fields != nil {
 		remote, known = rt.fields[m.RemoteControl.StatusField] != "", true
@@ -341,7 +346,7 @@ func (s *Session) AgentState() (st AgentState, ok bool) {
 		QueuedSince: since, Held: held, HeldSince: heldSince,
 		RemoteControl: remote, RemoteKnown: known,
 		Escape: escape && (m.State == agent.StateBlocked && m.Reason == "permission" || dialog),
-		Menu:   menu,
+		Menu:   menu, TurnSince: turn,
 	}, true
 }
 
@@ -1069,6 +1074,17 @@ func (s *Session) agentChanged(rt *agentRT) {
 	rt.mu.Lock()
 	changed := st != rt.lastState || sid != rt.lastSID || !slices.Equal(todos, rt.lastTodos)
 	rt.lastState, rt.lastSID, rt.lastTodos = st, sid, todos
+	switch st.State {
+	case agent.StateWorking:
+		if rt.turnSince.IsZero() {
+			rt.turnSince = time.Now().UTC()
+		}
+	case agent.StateBlocked:
+		// A permission prompt or a question within the turn: it goes
+		// on once answered.
+	default:
+		rt.turnSince = time.Time{}
+	}
 	switch st.State {
 	case agent.StateExited:
 		rt.escapes = nil

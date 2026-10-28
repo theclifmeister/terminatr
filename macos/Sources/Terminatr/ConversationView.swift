@@ -131,6 +131,13 @@ struct ConversationTab: View {
                 // ends above them and scrolls behind them under the edge.
                 .footBar(
                     VStack(spacing: 10) {
+                        // While the agent has its turn: how long, and
+                        // what it does now (T803).
+                        if let busy = Busy.of(session) {
+                            WorkingBar(busy: busy, activity: Activity.of(model.transcript, current: session?.current ?? ""))
+                                .padding(.horizontal, Page.edge)
+                                .transition(.opacity)
+                        }
                         VStack(spacing: 10) {
                             if let review, let task = review.task {
                                 ReviewCard(project: model.ref.project, thread: review, task: task)

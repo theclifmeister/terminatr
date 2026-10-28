@@ -48,7 +48,7 @@ struct ProjectDashboard: View {
                     }
                 }
                 section("Coordinator") {
-                    CardGrid { CoordinatorRow(project: project, attention: app.coordinator(of: project), running: running) }
+                    CardGrid { CoordinatorRow(project: project, attention: app.coordinator(of: project), busy: app.busy(coordinator: project), running: running) }
                 }
                 let groups = Dashboard.groups(project.threads, attention: app.attention) { t in
                     !t.record.session.isEmpty && app.sessions.contains { $0.id == t.record.session }
@@ -162,7 +162,7 @@ struct ProjectDashboard: View {
         let sel = Selection.card(t, in: project.slug)
         // A button, so Full Keyboard Access reaches it (Tab, Space).
         return Button { app.select(sel) } label: {
-            ThreadCard(thread: t, attention: app.attention(t))
+            ThreadCard(thread: t, attention: app.attention(t), busy: app.busy(t))
                 .contentShape(RoundedRectangle(cornerRadius: 14))
         }
         .buttonStyle(.plain)
@@ -268,22 +268,25 @@ struct CoordinatorRow: View {
     @Environment(\.theme) private var theme
     let project: AppAPI.Project
     let attention: Attention
+    /// Its turn while it works (the activity mark, working · 3m).
+    let busy: Busy?
     let running: Bool
 
     var body: some View {
         let ref = SessionRef(project: project.slug)
         HStack(alignment: .center, spacing: 8) {
-            Circle()
-                .fill(theme.colour(attention.tone))
-                .frame(width: 8, height: 8)
-                .accessibilityHidden(true)
+            StateDot(tone: attention.tone, busy: busy != nil)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text("Coordinator")
                         .font(theme.title(.headline, .bold))
-                    Text(attention.word)
-                        .font(theme.mono(.caption))
-                        .foregroundStyle(attention.waits ? theme.colour(attention.tone) : theme.muted)
+                    if let busy {
+                        BusyLabel(busy: busy, colour: theme.colour(.working))
+                    } else {
+                        Text(attention.word)
+                            .font(theme.mono(.caption))
+                            .foregroundStyle(attention.waits ? theme.colour(attention.tone) : theme.muted)
+                    }
                     if running, let ctx = ContextUse.of(app.coordinatorSession(project.slug), hint: app.contextHint) {
                         Text("context \(ctx.word)")
                             .font(theme.mono(.caption, ctx.tone == nil ? .regular : .semibold))
@@ -760,15 +763,15 @@ struct ThreadCard: View {
     @Environment(\.theme) private var theme
     let thread: AppAPI.Thread
     let attention: Attention
+    /// Its turn while its agent works: the activity mark for its dot and
+    /// how long the turn has run.
+    var busy: Busy?
 
     var body: some View {
         let r = thread.record, s = thread.status
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Circle()
-                    .fill(theme.colour(attention.tone))
-                    .frame(width: 8, height: 8)
-                    .accessibilityHidden(true)
+                StateDot(tone: attention.tone, busy: busy != nil)
                 if let task = thread.task {
                     Text(task.ref)
                         .font(theme.mono(.callout, .medium))
@@ -778,6 +781,7 @@ struct ThreadCard: View {
                     .font(theme.title(.headline, .bold))
                     .lineLimit(1)
                 Spacer(minLength: 8)
+                if let busy { BusyLabel(busy: busy, colour: theme.colour(.working)).fixedSize() }
                 Text(r.id)
                     .font(theme.mono(.footnote))
                     .foregroundStyle(theme.muted)
@@ -821,7 +825,7 @@ struct ThreadCard: View {
     }
 
     private var facts: String {
-        var f = [attention.word, thread.record.agent]
+        var f = [busy == nil ? attention.word : "", thread.record.agent]
         if thread.pr > 0 {
             f.append("PR #\(thread.pr)" + (thread.checks.isEmpty ? "" : " · \(thread.checks)"))
         }
