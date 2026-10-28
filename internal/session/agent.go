@@ -483,6 +483,27 @@ func (rt *agentRT) escapeOpen() bool {
 	return len(rt.escapes) > 0
 }
 
+// EscapeHeld says an escape's prompt may be on screen, the user's to
+// answer at this computer: a call that asked to leave the sandbox is
+// open (before its dialog has drawn, too), the screen shows the escape
+// rule's dialog, or the agent prompts only escapes and is blocked on a
+// permission prompt. Keys from a paired server's pane or a device are
+// dropped while it holds (T836).
+func (s *Session) EscapeHeld() bool {
+	rt := s.agentRT()
+	if rt == nil {
+		return false
+	}
+	rt.mu.Lock()
+	held := len(rt.escapes) > 0 || rt.escapeDialog || rt.cfg.PromptsEscape && rt.permDialog
+	rt.mu.Unlock()
+	if held {
+		return true
+	}
+	m := rt.tr.State()
+	return rt.cfg.PromptsEscape && m.State == agent.StateBlocked && m.Reason == "permission"
+}
+
 // Explain returns the agent tracker's view of every source.
 func (s *Session) Explain() (agent.Explanation, bool) {
 	rt := s.agentRT()
