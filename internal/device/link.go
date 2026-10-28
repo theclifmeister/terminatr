@@ -276,11 +276,12 @@ func (m *Manager) once(ctx context.Context, id *peer.Identity, t peer.Transport,
 		m.logf("device %s: its TLS failed: %v", d.Name, err)
 		return false, err
 	}
+	// Its last-up time first: whoever sees it up finds it saved.
+	m.lastUp(l, d)
+	defer m.lastUp(l, d)
 	l.set(proto.LinkUp, "", nil)
 	l.waitLogged = false
 	m.logf("device %s: up", d.Name)
-	m.lastUp(l, d)
-	defer m.lastUp(l, d)
 	if m.opts.Serve == nil {
 		<-ctx.Done()
 		return true, nil
