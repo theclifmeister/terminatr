@@ -96,7 +96,7 @@ func TestDeviceListAccessNameRemove(t *testing.T) {
 	if out := h.ok(human, "device", "access", "ipad", "view"); !strings.Contains(out, "iPad is view-only") || *reloads != 1 {
 		t.Fatalf("access: %q, %d reloads", out, *reloads)
 	}
-	if out := h.ok(human, "device", "access", "clif's iphone", "answer"); !strings.Contains(out, "Clif's iPhone is answer") || !strings.Contains(out, "Face ID") || *reloads != 2 {
+	if out := h.ok(human, "device", "access", "clif's iphone", "answer"); !strings.Contains(out, "Clif's iPhone is answer") || strings.Contains(out, "Face ID") || !strings.Contains(out, "signed by its write key") || *reloads != 2 {
 		t.Fatalf("access answer: %q, %d reloads", out, *reloads)
 	}
 	if out := h.ok(human, "device", "list"); !strings.Contains(out, "answer") {

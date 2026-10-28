@@ -7,8 +7,8 @@ import TerminatrUI
 /// approval's options that allow once, as the server reads the dialog
 /// (session.approve {check}); a question's options (session.answer, the
 /// question its guard); the coordinator's open questions (Answer now); a
-/// task in review (Accept, Send back…). Each act asks Face ID, which
-/// unlocks the write key that signs it, and the server checks every
+/// task in review (Accept, Send back…). Each act is signed by the
+/// write key, with no prompt, and the server checks every
 /// answer as it checks the Mac app's. An approval that runs a command
 /// outside the sandbox is never the phone's: the server refuses it
 /// (device-escape-off), and the card says to answer it on the computer.
@@ -173,7 +173,7 @@ struct NeedActs: View {
         }
     }
 
-    /// An act's failure in words; nil when the user cancelled Face ID.
+    /// An act's failure in words; nil when the user cancelled the system's prompt (an older key asks).
     static func words(_ error: any Error) -> String? {
         if let e = error as? LAError, [.userCancel, .appCancel, .systemCancel].contains(e.code) { return nil }
         if let e = error as? AppAPI.Error {

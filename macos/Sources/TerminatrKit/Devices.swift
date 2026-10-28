@@ -22,7 +22,7 @@ public enum DeviceWords {
     public static func levelHelp(_ level: String) -> String {
         switch level {
         case answer:
-            "Reads, answers questions and approvals (never one that runs a command outside the sandbox), and accepts or sends back tasks, each act behind Face ID."
+            "Reads, answers questions and approvals (never one that runs a command outside the sandbox), and accepts or sends back tasks, each act signed by its write key."
         case "write":
             "Does what this app does: prompts, new tasks, delegating, starting a coordinator, terminal keys and the rest, each act signed by its write key. Never an approval that runs a command outside the sandbox."
         default:

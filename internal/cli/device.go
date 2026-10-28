@@ -364,7 +364,7 @@ func (e *Env) deviceAccess(dir, name, level string) error {
 	}
 	switch d.Level {
 	case device.LevelAnswer:
-		fmt.Fprintf(e.Stdout, "%s is %s: it reads, answers questions and approvals (never one that runs a command outside the sandbox), and accepts or sends back tasks, each act behind Face ID.\n", d.Name, levelWords(d.Level))
+		fmt.Fprintf(e.Stdout, "%s is %s: it reads, answers questions and approvals (never one that runs a command outside the sandbox), and accepts or sends back tasks, each act signed by its write key.\n", d.Name, levelWords(d.Level))
 	case device.LevelWrite:
 		fmt.Fprintf(e.Stdout, "%s is %s: it does what the Mac app does (prompts, new tasks, delegating, starting a coordinator, pane keys and the rest), each act signed by its write key; never the guard's answers or the devices, and never an approval that runs a command outside the sandbox.\n", d.Name, levelWords(d.Level))
 	default:

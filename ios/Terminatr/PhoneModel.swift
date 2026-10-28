@@ -9,8 +9,8 @@ extension LinkTransport: @retroactive BridgeTransport {}
 /// What the phone shows of one server: its projects (projects.watch),
 /// sessions (session.list) and paired servers (peer.list), and what of
 /// it needs the user (Need.of), as the Mac app's AppModel reads them;
-/// and at the answer level the acts on those needs, each signed behind
-/// Face ID (WriteKey). It talks to a Bridge on either transport:
+/// and at the answer level the acts on those needs, each signed by
+/// the write key (WriteKey). It talks to a Bridge on either transport:
 /// the demo's recording (DemoTransport), or the device link to the
 /// paired server (LinkTransport), which it keeps while the app is in
 /// front: redialled when it drops and when the app comes back, its
@@ -130,7 +130,7 @@ final class PhoneModel {
     func pair(_ code: PairingCode, name: String) async throws {
         let id = try DeviceStore.identity()
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
-        let s = try await DevicePairing.join(code, as: id, name: name, version: version, writeKey: try WriteKey.signer().publicKey)
+        let s = try await DevicePairing.join(code, as: id, name: name, version: version, writeKey: try WriteKey.forPairing().publicKey)
         try DeviceStore.save(s)
         await disconnect()
         open(s)

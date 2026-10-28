@@ -98,8 +98,8 @@ type Device struct {
 	Relay string            `json:"relay"` // wss://host[:port][#sha256=<pin>]
 	// WriteKey is the P-256 key the device signs each act with
 	// (WriteKeySize bytes, uncompressed, base64), sent at pairing: on a
-	// phone it lives in the Secure Enclave and only Face ID or the
-	// passcode unlocks it. Without one the device acts on nothing.
+	// phone it lives in the Secure Enclave and signs with no
+	// prompt. Without one the device acts on nothing.
 	WriteKey []byte `json:"write_key,omitempty"`
 }
 
