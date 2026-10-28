@@ -181,7 +181,7 @@ struct Composer: View {
                 text = ""
                 files = []
                 failed = false
-                said = Self.words(r)
+                said = PromptSent.words(r)
             } catch {
                 failed = true
                 said = error.localizedDescription
@@ -328,21 +328,6 @@ struct Composer: View {
             }
             return event
         }
-    }
-
-    /// How the prompt went in, in the window's words.
-    static func words(_ r: AppAPI.PromptResult) -> String {
-        var s: String
-        switch r.via {
-        case "queued": s = r.running ? "Queued: it goes once the turn ends." : "Queued: it goes once the agent is idle."
-        case "steered": s = "Steered into the running turn."
-        case "interrupted": s = "The turn stopped for it."
-        case "channel": s = "Sent."
-        case "typed": s = "Typed into its pane."
-        default: s = r.via.isEmpty ? "Sent." : "Sent (\(r.via))."
-        }
-        if !r.why.isEmpty { s += " " + r.why }
-        return s
     }
 }
 

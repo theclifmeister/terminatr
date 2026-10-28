@@ -155,7 +155,7 @@ func TestEffective(t *testing.T) {
 		want  string
 	}{
 		{LevelView, nil, LevelView}, {LevelAnswer, wk, LevelAnswer}, {LevelAnswer, nil, LevelView},
-		{LevelWrite, wk, LevelView}, {"", wk, LevelView},
+		{LevelWrite, wk, LevelWrite}, {LevelWrite, nil, LevelView}, {"", wk, LevelView},
 	} {
 		if got := (Device{Level: c.level, WriteKey: c.key}).Effective(); got != c.want {
 			t.Errorf("level %q, key %v: %q, want %q", c.level, c.key != nil, got, c.want)
@@ -371,8 +371,7 @@ func TestLink(t *testing.T) {
 		t.Fatalf("echo %q", got)
 	}
 
-	// Answer reaches the open link; a level the release doesn't enable
-	// runs at view; the status says both.
+	// Answer reaches the open link, then write; the status says it.
 	SetLevel(devDir, "iPhone", LevelAnswer)
 	m.Reload()
 	if got := line(); got != "iPhone answer" {
@@ -380,10 +379,10 @@ func TestLink(t *testing.T) {
 	}
 	SetLevel(devDir, "iPhone", LevelWrite)
 	m.Reload()
-	if st := m.Status()[0]; st.Level != LevelWrite || st.Effective != LevelView || st.State != proto.LinkUp {
+	if st := m.Status()[0]; st.Level != LevelWrite || st.Effective != LevelWrite || st.State != proto.LinkUp {
 		t.Fatalf("after access: %+v", st)
 	}
-	if got := line(); got != "iPhone view" {
+	if got := line(); got != "iPhone write" {
 		t.Fatalf("after write %q", got)
 	}
 
