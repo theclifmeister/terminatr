@@ -1,5 +1,34 @@
 # Changelog
 
+## [0.60.0](https://github.com/theclifmeister/terminatr/compare/v0.59.0...v0.60.0) (2026-10-28)
+
+
+### Features
+
+* **ios, device:** the write level, with the iPhone's write screens ([#881](https://github.com/theclifmeister/terminatr/issues/881)) ([f97279a](https://github.com/theclifmeister/terminatr/commit/f97279a6e3f0331251961f3873ecf89f5e2cff70))
+* **ios:** build with the iOS 27.1 SDK for iPhone Duo, landscape on its outer display ([#883](https://github.com/theclifmeister/terminatr/issues/883)) ([7b2a7eb](https://github.com/theclifmeister/terminatr/commit/7b2a7eb663d5be0bcdffa336dd7a7cc819579dd1))
+* **ios:** list and detail side by side when an iPhone Duo is open; opening or closing it keeps your place ([#886](https://github.com/theclifmeister/terminatr/issues/886)) ([a473265](https://github.com/theclifmeister/terminatr/commit/a4732650fc950ce27117406394b833fdc81203b8))
+* **ios:** Needs you answers in one tap on a closed iPhone Duo; open, a need sits beside the conversation that asked it ([#888](https://github.com/theclifmeister/terminatr/issues/888)) ([46035b3](https://github.com/theclifmeister/terminatr/commit/46035b30ba81a20758a9f5bfb67eee52a2c99675))
+* **ios:** run on iPad too, one universal build, with the two columns ([#889](https://github.com/theclifmeister/terminatr/issues/889)) ([219fadc](https://github.com/theclifmeister/terminatr/commit/219fadc313b213f95d47cd80edfc592ae74936bc))
+* **ios:** the phone's write key signs without Face ID ([#879](https://github.com/theclifmeister/terminatr/issues/879)) ([b979712](https://github.com/theclifmeister/terminatr/commit/b979712b3e93f2c34a9f8f7a69cd09b303765f7f))
+* **peer:** this server's own name in tm, told to paired servers ([#896](https://github.com/theclifmeister/terminatr/issues/896)) ([50489e4](https://github.com/theclifmeister/terminatr/commit/50489e40bc65d9ea9d656ca0e8d6320164e426a6))
+* **server:** re-prompt agents a restart stopped mid-turn ([#894](https://github.com/theclifmeister/terminatr/issues/894)) ([08af14d](https://github.com/theclifmeister/terminatr/commit/08af14d328741fd4068104cab0715c5e6676d178))
+* **tui:** phones in the Network popup — pair with a QR code, level, rename, remove; last_up ([#885](https://github.com/theclifmeister/terminatr/issues/885)) ([e9b770c](https://github.com/theclifmeister/terminatr/commit/e9b770c2ca865170847534d685f72aa743f8a363))
+
+
+### Bug Fixes
+
+* **app:** centre the working spinner in tool rows on the label's line ([#880](https://github.com/theclifmeister/terminatr/issues/880)) ([b7c3236](https://github.com/theclifmeister/terminatr/commit/b7c323647167e867771e6bb5bd1ed8c5078ff3d0))
+* **app:** draw Markdown pipe tables as tables in the Mac and iPhone conversation views ([#877](https://github.com/theclifmeister/terminatr/issues/877)) ([90aa3c0](https://github.com/theclifmeister/terminatr/commit/90aa3c0a886c01ebd551eb752a0aef8100735308))
+* **app:** Jump to latest wins over a flick still decelerating, on the iPhone and the Mac ([#892](https://github.com/theclifmeister/terminatr/issues/892)) ([c38fbb5](https://github.com/theclifmeister/terminatr/commit/c38fbb5baf0c61dfbb61c2257f12f6f231dddeb5))
+* **device:** pairing a known phone again with another write key drops it to view and says the key changed ([#890](https://github.com/theclifmeister/terminatr/issues/890)) ([6e1cf78](https://github.com/theclifmeister/terminatr/commit/6e1cf7884738603579b8518977340de783d0e932))
+* **guard:** let a scratch tm of a thread's own through; follow line variables; say where human-only commands run ([#895](https://github.com/theclifmeister/terminatr/issues/895)) ([14714f5](https://github.com/theclifmeister/terminatr/commit/14714f538b3759ef6164d32b6eadb7259e2f770a))
+* **ios:** tm's own prompts show as a muted folded line on the iPhone, as on the Mac ([#882](https://github.com/theclifmeister/terminatr/issues/882)) ([32a6009](https://github.com/theclifmeister/terminatr/commit/32a600961b7c42fec8fa0718b0d67de202c908f2))
+* **macos:** paired servers' threads show their title in the sidebar ([#875](https://github.com/theclifmeister/terminatr/issues/875)) ([281f01f](https://github.com/theclifmeister/terminatr/commit/281f01f5fbbbc730e49032cc2ca28b7acd4d0334))
+* **macos:** the bridge keeps the human's TERMINATR_SOCKET, still dropping a session's ([#891](https://github.com/theclifmeister/terminatr/issues/891)) ([78d04e1](https://github.com/theclifmeister/terminatr/commit/78d04e15db9e91f9db5d74019bec9a596f32fd89))
+* **relay:** harden the iPhone relay client, the self-signed state reads and the Docker deploy ([#884](https://github.com/theclifmeister/terminatr/issues/884)) ([3d4ee81](https://github.com/theclifmeister/terminatr/commit/3d4ee8142741745e09ce82489f1570ad1fb4e3b4))
+* **server:** keys from a paired server's pane or a device never answer an escape's prompt ([#897](https://github.com/theclifmeister/terminatr/issues/897)) ([82aaf08](https://github.com/theclifmeister/terminatr/commit/82aaf08fe7d97700069422f36b403123682823b2))
+
 ## [0.59.0](https://github.com/theclifmeister/terminatr/compare/v0.58.0...v0.59.0) (2026-10-28)
 
 
