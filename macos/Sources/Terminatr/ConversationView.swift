@@ -30,8 +30,9 @@ struct ConversationTab: View {
     @State private var query = ""
     @State private var at = 0
     @FocusState private var findFocused: Bool
-    /// Whether the transcript's end is out of sight (macOS 15).
-    @State private var scrolledUp = false
+    /// Whether the transcript follows its end, or the user scrolled up
+    /// (macOS 15, from the scroll geometry; 14 always follows).
+    @State private var follow = Follow()
     /// Bumped by Jump to the open card: the cards flash.
     @State private var flash = 0
     /// How many of the last entries the transcript draws.
@@ -112,14 +113,29 @@ struct ConversationTab: View {
                                 .foregroundStyle(theme.muted)
                                 .frame(maxWidth: .infinity)
                         }
+                        Color.clear.frame(height: 1).id(Self.end)
                     }
                     .padding(.horizontal, Page.edge)
                     .padding(.vertical, 14)
                 }
-                .defaultScrollAnchor(.bottom)
+                .modifier(FollowAnchor())
                 // Streamed text lands in place: no implicit animation.
                 .transaction { if reduceMotion { $0.animation = nil } }
-                .modifier(ScrolledUp(up: $scrolledUp))
+                .modifier(FollowGeometry(follow: $follow, newest: model.transcript.entries.last?.id))
+                // New output, or a growing last entry: the follower goes
+                // to the end; one scrolled up stays, and counts it.
+                .onChange(of: Self.tail(model.transcript)) {
+                    if follow.arrived(model.transcript.entries.map(\.id)) { proxy.scrollTo(Self.end, anchor: .bottom) }
+                }
+                // The Working bar or a card coming or going.
+                .onChange(of: Busy.of(session) != nil) {
+                    if follow.following { proxy.scrollTo(Self.end, anchor: .bottom) }
+                }
+                // A prompt sent: back to the end.
+                .onChange(of: model.sent) {
+                    follow.follow(newest: model.transcript.entries.last?.id)
+                    withAnimation(motion) { proxy.scrollTo(Self.end, anchor: .bottom) }
+                }
                 .onChange(of: current) { _, c in
                     guard let c, let row = Transcript.row(of: c, in: rows) else { return }
                     // A match in a folded group unfolds it, and it stays so.
@@ -131,6 +147,13 @@ struct ConversationTab: View {
                 // ends above them and scrolls behind them under the edge.
                 .footBar(
                     VStack(spacing: 10) {
+                        // While the agent has its turn: how long, and
+                        // what it does now (T803).
+                        if let busy = Busy.of(session) {
+                            WorkingBar(busy: busy, activity: Activity.of(model.transcript, current: session?.current ?? ""))
+                                .padding(.horizontal, Page.edge)
+                                .transition(.opacity)
+                        }
                         VStack(spacing: 10) {
                             if let review, let task = review.task {
                                 ReviewCard(project: model.ref.project, thread: review, task: task)
@@ -152,9 +175,9 @@ struct ConversationTab: View {
                         }
                     }
                     .overlay(alignment: .top) {
-                        if open && scrolledUp && (!coordinator || remote != nil) {
+                        if !follow.following {
                             // Above the bar, over the transcript's edge.
-                            jump(proxy)
+                            jump(proxy, toCard: open && (!coordinator || remote != nil))
                                 .padding(.bottom, 8)
                                 .frame(height: 0, alignment: .bottom)
                         }
@@ -179,14 +202,25 @@ struct ConversationTab: View {
     /// A scroll's animation: none with Reduce Motion.
     private var motion: Animation? { reduceMotion ? nil : .default }
 
-    /// Jump to the open card: frosted, with a shadow, so it reads over
-    /// whatever scrolls behind it.
-    private func jump(_ proxy: ScrollViewProxy) -> some View {
+    /// The transcript's last row: what following scrolls to.
+    static let end = "end"
+
+    /// What changes as output comes: the entries' count, and the last
+    /// one's text and result as it streams.
+    static func tail(_ t: Transcript) -> [Int] {
+        [t.entries.count, t.entries.last?.id ?? -1, t.entries.last?.text.count ?? 0, t.entries.last?.result == nil ? 0 : 1]
+    }
+
+    /// Jump to latest, or to the open card when one waits (its cards
+    /// flash): frosted, with a shadow, so it reads over whatever scrolls
+    /// behind it. Either follows the end again.
+    private func jump(_ proxy: ScrollViewProxy, toCard: Bool) -> some View {
         Button {
-            if let last = model.transcript.entries.last { withAnimation(motion) { proxy.scrollTo(last.id, anchor: .bottom) } }
-            flash += 1
+            follow.follow(newest: model.transcript.entries.last?.id)
+            withAnimation(motion) { proxy.scrollTo(Self.end, anchor: .bottom) }
+            if toCard { flash += 1 }
         } label: {
-            Label("Jump to the open card", systemImage: "arrow.down")
+            Label(toCard ? "Jump to the open card" : follow.label, systemImage: "arrow.down")
                 .font(theme.body(.subheadline, .semibold))
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
@@ -283,20 +317,36 @@ struct ViewOnlyLine: View {
     }
 }
 
-/// While the transcript's end is out of sight: on macOS 15, from its
-/// scroll geometry; never on 14, which has none to read.
-struct ScrolledUp: ViewModifier {
-    @Binding var up: Bool
+/// The scroll geometry into Follow: on macOS 15; 14 has none to read,
+/// and its conversation always follows.
+struct FollowGeometry: ViewModifier {
+    @Binding var follow: Follow
+    let newest: Int?
 
     func body(content: Content) -> some View {
         if #available(macOS 15, *) {
-            content.onScrollGeometryChange(for: Bool.self) { g in
-                g.contentOffset.y + g.containerSize.height < g.contentSize.height - 80
-            } action: { _, new in
-                up = new
+            content.onScrollGeometryChange(for: [Double].self) { g in
+                [g.contentOffset.y, g.containerSize.height - g.contentInsets.bottom, g.contentSize.height]
+            } action: { _, g in
+                follow.scrolled(offset: g[0], visible: g[1], content: g[2], newest: newest)
             }
         } else {
             content
+        }
+    }
+}
+
+/// Opens at the end; on macOS 15 content that grows keeps its place
+/// (Follow scrolls a follower down), so a user scrolled up never jumps.
+/// 14 keeps to the bottom as it grows.
+struct FollowAnchor: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(macOS 15, *) {
+            content
+                .defaultScrollAnchor(.bottom, for: .initialOffset)
+                .defaultScrollAnchor(.top, for: .sizeChanges)
+        } else {
+            content.defaultScrollAnchor(.bottom)
         }
     }
 }

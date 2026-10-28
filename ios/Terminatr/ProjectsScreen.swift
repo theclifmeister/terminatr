@@ -74,15 +74,17 @@ struct ProjectScreen: View {
                 }
                 Section {
                     NavigationLink(value: Route.session(SessionRef(project: slug))) {
-                        SessionLine(label: "Coordinator", ref: nil,
-                                    state: .of(coordinator: model.coordinatorSession(slug), in: p), dormant: dormant)
+                        let c = model.coordinatorSession(slug)
+                        SessionLine(label: "Coordinator", ref: nil, state: .of(coordinator: c, in: p),
+                                    busy: Busy.of(coordinator: c, in: p), dormant: dormant)
                     }
                 }
                 pages(p)
                 Section("Threads") {
                     ForEach(SidebarTree.threads(of: p) { model.session($0) }, id: \.record.id) { t in
                         NavigationLink(value: Route.session(SessionRef(project: slug, thread: t.record.id))) {
-                            SessionLine(label: t.record.title, ref: t.task?.ref, state: model.attention(t), pr: t.pr, dormant: dormant)
+                            SessionLine(label: t.record.title, ref: t.task?.ref, state: model.attention(t), busy: model.busy(t),
+                                        pr: t.pr, dormant: dormant)
                         }
                     }
                 }

@@ -6,7 +6,7 @@ import Foundation
 /// The terminatr app API (docs/SPEC.md §3.8): what tm app bridge answers.
 public enum AppAPI {
     /// The app API version this app was generated against.
-    public static let version = 24
+    public static let version = 25
 
     public struct AdoptRequestParams: Codable, Sendable, Hashable {
         public var id: String
@@ -1506,6 +1506,7 @@ public enum AppAPI {
         public var queuedSince: Date?
         public var queueHeld: String
         public var queueHeldSince: Date?
+        public var turnSince: Date?
         public var remoteControl: Bool
         public var model: String
         public var question: Question?
@@ -1514,7 +1515,7 @@ public enum AppAPI {
         public var server: String
         public var viewOnly: Bool
 
-        public init(id: String, role: String, agent: String = "", project: String = "", thread: String = "", task: String = "", title: String = "", cols: Int, rows: Int, created: Date, clients: Int, state: String = "", reason: String = "", escape: Bool = false, todosDone: Int = 0, todosTotal: Int = 0, current: String = "", queuedPrompts: Int = 0, queuedSince: Date? = nil, queueHeld: String = "", queueHeldSince: Date? = nil, remoteControl: Bool = false, model: String = "", question: Question? = nil, context: Int = 0, contextWindow: Int = 0, server: String = "", viewOnly: Bool = false) {
+        public init(id: String, role: String, agent: String = "", project: String = "", thread: String = "", task: String = "", title: String = "", cols: Int, rows: Int, created: Date, clients: Int, state: String = "", reason: String = "", escape: Bool = false, todosDone: Int = 0, todosTotal: Int = 0, current: String = "", queuedPrompts: Int = 0, queuedSince: Date? = nil, queueHeld: String = "", queueHeldSince: Date? = nil, turnSince: Date? = nil, remoteControl: Bool = false, model: String = "", question: Question? = nil, context: Int = 0, contextWindow: Int = 0, server: String = "", viewOnly: Bool = false) {
             self.id = id
             self.role = role
             self.agent = agent
@@ -1536,6 +1537,7 @@ public enum AppAPI {
             self.queuedSince = queuedSince
             self.queueHeld = queueHeld
             self.queueHeldSince = queueHeldSince
+            self.turnSince = turnSince
             self.remoteControl = remoteControl
             self.model = model
             self.question = question
@@ -1567,6 +1569,7 @@ public enum AppAPI {
             case queuedSince = "queued_since"
             case queueHeld = "queue_held"
             case queueHeldSince = "queue_held_since"
+            case turnSince = "turn_since"
             case remoteControl = "remote_control"
             case model
             case question
@@ -3245,6 +3248,7 @@ extension AppAPI.Session {
         self.queuedSince = try c.decodeIfPresent(Date.self, forKey: .queuedSince)
         self.queueHeld = try c.decodeIfPresent(String.self, forKey: .queueHeld) ?? ""
         self.queueHeldSince = try c.decodeIfPresent(Date.self, forKey: .queueHeldSince)
+        self.turnSince = try c.decodeIfPresent(Date.self, forKey: .turnSince)
         self.remoteControl = try c.decodeIfPresent(Bool.self, forKey: .remoteControl) ?? false
         self.model = try c.decodeIfPresent(String.self, forKey: .model) ?? ""
         self.question = try c.decodeIfPresent(AppAPI.Question.self, forKey: .question)

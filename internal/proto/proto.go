@@ -38,7 +38,8 @@ import (
 // projects.watch {lean, shown}, the inactive projects as their slug and
 // settings. 23: task.get, and projects.watch {detail}'s threads' check
 // and pr_state. 24: task.done, task.templates, and task.add {template}.
-const Protocol = 24
+// 25: SessionInfo's TurnSince, when the agent's current turn began.
+const Protocol = 25
 
 // Kind is what a connection is for.
 type Kind string
