@@ -1,8 +1,12 @@
 package cli
 
 import (
+	"bytes"
 	"context"
+	"crypto/ecdsa"
 	"crypto/ed25519"
+	"crypto/elliptic"
+	"crypto/rand"
 	"encoding/json"
 	"net/http/httptest"
 	"strings"
@@ -43,6 +47,20 @@ func TestDeviceUsageAndGuard(t *testing.T) {
 	}
 }
 
+// testWriteKey is a fresh write key's public half, as a phone sends it.
+func testWriteKey(t *testing.T) []byte {
+	t.Helper()
+	k, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := k.PublicKey.Bytes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
+}
+
 func TestDeviceListAccessNameRemove(t *testing.T) {
 	h := newHarness(t)
 	if out := h.ok(human, "device", "list"); !strings.Contains(out, "no devices") {
@@ -51,11 +69,11 @@ func TestDeviceListAccessNameRemove(t *testing.T) {
 	dir, _ := device.Dir()
 	k1, _, _ := ed25519.GenerateKey(nil)
 	k2, _, _ := ed25519.GenerateKey(nil)
-	d1, err := device.Add(dir, k1, "Clif's iPhone", "wss://r.example.net")
+	d1, err := device.Add(dir, k1, testWriteKey(t), "Clif's iPhone", "wss://r.example.net")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := device.Add(dir, k2, "iPad", "wss://r.example.net"); err != nil {
+	if _, err := device.Add(dir, k2, nil, "iPad", "wss://r.example.net"); err != nil {
 		t.Fatal(err)
 	}
 	reloads := stubDeviceServer(t, []proto.DeviceLink{{Name: d1.Name, ID: d1.ID().String(), State: proto.LinkUp, Since: time.Now().Add(-2 * time.Minute)}})
@@ -71,19 +89,27 @@ func TestDeviceListAccessNameRemove(t *testing.T) {
 	if err := json.Unmarshal([]byte(h.ok(human, "device", "list", "--json")), &js); err != nil || len(js.Devices) != 2 || js.Devices[0].Link == nil || js.Devices[0].Effective != "view" {
 		t.Fatalf("list --json: %+v, %v", js, err)
 	}
-	// Only view runs in this release.
+	// View and answer run in this release; answer needs a write key.
 	h.expect(1, "level-not-yet", human, "device", "access", "ipad", "write")
 	h.expect(1, "unknown-device", human, "device", "access", "watch", "view")
+	h.expect(1, "no-write-key", human, "device", "access", "ipad", "answer")
 	if out := h.ok(human, "device", "access", "ipad", "view"); !strings.Contains(out, "iPad is view-only") || *reloads != 1 {
 		t.Fatalf("access: %q, %d reloads", out, *reloads)
 	}
+	if out := h.ok(human, "device", "access", "clif's iphone", "answer"); !strings.Contains(out, "Clif's iPhone is answer") || !strings.Contains(out, "Face ID") || *reloads != 2 {
+		t.Fatalf("access answer: %q, %d reloads", out, *reloads)
+	}
+	if out := h.ok(human, "device", "list"); !strings.Contains(out, "answer") {
+		t.Fatalf("list at answer: %q", out)
+	}
+	h.ok(human, "device", "access", "clif's iphone", "view")
 	h.expect(1, "name-taken", human, "device", "name", "ipad", "CLIF'S IPHONE")
 	h.expect(2, "device name", human, "device", "name", "ipad", "")
 	if out := h.ok(human, "device", "name", "ipad", "Tablet"); !strings.Contains(out, "human (iphone: Tablet)") {
 		t.Fatalf("name: %q", out)
 	}
 	h.expect(1, "unknown-device", human, "device", "remove", "ipad")
-	if out := h.ok(human, "device", "remove", "tablet"); !strings.Contains(out, "Removed Tablet") || *reloads != 3 {
+	if out := h.ok(human, "device", "remove", "tablet"); !strings.Contains(out, "Removed Tablet") || *reloads != 5 {
 		t.Fatalf("remove: %q, %d reloads", out, *reloads)
 	}
 	if ds, _ := device.Load(dir); len(ds) != 1 {
@@ -102,11 +128,12 @@ func TestDevicePair(t *testing.T) {
 	url := "ws" + strings.TrimPrefix(hs.URL, "http")
 	dir, _ := device.Dir()
 	k, _, _ := ed25519.GenerateKey(nil)
-	if _, err := device.Add(dir, k, "iPhone", url); err != nil {
+	if _, err := device.Add(dir, k, nil, "iPhone", url); err != nil {
 		t.Fatal(err)
 	}
 	_, phoneKey, _ := ed25519.GenerateKey(nil)
 	phone := peer.IdentityOf(phoneKey)
+	wk := testWriteKey(t)
 	joined := make(chan error, 1)
 	old := shownInvite
 	t.Cleanup(func() { shownInvite = old })
@@ -114,7 +141,7 @@ func TestDevicePair(t *testing.T) {
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 			defer cancel()
-			_, err := device.Join(ctx, phone, in, "iPhone", "1.0", nil)
+			_, err := device.Join(ctx, phone, in, "iPhone", "1.0", wk, nil)
 			joined <- err
 		}()
 	}
@@ -131,7 +158,7 @@ func TestDevicePair(t *testing.T) {
 		}
 	}
 	ds, _ := device.Load(dir)
-	if len(ds) != 2 || ds[1].Name != "iPhone 2" || !ds[1].Key.Equal(phoneKey.Public().(ed25519.PublicKey)) || ds[1].Level != device.LevelView || ds[1].Relay != url {
+	if len(ds) != 2 || ds[1].Name != "iPhone 2" || !ds[1].Key.Equal(phoneKey.Public().(ed25519.PublicKey)) || ds[1].Level != device.LevelView || ds[1].Relay != url || !bytes.Equal(ds[1].WriteKey, wk) {
 		t.Fatalf("devices %+v", ds)
 	}
 	if *reloads != 1 {

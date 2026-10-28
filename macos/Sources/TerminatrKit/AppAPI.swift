@@ -122,6 +122,21 @@ public enum AppAPI {
         }
     }
 
+    public struct Auth: Codable, Sendable, Hashable {
+        public var nonce: Data
+        public var sig: Data
+
+        public init(nonce: Data, sig: Data) {
+            self.nonce = nonce
+            self.sig = sig
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case nonce
+            case sig
+        }
+    }
+
     public struct CancelParams: Codable, Sendable, Hashable {
         public var id: Int
 
@@ -143,6 +158,18 @@ public enum AppAPI {
 
         enum CodingKeys: String, CodingKey {
             case session
+        }
+    }
+
+    public struct DeviceNonce: Codable, Sendable, Hashable {
+        public var nonce: Data
+
+        public init(nonce: Data) {
+            self.nonce = nonce
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case nonce
         }
     }
 
@@ -274,16 +301,18 @@ public enum AppAPI {
         public var tm: String
         public var build: String
         public var level: String
+        public var sign: Bool
         public var capabilities: [String]
         public var methods: [String]
         public var server: Server?
         public var error: Error?
 
-        public init(appApi: Int, tm: String, build: String, level: String = "", capabilities: [String] = [], methods: [String] = [], server: Server? = nil, error: Error? = nil) {
+        public init(appApi: Int, tm: String, build: String, level: String = "", sign: Bool = false, capabilities: [String] = [], methods: [String] = [], server: Server? = nil, error: Error? = nil) {
             self.appApi = appApi
             self.tm = tm
             self.build = build
             self.level = level
+            self.sign = sign
             self.capabilities = capabilities
             self.methods = methods
             self.server = server
@@ -295,6 +324,7 @@ public enum AppAPI {
             case tm
             case build
             case level
+            case sign
             case capabilities
             case methods
             case server
@@ -2453,6 +2483,7 @@ public enum AppAPI {
     /// Every method of the app API, by name.
     public enum Methods {
         public static let coordinatorClear = Call<ProjectParams, CoordinatorClear>("coordinator.clear", write: true)
+        public static let deviceNonce = Call<NoParams, DeviceNonce>("device.nonce", write: false)
         public static let guardDecide = Call<GuardDecideParams, GuardDecided>("guard.decide", write: true)
         public static let guardRefusals = Call<NoParams, GuardRefusals>("guard.refusals", write: false)
         public static let libraryList = Call<ProjectParams, Library>("library.list", write: false)
@@ -2552,6 +2583,14 @@ extension AppAPI.ApproveResult {
     }
 }
 
+extension AppAPI.Auth {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.nonce = try c.decode(Data.self, forKey: .nonce)
+        self.sig = try c.decode(Data.self, forKey: .sig)
+    }
+}
+
 extension AppAPI.CancelParams {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -2563,6 +2602,13 @@ extension AppAPI.CoordinatorClear {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.session = try c.decode(String.self, forKey: .session)
+    }
+}
+
+extension AppAPI.DeviceNonce {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.nonce = try c.decode(Data.self, forKey: .nonce)
     }
 }
 
@@ -2630,6 +2676,7 @@ extension AppAPI.Hello {
         self.tm = try c.decode(String.self, forKey: .tm)
         self.build = try c.decode(String.self, forKey: .build)
         self.level = try c.decodeIfPresent(String.self, forKey: .level) ?? ""
+        self.sign = try c.decodeIfPresent(Bool.self, forKey: .sign) ?? false
         self.capabilities = try c.decodeIfPresent([String].self, forKey: .capabilities) ?? []
         self.methods = try c.decodeIfPresent([String].self, forKey: .methods) ?? []
         self.server = try c.decodeIfPresent(AppAPI.Server.self, forKey: .server)

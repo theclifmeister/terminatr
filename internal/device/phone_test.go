@@ -61,7 +61,7 @@ func TestPhoneDevice(t *testing.T) {
 		},
 		Confirm: func(o Offer) (bool, error) {
 			t.Logf("offer: %+v", o)
-			if o.Name != "tm phone test" || o.Version == "" {
+			if o.Name != "tm phone test" || o.Version == "" || !declined && o.WriteKey == nil {
 				t.Errorf("offer %+v", o)
 			}
 			return !declined, nil
@@ -75,7 +75,7 @@ func TestPhoneDevice(t *testing.T) {
 	if err != nil {
 		t.Fatalf("pair: %v", err)
 	}
-	if _, err := Add(devDir, paired.Key, paired.Name, url); err != nil {
+	if _, err := Add(devDir, paired.Key, paired.WriteKey, paired.Name, url); err != nil {
 		t.Fatal(err)
 	}
 	// The link: the device's name and level first, then each line back

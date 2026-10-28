@@ -176,6 +176,9 @@ func (e *Env) devicePair(peerDir, dir, relayFlag, as string) error {
 				fmt.Fprintf(e.Stdout, "\nThis device is paired already, as %q; pairing again keeps its level.\n", devices[key].Name)
 			}
 			fmt.Fprintf(e.Stdout, "\nThe phone: %q, device id %s, app %s\n", off.Name, off.ID.Short(), textsafe.Line(off.Version, 40))
+			if off.WriteKey == nil {
+				fmt.Fprintln(e.Stdout, "Its app has no write key: it can only view, whatever its level.")
+			}
 			fmt.Fprintf(e.Stdout, "Add it as %q, a %s device? [y/N] ", name, levelWords(level))
 			line, err := stdin.ReadString('\n')
 			if err != nil && line == "" {
@@ -194,7 +197,7 @@ func (e *Env) devicePair(peerDir, dir, relayFlag, as string) error {
 	if err != nil {
 		return deviceError(pairFailed(err))
 	}
-	d, err := device.Add(dir, p.Key, name, relayURL)
+	d, err := device.Add(dir, p.Key, p.WriteKey, name, relayURL)
 	var taken *device.TakenError
 	if errors.As(err, &taken) {
 		return &project.Error{Code: "name-taken", Msg: err.Error()}
@@ -259,10 +262,12 @@ type deviceEntry struct {
 	ID    string `json:"id"`
 	Short string `json:"short"`
 	// Level is the device's level; Effective the one its link runs at
-	// (only view in this release).
+	// (view for write in this release, or without a write key);
+	// WriteKey says it has one.
 	Level     string            `json:"level"`
 	Effective string            `json:"effective"`
 	Relay     string            `json:"relay"`
+	WriteKey  bool              `json:"write_key"`
 	Link      *proto.DeviceLink `json:"link,omitempty"`
 }
 
@@ -278,7 +283,7 @@ func (e *Env) deviceList(dir string, asJSON bool) error {
 	}
 	entries := []deviceEntry{}
 	for _, d := range devices {
-		de := deviceEntry{Name: d.Name, ID: d.ID().String(), Short: d.ID().Short(), Level: d.Level, Effective: device.Effective(d.Level), Relay: d.Relay}
+		de := deviceEntry{Name: d.Name, ID: d.ID().String(), Short: d.ID().Short(), Level: d.Level, Effective: d.Effective(), Relay: d.Relay, WriteKey: d.WriteKey != nil}
 		if l, ok := links[de.ID]; ok {
 			de.Link = &l
 		}
@@ -302,7 +307,11 @@ func (e *Env) deviceList(dir string, asJSON bool) error {
 			state = "no link yet"
 		}
 		level := de.Level
-		if de.Effective != de.Level {
+		switch {
+		case de.Effective == de.Level:
+		case !de.WriteKey:
+			level += " (runs at " + de.Effective + ": no write key)"
+		default:
 			level += " (runs at " + de.Effective + " in this release)"
 		}
 		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", de.Name, de.Short, level, relayHost(de.Relay), state)
@@ -339,7 +348,10 @@ func sinceWords(t, now time.Time) string {
 func deviceError(err error) error {
 	var unknown *device.UnknownError
 	var taken *device.TakenError
+	var nokey *device.NoWriteKeyError
 	switch {
+	case errors.As(err, &nokey):
+		return &project.Error{Code: "no-write-key", Msg: err.Error()}
 	case errors.As(err, &unknown):
 		return &project.Error{Code: "unknown-device", Msg: err.Error()}
 	case errors.As(err, &taken):
@@ -358,22 +370,27 @@ func (e *Env) deviceRemove(dir, name string) error {
 	return nil
 }
 
-// deviceAccess sets what the device name may do through the app API. Only
-// view runs in this release: answer and write come with the phone's
-// later stages, so tm refuses them rather than store a level nothing
-// enforces yet.
+// deviceAccess sets what the device name may do through the app API.
+// View and answer run in this release: write comes with the phone's
+// composer, so tm refuses it rather than store a level nothing enforces
+// yet. Above view the device needs a write key.
 func (e *Env) deviceAccess(dir, name, level string) error {
 	if !device.ValidLevel(level) {
 		return usagef("tm device access NAME view|answer|write: %q isn't one", level)
 	}
 	if !device.Enabled(level) {
-		return &project.Error{Code: "level-not-yet", Msg: fmt.Sprintf("level %s isn't in this release: devices are view-only for now", level)}
+		return &project.Error{Code: "level-not-yet", Msg: fmt.Sprintf("level %s isn't in this release: devices go up to answer for now", level)}
 	}
 	d, err := device.SetLevel(dir, name, level)
 	if err != nil {
 		return deviceError(err)
 	}
-	fmt.Fprintf(e.Stdout, "%s is %s: it reads projects, sessions, conversations and panes, and acts on nothing.\n", d.Name, levelWords(d.Level))
+	switch d.Level {
+	case device.LevelAnswer:
+		fmt.Fprintf(e.Stdout, "%s is %s: it reads, answers questions and approvals (never one that runs a command outside the sandbox), and accepts or sends back tasks, each act behind Face ID.\n", d.Name, levelWords(d.Level))
+	default:
+		fmt.Fprintf(e.Stdout, "%s is %s: it reads projects, sessions, conversations and panes, and acts on nothing.\n", d.Name, levelWords(d.Level))
+	}
 	e.reloadDevices()
 	return nil
 }

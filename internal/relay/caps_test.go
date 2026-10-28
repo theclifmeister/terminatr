@@ -270,3 +270,14 @@ func TestControlFramesAreMetered(t *testing.T) {
 		t.Fatalf("the address's bucket wasn't debited: %+v", st)
 	}
 }
+
+// TestDefaultPerIPAboveWaiting: the waiting count among an address's
+// connections, so the default leaves an address as many again to mate
+// with: a server waiting in all its rooms, and its phones on the same
+// network mating them.
+func TestDefaultPerIPAboveWaiting(t *testing.T) {
+	cfg := DefaultConfig()
+	if cfg.MaxPerIP < 2*cfg.MaxWaitingPerIP {
+		t.Fatalf("--max-per-ip %d, waiting per address %d", cfg.MaxPerIP, cfg.MaxWaitingPerIP)
+	}
+}

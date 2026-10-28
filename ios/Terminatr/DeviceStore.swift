@@ -4,12 +4,14 @@ import TerminatrLink
 
 /// What the phone keeps of its pairing, in the Keychain, on this device
 /// only (never in a backup or iCloud Keychain), readable after the first
-/// unlock: the device key's seed, which the server pinned, and the
-/// server it paired with (its name, relay and key). One server for now.
+/// unlock: the device key's seed, which the server pinned, the server it
+/// paired with (its name, relay and key), and the write key's handle
+/// (WriteKey). One server for now.
 enum DeviceStore {
     private static let service = "dev.terminatr.ios.device"
     private static let keyAccount = "identity"
     private static let serverAccount = "server"
+    private static let writeKeyAccount = "write-key"
 
     /// The device's key, made and kept the first time it is asked for.
     static func identity() throws -> LinkIdentity {
@@ -30,10 +32,19 @@ enum DeviceStore {
         try write(serverAccount, JSONEncoder().encode(s))
     }
 
-    /// Forgets the server and the key: pairing again makes a new key,
+    /// The write key's handle (WriteKey), if it was made.
+    static func writeKey() throws -> Data? {
+        try read(writeKeyAccount)
+    }
+
+    static func saveWriteKey(_ d: Data) throws {
+        try write(writeKeyAccount, d)
+    }
+
+    /// Forgets the server and the keys: pairing again makes new ones,
     /// which the server has to take afresh.
     static func forget() {
-        for a in [serverAccount, keyAccount] {
+        for a in [serverAccount, keyAccount, writeKeyAccount] {
             SecItemDelete(query(a) as CFDictionary)
         }
     }

@@ -9,7 +9,9 @@
 package device
 
 import (
+	"crypto/ecdsa"
 	"crypto/ed25519"
+	"crypto/elliptic"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -63,15 +65,16 @@ const (
 // Levels are the levels, narrowest first.
 var Levels = []string{LevelView, LevelAnswer, LevelWrite}
 
-// Enabled says whether this release lets a device have level: only view
-// for now; answer and write come with the phone's later stages.
-func Enabled(level string) bool { return level == LevelView }
+// Enabled says whether this release lets a device have level: view and
+// answer; write comes with the phone's composer.
+func Enabled(level string) bool { return level == LevelView || level == LevelAnswer }
 
-// Effective is the level a device's link runs at: its own when this
-// release enables it, else view.
-func Effective(level string) string {
-	if Enabled(level) {
-		return level
+// Effective is the level d's link runs at: its own when this release
+// enables it and, above view, d has a write key to sign its acts with;
+// else view.
+func (d Device) Effective() string {
+	if Enabled(d.Level) && (d.Level == LevelView || d.WriteKey != nil) {
+		return d.Level
 	}
 	return LevelView
 }
@@ -87,12 +90,42 @@ func ValidLevel(s string) bool {
 }
 
 // Device is a paired device: the name the user knows it by, the key
-// pinned at pairing, its level and the relay both dial.
+// pinned at pairing, its level, the relay both dial and its write key.
 type Device struct {
 	Name  string            `json:"name"`
 	Key   ed25519.PublicKey `json:"key"` // base64
 	Level string            `json:"level"`
 	Relay string            `json:"relay"` // wss://host[:port][#sha256=<pin>]
+	// WriteKey is the P-256 key the device signs each act with
+	// (WriteKeySize bytes, uncompressed, base64), sent at pairing: on a
+	// phone it lives in the Secure Enclave and only Face ID or the
+	// passcode unlocks it. Without one the device acts on nothing.
+	WriteKey []byte `json:"write_key,omitempty"`
+}
+
+// WriteKeySize is a write key's length: an uncompressed P-256 point
+// (0x04, X, Y), as the Secure Enclave gives it (x963Representation).
+const WriteKeySize = 65
+
+// CheckWriteKey says why b isn't a write key.
+func CheckWriteKey(b []byte) error {
+	if len(b) != WriteKeySize {
+		return fmt.Errorf("the write key is %d bytes, want %d (an uncompressed P-256 point)", len(b), WriteKeySize)
+	}
+	if _, err := ecdsa.ParseUncompressedPublicKey(elliptic.P256(), b); err != nil {
+		return fmt.Errorf("the write key isn't a P-256 point: %v", err)
+	}
+	return nil
+}
+
+// Verifier is d's write key, to check its signatures with; nil when it
+// has none.
+func (d Device) Verifier() *ecdsa.PublicKey {
+	k, err := ecdsa.ParseUncompressedPublicKey(elliptic.P256(), d.WriteKey)
+	if err != nil {
+		return nil
+	}
+	return k
 }
 
 // ID is the device's id: its key's SHA-256, as a server's.
@@ -136,6 +169,11 @@ func (d Device) check() error {
 	}
 	if pin, err := relay.ParsePin(u.Fragment); err != nil || (pin != "" && u.Scheme != "wss") {
 		return fmt.Errorf("device %s: relay %q: a pin is #sha256= and 64 hex digits, on a wss:// URL", d.Name, d.Relay)
+	}
+	if d.WriteKey != nil {
+		if err := CheckWriteKey(d.WriteKey); err != nil {
+			return fmt.Errorf("device %s: %w", d.Name, err)
+		}
 	}
 	return nil
 }
@@ -279,11 +317,12 @@ func FreeName(devices []Device, name string, key ed25519.PublicKey) string {
 	return out
 }
 
-// Add keeps key as the device called name through relayURL, at view. A
-// key already paired keeps its level and takes the new name and relay;
-// a name another device has is a TakenError.
-func Add(dir string, key ed25519.PublicKey, name, relayURL string) (Device, error) {
-	d := Device{Name: name, Key: key, Level: LevelView, Relay: relayURL}
+// Add keeps key as the device called name through relayURL, with its
+// write key (nil for none), at view. A key already paired keeps its
+// level and takes the new name, relay and write key; a name another
+// device has is a TakenError.
+func Add(dir string, key ed25519.PublicKey, writeKey []byte, name, relayURL string) (Device, error) {
+	d := Device{Name: name, Key: key, Level: LevelView, Relay: relayURL, WriteKey: writeKey}
 	if err := d.check(); err != nil {
 		return Device{}, err
 	}
@@ -318,7 +357,16 @@ func Remove(dir, name string) (Device, error) {
 	return gone, err
 }
 
-// SetLevel sets the level of the device called name.
+// NoWriteKeyError says a device paired without a write key can't be
+// raised above view: it has nothing to sign its acts with.
+type NoWriteKeyError struct{ Name string }
+
+func (e *NoWriteKeyError) Error() string {
+	return fmt.Sprintf("%s has no write key to sign its acts with: pair it again from an app that has one (tm device pair)", e.Name)
+}
+
+// SetLevel sets the level of the device called name; above view it
+// needs a write key (NoWriteKeyError).
 func SetLevel(dir, name, level string) (Device, error) {
 	if !ValidLevel(level) {
 		return Device{}, fmt.Errorf("level %q: view, answer or write", level)
@@ -328,6 +376,9 @@ func SetLevel(dir, name, level string) (Device, error) {
 		i := find(devices, name)
 		if i < 0 {
 			return nil, &UnknownError{name}
+		}
+		if level != LevelView && devices[i].WriteKey == nil {
+			return nil, &NoWriteKeyError{devices[i].Name}
 		}
 		devices[i].Level = level
 		d = devices[i]

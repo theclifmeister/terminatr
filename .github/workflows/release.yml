@@ -20,6 +20,10 @@ name: release
 #      App so that ci.yml runs on it
 #   6. the relay image (deploy/relay/Dockerfile, from the published linux
 #      binaries) goes to ghcr.io/theclifmeister/tm-relay, on a Linux runner
+#   7. the iPhone app is archived, signed and uploaded to TestFlight
+#      (scripts/release/ios.sh), on its own macOS runner, once the
+#      release is published; skipped while its secrets aren't set
+#      (ios/README.md, TestFlight)
 #
 # The build runs on one macOS runner: tm needs cgo, the Linux targets are
 # cross-compiled with zig cc, the darwin targets are linked by Apple's
@@ -51,6 +55,7 @@ jobs:
     outputs:
       prerelease: ${{ steps.version.outputs.prerelease }}
       published: ${{ steps.publish.outputs.published }}
+      testflight: ${{ steps.testflight.outputs.testflight }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -70,6 +75,30 @@ jobs:
           esac
 
       - uses: ./.github/actions/release-setup
+
+      # Whether the testflight job runs: only once any of its secrets is
+      # set (a job's if: can't read secrets). Only their presence is
+      # looked at. Some but not all set runs it too, and it fails naming
+      # the missing ones.
+      - name: TestFlight secrets
+        id: testflight
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          IOS_DIST_CERT_P12_BASE64: ${{ secrets.IOS_DIST_CERT_P12_BASE64 }}
+          IOS_DIST_CERT_PASSWORD: ${{ secrets.IOS_DIST_CERT_PASSWORD }}
+          IOS_PROFILE_BASE64: ${{ secrets.IOS_PROFILE_BASE64 }}
+        run: |
+          set -euo pipefail
+          for v in ASC_KEY_ID ASC_ISSUER_ID ASC_KEY_P8 IOS_DIST_CERT_P12_BASE64 IOS_DIST_CERT_PASSWORD IOS_PROFILE_BASE64; do
+            if [ -n "${!v}" ]; then
+              echo "testflight=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          done
+          echo "::notice::no TestFlight secrets: the iPhone app is not uploaded (ios/README.md, TestFlight)"
+          echo "testflight=false" >> "$GITHUB_OUTPUT"
 
       # The same Developer ID as toe. The identity is found in the imported
       # certificate rather than spelled out, and must belong to APPLE_TEAM_ID.
@@ -245,6 +274,94 @@ jobs:
       - name: Clean up keychain
         if: always()
         run: security delete-keychain "$RUNNER_TEMP/tm-signing.keychain-db" || true
+
+  # The iPhone app to TestFlight (scripts/release/ios.sh): archived with
+  # the tag's version and its commit count as the build number, signed
+  # with an Apple Distribution identity and an App Store profile (manual
+  # signing: a CI runner has no Xcode account, and cloud signing would
+  # make a certificate per run), exported and uploaded with an App Store
+  # Connect API key. Prereleases go too: TestFlight is where they're
+  # tried. Runs once the release is published, so a failure here leaves
+  # the release as it is: rerun this job (a build number already
+  # uploaded is refused; that one is there). Skipped while none of its
+  # secrets is set.
+  testflight:
+    needs: release
+    if: ${{ !cancelled() && needs.release.outputs.published == 'true' && needs.release.outputs.testflight == 'true' }}
+    runs-on: macos-latest
+    environment: release
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # The build number is the commit count.
+          fetch-depth: 0
+
+      # The app's packages compile no shader today, but TerminatrUI is
+      # the Mac app's too: as macos-app in ci.yml.
+      - name: Metal toolchain
+        run: |
+          xcodebuild -version
+          xcrun metal --version >/dev/null 2>&1 || xcodebuild -downloadComponent MetalToolchain
+          xcrun metal --version
+
+      - name: Import signing certificate and profile
+        env:
+          CERT_P12_BASE64: ${{ secrets.IOS_DIST_CERT_P12_BASE64 }}
+          CERT_PASSWORD: ${{ secrets.IOS_DIST_CERT_PASSWORD }}
+          PROFILE_BASE64: ${{ secrets.IOS_PROFILE_BASE64 }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          set -euo pipefail
+          missing=
+          for v in CERT_P12_BASE64 CERT_PASSWORD PROFILE_BASE64 KEYCHAIN_PASSWORD ASC_KEY_ID ASC_ISSUER_ID ASC_KEY_P8; do
+            [ -n "${!v}" ] || missing="$missing $v"
+          done
+          if [ -n "$missing" ]; then
+            echo "TestFlight secrets missing:$missing (CERT_* and PROFILE_* are IOS_DIST_CERT_*, IOS_PROFILE_BASE64; ios/README.md, TestFlight)" >&2
+            exit 1
+          fi
+          keychain="$RUNNER_TEMP/tm-ios.keychain-db"
+          echo "$CERT_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/tm-ios.p12"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$keychain"
+          security set-keychain-settings -lut 3600 "$keychain"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$keychain"
+          security import "$RUNNER_TEMP/tm-ios.p12" -k "$keychain" \
+            -P "$CERT_PASSWORD" -T /usr/bin/codesign
+          # Without this codesign blocks on a GUI keychain prompt and the job hangs.
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "$KEYCHAIN_PASSWORD" "$keychain" > /dev/null
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          rm -f "$RUNNER_TEMP/tm-ios.p12"
+          # Xcode signs with "Apple Distribution" of the project's team
+          # (DEVELOPMENT_TEAM, ios/Terminatr.xcodeproj): one must be valid,
+          # its WWDR intermediate in the .p12 or on the runner.
+          team=$(sed -n 's/^[[:space:]]*DEVELOPMENT_TEAM = \([A-Z0-9]*\);$/\1/p' ios/Terminatr.xcodeproj/project.pbxproj)
+          identities=$(security find-identity -v -p codesigning "$keychain")
+          if ! printf '%s\n' "$identities" | grep -q "\"Apple Distribution: .* ($team)\""; then
+            echo "no valid Apple Distribution identity of team $team in IOS_DIST_CERT_P12_BASE64" >&2
+            exit 1
+          fi
+          echo "$PROFILE_BASE64" | base64 --decode > "$RUNNER_TEMP/tm-ios.mobileprovision"
+          printf '%s\n' "$ASC_KEY_P8" > "$RUNNER_TEMP/tm-asc.p8"
+
+      - name: Archive and upload
+        env:
+          TM_IOS_PROFILE: ${{ runner.temp }}/tm-ios.mobileprovision
+          TM_ASC_KEY: ${{ runner.temp }}/tm-asc.p8
+          TM_ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          TM_ASC_ISSUER: ${{ secrets.ASC_ISSUER_ID }}
+        run: scripts/release/ios.sh "$GITHUB_REF_NAME"
+
+      - name: Clean up
+        if: always()
+        run: |
+          security delete-keychain "$RUNNER_TEMP/tm-ios.keychain-db" || true
+          rm -f "$RUNNER_TEMP/tm-ios.mobileprovision" "$RUNNER_TEMP/tm-asc.p8"
 
   # The relay image, for amd64 and arm64, built by deploy/relay/Dockerfile
   # from this release's published linux archives, checked against its

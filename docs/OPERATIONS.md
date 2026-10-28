@@ -880,6 +880,8 @@ A tag pushed by hand (`git tag v0.2.0 && git push origin v0.2.0`) still releases
 
 To run a release again (a failed run, say), rerun its failed jobs, or Actions → release → Run workflow with Use workflow from set to the tag: on a branch it does nothing.
 
+Once the release is published, a `testflight` job on another macOS runner archives the iPhone app with the tag's version and its commit count as the build number, signs it with an Apple Distribution certificate and an App Store profile, and uploads it to TestFlight with an App Store Connect API key (`scripts/release/ios.sh`). It is skipped while none of its secrets is set; setting them up is a checklist in `ios/README.md` (TestFlight). If it fails, the release stays published: rerun the `testflight` job.
+
 Then a second job, on a Linux runner (outside the `release` environment, which holds only the Apple secrets), builds the relay image from `deploy/relay/Dockerfile` for amd64 and arm64 (the published linux archives, checked against `checksums.txt`) and pushes it to `ghcr.io/theclifmeister/tm-relay:<tag>`, and `:latest` unless it is a prerelease. It runs once the release is published, even when the formula step failed; if it fails, the release stays published: rerun the `image` job.
 
 Before you merge the release pull request (or push a tag), `ci.yml` on main has run `test` (unit tests with `-race`) and `macos` (build, unit tests, e2e smoke): wait for them to be green. Pull requests run neither macOS nor `-race`, and the release snapshot only when they touch release files; the tag run is where every release build is checked. If the repository requires status checks, require `test` (the one check every pull request runs). `macos` is main-only, so don't require it; `changes`, `mod-types` and `release-snapshot` are skipped when not needed, which counts as passed.
@@ -899,6 +901,9 @@ The same Apple credentials as toe. Put them in the `release` environment (Settin
 | `NOTARY_KEY_P8_BASE64` | an App Store Connect API key (.p8, role Developer), base64 |
 | `NOTARY_KEY_ID` | that key's id |
 | `NOTARY_ISSUER_ID` | the App Store Connect issuer id |
+| `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_KEY_P8` | optional, for TestFlight: an App Store Connect API key with the App Manager role, its issuer id and the .p8 as text (`ios/README.md`) |
+| `IOS_DIST_CERT_P12_BASE64`, `IOS_DIST_CERT_PASSWORD` | optional, for TestFlight: the Apple Distribution certificate, key and WWDR intermediate as .p12, base64, and its password |
+| `IOS_PROFILE_BASE64` | optional, for TestFlight: the App Store provisioning profile of `dev.terminatr.ios`, base64 |
 
 And two repository secrets (Settings → Secrets and variables → Actions → Repository secrets), for the release App: a GitHub App of your own (Settings → Developer settings → GitHub Apps → New GitHub App; no webhook), installed on this repository only, with the repository permissions Contents, Pull requests and Issues set to Read and write. `release-please.yml` and the release job's formula step get a short-lived token from it (`actions/create-github-app-token`).
 

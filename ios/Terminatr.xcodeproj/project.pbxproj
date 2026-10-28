@@ -184,6 +184,7 @@
 				INFOPLIST_FILE = Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = terminatr;
 				INFOPLIST_KEY_NSCameraUsageDescription = "The camera reads the pairing code tm device pair shows on your computer.";
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "Face ID confirms each answer, approval and review decision before it goes to your server.";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -211,10 +212,12 @@
 				CODE_SIGN_STYLE = Automatic;
 				"CODE_SIGN_IDENTITY[sdk=iphonesimulator*]" = "-";
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 4689D3AT8J;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = terminatr;
 				INFOPLIST_KEY_NSCameraUsageDescription = "The camera reads the pairing code tm device pair shows on your computer.";
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "Face ID confirms each answer, approval and review decision before it goes to your server.";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -226,6 +229,7 @@
 				MARKETING_VERSION = 0.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = dev.terminatr.ios;
 				PRODUCT_NAME = Terminatr;
+				PROVISIONING_PROFILE_SPECIFIER = "$(TM_IOS_PROFILE)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
 				SWIFT_EMIT_LOC_STRINGS = NO;

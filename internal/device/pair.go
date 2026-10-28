@@ -82,11 +82,13 @@ func ParseInvite(s string) (Invite, error) {
 }
 
 // Offer is what the user confirms on the server: the device's name, as
-// it gave it, its id and its app's version.
+// it gave it, its id, its app's version and its write key (nil when it
+// sent none, or one that isn't a P-256 point: it can only view).
 type Offer struct {
-	Name    string
-	Version string
-	ID      peer.ID
+	Name     string
+	Version  string
+	ID       peer.ID
+	WriteKey []byte
 }
 
 // PairOptions configure the server's side of a device pairing.
@@ -108,21 +110,34 @@ func Pair(ctx context.Context, id *peer.Identity, in Invite, o PairOptions) (*pe
 	if in.Server != id.ID {
 		return nil, errors.New("the invite names another server's key")
 	}
-	return peer.Pair(ctx, id, in.Code, peer.PairOptions{
+	p, err := peer.Pair(ctx, id, in.Code, peer.PairOptions{
 		Name: o.Name, Version: o.Version, RelayTLS: o.RelayTLS, Waiting: o.Waiting, Purpose: peer.PurposeDevice,
 		Confirm: func(po peer.Offer) (bool, error) {
-			return o.Confirm(Offer{Name: CleanName(po.Name), Version: po.Version, ID: po.ID})
+			return o.Confirm(Offer{Name: CleanName(po.Name), Version: po.Version, ID: po.ID, WriteKey: writeKeyOf(po.WriteKey)})
 		},
 	})
+	if err != nil {
+		return nil, err
+	}
+	p.WriteKey = writeKeyOf(p.WriteKey)
+	return p, nil
+}
+
+// writeKeyOf is b when it is a write key, else nil.
+func writeKeyOf(b []byte) []byte {
+	if CheckWriteKey(b) != nil {
+		return nil
+	}
+	return b
 }
 
 // Join is the device's side, as the phone runs it: it joins the pairing
 // in names with the device's key, takes only the server key in names,
-// and gives its name. It returns the server, once the user said yes
-// there.
-func Join(ctx context.Context, key *peer.Identity, in Invite, name, version string, relayTLS *tls.Config) (*peer.Paired, error) {
+// and gives its name and write key (nil for none). It returns the
+// server, once the user said yes there.
+func Join(ctx context.Context, key *peer.Identity, in Invite, name, version string, writeKey []byte, relayTLS *tls.Config) (*peer.Paired, error) {
 	return peer.Join(ctx, key, in.Code, peer.PairOptions{
-		Name: name, Version: version, RelayTLS: relayTLS, Purpose: peer.PurposeDevice, Expect: &in.Server,
+		Name: name, Version: version, RelayTLS: relayTLS, Purpose: peer.PurposeDevice, Expect: &in.Server, WriteKey: writeKey,
 		Confirm: func(peer.Offer) (bool, error) { return true, nil },
 	})
 }

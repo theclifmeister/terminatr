@@ -151,7 +151,7 @@ func TestBridge(t *testing.T) {
 	}
 	h := c.Hello
 	if h.AppAPI != appapi.Version || h.Server == nil || h.Server.Protocol != proto.Protocol || h.Server.PID != os.Getpid() ||
-		len(h.Methods) != len(appapi.MethodNames()) || len(h.Capabilities) == 0 {
+		len(h.Methods) != len(appapi.MethodNames())-1 || slices.Contains(h.Methods, appapi.MethodDeviceNonce) || h.Sign || len(h.Capabilities) == 0 {
 		t.Fatalf("hello %+v %+v", h, h.Server)
 	}
 

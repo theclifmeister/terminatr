@@ -500,7 +500,8 @@ func TestAllowlist(t *testing.T) {
 		proto.MethodSessionFile, proto.MethodCoordinatorClear, proto.MethodProjectActive, proto.MethodSessionUpload,
 		proto.MethodLinkAct, proto.MethodPeerShareAnswer, MethodGuardRefusals, MethodGuardDecide, proto.MethodTranscriptPage,
 		proto.MethodProjectPin, proto.MethodProjectNew, proto.MethodSessionAdoptRequest, proto.MethodSessionRemote, proto.MethodLinkSend,
-		proto.MethodMemoryList, proto.MethodMemoryRead, proto.MethodLibraryList, proto.MethodLibraryRead}
+		proto.MethodMemoryList, proto.MethodMemoryRead, proto.MethodLibraryList, proto.MethodLibraryRead,
+		MethodDeviceNonce}
 	slices.Sort(want)
 	if got := MethodNames(); !slices.Equal(got, want) {
 		t.Errorf("methods %v, want %v", got, want)

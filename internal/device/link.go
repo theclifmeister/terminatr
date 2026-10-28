@@ -1,6 +1,7 @@
 package device
 
 import (
+	"bytes"
 	"context"
 	"crypto/ed25519"
 	"crypto/tls"
@@ -115,9 +116,9 @@ func backoff(n int) time.Duration {
 }
 
 // Reload reads the identity key and the devices again: a new device gets
-// a link; a removed one, or one whose key, name or relay changed, loses
-// its link at once (a changed one dials again); a changed level reaches
-// the open link.
+// a link; a removed one, or one whose key, name, relay or write key
+// changed, loses its link at once (a changed one dials again); a
+// changed level reaches the open link.
 func (m *Manager) Reload() error {
 	if m == nil {
 		return nil
@@ -152,14 +153,14 @@ func (m *Manager) Reload() error {
 	}
 	for k, l := range m.links {
 		d, ok := want[k]
-		if !ok || d.Name != l.d.Name || d.Relay != l.d.Relay {
+		if !ok || d.Name != l.d.Name || d.Relay != l.d.Relay || !bytes.Equal(d.WriteKey, l.d.WriteKey) {
 			m.drop(k)
 			continue
 		}
 		l.d.Level = d.Level
-		l.level.Set(Effective(d.Level))
+		l.level.Set(d.Effective())
 		l.mu.Lock()
-		l.st.Level, l.st.Effective = d.Level, Effective(d.Level)
+		l.st.Level, l.st.Effective = d.Level, d.Effective()
 		l.mu.Unlock()
 	}
 	for k, d := range want {
@@ -172,8 +173,8 @@ func (m *Manager) Reload() error {
 
 func (m *Manager) add(id *peer.Identity, d Device) {
 	ctx, cancel := context.WithCancel(m.ctx)
-	l := &link{d: d, level: NewLevel(Effective(d.Level)), cancel: cancel,
-		st: proto.DeviceLink{Name: d.Name, ID: d.ID().String(), Level: d.Level, Effective: Effective(d.Level), State: proto.LinkConnecting, Since: time.Now()}}
+	l := &link{d: d, level: NewLevel(d.Effective()), cancel: cancel,
+		st: proto.DeviceLink{Name: d.Name, ID: d.ID().String(), Level: d.Level, Effective: d.Effective(), State: proto.LinkConnecting, Since: time.Now()}}
 	m.links[d.ID()] = l
 	t := peer.RelayTransport(d.Relay, id, d.ID(), m.opts.RelayTLS)
 	m.wg.Add(1)
