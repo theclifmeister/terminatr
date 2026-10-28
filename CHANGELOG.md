@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.58.0](https://github.com/theclifmeister/terminatr/compare/v0.57.0...v0.58.0) (2026-10-28)
+
+
+### Features
+
+* **app:** board Done fold and filter, New Task templates, Ask the Coordinator about a task (app API 20, protocol 24) ([#855](https://github.com/theclifmeister/terminatr/issues/855)) ([a7f6ff2](https://github.com/theclifmeister/terminatr/commit/a7f6ff29c3df243e6d7050cee93baf7e36daed27))
+* **app:** Needs you shows only guard refusals the user can allow (app API 24) ([#863](https://github.com/theclifmeister/terminatr/issues/863)) ([8a12217](https://github.com/theclifmeister/terminatr/commit/8a122172e2316a46f98f5839677b02c96ffc6474))
+* **app:** pin, new project, adopt a session, remote control and link messages (app API 22) ([#857](https://github.com/theclifmeister/terminatr/issues/857)) ([736c1f2](https://github.com/theclifmeister/terminatr/commit/736c1f21b1bd1f25564a59f908b5b7ac4a858796))
+* **app:** read-only project pages: Overview, Memory, Library (app API 21) ([#854](https://github.com/theclifmeister/terminatr/issues/854)) ([40fa0d5](https://github.com/theclifmeister/terminatr/commit/40fa0d557a24c0d5d16df190bf80175a0b82b97b))
+* **app:** show when a thread or coordinator is busy, and follow the conversation's end, on Mac and iPhone (app API 25, protocol 25) ([#865](https://github.com/theclifmeister/terminatr/issues/865)) ([b81875e](https://github.com/theclifmeister/terminatr/commit/b81875e1c09e3cfcd5c4e31737088be26c0afd41))
+* **device:** answer level with Face ID-signed writes; device-escape-off e2e; relay --max-per-ip 32 (app API 23) ([#861](https://github.com/theclifmeister/terminatr/issues/861)) ([f5dfd82](https://github.com/theclifmeister/terminatr/commit/f5dfd82ff18e8ba9e7a85e6c82a750e281d148f2))
+* **ios:** connect the iPhone app to a real server — pairing by camera, device link, asleep/offline state ([#856](https://github.com/theclifmeister/terminatr/issues/856)) ([ce8f794](https://github.com/theclifmeister/terminatr/commit/ce8f79467831be06fe94319691e9a08c908be5f6))
+* **ios:** project Overview, Memory, Library, board filter and Done fold, task detail on the iPhone ([#860](https://github.com/theclifmeister/terminatr/issues/860)) ([6d9f106](https://github.com/theclifmeister/terminatr/commit/6d9f106cd4a83a4bd629ee2c96a44677480a949e))
+* **ios:** TestFlight prerequisites and release upload job ([#858](https://github.com/theclifmeister/terminatr/issues/858)) ([7aaaed6](https://github.com/theclifmeister/terminatr/commit/7aaaed65664e02b43641dcd5e34749cc3bcfa79d))
+
+
+### Bug Fixes
+
+* **app:** terminal box gets the pages' top margin under the title bar ([#862](https://github.com/theclifmeister/terminatr/issues/862)) ([cfec97d](https://github.com/theclifmeister/terminatr/commit/cfec97de6662e489fa166dff5531675299be6395))
+* **app:** Terminal tab scrolls back through the pane's history, wheel to mouse-tracking apps ([#864](https://github.com/theclifmeister/terminatr/issues/864)) ([aa445cc](https://github.com/theclifmeister/terminatr/commit/aa445cc4960a4230242b7c5a2c65d6128d29f86b))
+* five flaky tests — server tests off the network, peer per-mux stall, bridge stderr, models WaitGroup, moddev save ([#851](https://github.com/theclifmeister/terminatr/issues/851)) ([aa23798](https://github.com/theclifmeister/terminatr/commit/aa237986a6fdec7e4c91f90648742e5d4253cd52))
+
 ## [0.57.0](https://github.com/theclifmeister/terminatr/compare/v0.56.1...v0.57.0) (2026-10-28)
 
 
