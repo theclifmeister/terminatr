@@ -72,9 +72,10 @@ func Answer(who caller.Caller, home string, e Entry, how string, tell func(strin
 	return "allowed for " + scope + "; " + e.Label() + " is told it may retry", nil
 }
 
-// Actionable: an allowance can lift refusal e, so the user has a real
-// choice; otherwise (the floor, tm's files, a rule no allowance names)
-// keeping it refusing is all there is. What Answer allows.
+// Actionable reports whether an allowance can lift refusal e, so the
+// user has a real choice; otherwise (the floor, tm's files, a rule no
+// allowance names) keeping it refusing is all there is. What Answer
+// allows.
 func (e Entry) Actionable() bool {
 	_, err := e.allowance()
 	return err == nil
