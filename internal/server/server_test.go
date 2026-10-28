@@ -40,6 +40,10 @@ func testPaths(t *testing.T) client.Paths {
 	// The human's, even under an agent's tm: an agent's Dial skips the
 	// human socket.
 	t.Setenv(caller.EnvSession, "")
+	// No network: the ticker's sweep fetches each repo's origin (made-up
+	// https://github.com/o/r.git ones here), and a slow fetch held the
+	// server's stop past its 15s wait for the sweep (TestProjectWatchIdleNoGit).
+	t.Setenv("GIT_ALLOW_PROTOCOL", "file")
 	p, err := client.ResolvePaths()
 	if err != nil {
 		t.Fatal(err)
