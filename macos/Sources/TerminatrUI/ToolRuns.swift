@@ -27,7 +27,7 @@ public struct ToolRunHeader: View {
                 .truncationMode(.tail)
             switch run.state {
             case .running:
-                ProgressView().controlSize(.mini)
+                WorkingSpinner()
             case .failed:
                 Text("· failed")
                     .font(theme.mono(.footnote))
@@ -106,7 +106,7 @@ public struct ToolLine: View {
                         .help("Shows the question card")
                 }
             } else {
-                ProgressView().controlSize(.mini)
+                WorkingSpinner()
             }
             Spacer(minLength: 0)
         }
@@ -122,5 +122,24 @@ public struct ToolLine: View {
         if !r.text.isEmpty { parts.append(r.text) }
         if r.lines > 1 { parts.append("\(r.lines) lines") }
         return "· " + (parts.isEmpty ? "done" : parts.joined(separator: " · "))
+    }
+}
+
+/// The spinner of a running tool row. It takes the place of the
+/// finished state's "· done" text — same font, so the same line height
+/// and baseline — and centres on that line, so the row keeps its height
+/// and the spinner its spot when the call finishes. A bare ProgressView
+/// in a baseline-aligned row would hang from the baseline, below the
+/// label.
+struct WorkingSpinner: View {
+    @Environment(\.theme) private var theme
+
+    var body: some View {
+        Text("· done")
+            .font(theme.mono(.footnote))
+            .hidden()
+            .overlay(alignment: .leading) {
+                ProgressView().controlSize(.mini)
+            }
     }
 }
