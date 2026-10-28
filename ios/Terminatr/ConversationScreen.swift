@@ -8,12 +8,16 @@ import TerminatrUI
 /// tool calls folded into runs (ToolRunHeader, a tap unfolds one), and
 /// the open question (QuestionSummary) or approval at the end. At the
 /// write level the prompt box and the terminal's keys are under it
-/// (PhoneComposer); below it, nothing.
+/// (PhoneComposer); below it, nothing. Opened from a need (Route.need,
+/// T826) the need's card is above it, with its buttons, and it opens
+/// scrolled to where the need was asked (Transcript.moment), marked.
 struct ConversationScreen: View {
     @Environment(PhoneModel.self) private var model
     @Environment(\.theme) private var theme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let ref: SessionRef
+    /// The question or approval its card shows above the conversation.
+    var need: Need?
     @State private var transcript = Transcript()
     @State private var failure: String?
     @State private var unfolded: Set<Int> = []
@@ -26,6 +30,9 @@ struct ConversationScreen: View {
     /// changed (an iPhone Duo opened or closed): scrolled back to once
     /// the transcript has it (Places, T825).
     @State private var restoring: Int?
+    /// Opened from a need: scrolls to its moment once the transcript
+    /// has it.
+    @State private var seeking = false
 
     /// The items a stream opens with when the server pages: the screen's
     /// worth and some.
@@ -40,6 +47,8 @@ struct ConversationScreen: View {
     var body: some View {
         let id = model.sessionID(ref)
         let session = id.flatMap { id in model.sessions.first { $0.id == id } }
+        let rows = Transcript.rows(transcript.entries)
+        let moment = moment(rows, session)
         ScrollViewReader { scroll in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 12) {
@@ -50,16 +59,19 @@ struct ConversationScreen: View {
                     }
                     if let failure { Failure(text: failure) }
                     if pages, !transcript.before.isEmpty, let id { earlier(id) }
-                    ForEach(Transcript.rows(transcript.entries)) { row in
+                    ForEach(rows) { row in
                         Group {
                             switch row {
                             case .entry(let e): EntryLine(entry: e, agent: session?.agent ?? "")
                             case .tools(let run): runView(run)
                             }
                         }
+                        .background(alignment: .leading) {
+                            if row.id == moment, let need { MomentMark(colour: theme.colour(need.kind)) }
+                        }
                         .id(row.id)
                     }
-                    if let session { waiting(session) }
+                    if let session, need == nil { waiting(session) }
                     // The foot's padding is the end row's: scrolled to,
                     // it reaches the true end (T807).
                     Color.clear.frame(height: 1).padding(.bottom, 16).id("end")
@@ -74,6 +86,11 @@ struct ConversationScreen: View {
             // screen stays and Jump to latest counts it. Laid out afresh,
             // it goes back to the row the user had at the top.
             .onChange(of: Self.tail(transcript)) {
+                if seeking, restoring == nil, let m = self.moment(Transcript.rows(transcript.entries), session) {
+                    seeking = false
+                    scroll.scrollTo(m, anchor: .bottom)
+                    return
+                }
                 if let r = restoring {
                     let rows = Transcript.rows(transcript.entries).map(\.id)
                     guard let first = rows.first, rows.last ?? Int.min >= r else { return }
@@ -87,6 +104,7 @@ struct ConversationScreen: View {
             }
             .onAppear {
                 if let top: Int = model.places.value("top \(ref)") { restoring = top }
+                seeking = need != nil
             }
             .onChange(of: Busy.of(session) != nil) {
                 if follow.following { scroll.scrollTo("end", anchor: .bottom) }
@@ -110,6 +128,9 @@ struct ConversationScreen: View {
                 }
             }
         }
+        .safeAreaInset(edge: .top, spacing: 0) {
+            if let need, let session { NeedCard(need: need) { waiting(session, pinned: true) } }
+        }
         .safeAreaInset(edge: .bottom) {
             if id != nil {
                 VStack(spacing: 0) {
@@ -132,6 +153,12 @@ struct ConversationScreen: View {
         // A redial is a new bridge: the stream opens again on it.
         .task(id: "\(id ?? "")/\(model.generation)") { await watch(id) }
         .kept($unfolded, "runs \(ref)")
+    }
+
+    /// The row the need was asked at.
+    private func moment(_ rows: [Transcript.Row], _ session: AppAPI.Session?) -> Int? {
+        guard let need, let e = transcript.moment(need.kind, since: session?.question?.since) else { return nil }
+        return Transcript.row(of: e, in: rows)
     }
 
     private func earlier(_ id: String) -> some View {
@@ -185,12 +212,23 @@ struct ConversationScreen: View {
         }
     }
 
-    /// What the session waits on: its open question, or its dialog.
+    /// What the session waits on: its open question, or its dialog. A
+    /// need's card (pinned) has its buttons below.
     @ViewBuilder
-    private func waiting(_ s: AppAPI.Session) -> some View {
+    private func waiting(_ s: AppAPI.Session, pinned: Bool = false) -> some View {
         if let q = s.question {
             ForEach(QuestionPlan.shown(q), id: \.self) { i in
-                QuestionSummary(menu: q, index: i, waiting: "question \(s.id) \(q.since?.timeIntervalSince1970 ?? 0) \(i)")
+                let waits = "question \(s.id) \(q.since?.timeIntervalSince1970 ?? 0) \(i)"
+                if pinned, need?.answer?.index == i, model.can(AppAPI.Methods.sessionAnswer.name) {
+                    // Its options are the need's buttons, below.
+                    CardFrame(tag: QuestionPlan.tag(q, index: i), colour: theme.question, tint: theme.questionTint, waiting: waits) {
+                        Text(q.questions[i].question)
+                            .font(theme.title(.headline, .bold))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                } else {
+                    QuestionSummary(menu: q, index: i, waiting: waits)
+                }
             }
         }
         if s.state == "blocked", s.reason == "permission" {
@@ -198,9 +236,11 @@ struct ConversationScreen: View {
                 Text(transcript.pendingTool.map { "\($0.tool): \($0.text)" } ?? "The agent asks to go on.")
                     .font(theme.mono(.subheadline))
                     .fixedSize(horizontal: false, vertical: true)
-                Text("Approve it on your Mac.")
-                    .font(theme.body(.footnote))
-                    .foregroundStyle(theme.muted)
+                if !pinned {
+                    Text("Approve it on your Mac.")
+                        .font(theme.body(.footnote))
+                        .foregroundStyle(theme.muted)
+                }
             }
         }
     }
@@ -221,6 +261,59 @@ struct ConversationScreen: View {
         } catch {
             if !Task.isCancelled { failure = error.localizedDescription }
         }
+    }
+}
+
+/// A need's card above its conversation: what the session waits on and
+/// the need's buttons (NeedActs), scrolling on its own past a third of
+/// the screen (220 points on a short one) so the conversation stays in
+/// view.
+struct NeedCard<Waiting: View>: View {
+    @Environment(\.theme) private var theme
+    let need: Need
+    @ViewBuilder let waiting: Waiting
+    @State private var height: CGFloat = 0
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 8) {
+                waiting
+                NeedActs(need: need)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        .containerRelativeFrame(.vertical) { h, _ in min(height, max(h / 3, 220)) }
+        .background(.bar)
+        .overlay(alignment: .bottom) { Rectangle().fill(theme.edge).frame(height: 1) }
+    }
+}
+
+/// The mark beside the row a need was asked at.
+struct MomentMark: View {
+    let colour: Color
+
+    var body: some View {
+        Capsule()
+            .fill(colour)
+            .frame(width: 3)
+            .offset(x: -9)
+            .accessibilityHidden(true)
+    }
+}
+
+/// A need's route: its session's conversation, with the question or
+/// approval it waits on above while it lasts; answered, the
+/// conversation as any other.
+struct NeedConversation: View {
+    @Environment(PhoneModel.self) private var model
+    let ref: SessionRef
+
+    var body: some View {
+        let id = model.sessionID(ref)
+        ConversationScreen(ref: ref, need: model.needs.first { $0.session == id && ($0.kind == .question || $0.kind == .approval) })
     }
 }
 

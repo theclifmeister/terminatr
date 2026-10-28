@@ -185,6 +185,7 @@ type Source interface {
 	SettingsSource
 	LinkSource
 	PeerSource
+	DeviceSource
 	ModSource
 	ModViewSource
 	SessionSource
@@ -410,6 +411,29 @@ type PeerSource interface {
 	// A refusal is its words. The human's.
 	AskShare(alias, forSlug, note string) (proto.ShareRequest, error)
 	AnswerShare(id string, accept bool, slug string) (proto.ShareRequest, error)
+}
+
+// DeviceSource manages the paired phones (the Network popup's phones,
+// docs/SPEC.md §16.15), as tm device does: all of it the human's,
+// refused when tm runs inside an agent. Each change has a running
+// server read the devices again. A device is named by its id.
+type DeviceSource interface {
+	// Devices is the paired devices with their links, as tm device
+	// list has them.
+	Devices() (DeviceList, error)
+	// SetDeviceLevel sets a device's level (view, answer, write: above
+	// view it needs a write key), as tm device access does;
+	// RenameDevice renames it, as tm device name; RemoveDevice removes
+	// it, its link closing, as tm device remove.
+	SetDeviceLevel(id, level string) error
+	RenameDevice(id, name string) error
+	RemoveDevice(id string) error
+	// PairDevice pairs a phone through relay ("" for the one the paired
+	// devices and servers use; errRelayNeeded when none is known), as
+	// tm device pair does: ev shows the invite once it works and asks
+	// about the phone that joined; ctx cancels. It returns the device
+	// added.
+	PairDevice(ctx context.Context, relay string, ev DevicePairEvents) (DeviceEntry, error)
 }
 
 // ModSource installs, updates and runs mods (the Mods tab).

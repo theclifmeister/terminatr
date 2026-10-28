@@ -73,6 +73,10 @@ enum Route: Hashable {
     case project(String)
     case peerProject(alias: String, project: String)
     case session(SessionRef)
+    /// A session's question or approval from Needs you (T826): its
+    /// conversation with the need's card above it, scrolled to where it
+    /// was asked.
+    case need(SessionRef)
     /// A project's pages (T798): its overview, board, memory, a memory
     /// file by its path, library, and a task by its ref.
     case overview(String)
@@ -83,7 +87,8 @@ enum Route: Hashable {
     case task(String, ref: String)
 
     /// A launch argument's route: "project:SLUG", "session:SLUG" (its
-    /// coordinator) or "session:SLUG/THREAD"; "overview:SLUG",
+    /// coordinator) or "session:SLUG/THREAD", "need:SLUG/THREAD" (its
+    /// question or approval); "overview:SLUG",
     /// "board:SLUG", "memory:SLUG", "memory:SLUG/PATH", "library:SLUG"
     /// or "task:SLUG/REF".
     static func parse(_ s: String) -> Route? {
@@ -94,6 +99,7 @@ enum Route: Hashable {
         switch parts[0] {
         case "project": return .project(parts[1])
         case "session": return .session(SessionRef(project: slug, thread: rest))
+        case "need": return .need(SessionRef(project: slug, thread: rest))
         case "overview": return .overview(slug)
         case "board": return .board(slug)
         case "memory": return rest.isEmpty ? .memory(slug) : .memoryFile(slug, path: rest)
@@ -109,7 +115,7 @@ enum Route: Hashable {
     var path: [Route] {
         switch self {
         case .project, .peerProject: [self]
-        case .session(let ref): [.project(ref.project), self]
+        case .session(let ref), .need(let ref): [.project(ref.project), self]
         case .overview(let s), .board(let s), .memory(let s), .library(let s): [.project(s), self]
         case .memoryFile(let s, _): [.project(s), .memory(s), self]
         case .task(let s, _): [.project(s), .board(s), self]
@@ -198,6 +204,7 @@ struct RouteScreen: View {
         case .project(let slug): ProjectScreen(slug: slug)
         case .peerProject(let alias, let project): PeerProjectScreen(alias: alias, project: project)
         case .session(let ref): ConversationScreen(ref: ref)
+        case .need(let ref): NeedConversation(ref: ref)
         case .overview(let slug): OverviewScreen(slug: slug)
         case .board(let slug): BoardScreen(slug: slug)
         case .memory(let slug): MemoryScreen(slug: slug)

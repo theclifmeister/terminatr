@@ -64,6 +64,11 @@ type networkView struct {
 	// at logsAt (logOf).
 	logs   map[string]linkLog
 	logsAt time.Time
+	// devs are the paired phones as last read (devsAt), devErr why they
+	// can't be (networkphones.go).
+	devs   DeviceList
+	devErr error
+	devsAt time.Time
 }
 
 // netLine is a body line as last drawn.
@@ -97,6 +102,7 @@ func (m *dash) network() *networkView {
 // load reads the paired servers again.
 func (nv *networkView) load(m *dash) {
 	nv.list, nv.err = m.src.Peers()
+	nv.loadDevices(m)
 	nv.loaded = true
 }
 
@@ -164,6 +170,8 @@ func (nv *networkView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	case "J":
 		m.joinPrompt("")
 		return nil
+	case "D":
+		return m.pairPhone("")
 	case "?":
 		m.push(&netKeysView{})
 		return nil
@@ -189,6 +197,9 @@ func (nv *networkView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 			return cmd
 		}
 	}
+	if cmd, done := nv.phoneKey(m, r, s); done {
+		return cmd
+	}
 	if r.kind == netAsked || r.kind == netShareReq {
 		if cmd, done := nv.shareKey(m, r, s); done {
 			return cmd
@@ -201,7 +212,7 @@ func (nv *networkView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 		} else {
 			m.msg = "nothing to change in the details of this row"
 		}
-	case r.kind == netServer && (s == "enter" || s == "left" && !nv.folded[nv.rowKey(r)] || s == "right" && nv.folded[nv.rowKey(r)]):
+	case (r.kind == netServer || r.kind == netPhones) && (s == "enter" || s == "left" && !nv.folded[nv.rowKey(r)] || s == "right" && nv.folded[nv.rowKey(r)]):
 		nv.folded[nv.rowKey(r)] = !nv.folded[nv.rowKey(r)]
 	case r.kind == netProject && nv.hasLinks(m, r.slug) && (s == "enter" || s == "left" && !nv.folded[nv.rowKey(r)] || s == "right" && nv.folded[nv.rowKey(r)]):
 		nv.folded[nv.rowKey(r)] = !nv.folded[nv.rowKey(r)]
@@ -214,11 +225,15 @@ func (nv *networkView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 		// To the need in the tree, unfolding its project.
 		nv.folded["g:"], nv.folded["p:"+r.slug] = false, false
 		nv.sel = needKey(r.slug, r.other, r.need, r.id())
-	case s == "left" && r.kind != netServer:
-		// Up to the row's project (a link's, a need's), else its server.
+	case s == "left" && r.kind != netServer && r.kind != netPhones:
+		// Up to the row's project (a link's, a need's), a phone's header,
+		// else its server.
 		up := netServer
-		if r.kind == netLink || r.kind == netNeed {
+		switch r.kind {
+		case netLink, netNeed:
 			up = netProject
+		case netDevice:
+			up = netPhones
 		}
 		for j := nv.at - 1; j >= 0; j-- {
 			if rows[j].kind == up {
@@ -271,6 +286,9 @@ func (nv *networkView) panelKey(m *dash, r netRow, ok bool, s string) (tea.Cmd, 
 	case "up", "down":
 		nv.psel = moveSel(nv.psel, scrollKeys[s], len(items))
 		return nil, true
+	}
+	if cmd, done := nv.phonePanelKey(m, r, items[nv.psel], s); done {
+		return cmd, true
 	}
 	switch item := items[nv.psel]; {
 	case item == itemName && s == "enter":
@@ -483,6 +501,9 @@ func (nv *networkView) click(m *dash, item, col int, double bool) tea.Cmd {
 	items := panelItems(nv.panelLines(m, r, ok, 40))
 	was := nv.panel && nv.psel < len(items) && items[nv.psel] == nl.panel.item
 	nv.panel, nv.psel = true, slices.Index(items, nl.panel.item)
+	if r.kind == netDevice {
+		return nv.phoneClick(m, r, nl.panel, col, was || double)
+	}
 	switch nl.panel.item {
 	case itemShare:
 		return nv.toggle(m, r.slug)
@@ -701,6 +722,8 @@ var netKeys = []keyHelp{
 	{"A X", "on a ⚑: send, accept or choose / drop or decline"},
 	{"P J", "pair with another server / join the code one shows"},
 	{"S E V U X", "a paired server: ask to share, name, panes, relay update, unpair"},
+	{"D", "pair a phone: a QR code to scan with the terminatr app"},
+	{"V E X", "a phone: its level (view, answer, write), name, remove"},
 	{"tab", "the keyboard to the details: enter edits, ← → switch"},
 	{"! esc", "the next ⚑ that needs you / close"},
 }

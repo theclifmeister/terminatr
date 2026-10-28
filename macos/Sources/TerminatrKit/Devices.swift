@@ -43,7 +43,8 @@ public enum DeviceWords {
     }
 
     /// A device's link, as tm device list says it: a phone that isn't
-    /// open is waited for, not failing.
+    /// open is waited for, not failing, and says when it was last linked
+    /// (app API 27's last_up).
     public static func link(_ d: AppAPI.Device, running: Bool, now: Date = .now) -> String {
         guard let l = d.link else {
             return running ? "No link yet" : "The server isn't running"
@@ -52,7 +53,9 @@ public enum DeviceWords {
         case ("up", _):
             return "Connected " + since(l.since, now: now)
         case ("offline", "peer"):
-            return "Waiting for it"
+            guard let t = d.lastUp else { return "Waiting for it" }
+            let s = since(t, now: now)
+            return "Last seen " + (s == "just now" ? s : s.dropFirst(4) + " ago")
         case ("offline", _):
             return "Offline" + (l.error.isEmpty ? "" : ": " + l.error)
         default:

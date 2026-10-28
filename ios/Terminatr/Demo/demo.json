@@ -232,6 +232,29 @@
     }
    }
   ],
+  "session.approve": [
+   {
+    "params": {
+     "id": "s-101",
+     "check": true
+    },
+    "result": {
+     "question": "Do you want to proceed?",
+     "option": "Yes",
+     "options": [
+      "Yes",
+      "Yes, and don't ask again for npm test commands in this project",
+      "No"
+     ],
+     "scopes": [
+      "once",
+      "project"
+     ],
+     "escape": false,
+     "sent": false
+    }
+   }
+  ],
   "task.done": [
    {
     "params": {
@@ -674,7 +697,7 @@
   }
  },
  "hello": {
-  "app_api": 26,
+  "app_api": 27,
   "build": "demo",
   "capabilities": [
    "read",

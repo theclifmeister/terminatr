@@ -10,8 +10,8 @@
      │      without one, on an address both servers reach: sudo tm relay install --ip (see the         │
      │      README).                                                                                   │
      │                                                                                                 │
-     │                                                                                                 │
-     │                                                                                                 │
+     │ ▾ phones                                                                        D pairs a phone │
+     │    No phone yet. D pairs one: a QR code to scan with the terminatr app on the iPhone.           │
      │                                                                                                 │
      │                                                                                                 │
      │                                                                                                 │

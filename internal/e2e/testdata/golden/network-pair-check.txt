@@ -10,8 +10,8 @@
      │      without one╭─ Pair a server ──────────────────────────────────────────────╮see the         │
      │      README).   │ The other server: <host> │                │
      │                 │ server id <id> · tm <version> │                │
-     │                 │                                                              │                │
-     │                 │ Check: <check>                                               │                │
+     │ ▾ phones        │                                                              │D pairs a phone │
+     │    No phone yet.│ Check: <check>                                               │hone.           │
      │                 │                                                              │                │
      │                 │ Pair only if the other side shows the same six digits. Do    │                │
      │                 │ they match?                                                  │                │

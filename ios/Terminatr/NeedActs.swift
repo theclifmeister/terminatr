@@ -104,12 +104,10 @@ struct NeedActs: View {
         }
     }
 
-    /// Buttons side by side, else one under another when they don't fit.
+    /// Buttons side by side, wrapping to the next line when they don't
+    /// fit: a short screen keeps them in a line or two (T826).
     private func row(@ViewBuilder _ content: () -> some View) -> some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 8) { content() }
-            VStack(alignment: .leading, spacing: 6) { content() }
-        }
+        Flow(spacing: 8, lineSpacing: 6) { content() }
     }
 
     private func named(_ title: String) -> String { "\(title): \(need.what)" }
@@ -189,5 +187,40 @@ struct NeedActs: View {
             }
         }
         return error.localizedDescription
+    }
+}
+
+/// Views left to right, onto the next line when the next doesn't fit.
+struct Flow: Layout {
+    var spacing: CGFloat
+    var lineSpacing: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let places = place(subviews, width: proposal.width ?? .infinity)
+        return CGSize(width: places.map(\.maxX).max() ?? 0, height: places.map(\.maxY).max() ?? 0)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        for (v, p) in zip(subviews, place(subviews, width: bounds.width)) {
+            v.place(at: CGPoint(x: bounds.minX + p.minX, y: bounds.minY + p.minY), proposal: ProposedViewSize(p.size))
+        }
+    }
+
+    private func place(_ subviews: Subviews, width: CGFloat) -> [CGRect] {
+        var out: [CGRect] = []
+        var x: CGFloat = 0, y: CGFloat = 0, line: CGFloat = 0
+        for v in subviews {
+            var size = v.sizeThatFits(.unspecified)
+            size.width = min(size.width, width)
+            if x > 0, x + size.width > width {
+                x = 0
+                y += line + lineSpacing
+                line = 0
+            }
+            out.append(CGRect(origin: CGPoint(x: x, y: y), size: size))
+            x += size.width + spacing
+            line = max(line, size.height)
+        }
+        return out
     }
 }

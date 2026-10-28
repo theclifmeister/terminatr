@@ -1,0 +1,66 @@
+== d:
+╭─ Network · studio + 2 paired ────────────────────────────────────────╮
+│ ▾ ◉ studio · this server 4F2A-91C3                     shares 0 of 2 │
+│    ■ terminatr         [ ] not shared                       no links │
+│    ■ web               [ ] not shared                       no links │
+│                                                                      │
+│ ▾ ◉ mini · connected 38 ms                                 panes off │
+│    ■ acme-api          shared with you · + link (L)        ● working │
+│    ■ infra             shared with you · + link (L)    · not running │
+│                                                                      │
+│ ▾ ○ nas · offline 4m · relay                               panes off │
+│    ■ media · stale     shared with you · + link (L)        ● working │
+│                                                                      │
+│ ▾ phones · 2 paired                                  D pairs a phone │
+│    ◉ Clif's iPhone · connected                          level answer │
+│    ○ iPad · last seen 2h ago                              level view │
+│ ──────────────────────────────────────────────────────────────────── │
+│ 2 paired phones                                                      │
+│ D pairs a phone: a QR code to scan with the terminatr app            │
+│                                                                      │
+│ D pair a phone · enter fold · tab details · ? keys · esc close       │
+╰──────────────────────────────────────────────────────────────────────╯
+== d:aa11
+╭─ Network · studio + 2 paired ────────────────────────────────────────╮
+│ ▾ ◉ studio · this server 4F2A-91C3                     shares 0 of 2 │
+│    ■ terminatr         [ ] not shared                       no links │
+│    ■ web               [ ] not shared                       no links │
+│                                                                      │
+│ ▾ ◉ mini · connected 38 ms                                 panes off │
+│    ■ acme-api          shared with you · + link (L)        ● working │
+│    ■ infra             shared with you · + link (L)    · not running │
+│                                                                      │
+│ ▾ ○ nas · offline 4m · relay                               panes off │
+│    ■ media · stale     shared with you · + link (L)        ● working │
+│                                                                      │
+│ ▾ phones · 2 paired                                  D pairs a phone │
+│    ◉ Clif's iPhone · connected                          level answer │
+│    ○ iPad · last seen 2h ago                              level view │
+│ ──────────────────────────────────────────────────────────────────── │
+│ Clif's iPhone · connected · device id AA11-0000                      │
+│ It reads, answers questions and approvals (never one that runs a co… │
+│                                                                      │
+│ V level · E name · X remove · tab details · ? keys · esc close       │
+╰──────────────────────────────────────────────────────────────────────╯
+== d:bb22
+╭─ Network · studio + 2 paired ────────────────────────────────────────╮
+│ ▾ ◉ studio · this server 4F2A-91C3                     shares 0 of 2 │
+│    ■ terminatr         [ ] not shared                       no links │
+│    ■ web               [ ] not shared                       no links │
+│                                                                      │
+│ ▾ ◉ mini · connected 38 ms                                 panes off │
+│    ■ acme-api          shared with you · + link (L)        ● working │
+│    ■ infra             shared with you · + link (L)    · not running │
+│                                                                      │
+│ ▾ ○ nas · offline 4m · relay                               panes off │
+│    ■ media · stale     shared with you · + link (L)        ● working │
+│                                                                      │
+│ ▾ phones · 2 paired                                  D pairs a phone │
+│    ◉ Clif's iPhone · connected                          level answer │
+│    ○ iPad · last seen 2h ago                              level view │
+│ ──────────────────────────────────────────────────────────────────── │
+│ iPad · last seen 2h ago · device id BB22-0000                        │
+│ No write key: it can only view. Pair it again from the terminatr ap… │
+│                                                                      │
+│ V level · E name · X remove · tab details · ? keys · esc close       │
+╰──────────────────────────────────────────────────────────────────────╯

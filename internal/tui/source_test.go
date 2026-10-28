@@ -62,6 +62,7 @@ var (
 	_ SettingsSource = (*ServerSource)(nil)
 	_ LinkSource     = (*ServerSource)(nil)
 	_ PeerSource     = (*ServerSource)(nil)
+	_ DeviceSource   = (*ServerSource)(nil)
 	_ ModSource      = (*ServerSource)(nil)
 	_ ModViewSource  = (*ServerSource)(nil)
 	_ SessionSource  = (*ServerSource)(nil)

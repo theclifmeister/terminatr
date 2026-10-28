@@ -9,8 +9,26 @@ import NIOWebSocket
 enum RelayWire {
     static let version = 1
     static let subprotocol = "tm-relay.1"
-    /// The largest message sent when the challenge names none.
+    /// The largest message sent when the challenge names none, and the
+    /// largest read: relay.Dialer reads at most this (maxMessage).
     static let maxMessage = 64 << 10
+    /// The largest of the relay's own text messages read: a challenge or
+    /// a status is a short line of JSON.
+    static let maxControl = 4 << 10
+
+    /// The relay's close reasons (relay.knownReasons, the Err* words in
+    /// hello.go). Any other shows as unknown, as relay.cleanReason has it:
+    /// the relay's text is not trusted.
+    static let reasons: Set<String> = [
+        "bad-hello", "bad-signature", "bad-room", "timeout", "replaced", "room-full",
+        "peer-gone", "rate-limited", "pair-limit", "shutdown", "protocol",
+    ]
+    static let unknownReason = "unknown"
+
+    /// reason when it is one of reasons or empty, else unknownReason.
+    static func cleanReason(_ reason: String) -> String {
+        reason.isEmpty || reasons.contains(reason) ? reason : unknownReason
+    }
 
     struct Challenge: Decodable {
         let t: String
@@ -53,7 +71,8 @@ enum RelayWire {
 /// Why a relay or link ended.
 public enum LinkError: Error, Equatable, LocalizedError {
     /// The relay closed the WebSocket with its error word (peer-gone,
-    /// bad-room, rate-limited, …).
+    /// bad-room, rate-limited, …): one of RelayWire.reasons, empty or
+    /// "unknown".
     case relayClosed(code: Int, reason: String)
     /// The relay spoke out of turn.
     case protocolError(String)
@@ -116,7 +135,9 @@ final class RelayHandler: ChannelDuplexHandler {
     private(set) var greeted = false
     private var max = RelayWire.maxMessage
     private var text = ByteBuffer()
-    private var textOpen = false
+    /// The fragmented message being read, if any, and its bytes so far.
+    private var open: WebSocketOpcode?
+    private var openSize = 0
 
     init(identity: LinkIdentity, kind: String, room: Data, peerID: Data?, onWait: @escaping @Sendable () -> Void,
          onMated: @escaping (ChannelHandlerContext) throws -> Void) {
@@ -138,26 +159,43 @@ final class RelayHandler: ChannelDuplexHandler {
         case .connectionClose:
             var d = frame.unmaskedData
             let code = d.readInteger(as: UInt16.self).map(Int.init) ?? 1005
-            let reason = d.readString(length: d.readableBytes) ?? ""
+            let reason = RelayWire.cleanReason(String(decoding: d.readableBytesView, as: UTF8.self))
             // The peer's last bytes can come in the same read as the
             // close (its "ok", then peer-gone as it leaves): the TLS after
             // this handler passes on what it decrypted only at a read's
             // end, so end the read before the close drops them (T809).
             context.fireChannelReadComplete()
             fail(context, LinkError.relayClosed(code: code, reason: reason))
-        case .binary where state == .mated:
-            context.fireChannelRead(wrapInboundOut(frame.unmaskedData))
-        case .continuation where state == .mated && !textOpen:
-            context.fireChannelRead(wrapInboundOut(frame.unmaskedData))
-        case .text, .continuation:
-            var d = frame.unmaskedData
+        case .binary where state == .mated, .text where state == .challenge || state == .waiting:
+            guard open == nil else { return fail(context, LinkError.protocolError("a new message inside a fragmented one")) }
+            open = frame.opcode
+            openSize = 0
             if frame.opcode == .text { text.clear() }
-            textOpen = !frame.fin
-            text.writeBuffer(&d)
-            if frame.fin { control(context, Data(text.readableBytesView)) }
+            message(context, frame)
+        case .continuation:
+            guard open != nil else { return fail(context, LinkError.protocolError("a continuation with no message open")) }
+            message(context, frame)
+        case .text where state == .mated:
+            fail(context, LinkError.protocolError("a text message after mated"))
         default:
             fail(context, LinkError.protocolError("unexpected \(frame.opcode)"))
         }
+    }
+
+    /// One frame of the open message, bounded as relay.Dialer bounds a
+    /// message: the peer's bytes go on as they come, the relay's text is
+    /// read whole at its last frame.
+    private func message(_ context: ChannelHandlerContext, _ frame: WebSocketFrame) {
+        let isText = open == .text
+        openSize += frame.data.readableBytes
+        guard openSize <= (isText ? RelayWire.maxControl : RelayWire.maxMessage) else {
+            return fail(context, LinkError.protocolError("a message over the limit"))
+        }
+        if frame.fin { open = nil }
+        var d = frame.unmaskedData
+        guard isText else { return context.fireChannelRead(wrapInboundOut(d)) }
+        text.writeBuffer(&d)
+        if frame.fin { control(context, Data(text.readableBytesView)) }
     }
 
     /// One of the relay's text messages.

@@ -4,8 +4,8 @@
 # archives, listed in checksums.txt (.goreleaser.yaml runs this as a before
 # hook; make copies the file into dist/ afterwards, for check.sh): the
 # Dockerfile, the compose files, the Caddyfile and the README, in a
-# tm-relay-docker/ folder, with the compose files' TM_VERSION pinned to
-# this release.
+# tm-relay-docker/ folder, with the compose files' TM_VERSION, which
+# deploy/relay requires, defaulting to this release.
 #
 #   scripts/release/relay-docker.sh v0.28.0
 set -eu
@@ -20,8 +20,8 @@ d="$tmp/tm-relay-docker"
 mkdir -p "$d"
 cp "$src/Dockerfile" "$src/Caddyfile" "$src/README.md" "$d/"
 for f in compose.yaml compose.acme.yaml compose.selfsigned.yaml; do
-	grep -q '\${TM_VERSION:-latest}' "$src/$f" || { echo "relay-docker: $f has no \${TM_VERSION:-latest} to pin" >&2; exit 1; }
-	sed "s/\${TM_VERSION:-latest}/\${TM_VERSION:-$version}/g" "$src/$f" > "$d/$f"
+	grep -q '\${TM_VERSION:?[^}]*}' "$src/$f" || { echo "relay-docker: $f has no \${TM_VERSION:?…} to pin" >&2; exit 1; }
+	sed "s/\${TM_VERSION:?[^}]*}/\${TM_VERSION:-$version}/g" "$src/$f" > "$d/$f"
 done
 chmod 755 "$d"
 chmod 644 "$d"/*
