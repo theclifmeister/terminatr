@@ -14,6 +14,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/models"
 	"github.com/theclifmeister/terminatr/internal/models/modelstest"
 	"github.com/theclifmeister/terminatr/internal/project"
+	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/thread"
 )
 
@@ -71,6 +72,31 @@ var (
 	coord = caller.Caller{Kind: caller.Coordinator, Project: "demo"}
 	thr   = caller.Caller{Kind: caller.Thread, Project: "demo", Thread: "t-0001"}
 )
+
+// TestPaneHint: a human-only refusal of a coordinator or a thread says
+// where the user runs the command, since a ! command in an agent's pane
+// is the agent's (T815); the human's other refusals don't.
+func TestPaneHint(t *testing.T) {
+	h := newHarness(t)
+	const hint = "even typed with ! in its pane. The user runs it in a terminal of their own, outside tm's agent panes."
+	for _, c := range []caller.Caller{coord, thr} {
+		if _, _, errs := h.run(c, "", "project", "new", "other"); !strings.Contains(errs, "human-only") || !strings.Contains(errs, "in the "+string(c.Kind)+"'s session") || !strings.Contains(errs, hint) {
+			t.Fatalf("%s: stderr %q", c.Kind, errs)
+		}
+	}
+	h.ok(human, "project", "new", "demo")
+	if _, _, errs := h.run(human, "", "project", "new", "demo"); strings.Contains(errs, hint) {
+		t.Fatalf("human: stderr %q", errs)
+	}
+	if _, _, errs := h.run(coord, "", "project", "bogus"); strings.Contains(errs, hint) {
+		t.Fatalf("not human-only: stderr %q", errs)
+	}
+	var out bytes.Buffer
+	(&Env{Stderr: &out, Caller: thr}).paneHint(srvFail("mod", proto.Errorf("human-only", "on the human socket")))
+	if !strings.Contains(out.String(), hint) {
+		t.Fatalf("server's human-only: %q", out.String())
+	}
+}
 
 func TestNotHandled(t *testing.T) {
 	e := &Env{}

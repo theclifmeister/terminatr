@@ -256,6 +256,7 @@ func (x *exitError) Error() string { return fmt.Sprintf("exit %d", x.code) }
 
 // report prints err and maps it to an exit code.
 func (e *Env) report(prefix string, err error) int {
+	defer e.paneHint(err)
 	var u *usageError
 	var r *tasks.Error
 	var x *exitError
@@ -277,6 +278,21 @@ func (e *Env) report(prefix string, err error) int {
 	default:
 		fmt.Fprintf(e.Stderr, "%s: %v\n", prefix, err)
 		return ExitIO
+	}
+}
+
+// paneHint tells the user, under a human-only refusal of a coordinator
+// or a thread, where to run the command (T815): tm takes the caller from
+// the session and the process tree, not from who typed it, so a command
+// the user types with ! in an agent's pane is the agent's.
+func (e *Env) paneHint(err error) {
+	if e.Caller.Kind != caller.Coordinator && e.Caller.Kind != caller.Thread {
+		return
+	}
+	var r *tasks.Error
+	var p *proto.Error
+	if errors.As(err, &r) && r.Code == "human-only" || errors.As(err, &p) && p.Code == "human-only" {
+		fmt.Fprintf(e.Stderr, "tm: this ran in the %s's session, so tm took it for the agent, even typed with ! in its pane. The user runs it in a terminal of their own, outside tm's agent panes.\n", e.Caller.Kind)
 	}
 }
 
