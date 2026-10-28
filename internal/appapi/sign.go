@@ -2,10 +2,9 @@ package appapi
 
 // Signed writes (app API 23, docs/SPEC.md §16.15): on a paired device's
 // link every write carries a signature by the device's write key, a
-// P-256 key that on a phone lives in the Secure Enclave and only Face ID
-// or the passcode unlocks. The bridge checks it before the request goes
-// any further, so an unlocked phone in someone else's hand, or malware
-// holding the device's link key, acts on nothing. Each signature covers
+// P-256 key that on a phone lives in the Secure Enclave and signs with
+// no prompt. The bridge checks it before the request goes any further,
+// so malware holding the device's link key alone acts on nothing. Each signature covers
 // the method, a nonce the bridge gave out (device.nonce, good once and
 // for nonceLife) and the params exactly as the request line has them.
 
