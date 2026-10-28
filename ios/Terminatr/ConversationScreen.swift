@@ -206,14 +206,18 @@ struct EntryLine: View {
     @Environment(\.theme) private var theme
     let entry: Transcript.Entry
     let agent: String
+    @State private var unfolded = false
 
     var body: some View {
         switch entry.kind {
+        case .prompt where entry.folds && !unfolded:
+            FoldedPrompt(entry: entry, when: entry.at?.formatted(date: .omitted, time: .shortened) ?? "") { unfolded = true }
         case .prompt:
             HStack {
                 Spacer(minLength: 40)
                 VStack(alignment: .trailing, spacing: 4) {
                     turn
+                        .onTapGesture { if entry.folds { unfolded = false } }
                     Text(entry.preview() ?? entry.text)
                         .foregroundStyle(theme.onPrompt)
                         .padding(.horizontal, 13)
