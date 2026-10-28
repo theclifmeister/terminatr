@@ -534,3 +534,8 @@ func (t *Theme) appendSGR(dst, p []byte) []byte {
 	}
 	return append(dst, 'm')
 }
+
+// qrLook is a QR code's look (devicepair.go): black on white whatever
+// the theme or scheme, as a camera reads it best; the one style drawn
+// outside the theme's roles.
+var qrLook = lipgloss.NewStyle().Foreground(lipgloss.Color("#000000")).Background(lipgloss.Color("#FFFFFF"))

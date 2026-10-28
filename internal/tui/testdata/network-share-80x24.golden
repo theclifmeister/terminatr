@@ -12,7 +12,7 @@
 │ ▾ ○ nas · offline 4m · relay                               panes off │
 │      shares nothing with you yet                                     │
 │      └─ asked (S-4F2A-33, for terminatr)       waiting on nas's user │
-│                                                                      │
+│                                                                   …↓ │
 │ ──────────────────────────────────────────────────────────────────── │
 │ mini · id 91C3-77AB · tm 0.27.0 · relay relay.example.net            │
 │ panes: mini may not open yours (V) · its tm has no remote panes      │
@@ -35,7 +35,7 @@
 │      shares nothing with you yet                                     │
 │      └─ asked (S-4F2A-33, for terminatr)       waiting on nas's user │
 │                                                                      │
-│                                                                      │
+│ ▾ phones                                             D pairs a pho…↓ │
 │ ──────────────────────────────────────────────────────────────────── │
 │ mini asks you to share a project (S-91C3-7), for its acme            │
 │ A picks one of yours, shared with every paired server · X declines   │
@@ -57,7 +57,7 @@
 │      shares nothing with you yet                                     │
 │      └─ asked (S-4F2A-33, for terminatr)       waiting on nas's user │
 │                                                                      │
-│                                                                      │
+│ ▾ phones                                             D pairs a pho…↓ │
 │ ──────────────────────────────────────────────────────────────────── │
 │ asked nas to share a project (S-4F2A-33, for terminatr)              │
 │ its user picks which, if any · one request per server at a time      │

@@ -41,6 +41,8 @@ const (
 	netNeed            // what a link needs of the user, under it
 	netAsked           // your share request to a paired server (networkshare.go)
 	netShareReq        // a paired server's share request, flagged
+	netPhones          // the phones' header (networkphones.go)
+	netDevice          // a paired phone
 )
 
 // netRow is one row of the tree.
@@ -69,6 +71,10 @@ type netRow struct {
 	listed bool
 	// share is a share request row's request.
 	share *proto.ShareRequest
+	// dev is a phone's index in the list (DeviceList.Devices); phone
+	// marks a note among the phones.
+	dev   int
+	phone bool
 }
 
 // selectable says whether the cursor stops on r.
@@ -106,6 +112,10 @@ func (nv *networkView) rowKey(r netRow) string {
 			k = "!" + k
 		}
 		return k
+	case netPhones:
+		return "d:"
+	case netDevice:
+		return "d:" + nv.device(r).ID
 	}
 	return ""
 }
@@ -175,8 +185,13 @@ func (nv *networkView) pairedNames() string {
 }
 
 // rows are the tree's rows, in order, after the NEEDS YOU list's when
-// the popup is netWide or wider.
+// the popup is netWide or wider: the servers, then the phones.
 func (nv *networkView) rows(m *dash) []netRow {
+	return append(nv.serverRows(m), nv.phoneRows()...)
+}
+
+// serverRows are this server's and the paired servers' rows.
+func (nv *networkView) serverRows(m *dash) []netRow {
 	out := append(nv.listRows(m), netRow{kind: netServer, peer: -1})
 	if !nv.folded["g:"] {
 		slugs := shareable(m)
@@ -308,8 +323,11 @@ func (nv *networkView) rowLines(m *dash, r netRow, w int) []string {
 		return []string{""}
 	case netNote:
 		pad := 0
-		if r.peer >= 0 {
+		switch {
+		case r.peer >= 0:
 			pad = 5
+		case r.phone:
+			pad = 3
 		}
 		var out []string
 		for _, l := range wrapLines(r.text, w-pad) {
@@ -360,6 +378,8 @@ func (nv *networkView) rowLines(m *dash, r netRow, w int) []string {
 			}
 		}
 		return []string{spread(left, right, w)}
+	case netPhones, netDevice:
+		return []string{nv.phoneLine(r, w)}
 	case netLink:
 		return []string{nv.linkLine(m, r, w)}
 	case netNeed:
@@ -429,6 +449,8 @@ func theirCoord(p *proto.PeerMirrorProject) (string, lipgloss.Style, string) {
 // no room for the details panel.
 func (nv *networkView) detail(m *dash, r netRow, w int) [2]string {
 	switch r.kind {
+	case netPhones, netDevice:
+		return nv.phoneDetail(r, w)
 	case netLink, netNeed:
 		return nv.linkDetail(m, r, w)
 	case netAsked, netShareReq:
@@ -537,6 +559,10 @@ func (nv *networkView) rowKeys(m *dash, r netRow, ok bool) string {
 		return "P pair · J join · " + tail
 	case r.kind == netServer && r.peer < 0:
 		return "enter fold · tab details · P pair · J join · " + tail
+	case r.kind == netPhones:
+		return "D pair a phone · enter fold · tab details · " + tail
+	case r.kind == netDevice:
+		return joinKeys("V level", "E name", "X remove", "tab details", tail)
 	case r.kind == netServer:
 		e := nv.list.Peers[r.peer]
 		u := ""
