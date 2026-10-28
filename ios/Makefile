@@ -1,8 +1,9 @@
 # terminatr for iPhone (T788): Terminatr.xcodeproj, its sources in
 # Terminatr/ (folder-synchronized: a file added there needs no project
 # edit), TerminatrKit and TerminatrUI from the Swift package in ../macos.
-# Xcode 16 or later, with an iOS Simulator runtime
-# (xcodebuild -downloadPlatform iOS); no other tools.
+# Xcode 27.1 or later (the iOS 27.1 SDK: iPhone Duo, README.md), with
+# an iOS Simulator runtime (xcodebuild -downloadPlatform iOS); no other
+# tools.
 #
 #   make build   build for the iOS Simulator (unsigned); ARCHS=arm64
 #                builds only that one (CI)

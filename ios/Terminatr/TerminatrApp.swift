@@ -15,6 +15,7 @@ import TerminatrUI
 /// Camera app's scan of the code) opens the pairing screen.
 @main
 struct TerminatrApp: App {
+    @UIApplicationDelegateAdaptor private var delegate: AppDelegate
     @State private var model = PhoneModel()
     @State private var linked: LinkedCode?
     @Environment(\.scenePhase) private var phase
@@ -32,6 +33,7 @@ struct TerminatrApp: App {
             Root()
                 .environment(model)
                 .themed()
+                .onHinge()
                 .task {
                     if UserDefaults.standard.bool(forKey: "demo"), model.source == .none {
                         await model.startDemo()

@@ -100,7 +100,9 @@ struct ConversationScreen: View {
                         .foregroundStyle(theme.muted)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 8)
-                        .background(.bar)
+                        // To the bottom edge only: on iPhone Duo (T824) the
+                        // bars sit on a side, which this stops at.
+                        .background(.bar, ignoresSafeAreaEdges: .bottom)
                 }
             }
         }
