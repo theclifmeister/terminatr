@@ -11,7 +11,7 @@ import TerminatrUI
 /// opens the demo at once, and -open ROUTE (Route.parse) on that
 /// screen: the Simulator's screenshots; with -pair CODE it pairs with
 /// that code at once, as this phone (the Simulator has no camera:
-/// internal/e2e TestPhoneDev's codes). A terminatr://pair link (the
+/// internal/e2e TestPhoneDev's codes); -open settings shows Settings. A terminatr://pair link (the
 /// Camera app's scan of the code) opens the pairing screen.
 @main
 struct TerminatrApp: App {
@@ -31,8 +31,7 @@ struct TerminatrApp: App {
         WindowGroup {
             Root()
                 .environment(model)
-                .environment(\.theme, Theme.bloom)
-                .tint(Theme.bloom.action)
+                .themed()
                 .task {
                     if UserDefaults.standard.bool(forKey: "demo"), model.source == .none {
                         await model.startDemo()
@@ -126,8 +125,15 @@ struct Root: View {
     @State private var tab = RootTab.needs
     @State private var needsPath: [Route] = []
     @State private var projectsPath: [Route] = []
+    @State private var settings = false
 
     var body: some View {
+        content
+            .environment(\.showSettings, ShowSettings { settings = true })
+            .sheet(isPresented: $settings) { SettingsScreen() }
+    }
+
+    @ViewBuilder private var content: some View {
         if model.source == .none {
             Welcome()
         } else {
@@ -151,11 +157,13 @@ struct Root: View {
 }
 
 extension Root {
-    /// -open: "projects", or a route opened from the Projects tab, on
+    /// -open: "settings", "projects", or a route opened from the Projects tab, on
     /// the path a tap would have taken (Route.path).
     private func openLaunched() {
         guard let open = UserDefaults.standard.string(forKey: "open") else { return }
-        if open == "projects" {
+        if open == "settings" {
+            settings = true
+        } else if open == "projects" {
             tab = .projects
         } else if let r = Route.parse(open) {
             tab = .projects
@@ -184,11 +192,11 @@ extension View {
 
     /// A screen's backdrop: the theme's base, under its lists.
     func backdrop() -> some View {
-        modifier(Backdrop())
+        modifier(BackdropModifier())
     }
 }
 
-private struct Backdrop: ViewModifier {
+private struct BackdropModifier: ViewModifier {
     @Environment(\.theme) private var theme
 
     func body(content: Content) -> some View {

@@ -163,12 +163,12 @@ public struct NeedSummary: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(need.what)
                     .font(theme.body(.body, .semibold))
-                    .lineLimit(1)
+                    .lines(1)
                 if !detail.isEmpty {
                     Text(detail)
                         .font(theme.body(.subheadline))
                         .foregroundStyle(theme.muted)
-                        .lineLimit(2)
+                        .lines(2)
                 }
             }
         }

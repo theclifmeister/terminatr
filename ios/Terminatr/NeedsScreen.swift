@@ -69,7 +69,7 @@ struct NeedTile: View {
                     if !need.text.isEmpty {
                         Text(need.text)
                             .font(theme.body(.subheadline))
-                            .lineLimit(3)
+                            .lines(3)
                             .padding(.leading, 24)
                     }
                 }
@@ -126,6 +126,7 @@ struct LinkBanner: View {
                 .fixedSize(horizontal: false, vertical: true)
             Spacer()
             Menu {
+                SettingsButton()
                 Button("Forget this server", role: .destructive) { forgetting = true }
             } label: {
                 Image(systemName: "ellipsis.circle")

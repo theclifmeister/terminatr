@@ -97,7 +97,7 @@ struct BoardScreen: View {
                         .frame(minWidth: 40, alignment: .leading)
                     Text(t.title)
                         .font(theme.body(.body))
-                        .lineLimit(2)
+                        .lines(2)
                 }
                 .accessibilityElement(children: .combine)
             }

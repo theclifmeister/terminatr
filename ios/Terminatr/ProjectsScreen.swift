@@ -45,6 +45,7 @@ struct ProjectsScreen: View {
         }
         .refreshable { await model.refresh() }
         .navigationTitle("Projects")
+        .toolbar { SettingsButton() }
         .backdrop()
     }
 

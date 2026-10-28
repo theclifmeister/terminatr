@@ -144,7 +144,7 @@ struct LibraryScreen: View {
                         ForEach(g.files, id: \.self) { row($0) }
                     } header: {
                         VStack(alignment: .leading, spacing: 1) {
-                            Text(g.title).lineLimit(1)
+                            Text(g.title).lines(1)
                             Text(g.detail).font(theme.mono(.caption2))
                         }
                     }
