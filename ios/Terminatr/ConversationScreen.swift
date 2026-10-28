@@ -8,7 +8,7 @@ import TerminatrUI
 /// tool calls folded into runs (ToolRunHeader, a tap unfolds one), and
 /// the open question (QuestionSummary) or approval at the end. At the
 /// write level the prompt box and the terminal's keys are under it
-/// (PhoneComposer); below it, read only.
+/// (PhoneComposer); below it, nothing.
 struct ConversationScreen: View {
     @Environment(PhoneModel.self) private var model
     @Environment(\.theme) private var theme
@@ -98,13 +98,6 @@ struct ConversationScreen: View {
                     }
                     if model.writes, let id {
                         PhoneComposer(ref: ref, session: id, running: session?.state == "working", queued: session?.queuedPrompts ?? 0)
-                    } else {
-                        Label("Read only: answer and send from your Mac for now", systemImage: "eye")
-                            .font(theme.body(.footnote))
-                            .foregroundStyle(theme.muted)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 8)
-                            .background(.bar)
                     }
                 }
             }
