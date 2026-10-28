@@ -35,6 +35,27 @@ runs:
       shell: bash
       run: command -v pkg-config || brew install pkgconf
 
+    # Ghostty's Zig dependencies (make ghostty-deps), so a build doesn't
+    # download them from deps.files.ghostty.org, which drops connections
+    # now and then (T806). Fetched here only when the cache has none,
+    # i.e. once per Ghostty pin: main's runs keep it, and a release tag
+    # can restore only what main saved.
+    - name: Zig package cache dir
+      shell: bash
+      run: echo "ZIG_GLOBAL_CACHE_DIR=$HOME/.cache/zig" >> "$GITHUB_ENV"
+
+    - name: Cache Ghostty's Zig dependencies
+      id: zigpkgs
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+      with:
+        path: ~/.cache/zig/p
+        key: zig-pkgs-${{ runner.os }}-${{ steps.pins.outputs.zigpkgs }}
+
+    - name: Fetch Ghostty's Zig dependencies
+      if: steps.zigpkgs.outputs.cache-hit != 'true'
+      shell: bash
+      run: make ghostty-deps
+
     - uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7
       with:
         install-only: true
