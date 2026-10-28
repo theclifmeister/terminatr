@@ -55,3 +55,10 @@ private func phone(level: String = "view", effective: String? = nil, writeKey: B
     #expect(DeviceWords.error(AppAPI.Error(code: "pair-expired", message: "x")).contains("time ran out"))
     #expect(DeviceWords.error(AppAPI.Error(code: "name-taken", message: "a device is already called iPhone")) == "a device is already called iPhone")
 }
+
+/// Write is a level the app offers (T821): its help says what it does.
+@Test func writeLevelHelp() {
+    #expect(DeviceWords.level("write") == "Write")
+    #expect(DeviceWords.levelHelp("write").contains("prompts"))
+    #expect(DeviceWords.levelHelp("write") != DeviceWords.levelHelp(DeviceWords.view))
+}

@@ -5,7 +5,8 @@ import TerminatrUI
 /// A project's board, as the Mac dashboard's: on deck shown, the backlog
 /// and the done tasks folded (task.done, read when the fold opens), and
 /// a filter (the TUI's / on the Tasks tab) that opens the folds while it
-/// has words. A task opens its detail. Read only. -filter WORDS fills
+/// has words. A task opens its detail. At the write level + adds a
+/// task (NewTaskSheet; -newtask YES opens it at launch). -filter WORDS fills
 /// the filter at launch (the Simulator's screenshots).
 struct BoardScreen: View {
     @Environment(PhoneModel.self) private var model
@@ -17,6 +18,7 @@ struct BoardScreen: View {
     /// when the board's done count changes; nil until read.
     @State private var done: [AppAPI.Task]?
     @State private var doneError: String?
+    @State private var adding = UserDefaults.standard.bool(forKey: "newtask")
 
     var body: some View {
         List {
@@ -27,6 +29,12 @@ struct BoardScreen: View {
         .searchable(text: $filter, prompt: "Filter by id or title")
         .refreshable { await model.refresh() }
         .navigationTitle("Board")
+        .toolbar {
+            if model.can(AppAPI.Methods.taskAdd.name) {
+                Button("New Task", systemImage: "plus") { adding = true }
+            }
+        }
+        .sheet(isPresented: $adding) { NewTaskSheet(project: slug) }
         .backdrop()
     }
 
@@ -117,8 +125,9 @@ struct BoardScreen: View {
 /// A task in full, as the Mac's task view shows it (TaskDetail): its
 /// status and thread, what it is blocked on, its PR and how to check it
 /// in review, its steps and its notes. A board task's notes and steps,
-/// and a done task as a whole, come from task.get. Read only: its
-/// thread's conversation opens from here.
+/// and a done task as a whole, come from task.get. Its thread's
+/// conversation opens from here; at the write level an open, on-deck or
+/// blocked task has Delegate… (DelegateButton).
 struct TaskScreen: View {
     @Environment(PhoneModel.self) private var model
     @Environment(\.theme) private var theme
@@ -140,6 +149,9 @@ struct TaskScreen: View {
                             Label("Show thread \(th.record.id)", systemImage: "bubble.left.and.text.bubble.right")
                                 .font(theme.body(.body, .medium))
                         }
+                    }
+                    if model.can(AppAPI.Methods.taskDelegate.name), Palette.delegable(detail.task.status) {
+                        DelegateButton(project: slug, task: ref, status: detail.task.status)
                     }
                     TaskDetailView(detail) {
                         if let fetchError {

@@ -633,6 +633,44 @@
   },
   "task.done": {
    "tasks": []
+  },
+  "task.templates": {
+   "templates": [
+    {
+     "ref": "tm:bug",
+     "mod": "tm",
+     "name": "bug",
+     "title": "Fix: {title}",
+     "notes": "What happens, what should, how to reproduce.",
+     "steps": [
+      "Reproduce it in a test",
+      "Fix it",
+      "Check the fix in the app"
+     ],
+     "builtin": true
+    },
+    {
+     "ref": "tm:spike",
+     "mod": "tm",
+     "name": "spike",
+     "title": "Spike: {title}",
+     "notes": "The question to answer, and by when.",
+     "steps": [
+      "Try it",
+      "Write up what was learnt"
+     ],
+     "builtin": true
+    },
+    {
+     "ref": "tm:chore",
+     "mod": "tm",
+     "name": "chore",
+     "title": "Chore: {title}",
+     "notes": "",
+     "steps": [],
+     "builtin": true
+    }
+   ]
   }
  },
  "hello": {
@@ -640,7 +678,8 @@
   "build": "demo",
   "capabilities": [
    "read",
-   "streams"
+   "streams",
+   "write"
   ],
   "methods": [
    "projects.watch",
@@ -652,7 +691,18 @@
    "library.list",
    "library.read",
    "task.done",
-   "task.get"
+   "task.get",
+   "session.answer",
+   "session.approve",
+   "task.accept",
+   "task.send-back",
+   "questions.open",
+   "session.prompt",
+   "session.keys",
+   "task.add",
+   "task.templates",
+   "task.delegate",
+   "project.open"
   ],
   "server": {
    "caps": [
@@ -662,7 +712,8 @@
    "protocol": 1,
    "version": "0.56.1"
   },
-  "tm": "0.56.1"
+  "tm": "0.56.1",
+  "level": "write"
  },
  "streams": {
   "projects.watch": {
