@@ -9,11 +9,11 @@ Each release uploads the app to TestFlight: the `testflight` job of `.github/wor
 
 - **Version:** the tag's three numbers (`v0.57.0` and `v0.57.0-rc1` are both `0.57.0`), like the Mac app.
 - **Build number:** the tag's commit count (`git rev-list --count`), which only grows along main, so every upload, prereleases included, is higher than the one before.
-- **Signing:** manual, with an Apple Distribution certificate and an App Store provisioning profile for `dev.terminatr.ios` from the secrets below. A CI runner has no Xcode account, and automatic (cloud) signing there would make a new certificate on every run. Builds in Xcode on your Mac keep signing automatically with your own team.
+- **Signing:** manual, with an Apple Distribution certificate and an App Store provisioning profile for `dev.terminatr.ios` from the secrets below. A CI runner has no Xcode account, and automatic (cloud) signing there would make a new certificate on every run. The team is the project's Release `DEVELOPMENT_TEAM` (4689D3AT8J). Builds in Xcode on your Mac keep signing automatically.
 - **Upload:** `xcodebuild -exportArchive` with an App Store Connect API key.
 - **Without the secrets** the job is skipped (a notice on the release run says so) and the release goes on as before. With some but not all of them it fails, naming the missing ones.
 
-To try it locally: `scripts/release/ios.sh v0.57.0` makes an unsigned archive (a dry run, no Apple account needed) in `.build/release/ios/`. With `TM_IOS_PROFILE` (the profile's path) and `TM_TEAM_ID` it signs with the Apple Distribution identity in your keychain and exports `Terminatr.ipa`; add `TM_ASC_KEY` (the .p8's path), `TM_ASC_KEY_ID` and `TM_ASC_ISSUER` to upload too.
+To try it locally: `scripts/release/ios.sh v0.57.0` makes an unsigned archive (a dry run, no Apple account needed) in `.build/release/ios/`. With `TM_IOS_PROFILE` (the profile's path) it signs with the Apple Distribution identity in your keychain and exports `Terminatr.ipa`; add `TM_ASC_KEY` (the .p8's path), `TM_ASC_KEY_ID` and `TM_ASC_ISSUER` to upload too.
 
 ### What you do once, in your Apple account
 
@@ -33,7 +33,7 @@ To try it locally: `scripts/release/ios.sh v0.57.0` makes an unsigned archive (a
    | `IOS_DIST_CERT_PASSWORD` | its password |
    | `IOS_PROFILE_BASE64` | the profile from step 4, base64 |
 
-   `APPLE_TEAM_ID` and `KEYCHAIN_PASSWORD` are there already (docs/OPERATIONS.md, Releasing).
+   `KEYCHAIN_PASSWORD` is there already (docs/OPERATIONS.md, Releasing). The team needs no secret: it is the Release config's `DEVELOPMENT_TEAM` in `Terminatr.xcodeproj`, 4689D3AT8J, the Mac app's team.
 7. **Add internal testers.** In App Store Connect → the app → TestFlight → Internal Testing, add a group and yourself (and anyone else on your team) to it. Builds then reach the group without review once processed; install TestFlight on the iPhone and accept the invitation. The first build asks for export compliance only if the Info.plist answer below is missing; it isn't.
 
 The next release then uploads the app. To upload a release already published, rerun its `testflight` job once the secrets are set (Actions → the release run → Re-run jobs).

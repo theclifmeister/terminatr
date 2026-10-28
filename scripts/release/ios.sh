@@ -10,9 +10,10 @@
 # uploads a higher build than the last. TM_IOS_BUILD overrides it.
 #
 # Signing is manual (ios/README.md, TestFlight): TM_IOS_PROFILE, the path
-# to the App Store provisioning profile of dev.terminatr.ios, and
-# TM_TEAM_ID its team; the matching Apple Distribution identity must be
-# in the keychain (the workflow imports it). With TM_ASC_KEY (the path to
+# to the App Store provisioning profile of dev.terminatr.ios, of the team
+# the project's Release config names (DEVELOPMENT_TEAM; TM_TEAM_ID
+# overrides it); that team's Apple Distribution identity must be in the
+# keychain (the workflow imports it). With TM_ASC_KEY (the path to
 # an App Store Connect API key, .p8), TM_ASC_KEY_ID and TM_ASC_ISSUER,
 # xcodebuild uploads the export to App Store Connect; without them it
 # leaves Terminatr.ipa in .build/release/ios/. Without TM_IOS_PROFILE the
@@ -49,7 +50,8 @@ if [ -z "${TM_IOS_PROFILE:-}" ]; then
 	echo "ios: TM_IOS_PROFILE not set; Terminatr.xcarchive is not signed and not uploaded (version $version, build $build)"
 	exit 0
 fi
-team=${TM_TEAM_ID:?ios: TM_IOS_PROFILE needs TM_TEAM_ID}
+team=${TM_TEAM_ID:-$(sed -n 's/^[[:space:]]*DEVELOPMENT_TEAM = \([A-Z0-9]*\);$/\1/p' "$root/ios/Terminatr.xcodeproj/project.pbxproj")}
+[ -n "$team" ] || { echo "ios: no DEVELOPMENT_TEAM in the project; set TM_TEAM_ID" >&2; exit 1; }
 
 # The profile must be an App Store one for this app and team, and still
 # valid; installed where Xcode looks (both its old and its 16+ folder),
@@ -59,7 +61,7 @@ security cms -D -i "$TM_IOS_PROFILE" > "$tmp/profile.plist" 2>/dev/null ||
 field() { plutil -extract "$1" raw -o - "$tmp/profile.plist" 2>/dev/null || true; }
 uuid=$(field UUID)
 [ "$(field Entitlements.application-identifier)" = "$team.$bundle" ] ||
-	{ echo "ios: the profile is not for $bundle of team TM_TEAM_ID" >&2; exit 1; }
+	{ echo "ios: the profile is not for $bundle of team $team" >&2; exit 1; }
 [ "$(field Entitlements.get-task-allow)" = false ] && [ -z "$(field ProvisionedDevices)" ] ||
 	{ echo "ios: the profile is not an App Store profile (Distribution → App Store Connect)" >&2; exit 1; }
 [ "$(field ExpirationDate)" \> "$(date -u +%Y-%m-%dT%H:%M:%SZ)" ] ||

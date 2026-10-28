@@ -211,6 +211,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				"CODE_SIGN_IDENTITY[sdk=iphonesimulator*]" = "-";
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 4689D3AT8J;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = terminatr;

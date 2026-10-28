@@ -312,14 +312,13 @@ jobs:
           CERT_PASSWORD: ${{ secrets.IOS_DIST_CERT_PASSWORD }}
           PROFILE_BASE64: ${{ secrets.IOS_PROFILE_BASE64 }}
           KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
           ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
         run: |
           set -euo pipefail
           missing=
-          for v in CERT_P12_BASE64 CERT_PASSWORD PROFILE_BASE64 KEYCHAIN_PASSWORD APPLE_TEAM_ID ASC_KEY_ID ASC_ISSUER_ID ASC_KEY_P8; do
+          for v in CERT_P12_BASE64 CERT_PASSWORD PROFILE_BASE64 KEYCHAIN_PASSWORD ASC_KEY_ID ASC_ISSUER_ID ASC_KEY_P8; do
             [ -n "${!v}" ] || missing="$missing $v"
           done
           if [ -n "$missing" ]; then
@@ -338,11 +337,13 @@ jobs:
             -s -k "$KEYCHAIN_PASSWORD" "$keychain" > /dev/null
           security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
           rm -f "$RUNNER_TEMP/tm-ios.p12"
-          # Xcode signs with "Apple Distribution": one of this team must be
-          # valid, its WWDR intermediate in the .p12 or on the runner.
+          # Xcode signs with "Apple Distribution" of the project's team
+          # (DEVELOPMENT_TEAM, ios/Terminatr.xcodeproj): one must be valid,
+          # its WWDR intermediate in the .p12 or on the runner.
+          team=$(sed -n 's/^[[:space:]]*DEVELOPMENT_TEAM = \([A-Z0-9]*\);$/\1/p' ios/Terminatr.xcodeproj/project.pbxproj)
           identities=$(security find-identity -v -p codesigning "$keychain")
-          if ! printf '%s\n' "$identities" | grep -q "\"Apple Distribution: .* ($APPLE_TEAM_ID)\""; then
-            echo "no valid Apple Distribution identity for team APPLE_TEAM_ID in IOS_DIST_CERT_P12_BASE64" >&2
+          if ! printf '%s\n' "$identities" | grep -q "\"Apple Distribution: .* ($team)\""; then
+            echo "no valid Apple Distribution identity of team $team in IOS_DIST_CERT_P12_BASE64" >&2
             exit 1
           fi
           echo "$PROFILE_BASE64" | base64 --decode > "$RUNNER_TEMP/tm-ios.mobileprovision"
@@ -351,7 +352,6 @@ jobs:
       - name: Archive and upload
         env:
           TM_IOS_PROFILE: ${{ runner.temp }}/tm-ios.mobileprovision
-          TM_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           TM_ASC_KEY: ${{ runner.temp }}/tm-asc.p8
           TM_ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           TM_ASC_ISSUER: ${{ secrets.ASC_ISSUER_ID }}

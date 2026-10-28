@@ -18,9 +18,10 @@
 #   make archive the Release build for devices, in $(ARCHIVE):
 #                VERSION and BUILD set its version (0.54.0) and build
 #                number; without PROFILE (an App Store provisioning
-#                profile's UUID, installed) and TEAM it is unsigned, a
-#                dry run; with them signed by an Apple Distribution
-#                identity in the keychain. scripts/release/ios.sh, which
+#                profile's UUID, installed) it is unsigned, a dry run;
+#                with it signed by an Apple Distribution identity in the
+#                keychain, of the Release config's team (DEVELOPMENT_TEAM,
+#                terminatr's; TEAM overrides it). scripts/release/ios.sh, which
 #                the release workflow runs, exports and uploads it
 #                (README.md, TestFlight)
 #
@@ -28,8 +29,9 @@
 # project). The package's aren't here: Xcode 26 builds it as a dependency
 # with -suppress-warnings, which TERMINATR_WERROR's -warnings-as-errors
 # conflicts with, so the build unsets it; macos/Makefile keeps its
-# warnings errors. Local builds in Xcode sign automatically with your
-# own team; the project holds none.
+# warnings errors. Builds in Xcode sign automatically; the Release config
+# names terminatr's team (4689D3AT8J, the Mac app's too), Debug none, so
+# a device build in Xcode takes your own.
 
 DEVICE       ?= iPhone 17
 CONFIG       ?= Debug
@@ -40,6 +42,9 @@ DEV          ?= build/dev
 ARCHIVE      ?= build/Terminatr.xcarchive
 VERSION      ?= 0.0.0
 BUILD        ?= 1
+# The Release config's team, passed to every target when signing: the
+# packages' resource bundles are signed too, and don't read the app's.
+TEAM         ?= $(shell sed -n 's/^[[:space:]]*DEVELOPMENT_TEAM = \([A-Z0-9]*\);$$/\1/p' Terminatr.xcodeproj/project.pbxproj)
 unexport TERMINATR_WERROR
 
 .PHONY: build run dev-server run-paired archive clean
