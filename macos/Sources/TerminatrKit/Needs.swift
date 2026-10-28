@@ -108,8 +108,8 @@ extension Need {
 
     /// Every need: sessions' first (questions, approvals, held queues),
     /// then each project's (its coordinator's questions, its blocked
-    /// tasks, failing checks, its links'), then the guard's refusals,
-    /// then the paired servers' (share requests, their projects'), then
+    /// tasks, failing checks, its links'), then the guard's refusals
+    /// the user can allow, then the paired servers' (share requests, their projects'), then
     /// the tasks in review. A paired server's panes (sessions with a
     /// server) are its user's there, not here.
     public static func of(projects: [AppAPI.Project], sessions: [AppAPI.Session], peers: [AppAPI.Peer] = [],
@@ -121,7 +121,7 @@ extension Need {
         for p in projects {
             out += of(project: p)
         }
-        for r in refusals {
+        for r in refusals where r.actionable {
             out.append(of(refusal: r, sessions: sessions))
         }
         for peer in peers {
@@ -285,4 +285,13 @@ extension Need {
     static func line(_ parts: String...) -> String {
         parts.filter { !$0.isEmpty }.joined(separator: " · ")
     }
+}
+
+extension AppAPI.GuardRefusal {
+    /// Whether the user has a real choice on the refusal: an allowance
+    /// the guard would honour. The floor's, tm's files' and any other no
+    /// allowance names (fixed, app API 24; an older tm marks the floor's
+    /// only) can only be kept refusing, so they stay in the guard's log,
+    /// never under Needs you.
+    public var actionable: Bool { !floor && !fixed }
 }

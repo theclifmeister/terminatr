@@ -66,3 +66,29 @@ func TestPrune(t *testing.T) {
 		t.Errorf("oldest open went? first %v", list[0].Last.Unix())
 	}
 }
+
+// TestActionable: a refusal is the user's choice only while an allowance
+// can lift it; the floor's, tm's files' and a write folder's aren't.
+func TestActionable(t *testing.T) {
+	for _, c := range []struct {
+		e    Entry
+		want bool
+	}{
+		{Entry{Rule: "force-push", Subject: "git push -f origin x"}, true},
+		{Entry{Rule: "credentials", Subject: "cat ~/.netrc"}, true},
+		{Entry{Rule: "mod:lint.no-rm", Subject: "rm -r x"}, true},
+		{Entry{Rule: "worktree-only", Subject: "cp a /opt/b"}, true},
+		{Entry{Rule: "worktree-only", Subject: "/opt/b", Path: true}, false},
+		{Entry{Rule: "merge", Subject: "gh pr merge 1", Floor: true}, false},
+		{Entry{Rule: "merge", Subject: "gh pr merge 1"}, false},
+		{Entry{Rule: "tm-files", Subject: "tm config set x y", Floor: true}, false},
+		{Entry{Rule: "tm-files", Subject: "echo x > ~/.terminatr/config.toml"}, false},
+		{Entry{Rule: "temp-folders", Subject: "/tmp/other", Path: true, Floor: true}, false},
+		{Entry{Rule: "unchecked", Subject: "ls", Floor: true}, false},
+		{Entry{Rule: "credentials", Subject: "cat ~/.ssh/*"}, false},
+	} {
+		if got := c.e.Actionable(); got != c.want {
+			t.Errorf("%s %q: actionable %t, want %t", c.e.Rule, c.e.Subject, got, c.want)
+		}
+	}
+}
