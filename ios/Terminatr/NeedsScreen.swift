@@ -3,8 +3,12 @@ import TerminatrKit
 import TerminatrUI
 
 /// The start screen: every need, as the Mac app's Needs you lists them
-/// (Need.of), each a card (NeedSummary) that opens its session, else
-/// its project, with its answers below at the answer level (NeedActs).
+/// (Need.of), each a compact card (NeedSummary) that opens its session,
+/// else its project, with its answers below at the answer level
+/// (NeedActs): on a closed iPhone Duo one tap answers the quick ones. A
+/// session's question or approval opens as its conversation with the
+/// card above it (Route.need), beside the list while the Duo is open
+/// (T826).
 struct NeedsScreen: View {
     @Environment(PhoneModel.self) private var model
     @Environment(\.theme) private var theme
@@ -34,7 +38,7 @@ struct NeedsScreen: View {
 
     private func route(_ n: Need) -> Route {
         if !n.session.isEmpty, let s = model.sessions.first(where: { $0.id == n.session }), let ref = SessionRef(s) {
-            return .session(ref)
+            return n.kind == .question || n.kind == .approval ? .need(ref) : .session(ref)
         }
         if n.kind == .question, n.id.hasPrefix("questions:") { return .session(SessionRef(project: n.project)) }
         if let slash = n.project.firstIndex(of: "/") {
@@ -46,10 +50,13 @@ struct NeedsScreen: View {
 
 /// A need's card, as the Mac dashboard's NeedCard looks: its project,
 /// then NeedSummary, which open route; below, outside the link, its
-/// buttons (NeedActs).
+/// buttons (NeedActs). The agent's words take two lines, one on a short
+/// screen (a closed iPhone Duo held sideways), so the buttons stay in
+/// reach; the whole of them is a tap away.
 struct NeedTile: View {
     @Environment(\.theme) private var theme
     @Environment(\.navigate) private var navigate
+    @Environment(\.verticalSizeClass) private var height
     let need: Need
     let route: Route
 
@@ -71,7 +78,7 @@ struct NeedTile: View {
                     if !need.text.isEmpty {
                         Text(need.text)
                             .font(theme.body(.subheadline))
-                            .lines(3)
+                            .lines(height == .compact ? 1 : 2)
                             .padding(.leading, 24)
                     }
                 }
