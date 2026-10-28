@@ -3,6 +3,14 @@
 The iPhone app: `Terminatr.xcodeproj`, its sources in `Terminatr/`, the phone's end of a device link in `TerminatrLink/`, and TerminatrKit and TerminatrUI from the Swift package in `../macos`.
 `Makefile` says how to build it, run it in the Simulator (demo or paired with a dev server) and archive it.
 
+## iPhone Duo
+
+The app builds with Xcode 27.1 and its iOS 27.1 SDK (T824), so it runs natively on iPhone Duo: on the outer display, and on the inner one in landscape, the tab and navigation bars move to a vertical bar on the side.
+It still runs on iOS 17 and later; the 27.1 APIs are behind `#available`.
+On an iPhone the app is portrait only, except on a phone with a hinge (`Duo.swift`), where the outer display turns to landscape too; the inner display ignores the lock anyway.
+CI's `ios-app` job and the release's `testflight` job run on GitHub's `xcode-27` image (a preview), the only one with Xcode 27.1; the Mac app's jobs stay on `macos-latest`.
+Check it in the Simulator on an iPhone Duo (iOS 27.1 runtime): `make run DEVICE="…"`; opening, closing and rotating it are buttons in Xcode's Device Hub (`simctl` can't), and `simctl io … screenshot --display=1` shoots the outer display.
+
 ## TestFlight
 
 Each release uploads the app to TestFlight: the `testflight` job of `.github/workflows/release.yml` runs `scripts/release/ios.sh` on the tag, once the release is published.

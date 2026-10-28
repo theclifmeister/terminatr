@@ -450,25 +450,7 @@ struct EntryView: View {
     var body: some View {
         switch entry.kind {
         case .prompt where entry.folds && !unfolded:
-            Button { unfolded = true } label: {
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Image(systemName: "chevron.right")
-                        .font(theme.body(.glyph, .bold))
-                    Text("tm")
-                        .font(theme.mono(.footnote, .medium))
-                    Text([entry.headline, Self.clock(entry.at)].filter { !$0.isEmpty }.joined(separator: " · "))
-                        .font(theme.body(.subheadline))
-                        .lineLimit(1)
-                    Spacer(minLength: 0)
-                }
-                .foregroundStyle(theme.muted)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .help("Show what tm sent")
-            .accessibilityHint("Shows the prompt tm sent")
+            FoldedPrompt(entry: entry, when: Self.clock(entry.at)) { unfolded = true }
         case .prompt:
             let preview = unfolded ? nil : entry.preview()
             HStack {

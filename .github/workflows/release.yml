@@ -284,11 +284,13 @@ jobs:
   # tried. Runs once the release is published, so a failure here leaves
   # the release as it is: rerun this job (a build number already
   # uploaded is refused; that one is there). Skipped while none of its
-  # secrets is set.
+  # secrets is set. On the xcode-27 image (a preview: it may queue), for
+  # the iOS 27.1 SDK the iPhone Duo layout needs (T824); the Mac app's
+  # jobs stay on macos-latest.
   testflight:
     needs: release
     if: ${{ !cancelled() && needs.release.outputs.published == 'true' && needs.release.outputs.testflight == 'true' }}
-    runs-on: macos-latest
+    runs-on: xcode-27
     environment: release
     permissions:
       contents: read
