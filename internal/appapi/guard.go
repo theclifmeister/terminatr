@@ -55,7 +55,7 @@ type GuardRefusals struct {
 // session's role), under which rule, with which tool, the journal's
 // Summary and the whole Subject (the command line, or the file when
 // Path) an allowance names. Floor: it is never allowed, only kept.
-// Fixed (app API 23): no allowance lifts it either (tm's files, a rule
+// Fixed (app API 24): no allowance lifts it either (tm's files, a rule
 // none names, a write folder's), so keeping it refusing is all there is
 // (not guardlog.Entry.Actionable); Needs you leaves both out, the
 // guard's log keeps every one.

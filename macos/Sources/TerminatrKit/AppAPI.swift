@@ -6,7 +6,7 @@ import Foundation
 /// The terminatr app API (docs/SPEC.md §3.8): what tm app bridge answers.
 public enum AppAPI {
     /// The app API version this app was generated against.
-    public static let version = 23
+    public static let version = 24
 
     public struct AdoptRequestParams: Codable, Sendable, Hashable {
         public var id: String

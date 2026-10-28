@@ -290,7 +290,7 @@ extension Need {
 extension AppAPI.GuardRefusal {
     /// Whether the user has a real choice on the refusal: an allowance
     /// the guard would honour. The floor's, tm's files' and any other no
-    /// allowance names (fixed, app API 23; an older tm marks the floor's
+    /// allowance names (fixed, app API 24; an older tm marks the floor's
     /// only) can only be kept refusing, so they stay in the guard's log,
     /// never under Needs you.
     public var actionable: Bool { !floor && !fixed }
