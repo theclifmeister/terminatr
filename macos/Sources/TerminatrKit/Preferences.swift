@@ -143,14 +143,34 @@ public enum SidebarSize: Sendable {
 }
 
 /// File › New Task…'s form: the title is one line and not empty, as tm
-/// task add takes it; notes are optional.
+/// task add takes it; notes are optional; a template (app API 20, the
+/// TUI's + offers them) lays its title around the title and gives the
+/// task its steps, and its notes when the form has none.
 public struct NewTaskForm: Equatable, Sendable {
     public var title = ""
     public var notes = ""
+    /// The template's ref (task.templates), "" for none.
+    public var template = ""
 
-    public init(title: String = "", notes: String = "") {
+    public init(title: String = "", notes: String = "", template: String = "") {
         self.title = title
         self.notes = notes
+        self.template = template
+    }
+
+    /// The title the task gets with template t: t's, around the title
+    /// typed ("…" while none is), as tm task add --template makes it.
+    public static func title(_ typed: String, with t: AppAPI.Template?) -> String {
+        guard let t else { return typed }
+        let s = typed.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let r = t.title.range(of: "{title}") else { return t.title }
+        return t.title.replacingCharacters(in: r, with: s.isEmpty ? "…" : s)
+    }
+
+    /// How the template picker names t among ts: its name, or its
+    /// <mod>:<name> when another of ts has the name, as the TUI's.
+    public static func label(_ t: AppAPI.Template, among ts: [AppAPI.Template]) -> String {
+        ts.contains { $0.name == t.name && $0.mod != t.mod } ? t.ref : t.name
     }
 
     public var trimmedTitle: String {
@@ -164,7 +184,7 @@ public struct NewTaskForm: Equatable, Sendable {
     /// task.add's params for project.
     public func params(project: String) -> AppAPI.TaskAddParams {
         AppAPI.TaskAddParams(project: project, title: trimmedTitle,
-                             notes: notes.trimmingCharacters(in: .whitespacesAndNewlines))
+                             notes: notes.trimmingCharacters(in: .whitespacesAndNewlines), template: template)
     }
 
     /// What the sheet says once task.add answered.

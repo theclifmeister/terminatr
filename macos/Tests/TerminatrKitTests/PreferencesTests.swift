@@ -43,6 +43,25 @@ import Testing
     #expect(NewTaskForm.done(AppAPI.TaskAdded(task: "T2", existing: true), project: "toe") == "T2 is on toe's board already.")
 }
 
+/// New Task's templates (app API 20): task.add takes the ref; the sheet
+/// shows the title the template makes, and names a template by its
+/// <mod>:<name> only when another mod's has its name, as the TUI's.
+@Test func newTaskTemplates() {
+    let bug = AppAPI.Template(ref: "default-templates:bug", mod: "default-templates", name: "bug", title: "Bug: {title}",
+                              steps: ["Reproduce", "Fix"], builtin: true)
+    let mine = AppAPI.Template(ref: "mine:bug", mod: "mine", name: "bug", title: "{title} (bug)")
+    let chore = AppAPI.Template(ref: "default-templates:chore", mod: "default-templates", name: "chore", title: "Chore: {title}")
+    let f = NewTaskForm(title: " Login fails ", template: bug.ref)
+    #expect(f.params(project: "web") == AppAPI.TaskAddParams(project: "web", title: "Login fails", template: "default-templates:bug"))
+    #expect(NewTaskForm().params(project: "web").template == "")
+    #expect(NewTaskForm.title(" Login fails ", with: bug) == "Bug: Login fails")
+    #expect(NewTaskForm.title("", with: bug) == "Bug: …")
+    #expect(NewTaskForm.title("Login", with: nil) == "Login")
+    #expect(NewTaskForm.title("x", with: AppAPI.Template(ref: "m:t", mod: "m", name: "t", title: "Fixed")) == "Fixed")
+    #expect(NewTaskForm.label(bug, among: [bug, mine, chore]) == "default-templates:bug")
+    #expect(NewTaskForm.label(chore, among: [bug, mine, chore]) == "chore")
+}
+
 @Test func bridgeLog() {
     var log = BridgeLog(limit: 3)
     let t0 = Date(timeIntervalSince1970: 0)

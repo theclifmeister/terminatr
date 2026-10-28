@@ -122,8 +122,10 @@ struct Composer: View {
         .padding(.top, 10)
         .padding(.bottom, 14)
         .onChange(of: app.composerFocus) { focused = true }
+        .onChange(of: app.draft) { takeDraft() }
         .onAppear {
             if autofocus { focused = true }
+            takeDraft()
             watchPaste()
         }
         .onDisappear {
@@ -158,6 +160,14 @@ struct Composer: View {
         if model.ref.isCoordinator { return "Message the coordinator" }
         let who = model.ref.thread
         return "Message \(who) · sending takes the thread over"
+    }
+
+    /// The text the window has for this composer (Ask the
+    /// Coordinator), after what the user typed already.
+    private func takeDraft() {
+        guard let t = app.takeDraft(for: model.ref) else { return }
+        text = text.isEmpty ? t : text + "\n" + t
+        focused = true
     }
 
     private func send(mode: String) {
