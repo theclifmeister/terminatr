@@ -382,6 +382,10 @@ type PeerSource interface {
 	// clears it with "", as tm peer name does (§16.8), and has the
 	// server read the peers again.
 	SetPeerName(alias, name string) error
+	// SetSelfName sets this server's own name, or clears it with "" for
+	// the host name, as tm network name does (§16.8), and has the server
+	// read the peers again, which tells the paired servers.
+	SetSelfName(name string) error
 	// SetPeerRelay gives the paired server alias another relay, as tm
 	// peer relay does, and has the server read the peers again; warn
 	// says when the relay is on a private address.

@@ -24,7 +24,7 @@
      │ <host> · this server · 0 paired servers │
      │ shares nothing with the paired servers · P pairs a new one                                      │
      │                                                                                                 │
- ────│ enter fold · tab details · P pair · J join · ? keys · esc close                                 │
+ ────│ E name · enter fold · tab details · P pair · J join · ? keys · esc close                        │
      ╰─────────────────────────────────────────────────────────────────────────────────────────────────╯──────
                                    │
  tab sidebar · ? help              │

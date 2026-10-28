@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"time"
 
 	tmclient "github.com/theclifmeister/terminatr/internal/client"
@@ -195,8 +194,7 @@ func (s *ServerSource) PairDevice(ctx context.Context, relayText string, ev Devi
 	if err != nil {
 		return DeviceEntry{}, err
 	}
-	host, _ := os.Hostname()
-	name := peer.HostLabel(host)
+	name := peer.SelfName()
 	var as string
 	ctx, cancel := context.WithTimeout(ctx, devicePairWait)
 	defer cancel()

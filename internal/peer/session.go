@@ -39,6 +39,9 @@ type Hello struct {
 	LinkProtocol int      `json:"link_protocol"`
 	Version      string   `json:"version"` // the tm release
 	Caps         []string `json:"caps"`
+	// Name is the server's own name ([server] name, §16.8) when its
+	// hello lists CapName; "" for none set.
+	Name string `json:"name,omitempty"`
 }
 
 // clean is h with its text made safe to show: the peer is paired but its
@@ -53,6 +56,9 @@ func (h Hello) clean() Hello {
 		}
 	}
 	h.Caps = caps
+	if CheckName(h.Name) != nil {
+		h.Name = ""
+	}
 	return h
 }
 

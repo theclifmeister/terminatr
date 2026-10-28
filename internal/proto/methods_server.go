@@ -124,8 +124,9 @@ const (
 // PeerLink is the link to one paired server.
 type PeerLink struct {
 	Alias string `json:"alias"`
-	// Name is the display name set here (tm peer name), "" for none:
-	// what screens and agents call the server; Alias stays its key.
+	// Name is the display name: the one set here (tm peer name), else
+	// the one the server gives itself (§16.8); "" for none. What screens
+	// and agents call the server; Alias stays its key.
 	Name      string `json:"name,omitempty"`
 	ID        string `json:"id"`
 	Transport string `json:"transport"` // "relay relay.example.net"

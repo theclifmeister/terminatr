@@ -1,17 +1,17 @@
 package tui
 
 import (
+	"cmp"
 	"fmt"
 	"math"
-	"os"
 	"slices"
 	"strings"
-	"sync"
 	"time"
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/theclifmeister/terminatr/internal/peer"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/view"
 )
@@ -68,16 +68,9 @@ type peerLink struct {
 // pin it.
 var sideClock = time.Now
 
-// thisHost is this machine's name for its server header: the host name
-// up to its first dot; "this server" when there is none.
-var thisHost = sync.OnceValue(func() string {
-	h, _ := os.Hostname()
-	h, _, _ = strings.Cut(h, ".")
-	if h == "" {
-		return "this server"
-	}
-	return h
-})
+// thisHost is this server's name for its server header (peer.SelfName);
+// "this server" when there is none.
+var thisHost = func() string { return cmp.Or(peer.SelfName(), "this server") }
 
 // peerFold is the view.Tree.Folded entry of a paired server's group
 // (slug "") or of one of its projects.

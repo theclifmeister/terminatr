@@ -61,6 +61,9 @@ type dispatcher struct {
 	// panesHere takes the peer's switches for this server, which it
 	// says when they change (peer.panes).
 	panesHere func(p proto.PeerPanesParams)
+	// named takes the peer's own name, which it says when it changes
+	// (peer.name).
+	named func(name string)
 }
 
 // methods are the peer.* methods a paired server may call: nothing
@@ -70,14 +73,19 @@ type dispatcher struct {
 // whose stream may type while the pane switch says so (§16.12);
 // peer.file.fetch reads only a file this server offered the peer
 // (§16.13); peer.transcript reads a conversation only while both the
-// pane switch and the conversations switch let the peer (§16.14).
+// pane switch and the conversations switch let the peer (§16.14);
+// peer.name changes only the name this server shows for the peer, never
+// its alias (§16.8).
 func (d *dispatcher) methods() map[string]handler {
-	if d == nil || (d.ex == nil && d.msgs == nil && d.panes == nil && d.files == nil && d.transcripts == nil && d.panesHere == nil) {
+	if d == nil || (d.ex == nil && d.msgs == nil && d.panes == nil && d.files == nil && d.transcripts == nil && d.panesHere == nil && d.named == nil) {
 		return nil
 	}
 	m := map[string]handler{}
 	if d.panesHere != nil {
 		m[proto.MethodPeerPanes] = d.panesChanged
+	}
+	if d.named != nil {
+		m[proto.MethodPeerName] = d.nameChanged
 	}
 	if d.ex != nil {
 		m[proto.MethodPeerProjects] = d.projects
@@ -177,6 +185,20 @@ func asProtoError(err error) *proto.Error {
 		return pe
 	}
 	return proto.Errorf(proto.ErrInternal, "the peer couldn't answer")
+}
+
+// nameChanged takes peer.name: the peer's own name changed
+// (docs/SPEC.md §16.8).
+func (d *dispatcher) nameChanged(_ context.Context, params json.RawMessage) (any, error) {
+	var p proto.PeerNameParams
+	if err := json.Unmarshal(params, &p); err != nil {
+		return nil, proto.Errorf(proto.ErrBadParams, "peer.name: %v", err)
+	}
+	if p.Name != "" && CheckName(p.Name) != nil {
+		return nil, proto.Errorf(proto.ErrBadParams, "peer.name: %v", CheckName(p.Name))
+	}
+	d.named(p.Name)
+	return struct{}{}, nil
 }
 
 // panesChanged takes peer.panes: the peer's pane switch for this server

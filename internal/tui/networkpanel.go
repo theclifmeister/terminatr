@@ -39,6 +39,7 @@ import (
 const (
 	itemNone    = iota
 	itemName    // a paired server's display name: enter edits it
+	itemSelf    // this server's own name: enter edits it
 	itemRelay   // its relay: enter edits it
 	itemPanes   // its pane switch: ← → or a click on a word
 	itemConv    // its conversations switch: ← → or enter
@@ -95,6 +96,11 @@ func (nv *networkView) panelLines(m *dash, r netRow, ok bool, w int) []panelLine
 	case netServer:
 		if r.peer < 0 {
 			add(itemNone, th().Head.Render(thisHost())+th().Faint.Render(" · this server"), rule)
+			if own := peer.OwnName(); own != "" {
+				row(itemSelf, "name (E)", own)
+			} else {
+				row(itemSelf, "name (E)", th().Faint.Render("none: the host name"))
+			}
 			if nv.list.Short != "" {
 				row(itemNone, "id", nv.list.Short)
 			}
@@ -115,13 +121,16 @@ func (nv *networkView) panelLines(m *dash, r netRow, ok bool, w int) []panelLine
 		e := nv.list.Peers[r.peer]
 		name := netName(e)
 		head := th().Head.Render(name)
-		if e.Name != "" {
-			head += th().Faint.Render(strings.TrimPrefix(peer.Both(e.Name, e.Alias), e.Name))
+		if s := e.shown(); s != "" {
+			head += th().Faint.Render(strings.TrimPrefix(peer.Both(s, e.Alias), s))
 		}
 		add(itemNone, head, rule)
-		if e.Name != "" {
+		switch {
+		case e.Name != "":
 			row(itemName, "name", e.Name)
-		} else {
+		case e.Told != "" && e.Told != e.Alias:
+			row(itemName, "name", th().Faint.Render("none here: shown as "+e.Told+", its own name"))
+		default:
 			row(itemName, "name", th().Faint.Render("none: shown as "+e.Alias))
 		}
 		g, st, words := nv.connLook(m, e)

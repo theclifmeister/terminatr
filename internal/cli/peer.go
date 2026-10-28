@@ -2,13 +2,13 @@ package cli
 
 import (
 	"bufio"
+	"cmp"
 	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
 	"github.com/theclifmeister/terminatr/internal/textsafe"
 	"io/fs"
-	"os"
 	"slices"
 	"strings"
 	"text/tabwriter"
@@ -52,7 +52,7 @@ const pairWait = 13 * time.Minute
 // server is told and asked about the peers.
 var (
 	pairRelayTLS = func() *tls.Config { return nil }
-	pairName     = func() string { h, _ := os.Hostname(); return peer.HostLabel(h) }
+	pairName     = peer.SelfName
 	reloadPeers  = serverReloadPeers
 	peerLinks    = serverPeerLinks
 )
@@ -377,9 +377,12 @@ func (e *Env) peerName(dir, who, name string) error {
 	case err != nil:
 		return err
 	}
-	if p.Name == "" {
+	switch {
+	case p.Name == "" && p.Told != "" && p.Told != p.Alias:
+		fmt.Fprintf(e.Stdout, "%s shows by the name it gives itself again, %s.\n", p.Alias, p.Told)
+	case p.Name == "":
 		fmt.Fprintf(e.Stdout, "%s shows by its alias again.\n", p.Alias)
-	} else {
+	default:
 		fmt.Fprintf(e.Stdout, "%s is now called %s here: %s/<project> and %s/<project> both name its projects.\n", p.Alias, p.Name, p.Name, p.Alias)
 	}
 	e.reload()
@@ -390,7 +393,10 @@ func (e *Env) peerName(dir, who, name string) error {
 type peerEntry struct {
 	Alias string `json:"alias"`
 	// Name is the display name set here (tm peer name); "" for none.
-	Name  string          `json:"name,omitempty"`
+	Name string `json:"name,omitempty"`
+	// Told is the name the server gives itself, shown while Name is ""
+	// (docs/SPEC.md §16.8); "" for none.
+	Told  string          `json:"told,omitempty"`
 	ID    string          `json:"id"`
 	Short string          `json:"short"`
 	Relay string          `json:"relay"`
@@ -421,7 +427,7 @@ func (e *Env) peerList(dir string, asJSON bool) error {
 	}
 	entries := []peerEntry{}
 	for _, p := range peers {
-		pe := peerEntry{Alias: p.Alias, Name: p.Name, ID: p.ID().String(), Short: p.ID().Short(), Relay: p.Relay, Panes: proto.PanesWord(p.PanesLevel()),
+		pe := peerEntry{Alias: p.Alias, Name: p.Name, Told: p.Told, ID: p.ID().String(), Short: p.ID().Short(), Relay: p.Relay, Panes: proto.PanesWord(p.PanesLevel()),
 			Conversations: convWord(p.ConversationsOn())}
 		if l, ok := links[pe.ID]; ok {
 			pe.Link = &l
@@ -462,7 +468,7 @@ func (e *Env) peerList(dir string, asJSON bool) error {
 				state += ", conversations off"
 			}
 		}
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", peer.Both(pe.Name, pe.Alias), pe.Short, relayHost(pe.Relay), state)
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", peer.Both(cmp.Or(pe.Name, pe.Told), pe.Alias), pe.Short, relayHost(pe.Relay), state)
 	}
 	return tw.Flush()
 }

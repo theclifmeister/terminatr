@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io/fs"
 	"net"
-	"os"
 	"time"
 
 	tmclient "github.com/theclifmeister/terminatr/internal/client"
@@ -38,7 +37,10 @@ type PeerList struct {
 // and its link (nil while there is none).
 type PeerEntry struct {
 	Alias, Name, ID, Short, Relay string
-	Link                          *proto.PeerLink
+	// Told is the name the server gives itself (peer.Peer.Told), shown
+	// while Name is "".
+	Told string
+	Link *proto.PeerLink
 	// Panes is this server's pane switch for it (proto.PanesOff …).
 	Panes string
 	// ConversationsOff: its conversations switch is off (§16.14).
@@ -74,7 +76,7 @@ func (s *ServerSource) Peers() (PeerList, error) {
 		}
 	}
 	for _, p := range peers {
-		e := PeerEntry{Alias: p.Alias, Name: p.Name, ID: p.ID().String(), Short: p.ID().Short(), Relay: p.Relay, Panes: p.PanesLevel(),
+		e := PeerEntry{Alias: p.Alias, Name: p.Name, Told: p.Told, ID: p.ID().String(), Short: p.ID().Short(), Relay: p.Relay, Panes: p.PanesLevel(),
 			ConversationsOff: !p.ConversationsOn()}
 		if pl, ok := links[e.ID]; ok {
 			e.Link = &pl
@@ -158,8 +160,7 @@ func (s *ServerSource) SetPeerName(alias, name string) error {
 	if s.Caller.IsAgent() {
 		return errHumanOnly
 	}
-	h, _ := os.Hostname()
-	self := peer.HostLabel(h)
+	self := peer.SelfName()
 	_, err := peer.SetName(peer.DirIn(s.Paths.Home), alias, name, func(n string) string { return project.PeerNameTaken(n, self) })
 	if err != nil {
 		return err
@@ -167,6 +168,21 @@ func (s *ServerSource) SetPeerName(alias, name string) error {
 	var st *proto.LinkStatus
 	if err := s.call(proto.MethodPeerReload, nil, &st); err != nil && !errors.Is(err, tmclient.ErrNotRunning) {
 		return fmt.Errorf("set, but the server didn't read the peers again (%v); tm server restart does", err)
+	}
+	return nil
+}
+
+func (s *ServerSource) SetSelfName(name string) error {
+	if s.Caller.IsAgent() {
+		return errHumanOnly
+	}
+	err := peer.SetSelfName(peer.DirIn(s.Paths.Home), name, func(n string) string { return project.PeerNameTaken(n, "") })
+	if err != nil {
+		return err
+	}
+	var st *proto.LinkStatus
+	if err := s.call(proto.MethodPeerReload, nil, &st); err != nil && !errors.Is(err, tmclient.ErrNotRunning) {
+		return fmt.Errorf("set, but the server didn't tell the paired servers (%v); tm server restart does", err)
 	}
 	return nil
 }
@@ -264,9 +280,8 @@ func (s *ServerSource) pairing(ctx context.Context, code peer.Code, ev PairEvent
 	if err != nil {
 		return "", err
 	}
-	host, _ := os.Hostname()
 	o := peer.PairOptions{
-		Name: peer.HostLabel(host), Version: version.Version,
+		Name: peer.SelfName(), Version: version.Version,
 		Confirm: func(of peer.Offer) (bool, error) {
 			return ev.Confirm(PairOffer{Name: of.Name, Short: of.ID.Short(), Version: of.Version, Check: of.Check}), nil
 		},
