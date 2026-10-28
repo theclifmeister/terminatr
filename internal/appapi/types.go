@@ -110,11 +110,13 @@ type (
 		Project string `json:"project"`
 	}
 	// TaskAddParams are task.add's: the project, the new task's title
-	// (one line) and, optionally, its notes.
+	// (one line) and, optionally, its notes and (app API 20) the
+	// template it is laid on, by its ref (task.templates).
 	TaskAddParams struct {
-		Project string `json:"project"`
-		Title   string `json:"title"`
-		Notes   string `json:"notes,omitempty"`
+		Project  string `json:"project"`
+		Title    string `json:"title"`
+		Notes    string `json:"notes,omitempty"`
+		Template string `json:"template,omitempty"`
 	}
 	// ProjectOpenParams are project.open's: the project, and the size a
 	// coordinator it starts gets (80x24 when unset).
@@ -942,6 +944,48 @@ type TaskAdded struct {
 
 func taskAddedOf(r proto.TaskAddResult) TaskAdded {
 	return TaskAdded{Task: r.Task, Existing: r.Existing}
+}
+
+// DoneTasks is task.done's result: the board's done tasks, in board
+// order, without their notes and steps.
+type DoneTasks struct {
+	Tasks []Task `json:"tasks"`
+}
+
+func doneTasksOf(r server.TaskDone) DoneTasks {
+	out := DoneTasks{Tasks: []Task{}}
+	for _, t := range r.Tasks {
+		out.Tasks = append(out.Tasks, taskOf(t))
+	}
+	return out
+}
+
+// Templates is task.templates' result: the task templates of the mods
+// that run in the project, by mod and name.
+type Templates struct {
+	Templates []Template `json:"templates"`
+}
+
+// Template is a task template: Ref names it to task.add; Title has
+// "{title}" where the task's title goes; Notes and Steps are what the
+// task starts with; Builtin a built-in mod's (default-templates).
+type Template struct {
+	Ref     string   `json:"ref"`
+	Mod     string   `json:"mod"`
+	Name    string   `json:"name"`
+	Title   string   `json:"title"`
+	Notes   string   `json:"notes,omitempty"`
+	Steps   []string `json:"steps,omitempty"`
+	Builtin bool     `json:"builtin,omitempty"`
+}
+
+func templatesOf(r proto.TaskTemplatesResult) Templates {
+	out := Templates{Templates: []Template{}}
+	for _, t := range r.Templates {
+		out.Templates = append(out.Templates, Template{Ref: t.Ref, Mod: t.Mod, Name: t.Name, Title: t.Title,
+			Notes: t.Notes, Steps: t.Steps, Builtin: t.Builtin})
+	}
+	return out
 }
 
 // ProjectOpen is project.open's result: the project's coordinator

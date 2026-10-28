@@ -30,6 +30,19 @@ private func task(_ n: Int, _ status: String, notes: String = "", steps: [AppAPI
     #expect(board?.filled(nil).partial == true)
 }
 
+/// A done task, which the watch has nowhere, is task.get's copy alone
+/// (the board's Done fold opens it); the watch's own comes first.
+@Test func taskDetailOfADoneTask() {
+    let p = AppAPI.Project(slug: "web", active: true, board: [task(3, "ready", updated: "2026-10-27")], usage: noUsage)
+    let done = task(7, "done", notes: "Shipped.")
+    #expect(TaskDetail.of("T7", in: p, fetched: done) == TaskDetail(project: "web", task: done))
+    #expect(TaskDetail.of("T7", in: p, fetched: nil) == nil)
+    #expect(TaskDetail.of("T8", in: p, fetched: done) == nil)
+    let full = task(3, "ready", notes: "Why.", updated: "2026-10-27")
+    #expect(TaskDetail.of("T3", in: p, fetched: full)?.task.notes == "Why.")
+    #expect(TaskDetail.of("T3", in: p, fetched: nil)?.partial == true)
+}
+
 /// Blocked on is the latest "blocked (date):" note, as the TUI's.
 @Test func taskDetailBlockedOn() {
     let notes = "Start.\n\nblocked (2026-10-01): old\n\nblocked (2026-10-02): needs the\nAPI key"

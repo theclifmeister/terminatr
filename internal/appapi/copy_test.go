@@ -295,6 +295,8 @@ func TestCopies(t *testing.T) {
 	check("peer.share-answer", homeOf(shareAnswerOf), []string{".Out", ".Peer", ".For", ".Note", ".Created", ".Answered",
 		".Code", ".Summary"})
 	check("task.get", homeOf(taskOf), []string{".Archived"})
+	check("task.done", homeOf(doneTasksOf), []string{".Tasks[].Archived"})
+	check("task.templates", homeOf(templatesOf), nil)
 	check("questions.open", homeOf(questionsOpenOf), nil)
 	check("notify", homeOf(noticeResultOf), nil)
 	// The window is the bridge's: it acks for the app.
@@ -452,7 +454,7 @@ func TestAllowlist(t *testing.T) {
 		proto.MethodSessionAnswer, proto.MethodSessionApprove, proto.MethodSessionKeys, proto.MethodSessionList,
 		proto.MethodSessionPrompt, proto.MethodSessionWatch, proto.MethodTaskAsk,
 		proto.MethodTaskAccept, proto.MethodTaskSendBack, proto.MethodTaskDelegate, proto.MethodProjectOpen,
-		proto.MethodQuestionsOpen, proto.MethodTaskAdd, proto.MethodTaskGet, proto.MethodPaneVT, proto.MethodTranscriptWatch, MethodPaneInput,
+		proto.MethodQuestionsOpen, proto.MethodTaskAdd, proto.MethodTaskGet, proto.MethodTaskDone, proto.MethodTaskTemplates, proto.MethodPaneVT, proto.MethodTranscriptWatch, MethodPaneInput,
 		proto.MethodSessionFile, proto.MethodCoordinatorClear, proto.MethodProjectActive, proto.MethodSessionUpload,
 		proto.MethodLinkAct, proto.MethodPeerShareAnswer, MethodGuardRefusals, MethodGuardDecide, proto.MethodTranscriptPage}
 	slices.Sort(want)

@@ -91,6 +91,9 @@ final class AppModel {
     }
     /// Bumped by ⌘L: the shown composer takes the focus.
     private(set) var composerFocus = 0
+    /// Text the coordinator's composer of a project takes as it shows,
+    /// once (Ask the Coordinator from the task view).
+    private(set) var draft: ComposerDraft?
     /// Bumped by ⌘F, ⌘G and ⇧⌘G: the shown conversation's find bar
     /// opens, or moves to the next or previous match.
     private(set) var find = FindRequest(n: 0, step: 0)
@@ -126,6 +129,14 @@ final class AppModel {
     private(set) var log = BridgeLog()
     /// The need ⌥⌘↓ or ⌥⌘↑ showed last (Need.step).
     @ObservationIgnored private var lastNeed: String?
+
+    /// Text for project's coordinator's composer; n tells one ask from
+    /// the next.
+    struct ComposerDraft: Equatable {
+        let n: Int
+        let project: String
+        let text: String
+    }
 
     struct FindRequest: Equatable {
         let n: Int
@@ -805,6 +816,50 @@ final class AppModel {
         guard canAddTask, let p = boardProject else { return }
         newTask = p
         showWindow?()
+    }
+
+    /// Whether this tm lists the board's done tasks (task.done, app API
+    /// 20).
+    var listsDone: Bool {
+        if case .connected(let h) = phase { return Compatibility.listsDone(h) }
+        return false
+    }
+
+    /// Whether this tm offers task templates for New Task (app API 20).
+    var offersTemplates: Bool {
+        if case .connected(let h) = phase { return Compatibility.offersTemplates(h) }
+        return false
+    }
+
+    /// The done tasks of project's board, in board order (task.done).
+    func doneTasks(_ project: String) async throws -> [AppAPI.Task] {
+        try await connected().call(AppAPI.Methods.taskDone, AppAPI.ProjectParams(project: project)).tasks
+    }
+
+    /// The task templates of the mods that run in project
+    /// (task.templates); none with an older tm.
+    func templates(_ project: String) async throws -> [AppAPI.Template] {
+        guard offersTemplates else { return [] }
+        return try await connected().call(AppAPI.Methods.taskTemplates, AppAPI.ProjectParams(project: project)).templates
+    }
+
+    /// The task view's Ask the Coordinator (the TUI's c): shows the
+    /// project's coordinator, started when none runs, its composer
+    /// focused and holding the task (Dashboard.askAbout).
+    func askCoordinator(about task: AppAPI.Task, project: String) async throws {
+        if coordinatorSession(project) == nil {
+            try await startCoordinator(project)
+        }
+        draft = ComposerDraft(n: (draft?.n ?? 0) + 1, project: project, text: Dashboard.askAbout(task))
+        select(.session(SessionRef(project: project)))
+        focusComposer()
+    }
+
+    /// Takes the draft for ref's composer: its text, once.
+    func takeDraft(for ref: SessionRef) -> String? {
+        guard let d = draft, ref.isCoordinator, !ref.isRemote, d.project == ref.project else { return nil }
+        draft = nil
+        return d.text
     }
 
     /// Adds a task to project's board as the user (task.add).

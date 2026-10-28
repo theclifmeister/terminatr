@@ -11,6 +11,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/tasks"
@@ -249,6 +250,89 @@ func TestTaskGet(t *testing.T) {
 		if err := app.Call(proto.MethodTaskGet, c.p, nil); !errors.As(err, &perr) || perr.Code != c.code {
 			t.Errorf("task.get %+v: %v, want %s", c.p, err, c.code)
 		}
+	}
+}
+
+// TestTaskDone: task.done lists the board's done tasks in board order
+// without their notes and steps, and refuses an unknown project.
+func TestTaskDone(t *testing.T) {
+	p := testPaths(t)
+	startServer(t, p)
+	pr, err := project.New(project.Options{Slug: "web"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pr.Tasks().Add(human, []tasks.NewTask{{Title: "Shipped", Status: "done", Notes: "Why."},
+		{Title: "Later", Status: "open"}, {Title: "Also shipped", Status: "done", Steps: []string{"a"}}}); err != nil {
+		t.Fatal(err)
+	}
+	app, err := client.DialAs(p, proto.ClientApp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer app.Close()
+	var res TaskDone
+	if err := app.Call(proto.MethodTaskDone, proto.TaskDoneParams{Project: "web"}, &res); err != nil || len(res.Tasks) != 2 ||
+		res.Tasks[0].Title != "Shipped" || res.Tasks[1].Title != "Also shipped" || res.Tasks[0].Notes != "" || res.Tasks[1].Steps != nil {
+		t.Fatalf("task.done: %+v %v", res, err)
+	}
+	var perr *proto.Error
+	if err := app.Call(proto.MethodTaskDone, proto.TaskDoneParams{Project: "nope"}, nil); !errors.As(err, &perr) || perr.Code != proto.ErrBadParams {
+		t.Errorf("task.done of no project: %v", err)
+	}
+}
+
+// TestTaskTemplates: task.templates lists the bundled bug, spike and
+// chore templates, and task.add lays one on the title, its notes
+// unless the params have some, its steps; an unknown one is refused.
+func TestTaskTemplates(t *testing.T) {
+	p := testPaths(t)
+	startServer(t, p)
+	pr, err := project.New(project.Options{Slug: "web"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	app, err := client.DialAs(p, proto.ClientApp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer app.Close()
+	var res proto.TaskTemplatesResult
+	if err := app.Call(proto.MethodTaskTemplates, proto.TaskDoneParams{Project: "web"}, &res); err != nil {
+		t.Fatal(err)
+	}
+	var bug *proto.TaskTemplate
+	names := map[string]bool{}
+	for i, tp := range res.Templates {
+		names[tp.Name] = true
+		if tp.Name == "bug" {
+			bug = &res.Templates[i]
+		}
+	}
+	if !names["bug"] || !names["spike"] || !names["chore"] || bug == nil || !strings.Contains(bug.Title, "{title}") || len(bug.Steps) == 0 {
+		t.Fatalf("task.templates: %+v", res)
+	}
+	var added proto.TaskAddResult
+	if err := app.Call(proto.MethodTaskAdd, proto.TaskAddParams{Project: "web", Title: "Login fails", Template: bug.Ref}, &added); err != nil {
+		t.Fatalf("task.add with %s: %v", bug.Ref, err)
+	}
+	if err := app.Call(proto.MethodTaskAdd, proto.TaskAddParams{Project: "web", Title: "Clean up", Notes: "Mine.", Template: "chore"}, &added); err != nil {
+		t.Fatalf("task.add with chore: %v", err)
+	}
+	var perr *proto.Error
+	if err := app.Call(proto.MethodTaskAdd, proto.TaskAddParams{Project: "web", Title: "x", Template: "nope"}, nil); !errors.As(err, &perr) || perr.Code != "unknown-template" {
+		t.Errorf("task.add with no template: %v", err)
+	}
+	b, err := pr.Tasks().Load()
+	if err != nil || len(b.Tasks) != 2 {
+		t.Fatalf("board %+v %v", b, err)
+	}
+	want, _, _ := mod.Template{Title: bug.Title}.Apply("Login fails")
+	if got := b.Tasks[0]; got.Title != want || got.Notes != bug.Notes || len(got.Steps) != len(bug.Steps) {
+		t.Errorf("bug task %+v, want title %q, notes %q, %d steps", got, want, bug.Notes, len(bug.Steps))
+	}
+	if got := b.Tasks[1]; got.Notes != "Mine." || len(got.Steps) == 0 {
+		t.Errorf("chore task %+v, want its own notes and the template's steps", got)
 	}
 }
 

@@ -37,6 +37,15 @@ public struct TaskDetail: Equatable, Sendable {
         return nil
     }
 
+    /// Task ref of project as the watch has it, filled with task.get's
+    /// copy (filled); one the watch has nowhere, a done task's, is
+    /// task.get's copy alone, without a thread. nil when neither has it.
+    public static func of(_ ref: String, in project: AppAPI.Project, fetched: AppAPI.Task?) -> TaskDetail? {
+        if let d = of(ref, in: project) { return d.filled(fetched) }
+        guard let fetched, fetched.ref == ref else { return nil }
+        return TaskDetail(project: project.slug, task: fetched)
+    }
+
     /// The same with full, task.get's copy of the task, unless the
     /// watch's has moved on since (another status or update).
     public func filled(_ full: AppAPI.Task?) -> TaskDetail {

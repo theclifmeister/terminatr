@@ -197,7 +197,11 @@ struct InspectorWidth: NSViewRepresentable {
 }
 
 /// File › New Task… (⌘N, T748 G1): a task added to the shown project's
-/// board as tm task add adds it; the coordinator sees it there.
+/// board as tm task add adds it; the coordinator sees it there. With a
+/// tm of app API 20 it offers the templates of the project's mods (the
+/// bundled bug, spike and chore among them), as the TUI's + does: the
+/// template's title around the one typed, its steps, its notes unless
+/// the form has some.
 struct NewTaskSheet: View {
     @Environment(AppModel.self) private var app
     @Environment(\.dismiss) private var dismiss
@@ -209,6 +213,11 @@ struct NewTaskSheet: View {
     /// What the last add said: the sheet stays for another.
     @State private var added: String?
     @FocusState private var titleFocused: Bool
+    @State private var templates: [AppAPI.Template] = []
+
+    private var template: AppAPI.Template? {
+        templates.first { $0.ref == form.template }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -220,10 +229,34 @@ struct NewTaskSheet: View {
                     .foregroundStyle(theme.muted)
             }
             Form {
+                if !templates.isEmpty {
+                    Picker("Template", selection: $form.template) {
+                        Text("No template").tag("")
+                        ForEach(templates, id: \.ref) { t in
+                            Text(NewTaskForm.label(t, among: templates)).tag(t.ref)
+                        }
+                    }
+                }
                 TextField("Title", text: $form.title, prompt: Text("What needs doing, in one line"))
                     .focused($titleFocused)
-                TextField("Notes", text: $form.notes, prompt: Text("Optional: details, links, acceptance"), axis: .vertical)
+                TextField("Notes", text: $form.notes,
+                          prompt: Text(template.map { $0.notes.isEmpty ? "Optional: details, links, acceptance" : "Empty: the \($0.name) template's notes" }
+                                       ?? "Optional: details, links, acceptance"),
+                          axis: .vertical)
                     .lineLimit(4...8)
+                if let template {
+                    LabeledContent("Adds") {
+                        VStack(alignment: .trailing, spacing: 2) {
+                            Text(NewTaskForm.title(form.title, with: template))
+                                .multilineTextAlignment(.trailing)
+                            if !template.steps.isEmpty {
+                                Text(template.steps.count == 1 ? "with 1 step" : "with \(template.steps.count) steps")
+                                    .foregroundStyle(theme.muted)
+                            }
+                        }
+                    }
+                    .help(template.steps.map { "• \($0)" }.joined(separator: "\n"))
+                }
             }
             .formStyle(.grouped)
             .scrollDisabled(true)
@@ -248,6 +281,7 @@ struct NewTaskSheet: View {
         .padding(24)
         .frame(width: 480)
         .onAppear { titleFocused = true }
+        .task { templates = (try? await app.templates(project)) ?? [] }
     }
 
     private func add() {
@@ -258,7 +292,7 @@ struct NewTaskSheet: View {
             do {
                 let r = try await app.addTask(form, project: project)
                 added = NewTaskForm.done(r, project: project)
-                form = NewTaskForm()
+                form = NewTaskForm(template: form.template)
                 titleFocused = true
             } catch {
                 self.error = error.localizedDescription

@@ -112,8 +112,11 @@ const (
 // task add does (since protocol 21): a title that matches a task that
 // isn't done answers that task instead, so a retried add adds none. Its
 // refusals carry the task store's codes ("empty-title", "invalid-title",
-// "invalid-notes"). Params TaskAddParams, result TaskAddResult. The
-// human's, journaled as the caller (task.add).
+// "invalid-notes"). Since protocol 24 it takes a template, as tm task
+// add --template does (its title around the title, its notes unless
+// the params have some, its steps), refused "unknown-template" when
+// none of the project's mods has it. Params TaskAddParams, result
+// TaskAddResult. The human's, journaled as the caller (task.add).
 const MethodTaskAdd = "task.add"
 
 // MethodTaskGet reads one task of a project's board, notes and steps
@@ -123,6 +126,43 @@ const MethodTaskAdd = "task.add"
 // task store's codes ("unknown-task"). The human's.
 const MethodTaskGet = "task.get"
 
+// MethodTaskDone lists a project's done tasks, the board's done group
+// in board order, without their notes and steps (since protocol 24):
+// what projects.watch leaves out, for a console's board when the user
+// shows the done tasks. Params TaskDoneParams, result {tasks}
+// (server.TaskDone). The human's.
+const MethodTaskDone = "task.done"
+
+// MethodTaskTemplates lists the task templates of the enabled mods that
+// run in a project (since protocol 24), as the TUI's new-task prompt
+// offers them: params TaskDoneParams, result TaskTemplatesResult. The
+// human's.
+const MethodTaskTemplates = "task.templates"
+
+// TaskDoneParams are the params of task.done and task.templates: the
+// project.
+type TaskDoneParams struct {
+	Project string `json:"project"`
+}
+
+// TaskTemplate is a task template: Ref is how task.add names it
+// (<mod>:<name>), Title its title with "{title}" where the task's goes,
+// Notes and Steps what the task starts with; Builtin a built-in mod's.
+type TaskTemplate struct {
+	Ref     string   `json:"ref"`
+	Mod     string   `json:"mod"`
+	Name    string   `json:"name"`
+	Title   string   `json:"title"`
+	Notes   string   `json:"notes,omitempty"`
+	Steps   []string `json:"steps,omitempty"`
+	Builtin bool     `json:"builtin,omitempty"`
+}
+
+// TaskTemplatesResult is task.templates' result, by mod and name.
+type TaskTemplatesResult struct {
+	Templates []TaskTemplate `json:"templates"`
+}
+
 // TaskGetParams are the params of task.get: project's task ("T12").
 type TaskGetParams struct {
 	Project string `json:"project"`
@@ -130,11 +170,13 @@ type TaskGetParams struct {
 }
 
 // TaskAddParams are the params of task.add: the project, the task's
-// title and, optionally, its notes.
+// title and, optionally, its notes and (since protocol 24) the template
+// it is laid on, by its ref (<mod>:<name>, or a name one mod has).
 type TaskAddParams struct {
-	Project string `json:"project"`
-	Title   string `json:"title"`
-	Notes   string `json:"notes,omitempty"`
+	Project  string `json:"project"`
+	Title    string `json:"title"`
+	Notes    string `json:"notes,omitempty"`
+	Template string `json:"template,omitempty"`
 }
 
 // TaskAddResult is the task ("T12") and whether it was there already.

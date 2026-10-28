@@ -23,9 +23,12 @@ struct TaskSheet: View {
     let shown: TaskShown
     @State private var full: AppAPI.Task?
     @State private var fetchError: String?
+    @State private var asking = false
+    @State private var askError: String?
 
     var body: some View {
-        let detail = app.project(shown.project).flatMap { TaskDetail.of(shown.task, in: $0) }?.filled(full)
+        let detail = app.project(shown.project).flatMap { TaskDetail.of(shown.task, in: $0, fetched: full) }
+        let watched = app.project(shown.project).flatMap { TaskDetail.of(shown.task, in: $0) }
         VStack(alignment: .leading, spacing: 0) {
             if let detail {
                 header(detail)
@@ -37,8 +40,11 @@ struct TaskSheet: View {
                 }
                 .frame(maxHeight: 520)
                 .fixedSize(horizontal: false, vertical: true)
+            } else if app.canGetTask && fetchError == nil {
+                ProgressView().controlSize(.small)
+                    .padding(20)
             } else {
-                Text("\(shown.task) isn't on \(shown.project)'s board any more: it was done or archived.")
+                Text("\(shown.task) isn't on \(shown.project)'s board any more: it was archived.")
                     .foregroundStyle(theme.muted)
                     .padding(20)
             }
@@ -47,8 +53,8 @@ struct TaskSheet: View {
         }
         .frame(width: 560)
         .guardingLinks()
-        .task(id: detail.map { "\($0.task.status) \($0.task.updated) \($0.partial)" }) {
-            await fetch(detail)
+        .task(id: watched.map { "\($0.task.status) \($0.task.updated) \($0.partial)" }) {
+            await fetch(watched)
         }
     }
 
@@ -147,6 +153,9 @@ struct TaskSheet: View {
                 }
                 .help("Shows \(th.record.id) in the window")
             }
+            if let d {
+                askButton(d)
+            }
             Spacer()
             Button("Close") { dismiss() }
                 .keyboardShortcut(.cancelAction)
@@ -156,6 +165,41 @@ struct TaskSheet: View {
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 14)
+    }
+
+    /// The TUI's c on a task: the project's coordinator, started when
+    /// none runs, its composer holding the task for the user's question.
+    private func askButton(_ d: TaskDetail) -> some View {
+        let project = app.project(d.project)
+        let running = app.coordinatorSession(d.project) != nil
+        return VStack(alignment: .leading, spacing: 4) {
+            Button(asking ? "Opening…" : "Ask the Coordinator") {
+                ask(d)
+            }
+            .disabled(asking || (!running && project?.active != true))
+            .help(running || project?.active == true
+                  ? "Opens \(d.project)'s coordinator with \(d.task.ref) in its composer, for your question"
+                  : "The project is inactive: activate it to start its coordinator")
+            if let askError {
+                Text(askError)
+                    .font(theme.body(.footnote))
+                    .foregroundStyle(theme.attention)
+            }
+        }
+    }
+
+    private func ask(_ d: TaskDetail) {
+        asking = true
+        askError = nil
+        Task {
+            do {
+                try await app.askCoordinator(about: d.task, project: d.project)
+                dismiss()
+            } catch {
+                askError = Dashboard.words(error)
+            }
+            asking = false
+        }
     }
 
     private func shipRow(_ ship: TaskDetail.Ship, url: URL?) -> some View {
@@ -238,13 +282,17 @@ struct TaskSheet: View {
 
     /// Reads a board task whole (task.get), which the watch sends
     /// without its notes and steps.
+    /// Reads the task whole when the watch has it without its notes
+    /// and steps, or has it nowhere (a done task, from the board's Done
+    /// fold).
     private func fetch(_ d: TaskDetail?) async {
-        guard let d, d.partial, app.canGetTask else { return }
+        guard d?.partial ?? true, app.canGetTask else { return }
         do {
-            full = try await app.getTask(project: d.project, task: d.task.ref)
+            full = try await app.getTask(project: shown.project, task: shown.task)
             fetchError = nil
         } catch {
-            fetchError = Dashboard.words(error, task: d.task.ref)
+            full = nil
+            fetchError = Dashboard.words(error, task: shown.task)
         }
     }
 }

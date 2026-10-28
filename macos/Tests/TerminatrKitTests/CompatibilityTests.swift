@@ -24,6 +24,21 @@ private func hello(_ api: Int, _ tm: String) -> AppAPI.Hello {
     #expect(!Compatibility.addsTasks(h))
 }
 
+/// The board's Done fold and New Task's templates need app API 20 and
+/// its methods.
+@Test func boardNeedsAPI20() {
+    var h = hello(20, "v0.58.0")
+    #expect(!Compatibility.listsDone(h) && !Compatibility.offersTemplates(h))
+    h.methods = [AppAPI.Methods.taskDone.name, AppAPI.Methods.taskTemplates.name]
+    #expect(Compatibility.listsDone(h))
+    // Templates go to task.add: without it, none.
+    #expect(!Compatibility.offersTemplates(h))
+    h.methods.append(AppAPI.Methods.taskAdd.name)
+    #expect(Compatibility.offersTemplates(h))
+    h.appApi = 19
+    #expect(!Compatibility.listsDone(h) && !Compatibility.offersTemplates(h))
+}
+
 @Test func compatibilityByRelease() {
     let api = AppAPI.version
     #expect(Compatibility.check(hello(api, "v0.54.0"), appVersion: "0.54.0") == .ok)
