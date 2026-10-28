@@ -123,3 +123,19 @@ func embeddedScripts() []string {
 	})
 	return names
 }
+
+// TestReplyScript: $FAKEAGENT_REPLIES names a script by words in the
+// prompt, the first match winning; without it, or a match, none.
+func TestReplyScript(t *testing.T) {
+	if _, ok := replyScript("[tm] 1 new inbox item"); ok {
+		t.Fatal("a reply with no FAKEAGENT_REPLIES")
+	}
+	f := filepath.Join(t.TempDir(), "replies.toml")
+	os.WriteFile(f, []byte("[[reply]]\nmatch = \"[tm]\"\nscript = \"nudge\"\n\n[[reply]]\nmatch = \"\"\nscript = \"any\"\n"), 0o644)
+	t.Setenv("FAKEAGENT_REPLIES", f)
+	for prompt, want := range map[string]string{"[tm] 1 new inbox item": "nudge", "hello": "any"} {
+		if got, ok := replyScript(prompt); !ok || got != want {
+			t.Errorf("%q: %q %v, want %q", prompt, got, ok, want)
+		}
+	}
+}
