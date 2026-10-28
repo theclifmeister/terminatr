@@ -17,6 +17,8 @@ public final class ProcessTransport: BridgeTransport, @unchecked Sendable {
     private var buffer = Data()
     private var stderr = Data()
     private var closing = false
+    /// Whether stdout's handler saw its end (it may be called again).
+    private var outEnded = false
 
     /// Keeps this much of the bridge's stderr, its last words.
     private static let stderrCap = 4096
@@ -53,25 +55,23 @@ public final class ProcessTransport: BridgeTransport, @unchecked Sendable {
 
         let (lines, sink) = AsyncThrowingStream<Data, any Error>.makeStream()
         self.lines = lines
-        errPipe.fileHandleForReading.readabilityHandler = { [weak self] h in
-            let d = h.availableData
-            guard let self, !d.isEmpty else {
-                h.readabilityHandler = nil
-                return
-            }
-            self.keep(d)
-        }
+        // The stream ends once stdout and stderr are read to their ends
+        // and the bridge has exited, so its last words are all in why.
+        // Nothing blocks waiting for that: waitUntilExit in a handler
+        // could hang with other bridges about (tests in parallel).
+        let done = DispatchGroup()
+        for _ in 0..<3 { done.enter() }
+        process.terminationHandler = { _ in done.leave() }
         stdout.fileHandleForReading.readabilityHandler = { [weak self] h in
             let d = h.availableData
             guard let self else { return }
             if d.isEmpty {
                 h.readabilityHandler = nil
-                self.process.waitUntilExit()
-                // Stderr's handler may not have read the bridge's last
-                // words yet: the process is gone, so the rest is there.
-                errPipe.fileHandleForReading.readabilityHandler = nil
-                self.keep(errPipe.fileHandleForReading.readDataToEndOfFile())
-                sink.finish(throwing: self.ended())
+                let first = self.lock.withLock {
+                    defer { self.outEnded = true }
+                    return !self.outEnded
+                }
+                if first { done.leave() }
                 return
             }
             for line in self.split(d) {
@@ -82,8 +82,21 @@ public final class ProcessTransport: BridgeTransport, @unchecked Sendable {
             try process.run()
         } catch {
             stdout.fileHandleForReading.readabilityHandler = nil
-            errPipe.fileHandleForReading.readabilityHandler = nil
             throw BridgeError.closed("Couldn't run \(tm.path): \(error.localizedDescription)")
+        }
+        // Stderr is read to its end on a thread of its own: a handler
+        // could still hold the last chunk when stdout ends.
+        let errHandle = errPipe.fileHandleForReading
+        Thread { [self] in
+            while true {
+                let d = errHandle.availableData
+                if d.isEmpty { break }
+                keep(d)
+            }
+            done.leave()
+        }.start()
+        done.notify(queue: .global()) { [weak self] in
+            sink.finish(throwing: self?.ended())
         }
     }
 
