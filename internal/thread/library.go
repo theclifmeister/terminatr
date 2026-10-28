@@ -229,6 +229,65 @@ func ReadLibraryFile(p *project.Project, id, name string, max int64) (data []byt
 	return data, truncated, err
 }
 
+// ReadLibraryChunk reads at most n bytes of a library file from off,
+// from the folder (never through a link) or, for an archived thread,
+// from the tarball, and says the file's size and modification time.
+func ReadLibraryChunk(p *project.Project, id, name string, off, n int64) (data []byte, size int64, mod time.Time, err error) {
+	if !ValidID(id) {
+		return nil, 0, time.Time{}, refuse("unknown-thread", "%q is not a thread id like t-0003", id)
+	}
+	if err := checkLibName(name); err != nil {
+		return nil, 0, time.Time{}, err
+	}
+	f, err := fsx.OpenNoLink(Path(p, id, "library", name), os.O_RDONLY, 0)
+	if err == nil {
+		defer f.Close()
+		fi, err := f.Stat()
+		if err != nil {
+			return nil, 0, time.Time{}, err
+		}
+		if !fi.Mode().IsRegular() {
+			return nil, 0, time.Time{}, refuse("unknown-file", "thread %s has no library file %s", id, name)
+		}
+		data, err := readChunk(io.NewSectionReader(f, 0, fi.Size()), fi.Size(), off, n)
+		return data, fi.Size(), fi.ModTime(), err
+	}
+	if !errors.Is(err, fs.ErrNotExist) {
+		return nil, 0, time.Time{}, err
+	}
+	found := false
+	werr := walkArchive(archivePath(p, id), func(h *tar.Header, r io.Reader) error {
+		if n2, ok := libraryName(id, h); ok && n2 == name && !found {
+			found, size, mod = true, h.Size, h.ModTime
+			data, err = readChunk(r, h.Size, off, n)
+			return err
+		}
+		return nil
+	})
+	if werr != nil && !errors.Is(werr, fs.ErrNotExist) {
+		return nil, 0, time.Time{}, werr
+	}
+	if !found {
+		return nil, 0, time.Time{}, refuse("unknown-file", "thread %s has no library file %s", id, name)
+	}
+	return data, size, mod, err
+}
+
+// readChunk reads at most n bytes from off of r, size bytes long.
+func readChunk(r io.Reader, size, off, n int64) ([]byte, error) {
+	if off < 0 || off > size {
+		return nil, fmt.Errorf("offset %d is past the end (%d)", off, size)
+	}
+	if _, err := io.CopyN(io.Discard, r, off); err != nil {
+		return nil, err
+	}
+	buf := make([]byte, min(size-off, n))
+	if _, err := io.ReadFull(r, buf); err != nil {
+		return nil, err
+	}
+	return buf, nil
+}
+
 // RemoveLibrary deletes library files of thread id: the named one, or
 // every one when name is "". It journals each deletion as library.rm and
 // returns how many it removed. A resolved thread's archive is rewritten
