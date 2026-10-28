@@ -12,6 +12,9 @@ enum DeviceStore {
     private static let keyAccount = "identity"
     private static let serverAccount = "server"
     private static let writeKeyAccount = "write-key"
+    /// Present when the write key was made without Face ID (T820); a key
+    /// without it is the older kind, bound to Face ID.
+    private static let writeKeyOpenAccount = "write-key-open"
 
     /// The device's key, made and kept the first time it is asked for.
     static func identity() throws -> LinkIdentity {
@@ -37,14 +40,22 @@ enum DeviceStore {
         try read(writeKeyAccount)
     }
 
+    /// Keeps a new write key, made without Face ID, and marks it so.
     static func saveWriteKey(_ d: Data) throws {
+        SecItemDelete(query(writeKeyOpenAccount) as CFDictionary)
         try write(writeKeyAccount, d)
+        try write(writeKeyOpenAccount, Data([1]))
+    }
+
+    /// Whether the kept write key is of the kind that signs with no prompt.
+    static func writeKeyIsOpen() -> Bool {
+        ((try? read(writeKeyOpenAccount)) ?? nil) != nil
     }
 
     /// Forgets the server and the keys: pairing again makes new ones,
     /// which the server has to take afresh.
     static func forget() {
-        for a in [serverAccount, keyAccount, writeKeyAccount] {
+        for a in [serverAccount, keyAccount, writeKeyAccount, writeKeyOpenAccount] {
             SecItemDelete(query(a) as CFDictionary)
         }
     }
