@@ -53,6 +53,13 @@ struct ProjectDashboard: View {
                         }
                     }
                 }
+                // The TUI's O: an outside agent session, adopted here.
+                let outside = app.actsOnSidebar && project.active ? ProjectAsk.adoptable(app.sessions) : []
+                if !outside.isEmpty {
+                    section("Agent sessions outside the projects · \(outside.count)") {
+                        AdoptableSessions(project: project, sessions: outside)
+                    }
+                }
                 let deck = Dashboard.onDeck(project), backlog = Dashboard.backlog(project)
                 if !deck.isEmpty || !backlog.isEmpty {
                     section("Board") {
@@ -257,7 +264,10 @@ struct CoordinatorRow: View {
 
 /// The project's actions in a context menu, as the TUI's prefix+C and S
 /// (app API 13): Save & Clear while its coordinator runs, and Activate
-/// or Deactivate. Nothing with an older tm.
+/// or Deactivate; and as its P, prefix+r and M (app API 22): Pin to Top
+/// or Unpin, remote control on or off while its coordinator runs, and
+/// Write to Linked Project… while a link of it sends. Nothing with an
+/// older tm.
 struct ProjectMenu: View {
     @Environment(AppModel.self) private var app
     let project: AppAPI.Project
@@ -266,13 +276,57 @@ struct ProjectMenu: View {
     var divided = true
 
     var body: some View {
-        if app.controlsProjects {
+        if app.controlsProjects || app.actsOnSidebar {
             if divided { Divider() }
+        }
+        if app.controlsProjects {
             if coordinator {
                 Button("Save & Clear Coordinator…") { app.ask(.saveClear(project: project.slug)) }
             }
             let a = ProjectAsk.toggle(project, sessions: app.sessions)
             Button(a.asks ? "\(a.verb) \(project.slug)…" : "\(a.verb) \(project.slug)") { app.ask(a) }
+        }
+        if app.actsOnSidebar {
+            Button(ProjectAsk.pinToggle(project).verb) { app.ask(.pinToggle(project)) }
+        }
+        if app.controlsRemote, coordinator, let c = app.coordinatorSession(project.slug) {
+            let r = ProjectAsk.remoteToggle(c)
+            Button("\(r.verb)…") { app.ask(r) }
+        }
+        if app.actsOnSidebar, !LinkMessageForm.writable(project).isEmpty {
+            Button("Write to Linked Project…") { app.showLinkMessage(project) }
+        }
+    }
+}
+
+/// The agent sessions outside the projects (the TUI dashboard's OTHER
+/// SESSIONS), on a project's dashboard, each with Adopt… (app API 22):
+/// the TUI's O, asking this project's coordinator to adopt it as a
+/// thread, or Withdraw… once asked.
+struct AdoptableSessions: View {
+    @Environment(AppModel.self) private var app
+    @Environment(\.theme) private var theme
+    let project: AppAPI.Project
+    /// ProjectAsk.adoptable's.
+    let sessions: [AppAPI.Session]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+                ForEach(sessions, id: \.id) { s in
+                    let a = ProjectAsk.adoptToggle(s, project: project.slug, items: project.items)
+                    HStack(spacing: 8) {
+                        Text(s.id)
+                            .font(theme.mono(.footnote, .medium))
+                            .foregroundStyle(theme.action)
+                        Text(ProjectAsk.adoptWhat(s))
+                            .font(theme.body(.callout))
+                            .lineLimit(1)
+                        Spacer(minLength: 4)
+                        Button("\(a.verb)…") { app.ask(a) }
+                            .help(a.message)
+                    }
+                    .accessibilityElement(children: .combine)
+                }
         }
     }
 }

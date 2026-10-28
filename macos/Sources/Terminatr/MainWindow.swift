@@ -107,8 +107,15 @@ struct MainWindow: View {
             }
         }
         .sheet(item: $app.taskShown) { TaskSheet(shown: $0) }
-        // Save & Clear, Activate and Deactivate, from wherever the user
-        // picked them: asked here, in the TUI's words.
+        .sheet(isPresented: $app.newProject) { NewProjectSheet() }
+        .sheet(isPresented: Binding(get: { app.linkMessage != nil }, set: { if !$0 { app.linkMessage = nil } })) {
+            if let m = app.linkMessage {
+                LinkMessageSheet(project: m.project, form: LinkMessageForm(peer: m.peer))
+            }
+        }
+        // Save & Clear, Activate and Deactivate, remote control and
+        // adopting, from wherever the user picked them: asked here, in
+        // the TUI's words.
         .confirmationDialog(app.asking?.title ?? "", isPresented: Binding(get: { app.asking != nil }, set: { if !$0 { app.asking = nil } }),
                             presenting: app.asking) { a in
             Button(a.verb) { app.act(a) }

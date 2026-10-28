@@ -116,9 +116,10 @@ enum DockIcon {
 }
 
 /// The File menu (T748 milestone G): New Task… (⌘N) adds a task to the
-/// shown project's board, Open in New Window (⇧⌘O) opens the shown
+/// shown project's board, New Project… (⇧⌘N) makes one, Open in New Window (⇧⌘O) opens the shown
 /// session beside the main window, Save & Clear Coordinator… and
-/// Activate or Deactivate Project act on the shown project, Close (⌘W)
+/// Activate or Deactivate Project, Pin, Remote Control and Write to
+/// Linked Project act on the shown project, Close (⌘W)
 /// the key window.
 struct FileCommands: Commands {
     let model: AppModel
@@ -129,6 +130,9 @@ struct FileCommands: Commands {
             Button("New Task…") { model.showNewTask() }
                 .keyboardShortcut("n")
                 .disabled(!model.canAddTask || model.boardProject == nil)
+            Button("New Project…") { model.showNewProject() }
+                .keyboardShortcut("n", modifiers: [.command, .shift])
+                .disabled(!model.actsOnSidebar)
             Button("Open in New Window") {
                 if let ref = model.selectedRef { openWindow(id: TerminatrApp.sessionWindow, value: ref) }
             }
@@ -147,6 +151,20 @@ struct FileCommands: Commands {
                 if let toggle { model.ask(toggle) }
             }
             .disabled(!model.controlsProjects || toggle == nil)
+            // As the TUI's P, prefix+r and M (app API 22).
+            Button(p?.pinned == true ? "Unpin Project" : "Pin Project to Top") {
+                if let p { model.ask(.pinToggle(p)) }
+            }
+            .disabled(!model.actsOnSidebar || p == nil)
+            let coordinator = p.flatMap { model.coordinatorSession($0.slug) }
+            Button(coordinator?.remoteControl == true ? "Turn Remote Control Off…" : "Turn Remote Control On…") {
+                if let coordinator { model.ask(.remoteToggle(coordinator)) }
+            }
+            .disabled(!model.controlsRemote || coordinator == nil)
+            Button("Write to Linked Project…") {
+                if let p { model.showLinkMessage(p) }
+            }
+            .disabled(!model.actsOnSidebar || p.map { LinkMessageForm.writable($0).isEmpty } ?? true)
         }
     }
 }

@@ -5,26 +5,73 @@ import Foundation
 /// (coordinator.clear), activate the project or deactivate it
 /// (project.active). The window asks first, in the TUI's words: always
 /// for a save and clear, and for a deactivation while anything of the
-/// project runs, which it stops.
+/// project runs, which it stops. And, as the TUI's P, prefix+r and O
+/// (app API 22): pin the project to the top of the sidebar or unpin it
+/// (project.pin, never asked), turn its coordinator's remote control on
+/// or off (session.remote), ask its coordinator to adopt an agent
+/// session outside the projects as a thread or take that back
+/// (session.adopt.request), each asked first.
 public enum ProjectAsk: Identifiable, Hashable, Sendable {
     case saveClear(project: String)
     case activate(project: String)
     /// running names what the deactivation stops: "its coordinator", a
     /// thread's task or id.
     case deactivate(project: String, running: [String])
+    case pin(project: String, on: Bool)
+    /// session is the coordinator's; on what remote control becomes.
+    case remote(project: String, session: String, on: Bool)
+    /// session is the outside agent session, what it runs and where.
+    case adopt(project: String, session: String, what: String)
+    case withdrawAdopt(project: String, session: String)
 
     public var id: String {
         switch self {
         case .saveClear(let p): "saveclear:\(p)"
         case .activate(let p): "activate:\(p)"
         case .deactivate(let p, _): "deactivate:\(p)"
+        case .pin(let p, let on): "pin:\(p):\(on)"
+        case .remote(let p, _, let on): "remote:\(p):\(on)"
+        case .adopt(let p, let s, _): "adopt:\(p):\(s)"
+        case .withdrawAdopt(let p, let s): "withdraw:\(p):\(s)"
         }
     }
 
     public var project: String {
         switch self {
-        case .saveClear(let p), .activate(let p), .deactivate(let p, _): p
+        case .saveClear(let p), .activate(let p), .deactivate(let p, _), .pin(let p, _), .remote(let p, _, _),
+             .adopt(let p, _, _), .withdrawAdopt(let p, _): p
         }
+    }
+
+    /// Pin project p to the top of the sidebar, or unpin it.
+    public static func pinToggle(_ p: AppAPI.Project) -> ProjectAsk { .pin(project: p.slug, on: !p.pinned) }
+
+    /// Turn coordinator session c's remote control around.
+    public static func remoteToggle(_ c: AppAPI.Session) -> ProjectAsk {
+        .remote(project: c.project, session: c.id, on: !c.remoteControl)
+    }
+
+    /// Ask project's coordinator to adopt session s, or, when an inbox
+    /// item already asks it (items, the project's), take that back: O
+    /// again, as the TUI's.
+    public static func adoptToggle(_ s: AppAPI.Session, project: String, items: [AppAPI.Item]) -> ProjectAsk {
+        if items.contains(where: { $0.kind == "adopt" && $0.subject == s.id }) {
+            return .withdrawAdopt(project: project, session: s.id)
+        }
+        return .adopt(project: project, session: s.id, what: adoptWhat(s))
+    }
+
+    /// The agent sessions outside the projects that a coordinator can
+    /// adopt, as the TUI's O takes them: a plain session of this
+    /// server's, not a project's, in which an agent runs.
+    public static func adoptable(_ sessions: [AppAPI.Session]) -> [AppAPI.Session] {
+        sessions.filter { $0.project.isEmpty && $0.role == "shell" && $0.server.isEmpty && !$0.agent.isEmpty && $0.state != "exited" }
+    }
+
+    /// What runs in s, for its row and the question: "claude · Fix the
+    /// login", or the agent alone.
+    public static func adoptWhat(_ s: AppAPI.Session) -> String {
+        s.title.isEmpty ? s.agent : "\(s.agent) · \(s.title)"
     }
 
     /// Activate or deactivate project p, active now, with sessions:
@@ -36,9 +83,17 @@ public enum ProjectAsk: Identifiable, Hashable, Sendable {
     /// Whether the window asks before it acts.
     public var asks: Bool {
         switch self {
-        case .saveClear: true
-        case .activate: false
+        case .saveClear, .remote, .adopt, .withdrawAdopt: true
+        case .activate, .pin: false
         case .deactivate(_, let running): !running.isEmpty
+        }
+    }
+
+    /// Whether the action is one app API 22 added (side-acts).
+    public var isSideAct: Bool {
+        switch self {
+        case .pin, .remote, .adopt, .withdrawAdopt: true
+        default: false
         }
     }
 
@@ -48,6 +103,10 @@ public enum ProjectAsk: Identifiable, Hashable, Sendable {
         case .saveClear: "Save & Clear"
         case .activate: "Activate"
         case .deactivate: "Deactivate"
+        case .pin(_, let on): on ? "Pin to Top" : "Unpin"
+        case .remote(_, _, let on): on ? "Turn Remote Control On" : "Turn Remote Control Off"
+        case .adopt: "Adopt"
+        case .withdrawAdopt: "Withdraw"
         }
     }
 
@@ -57,6 +116,10 @@ public enum ProjectAsk: Identifiable, Hashable, Sendable {
         case .saveClear(let p): "Save and clear \(p)'s coordinator?"
         case .activate(let p): "Activate \(p)?"
         case .deactivate(let p, _): "Deactivate \(p)?"
+        case .pin(let p, let on): on ? "Pin \(p) to the top?" : "Unpin \(p)?"
+        case .remote: "Remote control"
+        case .adopt(_, let s, _): "Adopt \(s)"
+        case .withdrawAdopt(_, let s): "Withdraw \(s)"
         }
     }
 
@@ -71,6 +134,35 @@ public enum ProjectAsk: Identifiable, Hashable, Sendable {
             "Nothing of it runs now; it stays inactive until you activate it."
         case .deactivate(_, let running):
             "This stops \(Self.joined(running)) now; they resume when you activate it."
+        case .pin(_, let on):
+            on ? "It comes first among the active projects." : "It goes back to its place among the active projects."
+        case .remote(let p, _, let on):
+            on ? "Turn remote control on for \(p), so it can be continued from another device?" : "Turn remote control off for \(p)?"
+        case .adopt(let p, let s, let what):
+            "Adopt \(s) as a thread of \(p)? The coordinator links it to a task and briefs it.\n\n\(what)"
+        case .withdrawAdopt(let p, let s):
+            "Withdraw your go-ahead to adopt \(s) as a thread of \(p)? The coordinator can't adopt it then."
+        }
+    }
+
+    /// What came of turning project's remote control around, as the
+    /// TUI's footer says it.
+    public static func words(_ r: AppAPI.Remote, project p: String) -> String {
+        let state = r.remoteControl ? "on" : "off"
+        switch r.how {
+        case "unchanged":
+            return r.held ? "Remote control is already off for \(p); it stays off until the coordinator is started anew."
+                : "Remote control is already \(state) for \(p)."
+        case "restarted":
+            return r.held
+                ? "Remote control off for \(p): the coordinator restarted and continues its conversation; it stays off until it is started anew, then the project's settings turn it on again."
+                : "Remote control \(state) for \(p): the coordinator restarted and continues its conversation; until it is started anew."
+        default:
+            if r.remoteControl { return "Remote control on for \(p): listed there as \"\(p)\"; until the coordinator is started anew." }
+            if r.held {
+                return "Remote control off for \(p); it stays off until the coordinator is started anew, then the project's settings turn it on again."
+            }
+            return "Remote control off for \(p); until the coordinator is started anew."
         }
     }
 
