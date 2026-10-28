@@ -148,7 +148,7 @@ struct LinkBanner: View {
         switch model.link {
         case .connecting: return ("antenna.radiowaves.left.and.right", "Linking to \(name)…", theme.muted)
         case .asleep: return ("moon.zzz", "\(name) is asleep or offline. The app links again once it's back.", theme.attention)
-        case .up where model.answers: return ("faceid", "\(name): answers with Face ID", theme.action)
+        case .up where model.answers: return ("checkmark.circle.fill", "\(name): answers here", theme.action)
         case .up: return ("checkmark.circle", "\(name), read only", theme.action)
         case .lost(let why): return ("exclamationmark.triangle", "Link lost: \(why) Trying again…", theme.attention)
         }

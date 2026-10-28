@@ -5,11 +5,11 @@ import Foundation
 /// bridge's hello says sign, every write carries a signature by the
 /// device's write key over the method, a nonce the bridge gave out
 /// (device.nonce) and the params exactly as the request line has them.
-/// On the phone the key is in the Secure Enclave and signing asks for
-/// Face ID; the Mac app's bridge never asks for a signature.
+/// On the phone the key is in the Secure Enclave and signs with no
+/// prompt (T820); the Mac app's bridge never asks for a signature.
 public protocol WriteSigner: Sendable {
     /// An ECDSA P-256 SHA-256 signature of message, ASN.1 DER. why says
-    /// what the user is asked to allow (the Face ID prompt's reason).
+    /// what the act is (the reason a key that asks would show).
     func sign(_ message: Data, why: String) async throws -> Data
 }
 
@@ -44,7 +44,7 @@ public enum SignedWrite {
         (params as? AppAPI.ApproveParams)?.check == true
     }
 
-    /// What the Face ID prompt says for a write of method.
+    /// What a prompt for a write of method would say.
     public static func why(_ method: String) -> String {
         switch method {
         case AppAPI.Methods.sessionApprove.name: return "Allow the agent's request"
@@ -68,5 +68,19 @@ public struct SoftwareSigner: WriteSigner {
 
     public func sign(_ message: Data, why: String) async throws -> Data {
         try key.signature(for: message).derRepresentation
+    }
+}
+
+/// What the phone does about its write key (T820). A key made since
+/// then signs with no prompt; an older one is bound to Face ID. The
+/// server takes a write key only at pairing, so an older key is kept
+/// and used until the phone pairs again, which makes a new one.
+public enum WriteKeyPlan: Equatable, Sendable {
+    case keep, make
+
+    /// The key to pair with: the one kept when it is the no-prompt
+    /// kind, else a new one.
+    public static func forPairing(hasKey: Bool, open: Bool) -> WriteKeyPlan {
+        hasKey && open ? .keep : .make
     }
 }
