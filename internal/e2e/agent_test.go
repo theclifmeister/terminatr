@@ -284,6 +284,42 @@ func TestSmokeAgentResume(t *testing.T) {
 	}
 }
 
+// TestAgentResumeMidTurn (T816): a restart that stops an agent mid-turn
+// re-prompts it to carry on once it is resumed and idle; an agent that
+// was idle is left idle.
+func TestAgentResumeMidTurn(t *testing.T) {
+	env := New(t)
+	env.FakeClaude()
+	dir := env.Workdir()
+	env.Trust(dir)
+	busy := env.StartAgent("claude", dir)
+	idle := env.StartAgent("claude", dir)
+	env.WaitState(busy, "idle", agentWait)
+	env.WaitState(idle, "idle", agentWait)
+	env.Prompt(idle, "hello")
+	env.WaitFake("hook", agentWait, func(r FakeRecord) bool { return r.Str("event") == "Stop" })
+	env.WaitState(idle, "idle", agentWait)
+	env.Prompt(busy, "run tool-long")
+	env.WaitState(busy, "working", agentWait)
+
+	env.MustCLI("server", "restart", "--yes")
+	env.WaitFake("prompt", 4*agentWait, func(r FakeRecord) bool { return strings.HasPrefix(r.Str("text"), "[tm] The tm server restarted") })
+	env.WaitState(idle, "idle", agentWait)
+	n := 0
+	for _, r := range env.FakeRecords("prompt") {
+		if strings.HasPrefix(r.Str("text"), "[tm] The tm server restarted") {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Fatalf("%d re-prompts, want 1 (the busy session's only)", n)
+	}
+	b, _ := os.ReadFile(filepath.Join(env.Home, "logs", "server.log"))
+	if log := string(b); !strings.Contains(log, "; re-prompted claude "+busy.ID+"\n") {
+		t.Errorf("server log doesn't name only %s as re-prompted:\n%s", busy.ID, log)
+	}
+}
+
 // TestSmokeAgentCoordinatorContext: a coordinator's SessionStart (startup,
 // clear, compact) gets the role rules plus `tm context`, fetched fresh
 // from the server each time (docs/SPEC.md §7.8).

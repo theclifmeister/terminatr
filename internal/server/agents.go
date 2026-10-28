@@ -1064,6 +1064,9 @@ func (s *Server) resume(recs []SessionRecord) (outs []restartOutcome) {
 		} else {
 			s.resumed = append(s.resumed, r.ID)
 		}
+		if o.reprompted {
+			s.reprompted = append(s.reprompted, r.ID)
+		}
 		s.mu.Unlock()
 		outs = append(outs, o)
 	}
@@ -1075,7 +1078,7 @@ func (s *Server) resume(recs []SessionRecord) (outs []restartOutcome) {
 // lost when its cwd is gone or the launch fails. s.mu not held.
 func (s *Server) resumeOne(r SessionRecord) restartOutcome {
 	kept := r
-	r.CleanExit = false
+	r.CleanExit, r.Interrupted = false, false
 	if _, err := os.Stat(r.Cwd); err != nil {
 		s.log.Printf("session %s: not resumed: %v", r.ID, err)
 		return restartOutcome{rec: r, how: "lost"}
@@ -1091,7 +1094,7 @@ func (s *Server) resumeOne(r SessionRecord) restartOutcome {
 		// Nothing to resume: the agent saved no conversation yet.
 		l.resume, l.kick, l.rec.AgentSessionID = false, r.Kickoff, newUUID()
 	}
-	if _, _, perr := s.launchAgent(l, func() *proto.Error {
+	sess, _, perr := s.launchAgent(l, func() *proto.Error {
 		if _, taken := s.records[r.ID]; taken {
 			return proto.Errorf(proto.ErrRefused, "session %s: id taken during the resume", r.ID)
 		}
@@ -1101,11 +1104,18 @@ func (s *Server) resumeOne(r SessionRecord) restartOutcome {
 			return perr
 		}
 		return nil
-	}); perr != nil {
+	})
+	if perr != nil {
 		s.log.Printf("session %s: not resumed: %v", r.ID, perr)
 		return restartOutcome{rec: r, how: "lost"}
 	}
-	return restartOutcome{rec: r, how: how}
+	// A fresh launch starts over on its kickoff: only a resumed
+	// conversation has a turn to carry on.
+	o := restartOutcome{rec: r, how: how, reprompted: how == "resumed" && kept.Interrupted}
+	if o.reprompted {
+		go s.reprompt(sess)
+	}
+	return o
 }
 
 func (s *Server) hookEvent(p proto.HookEventParams) proto.HookEventResult {

@@ -786,10 +786,20 @@ func TestAutoCloseKeepsUnsavedWork(t *testing.T) {
 
 func TestServerRestartedItems(t *testing.T) {
 	r := newRig(t)
-	r.tk.ServerRestarted("crash", map[string]int{"demo": 2}, map[string]int{"demo": 1, "gone": 1})
+	r.tk.ServerRestarted("crash", map[string]int{"demo": 2}, nil, map[string]int{"demo": 1, "gone": 1})
 	items := r.items()
 	if len(items) != 1 || items[0].Kind != KindServerRestart || !items[0].NeedsUser ||
 		items[0].Summary != "the server restarted after a crash: 2 session(s) resumed, 1 not restored (tm thread list)" {
+		t.Fatalf("%+v", items)
+	}
+}
+
+func TestServerRestartedReprompted(t *testing.T) {
+	r := newRig(t)
+	r.tk.ServerRestarted("clean", map[string]int{"demo": 3}, map[string]int{"demo": 2}, nil)
+	items := r.items()
+	if len(items) != 1 || items[0].NeedsUser ||
+		items[0].Summary != "the server restarted after a clean stop: 3 session(s) resumed (2 stopped mid-turn, re-prompted to carry on), 0 not restored (tm thread list)" {
 		t.Fatalf("%+v", items)
 	}
 }

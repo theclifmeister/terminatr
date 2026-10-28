@@ -147,7 +147,10 @@ type Server struct {
 	prevShut  string
 	lost      []string
 	resumed   []string
-	conns     map[net.Conn]struct{}
+	// reprompted are the resumed sessions told to carry on the turn the
+	// stop interrupted (reprompt), for the restart inbox items.
+	reprompted []string
+	conns      map[net.Conn]struct{}
 	// handlers counts the connection goroutines: Run waits for them, so
 	// nothing logs or writes state after it returned.
 	handlers sync.WaitGroup
@@ -618,6 +621,7 @@ func (s *Server) shutdown() {
 		c.Close()
 	}
 	s.mu.Unlock()
+	s.markInterrupted(sessions)
 
 	var wg sync.WaitGroup
 	for _, sess := range sessions {

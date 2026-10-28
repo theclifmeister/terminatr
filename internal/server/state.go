@@ -50,10 +50,13 @@ type SessionRecord struct {
 	// Prompted is set once the agent has worked on a prompt. Claude saves
 	// a conversation only then, so an unprompted session is relaunched
 	// fresh instead of resumed.
-	Prompted bool   `json:"prompted,omitempty"`
-	Cols     uint16 `json:"cols,omitempty"`
-	Rows     uint16 `json:"rows,omitempty"`
-	Yolo     bool   `json:"yolo,omitempty"`
+	Prompted bool `json:"prompted,omitempty"`
+	// Interrupted: a clean server stop stopped the agent mid-turn; the
+	// next server re-prompts it once resumed (restart.go).
+	Interrupted bool   `json:"interrupted,omitempty"`
+	Cols        uint16 `json:"cols,omitempty"`
+	Rows        uint16 `json:"rows,omitempty"`
+	Yolo        bool   `json:"yolo,omitempty"`
 	// NoSandboxEscapes: the agent can't run a command outside its
 	// sandbox, across resumes too.
 	NoSandboxEscapes bool `json:"no_sandbox_escapes,omitempty"`

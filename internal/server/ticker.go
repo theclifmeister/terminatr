@@ -156,10 +156,15 @@ func (s *Server) startTicker(ctx context.Context) <-chan struct{} {
 	s.mu.Lock()
 	s.tick = t
 	how := s.prevShut
-	resumed, lost := map[string]int{}, map[string]int{}
+	resumed, reprompted, lost := map[string]int{}, map[string]int{}, map[string]int{}
 	for _, id := range s.resumed {
 		if slug := s.prevProject[id]; slug != "" {
 			resumed[slug]++
+		}
+	}
+	for _, id := range s.reprompted {
+		if slug := s.prevProject[id]; slug != "" {
+			reprompted[slug]++
 		}
 	}
 	for _, id := range s.lost {
@@ -169,7 +174,7 @@ func (s *Server) startTicker(ctx context.Context) <-chan struct{} {
 	}
 	s.mu.Unlock()
 	if how != "" {
-		t.ServerRestarted(how, resumed, lost)
+		t.ServerRestarted(how, resumed, reprompted, lost)
 	}
 	done := make(chan struct{})
 	go func() {
