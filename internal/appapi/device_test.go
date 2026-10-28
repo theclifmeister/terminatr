@@ -156,7 +156,8 @@ func TestDeviceLink(t *testing.T) {
 	if _, err := device.Add(devDir, k.Public().(ed25519.PublicKey), wkb, "Clif's iPhone", url); err != nil {
 		t.Fatal(err)
 	}
-	// The access is write, which this release runs at view.
+	// The access is write: everything the Mac app's bridge has but the
+	// bridge's own methods, each write signed.
 	if _, err := device.SetLevel(devDir, "Clif's iPhone", device.LevelWrite); err != nil {
 		t.Fatal(err)
 	}
@@ -185,15 +186,20 @@ func TestDeviceLink(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if h := c.Hello; h.AppAPI != appapi.Version || h.Level != device.LevelView || h.Server == nil || slices.Contains(h.Methods, proto.MethodTaskAdd) {
+	if h := c.Hello; h.AppAPI != appapi.Version || h.Level != device.LevelWrite || !h.Sign || h.Server == nil {
 		t.Fatalf("hello %+v", h)
+	}
+	for _, m := range appapi.Methods() {
+		if want := m.DeviceOnly() || !m.Local(); slices.Contains(c.Hello.Methods, m.Name) != want {
+			t.Errorf("the write device's hello has %s: %v, want %v", m.Name, !want, want)
+		}
 	}
 	var list appapi.SessionList
 	if err := c.Call(proto.MethodSessionList, nil, &list); err != nil || list.Version == "" {
 		t.Fatalf("session.list: %+v %v", list, err)
 	}
-	if err := c.Call(proto.MethodTaskAdd, appapi.TaskAddParams{Project: "web", Title: "x"}, nil); code(err) != appapi.ErrLevel {
-		t.Fatalf("task.add at view: %v", err)
+	if err := c.Call(proto.MethodTaskAdd, appapi.TaskAddParams{Project: "web", Title: "x"}, nil); code(err) != appapi.ErrSignature {
+		t.Fatalf("unsigned task.add at write: %v", err)
 	}
 	// The methods the bridge answers in its own process (the guard's
 	// refusals) are the human's at a computer: on a device's link that
@@ -225,7 +231,7 @@ func TestDeviceLink(t *testing.T) {
 	defer sc.Close()
 	var st proto.ServerStatus
 	if err := sc.Call(proto.MethodServerStatus, nil, &st); err != nil || len(st.Devices) != 1 || st.Devices[0].State != proto.LinkUp ||
-		st.Devices[0].Level != device.LevelWrite || st.Devices[0].Effective != device.LevelView {
+		st.Devices[0].Level != device.LevelWrite || st.Devices[0].Effective != device.LevelWrite {
 		t.Fatalf("status %+v %v", st.Devices, err)
 	}
 

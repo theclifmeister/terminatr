@@ -56,7 +56,8 @@ struct ProjectsScreen: View {
 }
 
 /// One of this server's projects: its goal, its coordinator, running or
-/// not, then every unresolved thread, done ones too, in the TUI's order
+/// not (at the write level Start Coordinator under it), then every
+/// unresolved thread, done ones too, in the TUI's order
 /// (SidebarTree.threads). An inactive project's rows are dormant.
 struct ProjectScreen: View {
     @Environment(PhoneModel.self) private var model
@@ -78,6 +79,9 @@ struct ProjectScreen: View {
                         let c = model.coordinatorSession(slug)
                         SessionLine(label: "Coordinator", ref: nil, state: .of(coordinator: c, in: p),
                                     busy: Busy.of(coordinator: c, in: p), dormant: dormant)
+                    }
+                    if p.active, model.coordinatorSession(slug) == nil, model.can(AppAPI.Methods.projectOpen.name) {
+                        StartCoordinatorButton(project: slug)
                     }
                 }
                 pages(p)
