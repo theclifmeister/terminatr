@@ -97,7 +97,16 @@ func TestWatch(t *testing.T) {
 	if count() != 0 {
 		t.Fatal("node_modules counted")
 	}
-	os.WriteFile(filepath.Join(dir, "main.ts"), []byte("22"), 0o644)
+	// One save, all at once: os.WriteFile truncates, then writes, and a
+	// writer descheduled between the two for two looks shows the empty
+	// file as a save of its own.
+	tmp := filepath.Join(t.TempDir(), "main.ts")
+	if err := os.WriteFile(tmp, []byte("22"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(tmp, filepath.Join(dir, "main.ts")); err != nil {
+		t.Fatal(err)
+	}
 	testwait.Eventually(t, "a change", func() bool { return count() == 1 })
 	time.Sleep(30 * time.Millisecond)
 	if count() != 1 {
