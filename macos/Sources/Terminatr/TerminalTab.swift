@@ -21,7 +21,7 @@ struct TerminalTab: View {
     @State private var pane = PaneController()
 
     /// The terminal box's corners, which the session's notice above it
-    /// shares; its side edges, and the view-only note's, are the pages'
+    /// shares; its edges, and the view-only note's sides, are the pages'
     /// (Page.edge).
     static let corner: CGFloat = 12
 
@@ -57,7 +57,10 @@ struct TerminalTab: View {
                 }
                 .background(theme.terminalBackground)
                 .clipShape(RoundedRectangle(cornerRadius: Self.corner))
+                // Below the title bar, the conversation's top margin
+                // (T800); the room it takes is claimed off the pane.
                 .padding(.horizontal, Page.edge)
+                .padding(.top, Page.edge)
                 .padding(.bottom, remote == .view ? 0 : Page.edge)
                 if remote == .view { viewOnly }
             }
