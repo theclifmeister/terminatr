@@ -5,12 +5,14 @@ import UIKit
 /// phone with a hinge it turns to landscape too, which the outer display
 /// honours (the inner one ignores the lock anyway). Info.plist allows
 /// both; this delegate narrows it to portrait until a hinge is seen
-/// (onHinge), as no API names the device.
+/// (onHinge), as no API names the device. An iPad (T830) turns all four
+/// ways, as its multitasking (Split View, Stage Manager) expects.
 final class AppDelegate: NSObject, UIApplicationDelegate {
     @MainActor static var hinged = false
 
     func application(_ application: UIApplication, supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {
-        Self.hinged ? .allButUpsideDown : .portrait
+        if UIDevice.current.userInterfaceIdiom == .pad { return .all }
+        return Self.hinged ? .allButUpsideDown : .portrait
     }
 }
 

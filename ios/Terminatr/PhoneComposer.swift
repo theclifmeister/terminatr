@@ -9,7 +9,9 @@ import TerminatrUI
 /// its pane there. Sending to a thread takes it over, as the Mac's
 /// says. Text pastes as in any field; files stay the Mac's. The keys
 /// button swaps it for the keys bar (TerminalKeys); -keys YES opens it
-/// at launch (the Simulator's screenshots).
+/// at launch (the Simulator's screenshots). With a hardware keyboard (an
+/// iPad's, T830) Command-Return sends and Shift-Command-Return steers,
+/// as Return makes a new line.
 struct PhoneComposer: View {
     @Environment(PhoneModel.self) private var model
     @Environment(\.theme) private var theme
@@ -78,6 +80,7 @@ struct PhoneComposer: View {
             if running && !ref.isRemote {
                 Button("Steer") { send(mode: "now") }
                     .buttonStyle(.bordered)
+                    .keyboardShortcut(.return, modifiers: [.command, .shift])
                     .disabled(empty || busy)
                     .accessibilityHint("Sends it into the running turn")
             }
@@ -91,6 +94,7 @@ struct PhoneComposer: View {
             .buttonStyle(.borderedProminent)
             .buttonBorderShape(.circle)
             .tint(theme.action)
+            .keyboardShortcut(.return, modifiers: .command)
             .disabled(empty || busy)
             .accessibilityLabel("Send")
             .accessibilityHint(running && !ref.isRemote ? "Queued: it goes once the turn ends" : "")
