@@ -2605,7 +2605,8 @@ address's last connection.
   architecture (amd64, arm64), checked against the release's
   `checksums.txt` as `scripts/install.sh` does, on `distroless/cc`
   (glibc and nothing else), as uid 65532, listening on 8443 (published
-  as 443, so it needs no capability). `TM_VERSION` pins the release.
+  as 443, so it needs no capability). `TM_VERSION`, a release tag, is
+  required (no `latest`); the base images are pinned by digest.
   Each release's workflow builds it for linux/amd64 and linux/arm64 and
   pushes `ghcr.io/theclifmeister/tm-relay:<tag>`, and `:latest` unless
   a prerelease.
@@ -2616,14 +2617,14 @@ address's last connection.
   `compose.selfsigned.yaml`: a pinned relay (§16.1), `--self-signed
   --ip ${RELAY_IP} --listen :8443 --state /state`, its key in a mounted
   `./state`, published as 8443, running as `${RELAY_USER:-65532:65532}`.
-  All three run `ghcr.io/theclifmeister/tm-relay:${TM_VERSION:-latest}`
-  (a commented `build:` builds it locally instead) with a read-only root,
+  All three run `ghcr.io/theclifmeister/tm-relay:${TM_VERSION:?…}`,
+  failing when `TM_VERSION` is unset, and Caddy pinned by digest (a commented `build:` builds it locally instead) with a read-only root,
   no capabilities, `no-new-privileges`, `mem_limit: 256m` and
   `pids_limit: 256`.
 - `tm-relay-docker.tar.gz`, a release asset listed in `checksums.txt`:
   the Dockerfile, the three compose files, the Caddyfile and
   `deploy/relay/README.md` in `tm-relay-docker/`, the compose files'
-  default `TM_VERSION` replaced by the release's tag
+  required `TM_VERSION` given the release's tag as its default
   (`scripts/release/relay-docker.sh`, a goreleaser before hook; checked
   by `scripts/release/check.sh`).
 - `deploy/relay/tm-relay.service`: a systemd unit with a throwaway user

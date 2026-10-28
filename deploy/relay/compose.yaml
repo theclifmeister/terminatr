@@ -4,20 +4,21 @@
 #
 #   docker compose up -d
 #
-# The copy in a release's tm-relay-docker.tar.gz pins TM_VERSION to that
-# release. Upgrade: put TM_VERSION=<new tag> in .env, run the same command.
+# The copy in a release's tm-relay-docker.tar.gz defaults TM_VERSION to
+# that release; anywhere else, set it in .env (nothing follows latest).
+# Upgrade: put TM_VERSION=<new tag> in .env, run the same command.
 #
 # For a certificate obtained and renewed automatically (ACME), use
 # compose.acme.yaml instead.
 services:
   relay:
-    image: ghcr.io/theclifmeister/tm-relay:${TM_VERSION:-latest}
+    image: ghcr.io/theclifmeister/tm-relay:${TM_VERSION:?set TM_VERSION in .env to a release tag}
     # To build the image here instead, from the same release binary checked
     # against its checksums.txt, uncomment these lines and add --build:
     # build:
     #   context: .
     #   args:
-    #     TM_VERSION: ${TM_VERSION:-latest}
+    #     TM_VERSION: ${TM_VERSION:?set TM_VERSION in .env to a release tag}
     restart: unless-stopped
     ports:
       - "443:8443"
