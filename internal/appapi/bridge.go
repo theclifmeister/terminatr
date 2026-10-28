@@ -67,6 +67,8 @@ func Serve(in io.Reader, out io.Writer, o Options) error {
 	}
 	b := &bridge{o: o, w: json.NewEncoder(out), open: map[int64]bool{}, streams: map[int64]*openStream{},
 		idle: make(chan *client.Client, idleConns)}
+	b.ctx, b.stop = context.WithCancel(context.Background())
+	defer b.stop()
 	c, err := b.dial()
 	level, changed := b.level()
 	hello := helloAt(level)
@@ -184,6 +186,11 @@ type bridge struct {
 	whoKnown, whoHuman bool
 	// nonces are the ones device.nonce gave out.
 	nonces nonces
+	// ctx ends when the bridge does: its pairing with it.
+	ctx  context.Context
+	stop context.CancelFunc
+	// pairing is the open pairing of a device (devices.go).
+	pairing *pairing
 }
 
 // openStream is a stream the app opened: its method, what cancels it,
@@ -537,6 +544,7 @@ func (b *bridge) stream(ctx context.Context, id int64, m Method, params any, st 
 // close ends the streams, waits for the calls and closes the idle
 // connections.
 func (b *bridge) close() {
+	b.stop()
 	b.mu.Lock()
 	for _, st := range b.streams {
 		st.cancel()

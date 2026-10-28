@@ -501,7 +501,8 @@ func TestAllowlist(t *testing.T) {
 		proto.MethodLinkAct, proto.MethodPeerShareAnswer, MethodGuardRefusals, MethodGuardDecide, proto.MethodTranscriptPage,
 		proto.MethodProjectPin, proto.MethodProjectNew, proto.MethodSessionAdoptRequest, proto.MethodSessionRemote, proto.MethodLinkSend,
 		proto.MethodMemoryList, proto.MethodMemoryRead, proto.MethodLibraryList, proto.MethodLibraryRead,
-		MethodDeviceNonce}
+		MethodDeviceNonce, MethodDeviceList, MethodDevicePair, MethodDevicePairWait, MethodDevicePairAnswer, MethodDeviceAccess,
+		MethodDeviceName, MethodDeviceRemove}
 	slices.Sort(want)
 	if got := MethodNames(); !slices.Equal(got, want) {
 		t.Errorf("methods %v, want %v", got, want)
@@ -520,7 +521,9 @@ func TestAllowlist(t *testing.T) {
 	for name, write := range map[string]bool{MethodPaneInput: true, proto.MethodPaneVT: false, proto.MethodTranscriptWatch: false,
 		proto.MethodSessionFile: false, proto.MethodCoordinatorClear: true, proto.MethodProjectActive: true,
 		proto.MethodLinkAct: true, proto.MethodPeerShareAnswer: true, MethodGuardRefusals: false, MethodGuardDecide: true,
-		proto.MethodMemoryList: false, proto.MethodMemoryRead: false, proto.MethodLibraryList: false, proto.MethodLibraryRead: false} {
+		proto.MethodMemoryList: false, proto.MethodMemoryRead: false, proto.MethodLibraryList: false, proto.MethodLibraryRead: false,
+		MethodDeviceList: false, MethodDevicePair: true, MethodDevicePairWait: true, MethodDevicePairAnswer: true,
+		MethodDeviceAccess: true, MethodDeviceName: true, MethodDeviceRemove: true} {
 		if m, _ := Lookup(name); m.Write != write {
 			t.Errorf("%s: write %v", name, m.Write)
 		}

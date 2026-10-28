@@ -104,25 +104,9 @@ func deviceRelay(peerDir, dir, flag string) (string, error) {
 	if flag != "" {
 		return pairRelay(peerDir, flag)
 	}
-	relays := map[string]bool{}
-	devices, err := device.Load(dir)
-	if err != nil {
-		return "", err
-	}
-	for _, d := range devices {
-		relays[d.Relay] = true
-	}
-	peers, err := peer.LoadPeers(peerDir)
-	if err != nil {
-		return "", err
-	}
-	for _, p := range peers {
-		relays[p.Relay] = true
-	}
-	if len(relays) == 1 {
-		for r := range relays {
-			return r, nil
-		}
+	r, ok, err := device.KnownRelay(dir, peerDir)
+	if err != nil || ok {
+		return r, err
 	}
 	return "", usagef("--relay URL: the relay the phone and this server meet on (docs/OPERATIONS.md, Running a relay)\n%s", deviceUsage)
 }
@@ -155,25 +139,18 @@ func (e *Env) devicePair(peerDir, dir, relayFlag, as string) error {
 			shownInvite(in)
 		},
 		Confirm: func(off device.Offer) (bool, error) {
-			name = off.Name
-			if as != "" {
-				name = as
-			}
 			devices, err := device.Load(dir)
 			if err != nil {
 				return false, err
 			}
-			key := slices.IndexFunc(devices, func(d device.Device) bool { return d.ID() == off.ID })
-			others := slices.DeleteFunc(slices.Clone(devices), func(d device.Device) bool { return d.ID() == off.ID })
-			if as == "" {
-				name = device.FreeName(others, name, nil)
-			} else if slices.ContainsFunc(others, func(d device.Device) bool { return strings.EqualFold(d.Name, as) }) {
-				return false, &device.TakenError{Name: as}
+			var again *device.Device
+			if name, again, err = device.Propose(devices, off, as); err != nil {
+				return false, err
 			}
 			level := device.LevelView
-			if key >= 0 {
-				level = devices[key].Level
-				fmt.Fprintf(e.Stdout, "\nThis device is paired already, as %q; pairing again keeps its level.\n", devices[key].Name)
+			if again != nil {
+				level = again.Level
+				fmt.Fprintf(e.Stdout, "\nThis device is paired already, as %q; pairing again keeps its level.\n", again.Name)
 			}
 			fmt.Fprintf(e.Stdout, "\nThe phone: %q, device id %s, app %s\n", off.Name, off.ID.Short(), textsafe.Line(off.Version, 40))
 			if off.WriteKey == nil {

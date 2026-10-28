@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"github.com/theclifmeister/terminatr/internal/textsafe"
 	"io/fs"
-	"net/url"
 	"os"
 	"slices"
 	"strings"
@@ -305,17 +304,8 @@ func serverPeerLinks() (st *proto.LinkStatus, ok bool) {
 	return s.Link, true
 }
 
-// relayHost is the relay as people read it: its host for wss://, and
-// "(pinned)" for one taken by its key's pin.
-func relayHost(r string) string {
-	if u, err := url.Parse(r); err == nil && u.Scheme == "wss" && u.Path == "" {
-		if u.Fragment != "" {
-			return u.Host + " (pinned)"
-		}
-		return u.Host
-	}
-	return r
-}
+// relayHost is the relay as people read it (peer.RelayHost).
+func relayHost(r string) string { return peer.RelayHost(r) }
 
 // warnPrivate says when the relay is on a private address.
 func (e *Env) warnPrivate(relayURL string) {

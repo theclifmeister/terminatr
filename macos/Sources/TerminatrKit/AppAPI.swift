@@ -6,7 +6,7 @@ import Foundation
 /// The terminatr app API (docs/SPEC.md §3.8): what tm app bridge answers.
 public enum AppAPI {
     /// The app API version this app was generated against.
-    public static let version = 25
+    public static let version = 26
 
     public struct AdoptRequestParams: Codable, Sendable, Hashable {
         public var id: String
@@ -161,6 +161,90 @@ public enum AppAPI {
         }
     }
 
+    public struct Device: Codable, Sendable, Hashable, Identifiable {
+        public var name: String
+        public var id: String
+        public var short: String
+        public var level: String
+        public var effective: String
+        public var relay: String
+        public var writeKey: Bool
+        public var link: DeviceLink?
+
+        public init(name: String, id: String, short: String, level: String, effective: String, relay: String, writeKey: Bool = false, link: DeviceLink? = nil) {
+            self.name = name
+            self.id = id
+            self.short = short
+            self.level = level
+            self.effective = effective
+            self.relay = relay
+            self.writeKey = writeKey
+            self.link = link
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case name
+            case id
+            case short
+            case level
+            case effective
+            case relay
+            case writeKey = "write_key"
+            case link
+        }
+    }
+
+    public struct DeviceAccessParams: Codable, Sendable, Hashable {
+        public var device: String
+        public var level: String
+
+        public init(device: String, level: String) {
+            self.device = device
+            self.level = level
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case device
+            case level
+        }
+    }
+
+    public struct DeviceLink: Codable, Sendable, Hashable {
+        public var state: String
+        public var reason: String
+        public var since: Date
+        public var error: String
+
+        public init(state: String, reason: String = "", since: Date, error: String = "") {
+            self.state = state
+            self.reason = reason
+            self.since = since
+            self.error = error
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case state
+            case reason
+            case since
+            case error
+        }
+    }
+
+    public struct DeviceNameParams: Codable, Sendable, Hashable {
+        public var device: String
+        public var name: String
+
+        public init(device: String, name: String) {
+            self.device = device
+            self.name = name
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case device
+            case name
+        }
+    }
+
     public struct DeviceNonce: Codable, Sendable, Hashable {
         public var nonce: Data
 
@@ -170,6 +254,156 @@ public enum AppAPI {
 
         enum CodingKeys: String, CodingKey {
             case nonce
+        }
+    }
+
+    public struct DeviceOffer: Codable, Sendable, Hashable {
+        public var name: String
+        public var phone: String
+        public var short: String
+        public var version: String
+        public var writeKey: Bool
+        public var again: String
+        public var level: String
+        public var answerBy: Date
+
+        public init(name: String, phone: String, short: String, version: String, writeKey: Bool = false, again: String = "", level: String, answerBy: Date) {
+            self.name = name
+            self.phone = phone
+            self.short = short
+            self.version = version
+            self.writeKey = writeKey
+            self.again = again
+            self.level = level
+            self.answerBy = answerBy
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case name
+            case phone
+            case short
+            case version
+            case writeKey = "write_key"
+            case again
+            case level
+            case answerBy = "answer_by"
+        }
+    }
+
+    public struct DevicePairAnswerParams: Codable, Sendable, Hashable {
+        public var pairing: String
+        public var accept: Bool
+        public var name: String
+
+        public init(pairing: String, accept: Bool, name: String = "") {
+            self.pairing = pairing
+            self.accept = accept
+            self.name = name
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case pairing
+            case accept
+            case name
+        }
+    }
+
+    public struct DevicePairParams: Codable, Sendable, Hashable {
+        public var relay: String
+
+        public init(relay: String = "") {
+            self.relay = relay
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case relay
+        }
+    }
+
+    public struct DevicePaired: Codable, Sendable, Hashable {
+        public var device: Device?
+
+        public init(device: Device? = nil) {
+            self.device = device
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case device
+        }
+    }
+
+    public struct DevicePairing: Codable, Sendable, Hashable {
+        public var pairing: String
+        public var invite: String
+        public var expires: Date
+        public var server: String
+        public var name: String
+        public var relay: String
+        public var note: String
+
+        public init(pairing: String, invite: String, expires: Date, server: String, name: String, relay: String, note: String = "") {
+            self.pairing = pairing
+            self.invite = invite
+            self.expires = expires
+            self.server = server
+            self.name = name
+            self.relay = relay
+            self.note = note
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case pairing
+            case invite
+            case expires
+            case server
+            case name
+            case relay
+            case note
+        }
+    }
+
+    public struct DevicePairingParams: Codable, Sendable, Hashable {
+        public var pairing: String
+
+        public init(pairing: String) {
+            self.pairing = pairing
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case pairing
+        }
+    }
+
+    public struct DeviceParams: Codable, Sendable, Hashable {
+        public var device: String
+
+        public init(device: String) {
+            self.device = device
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case device
+        }
+    }
+
+    public struct Devices: Codable, Sendable, Hashable {
+        public var devices: [Device]
+        public var running: Bool
+        public var levels: [String]
+        public var relay: String
+
+        public init(devices: [Device] = [], running: Bool = false, levels: [String] = [], relay: String = "") {
+            self.devices = devices
+            self.running = running
+            self.levels = levels
+            self.relay = relay
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case devices
+            case running
+            case levels
+            case relay
         }
     }
 
@@ -2486,7 +2720,14 @@ public enum AppAPI {
     /// Every method of the app API, by name.
     public enum Methods {
         public static let coordinatorClear = Call<ProjectParams, CoordinatorClear>("coordinator.clear", write: true)
+        public static let deviceAccess = Call<DeviceAccessParams, Device>("device.access", write: true)
+        public static let deviceList = Call<NoParams, Devices>("device.list", write: false)
+        public static let deviceName = Call<DeviceNameParams, Device>("device.name", write: true)
         public static let deviceNonce = Call<NoParams, DeviceNonce>("device.nonce", write: false)
+        public static let devicePair = Call<DevicePairParams, DevicePairing>("device.pair", write: true)
+        public static let devicePairAnswer = Call<DevicePairAnswerParams, DevicePaired>("device.pair.answer", write: true)
+        public static let devicePairWait = Call<DevicePairingParams, DeviceOffer>("device.pair.wait", write: true)
+        public static let deviceRemove = Call<DeviceParams, Empty>("device.remove", write: true)
         public static let guardDecide = Call<GuardDecideParams, GuardDecided>("guard.decide", write: true)
         public static let guardRefusals = Call<NoParams, GuardRefusals>("guard.refusals", write: false)
         public static let libraryList = Call<ProjectParams, Library>("library.list", write: false)
@@ -2608,10 +2849,124 @@ extension AppAPI.CoordinatorClear {
     }
 }
 
+extension AppAPI.Device {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.name = try c.decode(String.self, forKey: .name)
+        self.id = try c.decode(String.self, forKey: .id)
+        self.short = try c.decode(String.self, forKey: .short)
+        self.level = try c.decode(String.self, forKey: .level)
+        self.effective = try c.decode(String.self, forKey: .effective)
+        self.relay = try c.decode(String.self, forKey: .relay)
+        self.writeKey = try c.decodeIfPresent(Bool.self, forKey: .writeKey) ?? false
+        self.link = try c.decodeIfPresent(AppAPI.DeviceLink.self, forKey: .link)
+    }
+}
+
+extension AppAPI.DeviceAccessParams {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.device = try c.decode(String.self, forKey: .device)
+        self.level = try c.decode(String.self, forKey: .level)
+    }
+}
+
+extension AppAPI.DeviceLink {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.state = try c.decode(String.self, forKey: .state)
+        self.reason = try c.decodeIfPresent(String.self, forKey: .reason) ?? ""
+        self.since = try c.decode(Date.self, forKey: .since)
+        self.error = try c.decodeIfPresent(String.self, forKey: .error) ?? ""
+    }
+}
+
+extension AppAPI.DeviceNameParams {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.device = try c.decode(String.self, forKey: .device)
+        self.name = try c.decode(String.self, forKey: .name)
+    }
+}
+
 extension AppAPI.DeviceNonce {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.nonce = try c.decode(Data.self, forKey: .nonce)
+    }
+}
+
+extension AppAPI.DeviceOffer {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.name = try c.decode(String.self, forKey: .name)
+        self.phone = try c.decode(String.self, forKey: .phone)
+        self.short = try c.decode(String.self, forKey: .short)
+        self.version = try c.decode(String.self, forKey: .version)
+        self.writeKey = try c.decodeIfPresent(Bool.self, forKey: .writeKey) ?? false
+        self.again = try c.decodeIfPresent(String.self, forKey: .again) ?? ""
+        self.level = try c.decode(String.self, forKey: .level)
+        self.answerBy = try c.decode(Date.self, forKey: .answerBy)
+    }
+}
+
+extension AppAPI.DevicePairAnswerParams {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.pairing = try c.decode(String.self, forKey: .pairing)
+        self.accept = try c.decode(Bool.self, forKey: .accept)
+        self.name = try c.decodeIfPresent(String.self, forKey: .name) ?? ""
+    }
+}
+
+extension AppAPI.DevicePairParams {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.relay = try c.decodeIfPresent(String.self, forKey: .relay) ?? ""
+    }
+}
+
+extension AppAPI.DevicePaired {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.device = try c.decodeIfPresent(AppAPI.Device.self, forKey: .device)
+    }
+}
+
+extension AppAPI.DevicePairing {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.pairing = try c.decode(String.self, forKey: .pairing)
+        self.invite = try c.decode(String.self, forKey: .invite)
+        self.expires = try c.decode(Date.self, forKey: .expires)
+        self.server = try c.decode(String.self, forKey: .server)
+        self.name = try c.decode(String.self, forKey: .name)
+        self.relay = try c.decode(String.self, forKey: .relay)
+        self.note = try c.decodeIfPresent(String.self, forKey: .note) ?? ""
+    }
+}
+
+extension AppAPI.DevicePairingParams {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.pairing = try c.decode(String.self, forKey: .pairing)
+    }
+}
+
+extension AppAPI.DeviceParams {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.device = try c.decode(String.self, forKey: .device)
+    }
+}
+
+extension AppAPI.Devices {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.devices = try c.decodeIfPresent([AppAPI.Device].self, forKey: .devices) ?? []
+        self.running = try c.decodeIfPresent(Bool.self, forKey: .running) ?? false
+        self.levels = try c.decodeIfPresent([String].self, forKey: .levels) ?? []
+        self.relay = try c.decodeIfPresent(String.self, forKey: .relay) ?? ""
     }
 }
 

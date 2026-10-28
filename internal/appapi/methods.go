@@ -15,7 +15,8 @@ import (
 // A method joins on purpose, here, with its copies; nothing reaches the
 // server that isn't listed. Settings, access, mods and the server's own
 // controls are never here: they stay the TUI's and the CLI's, but for
-// the one exception named in the spec, answering a guard refusal.
+// the two exceptions named in the spec, answering a guard refusal and
+// the user's paired devices.
 var methods = map[string]Method{}
 
 func init() {
@@ -140,6 +141,17 @@ func init() {
 		// No other setting or access joins.
 		local(MethodGuardRefusals, false, guardRefusals),
 		local(MethodGuardDecide, true, guardDecide),
+
+		// The paired devices, Settings › Devices (app API 26): the
+		// bridge's own, the user's pairing (devices.go). No other
+		// setting or access joins.
+		local(MethodDeviceList, false, deviceList),
+		local(MethodDevicePair, true, devicePair),
+		local(MethodDevicePairWait, true, devicePairWait),
+		local(MethodDevicePairAnswer, true, devicePairAnswer),
+		local(MethodDeviceAccess, true, deviceAccess),
+		local(MethodDeviceName, true, deviceName),
+		local(MethodDeviceRemove, true, deviceRemove),
 
 		// A nonce for a device's next signed write (app API 23,
 		// sign.go): only a device's bridge has it.

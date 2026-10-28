@@ -512,3 +512,15 @@ func (n Names) ShowKey(key string) string {
 
 // Both is the peer alias with its name: Both(name, alias).
 func (n Names) Both(alias string) string { return Both(n.shown[alias], alias) }
+
+// RelayHost is the relay r as people read it: its host for wss://, and
+// "(pinned)" for one taken by its key's pin.
+func RelayHost(r string) string {
+	if u, err := url.Parse(r); err == nil && u.Scheme == "wss" && u.Path == "" {
+		if u.Fragment != "" {
+			return u.Host + " (pinned)"
+		}
+		return u.Host
+	}
+	return r
+}
