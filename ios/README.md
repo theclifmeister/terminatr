@@ -11,6 +11,15 @@ On an iPhone the app is portrait only, except on a phone with a hinge (`Duo.swif
 CI's `ios-app` job and the release's `testflight` job run on GitHub's `xcode-27` image (a preview), the only one with Xcode 27.1; the Mac app's jobs stay on `macos-latest`.
 Check it in the Simulator on an iPhone Duo (iOS 27.1 runtime): `make run DEVICE="…"`; opening, closing and rotating it are buttons in Xcode's Device Hub (`simctl` can't), and `simctl io … screenshot --display=1` shoots the outer display.
 
+## iPad
+
+The app is universal (T830): one target and one build, for iPhone and iPad (`TARGETED_DEVICE_FAMILY = 1,2`), so the TestFlight and App Store uploads carry both and CI needs no other job.
+An iPad turns all four ways (`AppDelegate` in `Duo.swift`; Info.plist's iPad orientations), which Split View, Slide Over and Stage Manager expect; an iPhone stays as above.
+A regular-width window shows the two columns (`Columns.swift`), a compact one (a narrow Split View or Stage Manager window) the stack; resizing across them keeps your place (`Places.swift`).
+With a hardware keyboard, Command-Return sends a prompt and Shift-Command-Return steers; list rows and cards light up under the pointer.
+Check it in the Simulator on an iPad (iOS 27.0 runtime: 27.1 takes only iPhone Duo): `make run DEVICE="…"`. Resizing the window into compact width needs Stage Manager or Split View, by hand: `simctl` can't, and iPadOS refuses programmatic orientation and size changes to an app that joins multitasking.
+App Store submission (not TestFlight) needs iPad screenshots: 13-inch, 2064×2752 or 2048×2732 portrait (landscape the same, turned), which the iPad Pro 13-inch (M5) Simulator shoots as is; App Store Connect scales them down for the smaller iPads.
+
 ## TestFlight
 
 Each release uploads the app to TestFlight: the `testflight` job of `.github/workflows/release.yml` runs `scripts/release/ios.sh` on the tag, once the release is published.

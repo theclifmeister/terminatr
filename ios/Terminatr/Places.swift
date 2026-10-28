@@ -62,7 +62,8 @@ extension EnvironmentValues {
 
 /// A link to a route: a NavigationLink in the stack, a button that
 /// opens it in the columns, its row marked while its route is open
-/// beside it. List rows keep the chevron either way.
+/// beside it, and lit under an iPad's pointer (T830), as a
+/// NavigationLink's row is. List rows keep the chevron either way.
 struct RouteLink<Label: View>: View {
     @Environment(\.navigate) private var navigate
     @Environment(\.theme) private var theme
@@ -88,9 +89,10 @@ struct RouteLink<Label: View>: View {
                         .foregroundStyle(theme.muted)
                         .accessibilityHidden(true)
                 }
-                .contentShape(Rectangle())
+                .contentShape([.interaction, .hoverEffect], Rectangle())
             }
             .buttonStyle(.plain)
+            .hoverEffect(.highlight)
             .listRowBackground(on ? theme.action.opacity(0.16) : nil)
             .accessibilityAddTraits(on ? .isSelected : [])
             .id(route)
@@ -102,7 +104,7 @@ struct RouteLink<Label: View>: View {
 }
 
 /// A plain link, not a list row (a card, a button in a page): the same
-/// choice, without the chevron.
+/// choice, without the chevron; lit under an iPad's pointer.
 struct PlainRouteLink<Label: View>: View {
     @Environment(\.navigate) private var navigate
     let route: Route
@@ -116,10 +118,12 @@ struct PlainRouteLink<Label: View>: View {
     var body: some View {
         if let navigate {
             Button { navigate.go(route) } label: { label }
+                .hoverEffect()
                 .accessibilityAddTraits(navigate.open == route ? .isSelected : [])
                 .id(route)
         } else {
             NavigationLink(value: route) { label }
+                .hoverEffect()
                 .id(route)
         }
     }
