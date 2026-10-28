@@ -1050,13 +1050,17 @@ type Remote struct {
 	Held          bool   `json:"held,omitempty"`
 }
 
-func projectPinnedOf(r proto.ProjectPinResult) ProjectPinned { return ProjectPinned{Changed: r.Changed} }
+func projectPinnedOf(r proto.ProjectPinResult) ProjectPinned {
+	return ProjectPinned{Changed: r.Changed}
+}
 
 func projectNewOf(r proto.ProjectNewResult) ProjectNew {
 	return ProjectNew{Project: r.Project, NoAgent: r.NoAgent}
 }
 
-func adoptRequestedOf(r proto.SessionAdoptAskResult) AdoptRequested { return AdoptRequested{Asked: r.Asked} }
+func adoptRequestedOf(r proto.SessionAdoptAskResult) AdoptRequested {
+	return AdoptRequested{Asked: r.Asked}
+}
 
 func remoteOf(r proto.SessionRemoteResult) Remote {
 	return Remote{RemoteControl: r.RemoteControl, How: r.How, Held: r.Held}
