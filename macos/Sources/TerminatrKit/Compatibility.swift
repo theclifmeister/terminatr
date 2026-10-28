@@ -87,6 +87,17 @@ public enum Compatibility: Equatable, Sendable {
         hello.appApi >= guardAPI && hello.methods.contains(AppAPI.Methods.guardDecide.name)
     }
 
+    /// The app API that has the device methods: Settings › Devices
+    /// needs it.
+    public static let devicesAPI = 26
+
+    /// Whether hello's tm lists, pairs and changes the paired devices
+    /// from the app (device.list, device.pair …).
+    public static func managesDevices(_ hello: AppAPI.Hello) -> Bool {
+        hello.appApi >= devicesAPI && hello.methods.contains(AppAPI.Methods.devicePair.name)
+            && hello.methods.contains(AppAPI.Methods.deviceList.name)
+    }
+
     /// The app API that has memory.list, memory.read, library.list and
     /// library.read: a project's Memory and Library pages need it.
     public static let projectFilesAPI = 21

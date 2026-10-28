@@ -14,7 +14,9 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"slices"
 	"strings"
+	"time"
 
 	"github.com/theclifmeister/terminatr/internal/peer"
 )
@@ -140,4 +142,62 @@ func Join(ctx context.Context, key *peer.Identity, in Invite, name, version stri
 		Name: name, Version: version, RelayTLS: relayTLS, Purpose: peer.PurposeDevice, Expect: &in.Server, WriteKey: writeKey,
 		Confirm: func(peer.Offer) (bool, error) { return true, nil },
 	})
+}
+
+// The relay's pair room as a device's pairing meets it (its defaults,
+// relay.DefaultConfig): the code works for PairWindow from when the
+// server waits, and once the phone joined the room's life, AnswerWindow,
+// bounds the user's answer too.
+const (
+	PairWindow   = 10 * time.Minute
+	AnswerWindow = 2 * time.Minute
+)
+
+// Propose is how offer off would join devices: the name it gets (as
+// when set, else the device's own made free) and, for a key paired
+// already, that device, whose level it keeps. An as another device has
+// is a TakenError.
+func Propose(devices []Device, off Offer, as string) (name string, again *Device, err error) {
+	var others []Device
+	for i, d := range devices {
+		if d.ID() == off.ID {
+			again = &devices[i]
+		} else {
+			others = append(others, d)
+		}
+	}
+	if as == "" {
+		return FreeName(others, off.Name, nil), again, nil
+	}
+	if slices.ContainsFunc(others, func(d Device) bool { return strings.EqualFold(d.Name, as) }) {
+		return "", again, &TakenError{Name: as}
+	}
+	return as, again, nil
+}
+
+// KnownRelay is the relay every paired device (in dir) and server (in
+// peerDir) uses; ok is false when they use none or several.
+func KnownRelay(dir, peerDir string) (relayURL string, ok bool, err error) {
+	relays := map[string]bool{}
+	devices, err := Load(dir)
+	if err != nil {
+		return "", false, err
+	}
+	for _, d := range devices {
+		relays[d.Relay] = true
+	}
+	peers, err := peer.LoadPeers(peerDir)
+	if err != nil {
+		return "", false, err
+	}
+	for _, p := range peers {
+		relays[p.Relay] = true
+	}
+	if len(relays) != 1 {
+		return "", false, nil
+	}
+	for r := range relays {
+		relayURL = r
+	}
+	return relayURL, true, nil
 }

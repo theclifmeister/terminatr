@@ -6,11 +6,11 @@ import TerminatrUI
 
 /// Settings in tabs (T748 milestone G): General (where the app finds tm,
 /// where it shows, open at login), Notifications, Appearance (theme,
-/// sidebar density, text size) and Advanced (the bridge's log,
-/// Reconnect).
+/// sidebar density, text size), Devices (the paired iPhones, T790) and
+/// Advanced (the bridge's log, Reconnect).
 struct SettingsView: View {
     enum Tab: String {
-        case general, notifications, appearance, advanced
+        case general, notifications, appearance, devices, advanced
     }
 
     @AppStorage("settingsTab") private var tab = Tab.general.rawValue
@@ -26,6 +26,9 @@ struct SettingsView: View {
             AppearanceSettings()
                 .tabItem { Label("Appearance", systemImage: "paintpalette") }
                 .tag(Tab.appearance.rawValue)
+            DeviceSettings()
+                .tabItem { Label("Devices", systemImage: "iphone") }
+                .tag(Tab.devices.rawValue)
             AdvancedSettings()
                 .tabItem { Label("Advanced", systemImage: "wrench.and.screwdriver") }
                 .tag(Tab.advanced.rawValue)
