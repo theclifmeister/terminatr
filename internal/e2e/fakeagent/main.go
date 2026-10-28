@@ -8,7 +8,9 @@
 //	fakeagent [flags] [-- PROMPT]
 //
 // A prompt "run NAME" runs the script NAME.toml (from $FAKEAGENT_SCRIPTS or
-// the embedded scripts/); any other prompt answers "ok: PROMPT". Every
+// the embedded scripts/); any other prompt runs the script
+// $FAKEAGENT_REPLIES names for words in the prompt, if any, else answers
+// "ok: PROMPT". Every
 // observable action is logged as JSONL to $FAKEAGENT_LOG.
 package main
 
