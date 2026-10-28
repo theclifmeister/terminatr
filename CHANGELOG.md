@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.57.0](https://github.com/theclifmeister/terminatr/compare/v0.56.1...v0.57.0) (2026-10-28)
+
+
+### Features
+
+* **app:** a task view for review: notes, steps, Blocked on, how to check and the PR ([#842](https://github.com/theclifmeister/terminatr/issues/842)) ([ad9fcb8](https://github.com/theclifmeister/terminatr/commit/ad9fcb81f5f43cea62928e0ea6f2cb7111ad7744))
+* **app:** answer a guard refusal from Needs you ([#845](https://github.com/theclifmeister/terminatr/issues/845)) ([e332335](https://github.com/theclifmeister/terminatr/commit/e332335a1cb2b155f6aa83e07b636a439134d3dd))
+* **app:** answer link needs and share requests in place ([#844](https://github.com/theclifmeister/terminatr/issues/844)) ([edc1c09](https://github.com/theclifmeister/terminatr/commit/edc1c0916333fa2656dceaa8f852d3c73ef5d844))
+* **app:** coordinator controls — Save & Clear, Activate/Deactivate, context warning (app API 13) ([#841](https://github.com/theclifmeister/terminatr/issues/841)) ([3dbe5d2](https://github.com/theclifmeister/terminatr/commit/3dbe5d21f2662ed4ada5034986c341f63f16632a))
+* **app:** paste, drop or pick files into the composer ([#843](https://github.com/theclifmeister/terminatr/issues/843)) ([69fa4db](https://github.com/theclifmeister/terminatr/commit/69fa4dbb07222f14e07b09b4b19544552ec797a6))
+* **device:** pair phones as devices; device links run the app API on the server (view level); transcript tail (app API 19) ([#850](https://github.com/theclifmeister/terminatr/issues/850)) ([9aaa705](https://github.com/theclifmeister/terminatr/commit/9aaa705ac6a98eded604d89fe40f86ca4688cc1c))
+* **ios:** iPhone app skeleton — multiplatform TerminatrKit, TerminatrUI, demo mode, read-only screens ([#849](https://github.com/theclifmeister/terminatr/issues/849)) ([760a3d3](https://github.com/theclifmeister/terminatr/commit/760a3d3fee533645624675952a2086e45c960ea7))
+* **ios:** TerminatrLink — phone link over the relay with pinned Ed25519 TLS ([#848](https://github.com/theclifmeister/terminatr/issues/848)) ([7567386](https://github.com/theclifmeister/terminatr/commit/756738602b4019855e5f144df5c13e748c3ad72d))
+* the Mac app may pick an agent's 'allow for this session' option ([#847](https://github.com/theclifmeister/terminatr/issues/847)) ([9e35c17](https://github.com/theclifmeister/terminatr/commit/9e35c17e820e06f3dd0991ce280e64f576458d40))
+
 ## [0.56.1](https://github.com/theclifmeister/terminatr/compare/v0.56.0...v0.56.1) (2026-10-27)
 
 
