@@ -22,6 +22,10 @@ struct ConversationScreen: View {
     /// Whether the conversation follows its end, or the user scrolled
     /// up (iOS 18, from the scroll geometry; 17 always follows).
     @State private var follow = Follow()
+    /// The row the user had at the top, scrolled up, before the layout
+    /// changed (an iPhone Duo opened or closed): scrolled back to once
+    /// the transcript has it (Places, T825).
+    @State private var restoring: Int?
 
     /// The items a stream opens with when the server pages: the screen's
     /// worth and some.
@@ -47,10 +51,13 @@ struct ConversationScreen: View {
                     if let failure { Failure(text: failure) }
                     if pages, !transcript.before.isEmpty, let id { earlier(id) }
                     ForEach(Transcript.rows(transcript.entries)) { row in
-                        switch row {
-                        case .entry(let e): EntryLine(entry: e, agent: session?.agent ?? "")
-                        case .tools(let run): runView(run)
+                        Group {
+                            switch row {
+                            case .entry(let e): EntryLine(entry: e, agent: session?.agent ?? "")
+                            case .tools(let run): runView(run)
+                            }
                         }
+                        .id(row.id)
                     }
                     if let session { waiting(session) }
                     // The foot's padding is the end row's: scrolled to,
@@ -58,12 +65,28 @@ struct ConversationScreen: View {
                     Color.clear.frame(height: 1).padding(.bottom, 16).id("end")
                 }
                 .padding([.horizontal, .top], 16)
+                .scrollTargetLayout()
             }
-            .modifier(PhoneFollowGeometry(follow: $follow, newest: transcript.entries.last?.id))
+            .modifier(PhoneFollowGeometry(follow: $follow, newest: transcript.entries.last?.id) { top in
+                if restoring == nil { model.places.keep("top \(ref)", follow.following ? nil : top) }
+            })
             // New output: the follower goes to the end; scrolled up, the
-            // screen stays and Jump to latest counts it.
+            // screen stays and Jump to latest counts it. Laid out afresh,
+            // it goes back to the row the user had at the top.
             .onChange(of: Self.tail(transcript)) {
+                if let r = restoring {
+                    let rows = Transcript.rows(transcript.entries).map(\.id)
+                    guard let first = rows.first, rows.last ?? Int.min >= r else { return }
+                    restoring = nil
+                    if r >= first {
+                        scroll.scrollTo(rows.last { $0 <= r } ?? first, anchor: .top)
+                        return
+                    }
+                }
                 if follow.arrived(transcript.entries.map(\.id)) { scroll.scrollTo("end", anchor: .bottom) }
+            }
+            .onAppear {
+                if let top: Int = model.places.value("top \(ref)") { restoring = top }
             }
             .onChange(of: Busy.of(session) != nil) {
                 if follow.following { scroll.scrollTo("end", anchor: .bottom) }
@@ -108,6 +131,7 @@ struct ConversationScreen: View {
         .backdrop()
         // A redial is a new bridge: the stream opens again on it.
         .task(id: "\(id ?? "")/\(model.generation)") { await watch(id) }
+        .kept($unfolded, "runs \(ref)")
     }
 
     private func earlier(_ id: String) -> some View {
@@ -267,6 +291,8 @@ struct EntryLine: View {
 struct PhoneFollowGeometry: ViewModifier {
     @Binding var follow: Follow
     let newest: Int?
+    /// Told the row at the top as the user scrolls (iOS 18).
+    let top: (Int?) -> Void
 
     func body(content: Content) -> some View {
         if #available(iOS 18, *) {
@@ -278,6 +304,7 @@ struct PhoneFollowGeometry: ViewModifier {
                 } action: { _, g in
                     follow.scrolled(offset: g[0], visible: g[1], content: g[2], inset: g[3], newest: newest)
                 }
+                .onScrollTargetVisibilityChange(idType: Int.self, threshold: 0.01) { top($0.first) }
         } else {
             content.defaultScrollAnchor(.bottom)
         }

@@ -141,14 +141,14 @@ struct Root: View {
         } else {
             // .tabItem, not Tab: that one is iOS 18's.
             TabView(selection: $tab) {
-                NavigationStack(path: $needsPath) {
-                    NeedsScreen().destinations()
+                TabStack(path: $needsPath, key: "needs", empty: ("Pick a need", "exclamationmark.bubble")) {
+                    NeedsScreen()
                 }
                 .tabItem { Label("Needs you", systemImage: "exclamationmark.bubble") }
                 .badge(model.needs.count)
                 .tag(RootTab.needs)
-                NavigationStack(path: $projectsPath) {
-                    ProjectsScreen().destinations()
+                TabStack(path: $projectsPath, key: "projects", empty: ("Pick a project", "folder")) {
+                    ProjectsScreen()
                 }
                 .tabItem { Label("Projects", systemImage: "folder") }
                 .tag(RootTab.projects)
@@ -159,11 +159,14 @@ struct Root: View {
 }
 
 extension Root {
-    /// -open: "settings", "projects", or a route opened from the Projects tab, on
+    /// -open: "settings", "projects", "needs ROUTE" (a need's route
+    /// opened from Needs you), or a route opened from the Projects tab, on
     /// the path a tap would have taken (Route.path).
     private func openLaunched() {
         guard let open = UserDefaults.standard.string(forKey: "open") else { return }
-        if open == "settings" {
+        if open.hasPrefix("needs "), let r = Route.parse(String(open.dropFirst(6))) {
+            needsPath = [r]
+        } else if open == "settings" {
             settings = true
         } else if open == "projects" {
             tab = .projects
@@ -177,24 +180,31 @@ extension Root {
 extension View {
     /// The screens a Route opens.
     func destinations() -> some View {
-        navigationDestination(for: Route.self) { r in
-            switch r {
-            case .project(let slug): ProjectScreen(slug: slug)
-            case .peerProject(let alias, let project): PeerProjectScreen(alias: alias, project: project)
-            case .session(let ref): ConversationScreen(ref: ref)
-            case .overview(let slug): OverviewScreen(slug: slug)
-            case .board(let slug): BoardScreen(slug: slug)
-            case .memory(let slug): MemoryScreen(slug: slug)
-            case .memoryFile(let slug, let path): MemoryFileScreen(slug: slug, path: path)
-            case .library(let slug): LibraryScreen(slug: slug)
-            case .task(let slug, let ref): TaskScreen(slug: slug, ref: ref)
-            }
-        }
+        navigationDestination(for: Route.self) { RouteScreen(route: $0) }
     }
 
     /// A screen's backdrop: the theme's base, under its lists.
     func backdrop() -> some View {
         modifier(BackdropModifier())
+    }
+}
+
+/// The screen a Route opens.
+struct RouteScreen: View {
+    let route: Route
+
+    var body: some View {
+        switch route {
+        case .project(let slug): ProjectScreen(slug: slug)
+        case .peerProject(let alias, let project): PeerProjectScreen(alias: alias, project: project)
+        case .session(let ref): ConversationScreen(ref: ref)
+        case .overview(let slug): OverviewScreen(slug: slug)
+        case .board(let slug): BoardScreen(slug: slug)
+        case .memory(let slug): MemoryScreen(slug: slug)
+        case .memoryFile(let slug, let path): MemoryFileScreen(slug: slug, path: path)
+        case .library(let slug): LibraryScreen(slug: slug)
+        case .task(let slug, let ref): TaskScreen(slug: slug, ref: ref)
+        }
     }
 }
 

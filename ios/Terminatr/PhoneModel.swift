@@ -57,6 +57,8 @@ final class PhoneModel {
     /// its level and methods.
     private(set) var hello: AppAPI.Hello?
     private var watching: Task<Void, Never>?
+    /// Where the user is on each screen, which a resize keeps (T825).
+    @ObservationIgnored let places = Places()
 
     /// Every need, as the Mac app's Needs you lists them.
     var needs: [Need] { Need.of(projects: projects, sessions: sessions, peers: peers) }
@@ -90,6 +92,7 @@ final class PhoneModel {
         projects = []
         sessions = []
         peers = []
+        places.forget()
     }
 
     /// Ends the bridge and the link, and the redials.

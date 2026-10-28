@@ -57,13 +57,14 @@ struct MemoryScreen: View {
         }
         .task(id: model.generation) { await list() }
         .refreshable { await list() }
+        .keepsPlace(Route.memory(slug).listKey)
         .navigationTitle("Memory")
         .backdrop()
     }
 
     private func rows(_ fs: [AppAPI.MemoryFile]) -> some View {
         ForEach(fs, id: \.path) { f in
-            NavigationLink(value: Route.memoryFile(slug, path: f.path)) { MemoryFileRow(f) }
+            RouteLink(value: Route.memoryFile(slug, path: f.path)) { MemoryFileRow(f) }
         }
     }
 

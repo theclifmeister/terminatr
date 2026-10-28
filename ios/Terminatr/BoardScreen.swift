@@ -34,6 +34,10 @@ struct BoardScreen: View {
                 Button("New Task", systemImage: "plus") { adding = true }
             }
         }
+        .keepsPlace(Route.board(slug).listKey)
+        .kept($filter, "filter \(slug)")
+        .kept($unfolded, "folds \(slug)")
+        .kept($adding, "adding \(slug)")
         .sheet(isPresented: $adding) { NewTaskSheet(project: slug) }
         .backdrop()
     }
@@ -97,7 +101,7 @@ struct BoardScreen: View {
 
     private func rows(_ ts: [AppAPI.Task]) -> some View {
         ForEach(ts) { t in
-            NavigationLink(value: Route.task(slug, ref: t.ref)) {
+            RouteLink(value: Route.task(slug, ref: t.ref)) {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text(t.ref)
                         .font(theme.mono(.subheadline, .medium))
@@ -145,7 +149,7 @@ struct TaskScreen: View {
                 if let detail {
                     header(detail)
                     if let th = detail.thread {
-                        NavigationLink(value: Route.session(SessionRef(project: slug, thread: th.record.id))) {
+                        PlainRouteLink(value: Route.session(SessionRef(project: slug, thread: th.record.id))) {
                             Label("Show thread \(th.record.id)", systemImage: "bubble.left.and.text.bubble.right")
                                 .font(theme.body(.body, .medium))
                         }

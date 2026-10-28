@@ -42,6 +42,8 @@ struct NeedActs: View {
             }
         }
         .task(id: need.id) { await check() }
+        .kept($note, "send back \(need.id)")
+        .kept($sendingBack, "sending back \(need.id)")
         .alert("Send \(need.task) back", isPresented: $sendingBack) {
             TextField("What's missing", text: $note, axis: .vertical)
             Button("Send Back") { sendBack() }

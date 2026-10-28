@@ -60,6 +60,8 @@ struct PhoneComposer: View {
         // To the bottom edge only: on iPhone Duo (T824) the bars sit on
         // a side, which this stops at.
         .background(.bar, ignoresSafeAreaEdges: .bottom)
+        .kept($text, "prompt \(ref)")
+        .kept($keys, "keys \(ref)")
     }
 
     private var field: some View {
@@ -179,6 +181,7 @@ struct TerminalKeys: View {
             }
         }
         .disabled(busy)
+        .kept($typed, "typed \(session)")
     }
 
     private func type(enter: Bool) {
