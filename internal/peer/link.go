@@ -51,6 +51,9 @@ type link struct {
 	// conversations: the server serves conversations (§16.14), so
 	// peer.panes says its conversations switch too.
 	conversations bool
+	// told takes the name the peer gives itself, from a hello that
+	// lists CapName (§16.8); nil for none.
+	told func(name string)
 
 	mu sync.Mutex
 	st proto.PeerLink
@@ -176,11 +179,32 @@ var ErrNoPanes = errors.New("the paired server's tm has no remote panes")
 // maxErrorRunes bounds the error a link keeps and shows.
 const maxErrorRunes = 200
 
-// setName changes the display name the link's status carries.
-func (l *link) setName(name string) {
+// setNames changes the names the link keeps for the peer, p's: its
+// status carries the display name.
+func (l *link) setNames(p Peer) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	l.peer.Name, l.st.Name = name, name
+	l.peer.Name, l.peer.Told, l.st.Name = p.Name, p.Told, p.Display()
+}
+
+// setSelf changes this server's own name the hello says, and tells a
+// peer that is up and takes peer.name now (§16.8).
+func (l *link) setSelf(name string) {
+	l.mu.Lock()
+	l.hello.Name = name
+	s := l.sess
+	tell := s != nil && slices.Contains(l.st.Caps, CapName)
+	l.mu.Unlock()
+	if !tell {
+		return
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), helloTimeout)
+		defer cancel()
+		if err := s.call(ctx, proto.MethodPeerName, proto.PeerNameParams{Name: name}, nil); err != nil && l.logf != nil {
+			l.logf("peer %s: peer.name: %v", l.peer.Alias, err)
+		}
+	}()
 }
 
 func (l *link) status() proto.PeerLink {
@@ -301,13 +325,20 @@ func (l *link) once(ctx context.Context) (up bool, err error) {
 	if !tlsClient(l.id.ID, l.peer.ID()) {
 		s.files.top = 1 << 31
 	}
-	peer, err := s.hello(l.hello)
+	l.mu.Lock()
+	own := l.hello
+	l.mu.Unlock()
+	peer, err := s.hello(own)
 	l.mu.Lock()
 	l.st.Version, l.st.LinkProtocol, l.st.Caps = peer.Version, peer.LinkProtocol, peer.Caps
 	l.mu.Unlock()
 	if err != nil {
 		s.cancel()
 		return false, err
+	}
+	if l.told != nil && peer.Has(CapName) {
+		// An older tm doesn't say: the name it last told stays.
+		l.told(peer.Name)
 	}
 	l.mu.Lock()
 	l.sess = s

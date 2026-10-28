@@ -249,6 +249,8 @@ func (nv *networkView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 		return nv.showTheirs(m, r)
 	case r.kind == netTheirs && s == "L":
 		nv.pick(m, "", nv.list.Peers[r.peer].Alias+"/"+r.slug)
+	case r.kind == netServer && r.peer < 0 && s == "E":
+		nv.selfName(m)
 	case r.kind == netServer && r.peer >= 0:
 		e := nv.list.Peers[r.peer]
 		switch s {
@@ -291,6 +293,8 @@ func (nv *networkView) panelKey(m *dash, r netRow, ok bool, s string) (tea.Cmd, 
 		return cmd, true
 	}
 	switch item := items[nv.psel]; {
+	case item == itemSelf && s == "enter":
+		nv.selfName(m)
 	case item == itemName && s == "enter":
 		nv.name(m, nv.list.Peers[r.peer])
 	case item == itemRelay && s == "enter":
@@ -517,6 +521,10 @@ func (nv *networkView) click(m *dash, item, col int, double bool) tea.Cmd {
 		if i := switchAt(words, cur, col, nl.panel.x); i >= 0 {
 			return nv.panelSet(m, r, nl.panel.item, i)
 		}
+	case itemSelf:
+		if was || double {
+			nv.selfName(m)
+		}
 	case itemName:
 		if was || double {
 			nv.name(m, nv.list.Peers[r.peer])
@@ -696,6 +704,30 @@ func (nv *networkView) name(m *dash, e PeerEntry) {
 		}})
 }
 
+// selfName asks for this server's own name, the host label as the faint
+// placeholder, and sets it as tm network name does: empty clears it.
+func (nv *networkView) selfName(m *dash) {
+	was := peer.OwnName()
+	m.push(&inputView{title: "Name for this server", lineEdit: newLine(was), placeholder: peer.HostName(), keep: true, max: peer.MaxAlias, cancel: "name unchanged for this server",
+		label: "What this server calls itself (a-z, 0-9 and -): its header here, and the paired servers show it in its alias's place, once they run a tm that knows it. Empty is the host name again:",
+		submit: func(s string) tea.Cmd {
+			s = strings.TrimSpace(s)
+			if s == was {
+				m.msg = "name unchanged for this server"
+				return nil
+			}
+			src := m.src
+			return m.act(func() actionMsg {
+				err := src.SetSelfName(s)
+				msg := "this server is called " + s + "; the paired servers hear of it"
+				if s == "" {
+					msg = "this server is called by its host name again"
+				}
+				return actionMsg{err: err, msg: msg, then: nv.reload}
+			})
+		}})
+}
+
 // unpair asks, then unpins server e and has the server close its
 // connection, as tm peer remove does; the list is read again after.
 func (nv *networkView) unpair(m *dash, e PeerEntry) {
@@ -721,6 +753,7 @@ var netKeys = []keyHelp{
 	{"K F R M X", "on a link: ask first, files, resume or ask back, write, unlink"},
 	{"A X", "on a ⚑: send, accept or choose / drop or decline"},
 	{"P J", "pair with another server / join the code one shows"},
+	{"E", "this server: its own name, which the paired servers show"},
 	{"S E V U X", "a paired server: ask to share, name, panes, relay update, unpair"},
 	{"D", "pair a phone: a QR code to scan with the terminatr app"},
 	{"V E X", "a phone: its level (view, answer, write), name, remove"},

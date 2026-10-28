@@ -173,7 +173,11 @@ func mirror(m *dash, e PeerEntry) *proto.PeerMirror {
 
 // netName is a paired server's name here: its display name, else its
 // alias.
-func netName(e PeerEntry) string { return cmp.Or(e.Name, e.Alias) }
+func netName(e PeerEntry) string { return cmp.Or(e.shown(), e.Alias) }
+
+// shown is e's display name: the one set here, else the one it gives
+// itself; "" for neither.
+func (e PeerEntry) shown() string { return cmp.Or(e.Name, e.Told) }
 
 // pairedNames are the paired servers' names, joined.
 func (nv *networkView) pairedNames() string {
@@ -304,11 +308,12 @@ const netAliasMax = 32
 // whoLook is a paired server's name as rows draw it: its display name
 // with the alias beside it, or the alias.
 func whoLook(e PeerEntry) string {
-	if e.Name == "" {
+	name := e.shown()
+	if name == "" || name == e.Alias {
 		return th().Head.Render(fit(e.Alias, min(ansi.StringWidth(e.Alias), netAliasMax)))
 	}
-	who := peer.Both(e.Name, e.Alias)
-	return th().Head.Render(e.Name) + th().Faint.Render(fit(strings.TrimPrefix(who, e.Name), min(ansi.StringWidth(who)-ansi.StringWidth(e.Name), netAliasMax)))
+	who := peer.Both(name, e.Alias)
+	return th().Head.Render(name) + th().Faint.Render(fit(strings.TrimPrefix(who, name), min(ansi.StringWidth(who)-ansi.StringWidth(name), netAliasMax)))
 }
 
 // rowLines are row r's lines in a tree w cells wide; only a note wraps.
@@ -469,7 +474,7 @@ func (nv *networkView) detail(m *dash, r netRow, w int) [2]string {
 				th().Faint.Render(shares + " · P pairs a new one")}
 		}
 		e := nv.list.Peers[r.peer]
-		l1 := []string{peer.Both(e.Name, e.Alias), "id " + e.Short}
+		l1 := []string{peer.Both(e.shown(), e.Alias), "id " + e.Short}
 		if v := peerVersion(m, e); v != "" {
 			l1 = append(l1, "tm "+v)
 		}
@@ -558,7 +563,7 @@ func (nv *networkView) rowKeys(m *dash, r netRow, ok bool) string {
 	case !ok:
 		return "P pair · J join · " + tail
 	case r.kind == netServer && r.peer < 0:
-		return "enter fold · tab details · P pair · J join · " + tail
+		return "E name · enter fold · tab details · P pair · J join · " + tail
 	case r.kind == netPhones:
 		return "D pair a phone · enter fold · tab details · " + tail
 	case r.kind == netDevice:

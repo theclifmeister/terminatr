@@ -2,15 +2,15 @@
 ╭─ Network · studio + 2 paired ────────────────────────────────────────────────────────────────────────────╮
 │ ▾ ◉ studio · this server 4F2A-91C3          shares 0 of 2 │ studio · this server                         │
 │    ■ terminatr         [ ] not shared            no links │ ──────────────────────────────────────────── │
-│    ■ web               [ ] not shared            no links │ id            4F2A-91C3                      │
-│                                                           │ paired        work, nas                      │
-│ ▾ ◉ work (mini) · connected 38 ms              panes view │ shares        nothing                        │
-│    ■ acme-api          shared with you · + link (L)       │                                              │
-│    ■ infra             shared with you · + link (L)       │ P pairs with another server, J joins one's   │
-│                                                           │ pairing: the code works once, for 10         │
-│ ▾ ○ nas · offline 4m · relay                    panes off │ minutes, and both of you compare six digits  │
-│    ■ media · stale     shared with you · + link (L)       │ before Y.                                    │
-│                                                           │                                              │
+│    ■ web               [ ] not shared            no links │ name (E)      none: the host name            │
+│                                                           │ id            4F2A-91C3                      │
+│ ▾ ◉ work (mini) · connected 38 ms              panes view │ paired        work, nas                      │
+│    ■ acme-api          shared with you · + link (L)       │ shares        nothing                        │
+│    ■ infra             shared with you · + link (L)       │                                              │
+│                                                           │ P pairs with another server, J joins one's   │
+│ ▾ ○ nas · offline 4m · relay                    panes off │ pairing: the code works once, for 10         │
+│    ■ media · stale     shared with you · + link (L)       │ minutes, and both of you compare six digits  │
+│                                                           │ before Y.                                    │
 │ ▾ phones                                  D pairs a phone │                                              │
 │    No phone yet. D pairs one: a QR code to scan with the  │                                              │
 │    terminatr app on the iPhone.                           │                                              │
@@ -24,7 +24,7 @@
 │                                                           │                                              │
 │                                                           │                                              │
 │                                                                                                          │
-│ enter fold · tab details · P pair · J join · ? keys · esc close                                          │
+│ E name · enter fold · tab details · P pair · J join · ? keys · esc close                                 │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 == p:terminatr
 ╭─ Network · studio + 2 paired ────────────────────────────────────────────────────────────────────────────╮

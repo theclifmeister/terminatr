@@ -1,6 +1,7 @@
 package peer
 
 import (
+	"cmp"
 	"crypto/ed25519"
 	"encoding/json"
 	"errors"
@@ -28,7 +29,12 @@ type Peer struct {
 	// Name is the display name the user gave it here (tm peer name),
 	// shown in its alias's place; either targets it (Names). The alias
 	// stays the key of everything stored. Nothing of it crosses a link.
-	Name  string            `json:"name,omitempty"`
+	Name string `json:"name,omitempty"`
+	// Told is the name the server gives itself, as its link last said
+	// ([server] name there, §16.8): shown in the alias's place while no
+	// Name is set here, never instead of the alias as a key. "" for none,
+	// or one that is another peer's, this server's or a project's here.
+	Told  string            `json:"told,omitempty"`
 	Key   ed25519.PublicKey `json:"key"`   // base64
 	Relay string            `json:"relay"` // wss://host[:port][#sha256=<pin>]
 	// Panes is what the peer may do with this server's panes
@@ -57,17 +63,18 @@ func (p Peer) PanesLevel() string {
 // ID is the peer's server id.
 func (p Peer) ID() ID { return IDOf(p.Key) }
 
-// Shown is what screens and agents call p: its name, else its alias.
-func (p Peer) Shown() string {
-	if p.Name != "" {
-		return p.Name
-	}
-	return p.Alias
-}
+// Shown is what screens and agents call p: its display name, else its
+// alias.
+func (p Peer) Shown() string { return cmp.Or(p.Display(), p.Alias) }
 
-// Both is p with its alias beside a name, "work (del-02-0468-lt)", for
-// where both help (tm peer list, Settings → Peers).
-func (p Peer) Both() string { return Both(p.Name, p.Alias) }
+// Display is p's display name: the name set here, else the one it gives
+// itself; "" for neither.
+func (p Peer) Display() string { return cmp.Or(p.Name, p.Told) }
+
+// Both is p with its alias beside its display name, "work
+// (del-02-0468-lt)", for where both help (tm peer list, Settings →
+// Peers).
+func (p Peer) Both() string { return Both(p.Display(), p.Alias) }
 
 // Both is name with alias beside it; alias alone without a name.
 func Both(name, alias string) string {
@@ -86,6 +93,9 @@ func (p Peer) check() error {
 	}
 	if p.Name != "" && CheckName(p.Name) != nil {
 		return fmt.Errorf("peer %s: %w", p.Alias, CheckName(p.Name))
+	}
+	if p.Told != "" && CheckName(p.Told) != nil {
+		return fmt.Errorf("peer %s: told %w", p.Alias, CheckName(p.Told))
 	}
 	if p.Panes != "" && !proto.ValidPanes(p.Panes) {
 		return fmt.Errorf("peer %s: panes %q is not off, view or write", p.Alias, p.Panes)
@@ -272,8 +282,8 @@ func Pin(dir string, key ed25519.PublicKey, relayURL, name, as string) (Peer, er
 				if as == "" {
 					p.Alias = q.Alias
 				}
-				// Pairing again keeps the switches and the name.
-				p.Panes, p.Conversations, p.Name = q.Panes, q.Conversations, q.Name
+				// Pairing again keeps the switches and the names.
+				p.Panes, p.Conversations, p.Name, p.Told = q.Panes, q.Conversations, q.Name, q.Told
 			case q.Alias == as:
 			default:
 				kept = append(kept, q)
@@ -291,13 +301,22 @@ func Pin(dir string, key ed25519.PublicKey, relayURL, name, as string) (Peer, er
 		if p.Alias == "" {
 			base := DefaultAlias(name)
 			p.Alias = base
-			for n := 2; slices.ContainsFunc(kept, func(q Peer) bool { return q.Alias == p.Alias || q.Name == p.Alias }); n++ {
+			for n := 2; slices.ContainsFunc(kept, func(q Peer) bool { return q.Alias == p.Alias || q.Name == p.Alias || q.Told == p.Alias }); n++ {
 				p.Alias = fmt.Sprintf("%s-%d", base, n)
 			}
 		}
 		if p.Name != "" && slices.ContainsFunc(kept, func(q Peer) bool { return q.Alias == p.Name || q.Name == p.Name }) {
 			// Another peer took the name meanwhile: the alias shows.
 			p.Name = ""
+		}
+		if p.Told == p.Alias || slices.ContainsFunc(kept, func(q Peer) bool { return q.Alias == p.Told || q.Name == p.Told || q.Told == p.Told }) {
+			p.Told = ""
+		}
+		for i, q := range kept {
+			// A name it told yields to the alias or name pinned now.
+			if q.Told == p.Alias || q.Told == p.Name {
+				kept[i].Told = ""
+			}
 		}
 		return append(kept, p), nil
 	})
@@ -411,7 +430,7 @@ func SetName(dir, who, name string, taken NameTaken) (Peer, error) {
 		}
 		if name != "" {
 			for j, q := range peers {
-				if j != i && (q.Alias == name || q.Name == name) {
+				if j != i && (q.Alias == name || q.Name == name || q.Told == name) {
 					return nil, &NameError{Name: name, Why: "the paired server " + q.Both() + " is called that"}
 				}
 			}
@@ -453,6 +472,16 @@ func NamesOf(peers []Peer) Names {
 				n.alias[p.Name] = p.Alias
 			}
 			n.shown[p.Alias] = p.Name
+		}
+	}
+	// The names servers give themselves after the ones set here: a name
+	// set here wins.
+	for _, p := range peers {
+		if p.Name == "" && p.Told != "" && p.Told != p.Alias {
+			if _, ok := n.alias[p.Told]; !ok {
+				n.alias[p.Told] = p.Alias
+				n.shown[p.Alias] = p.Told
+			}
 		}
 	}
 	return n

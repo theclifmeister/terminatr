@@ -77,3 +77,48 @@ func TestPeerName(t *testing.T) {
 		t.Fatalf("after clear: %+v", ps)
 	}
 }
+
+// tm network name: the user's; this server's own name in config.toml,
+// refused when a paired server or a project here has it; cleared with
+// "" for the host name. The server is told, and tm network shows it.
+func TestNetworkName(t *testing.T) {
+	h := newHarness(t)
+	dir, err := peer.Dir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := peer.EnsureIdentity(dir); err != nil {
+		t.Fatal(err)
+	}
+	k1, _, _ := ed25519.GenerateKey(nil)
+	k2, _, _ := ed25519.GenerateKey(nil)
+	if err := peer.SavePeers(dir, []peer.Peer{{Alias: "mini", Name: "work", Key: k1, Relay: "wss://r.example.net"}, {Alias: "nas", Told: "attic", Key: k2, Relay: "wss://r.example.net"}}); err != nil {
+		t.Fatal(err)
+	}
+	reloads := stubPeerServer(t, &proto.LinkStatus{})
+	h.ok(human, "project", "new", "acme")
+
+	h.expect(1, "human-only", coord, "network", "name", "box")
+	h.expect(1, "human-only", thr, "network", "name", "box")
+	h.expect(2, "usage: tm network", human, "network", "name")
+	h.expect(2, "usage: tm network", human, "network", "name", "box", "--json")
+	h.expect(2, "name \"Bad\"", human, "network", "name", "Bad")
+	for _, n := range []string{"mini", "work", "attic", "acme"} {
+		h.expect(1, "name-taken", human, "network", "name", n)
+	}
+	if out := h.ok(human, "network", "name", "office"); !strings.Contains(out, "This server is called office now") || *reloads != 1 || peer.SelfName() != "office" {
+		t.Fatalf("name: %q, %d reloads, %q", out, *reloads, peer.SelfName())
+	}
+	var js struct{ Server struct{ Name string } }
+	if err := json.Unmarshal([]byte(h.ok(human, "network", "--json")), &js); err != nil || js.Server.Name != "office" {
+		t.Fatalf("network --json: %+v, %v", js, err)
+	}
+	// A paired server may not take it here now.
+	h.expect(1, "name-taken", human, "peer", "name", "mini", "office")
+	if out := h.ok(human, "peer", "list"); !strings.Contains(out, "attic (nas)") {
+		t.Fatalf("list: %q", out)
+	}
+	if out := h.ok(human, "network", "name", ""); !strings.Contains(out, "called by its host name again") || peer.OwnName() != "" || *reloads != 2 {
+		t.Fatalf("clear: %q, %d reloads", out, *reloads)
+	}
+}

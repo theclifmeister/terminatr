@@ -6,7 +6,6 @@ import (
 	"crypto/tls"
 	"encoding/hex"
 	"errors"
-	"os"
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/device"
@@ -548,6 +547,5 @@ func newPairingID() string {
 
 // pairName is the name this server gives the phone.
 func pairName() string {
-	h, _ := os.Hostname()
-	return peer.HostLabel(h)
+	return peer.SelfName()
 }

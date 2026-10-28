@@ -390,7 +390,8 @@ func Run(ctx context.Context, opts Options) error {
 	// The links to paired servers: each its own goroutine, which no
 	// local call waits on (docs/SPEC.md §16.7). They read the shared
 	// projects through peerExport (§16.9), nothing else.
-	s.peers = peer.Start(peer.Options{Dir: peer.DirIn(p.Home), Version: version.Version, Logf: logger.Printf, Export: s.peerExport(), Messages: peerMessages{}, Panes: peerPanes{s}, Files: link.Files(), Transcripts: peerTranscripts{s}})
+	s.peers = peer.Start(peer.Options{Dir: peer.DirIn(p.Home), Version: version.Version, Logf: logger.Printf, Export: s.peerExport(), Messages: peerMessages{}, Panes: peerPanes{s}, Files: link.Files(), Transcripts: peerTranscripts{s},
+		Name: peer.OwnName, Taken: func(n string) string { return project.PeerNameTaken(n, peer.SelfName()) }})
 	defer s.peers.Close()
 	// What they share, for the consoles (§16.10); a peer's pane switch
 	// reaches the remote panes open here at once (§16.12).

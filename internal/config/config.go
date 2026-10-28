@@ -397,7 +397,7 @@ type Config struct {
 	// enabled mod whose theme, or sidebar layout, every console uses. ""
 	// (unset) is the built-in one.
 	Theme, Layout string
-	// Unknown are the keys under [keys], [ui], [mods], [mods.<id>] and [agents.<name>] that tm doesn't know
+	// Unknown are the keys under [keys], [ui], [server], [mods], [mods.<id>] and [agents.<name>] that tm doesn't know
 	// (e.g. "ui.icon"), sorted. tm doctor reports them; unlike a
 	// project's, they don't fail Load, so a typo there never stops tm.
 	Unknown []string
@@ -423,7 +423,11 @@ type Config struct {
 	// UpdateCheck is [ui] update_check: the server looks once a day for a
 	// newer release and the dashboard says so. On unless set false.
 	UpdateCheck bool
-	projects    map[string]rawSafety
+	// ServerName is [server] name: this server's own name, the one
+	// screens show and paired servers are told (peer.SelfName); "" when
+	// unset, for its host name.
+	ServerName string
+	projects   map[string]rawSafety
 	// defaults is the [defaults] table: the all-projects settings.
 	defaults rawSafety
 	agent    string
@@ -488,6 +492,9 @@ func parse(path string, data []byte) (*Config, error) {
 		Azure struct {
 			Hosts []string `toml:"hosts"`
 		} `toml:"azure"`
+		Server struct {
+			Name string `toml:"name"`
+		} `toml:"server"`
 		// AgentMod is the removed agent mod's [agent_mod], any keys.
 		AgentMod map[string]any `toml:"agent_mod"`
 		// Mods are the user mods' [mods.<id>] tables and, under the
@@ -505,7 +512,8 @@ func parse(path string, data []byte) (*Config, error) {
 	sort.Strings(old)
 	c := &Config{AzureHosts: raw.Azure.Hosts, Mods: mods, Path: path, projects: raw.Projects, defaults: raw.Defaults, agent: raw.DefaultAgent, agents: raw.Agents,
 		Prefix: cmp.Or(raw.Keys.Prefix, raw.Keys.Detach), Icons: raw.UI.Icons, Theme: raw.UI.Theme, Layout: raw.UI.Layout, AgentMod: old,
-		ContextHint: DefaultContextHint, UpdateCheck: raw.UI.UpdateCheck == nil || *raw.UI.UpdateCheck, NeedsFirst: raw.UI.NeedsFirst}
+		ContextHint: DefaultContextHint, UpdateCheck: raw.UI.UpdateCheck == nil || *raw.UI.UpdateCheck, NeedsFirst: raw.UI.NeedsFirst,
+		ServerName: raw.Server.Name}
 	if h := raw.UI.ContextHint; h != nil {
 		if *h < 0 || *h > 100 {
 			return c, fmt.Errorf("%s: ui.context_hint is a percent from 0 (never) to 100", path)
@@ -530,7 +538,7 @@ func parse(path string, data []byte) (*Config, error) {
 			// excludedList or guideList.
 		case len(k) >= 3 && k[0] == "projects", len(k) >= 2 && k[0] == "defaults":
 			return c, fmt.Errorf("%s: unknown setting %s", path, k.String())
-		case len(k) >= 2 && (k[0] == "keys" || k[0] == "ui" || k[0] == "mods"),
+		case len(k) >= 2 && (k[0] == "keys" || k[0] == "ui" || k[0] == "mods" || k[0] == "server"),
 			len(k) >= 3 && k[0] == "agents":
 			c.Unknown = append(c.Unknown, k.String())
 		}

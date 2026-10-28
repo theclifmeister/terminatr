@@ -65,6 +65,18 @@ type PeerPanesParams struct {
 	Conversations string `json:"conversations,omitempty"`
 }
 
+// MethodPeerName tells the paired server this server's own name changed
+// (PeerNameParams), so it shows the new one in the alias's place
+// (docs/SPEC.md §16.8); sent only to a peer whose hello lists
+// peer.CapName.
+const MethodPeerName = "peer.name"
+
+// PeerNameParams are the params of peer.name: the server's own name now,
+// "" for none set (the other side shows its alias for it).
+type PeerNameParams struct {
+	Name string `json:"name"`
+}
+
 // PeerAttachParams are the params of peer.attach: the session (a
 // coordinator's or a thread's of the shared Project), the stream id the
 // caller picked for its frames, and the caller's pane size (informational,

@@ -61,7 +61,7 @@ var notHumanOnly = map[string]gate{
 // of the control socket.
 var notControl = map[string]bool{
 	proto.MethodPeerProjects: true, proto.MethodPeerWatch: true, proto.MethodPeerAttach: true,
-	proto.MethodPeerPanes: true, proto.MethodPeerMessage: true, proto.MethodPeerPopup: true,
+	proto.MethodPeerPanes: true, proto.MethodPeerName: true, proto.MethodPeerMessage: true, proto.MethodPeerPopup: true,
 	proto.MethodPeerFileFetch: true, proto.MethodPeerTranscript: true,
 }
 

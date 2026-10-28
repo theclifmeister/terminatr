@@ -44,6 +44,13 @@ type Options struct {
 	// whose switches allow it (peer.transcript); nil serves none and
 	// leaves out CapTranscript.
 	Transcripts TranscriptHost
+	// Name is this server's own name to tell paired servers (OwnName,
+	// §16.8), read again on Reload; nil tells none and leaves out
+	// CapName.
+	Name func() string
+	// Taken says why a name a paired server gives itself can't show
+	// here though no other peer has it (a project here); nil for none.
+	Taken NameTaken
 	// noPaneLevel plays tm v0.27.0 (tests): no CapPaneLevel, no
 	// peer.panes.
 	noPaneLevel bool
@@ -57,10 +64,12 @@ type Manager struct {
 	stop context.CancelFunc
 	wg   sync.WaitGroup
 
-	mu      sync.Mutex
-	id      *Identity
-	err     error
-	links   map[ID]*running
+	mu    sync.Mutex
+	id    *Identity
+	err   error
+	links map[ID]*running
+	// self is this server's own name the hellos say (Options.Name).
+	self    string
 	onPanes func(id ID, p proto.PeerPanesParams)
 	// fileSlots bounds the file streams served over all links.
 	fileSlots chan struct{}
@@ -118,6 +127,14 @@ func (m *Manager) Reload() error {
 		}
 	}
 	m.id = id
+	if m.opts.Name != nil {
+		if self := m.opts.Name(); self != m.self {
+			m.self = self
+			for _, r := range m.links {
+				r.l.setSelf(self)
+			}
+		}
+	}
 	want := map[ID]Peer{}
 	for _, p := range peers {
 		if p.ID() == id.ID {
@@ -136,8 +153,8 @@ func (m *Manager) Reload() error {
 			if p.ConversationsOn() != r.l.convOn() {
 				r.l.setConversations(p.ConversationsOn())
 			}
-			if p.Name != r.l.status().Name {
-				r.l.setName(p.Name)
+			if p.Display() != r.l.status().Name {
+				r.l.setNames(p)
 			}
 		}
 	}
@@ -155,7 +172,7 @@ func (m *Manager) add(id *Identity, cert tls.Certificate, p Peer) {
 		id:        id,
 		cert:      cert,
 		t:         RelayTransport(p.Relay, id, p.ID(), m.opts.RelayTLS),
-		hello:     Hello{LinkProtocol: LinkProtocol, Version: m.opts.Version, Caps: m.caps()},
+		hello:     Hello{LinkProtocol: LinkProtocol, Version: m.opts.Version, Caps: m.caps(), Name: m.self},
 		logf:      m.opts.Logf,
 		backoff:   m.opts.Backoff,
 		fileSlots: m.fileSlots,
@@ -171,8 +188,12 @@ func (m *Manager) add(id *Identity, cert tls.Certificate, p Peer) {
 	if m.opts.noPaneLevel {
 		d.panesHere = nil
 	}
+	if m.opts.Name != nil {
+		l.told = func(name string) { m.told(p.ID(), name) }
+		d.named = l.told
+	}
 	l.methods = d.methods()
-	l.st = proto.PeerLink{Alias: p.Alias, Name: p.Name, ID: p.ID().String(), Transport: l.t.String(), State: proto.LinkConnecting}
+	l.st = proto.PeerLink{Alias: p.Alias, Name: p.Display(), ID: p.ID().String(), Transport: l.t.String(), State: proto.LinkConnecting}
 	ctx, stop := context.WithCancel(m.ctx)
 	r := &running{l: l, stop: stop}
 	m.links[p.ID()] = r
@@ -186,6 +207,9 @@ func (m *Manager) add(id *Identity, cert tls.Certificate, p Peer) {
 // caps are the capabilities this server's hello lists.
 func (m *Manager) caps() []string {
 	caps := slices.Clone(Caps)
+	if m.opts.Name != nil {
+		caps = append(caps, CapName)
+	}
 	if m.opts.Export != nil {
 		caps = append(caps, CapWatch)
 		if _, ok := m.opts.Export.(PopupExporter); ok {
@@ -208,6 +232,73 @@ func (m *Manager) caps() []string {
 		return caps
 	}
 	return append(caps, CapPaneLevel)
+}
+
+// told keeps name, the one the paired server id gives itself, as its
+// Told (§16.8): "" when it is another peer's alias or name, this
+// server's own name or Options.Taken's (a project here), and the log
+// says why; its alias shows then.
+func (m *Manager) told(id ID, name string) {
+	var why, alias string
+	var got Peer
+	if peers, err := LoadPeers(m.opts.Dir); err == nil {
+		if i := slices.IndexFunc(peers, func(q Peer) bool { return q.ID() == id }); i >= 0 && peers[i].Told == name {
+			// Kept already: each link up says it again.
+			got = peers[i]
+		}
+	}
+	if got.Alias != "" {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		if r := m.links[id]; r != nil {
+			r.l.setNames(got)
+		}
+		return
+	}
+	err := change(m.opts.Dir, func(peers []Peer) ([]Peer, error) {
+		i := slices.IndexFunc(peers, func(q Peer) bool { return q.ID() == id })
+		if i < 0 {
+			return peers, nil
+		}
+		keep := name
+		if keep != "" {
+			why = m.toldTaken(peers, i, keep)
+			if why != "" {
+				keep = ""
+			}
+		}
+		peers[i].Told = keep
+		got, alias = peers[i], peers[i].Alias
+		return peers, nil
+	})
+	if err != nil {
+		m.logf("peer: keeping the name a paired server gives itself: %v", err)
+		return
+	}
+	if why != "" {
+		m.logf("peer %s: calls itself %s, but %s; shown by its alias", alias, name, why)
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if r := m.links[id]; r != nil && got.Alias != "" {
+		r.l.setNames(got)
+	}
+}
+
+// toldTaken says why name can't show for peers[i]: "" when it can.
+func (m *Manager) toldTaken(peers []Peer, i int, name string) string {
+	for j, q := range peers {
+		if j != i && (q.Alias == name || q.Name == name || q.Told == name) {
+			return "the paired server " + q.Both() + " is called that here"
+		}
+	}
+	if name == SelfName() {
+		return "it is this server's own name"
+	}
+	if m.opts.Taken != nil {
+		return m.opts.Taken(name)
+	}
+	return ""
 }
 
 // OnPanes sets f to hear a paired server's word that its switches for

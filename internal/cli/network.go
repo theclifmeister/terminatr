@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"os"
 	"slices"
 	"strings"
 	"time"
@@ -19,7 +18,8 @@ import (
 	"github.com/theclifmeister/terminatr/internal/textsafe"
 )
 
-const networkUsage = `usage: tm network [--json]   (this server, the paired servers, what each shares, the links and what needs you)`
+const networkUsage = `usage: tm network [--json]   (this server, the paired servers, what each shares, the links and what needs you)
+       tm network name NEW|""   (this server's own name; "" for its host name)`
 
 func init() {
 	commands["network"] = runNetwork
@@ -97,6 +97,7 @@ type (
 	networkPeer struct {
 		Alias      string          `json:"alias"`
 		Name       string          `json:"name,omitempty"`
+		Told       string          `json:"told,omitempty"`
 		ID         string          `json:"id"`
 		Short      string          `json:"short"`
 		Relay      string          `json:"relay"`
@@ -147,11 +148,14 @@ func runNetwork(e *Env, args []string) error {
 	if err != nil {
 		return err
 	}
-	if len(pos) != 0 {
+	if len(pos) != 0 && (pos[0] != "name" || len(pos) != 2 || *asJSON) {
 		return usagef("%s", networkUsage)
 	}
 	if e.Caller.Kind != caller.Human {
 		return &project.Error{Code: "human-only", Msg: "the network of servers and links is the user's, in their own terminal"}
+	}
+	if len(pos) == 2 {
+		return e.networkName(pos[1])
 	}
 	t, err := readNetwork()
 	if err != nil {
@@ -161,6 +165,37 @@ func runNetwork(e *Env, args []string) error {
 		return e.printJSON(t)
 	}
 	e.printNetwork(t, time.Now())
+	return nil
+}
+
+// networkName sets this server's own name, or clears it with "" for the
+// host name (docs/SPEC.md §16.8), and has a running server tell the
+// paired servers.
+func (e *Env) networkName(name string) error {
+	dir, err := peer.Dir()
+	if err != nil {
+		return err
+	}
+	if name == peer.OwnName() {
+		fmt.Fprintf(e.Stdout, "This server is called %s already.\n", peer.SelfName())
+		return nil
+	}
+	err = peer.SetSelfName(dir, name, func(n string) string { return project.PeerNameTaken(n, "") })
+	var taken *peer.NameError
+	switch {
+	case errors.As(err, &taken):
+		return &project.Error{Code: "name-taken", Msg: err.Error()}
+	case err != nil && name != "" && peer.CheckName(name) != nil:
+		return usagef("%v", err)
+	case err != nil:
+		return err
+	}
+	if name == "" {
+		fmt.Fprintf(e.Stdout, "This server is called by its host name again: %s.\n", peer.SelfName())
+	} else {
+		fmt.Fprintf(e.Stdout, "This server is called %s now; the paired servers show it in its alias's place.\n", name)
+	}
+	e.reload()
 	return nil
 }
 
@@ -184,8 +219,7 @@ func readNetwork() (*networkTree, error) {
 	if err != nil {
 		return nil, err
 	}
-	host, _ := os.Hostname()
-	t := &networkTree{Server: networkHere{Name: peer.HostLabel(host), Projects: []networkProject{}}, Peers: []networkPeer{}}
+	t := &networkTree{Server: networkHere{Name: peer.SelfName(), Projects: []networkProject{}}, Peers: []networkPeer{}}
 	if id != nil {
 		t.Server.ID, t.Server.Short = id.ID.String(), id.ID.Short()
 	}
@@ -246,7 +280,7 @@ func readNetwork() (*networkTree, error) {
 		}
 	}
 	for _, p := range peers {
-		np := networkPeer{Alias: p.Alias, Name: p.Name, ID: p.ID().String(), Short: p.ID().Short(), Relay: p.Relay,
+		np := networkPeer{Alias: p.Alias, Name: p.Name, Told: p.Told, ID: p.ID().String(), Short: p.ID().Short(), Relay: p.Relay,
 			Panes: proto.PanesWord(p.PanesLevel()), Conversations: convWord(p.ConversationsOn()), Projects: []networkTheirs{}, Shares: shares[p.Alias]}
 		if c, ok := conns[np.ID]; ok {
 			np.Connection = &c
@@ -454,7 +488,7 @@ func (e *Env) printNetwork(t *networkTree, now time.Time) {
 		if pe.TheirPanes != "" {
 			panes += ", it gives you " + pe.TheirPanes
 		}
-		fmt.Fprintf(w, "%s · %s · %s · %s\n", peer.Both(pe.Name, pe.Alias), pe.Short, conn, panes)
+		fmt.Fprintf(w, "%s · %s · %s · %s\n", peer.Both(cmp.Or(pe.Name, pe.Told), pe.Alias), pe.Short, conn, panes)
 		switch {
 		case len(pe.Projects) == 0 && !t.Running:
 		case len(pe.Projects) == 0:

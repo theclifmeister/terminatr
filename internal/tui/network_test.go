@@ -75,7 +75,7 @@ func TestNetworkTree(t *testing.T) {
 		"shared with you · + link (L)",
 		"○ nas · offline 4m · relay",
 		"media · stale",
-		"enter fold · tab details · P pair · J join · ? keys · esc close",
+		"E name · enter fold · tab details · P pair · J join · ? keys",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing %q in\n%s", want, out)
@@ -258,6 +258,34 @@ func TestNetworkUnpair(t *testing.T) {
 	}
 	if out := netBox(m); strings.Contains(out, "nas ·") || !strings.Contains(out, "+ 1 paired") {
 		t.Errorf("after:\n%s", out)
+	}
+}
+
+// TestNetworkSelfName: E on this server asks for its own name, starting
+// from the one set; a name sets it as tm network name does, empty
+// clears it. A paired server that names itself shows by that name.
+func TestNetworkSelfName(t *testing.T) {
+	m, src := netDash(t, 80, 24)
+	nv := netOpen(t, m)
+	press(m, "E")
+	in, ok := m.top().(*inputView)
+	if !ok || in.title != "Name for this server" || in.value() != "" {
+		t.Fatalf("E: %T %+v", m.top(), m.top())
+	}
+	in.lineEdit = newLine("office")
+	drain(t, m, press(m, "enter"))
+	if !slices.Equal(src.selfSet, []string{"office"}) || !strings.HasPrefix(m.msg, "this server is called office") {
+		t.Fatalf("set %v, %q", src.selfSet, m.msg)
+	}
+	press(m, "E", "esc")
+	if m.msg != "name unchanged for this server" || len(src.selfSet) != 1 {
+		t.Errorf("esc: %v, %q", src.selfSet, m.msg)
+	}
+
+	src.peers.Peers[1].Told = "attic"
+	nv.reload(m)
+	if out := netBox(m); !strings.Contains(out, "attic (nas)") {
+		t.Errorf("a told name doesn't show:\n%s", out)
 	}
 }
 

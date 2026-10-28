@@ -71,6 +71,8 @@ type fakeSource struct {
 	logReads []proto.LogReadParams
 	peerErr  error
 	nameErr  error // SetPeerName's answer
+	// selfSet are SetSelfName's calls.
+	selfSet []string
 	// popup and popupErr are PeerPopup's answer; popups its calls,
 	// "alias/slug".
 	popup        proto.PeerPopup
@@ -357,6 +359,13 @@ func (f *fakeSource) SetPeerConversations(alias string, on bool) error {
 			f.peers.Peers[i].ConversationsOff = !on
 		}
 	}
+	return nil
+}
+func (f *fakeSource) SetSelfName(name string) error {
+	if f.nameErr != nil {
+		return f.nameErr
+	}
+	f.selfSet = append(f.selfSet, name)
 	return nil
 }
 func (f *fakeSource) SetPeerName(alias, name string) error {

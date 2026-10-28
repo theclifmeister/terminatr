@@ -694,8 +694,7 @@ func (pv *projectView) overview(m *dash, p ProjectData, w int) ([]string, int, [
 		}
 	}
 	out = append(out, "")
-	host, _ := os.Hostname()
-	out = append(out, field("Machines")+"this one"+th().Faint.Render("  "+host))
+	out = append(out, field("Machines")+"this one"+th().Faint.Render("  "+thisHost()))
 	out = append(out, "")
 	out = append(out, field("Coordinator")+pv.coordinatorLine(m, p))
 	threads := map[string][]string{}
