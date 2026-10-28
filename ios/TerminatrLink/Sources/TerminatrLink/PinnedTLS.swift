@@ -2,12 +2,13 @@ import CryptoKit
 import Foundation
 import NIOCore
 import NIOSSL
+import Network
 
 /// The link's TLS, as internal/peer/tls.go has it: 1.3 only, each end
 /// presenting its own self-signed Ed25519 certificate and accepting only
 /// the other's pinned key, never a CA's.
 enum PinnedTLS {
-    static func context(identity: LinkIdentity, client: Bool) throws -> NIOSSLContext {
+    static func context(identity: LinkIdentity, client: Bool, keyLog: NIOSSLKeyLogCallback? = nil) throws -> NIOSSLContext {
         let cert = try NIOSSLCertificate(bytes: identity.certificate(name: "tm phone"), format: .der)
         let key = try NIOSSLPrivateKey(bytes: identity.pkcs8, format: .der)
         var c = client ? TLSConfiguration.makeClientConfiguration()
@@ -23,6 +24,7 @@ enum PinnedTLS {
         // BoringSSL leaves Ed25519 out of its defaults.
         c.verifySignatureAlgorithms = [.ed25519]
         c.signingSignatureAlgorithms = [.ed25519]
+        c.keyLogCallback = keyLog
         return try NIOSSLContext(configuration: c)
     }
 
@@ -51,30 +53,29 @@ enum PinnedTLS {
         }
     }
 
-    /// The outer TLS to a relay: by its key's pin (the hex SHA-256 of its
+    /// The outer TLS to a relay, in Network.framework (so iOS brings up
+    /// cellular and VPN for it): by its key's pin (the hex SHA-256 of its
     /// SubjectPublicKeyInfo, relay.CertPin) when its URL has one, else by
-    /// the system's CAs.
-    static func relay(host: String, pin: String?) throws -> ChannelHandler {
-        var c = TLSConfiguration.makeClientConfiguration()
-        c.minimumTLSVersion = .tlsv12
-        let sni = isIP(host) ? nil : host
-        guard let pin else {
-            return try NIOSSLClientHandler(context: NIOSSLContext(configuration: c), serverHostname: sni)
-        }
-        c.certificateVerification = .noHostnameVerification
-        c.trustRoots = .certificates([])
-        return try NIOSSLClientHandler(context: NIOSSLContext(configuration: c), serverHostname: sni) { certs, promise in
-            guard let leaf = certs.first, let spki = try? leaf.extractPublicKey().toSPKIBytes(),
-                  RelayWire.hex(Data(SHA256.hash(data: spki))) == pin else {
-                promise.succeed(.failed)
-                return
-            }
-            promise.succeed(.certificateVerified)
-        }
+    /// the system's CAs. refused is told when a pin doesn't match.
+    static func relay(pin: String?, refused: @escaping @Sendable () -> Void) -> NWProtocolTLS.Options {
+        let o = NWProtocolTLS.Options()
+        let sec = o.securityProtocolOptions
+        sec_protocol_options_set_min_tls_protocol_version(sec, .TLSv12)
+        guard let pin else { return o }
+        sec_protocol_options_set_verify_block(sec, { _, trust, complete in
+            let t = sec_trust_copy_ref(trust).takeRetainedValue()
+            let ok = (SecTrustCopyCertificateChain(t) as? [SecCertificate])?.first.map { leaf in
+                spkiPin(Array(SecCertificateCopyData(leaf) as Data)) == pin
+            } ?? false
+            if !ok { refused() }
+            complete(ok)
+        }, DispatchQueue.global(qos: .userInitiated))
+        return o
     }
 
-    static func isIP(_ host: String) -> Bool {
-        var a4 = in_addr(), a6 = in6_addr()
-        return inet_pton(AF_INET, host, &a4) == 1 || inet_pton(AF_INET6, host, &a6) == 1
+    /// A DER certificate's pin, as relay.CertPin has it.
+    static func spkiPin(_ der: [UInt8]) -> String? {
+        guard let spki = try? NIOSSLCertificate(bytes: der, format: .der).extractPublicKey().toSPKIBytes() else { return nil }
+        return RelayWire.hex(Data(SHA256.hash(data: spki)))
     }
 }
