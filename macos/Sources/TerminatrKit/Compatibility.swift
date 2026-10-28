@@ -65,6 +65,17 @@ public enum Compatibility: Equatable, Sendable {
         hello.appApi >= guardAPI && hello.methods.contains(AppAPI.Methods.guardDecide.name)
     }
 
+    /// The app API that has memory.list, memory.read, library.list and
+    /// library.read: a project's Memory and Library pages need it.
+    public static let projectFilesAPI = 21
+
+    /// Whether hello's tm reads a project's memory and library for the
+    /// app, its server too.
+    public static func readsProjectFiles(_ hello: AppAPI.Hello) -> Bool {
+        hello.appApi >= projectFilesAPI && hello.methods.contains(AppAPI.Methods.memoryRead.name)
+            && hello.methods.contains(AppAPI.Methods.libraryRead.name) && (hello.server?.caps ?? []).contains("project-files")
+    }
+
     /// Whether hello's tm adds tasks from the app (task.add).
     public static func addsTasks(_ hello: AppAPI.Hello) -> Bool {
         hello.appApi >= taskAddAPI && hello.methods.contains(AppAPI.Methods.taskAdd.name)
