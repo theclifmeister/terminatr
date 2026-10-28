@@ -2,17 +2,22 @@ import SwiftUI
 import TerminatrKit
 
 /// A card's frame: its tag, a wash and an edge in the card's colour.
+/// A card that waits on the user (a question, an approval, a review)
+/// names itself in `waiting`: its glow breathes, and the newest such
+/// card's edge runs (Glow).
 public struct CardFrame<Content: View>: View {
     @Environment(\.theme) private var theme
     let tag: String
     let colour: Color
     let tint: Color
+    let waiting: String?
     let content: Content
 
-    public init(tag: String, colour: Color, tint: Color, @ViewBuilder content: () -> Content) {
+    public init(tag: String, colour: Color, tint: Color, waiting: String? = nil, @ViewBuilder content: () -> Content) {
         self.tag = tag
         self.colour = colour
         self.tint = tint
+        self.waiting = waiting
         self.content = content()
     }
 
@@ -29,7 +34,7 @@ public struct CardFrame<Content: View>: View {
         .frosted(RoundedRectangle(cornerRadius: 14))
         .background(tint, in: RoundedRectangle(cornerRadius: 14))
         .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(colour.opacity(theme.contrast ? 1 : 0.4), lineWidth: 1))
-        .shadow(color: colour.opacity(0.25), radius: 12, y: 6)
+        .modifier(Glow(key: waiting, colour: colour, shape: RoundedRectangle(cornerRadius: 14)))
         // VoiceOver: a group named for the card, so its buttons are
         // heard as the approval's or the question's.
         .accessibilityElement(children: .contain)
@@ -65,15 +70,18 @@ public struct QuestionSummary: View {
     @Environment(\.theme) private var theme
     let menu: AppAPI.Question
     let index: Int
+    /// The card's name while it waits on the user (CardFrame).
+    let waiting: String?
 
-    public init(menu: AppAPI.Question, index: Int) {
+    public init(menu: AppAPI.Question, index: Int, waiting: String? = nil) {
         self.menu = menu
         self.index = index
+        self.waiting = waiting
     }
 
     public var body: some View {
         let item = menu.questions[index]
-        CardFrame(tag: QuestionPlan.tag(menu, index: index), colour: theme.question, tint: theme.questionTint) {
+        CardFrame(tag: QuestionPlan.tag(menu, index: index), colour: theme.question, tint: theme.questionTint, waiting: waiting) {
             Text(item.question)
                 .font(theme.title(.headline, .bold))
                 .textSelection(.enabled)

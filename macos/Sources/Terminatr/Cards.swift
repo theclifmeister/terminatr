@@ -24,7 +24,7 @@ struct Cards: View {
                         .id("\(session.id) \(q.since?.timeIntervalSince1970 ?? 0) \(i)")
                 }
                 if shown.isEmpty, let words = QuestionPlan.allAnswered(q) {
-                    AnsweredCard(model: model, words: words, screen: q.screen)
+                    AnsweredCard(model: model, words: words, screen: q.screen, waiting: "answered \(model.ref.card) \(q.since?.timeIntervalSince1970 ?? 0)")
                 }
             }
             if let session, session.state == "blocked", session.reason == "permission" {
@@ -67,7 +67,7 @@ struct QuestionCard: View {
     var body: some View {
         let plan = QuestionPlan(menu, index: index)
         let tag = QuestionPlan.tag(menu, index: index)
-        CardFrame(tag: firstChoice == nil || plan.paneOnly ? tag : "\(tag) · ⌘↩ answer", colour: theme.question, tint: theme.questionTint) {
+        CardFrame(tag: firstChoice == nil || plan.paneOnly ? tag : "\(tag) · ⌘↩ answer", colour: theme.question, tint: theme.questionTint, waiting: "question \(model.ref.card) \(menu.since?.timeIntervalSince1970 ?? 0) \(index)") {
             Text(item.question)
                 .font(theme.title(.headline, .bold))
                 .textSelection(.enabled)
@@ -202,9 +202,11 @@ struct AnsweredCard: View {
     let model: SessionModel
     let words: String
     let screen: Bool
+    /// The card's name for its glow (CardFrame).
+    let waiting: String
 
     var body: some View {
-        CardFrame(tag: "Question · answered", colour: theme.question, tint: theme.questionTint) {
+        CardFrame(tag: "Question · answered", colour: theme.question, tint: theme.questionTint, waiting: waiting) {
             HStack(alignment: .firstTextBaseline) {
                 Text(words)
                     .font(theme.body(.subheadline))
@@ -281,7 +283,7 @@ struct ApprovalCard: View {
     var body: some View {
         let tool = model.transcript.pendingTool
         let tag = session.escape ? "Approval · outside the sandbox" : "Approval"
-        CardFrame(tag: firstChoice == nil ? tag : "\(tag) · ⌘↩ allow", colour: theme.approval, tint: theme.approvalTint) {
+        CardFrame(tag: firstChoice == nil ? tag : "\(tag) · ⌘↩ allow", colour: theme.approval, tint: theme.approvalTint, waiting: "approval \(model.ref.card) \(tool?.call ?? "")") {
             Text(tool.map { "Run \($0.tool.isEmpty ? "a tool" : $0.tool)?" } ?? "The agent asks for permission")
                 .font(theme.title(.headline, .bold))
             if let tool, !tool.text.isEmpty {
@@ -444,4 +446,9 @@ struct ApprovalCard: View {
             busy = false
         }
     }
+}
+
+extension SessionRef {
+    /// The session's part of a waiting card's name (CardFrame).
+    var card: String { "\(server)/\(project)/\(thread)" }
 }

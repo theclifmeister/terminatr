@@ -81,7 +81,7 @@ private struct QuestionsCard: View {
     @State private var error: String?
 
     var body: some View {
-        CardFrame(tag: "Questions · \(count) open", colour: theme.question, tint: theme.questionTint) {
+        CardFrame(tag: "Questions · \(count) open", colour: theme.question, tint: theme.questionTint, waiting: "questions \(project) \(count)") {
             HStack(alignment: .center, spacing: 10) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(count == 1 ? "The coordinator has a question for you" : "The coordinator has \(count) questions for you")
