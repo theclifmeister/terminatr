@@ -6,7 +6,7 @@ import Foundation
 /// The terminatr app API (docs/SPEC.md §3.8): what tm app bridge answers.
 public enum AppAPI {
     /// The app API version this app was generated against.
-    public static let version = 20
+    public static let version = 21
 
     public struct AnswerParams: Codable, Sendable, Hashable {
         public var id: String
@@ -314,6 +314,99 @@ public enum AppAPI {
         }
     }
 
+    public struct Library: Codable, Sendable, Hashable {
+        public var files: [LibraryFile]
+
+        public init(files: [LibraryFile] = []) {
+            self.files = files
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case files
+        }
+    }
+
+    public struct LibraryChunk: Codable, Sendable, Hashable {
+        public var name: String
+        public var size: Int
+        public var mtime: Date?
+        public var offset: Int
+        public var data: Data
+
+        public init(name: String, size: Int, mtime: Date? = nil, offset: Int, data: Data = Data()) {
+            self.name = name
+            self.size = size
+            self.mtime = mtime
+            self.offset = offset
+            self.data = data
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case name
+            case size
+            case mtime
+            case offset
+            case data
+        }
+    }
+
+    public struct LibraryFile: Codable, Sendable, Hashable {
+        public var thread: String
+        public var task: String
+        public var title: String
+        public var state: String
+        public var name: String
+        public var size: Int
+        public var time: Date
+        public var peer: String
+        public var message: String
+
+        public init(thread: String = "", task: String = "", title: String, state: String, name: String, size: Int, time: Date, peer: String = "", message: String = "") {
+            self.thread = thread
+            self.task = task
+            self.title = title
+            self.state = state
+            self.name = name
+            self.size = size
+            self.time = time
+            self.peer = peer
+            self.message = message
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case thread
+            case task
+            case title
+            case state
+            case name
+            case size
+            case time
+            case peer
+            case message
+        }
+    }
+
+    public struct LibraryReadParams: Codable, Sendable, Hashable {
+        public var project: String
+        public var id: String
+        public var name: String
+        public var offset: Int
+
+        public init(project: String, id: String, name: String, offset: Int = 0) {
+            self.project = project
+            self.id = id
+            self.name = name
+            self.offset = offset
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case project
+            case id
+            case name
+            case offset
+        }
+    }
+
     public struct Link: Codable, Sendable, Hashable {
         public var peer: String
         public var shown: String
@@ -440,6 +533,69 @@ public enum AppAPI {
             case file
             case size
             case allow
+        }
+    }
+
+    public struct MemoryFile: Codable, Sendable, Hashable {
+        public var path: String
+        public var title: String
+        public var bytes: Int
+        public var touches: [String]
+
+        public init(path: String, title: String, bytes: Int, touches: [String] = []) {
+            self.path = path
+            self.title = title
+            self.bytes = bytes
+            self.touches = touches
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case path
+            case title
+            case bytes
+            case touches
+        }
+    }
+
+    public struct MemoryFiles: Codable, Sendable, Hashable {
+        public var files: [MemoryFile]
+
+        public init(files: [MemoryFile] = []) {
+            self.files = files
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case files
+        }
+    }
+
+    public struct MemoryReadParams: Codable, Sendable, Hashable {
+        public var project: String
+        public var path: String
+
+        public init(project: String, path: String) {
+            self.project = project
+            self.path = path
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case project
+            case path
+        }
+    }
+
+    public struct MemoryText: Codable, Sendable, Hashable {
+        public var path: String
+        public var text: String
+
+        public init(path: String, text: String) {
+            self.path = path
+            self.text = text
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case path
+            case text
         }
     }
 
@@ -2158,7 +2314,11 @@ public enum AppAPI {
         public static let coordinatorClear = Call<ProjectParams, CoordinatorClear>("coordinator.clear", write: true)
         public static let guardDecide = Call<GuardDecideParams, GuardDecided>("guard.decide", write: true)
         public static let guardRefusals = Call<NoParams, GuardRefusals>("guard.refusals", write: false)
+        public static let libraryList = Call<ProjectParams, Library>("library.list", write: false)
+        public static let libraryRead = Call<LibraryReadParams, LibraryChunk>("library.read", write: false)
         public static let linkAct = Call<LinkActParams, LinkActResult>("link.act", write: true)
+        public static let memoryList = Call<ProjectParams, MemoryFiles>("memory.list", write: false)
+        public static let memoryRead = Call<MemoryReadParams, MemoryText>("memory.read", write: false)
         public static let notifyClaim = Call<NoticeParams, NoticeResult>("notify.claim", write: false)
         public static let notifyDismiss = Call<NoticeParams, NoticeResult>("notify.dismiss", write: false)
         public static let paneInput = Call<PaneInputParams, Empty>("pane.input", write: true, target: "pane.vt")
@@ -2335,6 +2495,49 @@ extension AppAPI.KeysParams {
     }
 }
 
+extension AppAPI.Library {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.files = try c.decodeIfPresent([AppAPI.LibraryFile].self, forKey: .files) ?? []
+    }
+}
+
+extension AppAPI.LibraryChunk {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.name = try c.decode(String.self, forKey: .name)
+        self.size = try c.decode(Int.self, forKey: .size)
+        self.mtime = try c.decodeIfPresent(Date.self, forKey: .mtime)
+        self.offset = try c.decode(Int.self, forKey: .offset)
+        self.data = try c.decodeIfPresent(Data.self, forKey: .data) ?? Data()
+    }
+}
+
+extension AppAPI.LibraryFile {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.thread = try c.decodeIfPresent(String.self, forKey: .thread) ?? ""
+        self.task = try c.decodeIfPresent(String.self, forKey: .task) ?? ""
+        self.title = try c.decode(String.self, forKey: .title)
+        self.state = try c.decode(String.self, forKey: .state)
+        self.name = try c.decode(String.self, forKey: .name)
+        self.size = try c.decode(Int.self, forKey: .size)
+        self.time = try c.decode(Date.self, forKey: .time)
+        self.peer = try c.decodeIfPresent(String.self, forKey: .peer) ?? ""
+        self.message = try c.decodeIfPresent(String.self, forKey: .message) ?? ""
+    }
+}
+
+extension AppAPI.LibraryReadParams {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.project = try c.decode(String.self, forKey: .project)
+        self.id = try c.decode(String.self, forKey: .id)
+        self.name = try c.decode(String.self, forKey: .name)
+        self.offset = try c.decodeIfPresent(Int.self, forKey: .offset) ?? 0
+    }
+}
+
 extension AppAPI.Link {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -2387,6 +2590,39 @@ extension AppAPI.LinkNeed {
         self.file = try c.decodeIfPresent(String.self, forKey: .file) ?? ""
         self.size = try c.decodeIfPresent(Int.self, forKey: .size) ?? 0
         self.allow = try c.decodeIfPresent(String.self, forKey: .allow) ?? ""
+    }
+}
+
+extension AppAPI.MemoryFile {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.path = try c.decode(String.self, forKey: .path)
+        self.title = try c.decode(String.self, forKey: .title)
+        self.bytes = try c.decode(Int.self, forKey: .bytes)
+        self.touches = try c.decodeIfPresent([String].self, forKey: .touches) ?? []
+    }
+}
+
+extension AppAPI.MemoryFiles {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.files = try c.decodeIfPresent([AppAPI.MemoryFile].self, forKey: .files) ?? []
+    }
+}
+
+extension AppAPI.MemoryReadParams {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.project = try c.decode(String.self, forKey: .project)
+        self.path = try c.decode(String.self, forKey: .path)
+    }
+}
+
+extension AppAPI.MemoryText {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.path = try c.decode(String.self, forKey: .path)
+        self.text = try c.decode(String.self, forKey: .text)
     }
 }
 

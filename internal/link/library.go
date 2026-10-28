@@ -1,10 +1,13 @@
 package link
 
 import (
+	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"sort"
+	"time"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
@@ -67,6 +70,36 @@ func ReadFile(p *project.Project, id, name string, max int64) (data []byte, trun
 		return data[:max], true, err
 	}
 	return data, false, err
+}
+
+// ReadFileChunk reads at most n bytes from off of the file name that
+// came with p's message id, never through a link, and says its size and
+// modification time.
+func ReadFileChunk(p *project.Project, id, name string, off, n int64) (data []byte, size int64, mod time.Time, err error) {
+	path, err := received(p, id, name)
+	if err != nil {
+		return nil, 0, time.Time{}, err
+	}
+	f, err := fsx.OpenNoLink(path, os.O_RDONLY, 0)
+	if err != nil {
+		return nil, 0, time.Time{}, err
+	}
+	defer f.Close()
+	fi, err := f.Stat()
+	if err != nil {
+		return nil, 0, time.Time{}, err
+	}
+	if !fi.Mode().IsRegular() {
+		return nil, 0, time.Time{}, refuse("unknown-file", "%s brought no file %s", id, name)
+	}
+	if off < 0 || off > fi.Size() {
+		return nil, 0, time.Time{}, fmt.Errorf("offset %d is past the end (%d)", off, fi.Size())
+	}
+	data = make([]byte, min(fi.Size()-off, n))
+	if _, err := f.ReadAt(data, off); err != nil && !errors.Is(err, io.EOF) {
+		return nil, 0, time.Time{}, err
+	}
+	return data, fi.Size(), fi.ModTime(), nil
 }
 
 // RemoveFile deletes the file name that came with p's message id, as

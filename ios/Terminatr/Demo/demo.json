@@ -120,7 +120,7 @@
   }
  },
  "hello": {
-  "app_api": 20,
+  "app_api": 21,
   "build": "demo",
   "capabilities": [
    "read",

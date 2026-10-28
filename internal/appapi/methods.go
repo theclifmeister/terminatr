@@ -67,6 +67,15 @@ func init() {
 		unary(proto.MethodNotifyClaim, false, noticeParams, noticeResultOf),
 		unary(proto.MethodNotifyDismiss, false, noticeParams, noticeResultOf),
 
+		// A project's memory and library, read only (app API 21; the
+		// server's caps say project-files): memory files by their path in
+		// the project folder, library files by thread (or message) and
+		// name, a chunk at a time.
+		unary(proto.MethodMemoryList, false, memoryListParams, memoryFilesOf),
+		unary(proto.MethodMemoryRead, false, memoryReadParams, memoryTextOf),
+		unary(proto.MethodLibraryList, false, libraryListParams, libraryOf),
+		unary(proto.MethodLibraryRead, false, libraryReadParams, libraryChunkOf),
+
 		// Acting as the human; the server checks each as it checks the
 		// TUI's, and journals it as "human (app)".
 		unary(proto.MethodSessionPrompt, true, promptParams, promptResultOf),
@@ -391,4 +400,20 @@ func linkActParams(p LinkActParams) proto.LinkActParams {
 
 func shareAnswerParams(p ShareAnswerParams) proto.PeerShareAnswerParams {
 	return proto.PeerShareAnswerParams{ID: p.ID, Accept: p.Accept, Project: p.Project}
+}
+
+func memoryListParams(p ProjectParams) proto.ProjectFilesParams {
+	return proto.ProjectFilesParams{Project: p.Project}
+}
+
+func memoryReadParams(p MemoryReadParams) proto.MemoryReadParams {
+	return proto.MemoryReadParams{Project: p.Project, Path: p.Path}
+}
+
+func libraryListParams(p ProjectParams) proto.ProjectFilesParams {
+	return proto.ProjectFilesParams{Project: p.Project}
+}
+
+func libraryReadParams(p LibraryReadParams) proto.LibraryReadParams {
+	return proto.LibraryReadParams{Project: p.Project, ID: p.ID, Name: p.Name, Offset: p.Offset}
 }

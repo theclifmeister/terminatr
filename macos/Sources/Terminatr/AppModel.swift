@@ -693,6 +693,33 @@ final class AppModel {
         try await connected().call(AppAPI.Methods.taskGet, AppAPI.TaskGetParams(project: project, task: task))
     }
 
+    /// The project's memory files (memory.list, app API 21).
+    func memoryFiles(_ project: String) async throws -> [AppAPI.MemoryFile] {
+        try await connected().call(AppAPI.Methods.memoryList, AppAPI.ProjectParams(project: project)).files
+    }
+
+    /// A memory file's Markdown, by its path in the project (memory.read).
+    func memoryText(_ project: String, path: String) async throws -> String {
+        try await connected().call(AppAPI.Methods.memoryRead, AppAPI.MemoryReadParams(project: project, path: path)).text
+    }
+
+    /// The project's library, newest first (library.list).
+    func library(_ project: String) async throws -> [AppAPI.LibraryFile] {
+        try await connected().call(AppAPI.Methods.libraryList, AppAPI.ProjectParams(project: project)).files
+    }
+
+    /// A library file's bytes (library.read, a chunk at a time).
+    func libraryData(_ project: String, _ f: AppAPI.LibraryFile) async -> FileOutcome {
+        guard let b = bridge else { return .unavailable("tm isn't connected") }
+        return await LibraryPage.read({ p in try await b.call(AppAPI.Methods.libraryRead, p) }, project: project, file: f)
+    }
+
+    /// The project pages this tm has (Memory and Library need app API 21).
+    var projectPages: [ProjectPage] {
+        if case .connected(let h) = phase { return ProjectPage.pages(h) }
+        return ProjectPage.pages(nil)
+    }
+
     /// Asks project's coordinator to send task back with the user's
     /// note (task.send-back, the TUI's X).
     func sendBack(project: String, task: String, note: String) async throws -> Bool {
