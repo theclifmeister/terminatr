@@ -43,6 +43,29 @@ private func working(_ id: String, task: AppAPI.Task? = nil) -> AppAPI.Session {
     #expect(!Dashboard.isEmpty(p, needs: 0))
 }
 
+/// The board's filter finds every word in a task's id or title,
+/// ignoring case and accents; the done count is the board's.
+@Test func dashboardBoardFilter() {
+    let ts = [AppAPI.Task(id: 2, ref: "T2", title: "Café menu", status: "ready"),
+              AppAPI.Task(id: 12, ref: "T12", title: "Login page", status: "open"),
+              AppAPI.Task(id: 3, ref: "T3", title: "Login API", status: "done")]
+    #expect(Dashboard.filtered(ts, by: "").map(\.ref) == ["T2", "T12", "T3"])
+    #expect(Dashboard.filtered(ts, by: "  ").count == 3)
+    #expect(Dashboard.filtered(ts, by: "login").map(\.ref) == ["T12", "T3"])
+    #expect(Dashboard.filtered(ts, by: "login api").map(\.ref) == ["T3"])
+    #expect(Dashboard.filtered(ts, by: "cafe").map(\.ref) == ["T2"])
+    #expect(Dashboard.filtered(ts, by: "t12").map(\.ref) == ["T12"])
+    #expect(Dashboard.filtered(ts, by: "nothing").isEmpty)
+    let p = AppAPI.Project(slug: "demo", active: true, counts: ["done": 4], usage: noUsage)
+    #expect(Dashboard.doneCount(p) == 4)
+    #expect(Dashboard.doneCount(AppAPI.Project(slug: "demo", active: true, usage: noUsage)) == 0)
+}
+
+/// Ask the Coordinator puts the task in the composer, for the question.
+@Test func dashboardAskAbout() {
+    #expect(Dashboard.askAbout(AppAPI.Task(id: 7, ref: "T7", title: "Image CDN", status: "blocked")) == "About T7 (Image CDN): ")
+}
+
 @Test func dashboardEmpty() {
     // Only done tasks, no threads, nothing for the user: empty.
     var p = AppAPI.Project(slug: "demo", active: true, counts: ["needs_you": 0, "in_motion": 0, "done": 3], usage: noUsage)

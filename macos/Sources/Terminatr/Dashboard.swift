@@ -14,8 +14,17 @@ struct ProjectDashboard: View {
     @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
     let project: AppAPI.Project
-    /// The folded groups the user opened: "idle", "stopped", "backlog".
+    /// The folded groups the user opened: "idle", "stopped", "backlog",
+    /// "done".
     @State private var unfolded: Set<String> = []
+    /// The board's filter (the TUI's / on the Tasks tab): words found in
+    /// a task's id or title. While it has some, the folds are open.
+    @State private var filter = ""
+    /// The board's done tasks (task.done), read when the Done fold
+    /// opens and again when the board's done count changes; nil until
+    /// read.
+    @State private var done: [AppAPI.Task]?
+    @State private var doneError: String?
 
     var body: some View {
         ScrollView {
@@ -61,18 +70,11 @@ struct ProjectDashboard: View {
                     }
                 }
                 let deck = Dashboard.onDeck(project), backlog = Dashboard.backlog(project)
-                if !deck.isEmpty || !backlog.isEmpty {
+                let doneCount = app.listsDone ? Dashboard.doneCount(project) : 0
+                if !deck.isEmpty || !backlog.isEmpty || doneCount > 0 {
                     section("Board") {
-                        if !deck.isEmpty {
-                            fold("On deck", deck.count, key: nil) {
-                                CardGrid { ForEach(deck) { BoardRow(project: project.slug, task: $0) } }
-                            }
-                        }
-                        if !backlog.isEmpty {
-                            fold("Backlog", backlog.count, key: "backlog") {
-                                CardGrid { ForEach(backlog) { BoardRow(project: project.slug, task: $0) } }
-                            }
-                        }
+                        BoardFilter(text: $filter)
+                        boardGroups(deck: deck, backlog: backlog, doneCount: doneCount)
                     }
                 }
                 let inbox = project.items.filter(\.forYou)
@@ -98,6 +100,63 @@ struct ProjectDashboard: View {
     }
 
     static let inboxShown = 8
+
+    /// The board's groups, as the filter finds their tasks: on deck
+    /// shown; the backlog and the done tasks folded (the TUI's b lists
+    /// the done ones), open while the filter has words.
+    @ViewBuilder
+    private func boardGroups(deck: [AppAPI.Task], backlog: [AppAPI.Task], doneCount: Int) -> some View {
+        let filtering = !filter.trimmingCharacters(in: .whitespaces).isEmpty
+        let deck = Dashboard.filtered(deck, by: filter), backlog = Dashboard.filtered(backlog, by: filter)
+        let doneOpen = doneCount > 0 && (filtering || unfolded.contains("done"))
+        let doneShown = Dashboard.filtered(done ?? [], by: filter)
+        if !deck.isEmpty {
+            fold("On deck", deck.count, key: nil) {
+                CardGrid { ForEach(deck) { BoardRow(project: project.slug, task: $0) } }
+            }
+        }
+        if !backlog.isEmpty {
+            fold("Backlog", backlog.count, key: filtering ? nil : "backlog") {
+                CardGrid { ForEach(backlog) { BoardRow(project: project.slug, task: $0) } }
+            }
+        }
+        if doneCount > 0 && (!filtering || !doneShown.isEmpty || done == nil) {
+            fold("Done", filtering && done != nil ? doneShown.count : doneCount, key: filtering ? nil : "done") {
+                if let doneError {
+                    Text(doneError)
+                        .font(theme.body(.subheadline))
+                        .foregroundStyle(theme.attention)
+                } else if done == nil {
+                    ProgressView().controlSize(.small)
+                } else {
+                    CardGrid { ForEach(doneShown) { BoardRow(project: project.slug, task: $0) } }
+                }
+            }
+        }
+        if filtering && deck.isEmpty && backlog.isEmpty && (doneCount == 0 || (done != nil && doneShown.isEmpty)) {
+            Text("No task on the board matches “\(filter.trimmingCharacters(in: .whitespaces))”.")
+                .font(theme.body(.subheadline))
+                .foregroundStyle(theme.muted)
+        }
+        Color.clear.frame(height: 0)
+            .task(id: DoneRead(project: project.slug, open: doneOpen, count: doneCount)) {
+                guard doneOpen else { return }
+                do {
+                    done = try await app.doneTasks(project.slug)
+                    doneError = nil
+                } catch {
+                    doneError = Dashboard.words(error)
+                }
+            }
+    }
+
+    /// When the board's done tasks are read again: the fold opens, or
+    /// the board's done count changes while it is open.
+    private struct DoneRead: Equatable {
+        let project: String
+        let open: Bool
+        let count: Int
+    }
 
     private func threadCard(_ t: AppAPI.Thread) -> some View {
         let sel = Selection.card(t, in: project.slug)
@@ -378,6 +437,38 @@ struct StartButton: View {
             }
             busy = false
         }
+    }
+}
+
+/// The board's filter field: words that a task's id or title has (the
+/// TUI's / on the Tasks tab); esc clears it.
+private struct BoardFilter: View {
+    @Environment(\.theme) private var theme
+    @Binding var text: String
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "line.3.horizontal.decrease")
+                .foregroundStyle(theme.muted)
+                .accessibilityHidden(true)
+            TextField("Filter tasks", text: $text)
+                .textFieldStyle(.plain)
+                .onExitCommand { text = "" }
+                .accessibilityLabel("Filter the board's tasks")
+            if !text.isEmpty {
+                Button { text = "" } label: { Image(systemName: "xmark.circle.fill") }
+                    .buttonStyle(.borderless)
+                    .foregroundStyle(theme.muted)
+                    .help("Clear the filter")
+                    .accessibilityLabel("Clear the filter")
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .frame(maxWidth: 320)
+        .background(theme.cardTint, in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(theme.edge, lineWidth: 1))
+        .help("Shows the tasks whose id or title has these words, the done ones too")
     }
 }
 

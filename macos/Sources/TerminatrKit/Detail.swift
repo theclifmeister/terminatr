@@ -46,6 +46,35 @@ public enum Dashboard {
         p.board.filter { $0.status == "open" }
     }
 
+    /// How many of the board's tasks are done (its counts'), which the
+    /// board's Done fold lists through task.done (app API 20).
+    public static func doneCount(_ p: AppAPI.Project) -> Int {
+        p.counts["done"] ?? 0
+    }
+
+    /// The tasks of ts that filter finds, in their order: each of its
+    /// words is in the task's id or title, ignoring case and accents, as
+    /// the TUI's Tasks tab filter (/) finds them. An empty filter finds
+    /// them all.
+    public static func filtered(_ ts: [AppAPI.Task], by filter: String) -> [AppAPI.Task] {
+        let words = filter.split(whereSeparator: \.isWhitespace)
+        guard !words.isEmpty else { return ts }
+        return ts.filter { t in
+            words.allSatisfy { w in
+                t.ref.range(of: w, options: [.caseInsensitive, .diacriticInsensitive]) != nil
+                    || t.title.range(of: w, options: [.caseInsensitive, .diacriticInsensitive]) != nil
+            }
+        }
+    }
+
+    /// What a coordinator's composer starts with when the user asks it
+    /// about task t (the task view's Ask the Coordinator, as the TUI's c
+    /// opens the coordinator about a task): the task, then the user's
+    /// question.
+    public static func askAbout(_ t: AppAPI.Task) -> String {
+        "About \(t.ref) (\(t.title)): "
+    }
+
     /// Whether p has nothing to show: no thread, no task on its board
     /// but done ones, nothing that needs the user, nothing in its inbox.
     public static func isEmpty(_ p: AppAPI.Project, needs: Int) -> Bool {

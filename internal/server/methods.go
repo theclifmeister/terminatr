@@ -257,6 +257,12 @@ func init() {
 		proto.MethodTaskGet: {gate: gateHuman, call: typed(func(s *Server, p proto.TaskGetParams, _ callCtx) (any, *proto.Error) {
 			return s.taskGet(p)
 		})},
+		proto.MethodTaskDone: {gate: gateHuman, call: typed(func(s *Server, p proto.TaskDoneParams, _ callCtx) (any, *proto.Error) {
+			return s.taskDone(p)
+		})},
+		proto.MethodTaskTemplates: {gate: gateHuman, call: typed(func(s *Server, p proto.TaskDoneParams, _ callCtx) (any, *proto.Error) {
+			return s.taskTemplates(p)
+		})},
 		proto.MethodTaskAdd: {gate: gateHuman, call: typed(func(s *Server, p proto.TaskAddParams, c callCtx) (any, *proto.Error) {
 			return s.taskAdd(p, c)
 		})},

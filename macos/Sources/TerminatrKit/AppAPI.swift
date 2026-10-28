@@ -146,6 +146,18 @@ public enum AppAPI {
         }
     }
 
+    public struct DoneTasks: Codable, Sendable, Hashable {
+        public var tasks: [Task]
+
+        public init(tasks: [Task] = []) {
+            self.tasks = tasks
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case tasks
+        }
+    }
+
     public struct Empty: Codable, Sendable, Hashable {
 
         public init() {
@@ -1593,17 +1605,20 @@ public enum AppAPI {
         public var project: String
         public var title: String
         public var notes: String
+        public var template: String
 
-        public init(project: String, title: String, notes: String = "") {
+        public init(project: String, title: String, notes: String = "", template: String = "") {
             self.project = project
             self.title = title
             self.notes = notes
+            self.template = template
         }
 
         enum CodingKeys: String, CodingKey {
             case project
             case title
             case notes
+            case template
         }
     }
 
@@ -1682,6 +1697,48 @@ public enum AppAPI {
         enum CodingKeys: String, CodingKey {
             case project
             case task
+        }
+    }
+
+    public struct Template: Codable, Sendable, Hashable {
+        public var ref: String
+        public var mod: String
+        public var name: String
+        public var title: String
+        public var notes: String
+        public var steps: [String]
+        public var builtin: Bool
+
+        public init(ref: String, mod: String, name: String, title: String, notes: String = "", steps: [String] = [], builtin: Bool = false) {
+            self.ref = ref
+            self.mod = mod
+            self.name = name
+            self.title = title
+            self.notes = notes
+            self.steps = steps
+            self.builtin = builtin
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case ref
+            case mod
+            case name
+            case title
+            case notes
+            case steps
+            case builtin
+        }
+    }
+
+    public struct Templates: Codable, Sendable, Hashable {
+        public var templates: [Template]
+
+        public init(templates: [Template] = []) {
+            self.templates = templates
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case templates
         }
     }
 
@@ -2267,8 +2324,10 @@ public enum AppAPI {
         public static let taskAdd = Call<TaskAddParams, TaskAdded>("task.add", write: true)
         public static let taskAsk = Call<TaskAskParams, TaskAskResult>("task.ask", write: true)
         public static let taskDelegate = Call<TaskParams, TaskAskResult>("task.delegate", write: true)
+        public static let taskDone = Call<ProjectParams, DoneTasks>("task.done", write: false)
         public static let taskGet = Call<TaskGetParams, Task>("task.get", write: false)
         public static let taskSendBack = Call<SendBackParams, TaskAskResult>("task.send-back", write: true)
+        public static let taskTemplates = Call<ProjectParams, Templates>("task.templates", write: false)
         public static let transcriptPage = Call<TranscriptPageParams, TranscriptPage>("transcript.page", write: false)
         public static let transcriptWatch = Subscription<TranscriptParams, TranscriptResult, TranscriptEvent>("transcript.watch", events: ["transcript.reset", "transcript.items", "transcript.status", "transcript.closed"])
     }
@@ -2341,6 +2400,13 @@ extension AppAPI.CoordinatorClear {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.session = try c.decode(String.self, forKey: .session)
+    }
+}
+
+extension AppAPI.DoneTasks {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.tasks = try c.decodeIfPresent([AppAPI.Task].self, forKey: .tasks) ?? []
     }
 }
 
@@ -3006,6 +3072,7 @@ extension AppAPI.TaskAddParams {
         self.project = try c.decode(String.self, forKey: .project)
         self.title = try c.decode(String.self, forKey: .title)
         self.notes = try c.decodeIfPresent(String.self, forKey: .notes) ?? ""
+        self.template = try c.decodeIfPresent(String.self, forKey: .template) ?? ""
     }
 }
 
@@ -3047,6 +3114,26 @@ extension AppAPI.TaskParams {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.project = try c.decode(String.self, forKey: .project)
         self.task = try c.decode(String.self, forKey: .task)
+    }
+}
+
+extension AppAPI.Template {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.ref = try c.decode(String.self, forKey: .ref)
+        self.mod = try c.decode(String.self, forKey: .mod)
+        self.name = try c.decode(String.self, forKey: .name)
+        self.title = try c.decode(String.self, forKey: .title)
+        self.notes = try c.decodeIfPresent(String.self, forKey: .notes) ?? ""
+        self.steps = try c.decodeIfPresent([String].self, forKey: .steps) ?? []
+        self.builtin = try c.decodeIfPresent(Bool.self, forKey: .builtin) ?? false
+    }
+}
+
+extension AppAPI.Templates {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.templates = try c.decodeIfPresent([AppAPI.Template].self, forKey: .templates) ?? []
     }
 }
 

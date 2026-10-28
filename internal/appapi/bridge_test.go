@@ -306,6 +306,19 @@ func TestBridgeTaskActions(t *testing.T) {
 	if err := c.Call(proto.MethodTaskGet, appapi.TaskGetParams{Project: "web", Task: "T9"}, nil); code(err) != "unknown-task" {
 		t.Errorf("task.get of no task: %v", err)
 	}
+	// task.done and task.templates (app API 20): none done yet; the
+	// bundled templates, one of which task.add lays on a title.
+	var done appapi.DoneTasks
+	if err := c.Call(proto.MethodTaskDone, appapi.ProjectParams{Project: "web"}, &done); err != nil || done.Tasks == nil || len(done.Tasks) != 0 {
+		t.Fatalf("task.done: %+v %v", done, err)
+	}
+	var tpls appapi.Templates
+	if err := c.Call(proto.MethodTaskTemplates, appapi.ProjectParams{Project: "web"}, &tpls); err != nil || len(tpls.Templates) == 0 {
+		t.Fatalf("task.templates: %+v %v", tpls, err)
+	}
+	if err := c.Call(proto.MethodTaskAdd, appapi.TaskAddParams{Project: "web", Title: "Login", Template: tpls.Templates[0].Ref}, &added); err != nil || added.Task != "T5" {
+		t.Fatalf("task.add with %s: %+v %v", tpls.Templates[0].Ref, added, err)
+	}
 	if _, err := pr.AddQuestion(project.Question{Question: "Which?", Options: []project.QuestionOption{{Label: "A"}, {Label: "B"}}}); err != nil {
 		t.Fatal(err)
 	}

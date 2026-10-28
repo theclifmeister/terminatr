@@ -100,6 +100,11 @@ func init() {
 		// One task with its notes and steps, which the board's tasks
 		// come without, for the task view (app API 14).
 		unary(proto.MethodTaskGet, false, taskGetParams, taskOf),
+		// The board's done tasks, which projects.watch leaves out, for
+		// the board's Show Done, and the task templates of the
+		// project's mods for New Task (app API 20).
+		unary(proto.MethodTaskDone, false, taskDoneParams, doneTasksOf),
+		unary(proto.MethodTaskTemplates, false, taskDoneParams, templatesOf),
 		// What a project's link waits on the user for, answered in place
 		// (app API 16; the server's caps say link-act), with tm link's
 		// checks: a held message approved or dropped, a file accepted,
@@ -372,7 +377,11 @@ func taskGetParams(p TaskGetParams) proto.TaskGetParams {
 }
 
 func taskAddParams(p TaskAddParams) proto.TaskAddParams {
-	return proto.TaskAddParams{Project: p.Project, Title: p.Title, Notes: p.Notes}
+	return proto.TaskAddParams{Project: p.Project, Title: p.Title, Notes: p.Notes, Template: p.Template}
+}
+
+func taskDoneParams(p ProjectParams) proto.TaskDoneParams {
+	return proto.TaskDoneParams{Project: p.Project}
 }
 
 func coordinatorClearParams(p ProjectParams) proto.CoordinatorClearParams {
