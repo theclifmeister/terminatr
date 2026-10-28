@@ -25,6 +25,9 @@ final class SessionModel {
     /// Repaints asked for from View › Repaint Terminal: the shown
     /// Terminal tab asks its server for one each time this goes up.
     private(set) var repaints = 0
+    /// Prompts the user sent from here: the conversation follows its end
+    /// again each time this goes up (Follow).
+    private(set) var sent = 0
     /// The groups of tool calls the user unfolded, by their first
     /// call's id (Transcript.ToolRun), while the transcript lasts.
     var unfoldedRuns: Set<Int> = []
@@ -152,7 +155,9 @@ final class SessionModel {
     /// files are refs upload answered: tm names each after the text.
     func prompt(_ text: String, mode: String = "", files: [String] = []) async throws -> AppAPI.PromptResult {
         let (b, id) = try target()
-        return try await b.call(AppAPI.Methods.sessionPrompt, AppAPI.PromptParams(id: id, text: text, mode: mode, files: files))
+        let r = try await b.call(AppAPI.Methods.sessionPrompt, AppAPI.PromptParams(id: id, text: text, mode: mode, files: files))
+        sent += 1
+        return r
     }
 
     /// Sends a file for a prompt to tm (session.upload), which stores it

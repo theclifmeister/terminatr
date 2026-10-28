@@ -11,16 +11,26 @@ import TerminatrUI
 struct ConversationScreen: View {
     @Environment(PhoneModel.self) private var model
     @Environment(\.theme) private var theme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let ref: SessionRef
     @State private var transcript = Transcript()
     @State private var failure: String?
     @State private var unfolded: Set<Int> = []
     @State private var paging = false
     @State private var pages = false
+    /// Whether the conversation follows its end, or the user scrolled
+    /// up (iOS 18, from the scroll geometry; 17 always follows).
+    @State private var follow = Follow()
 
     /// The items a stream opens with when the server pages: the screen's
     /// worth and some.
-    static let tail = 60
+    static let tailItems = 60
+
+    /// What changes as output comes: the entries' count, and the last
+    /// one's text and result as it streams.
+    static func tail(_ t: Transcript) -> [Int] {
+        [t.entries.count, t.entries.last?.id ?? -1, t.entries.last?.text.count ?? 0, t.entries.last?.result == nil ? 0 : 1]
+    }
 
     var body: some View {
         let id = model.sessionID(ref)
@@ -46,7 +56,33 @@ struct ConversationScreen: View {
                 }
                 .padding(16)
             }
-            .onChange(of: transcript.entries.last?.id) { scroll.scrollTo("end", anchor: .bottom) }
+            .modifier(PhoneFollowGeometry(follow: $follow, newest: transcript.entries.last?.id))
+            // New output: the follower goes to the end; scrolled up, the
+            // screen stays and Jump to latest counts it.
+            .onChange(of: Self.tail(transcript)) {
+                if follow.arrived(transcript.entries.map(\.id)) { scroll.scrollTo("end", anchor: .bottom) }
+            }
+            .onChange(of: Busy.of(session) != nil) {
+                if follow.following { scroll.scrollTo("end", anchor: .bottom) }
+            }
+            .overlay(alignment: .bottom) {
+                if !follow.following {
+                    Button {
+                        follow.follow(newest: transcript.entries.last?.id)
+                        withAnimation(reduceMotion ? nil : .default) { scroll.scrollTo("end", anchor: .bottom) }
+                    } label: {
+                        Label(follow.label, systemImage: "arrow.down")
+                            .font(theme.body(.subheadline, .semibold))
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 8)
+                            .frosted(Capsule())
+                            .overlay(Capsule().strokeBorder(theme.edge, lineWidth: 1))
+                            .shadow(color: .black.opacity(0.18), radius: 8, y: 3)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.bottom, 10)
+                }
+            }
         }
         .safeAreaInset(edge: .bottom) {
             if id != nil {
@@ -151,7 +187,7 @@ struct ConversationScreen: View {
         guard let id, let b = model.bridge else { return }
         let hello = await b.hello
         pages = hello?.methods.contains(AppAPI.Methods.transcriptPage.name) == true
-        let tail = hello?.server?.caps.contains("transcript-tail") == true ? Self.tail : 0
+        let tail = hello?.server?.caps.contains("transcript-tail") == true ? Self.tailItems : 0
         do {
             let sub = try await b.subscribe(AppAPI.Methods.transcriptWatch, AppAPI.TranscriptParams(session: id, tail: tail))
             transcript.start(sub.result.status)
@@ -218,5 +254,28 @@ struct EntryLine: View {
         Text([entry.who(agent: agent), entry.at?.formatted(date: .omitted, time: .shortened) ?? ""].filter { !$0.isEmpty }.joined(separator: " · "))
             .font(theme.mono(.caption, .medium))
             .foregroundStyle(theme.muted)
+    }
+}
+
+/// The scroll geometry into Follow: on iOS 18; 17 has none to read, and
+/// its conversation always follows. The screen opens at the end, and
+/// content that grows keeps its place (Follow scrolls a follower down).
+struct PhoneFollowGeometry: ViewModifier {
+    @Binding var follow: Follow
+    let newest: Int?
+
+    func body(content: Content) -> some View {
+        if #available(iOS 18, *) {
+            content
+                .defaultScrollAnchor(.bottom, for: .initialOffset)
+                .defaultScrollAnchor(.top, for: .sizeChanges)
+                .onScrollGeometryChange(for: [Double].self) { g in
+                    [g.contentOffset.y, g.containerSize.height - g.contentInsets.bottom, g.contentSize.height]
+                } action: { _, g in
+                    follow.scrolled(offset: g[0], visible: g[1], content: g[2], newest: newest)
+                }
+        } else {
+            content.defaultScrollAnchor(.bottom)
+        }
     }
 }
