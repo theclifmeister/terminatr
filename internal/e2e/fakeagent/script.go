@@ -123,6 +123,27 @@ func parseScript(data []byte) (script, error) {
 	return s, nil
 }
 
+// replyScript is the script $FAKEAGENT_REPLIES, a TOML file of
+// [[reply]] tables (match, script), names for a prompt that names none:
+// the first whose match the prompt contains. A dev server's agents
+// answer kickoffs and nudges with it in their own words.
+func replyScript(prompt string) (string, bool) {
+	var r struct {
+		Reply []struct{ Match, Script string } `toml:"reply"`
+	}
+	if f := os.Getenv("FAKEAGENT_REPLIES"); f == "" {
+		return "", false
+	} else if _, err := toml.DecodeFile(f, &r); err != nil {
+		return "", false
+	}
+	for _, re := range r.Reply {
+		if strings.Contains(prompt, re.Match) {
+			return re.Script, true
+		}
+	}
+	return "", false
+}
+
 // runPrompt runs the script a prompt names, or the default answer.
 func (a *app) runPrompt(ctx context.Context, j job) error {
 	if j.kind == "notification" {
@@ -130,7 +151,9 @@ func (a *app) runPrompt(ctx context.Context, j job) error {
 	}
 	name, ok := strings.CutPrefix(strings.TrimSpace(j.text), "run ")
 	if !ok {
-		return a.stream(ctx, "ok: "+j.text, 200*time.Millisecond)
+		if name, ok = replyScript(j.text); !ok {
+			return a.stream(ctx, "ok: "+j.text, 200*time.Millisecond)
+		}
 	}
 	name = strings.TrimSpace(name)
 	s, err := loadScript(name)
