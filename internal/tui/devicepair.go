@@ -221,7 +221,6 @@ func (pv *phonePairView) render(m *dash) string {
 	case phoneDialing:
 		body = wrapLines("Making a code…", w)
 	case phoneWaiting:
-		b.keys = "esc cancel"
 		body = pv.waiting(m, w, m.boxRows(b))
 	case phoneOffer, phoneAdding:
 		o := pv.offer
@@ -239,8 +238,11 @@ func (pv *phonePairView) render(m *dash) string {
 		}
 		body = append(body, "")
 		a := "a view-only"
-		if o.Level != device.LevelView {
-			a = "a" + map[bool]string{true: "n", false: ""}[o.Level == device.LevelAnswer] + " " + o.Level
+		switch o.Level {
+		case device.LevelAnswer:
+			a = "an answer"
+		case device.LevelWrite:
+			a = "a write"
 		}
 		body = append(body, wrapLines(fmt.Sprintf("Add it as %q, %s device?", pv.name, a), w)...)
 		if pv.nameErr != "" {

@@ -164,7 +164,7 @@ func (nv *networkView) phoneConn(e DeviceEntry) (string, lipgloss.Style, string)
 	return g, st, words
 }
 
-// phoneLines are phone row r's line w cells wide: the header or a phone.
+// phoneLine is phone row r's line w cells wide: the header or a phone.
 func (nv *networkView) phoneLine(r netRow, w int) string {
 	if r.kind == netPhones {
 		fold := ic().unfold
@@ -183,7 +183,7 @@ func (nv *networkView) phoneLine(r netRow, w int) string {
 	}
 	e := nv.device(r)
 	g, st, words := nv.phoneConn(e)
-	left := "   " + st.Render(g) + " " + th().Head.Render(fit(e.Name, min(len([]rune(e.Name)), device.MaxName)))
+	left := "   " + st.Render(g) + " " + th().Head.Render(oneLine(e.Name))
 	if words == "connected" {
 		left += " · " + words
 	} else {
