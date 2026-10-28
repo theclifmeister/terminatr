@@ -1,12 +1,12 @@
 import SwiftUI
 import TerminatrUI
 
-/// The first screen: what the app does, the demo, and pairing (not yet:
-/// it comes with device links, T787).
+/// The first screen: what the app does, the demo, and pairing.
 struct Welcome: View {
     @Environment(PhoneModel.self) private var model
     @Environment(\.theme) private var theme
     @State private var opening = false
+    @State private var pairing = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -32,14 +32,13 @@ struct Welcome: View {
             .controlSize(.large)
             .disabled(opening)
             .accessibilityHint("Opens recorded projects and threads, read only")
-            Button {} label: {
+            Button { pairing = true } label: {
                 Label("Pair with a server", systemImage: "qrcode.viewfinder")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.bordered)
             .controlSize(.large)
-            .disabled(true)
-            Text("Pairing comes in a later version: on your Mac, tm device pair will show the code to scan.")
+            Text("On your computer, tm device pair shows the code to scan.")
                 .font(theme.body(.footnote))
                 .foregroundStyle(theme.muted)
             if let f = model.failure {
@@ -50,5 +49,6 @@ struct Welcome: View {
         }
         .padding(24)
         .backdrop()
+        .sheet(isPresented: $pairing) { PairScreen() }
     }
 }

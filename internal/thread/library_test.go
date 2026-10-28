@@ -132,3 +132,41 @@ func TestRemoveLibrary(t *testing.T) {
 		t.Error("rm with a path")
 	}
 }
+
+// TestReadLibraryChunk: a chunk from an offset, of a live thread's file
+// and an archived one's, with the file's size and time; past the end, a
+// bad name and a link are refused.
+func TestReadLibraryChunk(t *testing.T) {
+	p := libFixture(t)
+	at := time.Date(2026, 10, 2, 0, 0, 0, 0, time.UTC)
+	live, _ := Create(p, Record{Title: "Live", State: Running})
+	arch, _ := Create(p, Record{Title: "Arch", State: Resolved, ResolvedAt: at})
+	addLib(t, p, live.ID, "a.txt", "abcdef", at)
+	addLib(t, p, arch.ID, "b.txt", "uvwxyz", at)
+	if err := Archive(p, arch); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{live.ID, arch.ID} {
+		name := map[bool]string{true: "a.txt", false: "b.txt"}[id == live.ID]
+		data, size, mod, err := ReadLibraryChunk(p, id, name, 2, 3)
+		if err != nil || len(data) != 3 || size != 6 || !mod.Equal(at) {
+			t.Fatalf("%s: %q %d %v %v", id, data, size, mod, err)
+		}
+		if data, _, _, err := ReadLibraryChunk(p, id, name, 4, 10); err != nil || len(data) != 2 {
+			t.Fatalf("%s at the end: %q %v", id, data, err)
+		}
+		if _, _, _, err := ReadLibraryChunk(p, id, name, 7, 1); err == nil {
+			t.Errorf("%s: read past the end", id)
+		}
+	}
+	if _, _, _, err := ReadLibraryChunk(p, live.ID, "../thread.toml", 0, 10); err == nil {
+		t.Error("read a path")
+	}
+	os.WriteFile(p.Path("secret"), []byte("key"), 0o600)
+	if err := os.Symlink(p.Path("secret"), Path(p, live.ID, "library", "link.txt")); err != nil {
+		t.Fatal(err)
+	}
+	if data, _, _, err := ReadLibraryChunk(p, live.ID, "link.txt", 0, 10); err == nil {
+		t.Errorf("read through a link: %q", data)
+	}
+}

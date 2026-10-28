@@ -52,6 +52,10 @@ public struct Transcript: Sendable, Equatable {
     /// Items left out before the first entry: the server's, and the
     /// ones dropped here past limit.
     public private(set) var skipped = 0
+    /// The cursor transcript.page reads the items before the first entry
+    /// from (a tail's reset, app API 19, then each page's); empty when
+    /// there are none, or the server pages none.
+    public private(set) var before = ""
     public private(set) var todos: [AppAPI.TranscriptTodo] = []
     public private(set) var status: AppAPI.TranscriptStatus?
     /// Why the stream ended (exited, stopping), once it did.
@@ -71,6 +75,7 @@ public struct Transcript: Sendable, Equatable {
             entries = []
             todos = []
             skipped = data.skipped
+            before = data.before
             if let s = data.status { status = s }
             append(data.items)
         case "transcript.items":
@@ -82,6 +87,30 @@ public struct Transcript: Sendable, Equatable {
         default:
             break
         }
+    }
+
+    /// Puts a transcript.page's items (the ones just before the first
+    /// entry) in front, and takes its cursor. A result whose call was in
+    /// the page folds into that call, as it would have in order.
+    public mutating func prepend(_ page: AppAPI.TranscriptPage) {
+        var older = Transcript(limit: .max)
+        older.append(page.items)
+        var mine = entries[...]
+        while let r = mine.first, r.kind == .result, !r.call.isEmpty,
+              let i = older.entries.lastIndex(where: { ($0.kind == .tool || $0.kind == .files) && $0.call == r.call && $0.result == nil }) {
+            older.entries[i].result = r.result
+            mine = mine.dropFirst()
+        }
+        // Ids below the first entry's, so the ones the view has keep theirs.
+        let low = (entries.map(\.id).min() ?? nextID) - older.entries.count
+        let moved = older.entries.enumerated().map { i, e in
+            Entry(id: low + i, kind: e.kind, text: e.text, truncated: e.truncated, tool: e.tool, call: e.call,
+                  result: e.result, at: e.at, from: e.from, files: e.files, display: e.display)
+        }
+        entries = moved + mine
+        skipped = max(0, skipped - page.items.count)
+        before = page.before
+        if todos.isEmpty { todos = older.todos }
     }
 
     /// Takes the stream's result: the status it opened with.

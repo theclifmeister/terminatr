@@ -309,6 +309,10 @@ func TestCopies(t *testing.T) {
 	check("transcript.watch", homeOf(transcriptResultOf), append(sessionHome(".Session"), ".Window"))
 	check("transcript.watch events", homeOf(transcriptEventOf), []string{".Event"})
 	check("session.file", homeOf(sessionFileOf), nil)
+	check("memory.list", homeOf(memoryFilesOf), nil)
+	check("memory.read", homeOf(memoryTextOf), nil)
+	check("library.list", homeOf(libraryOf), nil)
+	check("library.read", homeOf(libraryChunkOf), nil)
 	// The session refused it is the bridge's to tell; an answered
 	// refusal isn't listed.
 	check("guard.refusals", homeOf(guardRefusalOf), []string{".Session", ".Decision"})
@@ -495,7 +499,8 @@ func TestAllowlist(t *testing.T) {
 		proto.MethodQuestionsOpen, proto.MethodTaskAdd, proto.MethodTaskGet, proto.MethodTaskDone, proto.MethodTaskTemplates, proto.MethodPaneVT, proto.MethodTranscriptWatch, MethodPaneInput,
 		proto.MethodSessionFile, proto.MethodCoordinatorClear, proto.MethodProjectActive, proto.MethodSessionUpload,
 		proto.MethodLinkAct, proto.MethodPeerShareAnswer, MethodGuardRefusals, MethodGuardDecide, proto.MethodTranscriptPage,
-		proto.MethodProjectPin, proto.MethodProjectNew, proto.MethodSessionAdoptRequest, proto.MethodSessionRemote, proto.MethodLinkSend}
+		proto.MethodProjectPin, proto.MethodProjectNew, proto.MethodSessionAdoptRequest, proto.MethodSessionRemote, proto.MethodLinkSend,
+		proto.MethodMemoryList, proto.MethodMemoryRead, proto.MethodLibraryList, proto.MethodLibraryRead}
 	slices.Sort(want)
 	if got := MethodNames(); !slices.Equal(got, want) {
 		t.Errorf("methods %v, want %v", got, want)
@@ -513,7 +518,8 @@ func TestAllowlist(t *testing.T) {
 	}
 	for name, write := range map[string]bool{MethodPaneInput: true, proto.MethodPaneVT: false, proto.MethodTranscriptWatch: false,
 		proto.MethodSessionFile: false, proto.MethodCoordinatorClear: true, proto.MethodProjectActive: true,
-		proto.MethodLinkAct: true, proto.MethodPeerShareAnswer: true, MethodGuardRefusals: false, MethodGuardDecide: true} {
+		proto.MethodLinkAct: true, proto.MethodPeerShareAnswer: true, MethodGuardRefusals: false, MethodGuardDecide: true,
+		proto.MethodMemoryList: false, proto.MethodMemoryRead: false, proto.MethodLibraryList: false, proto.MethodLibraryRead: false} {
 		if m, _ := Lookup(name); m.Write != write {
 			t.Errorf("%s: write %v", name, m.Write)
 		}

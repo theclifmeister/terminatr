@@ -1356,3 +1356,100 @@ func transcriptPageOf(r proto.TranscriptPageResult) TranscriptPage {
 	}
 	return out
 }
+
+// The project's memory and library, read only (app API 21; the server's
+// caps say project-files): what the TUI's Memory and Library tabs show.
+// A memory file is named by its path in the project folder, a library
+// file by its thread (or the message a linked project sent it with) and
+// its name: no other path crosses.
+type (
+	// MemoryReadParams are memory.read's: Path as memory.list gave it.
+	MemoryReadParams struct {
+		Project string `json:"project"`
+		Path    string `json:"path"`
+	}
+	// LibraryReadParams are library.read's: the file of thread (or
+	// message) ID named Name, the chunk from Offset.
+	LibraryReadParams struct {
+		Project string `json:"project"`
+		ID      string `json:"id"`
+		Name    string `json:"name"`
+		Offset  int64  `json:"offset,omitempty"`
+	}
+)
+
+// MemoryFiles are memory.list's result: CONTEXT.md and MEMORY.md when
+// they are there, then the notes by title.
+type MemoryFiles struct {
+	Files []MemoryFile `json:"files"`
+}
+
+// MemoryFile is one memory file: its path in the project folder, its
+// title, its size and, for a note, the paths and words it touches.
+type MemoryFile struct {
+	Path    string   `json:"path"`
+	Title   string   `json:"title"`
+	Bytes   int64    `json:"bytes"`
+	Touches []string `json:"touches,omitempty"`
+}
+
+// MemoryText is memory.read's result: the file's Markdown (at most
+// 1 MiB).
+type MemoryText struct {
+	Path string `json:"path"`
+	Text string `json:"text"`
+}
+
+// Library is library.list's result, newest file first.
+type Library struct {
+	Files []LibraryFile `json:"files"`
+}
+
+// LibraryFile is a file a thread's report attached (Thread, with its
+// Task, Title and State: running, stopped, resolved or archived), or
+// one linked project Peer sent with Message (State received). library.read
+// names it by Thread, else Message, and Name.
+type LibraryFile struct {
+	Thread  string    `json:"thread,omitempty"`
+	Task    string    `json:"task,omitempty"`
+	Title   string    `json:"title"`
+	State   string    `json:"state"`
+	Name    string    `json:"name"`
+	Size    int64     `json:"size"`
+	Time    time.Time `json:"time"`
+	Peer    string    `json:"peer,omitempty"`
+	Message string    `json:"message,omitempty"`
+}
+
+// LibraryChunk is library.read's result: Data from Offset (at most
+// 1 MiB) of Size bytes (at most 25 MiB), last modified at MTime.
+type LibraryChunk struct {
+	Name   string    `json:"name"`
+	Size   int64     `json:"size"`
+	MTime  time.Time `json:"mtime,omitzero"`
+	Offset int64     `json:"offset"`
+	Data   []byte    `json:"data,omitempty"`
+}
+
+func memoryFilesOf(r proto.MemoryListResult) MemoryFiles {
+	out := MemoryFiles{Files: []MemoryFile{}}
+	for _, f := range r.Files {
+		out.Files = append(out.Files, MemoryFile{Path: f.Path, Title: f.Title, Bytes: f.Bytes, Touches: f.Touches})
+	}
+	return out
+}
+
+func memoryTextOf(r proto.MemoryReadResult) MemoryText { return MemoryText{Path: r.Path, Text: r.Text} }
+
+func libraryOf(r proto.LibraryListResult) Library {
+	out := Library{Files: []LibraryFile{}}
+	for _, f := range r.Files {
+		out.Files = append(out.Files, LibraryFile{Thread: f.Thread, Task: f.Task, Title: f.Title, State: f.State,
+			Name: f.Name, Size: f.Size, Time: f.Time, Peer: f.Peer, Message: f.Message})
+	}
+	return out
+}
+
+func libraryChunkOf(r proto.LibraryReadResult) LibraryChunk {
+	return LibraryChunk{Name: r.Name, Size: r.Size, MTime: r.MTime, Offset: r.Offset, Data: r.Data}
+}

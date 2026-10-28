@@ -141,7 +141,8 @@ struct MainWindow: View {
                 .id(ref)
         case .project(let slug, let server) where server.isEmpty:
             if let p = app.project(slug) {
-                ProjectDashboard(project: p)
+                ProjectPages(project: p)
+                    .id(slug)
             } else {
                 Placeholder(phase: app.phase, empty: app.projects.isEmpty)
             }

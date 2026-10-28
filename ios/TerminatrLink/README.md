@@ -1,6 +1,8 @@
-# TerminatrLink (spike, T786)
+# TerminatrLink
 
-The phone's end of a link to its tm server, the way peers link (docs/SPEC.md §16):
+The phone's end of its device link to a tm server (docs/SPEC.md §16.15), the way peers link (§16): pairing by tm device pair's code (`DevicePairing.join`, `PairingCode`), then the link (`LinkTransport`), which the app runs its Bridge over. Started as the T786 spike; T792 made it the app's.
+
+The link:
 
 1. dial the relay (`wss://…#sha256=<pin>` for a self-signed relay, or the system's CAs);
 2. join the link room of the two keys with a signed hello, and wait there for the server;
@@ -32,47 +34,26 @@ How it was measured: an iOS release executable with `-dead_strip`, `strip -x`, m
 
 ## Proof
 
-`spike/run.sh [mac|sim] [link|impostor] [client|server]` runs two ends:
+`spike/run.sh [mac|sim] [device|declined|link|impostor] [client|server]` runs two ends:
 
-- **Server end:** a real `peer` link, from `TestPhoneSpikeLink` in `internal/peer/phonespike_test.go`. It goes through `tm relay serve --self-signed`'s relay code on loopback.
-- **Phone end:** this package's spike tests, on this Mac or inside the iOS Simulator (`xcodebuild test`).
+- **device** (the default): the server's real `device.Pair` and a `device.Manager` link (`TestPhoneDevice` in `internal/device/phone_test.go`), through `tm relay serve --self-signed`'s relay code on loopback. The phone pairs, checks a spent code finds nobody, links and swaps lines. **declined** has the server say no.
+- **link**, **impostor**: T786's peer-link spike against `internal/peer/phonespike_test.go` (peer hellos, `link.ping`, an impostor's key refused).
 
-The CLI relay refuses to run from an agent thread (it's human-only), which is why the Go test runs the relay in-process. To use a relay you started yourself, set `TM_PHONE_SPIKE_RELAY`.
+The CLI relay and `tm device pair` refuse to run from an agent thread (they're human-only), which is why the Go tests run them in-process. For the app itself, `make -C ios dev-server` runs a real tm server and relay for it (`TestPhoneDev`), and `make -C ios run-paired DEVICE=…` pairs the Simulator's app with it.
 
-What the link test checks:
+## The device link
 
-- the link comes up on the server's side;
-- hellos are exchanged both ways;
-- the phone's `spike.echo` request gets its answer;
-- the phone answers the server's `link.ping`;
-- the link ends when the phone leaves.
+A device link carries the app API's NDJSON right after the TLS, the server's hello first: no peer hellos, no `link.ping`. Nothing keeps it alive above the relay: the relay pings every 30 s and 90 s of silence ends the link (`RelayWire.idle`).
 
-In the impostor test, the right relay hello comes with another key's TLS certificate, and the phone must refuse it.
+## The pairing's exporter
 
-All of these pass in the iOS 27.1 Simulator and on macOS, with the phone as TLS client and as TLS server.
+The pairing proof binds the TLS session with `ExportKeyingMaterial("tm-pair v1", nil, 32)`. swift-nio-ssl has no exporter, so `PairKeys` takes BoringSSL's `EXPORTER_SECRET` from the key log callback and expands it as RFC 8446 §7.5 says (SHA-256 or SHA-384 by the secret's size). The device test against Go's `device.Pair` is what checks it: a wrong exporter fails the proof.
 
-## API
+## Network.framework
 
-`LinkTransport` has exactly `BridgeTransport`'s members, so the Bridge runs over it unchanged:
+The TCP connection and the relay's TLS go through NIOTransportServices (`NWConnection`), so iOS brings up cellular and VPNs; a pinned relay is checked in the TLS options' verify block. The link's TLS inside stays BoringSSL.
 
-```swift
-public final class LinkTransport: @unchecked Sendable {        // : BridgeTransport
-    public struct Endpoint: Sendable { var relay: URL; var serverKey: Data }  // from the pairing QR
-    public static func connect(to: Endpoint, as: LinkIdentity,
-                               group: EventLoopGroup = .singleton,
-                               onWait: @Sendable () -> Void = {}) async throws -> LinkTransport
-    public let lines: AsyncThrowingStream<Data, any Error>  // finishes with LinkError on end
-    public func send(_ line: Data) throws
-    public func close()                                      // leaves the room; the server hears
-}
-public struct LinkIdentity { init(); init(seed: Data); publicKey: Data; id: Data }  // Keychain keeps the seed
-```
+## Still to come
 
-The conformance itself, `extension LinkTransport: BridgeTransport {}`, waits until TerminatrKit builds for iOS: `ProcessTransport` and `TMLocator` go behind `#if os(macOS)`.
-
-## Before it ships
-
-- **Network.framework underneath.** Use NIOTransportServices (`NWConnection`) for the TCP connection and the relay's TLS, so iOS brings up cellular and VPN. BSD sockets don't do that. The inner TLS stays BoringSSL.
-- **Keepalive.** Answer `link.ping` and treat 90 s of silence as dead, in the device protocol's layer above the lines.
-- **Reconnects.** Redial with backoff, and close cleanly when the app goes to the background.
-- **Keychain.** Keep the identity seed in the Keychain, this device only, after first unlock.
+- Push and a link while the app is in the back (T785).
+- Answer and write levels (the server enables only view).

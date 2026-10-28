@@ -66,7 +66,7 @@ struct Spike {
     }
 }
 
-@Test(.enabled(if: Spike() != nil && ProcessInfo.processInfo.environment["TM_PHONE_SPIKE_MODE"] != "impostor"))
+@Test(.enabled(if: Spike() != nil && [nil, "link"].contains(ProcessInfo.processInfo.environment["TM_PHONE_SPIKE_MODE"])))
 func spikeLink() async throws {
     let s = Spike()!
     let (ep, identity) = try await s.endpoint()
@@ -123,4 +123,60 @@ extension Data {
         }
         self = d
     }
+}
+
+@Test func pairingCodeReadsTmDevicePairs() throws {
+    // device.Invite.String's form (internal/device TestInvite).
+    let pin = String(repeating: "0f", count: 32)
+    let server = String(repeating: "ab", count: 32)
+    let c = try PairingCode("terminatr://pair?v=1&relay=wss%3A%2F%2Frelay.example.net%23sha256%3D\(pin)&secret=7Q4M-K2XD-9HVA-PT3C&server=\(server)")
+    #expect(c.relay.absoluteString == "wss://relay.example.net#sha256=\(pin)")
+    #expect(c.secret.count == 10)
+    #expect(c.server == Data(hexString: server))
+    #expect(PairingCode.parseSecret("7q4m k2xd 9hva pt3c") == c.secret)
+    #expect(PairingCode.parseSecret("7Q4M-K2XD-9HVA-PT3") == nil)
+    for bad in ["", "https://pair?v=1", "terminatr://pair?v=2",
+                "terminatr://pair?v=1&relay=wss%3A%2F%2Fr&secret=7Q4M-K2XD-9HVA-PT3C&server=00",
+                "terminatr://pair?v=1&relay=https%3A%2F%2Fr&secret=7Q4M-K2XD-9HVA-PT3C&server=\(server)"] {
+        #expect(throws: PairingCode.Bad.self) { try PairingCode(bad) }
+    }
+}
+
+// The phone's pairing and device link against a server's real
+// device.Pair and link (internal/device/phone_test.go), as spike/run.sh
+// device runs them: the invite comes through TM_PHONE_SPIKE_DIR.
+@Test(.enabled(if: Spike() != nil && ["device", "declined"].contains(ProcessInfo.processInfo.environment["TM_PHONE_SPIKE_MODE"])))
+func spikeDevice() async throws {
+    let s = Spike()!
+    var invite: String?
+    for _ in 0..<1800 where invite == nil {
+        invite = try? String(contentsOf: s.dir.appendingPathComponent("invite.txt"), encoding: .utf8)
+        if invite == nil { try await Task.sleep(for: .milliseconds(100)) }
+    }
+    let code = try PairingCode(try #require(invite))
+    let identity = LinkIdentity()
+    if ProcessInfo.processInfo.environment["TM_PHONE_SPIKE_MODE"] == "declined" {
+        await #expect(throws: LinkError.declined) {
+            _ = try await DevicePairing.join(code, as: identity, name: "tm phone test", version: "1.0")
+        }
+        return
+    }
+    let server = try await DevicePairing.join(code, as: identity, name: "tm phone test", version: "1.0")
+    print("spike: paired with \(server.name) \(server.version)")
+    #expect(server.name == "studio")
+    #expect(LinkIdentity.id(of: server.endpoint.serverKey) == code.server)
+    // A spent code finds nobody.
+    await #expect(throws: LinkError.noPairer) {
+        _ = try await DevicePairing.join(code, as: LinkIdentity(), name: "again", version: "1.0")
+    }
+    let link = try await LinkTransport.connect(to: server.endpoint, as: identity) {
+        print("spike: the server isn't in the room yet")
+    }
+    var it = link.lines.makeAsyncIterator()
+    // The server speaks first: the echo's name and level line.
+    #expect(try await it.next().map { String(decoding: $0, as: UTF8.self) } == "tm phone test view")
+    try link.send(Data("hello from the phone".utf8))
+    #expect(try await it.next().map { String(decoding: $0, as: UTF8.self) } == "hello from the phone")
+    print("spike: device link up, lines both ways")
+    link.close()
 }
