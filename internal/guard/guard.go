@@ -1047,8 +1047,16 @@ func assignAt(name string) *regexp.Regexp {
 
 // litValue is a value written out from / that the shell takes as it is:
 // no expansion, pattern, quote or operator in it, or all of it in '…',
-// or in "…" without $, ` or \.
-const litValue = `(/[^\s$` + "`" + `'"\\;&|<>(){}*?\[\]~#!]*|'/[^']*'|"/[^"$` + "`" + `\\!]*")`
+// or in "…" without $, ` or \. Or one that starts with ~ or a bare
+// variable ($HOME, ${TMPDIR}, $S), then a / and such a path or nothing,
+// unquoted or all of it in "…": walkLine places it where the variable
+// is (lineValue).
+const (
+	litRest  = `[^\s$` + "`" + `'"\\;&|<>(){}*?\[\]~#!]*`
+	litQRest = `[^"$` + "`" + `\\!]*`
+	litVar   = `\$(?:\{[A-Za-z_][A-Za-z0-9_]*\}|[A-Za-z_][A-Za-z0-9_]*)`
+	litValue = `(/` + litRest + `|'/[^']*'|"/` + litQRest + `"|~(?:/` + litRest + `)?|` + litVar + `(?:/` + litRest + `)?|"` + litVar + `(?:/` + litQRest + `)?")`
+)
 
 var (
 	// litAssign is one assignment of a litValue to a variable.
@@ -1128,6 +1136,57 @@ func (r Rules) lineVals(parts []linePart) map[int][][2]string {
 		})
 	}
 	return found
+}
+
+// lineValue are the paths value v (a litValue, unquoted) of an
+// assignment may be where the line's commands in folders cur run it,
+// with the values vals its variables hold ("" one the guard can't
+// tell): ~ and $HOME are the user's home, $PWD each of cur, a variable
+// the line sets what vals says, and one it doesn't set ($TMPDIR) stays
+// as written, which judgeNoWrite takes as given, as it takes $TMPDIR/x.
+// $_, $OLDPWD, and $HOME or $PWD the line may set, can't be told.
+func (r Rules) lineValue(v string, vals map[string][]string, cur []string) []string {
+	head, rest := v, ""
+	if i := strings.IndexByte(v, '/'); i >= 0 {
+		head, rest = v[:i], v[i:]
+	}
+	join := func(dirs []string) []string {
+		var out []string
+		for _, d := range dirs {
+			if d == "" {
+				out = withDirs(out, "")
+			} else {
+				out = withDirs(out, d+rest)
+			}
+		}
+		return out
+	}
+	var name string
+	switch {
+	case head == "":
+		return []string{v}
+	case head == "~":
+		name = "HOME"
+	case strings.HasPrefix(head, "${"):
+		name = head[2 : len(head)-1]
+	case strings.HasPrefix(head, "$"):
+		name = head[1:]
+	default:
+		return []string{""}
+	}
+	switch {
+	case name == "_" || name == "OLDPWD":
+		return []string{""}
+	case vals[name] != nil:
+		return join(vals[name])
+	case assigns(r.line, name) || name == "PWD" && r.pwdSet:
+		return []string{""}
+	case name == "HOME":
+		return join([]string{r.Home})
+	case name == "PWD":
+		return join(cur)
+	}
+	return []string{v}
 }
 
 // lineVal is where path w goes when it starts with a variable the line
@@ -1473,14 +1532,15 @@ func (r Rules) walkLine(command string, cwds []string) (d *Denial, st, ts lineDi
 				vals = map[string][]string{}
 			}
 			for _, a := range as {
+				v := r.lineValue(a[1], vals, st.cur)
 				if pt.before == "&&" || pt.before == "||" {
 					was := vals[a[0]]
 					if was == nil {
 						was = []string{""}
 					}
-					vals[a[0]] = withDirs(was, a[1])
+					vals[a[0]] = withDirs(was, v...)
 				} else {
-					vals[a[0]] = []string{a[1]}
+					vals[a[0]] = v
 				}
 			}
 			r.vals = vals
@@ -2990,6 +3050,119 @@ func tmWritesSettings(args []string) string {
 	return ""
 }
 
+// scratchTM: words, a tm command's words with its last n the command
+// and its arguments, give it a home and a server of its own (T812):
+// TERMINATR_HOME set to a folder of the thread's own (scratchPath), and
+// TERMINATR_SOCKET set to a path in one too, or unset (env -u, or set
+// empty: tm then takes its home's). Such a tm reads and writes its home
+// alone and dials no server but its own, so the user's settings,
+// projects and server are out of its reach, whichever tm it is. Only
+// assignments before the command or after env count: a word after
+// another wrapper may be its option's value (xargs -I), and sudo and
+// doas set the environment themselves.
+func (r Rules) scratchTM(words []string, n int) bool {
+	if n > len(words) {
+		return false
+	}
+	set, unset := map[string]string{}, map[string]bool{}
+	envOK := true
+	pre := words[:len(words)-n]
+	for i := 0; i < len(pre); i++ {
+		w := pre[i]
+		switch {
+		case w == "<" || w == ">":
+			i++
+		case assignment.MatchString(w):
+			k, v, _ := strings.Cut(w, "=")
+			if !envOK || strings.ContainsAny(k, "+[") {
+				return false
+			}
+			set[k] = v
+			delete(unset, k)
+		case w == "env":
+			envOK = true
+			for i+1 < len(pre) && strings.HasPrefix(pre[i+1], "-") {
+				i++
+				o := pre[i]
+				switch {
+				case o == "--":
+				case o == "-u" || isLong(o, "--unset") && !strings.Contains(o, "="):
+					if i++; i == len(pre) {
+						return false
+					}
+					unset[pre[i]] = true
+					delete(set, pre[i])
+				case strings.HasPrefix(o, "-u") || isLong(o, "--unset"):
+					k := strings.TrimPrefix(o, "-u")
+					if strings.HasPrefix(o, "--") {
+						_, k, _ = strings.Cut(o, "=")
+					}
+					unset[k] = true
+					delete(set, k)
+				default:
+					return false // -i, -S, -C and the like
+				}
+			}
+		case w == "sudo" || w == "doas":
+			return false
+		default:
+			envOK = false
+		}
+	}
+	home, ok := set["TERMINATR_HOME"]
+	if !ok || home == "" || !r.scratchPath(home) {
+		return false
+	}
+	sock, ok := set["TERMINATR_SOCKET"]
+	if !ok {
+		return unset["TERMINATR_SOCKET"]
+	}
+	return sock == "" || r.scratchPath(sock)
+}
+
+// scratchPath: value w of an assignment is a path in a folder of the
+// thread's own, its worktree, its own temp folder ($TMPDIR is that) or
+// one it may write in (Writable), wherever it lands, and neither in nor
+// holding any of tm's files the floor keeps (NoWrite, Own) or another
+// thread's temp folder.
+func (r Rules) scratchPath(w string) bool {
+	ps, ok := r.lineVal(w)
+	if !ok {
+		ps = []string{w}
+	}
+	var lands []string
+	for _, p := range ps {
+		if m := bareParam.FindStringSubmatch(p); m != nil && m[1]+m[2] == "TMPDIR" && r.OwnTemp != "" && !assigns(r.line, "TMPDIR") {
+			p = r.OwnTemp + p[len(m[0]):]
+		}
+		if p == "" || strings.ContainsAny(p, "$`*?[{") || strings.HasPrefix(p, "~") && !strings.HasPrefix(p, "~/") ||
+			r.Cwd == "" && !strings.HasPrefix(slash(p), "/") && !strings.HasPrefix(p, "~") {
+			return false
+		}
+		lands = withDirs(lands, r.abs(p))
+		if r.Resolve != nil {
+			lands = withDirs(lands, r.abs(r.resolve(r.joined(p))))
+		}
+	}
+	lands, ok = r.throughLinks(lands)
+	if !ok {
+		return false
+	}
+	own := append([]string{r.OwnTemp}, r.Writable...)
+	if r.Role == "thread" {
+		own = append(own, r.wt)
+	}
+	tm := append(slices.Clone(r.NoWrite), r.Own...)
+	for _, p := range lands {
+		if !slices.ContainsFunc(own, func(d string) bool { return r.under(p, d) }) ||
+			slices.ContainsFunc(tm, func(d string) bool { return r.under(p, d) || r.under(d, p) }) ||
+			slices.ContainsFunc(r.OtherTemps, func(d string) bool { return r.under(p, d) }) && !r.under(p, r.OwnTemp) {
+			return false
+		}
+	}
+	return true
+}
+
 // accessOpen reports whether tm with args (after its name) is a tm
 // access write a coordinator with AccessWrites may run: a rule's (add,
 // rm, edit, drop, undrop, set local-ports), never for all
@@ -4137,9 +4310,10 @@ func (r Rules) judgeNoWrite(cmd string, args, words []string) *Denial {
 		return nil
 	}
 	if cmd == "tm" || strings.Contains(cmd, "TERMINATR_BIN") {
-		if what := tmWritesSettings(args); what != "" && !(r.AccessWrites && accessOpen(args)) {
+		if what := tmWritesSettings(args); what != "" && !(r.AccessWrites && accessOpen(args)) && !r.scratchTM(words, len(args)+1) {
 			d := r.deny(RuleTMFiles, what, "")
-			d.Message = "terminatr guard (" + RuleTMFiles + "): " + what + " changes tm's settings, which are the user's alone. Run tm's read-only commands instead (tm --version, tm --help, tm project list), or ask the user."
+			d.Message = "terminatr guard (" + RuleTMFiles + "): " + what + " changes tm's settings, which are the user's alone. Run tm's read-only commands instead (tm --version, tm --help, tm project list), or ask the user to run it in their own terminal (a ! command in an agent's pane runs as the agent). " +
+				"On a scratch tm of your own, give this command its own home and socket in your worktree or temp folder: env -u TERMINATR_SESSION TERMINATR_HOME=$TMPDIR/tm TERMINATR_SOCKET=$TMPDIR/tm.sock tm … (any program named tm, a wrapper or a build, counts as tm)."
 			return floor(d)
 		}
 	}

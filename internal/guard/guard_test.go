@@ -24,7 +24,9 @@ import (
 // The thread-mods and mods-only sets carry rules a mod adds (mods design
 // §7, Tighten only): the core's and the mod's, and the mod's alone. The
 // yolo-thread set is a yolo thread's guard: the floor only, with tm's
-// settings and the project folder no tool writes (noWrite); the
+// settings and the project folder no tool writes (noWrite), and
+// yolo-thread-temp the same with the thread's own temp folder, where a
+// scratch tm's home and socket may be (ownTemp, T812); the
 // floor-coordinator set the coordinator's, whose project folder it writes
 // but for tm's parts of it; thread-escapes asks about a call that asks to
 // leave the sandbox (askEscapes), rule "escape"; thread-ask-first asks
