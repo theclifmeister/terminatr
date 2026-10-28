@@ -113,10 +113,12 @@ struct ConversationTab: View {
                                 .foregroundStyle(theme.muted)
                                 .frame(maxWidth: .infinity)
                         }
-                        Color.clear.frame(height: 1).id(Self.end)
+                        // The foot's padding is the end row's: scrolled to,
+                        // it reaches the true end (T807).
+                        Color.clear.frame(height: 1).padding(.bottom, 14).id(Self.end)
                     }
                     .padding(.horizontal, Page.edge)
-                    .padding(.vertical, 14)
+                    .padding(.top, 14)
                 }
                 .modifier(FollowAnchor())
                 // Streamed text lands in place: no implicit animation.
@@ -326,9 +328,9 @@ struct FollowGeometry: ViewModifier {
     func body(content: Content) -> some View {
         if #available(macOS 15, *) {
             content.onScrollGeometryChange(for: [Double].self) { g in
-                [g.contentOffset.y, g.containerSize.height - g.contentInsets.bottom, g.contentSize.height]
+                [g.contentOffset.y, g.visibleRect.height, g.contentSize.height, g.contentInsets.bottom]
             } action: { _, g in
-                follow.scrolled(offset: g[0], visible: g[1], content: g[2], newest: newest)
+                follow.scrolled(offset: g[0], visible: g[1], content: g[2], inset: g[3], newest: newest)
             }
         } else {
             content

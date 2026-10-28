@@ -52,9 +52,11 @@ struct ConversationScreen: View {
                         }
                     }
                     if let session { waiting(session) }
-                    Color.clear.frame(height: 1).id("end")
+                    // The foot's padding is the end row's: scrolled to,
+                    // it reaches the true end (T807).
+                    Color.clear.frame(height: 1).padding(.bottom, 16).id("end")
                 }
-                .padding(16)
+                .padding([.horizontal, .top], 16)
             }
             .modifier(PhoneFollowGeometry(follow: $follow, newest: transcript.entries.last?.id))
             // New output: the follower goes to the end; scrolled up, the
@@ -270,9 +272,9 @@ struct PhoneFollowGeometry: ViewModifier {
                 .defaultScrollAnchor(.bottom, for: .initialOffset)
                 .defaultScrollAnchor(.top, for: .sizeChanges)
                 .onScrollGeometryChange(for: [Double].self) { g in
-                    [g.contentOffset.y, g.containerSize.height - g.contentInsets.bottom, g.contentSize.height]
+                    [g.contentOffset.y, g.visibleRect.height, g.contentSize.height, g.contentInsets.bottom]
                 } action: { _, g in
-                    follow.scrolled(offset: g[0], visible: g[1], content: g[2], newest: newest)
+                    follow.scrolled(offset: g[0], visible: g[1], content: g[2], inset: g[3], newest: newest)
                 }
         } else {
             content.defaultScrollAnchor(.bottom)

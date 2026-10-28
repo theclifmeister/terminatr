@@ -77,3 +77,24 @@ private func at(_ f: inout Follow, _ offset: Double, content: Double, newest: In
     #expect(!s7)
     #expect(f.unseen == 1)
 }
+
+/// The bars at the foot (composer, Working bar, cards) are a bottom
+/// inset: scrolled fully down, the view's whole height reaches past the
+/// content by it. The numbers are a Mac window's at its end (T807).
+@Test func endBehindTheBars() {
+    var f = Follow()
+    _ = f.arrived([0, 1])
+    // 600 tall, 166 of it the bars, over 2269 of content: the end.
+    f.scrolled(offset: 1835, visible: 600, content: 2269, inset: 166, newest: 1)
+    #expect(f.following)
+    // Scrolled up by more than the slack, though the bars' height
+    // would cover it: no longer at the end.
+    f.scrolled(offset: 1735, visible: 600, content: 2269, inset: 166, newest: 1)
+    #expect(!f.following)
+    // Back down by hand: at the end, and following again.
+    f.scrolled(offset: 1835, visible: 600, content: 2269, inset: 166, newest: 1)
+    #expect(f.following)
+    // A taller bar (an open card) under a follower: still following.
+    f.scrolled(offset: 1835, visible: 600, content: 2269, inset: 420, newest: 1)
+    #expect(f.following)
+}
