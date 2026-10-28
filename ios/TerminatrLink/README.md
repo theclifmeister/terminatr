@@ -39,7 +39,7 @@ How it was measured: an iOS release executable with `-dead_strip`, `strip -x`, m
 - **device** (the default): the server's real `device.Pair` and a `device.Manager` link (`TestPhoneDevice` in `internal/device/phone_test.go`), through `tm relay serve --self-signed`'s relay code on loopback. The phone pairs, checks a spent code finds nobody, links and swaps lines. **declined** has the server say no.
 - **link**, **impostor**: T786's peer-link spike against `internal/peer/phonespike_test.go` (peer hellos, `link.ping`, an impostor's key refused).
 
-The CLI relay and `tm device pair` refuse to run from an agent thread (they're human-only), which is why the Go tests run them in-process. For the app itself, `make -C ios dev-server` runs a real tm server and relay for it (`TestPhoneDev`), and `make -C ios run-paired DEVICE=…` pairs the Simulator's app with it.
+The CLI relay and `tm device pair` refuse to run from an agent thread (they're human-only), which is why the Go tests run them in-process. For the app itself, `make -C ios dev-server` runs a real tm server and relay for it (`TestPhoneDev` in `internal/e2e`, seeded with four projects; the Makefile lists what), and `make -C ios run-paired DEVICE=…` pairs the Simulator's app with it.
 
 ## The device link
 

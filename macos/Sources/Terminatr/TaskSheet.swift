@@ -71,14 +71,14 @@ struct TaskSheet: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .textSelection(.enabled)
                 Spacer(minLength: 8)
-                Text(Self.words(d.task.status))
+                Text(TaskDetail.words(d.task.status))
                     .font(theme.mono(.caption, .medium))
                     .padding(.horizontal, 7)
                     .padding(.vertical, 2)
                     .background(theme.cardTint, in: Capsule())
                     .overlay(Capsule().strokeBorder(theme.edge, lineWidth: 1))
             }
-            Text(facts(d))
+            Text(d.facts)
                 .font(theme.mono(.footnote))
                 .foregroundStyle(theme.muted)
             TaskOutcome(project: d.project, task: d.task.ref)
@@ -86,62 +86,18 @@ struct TaskSheet: View {
         .padding(20)
     }
 
-    @ViewBuilder
     private func content(_ d: TaskDetail) -> some View {
-        VStack(alignment: .leading, spacing: 18) {
-            if let on = d.blockedOn {
-                callout(on.isEmpty ? "No note says. Ask the coordinator in its conversation." : on,
-                        label: "Blocked on", symbol: "hand.raised.fill", colour: theme.attention, faint: on.isEmpty)
-            }
-            if let ship = d.ship {
-                shipRow(ship, url: prURL(d))
-            }
-            if let checks = d.checks {
-                section("How to check") {
-                    if checks.isEmpty {
-                        Text("The report doesn't say. Ask the coordinator in its conversation.")
-                            .foregroundStyle(theme.muted)
-                    } else {
-                        ForEach(Array(checks.enumerated()), id: \.offset) { _, c in
-                            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                                Text("•").foregroundStyle(theme.muted)
-                                MarkdownView(text: c)
-                            }
-                        }
-                    }
-                }
-            }
-            if !d.task.steps.isEmpty {
-                section("Steps · \(d.stepsDone)") {
-                    ForEach(d.task.steps, id: \.n) { s in
-                        HStack(alignment: .firstTextBaseline, spacing: 8) {
-                            Image(systemName: s.done ? "checkmark.circle.fill" : "circle")
-                                .foregroundStyle(s.done ? theme.good : theme.muted)
-                                .accessibilityLabel(s.done ? "done" : "to do")
-                            Text("\(s.n). \(s.text)")
-                                .foregroundStyle(s.done ? theme.muted : theme.ink)
-                                .fixedSize(horizontal: false, vertical: true)
-                                .textSelection(.enabled)
-                        }
-                        .accessibilityElement(children: .combine)
-                    }
-                }
-            }
-            if !d.notes.isEmpty {
-                section("Notes") { MarkdownView(text: d.notes) }
-            } else if d.partial {
-                if let fetchError {
-                    Text("Its notes and steps didn't load: \(fetchError)")
-                        .foregroundStyle(theme.attention)
-                } else if app.canGetTask {
-                    ProgressView().controlSize(.small)
-                } else {
-                    Text("This tm doesn't send a board task's notes and steps: update it with tm update.")
-                        .foregroundStyle(theme.muted)
-                }
+        TaskDetailView(d) {
+            if let fetchError {
+                Text("Its notes and steps didn't load: \(fetchError)")
+                    .foregroundStyle(theme.attention)
+            } else if app.canGetTask {
+                ProgressView().controlSize(.small)
+            } else {
+                Text("This tm doesn't send a board task's notes and steps: update it with tm update.")
+                    .foregroundStyle(theme.muted)
             }
         }
-        .font(theme.body(.body))
     }
 
     private func footer(_ d: TaskDetail?) -> some View {
@@ -199,82 +155,6 @@ struct TaskSheet: View {
                 askError = Dashboard.words(error)
             }
             asking = false
-        }
-    }
-
-    private func shipRow(_ ship: TaskDetail.Ship, url: URL?) -> some View {
-        let (symbol, colour): (String, Color) = switch ship.state {
-        case .merged: ("checkmark.circle.fill", theme.good)
-        case .open: ("arrow.triangle.pull", theme.action)
-        case .closed: ("xmark.circle.fill", theme.attention)
-        case .unknown: ("arrow.triangle.pull", theme.muted)
-        }
-        return HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Image(systemName: symbol)
-                .foregroundStyle(colour)
-                .accessibilityHidden(true)
-            if let url {
-                Link(ship.text, destination: url)
-                    .help(url.absoluteString)
-            } else {
-                Text(ship.text)
-            }
-        }
-        .font(theme.body(.body, .medium))
-        .foregroundStyle(ship.state == .closed ? theme.attention : theme.ink)
-    }
-
-    private func callout(_ text: String, label: String, symbol: String, colour: Color, faint: Bool) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Image(systemName: symbol)
-                .foregroundStyle(colour)
-                .accessibilityHidden(true)
-            (Text("\(label): ").bold() + Text(text))
-                .foregroundStyle(faint ? theme.muted : theme.ink)
-                .fixedSize(horizontal: false, vertical: true)
-                .textSelection(.enabled)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 9)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(colour.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(colour.opacity(theme.contrast ? 1 : 0.3), lineWidth: 1))
-        .accessibilityElement(children: .combine)
-    }
-
-    private func section<C: View>(_ title: String, @ViewBuilder _ content: () -> C) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title.uppercased())
-                .font(theme.mono(.caption2, .medium))
-                .tracking(1)
-                .foregroundStyle(theme.muted)
-            content()
-        }
-    }
-
-    // MARK: words
-
-    /// "web · thread t-0713 · owner me".
-    private func facts(_ d: TaskDetail) -> String {
-        var f = [d.project]
-        if !d.task.thread.isEmpty { f.append("thread \(d.task.thread)") }
-        if !d.task.owner.isEmpty { f.append("owner \(d.task.owner)") }
-        if !d.task.updated.isEmpty { f.append("updated \(d.task.updated)") }
-        return f.joined(separator: " · ")
-    }
-
-    /// The PR's link: the report's PR line, a web link only.
-    private func prURL(_ d: TaskDetail) -> URL? {
-        guard let s = d.thread?.reportPr, let u = URL(string: s), SafeMarkdown.allowed(u) else { return nil }
-        return u
-    }
-
-    static func words(_ status: String) -> String {
-        switch status {
-        case "ready": "on deck"
-        case "started": "in motion"
-        case "open": "backlog"
-        default: status
         }
     }
 

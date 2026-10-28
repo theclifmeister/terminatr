@@ -44,3 +44,73 @@ func demoBridge() async throws -> Bridge {
         _ = try await b.call(AppAPI.Methods.sessionPrompt, AppAPI.PromptParams(id: "s-101", text: "hi"))
     }
 }
+
+/// What the phone's project pages read of the demo (T798): acme-web's
+/// overview, board with its done tasks and each task whole, memory and
+/// library, as the Mac's pages gate and read them; another project's
+/// lists come empty, not refused.
+@Test func demoProjectPages() async throws {
+    let b = try await demoBridge()
+    let hello = try #require(await b.hello)
+    #expect(ProjectPage.pages(hello) == ProjectPage.allCases)
+    #expect(Compatibility.listsDone(hello) && Compatibility.getsTasks(hello))
+    let projects = try await b.subscribe(AppAPI.Methods.projectsWatch, AppAPI.ProjectsWatchParams(detail: true, lean: true)).result.projects
+    let web = try #require(projects.first { $0.slug == "acme-web" })
+    let overview = ProjectOverview(web, coordinator: nil, needs: 1)
+    #expect(overview.repos.map(\.note) == ["", "behind origin by 2"])
+    #expect(overview.tasks == "1 needs you · 3 in motion · 2 on deck · 4 done")
+
+    #expect(Dashboard.onDeck(web).count == 2 && Dashboard.backlog(web).count == 3)
+    let done = try await b.call(AppAPI.Methods.taskDone, AppAPI.ProjectParams(project: "acme-web")).tasks
+    #expect(done.count == Dashboard.doneCount(web))
+    #expect(Dashboard.filtered(done, by: "tokens").map(\.ref) == ["T8", "T11"])
+    for t in web.board + done {
+        let full = try await b.call(AppAPI.Methods.taskGet, AppAPI.TaskGetParams(project: "acme-web", task: t.ref))
+        let d = try #require(TaskDetail.of(t.ref, in: web, fetched: full))
+        #expect(!d.partial && !d.notes.isEmpty, "\(t.ref)")
+    }
+
+    let memory = try await b.call(AppAPI.Methods.memoryList, AppAPI.ProjectParams(project: "acme-web")).files
+    #expect(MemoryPage.first(memory) == "CONTEXT.md")
+    #expect(MemoryPage.project(memory).count == 2 && MemoryPage.notes(memory).count == 3)
+    for f in memory {
+        let m = try await b.call(AppAPI.Methods.memoryRead, AppAPI.MemoryReadParams(project: "acme-web", path: f.path))
+        #expect(m.path == f.path && m.text.utf8.count == f.bytes)
+    }
+
+    let library = try await b.call(AppAPI.Methods.libraryList, AppAPI.ProjectParams(project: "acme-web")).files
+    #expect(LibraryPage.groups(library).map(\.id) == ["t-0103", "t-0105", "@billing-api", "t-0098"])
+    for f in library {
+        let read = await LibraryPage.read({ p in try await b.call(AppAPI.Methods.libraryRead, p) }, project: "acme-web", file: f)
+        guard case .data(let d, _) = read else {
+            Issue.record("\(f.name): \(read)")
+            continue
+        }
+        #expect(d.count == f.size)
+    }
+
+    #expect(try await b.call(AppAPI.Methods.memoryList, AppAPI.ProjectParams(project: "billing-api")).files.isEmpty)
+    #expect(try await b.call(AppAPI.Methods.libraryList, AppAPI.ProjectParams(project: "docs-site")).files.isEmpty)
+}
+
+/// A recording's answers go by the request's params: the first that
+/// fits, else calls', else refused.
+@Test func demoAnswersByParams() async throws {
+    let recording = """
+    {"hello": {"app_api": \(AppAPI.version), "tm": "dev", "build": "demo", "level": "", "methods": [], "capabilities": []},
+     "calls": {"memory.read": {"path": "", "text": "fallback"}},
+     "answers": {"memory.read": [{"params": {"project": "a", "path": "CONTEXT.md"}, "result": {"path": "CONTEXT.md", "text": "a's"}},
+                                 {"params": {"project": "b"}, "result": {"path": "", "text": "b's"}}]}}
+    """
+    let b = Bridge(transport: try DemoTransport(recording: Data(recording.utf8)))
+    _ = try await b.start()
+    func read(_ project: String, _ path: String) async throws -> String {
+        try await b.call(AppAPI.Methods.memoryRead, AppAPI.MemoryReadParams(project: project, path: path)).text
+    }
+    #expect(try await read("a", "CONTEXT.md") == "a's")
+    #expect(try await read("b", "MEMORY.md") == "b's")
+    #expect(try await read("a", "MEMORY.md") == "fallback")
+    await #expect(throws: AppAPI.Error.self) {
+        _ = try await b.call(AppAPI.Methods.libraryList, AppAPI.ProjectParams(project: "a"))
+    }
+}

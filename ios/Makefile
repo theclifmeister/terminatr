@@ -9,10 +9,26 @@
 #   make run     build, install and open it in the Simulator DEVICE
 #                (a name or UDID; booted if it isn't), in demo mode
 #   make dev-server  a dev tm server and relay for the app to pair and
-#                link with (internal/appapi TestPhoneDev; Go): it writes
-#                its pairing code to $(DEV)/invite.txt; touch
+#                link with (internal/e2e TestPhoneDev; Go, the fake agent),
+#                seeded in about 15s with what the screens show:
+#                  acme-web (pinned): a coordinator with 30 turns (more
+#                    than a page: Earlier messages), 22 tasks across Done,
+#                    In motion, review, On deck, Backlog and blocked, with
+#                    steps and notes; threads asking a question (T13),
+#                    working (T14), blocked on a permission prompt (T15)
+#                    and idle with a report and attachment, in review
+#                    (T16); CONTEXT.md, MEMORY.md, 3 memory notes; inbox
+#                    items; linked both ways with billing-api, whose
+#                    message M-1 brings a file
+#                  billing-api: a coordinator, a thread idle with a
+#                    report and attachment (T3), one working (T4)
+#                  docs-site: a coordinator, 4 tasks, a question for you
+#                  old-prototype: inactive, its tasks done
+#                It writes its pairing code to $(DEV)/invite.txt and the
+#                server's TERMINATR_HOME/SOCKET to $(DEV)/home.txt (source
+#                it for tm commands, or the Mac app, against it); touch
 #                $(DEV)/asleep to stop the server, rm it to start it
-#                again, touch $(DEV)/stop to end
+#                again (the agents resume, idle), touch $(DEV)/stop to end
 #   make run-paired  as run, pairing with dev-server's code instead of
 #                the demo (the Simulator has no camera)
 #   make archive the Release build for devices, in $(ARCHIVE):
@@ -63,7 +79,7 @@ run: build
 
 dev-server:
 	mkdir -p $(DEV) && rm -f $(DEV)/invite.txt $(DEV)/asleep $(DEV)/stop
-	cd .. && TM_PHONE_DEV_DIR="$(abspath $(DEV))" go test -count=1 -v -timeout 0 -run '^TestPhoneDev$$' ./internal/appapi
+	cd .. && E2E=1 TM_PHONE_DEV_DIR="$(abspath $(DEV))" go test -count=1 -v -timeout 0 -run '^TestPhoneDev$$' ./internal/e2e
 
 run-paired: build
 	xcrun simctl boot "$(DEVICE)" 2>/dev/null || true

@@ -11,7 +11,7 @@ import TerminatrUI
 /// opens the demo at once, and -open ROUTE (Route.parse) on that
 /// screen: the Simulator's screenshots; with -pair CODE it pairs with
 /// that code at once, as this phone (the Simulator has no camera:
-/// internal/appapi TestPhoneDev's codes). A terminatr://pair link (the
+/// internal/e2e TestPhoneDev's codes). A terminatr://pair link (the
 /// Camera app's scan of the code) opens the pairing screen.
 @main
 struct TerminatrApp: App {
@@ -72,18 +72,46 @@ enum Route: Hashable {
     case project(String)
     case peerProject(alias: String, project: String)
     case session(SessionRef)
+    /// A project's pages (T798): its overview, board, memory, a memory
+    /// file by its path, library, and a task by its ref.
+    case overview(String)
+    case board(String)
+    case memory(String)
+    case memoryFile(String, path: String)
+    case library(String)
+    case task(String, ref: String)
 
-    /// A launch argument's route: "project:SLUG",
-    /// "session:SLUG" (its coordinator) or "session:SLUG/THREAD".
+    /// A launch argument's route: "project:SLUG", "session:SLUG" (its
+    /// coordinator) or "session:SLUG/THREAD"; "overview:SLUG",
+    /// "board:SLUG", "memory:SLUG", "memory:SLUG/PATH", "library:SLUG"
+    /// or "task:SLUG/REF".
     static func parse(_ s: String) -> Route? {
         let parts = s.split(separator: ":", maxSplits: 1).map(String.init)
         guard parts.count == 2 else { return nil }
+        let p = parts[1].split(separator: "/", maxSplits: 1).map(String.init)
+        let slug = p[0], rest = p.count > 1 ? p[1] : ""
         switch parts[0] {
         case "project": return .project(parts[1])
-        case "session":
-            let p = parts[1].split(separator: "/", maxSplits: 1).map(String.init)
-            return .session(SessionRef(project: p[0], thread: p.count > 1 ? p[1] : ""))
+        case "session": return .session(SessionRef(project: slug, thread: rest))
+        case "overview": return .overview(slug)
+        case "board": return .board(slug)
+        case "memory": return rest.isEmpty ? .memory(slug) : .memoryFile(slug, path: rest)
+        case "library": return .library(slug)
+        case "task": return rest.isEmpty ? nil : .task(slug, ref: rest)
         default: return nil
+        }
+    }
+
+    /// The Projects tab's path to it, as taps would have it: a project's
+    /// screens under the project, a memory file under Memory, a task
+    /// under the board.
+    var path: [Route] {
+        switch self {
+        case .project, .peerProject: [self]
+        case .session(let ref): [.project(ref.project), self]
+        case .overview(let s), .board(let s), .memory(let s), .library(let s): [.project(s), self]
+        case .memoryFile(let s, _): [.project(s), .memory(s), self]
+        case .task(let s, _): [.project(s), .board(s), self]
         }
     }
 }
@@ -123,15 +151,15 @@ struct Root: View {
 }
 
 extension Root {
-    /// -open: "projects", or a route opened from the Projects tab (a
-    /// project's session under its project, as a tap would have it).
+    /// -open: "projects", or a route opened from the Projects tab, on
+    /// the path a tap would have taken (Route.path).
     private func openLaunched() {
         guard let open = UserDefaults.standard.string(forKey: "open") else { return }
         if open == "projects" {
             tab = .projects
         } else if let r = Route.parse(open) {
             tab = .projects
-            if case .session(let ref) = r { projectsPath = [.project(ref.project), r] } else { projectsPath = [r] }
+            projectsPath = r.path
         }
     }
 }
@@ -144,6 +172,12 @@ extension View {
             case .project(let slug): ProjectScreen(slug: slug)
             case .peerProject(let alias, let project): PeerProjectScreen(alias: alias, project: project)
             case .session(let ref): ConversationScreen(ref: ref)
+            case .overview(let slug): OverviewScreen(slug: slug)
+            case .board(let slug): BoardScreen(slug: slug)
+            case .memory(let slug): MemoryScreen(slug: slug)
+            case .memoryFile(let slug, let path): MemoryFileScreen(slug: slug, path: path)
+            case .library(let slug): LibraryScreen(slug: slug)
+            case .task(let slug, let ref): TaskScreen(slug: slug, ref: ref)
             }
         }
     }

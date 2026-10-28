@@ -5,7 +5,7 @@
      an end-to-end TLS link to the user's own tm server, which the relay
      in between can't read, and to no one else. The one required-reason
      API is UserDefaults (CA92.1: the app's own launch arguments, -demo,
-     -pair, -open). swift-nio's bundles carry their own manifests. -->
+     -pair, -open, -filter). swift-nio's bundles carry their own manifests. -->
 <plist version="1.0">
 <dict>
 	<key>NSPrivacyTracking</key>
