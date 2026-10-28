@@ -25,8 +25,8 @@ import (
 // that write.
 const MethodDeviceNonce = "device.nonce"
 
-// ErrSignature: a device's write came without a valid signature by its
-// write key over a nonce it was given (app API 23).
+// ErrSignature answers a device's write that came without a valid
+// signature by its write key over a nonce it was given (app API 23).
 const ErrSignature = "device-signature"
 
 // Nonce limits.
