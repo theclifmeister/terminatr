@@ -139,6 +139,11 @@ final class RelayHandler: ChannelDuplexHandler {
             var d = frame.unmaskedData
             let code = d.readInteger(as: UInt16.self).map(Int.init) ?? 1005
             let reason = d.readString(length: d.readableBytes) ?? ""
+            // The peer's last bytes can come in the same read as the
+            // close (its "ok", then peer-gone as it leaves): the TLS after
+            // this handler passes on what it decrypted only at a read's
+            // end, so end the read before the close drops them (T809).
+            context.fireChannelReadComplete()
             fail(context, LinkError.relayClosed(code: code, reason: reason))
         case .binary where state == .mated:
             context.fireChannelRead(wrapInboundOut(frame.unmaskedData))

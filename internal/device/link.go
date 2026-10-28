@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/tls"
+	"encoding/hex"
 	"errors"
 	"io/fs"
 	"math/rand/v2"
@@ -92,6 +93,9 @@ type link struct {
 
 	mu sync.Mutex
 	st proto.DeviceLink
+	// waitLogged says the wait for the device is logged since the link
+	// was last up (run's goroutine only).
+	waitLogged bool
 }
 
 // Start reads the identity key and the devices and dials each device's
@@ -237,7 +241,13 @@ func (m *Manager) run(ctx context.Context, id *peer.Identity, t peer.Transport, 
 // once waits for the device, proves both keys and serves the link until
 // it ends; up says the TLS came up.
 func (m *Manager) once(ctx context.Context, id *peer.Identity, t peer.Transport, l *link) (bool, error) {
-	c, err := t.Dial(ctx, func() { l.set(proto.LinkOffline, proto.LinkReasonPeer, nil) })
+	c, err := t.Dial(ctx, func() {
+		l.set(proto.LinkOffline, proto.LinkReasonPeer, nil)
+		if !l.waitLogged {
+			l.waitLogged = true
+			m.logf("device %s: waiting for it in link room %s on %s", l.d.Name, roomPrefix(id.ID, l.d.ID()), t)
+		}
+	})
 	if err != nil {
 		return false, err
 	}
@@ -260,9 +270,11 @@ func (m *Manager) once(ctx context.Context, id *peer.Identity, t peer.Transport,
 	cancel()
 	if err != nil {
 		l.set(proto.LinkOffline, proto.LinkReasonRefused, err)
+		m.logf("device %s: its TLS failed: %v", l.d.Name, err)
 		return false, err
 	}
 	l.set(proto.LinkUp, "", nil)
+	l.waitLogged = false
 	m.logf("device %s: up", l.d.Name)
 	if m.opts.Serve == nil {
 		<-ctx.Done()
@@ -271,6 +283,13 @@ func (m *Manager) once(ctx context.Context, id *peer.Identity, t peer.Transport,
 	err = m.opts.Serve(ctx, tc, l.d, l.level)
 	m.logf("device %s: closed", l.d.Name)
 	return true, err
+}
+
+// roomPrefix is the link room's id as the relay logs it: its first four
+// bytes in hex.
+func roomPrefix(own, device peer.ID) string {
+	r := relay.LinkRoom(own, device)
+	return hex.EncodeToString(r[:4])
 }
 
 // maxErrorRunes bounds the error a link keeps and shows.

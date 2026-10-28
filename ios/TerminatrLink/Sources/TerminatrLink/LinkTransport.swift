@@ -3,6 +3,7 @@ import NIOCore
 import NIOSSL
 import NIOTLS
 import NIOTransportServices
+import os
 
 /// The phone's link to its server through a relay: NDJSON lines inside
 /// TLS 1.3 with both Ed25519 keys pinned, inside the relay's room. Its
@@ -58,12 +59,19 @@ public final class LinkTransport: @unchecked Sendable {
         onWait: @escaping @Sendable () -> Void = {}
     ) async throws -> LinkTransport {
         let peerID = LinkIdentity.id(of: endpoint.serverKey)
+        let room = linkRoom(identity.id, peerID)
+        // The room as the relay's and the server's logs name it (T809).
+        let tag = RelayWire.hex(room.prefix(4))
+        linkLog.debug("dialing \(endpoint.relay.host() ?? "?", privacy: .public) for link room \(tag, privacy: .public), server \(RelayWire.hex(peerID.prefix(4)), privacy: .public)")
         let (lines, sink) = AsyncThrowingStream<Data, any Error>.makeStream()
         let up = group.next().makePromise(of: Void.self)
         let inner = try PinnedTLS.handler(identity: identity, peerKey: endpoint.serverKey)
         let channel = try await RelayDial.open(
-            relay: endpoint.relay, identity: identity, kind: "link", room: linkRoom(identity.id, peerID), peer: peerID,
-            group: group, up: up, onWait: onWait
+            relay: endpoint.relay, identity: identity, kind: "link", room: room, peer: peerID,
+            group: group, up: up, onWait: {
+                linkLog.debug("waiting in link room \(tag, privacy: .public) for the server")
+                onWait()
+            }
         ) { ctx in
             let ops = ctx.pipeline.syncOperations
             try ops.addHandler(inner, position: .after(ctx.handler))
@@ -75,6 +83,9 @@ public final class LinkTransport: @unchecked Sendable {
         return LinkTransport(channel: channel, lines: lines)
     }
 }
+
+/// The link's debug log (Console: subsystem dev.terminatr.ios).
+let linkLog = Logger(subsystem: "dev.terminatr.ios", category: "link")
 
 /// Splits the server's bytes into lines for the stream; the TLS
 /// handshake's end completes the dial.

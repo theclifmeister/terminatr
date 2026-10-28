@@ -2857,7 +2857,9 @@ asks a running server to read it again (`peer.reload`).
   `y` once the digits match the other's (read aloud, or in the chat);
   each side then sends `{"ok": true|false}`. A side pins the other's key
   in `peers.json` only after its own `y` and the other's `ok`; otherwise
-  nothing is written. The answers fit the relay's 2 minutes for a mated
+  nothing is written. The joiner reads the pairer's `ok` last, so the
+  pairer leaves the room after the joiner (at most 5 s): the relay's
+  `peer-gone` never races that `ok`. The answers fit the relay's 2 minutes for a mated
   pair room (§16.4). Standard input needn't be a terminal: a script that
   answers is the human's.
 - **Outcomes.** Exit 0 once paired; exit 1 with `declined` (either

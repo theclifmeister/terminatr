@@ -280,6 +280,10 @@ var (
 // a mated pair room.
 const pairTimeout = 2 * time.Minute
 
+// pairLinger bounds how long the pairer waits, once paired, for the
+// joiner to leave the room first.
+const pairLinger = 5 * time.Second
+
 // Pair waits in the pair room of code for the other side to join, then
 // runs the pairing. ctx bounds the wait (the relay's 10 minutes, ^C).
 func Pair(ctx context.Context, id *Identity, code Code, o PairOptions) (*Paired, error) {
@@ -440,6 +444,13 @@ func runPair(raw net.Conn, id *Identity, t Secret, role string, o PairOptions) (
 	}
 	if !*m.OK {
 		return nil, ErrPeerNo
+	}
+	if role == rolePair {
+		// the joiner reads this side's ok last: leave once it has, so
+		// the relay's peer-gone can't come in the same read as that ok,
+		// which a phone's TLS then dropped (T809)
+		c.SetReadDeadline(time.Now().Add(pairLinger))
+		io.Copy(io.Discard, c)
 	}
 	return &Paired{Name: offer.Name, Key: other, WriteKey: offer.WriteKey}, nil
 }
