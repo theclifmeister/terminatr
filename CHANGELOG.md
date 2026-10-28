@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.59.0](https://github.com/theclifmeister/terminatr/compare/v0.58.0...v0.59.0) (2026-10-28)
+
+
+### Features
+
+* **app:** Settings › Devices on the Mac: pair an iPhone with a QR code, list, rename, remove, level (app API 26) ([#870](https://github.com/theclifmeister/terminatr/issues/870)) ([02df4d9](https://github.com/theclifmeister/terminatr/commit/02df4d905e06f94f9d80ea1b62174e8c1ad068f8))
+* **app:** waiting cards breathe, and the newest one's edge runs, on Mac and iPhone ([#867](https://github.com/theclifmeister/terminatr/issues/867)) ([4afc4d3](https://github.com/theclifmeister/terminatr/commit/4afc4d37b337039037e6d97fe92810580d43e789))
+* **ios:** Settings with the theme picker and appearance; text follows Dynamic Type ([#871](https://github.com/theclifmeister/terminatr/issues/871)) ([59582fe](https://github.com/theclifmeister/terminatr/commit/59582fe79a9ae032191a4b1d2e0eda555cfaf3a4))
+
+
+### Bug Fixes
+
+* **app:** Jump to latest hides at the conversation's end, and lands on it, on Mac and iPhone ([#869](https://github.com/theclifmeister/terminatr/issues/869)) ([36a0d5e](https://github.com/theclifmeister/terminatr/commit/36a0d5e58cd3396ccff74987560e392ad7a1b7aa))
+* **device:** read the link's device under the Manager's lock ([#874](https://github.com/theclifmeister/terminatr/issues/874)) ([99b2249](https://github.com/theclifmeister/terminatr/commit/99b22493a902e5d6ebdf0b15391e590f0a107cdd))
+* **ios:** keep the pairing's last line when the relay's close comes with it; room-id vectors; device wait log ([#872](https://github.com/theclifmeister/terminatr/issues/872)) ([00eef2e](https://github.com/theclifmeister/terminatr/commit/00eef2eef1c4473028dff78475ecfeb1e76afa2b))
+
 ## [0.58.0](https://github.com/theclifmeister/terminatr/compare/v0.57.0...v0.58.0) (2026-10-28)
 
 
