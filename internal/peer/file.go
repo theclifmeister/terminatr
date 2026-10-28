@@ -43,14 +43,12 @@ const (
 // File stream limits: the far end keeps at most fileWindow bytes
 // unacked and the near end acks every fileAckEvery; either end gives up
 // on a stream that hears nothing for fileStall. A server serves at most
-// maxFileStreams streams at once, over all its links.
-var (
-	fileWindow   = 128 << 10
-	fileAckEvery = 32 << 10
-	fileStall    = 60 * time.Second
-)
-
+// maxFileStreams streams at once, over all its links. A mux keeps its
+// own window and stall (tests shorten them).
 const (
+	fileWindow     = 128 << 10
+	fileAckEvery   = 32 << 10
+	fileStall      = 60 * time.Second
 	maxFileStreams = 2
 	// fileData is the most of a file one data frame carries.
 	fileData = frameChunk - 8
@@ -115,10 +113,15 @@ type fileMux struct {
 	ended bool
 	// slots bounds the streams the server serves over all its links.
 	slots chan struct{}
+	// window and stall are fileWindow and fileStall, set before the
+	// session serves.
+	window int
+	stall  time.Duration
 }
 
 func newFileMux(s *session) *fileMux {
-	return &fileMux{s: s, served: map[uint32]*fileServed{}, opened: map[uint32]*fileConn{}}
+	return &fileMux{s: s, served: map[uint32]*fileServed{}, opened: map[uint32]*fileConn{},
+		window: fileWindow, stall: fileStall}
 }
 
 // frame takes a file frame from the reader.
@@ -265,17 +268,18 @@ func (sv *fileServed) ack(p []byte) {
 func (sv *fileServed) wait(off int64, last bool) bool {
 	sv.mu.Lock()
 	defer sv.mu.Unlock()
-	timer := time.AfterFunc(fileStall, func() {
+	stall := sv.m.stall
+	timer := time.AfterFunc(stall, func() {
 		sv.mu.Lock()
 		sv.cond.Broadcast()
 		sv.mu.Unlock()
 	})
 	defer timer.Stop()
 	for !sv.done {
-		if last && sv.acked >= off || !last && off-sv.acked < int64(fileWindow) {
+		if last && sv.acked >= off || !last && off-sv.acked < int64(sv.m.window) {
 			return true
 		}
-		if time.Since(sv.heard) >= fileStall {
+		if time.Since(sv.heard) >= stall {
 			sv.mu.Unlock()
 			sv.m.s.sendFrame(sv.id, frameFileAbort, []byte(proto.FileStalled))
 			sv.stop(proto.FileStalled)
@@ -283,8 +287,8 @@ func (sv *fileServed) wait(off int64, last bool) bool {
 			return false
 		}
 		sv.cond.Wait()
-		if time.Since(sv.heard) < fileStall {
-			timer.Reset(fileStall - time.Since(sv.heard))
+		if time.Since(sv.heard) < stall {
+			timer.Reset(stall - time.Since(sv.heard))
 		}
 	}
 	return false
@@ -498,7 +502,7 @@ func (m *fileMux) fetch(ctx context.Context, id string, offset int64, w io.Write
 		copy(want[:], b)
 	}
 	got, unacked := offset, 0
-	stall := time.NewTimer(fileStall)
+	stall := time.NewTimer(m.stall)
 	defer stall.Stop()
 	ack := func() error {
 		return m.s.sendFrame(c.id, frameFileAck, binary.BigEndian.AppendUint64(nil, uint64(got)))
@@ -526,7 +530,7 @@ func (m *fileMux) fetch(ctx context.Context, id string, offset int64, w io.Write
 			m.abort(c.id, proto.FileStalled)
 			return FileEnd{}, &FileAbort{proto.FileStalled}
 		case f := <-c.frames:
-			stall.Reset(fileStall)
+			stall.Reset(m.stall)
 			switch f.typ {
 			case frameFileAbort:
 				return FileEnd{}, &FileAbort{abortWord(f.payload)}
