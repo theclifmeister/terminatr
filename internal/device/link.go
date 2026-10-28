@@ -87,6 +87,8 @@ type Manager struct {
 }
 
 type link struct {
+	// d is the device; Reload changes its level under the Manager's mu,
+	// so run's goroutine reads it under that mu (dev).
 	d      Device
 	level  *Level
 	cancel context.CancelFunc
@@ -241,11 +243,12 @@ func (m *Manager) run(ctx context.Context, id *peer.Identity, t peer.Transport, 
 // once waits for the device, proves both keys and serves the link until
 // it ends; up says the TLS came up.
 func (m *Manager) once(ctx context.Context, id *peer.Identity, t peer.Transport, l *link) (bool, error) {
+	d := l.dev(m)
 	c, err := t.Dial(ctx, func() {
 		l.set(proto.LinkOffline, proto.LinkReasonPeer, nil)
 		if !l.waitLogged {
 			l.waitLogged = true
-			m.logf("device %s: waiting for it in link room %s on %s", l.d.Name, roomPrefix(id.ID, l.d.ID()), t)
+			m.logf("device %s: waiting for it in link room %s on %s", d.Name, roomPrefix(id.ID, d.ID()), t)
 		}
 	})
 	if err != nil {
@@ -255,7 +258,7 @@ func (m *Manager) once(ctx context.Context, id *peer.Identity, t peer.Transport,
 	defer stop()
 	defer c.Close()
 	l.set(proto.LinkConnecting, "", nil)
-	cfg, client, err := peer.LinkTLS(id, l.d.Key)
+	cfg, client, err := peer.LinkTLS(id, d.Key)
 	if err != nil {
 		return false, err
 	}
@@ -270,18 +273,18 @@ func (m *Manager) once(ctx context.Context, id *peer.Identity, t peer.Transport,
 	cancel()
 	if err != nil {
 		l.set(proto.LinkOffline, proto.LinkReasonRefused, err)
-		m.logf("device %s: its TLS failed: %v", l.d.Name, err)
+		m.logf("device %s: its TLS failed: %v", d.Name, err)
 		return false, err
 	}
 	l.set(proto.LinkUp, "", nil)
 	l.waitLogged = false
-	m.logf("device %s: up", l.d.Name)
+	m.logf("device %s: up", d.Name)
 	if m.opts.Serve == nil {
 		<-ctx.Done()
 		return true, nil
 	}
-	err = m.opts.Serve(ctx, tc, l.d, l.level)
-	m.logf("device %s: closed", l.d.Name)
+	err = m.opts.Serve(ctx, tc, d, l.level)
+	m.logf("device %s: closed", d.Name)
 	return true, err
 }
 
@@ -290,6 +293,13 @@ func (m *Manager) once(ctx context.Context, id *peer.Identity, t peer.Transport,
 func roomPrefix(own, device peer.ID) string {
 	r := relay.LinkRoom(own, device)
 	return hex.EncodeToString(r[:4])
+}
+
+// dev is a copy of l's device, read under m's mu.
+func (l *link) dev(m *Manager) Device {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return l.d
 }
 
 // maxErrorRunes bounds the error a link keeps and shows.
