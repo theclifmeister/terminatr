@@ -36,13 +36,12 @@ struct TabStack<Content: View>: View {
 /// or the route before the last) and the route it opened. A link in the
 /// list opens beside it; a link in the detail moves the pair on, the
 /// detail becoming the list, and Back moves it back. On iOS 27.1 an
-/// ArrangementView splits them (.split). Where the screen folds (an
-/// iPhone Duo: a division region, active or not) it picks the axis
-/// itself and keeps both off the fold: side by side open, the list
-/// above the detail when the fold runs across (folded like a laptop).
-/// Elsewhere they stay side by side (.axes(.horizontal)), so a tall
-/// window doesn't stack them. Before 27.1, a fixed list beside the
-/// detail (an iPad).
+/// ArrangementView splits them (.split). While the screen is partly
+/// folded (an iPhone Duo's division region is active) it picks the axis
+/// itself and keeps both off the fold. Flat, or with no fold, they stay
+/// side by side (.axes(.horizontal)): the Duo's inner display is
+/// portrait, taller than wide, and would otherwise stack them. Before
+/// 27.1, a fixed list beside the detail (an iPad).
 struct Columns<Content: View>: View {
     @Environment(\.theme) private var theme
     @Binding var path: [Route]
@@ -87,7 +86,7 @@ struct Columns<Content: View>: View {
         .id(detail)
         if #available(iOS 27.1, *) {
             GeometryReader { g in
-                let folds = !g.reservedRegions(kind: .division, options: .includeInactive).isEmpty
+                let folds = g.reservedRegions(kind: .division).contains { $0.isActive }
                 ArrangementView {
                     lead.splitArrangementLayoutSize(minWidth: 300, idealWidth: Self.listWidth, maxWidth: 440)
                 } secondary: {
