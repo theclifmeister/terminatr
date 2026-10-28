@@ -536,6 +536,7 @@ An Xcode project (`ios/Terminatr.xcodeproj`, scheme `Terminatr-iOS`, bundle id `
 It shows Needs you (its start screen), the projects as `SidebarTree` lists them, a project's coordinator and threads, and a session's conversation, each pulled to refresh.
 It talks to a `Bridge` on any `BridgeTransport`: until device links land, only the built-in demo's (`DemoTransport`), which plays back a recording of bridge lines (`ios/Terminatr/Demo/demo.json`, checked against the app API by `swift test`) and refuses every write.
 `make -C ios build` builds it for the Simulator, unsigned; `make -C ios run DEVICE=…` opens it there in the demo (`-demo YES`, and `-open project:SLUG` or `-open session:SLUG/THREAD` for a screen).
+Each release uploads it to TestFlight (`scripts/release/ios.sh`, the release workflow's `testflight` job, skipped without its secrets): version the tag's, build number the tag's commit count, signed manually with an Apple Distribution certificate and an App Store profile; `ios/README.md` has the export compliance answer, the privacy manifest and the Apple account checklist.
 
 **Shipping** (§10.1).
 Releases carry the app as `terminatr-app.zip` and `terminatr-app.dmg` (`scripts/release/app.sh`): universal, signed with tm's Developer ID team (`version.TeamID`) with the hardened runtime and no entitlements, notarised and stapled; the DMG signed, notarised and stapled too.
