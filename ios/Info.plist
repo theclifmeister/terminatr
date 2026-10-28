@@ -2,8 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!-- What the generated Info.plist (GENERATE_INFOPLIST_FILE) can't say:
      terminatr:// links, so the Camera app's scan of tm device pair's
-     QR code (terminatr://pair?…) opens the app. Outside Terminatr/,
-     whose folder group would copy it as a resource. -->
+     QR code (terminatr://pair?…) opens the app; and the export
+     compliance answer, so App Store Connect doesn't ask on every
+     upload (ios/README.md, Encryption). Outside Terminatr/, whose folder
+     group would copy it as a resource. -->
 <plist version="1.0">
 <dict>
 	<key>CFBundleURLTypes</key>
@@ -17,5 +19,7 @@
 			</array>
 		</dict>
 	</array>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 </dict>
 </plist>
