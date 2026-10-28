@@ -74,7 +74,7 @@ enum RelayDial {
             .channelInitializer { channel in
                 channel.eventLoop.makeCompletedFuture {
                     let sync = channel.pipeline.syncOperations
-                    let upgrader = NIOWebSocketClientUpgrader(maxFrameSize: 1 << 20, automaticErrorHandling: false) { channel, _ in
+                    let upgrader = NIOWebSocketClientUpgrader(maxFrameSize: RelayWire.maxMessage, automaticErrorHandling: false) { channel, _ in
                         channel.eventLoop.makeCompletedFuture {
                             let ops = channel.pipeline.syncOperations
                             try ops.addHandler(IdleStateHandler(readTimeout: RelayWire.idle))
