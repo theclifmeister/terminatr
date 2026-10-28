@@ -1,0 +1,50 @@
+ PROJECTS                          │ tm dashboard                                               ● server ok · 0 sessions
+ no projects                       │  no projects; n creates one
+      ╭─ Pair a phone ───────────────────────────────────────────────────────────────────────────────────────────╮──────
+      │ A phone joined                                                                                           │
+      │ "Test iPhone", device id <id>, app 1.0                                                              │
+      │                                                                                                          │
+      │ Add it as "Test iPhone", a view-only device?                                                             │
+      │ Only a phone you just scanned the code with. Answer within <left>.                                         │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │ Y add · N don't add · E another name · esc cancel                                                        │
+ ─────╰──────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+                                   │────────────────────────────────────────────────────────────────────────────────────
+                                   │
+ tab sidebar · ? help              │

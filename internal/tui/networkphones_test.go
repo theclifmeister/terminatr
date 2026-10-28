@@ -314,7 +314,7 @@ func TestNetworkPhonePair(t *testing.T) {
 	}
 	flat := strings.Join(strings.Fields(out), " ")
 	for _, w := range []string{"Scan this with the terminatr app on the iPhone", "Works for 10:00 · waiting for the phone…",
-		"This server: studio, server id 4F2A-91C3, through relay.example.net.", "Or paste this code in the app:"} {
+		"This server: studio, id 4F2A-91C3.", "Through relay.example.net.", "Or paste this code in the app:"} {
 		if !strings.Contains(flat, w) {
 			t.Errorf("waiting lacks %q:\n%s", w, out)
 		}

@@ -276,7 +276,7 @@ func (pv *phonePairView) waiting(m *dash, w, n int) []string {
 	} else {
 		words = append(words, "The code's time ran out.")
 	}
-	words = append(words, fmt.Sprintf("This server: %s, server id %s, through %s.", in.Name, in.Server, in.Relay))
+	words = append(words, fmt.Sprintf("This server: %s, id %s.", in.Name, in.Server), "Through "+in.Relay+".")
 	if in.Note != "" {
 		words = append(words, "Note: "+in.Note+".")
 	}
@@ -289,6 +289,8 @@ func (pv *phonePairView) waiting(m *dash, w, n int) []string {
 		qw = ansi.StringWidth(pv.code[0])
 	}
 	text := func(width int) []string {
+		// A cell spare: a wrap after a short id's hyphen keeps it.
+		width--
 		var out []string
 		for i, p := range words {
 			if i > 0 {

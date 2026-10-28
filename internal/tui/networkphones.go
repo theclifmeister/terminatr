@@ -454,19 +454,18 @@ func (lv *levelPickView) render(m *dash) string {
 		if l == lv.dev.Level {
 			mark = "(•)"
 		}
-		head := mark + " " + l
 		what := levelWhat(l)
 		if l != device.LevelView && !lv.dev.WriteKey {
 			what = "Needs a write key, which this phone's app didn't send: pair it again."
 		}
 		if i == lv.sel {
 			sel = len(body)
-			body = append(body, selRow(head, w))
+			body = append(body, selRow("› "+mark+" "+l, w))
 		} else {
-			body = append(body, th().Accent.Render(mark)+" "+l)
+			body = append(body, "  "+th().Accent.Render(mark)+" "+l)
 		}
-		for _, x := range wrapLines(what, max(w-4, 8)) {
-			body = append(body, "    "+th().Faint.Render(x))
+		for _, x := range wrapLines(what, max(w-6, 8)) {
+			body = append(body, "      "+th().Faint.Render(x))
 		}
 	}
 	return m.popup(box{title: "Level for " + lv.dev.Name, body: body, sel: sel, keys: "↑ ↓ move · enter set · esc cancel"})
