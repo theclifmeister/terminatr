@@ -399,6 +399,26 @@ func TestLink(t *testing.T) {
 	}
 }
 
+// A level change while the link dials reaches the link without a race
+// on the device its goroutine reads (T810: run with -race).
+func TestLinkLevelWhileDialing(t *testing.T) {
+	url, tc := startRelay(t)
+	peerDir, devDir, _ := testHome(t)
+	if _, err := Add(devDir, pub(newKey(t)), writeKey(t), "iPhone", url); err != nil {
+		t.Fatal(err)
+	}
+	m := Start(Options{Dir: devDir, PeerDir: peerDir, Serve: echo, Logf: t.Logf, RelayTLS: tc,
+		Backoff: func(int) time.Duration { return 20 * time.Millisecond }})
+	t.Cleanup(m.Close)
+	for _, level := range []string{LevelAnswer, LevelView, LevelAnswer} {
+		SetLevel(devDir, "iPhone", level)
+		m.Reload()
+	}
+	if st := waitState(t, m, "iPhone", proto.LinkOffline); st.Level != LevelAnswer {
+		t.Fatalf("status %+v", st)
+	}
+}
+
 // Another key in the device's room fails the pinned TLS.
 func TestLinkRefusesAnotherKey(t *testing.T) {
 	url, tc := startRelay(t)
