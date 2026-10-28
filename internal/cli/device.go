@@ -348,15 +348,15 @@ func (e *Env) deviceRemove(dir, name string) error {
 }
 
 // deviceAccess sets what the device name may do through the app API.
-// View and answer run in this release: write comes with the phone's
-// composer, so tm refuses it rather than store a level nothing enforces
-// yet. Above view the device needs a write key.
+// Every level runs in this release (write since the phone's composer,
+// T821); a level a release doesn't enable is refused (level-not-yet)
+// rather than stored. Above view the device needs a write key.
 func (e *Env) deviceAccess(dir, name, level string) error {
 	if !device.ValidLevel(level) {
 		return usagef("tm device access NAME view|answer|write: %q isn't one", level)
 	}
 	if !device.Enabled(level) {
-		return &project.Error{Code: "level-not-yet", Msg: fmt.Sprintf("level %s isn't in this release: devices go up to answer for now", level)}
+		return &project.Error{Code: "level-not-yet", Msg: fmt.Sprintf("level %s isn't in this release", level)}
 	}
 	d, err := device.SetLevel(dir, name, level)
 	if err != nil {
@@ -365,6 +365,8 @@ func (e *Env) deviceAccess(dir, name, level string) error {
 	switch d.Level {
 	case device.LevelAnswer:
 		fmt.Fprintf(e.Stdout, "%s is %s: it reads, answers questions and approvals (never one that runs a command outside the sandbox), and accepts or sends back tasks, each act behind Face ID.\n", d.Name, levelWords(d.Level))
+	case device.LevelWrite:
+		fmt.Fprintf(e.Stdout, "%s is %s: it does what the Mac app does (prompts, new tasks, delegating, starting a coordinator, pane keys and the rest), each act signed by its write key; never the guard's answers or the devices, and never an approval that runs a command outside the sandbox.\n", d.Name, levelWords(d.Level))
 	default:
 		fmt.Fprintf(e.Stdout, "%s is %s: it reads projects, sessions, conversations and panes, and acts on nothing.\n", d.Name, levelWords(d.Level))
 	}

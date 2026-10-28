@@ -4,8 +4,8 @@ import Foundation
 /// and the Pair iPhone… sheet show, as tm device list and tm device pair
 /// say them.
 public enum DeviceWords {
-    /// The levels the app offers: view and answer (write isn't in this
-    /// release).
+    /// The levels by name; the app offers those device.list lists
+    /// (view, answer and write).
     public static let view = "view"
     public static let answer = "answer"
 
@@ -23,6 +23,8 @@ public enum DeviceWords {
         switch level {
         case answer:
             "Reads, answers questions and approvals (never one that runs a command outside the sandbox), and accepts or sends back tasks, each act behind Face ID."
+        case "write":
+            "Does what this app does: prompts, new tasks, delegating, starting a coordinator, terminal keys and the rest, each act signed by its write key. Never an approval that runs a command outside the sandbox."
         default:
             "Reads projects, sessions, conversations and panes, and acts on nothing."
         }

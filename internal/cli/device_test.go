@@ -89,8 +89,8 @@ func TestDeviceListAccessNameRemove(t *testing.T) {
 	if err := json.Unmarshal([]byte(h.ok(human, "device", "list", "--json")), &js); err != nil || len(js.Devices) != 2 || js.Devices[0].Link == nil || js.Devices[0].Effective != "view" {
 		t.Fatalf("list --json: %+v, %v", js, err)
 	}
-	// View and answer run in this release; answer needs a write key.
-	h.expect(1, "level-not-yet", human, "device", "access", "ipad", "write")
+	// Every level runs in this release; above view needs a write key.
+	h.expect(1, "no-write-key", human, "device", "access", "ipad", "write")
 	h.expect(1, "unknown-device", human, "device", "access", "watch", "view")
 	h.expect(1, "no-write-key", human, "device", "access", "ipad", "answer")
 	if out := h.ok(human, "device", "access", "ipad", "view"); !strings.Contains(out, "iPad is view-only") || *reloads != 1 {
@@ -102,6 +102,9 @@ func TestDeviceListAccessNameRemove(t *testing.T) {
 	if out := h.ok(human, "device", "list"); !strings.Contains(out, "answer") {
 		t.Fatalf("list at answer: %q", out)
 	}
+	if out := h.ok(human, "device", "access", "clif's iphone", "write"); !strings.Contains(out, "Clif's iPhone is write") || !strings.Contains(out, "outside the sandbox") || *reloads != 3 {
+		t.Fatalf("access write: %q, %d reloads", out, *reloads)
+	}
 	h.ok(human, "device", "access", "clif's iphone", "view")
 	h.expect(1, "name-taken", human, "device", "name", "ipad", "CLIF'S IPHONE")
 	h.expect(2, "device name", human, "device", "name", "ipad", "")
@@ -109,7 +112,7 @@ func TestDeviceListAccessNameRemove(t *testing.T) {
 		t.Fatalf("name: %q", out)
 	}
 	h.expect(1, "unknown-device", human, "device", "remove", "ipad")
-	if out := h.ok(human, "device", "remove", "tablet"); !strings.Contains(out, "Removed Tablet") || *reloads != 5 {
+	if out := h.ok(human, "device", "remove", "tablet"); !strings.Contains(out, "Removed Tablet") || *reloads != 6 {
 		t.Fatalf("remove: %q, %d reloads", out, *reloads)
 	}
 	if ds, _ := device.Load(dir); len(ds) != 1 {

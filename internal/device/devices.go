@@ -65,9 +65,9 @@ const (
 // Levels are the levels, narrowest first.
 var Levels = []string{LevelView, LevelAnswer, LevelWrite}
 
-// Enabled says whether this release lets a device have level: view and
-// answer; write comes with the phone's composer.
-func Enabled(level string) bool { return level == LevelView || level == LevelAnswer }
+// Enabled says whether this release lets a device have level: every
+// level, since write came with the phone's composer (T821).
+func Enabled(level string) bool { return ValidLevel(level) }
 
 // Effective is the level d's link runs at: its own when this release
 // enables it and, above view, d has a write key to sign its acts with;
