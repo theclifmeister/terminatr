@@ -783,3 +783,85 @@ func TestBridgePane(t *testing.T) {
 		t.Error("no pane.closed before the end")
 	}
 }
+
+// TestBridgeSideActs: the sidebar's and the sessions' acts (app API
+// 22) with the TUI's checks, journaled as "human (app)": a project
+// pinned and unpinned, one made (and refused when its slug is taken or
+// its repo isn't a folder), a message written on a link (text only),
+// and an adopt's and remote control's refusals for a session that
+// isn't there.
+func TestBridgeSideActs(t *testing.T) {
+	p := testPaths(t)
+	if err := os.WriteFile(filepath.Join(os.Getenv("TERMINATR_HOME"), "config.toml"),
+		[]byte("[projects.a.links]\nb = \"both\"\n\n[projects.b.links]\na = \"both\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	a, err := project.New(project.Options{Slug: "a"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := project.New(project.Options{Slug: "b"}); err != nil {
+		t.Fatal(err)
+	}
+	startServer(t, p)
+	c, err := bridge(t, p, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(c.Hello.Server.Caps, proto.CapSideActs) {
+		t.Errorf("caps %v", c.Hello.Server.Caps)
+	}
+	var pinned appapi.ProjectPinned
+	for _, step := range []struct{ on, changed bool }{{true, true}, {true, false}, {false, true}} {
+		if err := c.Call(proto.MethodProjectPin, appapi.ProjectPinParams{Project: "a", Pinned: step.on}, &pinned); err != nil || pinned.Changed != step.changed {
+			t.Fatalf("project.pin %v: %+v %v", step.on, pinned, err)
+		}
+	}
+	var made appapi.ProjectNew
+	repo := t.TempDir()
+	if err := c.Call(proto.MethodProjectNew, appapi.ProjectNewParams{Project: "Demo App", Repos: []string{repo}}, &made); err != nil || made.Project != "demo-app" {
+		t.Fatalf("project.new: %+v %v", made, err)
+	}
+	if pr, err := project.Open("demo-app"); err != nil || len(pr.Repos) != 1 {
+		t.Fatalf("demo-app: %+v %v", pr, err)
+	}
+	var sent appapi.LinkActResult
+	if err := c.Call(proto.MethodLinkSend, appapi.LinkSendParams{Project: "a", Peer: "b", Text: "Hello from the app"}, &sent); err != nil ||
+		!strings.HasPrefix(sent.Words, "sent M-") || !strings.HasSuffix(sent.Words, " to b") {
+		t.Fatalf("link.send: %+v %v", sent, err)
+	}
+	for _, bad := range []struct {
+		method string
+		params any
+		code   string
+	}{
+		{proto.MethodProjectNew, appapi.ProjectNewParams{Project: "demo-app"}, "project-exists"},
+		{proto.MethodProjectNew, appapi.ProjectNewParams{Project: "x", Repos: []string{filepath.Join(repo, "nope")}}, "invalid-repo"},
+		{proto.MethodProjectPin, appapi.ProjectPinParams{Project: "nope", Pinned: true}, "unknown-project"},
+		{proto.MethodLinkSend, appapi.LinkSendParams{Project: "a", Peer: "b", Text: " "}, proto.ErrBadParams},
+		{proto.MethodLinkSend, appapi.LinkSendParams{Project: "a", Peer: "demo-app", Text: "hi"}, "no-link"},
+		{proto.MethodLinkSend, map[string]string{"project": "a", "peer": "b", "text": "hi", "file": "/etc/passwd"}, appapi.ErrBadParams},
+		{proto.MethodSessionAdoptRequest, appapi.AdoptRequestParams{ID: "s-404", Project: "a"}, proto.ErrUnknownSession},
+		{proto.MethodSessionRemote, appapi.RemoteParams{ID: "s-404", On: true}, proto.ErrUnknownSession},
+	} {
+		if err := c.Call(bad.method, bad.params, nil); code(err) != bad.code {
+			t.Errorf("%s %+v: %v, want %s", bad.method, bad.params, err, bad.code)
+		}
+	}
+	var adopted appapi.AdoptRequested
+	if err := c.Call(proto.MethodSessionAdoptRequest, appapi.AdoptRequestParams{ID: "s-404", Project: "a", Withdraw: true}, &adopted); err != nil || adopted.Asked {
+		t.Fatalf("withdraw: %+v %v", adopted, err)
+	}
+	journal, _ := os.ReadFile(a.Path("JOURNAL.md"))
+	for _, want := range []string{" human (app) project.pin a", " human (app) project.unpin a", " human (app) link.send b",
+		" human (app) thread.adopt.withdraw s-404"} {
+		if !strings.Contains(string(journal), want) {
+			t.Errorf("journal lacks %q:\n%s", want, journal)
+		}
+	}
+	if pr, _ := project.Open("demo-app"); pr != nil {
+		if j, _ := os.ReadFile(pr.Path("JOURNAL.md")); !strings.Contains(string(j), " human (app) project.new demo-app") {
+			t.Errorf("demo-app's journal:\n%s", j)
+		}
+	}
+}

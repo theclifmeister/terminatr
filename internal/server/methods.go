@@ -312,9 +312,13 @@ func init() {
 		proto.MethodPeerPopupRead: {gate: gateHuman, call: typed(func(s *Server, p proto.PeerPopupReadParams, _ callCtx) (any, *proto.Error) {
 			return s.readPeerPopup(p)
 		})},
-		proto.MethodPeerShareAsk:    {gate: gateHuman, call: typed((*Server).askShare)},
-		proto.MethodPeerShareAnswer: {gate: gateHuman, call: typed((*Server).answerShare)},
-		proto.MethodLinkAct:         {gate: gateHuman, call: typed((*Server).linkAct)},
+		proto.MethodPeerShareAsk:        {gate: gateHuman, call: typed((*Server).askShare)},
+		proto.MethodPeerShareAnswer:     {gate: gateHuman, call: typed((*Server).answerShare)},
+		proto.MethodLinkAct:             {gate: gateHuman, call: typed((*Server).linkAct)},
+		proto.MethodLinkSend:            {gate: gateHuman, call: typed((*Server).linkSend)},
+		proto.MethodProjectPin:          {gate: gateHuman, call: typed((*Server).projectPin)},
+		proto.MethodProjectNew:          {gate: gateHuman, call: typed((*Server).projectNew)},
+		proto.MethodSessionAdoptRequest: {gate: gateHuman, call: typed((*Server).adoptRequest)},
 		proto.MethodModViews: {gate: gateHuman, call: typed(func(s *Server, p proto.ModViewsParams, c callCtx) (any, *proto.Error) {
 			return s.modViews(p, c.peerPID, c.who())
 		})},

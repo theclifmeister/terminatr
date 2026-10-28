@@ -291,6 +291,10 @@ func TestCopies(t *testing.T) {
 	check("project.active", homeOf(projectActiveOf), nil)
 	check("task.add", homeOf(taskAddedOf), nil)
 	check("link.act", homeOf(linkActOf), nil)
+	check("project.pin", homeOf(projectPinnedOf), nil)
+	check("project.new", homeOf(projectNewOf), nil)
+	check("session.adopt.request", homeOf(adoptRequestedOf), nil)
+	check("session.remote", homeOf(remoteOf), nil)
 	// The request's other fields are peer.list's.
 	check("peer.share-answer", homeOf(shareAnswerOf), []string{".Out", ".Peer", ".For", ".Note", ".Created", ".Answered",
 		".Code", ".Summary"})
@@ -385,6 +389,40 @@ func TestParamsCopies(t *testing.T) {
 	if want := (proto.ProjectActiveParams{Project: "web", Active: true}); err != nil || p != want {
 		t.Errorf("project.active params %+v %v", p, err)
 	}
+	m, _ = Lookup(proto.MethodProjectPin)
+	p, err = m.toServer(json.RawMessage(`{"project":"web","pinned":true}`))
+	if want := (proto.ProjectPinParams{Project: "web", Pinned: true}); err != nil || p != want {
+		t.Errorf("project.pin params %+v %v", p, err)
+	}
+	m, _ = Lookup(proto.MethodProjectNew)
+	p, err = m.toServer(json.RawMessage(`{"project":"Demo App","repos":["/src/app"]}`))
+	if np, ok := p.(proto.ProjectNewParams); err != nil || !ok || np.Project != "Demo App" || !slices.Equal(np.Repos, []string{"/src/app"}) {
+		t.Errorf("project.new params %+v %v", p, err)
+	}
+	if _, err := m.toServer(json.RawMessage(`{"project":"web","goal":"x"}`)); err == nil {
+		t.Error("project.new took a goal")
+	}
+	m, _ = Lookup(proto.MethodSessionAdoptRequest)
+	p, err = m.toServer(json.RawMessage(`{"id":"s-1","project":"web","withdraw":true}`))
+	if want := (proto.SessionAdoptRequestParams{ID: "s-1", Project: "web", Withdraw: true}); err != nil || p != want {
+		t.Errorf("session.adopt.request params %+v %v", p, err)
+	}
+	m, _ = Lookup(proto.MethodSessionRemote)
+	p, err = m.toServer(json.RawMessage(`{"id":"s-1","on":true}`))
+	if want := (proto.SessionRemoteParams{ID: "s-1", On: true}); err != nil || p != want {
+		t.Errorf("session.remote params %+v %v", p, err)
+	}
+	// link.send writes text only: no attachment, file or reply crosses.
+	m, _ = Lookup(proto.MethodLinkSend)
+	p, err = m.toServer(json.RawMessage(`{"project":"web","peer":"api","text":"hi"}`))
+	if want := (proto.LinkSendParams{Project: "web", Peer: "api", Text: "hi"}); err != nil || p != want {
+		t.Errorf("link.send params %+v %v", p, err)
+	}
+	for _, raw := range []string{`{"project":"web","peer":"api","text":"hi","file":"/etc/passwd"}`, `{"project":"web","peer":"api","text":"hi","re":"M-1"}`} {
+		if _, err := m.toServer(json.RawMessage(raw)); err == nil {
+			t.Errorf("link.send took %s", raw)
+		}
+	}
 	m, _ = Lookup(proto.MethodCoordinatorClear)
 	p, err = m.toServer(json.RawMessage(`{"project":"web"}`))
 	if want := (proto.CoordinatorClearParams{Project: "web"}); err != nil || p != want {
@@ -454,7 +492,8 @@ func TestAllowlist(t *testing.T) {
 		proto.MethodTaskAccept, proto.MethodTaskSendBack, proto.MethodTaskDelegate, proto.MethodProjectOpen,
 		proto.MethodQuestionsOpen, proto.MethodTaskAdd, proto.MethodTaskGet, proto.MethodPaneVT, proto.MethodTranscriptWatch, MethodPaneInput,
 		proto.MethodSessionFile, proto.MethodCoordinatorClear, proto.MethodProjectActive, proto.MethodSessionUpload,
-		proto.MethodLinkAct, proto.MethodPeerShareAnswer, MethodGuardRefusals, MethodGuardDecide, proto.MethodTranscriptPage}
+		proto.MethodLinkAct, proto.MethodPeerShareAnswer, MethodGuardRefusals, MethodGuardDecide, proto.MethodTranscriptPage,
+		proto.MethodProjectPin, proto.MethodProjectNew, proto.MethodSessionAdoptRequest, proto.MethodSessionRemote, proto.MethodLinkSend}
 	slices.Sort(want)
 	if got := MethodNames(); !slices.Equal(got, want) {
 		t.Errorf("methods %v, want %v", got, want)
