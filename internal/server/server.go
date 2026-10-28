@@ -879,8 +879,15 @@ func (s *Server) keys(p proto.SessionKeysParams) (any, *proto.Error) {
 
 // keysBy is session.keys's answer for caller cc: the Mac app's keys
 // are a console's, so text typed into a thread's prompt box takes it
-// over (session.HumanInput), and they are journaled.
+// over (session.HumanInput), and they are journaled. A device's keys
+// never answer an escape's prompt (T836), as its session.approve
+// doesn't.
 func (s *Server) keysBy(p proto.SessionKeysParams, cc callCtx) (any, *proto.Error) {
+	if cc.device != "" {
+		if sess, perr := s.session(p.ID); perr == nil && sess.EscapeHeld() {
+			return nil, proto.Errorf(proto.ErrDeviceEscapeOff, "session %s asks to run a command outside its sandbox: a paired device doesn't answer that prompt; answer it on this computer", p.ID)
+		}
+	}
 	if !cc.app || p.Relay != "" {
 		return s.keys(p)
 	}

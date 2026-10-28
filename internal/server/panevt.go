@@ -98,7 +98,8 @@ func (s *Server) servePaneVT(c net.Conn, br *bufio.Reader, req proto.Request, cc
 		if err := proto.ReadLine(br, &in); err != nil {
 			break
 		}
-		if len(in.Input) > 0 {
+		// A device's keys never answer an escape's prompt (T836).
+		if len(in.Input) > 0 && (cc.device == "" || !sess.EscapeHeld()) {
 			sess.HumanInput(in.Input, s.consoleTakeover(info, console, who))
 		}
 		if in.Ack > 0 {

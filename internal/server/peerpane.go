@@ -80,8 +80,13 @@ func (p *paneSource) Resync()              { p.sub.Resync() }
 // a text key or a paste that shows in the box counts
 // (session.Session.HumanInput): clicks, the wheel, focus, arrows, Esc,
 // the terminal's replies and the agent's own suggestion in the box
-// don't. The log keeps the start of the input that raised it.
+// don't. The log keeps the start of the input that raised it. While an
+// escape's prompt may be up, the keys are dropped: only the user
+// answers it, at this computer (T836).
 func (p *paneSource) Input(b []byte) error {
+	if p.sess.EscapeHeld() {
+		return nil
+	}
 	var took func()
 	p.mu.Lock()
 	if p.info.Role == proto.RoleThread && !p.told {
