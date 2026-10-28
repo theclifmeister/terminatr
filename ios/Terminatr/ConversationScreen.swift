@@ -81,6 +81,8 @@ struct ConversationScreen: View {
             }
             .modifier(PhoneFollowGeometry(follow: $follow, newest: transcript.entries.last?.id) { top in
                 if restoring == nil { model.places.keep("top \(ref)", follow.following ? nil : top) }
+            } toEnd: {
+                scroll.scrollTo("end", anchor: .bottom)
             })
             // New output: the follower goes to the end; scrolled up, the
             // screen stays and Jump to latest counts it. Laid out afresh,
@@ -112,7 +114,7 @@ struct ConversationScreen: View {
             .overlay(alignment: .bottom) {
                 if !follow.following {
                     Button {
-                        follow.follow(newest: transcript.entries.last?.id)
+                        follow.jump(newest: transcript.entries.last?.id)
                         withAnimation(reduceMotion ? nil : .default) { scroll.scrollTo("end", anchor: .bottom) }
                     } label: {
                         Label(follow.label, systemImage: "arrow.down")
@@ -378,14 +380,17 @@ struct EntryLine: View {
     }
 }
 
-/// The scroll geometry into Follow: on iOS 18; 17 has none to read, and
-/// its conversation always follows. The screen opens at the end, and
-/// content that grows keeps its place (Follow scrolls a follower down).
+/// The scroll geometry and phases into Follow: on iOS 18; 17 has none
+/// to read, and its conversation always follows. The screen opens at the
+/// end, and content that grows keeps its place (Follow scrolls a
+/// follower down). A jump that a flick's momentum carries up is pulled
+/// back to the end (toEnd, T829).
 struct PhoneFollowGeometry: ViewModifier {
     @Binding var follow: Follow
     let newest: Int?
     /// Told the row at the top as the user scrolls (iOS 18).
     let top: (Int?) -> Void
+    let toEnd: () -> Void
 
     func body(content: Content) -> some View {
         if #available(iOS 18, *) {
@@ -395,7 +400,10 @@ struct PhoneFollowGeometry: ViewModifier {
                 .onScrollGeometryChange(for: [Double].self) { g in
                     [g.contentOffset.y, g.visibleRect.height, g.contentSize.height, g.contentInsets.bottom]
                 } action: { _, g in
-                    follow.scrolled(offset: g[0], visible: g[1], content: g[2], inset: g[3], newest: newest)
+                    if follow.scrolled(offset: g[0], visible: g[1], content: g[2], inset: g[3], newest: newest) { toEnd() }
+                }
+                .onScrollPhaseChange { _, p in
+                    follow.moved(by: p == .tracking || p == .interacting, resting: p == .idle)
                 }
                 .onScrollTargetVisibilityChange(idType: Int.self, threshold: 0.01) { top($0.first) }
         } else {
