@@ -182,6 +182,7 @@ struct NeedActs: View {
             case "device-signature": return "Your server didn't take this phone's signature: \(e.message)"
             case "device-level": return "This phone may only view: tm device access on your computer raises it."
             case "always-allow": return "That option allows more than once: only you pick it, on your computer."
+            case DemoTransport.refused: return "The demo shows recorded data: pair your server to do this."
             default: return e.errorDescription
             }
         }
