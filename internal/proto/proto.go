@@ -37,8 +37,8 @@ import (
 // task.send-back, task.delegate and project.open. 21: task.add. 22:
 // projects.watch {lean, shown}, the inactive projects as their slug and
 // settings. 23: task.get, and projects.watch {detail}'s threads' check
-// and pr_state.
-const Protocol = 23
+// and pr_state. 24: task.done, task.templates, and task.add {template}.
+const Protocol = 24
 
 // Kind is what a connection is for.
 type Kind string

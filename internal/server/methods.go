@@ -257,6 +257,12 @@ func init() {
 		proto.MethodTaskGet: {gate: gateHuman, call: typed(func(s *Server, p proto.TaskGetParams, _ callCtx) (any, *proto.Error) {
 			return s.taskGet(p)
 		})},
+		proto.MethodTaskDone: {gate: gateHuman, call: typed(func(s *Server, p proto.TaskDoneParams, _ callCtx) (any, *proto.Error) {
+			return s.taskDone(p)
+		})},
+		proto.MethodTaskTemplates: {gate: gateHuman, call: typed(func(s *Server, p proto.TaskDoneParams, _ callCtx) (any, *proto.Error) {
+			return s.taskTemplates(p)
+		})},
 		// A project's memory and library, read only (CapProjectFiles).
 		proto.MethodMemoryList: {gate: gateHuman, call: typed(func(s *Server, p proto.ProjectFilesParams, _ callCtx) (any, *proto.Error) {
 			return s.memoryList(p)

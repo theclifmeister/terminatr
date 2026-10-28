@@ -25,6 +25,10 @@ public enum Compatibility: Equatable, Sendable {
     /// pr_state: the task view's notes for a board task need it.
     public static let taskGetAPI = 14
 
+    /// The app API that has task.done, task.templates and task.add's
+    /// template: the board's Done fold and New Task's templates need it.
+    public static let boardAPI = 20
+
     /// The app API that has session.file: the attachment cards need it.
     public static let sessionFileAPI = 11
 
@@ -84,6 +88,18 @@ public enum Compatibility: Equatable, Sendable {
     /// Whether hello's tm reads a task whole (task.get).
     public static func getsTasks(_ hello: AppAPI.Hello) -> Bool {
         hello.appApi >= taskGetAPI && hello.methods.contains(AppAPI.Methods.taskGet.name)
+    }
+
+    /// Whether hello's tm lists the board's done tasks (task.done).
+    public static func listsDone(_ hello: AppAPI.Hello) -> Bool {
+        hello.appApi >= boardAPI && hello.methods.contains(AppAPI.Methods.taskDone.name)
+    }
+
+    /// Whether hello's tm lists task templates and adds a task with one
+    /// (task.templates, task.add's template).
+    public static func offersTemplates(_ hello: AppAPI.Hello) -> Bool {
+        hello.appApi >= boardAPI && hello.methods.contains(AppAPI.Methods.taskTemplates.name)
+            && hello.methods.contains(AppAPI.Methods.taskAdd.name)
     }
 
     /// Compares hello with this app, of release appVersion (its
