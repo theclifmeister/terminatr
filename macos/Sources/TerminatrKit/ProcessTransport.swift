@@ -35,8 +35,13 @@ public final class ProcessTransport: BridgeTransport, @unchecked Sendable {
     /// the bridge dials the human socket as the human however the app
     /// was opened. TERMINATR_HOME stays: it picks the server (a test
     /// one, say), and a session's is its own server's home anyway.
+    /// TERMINATR_SOCKET stays too when no session set it (TERMINATR and
+    /// TERMINATR_SESSION unset): the human's server on a socket of its
+    /// own, which the bridge would otherwise miss and start a second,
+    /// empty one beside.
     public static func bridgeEnvironment(_ base: [String: String]) -> [String: String] {
-        base.filter { !sessionVariables.contains($0.key) }
+        let session = base["TERMINATR"] != nil || base["TERMINATR_SESSION"] != nil
+        return base.filter { !sessionVariables.contains($0.key) || (!session && $0.key == "TERMINATR_SOCKET") }
     }
 
     /// environment nil: the app's own.
