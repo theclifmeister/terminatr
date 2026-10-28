@@ -1,18 +1,20 @@
 import SwiftUI
-import TerminatrUI
 
 /// The theme's mesh behind the window's panels: a MeshGradient on
-/// macOS 15+, blurred radial gradients on 14. Reduce Transparency hides
-/// it and leaves the plain base colour.
-struct Backdrop: View {
+/// macOS 15+ and iOS 18+, blurred radial gradients before. Reduce Transparency hides
+/// it and leaves the plain base colour. The Mac's windows and the
+/// theme swatches in both apps' settings draw it.
+public struct Backdrop: View {
     @Environment(\.theme) private var theme
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
-    var body: some View {
+    public init() {}
+
+    public var body: some View {
         ZStack {
             theme.base
             if !reduceTransparency {
-                if #available(macOS 15, *) {
+                if #available(macOS 15, iOS 18, *) {
                     mesh
                 } else {
                     radials
@@ -25,7 +27,7 @@ struct Backdrop: View {
 
     /// 3×3: the corners and the centre are the theme's colours, the
     /// edges' midpoints the base, so the colours bloom from the corners.
-    @available(macOS 15, *)
+    @available(macOS 15, iOS 18, *)
     private var mesh: some View {
         let m = theme.mesh, b = theme.base
         return MeshGradient(

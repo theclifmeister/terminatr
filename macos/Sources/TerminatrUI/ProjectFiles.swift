@@ -77,7 +77,7 @@ public struct MemoryFileRow: View {
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(file.title).lineLimit(1)
+            Text(file.title).lines(1)
             Text(file.path)
                 .font(theme.mono(.caption))
                 .foregroundStyle(theme.muted)

@@ -109,6 +109,9 @@ public struct Theme: Sendable {
         contrast = c.contrast
     }
 
+    /// A style's size: its points times the scale. The custom faces are
+    /// fixed at it, as SF is, so Dynamic Type (the phone's text size,
+    /// in scale) grows every font once and alike.
     public func size(_ style: TextStyle) -> CGFloat {
         CGFloat(style.points) * scale
     }
@@ -116,13 +119,13 @@ public struct Theme: Sendable {
     /// The theme's display face (Bloom's Bricolage Grotesque), or SF Pro.
     public func title(_ style: TextStyle, _ weight: Font.Weight = .bold) -> Font {
         guard let f = colours.titleFamily else { return .system(size: size(style), weight: weight) }
-        return .custom(f, size: size(style)).weight(weight)
+        return .custom(f, fixedSize: size(style)).weight(weight)
     }
 
     /// The theme's mono (Bloom's DM Mono), or SF Mono.
     public func mono(_ style: TextStyle, _ weight: Font.Weight = .regular) -> Font {
         guard let f = colours.monoFamily else { return .system(size: size(style), weight: weight, design: .monospaced) }
-        return .custom(f, size: size(style)).weight(weight)
+        return .custom(f, fixedSize: size(style)).weight(weight)
     }
 
     /// The body's font, SF Pro (Bloom: "body stays SF Pro").
