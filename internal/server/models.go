@@ -42,13 +42,13 @@ func (s *Server) refreshAgentModels(a agent.Agent, env []string) {
 	if s.modelsBusy == nil {
 		s.modelsBusy = map[string]bool{}
 	}
-	if s.modelsBusy[m.Name] {
+	if s.modelsBusy[m.Name] || s.modelsDone {
 		s.modelsMu.Unlock()
 		return
 	}
 	s.modelsBusy[m.Name] = true
-	s.modelsMu.Unlock()
 	s.modelsWG.Add(1)
+	s.modelsMu.Unlock()
 	go func() {
 		defer s.modelsWG.Done()
 		defer func() {

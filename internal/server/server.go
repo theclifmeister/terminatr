@@ -226,6 +226,7 @@ type Server struct {
 	refusedSeen  map[string]bool
 	modelsMu     sync.Mutex
 	modelsBusy   map[string]bool
+	modelsDone   bool              // shutdown waits for the probes: no new one, under modelsMu
 	modelUnknown map[string]string // session -> why its models were unknown when last logged, under mu
 	// modelsCtx ends the agents' models probes when the server stops.
 	modelsCtx  context.Context
@@ -630,6 +631,11 @@ func (s *Server) shutdown() {
 	if s.modelsStop != nil {
 		s.modelsStop()
 	}
+	// A launch's version check may still ask for models: it starts no
+	// probe now, so no Add races the Wait.
+	s.modelsMu.Lock()
+	s.modelsDone = true
+	s.modelsMu.Unlock()
 	s.modelsWG.Wait()
 
 	s.mu.Lock()
