@@ -80,11 +80,21 @@ func TestRegistry(t *testing.T) {
 	if _, err := SetLevel(dir, "CLIF'S IPHONE", LevelAnswer); err != nil {
 		t.Fatal(err)
 	}
-	// Pairing the same key again keeps its level, takes the new name
-	// and write key.
-	wk2 := writeKey(t)
-	if d, err = Add(dir, pub(a), wk2, "Phone", r+"#sha256="+strings.Repeat("ab", 32)); err != nil || d.Level != LevelAnswer || !bytes.Equal(d.WriteKey, wk2) {
+	// Pairing the same key again with the same write key keeps its
+	// level and takes the new name.
+	if d, err = Add(dir, pub(a), wk, "Phone", r); err != nil || d.Level != LevelAnswer || d.Name != "Phone" {
 		t.Fatalf("again: %+v, %v", d, err)
+	}
+	// With another write key it takes the key and drops to view.
+	wk2 := writeKey(t)
+	if level, changed := d.Again(wk2); level != LevelView || !changed {
+		t.Fatalf("Again with another key: %s %v", level, changed)
+	}
+	if level, changed := d.Again(wk); level != LevelAnswer || changed {
+		t.Fatalf("Again with its key: %s %v", level, changed)
+	}
+	if d, err = Add(dir, pub(a), wk2, "Phone", r+"#sha256="+strings.Repeat("ab", 32)); err != nil || d.Level != LevelView || !bytes.Equal(d.WriteKey, wk2) {
+		t.Fatalf("again, another write key: %+v, %v", d, err)
 	}
 	if _, err := Add(dir, pub(b), nil, "iPad", r); err != nil {
 		t.Fatal(err)
@@ -448,8 +458,8 @@ func TestLinkRefusesAnotherKey(t *testing.T) {
 func TestLinkLastUp(t *testing.T) {
 	url, tc := startRelay(t)
 	peerDir, devDir, srv := testHome(t)
-	phone := newKey(t)
-	if _, err := Add(devDir, pub(phone), writeKey(t), "iPhone", url); err != nil {
+	phone, wk := newKey(t), writeKey(t)
+	if _, err := Add(devDir, pub(phone), wk, "iPhone", url); err != nil {
 		t.Fatal(err)
 	}
 	m := Start(Options{Dir: devDir, PeerDir: peerDir, Serve: echo, Logf: t.Logf, RelayTLS: tc,
@@ -495,7 +505,7 @@ func TestLinkLastUp(t *testing.T) {
 	// Renaming, setting the level and pairing again keep it.
 	SetLevel(devDir, "iPhone", LevelAnswer)
 	Rename(devDir, "iPhone", "Phone")
-	if _, err := Add(devDir, pub(phone), writeKey(t), "Phone", url); err != nil {
+	if _, err := Add(devDir, pub(phone), wk, "Phone", url); err != nil {
 		t.Fatal(err)
 	}
 	if d := saved(t, devDir); !d.LastUp.Equal(dropped) || d.Level != LevelAnswer {

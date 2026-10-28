@@ -424,3 +424,27 @@ func TestNetworkPhonesGolden(t *testing.T) {
 		}
 	}
 }
+
+// TestNetworkPhonePairAgain (T832): a phone paired already says so, and
+// with another write key that it comes back view-only.
+func TestNetworkPhonePairAgain(t *testing.T) {
+	m, _ := phoneDash(t, 160, 60)
+	for _, c := range []struct {
+		changed bool
+		level   string
+		want    []string
+	}{
+		{false, device.LevelAnswer, []string{`This phone is paired already, as "Old phone": pairing again keeps its level.`, `Add it as "iPhone", an answer device?`}},
+		{true, device.LevelView, []string{`This phone is paired already, as "Old phone", but its write key changed: pairing again makes it view-only; set its level again after.`,
+			`Add it as "iPhone", a view-only device?`}},
+	} {
+		pv := &phonePairView{stage: phoneOffer, name: "iPhone", offer: DeviceOffer{Name: "iPhone", Phone: "iPhone", Short: "CC33-0000",
+			Version: "1.4", WriteKey: true, Again: "Old phone", KeyChanged: c.changed, Level: c.level, AnswerBy: time.Now().Add(time.Minute)}}
+		out := ansi.Strip(pv.render(m))
+		for _, w := range c.want {
+			if !strings.Contains(out, w) {
+				t.Errorf("key changed %v, offer lacks %q:\n%s", c.changed, w, out)
+			}
+		}
+	}
+}

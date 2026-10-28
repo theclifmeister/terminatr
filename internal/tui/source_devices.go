@@ -63,11 +63,12 @@ type DeviceInvite struct {
 // DeviceOffer is the phone that joined a pairing, as tm device pair
 // shows it before asking: Name is what it would be added as, Phone the
 // name it gave; Again the device's name when its key is paired already
-// (it keeps Level); WriteKey false: it can only view. AnswerBy bounds
-// the answer. Check says why a name can't be the one it is added as.
+// (it keeps Level, view when KeyChanged: it brings another write key);
+// WriteKey false: it can only view. AnswerBy bounds the answer. Check
+// says why a name can't be the one it is added as.
 type DeviceOffer struct {
 	Name, Phone, Short, Version, Again, Level string
-	WriteKey                                  bool
+	WriteKey, KeyChanged                      bool
 	AnswerBy                                  time.Time
 	Check                                     func(name string) error
 }
@@ -225,7 +226,8 @@ func (s *ServerSource) PairDevice(ctx context.Context, relayText string, ev Devi
 					return err
 				}}
 			if again != nil {
-				o.Again, o.Level = again.Name, again.Level
+				o.Again = again.Name
+				o.Level, o.KeyChanged = again.Again(off.WriteKey)
 			}
 			as = ev.Confirm(o)
 			return as != "", nil

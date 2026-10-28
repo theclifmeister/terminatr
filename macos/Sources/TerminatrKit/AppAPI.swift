@@ -6,7 +6,7 @@ import Foundation
 /// The terminatr app API (docs/SPEC.md §3.8): what tm app bridge answers.
 public enum AppAPI {
     /// The app API version this app was generated against.
-    public static let version = 27
+    public static let version = 28
 
     public struct AdoptRequestParams: Codable, Sendable, Hashable {
         public var id: String
@@ -267,16 +267,18 @@ public enum AppAPI {
         public var version: String
         public var writeKey: Bool
         public var again: String
+        public var keyChanged: Bool
         public var level: String
         public var answerBy: Date
 
-        public init(name: String, phone: String, short: String, version: String, writeKey: Bool = false, again: String = "", level: String, answerBy: Date) {
+        public init(name: String, phone: String, short: String, version: String, writeKey: Bool = false, again: String = "", keyChanged: Bool = false, level: String, answerBy: Date) {
             self.name = name
             self.phone = phone
             self.short = short
             self.version = version
             self.writeKey = writeKey
             self.again = again
+            self.keyChanged = keyChanged
             self.level = level
             self.answerBy = answerBy
         }
@@ -288,6 +290,7 @@ public enum AppAPI {
             case version
             case writeKey = "write_key"
             case again
+            case keyChanged = "key_changed"
             case level
             case answerBy = "answer_by"
         }
@@ -2909,6 +2912,7 @@ extension AppAPI.DeviceOffer {
         self.version = try c.decode(String.self, forKey: .version)
         self.writeKey = try c.decodeIfPresent(Bool.self, forKey: .writeKey) ?? false
         self.again = try c.decodeIfPresent(String.self, forKey: .again) ?? ""
+        self.keyChanged = try c.decodeIfPresent(Bool.self, forKey: .keyChanged) ?? false
         self.level = try c.decode(String.self, forKey: .level)
         self.answerBy = try c.decode(Date.self, forKey: .answerBy)
     }

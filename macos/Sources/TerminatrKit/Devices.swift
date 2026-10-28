@@ -82,10 +82,13 @@ public enum DeviceWords {
     }
 
     /// The confirmation tm device pair asks, before its question: the
-    /// phone, whether it pairs again, and whether it has a write key.
+    /// phone, whether it pairs again (and with another write key), and
+    /// whether it has a write key.
     public static func offer(_ o: AppAPI.DeviceOffer) -> [String] {
         var lines = ["“\(o.phone)”, device id \(o.short), app \(o.version.isEmpty ? "unknown" : o.version)"]
-        if !o.again.isEmpty {
+        if !o.again.isEmpty && o.keyChanged {
+            lines.append("This phone is paired already, as “\(o.again)”, but its write key changed: pairing again makes it view-only; set its level again after.")
+        } else if !o.again.isEmpty {
             lines.append("This phone is paired already, as “\(o.again)”: pairing again keeps its level.")
         }
         if !o.writeKey {

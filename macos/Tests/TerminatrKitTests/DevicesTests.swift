@@ -55,6 +55,10 @@ private func phone(level: String = "view", effective: String? = nil, writeKey: B
     #expect(DeviceWords.offer(o) == ["“iPhone”, device id 77AB-0C1D, app 1.0",
                                      "This phone is paired already, as “Old phone”: pairing again keeps its level.",
                                      "Its app has no write key: it can only view, whatever its level."])
+    let changed = AppAPI.DeviceOffer(name: "iPhone", phone: "iPhone", short: "77AB-0C1D", version: "1.1", writeKey: true, again: "Old phone",
+                                     keyChanged: true, level: "view", answerBy: now)
+    #expect(DeviceWords.offer(changed) == ["“iPhone”, device id 77AB-0C1D, app 1.1",
+                                           "This phone is paired already, as “Old phone”, but its write key changed: pairing again makes it view-only; set its level again after."])
     #expect(DeviceWords.question(name: "iPhone 2", level: "view") == "Add it as “iPhone 2”, a view-only device?")
     #expect(DeviceWords.question(name: "iPhone 2", level: "answer") == "Add it as “iPhone 2”, an answer device?")
     #expect(DeviceWords.error(AppAPI.Error(code: "pair-expired", message: "x")).contains("time ran out"))
