@@ -1364,9 +1364,10 @@ func (t *Ticker) unstick(p *project.Project, pm *projectMemo, coord *proto.Sessi
 }
 
 // ServerRestarted raises one item per project that had sessions in the
-// previous server (§7.5): how it ended, and how many of its sessions came
-// back.
-func (t *Ticker) ServerRestarted(how string, resumed, lost map[string]int) {
+// previous server (§7.5): how it ended, how many of its sessions came
+// back, and how many of those were re-prompted to carry on a turn the
+// stop interrupted.
+func (t *Ticker) ServerRestarted(how string, resumed, reprompted, lost map[string]int) {
 	slugs := map[string]bool{}
 	for s := range resumed {
 		slugs[s] = true
@@ -1383,7 +1384,11 @@ func (t *Ticker) ServerRestarted(how string, resumed, lost map[string]int) {
 		if how == "crash" {
 			after = "a crash"
 		}
-		t.item(p, KindServerRestart, "server", fmt.Sprintf("the server restarted after %s: %d session(s) resumed, %d not restored (tm thread list)", after, resumed[slug], lost[slug]), lost[slug] > 0)
+		again := ""
+		if n := reprompted[slug]; n > 0 {
+			again = fmt.Sprintf(" (%d stopped mid-turn, re-prompted to carry on)", n)
+		}
+		t.item(p, KindServerRestart, "server", fmt.Sprintf("the server restarted after %s: %d session(s) resumed%s, %d not restored (tm thread list)", after, resumed[slug], again, lost[slug]), lost[slug] > 0)
 	}
 }
 
