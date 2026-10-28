@@ -2,8 +2,9 @@ import SwiftUI
 import TerminatrKit
 import TerminatrUI
 
-/// A session's conversation from its transcript (transcript.watch), as
-/// the Mac's conversation tab draws it: prompts, the agent's text,
+/// A session's conversation from its transcript (transcript.watch: its
+/// last items when the server pages, transcript.page for the earlier
+/// ones on a tap), as the Mac's conversation tab draws it: prompts, the agent's text,
 /// tool calls folded into runs (ToolRunHeader, a tap unfolds one), and
 /// the open question (QuestionSummary) or approval at the end. Read
 /// only: answering comes with the device link's answer level.
@@ -14,6 +15,12 @@ struct ConversationScreen: View {
     @State private var transcript = Transcript()
     @State private var failure: String?
     @State private var unfolded: Set<Int> = []
+    @State private var paging = false
+    @State private var pages = false
+
+    /// The items a stream opens with when the server pages: the screen's
+    /// worth and some.
+    static let tail = 60
 
     var body: some View {
         let id = model.sessionID(ref)
@@ -27,6 +34,7 @@ struct ConversationScreen: View {
                             .padding(.top, 60)
                     }
                     if let failure { Failure(text: failure) }
+                    if pages, !transcript.before.isEmpty, let id { earlier(id) }
                     ForEach(Transcript.rows(transcript.entries)) { row in
                         switch row {
                         case .entry(let e): EntryLine(entry: e, agent: session?.agent ?? "")
@@ -38,7 +46,7 @@ struct ConversationScreen: View {
                 }
                 .padding(16)
             }
-            .onChange(of: transcript.entries.count) { scroll.scrollTo("end", anchor: .bottom) }
+            .onChange(of: transcript.entries.last?.id) { scroll.scrollTo("end", anchor: .bottom) }
         }
         .safeAreaInset(edge: .bottom) {
             if id != nil {
@@ -54,7 +62,34 @@ struct ConversationScreen: View {
         .navigationTitle(model.title(ref))
         .navigationBarTitleDisplayMode(.inline)
         .backdrop()
-        .task(id: id) { await watch(id) }
+        // A redial is a new bridge: the stream opens again on it.
+        .task(id: "\(id ?? "")/\(model.generation)") { await watch(id) }
+    }
+
+    private func earlier(_ id: String) -> some View {
+        Button {
+            Task { await page(id) }
+        } label: {
+            HStack {
+                Text("Earlier messages")
+                if paging { ProgressView().controlSize(.small) }
+            }
+            .font(theme.body(.footnote, .semibold))
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.bordered)
+        .disabled(paging)
+    }
+
+    private func page(_ id: String) async {
+        guard let b = model.bridge else { return }
+        paging = true
+        defer { paging = false }
+        do {
+            transcript.prepend(try await b.call(AppAPI.Methods.transcriptPage, AppAPI.TranscriptPageParams(session: id, before: transcript.before)))
+        } catch {
+            failure = error.localizedDescription
+        }
     }
 
     @ViewBuilder
@@ -106,8 +141,11 @@ struct ConversationScreen: View {
         transcript = Transcript()
         failure = nil
         guard let id, let b = model.bridge else { return }
+        let hello = await b.hello
+        pages = hello?.methods.contains(AppAPI.Methods.transcriptPage.name) == true
+        let tail = hello?.server?.caps.contains("transcript-tail") == true ? Self.tail : 0
         do {
-            let sub = try await b.subscribe(AppAPI.Methods.transcriptWatch, AppAPI.TranscriptParams(session: id))
+            let sub = try await b.subscribe(AppAPI.Methods.transcriptWatch, AppAPI.TranscriptParams(session: id, tail: tail))
             transcript.start(sub.result.status)
             for try await e in sub.events {
                 transcript.apply(e.name, e.data)

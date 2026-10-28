@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- What the generated Info.plist (GENERATE_INFOPLIST_FILE) can't say:
+     terminatr:// links, so the Camera app's scan of tm device pair's
+     QR code (terminatr://pair?…) opens the app. Outside Terminatr/,
+     whose folder group would copy it as a resource. -->
+<plist version="1.0">
+<dict>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>dev.terminatr.ios.pair</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>terminatr</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>

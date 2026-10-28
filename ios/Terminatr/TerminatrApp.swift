@@ -1,16 +1,23 @@
 import CoreText
 import SwiftUI
 import TerminatrKit
+import TerminatrLink
 import TerminatrUI
 
 /// terminatr for iPhone (T788, stage 1): a server's Needs you, projects,
-/// threads and conversations, read only. Pairing comes with device
-/// links; until then the app opens its built-in demo. Launched with
-/// -demo YES it opens the demo at once, and -open ROUTE (Route.parse)
-/// on that screen: the Simulator's screenshots.
+/// threads and conversations, read only, over the device link to the
+/// server it paired with (tm device pair), or the built-in demo. The
+/// link is up while the app is in front. Launched with -demo YES it
+/// opens the demo at once, and -open ROUTE (Route.parse) on that
+/// screen: the Simulator's screenshots; with -pair CODE it pairs with
+/// that code at once, as this phone (the Simulator has no camera:
+/// internal/appapi TestPhoneDev's codes). A terminatr://pair link (the
+/// Camera app's scan of the code) opens the pairing screen.
 @main
 struct TerminatrApp: App {
     @State private var model = PhoneModel()
+    @State private var linked: LinkedCode?
+    @Environment(\.scenePhase) private var phase
 
     init() {
         // The Mac app's fonts (Bricolage Grotesque, DM Mono; OFL), which
@@ -30,9 +37,34 @@ struct TerminatrApp: App {
                     if UserDefaults.standard.bool(forKey: "demo"), model.source == .none {
                         await model.startDemo()
                     }
+                    if let s = UserDefaults.standard.string(forKey: "pair"), let c = try? PairingCode(s) {
+                        do {
+                            try await model.pair(c, name: UIDevice.current.name)
+                        } catch {
+                            model.failed(error)
+                        }
+                    }
+                    model.openPaired()
                 }
+                .onOpenURL { url in
+                    if let c = try? PairingCode(url.absoluteString) { linked = LinkedCode(code: c) }
+                }
+                .sheet(item: $linked) { PairScreen(code: $0.code).environment(model) }
+        }
+        .onChange(of: phase) { _, p in
+            switch p {
+            case .active: model.resume()
+            case .background: Task { await model.suspend() }
+            default: break
+            }
         }
     }
+}
+
+/// A pairing code a link brought, for the sheet.
+struct LinkedCode: Identifiable {
+    let id = UUID()
+    let code: PairingCode
 }
 
 /// Where a tap goes.

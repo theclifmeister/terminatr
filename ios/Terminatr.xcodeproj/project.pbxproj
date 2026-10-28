@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		7E0000000000000000000101 /* TerminatrKit in Frameworks */ = {isa = PBXBuildFile; productRef = 7E0000000000000000000201 /* TerminatrKit */; };
 		7E0000000000000000000102 /* TerminatrUI in Frameworks */ = {isa = PBXBuildFile; productRef = 7E0000000000000000000202 /* TerminatrUI */; };
+		7E0000000000000000000104 /* TerminatrLink in Frameworks */ = {isa = PBXBuildFile; productRef = 7E0000000000000000000203 /* TerminatrLink */; };
 		7E0000000000000000000103 /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 7E0000000000000000000302 /* AppIcon.icon */; };
 /* End PBXBuildFile section */
 
@@ -29,6 +30,7 @@
 			files = (
 				7E0000000000000000000101 /* TerminatrKit in Frameworks */,
 				7E0000000000000000000102 /* TerminatrUI in Frameworks */,
+				7E0000000000000000000104 /* TerminatrLink in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -76,6 +78,7 @@
 			packageProductDependencies = (
 				7E0000000000000000000201 /* TerminatrKit */,
 				7E0000000000000000000202 /* TerminatrUI */,
+				7E0000000000000000000203 /* TerminatrLink */,
 			);
 			productName = Terminatr;
 			productReference = 7E0000000000000000000301 /* Terminatr.app */;
@@ -102,6 +105,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				7E0000000000000000000901 /* XCLocalSwiftPackageReference "../macos" */,
+				7E0000000000000000000902 /* XCLocalSwiftPackageReference "TerminatrLink" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 7E0000000000000000000602 /* Products */;
@@ -177,7 +181,9 @@
 				"CODE_SIGN_IDENTITY[sdk=iphonesimulator*]" = "-";
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = terminatr;
+				INFOPLIST_KEY_NSCameraUsageDescription = "The camera reads the pairing code tm device pair shows on your computer.";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -206,7 +212,9 @@
 				"CODE_SIGN_IDENTITY[sdk=iphonesimulator*]" = "-";
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = terminatr;
+				INFOPLIST_KEY_NSCameraUsageDescription = "The camera reads the pairing code tm device pair shows on your computer.";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -255,6 +263,10 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = ../macos;
 		};
+		7E0000000000000000000902 /* XCLocalSwiftPackageReference "TerminatrLink" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = TerminatrLink;
+		};
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -267,6 +279,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 7E0000000000000000000901 /* XCLocalSwiftPackageReference "../macos" */;
 			productName = TerminatrUI;
+		};
+		7E0000000000000000000203 /* TerminatrLink */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 7E0000000000000000000902 /* XCLocalSwiftPackageReference "TerminatrLink" */;
+			productName = TerminatrLink;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
