@@ -138,7 +138,9 @@ public struct WorkingBar: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 7)
-            .background(theme.command, in: Capsule())
+            // A card's frost: it floats over the transcript's end.
+            .frosted(Capsule())
+            .background(theme.cardTint, in: Capsule())
             .overlay(Capsule().strokeBorder(theme.edge, lineWidth: 1))
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(busy.spoken(now: tl.date))
