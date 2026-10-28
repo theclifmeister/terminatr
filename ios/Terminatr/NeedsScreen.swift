@@ -4,7 +4,7 @@ import TerminatrUI
 
 /// The start screen: every need, as the Mac app's Needs you lists them
 /// (Need.of), each a card (NeedSummary) that opens its session, else
-/// its project. Read only: the answers stay on the Mac for now.
+/// its project, with its answers below at the answer level (NeedActs).
 struct NeedsScreen: View {
     @Environment(PhoneModel.self) private var model
     @Environment(\.theme) private var theme
@@ -21,10 +21,7 @@ struct NeedsScreen: View {
                         .padding(.top, 60)
                 }
                 ForEach(needs) { n in
-                    NavigationLink(value: route(n)) {
-                        NeedTile(need: n)
-                    }
-                    .buttonStyle(.plain)
+                    NeedTile(need: n, route: route(n))
                 }
             }
             .padding(16)
@@ -46,31 +43,43 @@ struct NeedsScreen: View {
     }
 }
 
-/// A need's card, as the Mac dashboard's NeedCard looks, without its
-/// buttons: its project, then NeedSummary.
+/// A need's card, as the Mac dashboard's NeedCard looks: its project,
+/// then NeedSummary, which open route; below, outside the link, its
+/// buttons (NeedActs).
 struct NeedTile: View {
     @Environment(\.theme) private var theme
     let need: Need
+    let route: Route
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text(need.project)
-                    .font(theme.mono(.caption2, .medium))
-                    .foregroundStyle(theme.muted)
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(theme.body(.footnote, .semibold))
-                    .foregroundStyle(theme.muted)
-                    .accessibilityHidden(true)
+        VStack(alignment: .leading, spacing: 8) {
+            NavigationLink(value: route) {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Text(need.project)
+                            .font(theme.mono(.caption2, .medium))
+                            .foregroundStyle(theme.muted)
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(theme.body(.footnote, .semibold))
+                            .foregroundStyle(theme.muted)
+                            .accessibilityHidden(true)
+                    }
+                    NeedSummary(need: need)
+                    if !need.text.isEmpty {
+                        Text(need.text)
+                            .font(theme.body(.subheadline))
+                            .lineLimit(3)
+                            .padding(.leading, 24)
+                    }
+                }
+                .contentShape(Rectangle())
+                .accessibilityElement(children: .combine)
+                .accessibilityHint(need.kind.verb)
             }
-            NeedSummary(need: need)
-            if !need.text.isEmpty {
-                Text(need.text)
-                    .font(theme.body(.subheadline))
-                    .lineLimit(3)
-                    .padding(.leading, 24)
-            }
+            .buttonStyle(.plain)
+            NeedActs(need: need)
+                .padding(.leading, 24)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
@@ -78,9 +87,7 @@ struct NeedTile: View {
         .frosted(RoundedRectangle(cornerRadius: 12))
         .background(theme.cardTint, in: RoundedRectangle(cornerRadius: 12))
         .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(theme.colour(need.kind).opacity(theme.contrast ? 1 : 0.35), lineWidth: 1))
-        .contentShape(RoundedRectangle(cornerRadius: 12))
-        .accessibilityElement(children: .combine)
-        .accessibilityHint(need.kind.verb)
+        .accessibilityElement(children: .contain)
     }
 }
 
@@ -140,6 +147,7 @@ struct LinkBanner: View {
         switch model.link {
         case .connecting: return ("antenna.radiowaves.left.and.right", "Linking to \(name)…", theme.muted)
         case .asleep: return ("moon.zzz", "\(name) is asleep or offline. The app links again once it's back.", theme.attention)
+        case .up where model.answers: return ("faceid", "\(name): answers with Face ID", theme.action)
         case .up: return ("checkmark.circle", "\(name), read only", theme.action)
         case .lost(let why): return ("exclamationmark.triangle", "Link lost: \(why) Trying again…", theme.attention)
         }

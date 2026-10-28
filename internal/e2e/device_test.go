@@ -85,6 +85,10 @@ func TestSmokeDeviceAnswerEscape(t *testing.T) {
 	env.MustCLI("thread", "prompt", "t-0001", "run thread-block", "--project", "demo")
 	env.WaitState(th, "blocked", agentWait)
 	waitReason(t, env, th, "permission")
+	var check appapi.ApproveResult
+	if err := phone.Call(proto.MethodSessionApprove, appapi.ApproveParams{ID: th.ID, Check: true}, &check); err != nil || check.Sent || check.Option == "" {
+		t.Fatalf("unsigned check: %+v %v", check, err)
+	}
 	if err := phone.Call(proto.MethodSessionApprove, appapi.ApproveParams{ID: th.ID}, nil); appCode(err) != appapi.ErrSignature {
 		t.Fatalf("unsigned approve: %v", err)
 	}

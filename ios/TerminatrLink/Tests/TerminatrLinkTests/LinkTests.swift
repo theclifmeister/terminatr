@@ -161,7 +161,9 @@ func spikeDevice() async throws {
         }
         return
     }
-    let server = try await DevicePairing.join(code, as: identity, name: "tm phone test", version: "1.0")
+    // The write key goes with the name, for the server to pin.
+    let writeKey = P256.Signing.PrivateKey().publicKey.x963Representation
+    let server = try await DevicePairing.join(code, as: identity, name: "tm phone test", version: "1.0", writeKey: writeKey)
     print("spike: paired with \(server.name) \(server.version)")
     #expect(server.name == "studio")
     #expect(LinkIdentity.id(of: server.endpoint.serverKey) == code.server)

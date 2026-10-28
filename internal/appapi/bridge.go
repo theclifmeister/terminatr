@@ -278,7 +278,7 @@ func (b *bridge) handle(req Request) {
 		b.fail(req.ID, ErrLevel, "%s needs a higher level than this device's (%s): tm device access on the server raises it", req.Method, level)
 		return
 	}
-	if m.Write && b.o.Level != nil {
+	if m.Write && b.o.Level != nil && !readsOnly(m, req.Params) {
 		if e := b.checkAuth(req); e != nil {
 			b.fail(req.ID, e.Code, "%s", e.Message)
 			return

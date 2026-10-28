@@ -6,10 +6,11 @@ import TerminatrLink
 /// The device link is a Bridge's transport as tm app bridge's stdio is.
 extension LinkTransport: @retroactive BridgeTransport {}
 
-/// What the phone shows of one server, read only: its projects
-/// (projects.watch), sessions (session.list) and paired servers
-/// (peer.list), and what of it needs the user (Need.of), as the Mac
-/// app's AppModel reads them. It talks to a Bridge on either transport:
+/// What the phone shows of one server: its projects (projects.watch),
+/// sessions (session.list) and paired servers (peer.list), and what of
+/// it needs the user (Need.of), as the Mac app's AppModel reads them;
+/// and at the answer level the acts on those needs, each signed behind
+/// Face ID (WriteKey). It talks to a Bridge on either transport:
 /// the demo's recording (DemoTransport), or the device link to the
 /// paired server (LinkTransport), which it keeps while the app is in
 /// front: redialled when it drops and when the app comes back, its
@@ -52,6 +53,8 @@ final class PhoneModel {
     /// Why the last load failed, in words.
     private(set) var failure: String?
     private(set) var bridge: Bridge?
+    /// The bridge's hello as last read: its level and methods.
+    private(set) var hello: AppAPI.Hello?
     private var watching: Task<Void, Never>?
 
     /// Every need, as the Mac app's Needs you lists them.
@@ -97,12 +100,14 @@ final class PhoneModel {
         watching = nil
         await bridge?.close()
         bridge = nil
+        hello = nil
     }
 
-    private func connect(_ transport: any BridgeTransport) async {
+    private func connect(_ transport: any BridgeTransport, signer: (any WriteSigner)? = nil) async {
         let b = Bridge(transport: transport)
         do {
-            _ = try await b.start()
+            hello = try await b.start()
+            await b.setSigner(signer)
             bridge = b
             generation += 1
             await refresh()
@@ -124,7 +129,7 @@ final class PhoneModel {
     func pair(_ code: PairingCode, name: String) async throws {
         let id = try DeviceStore.identity()
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
-        let s = try await DevicePairing.join(code, as: id, name: name, version: version)
+        let s = try await DevicePairing.join(code, as: id, name: name, version: version, writeKey: try WriteKey.signer().publicKey)
         try DeviceStore.save(s)
         await disconnect()
         open(s)
@@ -176,7 +181,7 @@ final class PhoneModel {
                 }
                 let lost = AsyncStream<any Error>.makeStream()
                 dropped = { lost.continuation.yield($0) }
-                await connect(t)
+                await connect(t, signer: WriteKey.existing())
                 guard bridge != nil else { throw LinkError.closed }
                 link = .up
                 fails = 0
@@ -190,6 +195,7 @@ final class PhoneModel {
                 watching = nil
                 await bridge?.close()
                 bridge = nil
+                hello = nil
                 if link != .asleep {
                     link = .lost(error.localizedDescription)
                     fails += 1
@@ -205,6 +211,7 @@ final class PhoneModel {
     func refresh() async {
         guard let b = bridge else { return }
         failure = nil
+        hello = await b.hello
         do {
             let l = try await b.call(AppAPI.Methods.sessionList)
             sessions = l.sessions
@@ -230,6 +237,60 @@ final class PhoneModel {
             // The bridge ended under it: the link dropped.
             if error is LinkError || error is BridgeError { dropped?(error) }
         }
+    }
+
+    // MARK: Acts (the answer level)
+
+    /// Whether the bridge has method m: the device's level allows it.
+    func can(_ m: String) -> Bool {
+        hello?.methods.contains(m) == true
+    }
+
+    /// Whether the phone answers here at all (the answer level).
+    var answers: Bool { can(AppAPI.Methods.sessionApprove.name) }
+
+    /// What an approval's dialog offers, as the server reads it off the
+    /// screen (session.approve {check}, unsigned: it answers nothing).
+    func check(_ session: String) async throws -> AppAPI.ApproveResult {
+        try await connected().call(AppAPI.Methods.sessionApprove, AppAPI.ApproveParams(id: session, choice: 1, check: true))
+    }
+
+    func approve(_ session: String, choice: Int) async throws {
+        _ = try await connected().call(AppAPI.Methods.sessionApprove, AppAPI.ApproveParams(id: session, choice: choice))
+        await reread()
+    }
+
+    func answer(_ a: Need.Answer, _ option: String) async throws {
+        _ = try await connected().call(AppAPI.Methods.sessionAnswer, a.params(option))
+        await reread()
+    }
+
+    /// Asks the coordinator to accept task: false when it was asked
+    /// already.
+    func accept(project: String, task: String) async throws -> Bool {
+        try await connected().call(AppAPI.Methods.taskAccept, AppAPI.TaskParams(project: project, task: task)).asked
+    }
+
+    func sendBack(project: String, task: String, note: String) async throws -> Bool {
+        try await connected().call(AppAPI.Methods.taskSendBack, AppAPI.SendBackParams(project: project, task: task, note: note)).asked
+    }
+
+    /// Has the coordinator put its open questions to the user: they
+    /// come back as its session's question, answered here.
+    func openQuestions(_ project: String) async throws {
+        _ = try await connected().call(AppAPI.Methods.questionsOpen, AppAPI.ProjectParams(project: project))
+        await reread()
+    }
+
+    private func connected() throws -> Bridge {
+        guard let b = bridge else { throw LinkError.closed }
+        return b
+    }
+
+    /// The sessions again, after an act: their needs change at once.
+    private func reread() async {
+        guard let b = bridge, let l = try? await b.call(AppAPI.Methods.sessionList) else { return }
+        sessions = l.sessions
     }
 
     /// The paired server's name, for the screens to say.

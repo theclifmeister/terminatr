@@ -313,6 +313,10 @@ func TestSignedWrites(t *testing.T) {
 	if err := c.Call(proto.MethodSessionApprove, approve, nil); code(err) != appapi.ErrSignature {
 		t.Fatalf("unsigned: %v", err)
 	}
+	// A check only reads the dialog: it needs no signature.
+	if err := c.Call(proto.MethodSessionApprove, appapi.ApproveParams{ID: "s-99", Check: true}, nil); code(err) != proto.ErrUnknownSession {
+		t.Fatalf("unsigned check: %v", err)
+	}
 	// Signed by the write key: it reaches the server.
 	c.Sign = apptest.Signer(wk)
 	if err := c.Call(proto.MethodSessionApprove, approve, nil); code(err) != proto.ErrUnknownSession {

@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/device"
+	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
 // MethodDeviceNonce gives a device a fresh nonce to sign its next write
@@ -127,6 +128,19 @@ func deviceNonce(b *bridge, _ struct{}) (DeviceNonce, error) {
 // signs says whether a device bridge at level checks signatures: the
 // levels that write.
 func signs(level string) bool { return level == device.LevelAnswer || level == device.LevelWrite }
+
+// readsOnly says whether a write's request only reads, so it needs no
+// signature: session.approve {check}, which reads the dialog off the
+// screen and answers nothing (a phone checks each approval it shows, and
+// Face ID for each would be noise).
+func readsOnly(m Method, raw []byte) bool {
+	if m.Name != proto.MethodSessionApprove {
+		return false
+	}
+	p, err := m.toServer(raw)
+	sp, ok := p.(proto.SessionApproveParams)
+	return err == nil && ok && sp.Check
+}
 
 // checkAuth is why req, a write of a device's bridge, can't go on: nil
 // when its auth is the device's signature over a nonce the bridge gave.

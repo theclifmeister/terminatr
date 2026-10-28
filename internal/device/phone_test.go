@@ -61,7 +61,7 @@ func TestPhoneDevice(t *testing.T) {
 		},
 		Confirm: func(o Offer) (bool, error) {
 			t.Logf("offer: %+v", o)
-			if o.Name != "tm phone test" || o.Version == "" {
+			if o.Name != "tm phone test" || o.Version == "" || !declined && o.WriteKey == nil {
 				t.Errorf("offer %+v", o)
 			}
 			return !declined, nil
