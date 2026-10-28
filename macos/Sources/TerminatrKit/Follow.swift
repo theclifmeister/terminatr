@@ -25,6 +25,10 @@ public struct Follow: Equatable, Sendable {
     /// The scroll offset at the last geometry, to tell the user's
     /// scroll up from the content growing under a follower.
     private var offset: Double?
+    /// Whether the last geometry was at the end.
+    private var atEnd = true
+    /// Whether the scroll is at rest (its phase idle).
+    private var resting = true
 
     /// How near the end counts as at it, in points.
     public static let slack = 80.0
@@ -47,7 +51,10 @@ public struct Follow: Equatable, Sendable {
     @discardableResult
     public mutating func scrolled(offset: Double, visible: Double, content: Double, inset: Double = 0, newest: Int?) -> Bool {
         defer { self.offset = offset }
-        if offset + visible >= content + inset - Self.slack {
+        atEnd = offset + visible >= content + inset - Self.slack
+        if atEnd {
+            // At rest there: no momentum left to fight.
+            if resting { jumping = false }
             following = true
             unseen = 0
             if let newest { seen = newest }
@@ -75,10 +82,11 @@ public struct Follow: Equatable, Sendable {
 
     /// Follow again: the user sent a prompt or pressed Jump to latest.
     /// The view scrolls to the end, and keeps to it until the scroll
-    /// comes to rest (moved(by:)).
+    /// comes to rest (moved(by:)); at rest at the end already, there is
+    /// nothing to keep to.
     public mutating func jump(newest: Int?) {
         following = true
-        jumping = true
+        jumping = !(atEnd && resting)
         unseen = 0
         if let newest { seen = newest }
     }
@@ -87,6 +95,7 @@ public struct Follow: Equatable, Sendable {
     /// trackpad touch) or the scroll at rest ends a jump; a scroll that
     /// decelerates or animates doesn't.
     public mutating func moved(by user: Bool, resting: Bool) {
+        self.resting = resting
         if user || resting { jumping = false }
     }
 

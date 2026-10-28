@@ -111,6 +111,9 @@ private func at(_ f: inout Follow, _ offset: Double, content: Double, newest: In
     var f = Follow()
     _ = f.arrived([0, 1])
     at(&f, 9500, content: 10000, newest: 1)
+    // A flick: the finger on it, then let go, decelerating up.
+    f.moved(by: true, resting: false)
+    f.moved(by: false, resting: false)
     at(&f, 7900, content: 10000, newest: 1)
     #expect(!f.following)
     f.jump(newest: 1)
@@ -123,7 +126,6 @@ private func at(_ f: inout Follow, _ offset: Double, content: Double, newest: In
     let atEnd = f.scrolled(offset: 9500, visible: 500, content: 10000, newest: 1)
     let ebb = f.scrolled(offset: 9497, visible: 500, content: 10000, newest: 1)
     #expect(!atEnd && !ebb)
-    f.moved(by: false, resting: false)
     #expect(f.jumping)
     f.moved(by: false, resting: true)
     #expect(!f.jumping && f.following)
@@ -144,4 +146,26 @@ private func at(_ f: inout Follow, _ offset: Double, content: Double, newest: In
     let pull = f.scrolled(offset: 400, visible: 500, content: 2000, newest: 1)
     #expect(!pull)
     #expect(!f.following)
+}
+
+/// A prompt sent at the end, at rest: no scroll comes of it, so no
+/// phase ends the jump; it ends at once, and the user's next scroll up
+/// (a mouse wheel's, which may show no phase) stops the follow.
+@Test func jumpAtRestAtTheEnd() {
+    var f = Follow()
+    _ = f.arrived([0, 1])
+    at(&f, 1500, content: 2000, newest: 1)
+    f.jump(newest: 1)
+    #expect(!f.jumping)
+    at(&f, 1300, content: 2000, newest: 1)
+    #expect(!f.following)
+    // Mid-flick at the end, though, a jump holds until the scroll rests.
+    f.moved(by: false, resting: false)
+    at(&f, 1500, content: 2000, newest: 1)
+    f.jump(newest: 1)
+    #expect(f.jumping)
+    let pull = f.scrolled(offset: 1400, visible: 500, content: 2000, newest: 1)
+    #expect(pull)
+    f.moved(by: false, resting: true)
+    #expect(!f.jumping)
 }
