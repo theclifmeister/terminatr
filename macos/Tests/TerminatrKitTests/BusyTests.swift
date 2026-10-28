@@ -24,7 +24,7 @@ import Testing
         #expect(Busy.of(session("s-1", state: state)) == nil)
     }
     #expect(Busy.of(nil) == nil)
-    // A tm before app API 26 sends no turn_since: busy, without a time.
+    // A tm before app API 25 sends no turn_since: busy, without a time.
     let old = try #require(Busy.of(session("s-1")))
     #expect(old.word(now: t0) == "working")
     #expect(old.spoken(now: t0) == "working")

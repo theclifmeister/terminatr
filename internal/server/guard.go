@@ -822,7 +822,7 @@ func (s *Server) guardDenied(r SessionRecord, d GuardDenial) {
 		e, listed, err := guardlog.Record(s.opts.Paths.Home, e, guardNow())
 		if err != nil {
 			s.log.Printf("session %s: guard log: %v", r.ID, err)
-		} else if listed && !e.Floor && guardSettings(r.Project).GuardMode == config.GuardLearn {
+		} else if listed && e.Actionable() && guardSettings(r.Project).GuardMode == config.GuardLearn {
 			msg := fmt.Sprintf("%s: the guard refused a %s call (%s: %s) and learns from your answer: allow it or keep refusing it in the project's Settings, Guard refusals",
 				ref, tool, d.Rule, summary)
 			if _, err := p.AddItem("guard", ref, msg, true); err != nil {

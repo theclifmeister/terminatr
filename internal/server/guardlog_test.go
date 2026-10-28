@@ -88,8 +88,8 @@ func TestGuardAllowsReal(t *testing.T) {
 
 // TestGuardLogRoute: a refusal's whole call goes to the guard's log and
 // never to the journal or the server's log; in learn mode a newly
-// listed one is put to the user with one inbox item, the same refused
-// again with none.
+// listed one the user can allow is put to the user with one inbox item,
+// the same refused again with none.
 func TestGuardLogRoute(t *testing.T) {
 	paths := testPaths(t)
 	p := newWatchProject(t)
@@ -134,6 +134,14 @@ func TestGuardLogRoute(t *testing.T) {
 	}
 	if l, _ := guardlog.List(paths.Home, p.Slug); len(l) != 2 || !l[0].Floor {
 		t.Errorf("floor %+v", l)
+	}
+	// Nor is one no allowance names (tm's files, not on the floor).
+	s.guardDenied(rec, GuardDenial{Rule: "tm-files", Tool: "Bash", Summary: "a write of tm's settings", Subject: "tm config set x y"})
+	if items2, _ := p.Inbox(); len(items2) != len(items) {
+		t.Errorf("tm-files refusal raised an item")
+	}
+	if l, _ := guardlog.List(paths.Home, p.Slug); len(l) != 3 {
+		t.Errorf("tm-files not logged %+v", l)
 	}
 }
 

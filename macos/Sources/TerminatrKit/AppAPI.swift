@@ -6,7 +6,7 @@ import Foundation
 /// The terminatr app API (docs/SPEC.md §3.8): what tm app bridge answers.
 public enum AppAPI {
     /// The app API version this app was generated against.
-    public static let version = 26
+    public static let version = 25
 
     public struct AdoptRequestParams: Codable, Sendable, Hashable {
         public var id: String
@@ -244,11 +244,12 @@ public enum AppAPI {
         public var subject: String
         public var path: Bool
         public var floor: Bool
+        public var fixed: Bool
         public var first: Date
         public var last: Date
         public var count: Int
 
-        public init(id: String, project: String, thread: String = "", role: String = "", rule: String, tool: String, summary: String = "", subject: String, path: Bool = false, floor: Bool = false, first: Date, last: Date, count: Int) {
+        public init(id: String, project: String, thread: String = "", role: String = "", rule: String, tool: String, summary: String = "", subject: String, path: Bool = false, floor: Bool = false, fixed: Bool = false, first: Date, last: Date, count: Int) {
             self.id = id
             self.project = project
             self.thread = thread
@@ -259,6 +260,7 @@ public enum AppAPI {
             self.subject = subject
             self.path = path
             self.floor = floor
+            self.fixed = fixed
             self.first = first
             self.last = last
             self.count = count
@@ -275,6 +277,7 @@ public enum AppAPI {
             case subject
             case path
             case floor
+            case fixed
             case first
             case last
             case count
@@ -2655,6 +2658,7 @@ extension AppAPI.GuardRefusal {
         self.subject = try c.decode(String.self, forKey: .subject)
         self.path = try c.decodeIfPresent(Bool.self, forKey: .path) ?? false
         self.floor = try c.decodeIfPresent(Bool.self, forKey: .floor) ?? false
+        self.fixed = try c.decodeIfPresent(Bool.self, forKey: .fixed) ?? false
         self.first = try c.decode(Date.self, forKey: .first)
         self.last = try c.decode(Date.self, forKey: .last)
         self.count = try c.decode(Int.self, forKey: .count)

@@ -234,7 +234,7 @@ type Session struct {
 	QueuedSince    time.Time `json:"queued_since,omitzero"`
 	QueueHeld      string    `json:"queue_held,omitempty"`
 	QueueHeldSince time.Time `json:"queue_held_since,omitzero"`
-	TurnSince      time.Time `json:"turn_since,omitzero"` // since app API 26
+	TurnSince      time.Time `json:"turn_since,omitzero"` // since app API 25
 	RemoteControl  bool      `json:"remote_control,omitempty"`
 	Model          string    `json:"model,omitempty"`
 	Question       *Question `json:"question,omitempty"`

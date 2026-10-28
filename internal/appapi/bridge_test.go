@@ -509,6 +509,7 @@ func TestBridgeGuard(t *testing.T) {
 	here := record(guardlog.Entry{Project: "web", Thread: "t-0001", Rule: "credentials", Tool: "Bash", Summary: "an HTTP call with credentials", Subject: cmd})
 	all := record(guardlog.Entry{Project: "web", Thread: "t-0002", Rule: "worktree-only", Tool: "Bash", Summary: "cp outside", Subject: "cp a /opt/b"})
 	floor := record(guardlog.Entry{Project: "web", Thread: "t-0003", Rule: "merge", Tool: "Bash", Summary: "gh pr merge", Subject: "gh pr merge 1", Floor: true})
+	tmFiles := record(guardlog.Entry{Project: "web", Thread: "t-0003", Rule: "tm-files", Tool: "Bash", Summary: "a write of tm's settings", Subject: "tm config set x y"})
 	startServer(t, p)
 
 	agent, err := bridgeWith(t, appapi.Options{Paths: p, Caller: caller.Caller{Kind: caller.Thread, Project: "web", Thread: "t-0001"}})
@@ -530,11 +531,23 @@ func TestBridgeGuard(t *testing.T) {
 		t.Errorf("hello methods %v", c.Hello.Methods)
 	}
 	var list appapi.GuardRefusals
-	if err := c.Call(appapi.MethodGuardRefusals, nil, &list); err != nil || len(list.Refusals) != 3 {
+	if err := c.Call(appapi.MethodGuardRefusals, nil, &list); err != nil || len(list.Refusals) != 4 {
 		t.Fatalf("guard.refusals: %+v %v", list, err)
 	}
-	if r := list.Refusals[2]; r.ID != here.ID || r.Subject != cmd || r.Thread != "t-0001" || r.Rule != "credentials" || r.Count != 1 {
+	if r := list.Refusals[3]; r.ID != here.ID || r.Subject != cmd || r.Thread != "t-0001" || r.Rule != "credentials" || r.Count != 1 {
 		t.Errorf("refusal %+v", r)
+	}
+	// Every refusal is listed, each marked whether the user can allow it.
+	for _, r := range list.Refusals {
+		if want := r.ID != here.ID && r.ID != all.ID; r.Fixed != want {
+			t.Errorf("refusal %s (%s) fixed %t, want %t", r.ID, r.Rule, r.Fixed, want)
+		}
+	}
+	if err := c.Call(appapi.MethodGuardDecide, appapi.GuardDecideParams{ID: tmFiles.ID, How: "here"}, nil); code(err) != appapi.ErrGuardRefused {
+		t.Errorf("guard.decide allow of tm-files: %v", err)
+	}
+	if err := c.Call(appapi.MethodGuardDecide, appapi.GuardDecideParams{ID: tmFiles.ID, How: "keep"}, nil); err != nil {
+		t.Errorf("guard.decide keep of tm-files: %v", err)
 	}
 	for _, bad := range []struct {
 		params any

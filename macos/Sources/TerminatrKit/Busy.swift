@@ -5,7 +5,7 @@ import Foundation
 /// bar with what it does now. Only state "working" is busy: an agent
 /// that asks, is blocked or idles has the user's turn, or none.
 public struct Busy: Equatable, Sendable {
-    /// When the turn began (app API 26's turn_since); nil from an older
+    /// When the turn began (app API 25's turn_since); nil from an older
     /// tm, which then shows no time.
     public let since: Date?
 
