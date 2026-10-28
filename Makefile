@@ -101,7 +101,7 @@ export CGO_ENABLED := 1
 CGO_CFLAGS ?= -O2 -g
 export CGO_CFLAGS += -DTM_LIBGHOSTTY=$(GHOSTTY_OUT)
 
-.PHONY: all build run test-bin test test-race test-claude test-codex e2e e2e-smoke e2e-smoke-race fuzz vet vet-cross ghostty toolchain env clean distclean zig-path release-ghostty release-snapshot release
+.PHONY: all build run test-bin test test-race test-claude test-codex e2e e2e-smoke e2e-smoke-race fuzz vet vet-cross ghostty ghostty-deps toolchain env clean distclean zig-path release-ghostty release-snapshot release
 
 all: build
 
@@ -205,7 +205,12 @@ vet-cross:
 
 ghostty: $(READY)
 
-$(STAMP): | toolchain $(if $(filter $(ZIG_LOCAL),$(ZIG)),$(ZIG_LOCAL))
+# The Ghostty checkout and its Zig dependencies, fetched before the build
+# and retried: deps.files.ghostty.org drops connections now and then
+# (T806). All of them, as plain --fetch skips the lazy ones the build then
+# asks for. They land in Zig's global cache (its p/), which CI keeps
+# (.github/actions/setup and release-setup run this when it is empty).
+ghostty-deps: | toolchain $(if $(filter $(ZIG_LOCAL),$(ZIG)),$(ZIG_LOCAL))
 	@mkdir -p $(GHOSTTY_SRC)
 	@if [ ! -d $(GHOSTTY_SRC)/.git ]; then \
 		git -C $(GHOSTTY_SRC) init -q && \
@@ -213,6 +218,15 @@ $(STAMP): | toolchain $(if $(filter $(ZIG_LOCAL),$(ZIG)),$(ZIG_LOCAL))
 	fi
 	git -C $(GHOSTTY_SRC) fetch -q --depth 1 origin $(GHOSTTY_REV)
 	git -C $(GHOSTTY_SRC) checkout -q --force FETCH_HEAD
+	cd $(GHOSTTY_SRC) && for try in 1 2 3; do \
+		$(ZIG) build --fetch=all && break; \
+		[ $$try -lt 3 ] || { echo "fetching ghostty's Zig dependencies failed 3 times" >&2; exit 1; }; \
+		echo "fetching ghostty's Zig dependencies failed; retrying in $$((try * 15))s" >&2; \
+		sleep $$((try * 15)); \
+	done
+
+$(STAMP): | toolchain $(if $(filter $(ZIG_LOCAL),$(ZIG)),$(ZIG_LOCAL))
+	@$(MAKE) --no-print-directory ghostty-deps
 	cd $(GHOSTTY_SRC) && $(ZIG) build -Demit-lib-vt -Demit-xcframework=false \
 		-Doptimize=ReleaseFast -Dcpu=$(GHOSTTY_CPU) $(if $(GHOSTTY_TARGET),-Dtarget=$(GHOSTTY_TARGET)) \
 		--prefix $(GHOSTTY_OUT)
