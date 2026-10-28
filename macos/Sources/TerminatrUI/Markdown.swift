@@ -54,6 +54,8 @@ public struct MarkdownView: View {
             .background(theme.command, in: RoundedRectangle(cornerRadius: 9))
         case .rule:
             theme.line.frame(height: 1)
+        case .table(let t):
+            MarkdownTable(table: t)
         }
     }
 }

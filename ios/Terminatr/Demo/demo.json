@@ -1254,7 +1254,7 @@
        {
         "at": "2026-10-27T09:20:00Z",
         "kind": "text",
-        "text": "The button renders only when `payments.applePay` is on and the browser supports it. Next I'll run the checkout tests."
+        "text": "The button renders only when `payments.applePay` is on and the browser supports it:\n\n| Browser | Wallet card | Shows | Why |\n|:--|:-:|:-:|:--|\n| Safari 17+ | yes | **yes** | `ApplePaySession.canMakePayments()` |\n| Safari 17+ | no | no | no card to pay with |\n| Chrome | either | no | Apple Pay JS is Safari-only; the card form stays |\n\nNext I'll run the checkout tests."
        },
        {
         "call": "c6",
