@@ -2,6 +2,7 @@ import AppKit
 import SwiftTerm
 import SwiftUI
 import TerminatrKit
+import TerminatrUI
 
 /// The Terminal tab: the session's pane through pane.vt, drawn by
 /// SwiftTerm. The server's emulator stays the pane's; this one mirrors

@@ -1,5 +1,6 @@
 import SwiftUI
 import TerminatrKit
+import TerminatrUI
 
 /// The window's sidebar (design T746, lean as T748 milestone A has it):
 /// what needs the user, cut to three rows and "+N more" (the app's own:
@@ -472,8 +473,8 @@ private struct NeedLine: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 6) {
-                Image(systemName: NeedRow.symbol(need.kind))
-                    .foregroundStyle(NeedRow.colour(need.kind, theme))
+                Image(systemName: need.kind.symbol)
+                    .foregroundStyle(theme.colour(need.kind))
                     .frame(width: 16)
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 0) {
@@ -492,7 +493,7 @@ private struct NeedLine: View {
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
-        .accessibilityHint(NeedRow.verb(need.kind))
+        .accessibilityHint(need.kind.verb)
     }
 }
 

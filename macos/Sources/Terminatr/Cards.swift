@@ -1,5 +1,6 @@
 import SwiftUI
 import TerminatrKit
+import TerminatrUI
 
 /// What the session waits on, above the composer: a question menu
 /// (session.answer, guarded) and the agent's permission dialog
@@ -32,35 +33,6 @@ struct Cards: View {
             }
         }
         .padding(.horizontal, Page.edge)
-    }
-}
-
-/// A card's frame: its tag, a wash and an edge in the card's colour.
-struct CardFrame<Content: View>: View {
-    @Environment(\.theme) private var theme
-    let tag: String
-    let colour: Color
-    let tint: Color
-    @ViewBuilder var content: Content
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            Text(tag.uppercased())
-                .font(theme.mono(.caption2, .medium))
-                .tracking(1)
-                .foregroundStyle(colour)
-            content
-        }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .frosted(RoundedRectangle(cornerRadius: 14))
-        .background(tint, in: RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(colour.opacity(theme.contrast ? 1 : 0.4), lineWidth: 1))
-        .shadow(color: colour.opacity(0.25), radius: 12, y: 6)
-        // VoiceOver: a group named for the card, so its buttons are
-        // heard as the approval's or the question's.
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel(tag)
     }
 }
 
@@ -103,7 +75,7 @@ struct QuestionCard: View {
             if plan.checkboxes {
                 ForEach(Array(item.options.enumerated()), id: \.offset) { i, o in
                     Toggle(isOn: Binding(get: { picked.contains(o.label) }, set: { on in if on { picked.insert(o.label) } else { picked.remove(o.label) } })) {
-                        option(o)
+                        OptionLabel(o)
                     }
                     .toggleStyle(.checkbox)
                     .disabled(plan.paneOnly || busy)
@@ -187,17 +159,6 @@ struct QuestionCard: View {
             if !picked.isEmpty { send(QuestionPlan.joined(item, picked: picked), guarded: false) }
         } else if let o = item.options.first {
             send(o.label, guarded: true)
-        }
-    }
-
-    private func option(_ o: AppAPI.QuestionOption) -> some View {
-        VStack(alignment: .leading, spacing: 1) {
-            Text(o.label)
-            if !o.description.isEmpty {
-                Text(o.description)
-                    .font(theme.body(.footnote))
-                    .foregroundStyle(theme.muted)
-            }
         }
     }
 

@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import TerminatrKit
+import TerminatrUI
 
 /// A link need's buttons (T778), as the TUI's Messages tab and Network
 /// popup answer it: Send or Drop… a held message, Accept or Decline… an

@@ -1,5 +1,6 @@
 import SwiftUI
 import TerminatrKit
+import TerminatrUI
 
 /// The menu bar's dropdown (MenuBarExtra, .window style; T748 milestone
 /// F): the first needs, each named with its project, and a line for the
@@ -394,7 +395,7 @@ struct NeedRow: View {
 
     private func row(verb: Bool) -> some View {
         MenuRow(action: action) {
-            Image(systemName: Self.symbol(need.kind))
+            Image(systemName: need.kind.symbol)
                 .font(theme.body(.body, .semibold))
                 .foregroundStyle(colour)
                 .frame(width: 18)
@@ -410,7 +411,7 @@ struct NeedRow: View {
             }
             Spacer(minLength: 4)
             if verb {
-                Text(Self.verb(need.kind))
+                Text(need.kind.verb)
                     .font(theme.body(.footnote, .semibold))
                     .foregroundStyle(theme.action)
             }
@@ -418,43 +419,7 @@ struct NeedRow: View {
         .accessibilityElement(children: .combine)
     }
 
-    private var colour: Color { Self.colour(need.kind, theme) }
-
-    static func colour(_ k: Need.Kind, _ theme: Theme) -> Color {
-        switch k {
-        case .question: theme.question
-        case .approval: theme.approval
-        case .review: theme.good
-        case .blocked, .checks, .refusal: theme.attention
-        case .held, .network: theme.muted
-        case .link: theme.action
-        }
-    }
-
-    static func symbol(_ k: Need.Kind) -> String {
-        switch k {
-        case .question: "questionmark.bubble"
-        case .approval: "hand.raised"
-        case .review: "checkmark.seal"
-        case .blocked: "exclamationmark.octagon"
-        case .checks: "xmark.circle"
-        case .held: "pause.circle"
-        case .network: "point.3.connected.trianglepath.dotted"
-        case .link: "envelope.badge"
-        case .refusal: "shield.lefthalf.filled"
-        }
-    }
-
-    /// What opening it is for.
-    static func verb(_ k: Need.Kind) -> String {
-        switch k {
-        case .question: "Answer"
-        case .approval: "Approve"
-        case .review: "Review"
-        case .refusal: "Answer"
-        case .blocked, .checks, .held, .network, .link: "Open"
-        }
-    }
+    private var colour: Color { theme.colour(need.kind) }
 }
 
 /// A paired server's shared project; with a coordinator running there,

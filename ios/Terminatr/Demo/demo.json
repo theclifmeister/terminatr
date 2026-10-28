@@ -1,0 +1,970 @@
+{
+ "calls": {
+  "peer.list": {
+   "gen": 1,
+   "peers": []
+  },
+  "session.list": {
+   "alerts": 0,
+   "sessions": [
+    {
+     "agent": "claude",
+     "clients": 1,
+     "cols": 120,
+     "created": "2026-10-27T08:00:00Z",
+     "current": "Reading T15's report",
+     "id": "s-c1",
+     "model": "opus",
+     "project": "acme-web",
+     "reason": "",
+     "role": "coordinator",
+     "rows": 36,
+     "state": "working",
+     "task": "",
+     "thread": "",
+     "title": ""
+    },
+    {
+     "agent": "claude",
+     "clients": 1,
+     "cols": 120,
+     "created": "2026-10-27T08:00:00Z",
+     "current": "Bash: npm test",
+     "id": "s-101",
+     "model": "opus",
+     "project": "acme-web",
+     "reason": "permission",
+     "role": "thread",
+     "rows": 36,
+     "state": "blocked",
+     "task": "T12",
+     "thread": "t-0101",
+     "title": ""
+    },
+    {
+     "agent": "claude",
+     "clients": 1,
+     "cols": 120,
+     "created": "2026-10-27T08:00:00Z",
+     "current": "",
+     "id": "s-102",
+     "model": "opus",
+     "project": "acme-web",
+     "question": {
+      "questions": [
+       {
+        "header": "Ranking",
+        "options": [
+         {
+          "description": "New products surface until they have sales data.",
+          "label": "Newest first"
+         },
+         {
+          "description": "Uses review scores; unrated ones go last.",
+          "label": "By rating"
+         },
+         {
+          "description": "Alphabetical, as today.",
+          "label": "Keep current"
+         }
+        ],
+        "question": "Which ranking should search use for products with no sales yet?"
+       }
+      ],
+      "since": "2026-10-27T09:41:00Z",
+      "tool": "AskUserQuestion"
+     },
+     "reason": "question",
+     "role": "thread",
+     "rows": 36,
+     "state": "blocked",
+     "task": "T14",
+     "thread": "t-0102",
+     "title": ""
+    },
+    {
+     "agent": "claude",
+     "clients": 1,
+     "cols": 120,
+     "created": "2026-10-27T08:00:00Z",
+     "current": "Reading cart.spec.ts",
+     "id": "s-104",
+     "model": "opus",
+     "project": "acme-web",
+     "reason": "",
+     "role": "thread",
+     "rows": 36,
+     "state": "working",
+     "task": "T16",
+     "thread": "t-0104",
+     "title": ""
+    },
+    {
+     "agent": "claude",
+     "clients": 1,
+     "cols": 120,
+     "created": "2026-10-27T08:00:00Z",
+     "current": "Writing pdf.go",
+     "id": "s-201",
+     "model": "opus",
+     "project": "billing-api",
+     "reason": "",
+     "role": "thread",
+     "rows": 36,
+     "state": "working",
+     "task": "T7",
+     "thread": "t-0201",
+     "title": ""
+    }
+   ]
+  }
+ },
+ "hello": {
+  "app_api": 19,
+  "build": "demo",
+  "capabilities": [
+   "read",
+   "streams"
+  ],
+  "methods": [
+   "projects.watch",
+   "session.list",
+   "peer.list",
+   "transcript.watch"
+  ],
+  "server": {
+   "caps": [
+    "transcript"
+   ],
+   "protocol": 1,
+   "version": "0.56.1"
+  },
+  "tm": "0.56.1"
+ },
+ "streams": {
+  "projects.watch": {
+   "result": {
+    "projects": [
+     {
+      "active": true,
+      "counts": {
+       "needs_you": 1
+      },
+      "goal": "Rebuild the storefront on the new design system",
+      "needs_you": [
+       {
+        "id": 15,
+        "ref": "T15",
+        "status": "review",
+        "thread": "t-0103",
+        "title": "Image CDN migration"
+       }
+      ],
+      "pinned": true,
+      "questions": 0,
+      "slug": "acme-web",
+      "threads": [
+       {
+        "checks": "",
+        "pr": 0,
+        "record": {
+         "agent": "claude",
+         "created": "2026-10-27T08:00:00Z",
+         "done": false,
+         "id": "t-0101",
+         "report_acked": 0,
+         "reports": 0,
+         "session": "s-101",
+         "state": "running",
+         "task": "T12",
+         "title": "Checkout: Apple Pay button",
+         "usage": {
+          "cache_creation": 0,
+          "cache_read": 0,
+          "cost_usd": 0,
+          "input": 0,
+          "output": 0,
+          "turns": 0
+         },
+         "worktree": "~/work/t-0101"
+        },
+        "status": {
+         "current": "Bash: npm test",
+         "done": false,
+         "needs_you": "",
+         "percent": 0,
+         "self_percent": 0,
+         "steps_done": 2,
+         "steps_total": 4,
+         "todos_done": 0,
+         "todos_total": 0,
+         "updated": "2026-10-27T09:30:00Z"
+        },
+        "task": {
+         "id": 12,
+         "ref": "T12",
+         "status": "in-progress",
+         "thread": "t-0101",
+         "title": "Checkout: Apple Pay button"
+        }
+       },
+       {
+        "checks": "",
+        "pr": 0,
+        "record": {
+         "agent": "claude",
+         "created": "2026-10-27T08:00:00Z",
+         "done": false,
+         "id": "t-0102",
+         "report_acked": 0,
+         "reports": 0,
+         "session": "s-102",
+         "state": "running",
+         "task": "T14",
+         "title": "Product search ranking",
+         "usage": {
+          "cache_creation": 0,
+          "cache_read": 0,
+          "cost_usd": 0,
+          "input": 0,
+          "output": 0,
+          "turns": 0
+         },
+         "worktree": "~/work/t-0102"
+        },
+        "status": {
+         "current": "",
+         "done": false,
+         "needs_you": "",
+         "percent": 0,
+         "self_percent": 0,
+         "steps_done": 1,
+         "steps_total": 3,
+         "todos_done": 0,
+         "todos_total": 0,
+         "updated": "2026-10-27T09:30:00Z"
+        },
+        "task": {
+         "id": 14,
+         "ref": "T14",
+         "status": "in-progress",
+         "thread": "t-0102",
+         "title": "Product search ranking"
+        }
+       },
+       {
+        "checks": "",
+        "pr": 412,
+        "record": {
+         "agent": "claude",
+         "created": "2026-10-27T08:00:00Z",
+         "done": false,
+         "id": "t-0103",
+         "report_acked": 0,
+         "reports": 1,
+         "session": "",
+         "state": "stopped",
+         "task": "T15",
+         "title": "Image CDN migration",
+         "usage": {
+          "cache_creation": 0,
+          "cache_read": 0,
+          "cost_usd": 0,
+          "input": 0,
+          "output": 0,
+          "turns": 0
+         },
+         "worktree": "~/work/t-0103"
+        },
+        "status": {
+         "current": "",
+         "done": false,
+         "needs_you": "",
+         "percent": 0,
+         "self_percent": 0,
+         "steps_done": 3,
+         "steps_total": 3,
+         "todos_done": 0,
+         "todos_total": 0,
+         "updated": "2026-10-27T09:30:00Z"
+        },
+        "task": {
+         "id": 15,
+         "ref": "T15",
+         "status": "review",
+         "thread": "t-0103",
+         "title": "Image CDN migration"
+        }
+       },
+       {
+        "checks": "",
+        "pr": 0,
+        "record": {
+         "agent": "claude",
+         "created": "2026-10-27T08:00:00Z",
+         "done": false,
+         "id": "t-0104",
+         "report_acked": 0,
+         "reports": 0,
+         "session": "s-104",
+         "state": "running",
+         "task": "T16",
+         "title": "Fix the flaky cart test",
+         "usage": {
+          "cache_creation": 0,
+          "cache_read": 0,
+          "cost_usd": 0,
+          "input": 0,
+          "output": 0,
+          "turns": 0
+         },
+         "worktree": "~/work/t-0104"
+        },
+        "status": {
+         "current": "Reading cart.spec.ts",
+         "done": false,
+         "needs_you": "",
+         "percent": 0,
+         "self_percent": 0,
+         "steps_done": 1,
+         "steps_total": 2,
+         "todos_done": 0,
+         "todos_total": 0,
+         "updated": "2026-10-27T09:30:00Z"
+        },
+        "task": {
+         "id": 16,
+         "ref": "T16",
+         "status": "in-progress",
+         "thread": "t-0104",
+         "title": "Fix the flaky cart test"
+        }
+       },
+       {
+        "checks": "",
+        "pr": 405,
+        "record": {
+         "agent": "claude",
+         "created": "2026-10-27T08:00:00Z",
+         "done": true,
+         "id": "t-0105",
+         "report_acked": 1,
+         "reports": 1,
+         "session": "",
+         "state": "stopped",
+         "task": "T11",
+         "title": "Dark mode colour tokens",
+         "usage": {
+          "cache_creation": 0,
+          "cache_read": 0,
+          "cost_usd": 0,
+          "input": 0,
+          "output": 0,
+          "turns": 0
+         },
+         "worktree": "~/work/t-0105"
+        },
+        "status": {
+         "current": "",
+         "done": true,
+         "needs_you": "",
+         "percent": 0,
+         "self_percent": 0,
+         "steps_done": 2,
+         "steps_total": 2,
+         "todos_done": 0,
+         "todos_total": 0,
+         "updated": "2026-10-27T09:30:00Z"
+        },
+        "task": {
+         "id": 11,
+         "ref": "T11",
+         "status": "done",
+         "thread": "t-0105",
+         "title": "Dark mode colour tokens"
+        }
+       }
+      ],
+      "usage": {
+       "cache_creation": 0,
+       "cache_read": 0,
+       "cost_usd": 0,
+       "input": 0,
+       "output": 0,
+       "turns": 0
+      }
+     },
+     {
+      "active": true,
+      "counts": {
+       "needs_you": 1
+      },
+      "goal": "Invoices and payments",
+      "needs_you": [
+       {
+        "id": 9,
+        "ref": "T9",
+        "status": "blocked",
+        "thread": "t-0202",
+        "title": "Rotate the Stripe webhook secret"
+       }
+      ],
+      "questions": 1,
+      "slug": "billing-api",
+      "threads": [
+       {
+        "checks": "",
+        "pr": 0,
+        "record": {
+         "agent": "claude",
+         "created": "2026-10-27T08:00:00Z",
+         "done": false,
+         "id": "t-0201",
+         "report_acked": 0,
+         "reports": 0,
+         "session": "s-201",
+         "state": "running",
+         "task": "T7",
+         "title": "Invoice PDF export",
+         "usage": {
+          "cache_creation": 0,
+          "cache_read": 0,
+          "cost_usd": 0,
+          "input": 0,
+          "output": 0,
+          "turns": 0
+         },
+         "worktree": "~/work/t-0201"
+        },
+        "status": {
+         "current": "Writing pdf.go",
+         "done": false,
+         "needs_you": "",
+         "percent": 0,
+         "self_percent": 0,
+         "steps_done": 1,
+         "steps_total": 3,
+         "todos_done": 0,
+         "todos_total": 0,
+         "updated": "2026-10-27T09:30:00Z"
+        },
+        "task": {
+         "id": 7,
+         "ref": "T7",
+         "status": "in-progress",
+         "thread": "t-0201",
+         "title": "Invoice PDF export"
+        }
+       },
+       {
+        "checks": "",
+        "pr": 0,
+        "record": {
+         "agent": "claude",
+         "created": "2026-10-27T08:00:00Z",
+         "done": false,
+         "id": "t-0202",
+         "report_acked": 0,
+         "reports": 0,
+         "session": "",
+         "state": "stopped",
+         "task": "T9",
+         "title": "Rotate the Stripe webhook secret",
+         "usage": {
+          "cache_creation": 0,
+          "cache_read": 0,
+          "cost_usd": 0,
+          "input": 0,
+          "output": 0,
+          "turns": 0
+         },
+         "worktree": "~/work/t-0202"
+        },
+        "status": {
+         "current": "",
+         "done": false,
+         "needs_you": "Needs the new secret in the vault before it can go on",
+         "percent": 0,
+         "self_percent": 0,
+         "steps_done": 0,
+         "steps_total": 2,
+         "todos_done": 0,
+         "todos_total": 0,
+         "updated": "2026-10-27T09:30:00Z"
+        },
+        "task": {
+         "id": 9,
+         "ref": "T9",
+         "status": "blocked",
+         "thread": "t-0202",
+         "title": "Rotate the Stripe webhook secret"
+        }
+       }
+      ],
+      "usage": {
+       "cache_creation": 0,
+       "cache_read": 0,
+       "cost_usd": 0,
+       "input": 0,
+       "output": 0,
+       "turns": 0
+      }
+     },
+     {
+      "active": false,
+      "goal": "Public docs",
+      "slug": "docs-site",
+      "threads": [
+       {
+        "checks": "",
+        "pr": 0,
+        "record": {
+         "agent": "claude",
+         "created": "2026-10-27T08:00:00Z",
+         "done": false,
+         "id": "t-0301",
+         "report_acked": 0,
+         "reports": 0,
+         "session": "",
+         "state": "stopped",
+         "task": "T3",
+         "title": "Search box",
+         "usage": {
+          "cache_creation": 0,
+          "cache_read": 0,
+          "cost_usd": 0,
+          "input": 0,
+          "output": 0,
+          "turns": 0
+         },
+         "worktree": "~/work/t-0301"
+        },
+        "status": {
+         "current": "",
+         "done": false,
+         "needs_you": "",
+         "percent": 0,
+         "self_percent": 0,
+         "steps_done": 0,
+         "steps_total": 0,
+         "todos_done": 0,
+         "todos_total": 0,
+         "updated": "2026-10-27T09:30:00Z"
+        },
+        "task": {
+         "id": 3,
+         "ref": "T3",
+         "status": "in-progress",
+         "thread": "t-0301",
+         "title": "Search box"
+        }
+       }
+      ],
+      "usage": {
+       "cache_creation": 0,
+       "cache_read": 0,
+       "cost_usd": 0,
+       "input": 0,
+       "output": 0,
+       "turns": 0
+      }
+     }
+    ]
+   }
+  }
+ },
+ "transcripts": {
+  "s-101": {
+   "events": [
+    {
+     "data": {
+      "items": [
+       {
+        "at": "2026-10-27T09:02:00Z",
+        "kind": "prompt",
+        "text": "Start on T12: add an Apple Pay button to checkout, behind the payments flag."
+       },
+       {
+        "at": "2026-10-27T09:03:00Z",
+        "kind": "text",
+        "text": "I'll look at the checkout page and the payments flag first."
+       },
+       {
+        "call": "c1",
+        "kind": "tool",
+        "text": "src/checkout/Checkout.tsx",
+        "tool": "Read"
+       },
+       {
+        "call": "c1",
+        "kind": "result",
+        "lines": 182,
+        "text": "182 lines"
+       },
+       {
+        "call": "c2",
+        "kind": "tool",
+        "text": "src/flags.ts",
+        "tool": "Read"
+       },
+       {
+        "call": "c2",
+        "kind": "result",
+        "lines": 40,
+        "text": "40 lines"
+       },
+       {
+        "call": "c3",
+        "kind": "tool",
+        "text": "\"applePay\"",
+        "tool": "Grep"
+       },
+       {
+        "call": "c3",
+        "kind": "result",
+        "lines": 3,
+        "text": "3 matches"
+       },
+       {
+        "call": "c4",
+        "kind": "tool",
+        "text": "src/checkout/ApplePayButton.tsx",
+        "tool": "Write"
+       },
+       {
+        "call": "c4",
+        "kind": "result",
+        "text": "created"
+       },
+       {
+        "call": "c5",
+        "kind": "tool",
+        "text": "src/checkout/Checkout.tsx",
+        "tool": "Edit"
+       },
+       {
+        "call": "c5",
+        "kind": "result",
+        "text": "updated"
+       },
+       {
+        "at": "2026-10-27T09:20:00Z",
+        "kind": "text",
+        "text": "The button renders only when `payments.applePay` is on and the browser supports it. Next I'll run the checkout tests."
+       },
+       {
+        "call": "c6",
+        "kind": "tool",
+        "text": "npm test -- checkout",
+        "tool": "Bash"
+       }
+      ],
+      "status": {
+       "agent": "claude",
+       "state": "ok"
+      }
+     },
+     "event": "transcript.reset"
+    }
+   ],
+   "result": {
+    "session": {
+     "agent": "claude",
+     "clients": 1,
+     "cols": 120,
+     "created": "2026-10-27T08:00:00Z",
+     "current": "Bash: npm test",
+     "id": "s-101",
+     "model": "opus",
+     "project": "acme-web",
+     "reason": "permission",
+     "role": "thread",
+     "rows": 36,
+     "state": "blocked",
+     "task": "T12",
+     "thread": "t-0101",
+     "title": ""
+    },
+    "status": {
+     "agent": "claude",
+     "state": "ok"
+    }
+   }
+  },
+  "s-102": {
+   "events": [
+    {
+     "data": {
+      "items": [
+       {
+        "at": "2026-10-27T09:10:00Z",
+        "kind": "prompt",
+        "text": "Start on T14: improve product search ranking."
+       },
+       {
+        "call": "d1",
+        "kind": "tool",
+        "text": "src/search/rank.ts",
+        "tool": "Read"
+       },
+       {
+        "call": "d1",
+        "kind": "result",
+        "lines": 96,
+        "text": "96 lines"
+       },
+       {
+        "call": "d2",
+        "kind": "tool",
+        "text": "SELECT count(*) FROM products WHERE sales = 0",
+        "tool": "Bash"
+       },
+       {
+        "call": "d2",
+        "kind": "result",
+        "text": "1,284"
+       },
+       {
+        "at": "2026-10-27T09:40:00Z",
+        "kind": "text",
+        "text": "About **1,300 products** have no sales yet, so they all tie at the bottom today. That needs a decision from you:"
+       },
+       {
+        "call": "d3",
+        "kind": "tool",
+        "text": "Which ranking should search use for products with no sales yet?",
+        "tool": "AskUserQuestion"
+       }
+      ],
+      "status": {
+       "agent": "claude",
+       "state": "ok"
+      }
+     },
+     "event": "transcript.reset"
+    }
+   ],
+   "result": {
+    "session": {
+     "agent": "claude",
+     "clients": 1,
+     "cols": 120,
+     "created": "2026-10-27T08:00:00Z",
+     "current": "",
+     "id": "s-102",
+     "model": "opus",
+     "project": "acme-web",
+     "question": {
+      "questions": [
+       {
+        "header": "Ranking",
+        "options": [
+         {
+          "description": "New products surface until they have sales data.",
+          "label": "Newest first"
+         },
+         {
+          "description": "Uses review scores; unrated ones go last.",
+          "label": "By rating"
+         },
+         {
+          "description": "Alphabetical, as today.",
+          "label": "Keep current"
+         }
+        ],
+        "question": "Which ranking should search use for products with no sales yet?"
+       }
+      ],
+      "since": "2026-10-27T09:41:00Z",
+      "tool": "AskUserQuestion"
+     },
+     "reason": "question",
+     "role": "thread",
+     "rows": 36,
+     "state": "blocked",
+     "task": "T14",
+     "thread": "t-0102",
+     "title": ""
+    },
+    "status": {
+     "agent": "claude",
+     "state": "ok"
+    }
+   }
+  },
+  "s-104": {
+   "events": [
+    {
+     "data": {
+      "items": [
+       {
+        "at": "2026-10-27T09:15:00Z",
+        "kind": "prompt",
+        "text": "Start on T16: the cart test fails about one run in ten."
+       },
+       {
+        "call": "e1",
+        "kind": "tool",
+        "text": "npm test -- cart --repeat 20",
+        "tool": "Bash"
+       },
+       {
+        "call": "e1",
+        "error": true,
+        "kind": "result",
+        "lines": 48,
+        "text": "2 of 20 failed"
+       },
+       {
+        "at": "2026-10-27T09:28:00Z",
+        "kind": "text",
+        "text": "It fails when the price service answers after the test's 200 ms timeout. Reading the spec now."
+       },
+       {
+        "call": "e2",
+        "kind": "tool",
+        "text": "test/cart.spec.ts",
+        "tool": "Read"
+       }
+      ],
+      "status": {
+       "agent": "claude",
+       "state": "ok"
+      }
+     },
+     "event": "transcript.reset"
+    }
+   ],
+   "result": {
+    "session": {
+     "agent": "claude",
+     "clients": 1,
+     "cols": 120,
+     "created": "2026-10-27T08:00:00Z",
+     "current": "Reading cart.spec.ts",
+     "id": "s-104",
+     "model": "opus",
+     "project": "acme-web",
+     "reason": "",
+     "role": "thread",
+     "rows": 36,
+     "state": "working",
+     "task": "T16",
+     "thread": "t-0104",
+     "title": ""
+    },
+    "status": {
+     "agent": "claude",
+     "state": "ok"
+    }
+   }
+  },
+  "s-201": {
+   "events": [
+    {
+     "data": {
+      "items": [
+       {
+        "at": "2026-10-27T09:05:00Z",
+        "kind": "prompt",
+        "text": "Start on T7: export invoices as PDF."
+       },
+       {
+        "call": "g1",
+        "kind": "tool",
+        "text": "internal/invoice/pdf.go",
+        "tool": "Write"
+       }
+      ],
+      "status": {
+       "agent": "claude",
+       "state": "ok"
+      }
+     },
+     "event": "transcript.reset"
+    }
+   ],
+   "result": {
+    "session": {
+     "agent": "claude",
+     "clients": 1,
+     "cols": 120,
+     "created": "2026-10-27T08:00:00Z",
+     "current": "Writing pdf.go",
+     "id": "s-201",
+     "model": "opus",
+     "project": "billing-api",
+     "reason": "",
+     "role": "thread",
+     "rows": 36,
+     "state": "working",
+     "task": "T7",
+     "thread": "t-0201",
+     "title": ""
+    },
+    "status": {
+     "agent": "claude",
+     "state": "ok"
+    }
+   }
+  },
+  "s-c1": {
+   "events": [
+    {
+     "data": {
+      "items": [
+       {
+        "kind": "note",
+        "text": "Coordinator started"
+       },
+       {
+        "at": "2026-10-27T09:00:00Z",
+        "kind": "prompt",
+        "text": "What's left before the storefront beta?"
+       },
+       {
+        "at": "2026-10-27T09:01:00Z",
+        "kind": "text",
+        "text": "Three things:\n\n1. **T12** Apple Pay at checkout: in progress, waiting on your approval to run the tests.\n2. **T14** Search ranking: it asks you how to rank products with no sales.\n3. **T15** Image CDN migration: done and ready for your review (PR #412)."
+       },
+       {
+        "call": "f1",
+        "kind": "tool",
+        "text": "T15",
+        "tool": "Read"
+       }
+      ],
+      "status": {
+       "agent": "claude",
+       "state": "ok"
+      }
+     },
+     "event": "transcript.reset"
+    }
+   ],
+   "result": {
+    "session": {
+     "agent": "claude",
+     "clients": 1,
+     "cols": 120,
+     "created": "2026-10-27T08:00:00Z",
+     "current": "Reading T15's report",
+     "id": "s-c1",
+     "model": "opus",
+     "project": "acme-web",
+     "reason": "",
+     "role": "coordinator",
+     "rows": 36,
+     "state": "working",
+     "task": "",
+     "thread": "",
+     "title": ""
+    },
+    "status": {
+     "agent": "claude",
+     "state": "ok"
+    }
+   }
+  }
+ }
+}

@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import TerminatrKit
+import TerminatrUI
 import UniformTypeIdentifiers
 
 /// The prompt box under the conversation (design T734 §5): ↩ sends,

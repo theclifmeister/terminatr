@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import TerminatrKit
+import TerminatrUI
 
 /// A task's actions as buttons (T748 C1): Accept and Send back… for a
 /// task in review, Delegate… for an open, ready or blocked one. Each

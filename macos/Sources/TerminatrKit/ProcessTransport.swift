@@ -1,5 +1,9 @@
 import Foundation
 
+// The Mac app's only: iOS runs no child processes (the phone's
+// transport is a device link, docs/SPEC.md §3.8).
+#if os(macOS)
+
 /// tm app bridge as the app's child: its stdin and stdout are the lines,
 /// its stderr the reason when it ends unasked. It opens no listener:
 /// the bridge dials the human socket, and starts the server through
@@ -132,3 +136,4 @@ public final class ProcessTransport: BridgeTransport, @unchecked Sendable {
         }
     }
 }
+#endif

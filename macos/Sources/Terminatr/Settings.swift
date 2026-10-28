@@ -2,6 +2,7 @@ import AppKit
 import ServiceManagement
 import SwiftUI
 import TerminatrKit
+import TerminatrUI
 
 /// Settings in tabs (T748 milestone G): General (where the app finds tm,
 /// where it shows, open at login), Notifications, Appearance (theme,

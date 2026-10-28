@@ -1,5 +1,6 @@
 import SwiftUI
 import TerminatrKit
+import TerminatrUI
 
 /// The task the window's task view shows (AppModel.taskShown).
 struct TaskShown: Identifiable, Hashable {

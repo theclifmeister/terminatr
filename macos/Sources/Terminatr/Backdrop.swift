@@ -1,4 +1,5 @@
 import SwiftUI
+import TerminatrUI
 
 /// The theme's mesh behind the window's panels: a MeshGradient on
 /// macOS 15+, blurred radial gradients on 14. Reduce Transparency hides

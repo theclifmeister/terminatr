@@ -1,4 +1,5 @@
 import SwiftUI
+import TerminatrUI
 
 /// Help › Keyboard Shortcuts (⌘/, T748 milestone E): every key the
 /// window has, by where it works.

@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import TerminatrKit
+import TerminatrUI
 
 /// The Conversation tab: the transcript, the cards for what the session
 /// waits on (a question, a permission dialog, a task in review), and
@@ -520,7 +521,7 @@ struct ToolRunView: View {
         let open = unfolded || run.calls.contains { found.contains($0.id) }
         VStack(alignment: .leading, spacing: 6) {
             Button { fold(open: !unfolded) } label: {
-                header(open: open)
+                ToolRunHeader(run: run, open: open)
             }
             .buttonStyle(.plain)
             .onKeyPress(keys: [.leftArrow, .rightArrow]) { press in
@@ -529,7 +530,7 @@ struct ToolRunView: View {
             }
             .help(open ? "Fold the tool calls" : "Show each tool call")
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel(run.spoken + ", " + stateWord)
+            .accessibilityLabel(run.spoken + ", " + ToolRunHeader.stateWord(run))
             .accessibilityValue(open ? "expanded" : "collapsed")
             .accessibilityHint(open ? "Folds the tool calls" : "Shows each tool call")
             .accessibilityAddTraits(.isButton)
@@ -547,46 +548,6 @@ struct ToolRunView: View {
         }
     }
 
-    private func header(open: Bool) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Image(systemName: "chevron.right")
-                .font(theme.body(.glyph, .bold))
-                .foregroundStyle(theme.muted)
-                .rotationEffect(.degrees(open ? 90 : 0))
-            Text(run.headline)
-                .font(theme.mono(.subheadline, .medium))
-                .foregroundStyle(theme.action)
-                .lineLimit(1)
-                .truncationMode(.tail)
-            switch run.state {
-            case .running:
-                ProgressView().controlSize(.mini)
-            case .failed:
-                Text("· failed")
-                    .font(theme.mono(.footnote))
-                    .foregroundStyle(theme.attention)
-            case .done:
-                Text("· done")
-                    .font(theme.mono(.footnote))
-                    .foregroundStyle(theme.muted)
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 7)
-        .background(theme.command, in: RoundedRectangle(cornerRadius: 9))
-        .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(theme.edge, lineWidth: 1))
-        .contentShape(Rectangle())
-    }
-
-    private var stateWord: String {
-        switch run.state {
-        case .running: "running"
-        case .failed: "failed"
-        case .done: "done"
-        }
-    }
-
     private func fold(open: Bool) {
         withAnimation(reduceMotion ? nil : .snappy(duration: 0.2)) {
             if open {
@@ -594,115 +555,6 @@ struct ToolRunView: View {
             } else {
                 model.unfoldedRuns.remove(run.id)
             }
-        }
-    }
-}
-
-/// A tool call folded to one line: the tool, its main argument and its
-/// result's first line. An AskUserQuestion call without its answer
-/// waits on the user, not on a spinner: it says so, with a link that
-/// shows the question card.
-struct ToolLine: View {
-    @Environment(\.theme) private var theme
-    let entry: Transcript.Entry
-    var answer: (() -> Void)? = nil
-
-    var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(entry.tool.isEmpty ? "tool" : entry.tool)
-                .font(theme.mono(.subheadline, .medium))
-                .foregroundStyle(theme.action)
-            Text(entry.text)
-                .font(theme.mono(.subheadline))
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .textSelection(.enabled)
-            if let r = entry.result {
-                Text(summary(r))
-                    .font(theme.mono(.footnote))
-                    .foregroundStyle(r.error ? theme.attention : theme.muted)
-                    .lineLimit(1)
-            } else if entry.asksUser {
-                Text("· Waiting for your answer")
-                    .font(theme.mono(.footnote))
-                    .foregroundStyle(theme.question)
-                    .lineLimit(1)
-                if let answer {
-                    Button("Answer", action: answer)
-                        .buttonStyle(.link)
-                        .font(theme.body(.footnote, .semibold))
-                        .foregroundStyle(theme.action)
-                        .help("Shows the question card")
-                }
-            } else {
-                ProgressView().controlSize(.mini)
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 7)
-        .background(theme.command, in: RoundedRectangle(cornerRadius: 9))
-        .accessibilityElement(children: .combine)
-    }
-
-    private func summary(_ r: Transcript.Result) -> String {
-        var parts: [String] = []
-        if r.error { parts.append("error") }
-        if !r.text.isEmpty { parts.append(r.text) }
-        if r.lines > 1 { parts.append("\(r.lines) lines") }
-        return "· " + (parts.isEmpty ? "done" : parts.joined(separator: " · "))
-    }
-}
-
-/// An agent's Markdown, cleaned by SafeMarkdown: no raw HTML, no
-/// images, and links that open only on a click confirmed with their
-/// URL (guardingLinks).
-struct MarkdownView: View {
-    @Environment(\.theme) private var theme
-    let text: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ForEach(Array(SafeMarkdown.cached(text).enumerated()), id: \.offset) { _, b in
-                block(b)
-            }
-        }
-        .textSelection(.enabled)
-        .tint(theme.action)
-    }
-
-    @ViewBuilder
-    private func block(_ b: SafeMarkdown.Block) -> some View {
-        switch b {
-        case .paragraph(let s):
-            Text(s).fixedSize(horizontal: false, vertical: true)
-        case .heading(let level, let s):
-            Text(s)
-                .font(theme.title(level <= 1 ? .title2 : level == 2 ? .title3 : .heading, .bold))
-                .padding(.top, 2)
-        case .item(let marker, let depth, let s):
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(marker)
-                    .foregroundStyle(theme.muted)
-                    .frame(minWidth: 14, alignment: .trailing)
-                Text(s).fixedSize(horizontal: false, vertical: true)
-            }
-            .padding(.leading, CGFloat(depth) * 16)
-        case .quote(let s):
-            Text(s)
-                .foregroundStyle(theme.muted)
-                .padding(.leading, 10)
-                .overlay(alignment: .leading) { theme.line.frame(width: 3) }
-        case .code(_, let code):
-            ScrollView(.horizontal) {
-                Text(code)
-                    .font(theme.mono(.subheadline))
-                    .padding(10)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(theme.command, in: RoundedRectangle(cornerRadius: 9))
-        case .rule:
-            theme.line.frame(height: 1)
         }
     }
 }

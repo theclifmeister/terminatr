@@ -1,5 +1,6 @@
 import SwiftUI
 import TerminatrKit
+import TerminatrUI
 
 /// A coordinator or thread in the window's detail (design T734 §6,
 /// T746): the tab, with its switch in the title bar beside the window's

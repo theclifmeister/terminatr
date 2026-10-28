@@ -1,4 +1,5 @@
 import SwiftUI
+import TerminatrUI
 
 /// A scroll view's edges under the window's bars (T764): what scrolls
 /// under the toolbar, or under a bar at its foot (footBar), is never

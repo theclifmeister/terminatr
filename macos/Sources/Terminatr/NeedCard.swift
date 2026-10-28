@@ -1,5 +1,6 @@
 import SwiftUI
 import TerminatrKit
+import TerminatrUI
 
 /// A need on the dashboard that acts in place (T748 milestone C): an
 /// approval's dialog as the server reads it (Allow, the last option,
@@ -24,20 +25,16 @@ struct NeedCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .center, spacing: 8) {
-                Image(systemName: NeedRow.symbol(need.kind))
-                    .foregroundStyle(NeedRow.colour(need.kind, theme))
-                    .frame(width: 16)
-                    .accessibilityHidden(true)
                 if showsTask {
                     // A button, so Full Keyboard Access reaches it.
                     Button { app.showTask(project: need.project, task: need.task) } label: {
-                        words.contentShape(Rectangle())
+                        NeedSummary(need: need, detail: detail).contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .help("Shows \(need.task) in full: how to check it, its PR, steps and notes")
                     .accessibilityHint("Shows the task in full")
                 } else {
-                    words
+                    NeedSummary(need: need, detail: detail)
                 }
                 Spacer(minLength: 8)
                 acts
@@ -65,7 +62,7 @@ struct NeedCard: View {
         .padding(.vertical, 9)
         .frosted(RoundedRectangle(cornerRadius: 10))
         .background(theme.cardTint, in: RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(NeedRow.colour(need.kind, theme).opacity(theme.contrast ? 1 : 0.35), lineWidth: 1))
+        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(theme.colour(need.kind).opacity(theme.contrast ? 1 : 0.35), lineWidth: 1))
         .accessibilityElement(children: .contain)
         .accessibilityLabel(need.title)
         .task(id: need.id) { await check() }
@@ -77,20 +74,6 @@ struct NeedCard: View {
         } message: {
             if let r = need.refusal {
                 Text("The guard lets every project's agents run it as it is, from now on:\n\n\(r.subject)")
-            }
-        }
-    }
-
-    private var words: some View {
-        VStack(alignment: .leading, spacing: 1) {
-            Text(need.what)
-                .font(theme.body(.body, .semibold))
-                .lineLimit(1)
-            if !detail.isEmpty {
-                Text(detail)
-                    .font(theme.body(.subheadline))
-                    .foregroundStyle(theme.muted)
-                    .lineLimit(2)
             }
         }
     }

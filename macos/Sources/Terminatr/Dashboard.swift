@@ -1,5 +1,6 @@
 import SwiftUI
 import TerminatrKit
+import TerminatrUI
 
 /// A project in the window's detail (design T746, T748 milestone C):
 /// its goal; what needs the user, as cards that act in place (the

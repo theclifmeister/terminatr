@@ -2,7 +2,8 @@ import Foundation
 
 /// The lines between the app and tm app bridge (docs/SPEC.md §3.8): the
 /// bridge's stdout one line at a time, and the app's requests to its
-/// stdin. ProcessTransport is the real one; tests script their own.
+/// stdin. ProcessTransport is the Mac's; the iOS app's demo and tests
+/// script their own.
 public protocol BridgeTransport: Sendable {
     /// The bridge's lines, without their newline. It finishes when the
     /// bridge does, throwing BridgeError.closed when that wasn't asked.
@@ -78,12 +79,14 @@ public actor Bridge {
         self.transport = transport
     }
 
+    #if os(macOS)
     /// Starts tm app bridge with the tm at tm and waits for its hello.
     public static func launch(tm: URL, environment: [String: String]? = nil) async throws -> Bridge {
         let b = Bridge(transport: try ProcessTransport(tm: tm, environment: environment))
         _ = try await b.start()
         return b
     }
+    #endif
 
     /// Reads the lines until the bridge ends, and returns its hello. A
     /// hello with an error throws BridgeError.hello.

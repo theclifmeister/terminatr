@@ -2,6 +2,7 @@ import AppKit
 import PDFKit
 import SwiftUI
 import TerminatrKit
+import TerminatrUI
 import UniformTypeIdentifiers
 
 /// A call that sends the user files (Claude's SendUserFile), as its own

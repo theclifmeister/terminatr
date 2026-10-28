@@ -1,5 +1,6 @@
 import SwiftUI
 import TerminatrKit
+import TerminatrUI
 
 /// The app's one window (design T746): the sidebar of servers, projects
 /// and their coordinators and threads; in the detail a project's
