@@ -441,3 +441,81 @@ func TestLinkRefusesAnotherKey(t *testing.T) {
 		t.Fatal("an unpaired key got a link")
 	}
 }
+
+// The link notes when it was last up, in its status and in the devices
+// (T828): when it comes up and when it drops, so a new manager (a
+// restarted server) has it before the phone opens again.
+func TestLinkLastUp(t *testing.T) {
+	url, tc := startRelay(t)
+	peerDir, devDir, srv := testHome(t)
+	phone := newKey(t)
+	if _, err := Add(devDir, pub(phone), writeKey(t), "iPhone", url); err != nil {
+		t.Fatal(err)
+	}
+	m := Start(Options{Dir: devDir, PeerDir: peerDir, Serve: echo, Logf: t.Logf, RelayTLS: tc,
+		Backoff: func(int) time.Duration { return 20 * time.Millisecond }})
+	t.Cleanup(m.Close)
+	if st := waitState(t, m, "iPhone", proto.LinkOffline); !st.LastUp.IsZero() {
+		t.Fatalf("never linked, last up %v", st.LastUp)
+	}
+	before := time.Now().Add(-time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	c, err := Dial(ctx, phone, pub(srv), url, tc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st := waitState(t, m, "iPhone", proto.LinkUp); st.LastUp.Before(before) {
+		t.Fatalf("up, last up %v", st.LastUp)
+	}
+	up := saved(t, devDir).LastUp
+	if up.Before(before) {
+		t.Fatalf("devices.json last_up %v", up)
+	}
+	time.Sleep(1100 * time.Millisecond) // a second later: the drop's time differs
+	c.Close()
+	st := waitState(t, m, "iPhone", proto.LinkOffline)
+	deadline := time.Now().Add(5 * time.Second)
+	for !saved(t, devDir).LastUp.After(up) && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	dropped := saved(t, devDir).LastUp
+	if !dropped.After(up) || st.LastUp.Before(dropped) {
+		t.Fatalf("after the drop: devices.json %v (up %v), status %v", dropped, up, st.LastUp)
+	}
+	m.Close()
+
+	// A restart: the new manager's status has it at once.
+	m2 := Start(Options{Dir: devDir, PeerDir: peerDir, Serve: echo, RelayTLS: tc,
+		Backoff: func(int) time.Duration { return 20 * time.Millisecond }})
+	t.Cleanup(m2.Close)
+	if st := m2.Status()[0]; !st.LastUp.Equal(dropped) {
+		t.Fatalf("after a restart, last up %v, want %v", st.LastUp, dropped)
+	}
+	// Renaming, setting the level and pairing again keep it.
+	SetLevel(devDir, "iPhone", LevelAnswer)
+	Rename(devDir, "iPhone", "Phone")
+	if _, err := Add(devDir, pub(phone), writeKey(t), "Phone", url); err != nil {
+		t.Fatal(err)
+	}
+	if d := saved(t, devDir); !d.LastUp.Equal(dropped) || d.Level != LevelAnswer {
+		t.Fatalf("after changes %+v", d)
+	}
+	// An older time changes nothing; a device that went is no error.
+	if err := SetLastUp(devDir, phone.ID, dropped.Add(-time.Hour)); err != nil || !saved(t, devDir).LastUp.Equal(dropped) {
+		t.Fatalf("older time: %v %v", err, saved(t, devDir).LastUp)
+	}
+	if err := SetLastUp(devDir, newKey(t).ID, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// saved is the one device in dir.
+func saved(t *testing.T, dir string) Device {
+	t.Helper()
+	ds, err := Load(dir)
+	if err != nil || len(ds) != 1 {
+		t.Fatalf("devices %+v %v", ds, err)
+	}
+	return ds[0]
+}

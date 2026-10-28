@@ -240,12 +240,13 @@ type deviceEntry struct {
 	Short string `json:"short"`
 	// Level is the device's level; Effective the one its link runs at
 	// (view for write in this release, or without a write key);
-	// WriteKey says it has one.
+	// WriteKey says it has one; LastUp is when its link was last up.
 	Level     string            `json:"level"`
 	Effective string            `json:"effective"`
 	Relay     string            `json:"relay"`
 	WriteKey  bool              `json:"write_key"`
 	Link      *proto.DeviceLink `json:"link,omitempty"`
+	LastUp    time.Time         `json:"last_up,omitzero"`
 }
 
 func (e *Env) deviceList(dir string, asJSON bool) error {
@@ -260,9 +261,13 @@ func (e *Env) deviceList(dir string, asJSON bool) error {
 	}
 	entries := []deviceEntry{}
 	for _, d := range devices {
-		de := deviceEntry{Name: d.Name, ID: d.ID().String(), Short: d.ID().Short(), Level: d.Level, Effective: d.Effective(), Relay: d.Relay, WriteKey: d.WriteKey != nil}
+		de := deviceEntry{Name: d.Name, ID: d.ID().String(), Short: d.ID().Short(), Level: d.Level, Effective: d.Effective(), Relay: d.Relay, WriteKey: d.WriteKey != nil,
+			LastUp: d.LastUp}
 		if l, ok := links[de.ID]; ok {
 			de.Link = &l
+			if l.LastUp.After(de.LastUp) {
+				de.LastUp = l.LastUp
+			}
 		}
 		entries = append(entries, de)
 	}
@@ -282,6 +287,9 @@ func (e *Env) deviceList(dir string, asJSON bool) error {
 			state = deviceLinkWords(*de.Link, now)
 		case running:
 			state = "no link yet"
+		}
+		if !de.LastUp.IsZero() && (de.Link == nil || de.Link.State != proto.LinkUp) {
+			state += ", last seen " + agoWords(de.LastUp, now)
 		}
 		level := de.Level
 		switch {
@@ -319,6 +327,14 @@ func sinceWords(t, now time.Time) string {
 		return "just now"
 	}
 	return "for " + strings.TrimSuffix(d.Truncate(time.Minute).String(), "0s")
+}
+
+// agoWords is how long ago t was, roughly: "just now", "5m ago".
+func agoWords(t, now time.Time) string {
+	if s := sinceWords(t, now); s != "just now" {
+		return strings.TrimPrefix(s, "for ") + " ago"
+	}
+	return "just now"
 }
 
 // deviceError is a registry error as tm device reports it.

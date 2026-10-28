@@ -1,0 +1,50 @@
+ PROJECTS                          │ tm dashboard                                               ● server ok · 0 sessions
+ no projects                       │  no projects; n creates one
+      ╭─ Level for Work phone ───────────────────────────────────────────────────────────────────────────────────╮──────
+      │ › (•) view                                                                                               │
+      │       It reads projects, sessions, conversations and panes, and acts on nothing.                         │
+      │   ( ) answer                                                                                             │
+      │       It reads, answers questions and approvals (never one that runs a command outside the sandbox), and │
+      │       accepts or sends back tasks, each act signed by its write key.                                     │
+      │   ( ) write                                                                                              │
+      │       It does what the Mac app does: prompts, new tasks, delegating, starting a coordinator, pane keys   │
+      │       and the rest, each act signed by its write key; never the guard's answers or the devices, and      │
+      │       never an approval that runs a command outside the sandbox.                                         │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │ ↑ ↓ move · enter set · esc cancel                                                                        │
+ ─────╰──────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+                                   │────────────────────────────────────────────────────────────────────────────────────
+                                   │
+ tab sidebar · ? help              │

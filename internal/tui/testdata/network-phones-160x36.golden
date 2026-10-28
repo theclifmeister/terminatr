@@ -1,0 +1,99 @@
+== d:
+╭─ Network · studio + 2 paired ────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ ▾ ◉ studio · this server 4F2A-91C3                              shares 0 of 2 │ phones · paired with this server                             │
+│    ■ terminatr         [ ] not shared                                no links │ ──────────────────────────────────────────────────────────── │
+│    ■ web               [ ] not shared                                no links │ paired        2 phones                                       │
+│                                                                               │ relay         relay.example.net                              │
+│ ▾ ◉ mini · connected 38 ms · tm 0.27.0                              panes off │                                                              │
+│    ■ acme-api          shared with you · + link (L)                 ● working │ D pairs a phone: it shows a QR code to scan with the         │
+│    ■ infra             shared with you · + link (L)             · not running │ terminatr app, which works once, for 10 minutes; you confirm │
+│                                                                               │ the phone here before it is added, at view. A phone reads    │
+│ ▾ ○ nas · offline 4m · relay                                        panes off │ what this server shows, through the relay, and answers or    │
+│    ■ media · stale     shared with you · + link (L)                 ● working │ writes only at the level you give it.                        │
+│                                                                               │                                                              │
+│ ▾ phones · 2 paired                                           D pairs a phone │                                                              │
+│    ◉ Clif's iPhone · connected                                   level answer │                                                              │
+│    ○ iPad · last seen 2h ago                                       level view │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                                                                                              │
+│ D pair a phone · enter fold · tab details · ? keys · esc close                                                                               │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+== d:aa11
+╭─ Network · studio + 2 paired ────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ ▾ ◉ studio · this server 4F2A-91C3                              shares 0 of 2 │ Clif's iPhone · phone                                        │
+│    ■ terminatr         [ ] not shared                                no links │ ──────────────────────────────────────────────────────────── │
+│    ■ web               [ ] not shared                                no links │ name (E)      Clif's iPhone                                  │
+│                                                                               │ connection    ◉ connected                                    │
+│ ▾ ◉ mini · connected 38 ms · tm 0.27.0                              panes off │ device id     AA11-0000                                      │
+│    ■ acme-api          shared with you · + link (L)                 ● working │ relay         relay.example.net                              │
+│    ■ infra             shared with you · + link (L)             · not running │                                                              │
+│                                                                               │ level (V)     view · [answer] · write                        │
+│ ▾ ○ nas · offline 4m · relay                                        panes off │               It reads, answers questions and approvals      │
+│    ■ media · stale     shared with you · + link (L)                 ● working │               (never one that runs a command outside the     │
+│                                                                               │               sandbox), and accepts or sends back tasks,     │
+│ ▾ phones · 2 paired                                           D pairs a phone │               each act signed by its write key.              │
+│    ◉ Clif's iPhone · connected                                   level answer │                                                              │
+│    ○ iPad · last seen 2h ago                                       level view │ X removes it: its link closes and its key is no longer       │
+│                                                                               │ taken. On the phone, Forget this server deletes its keys.    │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                                                                                              │
+│ V level · E name · X remove · tab details · ? keys · esc close                                                                               │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+== d:bb22
+╭─ Network · studio + 2 paired ────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ ▾ ◉ studio · this server 4F2A-91C3                              shares 0 of 2 │ iPad · phone                                                 │
+│    ■ terminatr         [ ] not shared                                no links │ ──────────────────────────────────────────────────────────── │
+│    ■ web               [ ] not shared                                no links │ name (E)      iPad                                           │
+│                                                                               │ connection    ○ last seen 2h ago                             │
+│ ▾ ◉ mini · connected 38 ms · tm 0.27.0                              panes off │ device id     BB22-0000                                      │
+│    ■ acme-api          shared with you · + link (L)                 ● working │ relay         relay.example.net                              │
+│    ■ infra             shared with you · + link (L)             · not running │                                                              │
+│                                                                               │ level (V)     [view] · answer · write                        │
+│ ▾ ○ nas · offline 4m · relay                                        panes off │               No write key: it can only view. Pair it again  │
+│    ■ media · stale     shared with you · + link (L)                 ● working │               from the terminatr app to let it answer or     │
+│                                                                               │               write.                                         │
+│ ▾ phones · 2 paired                                           D pairs a phone │               It reads projects, sessions, conversations and │
+│    ◉ Clif's iPhone · connected                                   level answer │               panes, and acts on nothing.                    │
+│    ○ iPad · last seen 2h ago                                       level view │                                                              │
+│                                                                               │ X removes it: its link closes and its key is no longer       │
+│                                                                               │ taken. On the phone, Forget this server deletes its keys.    │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                               │                                                              │
+│                                                                                                                                              │
+│ V level · E name · X remove · tab details · ? keys · esc close                                                                               │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯

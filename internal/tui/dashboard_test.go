@@ -58,6 +58,13 @@ type fakeSource struct {
 	saveCleared []string // slugs whose coordinators were saved and cleared
 	reviews     map[int]Review
 	peers       PeerList
+	// devices and devErr are Devices' answer; devActs the changes to
+	// them ("level <id> answer", "name <id> New", "remove <id>"), and
+	// pairDevice runs PairDevice (networkphones_test.go).
+	devices    DeviceList
+	devErr     error
+	devActs    []string
+	pairDevice func(ctx context.Context, relay string, ev DevicePairEvents) (DeviceEntry, error)
 	// logs are the Logs tab's (logstab_test.go), read from their files;
 	// logReads the log.read calls.
 	logs     []proto.LogInfo

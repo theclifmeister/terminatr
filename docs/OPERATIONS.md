@@ -655,7 +655,7 @@ A conversation is the session's whole transcript as tm reads it: prompts, the ag
 
 ### Pairing a phone
 
-A phone with the terminatr app pairs with one server as a **device**: it reads what that server's consoles read, the projects its paired servers share too, and nothing else of it. It meets the server on the same relay, so the server still opens no port. In this release a device is **view-only**: it sees projects, sessions, conversations and panes, and acts on nothing.
+A phone with the terminatr app pairs with one server as a **device**: it reads what that server's consoles read, the projects its paired servers share too, and nothing else of it. It meets the server on the same relay, so the server still opens no port. A device starts **view-only**: it sees projects, sessions, conversations and panes, and acts on nothing until you give it a higher level (below).
 
 ```
 $ tm device pair
@@ -671,17 +671,19 @@ Add it as "Clif's iPhone", a view-only device? [y/N] y
 Paired Clif's iPhone (device id 91C3-77AB, view-only) through relay.example.net.
 ```
 
+In the console it is the Network popup (`N` on the dashboard): `D` shows the same QR code in the popup, with the code as text under it to paste in the app if the camera can't scan it (make the window bigger if it says so), asks for a relay when none is set up yet, and asks the same question once the phone joins: `Y` adds it, `E` names it first, `N` doesn't. The phones are listed under the paired servers, each with its connection or when it was last seen and its level; on one, `V` picks its level, `E` renames it and `X` removes it after asking. The Mac app's Settings › Devices does the same.
+
 The relay is the one your paired servers use, or `--relay URL`. The QR code holds the relay (with its pin), the one-time secret and this server's key fingerprint, so the phone checks the server's key itself and nobody compares digits; the code works once, and nothing is pinned until you say yes here. Show it only to your own phone.
 
 ```
 $ tm device list
-Clif's iPhone  91C3-77AB  view  relay.example.net  waiting for it
+Clif's iPhone  91C3-77AB  view  relay.example.net  waiting for it, last seen 2h5m ago
 $ tm device name "clif's iphone" "Work phone"
 $ tm device remove "work phone"
 Removed Work phone; its link closes now and its key is no longer taken. On the phone, Forget this server deletes its keys.
 ```
 
-A device is `waiting for it` while the app isn't open: the server keeps a connection waiting in the device's room on the relay (one per device; the relay lets one address wait in 16 rooms). Removing a device cuts it off at once. Its acts are journaled as `human (iphone: NAME)`; it never answers a prompt to run a command outside the sandbox. `tm device access NAME view|answer|write` sets what it may do: `view` reads, `answer` answers questions and approvals and accepts or sends back tasks, `write` does what the Mac app does (prompts, new tasks, delegating, starting a coordinator, terminal keys and the rest); above `view` it needs the write key it made at pairing. Rotating this server's key (`tm peer rotate`) means every device pairs again (SPEC §16.15).
+A device is `waiting for it` while the app isn't open (with when it was `last seen`, once it has connected): the server keeps a connection waiting in the device's room on the relay (one per device; the relay lets one address wait in 16 rooms). Removing a device cuts it off at once. Its acts are journaled as `human (iphone: NAME)`; it never answers a prompt to run a command outside the sandbox. `tm device access NAME view|answer|write` sets what it may do: `view` reads, `answer` answers questions and approvals and accepts or sends back tasks, `write` does what the Mac app does (prompts, new tasks, delegating, starting a coordinator, terminal keys and the rest); above `view` it needs the write key it made at pairing. Rotating this server's key (`tm peer rotate`) means every device pairs again (SPEC §16.15).
 
 ### The servers' side
 

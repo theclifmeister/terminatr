@@ -1,0 +1,50 @@
+ PROJECTS                          │ tm dashboard                                               ● server ok · 0 sessions
+ no projects                       │  no projects; n creates one
+      ╭─ Network · <host> ╮──────
+      │ ▾ ◉ <host> · this server <id>     shares 0 of 0 │ Work phone · phone                           │
+      │      no active project here to share                      │ ──────────────────────────────────────────── │
+      │                                                           │ name (E)      Work phone                     │
+      │      No paired server yet. P pairs with one: it shows a   │ connection    ◉ connected                    │
+      │      code to pass on, and J on the other server takes it  │ device id     <id>                      │
+      │      (or tm peer pair and tm peer join in a terminal);    │ relay         ws://<port>           │
+      │      both of you then compare six digits.                 │                                              │
+      │      No relay yet? On a Linux server with a domain: sudo  │ level (V)     [view] · answer · write        │
+      │      tm relay install --domain NAME; without one, on an   │               It reads projects, sessions,   │
+      │      address both servers reach: sudo tm relay install -- │               conversations and panes, and   │
+      │      ip (see the README).                                 │               acts on nothing.               │
+      │                                                           │                                              │
+      │ ▾ phones · 1 paired                       D pairs a phone │ X removes it: its link closes and its key is │
+      │    ◉ Work phone · connected                    level view │ no longer taken. On the phone, Forget this   │
+      │                                                           │ server deletes its keys.                     │
+      │                                                           │                                              │
+      │                                                           │                                              │
+      │                                                           │                                              │
+      │                                                           │                                              │
+      │                                                           │                                              │
+      │                                                           │                                              │
+      │                                                           │                                              │
+      │                                                           │                                              │
+      │                                                           │                                              │
+      │                                                           │                                              │
+      │                                                           │                                              │
+      │                                                           │                                              │
+      │                                                           │                                              │
+      │                                                           │                                              │
+      │                                                           │                                              │
+      │                                                           │                                              │
+      │                                                           │                                              │
+      │                                                           │                                              │
+      │                                                           │                                              │
+      │                                                           │                                              │
+      │                                                           │                                              │
+      │                                                           │                                              │
+      │                                                           │                                              │
+      │                                                           │                                              │
+      │                                                           │                                              │
+      │                                                           │                                              │
+      │                                                                                                          │
+      │ V level · E name · X remove · tab details · ? keys · esc close                                           │
+ ─────╰──────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+                                   │────────────────────────────────────────────────────────────────────────────────────
+                                   │
+ tab sidebar · ? help              │ paired Work phone (device id <id>), view only; V on it sets its level

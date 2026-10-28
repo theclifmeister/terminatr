@@ -11,9 +11,9 @@
 │ ▾ ○ nas · offline 4m · relay                                        panes off │ digits before Y.                                             │
 │    ■ media · stale     shared with you · + link (L)                 ● working │                                                              │
 │                                                                               │                                                              │
-│                                                                               │                                                              │
-│                                                                               │                                                              │
-│                                                                               │                                                              │
+│ ▾ phones                                                      D pairs a phone │                                                              │
+│    No phone yet. D pairs one: a QR code to scan with the terminatr app on the │                                                              │
+│    iPhone.                                                                    │                                                              │
 │                                                                               │                                                              │
 │                                                                               │                                                              │
 │                                                                               │                                                              │
@@ -44,9 +44,9 @@
 │ ▾ ○ nas · offline 4m · relay                                        panes off │ paired server: what waits for you, the inbox, threads, tasks │
 │    ■ media · stale     shared with you · + link (L)                 ● working │ on deck and its sessions' states; never its files. Sharing   │
 │                                                                               │ asks first; it is the project's own Shared with paired       │
-│                                                                               │ servers setting.                                             │
-│                                                                               │                                                              │
-│                                                                               │                                                              │
+│ ▾ phones                                                      D pairs a phone │ servers setting.                                             │
+│    No phone yet. D pairs one: a QR code to scan with the terminatr app on the │                                                              │
+│    iPhone.                                                                    │                                                              │
 │                                                                               │                                                              │
 │                                                                               │                                                              │
 │                                                                               │                                                              │
@@ -77,9 +77,9 @@
 │ ▾ ○ nas · offline 4m · relay                                        panes off │   ● paired: your projects and its can link                   │
 │    ■ media · stale     shared with you · + link (L)                 ● working │   ○ sees nothing: you share no project                       │
 │                                                                               │   ● watches your shared panes and popups                     │
-│                                                                               │   ○ types in them                                            │
-│                                                                               │   ● reads their conversations, in its Mac app                │
-│                                                                               │   panes (V)   off · [view] · write                           │
+│ ▾ phones                                                      D pairs a phone │   ○ types in them                                            │
+│    No phone yet. D pairs one: a QR code to scan with the terminatr app on the │   ● reads their conversations, in its Mac app                │
+│    iPhone.                                                                    │   panes (V)   off · [view] · write                           │
 │                                                                               │               it can watch the coordinators and threads of   │
 │                                                                               │               the projects you share, not type               │
 │                                                                               │   chats (C)   [on] · off                                     │
@@ -110,9 +110,9 @@
 │ ▾ ○ nas · offline 4m · relay                                        panes off │                                                              │
 │    ■ media · stale     shared with you · + link (L)                 ● working │ Nothing here acts on it: enter shows its dashboard, read-    │
 │                                                                               │ only. L links one of your projects with it, which writes     │
-│                                                                               │ only your side; its user sets theirs.                        │
-│                                                                               │                                                              │
-│                                                                               │                                                              │
+│ ▾ phones                                                      D pairs a phone │ only your side; its user sets theirs.                        │
+│    No phone yet. D pairs one: a QR code to scan with the terminatr app on the │                                                              │
+│    iPhone.                                                                    │                                                              │
 │                                                                               │                                                              │
 │                                                                               │                                                              │
 │                                                                               │                                                              │

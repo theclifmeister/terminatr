@@ -1,0 +1,50 @@
+ PROJECTS                          │ tm dashboard                                               ● server ok · 0 sessions
+ no projects                       │  no projects; n creates one
+      ╭─ Pair a phone ───────────────────────────────────────────────────────────────────────────────────────────╮──────
+      │                                                                 Scan this with the terminatr app on the  │
+      │                                                                 iPhone. It works once; you confirm the   │
+      │<qr>phone here before it is added.           │
+      │<qr>│
+      │<qr>Works for <left> · waiting for the phone…  │
+      │<qr>│
+      │<qr>This server: <host>, id <id> │
+      │<qr>│
+      │<qr>Through ws://<port>.            │
+      │<qr>│
+      │<qr>│
+      │<qr>│
+      │<qr>│
+      │<qr>│
+      │<qr>│
+      │<qr>│
+      │<qr>│
+      │<qr>│
+      │<qr>│
+      │<qr>│
+      │<qr>│
+      │<qr>│
+      │<qr>│
+      │<qr>│
+      │<qr>│
+      │<qr>│
+      │<qr>│
+      │<qr>│
+      │<qr>│
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │ Or paste this code in the app:                                                                           │
+      │ <invite> │
+      │ <invite> │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │ esc cancel                                                                                               │
+ ─────╰──────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+                                   │────────────────────────────────────────────────────────────────────────────────────
+                                   │
+ tab sidebar · ? help              │

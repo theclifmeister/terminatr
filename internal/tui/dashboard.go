@@ -537,7 +537,7 @@ func (m *dash) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, m.setData(msg.data)
 	case tickMsg:
-		return m, tea.Batch(m.load(), m.reloadBoards(), m.pollModViews(), m.logsTick())
+		return m, tea.Batch(m.load(), m.reloadBoards(), m.pollModViews(), m.logsTick(), m.pollDevices())
 	case logMsg:
 		m.logsTook(msg)
 		return m, nil
@@ -569,6 +569,11 @@ func (m *dash) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case pairMsg:
 		return m, msg.pv.step(m, msg)
+	case phonePairMsg:
+		return m, msg.pv.step(m, msg)
+	case devicesMsg:
+		m.tookDevices(msg)
+		return m, nil
 	case loadedMsg:
 		return m, msg.then(m)
 	case actionMsg:

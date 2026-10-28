@@ -37,12 +37,14 @@ import (
 
 // The panel's items: the rows its keyboard stops on.
 const (
-	itemNone  = iota
-	itemName  // a paired server's display name: enter edits it
-	itemRelay // its relay: enter edits it
-	itemPanes // its pane switch: ← → or a click on a word
-	itemConv  // its conversations switch: ← → or enter
-	itemShare // a project's share box: enter, space or a click
+	itemNone    = iota
+	itemName    // a paired server's display name: enter edits it
+	itemRelay   // its relay: enter edits it
+	itemPanes   // its pane switch: ← → or a click on a word
+	itemConv    // its conversations switch: ← → or enter
+	itemShare   // a project's share box: enter, space or a click
+	itemDevName // a phone's name: enter edits it
+	itemLevel   // a phone's level switch: ← →, a click on a word, enter picks
 )
 
 // panelLine is one line of the panel: its text, the item it belongs to
@@ -84,6 +86,8 @@ func (nv *networkView) panelLines(m *dash, r netRow, ok bool, w int) []panelLine
 		return out
 	}
 	switch r.kind {
+	case netPhones, netDevice:
+		out = nv.phonePanel(r, w)
 	case netLink, netNeed:
 		out = nv.linkPanel(m, r, w)
 	case netAsked, netShareReq:

@@ -76,9 +76,14 @@ func TestDeviceListAccessNameRemove(t *testing.T) {
 	if _, err := device.Add(dir, k2, nil, "iPad", "wss://r.example.net"); err != nil {
 		t.Fatal(err)
 	}
+	// The iPad was linked before (last_up, kept in the devices).
+	seen := time.Now().Add(-2*time.Hour - 5*time.Minute)
+	if err := device.SetLastUp(dir, peer.IDOf(k2), seen); err != nil {
+		t.Fatal(err)
+	}
 	reloads := stubDeviceServer(t, []proto.DeviceLink{{Name: d1.Name, ID: d1.ID().String(), State: proto.LinkUp, Since: time.Now().Add(-2 * time.Minute)}})
 	out := h.ok(human, "device", "list")
-	for _, want := range []string{"Clif's iPhone  " + d1.ID().Short() + "  view  r.example.net  connected for 2m", "iPad", "no link yet"} {
+	for _, want := range []string{"Clif's iPhone  " + d1.ID().Short() + "  view  r.example.net  connected for 2m\n", "iPad", "no link yet, last seen 2h5m ago"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("list lacks %q:\n%s", want, out)
 		}
@@ -86,7 +91,8 @@ func TestDeviceListAccessNameRemove(t *testing.T) {
 	var js struct {
 		Devices []deviceEntry `json:"devices"`
 	}
-	if err := json.Unmarshal([]byte(h.ok(human, "device", "list", "--json")), &js); err != nil || len(js.Devices) != 2 || js.Devices[0].Link == nil || js.Devices[0].Effective != "view" {
+	if err := json.Unmarshal([]byte(h.ok(human, "device", "list", "--json")), &js); err != nil || len(js.Devices) != 2 || js.Devices[0].Link == nil || js.Devices[0].Effective != "view" ||
+		!js.Devices[1].LastUp.Equal(seen.UTC().Truncate(time.Second)) {
 		t.Fatalf("list --json: %+v, %v", js, err)
 	}
 	// Every level runs in this release; above view needs a write key.

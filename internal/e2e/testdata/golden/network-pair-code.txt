@@ -10,8 +10,8 @@
      │      without one╭─ Pair a server ──────────────────────────────────────────────╮see the         │
      │      README).   │ Pairing code (works once, for 10 minutes; <left>): │                │
      │                 │                                                              │                │
-     │                 │     ws://<port>/<code> │                │
-     │                 │                                                              │                │
+     │ ▾ phones        │     ws://<port>/<code> │D pairs a phone │
+     │    No phone yet.│                                                              │hone.           │
      │                 │ On the other server: N (Network), then J, and type it in; or │                │
      │                 │ tm peer join CODE. Pass it on yourself (a chat, a call),     │                │
      │                 │ never through the relay.                                     │                │

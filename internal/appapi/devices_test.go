@@ -36,6 +36,11 @@ func TestBridgeDevices(t *testing.T) {
 	if _, err := device.Add(devDir, old, nil, "iPhone", url); err != nil {
 		t.Fatal(err)
 	}
+	// It was linked before (app API 27's last_up, kept in the devices).
+	seen := time.Date(2026, 10, 28, 9, 30, 0, 0, time.UTC)
+	if err := device.SetLastUp(devDir, peer.IDOf(old), seen); err != nil {
+		t.Fatal(err)
+	}
 	startServer(t, p)
 
 	agent, err := bridgeWith(t, appapi.Options{Paths: p, Caller: caller.Caller{Kind: caller.Thread, Project: "web", Thread: "t-0001"}})
@@ -58,7 +63,7 @@ func TestBridgeDevices(t *testing.T) {
 		!slices.Equal(list.Levels, device.Levels) || list.Relay == "" {
 		t.Fatalf("device.list: %+v %v", list, err)
 	}
-	if d := list.Devices[0]; d.Name != "iPhone" || d.Level != device.LevelView || d.WriteKey || len(d.Short) != 9 {
+	if d := list.Devices[0]; d.Name != "iPhone" || d.Level != device.LevelView || d.WriteKey || len(d.Short) != 9 || !d.LastUp.Equal(seen) {
 		t.Errorf("device %+v", d)
 	}
 

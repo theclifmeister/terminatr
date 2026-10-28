@@ -180,7 +180,7 @@ func (m *Manager) Reload() error {
 func (m *Manager) add(id *peer.Identity, d Device) {
 	ctx, cancel := context.WithCancel(m.ctx)
 	l := &link{d: d, level: NewLevel(d.Effective()), cancel: cancel,
-		st: proto.DeviceLink{Name: d.Name, ID: d.ID().String(), Level: d.Level, Effective: d.Effective(), State: proto.LinkConnecting, Since: time.Now()}}
+		st: proto.DeviceLink{Name: d.Name, ID: d.ID().String(), Level: d.Level, Effective: d.Effective(), State: proto.LinkConnecting, Since: time.Now(), LastUp: d.LastUp}}
 	m.links[d.ID()] = l
 	t := peer.RelayTransport(d.Relay, id, d.ID(), m.opts.RelayTLS)
 	m.wg.Add(1)
@@ -276,6 +276,9 @@ func (m *Manager) once(ctx context.Context, id *peer.Identity, t peer.Transport,
 		m.logf("device %s: its TLS failed: %v", d.Name, err)
 		return false, err
 	}
+	// Its last-up time first: whoever sees it up finds it saved.
+	m.lastUp(l, d)
+	defer m.lastUp(l, d)
 	l.set(proto.LinkUp, "", nil)
 	l.waitLogged = false
 	m.logf("device %s: up", d.Name)
@@ -293,6 +296,19 @@ func (m *Manager) once(ctx context.Context, id *peer.Identity, t peer.Transport,
 func roomPrefix(own, device peer.ID) string {
 	r := relay.LinkRoom(own, device)
 	return hex.EncodeToString(r[:4])
+}
+
+// lastUp notes that d's link l is up now (or was until now, when it
+// drops): in its status and in the devices, which keep it across a
+// restart.
+func (m *Manager) lastUp(l *link, d Device) {
+	now := time.Now()
+	l.mu.Lock()
+	l.st.LastUp = now
+	l.mu.Unlock()
+	if err := SetLastUp(m.opts.Dir, d.ID(), now); err != nil {
+		m.logf("device %s: its last link time isn't saved: %v", d.Name, err)
+	}
 }
 
 // dev is a copy of l's device, read under m's mu.

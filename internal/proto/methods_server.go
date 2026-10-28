@@ -84,6 +84,10 @@ type DeviceLink struct {
 	Since time.Time `json:"since"`
 	// Error is the last failure, for people.
 	Error string `json:"error,omitempty"`
+	// LastUp is when the link was last up: now while it is, else when
+	// it dropped (kept in the devices across a restart); zero before
+	// the device ever linked.
+	LastUp time.Time `json:"last_up,omitzero"`
 }
 
 // MethodPeerReload has the server read its identity key and peers again
