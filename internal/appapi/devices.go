@@ -153,17 +153,19 @@ type DevicePairing struct {
 // DeviceOffer is device.pair.wait's result: the phone that joined, as
 // tm device pair shows it before asking. Name is what it would be added
 // as, Phone the name it gave; Again the device's name when its key is
-// paired already (it keeps Level); WriteKey false: it can only view.
-// AnswerBy bounds the user's answer.
+// paired already (it keeps Level, view when KeyChanged: it brings
+// another write key, since app API 28); WriteKey false: it can only
+// view. AnswerBy bounds the user's answer.
 type DeviceOffer struct {
-	Name     string    `json:"name"`
-	Phone    string    `json:"phone"`
-	Short    string    `json:"short"`
-	Version  string    `json:"version"`
-	WriteKey bool      `json:"write_key,omitempty"`
-	Again    string    `json:"again,omitempty"`
-	Level    string    `json:"level"`
-	AnswerBy time.Time `json:"answer_by"`
+	Name       string    `json:"name"`
+	Phone      string    `json:"phone"`
+	Short      string    `json:"short"`
+	Version    string    `json:"version"`
+	WriteKey   bool      `json:"write_key,omitempty"`
+	Again      string    `json:"again,omitempty"`
+	KeyChanged bool      `json:"key_changed,omitempty"`
+	Level      string    `json:"level"`
+	AnswerBy   time.Time `json:"answer_by"`
 }
 
 // DevicePaired is device.pair.answer's result: the device added, none
@@ -398,7 +400,8 @@ func (b *bridge) runPairing(ctx context.Context, pg *pairing, id *peer.Identity,
 			pg.shown = DeviceOffer{Name: proposed, Phone: off.Name, Short: off.ID.Short(), Version: off.Version,
 				WriteKey: off.WriteKey != nil, Level: device.LevelView, AnswerBy: time.Now().Add(device.AnswerWindow)}
 			if again != nil {
-				pg.shown.Again, pg.shown.Level = again.Name, again.Level
+				pg.shown.Again = again.Name
+				pg.shown.Level, pg.shown.KeyChanged = again.Again(off.WriteKey)
 			}
 			close(pg.offered)
 			select {

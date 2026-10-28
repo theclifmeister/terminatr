@@ -230,7 +230,10 @@ func (pv *phonePairView) render(m *dash) string {
 			version = "unknown"
 		}
 		body = append(body, wrapLines(fmt.Sprintf("%q, device id %s, app %s", oneLine(o.Phone), o.Short, oneLine(version)), w)...)
-		if o.Again != "" {
+		switch {
+		case o.Again != "" && o.KeyChanged:
+			body = append(body, wrapLines(fmt.Sprintf("This phone is paired already, as %q, but its write key changed: pairing again makes it view-only; set its level again after.", o.Again), w)...)
+		case o.Again != "":
 			body = append(body, wrapLines(fmt.Sprintf("This phone is paired already, as %q: pairing again keeps its level.", o.Again), w)...)
 		}
 		if !o.WriteKey {

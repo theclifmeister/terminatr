@@ -9,6 +9,7 @@
 package device
 
 import (
+	"bytes"
 	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/elliptic"
@@ -322,10 +323,21 @@ func FreeName(devices []Device, name string, key ed25519.PublicKey) string {
 	return out
 }
 
+// Again is the level a pairing with writeKey gives d, a device paired
+// already: its own, or view when it brings another write key than d's
+// (keyChanged), since a level given to acts signed with one key isn't
+// given to another's.
+func (d Device) Again(writeKey []byte) (level string, keyChanged bool) {
+	if d.WriteKey != nil && !bytes.Equal(d.WriteKey, writeKey) {
+		return LevelView, true
+	}
+	return d.Level, false
+}
+
 // Add keeps key as the device called name through relayURL, with its
-// write key (nil for none), at view. A key already paired keeps its
-// level and takes the new name, relay and write key; a name another
-// device has is a TakenError.
+// write key (nil for none), at view. A key already paired takes the new
+// name, relay and write key, and keeps its level unless the write key
+// changed (Again); a name another device has is a TakenError.
 func Add(dir string, key ed25519.PublicKey, writeKey []byte, name, relayURL string) (Device, error) {
 	d := Device{Name: name, Key: key, Level: LevelView, Relay: relayURL, WriteKey: writeKey}
 	if err := d.check(); err != nil {
@@ -336,7 +348,8 @@ func Add(dir string, key ed25519.PublicKey, writeKey []byte, name, relayURL stri
 		for _, q := range devices {
 			switch {
 			case q.Key.Equal(key):
-				d.Level, d.LastUp = q.Level, q.LastUp
+				d.Level, _ = q.Again(writeKey)
+				d.LastUp = q.LastUp
 			case strings.EqualFold(q.Name, name):
 				return nil, &TakenError{name}
 			default:

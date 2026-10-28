@@ -155,6 +155,37 @@ func TestBridgeDevices(t *testing.T) {
 		d.Level != device.LevelWrite || d.Effective != device.LevelWrite {
 		t.Errorf("device.access write: %+v %v", d, err)
 	}
+
+	// Pairing it again with another write key (T832): the offer says so
+	// and it comes back at view.
+	wk2, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	wkb2, _ := wk2.PublicKey.Bytes()
+	if err := c.Call(appapi.MethodDevicePair, appapi.DevicePairParams{}, &pg); err != nil {
+		t.Fatalf("device.pair again: %v", err)
+	}
+	in, err = device.ParseInvite(pg.Invite)
+	if err != nil {
+		t.Fatal(err)
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		defer cancel()
+		_, err := device.Join(ctx, peer.IdentityOf(phoneKey), in, "iPhone", "1.1", wkb2, nil)
+		joined <- err
+	}()
+	offer = appapi.DeviceOffer{}
+	if err := c.Call(appapi.MethodDevicePairWait, appapi.DevicePairingParams{Pairing: pg.Pairing}, &offer); err != nil ||
+		offer.Again != "Clif's iPhone" || !offer.KeyChanged || offer.Level != device.LevelView || offer.Name != "iPhone 2" {
+		t.Fatalf("offer again: %+v %v", offer, err)
+	}
+	paired = appapi.DevicePaired{}
+	if err := c.Call(appapi.MethodDevicePairAnswer, appapi.DevicePairAnswerParams{Pairing: pg.Pairing, Accept: true, Name: "Clif's iPhone"}, &paired); err != nil ||
+		paired.Device == nil || paired.Device.Level != device.LevelView || paired.Device.ID != id {
+		t.Fatalf("device.pair.answer again: %+v %v", paired, err)
+	}
+	if err := <-joined; err != nil {
+		t.Fatalf("join again: %v", err)
+	}
 	if err := c.Call(appapi.MethodDeviceName, appapi.DeviceNameParams{Device: id, Name: "iphone"}, nil); code(err) != "name-taken" {
 		t.Errorf("device.name to a taken name: %v", err)
 	}

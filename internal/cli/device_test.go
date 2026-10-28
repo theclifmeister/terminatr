@@ -8,6 +8,7 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"encoding/json"
+	"fmt"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -172,5 +173,34 @@ func TestDevicePair(t *testing.T) {
 	}
 	if *reloads != 1 {
 		t.Fatalf("%d reloads", *reloads)
+	}
+
+	// Pairing it again with another write key (T832): it says so and
+	// drops to view; with the same key it keeps its level.
+	for _, again := range []struct {
+		key   []byte
+		words string
+		level string
+	}{
+		{wk, `paired already, as "iPhone 2"; pairing again keeps its level`, device.LevelAnswer},
+		{testWriteKey(t), `paired already, as "iPhone 2", but its write key changed: pairing again makes it view-only`, device.LevelView},
+	} {
+		if _, err := device.SetLevel(dir, "iPhone 2", device.LevelAnswer); err != nil {
+			t.Fatal(err)
+		}
+		wk = again.key
+		code, out, errs = h.run(human, "y\n", "device", "pair", "--relay", url)
+		if code != 0 {
+			t.Fatalf("pair again: exit %d\n%s%s", code, out, errs)
+		}
+		if err := <-joined; err != nil {
+			t.Fatalf("join again: %v", err)
+		}
+		if !strings.Contains(out, again.words) || !strings.Contains(out, fmt.Sprintf("a %s device? [y/N]", levelWords(again.level))) {
+			t.Errorf("pair again, output:\n%s", out)
+		}
+		if ds, _ := device.Load(dir); len(ds) != 2 || ds[1].Level != again.level || !bytes.Equal(ds[1].WriteKey, again.key) {
+			t.Fatalf("devices after pairing again %+v", ds)
+		}
 	}
 }

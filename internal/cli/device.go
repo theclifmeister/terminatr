@@ -149,8 +149,12 @@ func (e *Env) devicePair(peerDir, dir, relayFlag, as string) error {
 			}
 			level := device.LevelView
 			if again != nil {
-				level = again.Level
-				fmt.Fprintf(e.Stdout, "\nThis device is paired already, as %q; pairing again keeps its level.\n", again.Name)
+				var changed bool
+				if level, changed = again.Again(off.WriteKey); changed {
+					fmt.Fprintf(e.Stdout, "\nThis device is paired already, as %q, but its write key changed: pairing again makes it view-only; set its level again after.\n", again.Name)
+				} else {
+					fmt.Fprintf(e.Stdout, "\nThis device is paired already, as %q; pairing again keeps its level.\n", again.Name)
+				}
 			}
 			fmt.Fprintf(e.Stdout, "\nThe phone: %q, device id %s, app %s\n", off.Name, off.ID.Short(), textsafe.Line(off.Version, 40))
 			if off.WriteKey == nil {
