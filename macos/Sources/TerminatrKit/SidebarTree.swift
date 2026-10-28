@@ -116,19 +116,20 @@ public enum SidebarTree {
     /// What a paired server's shared project lists under it, as the
     /// TUI's peerProjectRows: nothing while stale; else its coordinator,
     /// running there or not, then its threads, each with its session
-    /// there (nil when none runs) and its task. With watched (a bridge
+    /// there (nil when none runs), its task and its title (the watched
+    /// thread's, as a local row's label; empty before app API 10). With watched (a bridge
     /// of app API 10 or later) those are the watched ones, running or
     /// not, in their order; an older bridge lists only the ones a
     /// session runs.
     public static func sessions(of p: AppAPI.PeerProject, alias: String, watched: Bool = true)
-        -> [(session: AppAPI.PeerSession?, ref: SessionRef, task: String)] {
+        -> [(session: AppAPI.PeerSession?, ref: SessionRef, task: String, title: String)] {
         guard !p.stale else { return [] }
-        let all = p.sessions.compactMap { s in SessionRef(s, of: alias).map { (session: Optional(s), ref: $0, task: s.task) } }
-        let coordinator = all.first { $0.ref.isCoordinator } ?? (nil, SessionRef(project: p.project, server: alias), "")
+        let all = p.sessions.compactMap { s in SessionRef(s, of: alias).map { (session: Optional(s), ref: $0, task: s.task, title: "") } }
+        let coordinator = all.first { $0.ref.isCoordinator } ?? (nil, SessionRef(project: p.project, server: alias), "", "")
         guard watched else { return [coordinator] + all.filter { !$0.ref.isCoordinator } }
         return [coordinator] + p.watched.map { t in
             let s = t.session.isEmpty ? nil : p.sessions.first { $0.id == t.session }
-            return (s, SessionRef(project: p.project, thread: t.id, server: alias), t.task.isEmpty ? s?.task ?? "" : t.task)
+            return (s, SessionRef(project: p.project, thread: t.id, server: alias), t.task.isEmpty ? s?.task ?? "" : t.task, t.title)
         }
     }
 

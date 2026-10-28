@@ -167,10 +167,10 @@ struct Sidebar: View {
     /// A paired server's project's rows under it (SidebarTree), with
     /// their sessions: those the filter finds, all of them when it finds
     /// the project.
-    private func sessions(_ peer: AppAPI.Peer, _ p: AppAPI.PeerProject) -> [(session: AppAPI.PeerSession?, ref: SessionRef, task: String)] {
+    private func sessions(_ peer: AppAPI.Peer, _ p: AppAPI.PeerProject) -> [(session: AppAPI.PeerSession?, ref: SessionRef, task: String, title: String)] {
         let all = SidebarTree.sessions(of: p, alias: peer.alias, watched: app.watched)
         guard filtering, !SidebarTree.matches(app.filter, p.project, peer.alias, peer.name) else { return all }
-        return all.filter { _, r, task in SidebarTree.matches(app.filter, task, r.thread, r.isCoordinator ? "coordinator" : "") }
+        return all.filter { _, r, task, title in SidebarTree.matches(app.filter, task, title, r.thread, r.isCoordinator ? "coordinator" : "") }
     }
 
     /// What a project of this server lists under it (SidebarTree):
@@ -209,7 +209,7 @@ struct Sidebar: View {
             for p in shown(peer) {
                 out.append((.project(p.project, server: peer.alias), p.project))
                 if !app.nav.collapsed.contains(Navigation.sectionKey(server: peer.alias, project: p.project)) {
-                    out += sessions(peer, p).map { (.session($0.ref), $0.ref.isCoordinator ? "Coordinator" : $0.ref.thread) }
+                    out += sessions(peer, p).map { (.session($0.ref), $0.ref.isCoordinator ? "Coordinator" : $0.title.isEmpty ? $0.ref.thread : $0.title) }
                 }
             }
         }
@@ -416,8 +416,8 @@ struct Sidebar: View {
             .selectable(sel)
             .opacity(dim)
         if !app.nav.collapsed.contains(Navigation.sectionKey(server: peer.alias, project: p.project)) {
-            ForEach(sessions(peer, p), id: \.ref) { s, r, task in
-                row(.session(r), label: r.isCoordinator ? "Coordinator" : r.thread, ref: task.isEmpty ? nil : task,
+            ForEach(sessions(peer, p), id: \.ref) { s, r, task, title in
+                row(.session(r), label: r.isCoordinator ? "Coordinator" : title.isEmpty ? r.thread : title, ref: task.isEmpty ? nil : task,
                     tag: s.flatMap(tag), dot: theme.colour(s.map(tone) ?? .idle), spoken: s.map(spoken) ?? "not running")
                     .opacity(dim)
             }
