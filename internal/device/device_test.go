@@ -2,8 +2,12 @@ package device
 
 import (
 	"bufio"
+	"bytes"
 	"context"
+	"crypto/ecdsa"
 	"crypto/ed25519"
+	"crypto/elliptic"
+	"crypto/rand"
 	"crypto/tls"
 	"errors"
 	"net"
@@ -31,6 +35,20 @@ func newKey(t *testing.T) *peer.Identity {
 
 func pub(id *peer.Identity) ed25519.PublicKey { return id.Key.Public().(ed25519.PublicKey) }
 
+// writeKey is a fresh write key's public half, as a phone sends it.
+func writeKey(t *testing.T) []byte {
+	t.Helper()
+	k, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := k.PublicKey.Bytes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
+}
+
 func startRelay(t *testing.T) (string, *tls.Config) {
 	t.Helper()
 	s := relay.New(relay.DefaultConfig())
@@ -45,22 +63,32 @@ func TestRegistry(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "device")
 	a, b := newKey(t), newKey(t)
 	const r = "wss://relay.example.net"
-	d, err := Add(dir, pub(a), "Clif's iPhone", r)
+	wk := writeKey(t)
+	d, err := Add(dir, pub(a), wk, "Clif's iPhone", r)
 	if err != nil || d.Level != LevelView {
 		t.Fatalf("Add: %+v, %v", d, err)
 	}
-	if _, err := Add(dir, pub(b), "clif's iphone", r); !errors.As(err, new(*TakenError)) {
+	if _, err := Add(dir, pub(b), nil, "clif's iphone", r); !errors.As(err, new(*TakenError)) {
 		t.Fatalf("a taken name: %v", err)
+	}
+	if _, err := Add(dir, pub(b), wk[:64], "iPad", r); err == nil {
+		t.Fatal("took a write key that isn't a point")
 	}
 	if _, err := SetLevel(dir, "CLIF'S IPHONE", LevelAnswer); err != nil {
 		t.Fatal(err)
 	}
-	// Pairing the same key again keeps its level, takes the new name.
-	if d, err = Add(dir, pub(a), "Phone", r+"#sha256="+strings.Repeat("ab", 32)); err != nil || d.Level != LevelAnswer {
+	// Pairing the same key again keeps its level, takes the new name
+	// and write key.
+	wk2 := writeKey(t)
+	if d, err = Add(dir, pub(a), wk2, "Phone", r+"#sha256="+strings.Repeat("ab", 32)); err != nil || d.Level != LevelAnswer || !bytes.Equal(d.WriteKey, wk2) {
 		t.Fatalf("again: %+v, %v", d, err)
 	}
-	if _, err := Add(dir, pub(b), "iPad", r); err != nil {
+	if _, err := Add(dir, pub(b), nil, "iPad", r); err != nil {
 		t.Fatal(err)
+	}
+	// Without a write key a device stays at view.
+	if _, err := SetLevel(dir, "ipad", LevelAnswer); !errors.As(err, new(*NoWriteKeyError)) {
+		t.Fatalf("answer without a write key: %v", err)
 	}
 	if _, err := Rename(dir, "ipad", "phone"); !errors.As(err, new(*TakenError)) {
 		t.Fatalf("rename to a taken name: %v", err)
@@ -82,7 +110,7 @@ func TestRegistry(t *testing.T) {
 	if _, err := Remove(dir, "tablet"); err != nil {
 		t.Fatal(err)
 	}
-	if ds, _ := Load(dir); len(ds) != 1 || ds[0].Name != "Phone" {
+	if ds, _ := Load(dir); len(ds) != 1 || ds[0].Name != "Phone" || !bytes.Equal(ds[0].WriteKey, wk2) || ds[0].Verifier() == nil {
 		t.Fatalf("after remove: %+v", ds)
 	}
 	if _, err := SetLevel(dir, "phone", "admin"); err == nil {
@@ -114,10 +142,20 @@ func TestNames(t *testing.T) {
 	}
 }
 
+// TestEffective: answer runs when the device has a write key; write
+// doesn't run in this release.
 func TestEffective(t *testing.T) {
-	for l, want := range map[string]string{LevelView: LevelView, LevelAnswer: LevelView, LevelWrite: LevelView, "": LevelView} {
-		if got := Effective(l); got != want {
-			t.Errorf("Effective(%q) = %q", l, got)
+	wk := writeKey(t)
+	for _, c := range []struct {
+		level string
+		key   []byte
+		want  string
+	}{
+		{LevelView, nil, LevelView}, {LevelAnswer, wk, LevelAnswer}, {LevelAnswer, nil, LevelView},
+		{LevelWrite, wk, LevelView}, {"", wk, LevelView},
+	} {
+		if got := (Device{Level: c.level, WriteKey: c.key}).Effective(); got != c.want {
+			t.Errorf("level %q, key %v: %q, want %q", c.level, c.key != nil, got, c.want)
 		}
 	}
 }
@@ -170,24 +208,35 @@ func pairBoth(t *testing.T, url string, tc *tls.Config, srv, phone *peer.Identit
 		t.Fatalf("pair: %v", err)
 	}
 	in.Server = server
-	pp, ep := Join(ctx, phone, in, "Clif's\x1b[2J iPhone", "1.0", tc)
+	pp, ep := Join(ctx, phone, in, "Clif's\x1b[2J iPhone", "1.0", phoneWriteKey, tc)
 	es := <-errs
 	return offer, ps, pp, es, ep
 }
 
+// phoneWriteKey is the write key pairBoth's phone sends.
+var phoneWriteKey []byte
+
 func TestPairThroughRelay(t *testing.T) {
 	url, tc := startRelay(t)
 	srv, phone := newKey(t), newKey(t)
+	phoneWriteKey = writeKey(t)
 	offer, ps, pp, es, ep := pairBoth(t, url, tc, srv, phone, srv.ID, true)
 	if es != nil || ep != nil {
 		t.Fatalf("pair: %v / %v", es, ep)
 	}
-	if offer.Name != "Clif's[2J iPhone" || offer.ID != phone.ID || offer.Version != "1.0" {
+	if offer.Name != "Clif's[2J iPhone" || offer.ID != phone.ID || offer.Version != "1.0" || !bytes.Equal(offer.WriteKey, phoneWriteKey) {
 		t.Fatalf("offer %+v", offer)
 	}
-	if !ps.Key.Equal(pub(phone)) || !pp.Key.Equal(pub(srv)) || pp.Name != "studio" {
+	if !ps.Key.Equal(pub(phone)) || !pp.Key.Equal(pub(srv)) || pp.Name != "studio" || !bytes.Equal(ps.WriteKey, phoneWriteKey) {
 		t.Fatalf("paired %+v / %+v", ps, pp)
 	}
+	// A write key that isn't a P-256 point is none: the device views.
+	phoneWriteKey = []byte("not a key")
+	offer, ps, _, es, ep = pairBoth(t, url, tc, srv, newKey(t), srv.ID, true)
+	if es != nil || ep != nil || offer.WriteKey != nil || ps.WriteKey != nil {
+		t.Fatalf("a bad write key: %+v %+v %v %v", offer, ps, es, ep)
+	}
+	phoneWriteKey = nil
 }
 
 func TestPairDeclinedOnServer(t *testing.T) {
@@ -266,7 +315,8 @@ func TestLink(t *testing.T) {
 	url, tc := startRelay(t)
 	peerDir, devDir, srv := testHome(t)
 	phone := newKey(t)
-	if _, err := Add(devDir, pub(phone), "iPhone", url); err != nil {
+	wk := writeKey(t)
+	if _, err := Add(devDir, pub(phone), wk, "iPhone", url); err != nil {
 		t.Fatal(err)
 	}
 	m := Start(Options{Dir: devDir, PeerDir: peerDir, Serve: echo, Logf: t.Logf, RelayTLS: tc,
@@ -302,12 +352,20 @@ func TestLink(t *testing.T) {
 		t.Fatalf("echo %q", got)
 	}
 
-	// A level the release doesn't enable runs at view; the status says
-	// both.
+	// Answer reaches the open link; a level the release doesn't enable
+	// runs at view; the status says both.
+	SetLevel(devDir, "iPhone", LevelAnswer)
+	m.Reload()
+	if got := line(); got != "iPhone answer" {
+		t.Fatalf("after answer %q", got)
+	}
 	SetLevel(devDir, "iPhone", LevelWrite)
 	m.Reload()
 	if st := m.Status()[0]; st.Level != LevelWrite || st.Effective != LevelView || st.State != proto.LinkUp {
 		t.Fatalf("after access: %+v", st)
+	}
+	if got := line(); got != "iPhone view" {
+		t.Fatalf("after write %q", got)
 	}
 
 	// Removing the device closes its link at once.
@@ -327,7 +385,8 @@ func TestLinkRefusesAnotherKey(t *testing.T) {
 	url, tc := startRelay(t)
 	peerDir, devDir, srv := testHome(t)
 	phone, other := newKey(t), newKey(t)
-	if _, err := Add(devDir, pub(phone), "iPhone", url); err != nil {
+	wk := writeKey(t)
+	if _, err := Add(devDir, pub(phone), wk, "iPhone", url); err != nil {
 		t.Fatal(err)
 	}
 	m := Start(Options{Dir: devDir, PeerDir: peerDir, Serve: echo, RelayTLS: tc,

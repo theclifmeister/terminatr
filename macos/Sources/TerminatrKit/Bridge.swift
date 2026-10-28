@@ -96,11 +96,28 @@ public actor Bridge {
         return try await withCheckedThrowingContinuation { helloWaiter = $0 }
     }
 
-    /// Calls method m with params and returns its result.
+    /// Signs this bridge's writes when its hello says sign (a device's
+    /// link, app API 23); nil sends them unsigned, which such a bridge
+    /// refuses (device-signature).
+    public private(set) var signer: (any WriteSigner)?
+
+    public func setSigner(_ s: (any WriteSigner)?) {
+        signer = s
+    }
+
+    /// Calls method m with params and returns its result. A write to a
+    /// bridge whose hello says sign asks device.nonce first and goes
+    /// signed (WriteSigner).
     public func call<P, R>(_ m: AppAPI.Call<P, R>, _ params: P) async throws -> R {
         if let ended { throw ended }
-        let id = take()
-        let line = try request(id, m.name, params)
+        let id: Int
+        let line: Data
+        if m.write, hello?.sign == true, let signer, !SignedWrite.readsOnly(params) {
+            (id, line) = try await signedRequest(m.name, params, signer)
+        } else {
+            id = take()
+            line = try request(id, m.name, params)
+        }
         let decoder = self.decoder
         return try await withCheckedThrowingContinuation { (k: CheckedContinuation<R, any Error>) in
             calls[id] = { r in
@@ -178,6 +195,18 @@ public actor Bridge {
     private func take() -> Int {
         defer { nextID += 1 }
         return nextID
+    }
+
+    /// A write's request signed by signer: over a fresh nonce, the
+    /// method and the params' bytes as the line carries them.
+    private func signedRequest<P: Encodable>(_ method: String, _ params: P, _ signer: any WriteSigner) async throws -> (Int, Data) {
+        let nonce = try await call(AppAPI.Methods.deviceNonce).nonce
+        let body: Data? = params is AppAPI.NoParams ? nil : try encoder.encode(params)
+        let sig = try await signer.sign(SignedWrite.message(method: method, nonce: nonce, params: body ?? Data()),
+                                        why: SignedWrite.why(method))
+        if let ended { throw ended }
+        let id = take()
+        return (id, try SignedWrite.line(id: id, method: method, params: body, auth: AppAPI.Auth(nonce: nonce, sig: sig), encoder: encoder))
     }
 
     private func request<P: Encodable>(_ id: Int, _ method: String, _ params: P) throws -> Data {

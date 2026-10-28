@@ -140,6 +140,10 @@ func init() {
 		// No other setting or access joins.
 		local(MethodGuardRefusals, false, guardRefusals),
 		local(MethodGuardDecide, true, guardDecide),
+
+		// A nonce for a device's next signed write (app API 23,
+		// sign.go): only a device's bridge has it.
+		deviceOnly(local(MethodDeviceNonce, false, deviceNonce)),
 	} {
 		methods[m.Name] = m
 	}
@@ -244,6 +248,12 @@ func local[AP, AR any](name string, write bool, f func(*bridge, AP) (AR, error))
 	m := Method{Name: name, Write: write, Result: reflect.TypeFor[AR]()}
 	m.toServer, m.Params = paramsOf(func(ap AP) AP { return ap })
 	m.local = func(b *bridge, params any) (any, error) { return f(b, params.(AP)) }
+	return m
+}
+
+// deviceOnly is m for devices' bridges alone (Method.device).
+func deviceOnly(m Method) Method {
+	m.device = true
 	return m
 }
 

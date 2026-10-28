@@ -103,10 +103,12 @@ public enum DevicePairing {
     /// minutes for a mated pair room, which the user's yes is within.
     public static let timeout = Duration.seconds(120)
 
-    /// Joins the pairing code names as identity, with the device's name
-    /// and the app's version. It returns once the server's user said yes.
+    /// Joins the pairing code names as identity, with the device's name,
+    /// the app's version and its write key (an uncompressed P-256 point,
+    /// which signs its acts; nil for none: the server lets it only view).
+    /// It returns once the server's user said yes.
     public static func join(
-        _ code: PairingCode, as identity: LinkIdentity, name: String, version: String,
+        _ code: PairingCode, as identity: LinkIdentity, name: String, version: String, writeKey: Data? = nil,
         group: EventLoopGroup = NIOTSEventLoopGroup.singleton
     ) async throws -> Server {
         let (lines, sink) = AsyncThrowingStream<Data, any Error>.makeStream()
@@ -144,7 +146,7 @@ public enum DevicePairing {
         defer { link.close() }
         return try await withThrowingTaskGroup(of: Server.self) { g in
             g.addTask {
-                try await exchange(link, code: code, identity: identity, keys: keys, name: name, version: version)
+                try await exchange(link, code: code, identity: identity, keys: keys, name: name, version: version, writeKey: writeKey)
             }
             g.addTask {
                 try await Task.sleep(for: timeout)
@@ -156,7 +158,7 @@ public enum DevicePairing {
     }
 
     private static func exchange(_ link: LinkTransport, code: PairingCode, identity: LinkIdentity, keys: PairKeys,
-                                 name: String, version: String) async throws -> Server {
+                                 name: String, version: String, writeKey: Data?) async throws -> Server {
         guard let serverKey = keys.server else { throw LinkError.notPinned }
         let serverID = LinkIdentity.id(of: serverKey)
         guard serverID != identity.id else { throw LinkError.protocolError("that's this phone's own pairing") }
@@ -180,7 +182,7 @@ public enum DevicePairing {
         guard let p = theirs.proof, p == proof(code.secret, role: "pair", pairer: serverID, joiner: identity.id, exp: exp) else {
             throw LinkError.badCode
         }
-        try send(Message(name: name, version: version))
+        try send(Message(name: name, version: version, writeKey: writeKey))
         let about = try await recv()
         guard about.proof == nil, about.ok == nil else { throw LinkError.protocolError("the server sent something unexpected") }
         // The code named the server: nothing to confirm on this side.
@@ -198,6 +200,12 @@ public enum DevicePairing {
         var name: String?
         var version: String?
         var ok: Bool?
+        var writeKey: Data?
+
+        enum CodingKeys: String, CodingKey {
+            case proof, name, version, ok
+            case writeKey = "write_key"
+        }
     }
 
     /// The pair room a device code's secret names (peer.pairRoom).

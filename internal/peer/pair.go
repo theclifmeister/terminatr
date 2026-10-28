@@ -231,12 +231,17 @@ type Offer struct {
 	Version string // its tm release
 	ID      ID
 	Check   string
+	// WriteKey is a device's write key as it sent it (unchecked), for
+	// PurposeDevice only.
+	WriteKey []byte
 }
 
 // Paired is the other server, both people having said yes.
 type Paired struct {
 	Name string
 	Key  ed25519.PublicKey
+	// WriteKey is the key a device signs its writes with (Offer's).
+	WriteKey []byte
 }
 
 // PairOptions configure a pairing.
@@ -255,6 +260,9 @@ type PairOptions struct {
 	// Expect, when set, is the only key the joiner takes: the server id
 	// a device's code carries, so the camera is the check.
 	Expect *ID
+	// WriteKey is sent with Name and Version: a device's key for signed
+	// writes (PurposeDevice only).
+	WriteKey []byte
 }
 
 // Pairing errors people see.
@@ -330,6 +338,8 @@ type pairMsg struct {
 	Name    string `json:"name,omitempty"`
 	Version string `json:"version,omitempty"`
 	OK      *bool  `json:"ok,omitempty"`
+	// WriteKey is a device's, beside its name (PurposeDevice).
+	WriteKey []byte `json:"write_key,omitempty"`
 }
 
 func runPair(raw net.Conn, id *Identity, t Secret, role string, o PairOptions) (*Paired, error) {
@@ -395,7 +405,7 @@ func runPair(raw net.Conn, id *Identity, t Secret, role string, o PairOptions) (
 	if !hmac.Equal(m.Proof, pairProof(t, o.Purpose, otherRole, pairer, joiner, exp)) {
 		return nil, ErrBadCode
 	}
-	if err := enc.Encode(pairMsg{Name: o.Name, Version: o.Version}); err != nil {
+	if err := enc.Encode(pairMsg{Name: o.Name, Version: o.Version, WriteKey: o.WriteKey}); err != nil {
 		return nil, err
 	}
 	if m, err = recv(); err != nil {
@@ -409,6 +419,8 @@ func runPair(raw net.Conn, id *Identity, t Secret, role string, o PairOptions) (
 	offer := Offer{Name: textsafe.Line(m.Name, maxNameRunes), Version: textsafe.Line(m.Version, maxVersionRunes), ID: otherID}
 	if o.Purpose == "" {
 		offer.Check = CheckDigits(pairer, joiner)
+	} else {
+		offer.WriteKey = m.WriteKey
 	}
 	yes, err := o.Confirm(offer)
 	if err != nil {
@@ -429,7 +441,7 @@ func runPair(raw net.Conn, id *Identity, t Secret, role string, o PairOptions) (
 	if !*m.OK {
 		return nil, ErrPeerNo
 	}
-	return &Paired{Name: offer.Name, Key: other}, nil
+	return &Paired{Name: offer.Name, Key: other, WriteKey: offer.WriteKey}, nil
 }
 
 // anyKey takes the other end's one Ed25519 certificate, whatever its key,
