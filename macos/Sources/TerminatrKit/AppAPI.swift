@@ -6,7 +6,7 @@ import Foundation
 /// The terminatr app API (docs/SPEC.md §3.8): what tm app bridge answers.
 public enum AppAPI {
     /// The app API version this app was generated against.
-    public static let version = 26
+    public static let version = 27
 
     public struct AdoptRequestParams: Codable, Sendable, Hashable {
         public var id: String
@@ -170,8 +170,9 @@ public enum AppAPI {
         public var relay: String
         public var writeKey: Bool
         public var link: DeviceLink?
+        public var lastUp: Date?
 
-        public init(name: String, id: String, short: String, level: String, effective: String, relay: String, writeKey: Bool = false, link: DeviceLink? = nil) {
+        public init(name: String, id: String, short: String, level: String, effective: String, relay: String, writeKey: Bool = false, link: DeviceLink? = nil, lastUp: Date? = nil) {
             self.name = name
             self.id = id
             self.short = short
@@ -180,6 +181,7 @@ public enum AppAPI {
             self.relay = relay
             self.writeKey = writeKey
             self.link = link
+            self.lastUp = lastUp
         }
 
         enum CodingKeys: String, CodingKey {
@@ -191,6 +193,7 @@ public enum AppAPI {
             case relay
             case writeKey = "write_key"
             case link
+            case lastUp = "last_up"
         }
     }
 
@@ -2860,6 +2863,7 @@ extension AppAPI.Device {
         self.relay = try c.decode(String.self, forKey: .relay)
         self.writeKey = try c.decodeIfPresent(Bool.self, forKey: .writeKey) ?? false
         self.link = try c.decodeIfPresent(AppAPI.DeviceLink.self, forKey: .link)
+        self.lastUp = try c.decodeIfPresent(Date.self, forKey: .lastUp)
     }
 }
 

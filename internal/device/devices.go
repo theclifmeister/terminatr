@@ -20,6 +20,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/theclifmeister/terminatr/internal/home"
@@ -101,6 +102,10 @@ type Device struct {
 	// phone it lives in the Secure Enclave and signs with no
 	// prompt. Without one the device acts on nothing.
 	WriteKey []byte `json:"write_key,omitempty"`
+	// LastUp is when the device's link was last up: the server sets it
+	// when the link comes up and when it drops, so it outlives a
+	// restart. Zero before the device ever linked.
+	LastUp time.Time `json:"last_up,omitzero"`
 }
 
 // WriteKeySize is a write key's length: an uncompressed P-256 point
@@ -331,7 +336,7 @@ func Add(dir string, key ed25519.PublicKey, writeKey []byte, name, relayURL stri
 		for _, q := range devices {
 			switch {
 			case q.Key.Equal(key):
-				d.Level = q.Level
+				d.Level, d.LastUp = q.Level, q.LastUp
 			case strings.EqualFold(q.Name, name):
 				return nil, &TakenError{name}
 			default:
@@ -385,6 +390,20 @@ func SetLevel(dir, name, level string) (Device, error) {
 		return devices, nil
 	})
 	return d, err
+}
+
+// SetLastUp notes that the device with id was linked at t; a device no
+// longer there is no error, and an earlier t than the one kept changes
+// nothing.
+func SetLastUp(dir string, id peer.ID, t time.Time) error {
+	return change(dir, func(devices []Device) ([]Device, error) {
+		for i := range devices {
+			if devices[i].ID() == id && t.After(devices[i].LastUp) {
+				devices[i].LastUp = t.UTC().Truncate(time.Second)
+			}
+		}
+		return devices, nil
+	})
 }
 
 // Rename gives the device called name the name to.

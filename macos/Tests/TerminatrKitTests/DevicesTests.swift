@@ -2,9 +2,10 @@ import Foundation
 import Testing
 @testable import TerminatrKit
 
-private func phone(level: String = "view", effective: String? = nil, writeKey: Bool = true, link: AppAPI.DeviceLink? = nil) -> AppAPI.Device {
+private func phone(level: String = "view", effective: String? = nil, writeKey: Bool = true, link: AppAPI.DeviceLink? = nil,
+                   lastUp: Date? = nil) -> AppAPI.Device {
     AppAPI.Device(name: "Clif's iPhone", id: "4f2a91c3", short: "4F2A-91C3", level: level, effective: effective ?? level,
-                  relay: "relay.example", writeKey: writeKey, link: link)
+                  relay: "relay.example", writeKey: writeKey, link: link, lastUp: lastUp)
 }
 
 /// Settings › Devices needs app API 26 and its methods.
@@ -26,6 +27,10 @@ private func phone(level: String = "view", effective: String? = nil, writeKey: B
     #expect(DeviceWords.link(phone(link: .init(state: "up", since: now.addingTimeInterval(-30))), running: true, now: now) == "Connected just now")
     #expect(DeviceWords.link(phone(link: .init(state: "up", since: now.addingTimeInterval(-600))), running: true, now: now) == "Connected for 10 min")
     #expect(DeviceWords.link(phone(link: .init(state: "offline", reason: "peer", since: now)), running: true, now: now) == "Waiting for it")
+    // Linked before (app API 27): when it was last.
+    let away = AppAPI.DeviceLink(state: "offline", reason: "peer", since: now)
+    #expect(DeviceWords.link(phone(link: away, lastUp: now.addingTimeInterval(-7_500)), running: true, now: now) == "Last seen 2 h 5 min ago")
+    #expect(DeviceWords.link(phone(link: away, lastUp: now.addingTimeInterval(-20)), running: true, now: now) == "Last seen just now")
     #expect(DeviceWords.link(phone(link: .init(state: "offline", reason: "relay", since: now, error: "dial: refused")), running: true, now: now) == "Offline: dial: refused")
     #expect(DeviceWords.link(phone(link: .init(state: "connecting", since: now)), running: true, now: now) == "Connecting")
 }

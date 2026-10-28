@@ -111,7 +111,9 @@ type Devices struct {
 // Device is a paired device: its name, id (and short id), level and
 // the one its link runs at (Effective: view without a write key, or for
 // a level this release doesn't enable), its relay's host, whether it
-// has a write key, and its link while a server runs it.
+// has a write key, its link while a server runs it, and when its link
+// was last up (app API 27; zero before it ever linked): the server's
+// while it runs, else as the devices keep it.
 type Device struct {
 	Name      string      `json:"name"`
 	ID        string      `json:"id"`
@@ -121,6 +123,7 @@ type Device struct {
 	Relay     string      `json:"relay"`
 	WriteKey  bool        `json:"write_key,omitempty"`
 	Link      *DeviceLink `json:"link,omitempty"`
+	LastUp    time.Time   `json:"last_up,omitzero"`
 }
 
 // DeviceLink is a device's link: up, offline (Reason peer: the server
@@ -232,6 +235,9 @@ func deviceList(b *bridge, _ struct{}) (Devices, error) {
 		ad := deviceOf(d)
 		if l, ok := links[ad.ID]; ok {
 			ad.Link = &DeviceLink{State: l.State, Reason: l.Reason, Since: l.Since, Error: l.Error}
+			if l.LastUp.After(ad.LastUp) {
+				ad.LastUp = l.LastUp
+			}
 		}
 		out.Devices = append(out.Devices, ad)
 	}
@@ -240,7 +246,7 @@ func deviceList(b *bridge, _ struct{}) (Devices, error) {
 
 func deviceOf(d device.Device) Device {
 	return Device{Name: d.Name, ID: d.ID().String(), Short: d.ID().Short(), Level: d.Level, Effective: d.Effective(),
-		Relay: peer.RelayHost(d.Relay), WriteKey: d.WriteKey != nil}
+		Relay: peer.RelayHost(d.Relay), WriteKey: d.WriteKey != nil, LastUp: d.LastUp}
 }
 
 // devicesError is a registry error as the device methods answer it,
