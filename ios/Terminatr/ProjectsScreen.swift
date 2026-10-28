@@ -78,6 +78,7 @@ struct ProjectScreen: View {
                                     state: .of(coordinator: model.coordinatorSession(slug), in: p), dormant: dormant)
                     }
                 }
+                pages(p)
                 Section("Threads") {
                     ForEach(SidebarTree.threads(of: p) { model.session($0) }, id: \.record.id) { t in
                         NavigationLink(value: Route.session(SessionRef(project: slug, thread: t.record.id))) {
@@ -92,6 +93,35 @@ struct ProjectScreen: View {
         .refreshable { await model.refresh() }
         .navigationTitle(slug)
         .backdrop()
+    }
+
+    /// The project's read-only pages, as the Mac's beside its dashboard:
+    /// Memory and Library with a tm that reads them.
+    private func pages(_ p: AppAPI.Project) -> some View {
+        let pages = model.pages
+        let board = [Dashboard.onDeck(p).count, Dashboard.backlog(p).count, model.listsDone ? Dashboard.doneCount(p) : 0]
+        return Section("Project") {
+            NavigationLink(value: Route.overview(slug)) { Label("Overview", systemImage: "info.circle") }
+            NavigationLink(value: Route.board(slug)) {
+                LabeledContent {
+                    Text(Self.boardWords(board)).font(theme.mono(.caption))
+                } label: {
+                    Label("Board", systemImage: "list.bullet.rectangle")
+                }
+            }
+            if pages.contains(.memory) {
+                NavigationLink(value: Route.memory(slug)) { Label("Memory", systemImage: "brain") }
+            }
+            if pages.contains(.library) {
+                NavigationLink(value: Route.library(slug)) { Label("Library", systemImage: "books.vertical") }
+            }
+        }
+        .font(theme.body(.body))
+    }
+
+    /// "2 on deck · 3 backlog · 9 done", the empty ones left out.
+    static func boardWords(_ n: [Int]) -> String {
+        zip(n, ["on deck", "backlog", "done"]).filter { $0.0 > 0 }.map { "\($0.0) \($0.1)" }.joined(separator: " · ")
     }
 }
 
