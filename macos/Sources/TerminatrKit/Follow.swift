@@ -26,9 +26,16 @@ public struct Follow: Equatable, Sendable {
     /// follows again; scrolled up from where it was, it stops. Content
     /// that grows while the offset stays (new output, a taller bar)
     /// changes nothing: the follower is scrolled down to it.
-    public mutating func scrolled(offset: Double, visible: Double, content: Double, newest: Int?) {
+    ///
+    /// visible is the scroll view's whole height, the bars over its foot
+    /// included (ScrollGeometry's visibleRect), and inset those bars'
+    /// (contentInsets.bottom): scrolled fully down, offset + visible is
+    /// content + inset. Not containerSize: it leaves the insets out
+    /// already, and less the inset again a view at its end read as the
+    /// bars' height short of it (T807).
+    public mutating func scrolled(offset: Double, visible: Double, content: Double, inset: Double = 0, newest: Int?) {
         defer { self.offset = offset }
-        if offset + visible >= content - Self.slack {
+        if offset + visible >= content + inset - Self.slack {
             follow(newest: newest)
         } else if let was = self.offset, offset < was - 1 {
             following = false
