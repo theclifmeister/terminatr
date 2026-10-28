@@ -114,3 +114,26 @@ func demoBridge() async throws -> Bridge {
         _ = try await b.call(AppAPI.Methods.libraryList, AppAPI.ProjectParams(project: "a"))
     }
 }
+
+/// The demo shows the phone's write-level controls (T821): its hello
+/// lists the write methods, New Task's templates come recorded, and
+/// each write is refused as the demo's, not sent.
+@Test func demoOffersWrites() async throws {
+    let b = try await demoBridge()
+    let hello = try #require(await b.hello)
+    #expect(hello.level == "write" && !hello.sign)
+    for m in [AppAPI.Methods.sessionPrompt.name, AppAPI.Methods.sessionKeys.name, AppAPI.Methods.taskAdd.name,
+              AppAPI.Methods.taskDelegate.name, AppAPI.Methods.projectOpen.name] {
+        #expect(hello.methods.contains(m), "\(m)")
+    }
+    #expect(Compatibility.offersTemplates(hello))
+    let ts = try await b.call(AppAPI.Methods.taskTemplates, AppAPI.ProjectParams(project: "acme-web")).templates
+    #expect(ts.map(\.name) == ["bug", "spike", "chore"])
+    #expect(NewTaskForm.title("Login loops", with: ts.first) == "Fix: Login loops")
+    do {
+        _ = try await b.call(AppAPI.Methods.taskDelegate, AppAPI.TaskParams(project: "acme-web", task: "T17"))
+        Issue.record("the demo delegated")
+    } catch let e as AppAPI.Error {
+        #expect(e.code == DemoTransport.refused)
+    }
+}

@@ -6,8 +6,9 @@ import TerminatrUI
 /// last items when the server pages, transcript.page for the earlier
 /// ones on a tap), as the Mac's conversation tab draws it: prompts, the agent's text,
 /// tool calls folded into runs (ToolRunHeader, a tap unfolds one), and
-/// the open question (QuestionSummary) or approval at the end. Read
-/// only: answering comes with the device link's answer level.
+/// the open question (QuestionSummary) or approval at the end. At the
+/// write level the prompt box and the terminal's keys are under it
+/// (PhoneComposer); below it, nothing.
 struct ConversationScreen: View {
     @Environment(PhoneModel.self) private var model
     @Environment(\.theme) private var theme
@@ -95,14 +96,9 @@ struct ConversationScreen: View {
                             .padding(.horizontal, 16)
                             .padding(.bottom, 8)
                     }
-                    Label("Read only: answer and send from your Mac for now", systemImage: "eye")
-                        .font(theme.body(.footnote))
-                        .foregroundStyle(theme.muted)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 8)
-                        // To the bottom edge only: on iPhone Duo (T824) the
-                        // bars sit on a side, which this stops at.
-                        .background(.bar, ignoresSafeAreaEdges: .bottom)
+                    if model.writes, let id {
+                        PhoneComposer(ref: ref, session: id, running: session?.state == "working", queued: session?.queuedPrompts ?? 0)
+                    }
                 }
             }
         }

@@ -55,7 +55,7 @@ func TestBridgeDevices(t *testing.T) {
 	}
 	var list appapi.Devices
 	if err := c.Call(appapi.MethodDeviceList, nil, &list); err != nil || len(list.Devices) != 1 || !list.Running ||
-		!slices.Equal(list.Levels, []string{device.LevelView, device.LevelAnswer}) || list.Relay == "" {
+		!slices.Equal(list.Levels, device.Levels) || list.Relay == "" {
 		t.Fatalf("device.list: %+v %v", list, err)
 	}
 	if d := list.Devices[0]; d.Name != "iPhone" || d.Level != device.LevelView || d.WriteKey || len(d.Short) != 9 {
@@ -127,14 +127,14 @@ func TestBridgeDevices(t *testing.T) {
 		t.Errorf("device.pair.wait after a no: %v", err)
 	}
 
-	// The level: answer needs a write key; write isn't in this release.
+	// The level: above view needs a write key; every level runs.
 	var d appapi.Device
 	for _, bad := range []struct {
 		params appapi.DeviceAccessParams
 		code   string
 	}{
 		{appapi.DeviceAccessParams{Device: "iPhone", Level: device.LevelAnswer}, "no-write-key"},
-		{appapi.DeviceAccessParams{Device: id, Level: device.LevelWrite}, "level-not-yet"},
+		{appapi.DeviceAccessParams{Device: "iPhone", Level: device.LevelWrite}, "no-write-key"},
 		{appapi.DeviceAccessParams{Device: id, Level: "admin"}, appapi.ErrBadParams},
 		{appapi.DeviceAccessParams{Device: "Android", Level: device.LevelView}, "unknown-device"},
 	} {
@@ -145,6 +145,10 @@ func TestBridgeDevices(t *testing.T) {
 	if err := c.Call(appapi.MethodDeviceAccess, appapi.DeviceAccessParams{Device: id, Level: device.LevelAnswer}, &d); err != nil ||
 		d.Level != device.LevelAnswer || d.Effective != device.LevelAnswer {
 		t.Errorf("device.access answer: %+v %v", d, err)
+	}
+	if err := c.Call(appapi.MethodDeviceAccess, appapi.DeviceAccessParams{Device: id, Level: device.LevelWrite}, &d); err != nil ||
+		d.Level != device.LevelWrite || d.Effective != device.LevelWrite {
+		t.Errorf("device.access write: %+v %v", d, err)
 	}
 	if err := c.Call(appapi.MethodDeviceName, appapi.DeviceNameParams{Device: id, Name: "iphone"}, nil); code(err) != "name-taken" {
 		t.Errorf("device.name to a taken name: %v", err)

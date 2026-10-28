@@ -273,10 +273,10 @@ func deviceAccess(b *bridge, p DeviceAccessParams) (Device, error) {
 		return Device{}, devicesHumanOnly()
 	}
 	if !device.ValidLevel(p.Level) {
-		return Device{}, &Error{Code: ErrBadParams, Message: `device.access: level is "view" or "answer"`}
+		return Device{}, &Error{Code: ErrBadParams, Message: `device.access: level is "view", "answer" or "write"`}
 	}
 	if !device.Enabled(p.Level) {
-		return Device{}, &Error{Code: "level-not-yet", Message: "level " + p.Level + " isn't in this release: devices go up to answer for now"}
+		return Device{}, &Error{Code: "level-not-yet", Message: "level " + p.Level + " isn't in this release"}
 	}
 	dir, _ := b.deviceDirs()
 	d, err := device.SetLevel(dir, p.Device, p.Level)

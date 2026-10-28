@@ -681,7 +681,7 @@ $ tm device remove "work phone"
 Removed Work phone; its link closes now and its key is no longer taken. On the phone, Forget this server deletes its keys.
 ```
 
-A device is `waiting for it` while the app isn't open: the server keeps a connection waiting in the device's room on the relay (one per device; the relay lets one address wait in 16 rooms). Removing a device cuts it off at once. Its acts are journaled as `human (iphone: NAME)`; it never answers a prompt to run a command outside the sandbox. `tm device access NAME view|answer|write` is there for later stages: only `view` is enabled now. Rotating this server's key (`tm peer rotate`) means every device pairs again (SPEC §16.15).
+A device is `waiting for it` while the app isn't open: the server keeps a connection waiting in the device's room on the relay (one per device; the relay lets one address wait in 16 rooms). Removing a device cuts it off at once. Its acts are journaled as `human (iphone: NAME)`; it never answers a prompt to run a command outside the sandbox. `tm device access NAME view|answer|write` sets what it may do: `view` reads, `answer` answers questions and approvals and accepts or sends back tasks, `write` does what the Mac app does (prompts, new tasks, delegating, starting a coordinator, terminal keys and the rest); above `view` it needs the write key it made at pairing. Rotating this server's key (`tm peer rotate`) means every device pairs again (SPEC §16.15).
 
 ### The servers' side
 

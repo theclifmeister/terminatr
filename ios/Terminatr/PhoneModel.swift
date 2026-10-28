@@ -283,6 +283,52 @@ final class PhoneModel {
         await reread()
     }
 
+    // MARK: Writes (the write level, T821), as the Mac app's
+
+    /// Whether the phone sends prompts here (the write level).
+    var writes: Bool { can(AppAPI.Methods.sessionPrompt.name) }
+
+    /// Sends a prompt to session: queued (mode ""), or steered into the
+    /// running turn ("now").
+    func prompt(_ session: String, text: String, mode: String = "") async throws -> AppAPI.PromptResult {
+        let r = try await connected().call(AppAPI.Methods.sessionPrompt, AppAPI.PromptParams(id: session, text: text, mode: mode))
+        await reread()
+        return r
+    }
+
+    /// Writes data to session's terminal as if typed (TerminalKey).
+    func keys(_ session: String, _ data: String) async throws {
+        _ = try await connected().call(AppAPI.Methods.sessionKeys, AppAPI.KeysParams(id: session, data: data))
+    }
+
+    /// Whether this tm offers task templates for New Task (app API 20).
+    var offersTemplates: Bool { hello.map(Compatibility.offersTemplates) ?? false }
+
+    /// The task templates of the mods that run in project; none with an
+    /// older tm.
+    func templates(_ project: String) async throws -> [AppAPI.Template] {
+        guard offersTemplates else { return [] }
+        return try await connected().call(AppAPI.Methods.taskTemplates, AppAPI.ProjectParams(project: project)).templates
+    }
+
+    /// Adds a task to project's board as the user (task.add).
+    func addTask(_ form: NewTaskForm, project: String) async throws -> AppAPI.TaskAdded {
+        try await connected().call(AppAPI.Methods.taskAdd, form.params(project: project))
+    }
+
+    /// Asks project's coordinator to delegate task: false when it was
+    /// asked already.
+    func delegate(project: String, task: String) async throws -> Bool {
+        try await connected().call(AppAPI.Methods.taskDelegate, AppAPI.TaskParams(project: project, task: task)).asked
+    }
+
+    /// Starts project's coordinator unless it runs (project.open, at the
+    /// Mac's size), and lists the sessions again so it shows.
+    func startCoordinator(_ project: String) async throws {
+        _ = try await connected().call(AppAPI.Methods.projectOpen, AppAPI.ProjectOpenParams(project: project, cols: 120, rows: 36))
+        await reread()
+    }
+
     /// The sessions again, after an act: their needs change at once.
     private func reread() async {
         guard let b = bridge, let l = try? await b.call(AppAPI.Methods.sessionList) else { return }
