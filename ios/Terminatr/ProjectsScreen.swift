@@ -138,9 +138,9 @@ struct PeerProjectScreen: View {
     var body: some View {
         List {
             if let p = model.peers.first(where: { $0.alias == alias })?.projects.first(where: { $0.project == project }) {
-                ForEach(SidebarTree.sessions(of: p, alias: alias), id: \.ref) { s, ref, task in
+                ForEach(SidebarTree.sessions(of: p, alias: alias), id: \.ref) { s, ref, task, title in
                     NavigationLink(value: Route.session(ref)) {
-                        SessionLine(label: ref.isCoordinator ? "Coordinator" : ref.thread, ref: task.isEmpty ? nil : task,
+                        SessionLine(label: ref.isCoordinator ? "Coordinator" : title.isEmpty ? ref.thread : title, ref: task.isEmpty ? nil : task,
                                     state: .of(peer: s))
                     }
                 }
