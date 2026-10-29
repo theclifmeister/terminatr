@@ -30,8 +30,8 @@ func (f *fakeSource) ApplyModDefaults(id string) ([]mod.Suggestion, error) {
 func (f *fakeSource) SetModGrants(id string, grants []string) error {
 	return f.human().SetModGrants(id, grants)
 }
-func (f *fakeSource) SetModSetting(id, key string, value any) error {
-	return f.human().SetModSetting(id, key, value)
+func (f *fakeSource) SetModSetting(id, slug, key string, value any) error {
+	return f.human().SetModSetting(id, slug, key, value)
 }
 func (f *fakeSource) FetchModUpdate(id string) (*mod.Staged, error) {
 	return f.human().FetchModUpdate(id)
@@ -341,10 +341,10 @@ func TestModsTextSetting(t *testing.T) {
 
 	// Typed text stays on one line; the write refuses a control
 	// character or a value too long all the same.
-	if err := src.SetModSetting("review-age", "wording", "two\nlines"); err == nil || !strings.Contains(err.Error(), "one line") {
+	if err := src.SetModSetting("review-age", "", "wording", "two\nlines"); err == nil || !strings.Contains(err.Error(), "one line") {
 		t.Errorf("a newline: %v", err)
 	}
-	if err := src.SetModSetting("review-age", "wording", strings.Repeat("a", mod.MaxTextSetting+1)); err == nil {
+	if err := src.SetModSetting("review-age", "", "wording", strings.Repeat("a", mod.MaxTextSetting+1)); err == nil {
 		t.Error("a value over the cap was saved")
 	}
 	edit("a\tb")
@@ -585,6 +585,58 @@ func TestModsProjectLine(t *testing.T) {
 	}
 }
 
+// TestModsProjectSettings: a project's Settings tab has a row per user
+// mod with settings that runs for it; enter opens its settings for the
+// project, where a key it doesn't set follows all projects, + writes the
+// project's own value and X follows all projects again (mod API 1.11).
+func TestModsProjectSettings(t *testing.T) {
+	src, m := modsDash(t)
+	press(m, "esc")
+	row := func() (setting, bool) {
+		rows := m.projectRows("beta")
+		i := slices.IndexFunc(rows, func(r setting) bool { return r.label == "Review age settings" })
+		if i < 0 {
+			return setting{}, false
+		}
+		return rows[i], true
+	}
+	if _, ok := row(); ok {
+		t.Fatal("a row for a mod that is off")
+	}
+	if err := mod.Enable(caller.Caller{Kind: caller.Human}, "review-age", ""); err != nil {
+		t.Fatal(err)
+	}
+	src.loadMods()
+	m.setData(src.data)
+	r, ok := row()
+	if !ok || r.value(m) != "all projects" {
+		t.Fatalf("row %+v %v", r, ok)
+	}
+	if slices.ContainsFunc(m.projectRows("beta"), func(r setting) bool { return r.label == "Ticker settings" }) {
+		t.Error("a built-in mod's row")
+	}
+	r.change(m)
+	if out := screen(m); !strings.Contains(out, "Review age · settings · beta") || !strings.Contains(out, "all projects") {
+		t.Fatalf("the project's page:\n%s", out)
+	}
+	modAct(t, m, src, "+")
+	md := modState(t, src, "review-age")
+	if md.SettingsFor("beta")["warn_after_hours"] != int64(25) || md.Settings["warn_after_hours"] != int64(24) {
+		t.Fatalf("+ set %v over %v (%s)", md.ProjectSettings, md.Settings, m.msg)
+	}
+	data, _ := os.ReadFile(filepath.Join(os.Getenv("TERMINATR_HOME"), "config.toml"))
+	if !strings.Contains(string(data), "[projects.beta.mods.review-age.settings]\nwarn_after_hours = 25\n") {
+		t.Errorf("config.toml:\n%s", data)
+	}
+	if r, _ := row(); r.value(m) != "1 of its own" {
+		t.Errorf("row after +: %q", r.value(m))
+	}
+	modAct(t, m, src, "X")
+	if md := modState(t, src, "review-age"); len(md.ProjectSettings["beta"]) != 0 || m.msg != "warn_after_hours: follows all projects" {
+		t.Errorf("X left %v (%s)", md.ProjectSettings, m.msg)
+	}
+}
+
 // TestModsDataAndBuiltin: an enabled data mod whose file doesn't load
 // is ▲ with what doesn't load; a built-in mod says it is built in, and
 // one tm can't do without isn't turned off.
@@ -699,7 +751,7 @@ func TestModsSidebarHidden(t *testing.T) {
 // TestModSettingRowCleansDefault: a string default is the mod's text,
 // shown cleaned and quoted like its label.
 func TestModSettingRowCleansDefault(t *testing.T) {
-	r := modSettingRow("m", "k", mod.Setting{Type: mod.SettingString, Default: "a\x1b]52;c;eA==\x07b", Label: "Wor\x1b[2Jding"})
+	r := modSettingRow("m", "", "k", mod.Setting{Type: mod.SettingString, Default: "a\x1b]52;c;eA==\x07b", Label: "Wor\x1b[2Jding"})
 	if want := `Wor[2Jding. Default "a]52;c;eA==b".`; r.help != want {
 		t.Errorf("help = %q, want %q", r.help, want)
 	}

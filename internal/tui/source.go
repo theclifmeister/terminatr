@@ -457,10 +457,11 @@ type ModSource interface {
 	// inside an agent, as every mod change is.
 	ModAct(id, verb string) error
 	// SetModGrants sets the permissions mod id runs with, of those it
-	// asks for; SetModSetting one of its own settings, nil for its
-	// default.
+	// asks for; SetModSetting one of its own settings, for all projects
+	// or for project slug (mod API 1.11), nil for its default (or, for a
+	// project, all projects' value).
 	SetModGrants(id string, grants []string) error
-	SetModSetting(id, key string, value any) error
+	SetModSetting(id, slug, key string, value any) error
 	// FetchModUpdate stages mod id's update from its source, nil when it
 	// is up to date; ReplaceMod installs it, granting grant too (the new
 	// permissions the human accepted). The caller closes the staged copy.
