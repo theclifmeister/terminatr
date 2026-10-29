@@ -5,12 +5,14 @@ import TerminatrUI
 /// A session's conversation from its transcript (transcript.watch: its
 /// last items when the server pages, transcript.page for the earlier
 /// ones on a tap), as the Mac's conversation tab draws it: prompts, the agent's text,
-/// tool calls folded into runs (ToolRunHeader, a tap unfolds one), and
-/// the open question (QuestionSummary) or approval at the end. At the
-/// write level the prompt box and the terminal's keys are under it
-/// (PhoneComposer); below it, nothing. Opened from a need (Route.need,
-/// T826) the need's card is above it, with its buttons, and it opens
-/// scrolled to where the need was asked (Transcript.moment), marked.
+/// tool calls folded into runs (RunChip, a tap unfolds one), and what
+/// it waits on at the end as its hero (HeroCard, T848): the open
+/// question with its options as numbered rows, or the approval with
+/// its command, answered there at the answer level (NeedActs), else to
+/// read. At the write level the composer dock floats under it
+/// (PhoneComposer). Opened from a need (Route.need, T826) it opens at
+/// its end, the hero in view, and marks where the need was asked
+/// (Transcript.moment).
 struct ConversationScreen: View {
     @Environment(PhoneModel.self) private var model
     @Environment(\.theme) private var theme
@@ -49,6 +51,7 @@ struct ConversationScreen: View {
         let session = id.flatMap { id in model.sessions.first { $0.id == id } }
         let rows = Transcript.rows(transcript.entries)
         let moment = moment(rows, session)
+        let waits = need ?? model.needs.first { $0.session == id && ($0.kind == .question || $0.kind == .approval) }
         ScrollViewReader { scroll in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 12) {
@@ -62,6 +65,8 @@ struct ConversationScreen: View {
                     ForEach(rows) { row in
                         Group {
                             switch row {
+                            // The question it waits on is the hero, at the end.
+                            case .entry(let e) where e.asksUser && e.result == nil && session?.question != nil: EmptyView()
                             case .entry(let e): EntryLine(entry: e, agent: session?.agent ?? "")
                             case .tools(let run): runView(run)
                             }
@@ -71,7 +76,7 @@ struct ConversationScreen: View {
                         }
                         .id(row.id)
                     }
-                    if let session, need == nil { waiting(session) }
+                    if let session { waiting(session, need: waits) }
                     // The foot's padding is the end row's: scrolled to,
                     // it reaches the true end (T807).
                     Color.clear.frame(height: 1).padding(.bottom, 16).id("end")
@@ -88,9 +93,10 @@ struct ConversationScreen: View {
             // screen stays and Jump to latest counts it. Laid out afresh,
             // it goes back to the row the user had at the top.
             .onChange(of: Self.tail(transcript)) {
-                if seeking, restoring == nil, let m = self.moment(Transcript.rows(transcript.entries), session) {
+                if seeking, restoring == nil, self.moment(Transcript.rows(transcript.entries), session) != nil {
+                    // The hero is after the moment: the end shows both.
                     seeking = false
-                    scroll.scrollTo(m, anchor: .bottom)
+                    scroll.scrollTo("end", anchor: .bottom)
                     return
                 }
                 if let r = restoring {
@@ -130,9 +136,6 @@ struct ConversationScreen: View {
                 }
             }
         }
-        .safeAreaInset(edge: .top, spacing: 0) {
-            if let need, let session { NeedCard(need: need) { waiting(session, pinned: true) } }
-        }
         .safeAreaInset(edge: .bottom) {
             if id != nil {
                 VStack(spacing: 0) {
@@ -140,7 +143,7 @@ struct ConversationScreen: View {
                     if let busy = Busy.of(session) {
                         WorkingBar(busy: busy, activity: Activity.of(transcript, current: session?.current ?? ""))
                             .padding(.horizontal, 16)
-                            .padding(.bottom, 8)
+                            .padding(.bottom, model.writes ? 0 : 8)
                     }
                     if model.writes, let id {
                         PhoneComposer(ref: ref, session: id, running: session?.state == "working", queued: session?.queuedPrompts ?? 0,
@@ -150,8 +153,6 @@ struct ConversationScreen: View {
             }
         }
         .refreshable { await model.refresh() }
-        .navigationTitle(model.title(ref))
-        .navigationBarTitleDisplayMode(.inline)
         .backdrop()
         // A redial is a new bridge: the stream opens again on it.
         .task(id: "\(id ?? "")/\(model.generation)") { await watch(id) }
@@ -199,7 +200,7 @@ struct ConversationScreen: View {
                     if open { unfolded.remove(run.id) } else { unfolded.insert(run.id) }
                 }
             } label: {
-                ToolRunHeader(run: run, open: open)
+                RunChip(run: run, open: open)
             }
             .buttonStyle(.plain)
             .accessibilityElement(children: .ignore)
@@ -215,37 +216,62 @@ struct ConversationScreen: View {
         }
     }
 
-    /// What the session waits on: its open question, or its dialog. A
-    /// need's card (pinned) has its buttons below.
+    /// What the session waits on, as the conversation's hero: each open
+    /// question (QuestionPlan.shown), the need's with its options to
+    /// answer, the rest to read; or its dialog, with the need's buttons.
     @ViewBuilder
-    private func waiting(_ s: AppAPI.Session, pinned: Bool = false) -> some View {
+    private func waiting(_ s: AppAPI.Session, need: Need?) -> some View {
         if let q = s.question {
             ForEach(QuestionPlan.shown(q), id: \.self) { i in
+                let item = q.questions[i]
                 let waits = "question \(s.id) \(q.since?.timeIntervalSince1970 ?? 0) \(i)"
-                if pinned, need?.answer?.index == i, model.can(AppAPI.Methods.sessionAnswer.name) {
-                    // Its options are the need's buttons, below.
-                    CardFrame(tag: QuestionPlan.tag(q, index: i), colour: theme.question, tint: theme.questionTint, waiting: waits) {
-                        Text(q.questions[i].question)
-                            .font(theme.title(.headline, .bold))
-                            .fixedSize(horizontal: false, vertical: true)
+                let word = "Asks · " + QuestionPlan.tag(q, index: i)
+                let line = Self.line("AskUserQuestion", since: q.since)
+                if let need, need.kind == .question, need.answer?.index == i, model.can(AppAPI.Methods.sessionAnswer.name) {
+                    NeedActs(need: need) { parts in
+                        HeroCard(tone: .question, symbol: Need.Kind.question.symbol, word: word, line: line, title: item.question,
+                                 note: parts.note, waiting: waits) {
+                            parts.buttons
+                        }
                     }
                 } else {
-                    QuestionSummary(menu: q, index: i, waiting: waits)
+                    HeroCard(tone: .question, symbol: Need.Kind.question.symbol, word: word, line: line, title: item.question,
+                             waiting: waits) {
+                        VStack(spacing: Spacing.item) {
+                            ForEach(Array(item.options.enumerated()), id: \.offset) { n, o in
+                                AnswerOption(key: n + 1, option: o, action: nil)
+                            }
+                        }
+                    }
                 }
             }
         }
         if s.state == "blocked", s.reason == "permission" {
-            CardFrame(tag: s.escape ? "Approval · outside the sandbox" : "Approval", colour: theme.approval, tint: theme.approvalTint, waiting: "approval \(s.id) \(transcript.pendingTool?.call ?? "")") {
-                Text(transcript.pendingTool.map { "\($0.tool): \($0.text)" } ?? "The agent asks to go on.")
-                    .font(theme.mono(.subheadline))
-                    .fixedSize(horizontal: false, vertical: true)
-                if !pinned {
-                    Text("Approve it on your Mac.")
-                        .font(theme.body(.footnote))
-                        .foregroundStyle(theme.muted)
+            let tool = transcript.pendingTool
+            let word = s.escape ? "Approval · outside the sandbox" : "Approval"
+            let line = Self.line(tool?.tool ?? "", since: need?.since)
+            let command = tool.map { "\($0.tool): \($0.text)" } ?? ""
+            let waits = "approval \(s.id) \(tool?.call ?? "")"
+            if let need, need.kind == .approval, model.can(AppAPI.Methods.sessionApprove.name) {
+                NeedActs(need: need) { parts in
+                    HeroCard(tone: .approval, symbol: Need.Kind.approval.symbol, word: word, line: line,
+                             title: parts.command.isEmpty ? "The agent asks to go on." : parts.command,
+                             command: command, note: parts.note, waiting: waits) {
+                        parts.buttons
+                    }
                 }
+            } else {
+                HeroCard(tone: .approval, symbol: Need.Kind.approval.symbol, word: word, line: line,
+                         title: "The agent asks to go on.", command: command,
+                         note: ("Approve it on your Mac.", false), waiting: waits)
             }
         }
+    }
+
+    /// A hero's line: the tool, and how long it has waited.
+    private static func line(_ tool: String, since: Date?) -> String {
+        let age = Need.age(since: since)
+        return [tool, age.isEmpty ? "" : age == "now" ? "waiting" : "waiting \(age)"].filter { !$0.isEmpty }.joined(separator: " · ")
     }
 
     private func watch(_ id: String?) async {
@@ -264,33 +290,6 @@ struct ConversationScreen: View {
         } catch {
             if !Task.isCancelled { failure = error.localizedDescription }
         }
-    }
-}
-
-/// A need's card above its conversation: what the session waits on and
-/// the need's buttons (NeedActs), scrolling on its own past a third of
-/// the screen (220 points on a short one) so the conversation stays in
-/// view.
-struct NeedCard<Waiting: View>: View {
-    @Environment(\.theme) private var theme
-    let need: Need
-    @ViewBuilder let waiting: Waiting
-    @State private var height: CGFloat = 0
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 8) {
-                waiting
-                NeedActs(need: need)
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
-        }
-        .scrollBounceBehavior(.basedOnSize)
-        .containerRelativeFrame(.vertical) { h, _ in min(height, max(h / 3, 220)) }
-        .background(.bar)
-        .overlay(alignment: .bottom) { Rectangle().fill(theme.edge).frame(height: 1) }
     }
 }
 

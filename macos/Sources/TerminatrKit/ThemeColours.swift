@@ -317,6 +317,11 @@ extension ThemeColours {
             ("a sheet card", layered(frost + [glass] + frost + [deck])),
             ("a sheet chip", layered(frost + [glass] + frost + [deck, wash(ink, Self.inkWash)])),
             ("a level chip", layered(frost + [glass] + frost + [deck, wash(good, Self.toneWash)])),
+            // The session's (T848): the header's title and a run chip on
+            // the glass, a key strip's cap (the glass with an ink wash),
+            // and the dock's Queue / Steer in its field.
+            ("a key", layered(frost + [glass, wash(ink, Self.inkWash)])),
+            ("a dock's modes", layered(frost + [deck, wash(ink, Self.inkWash)])),
         ] + [
             ("approval", approval), ("question", question), ("attention", attention),
             ("good", good), ("action", action), ("idle", idle),

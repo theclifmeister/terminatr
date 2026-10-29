@@ -8,6 +8,8 @@ public struct ComponentGallery: View {
     @Environment(\.theme) private var theme
     @State private var filter = "all"
     @State private var picked = 0
+    @State private var tab = SessionTab.conversation
+    @State private var steer = false
     /// Opened at the states and buttons, not the top: the Simulator
     /// can't scroll for a screenshot.
     let lower: Bool
@@ -43,6 +45,7 @@ public struct ComponentGallery: View {
                     paired
                     glyphs.id("states")
                     buttons
+                    session
                 }
                 .padding(.horizontal, Spacing.card)
             }
@@ -145,6 +148,41 @@ public struct ComponentGallery: View {
         }
         .padding(Spacing.card)
         .surface(.card, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+    }
+}
+
+extension ComponentGallery {
+    /// A session's pieces (T848): its header's title and switch, the
+    /// question as its hero, and the composer dock with its key strip.
+    private var session: some View {
+        VStack(alignment: .leading, spacing: Spacing.row) {
+            Text("Session").font(theme.title(.title, .bold)).foregroundStyle(theme.ink)
+            HStack {
+                SessionTitle("Product search ranking", place: "T14 · acme-web", state: Attention(word: "asks", tone: .question, why: "", waits: true))
+                Spacer(minLength: 0)
+                SessionToggle(selection: $tab)
+            }
+            HeroCard(tone: .question, symbol: Need.Kind.question.symbol, word: "Asks · Ranking", line: "AskUserQuestion · waiting 6m",
+                     title: "Which ranking should search use for products with no sales yet?") {
+                VStack(spacing: Spacing.item) {
+                    ForEach(Array(Self.options.enumerated()), id: \.offset) { i, o in
+                        AnswerOption(key: i + 1, label: o.0, detail: o.1, action: nil)
+                    }
+                }
+            }
+            DockNote("1 prompt queued")
+            KeyStrip { _ in }
+            HStack(alignment: .bottom, spacing: Spacing.item) {
+                Button {} label: { Label("Keys", systemImage: "keyboard") }.buttonStyle(.circle)
+                HStack {
+                    Text("Message T14").foregroundStyle(theme.muted).padding(.vertical, 11)
+                    Spacer(minLength: 0)
+                    DockModes([(false, "Queue"), (true, "Steer")], selection: $steer)
+                }
+                .dockField()
+                Button {} label: { Label("Send", systemImage: "arrow.up") }.buttonStyle(.send)
+            }
+        }
     }
 }
 

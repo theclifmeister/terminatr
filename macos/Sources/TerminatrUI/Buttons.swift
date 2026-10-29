@@ -14,6 +14,9 @@ public struct RoleButtonStyle: ButtonStyle {
         case ghost
         /// A header's button: a 44 pt glass circle round its symbol.
         case circle
+        /// The composer dock's send (T848): a 44 pt circle of the action
+        /// colour round its symbol, in its ink.
+        case send
     }
 
     let role: Role
@@ -28,6 +31,7 @@ extension ButtonStyle where Self == RoleButtonStyle {
     public static var secondary: RoleButtonStyle { RoleButtonStyle(role: .secondary) }
     public static var ghost: RoleButtonStyle { RoleButtonStyle(role: .ghost) }
     public static var circle: RoleButtonStyle { RoleButtonStyle(role: .circle) }
+    public static var send: RoleButtonStyle { RoleButtonStyle(role: .send) }
 }
 
 private struct RoleButton: View {
@@ -81,6 +85,14 @@ private struct RoleButton: View {
                 .foregroundStyle(theme.ink)
                 .frame(width: max(tapTarget, 44 * theme.scale), height: max(tapTarget, 44 * theme.scale))
                 .surface(.glass, in: Circle())
+        case .send:
+            configuration.label
+                .labelStyle(.iconOnly)
+                .font(.system(size: 18 * theme.scale, weight: .bold))
+                .foregroundStyle(theme.onAction)
+                .frame(width: max(tapTarget, 44 * theme.scale), height: max(tapTarget, 44 * theme.scale))
+                .background(theme.action, in: Circle())
+                .shadow(color: theme.action.opacity(0.35), radius: 8, y: 4)
         }
     }
 }

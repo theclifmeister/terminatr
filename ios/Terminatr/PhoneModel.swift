@@ -387,6 +387,27 @@ final class PhoneModel {
         return project(ref.project)?.threads.first { $0.record.id == ref.thread }?.record.title ?? ref.thread
     }
 
+    /// A ref's thread as it is named: its task's ref ("T14"), else its id.
+    func tag(_ ref: SessionRef) -> String {
+        if ref.isCoordinator { return "the coordinator" }
+        if ref.isRemote { return ref.thread }
+        return project(ref.project)?.threads.first { $0.record.id == ref.thread }?.task?.ref ?? ref.thread
+    }
+
+    /// Where a ref's session is, under its title (T848): "T14 · acme-web",
+    /// a coordinator's project, and a paired server's alias after.
+    func place(_ ref: SessionRef) -> String {
+        [ref.isCoordinator ? "" : tag(ref), ref.project, ref.server].filter { !$0.isEmpty }.joined(separator: " · ")
+    }
+
+    /// A ref's state, as its row says it: its pill in the header.
+    func attention(_ ref: SessionRef) -> Attention? {
+        if ref.isRemote { return Attention.of(peer: ref.session(in: peers)) }
+        guard let p = project(ref.project) else { return nil }
+        if ref.isCoordinator { return Attention.of(coordinator: coordinatorSession(ref.project), in: p) }
+        return p.threads.first { $0.record.id == ref.thread }.map(attention)
+    }
+
     // MARK: A project's pages, read only, as the Mac app reads them
 
     /// The pages this tm has (Memory and Library need app API 21).

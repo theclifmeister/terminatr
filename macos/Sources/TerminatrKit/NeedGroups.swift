@@ -69,6 +69,11 @@ extension Need {
     /// How long it has waited, short, as a card's corner says it: "now",
     /// "4m", "2h", "3d"; "" when unknown.
     public func age(now: Date = Date()) -> String {
+        Self.age(since: since, now: now)
+    }
+
+    /// The same of anything waiting since then (a session's question, T848).
+    public static func age(since: Date?, now: Date = Date()) -> String {
         guard let since else { return "" }
         let s = max(0, Int(now.timeIntervalSince(since)))
         switch s {
