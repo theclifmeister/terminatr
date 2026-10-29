@@ -96,7 +96,9 @@ import Testing
 // T845: a StateGlyph is filled for what waits on the user, and each
 // tone is spoken, so its colour is never the only sign.
 @Test func toneGlyphs() {
-    #expect([Attention.Tone.approval, .question, .attention, .review].allSatisfy(\.waits))
-    #expect(![Attention.Tone.working, .idle, .done].contains(where: \.waits))
+    let waiting: [Attention.Tone] = [.approval, .question, .attention, .review]
+    let not: [Attention.Tone] = [.working, .idle, .done]
+    #expect(waiting.map(\.waits) == [true, true, true, true])
+    #expect(not.map(\.waits) == [false, false, false])
     #expect(Attention.Tone.approval.spoken == "needs approval")
 }

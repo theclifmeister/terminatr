@@ -157,6 +157,8 @@ public struct ThemeColours: Hashable, Sendable {
     /// option picked before it is sent.
     public static let toneWash = 0.16
     public static let pickedWash = 0.18
+    /// An option's row and a secondary button: a wash of ink.
+    public static let inkWash = 0.05
 
     /// A tone's colour at a wash's strength.
     public func wash(_ tone: Swatch, _ share: Double) -> Swatch {
@@ -307,6 +309,7 @@ extension ThemeColours {
             // before sending, and the command block in a deck card.
             ("a deck card", layered(frost + [deck])),
             ("a deck command", layered(frost + [deck, command])),
+            ("an option", layered(frost + [deck, wash(ink, Self.inkWash)])),
             ("a picked option", layered(frost + [deck, wash(question, Self.pickedWash)])),
         ] + [
             ("approval", approval), ("question", question), ("attention", attention),
@@ -339,6 +342,11 @@ extension ThemeColours {
             let r = RGB(hex: text.hex(dark: dark)).contrast(RGB(hex: fill.hex(dark: dark)))
             out.append(ContrastCheck(text: name, surface: "its fill", ratio: r, least: 4.5))
         }
+        // A screen's header title (ScreenHeader) is the one text on the
+        // raw mesh: large text, so 3:1 (WCAG AA). Its other lines sit on
+        // glass.
+        let title = RGB(hex: ink.hex(dark: dark))
+        out.append(ContrastCheck(text: "a header's title", surface: "the mesh", ratio: spots.map(title.contrast).min()!, least: 3))
         let term = terminal, bg = RGB(hex: term.background.hex(dark: dark))
         out.append(ContrastCheck(text: "terminal text", surface: "the terminal", ratio: RGB(hex: term.foreground.hex(dark: dark)).contrast(bg), least: 7))
         out.append(ContrastCheck(text: "terminal text", surface: "the selection",
