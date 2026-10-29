@@ -3,9 +3,9 @@ import TerminatrKit
 import TerminatrUI
 
 /// A project's board, as the Mac dashboard's: on deck shown, the backlog
-/// and the done tasks folded (task.done, read when the fold opens), and
-/// a filter (the TUI's / on the Tasks tab) that opens the folds while it
-/// has words. A task opens its detail. At the write level + adds a
+/// and the done tasks folded in one section (task.done, read when the
+/// fold opens), and a filter (the TUI's / on the Tasks tab) that opens
+/// the folds while it has words. A task opens its detail. At the write level + adds a
 /// task (NewTaskSheet; -newtask YES opens it at launch). -filter WORDS fills
 /// the filter at launch (the Simulator's screenshots).
 struct BoardScreen: View {
@@ -53,30 +53,33 @@ struct BoardScreen: View {
         if !deck.isEmpty {
             Section("On deck · \(deck.count)") { rows(deck) }
         }
-        if !backlog.isEmpty {
+        // The two folds share a section: they read as a pair, a row
+        // apart, not a section's gap (T856).
+        let doneFold = doneCount > 0 && (!filtering || !doneShown.isEmpty || done == nil)
+        if !backlog.isEmpty || doneFold {
             Section {
-                DisclosureGroup("Backlog · \(backlog.count)", isExpanded: open("backlog", filtering)) { rows(backlog) }
-            }
-        }
-        if doneCount > 0 && (!filtering || !doneShown.isEmpty || done == nil) {
-            Section {
-                DisclosureGroup("Done · \(filtering && done != nil ? doneShown.count : doneCount)", isExpanded: open("done", filtering)) {
-                    if let doneError {
-                        Failure(text: doneError)
-                    } else if done == nil {
-                        ProgressView()
-                    } else {
-                        rows(doneShown)
-                    }
+                if !backlog.isEmpty {
+                    DisclosureGroup("Backlog · \(backlog.count)", isExpanded: open("backlog", filtering)) { rows(backlog) }
                 }
-            }
-            .task(id: DoneRead(project: slug, open: doneOpen, count: doneCount, generation: model.generation)) {
-                guard doneOpen else { return }
-                do {
-                    done = try await model.doneTasks(slug)
-                    doneError = nil
-                } catch {
-                    doneError = Dashboard.words(error)
+                if doneFold {
+                    DisclosureGroup("Done · \(filtering && done != nil ? doneShown.count : doneCount)", isExpanded: open("done", filtering)) {
+                        if let doneError {
+                            Failure(text: doneError)
+                        } else if done == nil {
+                            ProgressView()
+                        } else {
+                            rows(doneShown)
+                        }
+                    }
+                    .task(id: DoneRead(project: slug, open: doneOpen, count: doneCount, generation: model.generation)) {
+                        guard doneOpen else { return }
+                        do {
+                            done = try await model.doneTasks(slug)
+                            doneError = nil
+                        } catch {
+                            doneError = Dashboard.words(error)
+                        }
+                    }
                 }
             }
         }
