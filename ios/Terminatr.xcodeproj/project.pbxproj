@@ -10,6 +10,7 @@
 		7E0000000000000000000101 /* TerminatrKit in Frameworks */ = {isa = PBXBuildFile; productRef = 7E0000000000000000000201 /* TerminatrKit */; };
 		7E0000000000000000000102 /* TerminatrUI in Frameworks */ = {isa = PBXBuildFile; productRef = 7E0000000000000000000202 /* TerminatrUI */; };
 		7E0000000000000000000104 /* TerminatrLink in Frameworks */ = {isa = PBXBuildFile; productRef = 7E0000000000000000000203 /* TerminatrLink */; };
+		7E0000000000000000000105 /* TerminatrPane in Frameworks */ = {isa = PBXBuildFile; productRef = 7E0000000000000000000204 /* TerminatrPane */; };
 		7E0000000000000000000103 /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 7E0000000000000000000302 /* AppIcon.icon */; };
 /* End PBXBuildFile section */
 
@@ -31,6 +32,7 @@
 				7E0000000000000000000101 /* TerminatrKit in Frameworks */,
 				7E0000000000000000000102 /* TerminatrUI in Frameworks */,
 				7E0000000000000000000104 /* TerminatrLink in Frameworks */,
+				7E0000000000000000000105 /* TerminatrPane in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -79,6 +81,7 @@
 				7E0000000000000000000201 /* TerminatrKit */,
 				7E0000000000000000000202 /* TerminatrUI */,
 				7E0000000000000000000203 /* TerminatrLink */,
+				7E0000000000000000000204 /* TerminatrPane */,
 			);
 			productName = Terminatr;
 			productReference = 7E0000000000000000000301 /* Terminatr.app */;
@@ -288,6 +291,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 7E0000000000000000000902 /* XCLocalSwiftPackageReference "TerminatrLink" */;
 			productName = TerminatrLink;
+		};
+		7E0000000000000000000204 /* TerminatrPane */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 7E0000000000000000000901 /* XCLocalSwiftPackageReference "../macos" */;
+			productName = TerminatrPane;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
