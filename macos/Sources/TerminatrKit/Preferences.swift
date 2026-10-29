@@ -89,6 +89,8 @@ public enum TextSize {
 /// and, in the sidebar, the system's sidebar size. The sizes are
 /// Bloom's at 100%.
 public enum TextStyle: CaseIterable, Sendable {
+    /// The phone's Welcome wordmark (T850).
+    case wordmark
     /// A screen's header on the phone (T845's ScreenHeader).
     case hero
     /// A project's name over its dashboard.
@@ -107,6 +109,7 @@ public enum TextStyle: CaseIterable, Sendable {
     /// The size in points at 100%.
     public var points: Double {
         switch self {
+        case .wordmark: 52
         case .hero: 36
         case .display: 30
         case .sheetTitle: 24

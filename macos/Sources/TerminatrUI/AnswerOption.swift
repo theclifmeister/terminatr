@@ -30,9 +30,11 @@ public struct Keycap: View {
 /// A question's option as a row to tap (T845): its keycap, its label and
 /// a line of description, at least 44 pt tall. Picked (before sending, on
 /// a question that takes several), it's washed in the question colour
-/// with an edge of it. With a keyboard (the iPad's) its key picks it.
+/// with an edge of it. With a keyboard (the iPad's) its key picks it,
+/// where the environment's answerKeys says so. A pick is a selection tap.
 public struct AnswerOption: View {
     @Environment(\.theme) private var theme
+    @State private var taps = 0
     let key: Int
     let label: String
     let detail: String
@@ -54,7 +56,7 @@ public struct AnswerOption: View {
 
     public var body: some View {
         let shape = RoundedRectangle(cornerRadius: Radius.row, style: .continuous)
-        Button(action: action) {
+        Button { taps += 1; action() } label: {
             HStack(alignment: .center, spacing: Spacing.row) {
                 if (1...9).contains(key) {
                     Keycap(String(key))
@@ -88,7 +90,8 @@ public struct AnswerOption: View {
             .contentShape(shape)
         }
         .buttonStyle(Pressable())
-        .keyboardShortcut((1...9).contains(key) ? KeyboardShortcut(KeyEquivalent(Character(String(key))), modifiers: []) : nil)
+        .answerKey((1...9).contains(key) ? KeyEquivalent(Character(String(key))) : nil)
+        .feedback(.selection, trigger: taps)
         .accessibilityLabel(detail.isEmpty ? "\(key). \(label)" : "\(key). \(label), \(detail)")
         .accessibilityAddTraits(picked ? .isSelected : [])
     }

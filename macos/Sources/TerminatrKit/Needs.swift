@@ -59,10 +59,12 @@ public struct Need: Identifiable, Hashable, Sendable {
     public let link: LinkAct?
     /// The refused call a refusal's card answers, its whole command.
     public let refusal: AppAPI.GuardRefusal?
+    /// Since when it waits, when that is known: a card's age.
+    public let since: Date?
 
     public init(id: String, kind: Kind, project: String, what: String, detail: String, text: String = "",
                 session: String = "", answer: Answer? = nil, task: String = "", link: LinkAct? = nil,
-                refusal: AppAPI.GuardRefusal? = nil) {
+                refusal: AppAPI.GuardRefusal? = nil, since: Date? = nil) {
         self.id = id
         self.kind = kind
         self.project = project
@@ -74,6 +76,7 @@ public struct Need: Identifiable, Hashable, Sendable {
         self.task = task
         self.link = link
         self.refusal = refusal
+        self.since = since
     }
 
     /// The need named with its project, as the sidebar, the menu bar
@@ -95,6 +98,8 @@ public struct Need: Identifiable, Hashable, Sendable {
         public let index: Int
         public let question: String
         public let options: [String]
+        /// Each option's line of description ("" for none), for its row.
+        public var descriptions: [String] = []
 
         public func params(_ option: String) -> AppAPI.AnswerParams {
             AppAPI.AnswerParams(id: session, index: index, answer: option, question: question)
@@ -144,7 +149,7 @@ extension Need {
             out.append(Need(id: "question:\(s.id):\(key)", kind: .question, project: s.project,
                             what: open.count == 1 ? "\(who) asks a question" : "\(who) asks \(open.count) questions",
                             detail: task, text: open.map(\.element.question).joined(separator: "\n"),
-                            session: s.id, answer: answerable(s.id, q)))
+                            session: s.id, answer: answerable(s.id, q), since: q.since))
         } else if s.state == "blocked" && s.reason == "question" {
             // Blocked on a question whose menu tm didn't parse: still the
             // user's, answered at the agent's own prompt.
@@ -158,7 +163,7 @@ extension Need {
         if held(s, now: now), let since = s.queueHeldSince {
             out.append(Need(id: "held:\(s.id):\(Int(since.timeIntervalSince1970))", kind: .held, project: s.project,
                             what: s.queuedPrompts == 1 ? "\(who)'s prompt is held" : "\(who)'s \(s.queuedPrompts) prompts are held",
-                            detail: task, text: s.queueHeld, session: s.id))
+                            detail: task, text: s.queueHeld, session: s.id, since: since))
         }
         return out
     }
@@ -175,8 +180,9 @@ extension Need {
         guard !q.escape else { return nil }
         let open = q.questions.enumerated().filter { !$0.element.answered }
         guard open.count == 1, let (i, item) = open.first, !item.multiSelect, !item.options.isEmpty else { return nil }
+        let shown = item.options.prefix(maxButtons)
         return Answer(session: session, index: i, question: item.question,
-                      options: item.options.prefix(maxButtons).map(\.label))
+                      options: shown.map(\.label), descriptions: shown.map(\.description))
     }
 
     static func of(project p: AppAPI.Project) -> [Need] {
@@ -222,7 +228,7 @@ extension Need {
         let times = r.count > 1 ? " · \(r.count) times" : ""
         return Need(id: "refusal:\(r.id)", kind: .refusal, project: r.project,
                     what: "\(who)'s \(r.tool) call was refused",
-                    detail: line(ruleWord(r.rule), r.summary) + times, refusal: r)
+                    detail: line(ruleWord(r.rule), r.summary) + times, refusal: r, since: r.last)
     }
 
     /// A guard rule in the user's words, as the TUI's Guard refusals
@@ -304,7 +310,7 @@ extension Need {
         let where_ = n.escape ? "only on \(server)" : "answer on \(server)"
         return Need(id: "paired:\(peer.alias)/\(project):\(n.id)", kind: .network, project: "\(peer.alias)/\(project)",
                     what: "\(server) › \(project): \(what)", detail: line(n.title, where_), text: text,
-                    session: n.session, task: n.task)
+                    session: n.session, task: n.task, since: n.since)
     }
 
     /// Who a session is in a need: its task, its thread, its project's

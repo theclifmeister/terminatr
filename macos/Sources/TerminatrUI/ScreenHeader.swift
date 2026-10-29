@@ -111,7 +111,7 @@ public struct PulseChips<ID: Hashable>: View {
                 }
             }
         }
-        .sensoryFeedback(.selection, trigger: selection)
+        .feedback(.selection, trigger: selection)
     }
 
     private var row: some View {

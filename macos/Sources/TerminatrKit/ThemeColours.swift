@@ -314,6 +314,12 @@ extension ThemeColours {
             // The phone's live strip (T849): the glass in the tab bar's
             // accessory, whose own glass is the frost.
             ("the live strip", layered(frost + [glass])),
+            // The phone's sheets (T850): Settings and pairing on the
+            // glass, their deck cards over it, a fingerprint chip and the
+            // level chip on those.
+            ("a sheet card", layered(frost + [glass] + frost + [deck])),
+            ("a sheet chip", layered(frost + [glass] + frost + [deck, wash(ink, Self.inkWash)])),
+            ("a level chip", layered(frost + [glass] + frost + [deck, wash(good, Self.toneWash)])),
         ] + [
             ("approval", approval), ("question", question), ("attention", attention),
             ("good", good), ("action", action), ("idle", idle),

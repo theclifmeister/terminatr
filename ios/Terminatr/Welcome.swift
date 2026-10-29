@@ -1,23 +1,46 @@
 import SwiftUI
+import TerminatrLink
 import TerminatrUI
 
-/// The first screen: what the app does, the demo, and pairing.
+/// The first screen (T850): the theme's mesh, drifting, with two needs
+/// floating over it to show what the app is for, and at the foot the
+/// wordmark on glass with the demo and pairing. At accessibility text
+/// sizes the needs step aside and the panel scrolls. Launched with
+/// -open pair it opens pairing, with -open "pair CODE" that code's
+/// confirm step (the Simulator's screenshots).
 struct Welcome: View {
     @Environment(PhoneModel.self) private var model
     @Environment(\.theme) private var theme
+    @Environment(\.dynamicTypeSize) private var typeSize
     @State private var opening = false
-    @State private var pairing = false
+    @State private var pairing: Pairing?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            Spacer()
-            Text("terminatr")
-                .font(theme.title(.largeTitle))
-            Text("See what your coding agents need from you, from anywhere: their questions, approvals and reviews, and every project's threads and conversations.")
-                .font(theme.body(.body))
-                .foregroundStyle(theme.muted)
-                .fixedSize(horizontal: false, vertical: true)
-            Spacer()
+        GeometryReader { g in
+            ScrollView {
+                VStack(spacing: Spacing.gutter) {
+                    if !typeSize.isAccessibilitySize {
+                        Spacer(minLength: Spacing.gutter)
+                        FloatingNeeds()
+                            .padding(.horizontal, Spacing.item)
+                    }
+                    Spacer(minLength: Spacing.gutter)
+                    panel
+                }
+                .frame(maxWidth: 520)
+                .padding(.horizontal, 10)
+                .padding(.bottom, 10)
+                .frame(maxWidth: .infinity, minHeight: g.size.height)
+            }
+            .scrollBounceBehavior(.basedOnSize)
+        }
+        .background { Backdrop(drifting: true) }
+        .sheet(item: $pairing) { PairScreen(code: $0.code) }
+        .onAppear(perform: openLaunched)
+    }
+
+    private var panel: some View {
+        WordmarkPanel("Your coding agents' questions, approvals and reviews, and every project's threads, wherever you are.") {
             Button {
                 opening = true
                 Task {
@@ -25,30 +48,33 @@ struct Welcome: View {
                     opening = false
                 }
             } label: {
-                Label("Explore the demo", systemImage: "play.rectangle")
-                    .frame(maxWidth: .infinity)
+                Label("Explore the demo", systemImage: "bolt.fill")
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
+            .buttonStyle(.primary())
             .disabled(opening)
             .accessibilityHint("Opens recorded projects and threads, read only")
-            Button { pairing = true } label: {
+            Button { pairing = Pairing() } label: {
                 Label("Pair with a server", systemImage: "qrcode.viewfinder")
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.bordered)
-            .controlSize(.large)
-            Text("On your computer, tm device pair shows the code to scan.")
-                .font(theme.body(.footnote))
-                .foregroundStyle(theme.muted)
+            .buttonStyle(.secondary)
             if let f = model.failure {
                 Text(f)
                     .font(theme.body(.footnote))
                     .foregroundStyle(theme.attention)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(24)
-        .backdrop()
-        .sheet(isPresented: $pairing) { PairScreen() }
     }
+
+    private func openLaunched() {
+        guard let open = UserDefaults.standard.string(forKey: "open"), open == "pair" || open.hasPrefix("pair ") else { return }
+        pairing = Pairing(code: try? PairingCode(String(open.dropFirst(5))))
+    }
+}
+
+/// The pairing sheet, with the code it opens at, if any.
+private struct Pairing: Identifiable {
+    let id = UUID()
+    var code: PairingCode?
 }
