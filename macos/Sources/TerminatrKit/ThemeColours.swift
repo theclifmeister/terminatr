@@ -347,6 +347,14 @@ extension ThemeColours {
         // glass.
         let title = RGB(hex: ink.hex(dark: dark))
         out.append(ContrastCheck(text: "a header's title", surface: "the mesh", ratio: spots.map(title.contrast).min()!, least: 3))
+        // A ThreadMeter's segments and a StateGlyph's fill (T846) are
+        // graphics on a deck card: 3:1 (WCAG 1.4.11). Its legend's
+        // words carry the states too.
+        let deckCard = layered(frost + [deck])
+        for (name, tone) in [("approval", approval), ("question", question), ("attention", attention), ("good", good), ("action", action)] {
+            let c = RGB(hex: tone.hex(dark: dark))
+            out.append(ContrastCheck(text: "a \(name) segment", surface: "a deck card", ratio: deckCard.map(c.contrast).min()!, least: 3))
+        }
         let term = terminal, bg = RGB(hex: term.background.hex(dark: dark))
         out.append(ContrastCheck(text: "terminal text", surface: "the terminal", ratio: RGB(hex: term.foreground.hex(dark: dark)).contrast(bg), least: 7))
         out.append(ContrastCheck(text: "terminal text", surface: "the selection",
