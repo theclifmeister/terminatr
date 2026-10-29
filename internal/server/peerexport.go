@@ -23,6 +23,9 @@ type peerExport struct {
 	// approval reads the permission dialog on a session's screen
 	// (peerneeds.go).
 	approval func(id string) *proto.PeerApproval
+	// act runs an act on a need for a paired server's user, once Act
+	// checked it (peerneeds.go).
+	act func(c caller.Caller, n proto.PeerNeed, p proto.PeerAct) (proto.PeerActResult, *proto.Error)
 }
 
 // peerExport is the server's peer.Exporter.
@@ -35,6 +38,7 @@ func (s *Server) peerExport() peerExport {
 			return ch, func() { s.watch.remove(ch) }
 		},
 		approval: s.peerApproval,
+		act:      s.peerAct,
 	}
 }
 

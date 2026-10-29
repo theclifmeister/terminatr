@@ -78,10 +78,12 @@ type fakeSource struct {
 	popup        proto.PeerPopup
 	popupErr     error
 	popups       []string
-	unpinned     []string // aliases unpaired in the Network popup
-	panesSet     []string // "alias level" set in the Network popup
-	convSet      []string // "alias on" set in the Network popup
-	needsSet     []string // "alias level" set in the Network popup
+	unpinned     []string                  // aliases unpaired in the Network popup
+	panesSet     []string                  // "alias level" set in the Network popup
+	convSet      []string                  // "alias on" set in the Network popup
+	needsSet     []string                  // "alias level" set in the Network popup
+	acts         []proto.PeerNeedActParams // paired servers' needs acted on
+	actErr       error
 	relaySet     []string // "alias relay" set in the Network popup
 	namesSet     []string // "alias name" set in the Network popup
 	relayUpdates []string // aliases whose relay u asked to update
@@ -361,6 +363,10 @@ func (f *fakeSource) SetPeerConversations(alias string, on bool) error {
 		}
 	}
 	return nil
+}
+func (f *fakeSource) ActOnNeed(p proto.PeerNeedActParams) (proto.PeerActResult, error) {
+	f.acts = append(f.acts, p)
+	return proto.PeerActResult{Act: p.Act, Asked: true}, f.actErr
 }
 func (f *fakeSource) SetPeerNeeds(alias, level string) error {
 	f.needsSet = append(f.needsSet, alias+" "+level)
@@ -1618,5 +1624,79 @@ func TestActWaitsForTheRunningOne(t *testing.T) {
 	m.busy = false
 	if m.runQueued() == nil || !m.busy || len(m.queued) != 0 || m.acts != 2 {
 		t.Fatalf("the queued action didn't run in its turn: busy %v, %d started", m.busy, m.acts)
+	}
+}
+
+// TestDashboardPeerNeedAct: at a needs switch of answer, a paired
+// server's need says "answer here", enter opens its dialog with what it
+// takes (a menu's options, a dialog's once-only options, accept and
+// send back), a pick asks first and goes to peer.need-act with the words
+// shown as the guard; an escape's opens nothing; at view enter still
+// shows the read-only dashboard.
+func TestDashboardPeerNeedAct(t *testing.T) {
+	d := testData()
+	menu := &proto.Question{Questions: []proto.QuestionItem{{Question: "Which cache?", Options: []proto.QuestionOption{{Label: "Redis"}, {Label: "None"}}}}}
+	d.Peers = []proto.PeerMirror{{Alias: "mini", State: "up", Watch: true, NeedsCap: true, Needs: proto.NeedsAnswer, Projects: []proto.PeerMirrorProject{
+		{PeerProject: proto.PeerProject{Project: "acme-api"}, Watch: &proto.ProjectWatch{},
+			Needs: []proto.PeerNeed{
+				{ID: "question:s-1:a", Kind: proto.NeedQuestion, Task: "T7", Session: "s-1", Question: menu},
+				{ID: "approval:s-2:b", Kind: proto.NeedApproval, Task: "T8", Approval: &proto.PeerApproval{Question: "Allow curl?",
+					Options: []string{"Yes", "Yes, and don't ask again", "No"}, Scopes: []string{"once", "persistent", "once"}}},
+				{ID: "approval:s-3", Kind: proto.NeedApproval, Role: proto.RoleCoordinator, Escape: true},
+				{ID: "review:T3:1", Kind: proto.NeedReview, Task: "T3", Title: "Rate limits", Status: "review"},
+			}},
+	}}}
+	src := &fakeSource{data: d}
+	m := newDash(DashOptions{Source: src, Width: 160 + sideDefault, Height: 30, State: DashState{Current: allProjects}})
+	m.layout.Details = false
+	m.setData(src.data)
+	if out := screen(m); !strings.Contains(out, "answer here, for mini") {
+		t.Errorf("no answer here in\n%s", out)
+	}
+	open := func(id string) {
+		t.Helper()
+		m.stack = nil
+		m.sel = "nr:@mini/acme-api:" + id
+		m.enter("")
+	}
+	open("question:s-1:a")
+	if out := screen(m); !strings.Contains(out, "Which cache?") || !strings.Contains(out, "2  None") {
+		t.Fatalf("the question's dialog:\n%s", out)
+	}
+	drain(t, m, press(m, "2"))
+	drain(t, m, press(m, "Y"))
+	want := proto.PeerNeedActParams{Peer: "mini", PeerAct: proto.PeerAct{Project: "acme-api", Need: "question:s-1:a", Act: proto.ActAnswer, Question: "Which cache?", Answer: "None"}}
+	if len(src.acts) != 1 || src.acts[0] != want {
+		t.Fatalf("acts %+v, want %+v", src.acts, want)
+	}
+
+	open("approval:s-2:b")
+	v, ok := m.stack[len(m.stack)-1].(*peerNeedView)
+	if !ok || len(v.choices) != 2 || v.choices[1].act.Choice != 3 || v.choices[1].act.Option != "No" {
+		t.Fatalf("the dialog's choices: %+v", m.stack)
+	}
+
+	open("review:T3:1")
+	drain(t, m, press(m, "2"))
+	in, ok := m.stack[len(m.stack)-1].(*inputView)
+	if !ok {
+		t.Fatalf("send back asked no note: %+v", m.stack)
+	}
+	m.pop()
+	drain(t, m, in.submit("tests fail"))
+	if a := src.acts[len(src.acts)-1]; a.Act != proto.ActSendBack || a.Status != "review" || a.Note != "tests fail" {
+		t.Errorf("send back %+v", a)
+	}
+
+	open("approval:s-3")
+	if len(m.stack) != 0 || !strings.Contains(m.msg, "only mini's user") {
+		t.Errorf("an escape: stack %v, msg %q", m.stack, m.msg)
+	}
+
+	src.data.Peers[0].Needs = proto.NeedsView
+	m.setData(src.data)
+	open("question:s-1:a")
+	if len(m.stack) != 0 || m.current != "@mini/acme-api" {
+		t.Errorf("at view: stack %v, current %q", m.stack, m.current)
 	}
 }

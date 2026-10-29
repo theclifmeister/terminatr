@@ -40,8 +40,9 @@ import (
 // and pr_state. 24: task.done, task.templates, and task.add {template}.
 // 25: SessionInfo's TurnSince, when the agent's current turn began.
 // 26: peer.list's needs switch and paired needs (PeerMirror.Needs,
-// PeerMirrorProject.Needs), added fields only.
-const Protocol = 26
+// PeerMirrorProject.Needs), added fields only. 27: peer.need-act, an
+// act on a paired server's need (§16.16).
+const Protocol = 27
 
 // Kind is what a connection is for.
 type Kind string

@@ -61,6 +61,8 @@ type dispatcher struct {
 	// needs is this server's needs switch for the peer now
 	// (proto.NeedsOff …); nil where the server shows no needs.
 	needs func() string
+	// nonces are the nonces given the peer for its acts (peer.nonce).
+	nonces nonces
 	// panesHere takes the peer's switches for this server, which it
 	// says when they change (peer.panes).
 	panesHere func(p proto.PeerPanesParams)
@@ -78,7 +80,8 @@ type dispatcher struct {
 // (§16.13); peer.transcript reads a conversation only while both the
 // pane switch and the conversations switch let the peer (§16.14);
 // peer.name changes only the name this server shows for the peer, never
-// its alias (§16.8).
+// its alias (§16.8); peer.act acts on one of this server's needs only
+// while the needs switch is answer, as the peer's user (§16.16).
 func (d *dispatcher) methods() map[string]handler {
 	if d == nil || (d.ex == nil && d.msgs == nil && d.panes == nil && d.files == nil && d.transcripts == nil && d.panesHere == nil && d.named == nil) {
 		return nil
@@ -96,6 +99,7 @@ func (d *dispatcher) methods() map[string]handler {
 		if _, ok := d.ex.(PopupExporter); ok {
 			m[proto.MethodPeerPopup] = d.popup
 		}
+		d.needsMethods(m)
 	}
 	if d.msgs != nil {
 		m[proto.MethodPeerMessage] = d.message

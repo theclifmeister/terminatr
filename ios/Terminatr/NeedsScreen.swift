@@ -92,8 +92,9 @@ struct NeedsScreen: View {
 
 /// A need's card in the deck (NeedCard): its head opens route (the
 /// chevron says so); its answers (NeedActs) below, outside the link,
-/// and its VoiceOver actions. A paired server's need has none: it is
-/// answered there. The lead card is lifted and takes the keys; the one
+/// and its VoiceOver actions. A paired server's need has them only
+/// while that server takes answers from this one (needs at answer,
+/// peer.need-act); otherwise it is answered there. The lead card is lifted and takes the keys; the one
 /// open beside the list (Columns) is ringed.
 struct NeedTile: View {
     @Environment(\.navigate) private var navigate

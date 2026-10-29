@@ -8,6 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/theclifmeister/terminatr/internal/project"
+	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
 // Actions: the list's keys. One table drives the key handling, the help
@@ -69,12 +70,14 @@ func init() {
 		{id: "focus.prev", keys: []string{"shift+tab"}, fixed: true, mouse: "a click on the area", run: (*dash).cycleFocus},
 		{id: "place.last", keys: []string{";"}, label: ";", help: "back to the last place: the area, sidebar row or session the keyboard was in before (prefix+; anywhere)",
 			menu: "back to the last place", run: (*dash).goLastPlace},
-		{id: "row.open", keys: []string{"enter"}, label: "enter", help: "attach to the selected session; on a project, open its coordinator; a task in NEEDS YOU shows in the project popup; questions waiting there open in the coordinator's question dialog; a held message or a file offered opens its dialog, a link request, a paused link or a paired server's share request the Network popup at its row; a paired server's need in the all-projects NEEDS YOU shows its read-only dashboard",
+		{id: "row.open", keys: []string{"enter"}, label: "enter", help: "attach to the selected session; on a project, open its coordinator; a task in NEEDS YOU shows in the project popup; questions waiting there open in the coordinator's question dialog; a held message or a file offered opens its dialog, a link request, a paused link or a paired server's share request the Network popup at its row; a paired server's need in the all-projects NEEDS YOU opens its dialog to answer it there while that server takes answers from this one (tm peer needs … answer, on it), else shows its read-only dashboard",
 			menu: "open the selected row",
 			foot: func(_ *dash, r row, ok bool) string {
 				switch {
 				case !ok:
 					return ""
+				case r.peerNeed != nil && r.peerNeed.answer && len(proto.ActsOf(r.peerNeed.need)) > 0:
+					return "answer"
 				case r.task != nil, r.remote != "":
 					return "show"
 				case r.card:
@@ -236,6 +239,8 @@ func (m *dash) enter(string) tea.Cmd {
 		return m.showTask(r.project, r.task.ID)
 	case r.card:
 		return m.openCard(r.key)
+	case r.peerNeed != nil:
+		return m.openPeerNeed(*r.peerNeed)
 	case r.remote != "":
 		return m.showProject(r.remote)
 	case r.questions > 0:

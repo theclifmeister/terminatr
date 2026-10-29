@@ -672,7 +672,8 @@ type PeerProject struct {
 // question, Approval a permission dialog. Escape: it asks to run a
 // command outside the sandbox, and comes without its menu or dialog:
 // only that server's user answers it, there. Since is on this server's
-// clock. Read-only in app API 29.
+// clock. peer.need-act acts on it (app API 30) where Acts lists what
+// it takes, while that server's needs switch for this one is answer.
 type PeerNeed struct {
 	ID        string        `json:"id"`
 	Kind      string        `json:"kind"`
@@ -693,6 +694,10 @@ type PeerNeed struct {
 	Asked     string        `json:"asked,omitempty"`
 	Reports   int           `json:"reports,omitempty"`
 	Since     time.Time     `json:"since,omitzero"`
+	// Acts (app API 30) are the acts peer.need-act takes on it:
+	// answer, approve, accept, send-back, questions; none for an
+	// escape's, or a need only that server's user acts on.
+	Acts []string `json:"acts,omitempty"`
 }
 
 // PeerApproval is a permission dialog on a paired server's session:
@@ -986,7 +991,7 @@ func peerThreadOf(alias string, w proto.WatchThread) PeerThread {
 func peerNeedOf(alias string, offset time.Duration, n proto.PeerNeed) PeerNeed {
 	out := PeerNeed{ID: n.ID, Kind: n.Kind, Role: n.Role, Thread: n.Thread, Task: n.Task, Title: n.Title, Status: n.Status,
 		Text: n.Text, Escape: n.Escape, PR: n.PR, PRURL: n.PRURL, PRNumber: n.PRNumber, Mergeable: n.Mergeable,
-		Asked: n.Asked, Reports: n.Reports}
+		Asked: n.Asked, Reports: n.Reports, Acts: proto.ActsOf(n)}
 	if n.Session != "" {
 		out.Session = alias + "/" + n.Session
 	}
@@ -1021,6 +1026,45 @@ func shareRequestOf(q proto.ShareRequest) ShareRequest {
 }
 
 func linkActOf(r proto.LinkActResult) LinkActResult { return LinkActResult{Words: r.Words} }
+
+// PeerNeedActParams are peer.need-act's (app API 30): an act on need
+// Need (PeerNeed.ID) of the paired server Peer's project. Act is answer
+// (question Index, from 0, with Answer, one of its options' labels;
+// Question its text), approve (option Choice, from 1; Option its
+// text), accept or send-back (Status the task's status as shown; Note
+// send-back's why) or questions (the coordinator opens its questions).
+// The words shown go along as the guard: that server refuses the act
+// when the need changed (need-changed), and always an escape's.
+type PeerNeedActParams struct {
+	Peer     string `json:"peer"`
+	Project  string `json:"project"`
+	Need     string `json:"need"`
+	Act      string `json:"act"`
+	Index    int    `json:"index,omitempty"`
+	Answer   string `json:"answer,omitempty"`
+	Question string `json:"question,omitempty"`
+	Choice   int    `json:"choice,omitempty"`
+	Option   string `json:"option,omitempty"`
+	Status   string `json:"status,omitempty"`
+	Note     string `json:"note,omitempty"`
+}
+
+// PeerNeedActResult is what the act did there: Asked (accept,
+// send-back) false when the coordinator was asked the same already;
+// Remaining (answer) the menu's questions still open; Option (approve)
+// the option sent; Open (questions) how many the coordinator puts to
+// the user.
+type PeerNeedActResult struct {
+	Act       string `json:"act"`
+	Asked     bool   `json:"asked,omitempty"`
+	Remaining int    `json:"remaining,omitempty"`
+	Option    string `json:"option,omitempty"`
+	Open      int    `json:"open,omitempty"`
+}
+
+func peerNeedActOf(r proto.PeerActResult) PeerNeedActResult {
+	return PeerNeedActResult{Act: r.Act, Asked: r.Asked, Remaining: r.Remaining, Option: r.Option, Open: r.Open}
+}
 
 // shareAnswerOf is the answer as the app sees it: of the request, its
 // id, state and the project shared; the rest is peer.list's.

@@ -34,6 +34,7 @@ struct NeedActs: View {
     @State private var said: (text: String, failed: Bool)?
     @State private var sendingBack = false
     @State private var note = ""
+    @State private var peerSendBack: Need.PeerAct.Choice?
     @State private var answered = 0
     @State private var refused = 0
 
@@ -47,9 +48,11 @@ struct NeedActs: View {
         .kept($sendingBack, "sending back \(need.id)")
         .alert("Send \(need.task) back", isPresented: $sendingBack) {
             TextField("What's missing", text: $note, axis: .vertical)
-            Button("Send Back") { sendBack() }
+            Button("Send Back") {
+                if let c = peerSendBack { peerSendBack = nil; peerAct(c.params(note: note.trimmingCharacters(in: .whitespacesAndNewlines))) } else { sendBack() }
+            }
                 .disabled(note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            Button("Cancel", role: .cancel) {}
+            Button("Cancel", role: .cancel) { peerSendBack = nil }
         } message: {
             Text("The coordinator hands your note to the thread.")
         }
@@ -106,6 +109,13 @@ struct NeedActs: View {
                         .accessibilityLabel(named("Send back"))
                 }
             }
+        case .network where need.peer != nil && model.can(AppAPI.Methods.peerNeedAct.name):
+            // A paired server's need at its answer level, answered there
+            // through this server (app API 30), in the same buttons as
+            // this server's own.
+            if let p = need.peer {
+                peerButtons(p)
+            }
         default:
             EmptyView()
         }
@@ -133,8 +143,59 @@ struct NeedActs: View {
                 out.append(NeedAct("Send back") { note = ""; sendingBack = true })
             }
             return out
+        case .network where need.peer != nil && model.can(AppAPI.Methods.peerNeedAct.name):
+            guard let p = need.peer, !busy else { return [] }
+            return p.choices.map { c in NeedAct(c.title) { peerPick(c) } }
         default:
             return []
+        }
+    }
+
+    /// A paired server's need's buttons: a question's or a dialog's
+    /// choices as numbered rows, accept and send back as a review's pair,
+    /// the coordinator's questions as Answer now.
+    @ViewBuilder
+    private func peerButtons(_ p: Need.PeerAct) -> some View {
+        let tone: Need.Kind = p.choices.first.map { $0.params.act == "approve" ? .approval : .question } ?? .question
+        switch p.choices.first?.params.act {
+        case "answer", "approve":
+            VStack(spacing: Spacing.item) {
+                ForEach(Array(p.choices.enumerated()), id: \.offset) { i, c in
+                    AnswerOption(key: i + 1, label: c.title) { peerPick(c) }
+                        .accessibilityLabel(named(c.title))
+                }
+            }
+            .tint(theme.colour(tone))
+        case "questions":
+            Button("Answer now") { peerPick(p.choices[0]) }
+                .buttonStyle(.primary(.question))
+                .accessibilityLabel(named("Answer now"))
+        default:
+            pair {
+                ForEach(p.choices, id: \.self) { c in
+                    if c.note {
+                        Button(c.title) { peerPick(c) }
+                            .buttonStyle(.secondary)
+                            .accessibilityLabel(named(c.title))
+                    } else {
+                        Button(c.title) { peerPick(c) }
+                            .buttonStyle(.primary(.review))
+                            .accessibilityLabel(named(c.title))
+                    }
+                }
+            }
+        }
+    }
+
+    /// Sends choice c of a paired server's need; send back asks for its
+    /// note first.
+    private func peerPick(_ c: Need.PeerAct.Choice) {
+        if c.note {
+            note = ""
+            peerSendBack = c
+            sendingBack = true
+        } else {
+            peerAct(c.params)
         }
     }
 
@@ -204,6 +265,18 @@ struct NeedActs: View {
         }
     }
 
+    private func peerAct(_ p: AppAPI.PeerNeedActParams) {
+        let server = need.peer?.server ?? "the paired server"
+        act {
+            let r = try await model.actOnNeed(p)
+            switch r.act {
+            case "accept", "send-back": return r.asked ? "Sent to \(server)'s coordinator." : "\(server)'s coordinator was asked already."
+            case "questions": return "\(server)'s coordinator asks them now, there."
+            default: return "Answered on \(server)."
+            }
+        }
+    }
+
     private func sendBack() {
         let text = note.trimmingCharacters(in: .whitespacesAndNewlines)
         act {
@@ -239,6 +312,7 @@ struct NeedActs: View {
             case "device-signature": return "Your server didn't take this phone's signature: \(e.message)"
             case "device-level": return "This phone may only view: tm device access on your computer raises it."
             case "always-allow": return "That option allows more than once: only you pick it, on your computer."
+            case "need-changed": return "That changed meanwhile: look again."
             case DemoTransport.refused: return "The demo shows recorded data: pair your server to do this."
             default: return e.errorDescription
             }

@@ -124,6 +124,13 @@ func init() {
 		// this server's projects, or declined.
 		unary(proto.MethodLinkAct, true, linkActParams, linkActOf),
 		unary(proto.MethodPeerShareAnswer, true, shareAnswerParams, shareAnswerOf),
+		// An act on a paired server's need (app API 30; the server's
+		// caps say need-act): its question answered, its dialog's option
+		// approved, its task accepted or sent back, its coordinator's
+		// questions opened, as this server's user. That server checks
+		// it all again, never takes an escape's, and journals a
+		// device's act with its name.
+		unary(proto.MethodPeerNeedAct, true, peerNeedActParams, peerNeedActOf),
 		// The sidebar's and the sessions' acts (app API 22; the server's
 		// caps say side-acts, but for session.remote): a project pinned
 		// or unpinned (P), a project made (+), an agent session outside
@@ -425,6 +432,11 @@ func projectActiveParams(p ProjectActiveParams) proto.ProjectActiveParams {
 
 func projectOpenParams(p ProjectOpenParams) proto.ProjectOpenParams {
 	return proto.ProjectOpenParams{Project: p.Project, Cols: p.Cols, Rows: p.Rows}
+}
+
+func peerNeedActParams(p PeerNeedActParams) proto.PeerNeedActParams {
+	return proto.PeerNeedActParams{Peer: p.Peer, PeerAct: proto.PeerAct{Project: p.Project, Need: p.Need, Act: p.Act, Index: p.Index,
+		Answer: p.Answer, Question: p.Question, Choice: p.Choice, Option: p.Option, Status: p.Status, Note: p.Note}}
 }
 
 func linkActParams(p LinkActParams) proto.LinkActParams {

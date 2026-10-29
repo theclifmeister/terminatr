@@ -698,6 +698,13 @@ final class AppModel {
         try await connected().call(AppAPI.Methods.taskAccept, AppAPI.TaskParams(project: project, task: task)).asked
     }
 
+    /// Acts on a paired server's need as this server's user
+    /// (peer.need-act, app API 30): that server checks it again, and
+    /// refuses it once the need changed (need-changed).
+    func actOnNeed(_ params: AppAPI.PeerNeedActParams) async throws -> AppAPI.PeerNeedActResult {
+        try await connected().call(AppAPI.Methods.peerNeedAct, params)
+    }
+
     /// Reads task of project whole, its notes and steps too (task.get,
     /// app API 14): a board task comes without them in the watch.
     func getTask(project: String, task: String) async throws -> AppAPI.Task {

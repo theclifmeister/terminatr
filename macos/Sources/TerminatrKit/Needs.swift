@@ -61,10 +61,13 @@ public struct Need: Identifiable, Hashable, Sendable {
     public let refusal: AppAPI.GuardRefusal?
     /// Since when it waits, when that is known: a card's age.
     public let since: Date?
+    /// A paired server's need its buttons answer there (peer.need-act,
+    /// app API 30), while that server takes answers from this one.
+    public let peer: PeerAct?
 
     public init(id: String, kind: Kind, project: String, what: String, detail: String, text: String = "",
                 session: String = "", answer: Answer? = nil, task: String = "", link: LinkAct? = nil,
-                refusal: AppAPI.GuardRefusal? = nil, since: Date? = nil) {
+                refusal: AppAPI.GuardRefusal? = nil, since: Date? = nil, peer: PeerAct? = nil) {
         self.id = id
         self.kind = kind
         self.project = project
@@ -77,6 +80,7 @@ public struct Need: Identifiable, Hashable, Sendable {
         self.link = link
         self.refusal = refusal
         self.since = since
+        self.peer = peer
     }
 
     /// The need named with its project, as the sidebar, the menu bar
@@ -103,6 +107,75 @@ public struct Need: Identifiable, Hashable, Sendable {
 
         public func params(_ option: String) -> AppAPI.AnswerParams {
             AppAPI.AnswerParams(id: session, index: index, answer: option, question: question)
+        }
+    }
+
+    /// The acts on a paired server's need (docs/SPEC.md §16.16): each
+    /// choice's params carry the words shown as the guard, so that
+    /// server refuses an act once the need changed, and never takes an
+    /// escape's (which gets no PeerAct).
+    public struct PeerAct: Hashable, Sendable {
+        /// One button: its title and the act; note says send back,
+        /// whose note the user writes first.
+        public struct Choice: Hashable, Sendable {
+            public let title: String
+            public let params: AppAPI.PeerNeedActParams
+            public var note: Bool { params.act == "send-back" }
+
+            /// The act with send back's note.
+            public func params(note text: String) -> AppAPI.PeerNeedActParams {
+                var p = params
+                p.note = text
+                return p
+            }
+        }
+
+        public let server: String
+        public let choices: [Choice]
+
+        /// The acts on need n of the paired server alias's project: the
+        /// first open question's options (single-select), a dialog's
+        /// options that allow once (the rest stay that server's user's),
+        /// accept and send back, or opening the coordinator's questions.
+        /// Nil when there is none.
+        public init?(need n: AppAPI.PeerNeed, alias: String, project: String, server: String) {
+            guard !n.escape else { return nil }
+            func p(_ act: String) -> AppAPI.PeerNeedActParams {
+                AppAPI.PeerNeedActParams(peer: alias, project: project, need: n.id, act: act)
+            }
+            var out: [Choice] = []
+            for act in n.acts {
+                switch act {
+                case "answer":
+                    guard let qs = n.question?.questions, let i = qs.firstIndex(where: { !$0.answered }), !qs[i].multiSelect else { continue }
+                    for o in qs[i].options {
+                        var a = p(act)
+                        a.index = i
+                        a.question = qs[i].question
+                        a.answer = o.label
+                        out.append(Choice(title: o.label, params: a))
+                    }
+                case "approve":
+                    guard let d = n.approval else { continue }
+                    for (i, o) in d.options.enumerated() where i >= d.scopes.count || d.scopes[i] == "once" {
+                        var a = p(act)
+                        a.choice = i + 1
+                        a.option = o
+                        out.append(Choice(title: o, params: a))
+                    }
+                case "accept", "send-back":
+                    var a = p(act)
+                    a.status = n.status
+                    out.append(Choice(title: act == "accept" ? "Accept" : "Send Back…", params: a))
+                case "questions":
+                    out.append(Choice(title: "Answer now", params: p(act)))
+                default:
+                    continue
+                }
+            }
+            guard !out.isEmpty else { return nil }
+            self.server = server
+            self.choices = out
         }
     }
 }
@@ -307,10 +380,12 @@ extension Need {
             what = "\(who) asks to run outside the sandbox"
             text = ""
         }
-        let where_ = n.escape ? "only on \(server)" : "answer on \(server)"
+        // At answer, its buttons answer it there (app API 30).
+        let acts = peer.needs == "answer" ? PeerAct(need: n, alias: peer.alias, project: project, server: server) : nil
+        let where_ = n.escape ? "only on \(server)" : acts != nil ? "for \(server)" : "answer on \(server)"
         return Need(id: "paired:\(peer.alias)/\(project):\(n.id)", kind: .network, project: "\(peer.alias)/\(project)",
                     what: "\(server) › \(project): \(what)", detail: line(n.title, where_), text: text,
-                    session: n.session, task: n.task, since: n.since)
+                    session: n.session, task: n.task, since: n.since, peer: acts)
     }
 
     /// Who a session is in a need: its task, its thread, its project's

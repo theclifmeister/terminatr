@@ -717,7 +717,7 @@ func (s *Server) hello() proto.Hello {
 		Build:    s.build,
 		Bin:      s.opts.Bin,
 		PID:      os.Getpid(),
-		Caps:     []string{proto.CapPaneVT, proto.CapTranscript, proto.CapPaneVTRemote, proto.CapSessionFile, proto.CapTranscriptRemote, proto.CapLinkAct, proto.CapTranscriptTail, proto.CapSideActs, proto.CapProjectFiles},
+		Caps:     []string{proto.CapPaneVT, proto.CapTranscript, proto.CapPaneVTRemote, proto.CapSessionFile, proto.CapTranscriptRemote, proto.CapLinkAct, proto.CapTranscriptTail, proto.CapSideActs, proto.CapProjectFiles, proto.CapNeedAct},
 	}
 }
 
@@ -965,8 +965,8 @@ func (s *Server) answer(p proto.SessionAnswerParams, cc callCtx) (any, *proto.Er
 	}
 	// Only the human answers while an escape's prompt is open: not an
 	// agent, nor tm's commands answering for the coordinator, nor a
-	// paired device (§16.15).
-	byHuman := cc.human && p.Relay != proto.RoleCoordinator && !c.IsAgent() && c.Device == ""
+	// paired device (§16.15), nor a paired server's user (§16.16).
+	byHuman := cc.human && p.Relay != proto.RoleCoordinator && !c.IsAgent() && !c.Remote()
 	if !byHuman && sess.Info().Escape {
 		return nil, proto.Errorf(proto.ErrRefused, "session %s asks to run a command outside its sandbox: only the user answers that prompt", p.ID)
 	}

@@ -1,11 +1,16 @@
 package server
 
 import (
+	"errors"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/theclifmeister/terminatr/internal/caller"
+	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/textsafe"
 )
 
 // TestPeerNeeds: a shared project's needs in full: a session's menu
@@ -86,5 +91,94 @@ func TestPeerNeeds(t *testing.T) {
 	})
 	if ns2[1].ID == ns[1].ID {
 		t.Errorf("another dialog kept the id %s", ns[1].ID)
+	}
+}
+
+// TestPeerActChecks: an act on a need runs only for a paired server's
+// user, on a need the shared project still has, never an escape's, of
+// the kind the need takes, with its guard holding as the paired server
+// showed it (one line, cut), and then with this server's own words.
+func TestPeerActChecks(t *testing.T) {
+	testPaths(t)
+	for _, slug := range []string{"web", "api"} {
+		if _, err := project.New(project.Options{Slug: slug}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := config.SetProject("web", "share", true); err != nil {
+		t.Fatal(err)
+	}
+	label := "Redis, with a long label " + strings.Repeat("x", 300)
+	menu := &proto.Question{Since: time.Unix(1700000000, 0), Questions: []proto.QuestionItem{
+		{Question: "Which\tcache?", Options: []proto.QuestionOption{{Label: label}, {Label: "None"}}}}}
+	sessions := []proto.SessionInfo{
+		{ID: "s-1", Role: proto.RoleThread, Project: "web", Thread: "t-0001", Question: menu},
+		{ID: "s-2", Role: proto.RoleThread, Project: "web", Thread: "t-0002", State: "blocked", Reason: "permission"},
+		{ID: "s-3", Role: proto.RoleThread, Project: "web", Thread: "t-0003", State: "blocked", Reason: "permission", Escape: true},
+		{ID: "s-4", Role: proto.RoleThread, Project: "api", State: "blocked", Reason: "permission"},
+	}
+	var ran []proto.PeerAct
+	ex := peerExport{
+		sessions: func() []proto.SessionInfo { return sessions },
+		state: func(string, []proto.SessionInfo) (proto.ProjectWatch, error) {
+			return proto.ProjectWatch{NeedsYou: []proto.WatchNeed{{Why: proto.WhyReview, Task: "T4", Status: "review"}}}, nil
+		},
+		approval: func(string) *proto.PeerApproval {
+			return &proto.PeerApproval{Question: "Allow curl?", Options: []string{"Yes", "No"}, Scopes: []string{"once", "once"}}
+		},
+		act: func(c caller.Caller, n proto.PeerNeed, p proto.PeerAct) (proto.PeerActResult, *proto.Error) {
+			ran = append(ran, p)
+			return proto.PeerActResult{Asked: true}, nil
+		},
+	}
+	ns, err := ex.needsOf("web")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ids := map[string]string{}
+	for _, n := range ns {
+		ids[n.Kind+map[bool]string{true: ":escape"}[n.Escape]] = n.ID
+	}
+	user := caller.ForPeerHuman("studio", "")
+	shown := func(s string) string { return textsafe.Line(s, 200) } // as the paired server's mirror has it
+	cases := []struct {
+		name string
+		c    caller.Caller
+		p    proto.PeerAct
+		code string
+	}{
+		{"the paired server itself", caller.ForPeer("studio"), proto.PeerAct{Project: "web", Need: ids[proto.NeedReview], Act: proto.ActAccept, Status: "review"}, proto.ErrRefused},
+		{"a project not shared", user, proto.PeerAct{Project: "api", Need: "approval:s-4", Act: proto.ActApprove}, proto.ErrNotShared},
+		{"a need gone", user, proto.PeerAct{Project: "web", Need: "review:T4:9", Act: proto.ActAccept, Status: "review"}, proto.ErrNeedChanged},
+		{"an escape", user, proto.PeerAct{Project: "web", Need: ids[proto.NeedApproval+":escape"], Act: proto.ActApprove, Choice: 1, Option: "Yes"}, proto.ErrEscapeHere},
+		{"another kind's act", user, proto.PeerAct{Project: "web", Need: ids[proto.NeedReview], Act: proto.ActApprove, Choice: 1}, proto.ErrBadParams},
+		{"a stale status", user, proto.PeerAct{Project: "web", Need: ids[proto.NeedReview], Act: proto.ActAccept, Status: "in-progress"}, proto.ErrNeedChanged},
+		{"no status", user, proto.PeerAct{Project: "web", Need: ids[proto.NeedReview], Act: proto.ActSendBack, Note: "why"}, proto.ErrNeedChanged},
+		{"another option", user, proto.PeerAct{Project: "web", Need: ids[proto.NeedApproval], Act: proto.ActApprove, Choice: 1, Option: "No"}, proto.ErrNeedChanged},
+		{"an option it hasn't", user, proto.PeerAct{Project: "web", Need: ids[proto.NeedApproval], Act: proto.ActApprove, Choice: 3, Option: "No"}, proto.ErrBadParams},
+		{"another question", user, proto.PeerAct{Project: "web", Need: ids[proto.NeedQuestion], Act: proto.ActAnswer, Question: "Which db?", Answer: "None"}, proto.ErrNeedChanged},
+		{"an answer that isn't an option", user, proto.PeerAct{Project: "web", Need: ids[proto.NeedQuestion], Act: proto.ActAnswer, Question: "Which cache?", Answer: "Memcached"}, proto.ErrBadParams},
+		{"answer", user, proto.PeerAct{Project: "web", Need: ids[proto.NeedQuestion], Act: proto.ActAnswer, Question: shown("Which\tcache?"), Answer: shown(label)}, ""},
+		{"approve", user, proto.PeerAct{Project: "web", Need: ids[proto.NeedApproval], Act: proto.ActApprove, Choice: 2, Option: "No"}, ""},
+		{"accept", user, proto.PeerAct{Project: "web", Need: ids[proto.NeedReview], Act: proto.ActAccept, Status: "review"}, ""},
+	}
+	for _, tc := range cases {
+		res, err := ex.Act(tc.c, tc.p)
+		var pe *proto.Error
+		errors.As(err, &pe)
+		switch {
+		case tc.code == "" && err != nil:
+			t.Errorf("%s: %v", tc.name, err)
+		case tc.code == "" && (res.Act != tc.p.Act || !res.Asked):
+			t.Errorf("%s: %+v", tc.name, res)
+		case tc.code != "" && (pe == nil || pe.Code != tc.code):
+			t.Errorf("%s: %v, want %s", tc.name, err, tc.code)
+		}
+	}
+	if len(ran) != 3 {
+		t.Fatalf("ran %+v", ran)
+	}
+	if ran[0].Question != "Which\tcache?" || ran[0].Answer != label {
+		t.Errorf("the answer went in the paired server's words: %+v", ran[0])
 	}
 }
