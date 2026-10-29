@@ -311,6 +311,12 @@ extension ThemeColours {
             ("a deck command", layered(frost + [deck, command])),
             ("an option", layered(frost + [deck, wash(ink, Self.inkWash)])),
             ("a picked option", layered(frost + [deck, wash(question, Self.pickedWash)])),
+            // The phone's sheets (T850): Settings and pairing on the
+            // glass, their deck cards over it, a fingerprint chip and the
+            // level chip on those.
+            ("a sheet card", layered(frost + [glass] + frost + [deck])),
+            ("a sheet chip", layered(frost + [glass] + frost + [deck, wash(ink, Self.inkWash)])),
+            ("a level chip", layered(frost + [glass] + frost + [deck, wash(good, Self.toneWash)])),
         ] + [
             ("approval", approval), ("question", question), ("attention", attention),
             ("good", good), ("action", action), ("idle", idle),
