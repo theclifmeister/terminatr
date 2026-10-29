@@ -87,6 +87,9 @@ type Spec struct {
 	Projects []string
 	// Settings are its options, sent in hello.
 	Settings map[string]any
+	// ProjectSettings are its options for each project that sets some
+	// of its own, by slug (mod.Mod.SettingsFor), sent in hello.
+	ProjectSettings map[string]map[string]any
 	// Eager starts the host with the supervisor instead of on its first
 	// event: a bundled mod that draws on the sidebar, whose cells shown
 	// from the last run would otherwise stay stale until something

@@ -40,8 +40,8 @@ func (s *ServerSource) SetModGrants(id string, grants []string) error {
 	return mod.SetGrants(s.Caller, id, grants)
 }
 
-func (s *ServerSource) SetModSetting(id, key string, value any) error {
-	return mod.SetSetting(s.Caller, id, key, value)
+func (s *ServerSource) SetModSetting(id, slug, key string, value any) error {
+	return mod.SetSettingFor(s.Caller, id, slug, key, value)
 }
 
 func (s *ServerSource) FetchModUpdate(id string) (*mod.Staged, error) {

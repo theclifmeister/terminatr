@@ -536,7 +536,7 @@ func (r *runner) once(sub *modbus.Sub) (code int, why string) {
 
 	hctx, hcancel := context.WithTimeout(r.ctx, HelloLimit)
 	res, err := client.Hello(hctx, modproto.Hello{API: r.sup.o.API, TM: r.sup.o.TMVersion, Mod: r.spec.ID,
-		Grants: r.spec.Grants, Settings: settingsJSON(r.spec.Settings)})
+		Grants: r.spec.Grants, Settings: settingsJSON(r.spec.Settings), Projects: projectSettingsJSON(r.spec.ProjectSettings)})
 	hcancel()
 	if err != nil {
 		if r.ctx.Err() != nil {
@@ -727,6 +727,19 @@ func settingsJSON(s map[string]any) json.RawMessage {
 		return nil
 	}
 	return b
+}
+
+func projectSettingsJSON(ps map[string]map[string]any) map[string]json.RawMessage {
+	if len(ps) == 0 {
+		return nil
+	}
+	out := make(map[string]json.RawMessage, len(ps))
+	for slug, s := range ps {
+		if b, err := json.Marshal(s); err == nil {
+			out[slug] = b
+		}
+	}
+	return out
 }
 
 func cleanLevel(l string) string {

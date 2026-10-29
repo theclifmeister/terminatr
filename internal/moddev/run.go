@@ -69,6 +69,14 @@ func (m *Mod) Run(f *Fixture, file string) (r Result) {
 	r = Result{File: file, Name: cmp.Or(f.Name, file), Calls: []Call{}}
 	bad := func(format string, a ...any) { r.Problems = append(r.Problems, fmt.Sprintf(format, a...)) }
 	defer func() { r.OK = len(r.Problems) == 0 }()
+	all, projects, err := m.settings(f)
+	if err != nil {
+		bad("settings: %v", err)
+	}
+	m.checkRules(f, all, projects, bad)
+	if len(f.Events) == 0 {
+		return r
+	}
 	if m.Script == "" {
 		bad("%s is a data mod: it has no code to run", m.Manifest.ID)
 		return r
@@ -85,9 +93,13 @@ func (m *Mod) Run(f *Fixture, file string) (r Result) {
 			grants = append(grants, g)
 		}
 	}
-	settings, err := m.settings(f.Settings)
-	if err != nil {
-		bad("settings: %v", err)
+	settings, _ := json.Marshal(all)
+	var projectSettings map[string]json.RawMessage
+	for slug, s := range projects {
+		if projectSettings == nil {
+			projectSettings = map[string]json.RawMessage{}
+		}
+		projectSettings[slug], _ = json.Marshal(s)
 	}
 	steps := f.Events
 	if steps[0].Name != modbus.ModReady {
@@ -163,7 +175,7 @@ func (m *Mod) Run(f *Fixture, file string) (r Result) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), EventLimit+modhost.DefaultBudget)
 	_, err = d.call(ctx, modproto.MethodHello, modproto.Hello{Protocol: modproto.Protocol, API: mod.APIVersion(),
-		TM: version.Version, Mod: m.Manifest.ID, Grants: grants, Settings: settings})
+		TM: version.Version, Mod: m.Manifest.ID, Grants: grants, Settings: settings, Projects: projectSettings})
 	cancel()
 	if err != nil {
 		bad("loading the script: %v", err)
@@ -302,18 +314,19 @@ func (m *Mod) Run(f *Fixture, file string) (r Result) {
 }
 
 // RunDir loads the mod in dir and replays each of its fixtures. A code
-// mod with none is an error: nothing would be tested.
+// mod with none is an error: nothing would be tested. A data mod's
+// fixtures, when it has some, check its rules text.
 func RunDir(dir string) ([]Result, error) {
 	m, err := Load(dir)
 	if err != nil {
 		return nil, err
 	}
-	if m.Script == "" {
-		return nil, nil
-	}
 	paths, err := Fixtures(dir)
 	if err != nil {
 		return nil, err
+	}
+	if m.Script == "" && len(paths) == 0 {
+		return nil, nil
 	}
 	if len(paths) == 0 {
 		return nil, fmt.Errorf("%s has no fixtures: add %s/<name>.json (tm mod new writes one)", m.Manifest.ID, TestsDir)
@@ -331,27 +344,79 @@ func RunDir(dir string) ([]Result, error) {
 	return out, nil
 }
 
-// settings are the manifest's defaults overlaid with set, as hello sends
-// them.
-func (m *Mod) settings(set map[string]any) (json.RawMessage, error) {
-	whole := map[string]any{}
-	for k, v := range set {
-		// JSON's numbers are floats; a setting's are whole.
-		if f, ok := v.(float64); ok && f == float64(int64(f)) {
-			v = int64(f)
+// settings are the manifest's defaults overlaid with f's settings, as
+// hello sends them, and each of f's projects' settings over those.
+func (m *Mod) settings(f *Fixture) (all map[string]any, projects map[string]map[string]any, err error) {
+	whole := func(set map[string]any) map[string]any {
+		out := map[string]any{}
+		for k, v := range set {
+			// JSON's numbers are floats; a setting's are whole.
+			if f, ok := v.(float64); ok && f == float64(int64(f)) {
+				v = int64(f)
+			}
+			out[k] = v
 		}
-		whole[k] = v
+		return out
 	}
-	out, bad := mod.SettingsOf(m.Manifest.ID, m.Manifest, whole)
-	errs := make([]error, 0, len(bad)+1)
+	var errs []error
+	all, bad := mod.SettingsOf(m.Manifest.ID, m.Manifest, whole(f.Settings))
 	for _, b := range bad {
 		errs = append(errs, errors.New(b))
 	}
-	b, err := json.Marshal(out)
-	if err != nil {
-		errs = append(errs, err)
+	for _, slug := range slices.Sorted(maps.Keys(f.Projects)) {
+		set := whole(f.Settings)
+		maps.Copy(set, whole(f.Projects[slug]))
+		s, bad := mod.SettingsOf(m.Manifest.ID, m.Manifest, set)
+		for _, b := range bad {
+			errs = append(errs, fmt.Errorf("projects.%s: %s", slug, b))
+		}
+		if projects == nil {
+			projects = map[string]map[string]any{}
+		}
+		projects[slug] = s
 	}
-	return b, errors.Join(errs...)
+	return all, projects, errors.Join(errs...)
+}
+
+// checkRules checks f's rules expectations against the mod's rules
+// files, resolved with the settings for each one's project.
+func (m *Mod) checkRules(f *Fixture, all map[string]any, projects map[string]map[string]any, bad func(string, ...any)) {
+	md := mod.Mod{ID: m.Manifest.ID, Dir: m.Dir, Manifest: m.Manifest}
+	for _, key := range slices.Sorted(maps.Keys(f.Rules)) {
+		want := f.Rules[key]
+		rel, ok := m.Manifest.Provides.Rules[key]
+		if !ok {
+			bad("rules.%s: the mod provides no such rules (provides.rules)", key)
+			continue
+		}
+		settings := all
+		if s, ok := projects[want.Project]; ok {
+			settings = s
+		}
+		b, err := md.ReadAgentText(rel)
+		var text string
+		if err == nil {
+			text, err = mod.ResolveRules(string(b), m.Manifest, settings)
+		}
+		if err != nil {
+			bad("rules.%s: %v", key, err)
+			continue
+		}
+		where := "for all projects"
+		if want.Project != "" {
+			where = "for " + want.Project
+		}
+		for _, c := range want.Contains {
+			if !strings.Contains(text, c) {
+				bad("rules.%s %s lacks %q", key, where, c)
+			}
+		}
+		for _, l := range want.Lacks {
+			if strings.Contains(text, l) {
+				bad("rules.%s %s has %q", key, where, l)
+			}
+		}
+	}
 }
 
 func firstLine(s string) string {

@@ -1,0 +1,12 @@
+{
+  "name": "the gate is in a project's rules only once it turns it on",
+  "projects": {
+    "gated": {"gates": true},
+    "careful": {"depth": "thorough"}
+  },
+  "rules": {
+    "thread": {"contains": ["run the project's tests"], "lacks": ["Gate:", "linters"]},
+    "coordinator": {"project": "gated", "contains": ["ask the user first"], "lacks": ["on their own"]}
+  },
+  "expect": {}
+}

@@ -111,7 +111,7 @@ func (e *Env) printTestRow(row testRow) {
 			fmt.Fprintf(e.Stdout, "  %s\n", l)
 		}
 		return
-	case row.Data:
+	case row.Data && len(row.Results) == 0:
 		fmt.Fprintf(e.Stdout, "ok    %s  a data mod: valid, no code to run  %s\n", row.ID, row.Dir)
 		return
 	}

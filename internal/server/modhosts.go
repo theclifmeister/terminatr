@@ -108,7 +108,7 @@ func (s *Server) specsOf(reg *mod.Registry) []modsup.Spec {
 		// stale after a restart until an event arrived. The others (the
 		// Memory tab) wait, lazily, for their first event.
 		sp := modsup.Spec{ID: m.ID, Grants: m.Grants, Projects: m.Projects, Settings: m.Settings,
-			Eager: len(m.Manifest.Provides.Columns) > 0}
+			ProjectSettings: modProjectSettings(m), Eager: len(m.Manifest.Provides.Columns) > 0}
 		if m.Builtin {
 			// Precompiled into tm (go generate ./internal/mod): it
 			// runs without esbuild.
@@ -124,6 +124,22 @@ func (s *Server) specsOf(reg *mod.Registry) []modsup.Spec {
 		specs = append(specs, sp)
 	}
 	return specs
+}
+
+// modProjectSettings are mod m's settings for each project it runs for
+// that sets some of its own (mod API 1.11), for hello.
+func modProjectSettings(m mod.Mod) map[string]map[string]any {
+	var out map[string]map[string]any
+	for slug := range m.ProjectSettings {
+		if !m.Runs(slug) {
+			continue
+		}
+		if out == nil {
+			out = map[string]map[string]any{}
+		}
+		out[slug] = m.SettingsFor(slug)
+	}
+	return out
 }
 
 // builtinBundles are the built-in code mods' bundles, by mod id, read

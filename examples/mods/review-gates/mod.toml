@@ -1,0 +1,22 @@
+id          = "review-gates"
+name        = "Review gates"
+version     = "0.1.0"
+api         = "1.11"
+description = "One playbook for threads and the coordinator, with a gate before each PR that a project turns on: tm mod settings review-gates --project <slug> gates=true."
+authors     = ["terminatr"]
+
+[provides]
+rules = { thread = "rules/thread.md", coordinator = "rules/coordinator.md" }
+
+# Off for every project until a project turns it on; the rules' gate
+# sections are in a project's rules only then.
+[settings.gates]
+type    = "bool"
+default = false
+label   = "Stop for the user's go-ahead before a PR"
+
+[settings.depth]
+type    = "choice"
+options = ["light", "thorough"]
+default = "light"
+label   = "How much a thread checks before it reports"

@@ -348,7 +348,7 @@ func (mt *modsTab) key(m *dash, k tea.KeyPressMsg) (tea.Cmd, bool) {
 	case "p":
 		m.push(&modPermsView{id: md.ID})
 	case "s":
-		m.push(newModSettings(md))
+		m.push(newModSettings(md, ""))
 	case "d":
 		if md.Manifest == nil || len(md.Manifest.Defaults) == 0 {
 			m.fail(fmt.Errorf("%s suggests no defaults", modName(md)))
@@ -746,17 +746,21 @@ func (v *modPermsView) render(m *dash) string {
 	return m.popup(box{title: modName(md) + " · permissions", body: lines, sel: -1, keys: "enter grant or take back · ↑ ↓ move · esc back", dialog: true})
 }
 
-// newModSettings is the mod's own settings page, from its manifest:
-// enter turns a yes/no over or steps a choice, + and - change a number,
-// enter on a text one opens a line to edit it in, x puts one back to
-// its default.
-func newModSettings(md mod.Mod) *modSettingsView {
+// newModSettings is the mod's own settings page, from its manifest, for
+// all projects or for project slug (mod API 1.11): enter turns a yes/no
+// over or steps a choice, + and - change a number, enter on a text one
+// opens a line to edit it in, x puts one back to its default (for a
+// project, to all projects' value).
+func newModSettings(md mod.Mod, slug string) *modSettingsView {
 	v := &modSettingsView{id: md.ID, title: modName(md) + " · settings"}
+	if slug != "" {
+		v.title += " · " + slug
+	}
 	if md.Manifest == nil {
 		return v
 	}
 	for _, key := range sortedSettingKeys(md.Manifest.Settings) {
-		v.list.rows = append(v.list.rows, modSettingRow(md.ID, key, md.Manifest.Settings[key]))
+		v.list.rows = append(v.list.rows, modSettingRow(md.ID, slug, key, md.Manifest.Settings[key]))
 	}
 	return v
 }
@@ -770,9 +774,9 @@ func sortedSettingKeys(s map[string]mod.Setting) []string {
 	return keys
 }
 
-// modSettingRow is setting key of mod id, as a settings row whose value
-// is the last poll's.
-func modSettingRow(id, key string, s mod.Setting) setting {
+// modSettingRow is setting key of mod id, for all projects or project
+// slug, as a settings row whose value is the last poll's.
+func modSettingRow(id, slug, key string, s mod.Setting) setting {
 	label := key
 	help := ""
 	if s.Label != "" {
@@ -782,14 +786,14 @@ func modSettingRow(id, key string, s mod.Setting) setting {
 	help += "Default " + mod.SettingWords(s.Default) + "."
 	cur := func(m *dash) any {
 		if md, ok := modByID(m, id); ok {
-			return md.Settings[key]
+			return md.SettingsFor(slug)[key]
 		}
 		return nil
 	}
 	set := func(m *dash, v any, msg string) tea.Cmd {
 		src := m.src
 		return m.act(func() actionMsg {
-			if err := src.SetModSetting(id, key, v); err != nil {
+			if err := src.SetModSetting(id, slug, key, v); err != nil {
 				return actionMsg{err: err}
 			}
 			return actionMsg{msg: msg}
@@ -798,6 +802,18 @@ func modSettingRow(id, key string, s mod.Setting) setting {
 	r := setting{label: label, help: help,
 		value: func(m *dash) string { return mod.Clean(fmt.Sprint(cur(m)), false) },
 		unset: func(m *dash) tea.Cmd { return set(m, nil, key+": back to "+mod.SettingWords(s.Default)) }}
+	if slug != "" {
+		// A project's page: a key it doesn't set follows all projects.
+		r.from = func(m *dash) string {
+			if md, ok := modByID(m, id); ok {
+				if _, own := md.ProjectSettings[slug][key]; !own {
+					return "all projects"
+				}
+			}
+			return ""
+		}
+		r.unset = func(m *dash) tea.Cmd { return set(m, nil, key+": follows all projects") }
+	}
 	switch s.Type {
 	case mod.SettingBool:
 		r.value = func(m *dash) string { b, _ := cur(m).(bool); return onOff(b) }
@@ -1012,15 +1028,52 @@ func (m *dash) noteModFailures() {
 	}
 }
 
-// projectRows are project slug's own settings, and the Mods line when a
+// projectRows are project slug's own settings, the Mods line when a
 // mod is limited to some projects (mods design §9): the limited mods
-// that run for this one. enter opens the Mods tab, where they change.
+// that run for this one, enter opening the Mods tab, where they change;
+// then a row per user mod that runs for it and has settings, enter opening
+// its settings for this project (mod API 1.11).
 func (m *dash) projectRows(slug string) []setting {
 	rows := projectSettings(slug)
-	if !slices.ContainsFunc(m.data.Mods, func(md mod.Mod) bool { return len(md.Projects) > 0 }) {
-		return rows
+	if slices.ContainsFunc(m.data.Mods, func(md mod.Mod) bool { return len(md.Projects) > 0 }) {
+		rows = append(rows, m.limitedModsRow(slug))
 	}
-	return append(rows, setting{label: "Mods",
+	for _, md := range m.data.Mods {
+		// The built-in mods' are tm's look and layout, the same for
+		// every project here (tm mod settings --project still sets them).
+		if md.Runs(slug) && !md.Builtin && md.Manifest != nil && len(md.Manifest.Settings) > 0 {
+			rows = append(rows, projectModRow(md.ID, modName(md), slug))
+		}
+	}
+	return rows
+}
+
+// projectModRow is mod id's settings row on project slug's Settings tab.
+func projectModRow(id, name, slug string) setting {
+	return setting{label: name + " settings",
+		help: "The mod's own settings for this project: each one it doesn't set follows all projects (, then 4, s). tm mod settings " + id + " --project " + slug + " shows them too.",
+		value: func(m *dash) string {
+			md, ok := modByID(m, id)
+			switch n := len(md.ProjectSettings[slug]); {
+			case !ok || n == 0:
+				return "all projects"
+			case n == 1:
+				return "1 of its own"
+			default:
+				return fmt.Sprintf("%d of its own", n)
+			}
+		},
+		change: func(m *dash) tea.Cmd {
+			if md, ok := modByID(m, id); ok {
+				m.push(newModSettings(md, slug))
+			}
+			return nil
+		}}
+}
+
+// limitedModsRow is the Mods line of project slug's Settings tab.
+func (m *dash) limitedModsRow(slug string) setting {
+	return setting{label: "Mods",
 		help: "The mods limited to some projects that run for this one; the others run for every project. , then 4 lists them all; tm mod enable <id> --project " + slug + " adds one here.",
 		value: func(m *dash) string {
 			var names []string
@@ -1040,5 +1093,5 @@ func (m *dash) projectRows(slug string) []setting {
 				sv.tab = tabMods
 			}
 			return nil
-		}})
+		}}
 }

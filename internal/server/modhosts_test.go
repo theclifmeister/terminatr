@@ -339,6 +339,20 @@ func TestModSpecsTickerPlace(t *testing.T) {
 	if got := place(); got != "right" {
 		t.Fatalf("place back to %v", got)
 	}
+
+	// A project's own value goes in the spec's ProjectSettings, the whole
+	// set for that project (mod API 1.11), and changes the spec.
+	if err := mod.SetSettingFor(human, mod.BundledTicker, "demo", "place", "both"); err != nil {
+		t.Fatal(err)
+	}
+	specs, _ := s.modSpecs()
+	for _, sp := range specs {
+		if sp.ID == mod.BundledTicker {
+			if got := sp.ProjectSettings["demo"]; got["place"] != "both" || len(got) != len(sp.Settings) || sp.Settings["place"] != "right" {
+				t.Fatalf("project settings %v over %v", sp.ProjectSettings, sp.Settings)
+			}
+		}
+	}
 }
 
 // TestModSpecsColumnModsEager: a user code mod that declares columns is

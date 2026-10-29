@@ -3,6 +3,7 @@ package mod
 import (
 	"errors"
 	"fmt"
+	"regexp"
 	"slices"
 	"unicode/utf8"
 
@@ -131,11 +132,27 @@ func checkText(v any) error {
 	return nil
 }
 
-// SetSetting sets one of mod id's own options, checked against its
-// manifest; a nil value removes it, back to the default.
+// SetSetting sets one of mod id's own options for all projects,
+// checked against its manifest; a nil value removes it, back to the
+// default.
 func SetSetting(c caller.Caller, id, key string, value any) error {
+	return SetSettingFor(c, id, "", key, value)
+}
+
+// projectSlugRE is a project's slug (project.ValidSlug, which mod can't
+// import): a bare key in config.toml's table names.
+var projectSlugRE = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,63}$`)
+
+// SetSettingFor sets one of mod id's own options for project slug, in
+// [projects.<slug>.mods.<id>.settings] (mod API 1.11), or for all
+// projects when slug is ""; a nil value removes it, so the project
+// follows all projects (or all projects the default) again.
+func SetSettingFor(c caller.Caller, id, slug, key string, value any) error {
 	if c.IsAgent() {
 		return ErrHumanOnly
+	}
+	if slug != "" && !projectSlugRE.MatchString(slug) {
+		return fmt.Errorf("%q isn't a project's name", slug)
 	}
 	m, err := installed(id)
 	if err != nil {
@@ -144,23 +161,40 @@ func SetSetting(c caller.Caller, id, key string, value any) error {
 	if m.Manifest == nil {
 		return fmt.Errorf("%s has no settings: %w", id, m.Err)
 	}
-	s, ok := m.Manifest.Settings[key]
-	if !ok {
+	if _, ok := m.Manifest.Settings[key]; !ok {
 		return fmt.Errorf("%s has no setting %q", id, key)
 	}
 	table := config.ModsTable(id) + ".settings"
+	if slug != "" {
+		table = config.ProjectModsTable(slug, id)
+	}
 	if value == nil {
 		return config.Unset(table, key)
+	}
+	v, err := CheckSetting(m.Manifest, key, value)
+	if err != nil {
+		return err
+	}
+	if n, ok := v.(int64); ok {
+		v = int(n)
+	}
+	return config.Set(table, key, v)
+}
+
+// CheckSetting returns value as setting key of man would be written, or
+// why it can't be: a key it doesn't have, a value of the wrong type or
+// out of range, a text that isn't one short line.
+func CheckSetting(man *Manifest, key string, value any) (any, error) {
+	s, ok := man.Settings[key]
+	if !ok {
+		return nil, fmt.Errorf("%s has no setting %q", man.ID, key)
 	}
 	v, err := s.Check(value)
 	if err == nil {
 		err = checkText(v)
 	}
 	if err != nil {
-		return fmt.Errorf("%s %v", key, err)
+		return nil, fmt.Errorf("%s %v", key, err)
 	}
-	if n, ok := v.(int64); ok {
-		v = int(n)
-	}
-	return config.Set(table, key, v)
+	return v, nil
 }

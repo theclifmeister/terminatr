@@ -349,6 +349,10 @@ type rawSafety struct {
 	// safety setting; read by ThreadSandbox and SandboxOf, written by
 	// EditSandbox.
 	Sandbox *rawSandbox `toml:"sandbox"`
+	// Mods are a project's [projects.<slug>.mods.<id>] tables, the
+	// mods' settings for it (readProjectMods): not a safety setting, and
+	// never [defaults]'s, since [mods.<id>.settings] are all projects'.
+	Mods toml.Primitive `toml:"mods"`
 }
 
 // CheckAgent checks an agent name's shape: one word. Whether the
@@ -506,6 +510,9 @@ func parse(path string, data []byte) (*Config, error) {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
 	old, mods, unknownMods := readMods(md, raw.Mods)
+	// [defaults.mods] stays undecoded, so it is an unknown setting below:
+	// a mod's settings for all projects are [mods.<id>.settings].
+	projErr := readProjectMods(md, raw.Projects, mods)
 	for k := range raw.AgentMod {
 		old = append(old, "agent_mod."+k)
 	}
@@ -519,6 +526,9 @@ func parse(path string, data []byte) (*Config, error) {
 			return c, fmt.Errorf("%s: ui.context_hint is a percent from 0 (never) to 100", path)
 		}
 		c.ContextHint = *h
+	}
+	if projErr != nil {
+		return c, fmt.Errorf("%s: %w", path, projErr)
 	}
 	c.Unknown = unknownMods
 	switch raw.SandboxLists {
@@ -536,6 +546,9 @@ func parse(path string, data []byte) (*Config, error) {
 			len(k) >= 4 && k[0] == "defaults" && k[1] == "sandbox" && (k[2] == SandboxExcluded || k[2] == SandboxGuides):
 			// An excluded command's or a guide's table, read and checked by
 			// excludedList or guideList.
+		case len(k) >= 4 && k[0] == "projects" && k[2] == "mods":
+			// A mod's settings for a project, read and checked by
+			// readProjectMods.
 		case len(k) >= 3 && k[0] == "projects", len(k) >= 2 && k[0] == "defaults":
 			return c, fmt.Errorf("%s: unknown setting %s", path, k.String())
 		case len(k) >= 2 && (k[0] == "keys" || k[0] == "ui" || k[0] == "mods" || k[0] == "server"),
