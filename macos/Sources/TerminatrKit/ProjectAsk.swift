@@ -203,6 +203,11 @@ public struct ContextUse: Equatable, Sendable {
     public let percent: Int
     public let level: Level
 
+    public init(percent: Int, level: Level) {
+        self.percent = percent
+        self.level = level
+    }
+
     /// The percent from which the use is high, whatever the hint.
     public static let high = 80
 
@@ -235,6 +240,125 @@ public struct ContextUse: Equatable, Sendable {
         case .plain: "context \(percent)% used"
         case .hint: "context \(percent)% used, past the hint: Save & Clear frees it"
         case .high: "context \(percent)% used, nearly full: Save & Clear frees it"
+        }
+    }
+}
+
+extension ContextUse {
+    /// How full the window is, for a gauge: 0 to 1.
+    public var fraction: Double { Double(min(max(percent, 0), 100)) / 100 }
+}
+
+/// A save and clear of a coordinator as the phone follows it (T868):
+/// asked (coordinator.clear), the coordinator saving what it learned
+/// (its turn), its conversation cleared at its next idle moment, done
+/// once its context use drops below what it was when asked (the server
+/// forgets the use at the clear). Each session.list read moves it on.
+public struct SaveClear: Equatable, Sendable {
+    public enum Phase: Equatable, Sendable {
+        /// coordinator.clear is on its way.
+        case asking
+        case saving
+        case clearing
+        /// Cleared; the use after, nil until the next turn reports one.
+        case done(after: Int?)
+        case failed(String)
+    }
+
+    public private(set) var phase = Phase.asking
+    /// The use when asked, in percent: done once it drops below.
+    public let before: Int?
+    /// The tokens its latest turn read when asked: more, and the save
+    /// turn ran, however short it was between two reads.
+    private let tokens: Int
+    public let since: Date
+    /// The coordinator was seen working since the ask: its save turn.
+    private var worked = false
+    /// When it was done or failed.
+    private var ended: Date?
+
+    /// How long it is followed at most: the ticker may wait on a long
+    /// turn before it asks for the save.
+    public static let longest: TimeInterval = 15 * 60
+
+    /// How long done or failed stays said.
+    public static let shown: TimeInterval = 12
+
+    /// Asked at now of coordinator session s.
+    public init(coordinator s: AppAPI.Session?, at now: Date) {
+        before = ContextUse.of(s, hint: 0)?.percent
+        tokens = s?.context ?? 0
+        since = now
+    }
+
+    /// The server took it.
+    public mutating func asked() {
+        if phase == .asking { phase = .saving }
+    }
+
+    public mutating func fail(_ why: String, at now: Date) {
+        phase = .failed(why)
+        ended = now
+    }
+
+    /// Moves on, at now, from the coordinator's session as the latest
+    /// list has it (nil: none runs).
+    public mutating func follow(_ s: AppAPI.Session?, at now: Date) {
+        guard phase == .saving || phase == .clearing else { return }
+        guard let s, s.state != "exited" else {
+            fail("The coordinator stopped before it was cleared.", at: now)
+            return
+        }
+        let use = ContextUse.of(s, hint: 0)?.percent
+        if let before, use.map({ $0 < before }) ?? true {
+            phase = .done(after: use)
+            ended = now
+            return
+        }
+        if s.state == "working" || s.context > tokens {
+            worked = true
+        }
+        if worked, s.state != "working" {
+            // The save turn ended: the clear goes now. With no use to
+            // watch drop, that is as far as it can be seen.
+            if before == nil {
+                phase = .done(after: nil)
+                ended = now
+            } else {
+                phase = .clearing
+            }
+        }
+    }
+
+    /// Whether it is still on its way.
+    public var running: Bool {
+        switch phase {
+        case .asking, .saving, .clearing: true
+        case .done, .failed: false
+        }
+    }
+
+    /// Whether it is no longer worth showing at now: said long enough,
+    /// or followed too long.
+    public func over(at now: Date) -> Bool {
+        if let ended { return now.timeIntervalSince(ended) > Self.shown }
+        return now.timeIntervalSince(since) > Self.longest
+    }
+
+    /// What the screen says of it.
+    public var words: String {
+        switch phase {
+        case .asking: "Asking…"
+        case .saving: "Saving what it learned…"
+        case .clearing: "Clearing…"
+        case .done(let after):
+            switch (before, after) {
+            case (let b?, let a?): "Cleared: context \(b)% → \(a)%"
+            // The server forgets the use until the next turn's.
+            case (let b?, nil): "Cleared: context was \(b)%"
+            default: "Cleared"
+            }
+        case .failed(let why): why
         }
     }
 }

@@ -158,7 +158,8 @@ extension ComponentGallery {
         VStack(alignment: .leading, spacing: Spacing.row) {
             Text("Session").font(theme.title(.title, .bold)).foregroundStyle(theme.ink)
             HStack {
-                SessionTitle("Product search ranking", place: "T14 · acme-web", state: Attention(word: "asks", tone: .question, why: "", waits: true))
+                SessionTitle("Product search ranking", place: "T14 · acme-web", state: Attention(word: "asks", tone: .question, why: "", waits: true),
+                             context: ContextUse(percent: 72, level: .hint))
                 Spacer(minLength: 0)
                 SessionToggle(selection: $tab)
             }
