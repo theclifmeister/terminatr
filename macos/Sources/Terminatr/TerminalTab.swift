@@ -2,11 +2,13 @@ import AppKit
 import SwiftTerm
 import SwiftUI
 import TerminatrKit
+import TerminatrPane
 import TerminatrUI
 
 /// The Terminal tab: the session's pane through pane.vt, drawn by
-/// SwiftTerm. The server's emulator stays the pane's; this one mirrors
-/// it at the pane's size and never answers the program. Keys go back
+/// SwiftTerm (PaneController, shared with the phone's). The server's
+/// emulator stays the pane's; this one mirrors it at the pane's size
+/// and never answers the program. Keys go back
 /// through pane.input as the human's: typed text takes a thread over.
 /// The tab claims the pane's size for its room when it opens, when the
 /// room changes and settles, and on keys (PaneFit). A paired
@@ -18,7 +20,7 @@ struct TerminalTab: View {
     @Environment(\.theme) private var theme
     let model: SessionModel
     let session: AppAPI.Session?
-    @State private var pane = PaneController()
+    @State private var pane = MacPane()
 
     /// The terminal box's corners, which the session's notice above it
     /// shares; its edges, and the view-only note's sides, are the pages'
@@ -42,13 +44,13 @@ struct TerminalTab: View {
                 // While the bridge is down the pane keeps its last
                 // screen (the window's banner says why) until the next.
                 ZStack(alignment: .bottom) {
-                    PaneTerminal(controller: pane, theme: theme)
+                    PaneTerminal(host: pane.host, theme: theme)
                         .task(id: PaneKey(session: id, bridge: app.bridge.map(ObjectIdentifier.init))) {
-                            if let bridge = app.bridge { await pane.run(bridge, id) }
+                            if let bridge = app.bridge { await pane.controller.run(bridge, id) }
                         }
-                        .onChange(of: remote, initial: true) { _, r in pane.keys = r != .view }
-                        .onChange(of: model.repaints) { pane.repaint() }
-                    if let closed = pane.closed, app.bridge != nil {
+                        .onChange(of: remote, initial: true) { _, r in pane.controller.keys = r != .view }
+                        .onChange(of: model.repaints) { pane.controller.repaint() }
+                    if let closed = pane.controller.closed, app.bridge != nil {
                         Text(closed)
                             .padding(10)
                             .frosted(RoundedRectangle(cornerRadius: 10))
@@ -87,146 +89,24 @@ private struct PaneKey: Equatable {
     let bridge: ObjectIdentifier?
 }
 
-/// The pane stream and the mirror it feeds.
+/// The tab's pane: the shared stream (PaneController, TerminatrPane)
+/// into the mirror PaneHost pins at the top left, claiming the tab's
+/// size as PaneFit says.
 @MainActor
 @Observable
-final class PaneController: NSObject, TerminalViewDelegate {
-    private(set) var size: AppAPI.PaneSize?
-    private(set) var closed: String?
-    /// Keys are sent: false while a paired server's switch is view,
-    /// where its server would drop them, and the mouse stays the tab's.
-    @ObservationIgnored var keys = true {
-        didSet { host.terminal.allowMouseReporting = keys }
-    }
-
+final class MacPane {
     @ObservationIgnored let host = PaneHost()
-    @ObservationIgnored private var bridge: Bridge?
-    @ObservationIgnored private var stream: Int?
-    @ObservationIgnored private var pending = Data()
-    @ObservationIgnored private var claim: AppAPI.PaneSize?
-    @ObservationIgnored private var fits = PaneFit()
-    @ObservationIgnored private var sending = false
+    let controller: PaneController
 
-    override init() {
-        super.init()
-        host.terminal.terminalDelegate = self
-        host.terminal.onRepaint = { [weak self] in self?.repaint() }
-        host.roomChanged = { [weak self] in self?.roomChanged() }
+    init() {
+        let host = host
+        controller = PaneController(terminal: host.terminal)
+        controller.fitting = { host.fitting }
+        controller.mirror = { cols, rows in host.mirror(cols: cols, rows: rows) }
+        controller.openLink = { LinkConfirm.open($0) }
+        host.terminal.onRepaint = { [weak controller] in controller?.repaint() }
+        host.roomChanged = { [weak controller] in controller?.roomChanged() }
     }
-
-    /// Streams session id's pane into the mirror until cancelled or
-    /// the pane closes.
-    func run(_ bridge: Bridge, _ id: String) async {
-        self.bridge = bridge
-        closed = nil
-        do {
-            let sub = try await bridge.subscribe(AppAPI.Methods.paneVt, AppAPI.PaneParams(session: id))
-            stream = sub.id
-            fits.opened()
-            show(cols: sub.result.session.cols, rows: sub.result.session.rows)
-            fit()
-            for try await e in sub.events {
-                switch e.name {
-                case "pane.repaint":
-                    let t = host.terminal.getTerminal()
-                    t.resetToInitialState()
-                    show(cols: e.data.cols, rows: e.data.rows)
-                    host.terminal.feed(byteArray: ArraySlice(e.data.data))
-                case "pane.output":
-                    host.terminal.feed(byteArray: ArraySlice(e.data.data))
-                case "pane.resize":
-                    show(cols: e.data.cols, rows: e.data.rows)
-                case "pane.closed":
-                    // A paired server's pane says why in the server's
-                    // words, this server's in a fixed one.
-                    let why = e.data.reason
-                    closed = why.contains(" ") ? "The pane closed: \(why)." : "The pane closed (\(why))."
-                default:
-                    break
-                }
-            }
-        } catch {
-            if !Task.isCancelled {
-                closed = error.localizedDescription
-            }
-        }
-        stream = nil
-    }
-
-    private func show(cols: Int, rows: Int) {
-        guard cols > 0, rows > 0 else { return }
-        size = AppAPI.PaneSize(cols: cols, rows: rows)
-        host.mirror(cols: cols, rows: rows)
-    }
-
-    /// Claims the size that fills the tab, when PaneFit says to.
-    private func fit() {
-        guard let c = fits.claim(fitting: host.fitting, pane: size, keys: keys, open: stream != nil) else { return }
-        claim = c
-        flush()
-    }
-
-    /// The tab's room changed (the window resized, the inspector or the
-    /// sidebar shown or hidden): claims once it settles.
-    private func roomChanged() {
-        let move = fits.moved()
-        Task { [weak self] in
-            try? await Task.sleep(for: PaneFit.settle)
-            guard let self, self.fits.settled(move) else { return }
-            self.fit()
-        }
-    }
-
-    func repaint() {
-        guard let bridge, let stream else { return }
-        Task { _ = try? await bridge.call(AppAPI.Methods.paneInput, AppAPI.PaneInputParams(id: stream, repaint: true)) }
-    }
-
-    /// Sends what was typed, in order, a call at a time. Keys claim the
-    /// window's size when the pane has another, as typing in a console
-    /// does: once per size.
-    private func type(_ data: Data) {
-        guard keys else { return }
-        if let c = fits.claim(fitting: host.fitting, pane: size, keys: keys, open: stream != nil) {
-            claim = c
-        }
-        pending.append(data)
-        flush()
-    }
-
-    private func flush() {
-        guard !sending, let bridge, let stream else { return }
-        sending = true
-        Task {
-            while !pending.isEmpty || claim != nil {
-                let input = pending, size = claim
-                pending = Data()
-                claim = nil
-                _ = try? await bridge.call(AppAPI.Methods.paneInput, AppAPI.PaneInputParams(id: stream, input: input, size: size))
-            }
-            sending = false
-        }
-    }
-
-    // MARK: TerminalViewDelegate
-
-    nonisolated func send(source: TerminalView, data: ArraySlice<UInt8>) {
-        let d = Data(data)
-        MainActor.assumeIsolated { type(d) }
-    }
-
-    nonisolated func requestOpenLink(source: TerminalView, link: String, params: [String: String]) {
-        MainActor.assumeIsolated { LinkConfirm.open(link) }
-    }
-
-    /// A program setting the clipboard (OSC 52) is ignored: an agent's
-    /// output never writes the user's pasteboard.
-    nonisolated func clipboardCopy(source: TerminalView, content: Data) {}
-    nonisolated func sizeChanged(source: TerminalView, newCols: Int, newRows: Int) {}
-    nonisolated func setTerminalTitle(source: TerminalView, title: String) {}
-    nonisolated func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {}
-    nonisolated func scrolled(source: TerminalView, position: Double) {}
-    nonisolated func rangeChanged(source: TerminalView, startY: Int, endY: Int) {}
 }
 
 /// A link clicked in the terminal: shown with its full URL first, and
@@ -397,15 +277,14 @@ final class MirrorTerminalView: TerminalView {
 /// cursor and selection, set again when the theme or the appearance
 /// changes.
 struct PaneTerminal: NSViewRepresentable {
-    let controller: PaneController
+    let host: PaneHost
     let theme: Theme
     @Environment(\.colorScheme) private var scheme
 
     func makeNSView(context: Context) -> PaneHost {
-        let h = controller.host
-        h.terminal.optionAsMetaKey = false
-        paint(h, context.coordinator)
-        return h
+        host.terminal.optionAsMetaKey = false
+        paint(host, context.coordinator)
+        return host
     }
 
     func updateNSView(_ nsView: PaneHost, context: Context) {
@@ -423,14 +302,6 @@ struct PaneTerminal: NSViewRepresentable {
         let c = theme.colours.terminal, dark = scheme == .dark
         if let w = painted.with, w.0 == c, w.1 == dark { return }
         painted.with = (c, dark)
-        let t = h.terminal
-        t.nativeBackgroundColor = NSColor(c.background, dark: dark)
-        t.nativeForegroundColor = NSColor(c.foreground, dark: dark)
-        t.caretColor = NSColor(c.cursor, dark: dark)
-        t.selectedTextBackgroundColor = NSColor(c.selection, dark: dark)
-        t.installColors(c.ansi.map { s in
-            let x = s.hex(dark: dark)
-            return SwiftTerm.Color(red8: UInt16((x >> 16) & 0xff), green8: UInt16((x >> 8) & 0xff), blue8: UInt16(x & 0xff))
-        })
+        h.terminal.paint(c, dark: dark)
     }
 }

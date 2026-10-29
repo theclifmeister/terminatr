@@ -29,7 +29,9 @@
 #                server's TERMINATR_HOME/SOCKET to $(DEV)/home.txt (source
 #                it for tm commands, or the Mac app, against it); touch
 #                $(DEV)/asleep to stop the server, rm it to start it
-#                again (the agents resume, idle), touch $(DEV)/stop to end
+#                again (the agents resume, idle), touch $(DEV)/stop to end;
+#                LEVEL=write pairs the phone at write (its prompt box and
+#                its terminal's keys), else at answer
 #   make run-paired  as run, pairing with dev-server's code instead of
 #                the demo (the Simulator has no camera)
 #   make archive the Release build for devices, in $(ARCHIVE):
@@ -69,8 +71,13 @@ unexport TERMINATR_WERROR
 # The scheme is Terminatr-iOS (xcshareddata): a scheme named Terminatr
 # can resolve to the package's Mac executable of that name, which then
 # builds for iOS and fails (on SwiftTerm's plugin, then on AppKit).
+# SwiftTerm (the Terminal screen, T840) runs a build-tool plugin that
+# writes its version into the build; xcodebuild asks to trust a plugin
+# in Xcode's dialog first, which a command line can't, so it skips that.
+PLUGINS      := -skipPackagePluginValidation
+
 build:
-	xcodebuild -project Terminatr.xcodeproj -scheme Terminatr-iOS -configuration $(CONFIG) \
+	xcodebuild -project Terminatr.xcodeproj -scheme Terminatr-iOS -configuration $(CONFIG) $(PLUGINS) \
 		-destination 'generic/platform=iOS Simulator' -derivedDataPath $(DERIVED) $(if $(ARCHS),ARCHS="$(ARCHS)") build
 
 run: build
@@ -80,7 +87,7 @@ run: build
 
 dev-server:
 	mkdir -p $(DEV) && rm -f $(DEV)/invite.txt $(DEV)/asleep $(DEV)/stop
-	cd .. && E2E=1 TM_PHONE_DEV_DIR="$(abspath $(DEV))" go test -count=1 -v -timeout 0 -run '^TestPhoneDev$$' ./internal/e2e
+	cd .. && E2E=1 TM_PHONE_DEV_DIR="$(abspath $(DEV))" TM_PHONE_DEV_LEVEL="$(LEVEL)" go test -count=1 -v -timeout 0 -run '^TestPhoneDev$$' ./internal/e2e
 
 run-paired: build
 	xcrun simctl boot "$(DEVICE)" 2>/dev/null || true
@@ -91,7 +98,7 @@ run-paired: build
 # by its Release PROVISIONING_PROFILE_SPECIFIER): set for every target,
 # the packages' resource bundles refuse it.
 archive:
-	xcodebuild -project Terminatr.xcodeproj -scheme Terminatr-iOS -configuration Release \
+	xcodebuild -project Terminatr.xcodeproj -scheme Terminatr-iOS -configuration Release $(PLUGINS) \
 		-destination 'generic/platform=iOS' -derivedDataPath $(DERIVED) -archivePath $(ARCHIVE) \
 		MARKETING_VERSION=$(VERSION) CURRENT_PROJECT_VERSION=$(BUILD) \
 		$(if $(PROFILE),CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="Apple Distribution" DEVELOPMENT_TEAM=$(TEAM) TM_IOS_PROFILE=$(PROFILE),CODE_SIGNING_ALLOWED=NO) \

@@ -4,14 +4,6 @@ import SwiftUI
 import TerminatrKit
 import TerminatrUI
 
-extension NSColor {
-    /// A theme's swatch as drawn in light or dark (the terminal's, set
-    /// once per appearance).
-    convenience init(_ s: Swatch, dark: Bool) {
-        self.init(hex: s.hex(dark: dark), alpha: s.alpha(dark: dark))
-    }
-}
-
 enum Fonts {
     /// Registers the bundled fonts (Bricolage Grotesque, DM Mono; OFL,
     /// their licences beside them) for this process.
