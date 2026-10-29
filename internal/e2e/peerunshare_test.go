@@ -58,10 +58,11 @@ func TestPeerUnshareLinkedProjects(t *testing.T) {
 	w.Type("A")
 	w.WaitFor("1 overview", wait)
 	w.Type("4")
-	// Linked projects is the row above the last (Share).
+	// Linked projects is two rows above the last (Share, then Mods).
 	for range 40 {
 		w.Key(keyDown)
 	}
+	w.Key(keyUp)
 	w.Key(keyUp)
 	w.WaitFor("Enter opens the Network popup on this project", wait)
 	w.Key(keyEnter)

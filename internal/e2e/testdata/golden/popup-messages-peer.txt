@@ -1,7 +1,7 @@
  PROJECTS                      1   │ tm dashboard                                               ● server ok · 0 sessions
  <server>│ NEEDS YOU 1 ───────────────────────────────────────────────────────────────────────
  ■ acm╭─ acme ───────────────────────────────────────────────────────────────────────────────────────────────────╮twork
- └─ co│ 1 overview 2 inbox 2 3 tasks 4 settings 5 access 6 keys 7 memory 8 library 9 messages 1                  │ivate
+ └─ co│ 1 overview 2 inbox 2 3 tasks 4 settings 5 access 6 keys 7 memory 8 library 9 messages 1 0 designs mods   │ivate
       │                                                                                                          │ inbox
  ◉ min│ ⚑ NEEDS YOU 1 · 1 link request │
       │ ⚑ mini/docs   asks to link (<id>) · A accept · X decline                                             │──────

@@ -178,6 +178,11 @@ func TestSmokeProjectPopup(t *testing.T) {
 	w.WaitFor("BUILD 0/2 built", wait)
 	w.Key(keyEsc)
 	w.WaitFor("enter open", wait)
+	// Mods: the last core tab, after Designs, with no number key; the
+	// built-in mods follow all projects.
+	w.Key(emu.Key{Special: emu.KeyRight})
+	w.WaitFor("follows all projects: on", wait)
+	w.Golden("popup-mods.txt", popupMasks...)
 	w.Type("4")
 
 	// Start threads: ask first → automatically, saved and in the

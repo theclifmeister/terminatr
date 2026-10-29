@@ -1,7 +1,7 @@
  PROJECTS                      1   │ tm dashboard                                               ● server ok · 2 sessions
  ■ demo        2                   │ demo ────────────────────────────────────────────────── ● active — S to deactivate
  └─ co╭─ demo ───────────────────────────────────────────────────────────────────────────────────────────────────╮ inbox
-    ├─│  1 overview   2 inbox 3   3 tasks   4 settings   5 access   6 keys   7 memory   8 library   9 messages   │t  10…
+    ├─│ 1 overview 2 inbox 3 3 tasks 4 settings 5 access 6 keys 7 memory 8 library 9 messages 0 designs mods     │t  10…
     └─│                                                                                                          │
       │ Memory  MEMORY.md                                                                                        │
       │ - Login flow: the redirect lives in auth/session.go                                                      │

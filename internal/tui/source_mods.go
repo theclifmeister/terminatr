@@ -21,13 +21,13 @@ import (
 // ServerSource's ModSource and ModViewSource: installing, updating and
 // running mods, and their views.
 
-func (s *ServerSource) ModAct(id, verb string) error {
+func (s *ServerSource) ModAct(id, verb, slug string) error {
 	defer s.touch()
 	switch verb {
 	case "enable":
-		return mod.Enable(s.Caller, id, "")
+		return mod.Enable(s.Caller, id, slug)
 	case "disable":
-		return mod.Disable(s.Caller, id, "")
+		return mod.Disable(s.Caller, id, slug)
 	case "remove":
 		mod.SweepRemoved(time.Now())
 		return mod.Remove(s.Caller, id, false)
@@ -38,6 +38,11 @@ func (s *ServerSource) ModAct(id, verb string) error {
 func (s *ServerSource) SetModGrants(id string, grants []string) error {
 	defer s.touch()
 	return mod.SetGrants(s.Caller, id, grants)
+}
+
+func (s *ServerSource) SetModProjects(id string, projects []string) error {
+	defer s.touch()
+	return mod.SetProjects(s.Caller, id, projects)
 }
 
 func (s *ServerSource) SetModSetting(id, slug, key string, value any) error {
