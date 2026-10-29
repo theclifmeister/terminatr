@@ -4,158 +4,272 @@ import TerminatrUI
 
 /// The projects as the TUI's and the Mac's sidebar list them
 /// (SidebarTree): this server's active ones, pinned first; each paired
-/// server's shared ones; and the inactive ones folded under
-/// "Inactive (n)". A project opens its coordinator and threads.
+/// server's shared ones; and the inactive ones folded under one quiet
+/// row. Each is a ProjectCard (T846) under the screen's header, and
+/// opens its coordinator and threads.
 struct ProjectsScreen: View {
     @Environment(PhoneModel.self) private var model
     @Environment(\.theme) private var theme
+    @Environment(\.navigate) private var navigate
     @State private var showInactive = false
 
     var body: some View {
-        List {
-            if let f = model.failure { Failure(text: f) }
-            Section(model.peers.isEmpty ? "" : "This server") {
-                ForEach(model.activeProjects, id: \.slug) { p in
-                    RouteLink(value: Route.project(p.slug)) { line(p) }
+        let gone = model.inactiveProjects
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                ScreenHeader("Projects", subtitle: subtitle(inactive: gone.count), symbol: symbol) {
+                    SettingsButton().buttonStyle(.circle)
                 }
-            }
-            ForEach(model.peers, id: \.alias) { peer in
-                Section("\(peer.name.isEmpty ? peer.alias : peer.name) · \(PeerTag.of(peer).word)") {
-                    ForEach(peer.projects, id: \.project) { p in
-                        let coordinator = p.sessions.first { SessionRef($0, of: peer.alias)?.isCoordinator == true }
-                        RouteLink(value: Route.peerProject(alias: peer.alias, project: p.project)) {
-                            ProjectLine(name: p.project, state: .of(peer: coordinator), needs: p.stale ? 0 : p.needsYou,
-                                        dim: peer.state != "up" || p.stale)
+                LazyVStack(alignment: .leading, spacing: Spacing.row + 2) {
+                    if let f = model.failure { Failure(text: f) }
+                    if !model.peers.isEmpty { SectionHeading("This server") }
+                    ForEach(model.activeProjects, id: \.slug) { card($0) }
+                    ForEach(model.peers, id: \.alias) { peer in
+                        SectionHeading(peer.name.isEmpty ? peer.alias : peer.name, detail: PeerTag.of(peer).word)
+                        ForEach(peer.projects, id: \.project) { p in
+                            let sessions = SidebarTree.sessions(of: p, alias: peer.alias)
+                            let coordinator = sessions.first { $0.ref.isCoordinator }?.session ?? nil
+                            let route = Route.peerProject(alias: peer.alias, project: p.project)
+                            PlainRouteLink(value: route) {
+                                ProjectCard(name: p.project, coordinator: .of(peer: coordinator), needs: p.stale ? 0 : p.needsYou,
+                                            threads: sessions.filter { !$0.ref.isCoordinator }.map { Attention.of(peer: $0.session).tone },
+                                            dim: peer.state != "up" || p.stale, selected: navigate?.open == route)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    if !gone.isEmpty {
+                        InactiveFold(count: gone.count, names: gone.map(\.slug), open: $showInactive)
+                        if showInactive {
+                            ForEach(gone, id: \.slug) { card($0, dim: true) }
                         }
                     }
                 }
-            }
-            let gone = model.inactiveProjects
-            if !gone.isEmpty {
-                Section {
-                    DisclosureGroup("Inactive (\(gone.count))", isExpanded: $showInactive) {
-                        ForEach(gone, id: \.slug) { p in
-                            RouteLink(value: Route.project(p.slug)) { line(p).opacity(0.7) }
-                        }
-                    }
-                    .font(theme.body(.body, .medium))
-                    .foregroundStyle(theme.muted)
-                }
+                .padding(.horizontal, Spacing.gutter)
+                .padding(.bottom, Spacing.gutter)
             }
         }
         .refreshable { await model.refresh() }
         .keepsPlace("projects")
         .kept($showInactive, "inactive")
         .navigationTitle("Projects")
-        .toolbar { SettingsButton() }
+        // The header has the title and the Settings button.
+        .toolbar(.hidden, for: .navigationBar)
         .backdrop()
     }
 
-    private func line(_ p: AppAPI.Project) -> some View {
-        ProjectLine(name: p.slug, state: .of(coordinator: model.coordinatorSession(p.slug), in: p),
-                    needs: Need.count(model.needs, project: p.slug))
+    private func card(_ p: AppAPI.Project, dim: Bool = false) -> some View {
+        let route = Route.project(p.slug)
+        return PlainRouteLink(value: route) {
+            ProjectCard(name: p.slug, coordinator: .of(coordinator: model.coordinatorSession(p.slug), in: p),
+                        needs: Need.count(model.needs, project: p.slug),
+                        threads: SidebarTree.threads(of: p) { model.session($0) }.map { model.attention($0).tone },
+                        pinned: p.pinned, dim: dim, selected: navigate?.open == route)
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// "clifford's Mac · 2 active · 1 inactive".
+    private func subtitle(inactive: Int) -> String {
+        let source = model.source == .demo ? "Demo" : model.serverName
+        return [source, "\(model.activeProjects.count) active", inactive > 0 ? "\(inactive) inactive" : nil]
+            .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
+    }
+
+    private var symbol: String {
+        model.source == .demo ? "sparkles" : model.linkWords.0
     }
 }
 
-/// One of this server's projects: its goal, its coordinator, running or
-/// not (at the write level Start Coordinator under it), then every
-/// unresolved thread, done ones too, in the TUI's order
-/// (SidebarTree.threads). An inactive project's rows are dormant.
+/// The inactive projects folded into one quiet row on glass: "Inactive
+/// · old-prototype" (or how many), its chevron turned while open.
+private struct InactiveFold: View {
+    @Environment(\.theme) private var theme
+    @Environment(\.accessibilityReduceMotion) private var still
+    let count: Int
+    let names: [String]
+    @Binding var open: Bool
+
+    var body: some View {
+        Button {
+            withAnimation(still ? nil : .snappy) { open.toggle() }
+        } label: {
+            HStack {
+                Text("Inactive · " + (count == 1 ? names[0] : "\(count)"))
+                    .font(theme.body(.subheadline, .medium))
+                    .foregroundStyle(theme.muted)
+                    .lines(1)
+                Spacer(minLength: Spacing.item)
+                Image(systemName: "chevron.right")
+                    .font(theme.body(.footnote, .semibold))
+                    .foregroundStyle(theme.muted)
+                    .rotationEffect(.degrees(open ? 90 : 0))
+            }
+            .padding(.horizontal, Spacing.card + 2)
+            .frame(minHeight: tapTarget + 4)
+            .surface(.glass, in: RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .hoverEffect()
+        .accessibilityLabel("Inactive projects, \(count)")
+        .accessibilityValue(open ? "shown" : "hidden")
+        .accessibilityHint(open ? "Hides them" : "Shows them")
+    }
+}
+
+/// One of this server's projects (T846): its monogram, name and goal,
+/// its board's counts as StatTiles, its coordinator, running or not (at
+/// the write level Start Coordinator under it), its pages as PageTiles,
+/// then every unresolved thread, done ones too, in the TUI's order
+/// (SidebarTree.threads), as SessionTiles. An inactive project's rows
+/// are dormant.
 struct ProjectScreen: View {
     @Environment(PhoneModel.self) private var model
     @Environment(\.theme) private var theme
+    @Environment(\.navigate) private var navigate
     let slug: String
 
     var body: some View {
-        List {
+        ScrollView {
             if let p = model.project(slug) {
                 let dormant = !p.active
-                if !p.goal.isEmpty {
-                    Text(p.goal)
-                        .font(theme.body(.subheadline))
-                        .foregroundStyle(theme.muted)
-                        .listRowBackground(Color.clear)
-                }
-                Section {
-                    RouteLink(value: Route.session(SessionRef(project: slug))) {
+                let threads = SidebarTree.threads(of: p) { model.session($0) }
+                LazyVStack(alignment: .leading, spacing: Spacing.row + 2) {
+                    ProjectHeader(slug, goal: p.goal)
+                    stats(p)
+                    TileGroup {
                         let c = model.coordinatorSession(slug)
-                        SessionLine(label: "Coordinator", ref: nil, state: .of(coordinator: c, in: p),
-                                    busy: Busy.of(coordinator: c, in: p), dormant: dormant)
+                        let route = Route.session(SessionRef(project: slug))
+                        PlainRouteLink(value: route) {
+                            SessionTile("Coordinator", state: .of(coordinator: c, in: p), busy: Busy.of(coordinator: c, in: p),
+                                        dormant: dormant, selected: navigate?.open == route)
+                        }
+                        .buttonStyle(.plain)
                     }
                     if p.active, model.coordinatorSession(slug) == nil, model.can(AppAPI.Methods.projectOpen.name) {
                         StartCoordinatorButton(project: slug)
                     }
-                }
-                pages(p)
-                Section("Threads") {
-                    ForEach(SidebarTree.threads(of: p) { model.session($0) }, id: \.record.id) { t in
-                        RouteLink(value: Route.session(SessionRef(project: slug, thread: t.record.id))) {
-                            SessionLine(label: t.record.title, ref: t.task?.ref, state: model.attention(t), busy: model.busy(t),
-                                        pr: t.pr, dormant: dormant)
+                    pages
+                    let waiting = threads.filter { model.attention($0).waits }.count
+                    SectionHeading("Threads", detail: threads.isEmpty ? "" : "\(threads.count)" + (waiting > 0 ? " · \(waiting) wait on you" : ""))
+                    if threads.isEmpty {
+                        Text("No threads")
+                            .font(theme.body(.subheadline))
+                            .foregroundStyle(theme.muted)
+                            .padding(Spacing.card)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .surface(.card, in: RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
+                    } else {
+                        TileGroup {
+                            ForEach(Array(threads.enumerated()), id: \.element.record.id) { i, t in
+                                let route = Route.session(SessionRef(project: slug, thread: t.record.id))
+                                PlainRouteLink(value: route) {
+                                    SessionTile(t.record.title, ref: t.task?.ref, state: model.attention(t), busy: model.busy(t),
+                                                pr: t.pr, dormant: dormant, rule: i > 0, selected: navigate?.open == route)
+                                }
+                                .buttonStyle(.plain)
+                            }
                         }
                     }
                 }
+                .padding(.horizontal, Spacing.gutter)
+                .padding(.bottom, Spacing.gutter)
             } else {
                 ContentUnavailableView("No project \(slug)", systemImage: "folder.badge.questionmark")
+                    .padding(.top, 60)
             }
         }
         .refreshable { await model.refresh() }
         .keepsPlace(Route.project(slug).listKey)
         .navigationTitle(slug)
+        .headerTitle()
         .backdrop()
+    }
+
+    /// The board's counts, each opening the board: done only once the
+    /// lists carry it.
+    private func stats(_ p: AppAPI.Project) -> some View {
+        TileRow {
+            ForEach(Self.stats(p, done: model.listsDone), id: \.1) { n, word in
+                PlainRouteLink(value: Route.board(slug)) { StatTile(n, word) }
+                    .buttonStyle(.plain)
+                    .accessibilityHint("Opens the board")
+            }
+        }
+    }
+
+    static func stats(_ p: AppAPI.Project, done: Bool) -> [(Int, String)] {
+        [(Dashboard.onDeck(p).count, "on deck"), (Dashboard.backlog(p).count, "backlog")] + (done ? [(Dashboard.doneCount(p), "done")] : [])
     }
 
     /// The project's read-only pages, as the Mac's beside its dashboard:
     /// Memory and Library with a tm that reads them.
-    private func pages(_ p: AppAPI.Project) -> some View {
+    private var pages: some View {
         let pages = model.pages
-        let board = [Dashboard.onDeck(p).count, Dashboard.backlog(p).count, model.listsDone ? Dashboard.doneCount(p) : 0]
-        return Section("Project") {
-            RouteLink(value: Route.overview(slug)) { Label("Overview", systemImage: "info.circle") }
-            RouteLink(value: Route.board(slug)) {
-                LabeledContent {
-                    Text(Self.boardWords(board)).font(theme.mono(.caption))
-                } label: {
-                    Label("Board", systemImage: "list.bullet.rectangle")
-                }
-            }
-            if pages.contains(.memory) {
-                RouteLink(value: Route.memory(slug)) { Label("Memory", systemImage: "brain") }
-            }
-            if pages.contains(.library) {
-                RouteLink(value: Route.library(slug)) { Label("Library", systemImage: "books.vertical") }
+        let tiles: [(Route, String, String)] = [
+            (.overview(slug), "Overview", "info.circle"),
+            (.board(slug), "Board", "list.bullet.rectangle"),
+        ] + (pages.contains(.memory) ? [(.memory(slug), "Memory", "brain")] : [])
+            + (pages.contains(.library) ? [(.library(slug), "Library", "books.vertical")] : [])
+        return TileRow {
+            ForEach(tiles, id: \.1) { route, title, symbol in
+                PlainRouteLink(value: route) { PageTile(title, symbol: symbol, selected: navigate?.open == route) }
+                    .buttonStyle(.plain)
             }
         }
-        .font(theme.body(.body))
-    }
-
-    /// "2 on deck · 3 backlog · 9 done", the empty ones left out.
-    static func boardWords(_ n: [Int]) -> String {
-        zip(n, ["on deck", "backlog", "done"]).filter { $0.0 > 0 }.map { "\($0.0) \($0.1)" }.joined(separator: " · ")
     }
 }
 
 /// A paired server's shared project: its coordinator, running there or
-/// not, and its threads (SidebarTree.sessions), as the Mac lists them.
+/// not, and its threads (SidebarTree.sessions), as the Mac lists them,
+/// under its header as SessionTiles (T846).
 struct PeerProjectScreen: View {
     @Environment(PhoneModel.self) private var model
+    @Environment(\.navigate) private var navigate
     let alias: String
     let project: String
 
     var body: some View {
-        List {
-            if let p = model.peers.first(where: { $0.alias == alias })?.projects.first(where: { $0.project == project }) {
-                ForEach(SidebarTree.sessions(of: p, alias: alias), id: \.ref) { s, ref, task, title in
-                    RouteLink(value: Route.session(ref)) {
-                        SessionLine(label: ref.isCoordinator ? "Coordinator" : title.isEmpty ? ref.thread : title, ref: task.isEmpty ? nil : task,
-                                    state: .of(peer: s))
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: Spacing.row + 2) {
+                ProjectHeader(project)
+                if let p = model.peers.first(where: { $0.alias == alias })?.projects.first(where: { $0.project == project }) {
+                    let sessions = SidebarTree.sessions(of: p, alias: alias)
+                    if !sessions.isEmpty {
+                        TileGroup {
+                            ForEach(Array(sessions.enumerated()), id: \.element.ref) { i, e in
+                                let route = Route.session(e.ref)
+                                PlainRouteLink(value: route) {
+                                    SessionTile(e.ref.isCoordinator ? "Coordinator" : e.title.isEmpty ? e.ref.thread : e.title,
+                                                ref: e.task.isEmpty ? nil : e.task, state: .of(peer: e.session), rule: i > 0,
+                                                selected: navigate?.open == route)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
                     }
                 }
             }
+            .padding(.horizontal, Spacing.gutter)
+            .padding(.bottom, Spacing.gutter)
         }
         .refreshable { await model.refresh() }
         .keepsPlace(Route.peerProject(alias: alias, project: project).listKey)
         .navigationTitle(project)
+        .headerTitle()
         .backdrop()
+    }
+}
+
+extension View {
+    /// A screen with its own header in its content (T846): the bar keeps
+    /// its buttons, and the screen's title for the back button and
+    /// VoiceOver, but shows no title of its own.
+    func headerTitle() -> some View {
+        navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .principal) { Color.clear.frame(width: 1, height: 1).accessibilityHidden(true) }
+            }
     }
 }
