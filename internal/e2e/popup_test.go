@@ -151,6 +151,11 @@ func TestSmokeProjectPopup(t *testing.T) {
 	if out := env.MustCLI("library", "list", "--project", slug); out != "" {
 		t.Fatalf("library after D:\n%s", out)
 	}
+	// Mods: the last core tab, with no number key; the built-in mods
+	// follow all projects.
+	w.Keys(emu.Key{Special: emu.KeyRight}, emu.Key{Special: emu.KeyRight})
+	w.WaitFor("follows all projects: on", wait)
+	w.Golden("popup-mods.txt", popupMasks...)
 	w.Type("4")
 
 	// Start threads: ask first → automatically, saved and in the

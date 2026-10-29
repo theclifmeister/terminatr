@@ -67,10 +67,10 @@ func TestModTab(t *testing.T) {
 	src, m := panelDash(t)
 	m.openTab("alpha", tabOverview, 0)
 	out := screen(m)
-	if !strings.Contains(out, "0 Review queue 2") {
+	if !strings.Contains(out, "   mods   Review queue 2") {
 		t.Fatalf("no mod tab in the tab bar:\n%s", out)
 	}
-	press(m, "0")
+	press(m, "left") // the mod tab is last, past the core tabs: no number key
 	out = screen(m)
 	for _, want := range []string{"T1 fix the login", "T2 write docs", "older first", "/ filter"} {
 		if !strings.Contains(out, want) {
@@ -248,7 +248,7 @@ func TestMemoryTabMod(t *testing.T) {
 	m.openTab("alpha", tabOverview, 0)
 	press(m, "7")
 	out := screen(m)
-	for _, want := range []string{"7 memory", "0 Review queue", "Context", "CONTEXT.md · 1 KB", "Decisions", "read"} {
+	for _, want := range []string{"7 memory", "mods   Review queue", "Context", "CONTEXT.md · 1 KB", "Decisions", "read"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("memory tab lacks %q:\n%s", want, out)
 		}
@@ -398,7 +398,7 @@ func TestModTabBinding(t *testing.T) {
 	q.Rows[1].Actions = []widget.Action{{ID: "task.delegate", Target: map[string]string{"project": "alpha", "task": "T2"}}}
 	m.setModViews(modViewsMsg{res: src.modViews})
 	m.openTab("alpha", tabOverview, 0)
-	press(m, "0")
+	press(m, "left") // the mod tab is last, past the core tabs: no number key
 	press(m, "down")
 	if out := screen(m); !strings.Contains(out, "D delegate") {
 		t.Fatalf("no core hint for the bound row:\n%s", out)
@@ -428,7 +428,7 @@ func TestModTabHintClick(t *testing.T) {
 	q.Rows[1].Actions = []widget.Action{{ID: "task.delegate", Target: map[string]string{"project": "alpha", "task": "T2"}}}
 	m.setModViews(modViewsMsg{res: src.modViews})
 	m.openTab("alpha", tabOverview, 0)
-	press(m, "0")
+	press(m, "left") // the mod tab is last, past the core tabs: no number key
 	press(m, "down")
 	stillRows(t)
 	m.render()
@@ -499,7 +499,7 @@ func TestTasksTabMod(t *testing.T) {
 	m.Update(m.openTab("alpha", tabOverview, 0)())
 	press(m, "3")
 	out := screen(m)
-	for _, want := range []string{"3 tasks", "0 Review queue", "IN MOTION ─", "ON DECK ─", "Write the README", "Proofread", "enter show"} {
+	for _, want := range []string{"3 tasks", "mods   Review queue", "IN MOTION ─", "ON DECK ─", "Write the README", "Proofread", "enter show"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("tasks tab lacks %q:\n%s", want, out)
 		}

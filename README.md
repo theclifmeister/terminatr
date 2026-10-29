@@ -32,7 +32,7 @@ Mods make tm yours. A mod is a folder with a `mod.toml` and, for code, a TypeScr
 
 Mods are safe by design. Installing one shows what it asks for, and it installs turned off. Each code mod runs in its own host under the OS sandbox and asks tm for everything. A mod only names an action, such as clearing a session or answering a question; tm checks it and asks you before it runs. Your console talks to the server on a socket of its own that agents' sandboxes don't allow, so an agent can't act as you. `tm --no-mods` starts with the built-in mods only.
 
-Some of tm is mods already: the Tasks tab, the sidebar's PR/CI column, the Memory tab and the default task templates. Settings (`,`) then `4` lists every mod, what it provides and what it may do.
+Some of tm is mods already: the Tasks tab, the sidebar's PR/CI column, the Memory tab and the default task templates. Settings (`,`) then `4` lists every mod, what it provides and what it may do. A project's popup (`A`) has a Mods tab, its last: `space` turns a mod on or off for that project and `enter` sets the mod's settings for it alone.
 
 ![Settings, Mods tab: the installed example mods, then the built-in ones, each with what it provides and the permissions it runs with.](docs/images/mods-settings.svg)
 

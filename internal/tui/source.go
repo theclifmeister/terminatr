@@ -452,10 +452,14 @@ type DeviceSource interface {
 type ModSource interface {
 	// ModAct enables, disables or removes installed mod id (verb
 	// "enable", "disable", "remove"), on the human's answer in the Mods
-	// tab (mods design §9). Enabling grants every permission the mod
-	// asks for: the human has just seen them. It is refused when tm runs
-	// inside an agent, as every mod change is.
-	ModAct(id, verb string) error
+	// tab (mods design §9); with slug, enable and disable do what tm mod
+	// enable/disable --project does. Enabling grants every permission
+	// the mod asks for: the human has just seen them. It is refused when
+	// tm runs inside an agent, as every mod change is.
+	ModAct(id, verb, slug string) error
+	// SetModProjects limits mod id to projects, none for every project
+	// (mod.SetProjects).
+	SetModProjects(id string, projects []string) error
 	// SetModGrants sets the permissions mod id runs with, of those it
 	// asks for; SetModSetting one of its own settings, for all projects
 	// or for project slug (mod API 1.11), nil for its default (or, for a
