@@ -11,8 +11,8 @@ import TerminatrUI
 /// kept for each session while the server is (Places), so going back to
 /// one shows what it showed. While the terminal shows, Repaint asks the
 /// pane afresh. On a phone's width the tab bar hides here, so the
-/// composer dock has the bottom; beside a list (an iPad, an open Duo)
-/// it stays.
+/// composer dock has the bottom, and the live strip with it; beside a
+/// list (an iPad, an open Duo) they stay.
 struct SessionScreen: View {
     @Environment(PhoneModel.self) private var model
     @Environment(\.theme) private var theme
@@ -57,6 +57,7 @@ struct SessionScreen: View {
             }
         }
         .toolbar(width == .compact ? .hidden : .automatic, for: .tabBar)
+        .hidesLiveStrip(width == .compact)
         .kept($tab, "tab \(ref)")
     }
 }
