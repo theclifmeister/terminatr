@@ -12,10 +12,13 @@ import TerminatrUI
 /// not on a paired server's session, whose prompt is typed into its
 /// pane there. Over it, a line: what the last send did, the queue and a
 /// held queue, and while the field has focus that sending takes the
-/// thread over, as the Mac's says. Text pastes as in any field; files
-/// stay the Mac's. In keys mode (-keys YES at launch, the Simulator's
+/// thread over, as the Mac's says; while the keyboard is up, at its
+/// end, a circle that hides it (HideKeyboard, T857). The circles, the
+/// field at one line and Send are one height (Theme.circle). Text
+/// pastes as in any field; files stay the Mac's. In keys mode (-keys YES at launch, the Simulator's
 /// screenshots) the key strip stays over the dock, keyboard up or not
-/// (KeyStrip), and the field types into the terminal. With a hardware
+/// (KeyStrip), and the field types into the terminal. -compose YES
+/// focuses the field (the prompt or the keys') as it shows (the Simulator's screenshots). With a hardware
 /// keyboard (an iPad's, T830) Command-Return sends as picked and
 /// Shift-Command-Return steers, as Return makes a new line; no key
 /// without a modifier does anything here.
@@ -32,18 +35,26 @@ struct PhoneComposer: View {
     @State private var text = ""
     @State private var busy = false
     @State private var said: (text: String, failed: Bool)?
+    /// The note says a prompt is queued: it goes once that prompt went in.
+    @State private var queuedNote = false
     @State private var keys = UserDefaults.standard.bool(forKey: "keys")
     @State private var steer = false
     @State private var interrupting = false
     @State private var sends = 0
+    @State private var keyboard = false
     @FocusState private var focused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.item) {
-            if let note {
-                DockNote(note.text, failed: note.failed)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .transition(.opacity)
+            if note != nil || keyboard {
+                HStack(spacing: Spacing.item) {
+                    if let note {
+                        DockNote(note.text, failed: note.failed)
+                            .transition(.opacity)
+                    }
+                    Spacer(minLength: 0)
+                    if keyboard { HideKeyboard() }
+                }
             }
             if keys {
                 TerminalKeys(session: session, mode: modeButton) { said = $0 }
@@ -55,6 +66,15 @@ struct PhoneComposer: View {
         .padding(.top, Spacing.tight)
         .padding(.bottom, Spacing.item)
         .feedback(.impact(weight: .light), trigger: sends)
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in keyboard = true }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in keyboard = false }
+        .onAppear { if UserDefaults.standard.bool(forKey: "compose"), !keys { focused = true } }
+        .onChange(of: [queued, running ? 1 : 0]) { old, new in
+            if queuedNote, PromptSent.wentIn(queued: old[0], new[0], working: old[1] == 1, new[1] == 1) {
+                queuedNote = false
+                said = nil
+            }
+        }
         .kept($text, "prompt \(ref)")
         .kept($keys, "keys \(ref)")
         .kept($steer, "steer \(ref)")
@@ -94,18 +114,23 @@ struct PhoneComposer: View {
     }
 
     /// The field; at accessibility sizes Queue and Steer go under the
-    /// text, which keeps the row's width.
+    /// text, which keeps the row's width. Its text keeps the field's
+    /// inset on the right as on the left (T857).
     private var field: some View {
-        let row = typeSize.isAccessibilitySize
+        let under = typeSize.isAccessibilitySize
+        let row = under
             ? AnyLayout(VStackLayout(alignment: .trailing, spacing: 0))
-            : AnyLayout(HStackLayout(alignment: .bottom, spacing: Spacing.tight))
+            : AnyLayout(HStackLayout(alignment: .bottom, spacing: Spacing.item))
         return row {
             TextField(placeholder, text: $text, axis: .vertical)
                 .lineLimit(1...6)
                 .font(theme.body(.body))
                 .foregroundStyle(theme.ink)
                 .focused($focused)
-                .padding(.vertical, 11)
+                .padding(.vertical, Spacing.item)
+                // A line sits level with Queue and Steer.
+                .frame(minHeight: tapTarget)
+                .padding(.trailing, working && under ? Spacing.card - Spacing.hair : 0)
                 .modifier(NoWritingTools())
             if working {
                 DockModes([(false, "Queue"), (true, "Steer")], selection: $steer)
@@ -113,7 +138,7 @@ struct PhoneComposer: View {
                     .accessibilityLabel("How it goes")
             }
         }
-        .dockField()
+        .dockField(control: working)
     }
 
     private var sendButton: some View {
@@ -171,7 +196,9 @@ struct PhoneComposer: View {
                 let r = try await model.prompt(session, text: t, mode: mode)
                 text = ""
                 said = (PromptSent.words(r), false)
+                queuedNote = r.via == "queued"
             } catch {
+                queuedNote = false
                 if let w = NeedActs.words(error) { said = (w, true) }
             }
             busy = false
@@ -192,10 +219,12 @@ struct TerminalKeys<Mode: View>: View {
     let said: ((text: String, failed: Bool)?) -> Void
     @State private var typed = ""
     @State private var busy = false
+    @FocusState private var focused: Bool
 
     var body: some View {
         VStack(spacing: Spacing.item) {
             KeyStrip { write($0.data) }
+                .disabled(busy)
             DockRow { mode } field: {
                 TextField("Type into its terminal", text: $typed)
                     .font(theme.mono(.body))
@@ -204,23 +233,25 @@ struct TerminalKeys<Mode: View>: View {
                     .autocorrectionDisabled()
                     .submitLabel(.send)
                     .onSubmit { type(enter: true) }
-                    .padding(.vertical, 11)
+                    .focused($focused)
+                    .padding(.vertical, Spacing.item)
                     .dockField()
             } send: {
                 Button { type(enter: false) } label: {
                     Label("Type", systemImage: "arrow.up")
                 }
                 .buttonStyle(.send)
-                .disabled(typed.isEmpty)
+                .disabled(typed.isEmpty || busy)
                 .accessibilityHint("Types it without Return; Return on the keyboard types it with one")
             }
         }
-        .disabled(busy)
+        // Not the field: disabled, it would give up the keyboard.
         .kept($typed, "typed \(session)")
+        .onAppear { if UserDefaults.standard.bool(forKey: "compose") { focused = true } }
     }
 
     private func type(enter: Bool) {
-        guard !typed.isEmpty || enter else { return }
+        guard !typed.isEmpty || enter, !busy else { return }
         let t = typed + (enter ? TerminalKey.enter.data : "")
         typed = ""
         write(t)
@@ -248,5 +279,20 @@ struct NoWritingTools: ViewModifier {
         } else {
             content
         }
+    }
+}
+
+/// Folds the keyboard away, the system's or the key strip's field's
+/// (T857): a glass circle over the dock while the keyboard is up. The
+/// draft stays.
+struct HideKeyboard: View {
+    var body: some View {
+        Button {
+            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        } label: {
+            Label("Hide Keyboard", systemImage: "keyboard.chevron.compact.down")
+        }
+        .buttonStyle(.circle)
+        .transition(.opacity)
     }
 }

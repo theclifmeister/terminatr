@@ -6,20 +6,25 @@ import TerminatrKit
 /// under it, a circle to switch it between the prompt and the keys, the
 /// field on a deck card's glass, and a round send button.
 extension View {
-    /// The dock's field: a deck card's glass in a capsule, at least 44 pt
-    /// tall.
-    public func dockField() -> some View {
-        modifier(DockField())
+    /// The dock's field: a deck card's glass in a capsule, as tall as the
+    /// circles beside it (Theme.circle) at one line, its text inset alike
+    /// on both sides (T857). With a control at its trailing end (Queue and
+    /// Steer) that end's inset is the control's.
+    public func dockField(control: Bool = false) -> some View {
+        modifier(DockField(control: control))
     }
 }
 
 private struct DockField: ViewModifier {
+    @Environment(\.theme) private var theme
+    let control: Bool
+
     func body(content: Content) -> some View {
         content
             .padding(.leading, Spacing.card)
-            .padding(.trailing, Spacing.hair)
-            .frame(maxWidth: .infinity, minHeight: tapTarget, alignment: .leading)
-            .surface(.card, in: RoundedRectangle(cornerRadius: tapTarget / 2, style: .continuous))
+            .padding(.trailing, control ? Spacing.hair : Spacing.card)
+            .frame(maxWidth: .infinity, minHeight: theme.circle, alignment: .leading)
+            .surface(.card, in: RoundedRectangle(cornerRadius: theme.circle / 2, style: .continuous))
     }
 }
 

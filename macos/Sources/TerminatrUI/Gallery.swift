@@ -175,11 +175,11 @@ extension ComponentGallery {
             HStack(alignment: .bottom, spacing: Spacing.item) {
                 Button {} label: { Label("Keys", systemImage: "keyboard") }.buttonStyle(.circle)
                 HStack {
-                    Text("Message T14").foregroundStyle(theme.muted).padding(.vertical, 11)
+                    Text("Message T14").foregroundStyle(theme.muted).padding(.vertical, Spacing.item)
                     Spacer(minLength: 0)
                     DockModes([(false, "Queue"), (true, "Steer")], selection: $steer)
                 }
-                .dockField()
+                .dockField(control: true)
                 Button {} label: { Label("Send", systemImage: "arrow.up") }.buttonStyle(.send)
             }
         }
