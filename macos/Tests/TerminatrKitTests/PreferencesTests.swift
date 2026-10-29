@@ -92,3 +92,11 @@ import Testing
     #expect(Attention(word: "working", tone: .working, why: "Running tests", waits: false).spoken == "working")
     #expect(Attention(word: "blocked", tone: .attention, why: "", waits: true).spoken == "blocked")
 }
+
+// T845: a StateGlyph is filled for what waits on the user, and each
+// tone is spoken, so its colour is never the only sign.
+@Test func toneGlyphs() {
+    #expect([Attention.Tone.approval, .question, .attention, .review].allSatisfy(\.waits))
+    #expect(![Attention.Tone.working, .idle, .done].contains(where: \.waits))
+    #expect(Attention.Tone.approval.spoken == "needs approval")
+}
