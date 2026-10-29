@@ -544,7 +544,7 @@ func (e *Env) peerNeeds(dir, alias, level string) error {
 	case proto.NeedsView:
 		fmt.Fprintf(e.Stdout, "Needs view for %s: it sees each need of the projects this server shares in full: the questions' and permission dialogs' text and options, the tasks in review, the coordinators' questions. It answers none of them.\n", alias)
 	default:
-		fmt.Fprintf(e.Stdout, "Needs answer for %s: it sees each need in full, as at view; answering them from there comes with a later tm, never a command outside the sandbox.\n", alias)
+		fmt.Fprintf(e.Stdout, "Needs answer for %s: it sees each need in full, as at view, and its user answers them from there: questions, permission dialogs (once only), tasks in review, the coordinators' questions. Never a command outside the sandbox; the journal names each act human (peer: %s).\n", alias, alias)
 	}
 	e.reload()
 	return nil

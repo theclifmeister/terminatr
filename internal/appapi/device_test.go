@@ -62,7 +62,7 @@ func TestAllowed(t *testing.T) {
 			answer[m.Name] = true
 		}
 	}
-	want := []string{proto.MethodQuestionsOpen, proto.MethodSessionAnswer, proto.MethodSessionApprove, proto.MethodTaskAccept, proto.MethodTaskSendBack}
+	want := []string{proto.MethodPeerNeedAct, proto.MethodQuestionsOpen, proto.MethodSessionAnswer, proto.MethodSessionApprove, proto.MethodTaskAccept, proto.MethodTaskSendBack}
 	if got := slices.Sorted(func(yield func(string) bool) {
 		for k := range answer {
 			if !yield(k) {

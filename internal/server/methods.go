@@ -331,6 +331,9 @@ func init() {
 		proto.MethodPeerPopupRead: {gate: gateHuman, call: typed(func(s *Server, p proto.PeerPopupReadParams, _ callCtx) (any, *proto.Error) {
 			return s.readPeerPopup(p)
 		})},
+		proto.MethodPeerNeedAct: {gate: gateHuman, call: typed(func(s *Server, p proto.PeerNeedActParams, c callCtx) (any, *proto.Error) {
+			return s.needAct(p, c)
+		})},
 		proto.MethodPeerShareAsk:        {gate: gateHuman, call: typed((*Server).askShare)},
 		proto.MethodPeerShareAnswer:     {gate: gateHuman, call: typed((*Server).answerShare)},
 		proto.MethodLinkAct:             {gate: gateHuman, call: typed((*Server).linkAct)},

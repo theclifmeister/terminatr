@@ -6,7 +6,7 @@ import Foundation
 /// The terminatr app API (docs/SPEC.md §3.8): what tm app bridge answers.
 public enum AppAPI {
     /// The app API version this app was generated against.
-    public static let version = 29
+    public static let version = 30
 
     public struct AdoptRequestParams: Codable, Sendable, Hashable {
         public var id: String
@@ -1189,8 +1189,9 @@ public enum AppAPI {
         public var asked: String
         public var reports: Int
         public var since: Date?
+        public var acts: [String]
 
-        public init(id: String, kind: String, session: String = "", role: String = "", thread: String = "", task: String = "", title: String = "", status: String = "", text: String = "", question: Question? = nil, approval: PeerApproval? = nil, escape: Bool = false, pr: String = "", prUrl: String = "", prNumber: Int = 0, mergeable: Bool = false, asked: String = "", reports: Int = 0, since: Date? = nil) {
+        public init(id: String, kind: String, session: String = "", role: String = "", thread: String = "", task: String = "", title: String = "", status: String = "", text: String = "", question: Question? = nil, approval: PeerApproval? = nil, escape: Bool = false, pr: String = "", prUrl: String = "", prNumber: Int = 0, mergeable: Bool = false, asked: String = "", reports: Int = 0, since: Date? = nil, acts: [String] = []) {
             self.id = id
             self.kind = kind
             self.session = session
@@ -1210,6 +1211,7 @@ public enum AppAPI {
             self.asked = asked
             self.reports = reports
             self.since = since
+            self.acts = acts
         }
 
         enum CodingKeys: String, CodingKey {
@@ -1232,6 +1234,73 @@ public enum AppAPI {
             case asked
             case reports
             case since
+            case acts
+        }
+    }
+
+    public struct PeerNeedActParams: Codable, Sendable, Hashable {
+        public var peer: String
+        public var project: String
+        public var need: String
+        public var act: String
+        public var index: Int
+        public var answer: String
+        public var question: String
+        public var choice: Int
+        public var option: String
+        public var status: String
+        public var note: String
+
+        public init(peer: String, project: String, need: String, act: String, index: Int = 0, answer: String = "", question: String = "", choice: Int = 0, option: String = "", status: String = "", note: String = "") {
+            self.peer = peer
+            self.project = project
+            self.need = need
+            self.act = act
+            self.index = index
+            self.answer = answer
+            self.question = question
+            self.choice = choice
+            self.option = option
+            self.status = status
+            self.note = note
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case peer
+            case project
+            case need
+            case act
+            case index
+            case answer
+            case question
+            case choice
+            case option
+            case status
+            case note
+        }
+    }
+
+    public struct PeerNeedActResult: Codable, Sendable, Hashable {
+        public var act: String
+        public var asked: Bool
+        public var remaining: Int
+        public var option: String
+        public var open: Int
+
+        public init(act: String, asked: Bool = false, remaining: Int = 0, option: String = "", open: Int = 0) {
+            self.act = act
+            self.asked = asked
+            self.remaining = remaining
+            self.option = option
+            self.open = open
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case act
+            case asked
+            case remaining
+            case option
+            case open
         }
     }
 
@@ -2837,6 +2906,7 @@ public enum AppAPI {
         public static let paneInput = Call<PaneInputParams, Empty>("pane.input", write: true, target: "pane.vt")
         public static let paneVt = Subscription<PaneParams, PaneResult, PaneEvent>("pane.vt", events: ["pane.repaint", "pane.output", "pane.resize", "pane.closed"])
         public static let peerList = Call<NoParams, PeerList>("peer.list", write: false)
+        public static let peerNeedAct = Call<PeerNeedActParams, PeerNeedActResult>("peer.need-act", write: true)
         public static let peerShareAnswer = Call<ShareAnswerParams, ShareAnswer>("peer.share-answer", write: true)
         public static let projectActive = Call<ProjectActiveParams, ProjectActive>("project.active", write: true)
         public static let projectNew = Call<ProjectNewParams, ProjectNew>("project.new", write: true)
@@ -3442,6 +3512,35 @@ extension AppAPI.PeerNeed {
         self.asked = try c.decodeIfPresent(String.self, forKey: .asked) ?? ""
         self.reports = try c.decodeIfPresent(Int.self, forKey: .reports) ?? 0
         self.since = try c.decodeIfPresent(Date.self, forKey: .since)
+        self.acts = try c.decodeIfPresent([String].self, forKey: .acts) ?? []
+    }
+}
+
+extension AppAPI.PeerNeedActParams {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.peer = try c.decode(String.self, forKey: .peer)
+        self.project = try c.decode(String.self, forKey: .project)
+        self.need = try c.decode(String.self, forKey: .need)
+        self.act = try c.decode(String.self, forKey: .act)
+        self.index = try c.decodeIfPresent(Int.self, forKey: .index) ?? 0
+        self.answer = try c.decodeIfPresent(String.self, forKey: .answer) ?? ""
+        self.question = try c.decodeIfPresent(String.self, forKey: .question) ?? ""
+        self.choice = try c.decodeIfPresent(Int.self, forKey: .choice) ?? 0
+        self.option = try c.decodeIfPresent(String.self, forKey: .option) ?? ""
+        self.status = try c.decodeIfPresent(String.self, forKey: .status) ?? ""
+        self.note = try c.decodeIfPresent(String.self, forKey: .note) ?? ""
+    }
+}
+
+extension AppAPI.PeerNeedActResult {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.act = try c.decode(String.self, forKey: .act)
+        self.asked = try c.decodeIfPresent(Bool.self, forKey: .asked) ?? false
+        self.remaining = try c.decodeIfPresent(Int.self, forKey: .remaining) ?? 0
+        self.option = try c.decodeIfPresent(String.self, forKey: .option) ?? ""
+        self.open = try c.decodeIfPresent(Int.self, forKey: .open) ?? 0
     }
 }
 

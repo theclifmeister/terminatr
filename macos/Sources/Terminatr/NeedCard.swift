@@ -21,6 +21,8 @@ struct NeedCard: View {
     @State private var busy = false
     @State private var said: (text: String, failed: Bool)?
     @State private var confirmAll = false
+    @State private var sendingBack: Need.PeerAct.Choice?
+    @State private var note = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -66,6 +68,16 @@ struct NeedCard: View {
         .accessibilityElement(children: .contain)
         .accessibilityLabel(need.title)
         .task(id: need.id) { await check() }
+        .alert("Send \(need.task) back", isPresented: Binding(get: { sendingBack != nil }, set: { if !$0 { sendingBack = nil } })) {
+            TextField("What's missing", text: $note)
+            Button("Send Back") {
+                if let c = sendingBack { send(c.params(note: note)) }
+            }
+            .disabled(note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("\(need.peer?.server ?? "Its") coordinator hands your note to the thread.")
+        }
         .confirmationDialog("Allow this \(need.refusal?.path == true ? "file" : "command") for all projects?", isPresented: $confirmAll) {
             if let r = need.refusal {
                 Button("Allow for All Projects") { decide(r, "all") }
@@ -150,6 +162,13 @@ struct NeedCard: View {
             case .link, .network:
                 if let l = need.link {
                     LinkActs(need: need, act: l)
+                } else if let p = need.peer {
+                    // A paired server's need, answered there (app API 30).
+                    ForEach(p.choices, id: \.self) { c in
+                        Button(c.title) { peerAct(c) }
+                            .accessibilityLabel(named(c.title))
+                            .help("Goes to \(p.server) as your answer; it refuses it if the need changed meanwhile")
+                    }
                 } else {
                     open("Open")
                 }
@@ -210,6 +229,29 @@ struct NeedCard: View {
         }
     }
 
+    /// Sends choice c of a paired server's need; send back asks for its
+    /// note first.
+    private func peerAct(_ c: Need.PeerAct.Choice) {
+        if c.note {
+            note = ""
+            sendingBack = c
+            return
+        }
+        send(c.params)
+    }
+
+    private func send(_ p: AppAPI.PeerNeedActParams) {
+        act {
+            let r = try await app.actOnNeed(p)
+            let server = need.peer?.server ?? "the paired server"
+            switch r.act {
+            case "accept", "send-back": return r.asked ? "Sent to \(server)'s coordinator." : "\(server)'s coordinator was asked already."
+            case "questions": return "\(server)'s coordinator asks them now, in its session there."
+            default: return "Answered on \(server)."
+            }
+        }
+    }
+
     private func answerQuestions() {
         act {
             try await app.openQuestions(need.project)
@@ -224,6 +266,8 @@ struct NeedCard: View {
         Task {
             do {
                 if let s = try await f() { said = (s, false) }
+            } catch let e as AppAPI.Error where e.code == "need-changed" {
+                said = ("That changed meanwhile: look again.", true)
             } catch let e as AppAPI.Error where e.code == "always-allow" {
                 said = ("That option allows more than once: only you pick it, in the Terminal tab.", true)
             } catch {

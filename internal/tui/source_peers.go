@@ -141,6 +141,15 @@ func (s *ServerSource) SetPeerConversations(alias string, on bool) error {
 	return nil
 }
 
+func (s *ServerSource) ActOnNeed(p proto.PeerNeedActParams) (proto.PeerActResult, error) {
+	var res proto.PeerActResult
+	if s.Caller.IsAgent() {
+		return res, errHumanOnly
+	}
+	err := s.call(proto.MethodPeerNeedAct, p, &res)
+	return res, err
+}
+
 func (s *ServerSource) SetPeerNeeds(alias, level string) error {
 	if s.Caller.IsAgent() {
 		return errHumanOnly

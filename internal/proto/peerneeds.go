@@ -9,8 +9,8 @@ import "time"
 // (PeerQuestion). View and answer carry the needs themselves on
 // peer.watch (PeerWatch.Needs): a question's menu, an approval's dialog
 // and its options, a task in review, the coordinator's open questions.
-// Answer is the level the acts on them need (phase 2); until then it
-// shows what view shows.
+// Answer shows what view shows, and takes the paired server's user's
+// acts on them (peer.act, below).
 
 // The needs switch's levels, per paired server: what it may see (and
 // later do) of this server's needs. These are the wire's and
@@ -108,4 +108,158 @@ type PeerApproval struct {
 	Question string   `json:"question,omitempty"`
 	Options  []string `json:"options"`
 	Scopes   []string `json:"scopes,omitempty"`
+}
+
+// Acting on a paired server's needs (docs/SPEC.md §16.16): at a needs
+// switch of answer, the paired server's user answers a question menu,
+// approves a dialog's option, accepts a task in review or sends it back,
+// or has the coordinator open its questions. The owning server takes
+// that server's word that its user did so, and checks each act as it
+// checks its own user's, plus: the need is still the one the user saw
+// (its id, and the act's guard: the question, the option, the task's
+// status), the act carries a nonce the owner gave out (peer.nonce), and
+// it is never an escape's.
+
+// The link's methods of paired needs, behind CapNeeds (internal/peer):
+// peer.needs reads a shared project's needs at view or answer, peer.nonce
+// gives a nonce for the next act and peer.act acts, at answer only.
+const (
+	MethodPeerNeeds = "peer.needs"
+	MethodPeerNonce = "peer.nonce"
+	MethodPeerAct   = "peer.act"
+)
+
+// MethodPeerNeedAct is the console's way to peer.act (PeerNeedActParams):
+// this server asks the paired server for a nonce and sends the act, as
+// its user's. The human's only; a paired device at answer level calls it
+// too, and the owner journals it with the phone's name.
+const MethodPeerNeedAct = "peer.need-act"
+
+// CapNeedAct says the server answers peer.need-act.
+const CapNeedAct = "need-act"
+
+// The acts on a paired server's need, by PeerNeed kind: ActAnswer a
+// question menu's question (NeedQuestion), ActApprove an approval's
+// option (NeedApproval), ActAccept and ActSendBack a task in review
+// (NeedReview), ActQuestions the coordinator's open questions (NeedAsk).
+const (
+	ActAnswer    = "answer"
+	ActApprove   = "approve"
+	ActAccept    = "accept"
+	ActSendBack  = "send-back"
+	ActQuestions = "questions"
+)
+
+// ActsOf are the acts a need of kind takes; none for a need only its
+// server's user acts on (blocked, ci, queue) or an escape.
+func ActsOf(n PeerNeed) []string {
+	if n.Escape {
+		return nil
+	}
+	switch n.Kind {
+	case NeedQuestion:
+		if n.Question != nil {
+			return []string{ActAnswer}
+		}
+	case NeedApproval:
+		if n.Approval != nil {
+			return []string{ActApprove}
+		}
+	case NeedReview:
+		return []string{ActAccept, ActSendBack}
+	case NeedAsk:
+		return []string{ActQuestions}
+	}
+	return nil
+}
+
+// Refusals of an act on a paired server's need.
+const (
+	// ErrNeedsOff: the owner's needs switch for this server isn't
+	// answer (view shows the needs, nothing more).
+	ErrNeedsOff = "needs-off"
+	// ErrNeedChanged: the need isn't what the user saw any more (it
+	// was answered, its menu or dialog changed, the task moved): look
+	// again.
+	ErrNeedChanged = "need-changed"
+	// ErrBadNonce: the act's nonce isn't one the owner gave this
+	// server, or was used, or is too old.
+	ErrBadNonce = "bad-nonce"
+	// ErrEscapeHere: the need asks to run a command outside the
+	// sandbox, which only the owner's user answers, there.
+	ErrEscapeHere = "escape-here"
+)
+
+// PeerAct is an act on one need of a paired server's shared project:
+// what the user there chose, with the guard that binds it to what they
+// saw.
+type PeerAct struct {
+	Project string `json:"project"`
+	// Need is the need's id (PeerNeed.ID) and Act what is done to it
+	// (ActAnswer …).
+	Need string `json:"need"`
+	Act  string `json:"act"`
+	// ActAnswer: question Index of the menu (from 0), answered with
+	// Answer, one of its options' labels; Question is its text, the
+	// guard.
+	Index    int    `json:"index,omitempty"`
+	Answer   string `json:"answer,omitempty"`
+	Question string `json:"question,omitempty"`
+	// ActApprove: the dialog's option Choice (from 1); Option is its
+	// text, the guard.
+	Choice int    `json:"choice,omitempty"`
+	Option string `json:"option,omitempty"`
+	// ActAccept, ActSendBack: Status is the task's status as the user
+	// saw it, the guard; Note is send-back's why.
+	Status string `json:"status,omitempty"`
+	Note   string `json:"note,omitempty"`
+}
+
+// PeerActParams are peer.act's params: the act and a nonce peer.nonce
+// gave. Device names the phone of the paired server's whose user acted,
+// "" for that server's own console: the owner journals it.
+type PeerActParams struct {
+	PeerAct
+	Nonce  []byte `json:"nonce"`
+	Device string `json:"device,omitempty"`
+}
+
+// PeerActResult is what an act did: Asked, for accept and send-back,
+// false when an item already asked the coordinator the same;
+// Remaining, for answer, the menu's questions still open; Option, for
+// approve, the option sent; Open, for questions, how many the
+// coordinator puts to the user.
+type PeerActResult struct {
+	Act       string `json:"act"`
+	Asked     bool   `json:"asked,omitempty"`
+	Remaining int    `json:"remaining,omitempty"`
+	Option    string `json:"option,omitempty"`
+	Open      int    `json:"open,omitempty"`
+}
+
+// PeerNonce is peer.nonce's result: good for one act, for
+// PeerNonceLife.
+type PeerNonce struct {
+	Nonce []byte `json:"nonce"`
+}
+
+// PeerNonceLife is how long a peer.nonce waits for its act.
+const PeerNonceLife = 2 * time.Minute
+
+// PeerNeedsParams are peer.needs' params.
+type PeerNeedsParams struct {
+	Project string `json:"project"`
+}
+
+// PeerNeedsResult is peer.needs' result: the shared project's needs now,
+// as PeerWatch.Needs has them.
+type PeerNeedsResult struct {
+	Needs []PeerNeed `json:"needs"`
+}
+
+// PeerNeedActParams are peer.need-act's params: the paired server Peer
+// (its alias or name) and the act on its need.
+type PeerNeedActParams struct {
+	Peer string `json:"peer"`
+	PeerAct
 }

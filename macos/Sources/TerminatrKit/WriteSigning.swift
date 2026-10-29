@@ -52,6 +52,7 @@ public enum SignedWrite {
         case AppAPI.Methods.taskAccept.name: return "Accept the task"
         case AppAPI.Methods.taskSendBack.name: return "Send the task back"
         case AppAPI.Methods.questionsOpen.name: return "Open the coordinator's questions"
+        case AppAPI.Methods.peerNeedAct.name: return "Answer on the paired server"
         default: return "Act on your server"
         }
     }

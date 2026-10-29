@@ -279,6 +279,16 @@ final class PhoneModel {
         try await connected().call(AppAPI.Methods.taskSendBack, AppAPI.SendBackParams(project: project, task: task, note: note)).asked
     }
 
+    /// Acts on a paired server's need through this server (peer.need-act,
+    /// app API 30), signed as the phone's other answers: that server
+    /// journals it with this phone's name, and refuses it once the need
+    /// changed or when it is an escape's.
+    func actOnNeed(_ params: AppAPI.PeerNeedActParams) async throws -> AppAPI.PeerNeedActResult {
+        let r = try await connected().call(AppAPI.Methods.peerNeedAct, params)
+        await reread()
+        return r
+    }
+
     /// Has the coordinator put its open questions to the user: they
     /// come back as its session's question, answered here.
     func openQuestions(_ project: String) async throws {

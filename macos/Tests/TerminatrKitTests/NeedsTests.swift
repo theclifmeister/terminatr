@@ -125,6 +125,35 @@ let backend = AppAPI.QuestionItem(question: "Which cache backend?", options: [.i
     #expect(Need.count(needs, project: "mini/acme") == 3)
 }
 
+/// At answer, a paired server's need carries its acts: the open
+/// question's options with its text as the guard, a dialog's once-only
+/// options, accept and send back with the task's status; an escape's
+/// none, and at view none either.
+@Test func peerNeedActs() {
+    let menu = AppAPI.Question(questions: [AppAPI.QuestionItem(question: "Which cache?", options: [AppAPI.QuestionOption(label: "Redis"), AppAPI.QuestionOption(label: "None")])])
+    let dialog = AppAPI.PeerApproval(question: "Allow curl?", options: ["Yes", "Yes, always", "No"], scopes: ["once", "persistent", "once"])
+    var peer = AppAPI.Peer(alias: "mini", name: "work", state: "up", projects: [
+        AppAPI.PeerProject(project: "acme", needsYou: 4, threads: 1, ready: 0, needs: [
+            AppAPI.PeerNeed(id: "question:s-1:a", kind: "question", session: "mini/s-1", task: "T7", question: menu, acts: ["answer"]),
+            AppAPI.PeerNeed(id: "approval:s-2:b", kind: "approval", session: "mini/s-2", approval: dialog, acts: ["approve"]),
+            AppAPI.PeerNeed(id: "approval:s-3", kind: "approval", escape: true, acts: ["approve"]),
+            AppAPI.PeerNeed(id: "review:T3:1", kind: "review", task: "T3", status: "review", acts: ["accept", "send-back"]),
+        ]),
+    ], needs: "answer")
+    let needs = Need.of(projects: [], sessions: [], peers: [peer])
+    let q = needs[0].peer
+    #expect(q?.choices.map(\.title) == ["Redis", "None"])
+    #expect(q?.choices[1].params == AppAPI.PeerNeedActParams(peer: "mini", project: "acme", need: "question:s-1:a", act: "answer", answer: "None", question: "Which cache?"))
+    #expect(needs[0].detail == "for work")
+    #expect(needs[1].peer?.choices.map(\.params.choice) == [1, 3])
+    #expect(needs[2].peer == nil)
+    let r = needs[3].peer
+    #expect(r?.choices.map(\.title) == ["Accept", "Send Back…"])
+    #expect(r?.choices[1].note == true && r?.choices[1].params(note: "why").note == "why" && r?.choices[0].params.status == "review")
+    peer.needs = "view"
+    #expect(Need.of(projects: [], sessions: [], peers: [peer]).allSatisfy { $0.peer == nil })
+}
+
 @Test func tracker() {
     func need(_ id: String) -> Need { Need(id: id, kind: .review, project: "p", what: id, detail: "") }
     var t = NeedTracker()
