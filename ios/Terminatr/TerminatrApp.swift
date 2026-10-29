@@ -168,12 +168,20 @@ struct Root: View {
                 .tabItem { Label("Projects", systemImage: "folder") }
                 .tag(RootTab.projects)
             }
+            .liveStrip(LiveWork.of(model.sessions)) { open(.session($0)) }
             .onAppear(perform: openLaunched)
         }
     }
 }
 
 extension Root {
+    /// Opens route from the Projects tab, on the path a tap would have
+    /// taken (Route.path).
+    private func open(_ route: Route) {
+        tab = .projects
+        projectsPath = route.path
+    }
+
     /// -open: "settings", "gallery" (the redesign's components, T845;
     /// with -gallery-lower YES at its states and buttons),
     /// "projects", "needs ROUTE" (a need's route
@@ -190,8 +198,7 @@ extension Root {
         } else if open == "projects" {
             tab = .projects
         } else if let r = Route.parse(open) {
-            tab = .projects
-            projectsPath = r.path
+            self.open(r)
         }
     }
 }
