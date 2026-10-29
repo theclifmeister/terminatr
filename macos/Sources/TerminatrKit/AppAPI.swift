@@ -6,7 +6,7 @@ import Foundation
 /// The terminatr app API (docs/SPEC.md §3.8): what tm app bridge answers.
 public enum AppAPI {
     /// The app API version this app was generated against.
-    public static let version = 30
+    public static let version = 31
 
     public struct AdoptRequestParams: Codable, Sendable, Hashable {
         public var id: String
@@ -158,6 +158,102 @@ public enum AppAPI {
 
         enum CodingKeys: String, CodingKey {
             case session
+        }
+    }
+
+    public struct Design: Codable, Sendable, Hashable {
+        public var name: String
+        public var title: String
+        public var status: String
+        public var task: String
+        public var taskStatus: String
+        public var artifact: String
+        public var tasks: [String]
+        public var tasksDone: Int
+        public var answers: [String]
+        public var questions: [DesignQuestion]
+        public var build: [DesignTask]
+
+        public init(name: String, title: String, status: String, task: String = "", taskStatus: String = "", artifact: String = "", tasks: [String] = [], tasksDone: Int, answers: [String] = [], questions: [DesignQuestion] = [], build: [DesignTask] = []) {
+            self.name = name
+            self.title = title
+            self.status = status
+            self.task = task
+            self.taskStatus = taskStatus
+            self.artifact = artifact
+            self.tasks = tasks
+            self.tasksDone = tasksDone
+            self.answers = answers
+            self.questions = questions
+            self.build = build
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case name
+            case title
+            case status
+            case task
+            case taskStatus = "task_status"
+            case artifact
+            case tasks
+            case tasksDone = "tasks_done"
+            case answers
+            case questions
+            case build
+        }
+    }
+
+    public struct DesignQuestion: Codable, Sendable, Hashable, Identifiable {
+        public var id: String
+        public var header: String
+        public var question: String
+
+        public init(id: String, header: String, question: String) {
+            self.id = id
+            self.header = header
+            self.question = question
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case id
+            case header
+            case question
+        }
+    }
+
+    public struct DesignTask: Codable, Sendable, Hashable, Identifiable {
+        public var id: String
+        public var title: String
+        public var status: String
+        public var after: [String]
+        public var archived: Bool
+
+        public init(id: String, title: String, status: String, after: [String] = [], archived: Bool = false) {
+            self.id = id
+            self.title = title
+            self.status = status
+            self.after = after
+            self.archived = archived
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case id
+            case title
+            case status
+            case after
+            case archived
+        }
+    }
+
+    public struct Designs: Codable, Sendable, Hashable {
+        public var designs: [Design]
+
+        public init(designs: [Design] = []) {
+            self.designs = designs
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case designs
         }
     }
 
@@ -2885,6 +2981,7 @@ public enum AppAPI {
     /// Every method of the app API, by name.
     public enum Methods {
         public static let coordinatorClear = Call<ProjectParams, CoordinatorClear>("coordinator.clear", write: true)
+        public static let designList = Call<ProjectParams, Designs>("design.list", write: false)
         public static let deviceAccess = Call<DeviceAccessParams, Device>("device.access", write: true)
         public static let deviceList = Call<NoParams, Devices>("device.list", write: false)
         public static let deviceName = Call<DeviceNameParams, Device>("device.name", write: true)
@@ -3012,6 +3109,50 @@ extension AppAPI.CoordinatorClear {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.session = try c.decode(String.self, forKey: .session)
+    }
+}
+
+extension AppAPI.Design {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.name = try c.decode(String.self, forKey: .name)
+        self.title = try c.decode(String.self, forKey: .title)
+        self.status = try c.decode(String.self, forKey: .status)
+        self.task = try c.decodeIfPresent(String.self, forKey: .task) ?? ""
+        self.taskStatus = try c.decodeIfPresent(String.self, forKey: .taskStatus) ?? ""
+        self.artifact = try c.decodeIfPresent(String.self, forKey: .artifact) ?? ""
+        self.tasks = try c.decodeIfPresent([String].self, forKey: .tasks) ?? []
+        self.tasksDone = try c.decode(Int.self, forKey: .tasksDone)
+        self.answers = try c.decodeIfPresent([String].self, forKey: .answers) ?? []
+        self.questions = try c.decodeIfPresent([AppAPI.DesignQuestion].self, forKey: .questions) ?? []
+        self.build = try c.decodeIfPresent([AppAPI.DesignTask].self, forKey: .build) ?? []
+    }
+}
+
+extension AppAPI.DesignQuestion {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try c.decode(String.self, forKey: .id)
+        self.header = try c.decode(String.self, forKey: .header)
+        self.question = try c.decode(String.self, forKey: .question)
+    }
+}
+
+extension AppAPI.DesignTask {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try c.decode(String.self, forKey: .id)
+        self.title = try c.decode(String.self, forKey: .title)
+        self.status = try c.decode(String.self, forKey: .status)
+        self.after = try c.decodeIfPresent([String].self, forKey: .after) ?? []
+        self.archived = try c.decodeIfPresent(Bool.self, forKey: .archived) ?? false
+    }
+}
+
+extension AppAPI.Designs {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.designs = try c.decodeIfPresent([AppAPI.Design].self, forKey: .designs) ?? []
     }
 }
 

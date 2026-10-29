@@ -78,7 +78,7 @@ func designNotes(p *project.Project, boards ...*tasks.Board) ([]Note, error) {
 		for _, t := range db.Build {
 			d.build = append(d.build, boardTask{t})
 		}
-		d.depth = depths(d.build)
+		d.depth = project.BuildDepths(db.Build)
 		n, err := designNote(p.Slug, d)
 		if err != nil {
 			return nil, fmt.Errorf("design %s: %w", d.Name, err)
@@ -89,41 +89,6 @@ func designNotes(p *project.Project, boards ...*tasks.Board) ([]Note, error) {
 		}
 	}
 	return notes, nil
-}
-
-// depths is each task's depth in the after graph among build: 0 for one
-// that comes after none of them, else one more than the deepest it comes
-// after. A cycle (T1 after T2 after T1) is cut where it closes.
-func depths(build []boardTask) map[int]int {
-	in := map[int]*tasks.Task{}
-	for _, t := range build {
-		in[t.ID] = t.Task
-	}
-	depth := map[int]int{}
-	onPath := map[int]bool{}
-	var visit func(id int) int
-	visit = func(id int) int {
-		if d, ok := depth[id]; ok {
-			return d
-		}
-		if onPath[id] {
-			return -1
-		}
-		onPath[id] = true
-		d := 0
-		for _, a := range in[id].After {
-			if in[a] != nil {
-				d = max(d, visit(a)+1)
-			}
-		}
-		onPath[id] = false
-		depth[id] = d
-		return d
-	}
-	for _, t := range build {
-		visit(t.ID)
-	}
-	return depth
 }
 
 func (d *design) title() string {

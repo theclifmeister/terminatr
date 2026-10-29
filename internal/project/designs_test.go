@@ -2,6 +2,7 @@ package project
 
 import (
 	"fmt"
+	"slices"
 	"testing"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
@@ -87,5 +88,22 @@ func TestDesignBuilds(t *testing.T) {
 	}
 	if o := ds[1]; o.DesignTask != nil || len(o.Build) != 1 || o.Status() != DesignPlanned || o.Questions != nil {
 		t.Fatalf("other %+v", o)
+	}
+}
+
+// TestBuildDepths: a cycle in after is cut where it closes, and Ordered
+// lists the build by depth, then id.
+func TestBuildDepths(t *testing.T) {
+	build := []*tasks.Task{{ID: 1, After: []int{2}}, {ID: 2, After: []int{1}}, {ID: 3, After: []int{2, 9}}, {ID: 4}}
+	d := BuildDepths(build)
+	if d[1] != 1 || d[2] != 0 || d[3] != 1 || d[4] != 0 {
+		t.Errorf("depths: %v", d)
+	}
+	var ids []int
+	for _, t := range (DesignBuild{Build: build}).Ordered() {
+		ids = append(ids, t.ID)
+	}
+	if !slices.Equal(ids, []int{2, 4, 1, 3}) {
+		t.Errorf("ordered: %v", ids)
 	}
 }

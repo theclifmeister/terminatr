@@ -585,33 +585,30 @@ func taskRefs(ids []int) []string {
 // modDesigns is $.designs.list: p's designs as its vault notes show
 // them, from its board and its archive (project.DesignBuilds).
 func modDesigns(p *project.Project) ([]modapi.Design, error) {
-	board, err := p.Tasks().Load()
-	if err != nil {
-		return nil, err
-	}
-	archive, err := p.Tasks().LoadArchive()
-	if err != nil {
-		return nil, err
-	}
-	builds, err := p.DesignBuilds(board, archive)
+	builds, err := p.BoardDesigns()
 	if err != nil {
 		return nil, err
 	}
 	out := make([]modapi.Design, 0, len(builds))
 	for _, b := range builds {
-		d := modapi.Design{Name: b.Name, Title: cmp.Or(b.Title, b.Name), Status: modapi.DesignStatus(b.Status()),
-			Task: b.Task, Artifact: b.Artifact, Tasks: []string{}, TasksDone: b.Done(),
-			Answers: append([]string{}, b.Answers...), Questions: []modapi.DesignQuestion{}}
-		if b.DesignTask != nil {
-			d.TaskStatus = string(b.DesignTask.Status)
-		}
-		for _, t := range b.Build {
-			d.Tasks = append(d.Tasks, t.Ref())
-		}
-		for _, q := range b.Questions {
-			d.Questions = append(d.Questions, modapi.DesignQuestion{ID: q.ID, Header: q.Header, Question: q.Question})
-		}
-		out = append(out, d)
+		out = append(out, modDesignOf(b))
 	}
 	return out, nil
+}
+
+// modDesignOf is design b as designs.list gives it.
+func modDesignOf(b project.DesignBuild) modapi.Design {
+	d := modapi.Design{Name: b.Name, Title: cmp.Or(b.Title, b.Name), Status: modapi.DesignStatus(b.Status()),
+		Task: b.Task, Artifact: b.Artifact, Tasks: []string{}, TasksDone: b.Done(),
+		Answers: append([]string{}, b.Answers...), Questions: []modapi.DesignQuestion{}}
+	if b.DesignTask != nil {
+		d.TaskStatus = string(b.DesignTask.Status)
+	}
+	for _, t := range b.Build {
+		d.Tasks = append(d.Tasks, t.Ref())
+	}
+	for _, q := range b.Questions {
+		d.Questions = append(d.Questions, modapi.DesignQuestion{ID: q.ID, Header: q.Header, Question: q.Question})
+	}
+	return d
 }
