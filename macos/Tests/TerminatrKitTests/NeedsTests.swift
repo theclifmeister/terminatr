@@ -103,6 +103,28 @@ let backend = AppAPI.QuestionItem(question: "Which cache backend?", options: [.i
     #expect(needs.last?.title == "mini › acme: 2 need you")
 }
 
+/// A paired server whose needs switch for this one is view sends its
+/// needs in full (app API 29): a card each instead of the count, an
+/// escape's without its text, all answered there.
+@Test func peerNeedsInFull() {
+    let menu = AppAPI.Question(questions: [AppAPI.QuestionItem(question: "Which cache?", options: [AppAPI.QuestionOption(label: "Redis")])])
+    let peer = AppAPI.Peer(alias: "mini", name: "work", state: "up", projects: [
+        AppAPI.PeerProject(project: "acme", needsYou: 3, threads: 1, ready: 0, needs: [
+            AppAPI.PeerNeed(id: "question:s-1:a", kind: "question", session: "mini/s-1", task: "T7", title: "Cache layer", question: menu),
+            AppAPI.PeerNeed(id: "approval:s-2", kind: "approval", role: "coordinator", escape: true),
+            AppAPI.PeerNeed(id: "review:T3:1", kind: "review", task: "T3", title: "Rate limits"),
+        ]),
+    ], needs: "view")
+    let needs = Need.of(projects: [], sessions: [], peers: [peer])
+    #expect(needs.map(\.title) == ["work › acme: T7 asks a question", "work › acme: coordinator asks to run outside the sandbox",
+                                   "work › acme: T3 is ready to review"])
+    #expect(needs.map(\.kind) == [.network, .network, .network])
+    #expect(needs[0].text == "Which cache?" && needs[0].detail == "Cache layer · answer on work" && needs[0].session == "mini/s-1")
+    #expect(needs[1].text.isEmpty && needs[1].detail == "only on work")
+    #expect(needs[0].id == "paired:mini/acme:question:s-1:a")
+    #expect(Need.count(needs, project: "mini/acme") == 3)
+}
+
 @Test func tracker() {
     func need(_ id: String) -> Need { Need(id: id, kind: .review, project: "p", what: id, detail: "") }
     var t = NeedTracker()
