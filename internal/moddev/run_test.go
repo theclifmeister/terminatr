@@ -492,3 +492,61 @@ func TestBrokerStore(t *testing.T) {
 		t.Errorf("replacing a value: code %d", got)
 	}
 }
+
+// TestRunProjectSettings: a fixture's projects reach hello, so
+// $.settings(project) is that project's settings over all projects'
+// (mod API 1.11); a bad project value fails the fixture.
+func TestRunProjectSettings(t *testing.T) {
+	dir := writeMod(t, nil)
+	if err := os.WriteFile(filepath.Join(dir, "main.ts"), []byte(`$.on("mod.ready", () => { $.log("warn " + $.settings().warn + " " + $.settings("demo").warn + " " + $.settings("other").warn); });`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m, err := Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := &Fixture{Settings: map[string]any{"warn": float64(3)}, Projects: map[string]map[string]any{"demo": {"warn": float64(9)}},
+		Events: []Step{{Name: "mod.ready", Data: json.RawMessage(`{"projects":[]}`)}}, Expect: Expect{Logs: []string{"warn 3 9 3"}}}
+	if r := m.Run(f, "p.json"); !r.OK {
+		t.Fatalf("%q %q", r.Problems, r.Logs)
+	}
+	f.Projects["demo"]["warn"] = "lots"
+	if r := m.Run(f, "p.json"); r.OK || !strings.Contains(strings.Join(r.Problems, "\n"), "projects.demo: warn must be a whole number") {
+		t.Errorf("a bad project value: %q", r.Problems)
+	}
+}
+
+// TestRunRulesFixtures: a rules mod's fixtures check its text with its
+// sections resolved for a project; a key it doesn't provide, or events
+// for a data mod, fail.
+func TestRunRulesFixtures(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "gates")
+	files := map[string]string{
+		"mod.toml": "id = \"gates\"\nname = \"Gates\"\nversion = \"0.1.0\"\napi = \"1.11\"\n[provides]\nrules = { thread = \"t.md\" }\n[settings.gates]\ntype = \"bool\"\ndefault = false\n",
+		"t.md":     "Work.\n<!-- tm:if gates -->\nStop at the gate.\n<!-- tm:end -->\n",
+		"tests/a.json": `{"projects": {"g": {"gates": true}}, "rules": {
+  "thread": {"project": "g", "contains": ["Work.", "Stop at the gate."]}}}`,
+		"tests/b.json": `{"rules": {"thread": {"lacks": ["Stop"]}, "coordinator": {}}}`,
+		"tests/c.json": `{"events": [{"name": "mod.ready"}]}`,
+	}
+	for n, text := range files {
+		p := filepath.Join(dir, filepath.FromSlash(n))
+		os.MkdirAll(filepath.Dir(p), 0o755)
+		if err := os.WriteFile(p, []byte(text), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	res, err := RunDir(dir)
+	if err != nil || len(res) != 3 {
+		t.Fatalf("%v %+v", err, res)
+	}
+	if !res[0].OK {
+		t.Errorf("a: %q", res[0].Problems)
+	}
+	if res[1].OK || !strings.Contains(strings.Join(res[1].Problems, "\n"), "rules.coordinator: the mod provides no such rules") {
+		t.Errorf("b: %q", res[1].Problems)
+	}
+	if res[2].OK || !strings.Contains(strings.Join(res[2].Problems, "\n"), "a data mod") {
+		t.Errorf("c: %q", res[2].Problems)
+	}
+}

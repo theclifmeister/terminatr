@@ -70,6 +70,7 @@ var Examples = []Example{
 	{"ticker", "a coordinator-panel section or a sidebar section, by its place setting (built in)", Permissions{ProjectRead: true, Views: true}},
 	{"memory-search", "an agent tool", Permissions{ProjectRead: true, Tools: true}},
 	{"gitlab", "a code host (GitLab, through glab)", Permissions{Commands: []string{"glab"}}},
+	{"review-gates", "rules with sections a project's settings switch on: a playbook and its per-project gate", Permissions{}},
 	{"zen", "a layout: no sidebar or details panel, only needs and the project", Permissions{}},
 	{"cockpit", "a layout: sidebar on the right, details panel along the bottom", Permissions{}},
 	{"compact", "a layout: narrower sidebar, one-row footer and status bar, no extra lines", Permissions{}},

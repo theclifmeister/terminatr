@@ -1,0 +1,9 @@
+{
+  "name": "a thorough project's threads run more, and keep no gate",
+  "projects": {"careful": {"depth": "thorough"}},
+  "rules": {
+    "thread": {"project": "careful", "contains": ["linters and the race detector"], "lacks": ["Gate:"]},
+    "coordinator": {"project": "careful", "contains": ["on their own"]}
+  },
+  "expect": {}
+}

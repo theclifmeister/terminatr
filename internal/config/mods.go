@@ -1,7 +1,9 @@
 package config
 
 import (
+	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 
@@ -28,6 +30,10 @@ type Mod struct {
 	// decoded (int64, bool, string, …); internal/mod checks them against
 	// the manifest.
 	Settings map[string]any
+	// ProjectSettings are [projects.<slug>.mods.<id>.settings] by slug,
+	// the mod's options for one project, each over Settings key by key;
+	// internal/mod checks them as it does Settings.
+	ProjectSettings map[string]map[string]any
 	// Order is the table's place among the [mods.<id>] tables, from 0:
 	// the order they were enabled in, as each enable appends its table.
 	// Where two mods want one thing (a key), the first wins.
@@ -88,11 +94,71 @@ func readMods(md toml.MetaData, prims map[string]toml.Primitive) (old []string, 
 	return old, mods, unknown
 }
 
+// readProjectMods adds each project's [projects.<slug>.mods.<id>]
+// table to mods[id].ProjectSettings, adding an entry for a mod that has
+// no [mods.<id>] table (a built-in one, or one not installed). Such a
+// table holds only [settings]: another key, or a value that isn't a
+// table, is that mod's Err, as a bad [mods.<id>] table is. A project's
+// mods that isn't a table is an error: no mod can be named.
+func readProjectMods(md toml.MetaData, projects map[string]rawSafety, mods map[string]Mod) error {
+	var errs []error
+	for _, slug := range slices.Sorted(maps.Keys(projects)) {
+		if !md.IsDefined("projects", slug, "mods") {
+			continue
+		}
+		var v any
+		md.PrimitiveDecode(projects[slug].Mods, &v)
+		tables, ok := v.(map[string]any)
+		if !ok {
+			errs = append(errs, fmt.Errorf("projects.%s.mods: must be tables, [projects.%s.mods.<id>.settings]", slug, slug))
+			continue
+		}
+		for _, id := range slices.Sorted(maps.Keys(tables)) {
+			m, ok := mods[id]
+			if !ok {
+				m = Mod{Order: len(mods)}
+			}
+			var err error
+			raw, ok := tables[id].(map[string]any)
+			if !ok {
+				err = fmt.Errorf("must be a table, [projects.%s.mods.%s.settings]", slug, id)
+			}
+			set, isTable := raw["settings"].(map[string]any)
+			for _, k := range slices.Sorted(maps.Keys(raw)) {
+				if k != "settings" && err == nil {
+					err = fmt.Errorf("%s is not a key here; a mod's settings for a project are [projects.%s.mods.%s.settings]", k, slug, id)
+				}
+			}
+			if err == nil && raw["settings"] != nil && !isTable {
+				err = fmt.Errorf("settings must be a table")
+			}
+			switch {
+			case err != nil && m.Err == nil:
+				m.Err = fmt.Errorf("projects.%s.mods.%s: %w", slug, id, err)
+			case err == nil && set != nil:
+				if m.ProjectSettings == nil {
+					m.ProjectSettings = map[string]map[string]any{}
+				}
+				m.ProjectSettings[slug] = set
+			}
+			mods[id] = m
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// ProjectModsTable is the config.toml table of mod id's settings for
+// project slug.
+func ProjectModsTable(slug, id string) string {
+	return "projects." + slug + ".mods." + id + ".settings"
+}
+
 // ModsTable is the config.toml table of mod id.
 func ModsTable(id string) string { return "mods." + id }
 
 // RemoveModsTable removes mod id's [mods.<id>] table and the tables
-// under it ([mods.<id>.settings]) from config.toml, everything else kept
+// under it ([mods.<id>.settings]), and each project's
+// [projects.<slug>.mods.<id>], from config.toml, everything else kept
 // (tm mod remove, and tm mod install of an id whose table was left
 // behind, so a new install starts disabled and ungranted). ErrForm when
 // the file sets them in a form the line editor doesn't change.
@@ -101,7 +167,20 @@ func RemoveModsTable(id string) error {
 		if data == nil {
 			return nil, nil
 		}
-		return DropTable(data, ModsTable(id))
+		var file struct {
+			Projects map[string]struct {
+				Mods map[string]any `toml:"mods"`
+			} `toml:"projects"`
+		}
+		// A file that doesn't read so is refused by DropTable below.
+		toml.Decode(string(data), &file)
+		out, err := DropTable(data, ModsTable(id))
+		for _, slug := range slices.Sorted(maps.Keys(file.Projects)) {
+			if _, ok := file.Projects[slug].Mods[id]; ok && err == nil {
+				out, err = DropTable(out, "projects."+slug+".mods."+id)
+			}
+		}
+		return out, err
 	})
 }
 

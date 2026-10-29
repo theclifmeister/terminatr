@@ -124,6 +124,10 @@ type Hello struct {
 	Mod      string          `json:"mod"`        // the mod's id
 	Grants   []string        `json:"grants"`     // granted ∩ requested
 	Settings json.RawMessage `json:"settings,omitempty"`
+	// Projects are the settings of each project that sets some of its
+	// own, by slug, each the whole set (Settings with the project's
+	// keys over them; mod API 1.11): $.settings(project).
+	Projects map[string]json.RawMessage `json:"projects,omitempty"`
 }
 
 // HelloResult answers Hello once the script has run.

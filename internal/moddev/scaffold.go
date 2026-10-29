@@ -152,6 +152,15 @@ func readme(id, name, kind string) string {
 		b.WriteString("A data mod: tm reads its files; nothing runs.\n\n" +
 			"    tm mod dev .      # load it from this folder\n" +
 			"    tm mod validate .\n")
+		if kind == "rules" {
+			b.WriteString("\nA project can switch parts of the rules on: give the mod a bool or\n" +
+				"choice setting in mod.toml ([settings.gates] type = \"bool\"), wrap the\n" +
+				"part in <!-- tm:if gates --> … <!-- tm:end --> (or !gates, or\n" +
+				"key=option), and turn it on for one project with\n" +
+				"`tm mod settings " + id + " --project <slug> gates=true`. tests/*.json\n" +
+				"with `rules` check the text, run by `tm mod test .`\n" +
+				"(docs/SPEC.md §5.3, Rules sections).\n")
+		}
 	}
 	fmt.Fprintf(&b, "\nInstall it with `tm mod install <this folder>`, then `tm mod enable %s`.\n", id)
 	return b.String()

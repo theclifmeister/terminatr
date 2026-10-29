@@ -304,15 +304,16 @@ type Addendum struct {
 // slug ("" for any): the policy of the first enabled policy mod that
 // runs there (the user's before the built-in default-policy; nil: none)
 // and every addendum, by mod id.
-// errs say which files couldn't be read, or which policy mods lost to
-// an earlier one.
+// Each text has its sections resolved with the mod's settings for slug
+// (ResolveRules). errs say which files couldn't be read or resolved, or
+// which policy mods lost to an earlier one.
 func (r *Registry) Rules(role, slug string) (policy *Addendum, addenda []Addendum, errs []error) {
 	for _, m := range r.Providers(KindRules) {
 		if slug != "" && !m.Runs(slug) {
 			continue
 		}
 		if f := m.Manifest.Provides.Rules[role+"_policy"]; f != "" {
-			switch b, err := m.ReadAgentText(f); {
+			switch b, err := m.rulesText(f, slug); {
 			case err != nil:
 				errs = append(errs, err)
 			case policy != nil && m.Builtin:
@@ -320,7 +321,7 @@ func (r *Registry) Rules(role, slug string) (policy *Addendum, addenda []Addendu
 			case policy != nil:
 				errs = append(errs, fmt.Errorf("%s: its %s policy is not used: %s's came first", m.ID, role, policy.Mod))
 			default:
-				policy = &Addendum{Mod: m.ID, Text: string(b), Builtin: m.Builtin}
+				policy = &Addendum{Mod: m.ID, Text: b, Builtin: m.Builtin}
 			}
 		}
 	}
@@ -329,17 +330,31 @@ func (r *Registry) Rules(role, slug string) (policy *Addendum, addenda []Addendu
 			continue
 		}
 		if f := m.Manifest.Provides.Rules[role]; f != "" {
-			b, err := m.ReadAgentText(f)
+			b, err := m.rulesText(f, slug)
 			if err != nil {
 				errs = append(errs, err)
 				continue
 			}
-			if t := strings.TrimSpace(string(b)); t != "" {
+			if t := strings.TrimSpace(b); t != "" {
 				addenda = append(addenda, Addendum{Mod: m.ID, Text: t})
 			}
 		}
 	}
 	return policy, addenda, errs
+}
+
+// rulesText is the mod's rules file rel with its sections resolved for
+// project slug ("" for all projects): its settings for it.
+func (m Mod) rulesText(rel, slug string) (string, error) {
+	b, err := m.ReadAgentText(rel)
+	if err != nil {
+		return "", err
+	}
+	t, err := ResolveRules(string(b), m.Manifest, m.SettingsFor(slug))
+	if err != nil {
+		return "", fmt.Errorf("%s: %s: %w", m.ID, rel, err)
+	}
+	return t, nil
 }
 
 // ModGuardRule is a mod's guard rule, with the mod's id.
@@ -619,7 +634,12 @@ func (m Mod) CheckData() []error {
 		}
 	}
 	for _, role := range sortedKeys(m.Manifest.Provides.Rules) {
-		if _, err := m.ReadAgentText(m.Manifest.Provides.Rules[role]); err != nil {
+		rel := m.Manifest.Provides.Rules[role]
+		b, err := m.ReadAgentText(rel)
+		if err == nil {
+			err = checkRulesSections(m.Manifest, rel, string(b))
+		}
+		if err != nil {
 			errs = append(errs, fmt.Errorf("rules %s: %w", role, err))
 		}
 	}

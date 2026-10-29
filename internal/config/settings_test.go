@@ -29,7 +29,7 @@ func TestSettingKeys(t *testing.T) {
 }
 
 // TestSettingRowsCoverFields: every field of Safety and rawSafety (but
-// repos, links, env and sandbox, which aren't settings) has its row, and Value reads
+// repos, links, env, sandbox and mods, which aren't settings) has its row, and Value reads
 // each Safety field.
 func TestSettingRowsCoverFields(t *testing.T) {
 	s := reflect.ValueOf(Defaults)
@@ -46,7 +46,7 @@ func TestSettingRowsCoverFields(t *testing.T) {
 	for i := range r.NumField() {
 		key := r.Field(i).Tag.Get("toml")
 		// sandbox_escapes is protection's older form, read by its row.
-		if _, ok := lookup(key); !ok && key != "repos" && key != "links" && key != "env" && key != "sandbox" && key != "sandbox_escapes" {
+		if _, ok := lookup(key); !ok && key != "repos" && key != "links" && key != "env" && key != "sandbox" && key != "mods" && key != "sandbox_escapes" {
 			t.Errorf("rawSafety.%s (%s) has no row", r.Field(i).Name, key)
 		}
 	}
