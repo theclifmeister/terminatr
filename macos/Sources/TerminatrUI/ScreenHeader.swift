@@ -26,15 +26,11 @@ public struct ScreenHeader<Trailing: View>: View {
 
     public var body: some View {
         VStack(alignment: .leading, spacing: Spacing.item) {
-            // No buttons, no row: a screen with its buttons in its
-            // toolbar.
-            if Trailing.self != EmptyView.self {
-                HStack(spacing: Spacing.item) {
-                    Spacer(minLength: 0)
-                    trailing
-                }
-                .frame(minHeight: tapTarget)
+            HStack(spacing: Spacing.item) {
+                Spacer(minLength: 0)
+                trailing
             }
+            .frame(minHeight: tapTarget)
             let head = typeSize.isAccessibilitySize
                 ? AnyLayout(VStackLayout(alignment: .leading, spacing: Spacing.tight))
                 : AnyLayout(HStackLayout(alignment: .center, spacing: Spacing.row))

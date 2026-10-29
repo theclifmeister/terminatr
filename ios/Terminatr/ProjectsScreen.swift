@@ -17,7 +17,9 @@ struct ProjectsScreen: View {
         let gone = model.inactiveProjects
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                ScreenHeader("Projects", subtitle: subtitle(inactive: gone.count), symbol: symbol)
+                ScreenHeader("Projects", subtitle: subtitle(inactive: gone.count), symbol: symbol) {
+                    SettingsButton().buttonStyle(.circle)
+                }
                 LazyVStack(alignment: .leading, spacing: Spacing.row + 2) {
                     if let f = model.failure { Failure(text: f) }
                     if !model.peers.isEmpty { SectionHeading("This server") }
@@ -51,8 +53,8 @@ struct ProjectsScreen: View {
         .keepsPlace("projects")
         .kept($showInactive, "inactive")
         .navigationTitle("Projects")
-        .headerTitle()
-        .toolbar { SettingsButton() }
+        // The header has the title and the Settings button.
+        .toolbar(.hidden, for: .navigationBar)
         .backdrop()
     }
 
