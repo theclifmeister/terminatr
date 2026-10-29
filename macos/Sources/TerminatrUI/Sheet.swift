@@ -89,6 +89,44 @@ public struct GroupLabel: View {
     }
 }
 
+/// A setting's switch on a sheet (T851: Settings' Haptics): its title
+/// and a line of what it does, the switch in the action colour, on a
+/// deck card ("a sheet card"). VoiceOver reads it as the one switch.
+public struct SwitchCard: View {
+    @Environment(\.theme) private var theme
+    let title: String
+    let detail: String
+    @Binding var isOn: Bool
+
+    public init(_ title: String, detail: String = "", isOn: Binding<Bool>) {
+        self.title = title
+        self.detail = detail
+        _isOn = isOn
+    }
+
+    public var body: some View {
+        Toggle(isOn: $isOn) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(theme.body(.headline, .semibold))
+                    .foregroundStyle(theme.ink)
+                if !detail.isEmpty {
+                    Text(detail)
+                        .font(theme.body(.subheadline))
+                        .foregroundStyle(theme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .tint(theme.action)
+        .padding(.horizontal, Spacing.card)
+        .padding(.vertical, Spacing.row)
+        .frame(minHeight: tapTarget)
+        .surface(.card, in: RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
+        .padding(.horizontal, Spacing.gutter)
+    }
+}
+
 extension View {
     /// A sheet's ground (T850): the theme's mesh under the glass, edge to
     /// edge ("the glass" in ThemeColours.checks; its cards are "a sheet

@@ -12,11 +12,10 @@ import TerminatrUI
 /// session's question or approval opens as its conversation with the
 /// card above it (Route.need), beside the list while the Duo is open
 /// (T826). VoiceOver's Needs rotor goes card to card; haptics follow
-/// the switch (Haptics.key), and none comes when a need arrives.
+/// Settings' switch (Themed), and none comes when a need arrives.
 struct NeedsScreen: View {
     @Environment(PhoneModel.self) private var model
     @Environment(\.theme) private var theme
-    @AppStorage(Haptics.key) private var haptics = true
     /// -needs-filter GROUP opens on a chip, for screenshots.
     @State private var group = Need.Group(rawValue: UserDefaults.standard.string(forKey: "needs-filter") ?? "") ?? .all
     @Namespace private var rotor
@@ -64,7 +63,6 @@ struct NeedsScreen: View {
         .refreshable { await model.refresh() }
         .keepsPlace("needs")
         .kept($group, "needs filter")
-        .environment(\.haptics, haptics)
         .navigationTitle("Needs you")
         .toolbar(.hidden, for: .navigationBar)
         .backdrop()
@@ -130,35 +128,60 @@ struct SourceBanner: View {
     }
 }
 
-/// The demo says so on its start screen, and leads back out.
+/// The demo says so on its start screen, and leads back out: a line on
+/// the glass and Leave, a ghost button; at accessibility sizes Leave
+/// goes under the line.
 struct DemoBanner: View {
     @Environment(PhoneModel.self) private var model
     @Environment(\.theme) private var theme
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "play.rectangle")
-                .foregroundStyle(theme.action)
-                .accessibilityHidden(true)
-            Text("Demo: recorded projects, read only")
-                .font(theme.body(.footnote, .medium))
-            Spacer()
+        let row = typeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 0))
+            : AnyLayout(HStackLayout(spacing: Spacing.item))
+        row {
+            Label {
+                Text("Demo: recorded projects, read only")
+                    .foregroundStyle(theme.ink)
+                    .fixedSize(horizontal: false, vertical: true)
+            } icon: {
+                Image(systemName: "play.rectangle")
+                    .foregroundStyle(theme.action)
+            }
+            .font(theme.body(.footnote, .medium))
+            .frame(maxWidth: .infinity, alignment: .leading)
             Button("Leave") { Task { await model.disconnect() } }
-                .font(theme.body(.footnote, .semibold))
+                .buttonStyle(.ghost)
+                .fixedSize()
         }
-        .padding(10)
-        .background(theme.action.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
+        .padding(.leading, Spacing.card)
+        .padding(.trailing, Spacing.item)
+        .padding(.vertical, Spacing.hair)
+        .surface(.glass, in: RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
     }
 }
 
+/// Why the screen's last read failed: the attention mark and the words
+/// in ink, on the glass (the attention colour falls short as text in
+/// some themes, and the mesh is no place for small text).
 struct Failure: View {
     @Environment(\.theme) private var theme
     let text: String
 
     var body: some View {
-        Label(text, systemImage: "exclamationmark.triangle")
-            .font(theme.body(.footnote))
-            .foregroundStyle(theme.attention)
-            .frame(maxWidth: .infinity, alignment: .leading)
+        Label {
+            Text(text)
+                .foregroundStyle(theme.ink)
+                .fixedSize(horizontal: false, vertical: true)
+        } icon: {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(theme.attention)
+        }
+        .font(theme.body(.footnote))
+        .padding(.horizontal, Spacing.card)
+        .padding(.vertical, Spacing.row)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .surface(.glass, in: RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
     }
 }

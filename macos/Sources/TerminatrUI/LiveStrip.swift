@@ -52,6 +52,10 @@ public struct LiveStrip: View {
         .accessibilityLabel(work.word)
         .accessibilityValue(work.what)
         .accessibilityHint("Opens \(work.who)'s conversation")
+        // Held down at accessibility sizes, it shows its line whole.
+        .accessibilityShowsLargeContentViewer {
+            Label(compact ? work.word : work.word + " · " + work.what, systemImage: "circle.dotted")
+        }
     }
 
     /// Three bars in the action colour, rising and falling while the

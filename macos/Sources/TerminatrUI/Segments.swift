@@ -22,7 +22,7 @@ public struct Segments<ID: Hashable>: View {
         }
         .padding(4)
         .surface(.glass, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
-        .sensoryFeedback(.selection, trigger: selection)
+        .feedback(.selection, trigger: selection)
     }
 
     private var buttons: some View {

@@ -72,6 +72,12 @@ public struct Theme: Sendable {
     /// Every font's size times this: Settings › Appearance › Text size,
     /// and in the sidebar the system's sidebar size as well.
     public var scale: CGFloat = 1
+    /// How much of scale's growth a display size (above 20 pt: a header,
+    /// a project's name) takes: 1 on the Mac; on the phone less, as
+    /// Apple's large titles grow under Dynamic Type (34 to 60 pt where
+    /// the body triples), so a title word fits a row at accessibility
+    /// sizes rather than breaking (T851).
+    public var titleGrowth: CGFloat = 1
 
     public init(_ name: ThemeName, colours: ThemeColours? = nil) {
         let c = colours ?? name.colours
@@ -112,11 +118,13 @@ public struct Theme: Sendable {
         contrast = c.contrast
     }
 
-    /// A style's size: its points times the scale. The custom faces are
-    /// fixed at it, as SF is, so Dynamic Type (the phone's text size,
-    /// in scale) grows every font once and alike.
+    /// A style's size: its points times the scale, a display size's
+    /// times titleGrowth's share of it. The custom faces are fixed at
+    /// it, as SF is, so Dynamic Type (the phone's text size, in scale)
+    /// grows every font once.
     public func size(_ style: TextStyle) -> CGFloat {
-        CGFloat(style.points) * scale
+        let p = CGFloat(style.points)
+        return p > 20 ? p * (1 + (scale - 1) * titleGrowth) : p * scale
     }
 
     /// The theme's display face (Bloom's Bricolage Grotesque), or SF Pro.
@@ -142,6 +150,7 @@ public struct Theme: Sendable {
     public func increasedContrast() -> Theme {
         var t = Theme(name, colours: colours.increasedContrast())
         t.scale = scale
+        t.titleGrowth = titleGrowth
         return t
     }
 

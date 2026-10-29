@@ -33,7 +33,7 @@ public struct ThemeCarousel: View {
                 }
             }
         }
-        .sensoryFeedback(.selection, trigger: selection)
+        .feedback(.selection, trigger: selection)
     }
 
     private var tiles: some View {
