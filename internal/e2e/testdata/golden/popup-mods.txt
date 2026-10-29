@@ -1,0 +1,40 @@
+ PROJECTS                      1   │ tm dashboard                                               ● server ok · 0 sessions
+ ■ demo             0           ⚑  │ NEEDS YOU 1 ───────────────────────────────────────────────────────────────────────
+ └─ co╭─ demo ───────────────────────────────────────────────────────────────────────────────────────────────────╮
+      │ 1 overview 2 inbox 3 tasks 4 settings 5 access 6 keys 7 memory 8 library 9 messages 0 designs mods       │ivate
+      │                                                                                                          │
+      │ ● ASCII icons        icons · built in          follows all projects: on                                  │
+      │ ● Default keymap     keymap · built in         follows all projects: on                                  │──────
+      │ ● Default layout     layout · built in         follows all projects: on                                  │
+      │ ● Default policy     rules · built in          follows all projects: on                                  │
+      │ ● Default templates  templates · built in      follows all projects: on                                  │
+      │ ● Default theme      theme · built in          follows all projects: on                                  │
+      │ ○ Memory tab         code · view · built in    follows all projects: off                                 │
+      │ ● Nerd Font icons    icons · built in          follows all projects: on                                  │
+      │ ● PR/CI column       code · column · built in  follows all projects: on                                  │
+      │ ● Tasks tab          code · view · built in    follows all projects: on                                  │
+      │ ● Ticker             code · view · built in    follows all projects: on  settings: all projects          │
+      │ ● Unicode icons      icons · built in          follows all projects: on                                  │
+      │                                                                                                          │
+      │ ASCII icons: ASCII only, for a terminal or font without Unicode.                                         │
+      │ tm can't do without it: it runs for every project.                                                       │
+      │ It has no settings.                                                                                      │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+ ─────│ ↑ ↓ move · space on/off here · ← → tabs · esc close                                                      │
+ demo ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────╯──────
+ 0 threads · coordinator not runn… │
+ tab sidebar · ? help              │

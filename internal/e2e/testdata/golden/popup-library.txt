@@ -1,7 +1,7 @@
  PROJECTS                      1   │ tm dashboard                                               ● server ok · 0 sessions
  ■ demo             0              │ demo ────────────────────────────────────────────────── ● active — S to deactivate
  └─ co╭─ demo ───────────────────────────────────────────────────────────────────────────────────────────────────╮
-      │ 1 overview 2 inbox 3 tasks 4 settings 5 access 6 keys 7 memory 8 library 9 messages 0 designs            │
+      │ 1 overview 2 inbox 3 tasks 4 settings 5 access 6 keys 7 memory 8 library 9 messages 0 designs mods       │
       │                                                                                                          │──────
       │ T1  Research the options · t-0001 · 2026-10-07                                                           │
       │   data.json                                                                                         11 B │
