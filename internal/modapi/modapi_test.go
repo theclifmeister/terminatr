@@ -265,6 +265,27 @@ func TestSettingsEmpty(t *testing.T) {
 	}
 }
 
+// settings(project) is that project's settings from hello, all
+// projects' for a project without its own; a project that isn't a
+// string is a TypeError (mod API 1.11).
+func TestSettingsForProject(t *testing.T) {
+	b := start(t, `$.on("go", () => {
+		$.log([$.settings().gates, $.settings("gated").gates, $.settings("plain").gates, $.settings(null).gates].join(" "));
+		try { $.settings(7); } catch (e) { $.log("type", e instanceof TypeError); }
+	});`, echo)
+	h := modproto.Hello{API: "1.11", Mod: "test", Settings: json.RawMessage(`{"gates": false}`),
+		Projects: map[string]json.RawMessage{"gated": json.RawMessage(`{"gates": true}`)}}
+	if _, err := b.c.Hello(context.Background(), h); err != nil {
+		t.Fatal(err)
+	}
+	b.event("go", `{}`)
+	for _, w := range []string{"false true false false", "type true"} {
+		if got := b.log(); got != w {
+			t.Errorf("log %q, want %q", got, w)
+		}
+	}
+}
+
 // Bind refuses a $ path that runs into a built-in that isn't an object.
 func TestBindClash(t *testing.T) {
 	saved := Methods

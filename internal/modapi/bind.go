@@ -27,8 +27,19 @@ func Bind(h *modhost.Host) error {
 		var fn func(goja.FunctionCall) goja.Value
 		switch {
 		case m.Name == "settings":
-			fn = func(goja.FunctionCall) goja.Value {
-				raw := string(h.Hello().Settings)
+			fn = func(c goja.FunctionCall) goja.Value {
+				hello := h.Hello()
+				raw := string(hello.Settings)
+				// $.settings(project): that project's, when it sets
+				// some of its own; all projects' otherwise.
+				if p := c.Argument(0); !goja.IsUndefined(p) && !goja.IsNull(p) {
+					if _, ok := p.Export().(string); !ok {
+						panic(vm.NewTypeError("settings: project must be a project's slug"))
+					}
+					if own, ok := hello.Projects[p.String()]; ok {
+						raw = string(own)
+					}
+				}
 				if raw == "" || raw == "null" {
 					return vm.NewObject()
 				}

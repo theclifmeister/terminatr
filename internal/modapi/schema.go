@@ -304,8 +304,8 @@ var Methods = []Method{
 		Doc: "Reads a text file in the mod's own data dir, or under a root the files grant lists."},
 	{Name: "fs.write", Params: []Param{{Name: "path", Type: typ[string]()}, {Name: "text", Type: typ[string]()}, {Name: "append", Type: typ[bool](), Optional: true}},
 		Doc: "Writes a text file in the mod's own data dir, or under a root the files grant lets it write; with append true it adds to the end instead of replacing the file."},
-	{Name: "settings", Result: typ[Settings](), Local: true,
-		Doc: "The mod's settings."},
+	{Name: "settings", Params: []Param{{Name: "project", Type: typ[string](), Optional: true}}, Result: typ[Settings](), Local: true,
+		Doc: "The mod's settings: for all projects, or with project (mod API 1.11) that project's, each key it sets of its own over all projects' value."},
 	{Name: "api.has", Params: []Param{{Name: "name", Type: typ[string]()}}, Result: typ[bool](), Local: true,
 		Doc: "Whether this tm has a method (\"ui.view.set\") or event (\"view.opened\"): feature-test instead of pinning a minor."},
 	// Annotations.
