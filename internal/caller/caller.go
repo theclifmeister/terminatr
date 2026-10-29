@@ -56,6 +56,13 @@ type Caller struct {
 	// "human (iphone: <name>)". Its rights are its level's, which the
 	// device's app API enforces; the server refuses it escape approvals.
 	Device string
+	// Peer is the paired server a human's act came through (peer.act,
+	// docs/SPEC.md §16.16): its user, at a needs switch of answer here,
+	// answered one of this server's needs. Journaled as "human (peer:
+	// <alias>)", or "human (peer: <alias> › iphone: <name>)" when a
+	// phone of that server's acted through it. It reaches only the five
+	// answer acts, which peer.act calls itself, and never an escape.
+	Peer string
 }
 
 // ViaApp is Via for the Mac app's calls, journaled as "human (app)".
@@ -63,6 +70,23 @@ const ViaApp = "app"
 
 // ForDevice is the caller for the paired device name's calls.
 func ForDevice(name string) Caller { return Caller{Kind: Human, Via: "iphone: " + name, Device: name} }
+
+// ForPeerHuman is the caller for an act of the paired server alias's
+// user (peer.act): device names the phone of that server's that acted
+// through it, "" for its own console. Unlike ForPeer, it is the human's:
+// peer.act lets it reach the answer acts only.
+func ForPeerHuman(alias, device string) Caller {
+	via := "peer: " + alias
+	if device != "" {
+		via += " › iphone: " + device
+	}
+	return Caller{Kind: Human, Via: via, Peer: alias}
+}
+
+// Remote says whether the caller is the human acting from elsewhere: a
+// paired device, or through a paired server. Neither answers an
+// escape's prompt, which is the user's at this computer alone.
+func (c Caller) Remote() bool { return c.Device != "" || c.Peer != "" }
 
 // ForMod is the caller for mod id's brokered calls.
 func ForMod(id string) Caller { return Caller{Kind: Mod, Mod: id} }

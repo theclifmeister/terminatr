@@ -71,3 +71,25 @@ func TestViaApp(t *testing.T) {
 		t.Errorf("an agent's Via named it: %q", got)
 	}
 }
+
+// TestPeerHuman: a paired server's user, through peer.act, is the human,
+// remote, journaled with the server and the phone it came from; the
+// paired server itself stays an agent.
+func TestPeerHuman(t *testing.T) {
+	c := ForPeerHuman("mini", "")
+	if c.IsAgent() || !c.Remote() {
+		t.Errorf("ForPeerHuman: agent %v, remote %v", c.IsAgent(), c.Remote())
+	}
+	if got := c.String(); got != "human (peer: mini)" {
+		t.Errorf("String() = %q", got)
+	}
+	if got := ForPeerHuman("mini", "Clif's phone").String(); got != "human (peer: mini › iphone: Clif's phone)" {
+		t.Errorf("String() = %q", got)
+	}
+	if !ForPeer("mini").IsAgent() || ForPeer("mini").Remote() {
+		t.Error("ForPeer changed")
+	}
+	if !ForDevice("x").Remote() || (Caller{Kind: Human}).Remote() || (Caller{Kind: Human, Via: ViaApp}).Remote() {
+		t.Error("Remote() is wrong for a device, the human or the app")
+	}
+}

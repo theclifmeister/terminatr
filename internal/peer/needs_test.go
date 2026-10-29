@@ -2,6 +2,7 @@ package peer
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"strings"
 	"sync"
@@ -200,5 +201,121 @@ func TestCleanNeeds(t *testing.T) {
 	}
 	if e := w.Needs[1]; e.Approval != nil || e.Question != nil {
 		t.Errorf("an escape kept its dialog: %+v", e)
+	}
+}
+
+// actExport is a needsExport that takes acts, keeping each one's caller.
+type actExport struct {
+	*needsExport
+	mu   sync.Mutex
+	acts []caller.Caller
+}
+
+func (a *actExport) Act(c caller.Caller, p proto.PeerAct) (proto.PeerActResult, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.acts = append(a.acts, c)
+	return proto.PeerActResult{Act: p.Act, Asked: true}, nil
+}
+
+// TestPeerAct: peer.nonce and peer.act answer only at answer (view
+// reads peer.needs), an act needs a nonce this link gave, once, and it
+// reaches the exporter as the paired server's user, or its phone.
+func TestPeerAct(t *testing.T) {
+	ex := &actExport{needsExport: &needsExport{fakeExport: newFakeExport()}}
+	var mu sync.Mutex
+	level := proto.NeedsOff
+	ca, cb, err := tcpPair()
+	if err != nil {
+		t.Fatal(err)
+	}
+	sa, sb := newSession(ca), newSession(cb)
+	sa.ping, sb.ping = time.Hour, time.Hour
+	sb.methods = (&dispatcher{ex: ex, caller: caller.ForPeer("studio"), needs: func() string { mu.Lock(); defer mu.Unlock(); return level }}).methods()
+	go sa.serve(func(time.Duration) {})
+	go sb.serve(func(time.Duration) {})
+	t.Cleanup(func() { ca.Close(); cb.Close() })
+	ctx := context.Background()
+	set := func(l string) { mu.Lock(); level = l; mu.Unlock() }
+	code := func(err error) string {
+		var pe *proto.Error
+		if errors.As(err, &pe) {
+			return pe.Code
+		}
+		return ""
+	}
+	act := proto.PeerAct{Project: "web", Need: "review:T12:1", Act: proto.ActAccept, Status: "review"}
+
+	var nr proto.PeerNeedsResult
+	if err := sa.call(ctx, proto.MethodPeerNeeds, proto.PeerNeedsParams{Project: "web"}, &nr); code(err) != proto.ErrNeedsOff {
+		t.Errorf("peer.needs at off: %v", err)
+	}
+	set(proto.NeedsView)
+	if err := sa.call(ctx, proto.MethodPeerNeeds, proto.PeerNeedsParams{Project: "web"}, &nr); err != nil || len(nr.Needs) != 3 || nr.Needs[1].Approval != nil {
+		t.Errorf("peer.needs at view: %+v %v", nr.Needs, err)
+	}
+	var n proto.PeerNonce
+	if err := sa.call(ctx, proto.MethodPeerNonce, nil, &n); code(err) != proto.ErrNeedsOff {
+		t.Errorf("peer.nonce at view: %v", err)
+	}
+	if err := sa.call(ctx, proto.MethodPeerAct, proto.PeerActParams{PeerAct: act, Nonce: []byte("x")}, nil); code(err) != proto.ErrNeedsOff {
+		t.Errorf("peer.act at view: %v", err)
+	}
+
+	set(proto.NeedsAnswer)
+	if err := sa.call(ctx, proto.MethodPeerAct, proto.PeerActParams{PeerAct: act}, nil); code(err) != proto.ErrBadNonce {
+		t.Errorf("peer.act without a nonce: %v", err)
+	}
+	if err := sa.call(ctx, proto.MethodPeerAct, proto.PeerActParams{PeerAct: act, Nonce: make([]byte, 32)}, nil); code(err) != proto.ErrBadNonce {
+		t.Errorf("peer.act with a nonce it wasn't given: %v", err)
+	}
+	if err := sa.call(ctx, proto.MethodPeerNonce, nil, &n); err != nil || len(n.Nonce) != 32 {
+		t.Fatalf("peer.nonce: %v %v", n, err)
+	}
+	var res proto.PeerActResult
+	if err := sa.call(ctx, proto.MethodPeerAct, proto.PeerActParams{PeerAct: act, Nonce: n.Nonce}, &res); err != nil || !res.Asked {
+		t.Fatalf("peer.act: %+v %v", res, err)
+	}
+	if err := sa.call(ctx, proto.MethodPeerAct, proto.PeerActParams{PeerAct: act, Nonce: n.Nonce}, nil); code(err) != proto.ErrBadNonce {
+		t.Errorf("a replayed nonce: %v", err)
+	}
+	sa.call(ctx, proto.MethodPeerNonce, nil, &n)
+	if err := sa.call(ctx, proto.MethodPeerAct, proto.PeerActParams{PeerAct: act, Nonce: n.Nonce, Device: "Clif's\x1b[31m phone"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	ex.mu.Lock()
+	defer ex.mu.Unlock()
+	if len(ex.acts) != 2 || ex.acts[0].String() != "human (peer: studio)" || ex.acts[1].String() != "human (peer: studio › iphone: Clif's[31m phone)" {
+		t.Errorf("callers %v", ex.acts)
+	}
+	for _, c := range ex.acts {
+		if c.IsAgent() || !c.Remote() {
+			t.Errorf("caller %v: agent %v, remote %v", c, c.IsAgent(), c.Remote())
+		}
+	}
+}
+
+// TestNonces: a nonce is good once, for its life, and the oldest go
+// when too many wait.
+func TestNonces(t *testing.T) {
+	var ns nonces
+	now := time.Now()
+	a := ns.next(now)
+	if !ns.take(a, now) || ns.take(a, now) {
+		t.Error("a nonce wasn't good exactly once")
+	}
+	b := ns.next(now)
+	if ns.take(b, now.Add(proto.PeerNonceLife+time.Second)) {
+		t.Error("an old nonce was taken")
+	}
+	first := ns.next(now)
+	for i := range nonceMax {
+		ns.next(now.Add(time.Duration(i+1) * time.Millisecond))
+	}
+	if ns.take(first, now.Add(time.Second)) {
+		t.Error("the oldest of too many nonces was kept")
+	}
+	if ns.take(nil, now) {
+		t.Error("no nonce was taken")
 	}
 }
