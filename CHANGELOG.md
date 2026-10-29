@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.62.0](https://github.com/theclifmeister/terminatr/compare/v0.61.0...v0.62.0) (2026-10-29)
+
+
+### Features
+
+* **ios:** a session takes the whole width in portrait, and the settings gear sits on the title's line ([#917](https://github.com/theclifmeister/terminatr/issues/917)) ([2f293ee](https://github.com/theclifmeister/terminatr/commit/2f293eec6d9b50f2c6c2d8ea7e713889baf33517))
+
+
+### Bug Fixes
+
+* **ios:** composer dock at one height with a hide-keyboard button, keyboard kept across reconnects, Queued note cleared, board folds paired ([#918](https://github.com/theclifmeister/terminatr/issues/918)) ([8b1113a](https://github.com/theclifmeister/terminatr/commit/8b1113afd65254e8588a5728d2a2f0762d03e4d1))
+* **ios:** the Terminal view shows at once and in the theme's colours ([#915](https://github.com/theclifmeister/terminatr/issues/915)) ([96c86e3](https://github.com/theclifmeister/terminatr/commit/96c86e3000db4f353e10dde44d223cde6542b9dc))
+
 ## [0.61.0](https://github.com/theclifmeister/terminatr/compare/v0.60.0...v0.61.0) (2026-10-29)
 
 
