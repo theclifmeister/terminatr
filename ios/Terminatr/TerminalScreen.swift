@@ -10,9 +10,12 @@ import UIKit
 /// drawn by SwiftTerm. The phone never resizes the pane for the other
 /// viewers: the mirror keeps the pane's size, at a font that fits its
 /// width (PhonePaneHost), pinched to zoom and panned past the screen.
-/// It shows the pane's screen, not its scrollback: the conversation is
-/// the history. At the write level a tap brings the keyboard with
-/// SwiftTerm's key bar (Esc, Ctrl, Tab, the arrows, function keys),
+/// Above the screen a swipe scrolls through the pane's scrollback, kept
+/// in the mirror from the first repaint (T861), with a button back to
+/// the bottom; a program that tracks the mouse or runs full screen
+/// gets the swipe as the Mac's wheel, at the write level alone. At the
+/// write level a tap brings the keyboard with SwiftTerm's key bar
+/// (Esc, Ctrl, Tab, the arrows, function keys),
 /// and keys go in through pane.input as the human's, signed; not while
 /// an escape's prompt may be up (the server drops a device's keys then
 /// too), nor at a paired server's view switch. A paired server's pane
@@ -60,6 +63,19 @@ struct TerminalScreen: View {
                             }
                     } else {
                         Color.clear
+                    }
+                    if let pane, pane.back {
+                        Button { pane.host.jumpToBottom() } label: {
+                            Label("Jump to bottom", systemImage: "arrow.down")
+                                .font(theme.body(.subheadline, .semibold))
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 8)
+                                .frosted(Capsule())
+                                .overlay(Capsule().strokeBorder(theme.edge, lineWidth: 1))
+                                .shadow(color: .black.opacity(0.18), radius: 8, y: 3)
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.bottom, 10)
                     }
                     // A drop's error says nothing: the redial streams it again.
                     if let closed = pane?.controller.closed, !model.relinking {
@@ -134,8 +150,11 @@ final class PhonePane {
         didSet {
             controller.keys = typing
             host.terminal.typing = typing
+            host.keysChanged()
         }
     }
+    /// The terminal reads its scrollback, off the bottom.
+    private(set) var back = false
 
     init() {
         let host = host
@@ -144,6 +163,7 @@ final class PhonePane {
         controller.keys = false
         controller.mirror = { cols, rows in host.mirror(cols: cols, rows: rows) }
         controller.openLink = { LinkConfirm.open($0) }
+        host.onBack = { [weak self] in self?.back = $0 }
     }
 }
 
@@ -173,7 +193,12 @@ enum LinkConfirm {
 /// font that fits the pane's width in the room (PaneZoom), pinched to
 /// zoom between the smallest readable and the largest; past the room it
 /// pans, and it stays at the bottom, where the prompt is, until the
-/// user pans away.
+/// user scrolls away. Above the screen the scroll goes on into the
+/// mirror's scrollback (T861), one row of it a cell: the mirror stays
+/// a screen tall and moves down the rows it shows as the scroll goes
+/// up, and output doesn't move what the user reads off the bottom. A
+/// program that takes the swipe (PaneScroll.swipe) gets it instead
+/// past the screen's edges, as wheel ticks or arrow keys.
 final class PhonePaneHost: UIScrollView, UIScrollViewDelegate {
     let terminal = PhoneMirrorView(frame: .zero, font: UIFont.monospacedSystemFont(ofSize: PaneZoom.largest, weight: .regular))
     private var pane: (cols: Int, rows: Int)?
@@ -183,8 +208,27 @@ final class PhonePaneHost: UIScrollView, UIScrollViewDelegate {
     /// The size that fits the pane's width, unzoomed.
     private var fitted: CGFloat = PaneZoom.smallest
     private var laidOut: CGSize = .zero
-    /// The user hasn't panned up from the bottom.
+    /// The user hasn't scrolled up from the bottom.
     private var atBottom = true
+    /// A cell's height, and the rows of scrollback above the screen in
+    /// the scroll: none while a program takes the swipe.
+    private var cell: CGFloat = 0
+    private var history = 0
+    /// The scrollback row the mirror was last placed at.
+    private var shown = 0
+    private var swipe = PaneScroll.Swipe.history
+    /// Moving the offset from here, not the user's scroll.
+    private var placing = false
+    /// The view reads the scrollback: the jump-to-bottom button shows.
+    private(set) var back = false {
+        didSet { if back != oldValue { onBack?(back) } }
+    }
+    var onBack: ((Bool) -> Void)?
+    /// A program's swipe, beside the scroll's own pan.
+    private let wheel = UIPanGestureRecognizer()
+    private let wheelRules = Simultaneous()
+    private var wheelLast: CGFloat = 0
+    private var wheelCarry: CGFloat = 0
 
     /// Room between the cells and the screen's edges.
     static let inset = CGSize(width: 6, height: 6)
@@ -193,13 +237,23 @@ final class PhonePaneHost: UIScrollView, UIScrollViewDelegate {
         super.init(frame: frame)
         delegate = self
         alwaysBounceVertical = false
+        isDirectionalLockEnabled = true
         contentInsetAdjustmentBehavior = .never
         keyboardDismissMode = .interactive
-        terminal.changeScrollback(nil)
+        terminal.changeScrollback(PaneScroll.lines)
         terminal.isScrollEnabled = false
         terminal.optionAsMetaKey = false
+        terminal.onChange = { [weak self] reset in
+            if reset { self?.atBottom = true }
+            self?.layOut()
+        }
+        terminal.onAccessibilityScroll = { [weak self] in self?.page($0) ?? false }
         addSubview(terminal)
         addGestureRecognizer(UIPinchGestureRecognizer(target: self, action: #selector(pinched(_:))))
+        wheel.addTarget(self, action: #selector(swiped(_:)))
+        wheelRules.begins = { [weak self] g in self?.wheelBegins(g) ?? false }
+        wheel.delegate = wheelRules
+        addGestureRecognizer(wheel)
     }
 
     required init?(coder: NSCoder) { fatalError("not from a nib") }
@@ -210,6 +264,9 @@ final class PhonePaneHost: UIScrollView, UIScrollViewDelegate {
         refit()
     }
 
+    /// Keys went on or off: whether a program takes the swipe.
+    func keysChanged() { layOut() }
+
     override func layoutSubviews() {
         super.layoutSubviews()
         if bounds.size != laidOut {
@@ -218,8 +275,8 @@ final class PhonePaneHost: UIScrollView, UIScrollViewDelegate {
         }
     }
 
-    /// Sets the font for the pane and the room, pins the mirror to the
-    /// pane's size in it and centres it while it is smaller.
+    /// Sets the font for the pane and the room and pins the mirror to
+    /// the pane's size in it.
     private func refit() {
         guard let pane, bounds.width > 0 else { return }
         let room = bounds.width - 2 * Self.inset.width
@@ -228,10 +285,77 @@ final class PhonePaneHost: UIScrollView, UIScrollViewDelegate {
         let size = PaneZoom.size(fitting: room, cols: pane.cols, advance: advance, zoom: zoom)
         terminal.pin(cols: pane.cols, rows: pane.rows, fontSize: size == fontSize ? nil : size)
         fontSize = size
+        layOut()
+    }
+
+    /// Sizes the scroll for the scrollback and the screen, centres the
+    /// grid while it is narrower than the room and keeps what the user
+    /// reads where it is: the bottom while they are at it.
+    private func layOut() {
+        guard let pane, pane.rows > 0, bounds.width > 0 else { return }
+        let t = terminal.getTerminal()
+        let was = cell, wasTop = CGFloat(history) * was
         let grid = terminal.frame.size
-        contentSize = CGSize(width: grid.width + 2 * Self.inset.width, height: grid.height + 2 * Self.inset.height)
-        terminal.frame.origin = CGPoint(x: max(Self.inset.width, (bounds.width - grid.width) / 2), y: Self.inset.height)
-        if atBottom { toBottom() }
+        cell = max(1, (grid.height - 0.5) / CGFloat(pane.rows))
+        swipe = PaneScroll.swipe(alternate: t.isCurrentBufferAlternate, mouse: t.mouseMode != .off,
+                                 alternateScroll: t.alternateScrollMode, keys: terminal.typing)
+        // A program's swipe at the grid's edges doesn't rubber-band it.
+        bounces = swipe == .history || swipe == .none
+        // SwiftTerm sizes its own scroll for every line it keeps.
+        let lines = Int((terminal.contentSize.height / cell).rounded())
+        let latest = max(0, lines - pane.rows)
+        history = swipe == .history ? latest : 0
+        if swipe != .history, t.buffer.yDisp != latest {
+            terminal.scrollTo(row: latest, notifyAccessibility: false)
+        }
+        let top = CGFloat(history) * cell
+        contentSize = CGSize(width: grid.width + 2 * Self.inset.width,
+                             height: top + max(grid.height + 2 * Self.inset.height, bounds.height))
+        terminal.frame.origin.x = max(Self.inset.width, (bounds.width - grid.width) / 2)
+        let y = contentOffset.y
+        let target: CGFloat
+        if atBottom {
+            target = bottom
+        } else if was > 0, y < wasTop {
+            // In the scrollback: the row the mirror shows, which a full
+            // scrollback moves up as old lines go.
+            target = CGFloat(min(t.buffer.yDisp, history)) * cell + (y - CGFloat(shown) * was) * cell / was
+        } else {
+            target = top + (y - wasTop)
+        }
+        placing = true
+        contentOffset.y = min(max(0, target), bottom)
+        placing = false
+        place()
+    }
+
+    /// The largest offset: the screen's last row at the bottom.
+    private var bottom: CGFloat {
+        max(0, contentSize.height - bounds.height + adjustedContentInset.bottom)
+    }
+
+    /// Puts the mirror on the scrollback row the offset reads.
+    private func place() {
+        guard cell > 0 else { return }
+        let row = PaneScroll.row(offset: contentOffset.y, cell: cell, history: history)
+        shown = row
+        terminal.frame.origin.y = Self.inset.height + CGFloat(row) * cell
+        if swipe == .history, terminal.getTerminal().buffer.yDisp != row {
+            terminal.scrollTo(row: row, notifyAccessibility: false)
+        }
+        back = PaneScroll.back(offset: contentOffset.y, cell: cell, history: history)
+        terminal.accessibilityCustomActions = back ? [UIAccessibilityCustomAction(name: "Jump to bottom") { [weak self] _ in
+            self?.jumpToBottom()
+            return true
+        }] : nil
+    }
+
+    /// The jump-to-bottom button's: back to the screen, following output.
+    func jumpToBottom() {
+        atBottom = true
+        // A plain set stops a running deceleration.
+        setContentOffset(CGPoint(x: contentOffset.x, y: bottom), animated: false)
+        place()
     }
 
     /// A cell's width per point of font size: the system's monospaced
@@ -241,35 +365,130 @@ final class PhonePaneHost: UIScrollView, UIScrollViewDelegate {
         return ("W" as NSString).size(withAttributes: [.font: f]).width / 100
     }()
 
-    private func toBottom() {
-        let y = max(0, contentSize.height - bounds.height + adjustedContentInset.bottom)
-        contentOffset = CGPoint(x: contentOffset.x, y: y)
-    }
-
     @objc private func pinched(_ g: UIPinchGestureRecognizer) {
         switch g.state {
         case .changed:
             terminal.transform = CGAffineTransform(scaleX: g.scale, y: g.scale)
         case .ended, .cancelled:
             terminal.transform = .identity
-            let at = g.location(in: terminal)
-            let before = terminal.frame.size
+            // The line and the column under the fingers, in the scroll.
+            let local = g.location(in: self)
+            let screen = CGPoint(x: local.x - contentOffset.x, y: local.y - contentOffset.y)
+            let across = (local.x - terminal.frame.minX) / max(1, terminal.frame.width)
+            let line = (local.y - Self.inset.height) / max(1, cell)
+            let followed = atBottom
+            atBottom = false
             zoom = PaneZoom.clamp(zoom: zoom * g.scale, fitted: fitted)
             refit()
             // Keep the point under the fingers where it was.
-            let k = terminal.frame.width / max(1, before.width)
-            let local = g.location(in: self)
-            let x = terminal.frame.minX + at.x * k - (local.x - contentOffset.x)
-            let y = terminal.frame.minY + at.y * k - (local.y - contentOffset.y)
+            let x = terminal.frame.minX + across * terminal.frame.width - screen.x
+            let y = Self.inset.height + line * cell - screen.y
             contentOffset = CGPoint(x: min(max(0, x), max(0, contentSize.width - bounds.width)),
-                                    y: min(max(0, y), max(0, contentSize.height - bounds.height)))
-            atBottom = contentOffset.y >= contentSize.height - bounds.height - 4
+                                    y: min(max(0, y), bottom))
+            atBottom = followed && contentOffset.y >= bottom - max(4, cell / 2)
+            rest()
         default:
             break
         }
     }
 
+    // MARK: A program's swipe
+
+    private func wheelBegins(_ g: UIGestureRecognizer) -> Bool {
+        guard swipe == .wheel || swipe == .arrows, let g = g as? UIPanGestureRecognizer else { return false }
+        let v = g.velocity(in: self)
+        return abs(v.y) > abs(v.x)
+    }
+
+    /// Past the grid's top or bottom edge (all of it while the grid fits
+    /// the room), a cell's drag is a line for the program.
+    @objc private func swiped(_ g: UIPanGestureRecognizer) {
+        let ty = g.translation(in: self).y
+        switch g.state {
+        case .began:
+            wheelLast = ty
+            wheelCarry = 0
+        case .changed:
+            let d = ty - wheelLast
+            wheelLast = ty
+            let y = contentOffset.y
+            guard (d > 0 && y <= 0.5) || (d < 0 && y >= bottom - 0.5) else {
+                wheelCarry = 0
+                return
+            }
+            wheelCarry += d
+            let (n, rest) = PaneScroll.lines(wheelCarry, step: cell)
+            wheelCarry = rest
+            if n != 0 { scrollProgram(n, at: g.location(in: self)) }
+        default:
+            break
+        }
+    }
+
+    /// n lines up (positive) or down for the program, as the Mac's wheel
+    /// sends them: wheel ticks at the point, or arrow keys. They go in
+    /// through the mirror, which drops them while keys don't.
+    private func scrollProgram(_ n: Int, at p: CGPoint) {
+        let t = terminal.getTerminal()
+        let up = n > 0
+        switch swipe {
+        case .wheel:
+            let width = terminal.frame.width / CGFloat(max(1, t.cols))
+            let col = min(t.cols - 1, max(0, Int((p.x - terminal.frame.minX) / max(1, width))))
+            let row = min(t.rows - 1, max(0, Int((p.y - terminal.frame.minY) / cell)))
+            let flags = t.encodeButton(button: up ? 4 : 5, release: false, shift: false, meta: false, control: false)
+            for _ in 0..<abs(n) { t.sendEvent(buttonFlags: flags, x: col, y: row) }
+        case .arrows:
+            let key = up ? (t.applicationCursor ? EscapeSequences.moveUpApp : EscapeSequences.moveUpNormal)
+                : (t.applicationCursor ? EscapeSequences.moveDownApp : EscapeSequences.moveDownNormal)
+            for _ in 0..<abs(n) { terminal.send(key) }
+        case .history, .none:
+            break
+        }
+    }
+
+    // MARK: VoiceOver
+
+    /// A three-finger swipe: half the pane through the scrollback, or
+    /// for the program.
+    private func page(_ direction: UIAccessibilityScrollDirection) -> Bool {
+        guard let pane, cell > 0 else { return false }
+        let up: Bool
+        switch direction {
+        case .up, .previous: up = true
+        case .down, .next: up = false
+        default: return false
+        }
+        let n = PaneScroll.page(rows: pane.rows, alternate: false) ?? 1
+        switch swipe {
+        case .history:
+            let y = contentOffset.y + CGFloat(up ? -n : n) * cell
+            let to = min(max(0, y), bottom)
+            guard to != contentOffset.y else { return false }
+            contentOffset.y = to
+            atBottom = to >= bottom - max(4, cell / 2)
+            let behind = history - shown
+            UIAccessibility.post(notification: .pageScrolled,
+                                 argument: back ? "\(behind) line\(behind == 1 ? "" : "s") back" : "At the bottom")
+        case .wheel, .arrows:
+            scrollProgram(up ? n : -n, at: CGPoint(x: terminal.frame.midX, y: terminal.frame.midY))
+            UIAccessibility.post(notification: .pageScrolled, argument: nil)
+        case .none:
+            return false
+        }
+        return true
+    }
+
     // MARK: UIScrollViewDelegate
+
+    func scrollViewDidScroll(_ scrollView: UIScrollView) {
+        if !placing { place() }
+    }
+
+    func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
+        // While the finger is down output doesn't pull the view back.
+        atBottom = false
+    }
 
     func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
         if !decelerate { rest() }
@@ -278,18 +497,36 @@ final class PhonePaneHost: UIScrollView, UIScrollViewDelegate {
     func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) { rest() }
 
     private func rest() {
-        atBottom = contentOffset.y >= contentSize.height - bounds.height + adjustedContentInset.bottom - 4
+        atBottom = contentOffset.y >= bottom - max(4, cell / 2)
     }
+}
+
+/// A gesture that goes along with the others, once begins says it may.
+final class Simultaneous: NSObject, UIGestureRecognizerDelegate {
+    var begins: ((UIGestureRecognizer) -> Bool)?
+
+    func gestureRecognizerShouldBegin(_ g: UIGestureRecognizer) -> Bool { begins?(g) ?? true }
+
+    func gestureRecognizer(_ g: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool { true }
 }
 
 /// SwiftTerm's view as a mirror, as the Mac's: its size is the pane's,
 /// not its frame's, and the replies its emulator would send the program
 /// are dropped (the server's emulator answers them). It takes the
-/// keyboard only while keys go in.
+/// keyboard only while keys go in, never pans the program's mouse (the
+/// host turns a swipe into its wheel) and tells the host when its
+/// scrollback or screen changed.
 final class PhoneMirrorView: TerminalView {
     var typing = false {
         didSet { if !typing, isFirstResponder { _ = resignFirstResponder() } }
     }
+
+    /// Lines came, the screen switched or the mouse mode changed, once
+    /// a run loop; reset after a full reset or a screen switch, which
+    /// put the view at the bottom.
+    var onChange: ((_ reset: Bool) -> Void)?
+    var onAccessibilityScroll: ((UIAccessibilityScrollDirection) -> Bool)?
+    private var change: Bool?
 
     override var canBecomeFirstResponder: Bool { typing }
 
@@ -301,8 +538,10 @@ final class PhoneMirrorView: TerminalView {
             // A font change resizes the emulator from the frame unless
             // the frame is empty: empty it first, and the pane's size
             // stays.
+            let origin = frame.origin
             frame.size = .zero
             font = UIFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
+            frame.origin = origin
         }
         let t = getTerminal()
         if t.cols != cols || t.rows != rows {
@@ -310,12 +549,46 @@ final class PhoneMirrorView: TerminalView {
         }
         let r = getOptimalFrameSize()
         frame.size = CGSize(width: r.width + 0.5, height: r.height + 0.5)
+        // Its own scroll sized for the font.
+        scrollTo(row: t.buffer.yDisp, notifyAccessibility: false)
     }
 
     override func send(source: Terminal, data: ArraySlice<UInt8>) {
         if PaneScroll.isMouseReport(data) {
             terminalDelegate?.send(source: self, data: data)
         }
+    }
+
+    override func scrolled(source terminal: Terminal, yDisp: Int) {
+        super.scrolled(source: terminal, yDisp: yDisp)
+        changed(reset: false)
+    }
+
+    override func bufferActivated(source: Terminal) {
+        super.bufferActivated(source: source)
+        changed(reset: true)
+    }
+
+    override func mouseModeChanged(source: Terminal) {
+        // Not SwiftTerm's mouse pan: it would take the scroll's swipes.
+        changed(reset: false)
+    }
+
+    private func changed(reset: Bool) {
+        if let c = change {
+            change = c || reset
+            return
+        }
+        change = reset
+        DispatchQueue.main.async { [weak self] in
+            guard let self, let reset = change else { return }
+            change = nil
+            onChange?(reset)
+        }
+    }
+
+    override func accessibilityScroll(_ direction: UIAccessibilityScrollDirection) -> Bool {
+        onAccessibilityScroll?(direction) ?? false
     }
 }
 

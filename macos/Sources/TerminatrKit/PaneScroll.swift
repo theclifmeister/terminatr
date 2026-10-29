@@ -19,6 +19,44 @@ public enum PaneScroll {
         alternate ? nil : max(1, rows / 2)
     }
 
+    /// What a vertical swipe on the phone's terminal moves (T861), as the
+    /// Mac's wheel does: the mirror's own scrollback on the main screen;
+    /// the program's wheel when it tracks the mouse; the arrow keys on the
+    /// alternate screen (alternate scroll, DECSET 1007, as SwiftTerm's
+    /// wheel), nothing with it reset. Only while keys go in: below the
+    /// write level a swipe sends nothing and moves the scrollback alone.
+    public enum Swipe: Equatable {
+        case history, wheel, arrows, none
+    }
+
+    public static func swipe(alternate: Bool, mouse: Bool, alternateScroll: Bool, keys: Bool) -> Swipe {
+        if keys && mouse { return .wheel }
+        if alternate { return keys && alternateScroll ? .arrows : .none }
+        return .history
+    }
+
+    /// Whole lines in a drag of distance points at step points a line,
+    /// and what is left for the next: 1:1, as the Mac's trackpad.
+    public static func lines(_ distance: CGFloat, step: CGFloat) -> (lines: Int, rest: CGFloat) {
+        guard step > 0 else { return (0, 0) }
+        let n = Int(distance / step)
+        return (n, distance - CGFloat(n) * step)
+    }
+
+    /// The phone's scrollback as one scroll with the screen below it:
+    /// the first row the mirror shows at a scroll offset, history rows of
+    /// cell points above the screen (the screen's own row is history).
+    public static func row(offset: CGFloat, cell: CGFloat, history: Int) -> Int {
+        guard cell > 0 else { return history }
+        return min(history, max(0, Int((offset / cell).rounded(.down))))
+    }
+
+    /// Whether that offset reads the scrollback, more than half a row up
+    /// from the screen: the jump-to-bottom button shows.
+    public static func back(offset: CGFloat, cell: CGFloat, history: Int) -> Bool {
+        history > 0 && offset < CGFloat(history) * cell - cell / 2
+    }
+
     /// Whether bytes the mirror's emulator sends are a mouse report, the
     /// human's, which go to the program, rather than a reply to it, which
     /// the server's emulator answers: CSI M (X10, UTF-8), CSI < (SGR) or
