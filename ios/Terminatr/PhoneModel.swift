@@ -372,6 +372,15 @@ final class PhoneModel {
         ref.isRemote ? ref.session(in: peers)?.id : ref.session(in: projects, sessions: sessions)
     }
 
+    /// What the server serves beside its protocol (pane-vt …).
+    var caps: [String] { hello?.server?.caps ?? [] }
+
+    /// Whether a paired server's pane opens here, and takes keys, as the
+    /// Mac's Terminal tab reads it.
+    func remotePane(_ ref: SessionRef) -> RemotePane {
+        RemotePane.of(caps: caps, peer: peers.first { $0.alias == ref.server }, alias: ref.server)
+    }
+
     /// A ref's title: its thread's, else "Coordinator".
     func title(_ ref: SessionRef) -> String {
         if ref.isCoordinator { return "Coordinator" }

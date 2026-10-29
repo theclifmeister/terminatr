@@ -203,7 +203,7 @@ struct RouteScreen: View {
         switch route {
         case .project(let slug): ProjectScreen(slug: slug)
         case .peerProject(let alias, let project): PeerProjectScreen(alias: alias, project: project)
-        case .session(let ref): ConversationScreen(ref: ref)
+        case .session(let ref): SessionScreen(ref: ref)
         case .need(let ref): NeedConversation(ref: ref)
         case .overview(let slug): OverviewScreen(slug: slug)
         case .board(let slug): BoardScreen(slug: slug)

@@ -308,14 +308,14 @@ struct MomentMark: View {
 
 /// A need's route: its session's conversation, with the question or
 /// approval it waits on above while it lasts; answered, the
-/// conversation as any other.
+/// conversation as any other; its terminal a switch away (SessionScreen).
 struct NeedConversation: View {
     @Environment(PhoneModel.self) private var model
     let ref: SessionRef
 
     var body: some View {
         let id = model.sessionID(ref)
-        ConversationScreen(ref: ref, need: model.needs.first { $0.session == id && ($0.kind == .question || $0.kind == .approval) })
+        SessionScreen(ref: ref, need: model.needs.first { $0.session == id && ($0.kind == .question || $0.kind == .approval) })
     }
 }
 
