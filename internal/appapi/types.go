@@ -1572,3 +1572,67 @@ func libraryOf(r proto.LibraryListResult) Library {
 func libraryChunkOf(r proto.LibraryReadResult) LibraryChunk {
 	return LibraryChunk{Name: r.Name, Size: r.Size, MTime: r.MTime, Offset: r.Offset, Data: r.Data}
 }
+
+// Designs is design.list's result: the project's designs by name (app
+// API 31).
+type Designs struct {
+	Designs []Design `json:"designs"`
+}
+
+// Design is one of a project's designs, as the mod API's designs.list
+// gives it: its title (its name when it has none), Status (designing,
+// planned, building, done) from its build tasks, its design task and
+// that task's status, its page (an https URL), Tasks its build task
+// ids by id, how many are done, the user's decided answers and the
+// design task's open questions; and Build, the build tasks in after
+// order.
+type Design struct {
+	Name       string           `json:"name"`
+	Title      string           `json:"title"`
+	Status     string           `json:"status"`
+	Task       string           `json:"task,omitempty"`
+	TaskStatus string           `json:"task_status,omitempty"`
+	Artifact   string           `json:"artifact,omitempty"`
+	Tasks      []string         `json:"tasks"`
+	TasksDone  int              `json:"tasks_done"`
+	Answers    []string         `json:"answers"`
+	Questions  []DesignQuestion `json:"questions"`
+	Build      []DesignTask     `json:"build"`
+}
+
+// DesignQuestion is an open question of a design's task: its id
+// ("Q3"), its chip and its text.
+type DesignQuestion struct {
+	ID       string `json:"id"`
+	Header   string `json:"header"`
+	Question string `json:"question"`
+}
+
+// DesignTask is a build task: its id ("T12"), title, status, the tasks
+// it comes after, and whether it is archived (off the board: task.get
+// doesn't read it).
+type DesignTask struct {
+	ID       string   `json:"id"`
+	Title    string   `json:"title"`
+	Status   string   `json:"status"`
+	After    []string `json:"after,omitempty"`
+	Archived bool     `json:"archived,omitempty"`
+}
+
+func designsOf(r proto.DesignListResult) Designs {
+	out := Designs{Designs: []Design{}}
+	for _, d := range r.Designs {
+		ad := Design{Name: d.Name, Title: d.Title, Status: d.Status, Task: d.Task, TaskStatus: d.TaskStatus,
+			Artifact: d.Artifact, Tasks: append([]string{}, d.Tasks...), TasksDone: d.TasksDone,
+			Answers: append([]string{}, d.Answers...), Questions: []DesignQuestion{}, Build: []DesignTask{}}
+		for _, q := range d.Questions {
+			ad.Questions = append(ad.Questions, DesignQuestion{ID: q.ID, Header: q.Header, Question: q.Question})
+		}
+		for _, t := range d.Build {
+			ad.Build = append(ad.Build, DesignTask{ID: t.ID, Title: t.Title, Status: t.Status,
+				After: append([]string(nil), t.After...), Archived: t.Archived})
+		}
+		out.Designs = append(out.Designs, ad)
+	}
+	return out
+}

@@ -210,6 +210,21 @@ func (p *Project) DesignBuilds(boards ...*tasks.Board) ([]DesignBuild, error) {
 	return out, nil
 }
 
+// BoardDesigns are DesignBuilds of the project's board and archive:
+// what the vault's notes, the mod API's designs.list, the app API's
+// design.list and the TUI's Designs tab show.
+func (p *Project) BoardDesigns() ([]DesignBuild, error) {
+	board, err := p.Tasks().Load()
+	if err != nil {
+		return nil, err
+	}
+	archive, err := p.Tasks().LoadArchive()
+	if err != nil {
+		return nil, err
+	}
+	return p.DesignBuilds(board, archive)
+}
+
 // The design statuses, from its build (DesignStatus).
 const (
 	DesignDesigning = "designing"

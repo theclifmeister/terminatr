@@ -819,15 +819,7 @@ func (s *ServerSource) Designs(slug string) ([]project.DesignBuild, error) {
 	if err != nil {
 		return nil, err
 	}
-	board, err := p.Tasks().Load()
-	if err != nil {
-		return nil, err
-	}
-	archive, err := p.Tasks().LoadArchive()
-	if err != nil {
-		return nil, err
-	}
-	return p.DesignBuilds(board, archive)
+	return p.BoardDesigns()
 }
 
 // mergeNewest merges two lists of files, each newest first.
