@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.61.0](https://github.com/theclifmeister/terminatr/compare/v0.60.0...v0.61.0) (2026-10-29)
+
+
+### Features
+
+* **app:** redesign phase 0: deck glass, StateGlyph, badges, button roles, headers and keycap answers ([#906](https://github.com/theclifmeister/terminatr/issues/906)) ([2b3832b](https://github.com/theclifmeister/terminatr/commit/2b3832b05c4007439a8e719895a96e08b3f9a847))
+* **ios:** Conversation / Terminal switch on a session, and the composer as the Mac's ([#904](https://github.com/theclifmeister/terminatr/issues/904)) ([a21b2ca](https://github.com/theclifmeister/terminatr/commit/a21b2caf3ff7afef529801b9c6a67a3e6a4a2c34))
+* **ios:** redesign phase 1: Projects as cards, a project's screen with tiles and StateGlyph rows ([#908](https://github.com/theclifmeister/terminatr/issues/908)) ([bafcd3c](https://github.com/theclifmeister/terminatr/commit/bafcd3c9ad2fc78bcbf81cc808a368876b8e4995))
+* **ios:** redesign phase 2: Needs you as an answer deck, with haptics and VoiceOver actions ([#910](https://github.com/theclifmeister/terminatr/issues/910)) ([c3f57cc](https://github.com/theclifmeister/terminatr/commit/c3f57ccd3c4088e88995feb40245c2e577f71834))
+* **ios:** redesign phase 3: glass session header, run chips, the question as a hero, and the composer dock with a key strip ([#912](https://github.com/theclifmeister/terminatr/issues/912)) ([78160fd](https://github.com/theclifmeister/terminatr/commit/78160fd857ce81c1620eb49e56aaef53b8470c24))
+* **ios:** redesign phase 4: LiveStrip, iPad sidebar in the TUI's order, the open Duo split at the hinge ([#911](https://github.com/theclifmeister/terminatr/issues/911)) ([a47d57a](https://github.com/theclifmeister/terminatr/commit/a47d57aa6c05a34b9bd7d57185253504c14a5cc8))
+* **ios:** redesign phase 5: Welcome, Settings and pairing ([#909](https://github.com/theclifmeister/terminatr/issues/909)) ([7c531d2](https://github.com/theclifmeister/terminatr/commit/7c531d26f3421c780c81195a47f3a49ffd45324c))
+* **ios:** redesign phase 6: accessibility pass and a Haptics switch ([#913](https://github.com/theclifmeister/terminatr/issues/913)) ([db61a69](https://github.com/theclifmeister/terminatr/commit/db61a692049dd198a52c3fe4c52be4d7acc2c3a3))
+* **ios:** the server panel leaves Needs you; Settings shows the server and ends with Forget ([#902](https://github.com/theclifmeister/terminatr/issues/902)) ([ecc9697](https://github.com/theclifmeister/terminatr/commit/ecc9697423787ebe9c1d66b524923dc3b8133a86))
+* **peer:** paired needs, phase 1: a per-peer needs switch and full needs at view ([#903](https://github.com/theclifmeister/terminatr/issues/903)) ([d252081](https://github.com/theclifmeister/terminatr/commit/d252081018157b7268d4801d67821ea20f93b333))
+* **peer:** paired needs, phase 2: answer, approve, accept, send back and questions across a pairing ([#907](https://github.com/theclifmeister/terminatr/issues/907)) ([261d85b](https://github.com/theclifmeister/terminatr/commit/261d85b0ac38a1d0a73d3c73bec047406b710a13))
+
+
+### Bug Fixes
+
+* **ios:** a column's list fills the column side by side on a landscape iPhone Duo ([#899](https://github.com/theclifmeister/terminatr/issues/899)) ([db6a549](https://github.com/theclifmeister/terminatr/commit/db6a5495cea790bb414918a8dfc0938569b41220))
+* **ios:** a tap opens its screen beside the list on an open iPhone Duo in portrait ([#901](https://github.com/theclifmeister/terminatr/issues/901)) ([9bd15a3](https://github.com/theclifmeister/terminatr/commit/9bd15a361943c5072f4db74a65792cbd8970be76))
+* **tui:** call the Network popup's paired phones devices ([#905](https://github.com/theclifmeister/terminatr/issues/905)) ([e6beb21](https://github.com/theclifmeister/terminatr/commit/e6beb210fdc4000f05febaa12a312e46dc00cc82))
+
 ## [0.60.0](https://github.com/theclifmeister/terminatr/compare/v0.59.0...v0.60.0) (2026-10-28)
 
 
