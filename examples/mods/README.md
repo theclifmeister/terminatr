@@ -37,6 +37,7 @@ on in the Mods tab (`,` then `3`), or with `tm mod enable <id>`. `E` in the Mods
 | + | [standup](standup) | a command: the key `U`, a ≡ menu entry and `tm mod run standup show` | reads your projects, draws its own panels | `tm mod install https://github.com/theclifmeister/terminatr/tree/v0.28.3/examples/mods/standup` |
 | + | [report-glance](report-glance) | panel sections: one in the details panel, on the dashboard and beside a thread's pane, one in the coordinator's info panel | reads your projects, draws its own panels | `tm mod install https://github.com/theclifmeister/terminatr/tree/v0.28.3/examples/mods/report-glance` |
 | + | [gitlab](gitlab) | a code host: GitLab merge requests as tm's PRs | runs glab | `tm mod install https://github.com/theclifmeister/terminatr/tree/v0.28.3/examples/mods/gitlab` |
+| + | [review-gates](review-gates) | rules (data) with sections a project's settings switch on: one playbook, a gate per project | nothing (safe) | `tm mod install https://github.com/theclifmeister/terminatr/tree/v0.28.3/examples/mods/review-gates` (`api = "1.11"`) |
 | + | [zen](zen) | a layout (data) | nothing (safe) | `tm mod install https://github.com/theclifmeister/terminatr/tree/v0.28.3/examples/mods/zen` |
 | + | [cockpit](cockpit) | a layout (data) | nothing (safe) | `tm mod install https://github.com/theclifmeister/terminatr/tree/v0.28.3/examples/mods/cockpit` |
 | + | [compact](compact) | a layout (data) | nothing (safe) | `tm mod install https://github.com/theclifmeister/terminatr/tree/v0.28.3/examples/mods/compact` |
@@ -190,3 +191,29 @@ fixture; `tm mod dev <folder>` runs it live and restarts it on each save.
   coordinator's info panel gets the threads that reported. A row the mod
   draws nothing for (a project's own) has no section. Sections show
   only: their keys stay the panel's.
+- **review-gates** (`api = "1.11"`) is one rules mod that carries both
+  a playbook and a gate a project opts into, instead of a second mod
+  enabled per project. Its `gates` setting is off for all projects;
+  `tm mod settings review-gates --project <slug> gates=true` (or the
+  project popup's Settings tab, `Review gates settings`) turns it on in
+  one project, written to `[projects.<slug>.mods.review-gates.settings]`
+  over the all-projects value. Its rules files hold sections:
+
+  ```markdown
+  <!-- tm:if gates -->
+  Gate: before you push the branch for its PR, report what you will push
+  and wait for the coordinator to say the user agreed.
+  <!-- tm:end -->
+  ```
+
+  A section stays in `tm skill <role>` only for a project whose
+  settings meet its condition: `<key>` (a bool setting that is true),
+  `!<key>` (false) or `<key>=<option>` (a choice setting). Sections don't
+  nest and there is no else; a marker that names no setting of the
+  manifest, or of the wrong type, fails `tm mod validate`. A setting's
+  value only picks sections, it is never put into the text, so the
+  rules an agent gets are always text you saw on the consent screen.
+  `tests/*.json` check the text with `rules` fixtures: `{"rules":
+  {"thread": {"project": "gated", "contains": [...], "lacks": [...]}},
+  "projects": {"gated": {"gates": true}}}`, run by `tm mod test`. A
+  code mod reads the same settings with `$.settings(project)`.

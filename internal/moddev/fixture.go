@@ -35,8 +35,12 @@ type Fixture struct {
 	// step whose data has none (the minute it falls in), and the
 	// script's Date. Empty is the real clock.
 	Now string `json:"now,omitempty"`
-	// Settings overlay the manifest's defaults.
+	// Settings overlay the manifest's defaults: the all-projects ones.
 	Settings map[string]any `json:"settings,omitempty"`
+	// Projects are settings per project, by slug, each over Settings as
+	// [projects.<slug>.mods.<id>.settings] is (mod API 1.11): hello
+	// carries them for $.settings(project), and Rules reads them.
+	Projects map[string]map[string]any `json:"projects,omitempty"`
 	// Store and Files are the broker's store ($.store) and the files
 	// $.fs reads, by path, at the start.
 	Store map[string]json.RawMessage `json:"store,omitempty"`
@@ -48,7 +52,22 @@ type Fixture struct {
 	// are done. mod.ready goes first when the list doesn't start with it,
 	// as after every start of a real host.
 	Events []Step `json:"events"`
-	Expect Expect `json:"expect"`
+	// Rules check the mod's rules text, by its [provides] rules key
+	// (thread, coordinator_policy, …), resolved as tm skill resolves it
+	// (mod API 1.11). A fixture with Rules needs no Events: a rules
+	// mod's fixtures are only these.
+	Rules  map[string]RulesExpect `json:"rules,omitempty"`
+	Expect Expect                 `json:"expect"`
+}
+
+// RulesExpect is what one rules file must say, its sections resolved
+// with the settings for Project (Settings, then Projects[Project]; the
+// all-projects ones when empty).
+type RulesExpect struct {
+	Project string `json:"project,omitempty"`
+	// Contains must each be part of the text, and Lacks none.
+	Contains []string `json:"contains,omitempty"`
+	Lacks    []string `json:"lacks,omitempty"`
 }
 
 // Answer is the broker's answer to a call of Method whose params hold
@@ -145,8 +164,8 @@ func ReadFixture(path string) (*Fixture, error) {
 			return nil, fmt.Errorf("%s: now %q is not an RFC 3339 time like \"2026-10-13T12:00:00Z\"", filepath.Base(path), f.Now)
 		}
 	}
-	if len(f.Events) == 0 {
-		return nil, fmt.Errorf("%s: no events", filepath.Base(path))
+	if len(f.Events) == 0 && len(f.Rules) == 0 {
+		return nil, fmt.Errorf("%s: no events, and no rules to check", filepath.Base(path))
 	}
 	for i, s := range f.Events {
 		if s.Name == "" {
