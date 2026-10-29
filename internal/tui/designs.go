@@ -130,7 +130,6 @@ type designView struct {
 	pv   *projectView
 	name string
 	sel  int
-	top  int
 }
 
 func (dv *designView) design() (project.DesignBuild, bool) {
