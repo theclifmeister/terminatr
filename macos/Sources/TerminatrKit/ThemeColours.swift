@@ -139,6 +139,30 @@ public struct ThemeColours: Hashable, Sendable {
     /// Increase Contrast's: increasedContrast() made it.
     public var contrast = false
 
+    /// The redesign's deeper glass (T845): a card straight on the frost,
+    /// with no panel under it, its tint lighter than a card's in light and
+    /// the panel's smoke in dark, so the mesh shows through. Increase
+    /// Contrast's opaque card.
+    public var deck: Swatch {
+        if contrast { return opaque.card }
+        return Swatch(cardTint.light, glass.dark, alpha: cardTint.alpha * Self.deckLight, darkAlpha: glass.darkAlpha * Self.deckDark)
+    }
+
+    /// The deck's share of a card's tint in light, and of the panel's in
+    /// dark.
+    static let deckLight = 0.75
+    static let deckDark = 0.9
+
+    /// A tone's wash: a soft StateGlyph's and a picked chip's, and an
+    /// option picked before it is sent.
+    public static let toneWash = 0.16
+    public static let pickedWash = 0.18
+
+    /// A tone's colour at a wash's strength.
+    public func wash(_ tone: Swatch, _ share: Double) -> Swatch {
+        Swatch(tone.light, tone.dark, alpha: share)
+    }
+
     /// The colours as Increase Contrast wants them: the panels opaque,
     /// their edges and rules in the muted ink.
     public func increasedContrast() -> ThemeColours {
@@ -278,11 +302,21 @@ extension ThemeColours {
             ("a question card", layered(frost + [glass, questionTint])),
             ("an approval card", layered(frost + [glass, approvalTint])),
             ("a command", layered(frost + [glass, cardTint, command])),
-        ]
+            // The redesign's surfaces (T845): a deck card on the frost,
+            // a tone's wash on it (a soft StateGlyph), an option picked
+            // before sending, and the command block in a deck card.
+            ("a deck card", layered(frost + [deck])),
+            ("a deck command", layered(frost + [deck, command])),
+            ("a picked option", layered(frost + [deck, wash(question, Self.pickedWash)])),
+        ] + [
+            ("approval", approval), ("question", question), ("attention", attention),
+            ("good", good), ("action", action), ("idle", idle),
+        ].map { ("a \($0.0) wash", layered(frost + [deck, wash($0.1, Self.toneWash)])) }
+        let washes = Set(["approval", "question", "attention", "good", "action", "idle"].map { "a \($0) wash" })
         let texts: [(String, Swatch, Set<String>?)] = [
             ("ink", ink, nil),
-            ("muted", muted, nil),
-            ("action", action, ["the sidebar", "the glass", "a card"]),
+            ("muted", muted, Set(surfaces.map(\.0)).subtracting(washes)),
+            ("action", action, ["the sidebar", "the glass", "a card", "a deck card"]),
             ("attention", attention, ["the glass", "a card"]),
             ("good", good, ["a card"]),
             ("approval", approval, ["a card", "an approval card"]),
@@ -298,6 +332,8 @@ extension ThemeColours {
         let pills: [(String, Swatch, Swatch)] = [
             ("onAction", onAction, action), ("onGood", onGood, good), ("onAttention", onAttention, attention),
             ("onQuestion", onQuestion, question), ("onApproval", onApproval, approval),
+            // A picked chip: the base on ink; an idle pill: ink on idle.
+            ("base", base, ink), ("ink", ink, idle),
         ] + prompt.enumerated().map { ("onPrompt", onPrompt, $0.element) }
         for (name, text, fill) in pills {
             let r = RGB(hex: text.hex(dark: dark)).contrast(RGB(hex: fill.hex(dark: dark)))
