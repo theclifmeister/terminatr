@@ -11,7 +11,7 @@ import TerminatrUI
 /// opens the demo at once, and -open ROUTE (Route.parse) on that
 /// screen: the Simulator's screenshots; with -pair CODE it pairs with
 /// that code at once, as this phone (the Simulator has no camera:
-/// internal/e2e TestPhoneDev's codes); -open settings shows Settings. A terminatr://pair link (the
+/// internal/e2e TestPhoneDev's codes); -open settings shows Settings; on Welcome -open pair (or "pair CODE") opens pairing. A terminatr://pair link (the
 /// Camera app's scan of the code) opens the pairing screen.
 @main
 struct TerminatrApp: App {

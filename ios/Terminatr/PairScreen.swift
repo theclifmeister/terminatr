@@ -3,10 +3,12 @@ import SwiftUI
 import TerminatrLink
 import TerminatrUI
 
-/// Pairing with a server (docs/SPEC.md §16.15): scan the QR code tm
-/// device pair shows on the computer (or paste its terminatr://pair
-/// link), name this phone, and say yes on the computer. The code names
-/// the server's key; the pairing takes no other.
+/// Pairing with a server (docs/SPEC.md §16.15; redesigned in T850): scan
+/// the QR code tm device pair shows on the computer (PairHero, with the
+/// steps under it) or paste its terminatr://pair link; then confirm: the
+/// server's id as chips to check against the computer's, this phone's
+/// name, and Pair, then say yes on the computer. The code names the
+/// server's key; the pairing takes no other.
 struct PairScreen: View {
     @Environment(PhoneModel.self) private var model
     @Environment(\.theme) private var theme
@@ -26,39 +28,47 @@ struct PairScreen: View {
     }
 
     var body: some View {
-        NavigationStack {
-            Form {
+        ScrollView {
+            VStack(alignment: .leading, spacing: Spacing.card) {
                 if let code {
+                    SheetHeader("Is this your server?", leading: {
+                        Button {
+                            self.code = nil
+                            failure = nil
+                        } label: {
+                            Label("Back", systemImage: "chevron.backward")
+                        }
+                        .buttonStyle(.circle)
+                        .disabled(pairing)
+                    })
                     chosen(code)
                 } else {
+                    SheetHeader("Pair with a server", trailing: {
+                        Button("Cancel") { dismiss() }
+                            .buttonStyle(.ghost)
+                    })
                     scan
                 }
                 if let failure {
-                    Section { Failure(text: failure) }
+                    Failure(text: failure)
+                        .padding(.horizontal, Spacing.gutter)
                 }
             }
-            .scrollContentBackground(.hidden)
-            .backdrop()
-            .navigationTitle("Pair with a server")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
-            }
-            .onAppear { if code == nil { code = initial } }
+            .frame(maxWidth: 560)
+            .frame(maxWidth: .infinity)
+            .padding(.bottom, 32)
         }
+        .scrollDismissesKeyboard(.interactively)
+        .sheetGlass()
+        .onAppear { if code == nil { code = initial } }
     }
 
     @ViewBuilder
     private var scan: some View {
-        Section {
+        PairHero(scanning: camera == .authorized) {
             switch camera {
             case .authorized:
                 QRScanner { take($0) }
-                    .frame(height: 280)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .listRowInsets(EdgeInsets())
                     .accessibilityLabel("Camera, looking for the pairing code")
             case .notDetermined:
                 Button("Use the camera") {
@@ -67,55 +77,92 @@ struct PairScreen: View {
                         camera = AVCaptureDevice.authorizationStatus(for: .video)
                     }
                 }
+                .buttonStyle(.primary())
+                .fixedSize()
             default:
                 Text("The camera is off for terminatr: turn it on in Settings, or paste the code below.")
-                    .font(theme.body(.footnote))
-                    .foregroundStyle(theme.muted)
+                    .font(theme.body(.subheadline, .medium))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 28)
             }
-        } footer: {
-            Text("On your computer, run tm device pair, then point the camera at the code it shows.")
         }
-        Section("Or paste the code") {
+        .padding(.horizontal, Spacing.gutter)
+        NumberedSteps([
+            Text("On your computer, run \(Text("tm device pair").font(theme.mono(.subheadline, .medium)))"),
+            Text("Point the camera at the code it shows"),
+            Text("Say yes on the computer to add this phone"),
+        ])
+        .padding(.horizontal, Spacing.gutter)
+        GroupLabel("Or paste the code")
+        VStack(alignment: .leading, spacing: Spacing.row) {
             TextField("terminatr://pair?…", text: $pasted, axis: .vertical)
-                .font(theme.mono(.footnote))
+                .font(theme.mono(.subheadline))
+                .foregroundStyle(theme.ink)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
-            Button("Use this code") { take(pasted) }
-                .disabled(pasted.isEmpty)
+                .padding(.horizontal, Spacing.card)
+                .frame(minHeight: tapTarget)
+                .surface(.card, in: RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
+            if !pasted.isEmpty {
+                Button("Use this code") { take(pasted) }
+                    .buttonStyle(.secondary)
+            }
         }
+        .padding(.horizontal, Spacing.gutter)
     }
 
     @ViewBuilder
     private func chosen(_ c: PairingCode) -> some View {
-        Section {
-            LabeledContent("Relay", value: c.relay.host() ?? c.relay.absoluteString)
-            LabeledContent("Server key") {
-                Text(c.server.prefix(6).map { String(format: "%02x", $0) }.joined() + "…")
-                    .font(theme.mono(.footnote))
-            }
-            TextField("This phone's name", text: $name)
-        } footer: {
-            Text("The server shows this name and asks you to add the phone. Only the server whose key the code names can answer.")
+        VStack(alignment: .leading, spacing: Spacing.row) {
+            Text("Server id")
+                .font(theme.mono(.caption, .medium))
+                .tracking(0.8)
+                .textCase(.uppercase)
+                .foregroundStyle(theme.muted)
+            FingerprintChips(c.server.prefix(4))
+            Text("\(c.relay.host() ?? c.relay.absoluteString) · tm device pair on your computer shows the same id. Only that server can answer.")
+                .font(theme.body(.subheadline))
+                .foregroundStyle(theme.muted)
+                .fixedSize(horizontal: false, vertical: true)
         }
-        Section {
+        .padding(Spacing.card)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .surface(.card, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+        .padding(.horizontal, Spacing.gutter)
+        GroupLabel("This phone's name")
+        VStack(alignment: .leading, spacing: Spacing.tight) {
+            TextField("This phone's name", text: $name)
+                .font(theme.body(.headline))
+                .foregroundStyle(theme.ink)
+                .padding(.horizontal, Spacing.card)
+                .frame(minHeight: 50)
+                .surface(.card, in: RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
+            Text("The server shows this name and asks you to add the phone.")
+                .font(theme.body(.footnote))
+                .foregroundStyle(theme.muted)
+                .padding(.horizontal, 6)
+        }
+        .padding(.horizontal, Spacing.gutter)
+        VStack(spacing: Spacing.row) {
             Button {
                 pair(c)
             } label: {
-                HStack {
+                HStack(spacing: Spacing.item) {
+                    if pairing { ProgressView().tint(theme.onAction) }
                     Text(pairing ? "Say yes on your computer…" : "Pair")
-                    if pairing {
-                        Spacer()
-                        ProgressView()
-                    }
                 }
             }
+            .buttonStyle(.primary())
             .disabled(pairing || name.trimmingCharacters(in: .whitespaces).isEmpty)
-            Button("Scan another code", role: .cancel) {
+            Button("Scan another code") {
                 code = nil
                 failure = nil
             }
+            .buttonStyle(.ghost)
             .disabled(pairing)
         }
+        .padding(.horizontal, Spacing.gutter)
+        .padding(.top, Spacing.item)
     }
 
     private func take(_ s: String) {

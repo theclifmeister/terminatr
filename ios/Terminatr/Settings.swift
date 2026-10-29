@@ -3,53 +3,51 @@ import TerminatrKit
 import TerminatrUI
 import UIKit
 
-/// Settings (T808): the theme, as the Mac's Settings › Appearance picks
-/// it (ThemePicker, the same keys), and light, dark or the system's.
-/// Text follows the phone's Dynamic Type, so there is no size of its
-/// own. Paired with a server, it names the server, its link and the
-/// phone's level on it, and ends with Forget this server (T843). From
-/// the Projects tab's gear.
+/// Settings (T808; redesigned in T850): on the sheet's glass, the paired
+/// server first (ServerCard), then the themes as large live previews
+/// (ThemeCarousel, the same keys as the Mac's Settings › Appearance),
+/// light, dark or the system's, and with a server Forget this server,
+/// red and last (T843). Text follows the phone's Dynamic Type, so there
+/// is no size of its own. From the Projects tab's gear.
 struct SettingsScreen: View {
     @Environment(PhoneModel.self) private var model
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.dynamicTypeSize) private var typeSize
-    @AppStorage(ThemeName.key) private var theme = ThemeName.bloom.rawValue
+    @Environment(\.theme) private var theme
+    @AppStorage(ThemeName.key) private var name = ThemeName.bloom.rawValue
     @AppStorage(Appearance.key) private var appearance = Appearance.system.rawValue
 
     var body: some View {
-        NavigationStack {
-            Form {
+        ScrollView {
+            VStack(alignment: .leading, spacing: Spacing.row) {
+                SheetHeader("Settings", trailing: {
+                    Button("Done") { dismiss() }
+                        .buttonStyle(.primary())
+                        .fixedSize()
+                        .keyboardShortcut(.defaultAction)
+                })
                 if case .server = model.source { ServerSection() }
-                Section {
-                    ThemePicker(selection: $theme, columns: typeSize.isAccessibilitySize ? 2 : 3)
-                } header: {
-                    Text("Theme")
-                } footer: {
-                    Text("\(ThemeName.of(theme).label): \(ThemeName.of(theme).mood.lowercased()).")
-                }
-                Section {
-                    Picker("Appearance", selection: $appearance) {
-                        ForEach(Appearance.allCases, id: \.self) { a in
-                            Text(a.label).tag(a.rawValue)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                } header: {
-                    Text("Appearance")
-                } footer: {
-                    Text("The theme in light or dark; System follows the phone. Text follows the phone's text size.")
-                }
+                GroupLabel("Theme")
+                ThemeCarousel(selection: $name)
+                note("\(ThemeName.of(name).label): \(ThemeName.of(name).mood.lowercased()).")
+                GroupLabel("Appearance")
+                Segments(Appearance.allCases.map { (id: $0.rawValue, label: $0.label) }, selection: $appearance)
+                    .padding(.horizontal, Spacing.gutter)
+                note("The theme in light or dark; System follows the phone. Text follows the phone's text size.")
                 if case .server = model.source { ForgetSection() }
             }
-            .navigationTitle("Settings")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
-                }
-            }
-            .backdrop()
+            .frame(maxWidth: 640)
+            .frame(maxWidth: .infinity)
+            .padding(.bottom, 32)
         }
+        .sheetGlass()
+    }
+
+    private func note(_ s: String) -> some View {
+        Text(s)
+            .font(theme.body(.footnote))
+            .foregroundStyle(theme.muted)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, Spacing.gutter + 6)
     }
 }
 
@@ -102,35 +100,23 @@ struct ServerSection: View {
     @Environment(\.theme) private var theme
 
     var body: some View {
-        Section {
-            LabeledContent("Name", value: model.serverName)
-            LabeledContent("Link") {
-                let (icon, text) = model.linkWords
-                HStack(spacing: 6) {
-                    if model.link == .connecting {
-                        ProgressView().controlSize(.small)
-                    } else {
-                        Image(systemName: icon)
-                            .foregroundStyle(model.link.down ? theme.attention : theme.action)
-                            .accessibilityHidden(true)
-                    }
-                    Text(text)
-                        .multilineTextAlignment(.trailing)
-                }
-            }
-            LabeledContent("Level", value: level)
-        } header: {
-            Text("Server")
-        } footer: {
+        VStack(alignment: .leading, spacing: Spacing.tight) {
+            ServerCard(name: model.serverName, link: model.linkWords.1, linking: model.link == .connecting,
+                       down: model.link.down, level: level.word, levelSpoken: level.spoken)
             Text("What the phone may do there; tm device access on the computer changes it.")
+                .font(theme.body(.footnote))
+                .foregroundStyle(theme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 6)
         }
+        .padding(.horizontal, Spacing.gutter)
     }
 
     /// The level the link runs at, by its methods: write, answer or view.
-    private var level: String {
-        if model.writes { return "Answers and prompts" }
-        if model.answers { return "Answers" }
-        return model.link == .up ? "View only" : "—"
+    private var level: (word: String, spoken: String) {
+        if model.writes { return ("write", "Level: answers and prompts") }
+        if model.answers { return ("answer", "Level: answers") }
+        return model.link == .up ? ("view", "Level: view only") : ("", "")
     }
 }
 
@@ -141,24 +127,19 @@ struct ForgetSection: View {
     @State private var forgetting = false
 
     var body: some View {
-        Section {
-            Button(role: .destructive) { forgetting = true } label: {
-                Text("Forget this server")
-                    .frame(maxWidth: .infinity)
+        Button(role: .destructive) { forgetting = true } label: {
+            Text("Forget this server")
+        }
+        .buttonStyle(.primary(.attention))
+        .padding(.horizontal, Spacing.gutter)
+        .padding(.top, Spacing.gutter)
+        .confirmationDialog("Forget \(model.serverName)?", isPresented: $forgetting, titleVisibility: .visible) {
+            Button("Forget", role: .destructive) {
+                dismiss()
+                Task { await model.forget() }
             }
-            .buttonStyle(.borderedProminent)
-            .tint(.red)
-            .controlSize(.large)
-            .listRowInsets(EdgeInsets())
-            .listRowBackground(Color.clear)
-            .confirmationDialog("Forget \(model.serverName)?", isPresented: $forgetting, titleVisibility: .visible) {
-                Button("Forget", role: .destructive) {
-                    dismiss()
-                    Task { await model.forget() }
-                }
-            } message: {
-                Text("The phone forgets the server and its own key. To link again, pair again; on the computer, tm device remove takes the phone off.")
-            }
+        } message: {
+            Text("The phone forgets the server and its own key. To link again, pair again; on the computer, tm device remove takes the phone off.")
         }
     }
 }
