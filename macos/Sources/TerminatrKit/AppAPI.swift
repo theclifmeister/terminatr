@@ -6,7 +6,7 @@ import Foundation
 /// The terminatr app API (docs/SPEC.md §3.8): what tm app bridge answers.
 public enum AppAPI {
     /// The app API version this app was generated against.
-    public static let version = 31
+    public static let version = 32
 
     public struct AdoptRequestParams: Codable, Sendable, Hashable {
         public var id: String
@@ -3021,6 +3021,7 @@ public enum AppAPI {
         public static let sessionRemote = Call<RemoteParams, Remote>("session.remote", write: true)
         public static let sessionUpload = Call<UploadParams, Upload>("session.upload", write: true)
         public static let sessionWatch = Subscription<SessionIDParams, Watch, Watch>("session.watch", events: ["watch.changed"])
+        public static let sessionsWatch = Subscription<NoParams, SessionList, SessionList>("sessions.watch", events: ["sessions.changed"])
         public static let taskAccept = Call<TaskParams, TaskAskResult>("task.accept", write: true)
         public static let taskAdd = Call<TaskAddParams, TaskAdded>("task.add", write: true)
         public static let taskAsk = Call<TaskAskParams, TaskAskResult>("task.ask", write: true)

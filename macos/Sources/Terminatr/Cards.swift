@@ -184,6 +184,8 @@ struct QuestionCard: View {
             do {
                 _ = try await model.answer(index: index, answer: answer, question: item.question, guarded: guarded)
                 status = "Answered “\(answer)”."
+            } catch is QuestionGone {
+                status = nil
             } catch let e as AppAPI.Error where menu.screen && QuestionPlan.useTerminal(e.code) {
                 self.error = "\(e.message). Answer it in the Terminal tab."
                 terminal = true

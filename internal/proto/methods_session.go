@@ -32,7 +32,25 @@ const (
 	// agent's tm thread adopt needs that go-ahead, which nothing an agent
 	// writes can stand in for.
 	MethodSessionAdoptAsk = "session.adopt.ask"
+	// MethodSessionsWatch answers session.list's result, then sends it
+	// again (EventSessionsChanged, SessionsWatchEvent) whenever it
+	// changes, until the client hangs up: an agent's question or
+	// approval shows at once, and goes as soon as it is answered. The
+	// human's (since protocol 29).
+	MethodSessionsWatch = "sessions.watch"
+	// EventSessionsChanged carries the sessions' new list.
+	EventSessionsChanged = "sessions.changed"
 )
+
+// CapSessionsWatch says the server answers sessions.watch.
+const CapSessionsWatch = "sessions-watch"
+
+// SessionsWatchEvent is a sessions.changed line: session.list's result
+// as it is now.
+type SessionsWatchEvent struct {
+	Event string `json:"event"`
+	SessionListResult
+}
 
 // SessionAdoptParams are the params of session.adopt: the session, and
 // the project and thread it now belongs to. Brief is the thread's brief,

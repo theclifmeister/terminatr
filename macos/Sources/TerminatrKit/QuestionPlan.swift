@@ -82,6 +82,22 @@ public struct QuestionPlan: Equatable, Sendable {
     public static func useTerminal(_ code: String) -> Bool {
         ["screen-only", "no-question"].contains(code)
     }
+
+    /// Whether an answer the server refused with code was to a question
+    /// gone meanwhile (answered in the pane, the menu closed): no-question,
+    /// and the session's question as listed after it (now) no longer
+    /// asks it unanswered. The card then goes quietly (QuestionGone); a
+    /// menu still open whose screen didn't match keeps the error.
+    public static func gone(_ code: String, asked: String, now: AppAPI.Question?) -> Bool {
+        guard code == "no-question" else { return false }
+        return !(now?.questions.contains { !$0.answered && (asked.isEmpty || $0.question == asked) } ?? false)
+    }
+}
+
+/// An answer to a question gone meanwhile (QuestionPlan.gone): the card
+/// it came from goes with the next session list, and says nothing.
+public struct QuestionGone: Error, Equatable, Sendable {
+    public init() {}
 }
 
 extension Transcript.Entry {

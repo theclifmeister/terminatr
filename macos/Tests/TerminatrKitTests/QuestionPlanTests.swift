@@ -50,6 +50,22 @@ private func screen(_ items: [AppAPI.QuestionItem]) -> AppAPI.Question {
     #expect(!QuestionPlan.useTerminal("bad-params"))
 }
 
+@Test func questionPlanGone() {
+    var a = colour
+    a.answered = true
+    // Answered in the pane: the session has no question, another one,
+    // or this one answered; the card goes quietly.
+    #expect(QuestionPlan.gone("no-question", asked: "Which colour?", now: nil))
+    #expect(QuestionPlan.gone("no-question", asked: "Which colour?", now: screen([fruits])))
+    #expect(QuestionPlan.gone("no-question", asked: "Which colour?", now: screen([a, fruits])))
+    // Still open (the screen didn't match): the error stays; so does
+    // any other refusal, and an unguarded answer while a menu is open.
+    #expect(!QuestionPlan.gone("no-question", asked: "Which colour?", now: screen([colour])))
+    #expect(!QuestionPlan.gone("bad-params", asked: "Which colour?", now: nil))
+    #expect(!QuestionPlan.gone("no-question", asked: "", now: screen([fruits])))
+    #expect(QuestionPlan.gone("no-question", asked: "", now: nil))
+}
+
 @Test func questionPlanAllAnswered() {
     var a = colour
     a.answered = true

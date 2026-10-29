@@ -23,6 +23,13 @@ func init() {
 	for _, m := range []Method{
 		// Reading.
 		unary(proto.MethodSessionList, false, noParams, sessionListOf),
+		// session.list's result again whenever it changes (app API 32;
+		// the server's caps say sessions-watch): a question or approval
+		// shows as it opens and goes once answered anywhere.
+		stream(proto.MethodSessionsWatch, []string{proto.EventSessionsChanged}, noParams, sessionListOf,
+			func(ev proto.SessionsWatchEvent) (string, SessionList, bool) {
+				return ev.Event, sessionListOf(ev.SessionListResult), ev.Event == proto.EventSessionsChanged
+			}, nil),
 		stream(proto.MethodProjectsWatch, []string{proto.EventProjectsChanged}, projectsWatchParams, projectsOf,
 			func(ev server.ProjectsWatchEvent) (string, Projects, bool) {
 				return ev.Event, projectsOf(server.ProjectsWatch{Projects: ev.Projects}), ev.Event == proto.EventProjectsChanged

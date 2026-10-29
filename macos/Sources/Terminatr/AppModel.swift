@@ -683,7 +683,22 @@ final class AppModel {
     /// session.answer: the server refuses it when the menu changed.
     func answer(_ params: AppAPI.AnswerParams) async throws -> AppAPI.AnswerResult {
         guard let bridge else { throw BridgeError.closed("Not connected to terminatr.") }
-        return try await bridge.call(AppAPI.Methods.sessionAnswer, params)
+        do {
+            return try await bridge.call(AppAPI.Methods.sessionAnswer, params)
+        } catch let e as AppAPI.Error where e.code == "no-question" {
+            if await questionGone(e, session: params.id, asked: params.question) { throw QuestionGone() }
+            throw e
+        }
+    }
+
+    /// Whether session.answer's refusal e was for a question answered
+    /// elsewhere meanwhile (QuestionPlan.gone): the sessions are read
+    /// again now, so its card goes at once.
+    func questionGone(_ e: AppAPI.Error, session: String, asked: String) async -> Bool {
+        guard let bridge, let l = try? await bridge.call(AppAPI.Methods.sessionList) else { return false }
+        sessions = l.sessions
+        changed()
+        return QuestionPlan.gone(e.code, asked: asked, now: l.sessions.first { $0.id == session }?.question)
     }
 
     /// Asks project's coordinator to delegate task (task.delegate, as

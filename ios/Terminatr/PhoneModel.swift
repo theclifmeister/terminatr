@@ -442,8 +442,16 @@ final class PhoneModel {
         await reread()
     }
 
+    /// Answers a question; one answered elsewhere meanwhile throws
+    /// QuestionGone, its card gone with the sessions read again.
     func answer(_ a: Need.Answer, _ option: String) async throws {
-        _ = try await connected().call(AppAPI.Methods.sessionAnswer, a.params(option))
+        do {
+            _ = try await connected().call(AppAPI.Methods.sessionAnswer, a.params(option))
+        } catch let e as AppAPI.Error where e.code == "no-question" {
+            await reread()
+            if QuestionPlan.gone(e.code, asked: a.question, now: sessions.first { $0.id == a.session }?.question) { throw QuestionGone() }
+            throw e
+        }
         await reread()
     }
 

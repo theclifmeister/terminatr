@@ -303,9 +303,10 @@ struct NeedActs: View {
         }
     }
 
-    /// An act's failure in words; nil when the user cancelled the system's prompt (an older key asks).
+    /// An act's failure in words; nil when the user cancelled the system's prompt (an older key asks), or the question was answered elsewhere.
     static func words(_ error: any Error) -> String? {
         if let e = error as? LAError, [.userCancel, .appCancel, .systemCancel].contains(e.code) { return nil }
+        if error is QuestionGone { return nil } // answered elsewhere: the card goes
         if let e = error as? AppAPI.Error {
             switch e.code {
             case "device-escape-off": return nil // the card says so
