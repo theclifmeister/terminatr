@@ -752,6 +752,45 @@ func TestDashboardAllProjectsPeers(t *testing.T) {
 	}
 }
 
+// TestDashboardPeerNeedsInFull: a paired server whose needs switch for
+// this one is view sends each need in full: a row each, with what it
+// asks and "answer on mini", an escape's without what it would run;
+// enter still shows its read-only dashboard.
+func TestDashboardPeerNeedsInFull(t *testing.T) {
+	d := testData()
+	menu := &proto.Question{Questions: []proto.QuestionItem{{Question: "Which cache?", Options: []proto.QuestionOption{{Label: "Redis"}}}}}
+	d.Peers = []proto.PeerMirror{{Alias: "mini", State: "up", Watch: true, NeedsCap: true, Needs: proto.NeedsView, Projects: []proto.PeerMirrorProject{
+		{PeerProject: proto.PeerProject{Project: "acme-api"}, Watch: &proto.ProjectWatch{Questions: 1,
+			NeedsYou: []proto.WatchNeed{{Why: proto.WhyReview, Task: "T3", Title: "Rate limits", Thread: "t-0009"}}},
+			Needs: []proto.PeerNeed{
+				{ID: "question:s-1:a", Kind: proto.NeedQuestion, Task: "T7", Session: "s-1", Question: menu},
+				{ID: "approval:s-2:b", Kind: proto.NeedApproval, Task: "T8", Approval: &proto.PeerApproval{Question: "Allow curl example.com?", Options: []string{"Yes", "No"}}},
+				{ID: "approval:s-3", Kind: proto.NeedApproval, Role: proto.RoleCoordinator, Escape: true},
+				{ID: "ask:Q2", Kind: proto.NeedAsk, Role: proto.RoleCoordinator, Question: &proto.Question{Questions: []proto.QuestionItem{{Question: "Both apps?"}}}},
+				{ID: "review:T3:1", Kind: proto.NeedReview, Task: "T3", Title: "Rate limits", Status: "review"},
+			}},
+	}}}
+	src := &fakeSource{data: d}
+	m := newDash(DashOptions{Source: src, Width: 160 + sideDefault, Height: 30, State: DashState{Current: allProjects}})
+	m.layout.Details = false
+	m.setData(src.data)
+	out := screen(m)
+	for _, want := range []string{"T7  asks: Which cache?", "T8  needs approval: Allow curl", "coordinator  asks to run a command",
+		"only on mini", "coordinator  asks: Both apps?", "T3  Rate limits", "answer on mini"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q in\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "1 question waiting") {
+		t.Errorf("the masked count shows beside the needs in full:\n%s", out)
+	}
+	m.sel = "nr:@mini/acme-api:question:s-1:a"
+	m.enter("")
+	if m.current != "@mini/acme-api" {
+		t.Errorf("enter on a remote need shows %q", m.current)
+	}
+}
+
 // TestDashboardDoneThread: a done thread with a new report says so in
 // full, its blocked reason or report leading the row even in a narrow
 // list.

@@ -553,22 +553,34 @@ func otherRows(d Data, now time.Time) []row {
 }
 
 // peerNeeds are the NEEDS YOU rows of the paired servers' shared
-// projects, from the mirror's last watch of each (peer.list, §16.10):
-// its open questions, then what its ProjectWatch says waits on its
-// user, labelled "mini › acme-api". They are the other server's, to
-// see: enter shows that project's read-only dashboard.
+// projects, from the mirror's last watch of each (peer.list, §16.10),
+// labelled "mini › acme-api". A server whose needs switch for this one
+// is view or answer sends each need in full (§16.16): a row each, with
+// what it asks (peerNeedRow). Otherwise its open questions count as one
+// row, then what its ProjectWatch says waits on its user, masked. They
+// are the other server's, to see: enter shows that project's read-only
+// dashboard.
 func peerNeeds(peers []proto.PeerMirror) []row {
 	var out []row
 	for _, pm := range peers {
+		server := cmp.Or(pm.Name, pm.Alias)
 		for _, mp := range pm.Projects {
 			w := mp.Watch
 			if w == nil {
 				continue
 			}
-			fold, who := peerFold(pm.Alias, mp.Project), remoteCrumb(cmp.Or(pm.Name, pm.Alias), mp.Project)
+			fold, who := peerFold(pm.Alias, mp.Project), remoteCrumb(server, mp.Project)
+			if len(mp.Needs) > 0 || proto.NeedsShown(pm.Needs) {
+				for _, n := range mp.Needs {
+					r := peerNeedRow(n, server)
+					r.key, r.remote, r.mark, r.who, r.pct = "nr:"+fold+":"+n.ID, fold, markNeeds, who, -1
+					out = append(out, r)
+				}
+				continue
+			}
 			if w.Questions > 0 {
 				out = append(out, row{key: "nr:" + fold + ":q", remote: fold, mark: markNeeds, who: who,
-					what: questionsWaiting(w.Questions), state: "blocked", rest: "on " + cmp.Or(pm.Name, pm.Alias), pct: -1})
+					what: questionsWaiting(w.Questions), state: "blocked", rest: "on " + server, pct: -1})
 			}
 			for i, n := range w.NeedsYou {
 				ref := cmp.Or(n.Task, n.Thread, n.Session)
@@ -579,6 +591,48 @@ func peerNeeds(peers []proto.PeerMirror) []row {
 		}
 	}
 	return out
+}
+
+// peerNeedRow is a paired server's need in full as a row's words: who
+// asks and what, its state, and where it is answered: on that server
+// (read-only here), an escape's by its user alone.
+func peerNeedRow(n proto.PeerNeed, server string) row {
+	ref := cmp.Or(n.Task, n.Thread)
+	if ref == "" && n.Role == proto.RoleCoordinator {
+		ref = "coordinator"
+	}
+	ref = cmp.Or(ref, n.Session)
+	r := row{state: "blocked", rest: "answer on " + server}
+	asks := ""
+	if q := n.Question; q != nil {
+		for _, it := range q.Questions {
+			if !it.Answered {
+				asks = it.Question
+				break
+			}
+		}
+	}
+	switch n.Kind {
+	case proto.NeedQuestion, proto.NeedAsk:
+		r.what = joinSp(ref, "asks: "+oneLine(cmp.Or(asks, n.Text, "a question in its session")))
+	case proto.NeedApproval:
+		what := "needs approval"
+		if a := n.Approval; a != nil && a.Question != "" {
+			what += ": " + oneLine(a.Question)
+		}
+		r.what = joinSp(ref, what)
+	case proto.NeedReview:
+		r.what, r.state, r.rest = joinSp(ref, oneLine(n.Title)), "review", joinSp("in review", prRef(n.PRURL), "on "+server)
+	case proto.NeedQueue:
+		r.what, r.rest = joinSp(ref, oneLine(n.Text)), "on "+server
+	default:
+		r.what, r.rest = joinSp(ref, oneLine(n.Title)), joinSp(whyWords[n.Kind], "on "+server)
+	}
+	if n.Escape {
+		r.what = joinSp(ref, "asks to run a command outside the sandbox")
+		r.rest = "only on " + server
+	}
+	return r
 }
 
 // shareNeedRows are the all-projects NEEDS YOU's rows of the share
