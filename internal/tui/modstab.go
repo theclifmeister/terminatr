@@ -35,7 +35,7 @@ type modsTab struct {
 }
 
 // modsKeys are the Mods tab's action row.
-const modsKeys = "enter on/off · I install · p permissions · s settings · d defaults · l log · R restart · U update · X remove · E examples · ← → tabs · esc close"
+const modsKeys = "enter on/off · w where it runs · I install · p permissions · s settings · d defaults · l log · R restart · U update · X remove · E examples · ← → tabs · esc close"
 
 // selMod is the selected mod, false for none.
 func (mt *modsTab) selMod(m *dash) (mod.Mod, bool) {
@@ -262,7 +262,7 @@ func modAbout(m *dash, md mod.Mod, w int) []string {
 		out = append(out, wrapLines(about, w)...)
 	}
 	if len(md.Projects) > 0 {
-		out = append(out, faintLines("Runs only for "+joinAnd(md.Projects)+".", w)...)
+		out = append(out, faintLines("Runs only for "+joinAnd(md.Projects)+": w changes where it runs.", w)...)
 	}
 	if !md.Builtin {
 		if src, ok := mod.ReadSource(md.Dir); ok {
@@ -340,11 +340,13 @@ func (mt *modsTab) key(m *dash, k tea.KeyPressMsg) (tea.Cmd, bool) {
 	}
 	md, ok := mt.selMod(m)
 	if !ok {
-		return nil, slices.Contains([]string{"enter", "space", " ", "p", "s", "d", "l", "R", "U", "X"}, s)
+		return nil, slices.Contains([]string{"enter", "space", " ", "w", "p", "s", "d", "l", "R", "U", "X"}, s)
 	}
 	switch s {
 	case "enter", "space", " ":
 		return m.modToggle(md), true
+	case "w":
+		m.push(&modWhereView{id: md.ID})
 	case "p":
 		m.push(&modPermsView{id: md.ID})
 	case "s":
@@ -388,10 +390,14 @@ func (m *dash) modToggle(md mod.Mod) tea.Cmd {
 }
 
 // modAct runs a mod action in the background, then reloads.
-func (m *dash) modAct(id, verb, msg string) tea.Cmd {
+func (m *dash) modAct(id, verb, msg string) tea.Cmd { return m.modActFor(id, verb, "", msg) }
+
+// modActFor is modAct for project slug: enable and disable do what tm
+// mod enable/disable --project does.
+func (m *dash) modActFor(id, verb, slug, msg string) tea.Cmd {
 	src := m.src
 	return m.act(func() actionMsg {
-		if err := src.ModAct(id, verb); err != nil {
+		if err := src.ModAct(id, verb, slug); err != nil {
 			return actionMsg{err: err}
 		}
 		return actionMsg{msg: msg}
@@ -451,9 +457,12 @@ func permStyle(perm string) lipgloss.Style {
 // permission it asks for in plain words and its colour, every rules
 // addendum and agent manifest in full, then "Enable <name>?". Y turns it
 // on with every permission it asks for; a mod that wants more is asked
-// for what it wants more, and o turns it off instead.
+// for what it wants more, and o turns it off instead. With slug it is
+// the project popup's Mods tab's: Y turns it on for that project (tm mod
+// enable --project), o off for it.
 type consentView struct {
 	id     string
+	slug   string
 	scroll int
 }
 
@@ -530,7 +539,19 @@ func (cv *consentView) question(md mod.Mod) string {
 	if md.State == mod.Enabled {
 		return "Grant " + modName(md) + " what it wants more?"
 	}
+	if cv.slug != "" {
+		return "Enable " + modName(md) + " for " + joinAnd(enabledFor(md, cv.slug)) + "?"
+	}
 	return "Enable " + modName(md) + "?"
+}
+
+// enabledFor are the projects mod md, off, runs for once tm mod enable
+// --project slug turns it on: those it was limited to, then slug.
+func enabledFor(md mod.Mod, slug string) []string {
+	if slices.Contains(md.Projects, slug) {
+		return md.Projects
+	}
+	return append(slices.Clone(md.Projects), slug)
 }
 
 func (cv *consentView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
@@ -547,13 +568,23 @@ func (cv *consentView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	case "Y":
 		m.pop()
 		msg := name + " on"
+		if cv.slug != "" {
+			msg += " for " + cv.slug
+		}
 		if md.State == mod.Enabled {
 			msg = name + " has what it asked for"
 		}
-		return m.modAct(md.ID, "enable", msg)
+		return m.modActFor(md.ID, "enable", cv.slug, msg)
 	case "o":
 		if md.State == mod.Enabled {
 			m.pop()
+			if cv.slug != "" && md.Runs(cv.slug) {
+				return m.modToggleFor(md, cv.slug)
+			}
+			if cv.slug != "" {
+				m.msg = name + " stays off for " + cv.slug
+				return nil
+			}
 			return m.modAct(md.ID, "disable", name+" off")
 		}
 	case "N", "esc":
@@ -572,6 +603,9 @@ func (cv *consentView) render(m *dash) string {
 	}
 	keys := "Y yes · N no · ↑ ↓ scroll · esc cancel"
 	title := "Enable " + modName(md)
+	if cv.slug != "" {
+		title += " · " + cv.slug
+	}
 	if md.State == mod.Enabled {
 		keys = "Y grant · N not now · o turn it off · ↑ ↓ scroll · esc cancel"
 		title = modName(md) + " wants more"
@@ -1028,69 +1062,40 @@ func (m *dash) noteModFailures() {
 	}
 }
 
-// projectRows are project slug's own settings, the Mods line when a
-// mod is limited to some projects (mods design §9): the limited mods
-// that run for this one, enter opening the Mods tab, where they change;
-// then a row per user mod that runs for it and has settings, enter opening
-// its settings for this project (mod API 1.11).
+// projectRows are project slug's own settings, then the Mods line: your
+// mods that run for it and how many it sets settings of, enter
+// opening the popup's Mods tab, where they change (projectmods.go).
 func (m *dash) projectRows(slug string) []setting {
-	rows := projectSettings(slug)
-	if slices.ContainsFunc(m.data.Mods, func(md mod.Mod) bool { return len(md.Projects) > 0 }) {
-		rows = append(rows, m.limitedModsRow(slug))
-	}
-	for _, md := range m.data.Mods {
-		// The built-in mods' are tm's look and layout, the same for
-		// every project here (tm mod settings --project still sets them).
-		if md.Runs(slug) && !md.Builtin && md.Manifest != nil && len(md.Manifest.Settings) > 0 {
-			rows = append(rows, projectModRow(md.ID, modName(md), slug))
-		}
-	}
-	return rows
+	return append(projectSettings(slug), modsPointerRow(slug))
 }
 
-// projectModRow is mod id's settings row on project slug's Settings tab.
-func projectModRow(id, name, slug string) setting {
-	return setting{label: name + " settings",
-		help: "The mod's own settings for this project: each one it doesn't set follows all projects (, then 4, s). tm mod settings " + id + " --project " + slug + " shows them too.",
-		value: func(m *dash) string {
-			md, ok := modByID(m, id)
-			switch n := len(md.ProjectSettings[slug]); {
-			case !ok || n == 0:
-				return "all projects"
-			case n == 1:
-				return "1 of its own"
-			default:
-				return fmt.Sprintf("%d of its own", n)
-			}
-		},
-		change: func(m *dash) tea.Cmd {
-			if md, ok := modByID(m, id); ok {
-				m.push(newModSettings(md, slug))
-			}
-			return nil
-		}}
-}
-
-// limitedModsRow is the Mods line of project slug's Settings tab.
-func (m *dash) limitedModsRow(slug string) setting {
+// modsPointerRow is the Mods line of project slug's Settings tab.
+func modsPointerRow(slug string) setting {
 	return setting{label: "Mods",
-		help: "The mods limited to some projects that run for this one; the others run for every project. , then 4 lists them all; tm mod enable <id> --project " + slug + " adds one here.",
+		help: "Which mods run for this project and their settings for it are on the Mods tab (→ to the last tab).",
 		value: func(m *dash) string {
 			var names []string
+			own := 0
 			for _, md := range m.data.Mods {
-				if len(md.Projects) > 0 && md.Runs(slug) {
+				if md.Runs(slug) && !md.Builtin {
 					names = append(names, modName(md))
 				}
+				if len(md.ProjectSettings[slug]) > 0 {
+					own++
+				}
 			}
-			if len(names) == 0 {
-				return "none limited to it"
+			out := "none of yours run here"
+			if len(names) > 0 {
+				out = strings.Join(names, ", ")
 			}
-			return strings.Join(names, ", ")
+			if own > 0 {
+				out += fmt.Sprintf(" · settings of its own for %d", own)
+			}
+			return out
 		},
 		change: func(m *dash) tea.Cmd {
-			m.openSettings()
-			if sv, ok := m.top().(*settingsView); ok {
-				sv.tab = tabMods
+			if pv := m.projectPopupView(); pv != nil && pv.slug == slug {
+				pv.tab = tabProjMods
 			}
 			return nil
 		}}

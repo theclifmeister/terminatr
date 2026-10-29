@@ -194,8 +194,8 @@ fixture; `tm mod dev <folder>` runs it live and restarts it on each save.
 - **review-gates** (`api = "1.11"`) is one rules mod that carries both
   a playbook and a gate a project opts into, instead of a second mod
   enabled per project. Its `gates` setting is off for all projects;
-  `tm mod settings review-gates --project <slug> gates=true` (or the
-  project popup's Settings tab, `Review gates settings`) turns it on in
+  `tm mod settings review-gates --project <slug> gates=true` (or `enter` on
+  it in the project popup's Mods tab) turns it on in
   one project, written to `[projects.<slug>.mods.review-gates.settings]`
   over the all-projects value. Its rules files hold sections:
 

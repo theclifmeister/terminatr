@@ -266,16 +266,3 @@ func TestDesignCanvasKeeps(t *testing.T) {
 		t.Errorf("a design's note removed: %v", err)
 	}
 }
-
-// TestDepths: a cycle in after is cut where it closes.
-func TestDepths(t *testing.T) {
-	build := []boardTask{
-		{Task: &tasks.Task{ID: 1, After: []int{2}}},
-		{Task: &tasks.Task{ID: 2, After: []int{1}}},
-		{Task: &tasks.Task{ID: 3, After: []int{2, 9}}},
-	}
-	d := depths(build)
-	if d[1] != 1 || d[2] != 0 || d[3] != 1 {
-		t.Errorf("depths: %v", d)
-	}
-}

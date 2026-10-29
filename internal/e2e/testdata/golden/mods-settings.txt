@@ -28,8 +28,8 @@
       │ Runs as <pid>, using <mem>. │
       │                                                                                                          │
       │                                                                                                          │
-      │ enter on/off · I install · p permissions · s settings · d defaults · l log · R restart · U update        │
- ─────│ X remove · E examples · ← → tabs · esc close                                                             │
+      │ enter on/off · w where it runs · I install · p permissions · s settings · d defaults · l log · R restart │
+ ─────│ U update · X remove · E examples · ← → tabs · esc close                                                  │
  demo ╰───────────────────────────────────────────────────────────────────────────────────────────────── more ↓ ─╯──────
  2 threads · coordinator not runn… │
  tab sidebar · ? help              │

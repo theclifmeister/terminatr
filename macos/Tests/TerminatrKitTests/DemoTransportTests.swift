@@ -25,6 +25,12 @@ func demoBridge() async throws -> Bridge {
     // What the start screen shows: one need of every kind it draws.
     let kinds = Set(Need.of(projects: projects, sessions: sessions, peers: peers).map(\.kind))
     #expect(kinds == [.approval, .question, .review, .blocked])
+    // The project screen's Designs: one being built, its build in after
+    // order, and one still designing.
+    #expect(Compatibility.listsDesigns(try #require(await b.hello)))
+    let designs = try await b.call(AppAPI.Methods.designList, AppAPI.ProjectParams(project: "acme-web")).designs
+    #expect(designs.map(\.status) == ["building", "designing"])
+    #expect(designs.first?.build.map(\.id) == ["T9", "T12", "T18", "T21"])
     // Every running session has its conversation.
     for s in sessions {
         let sub = try await b.subscribe(AppAPI.Methods.transcriptWatch, AppAPI.TranscriptParams(session: s.id))

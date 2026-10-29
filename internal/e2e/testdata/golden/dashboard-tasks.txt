@@ -1,6 +1,6 @@
  PROJECTS                      1   │ tm dashboard                            ● server ok · 1 session
  ■ de╭─ demo ─────────────────────────────────────────────────────────────────────────────────╮─────
- └─ c│ 1 overview 2 inbox 3 tasks 4 settings 5 access 6 keys 7 memory 8 library 9 messages    │
+ └─ c│ 1 overview 2 inbox 3 tasks 4 settings 5 access 6 keys 7 memory 8 library 9 messages 0… │
      │                                                                                        │vate
      │ NEEDS YOU ──────────────────────────────────────────────────────────────────────────── │arts…
      │ T1  Write the README  ◆ review   0/2                                                   │ck

@@ -121,10 +121,11 @@ private struct InactiveFold: View {
 /// One of this server's projects (T846): its monogram, name and goal,
 /// its board's counts as StatTiles, its coordinator, running or not,
 /// with its context use (at the write level Start Coordinator under it;
-/// held, Save & Clear, T868), its pages as PageTiles, then every
-/// unresolved thread, done ones too, in the TUI's order
-/// (SidebarTree.threads), as SessionTiles, a thread's context use only
-/// when nearly full. An inactive project's rows are dormant.
+/// held, Save & Clear, T868), its pages as PageTiles, its designs as
+/// DesignTiles (DesignsTiles), then every unresolved thread, done ones
+/// too, in the TUI's order (SidebarTree.threads), as SessionTiles, a
+/// thread's context use only when nearly full. An inactive project's
+/// rows are dormant.
 struct ProjectScreen: View {
     @Environment(PhoneModel.self) private var model
     @Environment(\.theme) private var theme
@@ -157,6 +158,9 @@ struct ProjectScreen: View {
                         StartCoordinatorButton(project: slug)
                     }
                     pages
+                    if model.listsDesigns {
+                        DesignsTiles(project: p)
+                    }
                     let waiting = threads.filter { model.attention($0).waits }.count
                     SectionHeading("Threads", detail: threads.isEmpty ? "" : "\(threads.count)" + (waiting > 0 ? " · \(waiting) wait on you" : ""))
                     if threads.isEmpty {

@@ -1062,6 +1062,14 @@ func TestMemoryTab(t *testing.T) {
 		t.Fatalf("right from Library: %d", pv.tab)
 	}
 	keyPress(m, "right")
+	if pv.tab != tabDesigns {
+		t.Fatalf("right from Messages: %d", pv.tab)
+	}
+	keyPress(m, "right")
+	if pv.tab != tabProjMods {
+		t.Fatalf("right from Designs: %d", pv.tab)
+	}
+	keyPress(m, "right")
 	if pv.tab != tabOverview {
 		t.Fatalf("right from the last tab: %d", pv.tab)
 	}
@@ -1723,6 +1731,7 @@ func TestProjectShareRow(t *testing.T) {
 	for range 10 {
 		keyPress(m, "pgdown")
 	}
+	keyPress(m, "up") // the Mods line is last
 	if out := screen(m); !strings.Contains(lineWith(out, "Shared with paired servers"), "off") {
 		t.Fatalf("no Shared row, or on:\n%s", out)
 	}

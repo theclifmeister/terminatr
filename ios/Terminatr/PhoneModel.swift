@@ -704,6 +704,9 @@ final class PhoneModel {
     /// Whether this tm lists the board's done tasks (task.done, app API 20).
     var listsDone: Bool { hello.map(Compatibility.listsDone) ?? false }
 
+    /// Whether this tm lists a project's designs (design.list, app API 31).
+    var listsDesigns: Bool { hello.map(Compatibility.listsDesigns) ?? false }
+
     /// Whether this tm reads a task whole (task.get, app API 14).
     var getsTasks: Bool { hello.map(Compatibility.getsTasks) ?? false }
 
@@ -731,6 +734,12 @@ final class PhoneModel {
     func libraryData(_ project: String, _ f: AppAPI.LibraryFile) async -> FileOutcome {
         guard let b = bridge else { return .unavailable("the link is down") }
         return await LibraryPage.read({ p in try await b.call(AppAPI.Methods.libraryRead, p) }, project: project, file: f)
+    }
+
+    /// The project's designs, by name, each with its build in after
+    /// order (design.list).
+    func designs(_ project: String) async throws -> [AppAPI.Design] {
+        try await connected().call(AppAPI.Methods.designList, AppAPI.ProjectParams(project: project)).designs
     }
 
     /// The done tasks of project's board, in board order (task.done).

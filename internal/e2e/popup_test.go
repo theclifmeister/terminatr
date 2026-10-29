@@ -151,6 +151,38 @@ func TestSmokeProjectPopup(t *testing.T) {
 	if out := env.MustCLI("library", "list", "--project", slug); out != "" {
 		t.Fatalf("library after D:\n%s", out)
 	}
+
+	// Designs: a recorded design, its design task in review, its build
+	// in after order with its statuses; enter opens it, and enter on a
+	// build task shows the task, its design and after.
+	env.MustCLI("task", "add", "Sketch the docs", "--status", "review", "--project", slug)
+	env.MustCLI("task", "edit", "T1", "--design", "docs", "--project", slug)
+	env.MustCLI("task", "edit", "T2", "--design", "docs", "--after", "T1", "--project", slug)
+	env.MustCLI("design", "set", "docs", "--title", "The docs", "--task", "T3", "--artifact", "https://example.com/docs",
+		"--answer", "Markdown only", "--answer", "One page per command", "--project", slug)
+	w.Type("0")
+	w.WaitFor("0/2 built", wait)
+	w.Golden("popup-designs.txt", popupMasks...)
+	w.Key(Enter)
+	w.WaitFor("BUILD 0/2 built", wait)
+	w.Golden("popup-design.txt", popupMasks...)
+	// The selection moves in reverse video alone: each key waits for
+	// the screen to settle, not to change.
+	for _, k := range []emu.Key{keyDown, keyDown, Enter} {
+		w.Key(k)
+		w.Quiet(200 * time.Millisecond)
+	}
+	w.WaitFor("after     T1", wait)
+	w.WaitFor("design    docs", wait)
+	w.Key(keyEsc)
+	w.WaitFor("BUILD 0/2 built", wait)
+	w.Key(keyEsc)
+	w.WaitFor("enter open", wait)
+	// Mods: the last core tab, after Designs, with no number key; the
+	// built-in mods follow all projects.
+	w.Key(emu.Key{Special: emu.KeyRight})
+	w.WaitFor("follows all projects: on", wait)
+	w.Golden("popup-mods.txt", popupMasks...)
 	w.Type("4")
 
 	// Start threads: ask first → automatically, saved and in the

@@ -212,6 +212,10 @@ type PollSource interface {
 	Library(slug string) ([]thread.LibFile, error)
 	LibraryRead(slug, id, name string, max int64) (data []byte, truncated bool, err error)
 	LibraryRemove(slug, id, name string) (int, error)
+	// Designs are the project's designs with their build, from its
+	// board and archive (project.DesignBuilds), for the project popup's
+	// Designs tab.
+	Designs(slug string) ([]project.DesignBuild, error)
 	// RemoveNote deletes memory note path (memory/<name>.md) of the
 	// project as tm memory rm does: MEMORY.md written again, journaled,
 	// and an inbox item for the coordinator.
@@ -452,10 +456,14 @@ type DeviceSource interface {
 type ModSource interface {
 	// ModAct enables, disables or removes installed mod id (verb
 	// "enable", "disable", "remove"), on the human's answer in the Mods
-	// tab (mods design §9). Enabling grants every permission the mod
-	// asks for: the human has just seen them. It is refused when tm runs
-	// inside an agent, as every mod change is.
-	ModAct(id, verb string) error
+	// tab (mods design §9); with slug, enable and disable do what tm mod
+	// enable/disable --project does. Enabling grants every permission
+	// the mod asks for: the human has just seen them. It is refused when
+	// tm runs inside an agent, as every mod change is.
+	ModAct(id, verb, slug string) error
+	// SetModProjects limits mod id to projects, none for every project
+	// (mod.SetProjects).
+	SetModProjects(id string, projects []string) error
 	// SetModGrants sets the permissions mod id runs with, of those it
 	// asks for; SetModSetting one of its own settings, for all projects
 	// or for project slug (mod API 1.11), nil for its default (or, for a
@@ -808,6 +816,14 @@ func (s *ServerSource) Library(slug string) ([]thread.LibFile, error) {
 		return nil, err
 	}
 	return mergeNewest(files, link.LibraryFiles(p)), nil
+}
+
+func (s *ServerSource) Designs(slug string) ([]project.DesignBuild, error) {
+	p, err := project.Open(slug)
+	if err != nil {
+		return nil, err
+	}
+	return p.BoardDesigns()
 }
 
 // mergeNewest merges two lists of files, each newest first.

@@ -318,6 +318,7 @@ func TestCopies(t *testing.T) {
 	check("transcript.watch events", homeOf(transcriptEventOf), []string{".Event"})
 	check("session.file", homeOf(sessionFileOf), nil)
 	check("memory.list", homeOf(memoryFilesOf), nil)
+	check("design.list", homeOf(designsOf), nil)
 	check("memory.read", homeOf(memoryTextOf), nil)
 	check("library.list", homeOf(libraryOf), nil)
 	check("library.read", homeOf(libraryChunkOf), nil)
@@ -508,7 +509,7 @@ func TestAllowlist(t *testing.T) {
 		proto.MethodSessionFile, proto.MethodCoordinatorClear, proto.MethodProjectActive, proto.MethodSessionUpload,
 		proto.MethodLinkAct, proto.MethodPeerShareAnswer, proto.MethodPeerNeedAct, MethodGuardRefusals, MethodGuardDecide, proto.MethodTranscriptPage,
 		proto.MethodProjectPin, proto.MethodProjectNew, proto.MethodSessionAdoptRequest, proto.MethodSessionRemote, proto.MethodLinkSend,
-		proto.MethodMemoryList, proto.MethodMemoryRead, proto.MethodLibraryList, proto.MethodLibraryRead,
+		proto.MethodMemoryList, proto.MethodMemoryRead, proto.MethodLibraryList, proto.MethodLibraryRead, proto.MethodDesignList,
 		MethodDeviceNonce, MethodDeviceList, MethodDevicePair, MethodDevicePairWait, MethodDevicePairAnswer, MethodDeviceAccess,
 		MethodDeviceName, MethodDeviceRemove}
 	slices.Sort(want)

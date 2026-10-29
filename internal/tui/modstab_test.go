@@ -23,7 +23,10 @@ func (f *fakeSource) human() *ServerSource {
 	return &ServerSource{Caller: caller.Caller{Kind: caller.Human}}
 }
 
-func (f *fakeSource) ModAct(id, verb string) error { return f.human().ModAct(id, verb) }
+func (f *fakeSource) ModAct(id, verb, slug string) error { return f.human().ModAct(id, verb, slug) }
+func (f *fakeSource) SetModProjects(id string, projects []string) error {
+	return f.human().SetModProjects(id, projects)
+}
 func (f *fakeSource) ApplyModDefaults(id string) ([]mod.Suggestion, error) {
 	return f.human().ApplyModDefaults(id)
 }
@@ -554,86 +557,6 @@ func TestModsUpdate(t *testing.T) {
 	}
 	if out := screen(m); !strings.Contains(out, "Installed from "+srcDir) || !strings.Contains(out, "Installed 20") || !strings.Contains(out, "Updated 20") {
 		t.Errorf("after the update the detail lacks installed and updated times:\n%s", out)
-	}
-}
-
-// TestModsProjectLine: a project's Settings tab has a Mods line once a
-// mod is limited to some projects, naming those that run for it.
-func TestModsProjectLine(t *testing.T) {
-	src, m := modsDash(t)
-	press(m, "esc")
-	if rows := m.projectRows("beta"); slices.ContainsFunc(rows, func(r setting) bool { return r.label == "Mods" }) {
-		t.Error("a Mods line with no mod limited to some projects")
-	}
-	if err := mod.SetProjects(caller.Caller{Kind: caller.Human}, "nord", []string{"beta"}); err != nil {
-		t.Fatal(err)
-	}
-	if err := mod.SetEnabled(caller.Caller{Kind: caller.Human}, "nord", true); err != nil {
-		t.Fatal(err)
-	}
-	src.loadMods()
-	m.setData(src.data)
-	for slug, want := range map[string]string{"beta": "Nord", "alpha": "none limited to it"} {
-		rows := m.projectRows(slug)
-		i := slices.IndexFunc(rows, func(r setting) bool { return r.label == "Mods" })
-		if i < 0 {
-			t.Fatalf("%s has no Mods line", slug)
-		}
-		if got := rows[i].value(m); got != want {
-			t.Errorf("%s: Mods %q, want %q", slug, got, want)
-		}
-	}
-}
-
-// TestModsProjectSettings: a project's Settings tab has a row per user
-// mod with settings that runs for it; enter opens its settings for the
-// project, where a key it doesn't set follows all projects, + writes the
-// project's own value and X follows all projects again (mod API 1.11).
-func TestModsProjectSettings(t *testing.T) {
-	src, m := modsDash(t)
-	press(m, "esc")
-	row := func() (setting, bool) {
-		rows := m.projectRows("beta")
-		i := slices.IndexFunc(rows, func(r setting) bool { return r.label == "Review age settings" })
-		if i < 0 {
-			return setting{}, false
-		}
-		return rows[i], true
-	}
-	if _, ok := row(); ok {
-		t.Fatal("a row for a mod that is off")
-	}
-	if err := mod.Enable(caller.Caller{Kind: caller.Human}, "review-age", ""); err != nil {
-		t.Fatal(err)
-	}
-	src.loadMods()
-	m.setData(src.data)
-	r, ok := row()
-	if !ok || r.value(m) != "all projects" {
-		t.Fatalf("row %+v %v", r, ok)
-	}
-	if slices.ContainsFunc(m.projectRows("beta"), func(r setting) bool { return r.label == "Ticker settings" }) {
-		t.Error("a built-in mod's row")
-	}
-	r.change(m)
-	if out := screen(m); !strings.Contains(out, "Review age · settings · beta") || !strings.Contains(out, "all projects") {
-		t.Fatalf("the project's page:\n%s", out)
-	}
-	modAct(t, m, src, "+")
-	md := modState(t, src, "review-age")
-	if md.SettingsFor("beta")["warn_after_hours"] != int64(25) || md.Settings["warn_after_hours"] != int64(24) {
-		t.Fatalf("+ set %v over %v (%s)", md.ProjectSettings, md.Settings, m.msg)
-	}
-	data, _ := os.ReadFile(filepath.Join(os.Getenv("TERMINATR_HOME"), "config.toml"))
-	if !strings.Contains(string(data), "[projects.beta.mods.review-age.settings]\nwarn_after_hours = 25\n") {
-		t.Errorf("config.toml:\n%s", data)
-	}
-	if r, _ := row(); r.value(m) != "1 of its own" {
-		t.Errorf("row after +: %q", r.value(m))
-	}
-	modAct(t, m, src, "X")
-	if md := modState(t, src, "review-age"); len(md.ProjectSettings["beta"]) != 0 || m.msg != "warn_after_hours: follows all projects" {
-		t.Errorf("X left %v (%s)", md.ProjectSettings, m.msg)
 	}
 }
 

@@ -77,6 +77,11 @@ func init() {
 		unary(proto.MethodLibraryList, false, libraryListParams, libraryOf),
 		unary(proto.MethodLibraryRead, false, libraryReadParams, libraryChunkOf),
 
+		// A project's designs, read only (app API 31; the server's caps
+		// say designs): designs.list's records of the mod API, each with
+		// its build in after order. This server's projects only.
+		unary(proto.MethodDesignList, false, designListParams, designsOf),
+
 		// Acting as the human; the server checks each as it checks the
 		// TUI's, and journals it as "human (app)".
 		unary(proto.MethodSessionPrompt, true, promptParams, promptResultOf),
@@ -477,6 +482,10 @@ func memoryReadParams(p MemoryReadParams) proto.MemoryReadParams {
 
 func libraryListParams(p ProjectParams) proto.ProjectFilesParams {
 	return proto.ProjectFilesParams{Project: p.Project}
+}
+
+func designListParams(p ProjectParams) proto.DesignListParams {
+	return proto.DesignListParams{Project: p.Project}
 }
 
 func libraryReadParams(p LibraryReadParams) proto.LibraryReadParams {

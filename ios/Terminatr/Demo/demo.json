@@ -1,5 +1,79 @@
 {
  "answers": {
+  "design.list": [
+   {
+    "params": {
+     "project": "acme-web"
+    },
+    "result": {
+     "designs": [
+      {
+       "answers": [
+        "One page: address, delivery and payment together, no steps",
+        "Wallets (Apple Pay) above the card form",
+        "Prices in the shopper's currency, charged in it"
+       ],
+       "artifact": "https://example.com/designs/one-page-checkout",
+       "build": [
+        {
+         "archived": true,
+         "id": "T9",
+         "status": "done",
+         "title": "Checkout address form"
+        },
+        {
+         "after": [
+          "T9"
+         ],
+         "id": "T12",
+         "status": "started",
+         "title": "Checkout: Apple Pay button"
+        },
+        {
+         "after": [
+          "T12"
+         ],
+         "id": "T18",
+         "status": "ready",
+         "title": "Gift cards at checkout"
+        },
+        {
+         "after": [
+          "T12"
+         ],
+         "id": "T21",
+         "status": "open",
+         "title": "Prices in the shopper's currency"
+        }
+       ],
+       "name": "one-page-checkout",
+       "questions": [],
+       "status": "building",
+       "task": "T13",
+       "task_status": "done",
+       "tasks": [
+        "T9",
+        "T12",
+        "T18",
+        "T21"
+       ],
+       "tasks_done": 1,
+       "title": "One-page checkout"
+      },
+      {
+       "answers": [],
+       "build": [],
+       "name": "wishlist",
+       "questions": [],
+       "status": "designing",
+       "tasks": [],
+       "tasks_done": 0,
+       "title": "Wishlist"
+      }
+     ]
+    }
+   }
+  ],
   "library.list": [
    {
     "params": {
@@ -747,7 +821,7 @@
   }
  },
  "hello": {
-  "app_api": 30,
+  "app_api": 31,
   "build": "demo",
   "capabilities": [
    "read",
@@ -763,6 +837,7 @@
    "memory.read",
    "library.list",
    "library.read",
+   "design.list",
    "task.done",
    "task.get",
    "session.answer",
@@ -784,7 +859,8 @@
    "caps": [
     "transcript",
     "project-files",
-    "session-file"
+    "session-file",
+    "designs"
    ],
    "protocol": 1,
    "version": "0.56.1"
