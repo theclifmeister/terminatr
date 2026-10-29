@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.64.0](https://github.com/theclifmeister/terminatr/compare/v0.63.0...v0.64.0) (2026-10-29)
+
+
+### Features
+
+* designs in the TUI and the apps: a Designs tab, a design's detail, Mac and iPhone ([#928](https://github.com/theclifmeister/terminatr/issues/928)) ([d695878](https://github.com/theclifmeister/terminatr/commit/d695878e4a51f5b6245bb4362196855ed9af8b7b))
+* **ios:** a coordinator's context gauge and Save & Clear on iPhone and iPad ([#931](https://github.com/theclifmeister/terminatr/issues/931)) ([f95ecbe](https://github.com/theclifmeister/terminatr/commit/f95ecbed9e67c088c802a27552dbf7e5fa666a6f))
+* **tui:** a Mods tab in the project popup: turn mods on or off for a project and set their settings ([#932](https://github.com/theclifmeister/terminatr/issues/932)) ([bb1aee8](https://github.com/theclifmeister/terminatr/commit/bb1aee8c19184a1cab38425645458f23f1505a46))
+
 ## [0.63.0](https://github.com/theclifmeister/terminatr/compare/v0.62.1...v0.63.0) (2026-10-29)
 
 
