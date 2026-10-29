@@ -29,7 +29,7 @@ struct Composer: View {
     @State private var queuedNote = false
     @State private var busy = false
     @State private var interrupting = false
-    @State private var files: [ComposerFile] = []
+    @State private var tray = ComposerTray()
     @State private var dropping = false
     @State private var pasteMonitor: Any?
     @FocusState private var focused: Bool
@@ -37,10 +37,10 @@ struct Composer: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             VStack(alignment: .leading, spacing: 8) {
-                if !files.isEmpty {
+                if !tray.files.isEmpty {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 6) {
-                            ForEach(files) { f in chip(f) }
+                            ForEach(tray.files) { f in chip(f) }
                         }
                     }
                 }
@@ -48,7 +48,7 @@ struct Composer: View {
                     if attaches {
                         Button { pick() } label: { Image(systemName: "paperclip") }
                             .buttonStyle(.borderless)
-                            .disabled(files.count >= ComposerFiles.maxFiles)
+                            .disabled(tray.full)
                             .help("Attach files: images, PDFs or text (you can also paste or drop them)")
                             .accessibilityLabel("Attach files")
                     }
@@ -100,7 +100,11 @@ struct Composer: View {
                 return true
             }
             HStack(spacing: 10) {
-                if let said {
+                if let note = tray.note {
+                    Text(note)
+                        .foregroundStyle(theme.attention)
+                        .lineLimit(2)
+                } else if let said {
                     Text(said)
                         .foregroundStyle(failed ? theme.attention : theme.muted)
                         .lineLimit(2)
@@ -133,6 +137,7 @@ struct Composer: View {
         }
         .onAppear {
             if autofocus { focused = true }
+            tray.call = { [model] p in try await model.upload(p) }
             takeDraft()
             watchPaste()
         }
@@ -151,7 +156,7 @@ struct Composer: View {
     /// Nothing to send: no text and no file in, or a file still going.
     private var empty: Bool {
         let blank = text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        return (blank && !files.contains { $0.ref != nil }) || files.contains(where: \.uploading)
+        return (blank && tray.refs.isEmpty) || tray.uploading
     }
 
     /// Whether the composer takes files: this server's sessions, a tm
@@ -181,13 +186,13 @@ struct Composer: View {
     private func send(mode: String) {
         let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !empty, !busy else { return }
-        let refs = files.compactMap(\.ref)
+        let refs = tray.refs
         busy = true
         Task {
             do {
                 let r = try await model.prompt(t, mode: mode, files: refs)
                 text = ""
-                files = []
+                tray.clear()
                 failed = false
                 said = PromptSent.words(r)
                 queuedNote = r.via == "queued"
@@ -203,21 +208,30 @@ struct Composer: View {
     // MARK: files
 
     private func chip(_ f: ComposerFile) -> some View {
-        let failed: Bool = { if case .failed = f.state { return true } else { return false } }()
-        let image = ["png", "jpg", "jpeg", "gif", "webp"].contains((f.name as NSString).pathExtension.lowercased())
-        return HStack(spacing: 6) {
-            Image(systemName: failed ? "exclamationmark.triangle" : image ? "photo" : "doc.text")
-                .foregroundStyle(failed ? theme.attention : theme.muted)
+        HStack(spacing: 6) {
+            Image(systemName: f.failed ? "exclamationmark.triangle" : f.image ? "photo" : "doc.text")
+                .foregroundStyle(f.failed ? theme.attention : theme.muted)
             VStack(alignment: .leading, spacing: 0) {
                 Text(f.name).lineLimit(1).truncationMode(.middle)
                 Text(f.detail)
                     .font(theme.body(.caption2))
-                    .foregroundStyle(failed ? theme.attention : theme.muted)
+                    .foregroundStyle(f.failed ? theme.attention : theme.muted)
                     .lineLimit(1)
             }
             .frame(maxWidth: 180, alignment: .leading)
+            if f.canRetry {
+                Button {
+                    tray.retry(f.id)
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(theme.muted)
+                .help("Send it again")
+                .accessibilityLabel("Retry \(f.name)")
+            }
             Button {
-                files.removeAll { $0.id == f.id }
+                tray.remove(f.id)
             } label: {
                 Image(systemName: "xmark.circle.fill")
             }
@@ -230,40 +244,9 @@ struct Composer: View {
         .padding(.horizontal, 8)
         .padding(.vertical, 5)
         .background(theme.edge.opacity(0.35), in: RoundedRectangle(cornerRadius: 8))
-        .help(failed ? f.detail : f.name)
-        .accessibilityElement(children: .combine)
-    }
-
-    /// Adds a file of name and its bytes, and sends it to tm; one tm
-    /// won't take shows as a chip saying why.
-    private func add(name: String, data: Data) {
-        guard files.count < ComposerFiles.maxFiles else {
-            failed = true
-            said = "A prompt takes at most \(ComposerFiles.maxFiles) files."
-            return
-        }
-        if let why = ComposerFiles.refusal(name: name, size: data.count) {
-            files.append(ComposerFile(name: name, size: data.count, state: .failed(why)))
-            return
-        }
-        let f = ComposerFile(name: name, size: data.count)
-        files.append(f)
-        Task {
-            let state: ComposerFile.State
-            do {
-                let r = try await model.upload(data, name: name) { sent in
-                    set(f.id, .uploading(sent))
-                }
-                state = .ready(ref: r.ref)
-            } catch {
-                state = .failed(error.localizedDescription)
-            }
-            set(f.id, state)
-        }
-    }
-
-    private func set(_ id: UUID, _ state: ComposerFile.State) {
-        if let i = files.firstIndex(where: { $0.id == id }) { files[i].state = state }
+        .help(f.failed ? f.detail : f.name)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(f.spoken)
     }
 
     /// Adds the file at url: a folder, or one tm won't take, says why
@@ -272,19 +255,23 @@ struct Composer: View {
         let v = try? url.resourceValues(forKeys: [.isDirectoryKey, .fileSizeKey])
         let name = url.lastPathComponent
         if v?.isDirectory == true {
-            files.append(ComposerFile(name: name, size: 0, state: .failed("A folder: attach its files")))
+            tray.refuse(name: name, why: "A folder: attach its files")
             return
         }
         let size = v?.fileSize ?? 0
         if let why = ComposerFiles.refusal(name: name, size: size) {
-            files.append(ComposerFile(name: name, size: size, state: .failed(why)))
+            tray.refuse(name: name, size: size, why: why)
             return
         }
         do {
             add(name: name, data: try Data(contentsOf: url))
         } catch {
-            files.append(ComposerFile(name: name, size: size, state: .failed(error.localizedDescription)))
+            tray.refuse(name: name, size: size, why: error.localizedDescription)
         }
+    }
+
+    private func add(name: String, data: Data) {
+        tray.add(name: name, data: data)
     }
 
     private func drop(_ providers: [NSItemProvider]) {
