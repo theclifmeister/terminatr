@@ -576,7 +576,7 @@ func (nv *networkView) rowKeys(m *dash, r netRow, ok bool) string {
 				u = "U update relay"
 			}
 		}
-		return joinKeys("S ask to share", "E name", "V panes", "C conversations", u, "X unpair", "enter fold", "tab details", "P pair", "J join", tail)
+		return joinKeys("S ask to share", "E name", "V panes", "C conversations", "N needs", u, "X unpair", "enter fold", "tab details", "P pair", "J join", tail)
 	case r.kind == netProject && shared(m, r.slug):
 		return "space unshare · L link · tab details · " + tail
 	case r.kind == netProject:

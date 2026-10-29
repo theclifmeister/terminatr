@@ -110,11 +110,16 @@ type (
 		// Conversations is this server's conversations switch for it
 		// (on, off; §16.14); TheirConversations its switch for this
 		// one, as it last said ("" unknown).
-		Conversations      string               `json:"conversations"`
-		TheirConversations string               `json:"their_conversations,omitempty"`
-		Listed             bool                 `json:"listed,omitempty"`
-		Projects           []networkTheirs      `json:"projects"`
-		Shares             []proto.ShareRequest `json:"shares,omitempty"`
+		Conversations      string `json:"conversations"`
+		TheirConversations string `json:"their_conversations,omitempty"`
+		// Needs is this server's needs switch for it (off, view,
+		// answer; §16.16); TheirNeeds its switch for this one, as it
+		// last said ("" unknown).
+		Needs      string               `json:"needs"`
+		TheirNeeds string               `json:"their_needs,omitempty"`
+		Listed     bool                 `json:"listed,omitempty"`
+		Projects   []networkTheirs      `json:"projects"`
+		Shares     []proto.ShareRequest `json:"shares,omitempty"`
 	}
 	// networkTheirs is a project a paired server shares: from the
 	// mirror (stale while it is offline), and this server's projects
@@ -281,7 +286,7 @@ func readNetwork() (*networkTree, error) {
 	}
 	for _, p := range peers {
 		np := networkPeer{Alias: p.Alias, Name: p.Name, Told: p.Told, ID: p.ID().String(), Short: p.ID().Short(), Relay: p.Relay,
-			Panes: proto.PanesWord(p.PanesLevel()), Conversations: convWord(p.ConversationsOn()), Projects: []networkTheirs{}, Shares: shares[p.Alias]}
+			Panes: proto.PanesWord(p.PanesLevel()), Conversations: convWord(p.ConversationsOn()), Needs: p.NeedsLevel(), Projects: []networkTheirs{}, Shares: shares[p.Alias]}
 		if c, ok := conns[np.ID]; ok {
 			np.Connection = &c
 			np.Version = c.Version
@@ -293,6 +298,9 @@ func readNetwork() (*networkTree, error) {
 			}
 			if pm.Transcript {
 				np.TheirConversations = pm.Conversations
+			}
+			if pm.NeedsCap {
+				np.TheirNeeds = cmp.Or(pm.Needs, proto.NeedsOff)
 			}
 			np.Listed = pm.Listed
 			for _, mp := range pm.Projects {
@@ -487,6 +495,12 @@ func (e *Env) printNetwork(t *networkTree, now time.Time) {
 		panes := "panes: you give it " + pe.Panes
 		if pe.TheirPanes != "" {
 			panes += ", it gives you " + pe.TheirPanes
+		}
+		if pe.Needs != proto.NeedsOff || (pe.TheirNeeds != "" && pe.TheirNeeds != proto.NeedsOff) {
+			panes += " · needs: you give it " + pe.Needs
+			if pe.TheirNeeds != "" {
+				panes += ", it gives you " + pe.TheirNeeds
+			}
 		}
 		fmt.Fprintf(w, "%s · %s · %s · %s\n", peer.Both(cmp.Or(pe.Name, pe.Told), pe.Alias), pe.Short, conn, panes)
 		switch {

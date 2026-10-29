@@ -39,7 +39,9 @@ import (
 // settings. 23: task.get, and projects.watch {detail}'s threads' check
 // and pr_state. 24: task.done, task.templates, and task.add {template}.
 // 25: SessionInfo's TurnSince, when the agent's current turn began.
-const Protocol = 25
+// 26: peer.list's needs switch and paired needs (PeerMirror.Needs,
+// PeerMirrorProject.Needs), added fields only.
+const Protocol = 26
 
 // Kind is what a connection is for.
 type Kind string

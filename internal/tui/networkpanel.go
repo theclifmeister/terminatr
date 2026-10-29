@@ -31,6 +31,7 @@ import (
 //	"  ● watches your shared panes, popups read-only"
 //	"  ○ types in them"
 //	"  panes (V)   off · [view] · write"
+//	"  needs (N)   [off] · view · answer"
 //	"AND THE OTHER WAY"
 //	"  work lets you watch its panes · its popup read-only"
 //	"  it shares cowork, gatehouse"
@@ -43,6 +44,7 @@ const (
 	itemRelay   // its relay: enter edits it
 	itemPanes   // its pane switch: ← → or a click on a word
 	itemConv    // its conversations switch: ← → or enter
+	itemNeeds   // its needs switch: ← → or enter
 	itemShare   // a project's share box: enter, space or a click
 	itemDevName // a device's name: enter edits it
 	itemLevel   // a device's level switch: ← →, a click on a word, enter picks
@@ -176,6 +178,7 @@ func (nv *networkView) panelLines(m *dash, r netRow, ok bool, w int) []panelLine
 		rung(lv >= 1, "watches your shared panes and popups")
 		rung(lv >= 2, "types in them")
 		rung(lv >= 1 && !e.ConversationsOff, "reads their conversations, in its Mac app")
+		rung(proto.NeedsShown(needsLevel(e)), "sees what your projects ask you, in full")
 		out = append(out, panelLine{text: "  " + fit(th().Faint.Render("panes (V)"), panelLabel-2) + panesChoices(level, true), item: itemPanes, x: panelLabel})
 		under(panesWhat(level))
 		out = append(out, panelLine{text: "  " + fit(th().Faint.Render("chats (C)"), panelLabel-2) + convChoices(!e.ConversationsOff), item: itemConv, x: panelLabel})
@@ -184,6 +187,9 @@ func (nv *networkView) panelLines(m *dash, r netRow, ok bool, w int) []panelLine
 		} else {
 			under("its Mac app reads the conversations of what it may watch")
 		}
+		needs := needsLevel(e)
+		out = append(out, panelLine{text: "  " + fit(th().Faint.Render("needs (N)"), panelLabel-2) + needsChoices(needs), item: itemNeeds, x: panelLabel})
+		under(needsWhat(needs))
 		add(itemNone, th().Faint.Render("AND THE OTHER WAY"))
 		for _, l := range wrapLines(theirWords(mirror(m, e), name), max(w-2, 8)) {
 			add(itemNone, "  "+l)
@@ -302,6 +308,19 @@ func convChoices(on bool) string {
 	i := map[bool]int{true: 0, false: 1}[on]
 	words[i] = th().Accent.Render("[" + []string{proto.ConversationsOn, proto.ConversationsNot}[i] + "]")
 	return strings.Join(words, th().Faint.Render(" · "))
+}
+
+// needsChoices is the needs switch's words, the level's marked.
+func needsChoices(level string) string {
+	var parts []string
+	for _, l := range needsLevels {
+		word := th().Faint.Render(l)
+		if l == level {
+			word = th().Accent.Render("[" + l + "]")
+		}
+		parts = append(parts, word)
+	}
+	return strings.Join(parts, th().Faint.Render(" · "))
 }
 
 // panesAt is the level whose word a click at col is on, the switch's

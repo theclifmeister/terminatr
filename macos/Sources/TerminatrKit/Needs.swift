@@ -253,12 +253,58 @@ extension Need {
         var out: [Need] = []
         let server = peer.name.isEmpty ? peer.alias : peer.name
         out += shares(of: peer, server: server)
-        for p in peer.projects where p.needsYou > 0 && !p.stale {
-            out.append(Need(id: "paired:\(peer.alias)/\(p.project)", kind: .network, project: "\(peer.alias)/\(p.project)",
-                            what: p.needsYou == 1 ? "\(server) › \(p.project): 1 needs you" : "\(server) › \(p.project): \(p.needsYou) need you",
-                            detail: "\(server) · paired server"))
+        for p in peer.projects where !p.stale {
+            if !p.needs.isEmpty || peer.needs == "view" || peer.needs == "answer" {
+                // Its needs switch for this server shows them in full
+                // (app API 29): a card each, read-only here.
+                out += p.needs.map { of(peerNeed: $0, peer: peer, project: p.project, server: server) }
+            } else if p.needsYou > 0 {
+                out.append(Need(id: "paired:\(peer.alias)/\(p.project)", kind: .network, project: "\(peer.alias)/\(p.project)",
+                                what: p.needsYou == 1 ? "\(server) › \(p.project): 1 needs you" : "\(server) › \(p.project): \(p.needsYou) need you",
+                                detail: "\(server) · paired server"))
+            }
         }
         return out
+    }
+
+    /// A paired server's need in full, as the TUI's NEEDS YOU row says
+    /// it: who asks and what, its task, and where it is answered: on
+    /// that server, an escape's by its user alone. Its question's text
+    /// is the card's text (shown only when the user opts in, R9).
+    static func of(peerNeed n: AppAPI.PeerNeed, peer: AppAPI.Peer, project: String, server: String) -> Need {
+        let who = !n.task.isEmpty ? n.task : !n.thread.isEmpty ? n.thread : n.role == "coordinator" ? "coordinator" : n.session
+        let open = n.question?.questions.filter { !$0.answered } ?? []
+        var what: String
+        var text = open.map(\.question).joined(separator: "\n")
+        switch n.kind {
+        case "question":
+            what = open.count > 1 ? "\(who) asks \(open.count) questions" : "\(who) asks a question"
+            if text.isEmpty { text = n.text }
+        case "ask":
+            what = "coordinator has a question"
+        case "approval":
+            what = "\(who) needs approval"
+            text = n.approval?.question ?? ""
+        case "review":
+            what = "\(who) is ready to review"
+        case "blocked":
+            what = "\(who) is blocked"
+        case "ci":
+            what = "\(who)'s checks fail"
+        case "queue":
+            what = "\(who)'s prompts are held"
+            text = n.text
+        default:
+            what = "\(who) needs you"
+        }
+        if n.escape {
+            what = "\(who) asks to run outside the sandbox"
+            text = ""
+        }
+        let where_ = n.escape ? "only on \(server)" : "answer on \(server)"
+        return Need(id: "paired:\(peer.alias)/\(project):\(n.id)", kind: .network, project: "\(peer.alias)/\(project)",
+                    what: "\(server) › \(project): \(what)", detail: line(n.title, where_), text: text,
+                    session: n.session, task: n.task)
     }
 
     /// Who a session is in a need: its task, its thread, its project's

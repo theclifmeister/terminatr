@@ -38,10 +38,13 @@ struct TabStack<Content: View>: View {
 /// detail becoming the list, and Back moves it back. On iOS 27.1 an
 /// ArrangementView splits them (.split). While the screen is partly
 /// folded (an iPhone Duo's division region is active) it picks the axis
-/// itself and keeps both off the fold. Flat, or with no fold, they stay
-/// side by side (.axes(.horizontal)): the Duo's inner display is
-/// portrait, taller than wide, and would otherwise stack them. Before
-/// 27.1, a fixed list beside the detail (an iPad).
+/// itself and keeps both off the fold. Flat and wider than tall, they
+/// stay side by side (.axes(.horizontal)). Flat and taller than wide
+/// (an open iPhone Duo held in portrait, an iPad in portrait) the
+/// ArrangementView stacks them anyway, axes or not, and the list takes
+/// the whole height: the detail was never shown, so a tap opened
+/// nothing (T841). There, and before 27.1, the list sits beside the
+/// detail in an HStack (beside).
 struct Columns<Content: View>: View {
     @Environment(\.theme) private var theme
     @Binding var path: [Route]
@@ -89,19 +92,31 @@ struct Columns<Content: View>: View {
         if #available(iOS 27.1, *) {
             GeometryReader { g in
                 let folds = g.reservedRegions(kind: .division).contains { $0.isActive }
-                ArrangementView {
-                    lead.splitArrangementLayoutSize(minWidth: 300, idealWidth: Self.listWidth, maxWidth: 440)
-                } secondary: {
-                    trail
+                if folds || g.size.width > g.size.height {
+                    ArrangementView {
+                        lead.splitArrangementLayoutSize(minWidth: 300, idealWidth: Self.listWidth, maxWidth: 440)
+                    } secondary: {
+                        trail
+                    }
+                    .arrangementViewStyle(folds ? .split : .split.axes(.horizontal))
+                } else {
+                    // Half the width at most: an open Duo's 585 pt leaves
+                    // the detail as much room as the list.
+                    beside(lead, trail, list: min(Self.listWidth, g.size.width / 2))
+                        .environment(\.splitArrangementAxis, .horizontal)
                 }
-                .arrangementViewStyle(folds ? .split : .split.axes(.horizontal))
             }
         } else {
-            HStack(spacing: 0) {
-                lead.frame(width: Self.listWidth)
-                Rectangle().fill(theme.edge).frame(width: 1).ignoresSafeArea()
-                trail
-            }
+            beside(lead, trail, list: Self.listWidth)
+        }
+    }
+
+    /// The list column, list points wide, beside the detail.
+    private func beside(_ lead: some View, _ trail: some View, list: CGFloat) -> some View {
+        HStack(spacing: 0) {
+            lead.frame(width: list)
+            Rectangle().fill(theme.edge).frame(width: 1).ignoresSafeArea()
+            trail
         }
     }
 }
@@ -113,7 +128,8 @@ struct Columns<Content: View>: View {
 /// and sections stopped that far short of the column, and turned the
 /// other way the detail's started that far into it. Stacked, or before
 /// iOS 27.1 (no splitArrangementAxis), every edge may be the screen's
-/// and the insets hold.
+/// and the insets hold. Beside in an HStack on 27.1, Columns sets the
+/// axis itself.
 private struct InnerEdge: ViewModifier {
     let edge: Edge.Set
 

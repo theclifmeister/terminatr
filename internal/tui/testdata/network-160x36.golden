@@ -79,23 +79,23 @@
 │                                                                               │   ● watches your shared panes and popups                     │
 │ ▾ devices                                                    D pairs a device │   ○ types in them                                            │
 │    No device yet. D pairs one: a QR code to scan with the terminatr app on an │   ● reads their conversations, in its Mac app                │
-│    iPhone or iPad.                                                            │   panes (V)   off · [view] · write                           │
+│    iPhone or iPad.                                                            │   ○ sees what your projects ask you, in full                 │
+│                                                                               │   panes (V)   off · [view] · write                           │
 │                                                                               │               it can watch the coordinators and threads of   │
 │                                                                               │               the projects you share, not type               │
 │                                                                               │   chats (C)   [on] · off                                     │
 │                                                                               │               its Mac app reads the conversations of what it │
 │                                                                               │               may watch                                      │
+│                                                                               │   needs (N)   [off] · view · answer                          │
+│                                                                               │               it sees how many needs your shared projects    │
+│                                                                               │               have, not what they ask                        │
 │                                                                               │ AND THE OTHER WAY                                            │
 │                                                                               │   work lets you watch its panes; its popups open here, read- │
 │                                                                               │   only                                                       │
 │                                                                               │   it shares acme-api, infra                                  │
-│                                                                               │                                                              │
-│                                                                               │                                                              │
-│                                                                               │                                                              │
-│                                                                               │                                                              │
 │                                                                                                                                              │
-│ S ask to share · E name · V panes · C conversations · U update relay · X unpair · enter fold · tab details · P pair · J join · ? keys        │
-│ esc close                                                                                                                                    │
+│ S ask to share · E name · V panes · C conversations · N needs · U update relay · X unpair · enter fold · tab details · P pair · J join       │
+│ ? keys · esc close                                                                                                                           │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 == t:mini/acme-api
 ╭─ Network · studio + 2 paired ────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮

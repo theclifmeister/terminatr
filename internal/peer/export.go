@@ -58,6 +58,9 @@ type dispatcher struct {
 	// level is this server's pane switch for the peer now
 	// (proto.PanesOff …).
 	level func() string
+	// needs is this server's needs switch for the peer now
+	// (proto.NeedsOff …); nil where the server shows no needs.
+	needs func() string
 	// panesHere takes the peer's switches for this server, which it
 	// says when they change (peer.panes).
 	panesHere func(p proto.PeerPanesParams)
@@ -124,6 +127,9 @@ func (d *dispatcher) projects(ctx context.Context, _ json.RawMessage) (any, erro
 	if d.transcripts != nil && d.convOn != nil {
 		out.Conversations = map[bool]string{true: proto.ConversationsOn, false: proto.ConversationsNot}[d.convOn()]
 	}
+	if _, ok := d.ex.(NeedsExporter); ok && d.needs != nil {
+		out.Needs = d.needs()
+	}
 	return out, nil
 }
 
@@ -150,6 +156,9 @@ func (d *dispatcher) watch(ctx context.Context, raw json.RawMessage) (any, error
 	for {
 		w, err := d.ex.Watch(d.caller, p.Project)
 		if err != nil {
+			return nil, err
+		}
+		if w.Needs, err = d.needsOf(p.Project); err != nil {
 			return nil, err
 		}
 		w.Rev = rev(w)
@@ -215,6 +224,9 @@ func (d *dispatcher) panesChanged(_ context.Context, params json.RawMessage) (an
 	p.Panes = level
 	if p.Conversations != proto.ConversationsOn && p.Conversations != proto.ConversationsNot {
 		p.Conversations = ""
+	}
+	if _, ok := proto.ParseNeeds(p.Needs); !ok {
+		p.Needs = ""
 	}
 	d.panesHere(p)
 	return struct{}{}, nil

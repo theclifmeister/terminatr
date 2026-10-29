@@ -20,6 +20,9 @@ type peerExport struct {
 	sessions func() []proto.SessionInfo
 	state    func(slug string, sessions []proto.SessionInfo) (proto.ProjectWatch, error)
 	changes  func() (<-chan struct{}, func())
+	// approval reads the permission dialog on a session's screen
+	// (peerneeds.go).
+	approval func(id string) *proto.PeerApproval
 }
 
 // peerExport is the server's peer.Exporter.
@@ -31,6 +34,7 @@ func (s *Server) peerExport() peerExport {
 			ch := s.watch.add()
 			return ch, func() { s.watch.remove(ch) }
 		},
+		approval: s.peerApproval,
 	}
 }
 

@@ -139,6 +139,25 @@ func TestPeerListRemoveRotate(t *testing.T) {
 		t.Fatalf("conversations on, panes off: %q", out)
 	}
 	h.expect(1, "human-only", coord, "peer", "conversations", "mini", "off")
+	// The needs switch (§16.16): off by default, view and answer kept
+	// in peers.json, the human's alone.
+	h.expect(2, "off|view|answer", human, "peer", "needs", "mini", "write")
+	h.expect(1, "unknown-peer", human, "peer", "needs", "studio", "view")
+	if out := h.ok(human, "peer", "needs", "mini", "view"); !strings.Contains(out, "Needs view for mini") {
+		t.Fatalf("needs view: %q", out)
+	}
+	if ps, _ := peer.LoadPeers(dir); ps[0].Needs != proto.NeedsView {
+		t.Fatalf("after needs view: %+v", ps)
+	}
+	if out := h.ok(human, "peer", "list"); !strings.Contains(out, "needs: view") {
+		t.Fatalf("list with needs: %q", out)
+	}
+	h.ok(human, "peer", "needs", "mini", "off")
+	if ps, _ := peer.LoadPeers(dir); ps[0].Needs != "" {
+		t.Fatalf("after needs off: %+v", ps)
+	}
+	h.expect(1, "human-only", coord, "peer", "needs", "mini", "view")
+	h.expect(1, "human-only", thr, "peer", "needs", "mini", "view")
 	*reloads = 0
 
 	h.expect(1, "unknown-peer", human, "peer", "remove", "studio")

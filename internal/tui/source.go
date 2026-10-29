@@ -378,6 +378,10 @@ type PeerSource interface {
 	// conversations switch on or off (§16.14), as tm peer
 	// conversations does, and has the server read the peers again.
 	SetPeerConversations(alias string, on bool) error
+	// SetPeerNeeds sets what the paired server alias may see of this
+	// server's needs (proto.NeedsOff, NeedsView, NeedsAnswer; §16.16),
+	// as tm peer needs does, and has the server read the peers again.
+	SetPeerNeeds(alias, level string) error
 	// SetPeerName gives the paired server alias a display name, or
 	// clears it with "", as tm peer name does (§16.8), and has the
 	// server read the peers again.

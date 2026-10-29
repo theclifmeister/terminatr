@@ -11,14 +11,14 @@
 │                                                                      │
 │ ▾ ○ nas · offline 4m · relay                               panes off │
 │      shares nothing with you yet                                     │
-│      └─ asked (S-4F2A-33, for terminatr)       waiting on nas's user │
-│                                                                   …↓ │
+│      └─ asked (S-4F2A-33, for terminatr)       waiting on nas's us…↓ │
 │ ──────────────────────────────────────────────────────────────────── │
 │ mini · id 91C3-77AB · tm 0.27.0 · relay relay.example.net            │
 │ panes: mini may not open yours (V) · its tm has no remote panes      │
 │                                                                      │
-│ S ask to share · E name · V panes · C conversations · X unpair       │
-│ enter fold · tab details · P pair · J join · ? keys · esc close      │
+│ S ask to share · E name · V panes · C conversations · N needs        │
+│ X unpair · enter fold · tab details · P pair · J join · ? keys       │
+│ esc close                                                            │
 ╰──────────────────────────────────────────────────────────────────────╯
 == s:mini:S-91C3-7
 ╭─ Network · studio + 2 paired ────────────────────────────────────────╮
