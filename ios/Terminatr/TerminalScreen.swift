@@ -61,7 +61,8 @@ struct TerminalScreen: View {
                     } else {
                         Color.clear
                     }
-                    if let closed = pane?.controller.closed {
+                    // A drop's error says nothing: the redial streams it again.
+                    if let closed = pane?.controller.closed, !model.relinking {
                         Text(closed)
                             .font(theme.body(.subheadline))
                             .padding(10)

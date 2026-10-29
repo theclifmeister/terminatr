@@ -287,7 +287,11 @@ func (m *Manager) once(ctx context.Context, id *peer.Identity, t peer.Transport,
 		return true, nil
 	}
 	err = m.opts.Serve(ctx, tc, d, l.level)
-	m.logf("device %s: closed", d.Name)
+	if err != nil && ctx.Err() == nil {
+		m.logf("device %s: closed: %v", d.Name, err)
+	} else {
+		m.logf("device %s: closed", d.Name)
+	}
 	return true, err
 }
 

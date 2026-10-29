@@ -4,7 +4,8 @@ import TerminatrUI
 import UIKit
 
 /// Settings (T808; redesigned in T850): on the sheet's glass, the paired
-/// server first (ServerCard), then the themes as large live previews
+/// server first (ServerCard) and its link's drops (Connection, T859; the
+/// demo's made up), then the themes as large live previews
 /// (ThemeCarousel, the same keys as the Mac's Settings › Appearance),
 /// light, dark or the system's, the Haptics switch (T851), and with a
 /// server Forget this server, red and last (T843). Text follows the
@@ -27,6 +28,7 @@ struct SettingsScreen: View {
                         .keyboardShortcut(.defaultAction)
                 })
                 if case .server = model.source { ServerSection() }
+                if model.source != .none { ConnectionSection() }
                 GroupLabel("Theme")
                 ThemeCarousel(selection: $name)
                 note("\(ThemeName.of(name).label): \(ThemeName.of(name).mood.lowercased()).")
@@ -124,6 +126,73 @@ struct ServerSection: View {
         if model.writes { return ("write", "Level: answers and prompts") }
         if model.answers { return ("answer", "Level: answers") }
         return model.link == .up ? ("view", "Level: view only") : ("", "")
+    }
+}
+
+/// The link's last drops (LinkLog): when, why, and how long until it
+/// was up again, under a line of the day's count by cause.
+struct ConnectionSection: View {
+    @Environment(PhoneModel.self) private var model
+    @Environment(\.theme) private var theme
+    /// The drops shown; the log keeps LinkLog.max.
+    static let shown = 6
+
+    var body: some View {
+        let drops = model.log.drops.prefix(Self.shown)
+        GroupLabel("Connection")
+        VStack(alignment: .leading, spacing: Spacing.tight) {
+            Text(summary)
+                .font(theme.body(.headline, .semibold))
+                .foregroundStyle(theme.ink)
+            if drops.isEmpty {
+                Text("No drops since the link came up.")
+                    .font(theme.body(.subheadline))
+                    .foregroundStyle(theme.muted)
+            }
+            ForEach(drops) { d in
+                VStack(alignment: .leading, spacing: 1) {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text(d.at, format: .dateTime.hour().minute())
+                            .font(theme.mono(.subheadline))
+                            .foregroundStyle(theme.muted)
+                        Text(d.cause.words)
+                            .font(theme.body(.subheadline, .semibold))
+                            .foregroundStyle(theme.ink)
+                        Spacer(minLength: 8)
+                        Text(Self.down(d))
+                            .font(theme.body(.subheadline))
+                            .foregroundStyle(theme.muted)
+                    }
+                    if !d.detail.isEmpty {
+                        Text(d.detail)
+                            .font(theme.body(.footnote))
+                            .foregroundStyle(theme.muted)
+                            .lineLimit(2)
+                    }
+                }
+                .accessibilityElement(children: .combine)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, Spacing.card)
+        .padding(.vertical, Spacing.row)
+        .surface(.card, in: RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
+        .padding(.horizontal, Spacing.gutter)
+    }
+
+    /// "Linked · 3 drops today" and the like.
+    private var summary: String {
+        let state = model.source == .demo ? "Demo" : model.linkWords.1
+        let n = model.log.drops.filter { Calendar.current.isDateInToday($0.at) }.count
+        return n == 0 ? state : "\(state) · \(n) \(n == 1 ? "drop" : "drops") today"
+    }
+
+    /// How long the link was down: "back in 4 s", or "down" while it is.
+    static func down(_ d: LinkLog.Drop) -> String {
+        guard let s = d.down else { return "down" }
+        if s < 60 { return "back in \(max(1, Int(s.rounded()))) s" }
+        if s < 3600 { return "back in \(Int((s / 60).rounded())) min" }
+        return "back in \(Int((s / 3600).rounded())) h"
     }
 }
 

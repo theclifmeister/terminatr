@@ -90,6 +90,10 @@ func (d *Dialer) RequestUpdate(ctx context.Context, rawURL string) (UpdateResult
 // challenge.
 var dialTimeout = 30 * time.Second
 
+// waitIdle is how long a dial waits for the relay's next frame until
+// "mated": three of its pings (Config.Ping).
+var waitIdle = 3 * DefaultConfig().Ping
+
 // open connects to the relay at rawURL and runs f on the stream, ctx
 // bounding both; the stream is closed when f fails.
 func (d *Dialer) open(ctx context.Context, rawURL string, f func(c net.Conn, host, path string) error) error {
@@ -174,7 +178,7 @@ func (d *Dialer) greet(c net.Conn, host, path string) (*wsConn, challenge, error
 	}
 	// The relay answered: from here its pings keep the wait alive.
 	c.SetDeadline(time.Time{})
-	ws.idle = 3 * DefaultConfig().Ping
+	ws.idle = waitIdle
 	if op != opText || json.Unmarshal(msg, &ch) != nil || ch.T != msgChallenge || len(ch.Nonce) != 32 {
 		return nil, ch, errNotHello
 	}
@@ -219,7 +223,11 @@ func (d *Dialer) hello(c net.Conn, host, path string) (*Conn, error) {
 			if max <= 0 || max > maxMessage {
 				max = maxMessage
 			}
-			ws.idle = 0 // from here the link keeps its own time
+			// From here the link keeps its own time: the deadline the
+			// wait set goes too, or a link that sets none (a device's)
+			// ends waitIdle after it mated, however busy (T859).
+			ws.idle = 0
+			c.SetReadDeadline(time.Time{})
 			return &Conn{ws: ws, max: max, version: CleanVersion(ch.TM)}, nil
 		}
 	}
