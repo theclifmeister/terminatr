@@ -666,34 +666,34 @@ Needs view for studio: it sees each need of the projects this server shares in f
 
 `studio`'s NEEDS YOU (all projects) then lists each as a row of its own (`mini › acme-api  T7  asks: Which cache?  answer on mini`), and its Mac app and phone a card each. At `view` they are read-only there: answer on `mini`. At `answer` `studio`'s user answers them from there: enter on a row opens its dialog (a question's options, a permission dialog's allow-once options, accept or send back a task in review, have the coordinator open its questions), and the Mac app's and the phone's cards get the same buttons (a phone at answer level or above). `mini` takes `studio`'s word that its user chose so, and checks each act as its own user's: the need must still be the one shown (a changed menu, dialog or task status answers `that need on mini changed: look again`), each act needs a one-time nonce from `mini`, and `mini`'s journal names it `human (peer: studio)`, or `human (peer: studio › iphone: Clif's iPhone)` for a phone. Only allow-once options cross; one that allows for the session or beyond stays `mini`'s user's, in the pane. A command that asks to run outside the sandbox never crosses with what it would run, only that it asks (`only on mini`). The Network popup (`N`) sets it too: `N` on the server, or its `needs` row in the details; raising it asks first. `tm peer list` shows `needs: view`, `tm network` both sides' switches, and `off` (the default) goes back to the count (SPEC §16.16).
 
-### Pairing a phone
+### Pairing a device
 
-A phone with the terminatr app pairs with one server as a **device**: it reads what that server's consoles read, the projects its paired servers share too, and nothing else of it. It meets the server on the same relay, so the server still opens no port. A device starts **view-only**: it sees projects, sessions, conversations and panes, and acts on nothing until you give it a higher level (below).
+An iPhone or iPad with the terminatr app pairs with one server as a **device**: it reads what that server's consoles read, the projects its paired servers share too, and nothing else of it. It meets the server on the same relay, so the server still opens no port. A device starts **view-only**: it sees projects, sessions, conversations and panes, and acts on nothing until you give it a higher level (below).
 
 ```
 $ tm device pair
-Scan this with the terminatr app on the phone (it works once, for 10 minutes):
+Scan this with the terminatr app on an iPhone or iPad (it works once, for 10 minutes):
 
   (a QR code)
 
 This server: server id 4F2A-91C3, through relay.example.net.
 Waiting…
 
-The phone: "Clif's iPhone", device id 91C3-77AB, app 1.0
+The device: "Clif's iPhone", device id 91C3-77AB, app 1.0
 Add it as "Clif's iPhone", a view-only device? [y/N] y
 Paired Clif's iPhone (device id 91C3-77AB, view-only) through relay.example.net.
 ```
 
-In the console it is the Network popup (`N` on the dashboard): `D` shows the same QR code in the popup, with the code as text under it to paste in the app if the camera can't scan it (make the window bigger if it says so), asks for a relay when none is set up yet, and asks the same question once the phone joins: `Y` adds it, `E` names it first, `N` doesn't. The phones are listed under the paired servers, each with its connection or when it was last seen and its level; on one, `V` picks its level, `E` renames it and `X` removes it after asking. The Mac app's Settings › Devices does the same.
+In the console it is the Network popup (`N` on the dashboard): `D` shows the same QR code in the popup, with the code as text under it to paste in the app if the camera can't scan it (make the window bigger if it says so), asks for a relay when none is set up yet, and asks the same question once the device joins: `Y` adds it, `E` names it first, `N` doesn't. The devices are listed under the paired servers, each with its connection or when it was last seen and its level; on one, `V` picks its level, `E` renames it and `X` removes it after asking. The Mac app's Settings › Devices does the same.
 
-The relay is the one your paired servers use, or `--relay URL`. The QR code holds the relay (with its pin), the one-time secret and this server's key fingerprint, so the phone checks the server's key itself and nobody compares digits; the code works once, and nothing is pinned until you say yes here. Show it only to your own phone.
+The relay is the one your paired servers use, or `--relay URL`. The QR code holds the relay (with its pin), the one-time secret and this server's key fingerprint, so the device checks the server's key itself and nobody compares digits; the code works once, and nothing is pinned until you say yes here. Show it only to your own device.
 
 ```
 $ tm device list
 Clif's iPhone  91C3-77AB  view  relay.example.net  waiting for it, last seen 2h5m ago
 $ tm device name "clif's iphone" "Work phone"
 $ tm device remove "work phone"
-Removed Work phone; its link closes now and its key is no longer taken. On the phone, Forget this server deletes its keys.
+Removed Work phone; its link closes now and its key is no longer taken. On the device, Forget this server deletes its keys.
 ```
 
 A device is `waiting for it` while the app isn't open (with when it was `last seen`, once it has connected): the server keeps a connection waiting in the device's room on the relay (one per device; the relay lets one address wait in 16 rooms). Removing a device cuts it off at once. Its acts are journaled as `human (iphone: NAME)`; it never answers a prompt to run a command outside the sandbox. `tm device access NAME view|answer|write` sets what it may do: `view` reads, `answer` answers questions and approvals and accepts or sends back tasks, `write` does what the Mac app does (prompts, new tasks, delegating, starting a coordinator, terminal keys and the rest); above `view` it needs the write key it made at pairing. Rotating this server's key (`tm peer rotate`) means every device pairs again (SPEC §16.15).

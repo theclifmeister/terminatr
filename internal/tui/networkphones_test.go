@@ -54,7 +54,7 @@ func (f *fakeSource) PairDevice(ctx context.Context, relay string, ev DevicePair
 	return f.pairDevice(ctx, relay, ev)
 }
 
-// phonesList is two paired phones: Clif's iPhone at answer, connected;
+// phonesList is two paired devices: Clif's iPhone at answer, connected;
 // the iPad at view, away for two hours, with no write key.
 func phonesList() DeviceList {
 	return DeviceList{Running: true, Relay: "wss://relay.example.net", Devices: []DeviceEntry{
@@ -84,8 +84,8 @@ func TestNetworkPhones(t *testing.T) {
 	nv := netOpen(t, m)
 	out := netBox(m)
 	for _, want := range []string{
-		"▾ phones · 2 paired",
-		"D pairs a phone",
+		"▾ devices · 2 paired",
+		"D pairs a device",
 		"◉ Clif's iPhone · connected",
 		"level answer",
 		"○ iPad · last seen 2h ago",
@@ -98,7 +98,7 @@ func TestNetworkPhones(t *testing.T) {
 	nv.sel = "d:bb22"
 	out = netBox(m)
 	for _, want := range []string{
-		"iPad · phone",
+		"iPad · device",
 		"name (E)",
 		"device id     BB22-0000",
 		"relay         relay.example.net",
@@ -111,13 +111,13 @@ func TestNetworkPhones(t *testing.T) {
 			t.Errorf("iPad's panel lacks %q:\n%s", want, out)
 		}
 	}
-	// ← goes up to the phones' header; enter folds them.
+	// ← goes up to the devices' header; enter folds them.
 	press(m, "left")
 	if nv.sel != "d:" {
 		t.Fatalf("left: %q", nv.sel)
 	}
 	press(m, "enter")
-	if out := netBox(m); strings.Contains(out, "iPad") || !strings.Contains(out, "▸ phones · 2 paired") {
+	if out := netBox(m); strings.Contains(out, "iPad") || !strings.Contains(out, "▸ devices · 2 paired") {
 		t.Errorf("folded:\n%s", out)
 	}
 }
@@ -128,7 +128,7 @@ func TestNetworkPhones(t *testing.T) {
 func TestNetworkPhonesNone(t *testing.T) {
 	m, src := netDash(t, 160, 50)
 	netOpen(t, m)
-	if out := netBox(m); !strings.Contains(out, "No phone yet. D pairs one: a QR code to scan with the terminatr app") {
+	if out := netBox(m); !strings.Contains(out, "No device yet. D pairs one: a QR code to scan with the terminatr app") {
 		t.Errorf("no phones:\n%s", out)
 	}
 	src.devices = DeviceList{Running: false, Devices: []DeviceEntry{{Name: "iPhone", ID: "cc", Level: device.LevelView, Effective: device.LevelView}}}
@@ -147,7 +147,7 @@ func TestNetworkPhonesNone(t *testing.T) {
 	src.devErr = errors.New("devices.json: bad")
 	m.stack = nil
 	netOpen(t, m)
-	if out := netBox(m); !strings.Contains(out, "The phones can't be read: devices.json: bad") {
+	if out := netBox(m); !strings.Contains(out, "The devices can't be read: devices.json: bad") {
 		t.Errorf("error:\n%s", out)
 	}
 }
@@ -246,7 +246,7 @@ func TestNetworkPhoneRenameRemove(t *testing.T) {
 	if src.devActs[1] != "remove bb22" || !strings.HasPrefix(m.msg, "removed Studio iPad") {
 		t.Fatalf("remove: %v %q", src.devActs, m.msg)
 	}
-	if out := netBox(m); strings.Contains(out, "Studio iPad ·") || !strings.Contains(out, "phones · 1 paired") {
+	if out := netBox(m); strings.Contains(out, "Studio iPad ·") || !strings.Contains(out, "devices · 1 paired") {
 		t.Errorf("after remove:\n%s", out)
 	}
 }
@@ -313,7 +313,7 @@ func TestNetworkPhonePair(t *testing.T) {
 		t.Errorf("no quiet zone: %q", want[0])
 	}
 	flat := strings.Join(strings.Fields(out), " ")
-	for _, w := range []string{"Scan this with the terminatr app on the iPhone", "Works for 10:00 · waiting for the phone…",
+	for _, w := range []string{"Scan this with the terminatr app on an iPhone or iPad", "Works for 10:00 · waiting for the device…",
 		"This server: studio, id 4F2A-91C3.", "Through relay.example.net.", "Or paste this code in the app:"} {
 		if !strings.Contains(flat, w) {
 			t.Errorf("waiting lacks %q:\n%s", w, out)
@@ -326,7 +326,7 @@ func TestNetworkPhonePair(t *testing.T) {
 	// The phone joins: a taken name is refused, another one taken.
 	cmd = phoneStep(t, m, cmd)
 	out = netBox(m)
-	for _, w := range []string{"A phone joined", `"iPhone", device id CC33-0000, app 1.4`, `Add it as "iPhone", a view-only device?`, "Y add · N don't add · E another name"} {
+	for _, w := range []string{"A device joined", `"iPhone", device id CC33-0000, app 1.4`, `Add it as "iPhone", a view-only device?`, "Y add · N don't add · E another name"} {
 		if !strings.Contains(out, w) {
 			t.Errorf("offer lacks %q:\n%s", w, out)
 		}
@@ -368,7 +368,7 @@ func TestNetworkPhonePairRelay(t *testing.T) {
 			ev.Waiting(DeviceInvite{Invite: "terminatr://pair?v=1&relay=" + strings.Repeat("x", 120), Name: "studio", Server: "4F2A-91C3",
 				Relay: "relay.example.net", Expires: time.Now().Add(10 * time.Minute)})
 		}
-		return DeviceEntry{}, errors.New("not paired: the phone said no")
+		return DeviceEntry{}, errors.New("not paired: the device said no")
 	}
 	cmd := press(m, "D")
 	phoneStep(t, m, cmd)
@@ -384,7 +384,7 @@ func TestNetworkPhonePairRelay(t *testing.T) {
 		t.Errorf("small window:\n%s", out)
 	}
 	phoneStep(t, m, cmd)
-	if out := netBox(m); !strings.Contains(out, "Not paired: the phone said no") || !strings.Contains(out, "enter new code") {
+	if out := netBox(m); !strings.Contains(out, "Not paired: the device said no") || !strings.Contains(out, "enter new code") {
 		t.Fatalf("failed:\n%s", out)
 	}
 	cmd = press(m, "enter")
@@ -434,8 +434,8 @@ func TestNetworkPhonePairAgain(t *testing.T) {
 		level   string
 		want    []string
 	}{
-		{false, device.LevelAnswer, []string{`This phone is paired already, as "Old phone": pairing again keeps its level.`, `Add it as "iPhone", an answer device?`}},
-		{true, device.LevelView, []string{`This phone is paired already, as "Old phone", but its write key changed: pairing again makes it view-only; set its level again after.`,
+		{false, device.LevelAnswer, []string{`This device is paired already, as "Old phone": pairing again keeps its level.`, `Add it as "iPhone", an answer device?`}},
+		{true, device.LevelView, []string{`This device is paired already, as "Old phone", but its write key changed: pairing again makes it view-only; set its level again after.`,
 			`Add it as "iPhone", a view-only device?`}},
 	} {
 		pv := &phonePairView{stage: phoneOffer, name: "iPhone", offer: DeviceOffer{Name: "iPhone", Phone: "iPhone", Short: "CC33-0000",

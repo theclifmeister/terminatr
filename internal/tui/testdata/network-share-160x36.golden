@@ -16,9 +16,9 @@
 │      shares nothing with you yet                                              │   ○ watches your shared panes and popups                     │
 │      └─ asked to share (S-4F2A-33, for terminatr)       waiting on nas's user │   ○ types in them                                            │
 │                                                                               │   ○ reads their conversations, in its Mac app                │
-│ ▾ phones                                                      D pairs a phone │   ○ sees what your projects ask you, in full                 │
-│    No phone yet. D pairs one: a QR code to scan with the terminatr app on the │   panes (V)   [off] · view · write                           │
-│    iPhone.                                                                    │               it can't open this server's panes              │
+│ ▾ devices                                                    D pairs a device │   ○ sees what your projects ask you, in full                 │
+│    No device yet. D pairs one: a QR code to scan with the terminatr app on an │   panes (V)   [off] · view · write                           │
+│    iPhone or iPad.                                                            │               it can't open this server's panes              │
 │                                                                               │   chats (C)   [on] · off                                     │
 │                                                                               │               its Mac app reads the conversations of what it │
 │                                                                               │               may watch                                      │
@@ -49,9 +49,9 @@
 │      shares nothing with you yet                                              │ usual confirm shares it with every paired server, read-only, │
 │      └─ asked to share (S-4F2A-33, for terminatr)       waiting on nas's user │ never its files. X declines: nothing is shared, and mini     │
 │                                                                               │ hears of it.                                                 │
-│ ▾ phones                                                      D pairs a phone │                                                              │
-│    No phone yet. D pairs one: a QR code to scan with the terminatr app on the │                                                              │
-│    iPhone.                                                                    │                                                              │
+│ ▾ devices                                                    D pairs a device │                                                              │
+│    No device yet. D pairs one: a QR code to scan with the terminatr app on an │                                                              │
+│    iPhone or iPad.                                                            │                                                              │
 │                                                                               │                                                              │
 │                                                                               │                                                              │
 │                                                                               │                                                              │
@@ -82,9 +82,9 @@
 │      shares nothing with you yet                                              │ One request per server waits at a time.                      │
 │      └─ asked to share (S-4F2A-33, for terminatr)       waiting on nas's user │                                                              │
 │                                                                               │                                                              │
-│ ▾ phones                                                      D pairs a phone │                                                              │
-│    No phone yet. D pairs one: a QR code to scan with the terminatr app on the │                                                              │
-│    iPhone.                                                                    │                                                              │
+│ ▾ devices                                                    D pairs a device │                                                              │
+│    No device yet. D pairs one: a QR code to scan with the terminatr app on an │                                                              │
+│    iPhone or iPad.                                                            │                                                              │
 │                                                                               │                                                              │
 │                                                                               │                                                              │
 │                                                                               │                                                              │

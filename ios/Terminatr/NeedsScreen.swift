@@ -3,37 +3,79 @@ import TerminatrKit
 import TerminatrUI
 
 /// The start screen: every need, as the Mac app's Needs you lists them
-/// (Need.of), each a compact card (NeedSummary) that opens its session,
-/// else its project, with its answers below at the answer level
-/// (NeedActs): on a closed iPhone Duo one tap answers the quick ones. A
+/// (Need.of), as a deck of answer cards (T847, direction A). Its header
+/// (ScreenHeader) counts them and says where the phone is linked, with
+/// Settings; its filter chips (PulseChips) show one kind (Need.Group).
+/// Each card (NeedTile) opens its session, else its project, with its
+/// answers in reach at the answer level (NeedActs); the first is the
+/// lead card, lifted, whose answers a hardware keyboard's keys give. A
 /// session's question or approval opens as its conversation with the
 /// card above it (Route.need), beside the list while the Duo is open
-/// (T826).
+/// (T826). VoiceOver's Needs rotor goes card to card; haptics follow
+/// the switch (Haptics.key), and none comes when a need arrives.
 struct NeedsScreen: View {
     @Environment(PhoneModel.self) private var model
     @Environment(\.theme) private var theme
+    @AppStorage(Haptics.key) private var haptics = true
+    /// -needs-filter GROUP opens on a chip, for screenshots.
+    @State private var group = Need.Group(rawValue: UserDefaults.standard.string(forKey: "needs-filter") ?? "") ?? .all
+    @Namespace private var rotor
 
     var body: some View {
         let needs = model.needs
+        let shown = Need.filter(needs, group)
+        let groups = Need.groups(needs)
         ScrollView {
-            LazyVStack(spacing: 10) {
-                SourceBanner()
-                if let f = model.failure { Failure(text: f) }
-                if needs.isEmpty {
-                    ContentUnavailableView("Nothing needs you", systemImage: "checkmark.circle",
-                                           description: Text("Questions, approvals and reviews show here."))
-                        .padding(.top, 60)
+            VStack(alignment: .leading, spacing: Spacing.row) {
+                ScreenHeader("Needs you", count: needs.count, subtitle: subtitle.text, symbol: subtitle.symbol) {
+                    SettingsButton()
+                        .buttonStyle(.circle)
                 }
-                ForEach(needs) { n in
-                    NeedTile(need: n, route: route(n))
+                if groups.count > 2 {
+                    PulseChips(groups.map { PulseChip(id: $0.group, label: $0.group.label($0.count), tone: $0.group.tone) },
+                               selection: $group)
+                        // Kept off a side safe area: a closed iPhone Duo held
+                        // sideways has its clock beside the list.
+                        .clipped()
                 }
+                LazyVStack(spacing: Spacing.card) {
+                    SourceBanner()
+                    if let f = model.failure { Failure(text: f) }
+                    if needs.isEmpty {
+                        ContentUnavailableView("Nothing needs you", systemImage: "checkmark.circle",
+                                               description: Text("Questions, approvals and reviews show here."))
+                            .padding(.top, 60)
+                    }
+                    ForEach(shown) { n in
+                        NeedTile(need: n, route: route(n), lead: n.id == shown.first?.id)
+                            .accessibilityRotorEntry(id: n.id, in: rotor)
+                    }
+                }
+                .padding(.horizontal, Spacing.gutter)
+                .padding(.top, Spacing.tight)
             }
-            .padding(16)
+            .padding(.bottom, Spacing.gutter)
+        }
+        .accessibilityRotor("Needs") {
+            ForEach(shown) { n in
+                AccessibilityRotorEntry(Text(n.title), id: n.id, in: rotor)
+            }
         }
         .refreshable { await model.refresh() }
         .keepsPlace("needs")
+        .kept($group, "needs filter")
+        .environment(\.haptics, haptics)
         .navigationTitle("Needs you")
+        .toolbar(.hidden, for: .navigationBar)
         .backdrop()
+    }
+
+    /// The header's line: the server and its link; the demo's banner
+    /// says what it is, so none.
+    private var subtitle: (text: String, symbol: String?) {
+        guard case .server = model.source else { return ("", nil) }
+        let (icon, words) = model.linkWords
+        return ("\(model.serverName) · \(words)", icon)
     }
 
     private func route(_ n: Need) -> Route {
@@ -48,55 +90,29 @@ struct NeedsScreen: View {
     }
 }
 
-/// A need's card, as the Mac dashboard's NeedCard looks: its project,
-/// then NeedSummary, which open route; below, outside the link, its
-/// buttons (NeedActs). The agent's words take two lines, one on a short
-/// screen (a closed iPhone Duo held sideways), so the buttons stay in
-/// reach; the whole of them is a tap away.
+/// A need's card in the deck (NeedCard): its head opens route (the
+/// chevron says so); its answers (NeedActs) below, outside the link,
+/// and its VoiceOver actions. A paired server's need has them only
+/// while that server takes answers from this one (needs at answer,
+/// peer.need-act); otherwise it is answered there. The lead card is lifted and takes the keys; the one
+/// open beside the list (Columns) is ringed.
 struct NeedTile: View {
-    @Environment(\.theme) private var theme
     @Environment(\.navigate) private var navigate
-    @Environment(\.verticalSizeClass) private var height
     let need: Need
     let route: Route
+    let lead: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            PlainRouteLink(value: route) {
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack {
-                        Text(need.project)
-                            .font(theme.mono(.caption2, .medium))
-                            .foregroundStyle(theme.muted)
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(theme.body(.footnote, .semibold))
-                            .foregroundStyle(theme.muted)
-                            .accessibilityHidden(true)
-                    }
-                    NeedSummary(need: need)
-                    if !need.text.isEmpty {
-                        Text(need.text)
-                            .font(theme.body(.subheadline))
-                            .lines(height == .compact ? 1 : 2)
-                            .padding(.leading, 24)
-                    }
-                }
-                .contentShape(Rectangle())
-                .accessibilityElement(children: .combine)
-                .accessibilityHint(need.kind.verb)
+        NeedActs(need: need) { parts in
+            TerminatrUI.NeedCard(need: need, command: parts.command, note: parts.note, lead: lead, open: open,
+                                 acts: parts.acts) { head in
+                PlainRouteLink(value: route) { head.opens() }
+                    .buttonStyle(.plain)
+                    .accessibilityHint(need.kind.verb)
+            } answers: {
+                parts.buttons
             }
-            .buttonStyle(.plain)
-            NeedActs(need: need)
-                .padding(.leading, 24)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .frosted(RoundedRectangle(cornerRadius: 12))
-        .background(theme.cardTint, in: RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(theme.colour(need.kind).opacity(theme.contrast || open ? 1 : 0.35), lineWidth: open ? 2.5 : 1))
-        .accessibilityElement(children: .contain)
     }
 
     /// Its route is open beside the list (Columns).
@@ -104,66 +120,13 @@ struct NeedTile: View {
 }
 
 /// What the screens are of, on the start screen: the demo (and the way
-/// back out), or the paired server and its link: linking, asleep or
-/// offline, lost.
+/// back out). The paired server has none (T843): its name, link, level
+/// and Forget are in Settings.
 struct SourceBanner: View {
     @Environment(PhoneModel.self) private var model
 
     var body: some View {
-        switch model.source {
-        case .none: EmptyView()
-        case .demo: DemoBanner()
-        case .server: LinkBanner()
-        }
-    }
-}
-
-struct LinkBanner: View {
-    @Environment(PhoneModel.self) private var model
-    @Environment(\.theme) private var theme
-    @State private var forgetting = false
-
-    var body: some View {
-        let (icon, text, colour) = words
-        HStack(spacing: 8) {
-            if model.link == .connecting {
-                ProgressView().controlSize(.small)
-            } else {
-                Image(systemName: icon)
-                    .foregroundStyle(colour)
-                    .accessibilityHidden(true)
-            }
-            Text(text)
-                .font(theme.body(.footnote, .medium))
-                .fixedSize(horizontal: false, vertical: true)
-            Spacer()
-            Menu {
-                SettingsButton()
-                Button("Forget this server", role: .destructive) { forgetting = true }
-            } label: {
-                Image(systemName: "ellipsis.circle")
-                    .accessibilityLabel("Server")
-            }
-        }
-        .padding(10)
-        .background(colour.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
-        .accessibilityElement(children: .combine)
-        .confirmationDialog("Forget \(model.serverName)?", isPresented: $forgetting, titleVisibility: .visible) {
-            Button("Forget", role: .destructive) { Task { await model.forget() } }
-        } message: {
-            Text("The phone forgets the server and its own key. To link again, pair again; on the computer, tm device remove takes the phone off.")
-        }
-    }
-
-    private var words: (String, String, Color) {
-        let name = model.serverName
-        switch model.link {
-        case .connecting: return ("antenna.radiowaves.left.and.right", "Linking to \(name)…", theme.muted)
-        case .asleep: return ("moon.zzz", "\(name) is asleep or offline. The app links again once it's back.", theme.attention)
-        case .up where model.answers: return ("checkmark.circle.fill", "\(name): answers here", theme.action)
-        case .up: return ("checkmark.circle", "\(name), read only", theme.action)
-        case .lost(let why): return ("exclamationmark.triangle", "Link lost: \(why) Trying again…", theme.attention)
-        }
+        if model.source == .demo { DemoBanner() }
     }
 }
 

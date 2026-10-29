@@ -35,7 +35,7 @@
 │      shares nothing with you yet                                     │
 │      └─ asked (S-4F2A-33, for terminatr)       waiting on nas's user │
 │                                                                      │
-│ ▾ phones                                             D pairs a pho…↓ │
+│ ▾ devices                                           D pairs a devi…↓ │
 │ ──────────────────────────────────────────────────────────────────── │
 │ mini asks you to share a project (S-91C3-7), for its acme            │
 │ A picks one of yours, shared with every paired server · X declines   │
@@ -57,7 +57,7 @@
 │      shares nothing with you yet                                     │
 │      └─ asked (S-4F2A-33, for terminatr)       waiting on nas's user │
 │                                                                      │
-│ ▾ phones                                             D pairs a pho…↓ │
+│ ▾ devices                                           D pairs a devi…↓ │
 │ ──────────────────────────────────────────────────────────────────── │
 │ asked nas to share a project (S-4F2A-33, for terminatr)              │
 │ its user picks which, if any · one request per server at a time      │

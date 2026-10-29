@@ -1,6 +1,6 @@
 # terminatr for iPhone
 
-The iPhone app: `Terminatr.xcodeproj`, its sources in `Terminatr/`, the phone's end of a device link in `TerminatrLink/`, and TerminatrKit and TerminatrUI from the Swift package in `../macos`.
+The iPhone app: `Terminatr.xcodeproj`, its sources in `Terminatr/`, the phone's end of a device link in `TerminatrLink/`, and TerminatrKit, TerminatrUI and TerminatrPane from the Swift package in `../macos`.
 `Makefile` says how to build it, run it in the Simulator (demo or paired with a dev server) and archive it.
 
 ## iPhone Duo
@@ -19,6 +19,16 @@ A regular-width window shows the two columns (`Columns.swift`), a compact one (a
 With a hardware keyboard, Command-Return sends a prompt and Shift-Command-Return steers; list rows and cards light up under the pointer.
 Check it in the Simulator on an iPad (iOS 27.0 runtime: 27.1 takes only iPhone Duo): `make run DEVICE="…"`. Resizing the window into compact width needs Stage Manager or Split View, by hand: `simctl` can't, and iPadOS refuses programmatic orientation and size changes to an app that joins multitasking.
 App Store submission (not TestFlight) needs iPad screenshots: 13-inch, 2064×2752 or 2048×2732 portrait (landscape the same, turned), which the iPad Pro 13-inch (M5) Simulator shoots as is; App Store Connect scales them down for the smaller iPads.
+
+## Terminal
+
+A session's screen switches between its conversation and its terminal (T840), as the Mac's session window does (`SessionScreen.swift`, the switch in the navigation bar, kept per session while the server is).
+The terminal (`TerminalScreen.swift`) is the pane through `pane.vt`, streamed by `PaneController` from TerminatrPane, which the Mac's Terminal tab streams with too, and drawn by SwiftTerm's iOS view.
+The phone never resizes the pane for the other viewers: the grid keeps the pane's size, its font fitted to the pane's width (`PaneZoom` in TerminatrKit, 7 to 16 points), and a pinch zooms it (up to 28); past the screen it pans.
+It shows the pane's screen, not its scrollback: the conversation is the history.
+At the write level a tap brings the keyboard with SwiftTerm's key bar (Esc, Ctrl, Tab, the arrows, function keys), each key a signed `pane.input`; below it, and while an escape's prompt may be up, a line says why keys are off.
+SwiftTerm runs a build-tool plugin, so `xcodebuild` takes `-skipPackagePluginValidation` (the Makefile passes it); Xcode asks once to trust it.
+`-terminal YES` opens sessions on the terminal (the Simulator's screenshots), and `make dev-server LEVEL=write` pairs the phone at write, to type into a pane.
 
 ## TestFlight
 

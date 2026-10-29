@@ -11,7 +11,7 @@ import TerminatrUI
 /// opens the demo at once, and -open ROUTE (Route.parse) on that
 /// screen: the Simulator's screenshots; with -pair CODE it pairs with
 /// that code at once, as this phone (the Simulator has no camera:
-/// internal/e2e TestPhoneDev's codes); -open settings shows Settings. A terminatr://pair link (the
+/// internal/e2e TestPhoneDev's codes); -open settings shows Settings; on Welcome -open pair (or "pair CODE") opens pairing. A terminatr://pair link (the
 /// Camera app's scan of the code) opens the pairing screen.
 @main
 struct TerminatrApp: App {
@@ -134,11 +134,20 @@ struct Root: View {
     @State private var needsPath: [Route] = []
     @State private var projectsPath: [Route] = []
     @State private var settings = false
+    @State private var gallery = false
 
     var body: some View {
         content
             .environment(\.showSettings, ShowSettings { settings = true })
             .sheet(isPresented: $settings) { SettingsScreen() }
+            .fullScreenCover(isPresented: $gallery) {
+                ComponentGallery(lower: UserDefaults.standard.bool(forKey: "gallery-lower"))
+                    .overlay(alignment: .topLeading) {
+                        Button("Done") { gallery = false }
+                            .buttonStyle(.ghost)
+                            .padding(.horizontal, 16)
+                    }
+            }
     }
 
     @ViewBuilder private var content: some View {
@@ -165,7 +174,9 @@ struct Root: View {
 }
 
 extension Root {
-    /// -open: "settings", "projects", "needs ROUTE" (a need's route
+    /// -open: "settings", "gallery" (the redesign's components, T845;
+    /// with -gallery-lower YES at its states and buttons),
+    /// "projects", "needs ROUTE" (a need's route
     /// opened from Needs you), or a route opened from the Projects tab, on
     /// the path a tap would have taken (Route.path).
     private func openLaunched() {
@@ -174,6 +185,8 @@ extension Root {
             needsPath = [r]
         } else if open == "settings" {
             settings = true
+        } else if open == "gallery" {
+            gallery = true
         } else if open == "projects" {
             tab = .projects
         } else if let r = Route.parse(open) {
@@ -203,7 +216,7 @@ struct RouteScreen: View {
         switch route {
         case .project(let slug): ProjectScreen(slug: slug)
         case .peerProject(let alias, let project): PeerProjectScreen(alias: alias, project: project)
-        case .session(let ref): ConversationScreen(ref: ref)
+        case .session(let ref): SessionScreen(ref: ref)
         case .need(let ref): NeedConversation(ref: ref)
         case .overview(let slug): OverviewScreen(slug: slug)
         case .board(let slug): BoardScreen(slug: slug)

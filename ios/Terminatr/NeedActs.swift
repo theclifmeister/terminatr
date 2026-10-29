@@ -13,10 +13,21 @@ import TerminatrUI
 /// outside the sandbox is never the phone's: the server refuses it
 /// (device-escape-off), and the card says to answer it on the computer.
 /// Nothing shows at view, or for a need the phone can't answer.
+///
+/// The buttons are the redesign's (T847): an approval's two in its
+/// tone, Y and N on their keycaps; a question's options as numbered
+/// rows (AnswerOption), 1 to 9; the rest a tone's primary and a
+/// secondary. Keys answer only where the environment's answerKeys says
+/// (the deck's lead card), never while the Send back note is asked. A
+/// server's answer is a success or warning haptic. laidOut lays the
+/// parts out: Needs you's card (NeedCard), or under a conversation's
+/// need (NeedActsColumn).
 struct NeedActs: View {
     @Environment(PhoneModel.self) private var model
     @Environment(\.theme) private var theme
+    @Environment(\.dynamicTypeSize) private var typeSize
     let need: Need
+    let laidOut: (NeedParts) -> AnyView
     @State private var dialog: AppAPI.ApproveResult?
     @State private var escape = false
     @State private var busy = false
@@ -24,24 +35,14 @@ struct NeedActs: View {
     @State private var sendingBack = false
     @State private var note = ""
     @State private var peerSendBack: Need.PeerAct.Choice?
+    @State private var answered = 0
+    @State private var refused = 0
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            buttons
-                .controlSize(.small)
-                .disabled(busy)
-            if escape {
-                Label("It runs a command outside its sandbox: answer it on your computer.", systemImage: "desktopcomputer")
-                    .font(theme.body(.footnote))
-                    .foregroundStyle(theme.muted)
-            }
-            if let said {
-                Text(said.text)
-                    .font(theme.body(.footnote))
-                    .foregroundStyle(said.failed ? theme.attention : theme.muted)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
+        laidOut(NeedParts(buttons: AnyView(answers), command: dialog.map { $0.escape ? "" : $0.question } ?? "",
+                      note: shownNote, acts: acts))
+        .feedback(.success, trigger: answered)
+        .feedback(.warning, trigger: refused)
         .task(id: need.id) { await check() }
         .kept($note, "send back \(need.id)")
         .kept($sendingBack, "sending back \(need.id)")
@@ -57,80 +58,170 @@ struct NeedActs: View {
         }
     }
 
+    private var answers: some View {
+        buttons
+            .disabled(busy)
+            .transformEnvironment(\.answerKeys) { if sendingBack { $0 = false } }
+    }
+
     @ViewBuilder
     private var buttons: some View {
         switch need.kind {
         case .approval where model.can(AppAPI.Methods.sessionApprove.name):
             if let d = dialog, !d.escape, let first = d.options.first, once(d, 1) {
-                row {
-                    Button(first) { approve(1) }
-                        .buttonStyle(.borderedProminent)
-                        .tint(theme.action)
+                pair {
+                    Button { approve(1) } label: { keyed("Y", first, inverted: true) }
+                        .buttonStyle(.primary(.approval))
+                        .answerKey("y")
                         .accessibilityLabel(named(first))
                     if d.options.count > 1, let last = d.options.last, once(d, d.options.count) {
-                        Button(last) { approve(d.options.count) }
-                            .buttonStyle(.bordered)
+                        Button { approve(d.options.count) } label: { keyed("N", last, inverted: false) }
+                            .buttonStyle(.secondary)
+                            .answerKey("n")
                             .accessibilityLabel(named(last))
                     }
                 }
             }
         case .question where need.id.hasPrefix("questions:") && model.can(AppAPI.Methods.questionsOpen.name):
             Button("Answer now") { openQuestions() }
-                .buttonStyle(.borderedProminent)
-                .tint(theme.action)
+                .buttonStyle(.primary(.question))
                 .accessibilityLabel(named("Answer now"))
                 .accessibilityHint("The coordinator puts its questions to you; they show here")
         case .question where model.can(AppAPI.Methods.sessionAnswer.name):
             if let a = need.answer {
-                row {
-                    ForEach(a.options, id: \.self) { o in
-                        Button(o) { answer(a, o) }
-                            .buttonStyle(.bordered)
-                            .accessibilityLabel(named(o))
+                VStack(spacing: Spacing.item) {
+                    ForEach(Array(a.options.enumerated()), id: \.offset) { i, o in
+                        AnswerOption(key: i + 1, label: o, detail: i < a.descriptions.count ? a.descriptions[i] : "") {
+                            answer(a, o)
+                        }
+                        .accessibilityLabel(named(o))
                     }
                 }
             }
         case .review where !need.task.isEmpty && model.can(AppAPI.Methods.taskAccept.name):
-            row {
+            pair {
                 Button("Accept") { accept() }
-                    .buttonStyle(.borderedProminent)
-                    .tint(theme.action)
+                    .buttonStyle(.primary(.review))
                     .accessibilityLabel(named("Accept"))
                 if model.can(AppAPI.Methods.taskSendBack.name) {
                     Button("Send Back…") { note = ""; sendingBack = true }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.secondary)
                         .accessibilityLabel(named("Send back"))
                 }
             }
         case .network where need.peer != nil && model.can(AppAPI.Methods.peerNeedAct.name):
-            // A paired server's need, answered there through this server
-            // (app API 30).
+            // A paired server's need at its answer level, answered there
+            // through this server (app API 30), in the same buttons as
+            // this server's own.
             if let p = need.peer {
-                row {
-                    ForEach(p.choices, id: \.self) { c in
-                        Button(c.title) {
-                            if c.note {
-                                note = ""
-                                peerSendBack = c
-                                sendingBack = true
-                            } else {
-                                peerAct(c.params)
-                            }
-                        }
-                        .buttonStyle(.bordered)
-                        .accessibilityLabel(named(c.title))
-                    }
-                }
+                peerButtons(p)
             }
         default:
             EmptyView()
         }
     }
 
-    /// Buttons side by side, wrapping to the next line when they don't
-    /// fit: a short screen keeps them in a line or two (T826).
-    private func row(@ViewBuilder _ content: () -> some View) -> some View {
-        Flow(spacing: 8, lineSpacing: 6) { content() }
+    /// The buttons as VoiceOver actions on the card, as buttons shows them.
+    private var acts: [NeedAct] {
+        switch need.kind {
+        case .approval where model.can(AppAPI.Methods.sessionApprove.name):
+            guard let d = dialog, !d.escape, let first = d.options.first, once(d, 1), !busy else { return [] }
+            var out = [NeedAct(first) { approve(1) }]
+            if d.options.count > 1, let last = d.options.last, once(d, d.options.count) {
+                out.append(NeedAct(last) { approve(d.options.count) })
+            }
+            return out
+        case .question where need.id.hasPrefix("questions:") && model.can(AppAPI.Methods.questionsOpen.name):
+            return busy ? [] : [NeedAct("Answer now") { openQuestions() }]
+        case .question where model.can(AppAPI.Methods.sessionAnswer.name):
+            guard let a = need.answer, !busy else { return [] }
+            return a.options.map { o in NeedAct(o) { answer(a, o) } }
+        case .review where !need.task.isEmpty && model.can(AppAPI.Methods.taskAccept.name):
+            guard !busy else { return [] }
+            var out = [NeedAct("Accept") { accept() }]
+            if model.can(AppAPI.Methods.taskSendBack.name) {
+                out.append(NeedAct("Send back") { note = ""; sendingBack = true })
+            }
+            return out
+        case .network where need.peer != nil && model.can(AppAPI.Methods.peerNeedAct.name):
+            guard let p = need.peer, !busy else { return [] }
+            return p.choices.map { c in NeedAct(c.title) { peerPick(c) } }
+        default:
+            return []
+        }
+    }
+
+    /// A paired server's need's buttons: a question's or a dialog's
+    /// choices as numbered rows, accept and send back as a review's pair,
+    /// the coordinator's questions as Answer now.
+    @ViewBuilder
+    private func peerButtons(_ p: Need.PeerAct) -> some View {
+        let tone: Need.Kind = p.choices.first.map { $0.params.act == "approve" ? .approval : .question } ?? .question
+        switch p.choices.first?.params.act {
+        case "answer", "approve":
+            VStack(spacing: Spacing.item) {
+                ForEach(Array(p.choices.enumerated()), id: \.offset) { i, c in
+                    AnswerOption(key: i + 1, label: c.title) { peerPick(c) }
+                        .accessibilityLabel(named(c.title))
+                }
+            }
+            .tint(theme.colour(tone))
+        case "questions":
+            Button("Answer now") { peerPick(p.choices[0]) }
+                .buttonStyle(.primary(.question))
+                .accessibilityLabel(named("Answer now"))
+        default:
+            pair {
+                ForEach(p.choices, id: \.self) { c in
+                    if c.note {
+                        Button(c.title) { peerPick(c) }
+                            .buttonStyle(.secondary)
+                            .accessibilityLabel(named(c.title))
+                    } else {
+                        Button(c.title) { peerPick(c) }
+                            .buttonStyle(.primary(.review))
+                            .accessibilityLabel(named(c.title))
+                    }
+                }
+            }
+        }
+    }
+
+    /// Sends choice c of a paired server's need; send back asks for its
+    /// note first.
+    private func peerPick(_ c: Need.PeerAct.Choice) {
+        if c.note {
+            note = ""
+            peerSendBack = c
+            sendingBack = true
+        } else {
+            peerAct(c.params)
+        }
+    }
+
+    /// The card's line under the buttons: what the server said, else why
+    /// the phone can't answer an escape.
+    private var shownNote: (text: String, failed: Bool)? {
+        if let said { return said }
+        if escape { return ("It runs a command outside its sandbox: answer it on your computer.", false) }
+        return nil
+    }
+
+    /// An answer's label after its keycap.
+    private func keyed(_ key: String, _ title: String, inverted: Bool) -> some View {
+        HStack(spacing: 7) {
+            Keycap(key, tone: .approval, inverted: inverted)
+            Text(title)
+        }
+    }
+
+    /// Two answers side by side, the primary taking the room; stacked at
+    /// accessibility sizes, so their words fit.
+    private func pair(@ViewBuilder _ content: () -> some View) -> some View {
+        let layout = typeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(spacing: Spacing.item))
+            : AnyLayout(HStackLayout(spacing: Spacing.item))
+        return layout { content() }
     }
 
     private func named(_ title: String) -> String { "\(title): \(need.what)" }
@@ -200,8 +291,12 @@ struct NeedActs: View {
         Task {
             do {
                 if let s = try await f() { said = (s, false) }
+                answered += 1
             } catch {
-                if let w = Self.words(error) { said = (w, true) }
+                if let w = Self.words(error) {
+                    said = (w, true)
+                    refused += 1
+                }
                 if (error as? AppAPI.Error)?.code == "device-escape-off" { escape = true }
             }
             busy = false
@@ -226,37 +321,42 @@ struct NeedActs: View {
     }
 }
 
-/// Views left to right, onto the next line when the next doesn't fit.
-struct Flow: Layout {
-    var spacing: CGFloat
-    var lineSpacing: CGFloat
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let places = place(subviews, width: proposal.width ?? .infinity)
-        return CGSize(width: places.map(\.maxX).max() ?? 0, height: places.map(\.maxY).max() ?? 0)
+extension NeedActs {
+    init(need: Need, laidOut: @escaping (NeedParts) -> some View) {
+        self.need = need
+        self.laidOut = { AnyView(laidOut($0)) }
     }
 
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        for (v, p) in zip(subviews, place(subviews, width: bounds.width)) {
-            v.place(at: CGPoint(x: bounds.minX + p.minX, y: bounds.minY + p.minY), proposal: ProposedViewSize(p.size))
-        }
+    init(need: Need) {
+        self.init(need: need) { NeedActsColumn(parts: $0) }
     }
+}
 
-    private func place(_ subviews: Subviews, width: CGFloat) -> [CGRect] {
-        var out: [CGRect] = []
-        var x: CGFloat = 0, y: CGFloat = 0, line: CGFloat = 0
-        for v in subviews {
-            var size = v.sizeThatFits(.unspecified)
-            size.width = min(size.width, width)
-            if x > 0, x + size.width > width {
-                x = 0
-                y += line + lineSpacing
-                line = 0
+/// What NeedActs lays out: its buttons, the dialog an approval asks,
+/// what the server said (or why the phone can't answer), and the
+/// buttons as VoiceOver actions.
+struct NeedParts {
+    let buttons: AnyView
+    let command: String
+    let note: (text: String, failed: Bool)?
+    let acts: [NeedAct]
+}
+
+/// NeedActs' parts one under the other: the buttons and the server's
+/// line, under a conversation's need.
+struct NeedActsColumn: View {
+    @Environment(\.theme) private var theme
+    let parts: NeedParts
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            parts.buttons
+            if let note = parts.note {
+                Text(note.text)
+                    .font(theme.body(.footnote))
+                    .foregroundStyle(note.failed ? theme.attention : theme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            out.append(CGRect(origin: CGPoint(x: x, y: y), size: size))
-            x += size.width + spacing
-            line = max(line, size.height)
         }
-        return out
     }
 }

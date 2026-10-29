@@ -41,7 +41,8 @@ import (
 // server (the phone shows it asleep or offline; on its return the server
 // resumes the agents, idle); stop ends the test. It runs at most
 // TM_PHONE_DEV_MINUTES (default 20). A phone that pairs with a write key
-// is set to answer.
+// is set to answer, or to TM_PHONE_DEV_LEVEL (write: the phone's write
+// screens and its terminal's keys, T840).
 func TestPhoneDev(t *testing.T) {
 	dir := os.Getenv("TM_PHONE_DEV_DIR")
 	if dir == "" {
@@ -108,7 +109,11 @@ func TestPhoneDev(t *testing.T) {
 			// A phone that signs its acts answers here (T791): the
 			// dev server is the user's own.
 			if d.WriteKey != nil {
-				if d, err = device.SetLevel(devDir, d.Name, device.LevelAnswer); err != nil {
+				level := device.LevelAnswer
+				if os.Getenv("TM_PHONE_DEV_LEVEL") == device.LevelWrite {
+					level = device.LevelWrite
+				}
+				if d, err = device.SetLevel(devDir, d.Name, level); err != nil {
 					t.Logf("pair: %v", err)
 				}
 			}

@@ -425,7 +425,7 @@ type PeerSource interface {
 	AnswerShare(id string, accept bool, slug string) (proto.ShareRequest, error)
 }
 
-// DeviceSource manages the paired phones (the Network popup's phones,
+// DeviceSource manages the paired devices (the Network popup's devices,
 // docs/SPEC.md §16.15), as tm device does: all of it the human's,
 // refused when tm runs inside an agent. Each change has a running
 // server read the devices again. A device is named by its id.
@@ -440,10 +440,10 @@ type DeviceSource interface {
 	SetDeviceLevel(id, level string) error
 	RenameDevice(id, name string) error
 	RemoveDevice(id string) error
-	// PairDevice pairs a phone through relay ("" for the one the paired
+	// PairDevice pairs a device through relay ("" for the one the paired
 	// devices and servers use; errRelayNeeded when none is known), as
 	// tm device pair does: ev shows the invite once it works and asks
-	// about the phone that joined; ctx cancels. It returns the device
+	// about the device that joined; ctx cancels. It returns the device
 	// added.
 	PairDevice(ctx context.Context, relay string, ev DevicePairEvents) (DeviceEntry, error)
 }

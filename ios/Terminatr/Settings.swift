@@ -3,48 +3,51 @@ import TerminatrKit
 import TerminatrUI
 import UIKit
 
-/// Settings (T808): the theme, as the Mac's Settings › Appearance picks
-/// it (ThemePicker, the same keys), and light, dark or the system's.
-/// Text follows the phone's Dynamic Type, so there is no size of its
-/// own. From the Projects tab's gear and the link banner's menu.
+/// Settings (T808; redesigned in T850): on the sheet's glass, the paired
+/// server first (ServerCard), then the themes as large live previews
+/// (ThemeCarousel, the same keys as the Mac's Settings › Appearance),
+/// light, dark or the system's, and with a server Forget this server,
+/// red and last (T843). Text follows the phone's Dynamic Type, so there
+/// is no size of its own. From the Projects tab's gear.
 struct SettingsScreen: View {
+    @Environment(PhoneModel.self) private var model
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.dynamicTypeSize) private var typeSize
-    @AppStorage(ThemeName.key) private var theme = ThemeName.bloom.rawValue
+    @Environment(\.theme) private var theme
+    @AppStorage(ThemeName.key) private var name = ThemeName.bloom.rawValue
     @AppStorage(Appearance.key) private var appearance = Appearance.system.rawValue
 
     var body: some View {
-        NavigationStack {
-            Form {
-                Section {
-                    ThemePicker(selection: $theme, columns: typeSize.isAccessibilitySize ? 2 : 3)
-                } header: {
-                    Text("Theme")
-                } footer: {
-                    Text("\(ThemeName.of(theme).label): \(ThemeName.of(theme).mood.lowercased()).")
-                }
-                Section {
-                    Picker("Appearance", selection: $appearance) {
-                        ForEach(Appearance.allCases, id: \.self) { a in
-                            Text(a.label).tag(a.rawValue)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                } header: {
-                    Text("Appearance")
-                } footer: {
-                    Text("The theme in light or dark; System follows the phone. Text follows the phone's text size.")
-                }
-            }
-            .navigationTitle("Settings")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
+        ScrollView {
+            VStack(alignment: .leading, spacing: Spacing.row) {
+                SheetHeader("Settings", trailing: {
                     Button("Done") { dismiss() }
-                }
+                        .buttonStyle(.primary())
+                        .fixedSize()
+                        .keyboardShortcut(.defaultAction)
+                })
+                if case .server = model.source { ServerSection() }
+                GroupLabel("Theme")
+                ThemeCarousel(selection: $name)
+                note("\(ThemeName.of(name).label): \(ThemeName.of(name).mood.lowercased()).")
+                GroupLabel("Appearance")
+                Segments(Appearance.allCases.map { (id: $0.rawValue, label: $0.label) }, selection: $appearance)
+                    .padding(.horizontal, Spacing.gutter)
+                note("The theme in light or dark; System follows the phone. Text follows the phone's text size.")
+                if case .server = model.source { ForgetSection() }
             }
-            .backdrop()
+            .frame(maxWidth: 640)
+            .frame(maxWidth: .infinity)
+            .padding(.bottom, 32)
         }
+        .sheetGlass()
+    }
+
+    private func note(_ s: String) -> some View {
+        Text(s)
+            .font(theme.body(.footnote))
+            .foregroundStyle(theme.muted)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, Spacing.gutter + 6)
     }
 }
 
@@ -91,8 +94,79 @@ extension View {
     }
 }
 
-/// Opens Settings: Root's sheet, from the Projects tab's gear and the
-/// link banner's menu.
+/// The paired server: its name, its link and the phone's level on it.
+struct ServerSection: View {
+    @Environment(PhoneModel.self) private var model
+    @Environment(\.theme) private var theme
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.tight) {
+            ServerCard(name: model.serverName, link: model.linkWords.1, linking: model.link == .connecting,
+                       down: model.link.down, level: level.word, levelSpoken: level.spoken)
+            Text("What the phone may do there; tm device access on the computer changes it.")
+                .font(theme.body(.footnote))
+                .foregroundStyle(theme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 6)
+        }
+        .padding(.horizontal, Spacing.gutter)
+    }
+
+    /// The level the link runs at, by its methods: write, answer or view.
+    private var level: (word: String, spoken: String) {
+        if model.writes { return ("write", "Level: answers and prompts") }
+        if model.answers { return ("answer", "Level: answers") }
+        return model.link == .up ? ("view", "Level: view only") : ("", "")
+    }
+}
+
+/// Forget this server: a red button, the screen's last, asked again.
+struct ForgetSection: View {
+    @Environment(PhoneModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    @State private var forgetting = false
+
+    var body: some View {
+        Button(role: .destructive) { forgetting = true } label: {
+            Text("Forget this server")
+        }
+        .buttonStyle(.primary(.attention))
+        .padding(.horizontal, Spacing.gutter)
+        .padding(.top, Spacing.gutter)
+        .confirmationDialog("Forget \(model.serverName)?", isPresented: $forgetting, titleVisibility: .visible) {
+            Button("Forget", role: .destructive) {
+                dismiss()
+                Task { await model.forget() }
+            }
+        } message: {
+            Text("The phone forgets the server and its own key. To link again, pair again; on the computer, tm device remove takes the phone off.")
+        }
+    }
+}
+
+extension PhoneModel.Link {
+    /// Asleep or offline, or lost.
+    var down: Bool {
+        switch self {
+        case .asleep, .lost: true
+        case .connecting, .up: false
+        }
+    }
+}
+
+extension PhoneModel {
+    /// The paired server's link in words, with its symbol.
+    var linkWords: (String, String) {
+        switch link {
+        case .connecting: ("antenna.radiowaves.left.and.right", "Linking…")
+        case .asleep: ("moon.zzz", "Asleep or offline")
+        case .up: ("checkmark.circle.fill", "Linked")
+        case .lost(let why): ("exclamationmark.triangle", "Lost: \(why)")
+        }
+    }
+}
+
+/// Opens Settings: Root's sheet, from the Projects tab's gear.
 struct ShowSettings: Sendable {
     var action: @MainActor @Sendable () -> Void = {}
 
