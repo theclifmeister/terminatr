@@ -40,6 +40,7 @@ public struct ComponentGallery: View {
                 VStack(spacing: Spacing.card) {
                     approval
                     question
+                    paired
                     glyphs.id("states")
                     buttons
                 }
@@ -50,53 +51,44 @@ public struct ComponentGallery: View {
         .background(Backdrop())
     }
 
-    private func head(_ tone: Attention.Tone, _ what: String, _ ref: String, _ age: String) -> some View {
-        HStack(spacing: 11) {
-            StateGlyph(tone)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(what).font(theme.body(.headline, .bold)).foregroundStyle(theme.ink)
-                Text(ref).font(theme.mono(.subheadline, .medium)).foregroundStyle(theme.muted)
-            }
-            Spacer(minLength: 0)
-            Text(age).font(theme.mono(.subheadline, .medium)).foregroundStyle(theme.muted)
-        }
-    }
+    private static let now = Date()
 
     private var approval: some View {
-        VStack(alignment: .leading, spacing: 11) {
-            head(.approval, "Approval", "acme-web · T12", "2m")
-            Text("Checkout: Apple Pay button")
-                .font(theme.body(.title2, .semibold)).foregroundStyle(theme.ink)
-            Text("Run the checkout tests against the Stripe sandbox?")
-                .font(theme.body(.body)).foregroundStyle(theme.muted)
-            Text("$ npm run test:checkout -- --sandbox")
-                .font(theme.mono(.callout)).foregroundStyle(theme.ink)
-                .padding(.horizontal, 10).padding(.vertical, 8)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(theme.command, in: RoundedRectangle(cornerRadius: 10))
+        let need = Need(id: "approval:s-12", kind: .approval, project: "acme-web", what: "T12 needs approval",
+                        detail: "Checkout: Apple Pay button", text: "Run the checkout tests against the Stripe sandbox?",
+                        session: "s-12", task: "T12", since: Self.now.addingTimeInterval(-120))
+        return NeedCard(need: need, command: "$ npm run test:checkout -- --sandbox", lead: true, now: Self.now) {
             HStack(spacing: Spacing.item) {
                 Button {} label: { HStack(spacing: 7) { Keycap("Y", tone: .approval, inverted: true); Text("Allow") } }
                     .buttonStyle(.primary(.approval))
+                    .answerKey("y")
                 Button {} label: { HStack(spacing: 7) { Keycap("N", tone: .approval); Text("Deny") } }
                     .buttonStyle(.secondary)
+                    .answerKey("n")
             }
         }
-        .padding(Spacing.card)
-        .surface(.raised, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+    }
+
+    /// A paired server's need: answered there, so no buttons and a soft glyph.
+    private var paired: some View {
+        let need = Need(id: "paired:mac/billing-api:n1", kind: .network, project: "mac/billing-api",
+                        what: "studio-mac › billing-api: T3 asks a question", detail: "Invoice PDFs · answer on studio-mac",
+                        since: Self.now.addingTimeInterval(-840))
+        return NeedCard(need: need, now: Self.now) { EmptyView() }
     }
 
     private var question: some View {
-        VStack(alignment: .leading, spacing: 11) {
-            head(.question, "Asks", "acme-web · T14", "6m")
-            Text("Which ranking should search use for products with no sales yet?")
-                .font(theme.body(.title2, .semibold)).foregroundStyle(theme.ink)
-                .fixedSize(horizontal: false, vertical: true)
-            ForEach(Array(Self.options.enumerated()), id: \.offset) { i, o in
-                AnswerOption(key: i + 1, label: o.0, detail: o.1, picked: picked == i + 1) { picked = i + 1 }
+        let need = Need(id: "question:s-14", kind: .question, project: "acme-web", what: "T14 asks a question",
+                        detail: "Product search ranking",
+                        text: "Which ranking should search use for products with no sales yet?",
+                        session: "s-14", task: "T14", since: Self.now.addingTimeInterval(-360))
+        return NeedCard(need: need, now: Self.now) {
+            VStack(spacing: Spacing.item) {
+                ForEach(Array(Self.options.enumerated()), id: \.offset) { i, o in
+                    AnswerOption(key: i + 1, label: o.0, detail: o.1, picked: picked == i + 1) { picked = i + 1 }
+                }
             }
         }
-        .padding(Spacing.card)
-        .surface(.card, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
     }
 
     private static let options = [

@@ -276,3 +276,35 @@ func thread(_ id: String, task: AppAPI.Task? = nil, session: String = "", checks
         """.utf8))
     #expect(!old.fixed && !old.actionable)
 }
+
+/// Needs you's chips (T847): All first, then each kind there is, in
+/// Group's order; a filter that empties shows them all again.
+@Test func needGroups() {
+    func need(_ id: String, _ kind: Need.Kind) -> Need {
+        Need(id: id, kind: kind, project: "terminatr", what: id, detail: "")
+    }
+    let needs = [need("q", .question), need("a", .approval), need("c", .checks), need("h", .held), need("p", .network)]
+    let groups = Need.groups(needs)
+    #expect(groups.map(\.group) == [.all, .approval, .question, .blocked, .paired])
+    #expect(groups.map { $0.group.label($0.count) } == ["All 5", "1 approval", "1 ask", "2 blocked", "1 paired"])
+    #expect(Need.Group.question.label(2) == "2 asks")
+    #expect(Need.filter(needs, .blocked).map(\.id) == ["c", "h"])
+    #expect(Need.filter(needs, .review).map(\.id) == needs.map(\.id))
+    #expect(Need.filter(needs, .all).count == 5)
+    // A paired server's need is answered there: its glyph is soft.
+    #expect(!Need.Kind.network.tone.waits && Need.Kind.approval.tone.waits)
+}
+
+/// A card's age, short; none when the need doesn't say since when.
+@Test func needAge() {
+    func aged(_ seconds: Double) -> String {
+        Need(id: "x", kind: .question, project: "", what: "", detail: "", since: t0).age(now: t0.addingTimeInterval(seconds))
+    }
+    #expect(aged(-5) == "now" && aged(59) == "now")
+    #expect(aged(240) == "4m" && aged(7200) == "2h" && aged(3 * 86400) == "3d")
+    #expect(Need(id: "x", kind: .question, project: "", what: "", detail: "").age(now: t0) == "")
+    // A question's need waits since its menu did, with each option's description.
+    let n = Need.of(projects: [], sessions: [session("s-1", state: "blocked", reason: "question", question: menu([backend]))]).first
+    #expect(n?.since == t0)
+    #expect(n?.answer?.descriptions == ["", ""])
+}
