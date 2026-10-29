@@ -18,6 +18,7 @@ import (
 var tsNames = map[reflect.Type]string{
 	typ[modbus.Task]():       "TaskChanged",
 	typ[modbus.Tasks]():      "TasksChanged",
+	typ[modbus.Designs]():    "DesignsChanged",
 	typ[modbus.Thread]():     "ThreadState",
 	typ[modbus.Item]():       "InboxItem",
 	typ[modbus.Session]():    "SessionState",
@@ -40,10 +41,11 @@ var tsSame = map[reflect.Type]reflect.Type{
 
 // tsUnions are the string types that are unions in TypeScript.
 var tsUnions = map[reflect.Type][]string{
-	typ[Role]():        Roles,
-	typ[Icon]():        Icons,
-	typ[Level]():       Levels,
-	typ[ChangesMode](): ChangesModes,
+	typ[Role]():         Roles,
+	typ[Icon]():         Icons,
+	typ[Level]():        Levels,
+	typ[ChangesMode]():  ChangesModes,
+	typ[DesignStatus](): DesignStatuses,
 }
 
 // codeHostTS declares what a code host mod's handlers get and answer

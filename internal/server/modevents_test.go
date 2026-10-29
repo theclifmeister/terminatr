@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/modbus"
+	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/session"
 	"github.com/theclifmeister/terminatr/internal/tasks"
@@ -139,6 +141,43 @@ func TestModEvents(t *testing.T) {
 	// The PR poll and its failing gh: the ticker as project.get gives it.
 	if tk := tickEv.Ticker; tickEv.Project != "demo" || !tk.PRChecked.Equal(time.Date(2026, 10, 13, 14, 0, 0, 0, time.UTC)) || !tk.GHFailing || tk.PRPollSeconds == 0 {
 		t.Fatalf("ticker.changed %+v", tickEv)
+	}
+
+	// Mod API 1.10: a task given a design changes the board and the
+	// designs, in that order; the design's record alone, only the
+	// designs.
+	looking.Lock()
+	view := "net-view"
+	if _, err := pr.Tasks().SetPlan(human, 1, &view, nil); err != nil {
+		t.Fatal(err)
+	}
+	s.modEv.wake()
+	looking.Unlock()
+	names = nil
+	for len(names) < 2 {
+		if ev := next(reader); ev.Name != modbus.ClockMinute {
+			names = append(names, ev.Name)
+		}
+	}
+	if want := []string{modbus.TasksChanged, modbus.DesignsChanged}; !slices.Equal(names, want) {
+		t.Fatalf("events %v, want %v", names, want)
+	}
+	looking.Lock()
+	title := "Network view"
+	if _, _, err := pr.SetDesign(view, project.DesignEdit{Title: &title}); err != nil {
+		t.Fatal(err)
+	}
+	s.modEv.wake()
+	looking.Unlock()
+	for {
+		ev := next(reader)
+		if ev.Name == modbus.ClockMinute {
+			continue
+		}
+		if d, ok := ev.Data.(modbus.Designs); ev.Name != modbus.DesignsChanged || !ok || d.Project != "demo" {
+			t.Fatalf("event %s %+v, want designs.changed", ev.Name, ev.Data)
+		}
+		break
 	}
 
 	// The blind mod got none of it, but does get the clock and sessions.

@@ -15,7 +15,11 @@ type ProjectState struct {
 	Tasks map[string]Task // by id, To the status
 	// Board is all $.tasks.list shows of the board, the asks too, as a
 	// digest: tasks.changed when it differs.
-	Board   string
+	Board string
+	// Designs is all $.designs.list shows, as a digest, while a mod
+	// listens to designs.changed: designs.changed when it differs. ""
+	// is not looked at.
+	Designs string
 	Threads map[string]ThreadSnap
 	Inbox   map[string]Item // the unhandled items, by id
 	PRs     map[string]PR   // by thread, only threads with a PR
@@ -79,7 +83,7 @@ func (t *Tracker) Reset() {
 
 // Project publishes what changed in project slug since its last state.
 // Events of one project go out in the order of the design's table:
-// threads started, tasks (each task, then the board), thread states, thread changes, reports, PRs, the ticker,
+// threads started, tasks (each task, then the board), designs, thread states, thread changes, reports, PRs, the ticker,
 // inbox items, threads resolved; each kind in id order.
 func (t *Tracker) Project(slug string, cur *ProjectState) {
 	old := t.projects[slug]
@@ -105,6 +109,9 @@ func (t *Tracker) Project(slug string, cur *ProjectState) {
 	}
 	if cur.Board != old.Board {
 		pub(TasksChanged, Tasks{Project: slug})
+	}
+	if cur.Designs != "" && old.Designs != "" && cur.Designs != old.Designs {
+		pub(DesignsChanged, Designs{Project: slug})
 	}
 	for _, id := range threads {
 		n, o := cur.Threads[id], old.Threads[id]

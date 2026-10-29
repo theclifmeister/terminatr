@@ -171,6 +171,26 @@ func TestTrackerBoard(t *testing.T) {
 	}
 }
 
+// TestTrackerDesigns: designs.changed follows the designs' digest once
+// both sides have one: "" (no mod listened, or it couldn't be read) is
+// a baseline, not a change.
+func TestTrackerDesigns(t *testing.T) {
+	b := New()
+	s := b.Subscribe("m", Options{Grants: all})
+	tr := NewTracker(b, nil)
+	cur := state()
+	tr.Project("p", cur)
+	for _, d := range []string{"a", "a", "b", "", "c", "d"} {
+		next := *cur
+		next.Designs = d
+		tr.Project("p", &next)
+	}
+	want := []string{"designs.changed {Project:p}", "designs.changed {Project:p}"}
+	if got := drain(t, s); fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("events %q, want %q", got, want)
+	}
+}
+
 // TestTrackerQuestions: session.question once a menu opens on a session
 // after the baseline, when another question replaces it, and once it
 // goes (no question); the same question again publishes nothing.

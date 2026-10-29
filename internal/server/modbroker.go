@@ -16,6 +16,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -356,6 +357,13 @@ func (s *Server) modMethods(b *modbroker.Broker) {
 		items, _ := p.Inbox()
 		return modTasks(board, items), nil
 	})
+	b.Handle("designs.list", mod.PermProjectRead, func(_ context.Context, c *modbroker.Call) (any, error) {
+		p, err := modProject(c, &struct{}{})
+		if err != nil {
+			return nil, err
+		}
+		return modDesigns(p)
+	})
 	b.Handle("thread.get", mod.PermProjectRead, func(_ context.Context, c *modbroker.Call) (any, error) {
 		var a struct {
 			Thread string `json:"thread"`
@@ -559,7 +567,51 @@ func modTasks(board *tasks.Board, items []project.Item) []ModTask {
 		}
 		out = append(out, ModTask{ID: t.Ref(), Title: t.Title, Status: string(t.Status),
 			StepsDone: t.StepsDone(), StepsTotal: len(t.Steps), Thread: t.Thread,
-			Steps: steps, Updated: t.Updated, Asked: project.TaskAsked(items, t.Ref())})
+			Steps: steps, Updated: t.Updated, Asked: project.TaskAsked(items, t.Ref()),
+			Design: t.Design, After: taskRefs(t.After)})
 	}
 	return out
+}
+
+// taskRefs are task ids as refs, "T10".
+func taskRefs(ids []int) []string {
+	var out []string
+	for _, id := range ids {
+		out = append(out, "T"+strconv.Itoa(id))
+	}
+	return out
+}
+
+// modDesigns is $.designs.list: p's designs as its vault notes show
+// them, from its board and its archive (project.DesignBuilds).
+func modDesigns(p *project.Project) ([]modapi.Design, error) {
+	board, err := p.Tasks().Load()
+	if err != nil {
+		return nil, err
+	}
+	archive, err := p.Tasks().LoadArchive()
+	if err != nil {
+		return nil, err
+	}
+	builds, err := p.DesignBuilds(board, archive)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]modapi.Design, 0, len(builds))
+	for _, b := range builds {
+		d := modapi.Design{Name: b.Name, Title: cmp.Or(b.Title, b.Name), Status: modapi.DesignStatus(b.Status()),
+			Task: b.Task, Artifact: b.Artifact, Tasks: []string{}, TasksDone: b.Done(),
+			Answers: append([]string{}, b.Answers...), Questions: []modapi.DesignQuestion{}}
+		if b.DesignTask != nil {
+			d.TaskStatus = string(b.DesignTask.Status)
+		}
+		for _, t := range b.Build {
+			d.Tasks = append(d.Tasks, t.Ref())
+		}
+		for _, q := range b.Questions {
+			d.Questions = append(d.Questions, modapi.DesignQuestion{ID: q.ID, Header: q.Header, Question: q.Question})
+		}
+		out = append(out, d)
+	}
+	return out, nil
 }

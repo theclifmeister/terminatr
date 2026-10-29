@@ -28,7 +28,10 @@ const (
 	// ThreadChanges (mod API 1.8): what a live thread's worktree
 	// changed (its HEAD, its status, its pushed branch) moved.
 	ThreadChanges = "thread.changes"
-	ClockMinute   = "clock.minute"
+	// DesignsChanged (mod API 1.10): anything $.designs.list shows of
+	// a project changed.
+	DesignsChanged = "designs.changed"
+	ClockMinute    = "clock.minute"
 	// Published by the console, action and view parts of the API.
 	UIClick    = "ui.click"
 	UIKey      = "ui.key"
@@ -45,7 +48,7 @@ const (
 // Needs is the grant a mod needs to get event name; "" for none.
 func Needs(name string) string {
 	switch name {
-	case TaskChanged, TasksChanged, ThreadState, ThreadStarted, ThreadResolved, ReportStored, InboxItem, PRChanged, TickerChanged, ThreadChanges, SessionQuestion:
+	case TaskChanged, TasksChanged, ThreadState, ThreadStarted, ThreadResolved, ReportStored, InboxItem, PRChanged, TickerChanged, ThreadChanges, SessionQuestion, DesignsChanged:
 		return mod.PermProjectRead
 	case ViewOpened, ViewClosed:
 		return mod.PermViews
@@ -71,6 +74,12 @@ type Task struct {
 // added or gone) or an ask about one of its tasks came or was handled.
 // It names the project only: a mod lists the tasks again.
 type Tasks struct {
+	Project string `json:"project"`
+}
+
+// Designs is designs.changed (mod API 1.10): what $.designs.list shows
+// of the project changed.
+type Designs struct {
 	Project string `json:"project"`
 }
 

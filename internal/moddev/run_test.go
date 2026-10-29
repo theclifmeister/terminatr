@@ -134,6 +134,61 @@ func TestRunDir(t *testing.T) {
 	}
 }
 
+// TestDesignsFixture (mod API 1.10): a fixture sends designs.changed
+// and answers designs.list; unanswered, designs.list lists nothing.
+func TestDesignsFixture(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "phases")
+	files := map[string]string{
+		"mod.toml": `id = "phases"
+name = "Phases"
+version = "0.1.0"
+api = "1.10"
+[provides]
+main = "main.ts"
+[permissions]
+project_read = true
+`,
+		"main.ts": `
+$.on("designs.changed", async (e: any) => {
+  const ds = await $.designs.list(e.project);
+  $.ui.status.set(ds.length ? ds.map((d: any) => ({ text: d.name + " " + d.status + " " + d.tasks_done + "/" + d.tasks.length })) : null);
+});
+`,
+		"tests/phases.json": `{
+  "answers": [{"method": "designs.list", "params": {"slug": "demo"}, "result": [
+    {"name": "net-view", "title": "Network view", "status": "building", "task": "T1", "tasks": ["T2", "T3"], "tasks_done": 1, "answers": [], "questions": []}
+  ]}],
+  "events": [{"name": "designs.changed", "project": "demo", "data": {"project": "demo"}}],
+  "expect": {"calls": [{"method": "designs.list", "params": {"slug": "demo"}}, {"method": "ui.status.set", "params": {"spans": [{"text": "net-view building 1/2"}]}}]}
+}`,
+		"tests/none.json": `{
+  "events": [{"name": "designs.changed", "project": "demo", "data": {"project": "demo"}}],
+  "expect": {"calls": [{"method": "designs.list"}, {"method": "ui.status.set", "params": {"spans": null}}]}
+}`,
+	}
+	for n, text := range files {
+		p := filepath.Join(dir, filepath.FromSlash(n))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(text), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	res, err := RunDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res) != 2 {
+		t.Fatalf("results %+v", res)
+	}
+	for _, r := range res {
+		if !r.OK {
+			t.Errorf("%s: %q", r.File, r.Problems)
+		}
+	}
+}
+
 func TestRunChecksTheFixture(t *testing.T) {
 	m, err := Load(writeMod(t, nil))
 	if err != nil {
