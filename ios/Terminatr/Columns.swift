@@ -44,7 +44,9 @@ struct TabStack<Content: View>: View {
 /// ArrangementView stacks them anyway, axes or not, and the list takes
 /// the whole height: the detail was never shown, so a tap opened
 /// nothing (T841). There, and before 27.1, the list sits beside the
-/// detail in an HStack (beside).
+/// detail in an HStack (beside); on an open iPhone Duo it ends at the
+/// hinge, which the region of the fold, inactive while flat, marks
+/// (PhoneColumns.split, T849).
 struct Columns<Content: View>: View {
     @Environment(\.theme) private var theme
     @Binding var path: [Route]
@@ -52,7 +54,7 @@ struct Columns<Content: View>: View {
     let root: () -> Content
 
     /// The list column's width when the layout leaves it to us.
-    static var listWidth: CGFloat { 360 }
+    static var listWidth: CGFloat { PhoneColumns.listIdeal }
 
     var body: some View {
         let n = path.count
@@ -100,9 +102,9 @@ struct Columns<Content: View>: View {
                     }
                     .arrangementViewStyle(folds ? .split : .split.axes(.horizontal))
                 } else {
-                    // Half the width at most: an open Duo's 585 pt leaves
-                    // the detail as much room as the list.
-                    beside(lead, trail, list: min(Self.listWidth, g.size.width / 2))
+                    let hinge = g.reservedRegions(kind: .division, options: .includeInactive).first?.frame
+                    let (list, gap) = PhoneColumns.split(g.size.width, hinge: hinge)
+                    beside(lead, trail, list: list, gap: gap)
                         .environment(\.splitArrangementAxis, .horizontal)
                 }
             }
@@ -111,11 +113,12 @@ struct Columns<Content: View>: View {
         }
     }
 
-    /// The list column, list points wide, beside the detail.
-    private func beside(_ lead: some View, _ trail: some View, list: CGFloat) -> some View {
+    /// The list column, list points wide, beside the detail, gap points
+    /// apart (the hinge, else a hairline).
+    private func beside(_ lead: some View, _ trail: some View, list: CGFloat, gap: CGFloat = 1) -> some View {
         HStack(spacing: 0) {
             lead.frame(width: list)
-            Rectangle().fill(theme.edge).frame(width: 1).ignoresSafeArea()
+            Rectangle().fill(theme.edge).frame(width: gap).ignoresSafeArea()
             trail
         }
     }

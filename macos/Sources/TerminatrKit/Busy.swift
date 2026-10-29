@@ -112,7 +112,7 @@ public enum Activity {
 
     /// A todo's words as the bar's: "Running the tests" reads "running
     /// the tests" after "Working… ·".
-    private static func lowered(_ s: String) -> String {
+    static func lowered(_ s: String) -> String {
         guard let first = s.first, first.isUppercase, s.dropFirst().first?.isUppercase != true else { return s }
         return first.lowercased() + s.dropFirst()
     }

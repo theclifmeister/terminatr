@@ -115,7 +115,8 @@ enum Route: Hashable {
     var path: [Route] {
         switch self {
         case .project, .peerProject: [self]
-        case .session(let ref), .need(let ref): [.project(ref.project), self]
+        case .session(let ref), .need(let ref):
+            [ref.isRemote ? .peerProject(alias: ref.server, project: ref.project) : .project(ref.project), self]
         case .overview(let s), .board(let s), .memory(let s), .library(let s): [.project(s), self]
         case .memoryFile(let s, _): [.project(s), .memory(s), self]
         case .task(let s, _): [.project(s), .board(s), self]
@@ -125,6 +126,9 @@ enum Route: Hashable {
 
 enum RootTab: Hashable {
     case needs, projects
+    /// A row of the iPad's sidebar (T849): a session or an inactive
+    /// project, opened in the Projects tab's columns.
+    case place(Route)
 }
 
 struct Root: View {
@@ -153,27 +157,117 @@ struct Root: View {
     @ViewBuilder private var content: some View {
         if model.source == .none {
             Welcome()
+        } else if #available(iOS 18, *), Self.sidebar {
+            sidebarTabs
+                .liveStrip(LiveWork.of(model.sessions)) { open(.session($0)) }
+                .onAppear(perform: openLaunched)
+                .onChange(of: projectsPath) { if tab != .needs { tab = Self.place(projectsPath, in: model.sidebar) } }
         } else {
             // .tabItem, not Tab: that one is iOS 18's.
             TabView(selection: $tab) {
-                TabStack(path: $needsPath, key: "needs", empty: ("Pick a need", "exclamationmark.bubble")) {
-                    NeedsScreen()
-                }
-                .tabItem { Label("Needs you", systemImage: "exclamationmark.bubble") }
-                .badge(model.needs.count)
-                .tag(RootTab.needs)
-                TabStack(path: $projectsPath, key: "projects", empty: ("Pick a project", "folder")) {
-                    ProjectsScreen()
-                }
-                .tabItem { Label("Projects", systemImage: "folder") }
-                .tag(RootTab.projects)
+                needsStack
+                    .tabItem { Label("Needs you", systemImage: "exclamationmark.bubble") }
+                    .badge(model.needs.count)
+                    .tag(RootTab.needs)
+                projectsStack
+                    .tabItem { Label("Projects", systemImage: "folder") }
+                    .tag(RootTab.projects)
             }
+            .liveStrip(LiveWork.of(model.sessions)) { open(.session($0)) }
             .onAppear(perform: openLaunched)
+        }
+    }
+
+    private var needsStack: some View {
+        TabStack(path: $needsPath, key: "needs", empty: ("Pick a need", "exclamationmark.bubble")) {
+            NeedsScreen()
+        }
+    }
+
+    private var projectsStack: some View {
+        TabStack(path: $projectsPath, key: "projects", empty: ("Pick a project", "folder")) {
+            ProjectsScreen()
         }
     }
 }
 
+/// The iPad's sidebar (T849): Needs you and Projects, then each
+/// project's coordinator and threads in the TUI's order (model.sidebar),
+/// each paired server's shared ones, and the inactive projects. A row
+/// opens its session in the Projects tab's columns, beside its
+/// project; the sidebar follows the columns as they move on. An iPhone
+/// and the Duo keep the tab bar (and the Duo's rail).
 extension Root {
+    static var sidebar: Bool { UIDevice.current.userInterfaceIdiom == .pad }
+
+    @available(iOS 18, *)
+    private var sidebarTabs: some View {
+        TabView(selection: Binding(get: { tab }, set: choose)) {
+            Tab("Needs you", systemImage: "exclamationmark.bubble", value: RootTab.needs) { needsStack }
+                .badge(model.needs.count)
+            Tab("Projects", systemImage: "folder", value: RootTab.projects) { projectsStack }
+            ForEach(model.sidebar, id: \.section.id) { s in
+                TabSection(s.section.title) {
+                    ForEach(s.rows) { r in
+                        Tab(value: RootTab.place(r.route)) {
+                            projectsStack
+                        } label: {
+                            Label {
+                                Text(r.title)
+                            } icon: {
+                                Image(systemName: r.tone.symbol)
+                                    .foregroundStyle(theme.colour(r.tone))
+                            }
+                        }
+                        .badge(r.badge.map { Text($0) })
+                        .defaultVisibility(.hidden, for: .tabBar)
+                    }
+                }
+                .defaultVisibility(.hidden, for: .tabBar)
+            }
+        }
+        .tabViewStyle(.sidebarAdaptable)
+        .tabViewSidebarHeader { SidebarHead() }
+        .onAppear { Task { Self.showSidebar() } }
+    }
+
+    /// Opens the sidebar once, as the app starts: in portrait the
+    /// TabView starts with it closed behind its button, and SwiftUI
+    /// names no way to open it. The user closes it as ever.
+    @available(iOS 18, *)
+    private static func showSidebar() {
+        func tabs(_ vc: UIViewController?) -> UITabBarController? {
+            guard let vc else { return nil }
+            if let t = vc as? UITabBarController { return t }
+            return vc.children.lazy.compactMap(tabs).first
+        }
+        for case let scene as UIWindowScene in UIApplication.shared.connectedScenes {
+            for w in scene.windows { tabs(w.rootViewController)?.sidebar.isHidden = false }
+        }
+    }
+
+    /// A row picked in the sidebar opens its route in the columns.
+    private func choose(_ t: RootTab) {
+        tab = t
+        if case .place(let r) = t { projectsPath = r.path }
+    }
+
+    /// The sidebar's row for what the columns show: the last route on
+    /// path that has a row, else Projects.
+    static func place(_ path: [Route], in sidebar: [(section: SidebarSection, rows: [SidebarRow])]) -> RootTab {
+        let rows = Set(sidebar.flatMap { $0.rows.map(\.route) })
+        return path.last(where: rows.contains).map(RootTab.place) ?? .projects
+    }
+}
+
+extension Root {
+    /// Opens route from the Projects tab, on the path a tap would have
+    /// taken (Route.path).
+    private func open(_ route: Route) {
+        tab = .projects
+        projectsPath = route.path
+    }
+
     /// -open: "settings", "gallery" (the redesign's components, T845;
     /// with -gallery-lower YES at its states and buttons),
     /// "projects", "needs ROUTE" (a need's route
@@ -190,8 +284,7 @@ extension Root {
         } else if open == "projects" {
             tab = .projects
         } else if let r = Route.parse(open) {
-            tab = .projects
-            projectsPath = r.path
+            self.open(r)
         }
     }
 }
