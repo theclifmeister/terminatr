@@ -717,7 +717,7 @@ func (s *Server) hello() proto.Hello {
 		Build:    s.build,
 		Bin:      s.opts.Bin,
 		PID:      os.Getpid(),
-		Caps:     []string{proto.CapPaneVT, proto.CapTranscript, proto.CapPaneVTRemote, proto.CapSessionFile, proto.CapTranscriptRemote, proto.CapLinkAct, proto.CapTranscriptTail, proto.CapSideActs, proto.CapProjectFiles},
+		Caps:     []string{proto.CapPaneVT, proto.CapTranscript, proto.CapPaneVTRemote, proto.CapSessionFile, proto.CapTranscriptRemote, proto.CapLinkAct, proto.CapTranscriptTail, proto.CapSideActs, proto.CapProjectFiles, proto.CapNeedAct},
 	}
 }
 

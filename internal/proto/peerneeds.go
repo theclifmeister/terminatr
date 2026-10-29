@@ -135,6 +135,9 @@ const (
 // too, and the owner journals it with the phone's name.
 const MethodPeerNeedAct = "peer.need-act"
 
+// CapNeedAct says the server answers peer.need-act.
+const CapNeedAct = "need-act"
+
 // The acts on a paired server's need, by PeerNeed kind: ActAnswer a
 // question menu's question (NeedQuestion), ActApprove an approval's
 // option (NeedApproval), ActAccept and ActSendBack a task in review

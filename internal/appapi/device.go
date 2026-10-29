@@ -18,10 +18,11 @@ import (
 
 // answerMethods are what the answer level adds to view's reads: answers,
 // approvals (never an escape's: the server refuses those to devices),
-// a task's accept and send-back, the coordinator's questions. Each is
-// signed (sign.go).
+// a task's accept and send-back, the coordinator's questions, and the
+// same on a paired server's needs (peer.need-act). Each is signed
+// (sign.go).
 var answerMethods = []string{proto.MethodSessionAnswer, proto.MethodSessionApprove, proto.MethodTaskAccept,
-	proto.MethodTaskSendBack, proto.MethodQuestionsOpen}
+	proto.MethodTaskSendBack, proto.MethodQuestionsOpen, proto.MethodPeerNeedAct}
 
 // Allowed says whether a bridge at device level may call m; "" is the
 // Mac app's, which may call every method but the devices' own

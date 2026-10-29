@@ -8,8 +8,10 @@ package server
 // project's NEEDS YOU.
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"slices"
 	"strconv"
@@ -333,4 +335,54 @@ func menuKey(q proto.Question) string {
 func key(words ...string) string {
 	h := sha256.Sum256([]byte(strings.Join(words, "\x00")))
 	return hex.EncodeToString(h[:6])
+}
+
+// needAct is peer.need-act's: this server's user (on a console, or its
+// phone at the answer level) acts on a need of a paired server's shared
+// project. The paired server checks it all again, and journals it as
+// "human (peer: <its alias for this server>)", with the phone's name
+// when one acted; this server logs it.
+func (s *Server) needAct(p proto.PeerNeedActParams, cc callCtx) (any, *proto.Error) {
+	if p.Peer == "" || strings.ContainsAny(p.Peer, "/@") || !project.ValidSlug(p.Project) || p.Need == "" {
+		return nil, proto.Errorf(proto.ErrBadParams, "peer.need-act needs a paired server, its project and the need")
+	}
+	switch p.Act {
+	case proto.ActAnswer, proto.ActApprove, proto.ActAccept, proto.ActSendBack, proto.ActQuestions:
+	default:
+		return nil, proto.Errorf(proto.ErrBadParams, "%q is no act: answer, approve, accept, send-back or questions", p.Act)
+	}
+	if p.Act == proto.ActSendBack {
+		if _, err := project.SendBackNote(p.Note); err != nil {
+			return nil, proto.Errorf(proto.ErrBadParams, "%v", err)
+		}
+	}
+	who := cc.who()
+	res, err := s.peers.Act(context.Background(), p.Peer, p.PeerAct, who.Device)
+	if err != nil {
+		return nil, needActError(p.Peer, err)
+	}
+	s.log.Printf("peer %s: %s %s on %s, by %s", p.Peer, p.Act, textsafe.Line(p.Need, 80), p.Project, who)
+	s.watch.wake()
+	return res, nil
+}
+
+// needActError is a failed peer.act in this server's words, its code
+// kept.
+func needActError(alias string, err error) *proto.Error {
+	var pe *proto.Error
+	switch {
+	case errors.As(err, &pe) && pe.Code == proto.ErrUnknownMethod:
+		return proto.Errorf(proto.ErrUnknownMethod, "%s's tm takes no answers to its needs; update it to answer there", alias)
+	case errors.As(err, &pe) && pe.Code == proto.ErrNeedsOff:
+		return proto.Errorf(proto.ErrNeedsOff, "%s shows its needs to this server but takes no answers: on %s, tm peer needs <this server> answer", alias, alias)
+	case errors.As(err, &pe) && pe.Code == proto.ErrNeedChanged:
+		return proto.Errorf(proto.ErrNeedChanged, "that need on %s changed: look again", alias)
+	case errors.As(err, &pe) && pe.Code == proto.ErrEscapeHere:
+		return proto.Errorf(proto.ErrEscapeHere, "that asks to run a command outside the sandbox: only %s's user answers it, there", alias)
+	case errors.As(err, &pe) && pe.Code == proto.ErrNotShared:
+		return proto.Errorf(proto.ErrNotShared, "%s doesn't share that project any more", alias)
+	case errors.As(err, &pe):
+		return pe
+	}
+	return proto.Errorf(proto.ErrRefused, "%s can't be reached now (%v)", alias, err)
 }

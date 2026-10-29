@@ -74,6 +74,10 @@ type row struct {
 	// its row in the all-projects NEEDS YOU: enter shows its read-only
 	// dashboard.
 	remote string
+	// peerNeed is a paired server's need in full on its row there
+	// (§16.16): enter opens the dialog to answer it while that server
+	// takes answers from this one (peerneedact.go).
+	peerNeed *peerNeedRef
 	// card: the row is a mod's dashboard card's header (modviews.go),
 	// its key the card's.
 	card bool
@@ -572,8 +576,9 @@ func peerNeeds(peers []proto.PeerMirror) []row {
 			fold, who := peerFold(pm.Alias, mp.Project), remoteCrumb(server, mp.Project)
 			if len(mp.Needs) > 0 || proto.NeedsShown(pm.Needs) {
 				for _, n := range mp.Needs {
-					r := peerNeedRow(n, server)
+					r := peerNeedRow(n, server, pm.Needs == proto.NeedsAnswer)
 					r.key, r.remote, r.mark, r.who, r.pct = "nr:"+fold+":"+n.ID, fold, markNeeds, who, -1
+					r.peerNeed = &peerNeedRef{alias: pm.Alias, server: server, project: mp.Project, need: n, answer: pm.Needs == proto.NeedsAnswer}
 					out = append(out, r)
 				}
 				continue
@@ -594,9 +599,10 @@ func peerNeeds(peers []proto.PeerMirror) []row {
 }
 
 // peerNeedRow is a paired server's need in full as a row's words: who
-// asks and what, its state, and where it is answered: on that server
-// (read-only here), an escape's by its user alone.
-func peerNeedRow(n proto.PeerNeed, server string) row {
+// asks and what, its state, and where it is answered: here when that
+// server takes answers from this one (answer) and the need takes an
+// act, else on that server; an escape's by its user alone.
+func peerNeedRow(n proto.PeerNeed, server string, answer bool) row {
 	ref := cmp.Or(n.Task, n.Thread)
 	if ref == "" && n.Role == proto.RoleCoordinator {
 		ref = "coordinator"
@@ -627,6 +633,12 @@ func peerNeedRow(n proto.PeerNeed, server string) row {
 		r.what, r.rest = joinSp(ref, oneLine(n.Text)), "on "+server
 	default:
 		r.what, r.rest = joinSp(ref, oneLine(n.Title)), joinSp(whyWords[n.Kind], "on "+server)
+	}
+	if answer && len(proto.ActsOf(n)) > 0 {
+		r.rest = "answer here, for " + server
+		if n.Kind == proto.NeedReview {
+			r.rest = joinSp("in review", prRef(n.PRURL), "for "+server)
+		}
 	}
 	if n.Escape {
 		r.what = joinSp(ref, "asks to run a command outside the sandbox")

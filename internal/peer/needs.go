@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/json"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -202,4 +203,43 @@ func (d *dispatcher) needsOf(project string) ([]proto.PeerNeed, error) {
 		}
 	}
 	return ns, nil
+}
+
+// actWait bounds an act across the link: the console waits for it, and
+// an answer types its keys there.
+const actWait = 30 * time.Second
+
+// ErrNoActs means the paired server's tm takes no acts on its needs
+// (its hello doesn't list CapNeeds).
+var ErrNoActs = proto.Errorf(proto.ErrUnknownMethod, "the paired server's tm takes no answers to its needs")
+
+// Act sends act p on a need of the paired server alias (or the one
+// named so), as this server's user, or its phone device's: a nonce from
+// peer.nonce, then peer.act with it. Its refusals come back with their
+// codes (proto.ErrNeedsOff, proto.ErrNeedChanged, proto.ErrEscapeHere …).
+func (m *Manager) Act(ctx context.Context, alias string, p proto.PeerAct, device string) (proto.PeerActResult, error) {
+	if m == nil {
+		return proto.PeerActResult{}, errNotUp
+	}
+	l := m.link(alias)
+	if l == nil {
+		return proto.PeerActResult{}, proto.Errorf(proto.ErrRefused, "no paired server %q", alias)
+	}
+	if st := l.status(); st.State == proto.LinkUp && !slices.Contains(st.Caps, CapNeeds) {
+		return proto.PeerActResult{}, ErrNoActs
+	}
+	ctx, cancel := context.WithTimeout(ctx, actWait)
+	defer cancel()
+	var n proto.PeerNonce
+	if err := l.call(ctx, proto.MethodPeerNonce, struct{}{}, &n); err != nil {
+		return proto.PeerActResult{}, err
+	}
+	var res proto.PeerActResult
+	if err := l.call(ctx, proto.MethodPeerAct, proto.PeerActParams{PeerAct: p, Nonce: n.Nonce, Device: device}, &res); err != nil {
+		return proto.PeerActResult{}, err
+	}
+	res.Act = p.Act
+	res.Option = textsafe.Line(res.Option, 300)
+	res.Remaining, res.Open = max(res.Remaining, 0), max(res.Open, 0)
+	return res, nil
 }
