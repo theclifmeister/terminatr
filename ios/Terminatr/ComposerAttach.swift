@@ -163,12 +163,16 @@ struct AttachMenu: View {
     /// The picked photos, each as ComposerFiles.photo makes it.
     private func add(_ items: [PhotosPickerItem]) async {
         for item in items {
-            let type = item.supportedContentTypes.first
+            // Its bytes as Photos keeps them (HEIC, JPEG, PNG…), whatever
+            // type it lists first: always an image here.
             guard let data = try? await item.loadTransferable(type: Data.self) else {
                 tray.refuse(name: "Photo", why: "Photos didn't give its bytes")
                 continue
             }
-            let f = await Task.detached { Incoming.file(name: "", data: data, type: type ?? .image) }.value
+            guard let f = await Task.detached(operation: { ComposerFiles.photo(data, name: "") }).value else {
+                tray.refuse(name: "Photo", size: data.count, why: "Not an image terminatr can read")
+                continue
+            }
             tray.add(name: f.name, data: f.data)
         }
     }

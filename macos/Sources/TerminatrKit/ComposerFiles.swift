@@ -169,7 +169,7 @@ public enum ComposerFiles {
         }
         // A JPEG small enough goes as it is, less its metadata: drawn
         // again only when it carries any.
-        if ext == "jpg", !large, props[kCGImagePropertyGPSDictionary] == nil,
+        if type == UTType.jpeg.identifier, !large, props[kCGImagePropertyGPSDictionary] == nil,
            (props[kCGImagePropertyOrientation] as? Int ?? 1) == 1 {
             return (renamed(name, ext: ext, date: date), data)
         }
@@ -179,13 +179,28 @@ public enum ComposerFiles {
             kCGImageSourceShouldCacheImmediately: true,
             kCGImageSourceThumbnailMaxPixelSize: min(max(w, h, 1), maxPixel),
         ]
-        guard let image = CGImageSourceCreateThumbnailAtIndex(src, 0, opts as CFDictionary) else { return nil }
+        guard let deep = CGImageSourceCreateThumbnailAtIndex(src, 0, opts as CFDictionary),
+              let image = eightBit(deep) else { return nil }
         let out = NSMutableData()
         let utType = ext == "png" ? UTType.png : UTType.jpeg
         guard let dst = CGImageDestinationCreateWithData(out, utType.identifier as CFString, 1, nil) else { return nil }
         CGImageDestinationAddImage(dst, image, ext == "png" ? nil : [kCGImageDestinationLossyCompressionQuality: 0.85] as CFDictionary)
         guard CGImageDestinationFinalize(dst) else { return nil }
         return (renamed(name, ext: ext, date: date), out as Data)
+    }
+
+    /// image at 8 bits a component, its colour space kept: a phone's
+    /// HEIC decodes at 10 (HDR, Display P3), which a JPEG encoder may
+    /// refuse (the Simulator's does).
+    static func eightBit(_ image: CGImage) -> CGImage? {
+        guard image.bitsPerComponent > 8 else { return image }
+        let space = image.colorSpace.flatMap { $0.model == .rgb ? $0 : nil } ?? CGColorSpace(name: CGColorSpace.sRGB)!
+        let alpha = image.alphaInfo
+        let opaque = alpha == .none || alpha == .noneSkipLast || alpha == .noneSkipFirst
+        guard let ctx = CGContext(data: nil, width: image.width, height: image.height, bitsPerComponent: 8, bytesPerRow: 0, space: space,
+                                  bitmapInfo: (opaque ? CGImageAlphaInfo.noneSkipLast : .premultipliedLast).rawValue) else { return nil }
+        ctx.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+        return ctx.makeImage()
     }
 
     /// name with its extension ext ("IMG_0042.HEIC" as "IMG_0042.jpg"),

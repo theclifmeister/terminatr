@@ -222,11 +222,17 @@ private func pixels(_ d: Data) -> (String, Int, Int) {
     let b = try #require(ComposerFiles.photo(big, name: "wide.png"))
     #expect(b.name == "wide.png")
     #expect(pixels(b.data) == (UTType.png.identifier, ComposerFiles.maxPixel, 50))
-    // HEIC (where this Mac writes it) goes as JPEG, turned upright.
+    // HEIC (where this Mac writes it) goes as JPEG, turned upright; an
+    // upright one with no place is drawn again too, never sent as HEIC.
     if let heic = image(.heic, w: 40, h: 20, props: [kCGImagePropertyOrientation: 6]) {
         let h = try #require(ComposerFiles.photo(heic, name: "IMG_0042.HEIC"))
         #expect(h.name == "IMG_0042.jpg")
         #expect(pixels(h.data) == (UTType.jpeg.identifier, 20, 40))
+    }
+    if let heic = image(.heic, w: 40, h: 20) {
+        let h = try #require(ComposerFiles.photo(heic, name: ""))
+        #expect(h.data.starts(with: [0xFF, 0xD8, 0xFF]))
+        #expect(pixels(h.data) == (UTType.jpeg.identifier, 40, 20))
     }
     // A JPEG with a place loses it.
     let gps: [CFString: Any] = [kCGImagePropertyGPSDictionary: [kCGImagePropertyGPSLatitude: 52.0, kCGImagePropertyGPSLatitudeRef: "N"]]
@@ -234,4 +240,18 @@ private func pixels(_ d: Data) -> (String, Int, Int) {
     let j = try #require(ComposerFiles.photo(jpg, name: "a.jpeg"))
     let props = CGImageSourceCopyPropertiesAtIndex(CGImageSourceCreateWithData(j.data as CFData, nil)!, 0, nil) as! [CFString: Any]
     #expect(j.name == "a.jpg" && props[kCGImagePropertyGPSDictionary] == nil)
+}
+
+/// A 10- or 16-bit image (a phone's HDR HEIC) is drawn at 8 bits before
+/// it goes as JPEG; an 8-bit one is left alone.
+@Test func deepPhotosGoAtEightBits() throws {
+    let space = CGColorSpace(name: CGColorSpace.displayP3)!
+    let ctx = try #require(CGContext(data: nil, width: 4, height: 2, bitsPerComponent: 16, bytesPerRow: 0, space: space,
+                                     bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue | CGBitmapInfo.byteOrder16Little.rawValue))
+    let deep = try #require(ctx.makeImage())
+    let flat = try #require(ComposerFiles.eightBit(deep))
+    #expect(flat.bitsPerComponent == 8 && flat.width == 4 && flat.colorSpace?.name == CGColorSpace.displayP3)
+    let eight = try #require(CGContext(data: nil, width: 2, height: 2, bitsPerComponent: 8, bytesPerRow: 0, space: space,
+                                       bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)?.makeImage())
+    #expect(ComposerFiles.eightBit(eight) === eight)
 }
