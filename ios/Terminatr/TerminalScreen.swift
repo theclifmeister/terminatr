@@ -36,7 +36,11 @@ struct TerminalScreen: View {
         let remote = ref.isRemote ? model.remotePane(ref) : nil
         let held = session.map { $0.escape || $0.question?.escape == true } ?? false
         let note = note(remote: remote, held: held)
-        Group {
+        // A ZStack, not a Group: a Group's modifiers go to its children,
+        // and before the pane is made the branch below had none, so the
+        // .task that makes it never ran and the screen stayed blank
+        // (T853).
+        ZStack {
             if id == nil {
                 ContentUnavailableView("No session runs", systemImage: "moon.zzz",
                                        description: Text("Its terminal shows while a session runs it."))
@@ -44,14 +48,20 @@ struct TerminalScreen: View {
                 message("This tm server doesn't stream panes to the app; tm update and tm server restart bring it.")
             } else if case .closed(let why) = remote {
                 message(why)
-            } else if let id, let pane {
+            } else if let id {
                 ZStack(alignment: .bottom) {
-                    PhoneTerminal(host: pane.host, theme: theme)
-                        // A redial is a new bridge: the stream opens again on it.
-                        .task(id: "\(id)/\(model.generation)/\(repaints)") {
-                            if let b = model.bridge { await pane.controller.run(b, id) }
-                        }
-                    if let closed = pane.controller.closed {
+                    // The box in the terminal's colours from the first
+                    // frame, the pane's mirror once it is made.
+                    if let pane {
+                        PhoneTerminal(host: pane.host, theme: theme)
+                            // A redial is a new bridge: the stream opens again on it.
+                            .task(id: "\(id)/\(model.generation)/\(repaints)") {
+                                if let b = model.bridge { await pane.controller.run(b, id) }
+                            }
+                    } else {
+                        Color.clear
+                    }
+                    if let closed = pane?.controller.closed {
                         Text(closed)
                             .font(theme.body(.subheadline))
                             .padding(10)
@@ -335,6 +345,11 @@ struct PhoneTerminal: UIViewRepresentable {
         if let w = painted.with, w.0 == c, w.1 == dark { return }
         painted.with = (c, dark)
         h.terminal.paint(c, dark: dark)
-        h.backgroundColor = PlatformColor(c.background, dark: dark)
+        // SwiftTerm on iOS keeps the layer's colour it set up with
+        // (black) under the cells it draws: the theme's, before the
+        // first frame too.
+        let bg = PlatformColor(c.background, dark: dark)
+        h.terminal.layer.backgroundColor = bg.cgColor
+        h.backgroundColor = bg
     }
 }
