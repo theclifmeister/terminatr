@@ -293,6 +293,8 @@ func taskPanelWith(d *panel, t *tasks.Task, rv *Review, asked string, usage thre
 	d.badges(badges)
 	d.field("thread", t.Thread)
 	d.field("usage", usage.String())
+	d.field("design", t.Design)
+	d.field("after", taskRefList(t.After))
 	if asked != "" {
 		d.gap()
 		d.wrap(th().Warn.Render(waitingFor(asked)))

@@ -57,6 +57,7 @@ type fakeSource struct {
 	answered    []string // slugs whose questions were opened
 	saveCleared []string // slugs whose coordinators were saved and cleared
 	reviews     map[int]Review
+	designs     []project.DesignBuild // the Designs tab's (designs_test.go)
 	peers       PeerList
 	// devices and devErr are Devices' answer; devActs the changes to
 	// them ("level <id> answer", "name <id> New", "remove <id>"), and
@@ -301,6 +302,7 @@ func (f *fakeSource) Ask(slug string, id int, kind, note string) (bool, error) {
 	return true, nil
 }
 func (f *fakeSource) Library(string) ([]thread.LibFile, error) { return f.library, nil }
+func (f *fakeSource) Designs(string) ([]project.DesignBuild, error) { return f.designs, nil }
 func (f *fakeSource) LibraryRead(_, id, name string, max int64) ([]byte, bool, error) {
 	return []byte(f.libFiles[id+"/"+name]), false, nil
 }

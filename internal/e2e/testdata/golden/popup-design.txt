@@ -1,0 +1,40 @@
+ PROJECTS                      1   │ tm dashboard                                               ● server ok · 0 sessions
+ ■ demo             0           ⚑  │ NEEDS YOU 1 ───────────────────────────────────────────────────────────────────────
+ └─ co╭─ Design · demo ──────────────────────────────────────────────────────────────────────────────────────────╮
+      │ The docs                                                                                                 │ivate
+      │ building · docs                                                                                          │
+      │                                                                                                          │
+      │ design task T3 Sketch the docs · review                                                                  │──────
+      │ page        https://example.com/docs                                                                     │
+      │ build       0/2 built                                                                                    │
+      │                                                                                                          │
+      │ ANSWERS 2                                                                                                │
+      │  1. Markdown only                                                                                        │
+      │  2. One page per command                                                                                 │
+      │                                                                                                          │
+      │ BUILD 0/2 built                                                                                          │
+      │ T1    Write the README ● started                                                                         │
+      │ T2    Ship it ○ ready · after T1                                                                         │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+      │                                                                                                          │
+ ─────│ enter show the task · ↑ ↓ move · esc back                                                                │
+ demo ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────╯──────
+ 0 threads · coordinator not runn… │
+ tab sidebar · ? help              │

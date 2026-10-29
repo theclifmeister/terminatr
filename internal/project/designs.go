@@ -309,3 +309,47 @@ func checkAnswers(in []string) ([]string, error) {
 }
 
 func isControl(r rune) bool { return r < ' ' || r == 0x7f }
+
+// BuildDepths is each task's depth in the after graph among build: 0
+// for one that comes after none of them, else one more than the deepest
+// it comes after. A cycle (T1 after T2 after T1) is cut where it closes.
+func BuildDepths(build []*tasks.Task) map[int]int {
+	in := map[int]*tasks.Task{}
+	for _, t := range build {
+		in[t.ID] = t
+	}
+	depth := map[int]int{}
+	onPath := map[int]bool{}
+	var visit func(id int) int
+	visit = func(id int) int {
+		if d, ok := depth[id]; ok {
+			return d
+		}
+		if onPath[id] {
+			return -1
+		}
+		onPath[id] = true
+		d := 0
+		for _, a := range in[id].After {
+			if in[a] != nil {
+				d = max(d, visit(a)+1)
+			}
+		}
+		onPath[id] = false
+		depth[id] = d
+		return d
+	}
+	for _, t := range build {
+		visit(t.ID)
+	}
+	return depth
+}
+
+// Ordered is d's build in after order: by depth in the after graph
+// (BuildDepths), then id, as the vault's note and the consoles list it.
+func (d DesignBuild) Ordered() []*tasks.Task {
+	depth := BuildDepths(d.Build)
+	out := slices.Clone(d.Build)
+	slices.SortStableFunc(out, func(a, b *tasks.Task) int { return depth[a.ID] - depth[b.ID] })
+	return out
+}

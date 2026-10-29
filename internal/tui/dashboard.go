@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/colorprofile"
 
 	"github.com/theclifmeister/terminatr/internal/modview"
+	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/thread"
@@ -339,6 +340,10 @@ type boardMsg struct {
 	library []thread.LibFile
 	libOK   bool
 	libErr  error
+	// designs are the project's designs (the Designs tab); desErr is
+	// why they didn't load.
+	designs []project.DesignBuild
+	desErr  error
 }
 
 // loadedMsg is what a command loaded off the UI goroutine (config.toml,
@@ -392,12 +397,13 @@ func (m *dash) loadBoard(slug string) tea.Cmd {
 }
 
 // loadPopup loads what slug's project popup shows from the project
-// folder: its board, as loadBoard, and its library.
+// folder: its board, as loadBoard, its library and its designs.
 func (m *dash) loadPopup(slug string) tea.Cmd {
 	board, src := m.loadBoard(slug), m.src
 	return func() tea.Msg {
 		msg := board().(boardMsg)
 		msg.library, msg.libErr = src.Library(slug)
+		msg.designs, msg.desErr = src.Designs(slug)
 		msg.libOK = true
 		return msg
 	}
@@ -564,6 +570,8 @@ func (m *dash) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if msg.libOK {
 				pv.library, pv.libErr, pv.libOK = msg.library, msg.libErr, true
 				pv.sel[tabLibrary] = min(pv.sel[tabLibrary], max(len(pv.library)-1, 0))
+				pv.designs, pv.desErr, pv.desOK = msg.designs, msg.desErr, true
+				pv.sel[tabDesigns] = min(pv.sel[tabDesigns], max(len(pv.designs)-1, 0))
 			}
 		}
 		return m, nil
