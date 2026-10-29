@@ -32,6 +32,7 @@ const peerUsage = `usage: tm peer pair [--relay URL] [--as ALIAS]
        tm peer rotate [--yes]
        tm peer panes ALIAS off|view|write
        tm peer conversations ALIAS on|off
+       tm peer needs ALIAS off|view|answer
        tm peer relay ALIAS ADDRESS
        tm peer relay-update ALIAS
        tm peer ask-share ALIAS [--for PROJECT] [--note TEXT]
@@ -79,7 +80,7 @@ func runPeer(e *Env, args []string) error {
 			return usagef("tm peer %s takes no --%s\n%s", args[0], name, peerUsage)
 		}
 	}
-	npos := map[string]int{"pair": 0, "join": 1, "list": 0, "remove": 1, "rotate": 0, "panes": 2, "conversations": 2, "relay": 2, "relay-update": 1, "name": 2,
+	npos := map[string]int{"pair": 0, "join": 1, "list": 0, "remove": 1, "rotate": 0, "panes": 2, "conversations": 2, "needs": 2, "relay": 2, "relay-update": 1, "name": 2,
 		"ask-share": 1, "requests": 0, "decline": 1}
 	if n, ok := npos[args[0]]; !ok || len(pos) != n {
 		return usagef("%s", peerUsage)
@@ -113,6 +114,8 @@ func runPeer(e *Env, args []string) error {
 		return e.peerPanes(dir, pos[0], pos[1])
 	case "conversations":
 		return e.peerConversations(dir, pos[0], pos[1])
+	case "needs":
+		return e.peerNeeds(dir, pos[0], pos[1])
 	case "relay":
 		return e.peerRelay(dir, pos[0], pos[1])
 	case "relay-update":
@@ -407,6 +410,9 @@ type peerEntry struct {
 	// Conversations is this server's conversations switch for the peer
 	// (§16.14): on or off.
 	Conversations string `json:"conversations"`
+	// Needs is this server's needs switch for the peer (§16.16): off,
+	// view or answer.
+	Needs string `json:"needs"`
 }
 
 func (e *Env) peerList(dir string, asJSON bool) error {
@@ -428,7 +434,7 @@ func (e *Env) peerList(dir string, asJSON bool) error {
 	entries := []peerEntry{}
 	for _, p := range peers {
 		pe := peerEntry{Alias: p.Alias, Name: p.Name, Told: p.Told, ID: p.ID().String(), Short: p.ID().Short(), Relay: p.Relay, Panes: proto.PanesWord(p.PanesLevel()),
-			Conversations: convWord(p.ConversationsOn())}
+			Conversations: convWord(p.ConversationsOn()), Needs: p.NeedsLevel()}
 		if l, ok := links[pe.ID]; ok {
 			pe.Link = &l
 		}
@@ -467,6 +473,9 @@ func (e *Env) peerList(dir string, asJSON bool) error {
 			if pe.Conversations == proto.ConversationsNot {
 				state += ", conversations off"
 			}
+		}
+		if pe.Needs != proto.NeedsOff {
+			state += "; needs: " + pe.Needs
 		}
 		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", peer.Both(cmp.Or(pe.Name, pe.Told), pe.Alias), pe.Short, relayHost(pe.Relay), state)
 	}
@@ -508,6 +517,34 @@ func (e *Env) peerPanes(dir, alias, level string) error {
 		fmt.Fprintf(e.Stdout, "Panes view for %s: it can watch the coordinator and thread panes of the projects this server shares, without typing.\n", alias)
 	default:
 		fmt.Fprintf(e.Stdout, "Panes write for %s: it can watch and type into the coordinator and thread panes of the projects this server shares; the first keys into a thread tell its coordinator.\n", alias)
+	}
+	e.reload()
+	return nil
+}
+
+// peerNeeds sets what the paired server alias may see of this server's
+// needs (docs/SPEC.md §16.16): off (the default: the masked list every
+// paired server reads), view (each need in full, question and dialog
+// text included) or answer (view, and the acts on them where its tm
+// sends them).
+func (e *Env) peerNeeds(dir, alias, level string) error {
+	if _, ok := proto.ParseNeeds(level); !ok {
+		return usagef("tm peer needs ALIAS off|view|answer: %q isn't one", level)
+	}
+	found, err := peer.SetNeeds(dir, alias, level)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return &project.Error{Code: "unknown-peer", Msg: fmt.Sprintf("no peer %q (tm peer list)", alias)}
+	}
+	switch level {
+	case proto.NeedsOff:
+		fmt.Fprintf(e.Stdout, "Needs off for %s: it sees how many needs the shared projects have, not what they ask.\n", alias)
+	case proto.NeedsView:
+		fmt.Fprintf(e.Stdout, "Needs view for %s: it sees each need of the projects this server shares in full: the questions' and permission dialogs' text and options, the tasks in review, the coordinators' questions. It answers none of them.\n", alias)
+	default:
+		fmt.Fprintf(e.Stdout, "Needs answer for %s: it sees each need in full, as at view; answering them from there comes with a later tm, never a command outside the sandbox.\n", alias)
 	}
 	e.reload()
 	return nil

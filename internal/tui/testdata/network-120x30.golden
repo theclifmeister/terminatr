@@ -71,15 +71,15 @@
 │    No phone yet. D pairs one: a QR code to scan with the  │   ○ types in them                            │
 │    terminatr app on the iPhone.                           │   ● reads their conversations, in its Mac    │
 │                                                           │     app                                      │
+│                                                           │   ○ sees what your projects ask you, in full │
 │                                                           │   panes (V)   off · [view] · write           │
 │                                                           │               it can watch the coordinators  │
 │                                                           │               and threads of the projects    │
 │                                                           │               you share, not type            │
 │                                                           │   chats (C)   [on] · off                     │
 │                                                           │               its Mac app reads the          │
-│                                                           │               conversations of what it may   │
 │                                                                                                          │
-│ S ask to share · E name · V panes · C conversations · U update relay · X unpair · enter fold             │
+│ S ask to share · E name · V panes · C conversations · N needs · U update relay · X unpair · enter fold   │
 │ tab details · P pair · J join · ? keys · esc close                                                       │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 == t:mini/acme-api

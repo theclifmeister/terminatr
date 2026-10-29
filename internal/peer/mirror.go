@@ -76,6 +76,9 @@ type mirrorPeer struct {
 	// conversations is its conversations switch for this server
 	// (proto.ConversationsOn …), as it last said; "" for unsaid.
 	conversations string
+	// needs is its needs switch for this server (proto.NeedsOff …), as
+	// it last said; "" for unsaid.
+	needs string
 	// listed: projects are a peer.projects answer, the last one while
 	// the link is down.
 	listed   bool
@@ -104,6 +107,7 @@ func StartMirror(l *Manager, opts MirrorOptions) *Mirror {
 	l.OnPanes(func(id ID, p proto.PeerPanesParams) {
 		m.SetPanes(id.String(), p.Panes)
 		m.setConversations(id.String(), p.Conversations)
+		m.setNeeds(id.String(), p.Needs)
 	})
 	return m
 }
@@ -128,6 +132,20 @@ func (m *Mirror) setConversations(id, conv string) {
 	defer m.mu.Unlock()
 	if p := m.peers[id]; p != nil && p.conversations != conv {
 		p.conversations = conv
+		m.changed()
+	}
+}
+
+// setNeeds takes the peer id's word on its needs switch for this
+// server; "" says nothing.
+func (m *Mirror) setNeeds(id, level string) {
+	if _, ok := proto.ParseNeeds(level); !ok {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if p := m.peers[id]; p != nil && p.needs != level {
+		p.needs = level
 		m.changed()
 	}
 }
@@ -321,6 +339,9 @@ func (m *Mirror) setProjects(ctx context.Context, id, alias string, ps proto.Pee
 	if c := ps.Conversations; (c == proto.ConversationsOn || c == proto.ConversationsNot) && c != p.conversations {
 		p.conversations, changed = c, true
 	}
+	if n, ok := proto.ParseNeeds(ps.Needs); ok && n != p.needs {
+		p.needs, changed = n, true
+	}
 	if !p.listed {
 		p.listed, changed = true, true
 	}
@@ -488,13 +509,16 @@ func (m *Mirror) List() proto.PeerList {
 	for _, l := range st.Peers {
 		pm := proto.PeerMirror{Alias: l.Alias, Name: l.Name, ID: l.ID, State: l.State, Reason: l.Reason, Since: l.Since, RTT: l.RTT,
 			Watch: slices.Contains(l.Caps, CapWatch), Popup: slices.Contains(l.Caps, CapPopup), Pane: slices.Contains(l.Caps, CapPane), Version: l.Version,
-			Transcript: slices.Contains(l.Caps, CapTranscript), Projects: []proto.PeerMirrorProject{}}
+			Transcript: slices.Contains(l.Caps, CapTranscript), NeedsCap: slices.Contains(l.Caps, CapNeeds), Projects: []proto.PeerMirrorProject{}}
 		if p := m.peers[l.ID]; p != nil {
 			if pm.Pane {
 				pm.Panes = p.panes
 			}
 			if pm.Transcript {
 				pm.Conversations = p.conversations
+			}
+			if pm.NeedsCap {
+				pm.Needs = p.needs
 			}
 			pm.Listed = p.listed
 			if p.hasOffset {
@@ -504,7 +528,7 @@ func (m *Mirror) List() proto.PeerList {
 				pr := p.projects[slug]
 				mp := proto.PeerMirrorProject{PeerProject: pr.line, Stale: pr.stale || l.State != proto.LinkUp, Synced: pr.synced}
 				if pr.w != nil {
-					mp.Rev, mp.Watch, mp.Sessions = pr.w.Rev, &pr.w.Watch, pr.w.Sessions
+					mp.Rev, mp.Watch, mp.Sessions, mp.Needs = pr.w.Rev, &pr.w.Watch, pr.w.Sessions, pr.w.Needs
 				}
 				pm.Projects = append(pm.Projects, mp)
 			}

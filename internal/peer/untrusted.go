@@ -3,6 +3,7 @@ package peer
 import (
 	"reflect"
 	"regexp"
+	"slices"
 
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/textsafe"
@@ -121,7 +122,66 @@ func cleanWatch(w proto.PeerWatch) proto.PeerWatch {
 		n.Thread = word(peerThread, n.Thread)
 		n.Title = textsafe.Line(n.Title, 200)
 	}
+	w.Needs = cleanNeeds(w.Needs)
 	return w
+}
+
+// needKinds are the kinds a PeerNeed may have: one of another kind is
+// dropped.
+var needKinds = []string{proto.NeedQuestion, proto.NeedApproval, proto.NeedAsk, proto.NeedReview, proto.NeedBlocked, proto.NeedCI, proto.NeedQueue}
+
+// cleanNeeds are a peer's needs (strings cleaned already) with the ids
+// they name checked and the words a row shows on one line: a need
+// without an id or of another kind is dropped, and an escape's keeps no
+// menu or dialog whatever the peer sent (§16.16).
+func cleanNeeds(ns []proto.PeerNeed) []proto.PeerNeed {
+	out := ns[:0:0]
+	for _, n := range ns {
+		if !peerWord.MatchString(n.ID) || !slices.Contains(needKinds, n.Kind) {
+			continue
+		}
+		n.Session, n.Thread, n.Task = word(peerWord, n.Session), word(peerThread, n.Thread), word(peerWord, n.Task)
+		n.Role, n.Status, n.PR, n.Asked = textsafe.Line(n.Role, 40), textsafe.Line(n.Status, 40), textsafe.Line(n.PR, 80), textsafe.Line(n.Asked, 40)
+		n.Title = textsafe.Line(n.Title, 200)
+		if n.Escape {
+			n.Question, n.Approval = nil, nil
+		}
+		if q := n.Question; q != nil {
+			c := *q
+			c.Tool = textsafe.Line(c.Tool, 40)
+			c.Questions = slices.Clone(c.Questions)
+			for i := range c.Questions {
+				it := &c.Questions[i]
+				it.Header, it.Answer = textsafe.Line(it.Header, 40), textsafe.Line(it.Answer, 300)
+				it.Options = slices.Clone(it.Options)
+				for j := range it.Options {
+					it.Options[j].Label = textsafe.Line(it.Options[j].Label, 200)
+				}
+			}
+			n.Question = &c
+		}
+		if a := n.Approval; a != nil {
+			c := cleanApproval(*a)
+			n.Approval = &c
+		}
+		out = append(out, n)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// cleanApproval is a dialog with each option and scope on one line.
+func cleanApproval(a proto.PeerApproval) proto.PeerApproval {
+	a.Options, a.Scopes = slices.Clone(a.Options), slices.Clone(a.Scopes)
+	for i := range a.Options {
+		a.Options[i] = textsafe.Line(a.Options[i], 300)
+	}
+	for i := range a.Scopes {
+		a.Scopes[i] = textsafe.Line(a.Scopes[i], 20)
+	}
+	return a
 }
 
 // cleanError is a peer's error answer in one short line: its code when

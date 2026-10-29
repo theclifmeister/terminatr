@@ -215,6 +215,9 @@ func TestPeerExportNeverLeaks(t *testing.T) {
 	}) {
 		t.Errorf("needs you: %+v", pw.Watch.NeedsYou)
 	}
+	if pw.Needs != nil {
+		t.Errorf("needs crossed with the switch off: %+v", pw.Needs)
+	}
 	if len(pw.Watch.Inbox) != 1 || pw.Watch.Inbox[0].Kind != "guard" || pw.Watch.Inbox[0].Count != 1 {
 		t.Errorf("inbox: %+v", pw.Watch.Inbox)
 	}

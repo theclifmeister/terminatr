@@ -45,6 +45,9 @@ type PeerEntry struct {
 	Panes string
 	// ConversationsOff: its conversations switch is off (§16.14).
 	ConversationsOff bool
+	// Needs is this server's needs switch for it (proto.NeedsOff …;
+	// §16.16).
+	Needs string
 }
 
 func (s *ServerSource) Peers() (PeerList, error) {
@@ -77,7 +80,7 @@ func (s *ServerSource) Peers() (PeerList, error) {
 	}
 	for _, p := range peers {
 		e := PeerEntry{Alias: p.Alias, Name: p.Name, Told: p.Told, ID: p.ID().String(), Short: p.ID().Short(), Relay: p.Relay, Panes: p.PanesLevel(),
-			ConversationsOff: !p.ConversationsOn()}
+			ConversationsOff: !p.ConversationsOn(), Needs: p.NeedsLevel()}
 		if pl, ok := links[e.ID]; ok {
 			e.Link = &pl
 		}
@@ -125,6 +128,24 @@ func (s *ServerSource) SetPeerConversations(alias string, on bool) error {
 		return errHumanOnly
 	}
 	found, err := peer.SetConversations(peer.DirIn(s.Paths.Home), alias, on)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return fmt.Errorf("no paired server %s (tm peer list)", alias)
+	}
+	var st *proto.LinkStatus
+	if err := s.call(proto.MethodPeerReload, nil, &st); err != nil && !errors.Is(err, tmclient.ErrNotRunning) {
+		return fmt.Errorf("set, but the server didn't read the peers again (%v); tm server restart does", err)
+	}
+	return nil
+}
+
+func (s *ServerSource) SetPeerNeeds(alias, level string) error {
+	if s.Caller.IsAgent() {
+		return errHumanOnly
+	}
+	found, err := peer.SetNeeds(peer.DirIn(s.Paths.Home), alias, level)
 	if err != nil {
 		return err
 	}

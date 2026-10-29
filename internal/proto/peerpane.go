@@ -63,6 +63,9 @@ const MethodPeerPanes = "peer.panes"
 type PeerPanesParams struct {
 	Panes         string `json:"panes"`
 	Conversations string `json:"conversations,omitempty"`
+	// Needs is the needs switch now (NeedsOff, NeedsView, NeedsAnswer;
+	// §16.16), from a server whose hello lists needs.
+	Needs string `json:"needs,omitempty"`
 }
 
 // MethodPeerName tells the paired server this server's own name changed

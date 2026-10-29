@@ -266,7 +266,7 @@ func TestCopies(t *testing.T) {
 		// (Watched). Its sessions cross as their panes, but only a
 		// coordinator or a thread, which a filled role isn't: their
 		// copy, and the clock's offset in it, are checked below.
-		".Peers[].Offset", ".Peers[].Projects[].Rev", ".Peers[].Projects[].Sessions",
+		".Peers[].Projects[].Rev", ".Peers[].Projects[].Sessions",
 		".Peers[].Projects[].Watch.Project", ".Peers[].Projects[].Watch.NeedsYou", ".Peers[].Projects[].Watch.Inbox",
 		".Peers[].Projects[].Watch.Ready", ".Peers[].Projects[].Watch.Context", ".Peers[].Projects[].Watch.Questions",
 		".Peers[].Projects[].Watch.Ticker", ".Peers[].Projects[].Watch.Cells", ".Peers[].Projects[].Watch.Links",
@@ -275,7 +275,15 @@ func TestCopies(t *testing.T) {
 		".Peers[].Projects[].Watch.Threads[].PRBad", ".Peers[].Projects[].Watch.Threads[].PRChecked",
 		".Peers[].Projects[].Watch.Threads[].Task.Title", ".Peers[].Projects[].Watch.Threads[].Task.Status",
 		".Peers[].Projects[].Watch.Threads[].Task.Current",
+		// Whether its tm has the needs switch: Needs is "" without.
+		// A need filled whole is an escape's, whose menu and dialog
+		// never cross (checked below, without Escape).
+		".Peers[].NeedsCap", ".Peers[].Projects[].Needs[].Approval", ".Peers[].Projects[].Needs[].Question",
 	})
+	check("peer.list needs", homeOf(func(n proto.PeerNeed) PeerNeed {
+		n.Escape = false
+		return peerNeedOf("mini", time.Second, n)
+	}), []string{".Escape"})
 	// Of a request that waits, what answers it: its state, the project
 	// it shared, its end are none yet.
 	check("peer.list shares", homeOf(shareRequestOf), []string{".Out", ".Peer", ".State", ".Project", ".Answered", ".Code",
