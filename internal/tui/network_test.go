@@ -184,6 +184,51 @@ func TestNetworkConversations(t *testing.T) {
 	}
 }
 
+// TestNetworkNeedsSwitch: N moves a paired server's needs switch along off ·
+// view · answer, asking before each raise, lowering at once; the panel
+// shows it and its row takes ← →.
+func TestNetworkNeedsSwitch(t *testing.T) {
+	m, src := netDash(t, 160, 40)
+	nv := netOpen(t, m)
+	nv.sel = "g:mini"
+	if out := netBox(m); !strings.Contains(out, "[off] · view · answer") {
+		t.Fatalf("off by default:\n%s", out)
+	}
+	press(m, "N")
+	cv, ok := m.top().(*confirmView)
+	if !ok || !strings.Contains(cv.question, "Let mini see what the projects") || !strings.Contains(cv.question, "permission dialogs") {
+		t.Fatalf("N: %T", m.top())
+	}
+	press(m, "N")
+	if len(src.needsSet) != 0 || m.msg != "needs unchanged for mini" {
+		t.Fatalf("no: %v %q", src.needsSet, m.msg)
+	}
+	press(m, "N")
+	drain(t, m, press(m, "Y"))
+	if out := netBox(m); !strings.Contains(out, "off · [view] · answer") || !strings.Contains(out, "● sees what your projects ask you") {
+		t.Errorf("after view:\n%s", out)
+	}
+	press(m, "N")
+	if cv, ok := m.top().(*confirmView); !ok || !strings.Contains(cv.question, "never answered from there") {
+		t.Fatalf("N to answer: %T", m.top())
+	}
+	drain(t, m, press(m, "Y"))
+	// answer → off lowers at once.
+	drain(t, m, press(m, "N"))
+	if _, ok := m.top().(*confirmView); ok {
+		t.Fatal("lowering asked")
+	}
+	tab(m)
+	press(m, "down", "down", "down", "down")
+	press(m, "right")
+	if cv, ok := m.top().(*confirmView); !ok || cv.title != "Needs for mini" {
+		t.Fatalf("→ in the panel: %T", m.top())
+	}
+	if !slices.Equal(src.needsSet, []string{"mini view", "mini answer", "mini off"}) {
+		t.Fatalf("set %v", src.needsSet)
+	}
+}
+
 // TestNetworkPanes: V moves a paired server's panes along off · view ·
 // write, asking before each raise (N keeps it), lowering at once; the
 // panel's switch takes ← → and a click on a word.
@@ -445,7 +490,7 @@ func TestNetworkKeys(t *testing.T) {
 		t.Fatalf("N: %T", m.top())
 	}
 	press(m, "?")
-	if _, ok := m.top().(*netKeysView); !ok || !strings.Contains(screen(m), "E V U X") {
+	if _, ok := m.top().(*netKeysView); !ok || !strings.Contains(screen(m), "E V C N") {
 		t.Fatalf("?: %T\n%s", m.top(), screen(m))
 	}
 	press(m, "esc", "esc")

@@ -150,6 +150,9 @@ func (m *Manager) Reload() error {
 			if p.PanesLevel() != r.l.panesLevel() {
 				r.l.setPanes(p.PanesLevel())
 			}
+			if p.NeedsLevel() != r.l.needsLevel() {
+				r.l.setNeeds(p.NeedsLevel())
+			}
 			if p.ConversationsOn() != r.l.convOn() {
 				r.l.setConversations(p.ConversationsOn())
 			}
@@ -180,8 +183,11 @@ func (m *Manager) add(id *Identity, cert tls.Certificate, p Peer) {
 		// knows them: needs the pane host too, for the level.
 		conversations: m.opts.Transcripts != nil && m.opts.Panes != nil,
 	}
+	if _, ok := m.opts.Export.(NeedsExporter); ok {
+		l.needs = true
+	}
 	d := &dispatcher{ex: m.opts.Export, msgs: m.opts.Messages, panes: m.opts.Panes, files: m.opts.Files, caller: caller.ForPeer(p.Alias),
-		peer: p.ID(), level: l.panesLevel, panesHere: func(pp proto.PeerPanesParams) { m.panesHere(p.ID(), pp) }}
+		peer: p.ID(), level: l.panesLevel, needs: l.needsLevel, panesHere: func(pp proto.PeerPanesParams) { m.panesHere(p.ID(), pp) }}
 	if l.conversations {
 		d.transcripts, d.convOn = m.opts.Transcripts, l.convOn
 	}
@@ -214,6 +220,9 @@ func (m *Manager) caps() []string {
 		caps = append(caps, CapWatch)
 		if _, ok := m.opts.Export.(PopupExporter); ok {
 			caps = append(caps, CapPopup)
+		}
+		if _, ok := m.opts.Export.(NeedsExporter); ok {
+			caps = append(caps, CapNeeds)
 		}
 	}
 	if m.opts.Messages != nil {

@@ -655,6 +655,17 @@ Conversations off for studio: it can't read the conversations of this server's s
 
 A conversation is the session's whole transcript as tm reads it: prompts, the agent's text, each tool call and its result's first line, and the todo list, so what an agent read or ran (a file's lines, a command's output) shows in it. Nothing else crosses: no file of the project, nothing from its uploads, no path outside the transcript. `tm peer list` adds `conversations off` to a server's panes when it is off, the Network popup (`N`) shows and turns it with `C`, and `tm network` lists both sides' switches. A server that runs an older tm shares no conversations: the app says it needs an update and shows the Terminal tab (SPEC §16.14).
 
+### Paired needs
+
+What a shared project asks its user shows on a paired server as a count, its questions' text masked. To let `studio` see each need in full, on `mini`:
+
+```
+$ tm peer needs studio view
+Needs view for studio: it sees each need of the projects this server shares in full: the questions' and permission dialogs' text and options, the tasks in review, the coordinators' questions. It answers none of them.
+```
+
+`studio`'s NEEDS YOU (all projects) then lists each as a row of its own (`mini › acme-api  T7  asks: Which cache?  answer on mini`), and its Mac app and phone a card each. They are read-only there: answer on `mini`. `answer` shows the same for now; answering from `studio` comes with a later tm. A command that asks to run outside the sandbox never crosses with what it would run, only that it asks (`only on mini`). The Network popup (`N`) sets it too: `N` on the server, or its `needs` row in the details; raising it asks first. `tm peer list` shows `needs: view`, `tm network` both sides' switches, and `off` (the default) goes back to the count (SPEC §16.16).
+
 ### Pairing a phone
 
 A phone with the terminatr app pairs with one server as a **device**: it reads what that server's consoles read, the projects its paired servers share too, and nothing else of it. It meets the server on the same relay, so the server still opens no port. A device starts **view-only**: it sees projects, sessions, conversations and panes, and acts on nothing until you give it a higher level (below).

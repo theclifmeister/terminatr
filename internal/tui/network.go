@@ -263,6 +263,9 @@ func (nv *networkView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 			return nv.setPanes(m, e, panesLevels[i])
 		case "C":
 			return nv.setConversations(m, e, e.ConversationsOff)
+		case "N":
+			i := (slices.Index(needsLevels, needsLevel(e)) + 1) % len(needsLevels)
+			return nv.setNeeds(m, e, needsLevels[i])
 		case "U":
 			nv.relayUpdate(m, e)
 		case "X":
@@ -307,6 +310,13 @@ func (nv *networkView) panelKey(m *dash, r netRow, ok bool, s string) (tea.Cmd, 
 		e := nv.list.Peers[r.peer]
 		on := map[string]bool{"left": true, "right": false, "enter": e.ConversationsOff}[s]
 		return nv.setConversations(m, e, on), true
+	case item == itemNeeds && (s == "left" || s == "right" || s == "enter"):
+		e := nv.list.Peers[r.peer]
+		i := slices.Index(needsLevels, needsLevel(e)) + map[string]int{"left": -1, "right": 1, "enter": 1}[s]
+		if s == "enter" {
+			i %= len(needsLevels)
+		}
+		return nv.setNeeds(m, e, needsLevels[min(max(i, 0), len(needsLevels)-1)]), true
 	case item == itemShare && (s == "enter" || s == "space" || s == " "):
 		return nv.toggle(m, r.slug), true
 	case (item == itemDir || item == itemAsk || item == itemFiles) && (s == "left" || s == "right"):
@@ -641,6 +651,50 @@ func (nv *networkView) setConversations(m *dash, e PeerEntry, on bool) tea.Cmd {
 	return nil
 }
 
+var needsLevels = []string{proto.NeedsOff, proto.NeedsView, proto.NeedsAnswer}
+
+func needsLevel(e PeerEntry) string {
+	if level, ok := proto.ParseNeeds(e.Needs); ok {
+		return level
+	}
+	return proto.NeedsOff
+}
+
+// needsWhat says what a needs switch at level lets the server see.
+func needsWhat(level string) string {
+	return map[string]string{
+		proto.NeedsOff:    "it sees how many needs your shared projects have, not what they ask",
+		proto.NeedsView:   "it sees each need in full: questions, permission dialogs, tasks in review",
+		proto.NeedsAnswer: "as view; answering from there comes with a later tm, never a sandbox escape",
+	}[level]
+}
+
+// setNeeds sets server e's needs switch to level: asking first when it
+// lets that server see or do more, at once when less.
+func (nv *networkView) setNeeds(m *dash, e PeerEntry, to string) tea.Cmd {
+	from := needsLevel(e)
+	if to == from {
+		return nil
+	}
+	name := netName(e)
+	set := func() tea.Cmd {
+		src, alias := m.src, e.Alias
+		return m.act(func() actionMsg {
+			err := src.SetPeerNeeds(alias, to)
+			return actionMsg{err: err, msg: "needs " + to + " for " + name, then: nv.reload}
+		})
+	}
+	if slices.Index(needsLevels, to) < slices.Index(needsLevels, from) {
+		return set()
+	}
+	q := map[string]string{
+		proto.NeedsView:   fmt.Sprintf("Let %s see what the projects this server shares ask you, in full? Questions, permission dialogs (the commands they would run) and their options, tasks in review and the coordinators' questions cross to it. It answers none of them.", name),
+		proto.NeedsAnswer: fmt.Sprintf("Let %s answer what the projects this server shares ask you, on its user's word? Until both run a tm that sends answers, it sees them as at view. A command outside the sandbox is never answered from there.", name),
+	}[to]
+	m.confirmNo("Needs for "+name, q, "needs unchanged for "+name, set)
+	return nil
+}
+
 // convWord is the conversations switch as people read it.
 func convWord(on bool) string {
 	if on {
@@ -754,7 +808,8 @@ var netKeys = []keyHelp{
 	{"A X", "on a ⚑: send, accept or choose / drop or decline"},
 	{"P J", "pair with another server / join the code one shows"},
 	{"E", "this server: its own name, which the paired servers show"},
-	{"S E V U X", "a paired server: ask to share, name, panes, relay update, unpair"},
+	{"S E V C N", "a paired server: ask to share, name, panes, conversations, needs"},
+	{"U X", "a paired server: relay update, unpair"},
 	{"D", "pair a phone: a QR code to scan with the terminatr app"},
 	{"V E X", "a phone: its level (view, answer, write), name, remove"},
 	{"tab", "the keyboard to the details: enter edits, ← → switch"},

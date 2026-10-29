@@ -49,6 +49,12 @@ type PeerMirror struct {
 	// and Conversations is on.
 	Transcript    bool   `json:"transcript,omitempty"`
 	Conversations string `json:"conversations,omitempty"`
+	// NeedsCap: the peer shows its needs in full to a paired server
+	// whose needs switch there lets it (its hello lists needs), and
+	// Needs is its needs switch for this server as it last said
+	// (NeedsOff, NeedsView, NeedsAnswer; docs/SPEC.md §16.16).
+	NeedsCap bool   `json:"needs_cap,omitempty"`
+	Needs    string `json:"needs,omitempty"`
 	// Offset is the peer's clock minus this server's, in milliseconds,
 	// as last measured; the peer's times (a session's created, the
 	// ticker's) less Offset are this server's. Unset (and 0) until a
@@ -95,4 +101,8 @@ type PeerMirrorProject struct {
 	Rev      string        `json:"rev,omitempty"`
 	Watch    *ProjectWatch `json:"watch,omitempty"`
 	Sessions []PeerSession `json:"sessions,omitempty"`
+	// Needs are the project's needs in full, from the last peer.watch
+	// answer, while the peer's needs switch for this server is view or
+	// answer (§16.16).
+	Needs []PeerNeed `json:"needs,omitempty"`
 }

@@ -6,7 +6,7 @@ import Foundation
 /// The terminatr app API (docs/SPEC.md §3.8): what tm app bridge answers.
 public enum AppAPI {
     /// The app API version this app was generated against.
-    public static let version = 28
+    public static let version = 29
 
     public struct AdoptRequestParams: Codable, Sendable, Hashable {
         public var id: String
@@ -1101,8 +1101,9 @@ public enum AppAPI {
         public var panes: String
         public var transcript: Bool
         public var conversations: String
+        public var needs: String
 
-        public init(alias: String, name: String = "", state: String, reason: String = "", since: Date? = nil, projects: [PeerProject] = [], shareWaits: Int = 0, shareRequests: [ShareRequest] = [], pane: Bool = false, panes: String = "", transcript: Bool = false, conversations: String = "") {
+        public init(alias: String, name: String = "", state: String, reason: String = "", since: Date? = nil, projects: [PeerProject] = [], shareWaits: Int = 0, shareRequests: [ShareRequest] = [], pane: Bool = false, panes: String = "", transcript: Bool = false, conversations: String = "", needs: String = "") {
             self.alias = alias
             self.name = name
             self.state = state
@@ -1115,6 +1116,7 @@ public enum AppAPI {
             self.panes = panes
             self.transcript = transcript
             self.conversations = conversations
+            self.needs = needs
         }
 
         enum CodingKeys: String, CodingKey {
@@ -1130,6 +1132,25 @@ public enum AppAPI {
             case panes
             case transcript
             case conversations
+            case needs
+        }
+    }
+
+    public struct PeerApproval: Codable, Sendable, Hashable {
+        public var question: String
+        public var options: [String]
+        public var scopes: [String]
+
+        public init(question: String = "", options: [String] = [], scopes: [String] = []) {
+            self.question = question
+            self.options = options
+            self.scopes = scopes
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case question
+            case options
+            case scopes
         }
     }
 
@@ -1148,6 +1169,72 @@ public enum AppAPI {
         }
     }
 
+    public struct PeerNeed: Codable, Sendable, Hashable, Identifiable {
+        public var id: String
+        public var kind: String
+        public var session: String
+        public var role: String
+        public var thread: String
+        public var task: String
+        public var title: String
+        public var status: String
+        public var text: String
+        public var question: Question?
+        public var approval: PeerApproval?
+        public var escape: Bool
+        public var pr: String
+        public var prUrl: String
+        public var prNumber: Int
+        public var mergeable: Bool
+        public var asked: String
+        public var reports: Int
+        public var since: Date?
+
+        public init(id: String, kind: String, session: String = "", role: String = "", thread: String = "", task: String = "", title: String = "", status: String = "", text: String = "", question: Question? = nil, approval: PeerApproval? = nil, escape: Bool = false, pr: String = "", prUrl: String = "", prNumber: Int = 0, mergeable: Bool = false, asked: String = "", reports: Int = 0, since: Date? = nil) {
+            self.id = id
+            self.kind = kind
+            self.session = session
+            self.role = role
+            self.thread = thread
+            self.task = task
+            self.title = title
+            self.status = status
+            self.text = text
+            self.question = question
+            self.approval = approval
+            self.escape = escape
+            self.pr = pr
+            self.prUrl = prUrl
+            self.prNumber = prNumber
+            self.mergeable = mergeable
+            self.asked = asked
+            self.reports = reports
+            self.since = since
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case id
+            case kind
+            case session
+            case role
+            case thread
+            case task
+            case title
+            case status
+            case text
+            case question
+            case approval
+            case escape
+            case pr
+            case prUrl = "pr_url"
+            case prNumber = "pr_number"
+            case mergeable
+            case asked
+            case reports
+            case since
+        }
+    }
+
     public struct PeerProject: Codable, Sendable, Hashable {
         public var project: String
         public var goal: String
@@ -1159,8 +1246,9 @@ public enum AppAPI {
         public var synced: Date?
         public var sessions: [PeerSession]
         public var watched: [PeerThread]
+        public var needs: [PeerNeed]
 
-        public init(project: String, goal: String = "", paused: Bool = false, needsYou: Int, threads: Int, ready: Int, stale: Bool = false, synced: Date? = nil, sessions: [PeerSession] = [], watched: [PeerThread] = []) {
+        public init(project: String, goal: String = "", paused: Bool = false, needsYou: Int, threads: Int, ready: Int, stale: Bool = false, synced: Date? = nil, sessions: [PeerSession] = [], watched: [PeerThread] = [], needs: [PeerNeed] = []) {
             self.project = project
             self.goal = goal
             self.paused = paused
@@ -1171,6 +1259,7 @@ public enum AppAPI {
             self.synced = synced
             self.sessions = sessions
             self.watched = watched
+            self.needs = needs
         }
 
         enum CodingKeys: String, CodingKey {
@@ -1184,6 +1273,7 @@ public enum AppAPI {
             case synced
             case sessions
             case watched
+            case needs
         }
     }
 
@@ -3309,6 +3399,16 @@ extension AppAPI.Peer {
         self.panes = try c.decodeIfPresent(String.self, forKey: .panes) ?? ""
         self.transcript = try c.decodeIfPresent(Bool.self, forKey: .transcript) ?? false
         self.conversations = try c.decodeIfPresent(String.self, forKey: .conversations) ?? ""
+        self.needs = try c.decodeIfPresent(String.self, forKey: .needs) ?? ""
+    }
+}
+
+extension AppAPI.PeerApproval {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.question = try c.decodeIfPresent(String.self, forKey: .question) ?? ""
+        self.options = try c.decodeIfPresent([String].self, forKey: .options) ?? []
+        self.scopes = try c.decodeIfPresent([String].self, forKey: .scopes) ?? []
     }
 }
 
@@ -3317,6 +3417,31 @@ extension AppAPI.PeerList {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.gen = try c.decode(Int.self, forKey: .gen)
         self.peers = try c.decodeIfPresent([AppAPI.Peer].self, forKey: .peers) ?? []
+    }
+}
+
+extension AppAPI.PeerNeed {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try c.decode(String.self, forKey: .id)
+        self.kind = try c.decode(String.self, forKey: .kind)
+        self.session = try c.decodeIfPresent(String.self, forKey: .session) ?? ""
+        self.role = try c.decodeIfPresent(String.self, forKey: .role) ?? ""
+        self.thread = try c.decodeIfPresent(String.self, forKey: .thread) ?? ""
+        self.task = try c.decodeIfPresent(String.self, forKey: .task) ?? ""
+        self.title = try c.decodeIfPresent(String.self, forKey: .title) ?? ""
+        self.status = try c.decodeIfPresent(String.self, forKey: .status) ?? ""
+        self.text = try c.decodeIfPresent(String.self, forKey: .text) ?? ""
+        self.question = try c.decodeIfPresent(AppAPI.Question.self, forKey: .question)
+        self.approval = try c.decodeIfPresent(AppAPI.PeerApproval.self, forKey: .approval)
+        self.escape = try c.decodeIfPresent(Bool.self, forKey: .escape) ?? false
+        self.pr = try c.decodeIfPresent(String.self, forKey: .pr) ?? ""
+        self.prUrl = try c.decodeIfPresent(String.self, forKey: .prUrl) ?? ""
+        self.prNumber = try c.decodeIfPresent(Int.self, forKey: .prNumber) ?? 0
+        self.mergeable = try c.decodeIfPresent(Bool.self, forKey: .mergeable) ?? false
+        self.asked = try c.decodeIfPresent(String.self, forKey: .asked) ?? ""
+        self.reports = try c.decodeIfPresent(Int.self, forKey: .reports) ?? 0
+        self.since = try c.decodeIfPresent(Date.self, forKey: .since)
     }
 }
 
@@ -3333,6 +3458,7 @@ extension AppAPI.PeerProject {
         self.synced = try c.decodeIfPresent(Date.self, forKey: .synced)
         self.sessions = try c.decodeIfPresent([AppAPI.PeerSession].self, forKey: .sessions) ?? []
         self.watched = try c.decodeIfPresent([AppAPI.PeerThread].self, forKey: .watched) ?? []
+        self.needs = try c.decodeIfPresent([AppAPI.PeerNeed].self, forKey: .needs) ?? []
     }
 }
 

@@ -51,6 +51,9 @@ type link struct {
 	// conversations: the server serves conversations (§16.14), so
 	// peer.panes says its conversations switch too.
 	conversations bool
+	// needs: the server shows its needs (CapNeeds), so peer.panes says
+	// its needs switch too.
+	needs bool
 	// told takes the name the peer gives itself, from a hello that
 	// lists CapName (§16.8); nil for none.
 	told func(name string)
@@ -123,6 +126,9 @@ func (l *link) tellSwitches(s *session) {
 	p := proto.PeerPanesParams{Panes: l.peer.PanesLevel()}
 	if l.conversations {
 		p.Conversations = map[bool]string{true: proto.ConversationsOn, false: proto.ConversationsNot}[l.peer.ConversationsOn()]
+	}
+	if l.needs {
+		p.Needs = l.peer.NeedsLevel()
 	}
 	tell := slices.Contains(l.st.Caps, CapPaneLevel)
 	l.mu.Unlock()

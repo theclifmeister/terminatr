@@ -47,6 +47,19 @@ type Peer struct {
 	// default when empty, shares the shared projects' coordinator and
 	// thread conversations while Panes is view or write.
 	Conversations string `json:"conversations,omitempty"`
+	// Needs is the needs switch for the peer (proto.NeedsOff, the
+	// default when empty, NeedsView, NeedsAnswer; docs/SPEC.md §16.16):
+	// view shows it the shared projects' needs in full, question and
+	// dialog text included.
+	Needs string `json:"needs,omitempty"`
+}
+
+// NeedsLevel is p's needs switch, off when unset.
+func (p Peer) NeedsLevel() string {
+	if level, ok := proto.ParseNeeds(p.Needs); ok {
+		return level
+	}
+	return proto.NeedsOff
 }
 
 // ConversationsOn says whether p's conversations switch is on.
@@ -102,6 +115,9 @@ func (p Peer) check() error {
 	}
 	if p.Conversations != "" && p.Conversations != proto.ConversationsOn && p.Conversations != proto.ConversationsNot {
 		return fmt.Errorf("peer %s: conversations %q is not on or off", p.Alias, p.Conversations)
+	}
+	if _, ok := proto.ParseNeeds(p.Needs); p.Needs != "" && !ok {
+		return fmt.Errorf("peer %s: needs %q is not off, view or answer", p.Alias, p.Needs)
 	}
 	u, err := url.Parse(p.Relay)
 	if err != nil || (u.Scheme != "wss" && u.Scheme != "ws") || u.Host == "" {
@@ -283,7 +299,7 @@ func Pin(dir string, key ed25519.PublicKey, relayURL, name, as string) (Peer, er
 					p.Alias = q.Alias
 				}
 				// Pairing again keeps the switches and the names.
-				p.Panes, p.Conversations, p.Name, p.Told = q.Panes, q.Conversations, q.Name, q.Told
+				p.Panes, p.Conversations, p.Needs, p.Name, p.Told = q.Panes, q.Conversations, q.Needs, q.Name, q.Told
 			case q.Alias == as:
 			default:
 				kept = append(kept, q)
@@ -339,6 +355,30 @@ func SetPanes(dir, alias, word string) (bool, error) {
 				peers[i].Panes = level
 				if level == proto.PanesOff {
 					peers[i].Panes = ""
+				}
+			}
+		}
+		return peers, nil
+	})
+	return found, err
+}
+
+// SetNeeds sets the needs switch for the peer called alias, or named so
+// (docs/SPEC.md §16.16); false when there is none.
+func SetNeeds(dir, alias, word string) (bool, error) {
+	level, ok := proto.ParseNeeds(word)
+	if !ok {
+		return false, fmt.Errorf("needs %q: off, view or answer", word)
+	}
+	found := false
+	err := change(dir, func(peers []Peer) ([]Peer, error) {
+		alias := NamesOf(peers).Alias(alias)
+		for i := range peers {
+			if peers[i].Alias == alias {
+				found = true
+				peers[i].Needs = level
+				if level == proto.NeedsOff {
+					peers[i].Needs = ""
 				}
 			}
 		}
