@@ -31,6 +31,7 @@ const modUsage = `usage: tm mod list [--outdated] [--json]
        tm mod logs <id> [--follow|-f] [--lines|-n N]
        tm mod run <id> <command> [--project <slug>]
        tm mod defaults <id> [--apply] [--yes]
+       tm mod settings <id> [--project <slug>] [<key>=<value>…] [--reset <key>] [--json]
        tm mod examples [--json]
 
 User mods (docs/SPEC.md §5.3), installed in ~/.terminatr/mods. install
@@ -49,7 +50,10 @@ does, in the project given, if any. defaults shows the values an
 enabled mod suggests for all projects' non-safety settings beside what
 they follow now; --apply writes them to config.toml's [defaults] as
 your change, after a y (--yes without a terminal), leaving each one
-[defaults] already sets. remove keeps the mod's data 30 days unless
+[defaults] already sets. settings shows a mod's own settings, each
+with where its value comes from, for all projects or with --project for
+that one; key=value sets them (--project: only for that project, over
+all projects' value) and --reset <key> puts one back. remove keeps the mod's data 30 days unless
 --purge. validate checks mod folders (the installed mods when none is
 named) and exits 1 if any is invalid.
 
@@ -62,8 +66,9 @@ unlinks it). test replays each code mod's tests/*.json fixtures with a
 fake broker (the current folder when none is named) and exits 1 if
 any fails. logs prints the end of a mod's log, and follows it with -f.
 examples shows where terminatr's example mods are and how to install
-each; it installs nothing. All but list, validate, new, test, logs and
-examples are the human's: an agent is refused.`
+each; it installs nothing. All but list, validate, new, test, logs,
+examples and settings without a change are the human's: an agent is
+refused.`
 
 func init() { commands["mod"] = runMod }
 
@@ -80,7 +85,7 @@ func runMod(e *Env, args []string) error {
 	}
 	f := newFlags()
 	asJSON, outdated, yes, purge, apply := f.Bool("json"), f.Bool("outdated"), f.Bool("yes"), f.Bool("purge"), f.Bool("apply")
-	slug := f.String("project")
+	slug, reset := f.String("project"), f.String("reset")
 	kind, dir := f.String("kind"), f.String("dir")
 	follow, followF := f.Bool("follow"), f.Bool("f")
 	lines, linesN := f.String("lines"), f.String("n")
@@ -94,13 +99,14 @@ func runMod(e *Env, args []string) error {
 		"new": {"kind", "dir"}, "dev": {"yes"}, "test": {"json"}, "logs": {"follow", "f", "lines", "n"},
 		"run":      {"project"},
 		"defaults": {"apply", "yes"},
+		"settings": {"project", "reset", "json"},
 		"examples": {"json"},
 	}
 	ok, known := allowed[args[0]]
 	if !known {
 		return usagef("unknown subcommand %q\n%s", args[0], modUsage)
 	}
-	for _, n := range []string{"json", "outdated", "yes", "purge", "apply", "project", "kind", "dir", "follow", "f", "lines", "n"} {
+	for _, n := range []string{"json", "outdated", "yes", "purge", "apply", "project", "reset", "kind", "dir", "follow", "f", "lines", "n"} {
 		if f.IsSet(n) && !slices.Contains(ok, n) {
 			return usagef("tm mod %s takes no --%s\n%s", args[0], n, modUsage)
 		}
@@ -193,6 +199,11 @@ func runMod(e *Env, args []string) error {
 			return err
 		}
 		return e.modDefaults(id, *apply, *yes)
+	case "settings":
+		if len(pos) == 0 {
+			return usagef("%s", modUsage)
+		}
+		return e.modSettings(pos[0], *slug, *reset, pos[1:], *asJSON)
 	case "remove":
 		id, err := one()
 		if err != nil {
@@ -237,7 +248,8 @@ var runModCommand = func(p proto.ModCommandParams) error {
 
 // agentMod are the tm mod subcommands an agent may run: they read, or
 // write only in the folder given.
-var agentMod = map[string]bool{"list": true, "show": true, "validate": true, "new": true, "test": true, "logs": true, "examples": true}
+// settings checks itself: an agent may read, not change.
+var agentMod = map[string]bool{"list": true, "show": true, "validate": true, "new": true, "test": true, "logs": true, "examples": true, "settings": true}
 
 // exampleRow is an example mod in tm mod examples --json.
 type exampleRow struct {

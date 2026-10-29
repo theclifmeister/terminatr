@@ -161,8 +161,7 @@ func SetSettingFor(c caller.Caller, id, slug, key string, value any) error {
 	if m.Manifest == nil {
 		return fmt.Errorf("%s has no settings: %w", id, m.Err)
 	}
-	s, ok := m.Manifest.Settings[key]
-	if !ok {
+	if _, ok := m.Manifest.Settings[key]; !ok {
 		return fmt.Errorf("%s has no setting %q", id, key)
 	}
 	table := config.ModsTable(id) + ".settings"
@@ -172,15 +171,30 @@ func SetSettingFor(c caller.Caller, id, slug, key string, value any) error {
 	if value == nil {
 		return config.Unset(table, key)
 	}
-	v, err := s.Check(value)
-	if err == nil {
-		err = checkText(v)
-	}
+	v, err := CheckSetting(m.Manifest, key, value)
 	if err != nil {
-		return fmt.Errorf("%s %v", key, err)
+		return err
 	}
 	if n, ok := v.(int64); ok {
 		v = int(n)
 	}
 	return config.Set(table, key, v)
+}
+
+// CheckSetting returns value as setting key of man would be written, or
+// why it can't be: a key it doesn't have, a value of the wrong type or
+// out of range, a text that isn't one short line.
+func CheckSetting(man *Manifest, key string, value any) (any, error) {
+	s, ok := man.Settings[key]
+	if !ok {
+		return nil, fmt.Errorf("%s has no setting %q", man.ID, key)
+	}
+	v, err := s.Check(value)
+	if err == nil {
+		err = checkText(v)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("%s %v", key, err)
+	}
+	return v, nil
 }
