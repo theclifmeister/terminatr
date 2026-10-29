@@ -59,6 +59,7 @@ struct Columns<Content: View>: View {
             Group {
                 if let list { RouteScreen(route: list) } else { root() }
             }
+            .modifier(InnerEdge(edge: .trailing))
             .toolbar {
                 if n >= 2 {
                     ToolbarItem(placement: .topBarLeading) {
@@ -80,6 +81,7 @@ struct Columns<Content: View>: View {
                         .backdrop()
                 }
             }
+            .modifier(InnerEdge(edge: .leading))
             .destinations()
         }
         .environment(\.navigate, Navigate(open: nil) { path.append($0) })
@@ -100,6 +102,36 @@ struct Columns<Content: View>: View {
                 Rectangle().fill(theme.edge).frame(width: 1).ignoresSafeArea()
                 trail
             }
+        }
+    }
+}
+
+/// A column's screen lays out to its inner edge, the one it shares with
+/// the other column side by side (T837). A NavigationStack gives its
+/// screen the window's side insets whole, wherever it sits: on a
+/// landscape iPhone Duo the sensor's 84 pt, so the list column's list
+/// and sections stopped that far short of the column, and turned the
+/// other way the detail's started that far into it. Stacked, or before
+/// iOS 27.1 (no splitArrangementAxis), every edge may be the screen's
+/// and the insets hold.
+private struct InnerEdge: ViewModifier {
+    let edge: Edge.Set
+
+    func body(content: Content) -> some View {
+        if #available(iOS 27.1, *) {
+            content.modifier(Arranged(edge: edge))
+        } else {
+            content
+        }
+    }
+
+    @available(iOS 27.1, *)
+    private struct Arranged: ViewModifier {
+        @Environment(\.splitArrangementAxis) private var axis
+        let edge: Edge.Set
+
+        func body(content: Content) -> some View {
+            content.ignoresSafeArea(.container, edges: axis == .horizontal ? edge : [])
         }
     }
 }
