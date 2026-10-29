@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.63.0](https://github.com/theclifmeister/terminatr/compare/v0.62.1...v0.63.0) (2026-10-29)
+
+
+### Features
+
+* **ios:** paste, pick and drop images and files into the composer; copy, share and save them out of the conversation ([#923](https://github.com/theclifmeister/terminatr/issues/923)) ([c0b758c](https://github.com/theclifmeister/terminatr/commit/c0b758cd8d7b0d38f91d9e567b97c51f16821d21))
+* **ios:** scroll back through the terminal's history on iPhone and iPad ([#925](https://github.com/theclifmeister/terminatr/issues/925)) ([782ad19](https://github.com/theclifmeister/terminatr/commit/782ad19f1d72d9b617404929bafff57eeccf9165))
+* **mods:** mod API 1.10, designs for mods: designs.list, designs.changed, a task's design and after ([#926](https://github.com/theclifmeister/terminatr/issues/926)) ([1e222b8](https://github.com/theclifmeister/terminatr/commit/1e222b858c0dabfb4c24ffea1c1543256eff95f1))
+* **mods:** per-project mod settings and rules sections (mod API 1.11) ([#927](https://github.com/theclifmeister/terminatr/issues/927)) ([fbb442f](https://github.com/theclifmeister/terminatr/commit/fbb442ff3c7a9603601a740a0e24bc34815e2eec))
+
 ## [0.62.1](https://github.com/theclifmeister/terminatr/compare/v0.62.0...v0.62.1) (2026-10-29)
 
 
