@@ -24,7 +24,11 @@ struct TerminalScreen: View {
     /// Goes up for each repaint the user asks: the stream opens again,
     /// which repaints at every level, unsigned.
     let repaints: Int
-    @State private var pane = PhonePane()
+    /// Made once the screen is up, never while SwiftUI updates it:
+    /// SwiftTerm's key bar, a keyboard input view, sets up the scene's
+    /// keyboard window as it is made, which lays the window out, and
+    /// SwiftUI refuses that from inside its update (iOS 27.1).
+    @State private var pane: PhonePane?
 
     var body: some View {
         let id = model.sessionID(ref)
@@ -40,7 +44,7 @@ struct TerminalScreen: View {
                 message("This tm server doesn't stream panes to the app; tm update and tm server restart bring it.")
             } else if case .closed(let why) = remote {
                 message(why)
-            } else if let id {
+            } else if let id, let pane {
                 ZStack(alignment: .bottom) {
                     PhoneTerminal(host: pane.host, theme: theme)
                         // A redial is a new bridge: the stream opens again on it.
@@ -76,7 +80,14 @@ struct TerminalScreen: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .backdrop()
-        .onChange(of: note == nil, initial: true) { _, typing in pane.typing = typing }
+        .task {
+            if pane == nil {
+                let p = PhonePane()
+                p.typing = note == nil
+                pane = p
+            }
+        }
+        .onChange(of: note == nil) { _, typing in pane?.typing = typing }
     }
 
     /// The terminal box's corners.
