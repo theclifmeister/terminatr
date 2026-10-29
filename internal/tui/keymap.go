@@ -47,7 +47,7 @@ func sessionKeys() []keyHelp {
 // popupKeys are the project popup's own keys (projectView). None is a
 // prefix command (TestNoPlainKeyIsAPrefixCommand).
 var popupKeys = []keyHelp{
-	{"← → 1-9", "previous / next tab, or pick one; the Mods tab is last of the core's, with no number, and mods' tabs come after it"},
+	{"← → 1-9 0", "previous / next tab, or pick one (0 is the tenth, Designs); the Mods tab is last of the core's, with no number, and mods' tabs come after it"},
 	{"↑ ↓ / tab", "on a mod's tab or card: move, filter (enter keeps it, esc drops it) and change list; the keys the mod lists go to it"},
 	{"↑ ↓ pgup pgdown", "move in the tab, or scroll it (Keys, Memory)"},
 	{"enter space + - X", "on the Settings tab: as in the settings, below"},

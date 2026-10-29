@@ -8,7 +8,9 @@ import TerminatrUI
 /// own group); its coordinator, with Start when none runs; its threads
 /// grouped by state, idle and stopped ones folded; its board, on deck
 /// shown and the backlog folded (C2), each task with its action; and
-/// the inbox items for the user. An empty project offers a next step.
+/// its designs, each opening in place to its answers, questions and
+/// build (DesignsSection); and the inbox items for the user. An empty
+/// project offers a next step.
 /// A thread's card shows its thread in the window.
 struct ProjectDashboard: View {
     @Environment(AppModel.self) private var app
@@ -76,6 +78,9 @@ struct ProjectDashboard: View {
                         BoardFilter(text: $filter)
                         boardGroups(deck: deck, backlog: backlog, doneCount: doneCount)
                     }
+                }
+                if app.listsDesigns {
+                    DesignsSection(project: project)
                 }
                 let inbox = project.items.filter(\.forYou)
                 if !inbox.isEmpty {

@@ -721,6 +721,12 @@ final class AppModel {
         try await connected().call(AppAPI.Methods.memoryRead, AppAPI.MemoryReadParams(project: project, path: path)).text
     }
 
+    /// The project's designs, by name, each with its build in after
+    /// order (design.list, app API 31).
+    func designs(_ project: String) async throws -> [AppAPI.Design] {
+        try await connected().call(AppAPI.Methods.designList, AppAPI.ProjectParams(project: project)).designs
+    }
+
     /// The project's library, newest first (library.list).
     func library(_ project: String) async throws -> [AppAPI.LibraryFile] {
         try await connected().call(AppAPI.Methods.libraryList, AppAPI.ProjectParams(project: project)).files
@@ -936,6 +942,13 @@ final class AppModel {
         guard canAddTask, let p = boardProject else { return }
         newTask = p
         showWindow?()
+    }
+
+    /// Whether this tm lists a project's designs (design.list, app API
+    /// 31).
+    var listsDesigns: Bool {
+        if case .connected(let h) = phase { return Compatibility.listsDesigns(h) }
+        return false
     }
 
     /// Whether this tm lists the board's done tasks (task.done, app API

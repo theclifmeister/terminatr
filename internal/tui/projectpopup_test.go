@@ -1062,8 +1062,12 @@ func TestMemoryTab(t *testing.T) {
 		t.Fatalf("right from Library: %d", pv.tab)
 	}
 	keyPress(m, "right")
-	if pv.tab != tabProjMods {
+	if pv.tab != tabDesigns {
 		t.Fatalf("right from Messages: %d", pv.tab)
+	}
+	keyPress(m, "right")
+	if pv.tab != tabProjMods {
+		t.Fatalf("right from Designs: %d", pv.tab)
 	}
 	keyPress(m, "right")
 	if pv.tab != tabOverview {

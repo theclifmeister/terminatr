@@ -45,13 +45,14 @@ const (
 	tabMemory
 	tabLibrary
 	tabMessages
+	tabDesigns
 	// tabProjMods is last, without a number key: the ten go to the tabs
 	// before it, and ← → or a click reach it (projectmods.go).
 	tabProjMods
 	tabCount
 )
 
-var tabNames = [tabCount]string{"overview", "inbox", "tasks", "settings", "access", "keys", "memory", "library", "messages", "mods"}
+var tabNames = [tabCount]string{"overview", "inbox", "tasks", "settings", "access", "keys", "memory", "library", "messages", "designs", "mods"}
 
 type projectView struct {
 	slug string
@@ -76,6 +77,11 @@ type projectView struct {
 	libErr  error
 	// msgs are the Messages tab's messages, newest first.
 	msgs msgList
+	// designs are the Designs tab's designs, by name, desOK once
+	// loaded (with the library); desErr is why they didn't.
+	designs []project.DesignBuild
+	desOK   bool
+	desErr  error
 	// show is the task the popup was opened to show, 0 for none: the
 	// Tasks tab's mod hears it in view.opened, and picking puts the
 	// cursor on its row once the mod lists it.
@@ -232,6 +238,8 @@ func (pv *projectView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 		return pv.libraryKey(m, k)
 	case tabMessages:
 		return pv.messagesKey(m, s)
+	case tabDesigns:
+		return pv.designsKey(m, s)
 	case tabProjMods:
 		return pv.modsKey(m, s)
 	}
@@ -373,6 +381,8 @@ func (pv *projectView) count(m *dash) int {
 	case tabMessages:
 		needs, es := pv.messages(m)
 		return len(needs) + min(len(es), msgShown)
+	case tabDesigns:
+		return len(pv.designs)
 	case tabProjMods:
 		return len(m.data.Mods)
 	}
@@ -474,6 +484,11 @@ func (pv *projectView) box(m *dash) box {
 		body, sel, hits = pv.libraryLines(w)
 		if len(pv.library) > 0 {
 			keys = "enter read · X delete · D delete the thread's · " + keys
+		}
+	case tabDesigns:
+		body, sel, hits = pv.designLines(w)
+		if len(pv.designs) > 0 {
+			keys = "↑ ↓ move · enter open · " + keys
 		}
 	case tabMessages:
 		needs, es := pv.messages(m)
@@ -577,6 +592,9 @@ func (pv *projectView) click(m *dash, item, col int, double bool) tea.Cmd {
 		// A click opens a message, as enter does.
 		return pv.messagesKey(m, "enter")
 	}
+	if double && pv.tab == tabDesigns {
+		return pv.designsKey(m, "enter")
+	}
 	if double && pv.tab == tabProjMods {
 		return pv.modsKey(m, "enter")
 	}
@@ -657,7 +675,7 @@ func (pv *projectView) tabLabel(m *dash, p ProjectData, i int) string {
 	if v, ok := m.mv.coreTab(pv.slug, i); ok {
 		return modTabLabel(v, pv.slug, i)
 	}
-	label := fmt.Sprintf("%d %s", i+1, tabNames[i])
+	label := fmt.Sprintf("%d %s", (i+1)%10, tabNames[i]) // 0 is the tenth
 	if i == tabProjMods {
 		label = tabNames[i]
 	}

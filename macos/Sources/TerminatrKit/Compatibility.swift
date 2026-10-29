@@ -29,6 +29,9 @@ public enum Compatibility: Equatable, Sendable {
     /// template: the board's Done fold and New Task's templates need it.
     public static let boardAPI = 20
 
+    /// The app API that has design.list: the project's Designs need it.
+    public static let designsAPI = 31
+
     /// The app API that has session.file: the attachment cards need it.
     public static let sessionFileAPI = 11
 
@@ -117,6 +120,13 @@ public enum Compatibility: Equatable, Sendable {
     /// Whether hello's tm reads a task whole (task.get).
     public static func getsTasks(_ hello: AppAPI.Hello) -> Bool {
         hello.appApi >= taskGetAPI && hello.methods.contains(AppAPI.Methods.taskGet.name)
+    }
+
+    /// Whether hello's tm lists a project's designs, its server too
+    /// (design.list, caps designs).
+    public static func listsDesigns(_ hello: AppAPI.Hello) -> Bool {
+        hello.appApi >= designsAPI && hello.methods.contains(AppAPI.Methods.designList.name)
+            && (hello.server?.caps ?? []).contains("designs")
     }
 
     /// Whether hello's tm lists the board's done tasks (task.done).

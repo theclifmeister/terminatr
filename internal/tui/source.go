@@ -212,6 +212,10 @@ type PollSource interface {
 	Library(slug string) ([]thread.LibFile, error)
 	LibraryRead(slug, id, name string, max int64) (data []byte, truncated bool, err error)
 	LibraryRemove(slug, id, name string) (int, error)
+	// Designs are the project's designs with their build, from its
+	// board and archive (project.DesignBuilds), for the project popup's
+	// Designs tab.
+	Designs(slug string) ([]project.DesignBuild, error)
 	// RemoveNote deletes memory note path (memory/<name>.md) of the
 	// project as tm memory rm does: MEMORY.md written again, journaled,
 	// and an inbox item for the coordinator.
@@ -812,6 +816,14 @@ func (s *ServerSource) Library(slug string) ([]thread.LibFile, error) {
 		return nil, err
 	}
 	return mergeNewest(files, link.LibraryFiles(p)), nil
+}
+
+func (s *ServerSource) Designs(slug string) ([]project.DesignBuild, error) {
+	p, err := project.Open(slug)
+	if err != nil {
+		return nil, err
+	}
+	return p.BoardDesigns()
 }
 
 // mergeNewest merges two lists of files, each newest first.
