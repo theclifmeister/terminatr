@@ -64,7 +64,7 @@ type networkView struct {
 	// at logsAt (logOf).
 	logs   map[string]linkLog
 	logsAt time.Time
-	// devs are the paired phones as last read (devsAt), devErr why they
+	// devs are the paired devices as last read (devsAt), devErr why they
 	// can't be (networkphones.go).
 	devs   DeviceList
 	devErr error
@@ -226,7 +226,7 @@ func (nv *networkView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 		nv.folded["g:"], nv.folded["p:"+r.slug] = false, false
 		nv.sel = needKey(r.slug, r.other, r.need, r.id())
 	case s == "left" && r.kind != netServer && r.kind != netPhones:
-		// Up to the row's project (a link's, a need's), a phone's header,
+		// Up to the row's project (a link's, a need's), a device's header,
 		// else its server.
 		up := netServer
 		switch r.kind {
@@ -755,8 +755,8 @@ var netKeys = []keyHelp{
 	{"P J", "pair with another server / join the code one shows"},
 	{"E", "this server: its own name, which the paired servers show"},
 	{"S E V U X", "a paired server: ask to share, name, panes, relay update, unpair"},
-	{"D", "pair a phone: a QR code to scan with the terminatr app"},
-	{"V E X", "a phone: its level (view, answer, write), name, remove"},
+	{"D", "pair a device: a QR code to scan with the terminatr app"},
+	{"V E X", "a device: its level (view, answer, write), name, remove"},
 	{"tab", "the keyboard to the details: enter edits, ← → switch"},
 	{"! esc", "the next ⚑ that needs you / close"},
 }

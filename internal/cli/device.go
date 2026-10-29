@@ -44,7 +44,7 @@ var (
 	shownInvite = func(device.Invite) {}
 )
 
-// runDevice is tm device (docs/SPEC.md §16.15): pairing a phone with this
+// runDevice is tm device (docs/SPEC.md §16.15): pairing a device with this
 // server through a relay, and the paired devices. All of it is the
 // human's.
 func runDevice(e *Env, args []string) error {
@@ -108,7 +108,7 @@ func deviceRelay(peerDir, dir, flag string) (string, error) {
 	if err != nil || ok {
 		return r, err
 	}
-	return "", usagef("--relay URL: the relay the phone and this server meet on (docs/OPERATIONS.md, Running a relay)\n%s", deviceUsage)
+	return "", usagef("--relay URL: the relay the device and this server meet on (docs/OPERATIONS.md, Running a relay)\n%s", deviceUsage)
 }
 
 func (e *Env) devicePair(peerDir, dir, relayFlag, as string) error {
@@ -134,7 +134,7 @@ func (e *Env) devicePair(peerDir, dir, relayFlag, as string) error {
 	o := device.PairOptions{
 		Name: pairName(), Version: version.Version, RelayTLS: pairRelayTLS(),
 		Waiting: func() {
-			fmt.Fprintf(e.Stdout, "Scan this with the terminatr app on the phone (it works once, for 10 minutes):\n\n%s\n", code.Terminal(qrColour()))
+			fmt.Fprintf(e.Stdout, "Scan this with the terminatr app on an iPhone or iPad (it works once, for 10 minutes):\n\n%s\n", code.Terminal(qrColour()))
 			fmt.Fprintf(e.Stdout, "This server: server id %s, through %s.\nWaiting…\n", id.ID.Short(), relayHost(relayURL))
 			shownInvite(in)
 		},
@@ -156,7 +156,7 @@ func (e *Env) devicePair(peerDir, dir, relayFlag, as string) error {
 					fmt.Fprintf(e.Stdout, "\nThis device is paired already, as %q; pairing again keeps its level.\n", again.Name)
 				}
 			}
-			fmt.Fprintf(e.Stdout, "\nThe phone: %q, device id %s, app %s\n", off.Name, off.ID.Short(), textsafe.Line(off.Version, 40))
+			fmt.Fprintf(e.Stdout, "\nThe device: %q, device id %s, app %s\n", off.Name, off.ID.Short(), textsafe.Line(off.Version, 40))
 			if off.WriteKey == nil {
 				fmt.Fprintln(e.Stdout, "Its app has no write key: it can only view, whatever its level.")
 			}
@@ -362,7 +362,7 @@ func (e *Env) deviceRemove(dir, name string) error {
 	if err != nil {
 		return deviceError(err)
 	}
-	fmt.Fprintf(e.Stdout, "Removed %s; its link closes now and its key is no longer taken. On the phone, Forget this server deletes its keys.\n", d.Name)
+	fmt.Fprintf(e.Stdout, "Removed %s; its link closes now and its key is no longer taken. On the device, Forget this server deletes its keys.\n", d.Name)
 	e.reloadDevices()
 	return nil
 }

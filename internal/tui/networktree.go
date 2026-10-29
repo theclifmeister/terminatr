@@ -41,8 +41,8 @@ const (
 	netNeed            // what a link needs of the user, under it
 	netAsked           // your share request to a paired server (networkshare.go)
 	netShareReq        // a paired server's share request, flagged
-	netPhones          // the phones' header (networkphones.go)
-	netDevice          // a paired phone
+	netPhones          // the devices' header (networkphones.go)
+	netDevice          // a paired device
 )
 
 // netRow is one row of the tree.
@@ -71,8 +71,8 @@ type netRow struct {
 	listed bool
 	// share is a share request row's request.
 	share *proto.ShareRequest
-	// dev is a phone's index in the list (DeviceList.Devices); phone
-	// marks a note among the phones.
+	// dev is a device's index in the list (DeviceList.Devices); phone
+	// marks a note among the devices.
 	dev   int
 	phone bool
 }
@@ -189,7 +189,7 @@ func (nv *networkView) pairedNames() string {
 }
 
 // rows are the tree's rows, in order, after the NEEDS YOU list's when
-// the popup is netWide or wider: the servers, then the phones.
+// the popup is netWide or wider: the servers, then the devices.
 func (nv *networkView) rows(m *dash) []netRow {
 	return append(nv.serverRows(m), nv.phoneRows()...)
 }
@@ -565,7 +565,7 @@ func (nv *networkView) rowKeys(m *dash, r netRow, ok bool) string {
 	case r.kind == netServer && r.peer < 0:
 		return "E name · enter fold · tab details · P pair · J join · " + tail
 	case r.kind == netPhones:
-		return "D pair a phone · enter fold · tab details · " + tail
+		return "D pair a device · enter fold · tab details · " + tail
 	case r.kind == netDevice:
 		return joinKeys("V level", "E name", "X remove", "tab details", tail)
 	case r.kind == netServer:

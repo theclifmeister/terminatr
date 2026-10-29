@@ -13,40 +13,40 @@ import (
 	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
-// The Network popup's phones (docs/SPEC.md §16.15): after the paired
-// servers, the phones paired with this server, each with its connection
+// The Network popup's devices (docs/SPEC.md §16.15): after the paired
+// servers, the devices paired with this server, each with its connection
 // (or when it was last seen) and its level, as tm device list and the
 // Mac app's Settings › Devices show them. Every act on them is the
 // human's, as tm device's are:
 //
-//   - D pairs a phone (devicepair.go): a QR code to scan with the
+//   - D pairs a device (devicepair.go): a QR code to scan with the
 //     terminatr app, as tm device pair shows it;
-//   - on a phone, V picks its level (view · answer · write; above view
+//   - on a device, V picks its level (view · answer · write; above view
 //     it needs its write key), E renames it, X removes it after asking;
 //     the details panel's level switch moves it with ← →, asking first
-//     when it lets the phone do more.
+//     when it lets the device do more.
 //
-//	"▾ phones · 2 paired                                D pairs a phone"
+//	"▾ devices · 2 paired                                D pairs a device"
 //	"   ◉ Clif's iPhone · connected                        level answer"
 //	"   ○ iPad · last seen 2h ago                            level view"
 
-// devicesEvery is how often the open popup reads the phones again: their
+// devicesEvery is how often the open popup reads the devices again: their
 // links change on their own.
 const devicesEvery = 3 * time.Second
 
-// devicesMsg is the phones as read in the background.
+// devicesMsg is the devices as read in the background.
 type devicesMsg struct {
 	list DeviceList
 	err  error
 }
 
-// loadDevices reads the phones again.
+// loadDevices reads the devices again.
 func (nv *networkView) loadDevices(m *dash) {
 	nv.devs, nv.devErr = m.src.Devices()
 	nv.devsAt = time.Now()
 }
 
-// pollDevices reads the phones again in the background, every
+// pollDevices reads the devices again in the background, every
 // devicesEvery while the popup is open.
 func (m *dash) pollDevices() tea.Cmd {
 	nv := m.network()
@@ -61,23 +61,23 @@ func (m *dash) pollDevices() tea.Cmd {
 	}
 }
 
-// tookDevices takes the phones as read.
+// tookDevices takes the devices as read.
 func (m *dash) tookDevices(msg devicesMsg) {
 	if nv := m.network(); nv != nil {
 		nv.devs, nv.devErr = msg.list, msg.err
 	}
 }
 
-// phoneRows are the tree's phones: their header, then each phone.
+// phoneRows are the tree's devices: their header, then each device.
 func (nv *networkView) phoneRows() []netRow {
 	out := []netRow{{kind: netGap}, {kind: netPhones, peer: -1}}
 	switch {
 	case nv.folded["d:"]:
 		return out
 	case nv.devErr != nil:
-		return append(out, netRow{kind: netNote, peer: -1, phone: true, bad: true, text: "The phones can't be read: " + oneLine(nv.devErr.Error())})
+		return append(out, netRow{kind: netNote, peer: -1, phone: true, bad: true, text: "The devices can't be read: " + oneLine(nv.devErr.Error())})
 	case len(nv.devs.Devices) == 0:
-		return append(out, netRow{kind: netNote, peer: -1, phone: true, text: "No phone yet. D pairs one: a QR code to scan with the terminatr app on the iPhone."})
+		return append(out, netRow{kind: netNote, peer: -1, phone: true, text: "No device yet. D pairs one: a QR code to scan with the terminatr app on an iPhone or iPad."})
 	}
 	for i := range nv.devs.Devices {
 		out = append(out, netRow{kind: netDevice, peer: -1, dev: i})
@@ -85,7 +85,7 @@ func (nv *networkView) phoneRows() []netRow {
 	return out
 }
 
-// device is phone row r's device.
+// device is row r's device.
 func (nv *networkView) device(r netRow) DeviceEntry { return nv.devs.Devices[r.dev] }
 
 // levelWord is a level as rows say it.
@@ -96,7 +96,7 @@ func levelWord(level string) string {
 	return level
 }
 
-// levelWhat says what a level lets a phone do, as tm device access and
+// levelWhat says what a level lets a device do, as tm device access and
 // the Mac app say it.
 func levelWhat(level string) string {
 	switch level {
@@ -108,7 +108,7 @@ func levelWhat(level string) string {
 	return "It reads projects, sessions, conversations and panes, and acts on nothing."
 }
 
-// levelLimit says why phone e runs below its level, or can't be raised;
+// levelLimit says why device e runs below its level, or can't be raised;
 // "" for neither.
 func levelLimit(e DeviceEntry) string {
 	switch {
@@ -120,7 +120,7 @@ func levelLimit(e DeviceEntry) string {
 	return ""
 }
 
-// phoneConn is phone e's connection glyph, look and words: connected,
+// phoneConn is device e's connection glyph, look and words: connected,
 // waiting for it or when it was last seen, offline and why.
 func (nv *networkView) phoneConn(e DeviceEntry) (string, lipgloss.Style, string) {
 	seen := ""
@@ -164,20 +164,20 @@ func (nv *networkView) phoneConn(e DeviceEntry) (string, lipgloss.Style, string)
 	return g, st, words
 }
 
-// phoneLine is phone row r's line w cells wide: the header or a phone.
+// phoneLine is device row r's line w cells wide: the header or a device.
 func (nv *networkView) phoneLine(r netRow, w int) string {
 	if r.kind == netPhones {
 		fold := ic().unfold
 		if nv.folded["d:"] {
 			fold = ic().fold
 		}
-		left := th().Faint.Render(fold) + " " + th().Head.Render("phones")
+		left := th().Faint.Render(fold) + " " + th().Head.Render("devices")
 		if n := len(nv.devs.Devices); n > 0 {
 			left += th().Faint.Render(fmt.Sprintf(" · %d paired", n))
 		}
 		right := ""
 		if w >= 50 {
-			right = th().Faint.Render("D pairs a phone")
+			right = th().Faint.Render("D pairs a device")
 		}
 		return spread(left, right, w)
 	}
@@ -199,12 +199,12 @@ func (nv *networkView) phoneLine(r netRow, w int) string {
 	return spread(left, right, w)
 }
 
-// phoneDetail is the two lines w cells wide under the tree about phone
+// phoneDetail is the two lines w cells wide under the tree about device
 // row r, when the popup has no room for the details panel.
 func (nv *networkView) phoneDetail(r netRow, w int) [2]string {
 	if r.kind == netPhones {
-		return [2]string{counted(len(nv.devs.Devices), "paired phone"),
-			th().Faint.Render("D pairs a phone: a QR code to scan with the terminatr app")}
+		return [2]string{counted(len(nv.devs.Devices), "paired device"),
+			th().Faint.Render("D pairs a device: a QR code to scan with the terminatr app")}
 	}
 	e := nv.device(r)
 	_, _, words := nv.phoneConn(e)
@@ -215,7 +215,7 @@ func (nv *networkView) phoneDetail(r netRow, w int) [2]string {
 	return [2]string{joinFit([]string{e.Name, words, "device id " + e.Short, "relay " + relayWords(e.Relay)}, w), th().Faint.Render(fit(l2, w))}
 }
 
-// phonePanel is the details panel's lines w cells wide about phone row r.
+// phonePanel is the details panel's lines w cells wide about device row r.
 func (nv *networkView) phonePanel(r netRow, w int) []panelLine {
 	var out []panelLine
 	add := func(item int, lines ...string) {
@@ -238,19 +238,19 @@ func (nv *networkView) phonePanel(r netRow, w int) []panelLine {
 	}
 	rule := th().Faint.Render(strings.Repeat("─", max(w, 1)))
 	if r.kind == netPhones {
-		add(itemNone, th().Head.Render("phones")+th().Faint.Render(" · paired with this server"), rule)
-		row(itemNone, "paired", counted(len(nv.devs.Devices), "phone"))
+		add(itemNone, th().Head.Render("devices")+th().Faint.Render(" · paired with this server"), rule)
+		row(itemNone, "paired", counted(len(nv.devs.Devices), "device"))
 		relay := th().Faint.Render("none yet: D asks for one")
 		if nv.devs.Relay != "" {
 			relay = relayWords(nv.devs.Relay)
 		}
 		row(itemNone, "relay", relay)
 		add(itemNone, "")
-		add(itemNone, faintLines("D pairs a phone: it shows a QR code to scan with the terminatr app, which works once, for 10 minutes; you confirm the phone here before it is added, at view. A phone reads what this server shows, through the relay, and answers or writes only at the level you give it.", w)...)
+		add(itemNone, faintLines("D pairs a device: it shows a QR code to scan with the terminatr app, which works once, for 10 minutes; you confirm the device here before it is added, at view. A device reads what this server shows, through the relay, and answers or writes only at the level you give it.", w)...)
 		return out
 	}
 	e := nv.device(r)
-	add(itemNone, th().Head.Render(e.Name)+th().Faint.Render(" · phone"), rule)
+	add(itemNone, th().Head.Render(e.Name)+th().Faint.Render(" · device"), rule)
 	row(itemDevName, "name (E)", e.Name)
 	g, st, words := nv.phoneConn(e)
 	row(itemNone, "connection", st.Render(g)+" "+words)
@@ -266,7 +266,7 @@ func (nv *networkView) phonePanel(r netRow, w int) []panelLine {
 	}
 	under(levelWhat(e.Effective))
 	add(itemNone, "")
-	add(itemNone, faintLines("X removes it: its link closes and its key is no longer taken. On the phone, Forget this server deletes its keys.", w)...)
+	add(itemNone, faintLines("X removes it: its link closes and its key is no longer taken. On the device, Forget this server deletes its keys.", w)...)
 	return out
 }
 
@@ -293,7 +293,7 @@ func levelChoices(level string, styled bool) string {
 	return strings.Join(parts, sep)
 }
 
-// phoneKey runs a key on phone row r; done is false for one it leaves
+// phoneKey runs a key on device row r; done is false for one it leaves
 // to the tree's keys.
 func (nv *networkView) phoneKey(m *dash, r netRow, s string) (tea.Cmd, bool) {
 	if r.kind != netDevice {
@@ -313,7 +313,7 @@ func (nv *networkView) phoneKey(m *dash, r netRow, s string) (tea.Cmd, bool) {
 	return nil, true
 }
 
-// phonePanelKey runs a key on the panel's phone item; done is false for
+// phonePanelKey runs a key on the panel's device item; done is false for
 // one it leaves to the panel.
 func (nv *networkView) phonePanelKey(m *dash, r netRow, item int, s string) (tea.Cmd, bool) {
 	if r.kind != netDevice {
@@ -334,7 +334,7 @@ func (nv *networkView) phonePanelKey(m *dash, r netRow, item int, s string) (tea
 	return nil, true
 }
 
-// phoneClick works a click on the panel's phone item at col.
+// phoneClick works a click on the panel's device item at col.
 func (nv *networkView) phoneClick(m *dash, r netRow, nl *panelLine, col int, again bool) tea.Cmd {
 	e := nv.device(r)
 	switch nl.item {
@@ -351,7 +351,7 @@ func (nv *networkView) phoneClick(m *dash, r netRow, nl *panelLine, col int, aga
 	return nil
 }
 
-// setLevel sets phone e's level to to, as tm device access does; with
+// setLevel sets device e's level to to, as tm device access does; with
 // ask, a level that lets it do more asks first. Above view it needs a
 // write key.
 func (nv *networkView) setLevel(m *dash, e DeviceEntry, to string, ask bool) tea.Cmd {
@@ -377,7 +377,7 @@ func (nv *networkView) setLevel(m *dash, e DeviceEntry, to string, ask bool) tea
 	return nil
 }
 
-// renamePhone asks for phone e's new name and renames it, as tm device
+// renamePhone asks for device e's new name and renames it, as tm device
 // name does.
 func (nv *networkView) renamePhone(m *dash, e DeviceEntry) {
 	id, name := e.ID, e.Name
@@ -400,10 +400,10 @@ func (nv *networkView) renamePhone(m *dash, e DeviceEntry) {
 		}})
 }
 
-// removePhone asks, then removes phone e, as tm device remove does.
+// removePhone asks, then removes device e, as tm device remove does.
 func (nv *networkView) removePhone(m *dash, e DeviceEntry) {
 	id, name := e.ID, e.Name
-	q := fmt.Sprintf("Remove %s? Its link closes now and its key is no longer taken; to use it again, pair it again. On the phone, Forget this server deletes its keys.", name)
+	q := fmt.Sprintf("Remove %s? Its link closes now and its key is no longer taken; to use it again, pair it again. On the device, Forget this server deletes its keys.", name)
 	m.confirmNo("Remove "+name, q, name+" kept", func() tea.Cmd {
 		src := m.src
 		return m.act(func() actionMsg {
@@ -413,8 +413,8 @@ func (nv *networkView) removePhone(m *dash, e DeviceEntry) {
 	})
 }
 
-// levelPickView picks a phone's level: each level with what it lets the
-// phone do; enter sets the one selected.
+// levelPickView picks a device's level: each level with what it lets the
+// device do; enter sets the one selected.
 type levelPickView struct {
 	dev DeviceEntry
 	sel int
@@ -456,7 +456,7 @@ func (lv *levelPickView) render(m *dash) string {
 		}
 		what := levelWhat(l)
 		if l != device.LevelView && !lv.dev.WriteKey {
-			what = "Needs a write key, which this phone's app didn't send: pair it again."
+			what = "Needs a write key, which this device's app didn't send: pair it again."
 		}
 		if i == lv.sel {
 			sel = len(body)
