@@ -32,6 +32,8 @@ public struct Keycap: View {
 /// a question that takes several), it's washed in the question colour
 /// with an edge of it. With a keyboard (the iPad's) its key picks it,
 /// where the environment's answerKeys says so. A pick is a selection tap.
+/// Without an action it is the row to read only (a question the phone
+/// can't answer, T848).
 public struct AnswerOption: View {
     @Environment(\.theme) private var theme
     @State private var taps = 0
@@ -39,10 +41,10 @@ public struct AnswerOption: View {
     let label: String
     let detail: String
     let picked: Bool
-    let action: () -> Void
+    let action: (() -> Void)?
 
     /// key: 1 to 9; one past that has no cap or shortcut.
-    public init(key: Int, label: String, detail: String = "", picked: Bool = false, action: @escaping () -> Void) {
+    public init(key: Int, label: String, detail: String = "", picked: Bool = false, action: (() -> Void)?) {
         self.key = key
         self.label = label
         self.detail = detail
@@ -50,50 +52,62 @@ public struct AnswerOption: View {
         self.action = action
     }
 
-    public init(key: Int, option: AppAPI.QuestionOption, picked: Bool = false, action: @escaping () -> Void) {
+    public init(key: Int, option: AppAPI.QuestionOption, picked: Bool = false, action: (() -> Void)?) {
         self.init(key: key, label: option.label, detail: option.description, picked: picked, action: action)
     }
 
     public var body: some View {
+        if let action {
+            Button { taps += 1; action() } label: { row }
+                .buttonStyle(Pressable())
+                .answerKey((1...9).contains(key) ? KeyEquivalent(Character(String(key))) : nil)
+                .feedback(.selection, trigger: taps)
+                .accessibilityLabel(spoken)
+                .accessibilityAddTraits(picked ? .isSelected : [])
+        } else {
+            row
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(spoken)
+        }
+    }
+
+    private var spoken: String {
+        detail.isEmpty ? "\(key). \(label)" : "\(key). \(label), \(detail)"
+    }
+
+    private var row: some View {
         let shape = RoundedRectangle(cornerRadius: Radius.row, style: .continuous)
-        Button { taps += 1; action() } label: {
-            HStack(alignment: .center, spacing: Spacing.row) {
-                if (1...9).contains(key) {
-                    Keycap(String(key))
-                }
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(label)
-                        .font(theme.body(.headline, .semibold))
-                        .foregroundStyle(theme.ink)
+        return HStack(alignment: .center, spacing: Spacing.row) {
+            if (1...9).contains(key) {
+                Keycap(String(key))
+            }
+            VStack(alignment: .leading, spacing: 1) {
+                Text(label)
+                    .font(theme.body(.headline, .semibold))
+                    .foregroundStyle(theme.ink)
+                    .lines(2)
+                if !detail.isEmpty {
+                    Text(detail)
+                        .font(theme.body(.subheadline))
+                        .foregroundStyle(theme.muted)
                         .lines(2)
-                    if !detail.isEmpty {
-                        Text(detail)
-                            .font(theme.body(.subheadline))
-                            .foregroundStyle(theme.muted)
-                            .lines(2)
-                    }
-                }
-                .multilineTextAlignment(.leading)
-                Spacer(minLength: 0)
-                if picked {
-                    Image(systemName: "checkmark")
-                        .font(theme.body(.headline, .bold))
-                        .foregroundStyle(theme.ink)
-                        .accessibilityHidden(true)
                 }
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 9)
-            .frame(maxWidth: .infinity, minHeight: tapTarget, alignment: .leading)
-            .background(picked ? theme.wash(.question, ThemeColours.pickedWash) : theme.ink.opacity(ThemeColours.inkWash), in: shape)
-            .overlay(shape.strokeBorder(picked ? theme.question : theme.line, lineWidth: picked ? 1.5 : 1))
-            .contentShape(shape)
+            .multilineTextAlignment(.leading)
+            Spacer(minLength: 0)
+            if picked {
+                Image(systemName: "checkmark")
+                    .font(theme.body(.headline, .bold))
+                    .foregroundStyle(theme.ink)
+                    .accessibilityHidden(true)
+            }
         }
-        .buttonStyle(Pressable())
-        .answerKey((1...9).contains(key) ? KeyEquivalent(Character(String(key))) : nil)
-        .feedback(.selection, trigger: taps)
-        .accessibilityLabel(detail.isEmpty ? "\(key). \(label)" : "\(key). \(label), \(detail)")
-        .accessibilityAddTraits(picked ? .isSelected : [])
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .frame(maxWidth: .infinity, minHeight: tapTarget, alignment: .leading)
+        .background(picked ? theme.wash(.question, ThemeColours.pickedWash) : theme.ink.opacity(ThemeColours.inkWash), in: shape)
+        .overlay(shape.strokeBorder(picked ? theme.question : theme.line, lineWidth: picked ? 1.5 : 1))
+        .contentShape(shape)
     }
 }
 

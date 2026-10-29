@@ -3,24 +3,27 @@ import TerminatrKit
 
 /// A state's pill (T845): its word in mono ("allow?", "asks",
 /// "review"), the tone's ink on the tone. Idle's is ink on idle.
+/// Compact, it fits under a header's title (SessionTitle).
 public struct ToneBadge: View {
     @Environment(\.theme) private var theme
     let word: String
     let tone: Attention.Tone
+    let compact: Bool
 
-    public init(_ word: String, tone: Attention.Tone) {
+    public init(_ word: String, tone: Attention.Tone, compact: Bool = false) {
         self.word = word
         self.tone = tone
+        self.compact = compact
     }
 
     public var body: some View {
         Text(word)
-            .font(theme.mono(.caption, .semibold))
+            .font(theme.mono(compact ? .caption2 : .caption, .semibold))
             .foregroundStyle(theme.on(tone))
             .lineLimit(1)
             .fixedSize()
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
+            .padding(.horizontal, compact ? 6 : 8)
+            .padding(.vertical, compact ? 1 : 4)
             .background(theme.colour(tone), in: Capsule())
     }
 }
