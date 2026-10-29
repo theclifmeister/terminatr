@@ -18,7 +18,6 @@ import TerminatrUI
 struct PhoneComposer: View {
     @Environment(PhoneModel.self) private var model
     @Environment(\.theme) private var theme
-    @Environment(\.horizontalSizeClass) private var width
     let ref: SessionRef
     let session: String
     let running: Bool
@@ -30,6 +29,8 @@ struct PhoneComposer: View {
     @State private var said: (text: String, failed: Bool)?
     @State private var keys = UserDefaults.standard.bool(forKey: "keys")
     @State private var interrupting = false
+    /// The card's width, which decides where its buttons go.
+    @State private var width: CGFloat = 0
     @FocusState private var focused: Bool
 
     var body: some View {
@@ -85,11 +86,12 @@ struct PhoneComposer: View {
     }
 
     /// The Mac's card: the text and its buttons on one line, but for a
-    /// working agent's three at compact width (an iPhone), on a line
-    /// below it, the placeholder whole.
+    /// working agent's three in a card narrower than oneLine (an
+    /// iPhone, an iPad's column), on a line below it, the placeholder
+    /// whole.
     private var card: some View {
         Group {
-            if running && !ref.isRemote && width == .compact {
+            if running && !ref.isRemote && width < Self.oneLine {
                 VStack(alignment: .trailing, spacing: 8) {
                     field
                     HStack(spacing: 8) { buttons }
@@ -103,10 +105,15 @@ struct PhoneComposer: View {
         }
         .font(theme.body(.subheadline, .semibold))
         .padding(10)
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
         .frosted(RoundedRectangle(cornerRadius: 14))
         .background(theme.cardTint, in: RoundedRectangle(cornerRadius: 14))
         .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(theme.edge, lineWidth: 1))
     }
+
+    /// The narrowest card that holds a thread's placeholder beside
+    /// Interrupt, Steer and Send.
+    static let oneLine: CGFloat = 600
 
     private var field: some View {
         TextField(placeholder, text: $text, axis: .vertical)
