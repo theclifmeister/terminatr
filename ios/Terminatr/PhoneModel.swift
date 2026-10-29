@@ -71,6 +71,14 @@ final class PhoneModel {
     private(set) var sessions: [AppAPI.Session] = []
     private(set) var peers: [AppAPI.Peer] = []
     private(set) var needsFirst = false
+    /// [ui] context_hint, as the last session list said (app API 13; 0
+    /// never warns): from it the coordinator's context gauge warns.
+    private(set) var contextHint = 0
+    /// Each project's Save & Clear on its way or just done (T868).
+    private(set) var clears: [String: SaveClear] = [:]
+    /// Reads session.list while the bridge is up: the context gauges
+    /// and a Save & Clear's progress follow it.
+    private var polling: Task<Void, Never>?
     /// Why the last load failed, in words.
     private(set) var failure: String?
     private(set) var bridge: Bridge?
@@ -120,6 +128,7 @@ final class PhoneModel {
         projects = []
         sessions = []
         peers = []
+        clears = [:]
         places.forget()
         for t in trays.values { t.clear() }
         trays = [:]
@@ -146,6 +155,8 @@ final class PhoneModel {
         dropped = nil
         watching?.cancel()
         watching = nil
+        polling?.cancel()
+        polling = nil
         await bridge?.close()
         bridge = nil
         transport = nil
@@ -396,8 +407,9 @@ final class PhoneModel {
         hello = await b.hello
         do {
             let l = try await b.call(AppAPI.Methods.sessionList)
-            sessions = l.sessions
+            listed(l)
             needsFirst = l.needsFirst
+            poll()
             if await b.hello?.methods.contains(AppAPI.Methods.peerList.name) == true {
                 peers = try await b.call(AppAPI.Methods.peerList).peers
             }
@@ -562,7 +574,64 @@ final class PhoneModel {
     /// The sessions again, after an act: their needs change at once.
     private func reread() async {
         guard let b = bridge, let l = try? await b.call(AppAPI.Methods.sessionList) else { return }
+        listed(l)
+    }
+
+    /// How often the sessions are read while the bridge is up.
+    static let sessionsEvery = Duration.seconds(4)
+
+    /// Reads the sessions every sessionsEvery until the bridge ends.
+    private func poll() {
+        polling?.cancel()
+        polling = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: Self.sessionsEvery)
+                guard !Task.isCancelled else { return }
+                await self?.reread()
+            }
+        }
+    }
+
+    /// Takes a session list: the sessions, the hint, and each Save &
+    /// Clear moved on from its coordinator.
+    private func listed(_ l: AppAPI.SessionList) {
         sessions = l.sessions
+        contextHint = l.contextHint
+        let now = Date.now
+        for (p, var c) in clears {
+            c.follow(coordinatorSession(p), at: now)
+            clears[p] = c.over(at: now) ? nil : c
+        }
+    }
+
+    // MARK: Save & Clear (the write level, T868), as the Mac's
+
+    /// Whether the phone saves and clears coordinators here.
+    var clearsCoordinators: Bool {
+        (hello?.appApi ?? 0) >= Compatibility.projectControlsAPI && can(AppAPI.Methods.coordinatorClear.name)
+    }
+
+    /// ref's context use: a coordinator's warns from the hint, a
+    /// thread's only when nearly full; a paired server's none.
+    func context(_ ref: SessionRef) -> ContextUse? {
+        guard !ref.isRemote else { return nil }
+        if ref.isCoordinator { return ContextUse.of(coordinatorSession(ref.project), hint: contextHint) }
+        return sessionID(ref).flatMap { id in ContextUse.of(sessions.first { $0.id == id }, hint: 0) }
+    }
+
+    /// Saves and clears project's coordinator (coordinator.clear), as
+    /// tm clear does, and follows it in clears.
+    func saveClear(_ project: String) async {
+        guard clears[project]?.running != true else { return }
+        var c = SaveClear(coordinator: coordinatorSession(project), at: .now)
+        clears[project] = c
+        do {
+            _ = try await connected().call(AppAPI.Methods.coordinatorClear, AppAPI.ProjectParams(project: project))
+            c.asked()
+        } catch {
+            c.fail(NeedActs.words(error) ?? error.localizedDescription, at: .now)
+        }
+        clears[project] = c
     }
 
     /// The paired server's name, for the screens to say.

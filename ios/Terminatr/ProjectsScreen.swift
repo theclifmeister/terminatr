@@ -119,16 +119,19 @@ private struct InactiveFold: View {
 }
 
 /// One of this server's projects (T846): its monogram, name and goal,
-/// its board's counts as StatTiles, its coordinator, running or not (at
-/// the write level Start Coordinator under it), its pages as PageTiles,
-/// its designs as DesignTiles (DesignsTiles), then every unresolved thread, done ones too, in the TUI's order
-/// (SidebarTree.threads), as SessionTiles. An inactive project's rows
-/// are dormant.
+/// its board's counts as StatTiles, its coordinator, running or not,
+/// with its context use (at the write level Start Coordinator under it;
+/// held, Save & Clear, T868), its pages as PageTiles, its designs as
+/// DesignTiles (DesignsTiles), then every unresolved thread, done ones
+/// too, in the TUI's order (SidebarTree.threads), as SessionTiles, a
+/// thread's context use only when nearly full. An inactive project's
+/// rows are dormant.
 struct ProjectScreen: View {
     @Environment(PhoneModel.self) private var model
     @Environment(\.theme) private var theme
     @Environment(\.navigate) private var navigate
     let slug: String
+    @State private var clearing = false
 
     var body: some View {
         ScrollView {
@@ -143,10 +146,14 @@ struct ProjectScreen: View {
                         let route = Route.session(SessionRef(project: slug))
                         PlainRouteLink(value: route) {
                             SessionTile("Coordinator", state: .of(coordinator: c, in: p), busy: Busy.of(coordinator: c, in: p),
-                                        dormant: dormant, selected: navigate?.open == route)
+                                        context: model.context(SessionRef(project: slug)), dormant: dormant,
+                                        selected: navigate?.open == route)
                         }
                         .buttonStyle(.plain)
+                        .contextMenu { SaveClearButton(project: slug, asking: $clearing) }
                     }
+                    .asksSaveClear(slug, isPresented: $clearing)
+                    if let clear = model.clears[slug] { SaveClearStatus(clear: clear) }
                     if p.active, model.coordinatorSession(slug) == nil, model.can(AppAPI.Methods.projectOpen.name) {
                         StartCoordinatorButton(project: slug)
                     }
@@ -169,7 +176,8 @@ struct ProjectScreen: View {
                                 let route = Route.session(SessionRef(project: slug, thread: t.record.id))
                                 PlainRouteLink(value: route) {
                                     SessionTile(t.record.title, ref: t.task?.ref, state: model.attention(t), busy: model.busy(t),
-                                                pr: t.pr, dormant: dormant, rule: i > 0, selected: navigate?.open == route)
+                                                pr: t.pr, context: ContextUse.of(model.session(t), hint: 0).flatMap { $0.level == .high ? $0 : nil }, dormant: dormant, rule: i > 0,
+                                                selected: navigate?.open == route)
                                 }
                                 .buttonStyle(.plain)
                             }
