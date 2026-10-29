@@ -80,3 +80,16 @@ private func screen(_ items: [AppAPI.QuestionItem]) -> AppAPI.Question {
     let bash = Transcript.Entry(id: 2, kind: .tool, text: "ls", truncated: false, tool: "Bash", call: "toolu_2")
     #expect(call.asksUser && !bash.asksUser)
 }
+
+/// The session list is pushed by a tm and server with sessions.watch;
+/// an older one is read on a timer.
+@Test func sessionsWatchCompatibility() {
+    var h = AppAPI.Hello(appApi: 32, tm: "1", build: "", capabilities: [], methods: ["sessions.watch"])
+    h.server = AppAPI.Server(version: "1", protocol: 29, caps: ["sessions-watch"])
+    #expect(Compatibility.watchesSessions(h))
+    h.server?.caps = []
+    #expect(!Compatibility.watchesSessions(h))
+    h.server?.caps = ["sessions-watch"]
+    h.methods = []
+    #expect(!Compatibility.watchesSessions(h))
+}

@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/theclifmeister/terminatr/internal/appapi"
 	"github.com/theclifmeister/terminatr/internal/appapi/apptest"
@@ -78,6 +79,47 @@ func appAsk(t *testing.T, env *Env, b *apptest.Bridge, s *Session) {
 		err := b.Call(proto.MethodSessionAnswer, appapi.AnswerParams{ID: s.ID, Index: i, Answer: ans, Question: guard}, &r)
 		return r, err
 	}
+	// sessions.watch pushes each question as it opens and as it goes
+	// (T870), without a session.list.
+	var first appapi.SessionList
+	st, err := b.Stream(proto.MethodSessionsWatch, nil, &first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Cancel()
+	lists := make(chan appapi.SessionList, 64)
+	go func() {
+		defer close(lists)
+		for {
+			var l appapi.SessionList
+			if _, err := st.Next(&l); err != nil {
+				return
+			}
+			lists <- l
+		}
+	}()
+	pushed := func(what string, ok func(*appapi.Question) bool) {
+		t.Helper()
+		deadline := time.After(agentWait)
+		for {
+			select {
+			case l, open := <-lists:
+				if !open {
+					t.Fatalf("sessions.watch ended waiting for %s", what)
+				}
+				for _, x := range l.Sessions {
+					if x.ID == s.ID && ok(x.Question) {
+						return
+					}
+				}
+			case <-deadline:
+				t.Fatalf("sessions.watch sent no list with %s", what)
+			}
+		}
+	}
+	asks := func(text string) func(*appapi.Question) bool {
+		return func(q *appapi.Question) bool { return q != nil && q.Screen && q.Questions[0].Question == text }
+	}
 	if q := question(); q != nil {
 		t.Fatalf("question while idle: %+v", q)
 	}
@@ -86,6 +128,7 @@ func appAsk(t *testing.T, env *Env, b *apptest.Bridge, s *Session) {
 	}
 
 	// One single-select question, with its options' descriptions.
+	pushed("the color question", asks("Which color should the button be?"))
 	env.WaitFor(s, "Which color should the button be?", agentWait)
 	waitReason(t, env, s, "question")
 	q := question()
@@ -105,6 +148,7 @@ func appAsk(t *testing.T, env *Env, b *apptest.Bridge, s *Session) {
 		t.Fatalf("answer Blue: %+v %v", r, err)
 	}
 	env.WaitFor(s, "→ Blue", agentWait)
+	pushed("the color question gone", func(q *appapi.Question) bool { return !asks("Which color should the button be?")(q) })
 
 	// Two questions in one call: in order; the user's words; a
 	// multi-select is the pane's.
@@ -132,6 +176,8 @@ func appAsk(t *testing.T, env *Env, b *apptest.Bridge, s *Session) {
 	env.Keys(s, "\r")
 	env.WaitFor(s, "→ Apple", agentWait)
 	env.WaitFor(s, "ASKED", agentWait)
+	// Answered in the pane: gone from the push at once.
+	pushed("no question", func(q *appapi.Question) bool { return q == nil })
 	if !Poll(agentWait, func() bool { return question() == nil }) {
 		t.Fatalf("question after the call: %+v", question())
 	}

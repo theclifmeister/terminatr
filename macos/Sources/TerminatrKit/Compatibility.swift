@@ -32,6 +32,10 @@ public enum Compatibility: Equatable, Sendable {
     /// The app API that has design.list: the project's Designs need it.
     public static let designsAPI = 31
 
+    /// The app API that has sessions.watch: the session list pushed as
+    /// it changes, so a question's card shows and goes at once.
+    public static let sessionsWatchAPI = 32
+
     /// The app API that has session.file: the attachment cards need it.
     public static let sessionFileAPI = 11
 
@@ -127,6 +131,14 @@ public enum Compatibility: Equatable, Sendable {
     public static func listsDesigns(_ hello: AppAPI.Hello) -> Bool {
         hello.appApi >= designsAPI && hello.methods.contains(AppAPI.Methods.designList.name)
             && (hello.server?.caps ?? []).contains("designs")
+    }
+
+    /// Whether hello's tm pushes the session list as it changes, its
+    /// server too (sessions.watch, caps sessions-watch); else the app
+    /// reads session.list on a timer.
+    public static func watchesSessions(_ hello: AppAPI.Hello) -> Bool {
+        hello.appApi >= sessionsWatchAPI && hello.methods.contains(AppAPI.Methods.sessionsWatch.name)
+            && (hello.server?.caps ?? []).contains("sessions-watch")
     }
 
     /// Whether hello's tm lists the board's done tasks (task.done).
