@@ -16,33 +16,33 @@ import (
 	"github.com/theclifmeister/terminatr/internal/qr"
 )
 
-// Pairing a phone from the Network popup (docs/SPEC.md §16.15): D makes
+// Pairing a device from the Network popup (docs/SPEC.md §16.15): D makes
 // a code through the relay the paired devices and servers use (asking
 // for one when none is known), as tm device pair does, and shows it as
 // a QR code drawn with tm's own encoder in half blocks, black on white
 // whatever the terminal's theme, with its quiet zone, and as text under
-// it to paste in the app. Once the phone joins it asks what tm device
+// it to paste in the app. Once the device joins it asks what tm device
 // pair asks, Y adds it (E gives it another name first), and the popup
 // closes with the outcome. esc cancels at any stage.
 //
-//	"█▀▀▀▀▀█ ▄▀ ▄ █▀▀▀▀▀█   Scan this with the terminatr app on the"
-//	"█ ███ █ ▀█▄▀ █ ███ █   iPhone. It works once; you confirm the"
-//	"…                      phone here before it is added."
+//	"█▀▀▀▀▀█ ▄▀ ▄ █▀▀▀▀▀█   Scan this with the terminatr app on an"
+//	"█ ███ █ ▀█▄▀ █ ███ █   iPhone or iPad. It works once; you"
+//	"…                      confirm the device here before it is…"
 //	""
 //	"Or paste this code in the app: terminatr://pair?v=1&relay=…"
 
-// phoneStage is where a phone's pairing is.
+// phoneStage is where a device's pairing is.
 type phoneStage int
 
 const (
 	phoneDialing phoneStage = iota // making a code
 	phoneWaiting                   // the code works: its QR code
-	phoneOffer                     // the phone joined: Y or N
+	phoneOffer                     // the device joined: Y or N
 	phoneAdding                    // the user said yes
 	phoneFailed                    // not paired: why
 )
 
-// phonePairView stands over the Network popup while a phone's pairing
+// phonePairView stands over the Network popup while a device's pairing
 // runs.
 type phonePairView struct {
 	// relay is the relay as typed, "" for the known one.
@@ -51,7 +51,7 @@ type phonePairView struct {
 	invite DeviceInvite
 	// code is the invite's QR code's lines, as drawn.
 	code []string
-	// offer is the phone that joined; name what it is added as, nameErr
+	// offer is the device that joined; name what it is added as, nameErr
 	// why that name can't be.
 	offer   DeviceOffer
 	name    string
@@ -62,8 +62,8 @@ type phonePairView struct {
 	events  chan phonePairMsg
 }
 
-// phonePairMsg is one step of a phone's pairing: the invite (it works
-// now), the phone that joined, or the end.
+// phonePairMsg is one step of a device's pairing: the invite (it works
+// now), the device that joined, or the end.
 type phonePairMsg struct {
 	pv     *phonePairView
 	invite *DeviceInvite
@@ -73,7 +73,7 @@ type phonePairMsg struct {
 	err    error
 }
 
-// pairPhone opens the phone's pairing popup and runs the pairing behind
+// pairPhone opens the device's pairing popup and runs the pairing behind
 // it, through relay ("" for the one the paired devices and servers
 // use).
 func (m *dash) pairPhone(relay string) tea.Cmd {
@@ -101,11 +101,11 @@ func (m *dash) pairPhone(relay string) tea.Cmd {
 	return pv.next()
 }
 
-// relayPrompt asks for the relay a phone's pairing goes through, when
+// relayPrompt asks for the relay a device's pairing goes through, when
 // none is known yet.
 func (m *dash) relayPrompt(relay string) {
-	m.push(&inputView{title: "Pair a phone", lineEdit: newLine(relay), cancel: "not paired",
-		label:       "The phone and this server meet on a relay, and none is set up yet. Its address (a host name, or wss://…; see Running a relay in docs/OPERATIONS.md):",
+	m.push(&inputView{title: "Pair a device", lineEdit: newLine(relay), cancel: "not paired",
+		label:       "The device and this server meet on a relay, and none is set up yet. Its address (a host name, or wss://…; see Running a relay in docs/OPERATIONS.md):",
 		placeholder: "relay.example.net",
 		submit:      func(s string) tea.Cmd { return m.pairPhone(s) }})
 }
@@ -170,7 +170,7 @@ func (pv *phonePairView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 		pv.stage = phoneAdding
 	case pv.stage == phoneOffer && s == "E":
 		m.push(&inputView{title: "Add it as", lineEdit: newLine(pv.name), max: device.MaxName, cancel: "name unchanged",
-			label: "The name this server knows the phone by; the journal names its acts so:",
+			label: "The name this server knows the device by; the journal names its acts so:",
 			submit: func(s string) tea.Cmd {
 				if err := device.CheckName(s); err != nil {
 					pv.nameErr = err.Error()
@@ -215,7 +215,7 @@ func countdown(end time.Time) string {
 
 func (pv *phonePairView) render(m *dash) string {
 	w := m.inner(viewWidth)
-	b := box{title: "Pair a phone", sel: -1, keys: "esc cancel"}
+	b := box{title: "Pair a device", sel: -1, keys: "esc cancel"}
 	var body []string
 	switch pv.stage {
 	case phoneDialing:
@@ -224,7 +224,7 @@ func (pv *phonePairView) render(m *dash) string {
 		body = pv.waiting(m, w, m.boxRows(b))
 	case phoneOffer, phoneAdding:
 		o := pv.offer
-		body = []string{th().Head.Render("A phone joined")}
+		body = []string{th().Head.Render("A device joined")}
 		version := o.Version
 		if version == "" {
 			version = "unknown"
@@ -232,9 +232,9 @@ func (pv *phonePairView) render(m *dash) string {
 		body = append(body, wrapLines(fmt.Sprintf("%q, device id %s, app %s", oneLine(o.Phone), o.Short, oneLine(version)), w)...)
 		switch {
 		case o.Again != "" && o.KeyChanged:
-			body = append(body, wrapLines(fmt.Sprintf("This phone is paired already, as %q, but its write key changed: pairing again makes it view-only; set its level again after.", o.Again), w)...)
+			body = append(body, wrapLines(fmt.Sprintf("This device is paired already, as %q, but its write key changed: pairing again makes it view-only; set its level again after.", o.Again), w)...)
 		case o.Again != "":
-			body = append(body, wrapLines(fmt.Sprintf("This phone is paired already, as %q: pairing again keeps its level.", o.Again), w)...)
+			body = append(body, wrapLines(fmt.Sprintf("This device is paired already, as %q: pairing again keeps its level.", o.Again), w)...)
 		}
 		if !o.WriteKey {
 			body = append(body, wrapLines("Its app has no write key: it can only view, whatever its level.", w)...)
@@ -254,7 +254,7 @@ func (pv *phonePairView) render(m *dash) string {
 			}
 		}
 		if pv.stage == phoneOffer {
-			body = append(body, faintLines("Only a phone you just scanned the code with. Answer within "+countdown(o.AnswerBy)+".", w)...)
+			body = append(body, faintLines("Only a device you just scanned the code with. Answer within "+countdown(o.AnswerBy)+".", w)...)
 			b.keys = "Y add · N don't add · E another name · esc cancel"
 		} else {
 			body = append(body, "", "Adding it…")
@@ -275,9 +275,9 @@ func (pv *phonePairView) render(m *dash) string {
 // the text, and how tall the window needs to be.
 func (pv *phonePairView) waiting(m *dash, w, n int) []string {
 	in := pv.invite
-	words := []string{"Scan this with the terminatr app on the iPhone. It works once; you confirm the phone here before it is added."}
+	words := []string{"Scan this with the terminatr app on an iPhone or iPad. It works once; you confirm the device here before it is added."}
 	if time.Now().Before(in.Expires) {
-		words = append(words, "Works for "+countdown(in.Expires)+" · waiting for the phone…")
+		words = append(words, "Works for "+countdown(in.Expires)+" · waiting for the device…")
 	} else {
 		words = append(words, "The code's time ran out.")
 	}

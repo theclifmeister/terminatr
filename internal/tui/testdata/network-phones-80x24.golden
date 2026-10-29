@@ -11,14 +11,14 @@
 │ ▾ ○ nas · offline 4m · relay                               panes off │
 │    ■ media · stale     shared with you · + link (L)        ● working │
 │                                                                      │
-│ ▾ phones · 2 paired                                  D pairs a phone │
+│ ▾ devices · 2 paired                                D pairs a device │
 │    ◉ Clif's iPhone · connected                          level answer │
 │    ○ iPad · last seen 2h ago                              level view │
 │ ──────────────────────────────────────────────────────────────────── │
-│ 2 paired phones                                                      │
-│ D pairs a phone: a QR code to scan with the terminatr app            │
+│ 2 paired devices                                                     │
+│ D pairs a device: a QR code to scan with the terminatr app           │
 │                                                                      │
-│ D pair a phone · enter fold · tab details · ? keys · esc close       │
+│ D pair a device · enter fold · tab details · ? keys · esc close      │
 ╰──────────────────────────────────────────────────────────────────────╯
 == d:aa11
 ╭─ Network · studio + 2 paired ────────────────────────────────────────╮
@@ -33,7 +33,7 @@
 │ ▾ ○ nas · offline 4m · relay                               panes off │
 │    ■ media · stale     shared with you · + link (L)        ● working │
 │                                                                      │
-│ ▾ phones · 2 paired                                  D pairs a phone │
+│ ▾ devices · 2 paired                                D pairs a device │
 │    ◉ Clif's iPhone · connected                          level answer │
 │    ○ iPad · last seen 2h ago                              level view │
 │ ──────────────────────────────────────────────────────────────────── │
@@ -55,7 +55,7 @@
 │ ▾ ○ nas · offline 4m · relay                               panes off │
 │    ■ media · stale     shared with you · + link (L)        ● working │
 │                                                                      │
-│ ▾ phones · 2 paired                                  D pairs a phone │
+│ ▾ devices · 2 paired                                D pairs a device │
 │    ◉ Clif's iPhone · connected                          level answer │
 │    ○ iPad · last seen 2h ago                              level view │
 │ ──────────────────────────────────────────────────────────────────── │

@@ -15,13 +15,13 @@ import (
 	"github.com/theclifmeister/terminatr/internal/version"
 )
 
-// ServerSource's DeviceSource: the paired phones (docs/SPEC.md §16.15).
+// ServerSource's DeviceSource: the paired devices (docs/SPEC.md §16.15).
 // As tm device and the app's bridge do, it reads and changes the
 // devices in this process, never through the server, and has a running
 // server read them again after each change (device.reload); their
 // links come from server.status.
 
-// DeviceList is the paired devices, for the Network popup's phones
+// DeviceList is the paired devices, for the Network popup's devices
 // (networkphones.go), oldest first. Running says a server answered, so
 // each one's Link is its link (none yet: nil). Relay is the relay a
 // pairing goes through, "" when none is known (none, or several, among
@@ -43,8 +43,8 @@ type DeviceEntry struct {
 	LastUp                                   time.Time
 }
 
-// DevicePairEvents are what a phone's pairing shows on the way: Waiting
-// the invite once it works, Confirm the phone that joined, returning
+// DevicePairEvents are what a device's pairing shows on the way: Waiting
+// the invite once it works, Confirm the device that joined, returning
 // the name to add it under ("" for no).
 type DevicePairEvents struct {
 	Waiting func(DeviceInvite)
@@ -59,7 +59,7 @@ type DeviceInvite struct {
 	Expires                           time.Time
 }
 
-// DeviceOffer is the phone that joined a pairing, as tm device pair
+// DeviceOffer is the device that joined a pairing, as tm device pair
 // shows it before asking: Name is what it would be added as, Phone the
 // name it gave; Again the device's name when its key is paired already
 // (it keeps Level, view when KeyChanged: it brings another write key);
@@ -74,7 +74,7 @@ type DeviceOffer struct {
 
 // errRelayNeeded says no relay is known for a pairing: the user gives
 // one.
-var errRelayNeeded = errors.New("no relay is known yet: give the relay the phone and this server meet on")
+var errRelayNeeded = errors.New("no relay is known yet: give the relay the device and this server meet on")
 
 func (s *ServerSource) Devices() (DeviceList, error) {
 	var l DeviceList
@@ -157,8 +157,8 @@ func (s *ServerSource) RemoveDevice(id string) error {
 	return s.devicesChanged("removed " + d.Name)
 }
 
-// devicePairWait bounds a phone's pairing: the code's 10 minutes, and
-// the answer's time once the phone joined (as tm device pair).
+// devicePairWait bounds a device's pairing: the code's 10 minutes, and
+// the answer's time once the device joined (as tm device pair).
 const devicePairWait = device.PairWindow + 3*time.Minute
 
 func (s *ServerSource) PairDevice(ctx context.Context, relayText string, ev DevicePairEvents) (DeviceEntry, error) {
@@ -242,18 +242,18 @@ func (s *ServerSource) PairDevice(ctx context.Context, relayText string, ev Devi
 	return e, s.devicesChanged("paired " + d.Name)
 }
 
-// devicePairWords is a phone's pairing's error in plain words, as the
+// devicePairWords is a device's pairing's error in plain words, as the
 // Mac app says them.
 func devicePairWords(err error, relayURL string) error {
 	switch {
 	case errors.Is(err, peer.ErrDeclined):
 		return errors.New("not paired: you said no")
 	case errors.Is(err, context.DeadlineExceeded) || errors.Is(err, peer.ErrNoPairer):
-		return errors.New("the code's time ran out before the phone joined: make a new code to try again")
+		return errors.New("the code's time ran out before the device joined: make a new code to try again")
 	case errors.Is(err, peer.ErrPeerNo):
-		return errors.New("not paired: the phone said no")
+		return errors.New("not paired: the device said no")
 	case errors.Is(err, peer.ErrBadCode) || errors.Is(err, peer.ErrNotExpected):
-		return errors.New("the phone and this server didn't agree on the code: someone in between, or another server; make a new code")
+		return errors.New("the device and this server didn't agree on the code: someone in between, or another server; make a new code")
 	}
 	return pairWords(err, relayURL)
 }
