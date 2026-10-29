@@ -105,42 +105,13 @@ struct NeedTile: View {
 }
 
 /// What the screens are of, on the start screen: the demo (and the way
-/// back out), or, of the paired server, only a link that is down (T843):
-/// its name, link, level and Forget are in Settings.
+/// back out). The paired server has none (T843): its name, link, level
+/// and Forget are in Settings.
 struct SourceBanner: View {
     @Environment(PhoneModel.self) private var model
 
     var body: some View {
-        switch model.source {
-        case .none: EmptyView()
-        case .demo: DemoBanner()
-        case .server: LinkDown()
-        }
-    }
-}
-
-/// The paired server's link while it is down: asleep or offline, or
-/// lost and dialling again. Linking or up, nothing.
-struct LinkDown: View {
-    @Environment(PhoneModel.self) private var model
-    @Environment(\.theme) private var theme
-
-    var body: some View {
-        if model.link.down {
-            let (icon, text) = model.linkWords()
-            HStack(spacing: 8) {
-                Image(systemName: icon)
-                    .foregroundStyle(theme.attention)
-                    .accessibilityHidden(true)
-                Text(text)
-                    .font(theme.body(.footnote, .medium))
-                    .fixedSize(horizontal: false, vertical: true)
-                Spacer()
-            }
-            .padding(10)
-            .background(theme.attention.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
-            .accessibilityElement(children: .combine)
-        }
+        if model.source == .demo { DemoBanner() }
     }
 }
 

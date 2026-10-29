@@ -96,8 +96,7 @@ extension View {
     }
 }
 
-/// The paired server: its name, its link (Needs you says so too while it
-/// is down) and the phone's level on it.
+/// The paired server: its name, its link and the phone's level on it.
 struct ServerSection: View {
     @Environment(PhoneModel.self) private var model
     @Environment(\.theme) private var theme
@@ -106,7 +105,7 @@ struct ServerSection: View {
         Section {
             LabeledContent("Name", value: model.serverName)
             LabeledContent("Link") {
-                let (icon, text) = model.linkWords(short: true)
+                let (icon, text) = model.linkWords
                 HStack(spacing: 6) {
                     if model.link == .connecting {
                         ProgressView().controlSize(.small)
@@ -165,7 +164,7 @@ struct ForgetSection: View {
 }
 
 extension PhoneModel.Link {
-    /// Asleep or offline, or lost: Needs you says so.
+    /// Asleep or offline, or lost.
     var down: Bool {
         switch self {
         case .asleep, .lost: true
@@ -175,14 +174,13 @@ extension PhoneModel.Link {
 }
 
 extension PhoneModel {
-    /// The paired server's link with its symbol: in a sentence (Needs
-    /// you), or short (Settings).
-    func linkWords(short: Bool = false) -> (String, String) {
+    /// The paired server's link in words, with its symbol.
+    var linkWords: (String, String) {
         switch link {
-        case .connecting: ("antenna.radiowaves.left.and.right", short ? "Linking…" : "Linking to \(serverName)…")
-        case .asleep: ("moon.zzz", short ? "Asleep or offline" : "\(serverName) is asleep or offline. The app links again once it's back.")
+        case .connecting: ("antenna.radiowaves.left.and.right", "Linking…")
+        case .asleep: ("moon.zzz", "Asleep or offline")
         case .up: ("checkmark.circle.fill", "Linked")
-        case .lost(let why): ("exclamationmark.triangle", short ? "Lost: \(why)" : "Link lost: \(why) Trying again…")
+        case .lost(let why): ("exclamationmark.triangle", "Lost: \(why)")
         }
     }
 }
