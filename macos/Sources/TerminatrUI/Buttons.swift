@@ -26,6 +26,12 @@ public struct RoleButtonStyle: ButtonStyle {
     }
 }
 
+extension Theme {
+    /// A circle button's side: 44 pt, grown with the text size. The
+    /// composer dock's field takes it as its height too (T857).
+    public var circle: CGFloat { max(tapTarget, 44 * scale) }
+}
+
 extension ButtonStyle where Self == RoleButtonStyle {
     public static func primary(_ tone: Attention.Tone? = nil) -> RoleButtonStyle { RoleButtonStyle(role: .primary(tone)) }
     public static var secondary: RoleButtonStyle { RoleButtonStyle(role: .secondary) }
@@ -83,14 +89,14 @@ private struct RoleButton: View {
                 .labelStyle(.iconOnly)
                 .font(.system(size: 18 * theme.scale, weight: .medium))
                 .foregroundStyle(theme.ink)
-                .frame(width: max(tapTarget, 44 * theme.scale), height: max(tapTarget, 44 * theme.scale))
+                .frame(width: theme.circle, height: theme.circle)
                 .surface(.glass, in: Circle())
         case .send:
             configuration.label
                 .labelStyle(.iconOnly)
                 .font(.system(size: 18 * theme.scale, weight: .bold))
                 .foregroundStyle(theme.onAction)
-                .frame(width: max(tapTarget, 44 * theme.scale), height: max(tapTarget, 44 * theme.scale))
+                .frame(width: theme.circle, height: theme.circle)
                 .background(theme.action, in: Circle())
                 .shadow(color: theme.action.opacity(0.35), radius: 8, y: 4)
         }

@@ -84,6 +84,8 @@ struct ConversationScreen: View {
                 .padding([.horizontal, .top], 16)
                 .scrollTargetLayout()
             }
+            // A drag down the conversation folds the keyboard (T857).
+            .scrollDismissesKeyboard(.interactively)
             .modifier(PhoneFollowGeometry(follow: $follow, newest: transcript.entries.last?.id) { top in
                 if restoring == nil { model.places.keep("top \(ref)", follow.following ? nil : top) }
             } toEnd: {

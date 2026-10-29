@@ -199,7 +199,10 @@ final class PhoneModel {
                 watching = nil
                 await bridge?.close()
                 bridge = nil
-                hello = nil
+                // The hello stays until the redial's: the same server
+                // at the same level, so what its level shows (the
+                // composer, the terminal's keys) stays up, and the
+                // keyboard with it (T857). Writes fail meanwhile.
                 if link != .asleep {
                     link = .lost(error.localizedDescription)
                     fails += 1
