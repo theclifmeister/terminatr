@@ -14,7 +14,7 @@ import (
 // only added; removing or changing one is a new major.
 const (
 	APIMajor = 1
-	APIMinor = 9
+	APIMinor = 11
 )
 
 // APIVersion is "MAJOR.MINOR" of the mod API this tm speaks.

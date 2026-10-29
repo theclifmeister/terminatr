@@ -343,6 +343,43 @@ func TestWritesHumanOnly(t *testing.T) {
 	if !ra.Runs("other") || ra.Settings["warn_after_hours"] != int64(24) {
 		t.Fatalf("%+v", ra)
 	}
+
+	// A project's own value, over all projects' key by key; nil follows
+	// all projects again.
+	for _, c := range []caller.Caller{{Kind: caller.Coordinator, Project: "demo"}, {Kind: caller.Thread, Project: "demo", Thread: "t-0001"}} {
+		if err := SetSettingFor(c, "review-age", "demo", "warn_after_hours", 2); !errors.Is(err, ErrHumanOnly) {
+			t.Fatalf("%s: %v", c, err)
+		}
+	}
+	for _, bad := range []string{"De mo", "../x", "a.b", "-x"} {
+		if err := SetSettingFor(human, "review-age", bad, "warn_after_hours", 2); err == nil {
+			t.Errorf("project %q taken", bad)
+		}
+	}
+	if err := SetSettingFor(human, "review-age", "demo", "warn_after_hours", 0); err == nil {
+		t.Fatal("a project's value below min")
+	}
+	if err := SetSettingFor(human, "review-age", "demo", "warn_after_hours", 6); err != nil {
+		t.Fatal(err)
+	}
+	data, _ = os.ReadFile(filepath.Join(h, "config.toml"))
+	if !strings.Contains(string(data), "\n[projects.demo.mods.review-age.settings]\nwarn_after_hours = 6\n") {
+		t.Fatalf("config.toml:\n%s", data)
+	}
+	c, _ = config.Load()
+	r, _ = Load(c)
+	ra, _ = r.Get("review-age")
+	if ra.SettingsFor("demo")["warn_after_hours"] != int64(6) || ra.SettingsFor("site")["warn_after_hours"] != int64(24) || ra.Settings["warn_after_hours"] != int64(24) {
+		t.Fatalf("per project: %+v", ra)
+	}
+	if err := SetSettingFor(human, "review-age", "demo", "warn_after_hours", nil); err != nil {
+		t.Fatal(err)
+	}
+	c, _ = config.Load()
+	r, _ = Load(c)
+	if ra, _ = r.Get("review-age"); ra.SettingsFor("demo")["warn_after_hours"] != int64(24) {
+		t.Fatalf("back to all projects: %+v", ra)
+	}
 }
 
 func TestSectionViews(t *testing.T) {

@@ -151,7 +151,7 @@ func Bundled(id string, t config.Mod) Mod {
 	// [mods.<id>.settings] over the defaults, so a change in the Mods tab
 	// changes its spec, and the server starts its host again with them.
 	m.Grants = man.Permissions.Requested()
-	m.Settings, m.BadSettings = SettingsOf(id, man, t.Settings)
+	m.setSettings(man, t)
 	m.State = Enabled
 	if t.EnabledSet && !t.Enabled && !m.Required {
 		m.State = Disabled

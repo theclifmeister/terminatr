@@ -4,10 +4,12 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
 	"sort"
+	"strings"
 
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/home"
@@ -53,6 +55,11 @@ type Mod struct {
 	// the manifest doesn't have.
 	Settings    map[string]any
 	BadSettings []string
+	// ProjectSettings are the valid values each project sets of its own
+	// ([projects.<slug>.mods.<id>.settings], mod API 1.11), by slug;
+	// SettingsFor lays them over Settings. BadSettings has the others,
+	// each starting "projects.<slug>: ".
+	ProjectSettings map[string]map[string]any
 	// Order is its [mods.<id>] table's place in config.toml: the order
 	// mods were enabled in (config.Mod.Order).
 	Order int
@@ -73,6 +80,19 @@ type Mod struct {
 // enabled, and slug is one of its projects (any, when it lists none).
 func (m Mod) Runs(slug string) bool {
 	return m.State == Enabled && (len(m.Projects) == 0 || slices.Contains(m.Projects, slug))
+}
+
+// SettingsFor are the mod's settings for project slug: Settings, each
+// key the project sets overlaid. "" (or a project that sets none) is
+// Settings itself.
+func (m Mod) SettingsFor(slug string) map[string]any {
+	own := m.ProjectSettings[slug]
+	if len(own) == 0 {
+		return m.Settings
+	}
+	out := maps.Clone(m.Settings)
+	maps.Copy(out, own)
+	return out
 }
 
 // Granted reports whether the mod runs with permission perm.
@@ -195,7 +215,7 @@ func load(id, dir string, t config.Mod) Mod {
 			m.WantsMore = append(m.WantsMore, p)
 		}
 	}
-	m.Settings, m.BadSettings = SettingsOf(id, man, t.Settings)
+	m.setSettings(man, t)
 	if err := CheckAPI(man); err != nil {
 		m.Err, m.State = err, Incompatible
 		return m
@@ -207,6 +227,25 @@ func load(id, dir string, t config.Mod) Mod {
 	return m
 }
 
+// setSettings sets m's Settings, ProjectSettings and BadSettings from
+// its manifest and table.
+func (m *Mod) setSettings(man *Manifest, t config.Mod) {
+	m.Settings, m.BadSettings = SettingsOf(m.ID, man, t.Settings)
+	for _, slug := range sortedKeys(t.ProjectSettings) {
+		own, bad := checkSettings(m.ID, man, t.ProjectSettings[slug])
+		for _, b := range bad {
+			m.BadSettings = append(m.BadSettings, "projects."+slug+": "+strings.Replace(b, "the default is used", "all projects' value is used", 1))
+		}
+		if len(own) == 0 {
+			continue
+		}
+		if m.ProjectSettings == nil {
+			m.ProjectSettings = map[string]map[string]any{}
+		}
+		m.ProjectSettings[slug] = own
+	}
+}
+
 // SettingsOf are mod id's settings: each of man's defaults, overlaid
 // with set (its [mods.<id>.settings]) where that is valid; bad say which
 // of set aren't.
@@ -215,6 +254,15 @@ func SettingsOf(id string, man *Manifest, set map[string]any) (settings map[stri
 	for _, k := range sortedKeys(man.Settings) {
 		settings[k], _ = man.Settings[k].Check(man.Settings[k].Default)
 	}
+	valid, bad := checkSettings(id, man, set)
+	maps.Copy(settings, valid)
+	return settings, bad
+}
+
+// checkSettings are the values of set that are valid for man, checked;
+// bad say which of set aren't.
+func checkSettings(id string, man *Manifest, set map[string]any) (valid map[string]any, bad []string) {
+	valid = map[string]any{}
 	for _, k := range sortedKeys(set) {
 		s, ok := man.Settings[k]
 		if !ok {
@@ -226,7 +274,7 @@ func SettingsOf(id string, man *Manifest, set map[string]any) (settings map[stri
 			bad = append(bad, fmt.Sprintf("%s %v; the default is used", k, err))
 			continue
 		}
-		settings[k] = v
+		valid[k] = v
 	}
-	return settings, bad
+	return valid, bad
 }
