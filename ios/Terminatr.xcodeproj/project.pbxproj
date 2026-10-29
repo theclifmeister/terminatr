@@ -186,7 +186,8 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = terminatr;
-				INFOPLIST_KEY_NSCameraUsageDescription = "The camera reads the pairing code tm device pair shows on your computer.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "The camera reads the pairing code tm device pair shows on your computer, and takes a photo you attach to a prompt.";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Save to Photos keeps an image from a conversation in your library.";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -219,7 +220,8 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = terminatr;
-				INFOPLIST_KEY_NSCameraUsageDescription = "The camera reads the pairing code tm device pair shows on your computer.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "The camera reads the pairing code tm device pair shows on your computer, and takes a photo you attach to a prompt.";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Save to Photos keeps an image from a conversation in your library.";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

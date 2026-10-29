@@ -79,6 +79,12 @@ public final class ComposerTray {
         return false
     }
 
+    /// Shows a file tm has already (the demo's).
+    public func keep(_ f: ComposerFile) {
+        guard !full, f.ref != nil else { return }
+        files.append(f)
+    }
+
     /// Takes the file off the prompt, stopping its upload.
     public func remove(_ id: UUID) {
         tasks.removeValue(forKey: id)?.cancel()

@@ -80,6 +80,12 @@ final class PhoneModel {
     private var watching: Task<Void, Never>?
     /// Where the user is on each screen, which a resize keeps (T825).
     @ObservationIgnored let places = Places()
+    /// Each session's composer files (T860), by its ref: kept across the
+    /// screens and the link's drops, as its draft is.
+    @ObservationIgnored private var trays: [SessionRef: ComposerTray] = [:]
+    /// The conversation's files (session.file), the bridge's: nil when
+    /// its tm sends none.
+    private(set) var files: FileStore?
 
     /// Every need, as the Mac app's Needs you lists them.
     var needs: [Need] { Need.of(projects: projects, sessions: sessions, peers: peers) }
@@ -115,6 +121,8 @@ final class PhoneModel {
         sessions = []
         peers = []
         places.forget()
+        for t in trays.values { t.clear() }
+        trays = [:]
     }
 
     /// Ends the bridge and the link, and the redials.
@@ -146,9 +154,11 @@ final class PhoneModel {
     private func connect(_ transport: any BridgeTransport, signer: (any WriteSigner)? = nil) async {
         let b = Bridge(transport: transport)
         do {
-            hello = try await b.start()
+            let h = try await b.start()
+            hello = h
             await b.setSigner(signer)
             bridge = b
+            files = Compatibility.sendsFiles(h) ? FileStore { p in try await b.call(AppAPI.Methods.sessionFile, p) } : nil
             generation += 1
             await refresh()
         } catch {
@@ -246,6 +256,7 @@ final class PhoneModel {
                 guard bridge != nil else { throw LinkError.closed }
                 link = .up
                 wasUp = true
+                for t in trays.values { t.resumeDropped() }
                 fails = 0
                 rush = false
                 log.up(at: .now)
@@ -469,11 +480,42 @@ final class PhoneModel {
     var writes: Bool { can(AppAPI.Methods.sessionPrompt.name) }
 
     /// Sends a prompt to session: queued (mode ""), or steered into the
-    /// running turn ("now").
-    func prompt(_ session: String, text: String, mode: String = "") async throws -> AppAPI.PromptResult {
-        let r = try await connected().call(AppAPI.Methods.sessionPrompt, AppAPI.PromptParams(id: session, text: text, mode: mode))
+    /// running turn ("now"); files are the refs its tray's uploads
+    /// answered, which tm names after the text.
+    func prompt(_ session: String, text: String, mode: String = "", files: [String] = []) async throws -> AppAPI.PromptResult {
+        let r = try await connected().call(AppAPI.Methods.sessionPrompt,
+                                           AppAPI.PromptParams(id: session, text: text, mode: mode, files: files))
         await reread()
         return r
+    }
+
+    /// Whether the composer takes files for ref's session (session.upload,
+    /// app API 15, at the write level): this server's sessions only.
+    func attaches(_ ref: SessionRef) -> Bool {
+        !ref.isRemote && hello.map(Compatibility.takesFiles) == true && can(AppAPI.Methods.sessionUpload.name)
+    }
+
+    /// ref's composer files, sent in phone-sized chunks to whichever
+    /// session runs it when each chunk goes; one the link's drop cut
+    /// goes on as the link comes back. The demo's shows a file in.
+    func tray(_ ref: SessionRef) -> ComposerTray {
+        if let t = trays[ref] { return t }
+        let t = ComposerTray(chunk: ComposerFiles.phoneChunk) { [weak self] p in
+            guard let self else { throw LinkError.closed }
+            return try await self.upload(ref, p)
+        }
+        t.dropped = { Self.isDrop($0) }
+        if source == .demo { t.keep(ComposerFile(name: "login-dark.png", size: 182_406, state: .ready(ref: "demo-login-dark.png"))) }
+        trays[ref] = t
+        return t
+    }
+
+    /// A chunk of a file for ref's session (session.upload), signed.
+    private func upload(_ ref: SessionRef, _ p: AppAPI.UploadParams) async throws -> AppAPI.Upload {
+        guard let id = sessionID(ref) else { throw AppAPI.Error(code: "no-session", message: "No session runs it now") }
+        var p = p
+        p.session = id
+        return try await connected().call(AppAPI.Methods.sessionUpload, p)
     }
 
     /// Writes data to session's terminal as if typed (TerminalKey).
