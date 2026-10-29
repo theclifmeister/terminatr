@@ -321,15 +321,24 @@ struct RouteScreen: View {
     }
 }
 
+/// The mesh's colours as a gradient; with Reduce Transparency the base
+/// alone, as Backdrop leaves it.
 private struct BackdropModifier: ViewModifier {
     @Environment(\.theme) private var theme
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     func body(content: Content) -> some View {
         content
             .scrollContentBackground(.hidden)
             .background {
-                LinearGradient(colors: [theme.mesh[0], theme.base, theme.mesh[3]], startPoint: .topLeading, endPoint: .bottomTrailing)
-                    .ignoresSafeArea()
+                Group {
+                    if reduceTransparency {
+                        theme.base
+                    } else {
+                        LinearGradient(colors: [theme.mesh[0], theme.base, theme.mesh[3]], startPoint: .topLeading, endPoint: .bottomTrailing)
+                    }
+                }
+                .ignoresSafeArea()
             }
     }
 }

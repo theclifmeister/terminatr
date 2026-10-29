@@ -6,15 +6,16 @@ import UIKit
 /// Settings (T808; redesigned in T850): on the sheet's glass, the paired
 /// server first (ServerCard), then the themes as large live previews
 /// (ThemeCarousel, the same keys as the Mac's Settings › Appearance),
-/// light, dark or the system's, and with a server Forget this server,
-/// red and last (T843). Text follows the phone's Dynamic Type, so there
-/// is no size of its own. From the Projects tab's gear.
+/// light, dark or the system's, the Haptics switch (T851), and with a
+/// server Forget this server, red and last (T843). Text follows the
+/// phone's Dynamic Type, so there is no size of its own. From the Projects tab's gear.
 struct SettingsScreen: View {
     @Environment(PhoneModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     @Environment(\.theme) private var theme
     @AppStorage(ThemeName.key) private var name = ThemeName.bloom.rawValue
     @AppStorage(Appearance.key) private var appearance = Appearance.system.rawValue
+    @AppStorage(Haptics.key) private var haptics = true
 
     var body: some View {
         ScrollView {
@@ -33,6 +34,8 @@ struct SettingsScreen: View {
                 Segments(Appearance.allCases.map { (id: $0.rawValue, label: $0.label) }, selection: $appearance)
                     .padding(.horizontal, Spacing.gutter)
                 note("The theme in light or dark; System follows the phone. Text follows the phone's text size.")
+                GroupLabel("Feedback")
+                SwitchCard("Haptics", detail: "A tap on picking an option or a chip, and when the server answers.", isOn: $haptics)
                 if case .server = model.source { ForgetSection() }
             }
             .frame(maxWidth: 640)
@@ -55,9 +58,11 @@ struct SettingsScreen: View {
 /// another) in their light or dark, its text scaled with Dynamic Type,
 /// and with Increase Contrast its opaque panels: what the Mac's Themed
 /// does, the phone's text size standing in for Settings › Text size.
+/// Settings' Haptics switch reaches every screen from here (\.haptics).
 struct Themed: ViewModifier {
     @AppStorage(ThemeName.key) private var name = ThemeName.bloom.rawValue
     @AppStorage(Appearance.key) private var appearance = Appearance.system.rawValue
+    @AppStorage(Haptics.key) private var haptics = true
     @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.dynamicTypeSize) private var typeSize
 
@@ -65,8 +70,10 @@ struct Themed: ViewModifier {
         let picked = Theme.named(ThemeName.of(name))
         var theme = contrast == .increased ? picked.increasedContrast() : picked
         theme.scale = Self.scale(typeSize)
+        theme.titleGrowth = 0.35
         return content
             .environment(\.theme, theme)
+            .environment(\.haptics, haptics)
             .tint(theme.action)
             .preferredColorScheme(Self.scheme(Appearance.of(appearance)))
     }

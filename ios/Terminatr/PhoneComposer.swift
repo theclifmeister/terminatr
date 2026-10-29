@@ -22,6 +22,7 @@ import TerminatrUI
 struct PhoneComposer: View {
     @Environment(PhoneModel.self) private var model
     @Environment(\.theme) private var theme
+    @Environment(\.dynamicTypeSize) private var typeSize
     let ref: SessionRef
     let session: String
     let running: Bool
@@ -92,8 +93,13 @@ struct PhoneComposer: View {
         }
     }
 
+    /// The field; at accessibility sizes Queue and Steer go under the
+    /// text, which keeps the row's width.
     private var field: some View {
-        HStack(alignment: .bottom, spacing: Spacing.tight) {
+        let row = typeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .trailing, spacing: 0))
+            : AnyLayout(HStackLayout(alignment: .bottom, spacing: Spacing.tight))
+        return row {
             TextField(placeholder, text: $text, axis: .vertical)
                 .lineLimit(1...6)
                 .font(theme.body(.body))
@@ -103,6 +109,7 @@ struct PhoneComposer: View {
                 .modifier(NoWritingTools())
             if working {
                 DockModes([(false, "Queue"), (true, "Steer")], selection: $steer)
+                    .accessibilityElement(children: .contain)
                     .accessibilityLabel("How it goes")
             }
         }

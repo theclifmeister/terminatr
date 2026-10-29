@@ -196,7 +196,7 @@ struct ConversationScreen: View {
         let open = unfolded.contains(run.id)
         VStack(alignment: .leading, spacing: 6) {
             Button {
-                withAnimation(.snappy(duration: 0.2)) {
+                withAnimation(reduceMotion ? nil : .snappy(duration: 0.2)) {
                     if open { unfolded.remove(run.id) } else { unfolded.insert(run.id) }
                 }
             } label: {
@@ -336,6 +336,7 @@ struct EntryLine: View {
                 Spacer(minLength: 40)
                 VStack(alignment: .trailing, spacing: 4) {
                     turn
+                        .onGlass()
                         .onTapGesture { if entry.folds { unfolded = false } }
                     Text(entry.preview() ?? entry.text)
                         .foregroundStyle(theme.onPrompt)
@@ -359,16 +360,25 @@ struct EntryLine: View {
             ToolLine(entry: entry)
         case .result:
             if let r = entry.result {
-                Text("\(r.text)\(r.lines > 1 ? " · \(r.lines) lines" : "")")
+                HStack(spacing: Spacing.tight) {
+                    if r.error {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(theme.attention)
+                            .accessibilityHidden(true)
+                    }
+                    Text("\(r.text)\(r.lines > 1 ? " · \(r.lines) lines" : "")")
+                        .foregroundStyle(r.error ? theme.ink : theme.muted)
+                }
                     .font(theme.mono(.footnote))
-                    .foregroundStyle(r.error ? theme.attention : theme.muted)
                     .lineLimit(1)
+                    .onGlass()
                     .padding(.leading, 12)
             }
         case .note:
             Text(entry.text)
                 .font(theme.body(.subheadline, .medium))
                 .foregroundStyle(theme.muted)
+                .onGlass()
                 .frame(maxWidth: .infinity)
         }
     }
@@ -377,6 +387,16 @@ struct EntryLine: View {
         Text([entry.who(agent: agent), entry.at?.formatted(date: .omitted, time: .shortened) ?? ""].filter { !$0.isEmpty }.joined(separator: " · "))
             .font(theme.mono(.caption, .medium))
             .foregroundStyle(theme.muted)
+    }
+}
+
+extension View {
+    /// A line over the mesh on a glass capsule: the mesh is no place for
+    /// small or muted text (ThemeColours.checks, T851).
+    fileprivate func onGlass() -> some View {
+        padding(.horizontal, Spacing.item)
+            .padding(.vertical, 2)
+            .surface(.glass, in: Capsule())
     }
 }
 
