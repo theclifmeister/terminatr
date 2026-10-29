@@ -33,6 +33,7 @@ struct NeedsScreen: View {
         .refreshable { await model.refresh() }
         .keepsPlace("needs")
         .navigationTitle("Needs you")
+        .toolbar { SettingsButton() }
         .backdrop()
     }
 
@@ -104,66 +105,13 @@ struct NeedTile: View {
 }
 
 /// What the screens are of, on the start screen: the demo (and the way
-/// back out), or the paired server and its link: linking, asleep or
-/// offline, lost.
+/// back out). The paired server has none (T843): its name, link, level
+/// and Forget are in Settings.
 struct SourceBanner: View {
     @Environment(PhoneModel.self) private var model
 
     var body: some View {
-        switch model.source {
-        case .none: EmptyView()
-        case .demo: DemoBanner()
-        case .server: LinkBanner()
-        }
-    }
-}
-
-struct LinkBanner: View {
-    @Environment(PhoneModel.self) private var model
-    @Environment(\.theme) private var theme
-    @State private var forgetting = false
-
-    var body: some View {
-        let (icon, text, colour) = words
-        HStack(spacing: 8) {
-            if model.link == .connecting {
-                ProgressView().controlSize(.small)
-            } else {
-                Image(systemName: icon)
-                    .foregroundStyle(colour)
-                    .accessibilityHidden(true)
-            }
-            Text(text)
-                .font(theme.body(.footnote, .medium))
-                .fixedSize(horizontal: false, vertical: true)
-            Spacer()
-            Menu {
-                SettingsButton()
-                Button("Forget this server", role: .destructive) { forgetting = true }
-            } label: {
-                Image(systemName: "ellipsis.circle")
-                    .accessibilityLabel("Server")
-            }
-        }
-        .padding(10)
-        .background(colour.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
-        .accessibilityElement(children: .combine)
-        .confirmationDialog("Forget \(model.serverName)?", isPresented: $forgetting, titleVisibility: .visible) {
-            Button("Forget", role: .destructive) { Task { await model.forget() } }
-        } message: {
-            Text("The phone forgets the server and its own key. To link again, pair again; on the computer, tm device remove takes the phone off.")
-        }
-    }
-
-    private var words: (String, String, Color) {
-        let name = model.serverName
-        switch model.link {
-        case .connecting: return ("antenna.radiowaves.left.and.right", "Linking to \(name)…", theme.muted)
-        case .asleep: return ("moon.zzz", "\(name) is asleep or offline. The app links again once it's back.", theme.attention)
-        case .up where model.answers: return ("checkmark.circle.fill", "\(name): answers here", theme.action)
-        case .up: return ("checkmark.circle", "\(name), read only", theme.action)
-        case .lost(let why): return ("exclamationmark.triangle", "Link lost: \(why) Trying again…", theme.attention)
-        }
+        if model.source == .demo { DemoBanner() }
     }
 }
 
