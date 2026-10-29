@@ -135,6 +135,7 @@ func TestPeerNeedAct(t *testing.T) {
 		t.Fatalf("the same answer again: %v", err)
 	}
 	mini.WaitFor(th, "What should the button say?", agentWait)
+	waitReason(t, mini, th, "question")
 	second := func(it appapi.QuestionItem) bool { return it.Question == "What should the button say?" && !it.Answered }
 	q = need("the second question", proto.NeedsAnswer, proto.NeedQuestion, func(n appapi.PeerNeed) bool {
 		return n.Question != nil && slices.ContainsFunc(n.Question.Questions, second)
