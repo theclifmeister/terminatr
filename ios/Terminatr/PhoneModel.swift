@@ -1,4 +1,5 @@
 import Foundation
+import Network
 import Observation
 import TerminatrKit
 import TerminatrLink
@@ -13,8 +14,11 @@ extension LinkTransport: @retroactive BridgeTransport {}
 /// the write key (WriteKey). It talks to a Bridge on either transport:
 /// the demo's recording (DemoTransport), or the device link to the
 /// paired server (LinkTransport), which it keeps while the app is in
-/// front: redialled when it drops and when the app comes back, its
-/// hello and streams afresh each time.
+/// front and for a short grace behind another app (LinkKeep): redialled
+/// when it drops, at once when the network changes, and when the app
+/// comes back, its streams afresh each time but what it shows kept
+/// meanwhile (T859). Each drop goes in the link's log (LinkLog), which
+/// Settings' Connection shows.
 @MainActor @Observable
 final class PhoneModel {
     enum Source: Equatable {
@@ -44,6 +48,23 @@ final class PhoneModel {
     /// it when this changes (a redial).
     private(set) var generation = 0
     private var linking: Task<Void, Never>?
+    /// The link's drops, kept across launches; the demo's is made up.
+    private(set) var log = LinkLog.load()
+    /// The link while it is up, for its ping (LinkTransport.check).
+    private var transport: LinkTransport?
+    /// Dials failed in a row: the next one waits LinkKeep.backoff of it.
+    private var fails = 0
+    /// The wait before the next dial, which a network change cuts short.
+    private var napping: Task<Void, Never>?
+    /// The next dial goes at once: the network changed under the link.
+    private var rush = false
+    /// The link was up since the server was opened: only then is a
+    /// failure a drop.
+    private var wasUp = false
+    /// The app is behind another one, the link still up until this ends.
+    private var grace: Task<Void, Never>?
+    private var paths: NWPathMonitor?
+    private var path: LinkKeep.Path?
     /// Told when projects.watch ends by itself: the link dropped.
     private var dropped: (@MainActor (any Error) -> Void)?
     private(set) var projects: [AppAPI.Project] = []
@@ -80,6 +101,7 @@ final class PhoneModel {
         do {
             await connect(try DemoTransport(recording: Data(contentsOf: url)))
             source = .demo
+            log = .demo
         } catch {
             failure = error.localizedDescription
         }
@@ -97,14 +119,28 @@ final class PhoneModel {
 
     /// Ends the bridge and the link, and the redials.
     private func drop() async {
+        await unlink()
+        hello = nil
+        paths?.cancel()
+        paths = nil
+        path = nil
+        wasUp = false
+        if source == .demo { log = LinkLog.load() }
+    }
+
+    /// Closes the link and stops the redials, what it showed kept.
+    private func unlink() async {
         linking?.cancel()
         linking = nil
+        napping?.cancel()
+        grace?.cancel()
+        grace = nil
         dropped = nil
         watching?.cancel()
         watching = nil
         await bridge?.close()
         bridge = nil
-        hello = nil
+        transport = nil
     }
 
     private func connect(_ transport: any BridgeTransport, signer: (any WriteSigner)? = nil) async {
@@ -152,43 +188,68 @@ final class PhoneModel {
 
     private func open(_ s: DevicePairing.Server) {
         source = .server(s)
+        watchPaths()
         resume()
     }
 
-    /// The app came to the front: link again (redial, hello, streams).
+    /// The app came to the front: back from its grace, the link kept is
+    /// pinged (is it still there?); else link again (redial, hello,
+    /// streams), what the screens show kept until it is up.
     func resume() {
+        if let g = grace {
+            g.cancel()
+            grace = nil
+            transport?.check()
+        }
         guard case .server(let s) = source, linking == nil else { return }
         linking = Task { await self.keep(s) }
     }
 
-    /// The app went to the back: the link closes (the server sees the
-    /// device go), and resume opens it again.
+    /// The app went to the back: the link stays up for LinkKeep's grace,
+    /// so a glance at another app keeps it, then suspends.
+    func toBack() async {
+        guard case .server = source, linking != nil, grace == nil else { return }
+        let g = Task { _ = try? await Task.sleep(for: .seconds(LinkKeep.backgroundGrace)) }
+        grace = g
+        await g.value
+        guard grace == g, !g.isCancelled else { return }
+        await suspend()
+    }
+
+    /// The link closes (the server sees the device go), and resume opens
+    /// it again. What the screens show stays, the hello too (T857).
     func suspend() async {
         guard case .server = source else { return }
-        await drop()
+        if link == .up { note(.background) }
+        await unlink()
         link = .connecting
     }
 
     /// Keeps the link to s until cancelled: dial, hello, read it all,
-    /// follow projects.watch; when that ends, dial again after a wait (1 s
-    /// doubling to 30 s). While the server is asleep the relay's room
-    /// waits for it; when the relay ends that wait, the next one starts.
+    /// follow projects.watch; when that ends, dial again after a wait
+    /// (LinkKeep.backoff, cut short by a network change). While the
+    /// server is asleep the relay's room waits for it; when the relay
+    /// ends that wait, the next one starts.
     private func keep(_ s: DevicePairing.Server) async {
-        var fails = 0
+        fails = 0
         while !Task.isCancelled {
             if link != .asleep { link = .connecting }
-            var wait = 1
             do {
                 let id = try DeviceStore.identity()
                 let t = try await LinkTransport.connect(to: s.endpoint, as: id) { [weak self] in
-                    Task { @MainActor in self?.link = .asleep }
+                    Task { @MainActor in self?.asleep() }
                 }
                 let lost = AsyncStream<any Error>.makeStream()
                 dropped = { lost.continuation.yield($0) }
+                transport = t
                 await connect(t, signer: WriteKey.existing())
                 guard bridge != nil else { throw LinkError.closed }
                 link = .up
+                wasUp = true
                 fails = 0
+                rush = false
+                log.up(at: .now)
+                log.save()
                 for await e in lost.stream {
                     throw e
                 }
@@ -199,18 +260,121 @@ final class PhoneModel {
                 watching = nil
                 await bridge?.close()
                 bridge = nil
+                transport = nil
                 // The hello stays until the redial's: the same server
                 // at the same level, so what its level shows (the
                 // composer, the terminal's keys) stays up, and the
                 // keyboard with it (T857). Writes fail meanwhile.
                 if link != .asleep {
+                    let (cause, detail) = Self.cause(error)
+                    note(cause, detail)
                     link = .lost(error.localizedDescription)
                     fails += 1
-                    wait = min(30, 1 << min(fails - 1, 5))
                 }
             }
-            try? await Task.sleep(for: .seconds(wait))
+            let wait = rush ? 0 : link == .asleep ? 1 : LinkKeep.backoff(fails)
+            rush = false
+            await nap(wait)
         }
+    }
+
+    /// Waits seconds before the next dial, unless redial cuts it short.
+    private func nap(_ seconds: Int) async {
+        guard seconds > 0 else { return }
+        let t = Task { _ = try? await Task.sleep(for: .seconds(seconds)) }
+        napping = t
+        await t.value
+        napping = nil
+    }
+
+    /// The relay says the server isn't in the room.
+    private func asleep() {
+        if link != .asleep { note(.asleep) }
+        link = .asleep
+    }
+
+    /// A drop for the log, once the link was up (a first dial failing is
+    /// none).
+    private func note(_ cause: LinkLog.Cause, _ detail: String = "") {
+        guard wasUp, source != .demo else { return }
+        log.dropped(at: .now, cause, detail: detail)
+        log.save()
+    }
+
+    /// Why the link ended, as the log keeps it.
+    static func cause(_ error: any Error) -> (LinkLog.Cause, String) {
+        let words = error.localizedDescription
+        switch error as? LinkError {
+        case .pingUnanswered?: return (.ping, words)
+        case .timedOut?: return (.idle, words)
+        // The server's TLS closing, or the relay saying it left.
+        case .closed?, .relayClosed(_, "peer-gone")?: return (.server, words)
+        case .relayClosed?: return (.relay, words)
+        default:
+            if case .closed? = error as? BridgeError { return (.server, words) }
+            return (.error, words)
+        }
+    }
+
+    /// Whether error is the link's dropping, which the screens don't
+    /// show: they keep what they have until the redial (T859).
+    static func isDrop(_ error: any Error) -> Bool {
+        if error is LinkError { return true }
+        if case .closed? = error as? BridgeError { return true }
+        return false
+    }
+
+    /// Whether the link is on its way back: the screens keep what they
+    /// show, and say nothing of the streams that ended.
+    var relinking: Bool {
+        if case .server = source { return link != .up }
+        return false
+    }
+
+    // MARK: The network (NWPathMonitor)
+
+    /// Follows the phone's network while a server is open: a change
+    /// redials at once, or checks the link (LinkKeep.onPath).
+    private func watchPaths() {
+        guard paths == nil else { return }
+        let m = NWPathMonitor()
+        m.pathUpdateHandler = { [weak self] p in
+            let now = LinkKeep.Path(online: p.status == .satisfied, via: p.availableInterfaces.first.map { Self.name($0.type) } ?? "")
+            Task { @MainActor in self?.pathChanged(now) }
+        }
+        m.start(queue: DispatchQueue(label: "dev.terminatr.ios.path"))
+        paths = m
+    }
+
+    private nonisolated static func name(_ t: NWInterface.InterfaceType) -> String {
+        switch t {
+        case .wifi: "wifi"
+        case .cellular: "cellular"
+        case .wiredEthernet: "wired"
+        case .loopback: "loopback"
+        default: "other"
+        }
+    }
+
+    private func pathChanged(_ now: LinkKeep.Path) {
+        let act = LinkKeep.onPath(from: path, to: now, up: link == .up)
+        path = now
+        switch act {
+        case .nothing: break
+        case .check: transport?.check()
+        case .redial: redial()
+        case .reconnect:
+            note(.path, "now on \(now.via)")
+            redial()
+            transport?.close()
+        }
+    }
+
+    /// The next dial goes now, the backoff from the start.
+    private func redial() {
+        fails = 0
+        rush = true
+        napping?.cancel()
     }
 
     /// Reads it all again (pull to refresh): the session and peer lists,
@@ -466,5 +630,24 @@ final class PhoneModel {
     /// Reads task of project whole, its notes and steps too (task.get).
     func getTask(project: String, task: String) async throws -> AppAPI.Task {
         try await connected().call(AppAPI.Methods.taskGet, AppAPI.TaskGetParams(project: project, task: task))
+    }
+}
+
+extension LinkLog {
+    /// The demo's Connection: a day's drops as a phone sees them.
+    static var demo: LinkLog {
+        let now = Date.now
+        var l = LinkLog()
+        let made: [(TimeInterval, LinkLog.Cause, String, TimeInterval)] = [
+            (-7 * 3600, .background, "", 540),
+            (-5 * 3600, .path, "now on cellular", 2),
+            (-3 * 3600, .ping, "the relay didn't answer a ping: the network went away", 6),
+            (-40 * 60, .background, "", 75),
+        ]
+        for (ago, cause, detail, down) in made {
+            l.dropped(at: now.addingTimeInterval(ago), cause, detail: detail)
+            l.up(at: now.addingTimeInterval(ago + down))
+        }
+        return l
     }
 }

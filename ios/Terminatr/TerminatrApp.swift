@@ -55,10 +55,37 @@ struct TerminatrApp: App {
         .onChange(of: phase) { _, p in
             switch p {
             case .active: model.resume()
-            case .background: Task { await model.suspend() }
+            case .background: Grace.begin(model)
             default: break
             }
         }
+    }
+}
+
+/// The link's grace behind another app (LinkKeep.backgroundGrace): a
+/// background task keeps the app running while the link stays up, and
+/// when iOS ends it first, the link closes then.
+@MainActor final class Grace {
+    private var id = UIBackgroundTaskIdentifier.invalid
+
+    static func begin(_ model: PhoneModel) {
+        let g = Grace()
+        g.id = UIApplication.shared.beginBackgroundTask(withName: "link") {
+            Task { @MainActor in
+                await model.suspend()
+                g.end()
+            }
+        }
+        Task {
+            await model.toBack()
+            g.end()
+        }
+    }
+
+    private func end() {
+        guard id != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(id)
+        id = .invalid
     }
 }
 

@@ -66,7 +66,21 @@ enum RelayWire {
     /// The relay pings every 30 s (relay.Config.Ping): three missed is a
     /// dead connection, as relay.Dialer has it.
     static let idle = TimeAmount.seconds(90)
+
+    /// The phone pings the relay this often once it has spoken, so a
+    /// link the network dropped shows in seconds, not idle's 90 (T859).
+    /// The relay meters a client's pings and pongs (relay.Config
+    /// ControlRate, 0.2 a second after a burst of 10): these and the
+    /// pongs to its own pings stay well under.
+    static let pingEvery = TimeAmount.seconds(10)
+    /// How long a ping waits for anything from the relay (its pong, or
+    /// any frame: a busy link is a live one) before the link is dead.
+    static let pingDeadline = TimeAmount.seconds(8)
 }
+
+/// Sent down a link's pipeline (LinkTransport.check): ping the relay
+/// now, the link failing if nothing comes back within pingDeadline.
+struct PingNow {}
 
 /// Why a relay or link ended.
 public enum LinkError: Error, Equatable, LocalizedError {
@@ -82,6 +96,9 @@ public enum LinkError: Error, Equatable, LocalizedError {
     case relayNotPinned
     case closed
     case timedOut(String)
+    /// The relay didn't answer the phone's ping in time: the network
+    /// dropped the link.
+    case pingUnanswered
     /// Nobody waits in the pair room: the code was used, has expired, or
     /// tm device pair stopped.
     case noPairer
@@ -100,6 +117,7 @@ public enum LinkError: Error, Equatable, LocalizedError {
         case .relayNotPinned: return "the relay has a different key than when you paired"
         case .closed: return "the link closed"
         case .timedOut(let what): return "timed out \(what)"
+        case .pingUnanswered: return "the relay didn't answer a ping: the network went away"
         case .noPairer: return "nobody is pairing with this code: it was used or has expired (10 minutes), or tm device pair stopped. Run it again for a new code."
         case .badCode: return "the code doesn't match: someone in between doesn't know it"
         case .notExpected: return "the server's key isn't the one the code names: someone in between, or another server"
@@ -113,7 +131,9 @@ public enum LinkError: Error, Equatable, LocalizedError {
 /// in become ByteBuffers, ByteBuffers out become binary messages of at
 /// most the relay's max. It answers pings, turns a close into
 /// LinkError.relayClosed and RelayWire.idle of silence into timedOut
-/// (an IdleStateHandler before it says when).
+/// (an IdleStateHandler before it says when); once the relay has
+/// spoken it pings it every RelayWire.pingEvery, and a ping that
+/// nothing answers within pingDeadline is LinkError.pingUnanswered.
 final class RelayHandler: ChannelDuplexHandler {
     typealias InboundIn = WebSocketFrame
     typealias InboundOut = ByteBuffer
@@ -138,6 +158,9 @@ final class RelayHandler: ChannelDuplexHandler {
     /// The fragmented message being read, if any, and its bytes so far.
     private var open: WebSocketOpcode?
     private var openSize = 0
+    /// The next ping, and the deadline of the one in flight.
+    private var nextPing: Scheduled<Void>?
+    private var pongDue: Scheduled<Void>?
 
     init(identity: LinkIdentity, kind: String, room: Data, peerID: Data?, onWait: @escaping @Sendable () -> Void,
          onMated: @escaping (ChannelHandlerContext) throws -> Void) {
@@ -151,6 +174,9 @@ final class RelayHandler: ChannelDuplexHandler {
 
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
         let frame = unwrapInboundIn(data)
+        // Anything from the relay answers the ping in flight.
+        pongDue?.cancel()
+        pongDue = nil
         switch frame.opcode {
         case .ping:
             send(context, .pong, frame.unmaskedData)
@@ -207,6 +233,7 @@ final class RelayHandler: ChannelDuplexHandler {
                 guard ch.t == "challenge", ch.nonce.count == 32 else { throw LinkError.protocolError("expected a challenge") }
                 guard ch.v == RelayWire.version else { throw LinkError.protocolError("wire version \(ch.v), this app speaks \(RelayWire.version)") }
                 greeted = true
+                schedulePing(context)
                 if let m = ch.max, m > 0, m < max { max = m }
                 let sig = try identity.key.signature(for: RelayWire.signed(nonce: ch.nonce, kind: kind, room: room, peer: peerID))
                 let hello = RelayWire.Hello(kind: kind, key: identity.publicKey, room: RelayWire.hex(room),
@@ -229,6 +256,49 @@ final class RelayHandler: ChannelDuplexHandler {
         } catch {
             fail(context, error)
         }
+    }
+
+    /// Pings the relay pingEvery from now, and again after that.
+    private func schedulePing(_ context: ChannelHandlerContext) {
+        nextPing?.cancel()
+        nextPing = context.eventLoop.assumeIsolated().scheduleTask(in: RelayWire.pingEvery) { [self] in
+            ping(context)
+        }
+    }
+
+    /// One ping, unless one waits for its answer already; the next is
+    /// pingEvery after it.
+    private func ping(_ context: ChannelHandlerContext) {
+        guard state != .closed else { return }
+        schedulePing(context)
+        guard pongDue == nil else { return }
+        send(context, .ping, context.channel.allocator.buffer(capacity: 0))
+        pongDue = context.eventLoop.assumeIsolated().scheduleTask(in: RelayWire.pingDeadline) { [self] in
+            pongDue = nil
+            if state != .closed { fail(context, LinkError.pingUnanswered) }
+        }
+    }
+
+    func triggerUserOutboundEvent(context: ChannelHandlerContext, event: Any, promise: EventLoopPromise<Void>?) {
+        guard event is PingNow else { return context.triggerUserOutboundEvent(event, promise: promise) }
+        if greeted { ping(context) }
+        promise?.succeed(())
+    }
+
+    func handlerRemoved(context: ChannelHandlerContext) {
+        stopPinging()
+    }
+
+    func channelInactive(context: ChannelHandlerContext) {
+        stopPinging()
+        context.fireChannelInactive()
+    }
+
+    private func stopPinging() {
+        nextPing?.cancel()
+        pongDue?.cancel()
+        nextPing = nil
+        pongDue = nil
     }
 
     func userInboundEventTriggered(context: ChannelHandlerContext, event: Any) {
@@ -258,6 +328,7 @@ final class RelayHandler: ChannelDuplexHandler {
         }
         // Leave the room: the relay tells the peer.
         state = .closed
+        stopPinging()
         var d = context.channel.allocator.buffer(capacity: 2)
         d.writeInteger(UInt16(1000))
         context.writeAndFlush(wrapOutboundOut(frame(.connectionClose, d)), promise: nil)
@@ -274,6 +345,7 @@ final class RelayHandler: ChannelDuplexHandler {
 
     private func fail(_ context: ChannelHandlerContext, _ error: Error) {
         state = .closed
+        stopPinging()
         context.fireErrorCaught(error)
         context.close(promise: nil)
     }

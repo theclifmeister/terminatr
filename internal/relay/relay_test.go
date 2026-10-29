@@ -920,3 +920,28 @@ func TestDialWaitsPastTheDialTimeout(t *testing.T) {
 	da.c.Close()
 	db.c.Close()
 }
+
+// A mated link outlives the wait's idle time: the wait's read deadline
+// goes at "mated", so a link that sets none of its own (a device's)
+// isn't cut waitIdle after it came up (T859: every phone link ended at
+// 90 s).
+func TestMatedLinkOutlivesTheWaitIdle(t *testing.T) {
+	old := waitIdle
+	waitIdle = 200 * time.Millisecond
+	t.Cleanup(func() { waitIdle = old })
+	cfg := DefaultConfig()
+	cfg.Ping = 50 * time.Millisecond
+	cfg.ControlRate, cfg.ControlBurst = 1000, 1000 // the pongs to those pings
+	_, url, tc := relayFor(t, cfg)
+	a, b, _, _ := mate(t, url, tc)
+	time.Sleep(3 * waitIdle)
+	go a.Write([]byte("still here"))
+	buf := make([]byte, 10)
+	if _, err := io.ReadFull(b, buf); err != nil {
+		t.Fatalf("the link ended after the wait's idle time: %v", err)
+	}
+	go b.Write([]byte("me too"))
+	if _, err := io.ReadFull(a, buf[:6]); err != nil {
+		t.Fatalf("the link ended after the wait's idle time: %v", err)
+	}
+}

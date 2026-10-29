@@ -44,6 +44,12 @@ public final class LinkTransport: @unchecked Sendable {
     /// Leaves the room; the relay tells the server.
     public func close() { channel.close(promise: nil) }
 
+    /// Pings the relay now: when nothing answers within a few seconds
+    /// (RelayWire.pingDeadline) the link fails, and lines ends with
+    /// LinkError.pingUnanswered. For when the app comes back to the
+    /// front with its link kept: is it still there?
+    public func check() { channel.triggerUserOutboundEvent(PingNow(), promise: nil) }
+
     /// The bound on the TLS handshake once the room mates.
     public static let handshakeTimeout = TimeAmount.seconds(10)
 

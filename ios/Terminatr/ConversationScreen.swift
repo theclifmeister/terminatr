@@ -21,6 +21,9 @@ struct ConversationScreen: View {
     /// The question or approval its card shows above the conversation.
     var need: Need?
     @State private var transcript = Transcript()
+    /// The session transcript is of: a redial's watch of the same one
+    /// keeps it on the screen (rejoin), another starts afresh.
+    @State private var watched: String?
     @State private var failure: String?
     @State private var unfolded: Set<Int> = []
     @State private var paging = false
@@ -277,7 +280,11 @@ struct ConversationScreen: View {
     }
 
     private func watch(_ id: String?) async {
-        transcript = Transcript()
+        // A redial reads the same session again: what is shown stays
+        // until the fresh read is in, then takes it in place (T859).
+        let again = id != nil && id == watched && !transcript.entries.isEmpty
+        if !again { transcript = Transcript() }
+        watched = id
         failure = nil
         guard let id, let b = model.bridge else { return }
         let hello = await b.hello
@@ -285,12 +292,23 @@ struct ConversationScreen: View {
         let tail = hello?.server?.caps.contains("transcript-tail") == true ? Self.tailItems : 0
         do {
             let sub = try await b.subscribe(AppAPI.Methods.transcriptWatch, AppAPI.TranscriptParams(session: id, tail: tail))
-            transcript.start(sub.result.status)
+            var fresh: Transcript? = again ? Transcript() : nil
+            if fresh == nil { transcript.start(sub.result.status) } else { fresh?.start(sub.result.status) }
             for try await e in sub.events {
-                transcript.apply(e.name, e.data)
+                guard var f = fresh else {
+                    transcript.apply(e.name, e.data)
+                    continue
+                }
+                f.apply(e.name, e.data)
+                fresh = f
+                if e.name == "transcript.reset" || e.name == "transcript.items" {
+                    transcript.rejoin(f)
+                    fresh = nil
+                }
             }
         } catch {
-            if !Task.isCancelled { failure = error.localizedDescription }
+            // A drop says nothing here: the redial reads it again.
+            if !Task.isCancelled, !PhoneModel.isDrop(error) { failure = error.localizedDescription }
         }
     }
 }

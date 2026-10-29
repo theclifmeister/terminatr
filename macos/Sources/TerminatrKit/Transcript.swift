@@ -39,6 +39,11 @@ public struct Transcript: Sendable, Equatable {
         /// no preview (Entry.attachments).
         public var files: [AppAPI.TranscriptFile] = []
         public var display: String = ""
+
+        /// The same item, whatever its id and its result so far.
+        func same(as o: Entry) -> Bool {
+            kind == o.kind && text == o.text && tool == o.tool && call == o.call && at == o.at && from == o.from
+        }
     }
 
     public struct Result: Sendable, Equatable {
@@ -165,6 +170,42 @@ public struct Transcript: Sendable, Equatable {
             entries.removeFirst(drop)
             skipped += drop
         }
+    }
+
+    /// Takes fresh, the same session's transcript read again after a
+    /// redial, without starting over (T859): when fresh's first entry is
+    /// one this one has, the entries before it stay (the pages read
+    /// earlier too), the ones both have keep their ids (so the view keeps
+    /// its place), with fresh's results, and the new ones follow. Without
+    /// such an entry it is fresh, as a new watch would have it.
+    public mutating func rejoin(_ fresh: Transcript) {
+        guard let first = fresh.entries.first,
+              let at = entries.lastIndex(where: { $0.same(as: first) }),
+              zip(entries[at...], fresh.entries).allSatisfy({ $0.same(as: $1) }) else {
+            self = fresh
+            return
+        }
+        var kept = Array(entries[..<at])
+        for (i, e) in fresh.entries.enumerated() {
+            var e = e
+            if at + i < entries.count {
+                e = Entry(id: entries[at + i].id, kind: e.kind, text: e.text, truncated: e.truncated, tool: e.tool, call: e.call,
+                          result: e.result ?? entries[at + i].result, at: e.at, from: e.from, files: e.files, display: e.display)
+            } else {
+                e = Entry(id: nextID, kind: e.kind, text: e.text, truncated: e.truncated, tool: e.tool, call: e.call,
+                          result: e.result, at: e.at, from: e.from, files: e.files, display: e.display)
+                nextID += 1
+            }
+            kept.append(e)
+        }
+        entries = kept
+        if at == 0 {
+            skipped = fresh.skipped
+            before = fresh.before
+        }
+        todos = fresh.todos
+        status = fresh.status ?? status
+        closed = fresh.closed
     }
 
     private mutating func add(_ kind: Entry.Kind, _ it: AppAPI.TranscriptItem, result: Result? = nil) {

@@ -114,3 +114,68 @@ private func failed(_ c: Catcher, _ ch: EmbeddedChannel) -> Bool {
     #expect(c.error as? LinkError == .relayClosed(code: 4400, reason: "unknown"))
     #expect(LinkError.relayClosed(code: 4400, reason: "unknown").errorDescription == "the relay closed: unknown (4400)")
 }
+
+// The phone's own ping (T859): a link the network dropped shows in
+// seconds, not after the relay's 90 s of silence.
+
+/// The frames the handler wrote since the last call, by opcode.
+private func written(_ ch: EmbeddedChannel) throws -> [WebSocketOpcode] {
+    var ops: [WebSocketOpcode] = []
+    while let f = try ch.readOutbound(as: WebSocketFrame.self) { ops.append(f.opcode) }
+    return ops
+}
+
+private func advance(_ ch: EmbeddedChannel, _ t: TimeAmount) {
+    (ch.eventLoop as! EmbeddedEventLoop).advanceTime(by: t)
+}
+
+@Test func unansweredPingFailsTheLink() throws {
+    let (ch, c) = try relay(mated: true)
+    advance(ch, RelayWire.pingEvery - .milliseconds(1))
+    #expect(try written(ch).isEmpty, "no ping before pingEvery")
+    advance(ch, .milliseconds(1))
+    #expect(try written(ch) == [.ping])
+    advance(ch, RelayWire.pingDeadline - .milliseconds(1))
+    #expect(c.error == nil)
+    advance(ch, .milliseconds(1))
+    #expect(c.error as? LinkError == .pingUnanswered)
+    #expect(!ch.isActive)
+}
+
+@Test func anyFrameAnswersThePing() throws {
+    let (ch, c) = try relay(mated: true)
+    for _ in 0..<5 {
+        advance(ch, RelayWire.pingEvery)
+        #expect(try written(ch) == [.ping])
+        advance(ch, .seconds(1))
+        // The pong, or the server's bytes: either shows the link is there.
+        deliver(ch, .binary, "x")
+    }
+    advance(ch, RelayWire.pingDeadline)
+    #expect(c.error == nil)
+    #expect(ch.isActive)
+}
+
+@Test func pingNowAsksAtOnce() throws {
+    let (ch, c) = try relay(mated: true)
+    try ch.pipeline.triggerUserOutboundEvent(PingNow()).wait()
+    #expect(try written(ch) == [.ping])
+    // One in flight: asking again sends no second.
+    try ch.pipeline.triggerUserOutboundEvent(PingNow()).wait()
+    #expect(try written(ch).isEmpty)
+    deliver(ch, .pong, "")
+    advance(ch, RelayWire.pingDeadline)
+    #expect(c.error == nil)
+}
+
+@Test func noPingBeforeTheRelaySpoke() throws {
+    let me = LinkIdentity(), peer = LinkIdentity()
+    let ch = EmbeddedChannel()
+    try ch.pipeline.syncOperations.addHandler(RelayHandler(
+        identity: me, kind: "link", room: linkRoom(me.id, peer.id), peerID: peer.id, onWait: {}
+    ) { _ in })
+    try ch.connect(to: SocketAddress(ipAddress: "127.0.0.1", port: 1)).wait()
+    try ch.pipeline.triggerUserOutboundEvent(PingNow()).wait()
+    advance(ch, RelayWire.pingEvery * 3)
+    #expect(try written(ch).isEmpty)
+}
