@@ -878,6 +878,7 @@ func (s *Server) commitLaunchLocked(p *preparedLaunch) (*session.Session, *proto
 	}
 	s.sessions[r.ID] = sess
 	s.records[r.ID] = r
+	s.watch.wake()
 	if s.launched == nil {
 		s.launched = map[string]string{}
 	}

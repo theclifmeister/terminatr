@@ -409,7 +409,7 @@ final class PhoneModel {
             let l = try await b.call(AppAPI.Methods.sessionList)
             listed(l)
             needsFirst = l.needsFirst
-            poll()
+            follow(b)
             if await b.hello?.methods.contains(AppAPI.Methods.peerList.name) == true {
                 peers = try await b.call(AppAPI.Methods.peerList).peers
             }
@@ -454,8 +454,16 @@ final class PhoneModel {
         await reread()
     }
 
+    /// Answers a question; one answered elsewhere meanwhile throws
+    /// QuestionGone, its card gone with the sessions read again.
     func answer(_ a: Need.Answer, _ option: String) async throws {
-        _ = try await connected().call(AppAPI.Methods.sessionAnswer, a.params(option))
+        do {
+            _ = try await connected().call(AppAPI.Methods.sessionAnswer, a.params(option))
+        } catch let e as AppAPI.Error where e.code == "no-question" {
+            await reread()
+            if QuestionPlan.gone(e.code, asked: a.question, now: sessions.first { $0.id == a.session }?.question) { throw QuestionGone() }
+            throw e
+        }
         await reread()
     }
 
@@ -569,13 +577,26 @@ final class PhoneModel {
         listed(l)
     }
 
-    /// How often the sessions are read while the bridge is up.
+    /// How often the sessions are read while the bridge is up, from a
+    /// tm without sessions.watch.
     static let sessionsEvery = Duration.seconds(4)
 
-    /// Reads the sessions every sessionsEvery until the bridge ends.
-    private func poll() {
+    /// Follows the sessions until the bridge ends: sessions.watch's
+    /// lists as they change (app API 32), so a question's card shows as
+    /// its dialog opens and goes once it is answered anywhere; from an
+    /// older tm, session.list every sessionsEvery.
+    private func follow(_ b: Bridge) {
         polling?.cancel()
         polling = Task { [weak self] in
+            if let h = await b.hello, Compatibility.watchesSessions(h),
+               let sub = try? await b.subscribe(AppAPI.Methods.sessionsWatch, AppAPI.NoParams()) {
+                self?.listed(sub.result)
+                // Its end is the link's, which projects.watch tells.
+                do {
+                    for try await e in sub.events { self?.listed(e.data) }
+                } catch {}
+                return
+            }
             while !Task.isCancelled {
                 try? await Task.sleep(for: Self.sessionsEvery)
                 guard !Task.isCancelled else { return }

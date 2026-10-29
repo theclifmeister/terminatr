@@ -29,7 +29,7 @@ var humanOnlyMethods = []string{
 	proto.MethodTaskAccept, proto.MethodTaskSendBack, proto.MethodTaskDelegate, proto.MethodTaskAdd, proto.MethodTaskGet, proto.MethodTaskDone, proto.MethodTaskTemplates, proto.MethodDesignList, proto.MethodProjectOpen,
 	proto.MethodMemoryList, proto.MethodMemoryRead, proto.MethodLibraryList, proto.MethodLibraryRead,
 	proto.MethodSessionAdopt, proto.MethodSessionAdoptAsk, proto.MethodSessionRemote, proto.MethodSessionModel, proto.MethodQuestionsOpen, proto.MethodCoordinatorClear,
-	proto.MethodServerStop, proto.MethodAgentReload, proto.MethodPeerReload, proto.MethodDeviceReload, proto.MethodPeerList, proto.MethodPeerPopupRead, proto.MethodPeerNeedAct, proto.MethodPeerShareAsk, proto.MethodPeerShareAnswer, proto.MethodLinkAct, proto.MethodProjectsWatch,
+	proto.MethodServerStop, proto.MethodAgentReload, proto.MethodPeerReload, proto.MethodDeviceReload, proto.MethodPeerList, proto.MethodPeerPopupRead, proto.MethodPeerNeedAct, proto.MethodPeerShareAsk, proto.MethodPeerShareAnswer, proto.MethodLinkAct, proto.MethodProjectsWatch, proto.MethodSessionsWatch,
 	proto.MethodProjectPin, proto.MethodProjectNew, proto.MethodSessionAdoptRequest, proto.MethodLinkSend,
 	proto.MethodViewSubscribe, proto.MethodViewAttach, proto.MethodViewDashboard, proto.MethodViewProject,
 	proto.MethodViewSelect, proto.MethodViewSideSel, proto.MethodViewExpand, proto.MethodViewTree, proto.MethodViewSections,
@@ -81,7 +81,7 @@ func gateOf(m string) gate {
 // into a stream (a refused one ends it).
 var handledElsewhere = map[string]bool{
 	proto.MethodServerStop: true, proto.MethodSessionStart: true, proto.MethodViewSubscribe: true,
-	proto.MethodProjectsWatch: true, proto.MethodPaneVT: true, proto.MethodTranscriptWatch: true,
+	proto.MethodProjectsWatch: true, proto.MethodSessionsWatch: true, proto.MethodPaneVT: true, proto.MethodTranscriptWatch: true,
 }
 
 // onHumanSocketOnly reports whether err is the server socket's refusal

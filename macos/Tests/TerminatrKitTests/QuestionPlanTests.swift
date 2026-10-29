@@ -50,6 +50,22 @@ private func screen(_ items: [AppAPI.QuestionItem]) -> AppAPI.Question {
     #expect(!QuestionPlan.useTerminal("bad-params"))
 }
 
+@Test func questionPlanGone() {
+    var a = colour
+    a.answered = true
+    // Answered in the pane: the session has no question, another one,
+    // or this one answered; the card goes quietly.
+    #expect(QuestionPlan.gone("no-question", asked: "Which colour?", now: nil))
+    #expect(QuestionPlan.gone("no-question", asked: "Which colour?", now: screen([fruits])))
+    #expect(QuestionPlan.gone("no-question", asked: "Which colour?", now: screen([a, fruits])))
+    // Still open (the screen didn't match): the error stays; so does
+    // any other refusal, and an unguarded answer while a menu is open.
+    #expect(!QuestionPlan.gone("no-question", asked: "Which colour?", now: screen([colour])))
+    #expect(!QuestionPlan.gone("bad-params", asked: "Which colour?", now: nil))
+    #expect(!QuestionPlan.gone("no-question", asked: "", now: screen([fruits])))
+    #expect(QuestionPlan.gone("no-question", asked: "", now: nil))
+}
+
 @Test func questionPlanAllAnswered() {
     var a = colour
     a.answered = true
@@ -63,4 +79,17 @@ private func screen(_ items: [AppAPI.QuestionItem]) -> AppAPI.Question {
     let call = Transcript.Entry(id: 1, kind: .tool, text: "Colour", truncated: false, tool: "AskUserQuestion", call: "toolu_1")
     let bash = Transcript.Entry(id: 2, kind: .tool, text: "ls", truncated: false, tool: "Bash", call: "toolu_2")
     #expect(call.asksUser && !bash.asksUser)
+}
+
+/// The session list is pushed by a tm and server with sessions.watch;
+/// an older one is read on a timer.
+@Test func sessionsWatchCompatibility() {
+    var h = AppAPI.Hello(appApi: 32, tm: "1", build: "", capabilities: [], methods: ["sessions.watch"])
+    h.server = AppAPI.Server(version: "1", protocol: 29, caps: ["sessions-watch"])
+    #expect(Compatibility.watchesSessions(h))
+    h.server?.caps = []
+    #expect(!Compatibility.watchesSessions(h))
+    h.server?.caps = ["sessions-watch"]
+    h.methods = []
+    #expect(!Compatibility.watchesSessions(h))
 }

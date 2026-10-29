@@ -319,6 +319,7 @@ func init() {
 			return res, perr
 		})},
 		proto.MethodProjectsWatch: {gate: gateHuman, stream: stream((*Server).serveProjectsWatch)},
+		proto.MethodSessionsWatch: {gate: gateHuman, stream: stream((*Server).serveSessionsWatch)},
 		proto.MethodAgentReload: {gate: gateHuman, call: plain(func(s *Server, _ callCtx) any {
 			s.loadAgents()
 			return s.agentList()

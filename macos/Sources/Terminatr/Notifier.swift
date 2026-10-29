@@ -185,6 +185,7 @@ final class Notifier: NSObject {
         let params = AppAPI.AnswerParams(id: session, index: index, answer: r.answerOptions[i], question: question)
         do {
             _ = try await model.answer(params)
+        } catch is QuestionGone {
         } catch {
             tell("\(r.who.isEmpty ? "The question" : r.who): not answered", error.localizedDescription)
         }
@@ -208,6 +209,8 @@ final class Notifier: NSObject {
             }
             do {
                 _ = try await model.answer(AppAPI.AnswerParams(id: session, index: index, answer: option, question: question))
+                await model.dismiss(id)
+            } catch is QuestionGone {
                 await model.dismiss(id)
             } catch {
                 tell("Not answered", error.localizedDescription)

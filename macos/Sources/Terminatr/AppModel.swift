@@ -162,6 +162,9 @@ final class AppModel {
     @ObservationIgnored private var projectEvents: Task<Void, any Error>?
     @ObservationIgnored private var reshowing = false
     @ObservationIgnored private var listAgain = false
+    /// sessions.watch sends the list as it changes: listSessions has
+    /// nothing to add.
+    @ObservationIgnored private var sessionsPushed = false
 
     /// The server's hello capabilities (pane-vt, transcript): the last
     /// bridge's while it is down, so the views stay as they were.
@@ -313,17 +316,36 @@ final class AppModel {
         lean && s.server.isEmpty && s.project != watchedShown && project(s.project)?.active == false
     }
 
+    /// Follows the sessions until the bridge ends: sessions.watch's
+    /// lists as they change (app API 32), so a question's card shows as
+    /// its dialog opens and goes once it is answered anywhere; from an
+    /// older tm, or once the watch ends, session.list every
+    /// sessionsEvery.
     private func readSessions(_ b: Bridge) async throws {
+        if let h = await b.hello, Compatibility.watchesSessions(h) {
+            let sub = try await b.subscribe(AppAPI.Methods.sessionsWatch, AppAPI.NoParams())
+            listed(sub.result)
+            sessionsPushed = true
+            defer { sessionsPushed = false }
+            for try await e in sub.events {
+                listed(e.data)
+            }
+        }
         while true {
-            let l = try await b.call(AppAPI.Methods.sessionList)
-            sessions = l.sessions
-            notices = l.notices
-            needsFirst = l.needsFirst
-            contextHint = l.contextHint
-            loaded.sessions = true
-            changed()
+            listed(try await b.call(AppAPI.Methods.sessionList))
             try await Task.sleep(for: Self.sessionsEvery)
         }
+    }
+
+    /// Takes a session list: the sessions, the mods' notices and the
+    /// settings it carries.
+    private func listed(_ l: AppAPI.SessionList) {
+        sessions = l.sessions
+        notices = l.notices
+        needsFirst = l.needsFirst
+        contextHint = l.contextHint
+        loaded.sessions = true
+        changed()
     }
 
     /// Reads peer.list until the bridge ends; a refusal (a bridge inside
@@ -393,6 +415,7 @@ final class AppModel {
     /// window's watch changed: its question or escape may have): once
     /// at a time, and once more after it when asked meanwhile.
     func listSessions() {
+        guard !sessionsPushed else { return }
         guard listing == nil else {
             listAgain = true
             return
@@ -683,7 +706,22 @@ final class AppModel {
     /// session.answer: the server refuses it when the menu changed.
     func answer(_ params: AppAPI.AnswerParams) async throws -> AppAPI.AnswerResult {
         guard let bridge else { throw BridgeError.closed("Not connected to terminatr.") }
-        return try await bridge.call(AppAPI.Methods.sessionAnswer, params)
+        do {
+            return try await bridge.call(AppAPI.Methods.sessionAnswer, params)
+        } catch let e as AppAPI.Error where e.code == "no-question" {
+            if await questionGone(e, session: params.id, asked: params.question) { throw QuestionGone() }
+            throw e
+        }
+    }
+
+    /// Whether session.answer's refusal e was for a question answered
+    /// elsewhere meanwhile (QuestionPlan.gone): the sessions are read
+    /// again now, so its card goes at once.
+    func questionGone(_ e: AppAPI.Error, session: String, asked: String) async -> Bool {
+        guard let bridge, let l = try? await bridge.call(AppAPI.Methods.sessionList) else { return false }
+        sessions = l.sessions
+        changed()
+        return QuestionPlan.gone(e.code, asked: asked, now: l.sessions.first { $0.id == session }?.question)
     }
 
     /// Asks project's coordinator to delegate task (task.delegate, as

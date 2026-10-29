@@ -266,6 +266,8 @@ struct NeedCard: View {
         Task {
             do {
                 if let s = try await f() { said = (s, false) }
+            } catch is QuestionGone {
+                // Answered elsewhere: the card goes with the sessions read.
             } catch let e as AppAPI.Error where e.code == "need-changed" {
                 said = ("That changed meanwhile: look again.", true)
             } catch let e as AppAPI.Error where e.code == "always-allow" {

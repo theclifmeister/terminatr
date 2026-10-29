@@ -175,7 +175,12 @@ final class SessionModel {
     /// unanswered, and answer is one of its options.
     func answer(index: Int, answer: String, question: String, guarded: Bool) async throws -> AppAPI.AnswerResult {
         let (b, id) = try target()
-        return try await b.call(AppAPI.Methods.sessionAnswer, AppAPI.AnswerParams(id: id, index: index, answer: answer, question: guarded ? question : ""))
+        do {
+            return try await b.call(AppAPI.Methods.sessionAnswer, AppAPI.AnswerParams(id: id, index: index, answer: answer, question: guarded ? question : ""))
+        } catch let e as AppAPI.Error where e.code == "no-question" {
+            if await app?.questionGone(e, session: id, asked: question) == true { throw QuestionGone() }
+            throw e
+        }
     }
 
     /// Asks the server what option choice of the dialog on screen would
