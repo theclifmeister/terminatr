@@ -6,8 +6,11 @@ import UIKit
 /// Settings (T808): the theme, as the Mac's Settings › Appearance picks
 /// it (ThemePicker, the same keys), and light, dark or the system's.
 /// Text follows the phone's Dynamic Type, so there is no size of its
-/// own. From the Projects tab's gear and the link banner's menu.
+/// own. Paired with a server, it names the server, its link and the
+/// phone's level on it, and ends with Forget this server (T843). From
+/// the Projects tab's gear.
 struct SettingsScreen: View {
+    @Environment(PhoneModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var typeSize
     @AppStorage(ThemeName.key) private var theme = ThemeName.bloom.rawValue
@@ -16,6 +19,7 @@ struct SettingsScreen: View {
     var body: some View {
         NavigationStack {
             Form {
+                if case .server = model.source { ServerSection() }
                 Section {
                     ThemePicker(selection: $theme, columns: typeSize.isAccessibilitySize ? 2 : 3)
                 } header: {
@@ -35,6 +39,7 @@ struct SettingsScreen: View {
                 } footer: {
                     Text("The theme in light or dark; System follows the phone. Text follows the phone's text size.")
                 }
+                if case .server = model.source { ForgetSection() }
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
@@ -91,8 +96,98 @@ extension View {
     }
 }
 
-/// Opens Settings: Root's sheet, from the Projects tab's gear and the
-/// link banner's menu.
+/// The paired server: its name, its link (Needs you says so too while it
+/// is down) and the phone's level on it.
+struct ServerSection: View {
+    @Environment(PhoneModel.self) private var model
+    @Environment(\.theme) private var theme
+
+    var body: some View {
+        Section {
+            LabeledContent("Name", value: model.serverName)
+            LabeledContent("Link") {
+                let (icon, text) = model.linkWords(short: true)
+                HStack(spacing: 6) {
+                    if model.link == .connecting {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Image(systemName: icon)
+                            .foregroundStyle(model.link.down ? theme.attention : theme.action)
+                            .accessibilityHidden(true)
+                    }
+                    Text(text)
+                        .multilineTextAlignment(.trailing)
+                }
+            }
+            LabeledContent("Level", value: level)
+        } header: {
+            Text("Server")
+        } footer: {
+            Text("What the phone may do there; tm device access on the computer changes it.")
+        }
+    }
+
+    /// The level the link runs at, by its methods: write, answer or view.
+    private var level: String {
+        if model.writes { return "Answers and prompts" }
+        if model.answers { return "Answers" }
+        return model.link == .up ? "View only" : "—"
+    }
+}
+
+/// Forget this server: a red button, the screen's last, asked again.
+struct ForgetSection: View {
+    @Environment(PhoneModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    @State private var forgetting = false
+
+    var body: some View {
+        Section {
+            Button(role: .destructive) { forgetting = true } label: {
+                Text("Forget this server")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.red)
+            .controlSize(.large)
+            .listRowInsets(EdgeInsets())
+            .listRowBackground(Color.clear)
+            .confirmationDialog("Forget \(model.serverName)?", isPresented: $forgetting, titleVisibility: .visible) {
+                Button("Forget", role: .destructive) {
+                    dismiss()
+                    Task { await model.forget() }
+                }
+            } message: {
+                Text("The phone forgets the server and its own key. To link again, pair again; on the computer, tm device remove takes the phone off.")
+            }
+        }
+    }
+}
+
+extension PhoneModel.Link {
+    /// Asleep or offline, or lost: Needs you says so.
+    var down: Bool {
+        switch self {
+        case .asleep, .lost: true
+        case .connecting, .up: false
+        }
+    }
+}
+
+extension PhoneModel {
+    /// The paired server's link with its symbol: in a sentence (Needs
+    /// you), or short (Settings).
+    func linkWords(short: Bool = false) -> (String, String) {
+        switch link {
+        case .connecting: ("antenna.radiowaves.left.and.right", short ? "Linking…" : "Linking to \(serverName)…")
+        case .asleep: ("moon.zzz", short ? "Asleep or offline" : "\(serverName) is asleep or offline. The app links again once it's back.")
+        case .up: ("checkmark.circle.fill", "Linked")
+        case .lost(let why): ("exclamationmark.triangle", short ? "Lost: \(why)" : "Link lost: \(why) Trying again…")
+        }
+    }
+}
+
+/// Opens Settings: Root's sheet, from the Projects tab's gear.
 struct ShowSettings: Sendable {
     var action: @MainActor @Sendable () -> Void = {}
 
