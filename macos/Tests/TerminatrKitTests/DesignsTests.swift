@@ -31,6 +31,9 @@ import Testing
         let building = AppAPI.Design(name: "c", title: "c", status: "building", tasksDone: 0)
         #expect(Designs.ordered([done, designing, building, vault]).map(\.name) == ["vault", "c", "b", "a"])
         #expect(Designs.Status("odd") == .planned)
+        #expect(Designs.tone(vault) == .question)
+        #expect(Designs.tone(building) == .working && Designs.tone(done) == .done && Designs.tone(designing) == .idle)
+        #expect(Designs.tone(task: vault.build[1]) == .working)
     }
 
     @Test func compatibility() {

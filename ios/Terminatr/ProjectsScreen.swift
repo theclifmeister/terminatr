@@ -121,7 +121,7 @@ private struct InactiveFold: View {
 /// One of this server's projects (T846): its monogram, name and goal,
 /// its board's counts as StatTiles, its coordinator, running or not (at
 /// the write level Start Coordinator under it), its pages as PageTiles,
-/// then every unresolved thread, done ones too, in the TUI's order
+/// its designs as DesignTiles (DesignsTiles), then every unresolved thread, done ones too, in the TUI's order
 /// (SidebarTree.threads), as SessionTiles. An inactive project's rows
 /// are dormant.
 struct ProjectScreen: View {
@@ -151,6 +151,9 @@ struct ProjectScreen: View {
                         StartCoordinatorButton(project: slug)
                     }
                     pages
+                    if model.listsDesigns {
+                        DesignsTiles(project: p)
+                    }
                     let waiting = threads.filter { model.attention($0).waits }.count
                     SectionHeading("Threads", detail: threads.isEmpty ? "" : "\(threads.count)" + (waiting > 0 ? " · \(waiting) wait on you" : ""))
                     if threads.isEmpty {

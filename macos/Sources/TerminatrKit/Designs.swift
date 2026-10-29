@@ -15,6 +15,29 @@ public enum Designs {
         public init(_ s: String) { self = Status(rawValue: s) ?? .planned }
     }
 
+    /// A design's tone on a tile: a question while its design task has
+    /// open ones, else by its status: designing and planned idle (the
+    /// badge's word tells them apart), building working, done done.
+    public static func tone(_ d: AppAPI.Design) -> Attention.Tone {
+        if !d.questions.isEmpty { return .question }
+        switch Status(d.status) {
+        case .designing, .planned: return .idle
+        case .building: return .working
+        case .done: return .done
+        }
+    }
+
+    /// A build task's tone, from its status.
+    public static func tone(task t: AppAPI.DesignTask) -> Attention.Tone {
+        switch t.status {
+        case "done": .done
+        case "started": .working
+        case "review": .review
+        case "blocked": .attention
+        default: .idle
+        }
+    }
+
     /// "3/5 built", "no build tasks".
     public static func built(_ d: AppAPI.Design) -> String {
         d.build.isEmpty && d.tasks.isEmpty ? "no build tasks" : "\(d.tasksDone)/\(max(d.build.count, d.tasks.count)) built"

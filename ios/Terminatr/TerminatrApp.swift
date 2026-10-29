@@ -112,12 +112,15 @@ enum Route: Hashable {
     case memoryFile(String, path: String)
     case library(String)
     case task(String, ref: String)
+    /// A project's design by its name (T864): its answers, open
+    /// questions and build.
+    case design(String, name: String)
 
     /// A launch argument's route: "project:SLUG", "session:SLUG" (its
     /// coordinator) or "session:SLUG/THREAD", "need:SLUG/THREAD" (its
     /// question or approval); "overview:SLUG",
-    /// "board:SLUG", "memory:SLUG", "memory:SLUG/PATH", "library:SLUG"
-    /// or "task:SLUG/REF".
+    /// "board:SLUG", "memory:SLUG", "memory:SLUG/PATH", "library:SLUG",
+    /// "task:SLUG/REF" or "design:SLUG/NAME".
     static func parse(_ s: String) -> Route? {
         let parts = s.split(separator: ":", maxSplits: 1).map(String.init)
         guard parts.count == 2 else { return nil }
@@ -132,6 +135,7 @@ enum Route: Hashable {
         case "memory": return rest.isEmpty ? .memory(slug) : .memoryFile(slug, path: rest)
         case "library": return .library(slug)
         case "task": return rest.isEmpty ? nil : .task(slug, ref: rest)
+        case "design": return rest.isEmpty ? nil : .design(slug, name: rest)
         default: return nil
         }
     }
@@ -144,7 +148,7 @@ enum Route: Hashable {
         case .project, .peerProject: [self]
         case .session(let ref), .need(let ref):
             [ref.isRemote ? .peerProject(alias: ref.server, project: ref.project) : .project(ref.project), self]
-        case .overview(let s), .board(let s), .memory(let s), .library(let s): [.project(s), self]
+        case .overview(let s), .board(let s), .memory(let s), .library(let s), .design(let s, _): [.project(s), self]
         case .memoryFile(let s, _): [.project(s), .memory(s), self]
         case .task(let s, _): [.project(s), .board(s), self]
         }
@@ -344,6 +348,7 @@ struct RouteScreen: View {
         case .memoryFile(let slug, let path): MemoryFileScreen(slug: slug, path: path)
         case .library(let slug): LibraryScreen(slug: slug)
         case .task(let slug, let ref): TaskScreen(slug: slug, ref: ref)
+        case .design(let slug, let name): DesignScreen(slug: slug, name: name)
         }
     }
 }
