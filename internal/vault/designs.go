@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"maps"
 	"math"
 	"os"
 	"slices"
@@ -53,11 +52,10 @@ type boardTask struct {
 
 // design is what a design's note and canvas come from.
 type design struct {
-	project.Design
-	task      *boardTask         // the design task, when it is on a board
-	build     []boardTask        // the tasks that name it, but the design task, by id
-	depth     map[int]int        // each build task's depth in the after graph
-	questions []project.Question // the design task's open questions
+	project.DesignBuild
+	task  *boardTask  // the design task, when it is on a board
+	build []boardTask // the tasks that name it, but the design task, by id
+	depth map[int]int // each build task's depth in the after graph
 }
 
 // DesignNote and DesignCanvas are the paths of design name's note and
@@ -67,59 +65,23 @@ func DesignCanvas(name string) string { return "designs/" + name + ".canvas" }
 
 // designNotes renders the note and canvas of every design.
 func designNotes(p *project.Project, boards ...*tasks.Board) ([]Note, error) {
-	recs, err := p.Designs()
+	builds, err := p.DesignBuilds(boards...)
 	if err != nil {
 		return nil, err
-	}
-	qs, err := p.Questions()
-	if err != nil {
-		return nil, err
-	}
-	byName := map[string]*design{}
-	get := func(name string) *design {
-		if byName[name] == nil {
-			byName[name] = &design{Design: project.Design{Name: name}}
-		}
-		return byName[name]
-	}
-	for _, r := range recs {
-		if tasks.ValidDesign(r.Name) {
-			get(r.Name).Design = r
-		}
-	}
-	refs := map[string]*boardTask{}
-	for _, b := range boards {
-		for _, t := range b.Tasks {
-			bt := &boardTask{t}
-			refs[t.Ref()] = bt
-			if t.Design != "" {
-				get(t.Design)
-			}
-		}
 	}
 	var notes []Note
-	for _, name := range slices.Sorted(maps.Keys(byName)) {
-		d := byName[name]
-		d.task = refs[d.Task]
-		for _, b := range boards {
-			for _, t := range b.Tasks {
-				if t.Design == name && t.Ref() != d.Task {
-					d.build = append(d.build, *refs[t.Ref()])
-				}
-			}
+	for _, db := range builds {
+		d := &design{DesignBuild: db}
+		if db.DesignTask != nil {
+			d.task = &boardTask{db.DesignTask}
 		}
-		slices.SortFunc(d.build, func(a, b boardTask) int { return a.ID - b.ID })
+		for _, t := range db.Build {
+			d.build = append(d.build, boardTask{t})
+		}
 		d.depth = depths(d.build)
-		if d.Task != "" {
-			for _, q := range qs {
-				if q.Task == d.Task {
-					d.questions = append(d.questions, q)
-				}
-			}
-		}
 		n, err := designNote(p.Slug, d)
 		if err != nil {
-			return nil, fmt.Errorf("design %s: %w", name, err)
+			return nil, fmt.Errorf("design %s: %w", d.Name, err)
 		}
 		notes = append(notes, n)
 		if c, ok := designCanvas(p, d); ok {
@@ -164,30 +126,6 @@ func depths(build []boardTask) map[int]int {
 	return depth
 }
 
-// status is a design's status from its build: done once every task is,
-// building once one has started, planned before, designing with none.
-func (d *design) status() string {
-	if len(d.build) == 0 {
-		return "designing"
-	}
-	done, moving := 0, false
-	for _, t := range d.build {
-		switch t.Status {
-		case tasks.Done:
-			done++
-		case tasks.Started, tasks.Review, tasks.Blocked:
-			moving = true
-		}
-	}
-	switch {
-	case done == len(d.build):
-		return "done"
-	case done > 0 || moving:
-		return "building"
-	}
-	return "planned"
-}
-
 func (d *design) title() string {
 	if d.Title != "" {
 		return d.Title
@@ -195,26 +133,16 @@ func (d *design) title() string {
 	return d.Name
 }
 
-func (d *design) done() int {
-	n := 0
-	for _, t := range d.build {
-		if t.Status == tasks.Done {
-			n++
-		}
-	}
-	return n
-}
-
 func designNote(slug string, d *design) (Note, error) {
 	link := func(t *tasks.Task) string { return vaultlink.Link(slug, vaultlink.Task, t.Ref(), "") }
 	f := designFront{
 		Name: d.Name, Title: d.title(), Project: vaultlink.Link(slug, vaultlink.Project, slug, ""),
-		Status: d.status(), Artifact: d.Artifact, Tasks: len(d.build), TasksDone: d.done(),
-		Answers: len(d.Answers), OpenQuestions: len(d.questions),
+		Status: d.Status(), Artifact: d.Artifact, Tasks: len(d.build), TasksDone: d.Done(),
+		Answers: len(d.Answers), OpenQuestions: len(d.Questions),
 		Canvas: vaultlink.Link(slug, vaultlink.Design, d.Name+".canvas", d.Name+".canvas"),
 		Tags:   []string{"design"}, TM: "owned", CSSClasses: []string{"tm-owned"},
 	}
-	if len(d.questions) > 0 {
+	if len(d.Questions) > 0 {
 		f.Tags = append(f.Tags, "needs-you")
 	}
 	if d.Task != "" {
@@ -247,9 +175,9 @@ func designNote(slug string, d *design) (Note, error) {
 			fmt.Fprintf(&b, "%d. %s\n", i+1, line(slug, a))
 		}
 	}
-	if len(d.questions) > 0 {
+	if len(d.Questions) > 0 {
 		b.WriteString("\n## Open questions\n\n")
-		for _, q := range d.questions {
+		for _, q := range d.Questions {
 			fmt.Fprintf(&b, "- %s: %s\n", q.ID, line(slug, q.Question))
 		}
 	}
@@ -341,7 +269,7 @@ func layout(slug string, d *design) ([]node, []edge) {
 	if d.Task != "" {
 		label += " (" + d.Task + ")"
 	}
-	if n := len(d.Answers) + len(d.questions); n > 0 {
+	if n := len(d.Answers) + len(d.Questions); n > 0 {
 		label += fmt.Sprintf(" · decided %d/%d", len(d.Answers), n)
 	}
 	nodes := []node{{}, {id: "tm-note", typ: "file", file: slug + "/" + DesignNote(d.Name), w: firstW, h: noteH}}
@@ -350,7 +278,7 @@ func layout(slug string, d *design) ([]node, []edge) {
 		nodes = append(nodes, node{id: "tm-artifact", typ: "link", url: d.Artifact, y: y, w: firstW, h: linkH})
 		y += linkH + gapY
 	}
-	for _, q := range d.questions {
+	for _, q := range d.Questions {
 		text := fmt.Sprintf("**%s** · open question\n\n%s", q.ID, line(slug, q.Question))
 		nodes = append(nodes, node{id: "tm-" + q.ID, typ: "text", text: text, color: red, y: y, w: firstW, h: questionH})
 		y += questionH + gapY

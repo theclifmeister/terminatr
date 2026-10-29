@@ -43,7 +43,7 @@ func TestTSCurrent(t *testing.T) {
 func TestEventsMatchBus(t *testing.T) {
 	bus := []string{
 		modbus.TaskChanged, modbus.TasksChanged, modbus.ThreadState, modbus.ThreadStarted, modbus.ThreadResolved,
-		modbus.ReportStored, modbus.InboxItem, modbus.PRChanged, modbus.TickerChanged, modbus.ThreadChanges, modbus.SessionState, modbus.SessionQuestion, modbus.ClockMinute,
+		modbus.ReportStored, modbus.InboxItem, modbus.PRChanged, modbus.TickerChanged, modbus.ThreadChanges, modbus.DesignsChanged, modbus.SessionState, modbus.SessionQuestion, modbus.ClockMinute,
 		modbus.UIClick, modbus.UIKey, modbus.UICursor, modbus.ActionDone, modbus.ViewOpened, modbus.ViewClosed,
 		modbus.CommandRun, modbus.ModReady,
 	}

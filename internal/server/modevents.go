@@ -182,9 +182,25 @@ func (s *Server) lookModEvents(tr *modbus.Tracker) {
 		if err != nil {
 			continue
 		}
-		tr.Project(p.Slug, projectState(p, sessions, statePath, s.liveChanges(p)))
+		st := projectState(p, sessions, statePath, s.liveChanges(p))
+		if s.modEv != nil && s.modEv.bus.Wants(modbus.DesignsChanged, p.Slug) {
+			st.Designs = designsDigest(p)
+		}
+		tr.Project(p.Slug, st)
 	}
 	s.modEv.changes.sweep()
+}
+
+// designsDigest is a digest of what $.designs.list shows of p
+// (designs.changed); "" when it can't be read.
+func designsDigest(p *project.Project) string {
+	ds, err := modDesigns(p)
+	if err != nil {
+		return ""
+	}
+	js, _ := json.Marshal(ds)
+	sum := sha256.Sum256(js)
+	return string(sum[:])
 }
 
 // sessionUsage is what session info's thread has used so far: its

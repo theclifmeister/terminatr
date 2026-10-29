@@ -18,6 +18,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/changes"
 	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/modbus"
+	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/widget"
 )
@@ -149,12 +150,51 @@ type Task struct {
 	Steps   []TaskStep `json:"steps"`
 	Updated string     `json:"updated,omitempty"`
 	Asked   string     `json:"asked,omitempty"`
+	// Mod API 1.10: the design the task builds, by name, and the tasks
+	// it comes after ("T10").
+	Design string   `json:"design,omitempty"`
+	After  []string `json:"after,omitempty"`
 }
 
 // TaskStep is one step of a task (mod API 1.2).
 type TaskStep struct {
 	Text string `json:"text"`
 	Done bool   `json:"done"`
+}
+
+// DesignStatus is a design's status from its build: designing with no
+// build tasks, planned before one started, building once one has,
+// done once all are.
+type DesignStatus string
+
+// DesignStatuses are the statuses.
+var DesignStatuses = []string{project.DesignDesigning, project.DesignPlanned, project.DesignBuilding, project.DesignDone}
+
+// Design is one of a project's designs (mod API 1.10): one that tm
+// design set recorded or a task names. Its title (its name when it has
+// none), status, design task and that task's status, its page (an https
+// URL), its build tasks (those naming it, but the design task, by id),
+// how many of them are done, the user's decided answers and the design
+// task's open questions. The words are data.
+type Design struct {
+	Name       string           `json:"name"`
+	Title      string           `json:"title"`
+	Status     DesignStatus     `json:"status"`
+	Task       string           `json:"task,omitempty"`
+	TaskStatus string           `json:"task_status,omitempty"`
+	Artifact   string           `json:"artifact,omitempty"`
+	Tasks      []string         `json:"tasks"`
+	TasksDone  int              `json:"tasks_done"`
+	Answers    []string         `json:"answers"`
+	Questions  []DesignQuestion `json:"questions"`
+}
+
+// DesignQuestion is an open question of a design's task (tm ask): its
+// id, its chip and its text.
+type DesignQuestion struct {
+	ID       string `json:"id"` // "Q3"
+	Header   string `json:"header"`
+	Question string `json:"question"`
 }
 
 // InboxRaise is the item $.inbox.raise gives the coordinator: data only,
@@ -261,6 +301,7 @@ var Events = []Event{
 	{Name: modbus.PRChanged, Data: typ[modbus.PR](), Needs: mod.PermProjectRead, Doc: "The ticker learnt something new of a thread's PR."},
 	{Name: modbus.TickerChanged, Data: typ[modbus.Ticker](), Needs: mod.PermProjectRead, Doc: "A project's ticker polled PRs or synced its repos, or its PR host began or stopped failing (mod API 1.7): the ticker as $.project.get gives it. Draw its times as ago and until spans, which move by themselves."},
 	{Name: modbus.ThreadChanges, Data: typ[modbus.Changes](), Needs: mod.PermProjectRead, Doc: "A thread whose session is live changed its worktree (mod API 1.8): an edit, a commit or a push moved its HEAD, its status or origin/<branch>. Seen by the server's look within seconds, at most once a look; the totals are $.thread.changes' (mode base). Looked for only while a mod listens to it."},
+	{Name: modbus.DesignsChanged, Data: typ[modbus.Designs](), Needs: mod.PermProjectRead, Doc: "Anything $.designs.list shows of a project changed (mod API 1.10): a design recorded or edited, its answers, a build task's status, design or after, or its design task's open questions. List the designs again. Looked for only while a mod listens to it."},
 	{Name: modbus.SessionState, Data: typ[modbus.Session](), Doc: "A session's agent state or context use changed, or it exited."},
 	{Name: modbus.SessionQuestion, Data: typ[modbus.Question](), Needs: mod.PermProjectRead, Doc: "The question a thread's or coordinator's open question menu asks changed (mod API 1.3): its first unanswered question, none once it is answered or gone. Its options can be offered as question.answer bindings."},
 	{Name: modbus.ClockMinute, Data: typ[modbus.Clock](), Doc: "Every minute."},
@@ -283,6 +324,8 @@ var Methods = []Method{
 		Doc: "A project as its dashboard shows it."},
 	{Name: "tasks.list", Params: []Param{{Name: "slug", Type: typ[string]()}}, Result: typ[[]Task](), Needs: mod.PermProjectRead,
 		Doc: "A project's tasks, in board order."},
+	{Name: "designs.list", Params: []Param{{Name: "slug", Type: typ[string]()}}, Result: typ[[]Design](), Needs: mod.PermProjectRead,
+		Doc: "A project's designs (mod API 1.10), by name: those tm design set recorded and those a task names (archived tasks too), each with its status from its build tasks, its design task, page, decided answers and open questions. A task's design and after (tasks.list) say which tasks build which."},
 	{Name: "thread.get", Params: []Param{{Name: "project", Type: typ[string]()}, {Name: "thread", Type: typ[string]()}}, Result: typ[*proto.WatchThread](), Needs: mod.PermProjectRead,
 		Doc: "A thread of a project; null when there is none."},
 	{Name: "report.get", Params: []Param{{Name: "project", Type: typ[string]()}, {Name: "thread", Type: typ[string]()}}, Result: typ[*modbus.Report](), Needs: mod.PermProjectRead,
