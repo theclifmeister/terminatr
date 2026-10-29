@@ -134,11 +134,20 @@ struct Root: View {
     @State private var needsPath: [Route] = []
     @State private var projectsPath: [Route] = []
     @State private var settings = false
+    @State private var gallery = false
 
     var body: some View {
         content
             .environment(\.showSettings, ShowSettings { settings = true })
             .sheet(isPresented: $settings) { SettingsScreen() }
+            .fullScreenCover(isPresented: $gallery) {
+                ComponentGallery(lower: UserDefaults.standard.bool(forKey: "gallery-lower"))
+                    .overlay(alignment: .topLeading) {
+                        Button("Done") { gallery = false }
+                            .buttonStyle(.ghost)
+                            .padding(.horizontal, 16)
+                    }
+            }
     }
 
     @ViewBuilder private var content: some View {
@@ -165,7 +174,9 @@ struct Root: View {
 }
 
 extension Root {
-    /// -open: "settings", "projects", "needs ROUTE" (a need's route
+    /// -open: "settings", "gallery" (the redesign's components, T845;
+    /// with -gallery-lower YES at its states and buttons),
+    /// "projects", "needs ROUTE" (a need's route
     /// opened from Needs you), or a route opened from the Projects tab, on
     /// the path a tap would have taken (Route.path).
     private func openLaunched() {
@@ -174,6 +185,8 @@ extension Root {
             needsPath = [r]
         } else if open == "settings" {
             settings = true
+        } else if open == "gallery" {
+            gallery = true
         } else if open == "projects" {
             tab = .projects
         } else if let r = Route.parse(open) {

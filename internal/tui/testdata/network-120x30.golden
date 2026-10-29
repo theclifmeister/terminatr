@@ -11,9 +11,9 @@
 │ ▾ ○ nas · offline 4m · relay                    panes off │ pairing: the code works once, for 10         │
 │    ■ media · stale     shared with you · + link (L)       │ minutes, and both of you compare six digits  │
 │                                                           │ before Y.                                    │
-│ ▾ phones                                  D pairs a phone │                                              │
-│    No phone yet. D pairs one: a QR code to scan with the  │                                              │
-│    terminatr app on the iPhone.                           │                                              │
+│ ▾ devices                                D pairs a device │                                              │
+│    No device yet. D pairs one: a QR code to scan with the │                                              │
+│    terminatr app on an iPhone or iPad.                    │                                              │
 │                                                           │                                              │
 │                                                           │                                              │
 │                                                           │                                              │
@@ -39,9 +39,9 @@
 │ ▾ ○ nas · offline 4m · relay                    panes off │ sidebar of every paired server: what waits   │
 │    ■ media · stale     shared with you · + link (L)       │ for you, the inbox, threads, tasks on deck   │
 │                                                           │ and its sessions' states; never its files.   │
-│ ▾ phones                                  D pairs a phone │ Sharing asks first; it is the project's own  │
-│    No phone yet. D pairs one: a QR code to scan with the  │ Shared with paired servers setting.          │
-│    terminatr app on the iPhone.                           │                                              │
+│ ▾ devices                                D pairs a device │ Sharing asks first; it is the project's own  │
+│    No device yet. D pairs one: a QR code to scan with the │ Shared with paired servers setting.          │
+│    terminatr app on an iPhone or iPad.                    │                                              │
 │                                                           │                                              │
 │                                                           │                                              │
 │                                                           │                                              │
@@ -67,9 +67,9 @@
 │ ▾ ○ nas · offline 4m · relay                    panes off │ WHAT WORK MAY DO HERE                        │
 │    ■ media · stale     shared with you · + link (L)       │   ● paired: your projects and its can link   │
 │                                                           │   ○ sees nothing: you share no project       │
-│ ▾ phones                                  D pairs a phone │   ● watches your shared panes and popups     │
-│    No phone yet. D pairs one: a QR code to scan with the  │   ○ types in them                            │
-│    terminatr app on the iPhone.                           │   ● reads their conversations, in its Mac    │
+│ ▾ devices                                D pairs a device │   ● watches your shared panes and popups     │
+│    No device yet. D pairs one: a QR code to scan with the │   ○ types in them                            │
+│    terminatr app on an iPhone or iPad.                    │   ● reads their conversations, in its Mac    │
 │                                                           │     app                                      │
 │                                                           │   ○ sees what your projects ask you, in full │
 │                                                           │   panes (V)   off · [view] · write           │
@@ -95,9 +95,9 @@
 │ ▾ ○ nas · offline 4m · relay                    panes off │                                              │
 │    ■ media · stale     shared with you · + link (L)       │ Nothing here acts on it: enter shows its     │
 │                                                           │ dashboard, read-only. L links one of your    │
-│ ▾ phones                                  D pairs a phone │ projects with it, which writes only your     │
-│    No phone yet. D pairs one: a QR code to scan with the  │ side; its user sets theirs.                  │
-│    terminatr app on the iPhone.                           │                                              │
+│ ▾ devices                                D pairs a device │ projects with it, which writes only your     │
+│    No device yet. D pairs one: a QR code to scan with the │ side; its user sets theirs.                  │
+│    terminatr app on an iPhone or iPad.                    │                                              │
 │                                                           │                                              │
 │                                                           │                                              │
 │                                                           │                                              │

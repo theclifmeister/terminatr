@@ -345,7 +345,7 @@ func devicePair(b *bridge, p DevicePairParams) (DevicePairing, error) {
 			return DevicePairing{}, devicesError(err)
 		}
 		if !ok {
-			return DevicePairing{}, &Error{Code: ErrRelayNeeded, Message: "no relay is known yet: give the relay the phone and this server meet on (wss://host)"}
+			return DevicePairing{}, &Error{Code: ErrRelayNeeded, Message: "no relay is known yet: give the relay the device and this server meet on (wss://host)"}
 		}
 		relayURL = r
 	}
@@ -434,7 +434,7 @@ func pairError(ctx context.Context, err error) *Error {
 	case errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) || errors.Is(err, peer.ErrNoPairer):
 		return &Error{Code: ErrPairExpired, Message: "the code's time ran out: pair again for a new one"}
 	case errors.Is(err, peer.ErrPeerNo):
-		return &Error{Code: "declined", Message: "not paired: the phone said no"}
+		return &Error{Code: "declined", Message: "not paired: the device said no"}
 	case errors.Is(err, peer.ErrBadCode) || errors.Is(err, peer.ErrNotExpected):
 		return &Error{Code: "bad-code", Message: err.Error()}
 	}
@@ -480,7 +480,7 @@ func (pg *pairing) ended() *Error {
 	if pg.err != nil {
 		return pg.err
 	}
-	return &Error{Code: ErrPairEnded, Message: "the pairing ended: the phone is paired"}
+	return &Error{Code: ErrPairEnded, Message: "the pairing ended: the device is paired"}
 }
 
 // devicePairAnswer answers device.pair.answer: a yes to the offer, under
@@ -510,7 +510,7 @@ func devicePairAnswer(b *bridge, p DevicePairAnswerParams) (DevicePaired, error)
 	select {
 	case <-pg.offered:
 	default:
-		return DevicePaired{}, &Error{Code: ErrBadParams, Message: "no phone has joined the pairing yet"}
+		return DevicePaired{}, &Error{Code: ErrBadParams, Message: "no device has joined the pairing yet"}
 	}
 	name := pg.shown.Name
 	if p.Name != "" {

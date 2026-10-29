@@ -70,11 +70,11 @@ func TestPhonePairTUI(t *testing.T) {
 	w := env.Window(120, 50)
 	w.WaitFor("+ new project", wait)
 	w.Type("N")
-	w.WaitFor("No phone yet. D pairs one", wait)
+	w.WaitFor("No device yet. D pairs one", wait)
 	w.Type("D")
-	w.WaitFor("The phone and this server meet on a relay", wait)
+	w.WaitFor("The device and this server meet on a relay", wait)
 	w.Keys(relayURL, keyEnter)
-	screen := w.WaitFor("waiting for the phone", wait)
+	screen := w.WaitFor("Works for", wait)
 	if !strings.Contains(screen, "▀") || !strings.Contains(screen, "▄") {
 		t.Fatalf("no QR code:\n%s", screen)
 	}
@@ -93,7 +93,7 @@ func TestPhonePairTUI(t *testing.T) {
 		_, err := device.Join(ctx, peer.IdentityOf(phoneKey), in, "Test iPhone", "1.0", wkb, nil)
 		joined <- err
 	}()
-	w.WaitFor("A phone joined", wait)
+	w.WaitFor("A device joined", wait)
 	w.Golden("phone-pair-offer.txt", masks...)
 	w.Type("E")
 	w.WaitFor("Add it as", wait)
@@ -143,7 +143,7 @@ func TestPhonePairTUI(t *testing.T) {
 	w.WaitFor("Remove Old phone?", wait)
 	w.Type("Y")
 	w.WaitFor("removed Old phone", wait)
-	w.WaitFor("No phone yet", wait)
+	w.WaitFor("No device yet", wait)
 	if out := env.MustCLI("device", "list"); !strings.Contains(out, "no devices") {
 		t.Fatalf("device list after X:\n%s", out)
 	}

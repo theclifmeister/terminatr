@@ -102,3 +102,26 @@ extension AppAPI.Item {
         return String(summary[..<open.lowerBound])
     }
 }
+
+extension Attention.Tone {
+    /// It waits on the user: its glyph is filled.
+    public var waits: Bool {
+        switch self {
+        case .approval, .question, .attention, .review: true
+        case .working, .idle, .done: false
+        }
+    }
+
+    /// What VoiceOver says of the glyph.
+    public var spoken: String {
+        switch self {
+        case .approval: "needs approval"
+        case .question: "asks a question"
+        case .attention: "needs you"
+        case .review: "ready to review"
+        case .working: "working"
+        case .idle: "idle"
+        case .done: "done"
+        }
+    }
+}

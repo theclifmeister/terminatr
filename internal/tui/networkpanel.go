@@ -46,8 +46,8 @@ const (
 	itemConv    // its conversations switch: ← → or enter
 	itemNeeds   // its needs switch: ← → or enter
 	itemShare   // a project's share box: enter, space or a click
-	itemDevName // a phone's name: enter edits it
-	itemLevel   // a phone's level switch: ← →, a click on a word, enter picks
+	itemDevName // a device's name: enter edits it
+	itemLevel   // a device's level switch: ← →, a click on a word, enter picks
 )
 
 // panelLine is one line of the panel: its text, the item it belongs to

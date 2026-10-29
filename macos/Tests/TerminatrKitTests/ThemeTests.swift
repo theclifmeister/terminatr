@@ -31,6 +31,16 @@ func themeContrast(_ name: ThemeName) {
     #expect(abs(ratio("muted", "a card") - 8.4) < 0.2)
 }
 
+/// The deck (T845) is deeper glass than a card on the panel: less of
+/// a card's tint, and no panel under it; Increase Contrast's is opaque.
+@Test(arguments: ThemeName.allCases)
+func deckIsDeeper(_ name: ThemeName) {
+    let c = name.colours
+    #expect(c.deck.alpha < c.cardTint.alpha)
+    #expect(c.deck.darkAlpha < c.glass.darkAlpha)
+    #expect(c.increasedContrast().deck == c.opaque.card)
+}
+
 @Test(arguments: ThemeName.allCases)
 func themeDotsApart(_ name: ThemeName) {
     // Bloom's dots are the measure: no theme leans on hue more.

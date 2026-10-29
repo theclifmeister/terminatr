@@ -11,8 +11,8 @@
 │ ▾ ○ nas · offline 4m · relay                               panes off │
 │    ■ media · stale     shared with you · + link (L)        ● working │
 │                                                                      │
-│ ▾ phones                                             D pairs a phone │
-│    No phone yet. D pairs one: a QR code to scan with the terminatr…↓ │
+│ ▾ devices                                           D pairs a device │
+│    No device yet. D pairs one: a QR code to scan with the terminat…↓ │
 │ ──────────────────────────────────────────────────────────────────── │
 │ studio · this server · id 4F2A-91C3 · 2 paired servers               │
 │ shares nothing with the paired servers · P pairs a new one           │
@@ -33,9 +33,9 @@
 │ ▾ ○ nas · offline 4m · relay                               panes off │
 │    ■ media · stale     shared with you · + link (L)        ● working │
 │                                                                      │
-│ ▾ phones                                             D pairs a phone │
-│    No phone yet. D pairs one: a QR code to scan with the terminatr   │
-│    app on the iPhone.                                                │
+│ ▾ devices                                           D pairs a device │
+│    No device yet. D pairs one: a QR code to scan with the terminatr  │
+│    app on an iPhone or iPad.                                         │
 │ ──────────────────────────────────────────────────────────────────── │
 │ terminatr · not shared: paired servers don't see it                  │
 │ space shares it with every paired server, asking first · L links it  │
@@ -55,7 +55,7 @@
 │ ▾ ○ nas · offline 4m · relay                               panes off │
 │    ■ media · stale     shared with you · + link (L)        ● working │
 │                                                                      │
-│ ▾ phones                                             D pairs a pho…↓ │
+│ ▾ devices                                           D pairs a devi…↓ │
 │ ──────────────────────────────────────────────────────────────────── │
 │ work (mini) · id 91C3-77AB · tm 0.27.0 · relay update (U)            │
 │ panes: work may watch yours (V) · you may watch its panes            │
@@ -77,9 +77,9 @@
 │ ▾ ○ nas · offline 4m · relay                               panes off │
 │    ■ media · stale     shared with you · + link (L)        ● working │
 │                                                                      │
-│ ▾ phones                                             D pairs a phone │
-│    No phone yet. D pairs one: a QR code to scan with the terminatr   │
-│    app on the iPhone.                                                │
+│ ▾ devices                                           D pairs a device │
+│    No device yet. D pairs one: a QR code to scan with the terminatr  │
+│    app on an iPhone or iPad.                                         │
 │ ──────────────────────────────────────────────────────────────────── │
 │ work's acme-api · synced 2s ago · coordinator working                │
 │ nothing here acts on it; enter shows its dashboard, read-only; L li… │

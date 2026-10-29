@@ -1,17 +1,17 @@
  PROJECTS                          │ tm dashboard                                               ● server ok · 0 sessions
  no projects                       │  no projects; n creates one
-      ╭─ Pair a phone ───────────────────────────────────────────────────────────────────────────────────────────╮──────
-      │                                                                 Scan this with the terminatr app on the  │
-      │                                                                 iPhone. It works once; you confirm the   │
-      │<qr>phone here before it is added.           │
+      ╭─ Pair a device ──────────────────────────────────────────────────────────────────────────────────────────╮──────
+      │                                                                 Scan this with the terminatr app on an   │
+      │                                                                 iPhone or iPad. It works once; you       │
+      │<qr>confirm the device here before it is     │
+      │<qr>added.                                   │
       │<qr>│
-      │<qr>Works for <left> · waiting for the phone…  │
+      │<qr>Works for <left> · waiting for the        │
+      │<qr>device…                                  │
       │<qr>│
       │<qr>This server: <host>, id <id> │
       │<qr>│
       │<qr>Through ws://<port>.            │
-      │<qr>│
-      │<qr>│
       │<qr>│
       │<qr>│
       │<qr>│
