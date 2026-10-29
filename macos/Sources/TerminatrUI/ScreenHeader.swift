@@ -1,12 +1,12 @@
 import SwiftUI
 import TerminatrKit
 
-/// A screen's header (T845), in place of the large-title bar: its
-/// trailing circle buttons, the title in the display face with a count
-/// of what waits, and a line on glass (the link's state). The title is
-/// the one text on the raw mesh, large enough for it (ThemeColours.checks,
-/// "a header's title"). At accessibility sizes the count goes under the
-/// title.
+/// A screen's header (T845), in place of the large-title bar: the title
+/// in the display face with a count of what waits, its trailing circle
+/// buttons centred on the title's line (T854), and a line on glass (the
+/// link's state). The title is the one text on the raw mesh, large
+/// enough for it (ThemeColours.checks, "a header's title"). At
+/// accessibility sizes the count goes under the title.
 public struct ScreenHeader<Trailing: View>: View {
     @Environment(\.theme) private var theme
     @Environment(\.dynamicTypeSize) private var typeSize
@@ -26,25 +26,31 @@ public struct ScreenHeader<Trailing: View>: View {
 
     public var body: some View {
         VStack(alignment: .leading, spacing: Spacing.item) {
-            HStack(spacing: Spacing.item) {
+            HStack(alignment: .titleLine, spacing: Spacing.item) {
+                let head = typeSize.isAccessibilitySize
+                    ? AnyLayout(VStackLayout(alignment: .leading, spacing: Spacing.tight))
+                    : AnyLayout(HStackLayout(alignment: .center, spacing: Spacing.row))
+                head {
+                    Text(title)
+                        .font(theme.title(.hero, .heavy))
+                        .tracking(-0.5)
+                        .foregroundStyle(theme.ink)
+                        .lines(1)
+                        .accessibilityAddTraits(.isHeader)
+                        // Its first line's middle: wrapped at accessibility
+                        // sizes, the lines below add what the baselines span.
+                        .alignmentGuide(.titleLine) { d in
+                            (d.height - (d[.lastTextBaseline] - d[.firstTextBaseline])) / 2
+                        }
+                    if count > 0 {
+                        CountBadge(count, style: .title3)
+                            .accessibilityLabel(count == 1 ? "1 waits" : "\(count) wait")
+                    }
+                }
+                .layoutPriority(1)
                 Spacer(minLength: 0)
                 trailing
-            }
-            .frame(minHeight: tapTarget)
-            let head = typeSize.isAccessibilitySize
-                ? AnyLayout(VStackLayout(alignment: .leading, spacing: Spacing.tight))
-                : AnyLayout(HStackLayout(alignment: .center, spacing: Spacing.row))
-            head {
-                Text(title)
-                    .font(theme.title(.hero, .heavy))
-                    .tracking(-0.5)
-                    .foregroundStyle(theme.ink)
-                    .lines(1)
-                    .accessibilityAddTraits(.isHeader)
-                if count > 0 {
-                    CountBadge(count, style: .title3)
-                        .accessibilityLabel(count == 1 ? "1 waits" : "\(count) wait")
-                }
+                    .alignmentGuide(.titleLine) { $0[VerticalAlignment.center] }
             }
             if !subtitle.isEmpty {
                 Label {
@@ -60,8 +66,18 @@ public struct ScreenHeader<Trailing: View>: View {
             }
         }
         .padding(.horizontal, Spacing.gutter)
-        .padding(.bottom, Spacing.row)
+        .padding(.vertical, Spacing.row)
     }
+}
+
+extension VerticalAlignment {
+    /// The middle of a header's title's first line, its trailing
+    /// buttons centred on it (T854).
+    private enum TitleLine: AlignmentID {
+        static func defaultValue(in d: ViewDimensions) -> CGFloat { d[VerticalAlignment.center] }
+    }
+
+    static let titleLine = VerticalAlignment(TitleLine.self)
 }
 
 extension ScreenHeader where Trailing == EmptyView {
