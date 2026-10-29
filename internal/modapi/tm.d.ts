@@ -29,6 +29,10 @@ export interface TM {
     /** A project's tasks, in board order. Needs the project_read grant. */
     list(slug: string): Promise<TM.Task[]>;
   };
+  designs: {
+    /** A project's designs (mod API 1.10), by name: those tm design set recorded and those a task names (archived tasks too), each with its status from its build tasks, its design task, page, decided answers and open questions. A task's design and after (tasks.list) say which tasks build which. Needs the project_read grant. */
+    list(slug: string): Promise<TM.Design[]>;
+  };
   thread: {
     /** A thread of a project; null when there is none. Needs the project_read grant. */
     get(project: string, thread: string): Promise<TM.WatchThread | null>;
@@ -132,6 +136,8 @@ export declare namespace TM {
     "ticker.changed": Ticker;
     /** A thread whose session is live changed its worktree (mod API 1.8): an edit, a commit or a push moved its HEAD, its status or origin/<branch>. Seen by the server's look within seconds, at most once a look; the totals are $.thread.changes' (mode base). Looked for only while a mod listens to it. Needs the project_read grant. */
     "thread.changes": ThreadChanges;
+    /** Anything $.designs.list shows of a project changed (mod API 1.10): a design recorded or edited, its answers, a build task's status, design or after, or its design task's open questions. List the designs again. Looked for only while a mod listens to it. Needs the project_read grant. */
+    "designs.changed": DesignsChanged;
     /** A session's agent state or context use changed, or it exited. */
     "session.state": SessionState;
     /** The question a thread's or coordinator's open question menu asks changed (mod API 1.3): its first unanswered question, none once it is answered or gone. Its options can be offered as question.answer bindings. Needs the project_read grant. */
@@ -331,6 +337,31 @@ export declare namespace TM {
     selection?: Target;
   }
 
+  interface Design {
+    name: string;
+    title: string;
+    status: DesignStatus;
+    task?: string;
+    task_status?: string;
+    artifact?: string;
+    tasks: string[];
+    tasks_done: number;
+    answers: string[];
+    questions: DesignQuestion[];
+  }
+
+  interface DesignQuestion {
+    id: string;
+    header: string;
+    question: string;
+  }
+
+  type DesignStatus = "designing" | "planned" | "building" | "done";
+
+  interface DesignsChanged {
+    project: string;
+  }
+
   interface FetchOptions {
     method?: string;
     headers?: Record<string, string>;
@@ -516,6 +547,8 @@ export declare namespace TM {
     steps: TaskStep[];
     updated?: string;
     asked?: string;
+    design?: string;
+    after?: string[];
   }
 
   interface TaskChanged {

@@ -153,7 +153,7 @@ func (b *Broker) Answer(method string, params json.RawMessage) (json.RawMessage,
 		if strings.TrimSpace(p.Text) == "" || p.Level != "" && !slices.Contains(modapi.Levels, p.Level) {
 			return nil, &modproto.Error{Code: modproto.CodeInvalidParams, Message: "ui.toast: a toast needs a text, and a level of info, warn or error"}
 		}
-	case "projects.list", "tasks.list", "actions.list", "memory.list":
+	case "projects.list", "tasks.list", "actions.list", "memory.list", "designs.list":
 		return json.RawMessage("[]"), nil
 	case "actions.available":
 		return json.RawMessage("false"), nil

@@ -107,6 +107,53 @@ func TestModBroker(t *testing.T) {
 		t.Fatalf("a missing thread's report = %v, %v; want null", got, err)
 	}
 
+	// Mod API 1.10: a task's design and after, and the designs, from
+	// the board and the archive, as their vault notes show them.
+	digest := designsDigest(p)
+	view := "net-view"
+	if _, err := p.Tasks().SetPlan(human, 2, &view, []string{"T1"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.Tasks().Add(human, []tasks.NewTask{{Title: "Old", Status: "done"}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.Tasks().SetPlan(human, 3, &view, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.Tasks().Archive(human, 3); err != nil {
+		t.Fatal(err)
+	}
+	title, task, answers := "Network view", "T1", []string{"Yes"}
+	if _, _, err := p.SetDesign(view, project.DesignEdit{Title: &title, Task: &task, Answers: &answers}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.AddQuestion(project.Question{Task: "T1", Header: "Colour", Question: "Red?", Options: []project.QuestionOption{{Label: "a"}, {Label: "b"}}}); err != nil {
+		t.Fatal(err)
+	}
+	if designsDigest(p) == digest {
+		t.Fatal("the designs' digest didn't change")
+	}
+	got, err = call("tasks.list", map[string]string{"slug": "demo"})
+	if ts, _ := got.([]ModTask); err != nil || len(ts) != 2 || ts[1].Design != view || !slices.Equal(ts[1].After, []string{"T1"}) || ts[0].Design != "" || ts[0].After != nil {
+		t.Fatalf("tasks.list = %+v, %v", got, err)
+	}
+	got, err = call("designs.list", map[string]string{"slug": "demo"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ds := got.([]modapi.Design)
+	if len(ds) != 1 {
+		t.Fatalf("designs.list = %+v", ds)
+	}
+	if d := ds[0]; d.Name != view || d.Title != title || d.Status != "building" || d.Task != "T1" || d.TaskStatus != "started" ||
+		!slices.Equal(d.Tasks, []string{"T2", "T3"}) || d.TasksDone != 1 || !slices.Equal(d.Answers, answers) ||
+		len(d.Questions) != 1 || d.Questions[0].Header != "Colour" || d.Questions[0].Question != "Red?" {
+		t.Fatalf("designs.list = %+v", d)
+	}
+	if _, err := call("designs.list", map[string]string{"slug": "other"}); code(err) != modbroker.CodeDenied {
+		t.Fatalf("designs of a project it doesn't run for: %v", err)
+	}
+
 	got, err = call("inbox.raise", map[string]any{"project": "demo", "item": map[string]string{"subject": "label\x1b[31m T1\nnow", "summary": "T1 looks like a bug"}})
 	if err != nil {
 		t.Fatal(err)

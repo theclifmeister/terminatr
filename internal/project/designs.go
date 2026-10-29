@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"net/url"
 	"os"
 	"slices"
@@ -140,6 +141,120 @@ func (p *Project) SetDesign(name string, e DesignEdit) (Design, bool, error) {
 		return append(b, '\n'), err
 	})
 	return got, changed, err
+}
+
+// DesignBuild is a design with what the boards say of it: its design
+// task, when it is on one, the tasks that build it (those that name it,
+// but the design task, by id) and the design task's open questions. The
+// vault's design notes and the mod API's designs.list both come from it.
+type DesignBuild struct {
+	Design
+	DesignTask *tasks.Task
+	Build      []*tasks.Task
+	Questions  []Question
+}
+
+// DesignBuilds are every design that designs.json records or a task of
+// boards names, by name.
+func (p *Project) DesignBuilds(boards ...*tasks.Board) ([]DesignBuild, error) {
+	recs, err := p.Designs()
+	if err != nil {
+		return nil, err
+	}
+	qs, err := p.Questions()
+	if err != nil {
+		return nil, err
+	}
+	byName := map[string]*DesignBuild{}
+	get := func(name string) *DesignBuild {
+		if byName[name] == nil {
+			byName[name] = &DesignBuild{Design: Design{Name: name}}
+		}
+		return byName[name]
+	}
+	for _, r := range recs {
+		if tasks.ValidDesign(r.Name) {
+			get(r.Name).Design = r
+		}
+	}
+	refs := map[string]*tasks.Task{}
+	for _, b := range boards {
+		for _, t := range b.Tasks {
+			refs[t.Ref()] = t
+			if t.Design != "" {
+				get(t.Design)
+			}
+		}
+	}
+	out := make([]DesignBuild, 0, len(byName))
+	for _, name := range slices.Sorted(maps.Keys(byName)) {
+		d := byName[name]
+		d.DesignTask = refs[d.Task]
+		for _, b := range boards {
+			for _, t := range b.Tasks {
+				if t.Design == name && t.Ref() != d.Task {
+					d.Build = append(d.Build, refs[t.Ref()])
+				}
+			}
+		}
+		slices.SortFunc(d.Build, func(a, b *tasks.Task) int { return a.ID - b.ID })
+		if d.Task != "" {
+			for _, q := range qs {
+				if q.Task == d.Task {
+					d.Questions = append(d.Questions, q)
+				}
+			}
+		}
+		out = append(out, *d)
+	}
+	return out, nil
+}
+
+// The design statuses, from its build (DesignStatus).
+const (
+	DesignDesigning = "designing"
+	DesignPlanned   = "planned"
+	DesignBuilding  = "building"
+	DesignDone      = "done"
+)
+
+// DesignStatus is a design's status from its build: done once every
+// task is, building once one has started, planned before, designing
+// with none.
+func DesignStatus(build []*tasks.Task) string {
+	if len(build) == 0 {
+		return DesignDesigning
+	}
+	done, moving := 0, false
+	for _, t := range build {
+		switch t.Status {
+		case tasks.Done:
+			done++
+		case tasks.Started, tasks.Review, tasks.Blocked:
+			moving = true
+		}
+	}
+	switch {
+	case done == len(build):
+		return DesignDone
+	case done > 0 || moving:
+		return DesignBuilding
+	}
+	return DesignPlanned
+}
+
+// Status is d's status (DesignStatus).
+func (d DesignBuild) Status() string { return DesignStatus(d.Build) }
+
+// Done counts the build's done tasks.
+func (d DesignBuild) Done() int {
+	n := 0
+	for _, t := range d.Build {
+		if t.Status == tasks.Done {
+			n++
+		}
+	}
+	return n
 }
 
 func checkDesignTitle(s string) (string, error) {
