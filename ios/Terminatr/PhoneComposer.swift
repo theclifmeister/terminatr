@@ -15,7 +15,14 @@ import TerminatrUI
 /// thread over, as the Mac's says; while the keyboard is up, at its
 /// end, a circle that hides it (HideKeyboard, T857). The circles, the
 /// field at one line and Send are one height (Theme.circle). Text
-/// pastes as in any field; files stay the Mac's. In keys mode (-keys YES at launch, the Simulator's
+/// pastes as in any field. On this server's sessions (session.upload)
+/// files go with the prompt as on the Mac (T860, ComposerAttach): the
+/// paperclip circle beside the mode's picks them (Photos, Files, the
+/// camera), an image or file copied pastes (⌘V, or the Paste button
+/// over the dock while the keyboard is up) and one dropped on the dock
+/// goes in; each shows as a chip over the field, its upload's progress,
+/// Retry and Remove. The session's files are PhoneModel's (its tray),
+/// kept as the draft is across screens and the link's drops. In keys mode (-keys YES at launch, the Simulator's
 /// screenshots) the key strip stays over the dock, keyboard up or not
 /// (KeyStrip), and the field types into the terminal. -compose YES
 /// focuses the field (the prompt or the keys') as it shows (the Simulator's screenshots). With a hardware
@@ -42,9 +49,12 @@ struct PhoneComposer: View {
     @State private var interrupting = false
     @State private var sends = 0
     @State private var keyboard = false
+    @State private var dropping = false
     @FocusState private var focused: Bool
 
     var body: some View {
+        let tray = model.tray(ref)
+        let files = attaches && !keys
         VStack(alignment: .leading, spacing: Spacing.item) {
             if note != nil || keyboard {
                 HStack(spacing: Spacing.item) {
@@ -53,14 +63,38 @@ struct PhoneComposer: View {
                             .transition(.opacity)
                     }
                     Spacer(minLength: 0)
+                    if keyboard, files { PasteFiles(tray: tray) }
                     if keyboard { HideKeyboard() }
                 }
+            }
+            if files, !tray.files.isEmpty {
+                ComposerChips(tray: tray)
             }
             if keys {
                 TerminalKeys(session: session, mode: modeButton) { said = $0 }
             } else {
-                DockRow { modeButton } field: { field } send: { sendButton }
+                DockRow {
+                    HStack(spacing: Spacing.item) {
+                        modeButton
+                        if files { AttachMenu(tray: tray) }
+                    }
+                } field: { field } send: { sendButton }
             }
+        }
+        .overlay {
+            if dropping {
+                RoundedRectangle(cornerRadius: Radius.tile, style: .continuous)
+                    .strokeBorder(theme.action, lineWidth: 2)
+                    .padding(-Spacing.hair)
+                    .allowsHitTesting(false)
+            }
+        }
+        .onDrop(of: Incoming.types, isTargeted: files ? $dropping : .constant(false)) { providers in
+            guard files else { return false }
+            // NSItemProvider loads from any thread.
+            nonisolated(unsafe) let providers = providers
+            Task.detached { await ComposerDrop.take(providers, into: tray) }
+            return true
         }
         .padding(.horizontal, 12)
         .padding(.top, Spacing.tight)
@@ -89,8 +123,12 @@ struct PhoneComposer: View {
     /// Whether Queue / Steer and Interrupt show: the agent works here.
     private var working: Bool { running && !ref.isRemote }
 
+    /// Whether the composer takes files here.
+    private var attaches: Bool { model.attaches(ref) }
+
     /// The line over the dock, if any.
     private var note: (text: String, failed: Bool)? {
+        if attaches, let n = model.tray(ref).note { return (n, true) }
         if let said { return said }
         var parts: [String] = []
         if queued > 0 { parts.append(queued == 1 ? "1 prompt queued" : "\(queued) prompts queued") }
@@ -132,6 +170,7 @@ struct PhoneComposer: View {
                 .frame(minHeight: tapTarget)
                 .padding(.trailing, working && under ? Spacing.card - Spacing.hair : 0)
                 .modifier(NoWritingTools())
+                .modifier(PastesFiles(tray: attaches ? model.tray(ref) : nil))
             if working {
                 DockModes([(false, "Queue"), (true, "Steer")], selection: $steer)
                     .accessibilityElement(children: .contain)
@@ -173,8 +212,12 @@ struct PhoneComposer: View {
         }
     }
 
+    /// Nothing to send: no text and no file in, or a file still going.
     private var empty: Bool {
-        text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let blank = text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        guard attaches else { return blank }
+        let tray = model.tray(ref)
+        return (blank && tray.refs.isEmpty) || tray.uploading
     }
 
     private var placeholder: String {
@@ -187,14 +230,17 @@ struct PhoneComposer: View {
 
     private func send(mode: String) {
         let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !t.isEmpty, !busy else { return }
+        guard !empty, !busy else { return }
+        let tray = attaches ? model.tray(ref) : nil
+        let refs = tray?.refs ?? []
         busy = true
         said = nil
         sends += 1
         Task {
             do {
-                let r = try await model.prompt(session, text: t, mode: mode)
+                let r = try await model.prompt(session, text: t, mode: mode, files: refs)
                 text = ""
+                tray?.clear()
                 said = (PromptSent.words(r), false)
                 queuedNote = r.via == "queued"
             } catch {

@@ -160,12 +160,14 @@ final class SessionModel {
         return r
     }
 
-    /// Sends a file for a prompt to tm (session.upload), which stores it
-    /// in the project's uploads/: the last answer has its ref.
-    func upload(_ data: Data, name: String, progress: (Int) -> Void) async throws -> AppAPI.Upload {
+    /// A chunk of a file for a prompt to tm (session.upload, the
+    /// composer's ComposerTray), which stores it in the project's
+    /// uploads/: the last answer has its ref.
+    func upload(_ p: AppAPI.UploadParams) async throws -> AppAPI.Upload {
         let (b, id) = try target()
-        return try await ComposerFiles.upload(data, name: name, session: id,
-                                              call: { try await b.call(AppAPI.Methods.sessionUpload, $0) }, progress: progress)
+        var p = p
+        p.session = id
+        return try await b.call(AppAPI.Methods.sessionUpload, p)
     }
 
     /// Answers question index of the open menu. guarded: the server

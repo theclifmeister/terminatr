@@ -70,7 +70,7 @@ struct ConversationScreen: View {
                             switch row {
                             // The question it waits on is the hero, at the end.
                             case .entry(let e) where e.asksUser && e.result == nil && session?.question != nil: EmptyView()
-                            case .entry(let e): EntryLine(entry: e, agent: session?.agent ?? "")
+                            case .entry(let e): EntryLine(entry: e, agent: session?.agent ?? "", session: id)
                             case .tools(let run): runView(run)
                             }
                         }
@@ -339,12 +339,15 @@ struct NeedConversation: View {
     }
 }
 
-/// One entry, as the Mac's EntryView draws it, without its files and
-/// folds: a prompt as a bubble on the right, the agent's text as a card.
+/// One entry, as the Mac's EntryView draws it, without its folds: a
+/// prompt as a bubble on the right, its files under it, the agent's
+/// text as a card, a call that sends files as their card (T860).
 struct EntryLine: View {
     @Environment(\.theme) private var theme
     let entry: Transcript.Entry
     let agent: String
+    /// The session its files are read from (session.file).
+    var session: String?
     @State private var unfolded = false
 
     var body: some View {
@@ -364,6 +367,9 @@ struct EntryLine: View {
                         .padding(.vertical, 9)
                         .background(LinearGradient(colors: theme.prompt, startPoint: .topLeading, endPoint: .bottomTrailing),
                                     in: RoundedRectangle(cornerRadius: 14))
+                    if !entry.files.isEmpty {
+                        PhoneAttachments(files: entry.attachments, session: session, alignment: .trailing)
+                    }
                 }
             }
         case .text:
@@ -376,7 +382,11 @@ struct EntryLine: View {
             .frosted(RoundedRectangle(cornerRadius: 14))
             .background(theme.agentCard, in: RoundedRectangle(cornerRadius: 14))
             .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(theme.edge, lineWidth: 1))
-        case .tool, .files:
+        case .files:
+            PhoneAttachmentCard(entry: entry, session: session,
+                                turn: [entry.who(agent: agent), entry.at?.formatted(date: .omitted, time: .shortened) ?? ""]
+                                    .filter { !$0.isEmpty }.joined(separator: " · "))
+        case .tool:
             ToolLine(entry: entry)
         case .result:
             if let r = entry.result {
