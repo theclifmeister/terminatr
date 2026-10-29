@@ -17,6 +17,14 @@ public enum PromptSent {
         if !r.why.isEmpty { s += " " + r.why }
         return s
     }
+
+    /// Whether a queued prompt went in since its note showed (T857): the
+    /// session's queue shrank, or the agent took a turn. A composer
+    /// clears its "Queued" note then, which otherwise stays after the
+    /// prompt shows in the conversation.
+    public static func wentIn(queued old: Int, _ new: Int, working wasWorking: Bool, _ working: Bool) -> Bool {
+        new < old || (!wasWorking && working)
+    }
 }
 
 /// The phone's keys bar (T821): the keys a terminal wants that a

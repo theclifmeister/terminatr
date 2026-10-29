@@ -25,3 +25,15 @@ import Testing
     #expect(PromptSent.words(.init(via: "typed", why: "Its pane is on billing.")) == "Typed into its pane. Its pane is on billing.")
     #expect(PromptSent.words(.init(via: "")) == "Sent.")
 }
+
+@Test func queuedPromptWentIn() {
+    // The queue shrank: it went in, whatever the agent does now.
+    #expect(PromptSent.wentIn(queued: 1, 0, working: true, true))
+    #expect(PromptSent.wentIn(queued: 2, 1, working: false, false))
+    // The agent took a turn.
+    #expect(PromptSent.wentIn(queued: 1, 1, working: false, true))
+    // Still waiting: the queue held or grew, the turn goes on or ended.
+    #expect(!PromptSent.wentIn(queued: 0, 1, working: true, true))
+    #expect(!PromptSent.wentIn(queued: 1, 1, working: true, false))
+    #expect(!PromptSent.wentIn(queued: 1, 1, working: false, false))
+}

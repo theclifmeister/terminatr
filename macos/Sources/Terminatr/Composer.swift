@@ -25,6 +25,8 @@ struct Composer: View {
     @State private var text = ""
     @State private var said: String?
     @State private var failed = false
+    /// The note says a prompt is queued: it goes once that prompt went in.
+    @State private var queuedNote = false
     @State private var busy = false
     @State private var interrupting = false
     @State private var files: [ComposerFile] = []
@@ -123,6 +125,12 @@ struct Composer: View {
         .padding(.bottom, 14)
         .onChange(of: app.composerFocus) { focused = true }
         .onChange(of: app.draft) { takeDraft() }
+        .onChange(of: [session?.queuedPrompts ?? 0, running ? 1 : 0]) { old, new in
+            if queuedNote, PromptSent.wentIn(queued: old[0], new[0], working: old[1] == 1, new[1] == 1) {
+                queuedNote = false
+                said = nil
+            }
+        }
         .onAppear {
             if autofocus { focused = true }
             takeDraft()
@@ -182,8 +190,10 @@ struct Composer: View {
                 files = []
                 failed = false
                 said = PromptSent.words(r)
+                queuedNote = r.via == "queued"
             } catch {
                 failed = true
+                queuedNote = false
                 said = error.localizedDescription
             }
             busy = false

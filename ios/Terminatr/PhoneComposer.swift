@@ -32,6 +32,8 @@ struct PhoneComposer: View {
     @State private var text = ""
     @State private var busy = false
     @State private var said: (text: String, failed: Bool)?
+    /// The note says a prompt is queued: it goes once that prompt went in.
+    @State private var queuedNote = false
     @State private var keys = UserDefaults.standard.bool(forKey: "keys")
     @State private var steer = false
     @State private var interrupting = false
@@ -55,6 +57,12 @@ struct PhoneComposer: View {
         .padding(.top, Spacing.tight)
         .padding(.bottom, Spacing.item)
         .feedback(.impact(weight: .light), trigger: sends)
+        .onChange(of: [queued, running ? 1 : 0]) { old, new in
+            if queuedNote, PromptSent.wentIn(queued: old[0], new[0], working: old[1] == 1, new[1] == 1) {
+                queuedNote = false
+                said = nil
+            }
+        }
         .kept($text, "prompt \(ref)")
         .kept($keys, "keys \(ref)")
         .kept($steer, "steer \(ref)")
@@ -171,7 +179,9 @@ struct PhoneComposer: View {
                 let r = try await model.prompt(session, text: t, mode: mode)
                 text = ""
                 said = (PromptSent.words(r), false)
+                queuedNote = r.via == "queued"
             } catch {
+                queuedNote = false
                 if let w = NeedActs.words(error) { said = (w, true) }
             }
             busy = false
