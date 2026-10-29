@@ -137,3 +137,20 @@ func demoBridge() async throws -> Bridge {
         #expect(e.code == DemoTransport.refused)
     }
 }
+
+/// The demo's composer takes files, and its conversation's image reads
+/// whole through FileStore (T860).
+@Test func demoFiles() async throws {
+    let b = try await demoBridge()
+    let h = try #require(await b.hello)
+    #expect(Compatibility.takesFiles(h) && Compatibility.sendsFiles(h))
+    let store = FileStore { p in try await b.call(AppAPI.Methods.sessionFile, p) }
+    guard case .data(let d, _) = await store.data("s-104", "4.e3.0.0") else {
+        Issue.record("no bytes")
+        return
+    }
+    #expect(d.starts(with: [0x89, 0x50, 0x4E, 0x47]))
+    let up = try await ComposerFiles.upload(Data("hi".utf8), name: "a.md", session: "s-104",
+                                            call: { try await b.call(AppAPI.Methods.sessionUpload, $0) })
+    #expect(!up.ref.isEmpty)
+}
