@@ -630,6 +630,10 @@ type Peer struct {
 	Panes         string         `json:"panes,omitempty"`
 	Transcript    bool           `json:"transcript,omitempty"`
 	Conversations string         `json:"conversations,omitempty"`
+	// Needs (app API 29) is its needs switch for this server as it
+	// last said ("off", "view", "answer"; "" for a tm without one): at
+	// view or answer its projects carry their needs in full (Needs).
+	Needs string `json:"needs,omitempty"`
 }
 
 // PeerProject is a project a paired server shares: its goal line,
@@ -654,6 +658,49 @@ type PeerProject struct {
 	// sidebar lists under its coordinator. None before the first read,
 	// or when the paired server's tm doesn't export them.
 	Watched []PeerThread `json:"watched"`
+	// Needs (app API 29) are what waits on that server's user, one per
+	// need, while its needs switch for this server is view or answer:
+	// none otherwise (NeedsYou counts them then).
+	Needs []PeerNeed `json:"needs"`
+}
+
+// PeerNeed is one need of a paired server's project, in full (app API
+// 29, docs/SPEC.md §16.16): ID names it there while it lasts; Kind is
+// question, approval, ask (the coordinator's open question), review,
+// blocked, ci or queue. Session is its pane's id here
+// ("<alias>/<session>"); Question a question's menu or an ask's one
+// question, Approval a permission dialog. Escape: it asks to run a
+// command outside the sandbox, and comes without its menu or dialog:
+// only that server's user answers it, there. Since is on this server's
+// clock. Read-only in app API 29.
+type PeerNeed struct {
+	ID        string        `json:"id"`
+	Kind      string        `json:"kind"`
+	Session   string        `json:"session,omitempty"`
+	Role      string        `json:"role,omitempty"`
+	Thread    string        `json:"thread,omitempty"`
+	Task      string        `json:"task,omitempty"`
+	Title     string        `json:"title,omitempty"`
+	Status    string        `json:"status,omitempty"`
+	Text      string        `json:"text,omitempty"`
+	Question  *Question     `json:"question,omitempty"`
+	Approval  *PeerApproval `json:"approval,omitempty"`
+	Escape    bool          `json:"escape,omitempty"`
+	PR        string        `json:"pr,omitempty"`
+	PRURL     string        `json:"pr_url,omitempty"`
+	PRNumber  int           `json:"pr_number,omitempty"`
+	Mergeable bool          `json:"mergeable,omitempty"`
+	Asked     string        `json:"asked,omitempty"`
+	Reports   int           `json:"reports,omitempty"`
+	Since     time.Time     `json:"since,omitzero"`
+}
+
+// PeerApproval is a permission dialog on a paired server's session:
+// its question, its options in order, how long each allows.
+type PeerApproval struct {
+	Question string   `json:"question,omitempty"`
+	Options  []string `json:"options"`
+	Scopes   []string `json:"scopes,omitempty"`
 }
 
 // PeerThread is an unresolved thread of a paired server's project, as
@@ -888,7 +935,7 @@ func peerListOf(l proto.PeerList) PeerList {
 	for _, p := range l.Peers {
 		peer := Peer{Alias: p.Alias, Name: p.Name, State: p.State, Reason: p.Reason, Since: p.Since,
 			Projects: make([]PeerProject, 0, len(p.Projects)), ShareWaits: proto.ShareWaits([]proto.PeerMirror{p}),
-			Pane: p.Pane, Panes: p.Panes, Transcript: p.Transcript, Conversations: p.Conversations}
+			Pane: p.Pane, Panes: p.Panes, Transcript: p.Transcript, Conversations: p.Conversations, Needs: p.Needs}
 		for _, q := range p.Shares {
 			if !q.Out && q.Pending() {
 				peer.ShareRequests = append(peer.ShareRequests, shareRequestOf(q))
@@ -898,11 +945,14 @@ func peerListOf(l proto.PeerList) PeerList {
 		for _, pp := range p.Projects {
 			pr := PeerProject{Project: pp.Project, Goal: pp.Goal, Paused: pp.Paused, NeedsYou: pp.NeedsYou,
 				Threads: pp.Threads, Ready: pp.Ready, Stale: pp.Stale, Synced: pp.Synced, Sessions: []PeerSession{},
-				Watched: []PeerThread{}}
+				Watched: []PeerThread{}, Needs: []PeerNeed{}}
 			if pp.Watch != nil {
 				for _, w := range pp.Watch.Threads {
 					pr.Watched = append(pr.Watched, peerThreadOf(p.Alias, w))
 				}
+			}
+			for _, n := range pp.Needs {
+				pr.Needs = append(pr.Needs, peerNeedOf(p.Alias, offset, n))
 			}
 			for _, s := range pp.Sessions {
 				if s.Role != proto.RoleCoordinator && s.Role != proto.RoleThread {
@@ -929,6 +979,30 @@ func peerThreadOf(alias string, w proto.WatchThread) PeerThread {
 		t.Task, t.StepsDone, t.StepsTotal = w.Task.ID, w.Task.StepsDone, w.Task.StepsTotal
 	}
 	return t
+}
+
+// peerNeedOf is need n of the paired server alias, whose clock is
+// offset ahead of this server's.
+func peerNeedOf(alias string, offset time.Duration, n proto.PeerNeed) PeerNeed {
+	out := PeerNeed{ID: n.ID, Kind: n.Kind, Role: n.Role, Thread: n.Thread, Task: n.Task, Title: n.Title, Status: n.Status,
+		Text: n.Text, Escape: n.Escape, PR: n.PR, PRURL: n.PRURL, PRNumber: n.PRNumber, Mergeable: n.Mergeable,
+		Asked: n.Asked, Reports: n.Reports}
+	if n.Session != "" {
+		out.Session = alias + "/" + n.Session
+	}
+	if !n.Since.IsZero() {
+		out.Since = n.Since.Add(-offset)
+	}
+	if !n.Escape {
+		out.Question = questionOf(n.Question)
+		if out.Question != nil && !out.Question.Since.IsZero() {
+			out.Question.Since = out.Question.Since.Add(-offset)
+		}
+		if a := n.Approval; a != nil {
+			out.Approval = &PeerApproval{Question: a.Question, Options: append([]string{}, a.Options...), Scopes: append([]string(nil), a.Scopes...)}
+		}
+	}
+	return out
 }
 
 // peerSessionOf is session s of the paired server alias, whose clock

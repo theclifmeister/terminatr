@@ -29,6 +29,10 @@ type PeerProjects struct {
 	// the caller (ConversationsOn, ConversationsNot; docs/SPEC.md
 	// §16.14), from a server whose hello lists transcript.
 	Conversations string `json:"conversations,omitempty"`
+	// Needs is the answering server's needs switch for the caller
+	// (NeedsOff, NeedsView, NeedsAnswer; docs/SPEC.md §16.16), from a
+	// server whose hello lists needs.
+	Needs string `json:"needs,omitempty"`
 	// Now is the peer's clock as it answered: the reader's mirror
 	// measures the offset between the two clocks from it.
 	Now time.Time `json:"now,omitzero"`
@@ -68,6 +72,10 @@ type PeerWatch struct {
 	Now      time.Time     `json:"now,omitzero"`
 	Watch    ProjectWatch  `json:"watch"`
 	Sessions []PeerSession `json:"sessions"`
+	// Needs are the project's needs in full, while the server's needs
+	// switch for the caller is view or answer (docs/SPEC.md §16.16);
+	// none otherwise.
+	Needs []PeerNeed `json:"needs,omitempty"`
 }
 
 // PeerSession is a SessionInfo with only what a paired server may see:

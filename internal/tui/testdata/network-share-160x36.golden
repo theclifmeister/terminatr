@@ -16,20 +16,20 @@
 │      shares nothing with you yet                                              │   ○ watches your shared panes and popups                     │
 │      └─ asked to share (S-4F2A-33, for terminatr)       waiting on nas's user │   ○ types in them                                            │
 │                                                                               │   ○ reads their conversations, in its Mac app                │
-│ ▾ phones                                                      D pairs a phone │   panes (V)   [off] · view · write                           │
-│    No phone yet. D pairs one: a QR code to scan with the terminatr app on the │               it can't open this server's panes              │
-│    iPhone.                                                                    │   chats (C)   [on] · off                                     │
+│ ▾ phones                                                      D pairs a phone │   ○ sees what your projects ask you, in full                 │
+│    No phone yet. D pairs one: a QR code to scan with the terminatr app on the │   panes (V)   [off] · view · write                           │
+│    iPhone.                                                                    │               it can't open this server's panes              │
+│                                                                               │   chats (C)   [on] · off                                     │
 │                                                                               │               its Mac app reads the conversations of what it │
 │                                                                               │               may watch                                      │
+│                                                                               │   needs (N)   [off] · view · answer                          │
+│                                                                               │               it sees how many needs your shared projects    │
+│                                                                               │               have, not what they ask                        │
 │                                                                               │ AND THE OTHER WAY                                            │
 │                                                                               │   mini's tm has no remote panes                              │
 │                                                                               │   it shares acme-api, infra                                  │
-│                                                                               │                                                              │
-│                                                                               │                                                              │
-│                                                                               │                                                              │
-│                                                                               │                                                              │
 │                                                                                                                                              │
-│ S ask to share · E name · V panes · C conversations · X unpair · enter fold · tab details · P pair · J join · ? keys · esc close             │
+│ S ask to share · E name · V panes · C conversations · N needs · X unpair · enter fold · tab details · P pair · J join · ? keys · esc close   │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 == s:mini:S-91C3-7
 ╭─ Network · studio + 2 paired ────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
