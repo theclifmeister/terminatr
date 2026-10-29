@@ -9,8 +9,8 @@ import "time"
 // (PeerQuestion). View and answer carry the needs themselves on
 // peer.watch (PeerWatch.Needs): a question's menu, an approval's dialog
 // and its options, a task in review, the coordinator's open questions.
-// Answer is the level the acts on them need (phase 2); until then it
-// shows what view shows.
+// Answer shows what view shows, and takes the paired server's user's
+// acts on them (peer.act, below).
 
 // The needs switch's levels, per paired server: what it may see (and
 // later do) of this server's needs. These are the wire's and

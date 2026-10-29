@@ -665,7 +665,7 @@ func needsWhat(level string) string {
 	return map[string]string{
 		proto.NeedsOff:    "it sees how many needs your shared projects have, not what they ask",
 		proto.NeedsView:   "it sees each need in full: questions, permission dialogs, tasks in review",
-		proto.NeedsAnswer: "as view; answering from there comes with a later tm, never a sandbox escape",
+		proto.NeedsAnswer: "as view, and its user answers them from there: never a sandbox escape",
 	}[level]
 }
 
