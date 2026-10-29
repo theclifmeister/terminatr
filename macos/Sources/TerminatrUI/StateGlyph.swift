@@ -14,10 +14,13 @@ public struct StateGlyph: View {
     let filled: Bool
     /// The side at 100%; the theme's scale grows it with Dynamic Type.
     let side: CGFloat
+    /// The symbol in place of the tone's: a need's kind's.
+    let symbolName: String?
 
     /// filled nil: filled when the tone waits on the user.
-    public init(_ tone: Attention.Tone, filled: Bool? = nil, side: CGFloat = 38) {
+    public init(_ tone: Attention.Tone, filled: Bool? = nil, side: CGFloat = 38, symbol: String? = nil) {
         self.tone = tone
+        self.symbolName = symbol
         self.filled = filled ?? tone.waits
         self.side = side
     }
@@ -42,7 +45,7 @@ public struct StateGlyph: View {
 
     @ViewBuilder private func symbol(_ s: CGFloat) -> some View {
         let ink = filled ? theme.on(tone) : theme.ink
-        if tone == .working && !still {
+        if tone == .working && symbolName == nil && !still {
             TimelineView(.animation(minimumInterval: 1 / 30)) { tl in
                 Circle()
                     .trim(from: 0, to: 0.75)
@@ -51,7 +54,7 @@ public struct StateGlyph: View {
                     .frame(width: s * 0.44, height: s * 0.44)
             }
         } else {
-            Image(systemName: tone.symbol)
+            Image(systemName: symbolName ?? tone.symbol)
                 .font(.system(size: s * 0.46, weight: .semibold))
                 .foregroundStyle(ink)
                 .contentTransition(.symbolEffect(.replace))
