@@ -652,6 +652,8 @@
      "agent": "claude",
      "clients": 1,
      "cols": 120,
+     "context": 130000,
+     "context_window": 200000,
      "created": "2026-10-27T08:00:00Z",
      "current": "Reading T15's report",
      "id": "s-c1",
@@ -669,6 +671,8 @@
      "agent": "claude",
      "clients": 1,
      "cols": 120,
+     "context": 62000,
+     "context_window": 200000,
      "created": "2026-10-27T08:00:00Z",
      "current": "Bash: npm test",
      "id": "s-101",
@@ -686,6 +690,8 @@
      "agent": "claude",
      "clients": 1,
      "cols": 120,
+     "context": 38000,
+     "context_window": 200000,
      "created": "2026-10-27T08:00:00Z",
      "current": "",
      "id": "s-102",
@@ -727,6 +733,8 @@
      "agent": "claude",
      "clients": 1,
      "cols": 120,
+     "context": 84000,
+     "context_window": 200000,
      "created": "2026-10-27T08:00:00Z",
      "current": "Reading cart.spec.ts",
      "id": "s-104",
@@ -744,6 +752,8 @@
      "agent": "claude",
      "clients": 1,
      "cols": 120,
+     "context": 46000,
+     "context_window": 200000,
      "created": "2026-10-27T08:00:00Z",
      "current": "Writing pdf.go",
      "id": "s-201",
@@ -757,7 +767,8 @@
      "thread": "t-0201",
      "title": ""
     }
-   ]
+   ],
+   "context_hint": 60
   },
   "task.done": {
    "tasks": []
@@ -841,7 +852,8 @@
    "task.delegate",
    "project.open",
    "session.file",
-   "session.upload"
+   "session.upload",
+   "coordinator.clear"
   ],
   "server": {
    "caps": [

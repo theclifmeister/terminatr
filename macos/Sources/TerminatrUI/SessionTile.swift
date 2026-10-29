@@ -4,7 +4,8 @@ import TerminatrKit
 /// A session's row (T846), in place of its dotted line: its StateGlyph,
 /// its task ref in mono and its title, the why line under them, and at
 /// the end what waits on the user as a ToneBadge ("allow?", "asks",
-/// "review"), else how long its turn has run, else a PR mark. Rows sit
+/// "review"), else how long its turn has run, else a PR mark, after its
+/// context use as a ContextGauge when it reports one (T868). Rows sit
 /// in a TileGroup, a hairline over each after the first (rule). At
 /// accessibility sizes the glyph and the badge go over the title, which
 /// keeps the row's width. Dormant: an inactive project's, all muted.
@@ -16,17 +17,19 @@ public struct SessionTile: View {
     let state: Attention
     let busy: Busy?
     let pr: Int
+    let context: ContextUse?
     let dormant: Bool
     let rule: Bool
     let selected: Bool
 
-    public init(_ label: String, ref: String? = nil, state: Attention, busy: Busy? = nil, pr: Int = 0, dormant: Bool = false,
-                rule: Bool = false, selected: Bool = false) {
+    public init(_ label: String, ref: String? = nil, state: Attention, busy: Busy? = nil, pr: Int = 0, context: ContextUse? = nil,
+                dormant: Bool = false, rule: Bool = false, selected: Bool = false) {
         self.label = label
         self.ref = ref
         self.state = state
         self.busy = busy
         self.pr = pr
+        self.context = context
         self.dormant = dormant
         self.rule = rule
         self.selected = selected
@@ -69,7 +72,8 @@ public struct SessionTile: View {
         .contentShape(Rectangle())
         .accessibilityElement(children: .ignore)
         .accessibilityLabel([ref, label].compactMap { $0 }.joined(separator: " "))
-        .accessibilityValue(dormant ? "inactive" : [busy.map { $0.spoken(now: Date()) } ?? state.spoken, pr > 0 ? "PR \(pr)" : nil]
+        .accessibilityValue(dormant ? "inactive" : [busy.map { $0.spoken(now: Date()) } ?? state.spoken, context?.spoken,
+                                                     pr > 0 ? "PR \(pr)" : nil]
             .compactMap { $0 }.joined(separator: ", "))
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
@@ -96,8 +100,12 @@ public struct SessionTile: View {
         }
     }
 
-    /// What waits on the user, else the turn's time, else the PR.
+    /// The context use, then what waits on the user, else the turn's
+    /// time, else the PR.
     @ViewBuilder private func end(_ busy: Busy?) -> some View {
+        if !dormant, let context {
+            ContextGauge(context)
+        }
         if !dormant, state.waits {
             ToneBadge(state.word, tone: state.tone)
         } else if let busy {

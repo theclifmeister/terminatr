@@ -84,3 +84,49 @@ public struct NeedsOrb: View {
             .accessibilityLabel(count == 1 ? "1 waits on you" : "\(count) wait on you")
     }
 }
+
+/// A session's context use (T868): a small ring filled to it and its
+/// percent in mono, muted, the approvals' amber from [ui] context_hint
+/// and the attention red when nearly full (ContextUse.tone), as the
+/// TUI's coordinator row warns. Compact, it fits under a header's
+/// title. VoiceOver says "context 72% used".
+public struct ContextGauge: View {
+    @Environment(\.theme) private var theme
+    @Environment(\.accessibilityReduceMotion) private var still
+    let use: ContextUse
+    let compact: Bool
+
+    public init(_ use: ContextUse, compact: Bool = false) {
+        self.use = use
+        self.compact = compact
+    }
+
+    public var body: some View {
+        let colour = use.tone.map { theme.colour($0) } ?? theme.muted
+        let style: TextStyle = compact ? .caption2 : .caption
+        let side = theme.size(style) * 0.95
+        HStack(spacing: compact ? 3 : 4) {
+            ZStack {
+                Circle().stroke(theme.ink.opacity(ThemeColours.inkWash * 2), lineWidth: side * 0.2)
+                Circle()
+                    .trim(from: 0, to: use.fraction)
+                    .stroke(colour, style: StrokeStyle(lineWidth: side * 0.2, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+            }
+            .frame(width: side, height: side)
+            Text(use.word)
+                .font(theme.mono(style, use.tone == nil ? .medium : .semibold))
+                .monospacedDigit()
+                .contentTransition(.numericText(value: Double(use.percent)))
+                .foregroundStyle(colour)
+                .lineLimit(1)
+        }
+        .animation(still ? nil : .snappy, value: use.percent)
+        .fixedSize()
+        .padding(.horizontal, compact ? 5 : 8)
+        .padding(.vertical, compact ? 1 : 4)
+        .background(use.tone.map { theme.wash($0) } ?? theme.ink.opacity(ThemeColours.inkWash), in: Capsule())
+        .accessibilityElement()
+        .accessibilityLabel(use.spoken)
+    }
+}

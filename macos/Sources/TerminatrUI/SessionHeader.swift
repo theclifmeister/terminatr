@@ -3,7 +3,8 @@ import TerminatrKit
 
 /// A session's title in its header (T848, direction A "Glass deck"): the
 /// thread's title in the display face, and under it where it is ("T14 ·
-/// acme-web") in mono with its state's pill (ToneBadge), on a glass
+/// acme-web") in mono with its state's pill (ToneBadge) and its context
+/// use (ContextGauge, T868), on a glass
 /// capsule, so no line of it sits on the raw mesh. The bar is short, so
 /// its text grows with Dynamic Type only to a point; held, the large
 /// content viewer shows it whole. VoiceOver reads it as one header.
@@ -12,14 +13,16 @@ public struct SessionTitle: View {
     let title: String
     let place: String
     let state: Attention?
+    let context: ContextUse?
 
     /// The most the bar's text grows.
     static let most: CGFloat = 1.3
 
-    public init(_ title: String, place: String, state: Attention? = nil) {
+    public init(_ title: String, place: String, state: Attention? = nil, context: ContextUse? = nil) {
         self.title = title
         self.place = place
         self.state = state
+        self.context = context
     }
 
     public var body: some View {
@@ -40,6 +43,9 @@ public struct SessionTitle: View {
                 if let state {
                     ToneBadge(state.word, tone: state.tone, compact: true)
                 }
+                if let context {
+                    ContextGauge(context, compact: true)
+                }
             }
         }
         .environment(\.theme, t)
@@ -55,7 +61,7 @@ public struct SessionTitle: View {
     }
 
     private var spoken: String {
-        [title, place.replacingOccurrences(of: " · ", with: ", "), state?.word ?? ""]
+        [title, place.replacingOccurrences(of: " · ", with: ", "), state?.word ?? "", context?.spoken ?? ""]
             .filter { !$0.isEmpty }.joined(separator: ", ")
     }
 }
