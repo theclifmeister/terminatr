@@ -51,7 +51,8 @@ private struct RoleButton: View {
     @ViewBuilder private var styled: some View {
         let label = configuration.label
             .font(theme.body(.headline, .semibold))
-            .lineLimit(1)
+            .lines(1)
+            .multilineTextAlignment(.center)
         switch role {
         case .primary(let tone):
             let fill = tone.map(theme.colour) ?? theme.action
