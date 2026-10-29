@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.62.1](https://github.com/theclifmeister/terminatr/compare/v0.62.0...v0.62.1) (2026-10-29)
+
+
+### Bug Fixes
+
+* **relay,ios:** device links no longer drop every 90 s; phone ping, network follow, background grace, quiet resume ([#920](https://github.com/theclifmeister/terminatr/issues/920)) ([2bcd847](https://github.com/theclifmeister/terminatr/commit/2bcd8477a0e5ac062756d5ffe7fb998298f6f58d))
+
 ## [0.62.0](https://github.com/theclifmeister/terminatr/compare/v0.61.0...v0.62.0) (2026-10-29)
 
 
