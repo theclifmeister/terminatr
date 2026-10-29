@@ -3,26 +3,33 @@ import TerminatrKit
 import TerminatrUI
 
 /// The prompt box under a conversation, at the write level (T821), as
-/// the Mac's Composer: Send queues the prompt until the agent is idle;
-/// while it works, Steer sends it into the running turn (session.prompt
-/// "now"), not on a paired server's session, whose prompt is typed into
-/// its pane there. Sending to a thread takes it over, as the Mac's
-/// says. Text pastes as in any field; files stay the Mac's. The keys
-/// button swaps it for the keys bar (TerminalKeys); -keys YES opens it
-/// at launch (the Simulator's screenshots). With a hardware keyboard (an
-/// iPad's, T830) Command-Return sends and Shift-Command-Return steers,
-/// as Return makes a new line.
+/// the Mac's Composer looks and words it (T840): a card with the text,
+/// Send (queued until the agent is idle) and, while it works, Interrupt
+/// (stops the turn for it, after a confirmation) and Steer (into the
+/// running turn, session.prompt "now"); not on a paired server's
+/// session, whose prompt is typed into its pane there. Below it, what
+/// the last send did, the queue and a held queue, and the Keys switch,
+/// where the Mac has its key hints. Sending to a thread takes it over,
+/// as the Mac's says. Text pastes as in any field; files stay the Mac's.
+/// The keys button swaps the card for the keys bar (TerminalKeys); -keys
+/// YES opens it at launch (the Simulator's screenshots). With a hardware
+/// keyboard (an iPad's, T830) Command-Return sends and
+/// Shift-Command-Return steers, as Return makes a new line.
 struct PhoneComposer: View {
     @Environment(PhoneModel.self) private var model
     @Environment(\.theme) private var theme
+    @Environment(\.horizontalSizeClass) private var width
     let ref: SessionRef
     let session: String
     let running: Bool
     let queued: Int
+    /// Why the queue is held, when it is.
+    var held = ""
     @State private var text = ""
     @State private var busy = false
     @State private var said: (text: String, failed: Bool)?
     @State private var keys = UserDefaults.standard.bool(forKey: "keys")
+    @State private var interrupting = false
     @FocusState private var focused: Bool
 
     var body: some View {
@@ -30,9 +37,9 @@ struct PhoneComposer: View {
             if keys {
                 TerminalKeys(session: session) { said = $0 }
             } else {
-                field
+                card
             }
-            HStack(spacing: 8) {
+            HStack(spacing: 10) {
                 if let said {
                     Text(said.text)
                         .foregroundStyle(said.failed ? theme.attention : theme.muted)
@@ -40,6 +47,11 @@ struct PhoneComposer: View {
                 } else if queued > 0 {
                     Text(queued == 1 ? "1 prompt queued" : "\(queued) prompts queued")
                         .foregroundStyle(theme.muted)
+                }
+                if !held.isEmpty {
+                    Text("Queue held: \(held)")
+                        .foregroundStyle(theme.attention)
+                        .lineLimit(2)
                 }
                 Spacer(minLength: 0)
                 if model.can(AppAPI.Methods.sessionKeys.name) {
@@ -54,7 +66,7 @@ struct PhoneComposer: View {
                 }
             }
             .font(theme.body(.footnote))
-            .padding(.horizontal, 4)
+            .padding(.horizontal, 6)
         }
         .padding(.horizontal, 12)
         .padding(.top, 8)
@@ -64,41 +76,67 @@ struct PhoneComposer: View {
         .background(.bar, ignoresSafeAreaEdges: .bottom)
         .kept($text, "prompt \(ref)")
         .kept($keys, "keys \(ref)")
+        .confirmationDialog("Interrupt the agent's turn?", isPresented: $interrupting, titleVisibility: .visible) {
+            Button("Interrupt and Send", role: .destructive) { send(mode: "interrupt") }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("The running turn stops and this prompt goes in its place. tm refuses while a draft or a dialog is on the agent's screen.")
+        }
+    }
+
+    /// The Mac's card: the text and its buttons on one line, but for a
+    /// working agent's three at compact width (an iPhone), on a line
+    /// below it, the placeholder whole.
+    private var card: some View {
+        Group {
+            if running && !ref.isRemote && width == .compact {
+                VStack(alignment: .trailing, spacing: 8) {
+                    field
+                    HStack(spacing: 8) { buttons }
+                }
+            } else {
+                HStack(alignment: .bottom, spacing: 8) {
+                    field
+                    buttons
+                }
+            }
+        }
+        .font(theme.body(.subheadline, .semibold))
+        .padding(10)
+        .frosted(RoundedRectangle(cornerRadius: 14))
+        .background(theme.cardTint, in: RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(theme.edge, lineWidth: 1))
     }
 
     private var field: some View {
-        HStack(alignment: .bottom, spacing: 8) {
-            TextField(placeholder, text: $text, axis: .vertical)
-                .lineLimit(1...6)
-                .font(theme.body(.body))
-                .focused($focused)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(theme.cardTint, in: RoundedRectangle(cornerRadius: 18))
-                .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(theme.edge, lineWidth: 1))
-                .modifier(NoWritingTools())
-            if running && !ref.isRemote {
-                Button("Steer") { send(mode: "now") }
-                    .buttonStyle(.bordered)
-                    .keyboardShortcut(.return, modifiers: [.command, .shift])
-                    .disabled(empty || busy)
-                    .accessibilityHint("Sends it into the running turn")
-            }
-            Button {
-                send(mode: "")
-            } label: {
-                Image(systemName: "arrow.up")
-                    .font(theme.body(.body, .bold))
-                    .frame(width: 22, height: 22)
-            }
+        TextField(placeholder, text: $text, axis: .vertical)
+            .lineLimit(1...6)
+            .font(theme.body(.body))
+            .focused($focused)
+            .padding(.vertical, 6)
+            .padding(.leading, 4)
+            .modifier(NoWritingTools())
+    }
+
+    @ViewBuilder
+    private var buttons: some View {
+        if running && !ref.isRemote {
+            Button("Interrupt") { interrupting = true }
+                .buttonStyle(.bordered)
+                .disabled(empty || busy)
+                .accessibilityHint("Stops the agent's turn for this prompt")
+            Button("Steer") { send(mode: "now") }
+                .buttonStyle(.bordered)
+                .keyboardShortcut(.return, modifiers: [.command, .shift])
+                .disabled(empty || busy)
+                .accessibilityHint("Sends it into the running turn")
+        }
+        Button("Send") { send(mode: "") }
             .buttonStyle(.borderedProminent)
-            .buttonBorderShape(.circle)
             .tint(theme.action)
             .keyboardShortcut(.return, modifiers: .command)
             .disabled(empty || busy)
-            .accessibilityLabel("Send")
             .accessibilityHint(running && !ref.isRemote ? "Queued: it goes once the turn ends" : "")
-        }
     }
 
     private var empty: Bool {
@@ -110,7 +148,7 @@ struct PhoneComposer: View {
             return "Message \(ref.isCoordinator ? "the coordinator" : ref.thread) on \(ref.server)"
         }
         if ref.isCoordinator { return "Message the coordinator" }
-        return "Message \(ref.thread) · takes it over"
+        return "Message \(ref.thread) · sending takes the thread over"
     }
 
     private func send(mode: String) {

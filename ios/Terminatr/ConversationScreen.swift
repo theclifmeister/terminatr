@@ -143,7 +143,8 @@ struct ConversationScreen: View {
                             .padding(.bottom, 8)
                     }
                     if model.writes, let id {
-                        PhoneComposer(ref: ref, session: id, running: session?.state == "working", queued: session?.queuedPrompts ?? 0)
+                        PhoneComposer(ref: ref, session: id, running: session?.state == "working", queued: session?.queuedPrompts ?? 0,
+                                      held: session?.queueHeld ?? "")
                     }
                 }
             }

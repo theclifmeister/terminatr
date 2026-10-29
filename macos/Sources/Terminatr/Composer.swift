@@ -155,7 +155,7 @@ struct Composer: View {
     private var placeholder: String {
         if model.ref.isRemote {
             let who = model.ref.isCoordinator ? "the coordinator" : model.ref.thread
-            return "Message \(who) on \(model.ref.server) · typed into its pane"
+            return "Message \(who) on \(model.ref.server)"
         }
         if model.ref.isCoordinator { return "Message the coordinator" }
         let who = model.ref.thread
