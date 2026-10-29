@@ -46,21 +46,62 @@ struct TabStack<Content: View>: View {
 /// nothing (T841). There, and before 27.1, the list sits beside the
 /// detail in an HStack (beside); on an open iPhone Duo it ends at the
 /// hinge, which the region of the fold, inactive while flat, marks
-/// (PhoneColumns.split, T849).
+/// (PhoneColumns.split, T849). A coordinator or thread open there, flat
+/// and in portrait or narrow (PhoneColumns.foldsList), takes the whole
+/// width instead, the list folded away (T855): the bar's list button,
+/// or a swipe in from the leading edge, slides it back over the session.
 struct Columns<Content: View>: View {
     @Environment(\.theme) private var theme
     @Binding var path: [Route]
     let empty: (String, String)
     let root: () -> Content
+    /// The folded list slid back over the session.
+    @State private var listShown = false
 
     /// The list column's width when the layout leaves it to us.
     static var listWidth: CGFloat { PhoneColumns.listIdeal }
 
     var body: some View {
+        GeometryReader { g in
+            if #available(iOS 27.1, *) {
+                let folds = g.reservedRegions(kind: .division).contains { $0.isActive }
+                let hinge = g.reservedRegions(kind: .division, options: .includeInactive).first?.frame
+                let (list, gap) = PhoneColumns.split(g.size.width, hinge: hinge)
+                if !folds, foldsList(g.size) {
+                    folded(list: list)
+                } else if folds || g.size.width > g.size.height {
+                    ArrangementView {
+                        lead.splitArrangementLayoutSize(minWidth: 300, idealWidth: Self.listWidth, maxWidth: 440)
+                    } secondary: {
+                        trail()
+                    }
+                    .arrangementViewStyle(folds ? .split : .split.axes(.horizontal))
+                } else {
+                    beside(list: list, gap: gap)
+                        .environment(\.splitArrangementAxis, .horizontal)
+                }
+            } else if foldsList(g.size) {
+                folded(list: min(Self.listWidth, g.size.width / 2))
+            } else {
+                beside(list: Self.listWidth)
+            }
+        }
+        .onChange(of: path) { listShown = false }
+    }
+
+    /// Whether the detail is a coordinator or thread that takes the
+    /// whole of a space this size.
+    private func foldsList(_ size: CGSize) -> Bool {
+        switch path.last {
+        case .session, .need: PhoneColumns.foldsList(size)
+        default: false
+        }
+    }
+
+    private var lead: some View {
         let n = path.count
         let list = n >= 2 ? path[n - 2] : nil
-        let detail = path.last
-        let lead = NavigationStack {
+        return NavigationStack {
             Group {
                 if let list { RouteScreen(route: list) } else { root() }
             }
@@ -75,9 +116,14 @@ struct Columns<Content: View>: View {
             }
             .destinations()
         }
-        .environment(\.navigate, Navigate(open: detail) { r in path = Array(path.prefix(max(n - 1, 0))) + [r] })
+        .environment(\.navigate, Navigate(open: path.last) { r in path = Array(path.prefix(max(n - 1, 0))) + [r] })
         .id(list)
-        let trail = NavigationStack {
+    }
+
+    /// The detail column; folded, its bar leads with the list button.
+    private func trail(folded: Bool = false) -> some View {
+        let detail = path.last
+        return NavigationStack {
             Group {
                 if let detail {
                     RouteScreen(route: detail)
@@ -87,40 +133,63 @@ struct Columns<Content: View>: View {
                 }
             }
             .modifier(InnerEdge(edge: .leading))
+            .toolbar {
+                if folded {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button("List", systemImage: "list.bullet") { show(!listShown) }
+                            .accessibilityLabel(listShown ? "Hide the list" : "Show the list")
+                    }
+                }
+            }
             .destinations()
         }
         .environment(\.navigate, Navigate(open: nil) { path.append($0) })
         .id(detail)
-        if #available(iOS 27.1, *) {
-            GeometryReader { g in
-                let folds = g.reservedRegions(kind: .division).contains { $0.isActive }
-                if folds || g.size.width > g.size.height {
-                    ArrangementView {
-                        lead.splitArrangementLayoutSize(minWidth: 300, idealWidth: Self.listWidth, maxWidth: 440)
-                    } secondary: {
-                        trail
-                    }
-                    .arrangementViewStyle(folds ? .split : .split.axes(.horizontal))
-                } else {
-                    let hinge = g.reservedRegions(kind: .division, options: .includeInactive).first?.frame
-                    let (list, gap) = PhoneColumns.split(g.size.width, hinge: hinge)
-                    beside(lead, trail, list: list, gap: gap)
-                        .environment(\.splitArrangementAxis, .horizontal)
-                }
-            }
-        } else {
-            beside(lead, trail, list: Self.listWidth)
-        }
     }
 
     /// The list column, list points wide, beside the detail, gap points
     /// apart (the hinge, else a hairline).
-    private func beside(_ lead: some View, _ trail: some View, list: CGFloat, gap: CGFloat = 1) -> some View {
+    private func beside(list: CGFloat, gap: CGFloat = 1) -> some View {
         HStack(spacing: 0) {
             lead.frame(width: list)
             Rectangle().fill(theme.edge).frame(width: gap).ignoresSafeArea()
-            trail
+            trail()
         }
+    }
+
+    /// The detail across the whole width, the list folded away; shown,
+    /// it slides in over the detail, list points wide, and a tap beside
+    /// it or a swipe back folds it again.
+    private func folded(list: CGFloat) -> some View {
+        ZStack(alignment: .leading) {
+            trail(folded: true)
+            if listShown {
+                Color.black.opacity(0.2)
+                    .ignoresSafeArea()
+                    .onTapGesture { show(false) }
+                    .accessibilityHidden(true)
+                    .transition(.opacity)
+                HStack(spacing: 0) {
+                    lead.frame(width: list)
+                    Rectangle().fill(theme.edge).frame(width: 1).ignoresSafeArea()
+                }
+                .shadow(color: .black.opacity(0.2), radius: 12)
+                .transition(.move(edge: .leading))
+            }
+        }
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 20).onEnded { v in
+                if !listShown, v.startLocation.x < 24, v.translation.width > 60 {
+                    show(true)
+                } else if listShown, v.translation.width < -60 {
+                    show(false)
+                }
+            }
+        )
+    }
+
+    private func show(_ shown: Bool) {
+        withAnimation(.snappy) { listShown = shown }
     }
 }
 

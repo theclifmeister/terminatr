@@ -20,3 +20,13 @@ import Testing
     #expect(PhoneColumns.split(951, hinge: CGRect(x: 0, y: 333, width: 951, height: 3)) == (360, 1))
     #expect(PhoneColumns.split(669, hinge: CGRect(x: 100, y: 0, width: 3, height: 951)) == (334.5, 1))
 }
+
+// A session open beside the list (T855): in portrait, or narrower than
+// 800 pt, it takes the whole width; in landscape the list stays.
+@Test func sessionFoldsTheListInPortrait() {
+    #expect(PhoneColumns.foldsList(CGSize(width: 669, height: 951)))   // open Duo, portrait
+    #expect(PhoneColumns.foldsList(CGSize(width: 1032, height: 1376))) // iPad 13", portrait
+    #expect(PhoneColumns.foldsList(CGSize(width: 744, height: 600)))   // narrow iPad window
+    #expect(!PhoneColumns.foldsList(CGSize(width: 951, height: 669)))  // open Duo, landscape
+    #expect(!PhoneColumns.foldsList(CGSize(width: 1376, height: 1032)))
+}
