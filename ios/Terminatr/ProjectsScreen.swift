@@ -20,7 +20,7 @@ struct ProjectsScreen: View {
                 ScreenHeader("Projects", subtitle: subtitle(inactive: gone.count), symbol: symbol) {
                     SettingsButton().buttonStyle(.circle)
                 }
-                LazyVStack(alignment: .leading, spacing: Spacing.row + 2) {
+                LazyVStack(alignment: .leading, spacing: Spacing.item) {
                     if let f = model.failure { Failure(text: f) }
                     if !model.peers.isEmpty { SectionHeading("This server") }
                     ForEach(model.activeProjects, id: \.slug) { card($0) }

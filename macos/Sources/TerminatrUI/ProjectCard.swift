@@ -17,7 +17,7 @@ public struct ProjectMonogram: View {
     public var body: some View {
         let s = side * theme.scale
         Text(Monogram.letters(name))
-            .font(theme.title(side >= 48 ? .sheetTitle : .title2, .bold))
+            .font(theme.title(side >= 48 ? .sheetTitle : side >= 40 ? .title2 : .headline, .bold))
             .foregroundStyle(theme.onPrompt)
             .lineLimit(1)
             .frame(width: s, height: s)
@@ -89,9 +89,11 @@ public struct ThreadMeter: View {
 /// card with its monogram, its name in the display face (a pin when
 /// pinned), its coordinator's state with the glyph's symbol or, working,
 /// the turning mark, what waits on the user as a NeedsOrb, and its
-/// threads' ThreadMeter. Dim: a paired server's project it can't reach,
-/// or an inactive one. Selected: open beside the list, ringed in the
-/// action colour. At accessibility sizes the orb goes over the name.
+/// threads' ThreadMeter. Compact (T881): the monogram two lines tall,
+/// and without threads no meter, "no threads" ending the coordinator's
+/// line instead. Dim: a paired server's project it can't reach, or an
+/// inactive one. Selected: open beside the list, ringed in the action
+/// colour. At accessibility sizes the orb goes over the name.
 public struct ProjectCard: View {
     @Environment(\.theme) private var theme
     @Environment(\.dynamicTypeSize) private var typeSize
@@ -115,20 +117,21 @@ public struct ProjectCard: View {
     }
 
     public var body: some View {
-        let shape = RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: Radius.tile, style: .continuous)
         let stacked = typeSize.isAccessibilitySize
-        VStack(alignment: .leading, spacing: Spacing.card) {
-            HStack(alignment: stacked ? .top : .center, spacing: Spacing.row + 2) {
-                ProjectMonogram(name)
+        VStack(alignment: .leading, spacing: Spacing.item) {
+            HStack(alignment: stacked ? .top : .center, spacing: Spacing.row) {
+                ProjectMonogram(name, side: 32)
                 if !stacked { title }
                 Spacer(minLength: 0)
                 if needs > 0 { NeedsOrb(needs) }
             }
             if stacked { title }
-            ThreadMeter(threads)
+            if !threads.isEmpty { ThreadMeter(threads) }
         }
-        .padding(Spacing.card + 2)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, Spacing.card)
+        .padding(.vertical, Spacing.row)
+        .frame(maxWidth: .infinity, minHeight: tapTarget, alignment: .leading)
         .opacity(dim ? 0.55 : 1)
         .surface(.card, in: shape)
         .overlay {
@@ -141,10 +144,10 @@ public struct ProjectCard: View {
     }
 
     private var title: some View {
-        VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: 1) {
             HStack(spacing: Spacing.tight) {
                 Text(name)
-                    .font(theme.title(.largeTitle, .bold))
+                    .font(theme.title(.title3, .bold))
                     .foregroundStyle(theme.ink)
                     .lines(1)
                 if pinned {
@@ -160,9 +163,17 @@ public struct ProjectCard: View {
                     Image(systemName: coordinator.tone.symbol)
                         .foregroundStyle(coordinator.tone == .idle ? theme.muted : theme.colour(coordinator.tone))
                 }
-                Text(line)
-                    .foregroundStyle(theme.muted)
-                    .lines(1)
+                // The state is cut before "no threads" is.
+                HStack(spacing: 0) {
+                    Text(line)
+                        .lines(1)
+                    if threads.isEmpty {
+                        Text(" · no threads")
+                            .lineLimit(1)
+                            .fixedSize()
+                    }
+                }
+                .foregroundStyle(theme.muted)
             }
             .font(theme.body(.subheadline))
         }
