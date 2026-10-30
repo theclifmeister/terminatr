@@ -110,5 +110,27 @@ public enum Designs {
         return ds.sorted { (rank($0), $0.name) < (rank($1), $1.name) }
     }
 
+    /// What a project's Designs section shows (T876): the designs once
+    /// read, the error that kept them, "No designs yet" for a project
+    /// with none, so an empty project and a broken read look different.
+    public enum Listing: Equatable, Sendable {
+        case reading
+        case none
+        case designs([AppAPI.Design])
+        case failed(String)
+    }
+
+    /// The section's listing from its last read: nil designs until one
+    /// answered. Designs read before stay shown when a later read fails.
+    public static func listing(_ ds: [AppAPI.Design]?, error: String?) -> Listing {
+        if let ds, !ds.isEmpty { return .designs(ds) }
+        if let error { return .failed(error) }
+        guard let ds else { return .reading }
+        return ds.isEmpty ? .none : .designs(ds)
+    }
+
+    /// The words for a project with no designs.
+    public static let noneYet = "No designs yet"
+
     static func count(_ n: Int, _ word: String) -> String { n == 1 ? "1 \(word)" : "\(n) \(word)s" }
 }

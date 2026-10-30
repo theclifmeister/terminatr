@@ -6,12 +6,15 @@ import TerminatrUI
 /// and the Mac dashboard's list them (design.list, app API 31): under a
 /// SectionHeading, one DesignTile each, those with open questions first
 /// (Designs.ordered), each opening its DesignScreen. Read again when
-/// the board or the link changes; nothing shows without designs.
+/// the board or the link changes. A project without designs says so,
+/// apart from a read that failed (Designs.listing).
 struct DesignsTiles: View {
     @Environment(PhoneModel.self) private var model
     @Environment(\.navigate) private var navigate
+    @Environment(\.theme) private var theme
     let project: AppAPI.Project
-    @State private var designs: [AppAPI.Design] = []
+    /// nil until design.list answered.
+    @State private var designs: [AppAPI.Design]?
     @State private var error: String?
     /// Whether the done and archived designs show too.
     @State private var all = false
@@ -20,7 +23,21 @@ struct DesignsTiles: View {
         // A stack, not a Group: its task runs while it shows nothing.
         VStack(alignment: .leading, spacing: Spacing.row + 2) {
             Color.clear.frame(height: 0)
-            if !designs.isEmpty {
+            switch Designs.listing(designs, error: error) {
+            case .reading:
+                EmptyView()
+            case .none:
+                SectionHeading("Designs", detail: "")
+                Text(Designs.noneYet)
+                    .font(theme.body(.subheadline))
+                    .foregroundStyle(theme.muted)
+                    .padding(Spacing.card)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .surface(.card, in: RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
+            case .failed(let error):
+                SectionHeading("Designs", detail: "")
+                Failure(text: "The designs didn't load: \(error)")
+            case .designs(let designs):
                 let shown = Designs.shown(designs, all: all)
                 SectionHeading("Designs", detail: "\(shown.count)")
                 if !shown.isEmpty {
@@ -39,8 +56,6 @@ struct DesignsTiles: View {
                     Button(words) { all.toggle() }
                         .font(.subheadline)
                 }
-            } else if let error {
-                Failure(text: "The designs didn't load: \(error)")
             }
         }
         .task(id: DesignsRead(project: project, generation: model.generation)) {
