@@ -3,6 +3,7 @@ package cli
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -33,4 +34,40 @@ func TestVaultDoctorLinks(t *testing.T) {
 		t.Fatalf("json: %v %+v", err, res)
 	}
 	h.expect(2, "", human, "vault", "doctor", "extra")
+}
+
+// TestVaultInitLink (T873): tm vault init links ~/terminatr-obsidian
+// (a scratch HOME here), names it in the closing line, --no-link makes
+// none, and tm vault off removes it.
+func TestVaultInitLink(t *testing.T) {
+	h := newHarness(t)
+	h.ok(human, "project", "new", "demo")
+	hd := t.TempDir()
+	t.Setenv("HOME", hd)
+	t.Setenv("USERPROFILE", hd)
+	link := filepath.Join(hd, "terminatr-obsidian")
+
+	h.expect(2, "", human, "vault", "init", "--yes", "--no-link", "--link", "x")
+	if out := h.ok(human, "vault", "init", "--yes", "--no-link"); strings.Contains(out, "terminatr-obsidian") {
+		t.Errorf("--no-link:\n%s", out)
+	}
+	if _, err := os.Lstat(link); err == nil {
+		t.Fatal("--no-link made a link")
+	}
+	out := h.ok(human, "vault", "init", "--yes")
+	if !strings.Contains(out, "Open ~/terminatr-obsidian as a vault in Obsidian") {
+		t.Errorf("init:\n%s", out)
+	}
+	if _, err := os.Readlink(link); err != nil {
+		t.Fatalf("no link: %v", err)
+	}
+	if out := h.ok(human, "vault", "doctor"); !strings.Contains(out, "folder link") {
+		t.Errorf("doctor:\n%s", out)
+	}
+	if out := h.ok(human, "vault", "off", "--yes"); !strings.Contains(out, "removed") {
+		t.Errorf("off:\n%s", out)
+	}
+	if _, err := os.Lstat(link); err == nil {
+		t.Error("off left the link")
+	}
 }

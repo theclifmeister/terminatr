@@ -12,7 +12,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/vault"
 )
 
-const vaultUsage = `usage: tm vault init [--plugin] [--yes]
+const vaultUsage = `usage: tm vault init [--plugin] [--link PATH | --no-link] [--yes]
        tm vault render [--project <slug>] [--days N] [--json]
        tm vault doctor [--json]
        tm vault off [--yes]
@@ -27,6 +27,12 @@ writes _tm/ (the Bases and Home.md) and _human/, puts reports stored before the
 vault guard through it (originals kept in state/migrate/), turns the derived
 notes on (state/vault) and renders them. It lists what it changes and asks first
 (--yes without a terminal). A key or file you changed since tm wrote it is kept.
+It also links ~/terminatr-obsidian to the vault (a symlink; a junction on Windows),
+since the projects folder is hidden in ~/.terminatr and hard to pick in Obsidian's
+"Open folder as vault": open that link. tm never overwrites: a file, a folder or a
+link elsewhere at that path is left alone and said so. --link PATH links there
+instead, --no-link makes none. off removes the link only while it is still the
+one init made and still leads to the vault; doctor reports a missing or broken one.
 --plugin also installs terminatr's Obsidian plugin in .obsidian/plugins/terminatr/:
 a NEEDS YOU pane whose buttons run your own tm commands (tm needs, tm task accept,
 tm ask answer, …); you turn it on in Obsidian's Community plugins.
