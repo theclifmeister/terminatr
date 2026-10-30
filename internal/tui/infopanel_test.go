@@ -111,6 +111,16 @@ func TestInfoLines(t *testing.T) {
 	if !strings.Contains(text, "PR        #70") || !strings.Contains(text, "no task") {
 		t.Errorf("without the ticker's PR or a task:\n%s", text)
 	}
+	// T877: why the ticker found none, with and without the report's
+	// PR.
+	d.noPR = "Azure DevOps has no PR from branch b in Shop/web"
+	if l := d.prLine(); l != "#70, not found: Azure DevOps has no PR from branch b in Shop/web" {
+		t.Errorf("not found PR line %q", l)
+	}
+	d.report = nil
+	if l := d.prLine(); l != "none found: Azure DevOps has no PR from branch b in Shop/web" {
+		t.Errorf("none PR line %q", l)
+	}
 	if lines, _ := infoLines(nil, 30, now); len(lines) != 1 {
 		t.Errorf("no data: %q", lines)
 	}

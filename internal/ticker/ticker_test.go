@@ -638,6 +638,15 @@ func TestAzureHost(t *testing.T) {
 	if !strings.HasPrefix(asked[0], "rest --method get --resource 499b84ac-1321-427f-aa17-267ca6975798 --url https://dev.azure.com/acme/Shop/_apis/git/repositories/web/pullrequests?searchCriteria.sourceRefName=refs%2Fheads%2Ftm%2Fdemo%2Ft-0001-fix-it&") {
 		t.Fatalf("asked %q", asked)
 	}
+	// T877: why there is no PR, as tm thread show and the TUI read it.
+	if why := NoPRs(r.tk.o.State, "demo")["t-0001"]; why != "az failed: az is not logged in" {
+		t.Fatalf("no PR while az fails: %q", why)
+	}
+	answer = `{"count":0,"value":[]}`
+	r.sweep(2 * time.Minute)
+	if why := NoPRs(r.tk.o.State, "demo")["t-0001"]; why != "Azure DevOps has no PR from branch tm/demo/t-0001-fix-it in Shop/web" {
+		t.Fatalf("no PR from the branch: %q", why)
+	}
 	r.handleAll()
 	answer = `{"count":1,"value":[{"pullRequestId":12,"status":"active","mergeStatus":"conflicts","repository":{"name":"web","project":{"id":"6ce954b1-ce1f-45d1-b94d-e6bf2464ba2c","name":"Shop"}},"reviewers":[{"vote":-5}]}]}`
 	r.sweep(2 * time.Minute)
@@ -646,6 +655,9 @@ func TestAzureHost(t *testing.T) {
 	}
 	if got := r.tk.st.Projects["demo"].GHFails; got != 0 {
 		t.Fatalf("fails %d after a poll worked", got)
+	}
+	if why, ok := NoPRs(r.tk.o.State, "demo")["t-0001"]; ok {
+		t.Fatalf("no PR once found: %q", why)
 	}
 	var checks, review string
 	for _, p := range r.host.prompts {

@@ -29,3 +29,15 @@ when a file FAIL exists.
 - timeline.json: build 6's timeline: the Check task failed (log 7), its
   Job, Phase and Stage rollups too.
 - buildlog.txt: log 7's lines (`{"count":n,"value":[lines]}` as asked).
+
+Captured on 2026-10-30 (T877), scrubbed the same way, from a YAML
+pipeline (ci, definition 2) that fails when FAIL exists:
+
+- pr-branch-ci.json: PR 7, active, from feature/ci into main, which has
+  no build validation policy; builds-branch.json: its branch's builds
+  (`branchName=refs/heads/feature/ci`), build 8 failed at the PR's head.
+  Its statuses and policy evaluations are empty lists.
+- pr-policy-ci.json: PR 8, from feature/policy into feature/base, which
+  has a blocking build validation policy; policies-ci.json: its
+  evaluation, approved, naming build 7; builds-merge.json:
+  `branchName=refs/pull/8/merge`, build 7 succeeded at the merge commit.

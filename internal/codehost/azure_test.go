@@ -342,13 +342,15 @@ func TestAzurePRLookup(t *testing.T) {
 	if err != nil || pr.Number != 1 || pr.Checks != "fail" {
 		t.Fatalf("by branch: %+v %v", pr, err)
 	}
-	if len(f.asked) != 3 || f.asked[0] != shopRepo+"/pullrequests?searchCriteria.sourceRefName=refs%2Fheads%2Ffeature%2Fpass&searchCriteria.status=all&$top=20&api-version=7.1" {
+	if len(f.asked) != 5 || f.asked[0] != shopRepo+"/pullrequests?searchCriteria.sourceRefName=refs%2Fheads%2Ffeature%2Fpass&searchCriteria.status=all&$top=20&api-version=7.1" {
 		t.Fatalf("asked %q", f.asked)
 	}
 	for _, c := range f.asked[1:] {
 		switch c {
 		case "https://dev.azure.com/acme/Shop/_apis/policy/evaluations?artifactId=vstfs%3A%2F%2F%2FCodeReview%2FCodeReviewId%2F" + shopPID + "%2F1&api-version=7.1-preview.1":
 		case shopRepo + "/pullRequests/1/statuses?api-version=7.1-preview.1":
+		case "https://dev.azure.com/acme/Shop/_apis/build/builds?branchName=refs%2Fheads%2Ffeature%2Fpass&queryOrder=queueTimeDescending&$top=20&api-version=7.1":
+		case "https://dev.azure.com/acme/Shop/_apis/build/builds?branchName=refs%2Fpull%2F1%2Fmerge&queryOrder=queueTimeDescending&$top=20&api-version=7.1":
 		default:
 			t.Fatalf("asked %q", c)
 		}
@@ -388,7 +390,7 @@ func TestAzurePRLookup(t *testing.T) {
 	// A PR without its project's id asks no policies.
 	f.answers["pr"] = strings.ReplaceAll(string(fixture(t, "pr-active.json")), shopPID, "not-a-guid")
 	f.asked = nil
-	if _, err := a.PR("/r", Ref{Number: 1}); err != nil || len(f.asked) != 2 {
+	if _, err := a.PR("/r", Ref{Number: 1}); err != nil || len(f.asked) != 4 {
 		t.Fatalf("no project id: %v %q", err, f.asked)
 	}
 
@@ -707,7 +709,7 @@ func TestAzureFailedLog(t *testing.T) {
 	// the merge ref's failed builds; the log's last 2000 lines
 	b := "https://dev.azure.com/acme/Shop/_apis/build/builds"
 	want := []string{
-		b + "?branchName=refs/pull/12/merge&resultFilter=failed&queryOrder=queueTimeDescending&$top=" + fmt.Sprint(logRuns) + "&api-version=7.1",
+		b + "?branchName=refs%2Fpull%2F12%2Fmerge&resultFilter=failed&queryOrder=queueTimeDescending&$top=20&api-version=7.1",
 		b + "/6/timeline?api-version=7.1",
 		b + "/6/logs?api-version=7.1",
 		b + "/6/logs/7?startLine=3001&endLine=5000&api-version=7.1",

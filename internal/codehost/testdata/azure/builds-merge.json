@@ -1,0 +1,150 @@
+{
+ "count": 1,
+ "value": [
+  {
+   "_links": {
+    "badge": {
+     "href": "https://dev.azure.com/acme/6ce954b1-ce1f-45d1-b94d-e6bf2464ba2c/_apis/build/status/2"
+    },
+    "self": {
+     "href": "https://dev.azure.com/acme/6ce954b1-ce1f-45d1-b94d-e6bf2464ba2c/_apis/build/Builds/7"
+    },
+    "sourceVersionDisplayUri": {
+     "href": "https://dev.azure.com/acme/6ce954b1-ce1f-45d1-b94d-e6bf2464ba2c/_apis/build/builds/7/sources"
+    },
+    "timeline": {
+     "href": "https://dev.azure.com/acme/6ce954b1-ce1f-45d1-b94d-e6bf2464ba2c/_apis/build/builds/7/Timeline"
+    },
+    "web": {
+     "href": "https://dev.azure.com/acme/6ce954b1-ce1f-45d1-b94d-e6bf2464ba2c/_build/results?buildId=7"
+    }
+   },
+   "appendCommitMessageToRunName": true,
+   "buildNumber": "20261030.1",
+   "buildNumberRevision": 1,
+   "definition": {
+    "drafts": [],
+    "id": 2,
+    "name": "ci",
+    "path": "\\",
+    "project": {
+     "id": "6ce954b1-ce1f-45d1-b94d-e6bf2464ba2c",
+     "lastUpdateTime": "2026-10-07T11:39:10.653Z",
+     "name": "Shop",
+     "revision": 11,
+     "state": "wellFormed",
+     "url": "https://dev.azure.com/acme/_apis/projects/6ce954b1-ce1f-45d1-b94d-e6bf2464ba2c",
+     "visibility": "private"
+    },
+    "queueStatus": "enabled",
+    "revision": 1,
+    "type": "build",
+    "uri": "vstfs:///Build/Definition/2",
+    "url": "https://dev.azure.com/acme/6ce954b1-ce1f-45d1-b94d-e6bf2464ba2c/_apis/build/Definitions/2?revision=1"
+   },
+   "finishTime": "2026-10-30T11:53:55.115402Z",
+   "id": 7,
+   "lastChangedBy": {
+    "_links": {
+     "avatar": {
+      "href": "https://dev.azure.com/acme/_apis/GraphProfile/MemberAvatars/s2s.REDACTED"
+     }
+    },
+    "descriptor": "s2s.REDACTED",
+    "displayName": "Microsoft.VisualStudio.Services.TFS",
+    "id": "00000002-0000-8888-8000-000000000000",
+    "imageUrl": "https://dev.azure.com/acme/_apis/GraphProfile/MemberAvatars/s2s.REDACTED",
+    "uniqueName": "00000002-0000-8888-8000-000000000000@da0c281d-333e-425b-a4aa-cb94ce7f4b33",
+    "url": "https://example.vssps.visualstudio.com/A89da6a07-3223-4728-a7aa-7b1e0b23a6b3/_apis/Identities/00000002-0000-8888-8000-000000000000"
+   },
+   "lastChangedDate": "2026-10-30T11:53:55.457Z",
+   "logs": {
+    "id": 0,
+    "type": "Container",
+    "url": "https://dev.azure.com/acme/6ce954b1-ce1f-45d1-b94d-e6bf2464ba2c/_apis/build/builds/7/logs"
+   },
+   "orchestrationPlan": {
+    "planId": "8d028c72-1d5d-4786-aba8-d57cf7e02957"
+   },
+   "parameters": "{\"system.pullRequest.pullRequestId\":\"8\",\"system.pullRequest.sourceBranch\":\"refs/heads/feature/policy\",\"system.pullRequest.targetBranch\":\"refs/heads/feature/base\",\"system.pullRequest.targetBranchName\":\"feature/base\",\"system.pullRequest.sourceCommitId\":\"d9046af93f190418efa6000c47f966d191f499e2\",\"system.pullRequest.sourceRepositoryUri\":\"https://acme@dev.azure.com/acme/Shop/_git/web\",\"system.pullRequest.pullRequestIteration\":\"1\"}",
+   "plans": [
+    {
+     "planId": "8d028c72-1d5d-4786-aba8-d57cf7e02957"
+    }
+   ],
+   "priority": "normal",
+   "project": {
+    "id": "6ce954b1-ce1f-45d1-b94d-e6bf2464ba2c",
+    "lastUpdateTime": "2026-10-07T11:39:10.653Z",
+    "name": "Shop",
+    "revision": 11,
+    "state": "wellFormed",
+    "url": "https://dev.azure.com/acme/_apis/projects/6ce954b1-ce1f-45d1-b94d-e6bf2464ba2c",
+    "visibility": "private"
+   },
+   "properties": {},
+   "queue": {
+    "id": 9,
+    "name": "Azure Pipelines",
+    "pool": {
+     "id": 9,
+     "isHosted": true,
+     "name": "Azure Pipelines"
+    }
+   },
+   "queueTime": "2026-10-30T11:53:35.8426283Z",
+   "reason": "pullRequest",
+   "repository": {
+    "checkoutSubmodules": false,
+    "clean": null,
+    "id": "3411ebc1-d5aa-464f-9615-0b527bc66719",
+    "name": "web",
+    "type": "TfsGit",
+    "url": "https://dev.azure.com/acme/Shop/_git/web"
+   },
+   "requestedBy": {
+    "_links": {
+     "avatar": {
+      "href": "https://dev.azure.com/acme/_apis/GraphProfile/MemberAvatars/s2s.REDACTED"
+     }
+    },
+    "descriptor": "s2s.REDACTED",
+    "displayName": "Microsoft.VisualStudio.Services.TFS",
+    "id": "00000002-0000-8888-8000-000000000000",
+    "imageUrl": "https://dev.azure.com/acme/_apis/GraphProfile/MemberAvatars/s2s.REDACTED",
+    "uniqueName": "00000002-0000-8888-8000-000000000000@da0c281d-333e-425b-a4aa-cb94ce7f4b33",
+    "url": "https://example.vssps.visualstudio.com/A89da6a07-3223-4728-a7aa-7b1e0b23a6b3/_apis/Identities/00000002-0000-8888-8000-000000000000"
+   },
+   "requestedFor": {
+    "_links": {
+     "avatar": {
+      "href": "https://dev.azure.com/acme/_apis/GraphProfile/MemberAvatars/aad.REDACTED"
+     }
+    },
+    "descriptor": "aad.REDACTED",
+    "displayName": "ada",
+    "id": "e6fb14c5-91d5-4170-a41d-712f262c858d",
+    "imageUrl": "https://dev.azure.com/acme/_apis/GraphProfile/MemberAvatars/aad.REDACTED",
+    "uniqueName": "ada@example.com",
+    "url": "https://example.vssps.visualstudio.com/A89da6a07-3223-4728-a7aa-7b1e0b23a6b3/_apis/Identities/e6fb14c5-91d5-4170-a41d-712f262c858d"
+   },
+   "result": "succeeded",
+   "retainedByRelease": false,
+   "sourceBranch": "refs/pull/8/merge",
+   "sourceVersion": "c9018378bf768cbd37d35cc5ccccbeaf65020ca8",
+   "startTime": "2026-10-30T11:53:43.8695199Z",
+   "status": "completed",
+   "tags": [],
+   "triggerInfo": {
+    "pr.isFork": "False",
+    "pr.number": "8",
+    "pr.triggerRepository": "3411ebc1-d5aa-464f-9615-0b527bc66719",
+    "pr.triggerRepository.Type": "TfsGit"
+   },
+   "triggeredByBuild": null,
+   "uri": "vstfs:///Build/Build/7",
+   "url": "https://dev.azure.com/acme/6ce954b1-ce1f-45d1-b94d-e6bf2464ba2c/_apis/build/Builds/7",
+   "validationResults": []
+  }
+ ]
+}

@@ -64,6 +64,9 @@ func runAZ(dir string, args ...string) ([]byte, error) {
 		"AZURE_CORE_ONLY_SHOW_ERRORS=true",
 		"AZURE_CORE_SURVEY_MESSAGE=false",
 		"AZURE_EXTENSION_USE_DYNAMIC_INSTALL=no",
+		// No az log file under ~/.azure: a folder it can't write (a
+		// sandbox, a full disk) fails every call.
+		"AZURE_LOGGING_ENABLE_LOG_FILE=false",
 	)
 	var errb bytes.Buffer
 	cmd.Stderr = &errb
@@ -152,8 +155,9 @@ func (a Azure) prURL(n int) string {
 
 // PR asks Azure DevOps about ref: the PR by number (or a PR URL of this
 // repo), else the repo's PRs by source branch, preferring an active PR,
-// else the newest. An open PR's policy evaluations and statuses are
-// asked too, at once. A PR of another repo is ErrNoPR.
+// else the newest. An open PR's policy evaluations, statuses and builds
+// (its source branch's and its merge ref's) are asked too, at once. No
+// PR, or a PR of another repo, is a *NoPRError saying which.
 func (a Azure) PR(repo string, ref Ref) (PR, error) {
 	n := ref.Number
 	if n <= 0 {
@@ -166,12 +170,13 @@ func (a Azure) PR(repo string, ref Ref) (PR, error) {
 	if a.Target.OrgURL == "" || a.Target.Project == "" || a.Target.Repo == "" {
 		return PR{}, fmt.Errorf("azure devops: no organization, project or repo for %s", repo)
 	}
+	where := azWhere(a.Target.Project, a.Target.Repo)
 	var raw []byte
 	if n > 0 {
 		out, err := a.get(repo, a.prURL(n))
 		if err != nil {
 			if azNoPR.MatchString(err.Error()) {
-				return PR{}, fmt.Errorf("%w: %v", ErrNoPR, err)
+				return PR{}, &NoPRError{Why: fmt.Sprintf("Azure DevOps has no PR %d in %s", n, where), Err: err}
 			}
 			return PR{}, err
 		}
@@ -183,14 +188,18 @@ func (a Azure) PR(repo string, ref Ref) (PR, error) {
 			return PR{}, err
 		}
 		if raw = pickAzurePR(out); raw == nil {
-			return PR{}, ErrNoPR
+			return PR{}, &NoPRError{Why: fmt.Sprintf("Azure DevOps has no PR from branch %s in %s", branch, where)}
 		}
 	}
 	var head azPR
-	if err := json.Unmarshal(raw, &head); err != nil || head.ID <= 0 || !a.ours(head) {
-		return PR{}, ErrNoPR
+	if err := json.Unmarshal(raw, &head); err != nil || head.ID <= 0 {
+		return PR{}, &NoPRError{Why: "Azure DevOps answered with no PR tm can read"}
 	}
-	var policies, statuses []byte
+	if !a.ours(head) {
+		return PR{}, &NoPRError{Why: fmt.Sprintf("PR %d is of %s, not of %s, the repo's origin", head.ID,
+			azWhere(head.Repository.Project.Name, head.Repository.Name), where)}
+	}
+	var policies, statuses, builds, mergeBuilds []byte
 	if head.Status == "active" {
 		var perr error
 		var wg sync.WaitGroup
@@ -201,22 +210,54 @@ func (a Azure) PR(repo string, ref Ref) (PR, error) {
 					url.QueryEscape("vstfs:///CodeReview/CodeReviewId/"+pid+"/"+strconv.Itoa(head.ID))+"&api-version=7.1-preview.1")
 			})
 		}
+		// External statuses and builds are extra: without them the
+		// policies still say what blocks the PR.
 		wg.Go(func() {
-			// External statuses are extra: without them the policies
-			// still say what blocks the PR.
 			statuses, _ = a.get(repo, fmt.Sprintf("%s/pullRequests/%d/statuses?api-version=7.1-preview.1", a.repoURL(), head.ID))
 		})
+		// A pipeline a push to the branch triggers builds the branch,
+		// with no policy or status to say so (T877).
+		if strings.HasPrefix(head.SourceRefName, "refs/heads/") {
+			wg.Go(func() { builds, _ = a.get(repo, a.buildsURL(head.SourceRefName, "")) })
+		}
+		wg.Go(func() { mergeBuilds, _ = a.get(repo, a.buildsURL(mergeRef(head.ID), "")) })
 		wg.Wait()
 		if perr != nil {
 			return PR{}, perr
 		}
 	}
-	pr, err := azurePR(a.Target, raw, policies, statuses)
+	pr, err := azurePR(a.Target, raw, policies, statuses, builds, mergeBuilds)
 	if err != nil || pr.Number == 0 {
-		return PR{}, ErrNoPR
+		return PR{}, &NoPRError{Why: "Azure DevOps answered with no PR tm can read"}
 	}
 	return pr, nil
 }
+
+// azWhere is "project/repo" as a reason may name it: "another repo"
+// for names that aren't plain.
+func azWhere(project, repo string) string {
+	if !azNameRE.MatchString(project) || !azNameRE.MatchString(repo) {
+		return "another repo"
+	}
+	return project + "/" + repo
+}
+
+// mergeRef is the ref Azure DevOps builds PR n's merge commit on.
+func mergeRef(n int) string { return "refs/pull/" + strconv.Itoa(n) + "/merge" }
+
+// buildsURL is the REST URL of the project's newest builds of ref,
+// newest first, of result ("failed") or any ("").
+func (a Azure) buildsURL(ref, result string) string {
+	u := a.projectURL() + "/_apis/build/builds?branchName=" + url.QueryEscape(ref)
+	if result != "" {
+		u += "&resultFilter=" + result
+	}
+	return u + "&queryOrder=queueTimeDescending&$top=" + strconv.Itoa(azBuildsTop) + "&api-version=7.1"
+}
+
+// azBuildsTop is how many of a ref's builds are asked for: enough for
+// each pipeline's newest.
+const azBuildsTop = 20
 
 // ours reports whether pr is of the Target's project and repo (names
 // are case-insensitive on Azure DevOps). A PR number can name any PR of
@@ -271,6 +312,7 @@ type azPR struct {
 		HasDeclined bool `json:"hasDeclined"`
 	} `json:"reviewers"`
 	Repository struct {
+		ID      string `json:"id"`
 		Name    string `json:"name"`
 		Project struct {
 			ID   string `json:"id"`
@@ -329,6 +371,34 @@ type azStatus struct {
 	} `json:"context"`
 }
 
+// azBuild is one Build as a builds list names it.
+type azBuild struct {
+	ID            int    `json:"id"`
+	Status        string `json:"status"`
+	Result        string `json:"result"`
+	SourceBranch  string `json:"sourceBranch"`
+	SourceVersion string `json:"sourceVersion"`
+	Definition    struct {
+		ID int `json:"id"`
+	} `json:"definition"`
+	Repository struct {
+		ID   string `json:"id"`
+		Name string `json:"name"`
+		Type string `json:"type"`
+	} `json:"repository"`
+}
+
+// ofRepo reports whether b built the repo of pr (or t, by name).
+func (b azBuild) ofRepo(t Target, pr azPR) bool {
+	if b.Repository.Type != "" && b.Repository.Type != "TfsGit" {
+		return false
+	}
+	if b.Repository.ID != "" && pr.Repository.ID != "" {
+		return strings.EqualFold(b.Repository.ID, pr.Repository.ID)
+	}
+	return strings.EqualFold(b.Repository.Name, t.Repo)
+}
+
 // Policy types by their well-known ids (the same in every
 // organization), with their English names for a record without one.
 const (
@@ -362,9 +432,10 @@ func isStatusPolicy(p azPolicy) bool {
 
 // azurePR maps Azure DevOps' answers onto the fixed fields
 // (docs/SPEC.md §7.5): pr is a GitPullRequest, policies the PR's policy
-// evaluation records and statuses its statuses (both lists, either
-// form of azValues, and may be nil). t is the repo it was asked for: the URL is built from it, never
-// taken from the answer. Anything outside the expected shapes is
+// evaluation records, statuses its statuses and builds lists of builds
+// (its source branch's, its merge ref's; all lists, either form of
+// azValues, and may be nil). t is the repo it was asked for: the URL is
+// built from it, never taken from the answer. Anything outside the expected shapes is
 // dropped, not passed on.
 //
 //   - status active, completed, abandoned => OPEN, MERGED, CLOSED; a
@@ -381,6 +452,12 @@ func isStatusPolicy(p azPolicy) bool {
 //     requeued by itself); approved, succeeded => pass;
 //     notApplicable => nothing. Reviewer, comment and other policies are
 //     no checks.
+//   - Builds are checks too, each pipeline's newest of the source
+//     branch at the head commit (a push's trigger, with no policy or
+//     status of its own) and of the merge ref at the merge commit, less
+//     the merge ref's of a pipeline a build policy names a build of:
+//     failed => fail; notStarted, inProgress, postponed => pending;
+//     succeeded, partiallySucceeded => pass; canceled => nothing.
 //   - Review: any vote of -5 (waiting for the author) or -10 (rejected)
 //     => CHANGES_REQUESTED; else a blocking reviewer policy not yet
 //     approved, or a required reviewer without a vote of 5 or 10 =>
@@ -389,7 +466,7 @@ func isStatusPolicy(p azPolicy) bool {
 //   - closedDate => MergedAt, lastMergeCommit => Merge (both MERGED
 //     only), lastMergeSourceCommit => Head, targetRefName => Base,
 //     sourceRefName => Branch.
-func azurePR(t Target, pr, policies, statuses []byte) (PR, error) {
+func azurePR(t Target, pr, policies, statuses []byte, builds ...[]byte) (PR, error) {
 	var a azPR
 	if err := json.Unmarshal(pr, &a); err != nil {
 		return PR{}, err
@@ -448,6 +525,7 @@ func azurePR(t Target, pr, policies, statuses []byte) (PR, error) {
 	pending, ran := false, false
 	reviewBlocked := false
 	covered := map[string]bool{} // genre/name of the status policies
+	policyBuilds := map[int]bool{}
 	for _, p := range pols {
 		if p.Configuration.IsEnabled != nil && !*p.Configuration.IsEnabled {
 			continue
@@ -457,6 +535,8 @@ func azurePR(t Target, pr, policies, statuses []byte) (PR, error) {
 		case "ci":
 			if isStatusPolicy(p) {
 				covered[strings.ToLower(p.Configuration.Settings.StatusGenre+"/"+p.Configuration.Settings.StatusName)] = true
+			} else if p.Context != nil && p.Context.BuildID > 0 {
+				policyBuilds[p.Context.BuildID] = true
 			}
 			switch p.Status {
 			case "rejected", "broken":
@@ -503,6 +583,17 @@ func azurePR(t Target, pr, policies, statuses []byte) (PR, error) {
 			ran = true
 		}
 	}
+	for _, b := range azBuildChecks(t, a, head, merge, policyBuilds, builds) {
+		switch {
+		case b.Status == "completed" && b.Result == "failed":
+			out.Failed++
+			ran = true
+		case b.Status == "completed" && (b.Result == "succeeded" || b.Result == "partiallySucceeded"):
+			ran = true
+		case b.Status == "notStarted" || b.Status == "inProgress" || b.Status == "postponed":
+			pending, ran = true, true
+		}
+	}
 	switch {
 	case out.Failed > 0:
 		out.Checks = "fail"
@@ -532,6 +623,48 @@ func azurePR(t Target, pr, policies, statuses []byte) (PR, error) {
 		out.Review = "APPROVED"
 	}
 	return out, nil
+}
+
+// azBuildChecks are the builds of lists that count as pr's checks
+// (azurePR): per pipeline, the newest of pr's source branch at head and
+// of its merge ref at merge, of its repo, less the merge ref's of a
+// pipeline one of policyBuilds is of.
+func azBuildChecks(t Target, pr azPR, head, merge string, policyBuilds map[int]bool, lists [][]byte) []azBuild {
+	var all []azBuild
+	byPolicy := map[int]bool{} // pipelines a build policy builds the merge ref with
+	for _, list := range lists {
+		for _, raw := range azValues(list) {
+			var b azBuild
+			if json.Unmarshal(raw, &b) != nil || b.ID <= 0 || !b.ofRepo(t, pr) {
+				continue
+			}
+			if b.SourceBranch == mergeRef(pr.ID) && policyBuilds[b.ID] {
+				byPolicy[b.Definition.ID] = true
+			}
+			all = append(all, b)
+		}
+	}
+	newest := map[string]azBuild{}
+	for _, b := range all {
+		var key string
+		switch {
+		case head != "" && b.SourceBranch == pr.SourceRefName && b.SourceVersion == head:
+			key = "branch"
+		case merge != "" && b.SourceBranch == mergeRef(pr.ID) && b.SourceVersion == merge && !byPolicy[b.Definition.ID]:
+			key = "merge"
+		default:
+			continue
+		}
+		key += "/" + strconv.Itoa(b.Definition.ID)
+		if old, ok := newest[key]; !ok || b.ID > old.ID {
+			newest[key] = b
+		}
+	}
+	out := make([]azBuild, 0, len(newest))
+	for _, b := range newest {
+		out = append(out, b)
+	}
+	return out
 }
 
 // azurePRURL is the web URL of PR n of t's repo,
