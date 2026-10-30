@@ -54,9 +54,10 @@ type boardTask struct {
 // design is what a design's note and canvas come from.
 type design struct {
 	project.DesignBuild
-	task  *boardTask  // the design task, when it is on a board
-	build []boardTask // the tasks that name it, but the design task, by id
-	depth map[int]int // each build task's depth in the after graph
+	task  *boardTask        // the design task, when it is on a board
+	build []boardTask       // the tasks that name it, but the design task, by id
+	depth map[int]int       // each build task's depth in the after graph
+	prs   map[string]string // each thread's latest PR URL
 }
 
 // DesignNote and DesignCanvas are the paths of design name's note and
@@ -65,14 +66,14 @@ func DesignNote(name string) string   { return "designs/" + name + ".md" }
 func DesignCanvas(name string) string { return "designs/" + name + ".canvas" }
 
 // designNotes renders the note and canvas of every design.
-func designNotes(p *project.Project, boards ...*tasks.Board) ([]Note, error) {
+func designNotes(p *project.Project, prs map[string]string, boards ...*tasks.Board) ([]Note, error) {
 	builds, err := p.DesignBuilds(boards...)
 	if err != nil {
 		return nil, err
 	}
 	var notes []Note
 	for _, db := range builds {
-		d := &design{DesignBuild: db}
+		d := &design{DesignBuild: db, prs: prs}
 		if db.DesignTask != nil {
 			d.task = &boardTask{db.DesignTask}
 		}
@@ -184,7 +185,8 @@ func (d *design) ordered() []boardTask {
 // after it. Sizes in canvas pixels.
 const (
 	firstW, noteH, linkH, questionH = 360, 220, 240, 160
-	taskW, taskH                    = 280, 120
+	taskW                           = 380
+	oldTaskW, oldTaskH              = 280, 120 // a file card of the first renders
 	gapX, gapY, pad                 = 80, 40, 40
 	maxCanvas                       = 8 << 20
 )
@@ -216,6 +218,8 @@ func statusColor(s tasks.Status) string {
 // node is one of tm's canvas nodes.
 type node struct {
 	id, typ, file, url, text, label, color string
+	match                                  string // the file a human's file node is taken over by
+	fit                                    bool   // tm sizes it to its text: a re-render resizes it
 	x, y, w, h                             float64
 }
 
@@ -242,7 +246,7 @@ func layout(slug string, d *design) ([]node, []edge) {
 	if n := len(d.Answers) + len(d.Questions); n > 0 {
 		label += fmt.Sprintf(" · decided %d/%d", len(d.Answers), n)
 	}
-	nodes := []node{{}, {id: "tm-note", typ: "file", file: slug + "/" + DesignNote(d.Name), w: firstW, h: noteH}}
+	nodes := []node{{}, {id: "tm-note", typ: "file", file: slug + "/" + DesignNote(d.Name), match: slug + "/" + DesignNote(d.Name), w: firstW, h: noteH}}
 	y := float64(noteH + gapY)
 	if d.Artifact != "" {
 		nodes = append(nodes, node{id: "tm-artifact", typ: "link", url: d.Artifact, y: y, w: firstW, h: linkH})
@@ -259,7 +263,7 @@ func layout(slug string, d *design) ([]node, []edge) {
 	for _, t := range d.build {
 		drawn[t.ID] = !t.Archived
 	}
-	rows := map[int]int{}
+	rows := map[int]float64{} // the next free y of each column
 	var edges []edge
 	for _, t := range d.ordered() {
 		if !drawn[t.ID] {
@@ -267,11 +271,12 @@ func layout(slug string, d *design) ([]node, []edge) {
 		}
 		col := d.depth[t.ID]
 		id := "tm-" + t.Ref()
+		text, h := d.card(slug, t)
 		nodes = append(nodes, node{
-			id: id, typ: "file", file: slug + "/" + TaskNote(t.Ref()), color: statusColor(t.Status),
-			x: firstW + gapX + float64(col*(taskW+gapX)), y: float64(rows[col] * (taskH + gapY)), w: taskW, h: taskH,
+			id: id, typ: "text", match: slug + "/" + TaskNote(t.Ref()), text: text, color: statusColor(t.Status), fit: true,
+			x: firstW + gapX + float64(col*(taskW+gapX)), y: rows[col], w: taskW, h: h,
 		})
-		rows[col]++
+		rows[col] += h + gapY
 		from := 0
 		for _, a := range t.After {
 			if drawn[a] {
@@ -289,6 +294,35 @@ func layout(slug string, d *design) ([]node, []edge) {
 	}
 	nodes[0] = node{id: "tm-group", typ: "group", label: label, x: -pad, y: -pad, w: right + 2*pad, h: bottom + 2*pad}
 	return nodes, edges
+}
+
+// card is a task's card: its title in bold, then a small line with its
+// linked id, status, steps, PR and thread, and the card's height for
+// it. All tm's words and the title through the guard, never agent text.
+func (d *design) card(slug string, t boardTask) (string, float64) {
+	title := heading(t.Title)
+	meta := []string{vaultlink.Link(slug, vaultlink.Task, t.Ref(), ""), string(t.Status)}
+	if n := len(t.Steps); n > 0 {
+		meta = append(meta, fmt.Sprintf("%d/%d steps", t.StepsDone(), n))
+	}
+	if pr := d.prs[t.Thread]; t.Thread != "" && pr != "" {
+		if i := strings.LastIndex(pr, "/"); i >= 0 && i+1 < len(pr) {
+			meta = append(meta, "["+"#"+pr[i+1:]+"]("+pr+")")
+		}
+	}
+	if t.Thread != "" {
+		meta = append(meta, vaultlink.Link(slug, vaultlink.Thread, t.Thread, ""))
+	}
+	line := strings.Join(meta, " · ")
+	text := "**" + title + "**\n\n<small>" + line + "</small>"
+	// About 30 title characters and 48 small ones fit a line.
+	h := 28 + 26*lines(title, 30) + 24*lines(line, 48)
+	return text, float64(max(h, 100))
+}
+
+// lines is how many lines of width w s takes, at least one.
+func lines(s string, w int) int {
+	return max(1, (len([]rune(s))+w-1)/w)
 }
 
 // designCanvas renders d's canvas over the one there: false when that
@@ -354,11 +388,12 @@ func mergeCanvas(old []byte, nodes []node, edges []edge) ([]byte, error) {
 	byFile := map[string]int{}
 	for i, n := range nodes {
 		mine[n.id] = i
-		if n.file != "" {
-			byFile[n.file] = i
+		if n.match != "" {
+			byFile[n.match] = i
 		}
 	}
 	// Match the canvas's nodes to tm's: by id, then a file node by file.
+	// A task's card was a file node once: it is replaced in place.
 	at := make([]int, len(oldNodes)) // tm's index, or -1
 	found := make([]bool, len(nodes))
 	renamed := map[string]string{}
@@ -406,8 +441,17 @@ func mergeCanvas(old []byte, nodes []node, edges []edge) ([]byte, error) {
 		w, okw := num(o, "width")
 		h, okh := num(o, "height")
 		if okx && oky && okw && okh && w > 0 && h > 0 {
-			if i == 0 {
+			switch {
+			case i == 0:
 				w, h = max(w, n.w), max(h, n.h)
+			case n.fit:
+				// The card's size is its text's. Where a file card of the
+				// first renders still sits on its grid, it was never
+				// moved: it takes the new layout's place.
+				if str(o, "type") == "file" && onOldGrid(x-dx, y-dy, w, h) {
+					continue
+				}
+				w, h = n.w, n.h
 			}
 			n.x, n.y, n.w, n.h = x, y, w, h
 		}
@@ -469,6 +513,16 @@ func mergeCanvas(old []byte, nodes []node, edges []edge) ([]byte, error) {
 		return nil, err
 	}
 	return encode(top)
+}
+
+// onOldGrid is whether a file card of size w x h is where the first
+// renders put one: 280 x 120 in the columns after the first, 160 apart.
+func onOldGrid(x, y, w, h float64) bool {
+	if w != oldTaskW || h != oldTaskH {
+		return false
+	}
+	cx, cy := (x-firstW-gapX)/(oldTaskW+gapX), y/(oldTaskH+gapY)
+	return cx >= 0 && cx == math.Trunc(cx) && cy >= 0 && cy == math.Trunc(cy)
 }
 
 // encode is v as JSON with tabs, as Obsidian writes a canvas, without

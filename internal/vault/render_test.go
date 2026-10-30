@@ -111,7 +111,7 @@ func TestRender(t *testing.T) {
 	if Stamp(p) == stamp {
 		t.Fatal("stamp unchanged by a step")
 	}
-	if w, _, err := Render(p); err != nil || w != 1 || !strings.Contains(read("tasks/T2.md"), "- [x] one") {
+	if w, _, err := Render(p); err != nil || w != 2 || !strings.Contains(read("tasks/T2.md"), "- [x] one") {
 		t.Fatalf("after a step: %d written, %v", w, err)
 	}
 	s.Archive(human, 1)
