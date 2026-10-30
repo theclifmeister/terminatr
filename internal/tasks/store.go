@@ -41,10 +41,10 @@ type Store struct {
 }
 
 // TasksPath is <project>/TASKS.md.
-func (s *Store) TasksPath() string { return filepath.Join(s.Dir, "TASKS.md") }
+func (s *Store) TasksPath() string { return Paths(s.Dir)[0] }
 
 // ArchivePath is <project>/tasks/ARCHIVE.md.
-func (s *Store) ArchivePath() string { return filepath.Join(s.Dir, "tasks", "ARCHIVE.md") }
+func (s *Store) ArchivePath() string { return Paths(s.Dir)[1] }
 
 func (s *Store) today() string {
 	now := time.Now

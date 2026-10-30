@@ -859,7 +859,7 @@ func DailyStamp(now time.Time) string {
 			continue
 		}
 		b.WriteString(e.Name() + ":")
-		for _, name := range []string{"JOURNAL.md", "journal", "TASKS.md", "tasks/ARCHIVE.md"} {
+		for _, name := range append([]string{"JOURNAL.md", "journal"}, tasks.Rels()...) {
 			if fi, err := os.Stat(filepath.Join(root, e.Name(), filepath.FromSlash(name))); err == nil {
 				fmt.Fprintf(&b, "%d.%d;", fi.Size(), fi.ModTime().UnixNano())
 			} else {

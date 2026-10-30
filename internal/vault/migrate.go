@@ -22,6 +22,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/mdfile"
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 	"github.com/theclifmeister/terminatr/internal/project"
+	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/thread"
 )
 
@@ -106,7 +107,7 @@ func Pending() ([]File, error) {
 
 // pending is Pending for project slug in dir.
 func pending(slug, dir string) ([]File, error) {
-	rels := []string{"PROJECT.md", "CONTEXT.md", "MEMORY.md", "TASKS.md", "tasks/ARCHIVE.md"}
+	rels := append([]string{"PROJECT.md", "CONTEXT.md", "MEMORY.md"}, tasks.Rels()...)
 	for _, d := range []string{"memory", "inbox"} {
 		ents, _ := os.ReadDir(filepath.Join(dir, d))
 		for _, e := range ents {

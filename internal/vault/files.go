@@ -3,6 +3,8 @@ package vault
 import (
 	"fmt"
 	"strings"
+
+	"github.com/theclifmeister/terminatr/internal/tasks"
 )
 
 // The files tm writes whole into the vault (setup.go): the CSS snippet,
@@ -211,7 +213,7 @@ func homeNote(slugs []string) string {
 		b.WriteString("No project yet: `tm project new`.\n")
 	}
 	for _, s := range slugs {
-		fmt.Fprintf(&b, "- [[%s/PROJECT|%s]] · [[%s/TASKS|board]] · [[%s/CONTEXT|context]] · [[%s/MEMORY|memory]]\n", s, s, s, s, s)
+		fmt.Fprintf(&b, "- [[%s/PROJECT|%s]] · [[%s/%s|board]] · [[%s/CONTEXT|context]] · [[%s/MEMORY|memory]]\n", s, s, s, tasks.BoardNote(), s, s)
 	}
 	b.WriteString("\n## Bases\n\n")
 	for _, n := range []string{"Tasks", "Threads", "Memory", "Inbox", "Messages"} {

@@ -270,8 +270,9 @@ func Stamp(p *project.Project) string {
 			b.WriteString("-;")
 		}
 	}
-	stamp(p.Path("TASKS.md"))
-	stamp(p.Path("tasks", "ARCHIVE.md"))
+	for _, path := range tasks.Paths(p.Dir) {
+		stamp(path)
+	}
 	stamp(p.Path("designs.json"))
 	stamp(p.Path("questions.json"))
 	files, _ := os.ReadDir(p.Path("designs"))
