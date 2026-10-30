@@ -58,7 +58,7 @@ struct DesignsTiles: View {
                 }
             }
         }
-        .task(id: DesignsRead(project: project, generation: model.generation)) {
+        .task(id: DesignsRead(project: project, sessions: model.sessions, generation: model.generation)) {
             do {
                 designs = try await model.designs(project.slug)
                 error = nil
@@ -70,19 +70,22 @@ struct DesignsTiles: View {
 }
 
 /// When a project's designs are read again: its board, counts or open
-/// questions changed, or the link came back.
+/// questions changed, a thread started or ended a turn on a task
+/// (Designs.working), or the link came back.
 struct DesignsRead: Equatable {
     let slug: String
     let board: [String]
     let counts: [String: Int]
     let questions: Int
+    let working: [String]
     let generation: Int
 
-    init(project p: AppAPI.Project, generation: Int) {
+    init(project p: AppAPI.Project, sessions: [AppAPI.Session], generation: Int) {
         slug = p.slug
         board = p.board.map { "\($0.ref) \($0.status) \($0.updated)" }
         counts = p.counts
         questions = p.questions
+        working = Designs.working(sessions, project: p.slug)
         self.generation = generation
     }
 }
@@ -126,7 +129,7 @@ struct DesignScreen: View {
             .padding(.bottom, Spacing.gutter)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .task(id: model.project(slug).map { DesignsRead(project: $0, generation: model.generation) }) {
+        .task(id: model.project(slug).map { DesignsRead(project: $0, sessions: model.sessions, generation: model.generation) }) {
             do {
                 design = try await model.designs(slug).first { $0.name == name }
                 error = nil
@@ -252,7 +255,7 @@ struct DesignScreen: View {
 
     private func buildRow(_ t: AppAPI.DesignTask, rule: Bool) -> some View {
         line(rule: rule) {
-            StateGlyph(Designs.tone(task: t), side: 24)
+            StateGlyph(Designs.tone(task: t), side: 24, symbol: Designs.symbol(task: t))
             VStack(alignment: .leading, spacing: 2) {
                 HStack(alignment: .firstTextBaseline, spacing: Spacing.tight) {
                     Text(t.id)

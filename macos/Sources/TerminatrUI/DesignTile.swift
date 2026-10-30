@@ -2,7 +2,8 @@ import SwiftUI
 import TerminatrKit
 
 /// A design's row (T864), as a SessionTile: its StateGlyph in its tone
-/// (Designs.tone), its title, its facts under it (design task, open
+/// (Designs.tone), a still hammer while it is built but no thread runs
+/// a turn on it (Designs.symbol), its title, its facts under it (design task, open
 /// questions, answers), and at the end its status as a ToneBadge over
 /// its build ("1/4 built"). Rows sit in a TileGroup, a hairline over
 /// each after the first (rule).
@@ -25,7 +26,7 @@ public struct DesignTile: View {
             if typeSize.isAccessibilitySize {
                 VStack(alignment: .leading, spacing: Spacing.item) {
                     HStack(spacing: Spacing.row) {
-                        StateGlyph(tone, side: 32)
+                        StateGlyph(tone, side: 32, symbol: Designs.symbol(design))
                         Spacer(minLength: 0)
                         end(tone)
                     }
@@ -33,7 +34,7 @@ public struct DesignTile: View {
                 }
             } else {
                 HStack(spacing: Spacing.row + 2) {
-                    StateGlyph(tone, side: 32)
+                    StateGlyph(tone, side: 32, symbol: Designs.symbol(design))
                     words
                     Spacer(minLength: Spacing.hair)
                     end(tone)

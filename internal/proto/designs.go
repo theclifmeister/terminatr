@@ -30,6 +30,8 @@ type DesignListResult struct {
 // in after order with their title, status and after, which a console
 // lists without the board's done and archived tasks. Archived (protocol
 // 30): tm design archive hid it; a console lists it only when asked.
+// Working (protocol 31): a thread of one of its build tasks is running
+// a turn now (agent state working), so a console turns its busy mark.
 type Design struct {
 	Name       string           `json:"name"`
 	Title      string           `json:"title"`
@@ -43,6 +45,7 @@ type Design struct {
 	Questions  []DesignQuestion `json:"questions"`
 	Build      []DesignTask     `json:"build"`
 	Archived   bool             `json:"archived,omitempty"`
+	Working    bool             `json:"working,omitempty"`
 }
 
 // DesignQuestion is an open question of a design's task (tm ask).
@@ -53,11 +56,13 @@ type DesignQuestion struct {
 }
 
 // DesignTask is a build task: its id ("T12"), title, status, the tasks
-// it comes after, and whether it is archived.
+// it comes after, whether it is archived, and Working (protocol 31),
+// whether a thread of it is running a turn now.
 type DesignTask struct {
 	ID       string   `json:"id"`
 	Title    string   `json:"title"`
 	Status   string   `json:"status"`
 	After    []string `json:"after,omitempty"`
 	Archived bool     `json:"archived,omitempty"`
+	Working  bool     `json:"working,omitempty"`
 }

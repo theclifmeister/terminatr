@@ -17,7 +17,8 @@ public enum Designs {
 
     /// A design's tone on a tile: a question while its design task has
     /// open ones, else by its status: designing and planned idle (the
-    /// badge's word tells them apart), building working, done done.
+    /// badge's word tells them apart), building working (its glyph a
+    /// hammer while no thread runs a turn on it, symbol), done done.
     public static func tone(_ d: AppAPI.Design) -> Attention.Tone {
         if !d.questions.isEmpty { return .question }
         switch Status(d.status) {
@@ -36,6 +37,30 @@ public enum Designs {
         case "blocked": .attention
         default: .idle
         }
+    }
+
+    /// The symbol a building design's glyph shows in place of the
+    /// working arc (T879): a still hammer, unless a thread of one of its
+    /// build tasks is running a turn (design.list's working, app API
+    /// 34); nil for the tone's own.
+    public static func symbol(_ d: AppAPI.Design) -> String? {
+        tone(d) == .working && !d.working ? hammer : nil
+    }
+
+    /// The symbol a started build task's glyph shows: the hammer, unless
+    /// its thread is running a turn.
+    public static func symbol(task t: AppAPI.DesignTask) -> String? {
+        tone(task: t) == .working && !t.working ? hammer : nil
+    }
+
+    static let hammer = "hammer"
+
+    /// The tasks this server's threads of project slug are running a
+    /// turn on, sorted: a screen reads the designs again when they
+    /// change, so the arc starts and stops with the turn.
+    public static func working(_ sessions: [AppAPI.Session], project slug: String) -> [String] {
+        Set(sessions.filter { $0.server.isEmpty && $0.project == slug && $0.role == "thread" && !$0.task.isEmpty && $0.state == "working" }
+            .map(\.task)).sorted()
     }
 
     /// "3/5 built", "no build tasks".
