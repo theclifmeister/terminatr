@@ -29,7 +29,7 @@ func TestDaily(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := demo.Tasks().Add(human, []tasks.NewTask{{Title: "Ship <b>it</b>"}, {Title: "Review me"}, {Title: "Old"}}); err != nil {
+	if _, err := demo.Tasks().Add(human, []tasks.NewTask{{Title: "Ship <b>it</b>"}, {Title: "Review me"}, {Title: "Old"}, {Title: "Never mind"}}); err != nil {
 		t.Fatal(err)
 	}
 	demo.Tasks().Archive(human, 3)
@@ -78,6 +78,8 @@ func TestDaily(t *testing.T) {
 		"not a line SECRET",
 		// The 25th, from 22:00Z on the 24th: T2 is accepted, Q2 stays.
 		"2026-10-24T22:00:00Z coordinator task.status T2 done (approved by the user)",
+		// T4 is dropped: decided, never shipped (T872).
+		"2026-10-24T22:05:00Z coordinator task.status T4 dropped: not needed (approved by the user)",
 	)
 	other.Tasks().Add(human, []tasks.NewTask{{Title: "Elsewhere"}})
 	journal(other, "2026-10-24T12:00:00Z coordinator task.add T1 Elsewhere")
@@ -126,7 +128,8 @@ func TestDaily(t *testing.T) {
 			t.Errorf("daily note has %q:\n%s", not, day)
 		}
 	}
-	if next := read("2026-10-25"); !strings.Contains(next, "### Shipped\n\n- [[demo/tasks/T2|T2]] Review me\n") || strings.Contains(next, "other/PROJECT") {
+	if next := read("2026-10-25"); !strings.Contains(next, "shipped: 1") || !strings.Contains(next, "### Shipped\n\n- [[demo/tasks/T2|T2]] Review me\n\n") ||
+		!strings.Contains(next, "### Decided\n\n- dropped: [[demo/tasks/T4|T4]] Never mind\n") || strings.Contains(next, "other/PROJECT") {
 		t.Errorf("the 25th:\n%s", next)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "projects", "_tm", "daily", "2026-10-23.md")); err == nil {

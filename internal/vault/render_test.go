@@ -130,6 +130,22 @@ func TestRender(t *testing.T) {
 	if w, _, _ := Render(p); w != 1 {
 		t.Fatalf("removed note: %d written", w)
 	}
+	// An archived task is off the board: its note is in no board group,
+	// Backlog or Needs you, whatever its status (T872).
+	s.Add(human, []tasks.NewTask{{Title: "Never mind"}, {Title: "Stuck", Status: "blocked"}, {Title: "Not this", Status: "dropped"}})
+	s.Archive(human, 4)
+	s.Archive(human, 5)
+	if _, _, err := Render(p); err != nil {
+		t.Fatal(err)
+	}
+	for _, ref := range []string{"T4", "T5"} {
+		if n := read("tasks/" + ref + ".md"); !strings.Contains(n, `group: "Archived"`) || strings.Contains(n, "needs-you") {
+			t.Errorf("archived %s:\n%s", ref, n)
+		}
+	}
+	if n := read("tasks/T6.md"); !strings.Contains(n, `status: "dropped"`) || !strings.Contains(n, `group: "Dropped"`) {
+		t.Errorf("dropped:\n%s", n)
+	}
 }
 
 // TestRenderOldArchive (T729): an archived task's note where a tm before

@@ -19,7 +19,6 @@ import (
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
-	"github.com/theclifmeister/terminatr/internal/tasks"
 )
 
 // Upkeep of the coordinator's context files (docs/SPEC.md §7.6).
@@ -124,8 +123,9 @@ func (p *Project) Oversized() ([]Oversize, error) {
 	return out, nil
 }
 
-// ArchiveOldDone moves each task done for at least age (by its updated
-// date) to the task archive, as caller c; it returns their ids.
+// ArchiveOldDone moves each task done or dropped for at least age (by
+// its updated date) to the task archive, as caller c; it returns their
+// ids.
 func (p *Project) ArchiveOldDone(c caller.Caller, now time.Time, age time.Duration) ([]int, error) {
 	s := p.Tasks()
 	b, err := s.Load()
@@ -134,7 +134,7 @@ func (p *Project) ArchiveOldDone(c caller.Caller, now time.Time, age time.Durati
 	}
 	var ids []int
 	for _, t := range b.Tasks {
-		if t.Status != tasks.Done {
+		if !t.Status.Closed() {
 			continue
 		}
 		at, err := time.ParseInLocation("2006-01-02", t.Updated, now.Location())

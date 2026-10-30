@@ -173,7 +173,7 @@ var GraphGroups = []colorGroup{
 }
 
 // GraphFilter is the graph's default filter.
-const GraphFilter = "-path:inbox/done -path:threads/archive -file:TASKS -file:JOURNAL -path:_tm/bases"
+const GraphFilter = "-path:inbox/done -path:threads/archive -file:TASKS -file:JOURNAL -path:_tm/bases -[archived:true]"
 
 // NewPlan reads the vault and plans init: the settings to merge, the
 // files to write, the reports to guard.

@@ -43,7 +43,9 @@ import (
 // PeerMirrorProject.Needs), added fields only. 27: peer.need-act, an
 // act on a paired server's need (§16.16). 28: design.list, a project's
 // designs. 29: sessions.watch, the session list pushed as it changes.
-const Protocol = 29
+// 30: the dropped task status, and design.list's Design.Archived (tm
+// design archive), added fields and values only.
+const Protocol = 30
 
 // Kind is what a connection is for.
 type Kind string

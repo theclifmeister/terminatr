@@ -135,10 +135,10 @@ func TestStatusAndDoneRule(t *testing.T) {
 
 	// The coordinator relays the user's acceptance; a thread can't.
 	mustAdd(t, s, coord, NewTask{Title: "B"})
-	if _, err := s.SetDoneApproved(thread, 2, ""); code(err) != "coordinator-only" {
+	if _, err := s.SetApproved(thread, 2, Done, ""); code(err) != "coordinator-only" {
 		t.Fatalf("thread approved done: %v", err)
 	}
-	res, err = s.SetDoneApproved(coord, 2, "")
+	res, err = s.SetApproved(coord, 2, Done, "")
 	if err != nil || !res.Changed || res.Task.Status != Done {
 		t.Fatalf("approved done: %v %+v", err, res)
 	}
@@ -147,6 +147,50 @@ func TestStatusAndDoneRule(t *testing.T) {
 	}
 	if _, err := s.SetStatus(coord, 9, Ready, ""); code(err) != "unknown-task" {
 		t.Fatalf("unknown: %v", err)
+	}
+}
+
+// TestDropped: only the user drops a task, as with done; the
+// coordinator relays their word. A dropped task is in its own group,
+// after Done, and any other status reopens it.
+func TestDropped(t *testing.T) {
+	s, ev := newStore(t)
+	mustAdd(t, s, coord, NewTask{Title: "A"}, NewTask{Title: "B"})
+	if _, err := s.SetStatus(thread, 1, Dropped, ""); code(err) != "coordinator-only" {
+		t.Fatalf("thread dropped: %v", err)
+	}
+	_, err := s.SetStatus(coord, 1, Dropped, "")
+	if code(err) != "human-only" || !strings.Contains(err.Error(), "dropped --approved-by-user") {
+		t.Fatalf("coordinator dropped: %v", err)
+	}
+	if _, err := s.SetApproved(coord, 1, Review, ""); code(err) != "invalid-status" {
+		t.Fatalf("approved review: %v", err)
+	}
+	res, err := s.SetApproved(coord, 1, Dropped, "not needed")
+	if err != nil || !res.Changed || res.Task.Status != Dropped {
+		t.Fatalf("approved dropped: %v %+v", err, res)
+	}
+	if j := ev.journal[len(ev.journal)-1]; j != "coordinator task.status T1 dropped: not needed (approved by the user)" {
+		t.Fatalf("journal %q", j)
+	}
+	if _, err := s.SetStatus(coord, 1, Dropped, ""); err != nil {
+		t.Fatalf("dropped again: %v", err)
+	}
+	if _, err := s.SetStatus(human, 2, Dropped, ""); err != nil {
+		t.Fatalf("human dropped: %v", err)
+	}
+	if res, _ := s.Add(coord, []NewTask{{Title: "C", Status: "dropped"}}); res[0].Code != "human-only" {
+		t.Fatalf("add dropped: %+v", res)
+	}
+	// A dropped task's title is free again, as a done one's.
+	if res := mustAdd(t, s, coord, NewTask{Title: "B"}); res[0].Result != "created" {
+		t.Fatalf("re-add: %+v", res)
+	}
+	if GroupOf(Dropped) != DroppedG || !Dropped.Closed() || Review.Closed() {
+		t.Fatal("dropped's group")
+	}
+	if res, err := s.SetStatus(coord, 1, Open, ""); err != nil || res.Task.Status != Open {
+		t.Fatalf("reopen: %v %+v", err, res)
 	}
 }
 

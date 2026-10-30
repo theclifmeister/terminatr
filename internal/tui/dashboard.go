@@ -571,7 +571,7 @@ func (m *dash) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				pv.library, pv.libErr, pv.libOK = msg.library, msg.libErr, true
 				pv.sel[tabLibrary] = min(pv.sel[tabLibrary], max(len(pv.library)-1, 0))
 				pv.designs, pv.desErr, pv.desOK = msg.designs, msg.desErr, true
-				pv.sel[tabDesigns] = min(pv.sel[tabDesigns], max(len(pv.designs)-1, 0))
+				pv.sel[tabDesigns] = min(pv.sel[tabDesigns], max(len(pv.shownDesigns())-1, 0))
 			}
 		}
 		return m, nil

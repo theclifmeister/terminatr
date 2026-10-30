@@ -600,7 +600,7 @@ func modDesigns(p *project.Project) ([]modapi.Design, error) {
 func modDesignOf(b project.DesignBuild) modapi.Design {
 	d := modapi.Design{Name: b.Name, Title: cmp.Or(b.Title, b.Name), Status: modapi.DesignStatus(b.Status()),
 		Task: b.Task, Artifact: b.Artifact, Tasks: []string{}, TasksDone: b.Done(),
-		Answers: append([]string{}, b.Answers...), Questions: []modapi.DesignQuestion{}}
+		Answers: append([]string{}, b.Answers...), Questions: []modapi.DesignQuestion{}, Archived: b.Archived}
 	if b.DesignTask != nil {
 		d.TaskStatus = string(b.DesignTask.Status)
 	}

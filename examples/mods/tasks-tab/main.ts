@@ -1,6 +1,6 @@
 // The project popup's Tasks tab (mods design §11 and §12 Phase 2):
 // the board's tasks grouped as tm groups them (needs you, in motion, on
-// deck, backlog, done), the done ones folded until b. Each row names the
+// deck, backlog, done, dropped), the done and dropped ones folded until b. Each row names the
 // core actions its keys run: enter shows the task, D delegates, A
 // accepts, x sends back, c opens the coordinator; + (a new task) is
 // bound in the whole view, as no row stands for it. The mod only names
@@ -23,7 +23,11 @@ const GROUPS: { id: string; title: string; statuses: string[] }[] = [
   { id: "on-deck", title: "ON DECK", statuses: ["ready"] },
   { id: "backlog", title: "BACKLOG", statuses: ["open"] },
   { id: "done", title: "DONE", statuses: ["done"] },
+  { id: "dropped", title: "DROPPED", statuses: ["dropped"] },
 ];
+
+// closed are the groups b folds: the tasks the user closed.
+const closed = (g: string) => g === "done" || g === "dropped";
 
 function groupOf(status: string): string {
   for (const g of GROUPS) if (g.statuses.includes(status)) return g.id;
@@ -96,8 +100,8 @@ function row(project: string, t: TM.Task): TM.Value {
     cells: [[{ text: t.id }], [{ text: t.title }], status(t.status), rest] as TM.Value,
     actions: actions(project, t) as TM.Value,
   };
-  // The selected task's steps, under it, unless it is done.
-  if (t.status !== "done" && (t.steps ?? []).length > 0) {
+  // The selected task's steps, under it, unless it is done or dropped.
+  if (!closed(groupOf(t.status)) && (t.steps ?? []).length > 0) {
     r.more = t.steps.map((s) => [
       { text: "      " },
       s.done ? { icon: "todo.done", role: "good" } : { icon: "todo.open", role: "faint" },
@@ -107,15 +111,15 @@ function row(project: string, t: TM.Task): TM.Value {
   return r as TM.Value;
 }
 
-// shown are the tasks listed, by section: the done ones last, newest
-// first (by updated date, then id), so x can still send one back; left
-// out while folded.
+// shown are the tasks listed, by section: the done and dropped ones
+// last, newest first (by updated date, then id), so x can still send a
+// done one back; left out while folded.
 function shown(t: Tab): TM.Task[] {
   const out: TM.Task[] = [];
   for (const g of GROUPS) {
-    if (g.id === "done" && !t.doneAll) continue;
+    if (closed(g.id) && !t.doneAll) continue;
     const in_ = t.tasks.filter((x) => groupOf(x.status) === g.id);
-    if (g.id === "done") {
+    if (closed(g.id)) {
       in_.sort((a, b) => (b.updated ?? "").localeCompare(a.updated ?? "") || num(b.id) - num(a.id));
     }
     out.push(...in_);
@@ -143,8 +147,10 @@ function tree(project: string, t: Tab): TM.Widget {
     rows.push(row(project, task));
   }
   const done = t.tasks.filter((x) => x.status === "done").length;
-  const folded = !t.doneAll && done > 0;
-  if (folded) rows.push({ id: "g:done", head: true, spans: [{ text: "DONE", role: "head" }] });
+  const dropped = t.tasks.filter((x) => x.status === "dropped").length;
+  const folded = !t.doneAll && done + dropped > 0;
+  if (folded && done > 0) rows.push({ id: "g:done", head: true, spans: [{ text: "DONE", role: "head" }] });
+  if (folded && dropped > 0) rows.push({ id: "g:dropped", head: true, spans: [{ text: "DROPPED", role: "head" }] });
   const children: TM.Value[] = [
     {
       kind: "table",
@@ -154,9 +160,12 @@ function tree(project: string, t: Tab): TM.Widget {
       rows,
     },
   ];
-  if (folded) children.push({ kind: "text", text: `… ${done} done (b shows them)`, role: "faint" });
+  if (folded) {
+    const counts = [done > 0 ? `${done} done` : "", dropped > 0 ? `${dropped} dropped` : ""].filter((s) => s !== "").join(", ");
+    children.push({ kind: "text", text: `… ${counts} (b shows them)`, role: "faint" });
+  }
   // b is the mod's own key; + runs tm's new task, from a template or none.
-  const keys = t.doneAll || done > 0 ? [{ key: "b", label: t.doneAll ? "hide done" : "done" }] : [];
+  const keys = t.doneAll || done + dropped > 0 ? [{ key: "b", label: t.doneAll ? "hide done" : "done" }] : [];
   children.push({ kind: "keys", id: "keys", keys, actions: [{ id: "task.new", target: { project } }] });
   return { kind: "stack", children };
 }
@@ -189,13 +198,13 @@ async function refresh(project: string | undefined): Promise<void> {
 }
 
 // The tab shows. When it was opened to show a task (e.task) that is
-// done, the done tasks are listed, so its row is there for the cursor.
+// done or dropped, those are listed, so its row is there for the cursor.
 $.on("view.opened", async (e) => {
   if (e.view !== VIEW || !e.project) return;
   const t: Tab = tabs.get(e.project) ?? { tasks: [], doneAll: false, error: "" };
   tabs.set(e.project, t);
   await load(e.project, t);
-  if (e.task && t.tasks.some((x) => x.id === e.task && x.status === "done")) t.doneAll = true;
+  if (e.task && t.tasks.some((x) => x.id === e.task && closed(groupOf(x.status)))) t.doneAll = true;
   await publish(e.project, t);
 });
 

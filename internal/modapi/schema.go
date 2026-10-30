@@ -175,7 +175,9 @@ var DesignStatuses = []string{project.DesignDesigning, project.DesignPlanned, pr
 // none), status, design task and that task's status, its page (an https
 // URL), its build tasks (those naming it, but the design task, by id),
 // how many of them are done, the user's decided answers and the design
-// task's open questions. The words are data.
+// task's open questions. The words are data. Archived (mod API 1.12):
+// tm design archive hid it; designs.list lists it still, so a mod hides
+// it unless it shows the archived ones.
 type Design struct {
 	Name       string           `json:"name"`
 	Title      string           `json:"title"`
@@ -187,6 +189,7 @@ type Design struct {
 	TasksDone  int              `json:"tasks_done"`
 	Answers    []string         `json:"answers"`
 	Questions  []DesignQuestion `json:"questions"`
+	Archived   bool             `json:"archived,omitempty"`
 }
 
 // DesignQuestion is an open question of a design's task (tm ask): its

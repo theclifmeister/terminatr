@@ -13,21 +13,31 @@ struct DesignsTiles: View {
     let project: AppAPI.Project
     @State private var designs: [AppAPI.Design] = []
     @State private var error: String?
+    /// Whether the done and archived designs show too.
+    @State private var all = false
 
     var body: some View {
         // A stack, not a Group: its task runs while it shows nothing.
         VStack(alignment: .leading, spacing: Spacing.row + 2) {
             Color.clear.frame(height: 0)
             if !designs.isEmpty {
-                SectionHeading("Designs", detail: "\(designs.count)")
-                TileGroup {
-                    ForEach(Array(Designs.ordered(designs).enumerated()), id: \.element.name) { i, d in
-                        let route = Route.design(project.slug, name: d.name)
-                        PlainRouteLink(value: route) {
-                            DesignTile(d, rule: i > 0, selected: navigate?.open == route)
+                let shown = Designs.shown(designs, all: all)
+                SectionHeading("Designs", detail: "\(shown.count)")
+                if !shown.isEmpty {
+                    TileGroup {
+                        ForEach(Array(Designs.ordered(shown).enumerated()), id: \.element.name) { i, d in
+                            let route = Route.design(project.slug, name: d.name)
+                            PlainRouteLink(value: route) {
+                                DesignTile(d, rule: i > 0, selected: navigate?.open == route)
+                            }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
                     }
+                }
+                let words = Designs.toggle(designs, all: all)
+                if !words.isEmpty {
+                    Button(words) { all.toggle() }
+                        .font(.subheadline)
                 }
             } else if let error {
                 Failure(text: "The designs didn't load: \(error)")

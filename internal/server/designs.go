@@ -23,7 +23,7 @@ func (s *Server) designList(p proto.DesignListParams) (any, *proto.Error) {
 		m := modDesignOf(b)
 		d := proto.Design{Name: m.Name, Title: m.Title, Status: string(m.Status), Task: m.Task, TaskStatus: m.TaskStatus,
 			Artifact: m.Artifact, Tasks: m.Tasks, TasksDone: m.TasksDone, Answers: m.Answers,
-			Questions: []proto.DesignQuestion{}, Build: []proto.DesignTask{}}
+			Questions: []proto.DesignQuestion{}, Build: []proto.DesignTask{}, Archived: m.Archived}
 		for _, q := range m.Questions {
 			d.Questions = append(d.Questions, proto.DesignQuestion{ID: q.ID, Header: q.Header, Question: q.Question})
 		}

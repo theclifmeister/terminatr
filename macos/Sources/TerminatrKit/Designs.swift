@@ -59,7 +59,7 @@ public enum Designs {
     /// A design's facts on its row: its design task, its open
     /// questions (only when it has some) and its answers.
     public static func facts(_ d: AppAPI.Design) -> [String] {
-        var out: [String] = []
+        var out: [String] = d.archived ? ["archived"] : []
         let t = designTask(d)
         if !t.isEmpty { out.append("design task \(t)") }
         if !d.questions.isEmpty { out.append(count(d.questions.count, "open question")) }
@@ -78,10 +78,27 @@ public enum Designs {
         t.after.isEmpty ? "" : "after " + t.after.joined(separator: ", ")
     }
 
+    /// The designs a list shows: without the done and the archived ones
+    /// (tm design archive, app API 33) unless it shows all, as tm design
+    /// list --all --archived does.
+    public static func shown(_ ds: [AppAPI.Design], all: Bool) -> [AppAPI.Design] {
+        all ? ds : ds.filter { !$0.archived && Status($0.status) != .done }
+    }
+
+    /// The toggle's words: "Show 2 done or archived", "Hide done and
+    /// archived"; "" with none hidden.
+    public static func toggle(_ ds: [AppAPI.Design], all: Bool) -> String {
+        let hidden = ds.count - shown(ds, all: false).count
+        if hidden == 0 { return "" }
+        return all ? "Hide done and archived" : "Show \(hidden) done or archived"
+    }
+
     /// The designs that need the user first (open questions), then the
-    /// ones being built, planned, designed, and done last; by name within.
+    /// ones being built, planned, designed, done, and archived last; by
+    /// name within.
     public static func ordered(_ ds: [AppAPI.Design]) -> [AppAPI.Design] {
         func rank(_ d: AppAPI.Design) -> Int {
+            if d.archived { return 5 }
             if !d.questions.isEmpty { return 0 }
             switch Status(d.status) {
             case .building: return 1

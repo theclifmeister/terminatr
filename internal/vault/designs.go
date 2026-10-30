@@ -39,6 +39,7 @@ type designFront struct {
 	Answers       int      `toml:"answers" yaml:"answers"`
 	OpenQuestions int      `toml:"open_questions" yaml:"open_questions"`
 	Canvas        string   `toml:"canvas" yaml:"canvas"`
+	Archived      bool     `toml:"archived,omitempty" yaml:"archived,omitempty"`
 	Tags          []string `toml:"tags" yaml:"tags"`
 	TM            string   `toml:"tm" yaml:"tm"`
 	CSSClasses    []string `toml:"cssclasses" yaml:"cssclasses"`
@@ -104,10 +105,11 @@ func designNote(slug string, d *design) (Note, error) {
 		Name: d.Name, Title: d.title(), Project: vaultlink.Link(slug, vaultlink.Project, slug, ""),
 		Status: d.Status(), Artifact: d.Artifact, Tasks: len(d.build), TasksDone: d.Done(),
 		Answers: len(d.Answers), OpenQuestions: len(d.Questions),
-		Canvas: vaultlink.Link(slug, vaultlink.Design, d.Name+".canvas", d.Name+".canvas"),
-		Tags:   []string{"design"}, TM: "owned", CSSClasses: []string{"tm-owned"},
+		Canvas:   vaultlink.Link(slug, vaultlink.Design, d.Name+".canvas", d.Name+".canvas"),
+		Archived: d.Archived,
+		Tags:     []string{"design"}, TM: "owned", CSSClasses: []string{"tm-owned"},
 	}
-	if len(d.Questions) > 0 {
+	if len(d.Questions) > 0 && !d.Archived {
 		f.Tags = append(f.Tags, "needs-you")
 	}
 	if d.Task != "" {
@@ -189,15 +191,18 @@ const (
 
 // JSON Canvas preset colours.
 const (
-	red, yellow, green, cyan = "1", "3", "4", "5"
+	red, yellow, green, cyan, purple = "1", "3", "4", "5", "6"
 )
 
 // statusColor is a task node's colour: done green, started blue (the
-// presets' cyan), review yellow, blocked red (needs you), else none.
+// presets' cyan), review yellow, blocked red (needs you), dropped
+// purple, else none.
 func statusColor(s tasks.Status) string {
 	switch s {
 	case tasks.Done:
 		return green
+	case tasks.Dropped:
+		return purple
 	case tasks.Started:
 		return cyan
 	case tasks.Review:
@@ -248,9 +253,18 @@ func layout(slug string, d *design) ([]node, []edge) {
 		nodes = append(nodes, node{id: "tm-" + q.ID, typ: "text", text: text, color: red, y: y, w: firstW, h: questionH})
 		y += questionH + gapY
 	}
+	// Archived tasks are off the board, so off the canvas too: the
+	// design note still lists them.
+	drawn := map[int]bool{}
+	for _, t := range d.build {
+		drawn[t.ID] = !t.Archived
+	}
 	rows := map[int]int{}
 	var edges []edge
 	for _, t := range d.ordered() {
+		if !drawn[t.ID] {
+			continue
+		}
 		col := d.depth[t.ID]
 		id := "tm-" + t.Ref()
 		nodes = append(nodes, node{
@@ -260,7 +274,7 @@ func layout(slug string, d *design) ([]node, []edge) {
 		rows[col]++
 		from := 0
 		for _, a := range t.After {
-			if _, ok := d.depth[a]; ok {
+			if drawn[a] {
 				edges = append(edges, edge{fmt.Sprintf("tm-e-T%d-%s", a, t.Ref()), "tm-T" + strconv.Itoa(a), id})
 				from++
 			}

@@ -18,7 +18,8 @@ import (
 // tm design set recorded or a task names (project.DesignBuilds, the
 // board's and the archive's tasks), with its status from its build, its
 // design task, how much of its build is done, its open questions, its
-// answers and its page. enter opens a design: its answers, its design
+// answers and its page; the done and archived ones (tm design archive)
+// only after b. enter opens a design: its answers, its design
 // task's open questions (enter has the coordinator open them, as the
 // sidebar's questions row does) and its build in after order (enter
 // shows a task). Nothing here changes a design: the coordinator records
@@ -89,11 +90,18 @@ func (pv *projectView) designLines(w int) ([]string, int, []int) {
 	case len(pv.designs) == 0:
 		return faintLines("no designs: a task names the design it builds (tm task edit --design), and the coordinator records one (tm design set)", w), -1, nil
 	}
+	shown := pv.shownDesigns()
+	if len(shown) == 0 {
+		return faintLines(fmt.Sprintf("%s, hidden (b shows them)", counted(len(pv.designs), "done or archived design")), w), -1, nil
+	}
 	var out []string
 	var hits []int
 	sel := -1
-	for i, d := range pv.designs {
+	for i, d := range shown {
 		status := fmt.Sprintf("%-9s", d.Status())
+		if d.Archived {
+			status = fmt.Sprintf("%-9s", "archived")
+		}
 		build := buildWords(d)
 		title := fit(designTitle(d), max(w-len(status)-len(build)-6, 4))
 		facts := fit("           "+strings.Join(designFacts(d), " · "), w)
@@ -106,7 +114,23 @@ func (pv *projectView) designLines(w int) ([]string, int, []int) {
 		out = append(out, th().Faint.Render(facts))
 		hits = append(hits, i, i)
 	}
+	if n := len(pv.designs) - len(shown); n > 0 {
+		out = append(out, "", th().Faint.Render(fmt.Sprintf("… %s (b shows them)", counted(n, "done or archived design"))))
+		hits = append(hits, noHit, noHit)
+	}
 	return out, sel, hits
+}
+
+// shownDesigns are the designs the tab lists: without the done and the
+// archived ones until b (project.DesignBuild.Shown).
+func (pv *projectView) shownDesigns() []project.DesignBuild {
+	var out []project.DesignBuild
+	for _, d := range pv.designs {
+		if d.Shown(pv.desAll, pv.desAll) {
+			out = append(out, d)
+		}
+	}
+	return out
 }
 
 // padTo pads s with spaces to w cells.
@@ -115,10 +139,26 @@ func padTo(s string, w int) string {
 	return s + strings.Repeat(" ", max(w-ansi.StringWidth(s), 0))
 }
 
-// designsKey: enter opens the selected design.
+// designsKey: enter opens the selected design; b lists the done and
+// archived designs too, or hides them again.
 func (pv *projectView) designsKey(m *dash, s string) tea.Cmd {
-	if i := pv.sel[tabDesigns]; (s == "enter" || s == "space") && i < len(pv.designs) {
-		m.push(&designView{pv: pv, name: pv.designs[i].Name})
+	shown := pv.shownDesigns()
+	switch i := pv.sel[tabDesigns]; {
+	case (s == "enter" || s == "space") && i < len(shown):
+		m.push(&designView{pv: pv, name: shown[i].Name})
+	case s == "b":
+		name := ""
+		if i < len(shown) {
+			name = shown[i].Name
+		}
+		pv.desAll = !pv.desAll
+		// The cursor stays on its design while it still shows.
+		pv.sel[tabDesigns] = 0
+		for j, d := range pv.shownDesigns() {
+			if d.Name == name {
+				pv.sel[tabDesigns] = j
+			}
+		}
 	}
 	return nil
 }
@@ -251,7 +291,11 @@ func (dv *designView) render(m *dash) string {
 		add(fit(styled, w)+reset, i)
 	}
 	add(th().Title.Render(fit(designTitle(d), w)), noHit)
-	add(designLook(d.Status()).Render(d.Status())+th().Faint.Render(" · "+d.Name), noHit)
+	archived := ""
+	if d.Archived {
+		archived = " · archived (tm design unarchive " + d.Name + ")"
+	}
+	add(designLook(d.Status()).Render(d.Status())+th().Faint.Render(" · "+d.Name+archived), noHit)
 	add("", noHit)
 	i := 0
 	if d.Task != "" {
