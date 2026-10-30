@@ -120,6 +120,7 @@ var hostFakes = []hostFake{
 		}}
 	}},
 	{"azure", func(s scenario) Host {
+		azVia.Clear() // each scenario finds its own way in
 		return Azure{Target: shop, Getenv: func(string) string { return "" }, Run: func(dir string, args ...string) ([]byte, error) {
 			out := s.az
 			switch route, _ := azRoute(args); route {

@@ -1,0 +1,76 @@
+{
+ "count": 1,
+ "value": [
+  {
+   "artifactId": "vstfs:///CodeReview/CodeReviewId/6ce954b1-ce1f-45d1-b94d-e6bf2464ba2c%2f8",
+   "completedDate": "2026-10-30T11:53:55.5759418Z",
+   "configuration": {
+    "_links": {
+     "policyType": {
+      "href": "https://dev.azure.com/acme/6ce954b1-ce1f-45d1-b94d-e6bf2464ba2c/_apis/policy/types/3c329e04-6d7d-4918-a3b9-375dd61cdbe6"
+     },
+     "self": {
+      "href": "https://dev.azure.com/acme/6ce954b1-ce1f-45d1-b94d-e6bf2464ba2c/_apis/policy/configurations/2"
+     }
+    },
+    "createdBy": {
+     "_links": {
+      "avatar": {
+       "href": "https://dev.azure.com/acme/_apis/GraphProfile/MemberAvatars/aad.REDACTED"
+      }
+     },
+     "descriptor": "aad.REDACTED",
+     "displayName": "ada",
+     "id": "e6fb14c5-91d5-4170-a41d-712f262c858d",
+     "imageUrl": "https://dev.azure.com/acme/_api/_common/identityImage?id=e6fb14c5-91d5-4170-a41d-712f262c858d",
+     "uniqueName": "ada@example.com",
+     "url": "https://example.vssps.visualstudio.com/A89da6a07-3223-4728-a7aa-7b1e0b23a6b3/_apis/Identities/e6fb14c5-91d5-4170-a41d-712f262c858d"
+    },
+    "createdDate": "2026-10-30T11:53:33.9153833Z",
+    "id": 2,
+    "isBlocking": true,
+    "isDeleted": false,
+    "isEnabled": true,
+    "isEnterpriseManaged": false,
+    "revision": 1,
+    "settings": {
+     "buildDefinitionId": 2,
+     "displayName": "ci validation",
+     "manualQueueOnly": false,
+     "queueOnSourceUpdateOnly": true,
+     "scope": [
+      {
+       "matchKind": "Exact",
+       "refName": "refs/heads/feature/base",
+       "repositoryId": "3411ebc1-d5aa-464f-9615-0b527bc66719"
+      }
+     ],
+     "validDuration": 720.0
+    },
+    "type": {
+     "displayName": "Build",
+     "id": "3c329e04-6d7d-4918-a3b9-375dd61cdbe6",
+     "url": "https://dev.azure.com/acme/6ce954b1-ce1f-45d1-b94d-e6bf2464ba2c/_apis/policy/types/3c329e04-6d7d-4918-a3b9-375dd61cdbe6"
+    },
+    "url": "https://dev.azure.com/acme/6ce954b1-ce1f-45d1-b94d-e6bf2464ba2c/_apis/policy/configurations/2"
+   },
+   "context": {
+    "buildAfterMerge": false,
+    "buildDefinitionId": 2,
+    "buildDefinitionName": "ci",
+    "buildId": 7,
+    "buildIsNotCurrent": false,
+    "buildOutputPreview": null,
+    "buildStartedUtc": "2026-10-30T11:53:37.3829177Z",
+    "isExpired": false,
+    "lastMergeCommitId": "c9018378bf768cbd37d35cc5ccccbeaf65020ca8",
+    "lastMergeSourceCommitId": "d9046af93f190418efa6000c47f966d191f499e2",
+    "lastMergeTargetCommitId": "aa2ef614651f363bd8c383e119ff4fb884abf64a",
+    "wasAutoRequeued": false
+   },
+   "evaluationId": "dbdb70a2-aecc-45dd-abf7-8997a9f6046d",
+   "startedDate": "2026-10-30T11:53:37.4002083Z",
+   "status": "approved"
+  }
+ ]
+}

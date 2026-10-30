@@ -365,14 +365,17 @@ type threadRow struct {
 	Report     string         `json:"report"`             // none, new, acked
 	PR         string         `json:"pr,omitempty"`       // the report's PR URL
 	PRState    *ticker.PR     `json:"pr_state,omitempty"` // as the ticker last saw it
-	Next       []string       `json:"next"`
+	// NoPR is why the ticker's last poll found no PR (T877), while it
+	// knows none: "Azure DevOps has no PR from branch b in Shop/web".
+	NoPR string   `json:"no_pr,omitempty"`
+	Next []string `json:"next"`
 	// Question is the question menu open in the thread's agent, as its
 	// mod sent it; nil without one, or without a mod.
 	Question *proto.Question `json:"question,omitempty"`
 }
 
-func (e *Env) rowOf(p *project.Project, r *thread.Record, sessions map[string]proto.SessionInfo, prs map[string]ticker.PR) threadRow {
-	row := threadRow{Record: r, Report: r.ReportState(), Next: []string{}}
+func (e *Env) rowOf(p *project.Project, r *thread.Record, sessions map[string]proto.SessionInfo, prs map[string]ticker.PR, noPRs map[string]string) threadRow {
+	row := threadRow{Record: r, Report: r.ReportState(), Next: []string{}, NoPR: noPRs[r.ID]}
 	if pr, ok := prs[r.ID]; ok {
 		row.PRState = &pr
 	}
@@ -474,6 +477,9 @@ func (row threadRow) Line() string {
 	switch {
 	case row.PRState != nil && row.PRState.Summary() != "":
 		b.WriteString("  PR: " + row.PRState.Summary())
+	case row.PR != "" && row.NoPR != "":
+		// The report names a PR the ticker can't find: say why.
+		b.WriteString("  PR: " + row.PR + " (not found: " + row.NoPR + ")")
 	case row.PR != "":
 		b.WriteString("  PR: " + row.PR)
 	}
@@ -495,7 +501,8 @@ func (e *Env) threadList(p *project.Project, all, asJSON bool) error {
 		}
 	}
 	sessions := e.liveSessions()
-	prs := ticker.PRs(tickerState(), p.Slug)
+	st := ticker.Load(tickerState())
+	prs, noPRs := st.PRs(p.Slug), st.NoPRs(p.Slug)
 	rows := make([]threadRow, 0, len(recs))
 	resolved := 0
 	for _, r := range recs {
@@ -503,7 +510,7 @@ func (e *Env) threadList(p *project.Project, all, asJSON bool) error {
 			resolved++
 			continue
 		}
-		rows = append(rows, e.rowOf(p, r, sessions, prs))
+		rows = append(rows, e.rowOf(p, r, sessions, prs, noPRs))
 	}
 	if asJSON {
 		if !all {
@@ -536,7 +543,8 @@ func (e *Env) threadShow(p *project.Project, id string, asJSON bool) error {
 	if err != nil {
 		return err
 	}
-	row := e.rowOf(p, r, e.liveSessions(), ticker.PRs(tickerState(), p.Slug))
+	st := ticker.Load(tickerState())
+	row := e.rowOf(p, r, e.liveSessions(), st.PRs(p.Slug), st.NoPRs(p.Slug))
 	rep, _ := thread.ReadReport(p, id)
 	if asJSON {
 		out := map[string]any{"thread": row}
@@ -550,6 +558,10 @@ func (e *Env) threadShow(p *project.Project, id string, asJSON bool) error {
 	}
 	w := tabwriter.NewWriter(e.Stdout, 0, 4, 2, ' ', 0)
 	fmt.Fprintln(w, row.Line())
+	noPR := ""
+	if row.NoPR != "" {
+		noPR = "none found: " + row.NoPR
+	}
 	adopted := ""
 	switch {
 	case r.Checkout:
@@ -559,7 +571,7 @@ func (e *Env) threadShow(p *project.Project, id string, asJSON bool) error {
 	}
 	for _, kv := range [][2]string{{"thread", r.ID}, {"task", r.Task}, {"worktree", r.Worktree}, {"branch", r.Branch}, {"base", r.Base}, {"repo", r.Repo}, {"adopted", adopted},
 		{"agent", r.Agent}, {"model", r.Model}, {"usage", r.Usage.Detail()}, {"session", r.Session}, {"state", r.State}, {"folder", thread.Dir(p, id)},
-		{"attached", strings.Join(thread.Attachments(p, id), ", ")}} {
+		{"attached", strings.Join(thread.Attachments(p, id), ", ")}, {"PR", noPR}} {
 		printPair(w, kv)
 	}
 	w.Flush()

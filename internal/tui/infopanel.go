@@ -40,6 +40,9 @@ type infoData struct {
 	report  *thread.Report
 	task    *tasks.Task
 	pr      ticker.PR
+	// noPR is why the ticker's last poll found no PR, while it knows
+	// none (ticker.NoPRs, T877).
+	noPR string
 	// attached: the names of the files its reports attached for the
 	// user. Names only: the UI shows no file paths (§4).
 	attached []string
@@ -83,7 +86,8 @@ func loadInfo(paths tmclient.Paths, s proto.SessionInfo, sessions []proto.Sessio
 		d.task, _ = p.Tasks().Get(d.rec.TaskID())
 	}
 	if paths.Sessions != "" {
-		d.pr = ticker.PRs(ticker.StatePath(paths.Sessions), s.Project)[s.Thread]
+		st := ticker.Load(ticker.StatePath(paths.Sessions))
+		d.pr, d.noPR = st.PRs(s.Project)[s.Thread], st.NoPRs(s.Project)[s.Thread]
 	}
 	return d
 }
@@ -131,12 +135,19 @@ func (d *infoData) prURL() string {
 }
 
 // prLine is the PR's state in the ticker's words ("#70 open, checks
-// pending"), with whether its branch is behind its base; "" without one.
+// pending"), with whether its branch is behind its base, or why the
+// ticker found none ("none found: …"); "" without one.
 func (d *infoData) prLine() string {
 	s := d.pr.Summary()
 	if s == "" {
 		if n := ticker.PRNumber(d.prURL()); n > 0 {
 			s = "#" + strconv.Itoa(n)
+		}
+		switch {
+		case d.noPR != "" && s != "":
+			s += ", not found: " + d.noPR
+		case d.noPR != "":
+			s = "none found: " + d.noPR
 		}
 	}
 	if s != "" && d.pr.State == "OPEN" && d.pr.MergeState == "BEHIND" {
@@ -254,6 +265,10 @@ func threadInfo(d *infoData, w int, now time.Time) (*panel, []infoHit) {
 			look, bad = th().Bad, true
 		case d.pr.State == "MERGED":
 			look = th().Good
+		case d.pr.Number <= 0 && d.noPR != "" && d.prURL() != "":
+			look = th().Bad // the report's PR isn't found
+		case d.pr.Number <= 0 && d.noPR != "":
+			look = th().Faint
 		}
 		from := len(pl.lines)
 		hang(pl, th().Faint.Render(fmt.Sprintf("%-9s", "PR"))+" ", look.Render(l))

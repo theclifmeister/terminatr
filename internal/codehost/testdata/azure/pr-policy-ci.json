@@ -1,0 +1,105 @@
+{
+ "_links": {
+  "createdBy": {
+   "href": "https://example.vssps.visualstudio.com/A89da6a07-3223-4728-a7aa-7b1e0b23a6b3/_apis/Identities/e6fb14c5-91d5-4170-a41d-712f262c858d"
+  },
+  "iterations": {
+   "href": "https://dev.azure.com/acme/6ce954b1-ce1f-45d1-b94d-e6bf2464ba2c/_apis/git/repositories/3411ebc1-d5aa-464f-9615-0b527bc66719/pullRequests/8/iterations"
+  },
+  "repository": {
+   "href": "https://dev.azure.com/acme/6ce954b1-ce1f-45d1-b94d-e6bf2464ba2c/_apis/git/repositories/3411ebc1-d5aa-464f-9615-0b527bc66719"
+  },
+  "self": {
+   "href": "https://dev.azure.com/acme/6ce954b1-ce1f-45d1-b94d-e6bf2464ba2c/_apis/git/repositories/3411ebc1-d5aa-464f-9615-0b527bc66719/pullRequests/8"
+  },
+  "sourceBranch": {
+   "href": "https://dev.azure.com/acme/6ce954b1-ce1f-45d1-b94d-e6bf2464ba2c/_apis/git/repositories/3411ebc1-d5aa-464f-9615-0b527bc66719/refs/heads/feature/policy"
+  },
+  "sourceCommit": {
+   "href": "https://dev.azure.com/acme/6ce954b1-ce1f-45d1-b94d-e6bf2464ba2c/_apis/git/repositories/3411ebc1-d5aa-464f-9615-0b527bc66719/commits/d9046af93f190418efa6000c47f966d191f499e2"
+  },
+  "statuses": {
+   "href": "https://dev.azure.com/acme/6ce954b1-ce1f-45d1-b94d-e6bf2464ba2c/_apis/git/repositories/3411ebc1-d5aa-464f-9615-0b527bc66719/pullRequests/8/statuses"
+  },
+  "targetBranch": {
+   "href": "https://dev.azure.com/acme/6ce954b1-ce1f-45d1-b94d-e6bf2464ba2c/_apis/git/repositories/3411ebc1-d5aa-464f-9615-0b527bc66719/refs/heads/feature/base"
+  },
+  "targetCommit": {
+   "href": "https://dev.azure.com/acme/6ce954b1-ce1f-45d1-b94d-e6bf2464ba2c/_apis/git/repositories/3411ebc1-d5aa-464f-9615-0b527bc66719/commits/aa2ef614651f363bd8c383e119ff4fb884abf64a"
+  },
+  "workItems": {
+   "href": "https://dev.azure.com/acme/6ce954b1-ce1f-45d1-b94d-e6bf2464ba2c/_apis/git/repositories/3411ebc1-d5aa-464f-9615-0b527bc66719/pullRequests/8/workitems"
+  }
+ },
+ "artifactId": "vstfs:///Git/PullRequestId/6ce954b1-ce1f-45d1-b94d-e6bf2464ba2c%2f3411ebc1-d5aa-464f-9615-0b527bc66719%2f8",
+ "codeReviewId": 8,
+ "createdBy": {
+  "_links": {
+   "avatar": {
+    "href": "https://dev.azure.com/acme/_apis/GraphProfile/MemberAvatars/aad.REDACTED"
+   }
+  },
+  "descriptor": "aad.REDACTED",
+  "displayName": "ada",
+  "id": "e6fb14c5-91d5-4170-a41d-712f262c858d",
+  "imageUrl": "https://dev.azure.com/acme/_api/_common/identityImage?id=e6fb14c5-91d5-4170-a41d-712f262c858d",
+  "uniqueName": "ada@example.com",
+  "url": "https://example.vssps.visualstudio.com/A89da6a07-3223-4728-a7aa-7b1e0b23a6b3/_apis/Identities/e6fb14c5-91d5-4170-a41d-712f262c858d"
+ },
+ "creationDate": "2026-10-30T11:53:35.0956389Z",
+ "description": "tm test PR (T877); abandoned after the test.",
+ "isDraft": false,
+ "lastMergeCommit": {
+  "author": {
+   "date": "2026-10-30T11:53:35Z",
+   "email": "ada@moddox.com",
+   "name": "ada"
+  },
+  "comment": "Merge pull request 8 from feature/policy into feature/base",
+  "commitId": "c9018378bf768cbd37d35cc5ccccbeaf65020ca8",
+  "committer": {
+   "date": "2026-10-30T11:53:35Z",
+   "email": "ada@moddox.com",
+   "name": "ada"
+  },
+  "url": "https://dev.azure.com/acme/6ce954b1-ce1f-45d1-b94d-e6bf2464ba2c/_apis/git/repositories/3411ebc1-d5aa-464f-9615-0b527bc66719/commits/c9018378bf768cbd37d35cc5ccccbeaf65020ca8"
+ },
+ "lastMergeSourceCommit": {
+  "commitId": "d9046af93f190418efa6000c47f966d191f499e2",
+  "url": "https://dev.azure.com/acme/6ce954b1-ce1f-45d1-b94d-e6bf2464ba2c/_apis/git/repositories/3411ebc1-d5aa-464f-9615-0b527bc66719/commits/d9046af93f190418efa6000c47f966d191f499e2"
+ },
+ "lastMergeTargetCommit": {
+  "commitId": "aa2ef614651f363bd8c383e119ff4fb884abf64a",
+  "url": "https://dev.azure.com/acme/6ce954b1-ce1f-45d1-b94d-e6bf2464ba2c/_apis/git/repositories/3411ebc1-d5aa-464f-9615-0b527bc66719/commits/aa2ef614651f363bd8c383e119ff4fb884abf64a"
+ },
+ "mergeId": "705c2fe8-1101-481c-a86d-eb5604f033ca",
+ "mergeStatus": "succeeded",
+ "pullRequestId": 8,
+ "repository": {
+  "id": "3411ebc1-d5aa-464f-9615-0b527bc66719",
+  "isDisabled": false,
+  "isInMaintenance": false,
+  "name": "web",
+  "project": {
+   "id": "6ce954b1-ce1f-45d1-b94d-e6bf2464ba2c",
+   "lastUpdateTime": "2026-10-07T11:39:10.653Z",
+   "name": "Shop",
+   "revision": 11,
+   "state": "wellFormed",
+   "url": "https://dev.azure.com/acme/_apis/projects/6ce954b1-ce1f-45d1-b94d-e6bf2464ba2c",
+   "visibility": "private"
+  },
+  "remoteUrl": "https://acme@dev.azure.com/acme/Shop/_git/web",
+  "size": 1650,
+  "sshUrl": "git@ssh.dev.azure.com:v3/acme/Shop/web",
+  "url": "https://dev.azure.com/acme/6ce954b1-ce1f-45d1-b94d-e6bf2464ba2c/_apis/git/repositories/3411ebc1-d5aa-464f-9615-0b527bc66719",
+  "webUrl": "https://dev.azure.com/acme/Shop/_git/web"
+ },
+ "reviewers": [],
+ "sourceRefName": "refs/heads/feature/policy",
+ "status": "active",
+ "supportsIterations": true,
+ "targetRefName": "refs/heads/feature/base",
+ "title": "T877: build validation policy",
+ "url": "https://dev.azure.com/acme/6ce954b1-ce1f-45d1-b94d-e6bf2464ba2c/_apis/git/repositories/3411ebc1-d5aa-464f-9615-0b527bc66719/pullRequests/8"
+}

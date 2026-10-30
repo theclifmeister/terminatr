@@ -213,8 +213,12 @@ type threadMemo struct {
 	IdleReport int       `json:"idle_report,omitempty"` // report an idle item was raised for
 	PR         PR        `json:"pr"`
 	PRPolled   time.Time `json:"pr_polled"`
-	Resolving  bool      `json:"resolving,omitempty"` // auto-close tried once
-	Held       string    `json:"held,omitempty"`      // unsaved work an item was raised for
+	// NoPR is why the last poll found no PR, in fixed words
+	// (codehost.NoPRWhy): none from the branch, one of another repo, the
+	// CLI failing. "" once one is found.
+	NoPR      string `json:"no_pr,omitempty"`
+	Resolving bool   `json:"resolving,omitempty"` // auto-close tried once
+	Held      string `json:"held,omitempty"`      // unsaved work an item was raised for
 	// IgnoredPR is a report's PR line found to name a PR of another
 	// branch (T728): the PR is looked up by the branch alone after.
 	IgnoredPR string `json:"ignored_pr,omitempty"`
@@ -923,6 +927,7 @@ func (t *Ticker) refreshPR(p *project.Project, r *thread.Record, m *threadMemo, 
 	m.PRPolled = now
 	t.projectMemo(p.Slug).PRPolled = now
 	t.ghRan(p.Slug, err)
+	m.NoPR = codehost.NoPRWhy(err)
 	if err != nil {
 		return false, false // no PR yet, no gh, no network: try again next time
 	}

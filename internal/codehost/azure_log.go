@@ -3,6 +3,7 @@ package codehost
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -11,16 +12,15 @@ import (
 // ones, where the error is.
 const azLogLines = 2000
 
-// FailedLog is the first failing task of a failed build of the PR's
-// validation and an excerpt of its log (azureExcerpt), "" when there is
-// none or Azure DevOps can't give it: no PR build, no failed task, the
-// call failed. Builds are the PR's failed builds of its merge ref,
-// newest first, at most logRuns of them.
+// FailedLog is the first failing task of a failed build of the PR and
+// an excerpt of its log (azureExcerpt), "" when there is none or Azure
+// DevOps can't give it: no PR build, no failed task, the call failed.
+// Builds are the PR's failed builds (failedBuilds), at most logRuns.
 func (a Azure) FailedLog(repo string, pr PR) (job, text string) {
 	if pr.Number <= 0 || a.Target.OrgURL == "" || a.Target.Project == "" {
 		return "", ""
 	}
-	for _, id := range a.failedBuilds(repo, pr.Number) {
+	for _, id := range a.failedBuilds(repo, pr) {
 		if job, ex := a.buildLog(repo, id); ex != "" {
 			return job, ex
 		}
@@ -28,25 +28,36 @@ func (a Azure) FailedLog(repo string, pr PR) (job, text string) {
 	return "", ""
 }
 
-// failedBuilds are the ids of the PR's failed builds: those of
-// refs/pull/<n>/merge, where Azure DevOps builds a PR (a build
-// validation policy's and any other), newest first, at most logRuns.
-func (a Azure) failedBuilds(repo string, n int) []int {
-	out, err := a.get(repo, fmt.Sprintf("%s/_apis/build/builds?branchName=refs/pull/%d/merge&resultFilter=failed&queryOrder=queueTimeDescending&$top=%d&api-version=7.1",
-		a.projectURL(), n, logRuns))
-	if err != nil {
-		return nil
+// failedBuilds are the ids of the PR's failed builds, newest first, at
+// most logRuns: those of refs/pull/<n>/merge, where Azure DevOps builds
+// a PR (a build validation policy's and any other), and those of its
+// source branch at its head commit, which a push's trigger builds
+// (T877).
+func (a Azure) failedBuilds(repo string, pr PR) []int {
+	refs := []string{mergeRef(pr.Number)}
+	if pr.Branch != "" && pr.Head != "" {
+		refs = append(refs, "refs/heads/"+pr.Branch)
 	}
 	var ids []int
-	for _, raw := range azValues(out) {
-		var b struct {
-			ID int `json:"id"`
+	for _, ref := range refs {
+		out, err := a.get(repo, a.buildsURL(ref, "failed"))
+		if err != nil {
+			continue
 		}
-		if json.Unmarshal(raw, &b) == nil && b.ID > 0 && len(ids) < logRuns {
+		for _, raw := range azValues(out) {
+			var b azBuild
+			if json.Unmarshal(raw, &b) != nil || b.ID <= 0 {
+				continue
+			}
+			if ref != mergeRef(pr.Number) && (b.SourceVersion != pr.Head || !strings.EqualFold(b.Repository.Name, a.Target.Repo)) {
+				continue
+			}
 			ids = append(ids, b.ID)
 		}
 	}
-	return ids
+	slices.SortFunc(ids, func(x, y int) int { return y - x })
+	ids = slices.Compact(ids)
+	return ids[:min(len(ids), logRuns)]
 }
 
 // azRecord is one record of a build's timeline.

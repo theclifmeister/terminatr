@@ -64,7 +64,13 @@ func (e *Env) threadMerge(p *project.Project, id string) error {
 	case errors.Is(err, codehost.ErrNoRef):
 		return mergeRefusal("no-pr", "thread %s has no branch to look its pull request up by", id)
 	case errors.Is(err, codehost.ErrNoPR):
-		return mergeRefusal("no-pr", "thread %s has no pull request yet: %s has none from its branch %s", id, hostWhere(host), r.Branch)
+		// The host's reason when it is more than "none from the branch":
+		// a PR of another repo, say (T877).
+		why := ""
+		if w := codehost.NoPRWhy(err); w != "" && !strings.Contains(w, "no PR from") {
+			why = "; " + w
+		}
+		return mergeRefusal("no-pr", "thread %s has no pull request yet: %s has none from its branch %s%s", id, hostWhere(host), r.Branch, why)
 	case err != nil:
 		return err
 	}

@@ -229,3 +229,20 @@ func TestResolveDiscardAlreadyResolved(t *testing.T) {
 		t.Fatalf("nothing left: %q", out)
 	}
 }
+
+// TestThreadShowNoPR (T877): why the ticker found no PR shows in tm
+// thread show, and in the list beside a report's PR line it can't find.
+func TestThreadShowNoPR(t *testing.T) {
+	h := newHarness(t)
+	h.ok(human, "project", "new", "demo")
+	_, rec := threadWithWorktree(t, h, "demo")
+	os.MkdirAll(filepath.Join(h.root, "state"), 0o700)
+	os.WriteFile(filepath.Join(h.root, "state", "ticker.json"), []byte(`{"threads":{"demo/t-0001":{"agent":"idle","reports":0,"pr":{},"pr_polled":"2026-10-30T10:00:00Z","no_pr":"PR 7 is of Shop/api, not of Shop/web, the repo's origin"}},"projects":{}}`), 0o600)
+	out := h.ok(human, "thread", "show", rec.ID, "--project", "demo")
+	if !strings.Contains(out, "PR:") || !strings.Contains(out, "none found: PR 7 is of Shop/api, not of Shop/web, the repo's origin") {
+		t.Fatalf("show:\n%s", out)
+	}
+	if out := h.ok(human, "thread", "show", rec.ID, "--project", "demo", "--json"); !strings.Contains(out, `"no_pr": "PR 7 is of Shop/api`) {
+		t.Fatalf("show --json:\n%s", out)
+	}
+}

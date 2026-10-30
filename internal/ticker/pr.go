@@ -64,6 +64,25 @@ func (s State) PRs(slug string) map[string]PR {
 	return prs
 }
 
+// NoPRs is, by thread id, why the ticker's last poll of each thread of
+// project slug found no PR (codehost.NoPRWhy), for the threads it found
+// none for and knows none of from before.
+func NoPRs(path, slug string) map[string]string {
+	return Load(path).NoPRs(slug)
+}
+
+// NoPRs is NoPRs of s.
+func (s State) NoPRs(slug string) map[string]string {
+	out := map[string]string{}
+	for k, m := range s.st.Threads {
+		id, ok := strings.CutPrefix(k, slug+"/")
+		if ok && m != nil && !strings.Contains(id, "/") && m.NoPR != "" && m.PR.Number <= 0 {
+			out[id] = m.NoPR
+		}
+	}
+	return out
+}
+
 // Timing is when the ticker last did its slow work for a project.
 type Timing struct {
 	PRPolled  time.Time // gh last asked about any PR

@@ -38,6 +38,45 @@ const (
 // says so); every other error is a failed call.
 var ErrNoPR = errors.New("no pull request found")
 
+// NoPRError is ErrNoPR with why the host has no PR, in fixed words
+// with names tm checked: "Azure DevOps has no PR from branch b in
+// Shop/web", "PR 12 is of Shop/api, not of Shop/web, the repo's
+// origin". Err is the host's own answer, for the server log; may be nil.
+type NoPRError struct {
+	Why string
+	Err error
+}
+
+func (e *NoPRError) Error() string {
+	if e.Err != nil {
+		return ErrNoPR.Error() + ": " + e.Why + ": " + e.Err.Error()
+	}
+	return ErrNoPR.Error() + ": " + e.Why
+}
+func (e *NoPRError) Is(target error) bool { return target == ErrNoPR }
+func (e *NoPRError) Unwrap() error        { return e.Err }
+
+// NoPRWhy says in fixed words why a PR lookup that failed with err found
+// no PR: the host's reason (NoPRError), "no PR from its branch" for a
+// host that gives none, or the CLI's failure ("az failed: az is not
+// logged in"); "" for no error and for ErrNoRef, when nothing was asked.
+func NoPRWhy(err error) string {
+	var ne *NoPRError
+	switch {
+	case err == nil, errors.Is(err, ErrNoRef):
+		return ""
+	case errors.As(err, &ne):
+		return ne.Why
+	case errors.Is(err, ErrNoPR):
+		return "no PR from its branch"
+	}
+	cli, problem, _ := Advice(err)
+	if problem == "" {
+		return cli + " failed"
+	}
+	return cli + " failed: " + problem
+}
+
 // ErrNoRef means there was nothing to look a PR up by: no PR URL of this
 // host and no usable branch. Nothing ran.
 var ErrNoRef = errors.New("nothing to look a pull request up by")
