@@ -10,7 +10,8 @@ import (
 )
 
 // TestDesignStatus: designing with no build, planned before a task
-// moves, building once one has (or is done), done once all are.
+// moves, building once one has (or is done), done once all are but the
+// dropped ones, which count as neither.
 func TestDesignStatus(t *testing.T) {
 	build := func(ss ...tasks.Status) []*tasks.Task {
 		var out []*tasks.Task
@@ -30,6 +31,9 @@ func TestDesignStatus(t *testing.T) {
 		{build(tasks.Open, tasks.Blocked), DesignBuilding},
 		{build(tasks.Open, tasks.Done), DesignBuilding},
 		{build(tasks.Done, tasks.Done), DesignDone},
+		{build(tasks.Done, tasks.Dropped), DesignDone},
+		{build(tasks.Open, tasks.Dropped), DesignPlanned},
+		{build(tasks.Dropped, tasks.Dropped), DesignPlanned},
 	} {
 		if got := DesignStatus(c.build); got != c.want {
 			t.Errorf("%v: %s, want %s", c.build, got, c.want)

@@ -30,6 +30,9 @@ they do and keep the project's state.
   [defaults] for all projects, [projects.<slug>] wins key by key.
 - Only the user accepts work: `tm task status T<n> done
   --approved-by-user` on their word only (chat or an `accept` item).
+  Only the user drops a task: `tm task status T<n> dropped
+  --approved-by-user --note "why"` on their word in chat; never mark a
+  task done that they decided not to do.
 - Never choose a thread's question answer yourself, and run `tm thread
   resolve --discard` or `tm library rm` only on the user's word in chat;
   `--discard` on a plain folder also needs `--approved-by-user`.

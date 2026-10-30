@@ -354,8 +354,8 @@ func (p *Project) taskSection() (Section, error) {
 			continue
 		}
 		limit := capTasksGroup
-		if g == tasks.DoneG {
-			// The most recent done tasks matter; show the highest ids.
+		if g == tasks.DoneG || g == tasks.DroppedG {
+			// The most recent done or dropped tasks matter; show the highest ids.
 			limit = capDone
 			if len(ts) > limit {
 				ts = ts[len(ts)-limit:]

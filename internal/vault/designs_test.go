@@ -161,6 +161,38 @@ func TestDesign(t *testing.T) {
 	}
 }
 
+// TestDesignCanvasArchived (T872): an archived build task has no node
+// on the canvas, and a task after it hangs off the note; a dropped one
+// is purple, and counts as neither done nor left to build.
+func TestDesignCanvasArchived(t *testing.T) {
+	p := vaultProject(t)
+	human := caller.Caller{Kind: caller.Human}
+	s := p.Tasks()
+	s.Add(human, []tasks.NewTask{{Title: "A", Status: "done"}, {Title: "B", Status: "dropped"}, {Title: "C", Status: "done"}})
+	name := "net-view"
+	for id, after := range map[int][]string{1: nil, 2: nil, 3: {"T1"}} {
+		s.SetPlan(human, id, &name, after)
+	}
+	s.Archive(human, 1)
+	if _, _, err := Render(p); err != nil {
+		t.Fatal(err)
+	}
+	c := readCanvas(t, p, name)
+	if c.node("tm-T1") != nil {
+		t.Errorf("archived T1 has a node: %v", c.Nodes)
+	}
+	if n := c.node("tm-T2"); n == nil || n["color"] != "6" {
+		t.Errorf("dropped T2: %v", n)
+	}
+	if c.edge("tm-e-note-T3") == nil || c.edge("tm-e-T1-T3") != nil {
+		t.Errorf("edges: %v", c.Edges)
+	}
+	b, _ := os.ReadFile(p.Path("designs", name+".md"))
+	if note := string(b); !strings.Contains(note, `status: "done"`) || !strings.Contains(note, "tasks_done: 2") || !strings.Contains(note, "[[demo/tasks/T1|T1]] A · done") {
+		t.Errorf("design note:\n%s", note)
+	}
+}
+
 // TestDesignCanvasKeeps (T723): tm keeps where the human put its nodes
 // and the human's own nodes and edges, takes over a file node of theirs
 // that is one of its tasks, and removes only its own.

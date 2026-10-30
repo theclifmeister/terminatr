@@ -198,7 +198,7 @@ func (sn *projectSnap) watch(sessions []proto.SessionInfo) proto.ProjectWatch {
 			case tasks.Ready:
 				w.Ready = append(w.Ready, proto.WatchTodo{Task: ref, Title: t.Title, Status: string(t.Status), Asked: asked})
 				continue
-			case tasks.Done:
+			case tasks.Done, tasks.Dropped:
 				continue
 			}
 			n := proto.WatchNeed{Task: ref, Title: t.Title, Status: string(t.Status), Asked: asked}

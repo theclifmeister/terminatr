@@ -270,6 +270,9 @@ func threadTask(p *project.Project, taskRef string) (*tasks.Task, error) {
 	if task.Status == tasks.Done {
 		return nil, &tasks.Error{Code: "task-done", Msg: task.Ref() + " is done"}
 	}
+	if task.Status == tasks.Dropped {
+		return nil, &tasks.Error{Code: "task-dropped", Msg: task.Ref() + " is dropped; reopen it first (tm task status " + task.Ref() + " open)"}
+	}
 	return task, nil
 }
 

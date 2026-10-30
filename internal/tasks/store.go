@@ -260,7 +260,7 @@ func (s *Store) addOne(c caller.Caller, b *Board, it NewTask) (AddResult, *Task)
 		return fail(err)
 	}
 	for _, t := range b.Tasks {
-		if t.Title == title && t.Status != Done {
+		if t.Title == title && !t.Status.Closed() {
 			return AddResult{Title: title, ID: t.Ref(), Result: "existing"}, nil
 		}
 	}
@@ -270,8 +270,8 @@ func (s *Store) addOne(c caller.Caller, b *Board, it NewTask) (AddResult, *Task)
 		if !ok {
 			return fail(refuse("invalid-status", fmt.Sprintf("unknown status %q", it.Status)))
 		}
-		if st == Done && c.IsAgent() {
-			return fail(refuse("human-only", "only the human sets done"))
+		if st.Closed() && c.IsAgent() {
+			return fail(refuse("human-only", "only the human sets "+string(st)))
 		}
 		status = st
 	}
@@ -301,25 +301,28 @@ func (s *Store) addOne(c caller.Caller, b *Board, it NewTask) (AddResult, *Task)
 	return AddResult{Title: title, ID: t.Ref(), Result: "created"}, t
 }
 
-// SetStatus moves a task. Only the human sets done (§6.4): an agent's
-// call is refused with human-only, and the coordinator relays the user's
-// acceptance with SetDoneApproved. note, if given, is appended to the
+// SetStatus moves a task. Only the human sets done or dropped (§6.4):
+// an agent's call is refused with human-only, and the coordinator relays
+// the user's word with SetApproved. note, if given, is appended to the
 // notes and journaled.
 func (s *Store) SetStatus(c caller.Caller, id int, st Status, note string) (Result, error) {
-	if st == Done && c.IsAgent() {
-		return s.refuseDone(c, id)
+	if st.Closed() && c.IsAgent() {
+		return s.refuseClosed(c, id, st)
 	}
 	return s.setStatus(c, id, st, note, "")
 }
 
-// SetDoneApproved marks a task done on the coordinator's call once the
-// user accepted the work and told it so (tm task status T12 done
+// SetApproved marks a task done or dropped on the coordinator's call
+// once the user told it so (tm task status T12 done|dropped
 // --approved-by-user); the journal says the user approved it.
-func (s *Store) SetDoneApproved(c caller.Caller, id int, note string) (Result, error) {
+func (s *Store) SetApproved(c caller.Caller, id int, st Status, note string) (Result, error) {
+	if !st.Closed() {
+		return Result{}, refuse("invalid-status", "only done and dropped take the user's word")
+	}
 	if c.IsAgent() && c.Kind != caller.Coordinator {
 		return Result{}, refuse("coordinator-only", "threads report through tm done; the coordinator moves the task")
 	}
-	return s.setStatus(c, id, Done, note, " (approved by the user)")
+	return s.setStatus(c, id, st, note, " (approved by the user)")
 }
 
 // CompleteBySetting marks a task in review done on the ticker's call,
@@ -367,9 +370,9 @@ func (s *Store) setStatus(c caller.Caller, id int, st Status, note, approved str
 	return res, s.journal(c, "task.status", res.Task, joinDetail(string(st), note)+approved)
 }
 
-// refuseDone answers an agent's plain request to set done: refused, or
-// already true.
-func (s *Store) refuseDone(c caller.Caller, id int) (Result, error) {
+// refuseClosed answers an agent's plain request to set done or dropped:
+// refused, or already true.
+func (s *Store) refuseClosed(c caller.Caller, id int, st Status) (Result, error) {
 	if c.Kind != caller.Coordinator {
 		return Result{}, refuse("coordinator-only", "threads report through tm done; the coordinator moves the task")
 	}
@@ -383,8 +386,11 @@ func (s *Store) refuseDone(c caller.Caller, id int) (Result, error) {
 	if t.Archived {
 		return Result{}, refuse("archived", fmt.Sprintf("%s is archived", t.Ref()))
 	}
-	if t.Status == Done {
+	if t.Status == st {
 		return Result{Task: t}, nil
+	}
+	if st == Dropped {
+		return Result{}, refuse("human-only", fmt.Sprintf("only the user drops a task: once they tell you to drop %s, run tm task status %s dropped --approved-by-user --note \"why\"", t.Ref(), t.Ref()))
 	}
 	return Result{}, refuse("human-only", fmt.Sprintf("only the user accepts work: once they tell you %s is done, run tm task status %s done --approved-by-user", t.Ref(), t.Ref()))
 }

@@ -28,11 +28,11 @@ func (f *fakeSource) tasksTabView() proto.ModView {
 	v := proto.ModView{Mod: mod.BundledTasks, Name: "Tasks tab", View: mod.TasksView, Title: "tasks", Slot: mod.SlotProjectTab}
 	for _, p := range f.data.Projects {
 		b, _ := f.Board(p.Slug)
-		// Opened to show a done task, the mod lists the done tasks.
+		// Opened to show a done or dropped task, the mod lists them.
 		doneAll := f.tasksDoneAll
 		for _, s := range f.shown {
 			if s.Mod == v.Mod && s.Project == p.Slug && s.Task != "" {
-				doneAll = doneAll || slices.ContainsFunc(b.Tasks, func(t *tasks.Task) bool { return t.Ref() == s.Task && t.Status == tasks.Done })
+				doneAll = doneAll || slices.ContainsFunc(b.Tasks, func(t *tasks.Task) bool { return t.Ref() == s.Task && t.Status.Closed() })
 			}
 		}
 		v.Trees = append(v.Trees, modview.Tree{Project: p.Slug, Tree: tasksTabTree(p.Slug, b, p.Items, doneAll)})
@@ -60,7 +60,7 @@ func (f *fakeSource) modViewsNow() proto.ModViewsResult {
 func tasksTabTree(slug string, b *tasks.Board, items []project.Item, doneAll bool) *widget.Widget {
 	var rows []widget.Row
 	var group tasks.Group
-	done := 0
+	done, dropped := 0, 0
 	for _, g := range tasks.Groups {
 		var in []*tasks.Task
 		for _, t := range b.Tasks {
@@ -68,8 +68,12 @@ func tasksTabTree(slug string, b *tasks.Board, items []project.Item, doneAll boo
 				in = append(in, t)
 			}
 		}
-		if g == tasks.DoneG {
-			done = len(in)
+		if g == tasks.DoneG || g == tasks.DroppedG {
+			if g == tasks.DoneG {
+				done = len(in)
+			} else {
+				dropped = len(in)
+			}
 			if !doneAll {
 				continue
 			}
@@ -86,16 +90,27 @@ func tasksTabTree(slug string, b *tasks.Board, items []project.Item, doneAll boo
 			rows = append(rows, tasksTabRow(slug, t, project.TaskAsked(items, t.Ref()) != ""))
 		}
 	}
-	if !doneAll && done > 0 {
+	folded := !doneAll && done+dropped > 0
+	if folded && done > 0 {
 		rows = append(rows, widget.Row{ID: "g:done", Head: true, Spans: []widget.Span{{Text: "DONE", Role: "head"}}})
 	}
+	if folded && dropped > 0 {
+		rows = append(rows, widget.Row{ID: "g:dropped", Head: true, Spans: []widget.Span{{Text: "DROPPED", Role: "head"}}})
+	}
 	children := []widget.Widget{{Kind: widget.KindTable, ID: "tasks", Empty: "no tasks", Columns: make([]widget.Column, 4), Rows: rows}}
-	if !doneAll && done > 0 {
-		children = append(children, widget.Widget{Kind: widget.KindText, Text: fmt.Sprintf("… %d done (b shows them)", done), Role: "faint"})
+	if folded {
+		var counts []string
+		if done > 0 {
+			counts = append(counts, fmt.Sprintf("%d done", done))
+		}
+		if dropped > 0 {
+			counts = append(counts, fmt.Sprintf("%d dropped", dropped))
+		}
+		children = append(children, widget.Widget{Kind: widget.KindText, Text: "… " + strings.Join(counts, ", ") + " (b shows them)", Role: "faint"})
 	}
 	keys := widget.Widget{Kind: widget.KindKeys, ID: "keys",
 		Actions: []widget.Action{{ID: "task.new", Target: map[string]string{"project": slug}}}}
-	if doneAll || done > 0 {
+	if doneAll || done+dropped > 0 {
 		keys.Keys = []widget.Key{{Key: "b", Label: map[bool]string{true: "hide done", false: "done"}[doneAll]}}
 	}
 	return &widget.Widget{Kind: widget.KindStack, Children: append(children, keys)}
@@ -123,8 +138,8 @@ func tasksTabRow(slug string, t *tasks.Task, asked bool) widget.Row {
 		ask("task.delegate")
 	}
 	icon, role := map[tasks.Status][2]string{tasks.Started: {"working", "good"}, tasks.Blocked: {"blocked", "bad"},
-		tasks.Review: {"review", "warn"}, tasks.Done: {"done", "good"}, tasks.Open: {"idle", ""}, tasks.Ready: {"idle", ""}}[t.Status][0], ""
-	role = map[tasks.Status]string{tasks.Started: "good", tasks.Blocked: "bad", tasks.Review: "warn", tasks.Done: "good"}[t.Status]
+		tasks.Review: {"review", "warn"}, tasks.Done: {"done", "good"}, tasks.Open: {"idle", ""}, tasks.Ready: {"idle", ""}, tasks.Dropped: {"other", "faint"}}[t.Status][0], ""
+	role = map[tasks.Status]string{tasks.Started: "good", tasks.Blocked: "bad", tasks.Review: "warn", tasks.Done: "good", tasks.Dropped: "faint"}[t.Status]
 	var rest []widget.Span
 	if asked {
 		rest = append(rest, widget.Span{Text: "asked the coordinator", Role: "warn"})
@@ -141,7 +156,7 @@ func tasksTabRow(slug string, t *tasks.Task, asked bool) widget.Row {
 	}
 	r := widget.Row{ID: t.Ref(), Actions: acts, Cells: [][]widget.Span{
 		{{Text: t.Ref()}}, {{Text: t.Title}}, {{Icon: icon, Role: role}, {Text: " " + string(t.Status), Role: role}}, rest}}
-	if t.Status != tasks.Done {
+	if !t.Status.Closed() {
 		for _, s := range t.Steps {
 			icon, role := "todo.open", "faint"
 			if s.Done {

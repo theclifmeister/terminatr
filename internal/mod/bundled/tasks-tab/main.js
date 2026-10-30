@@ -8,8 +8,10 @@
     { id: "in-motion", title: "IN MOTION", statuses: ["started"] },
     { id: "on-deck", title: "ON DECK", statuses: ["ready"] },
     { id: "backlog", title: "BACKLOG", statuses: ["open"] },
-    { id: "done", title: "DONE", statuses: ["done"] }
+    { id: "done", title: "DONE", statuses: ["done"] },
+    { id: "dropped", title: "DROPPED", statuses: ["dropped"] }
   ];
+  var closed = (g) => g === "done" || g === "dropped";
   function groupOf(status2) {
     for (const g of GROUPS) if (g.statuses.includes(status2)) return g.id;
     return "on-deck";
@@ -67,7 +69,7 @@
       cells: [[{ text: t.id }], [{ text: t.title }], status(t.status), rest],
       actions: actions(project, t)
     };
-    if (t.status !== "done" && ((_b = t.steps) != null ? _b : []).length > 0) {
+    if (!closed(groupOf(t.status)) && ((_b = t.steps) != null ? _b : []).length > 0) {
       r.more = t.steps.map((s) => [
         { text: "      " },
         s.done ? { icon: "todo.done", role: "good" } : { icon: "todo.open", role: "faint" },
@@ -79,9 +81,9 @@
   function shown(t) {
     const out = [];
     for (const g of GROUPS) {
-      if (g.id === "done" && !t.doneAll) continue;
+      if (closed(g.id) && !t.doneAll) continue;
       const in_ = t.tasks.filter((x) => groupOf(x.status) === g.id);
-      if (g.id === "done") {
+      if (closed(g.id)) {
         in_.sort((a, b) => {
           var _a, _b;
           return ((_a = b.updated) != null ? _a : "").localeCompare((_b = a.updated) != null ? _b : "") || num(b.id) - num(a.id);
@@ -110,8 +112,10 @@
       rows.push(row(project, task));
     }
     const done = t.tasks.filter((x) => x.status === "done").length;
-    const folded = !t.doneAll && done > 0;
-    if (folded) rows.push({ id: "g:done", head: true, spans: [{ text: "DONE", role: "head" }] });
+    const dropped = t.tasks.filter((x) => x.status === "dropped").length;
+    const folded = !t.doneAll && done + dropped > 0;
+    if (folded && done > 0) rows.push({ id: "g:done", head: true, spans: [{ text: "DONE", role: "head" }] });
+    if (folded && dropped > 0) rows.push({ id: "g:dropped", head: true, spans: [{ text: "DROPPED", role: "head" }] });
     const children = [
       {
         kind: "table",
@@ -121,8 +125,11 @@
         rows
       }
     ];
-    if (folded) children.push({ kind: "text", text: `… ${done} done (b shows them)`, role: "faint" });
-    const keys = t.doneAll || done > 0 ? [{ key: "b", label: t.doneAll ? "hide done" : "done" }] : [];
+    if (folded) {
+      const counts = [done > 0 ? `${done} done` : "", dropped > 0 ? `${dropped} dropped` : ""].filter((s) => s !== "").join(", ");
+      children.push({ kind: "text", text: `… ${counts} (b shows them)`, role: "faint" });
+    }
+    const keys = t.doneAll || done + dropped > 0 ? [{ key: "b", label: t.doneAll ? "hide done" : "done" }] : [];
     children.push({ kind: "keys", id: "keys", keys, actions: [{ id: "task.new", target: { project } }] });
     return { kind: "stack", children };
   }
@@ -157,7 +164,7 @@
     const t = (_a = tabs.get(e.project)) != null ? _a : { tasks: [], doneAll: false, error: "" };
     tabs.set(e.project, t);
     await load(e.project, t);
-    if (e.task && t.tasks.some((x) => x.id === e.task && x.status === "done")) t.doneAll = true;
+    if (e.task && t.tasks.some((x) => x.id === e.task && closed(groupOf(x.status)))) t.doneAll = true;
     await publish(e.project, t);
   });
   $.on("view.closed", async (e) => {

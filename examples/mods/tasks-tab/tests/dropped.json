@@ -1,0 +1,46 @@
+{
+  "name": "dropped tasks fold with the done ones under b, in their own section after Done, bound to nothing but task.show",
+  "answers": [
+    { "method": "tasks.list", "params": { "slug": "demo" },
+      "result": [
+        { "id": "T5", "title": "Idea", "status": "open", "steps_done": 0, "steps_total": 0, "steps": [] },
+        { "id": "T6", "title": "Old", "status": "done", "steps_done": 0, "steps_total": 0, "steps": [], "updated": "2026-09-01" },
+        { "id": "T7", "title": "Never mind", "status": "dropped", "steps_done": 0, "steps_total": 1, "steps": [{ "text": "Try", "done": false }], "updated": "2026-10-30" }
+      ] }
+  ],
+  "events": [
+    { "name": "view.opened", "project": "demo",
+      "data": { "view": "tasks", "slot": "project.tab", "project": "demo", "width": 70, "height": 20 } },
+    { "name": "ui.key", "project": "demo",
+      "data": { "view": "tasks", "widget": "tasks", "key": "b", "target": { "project": "demo" } } }
+  ],
+  "expect": {
+    "calls": [
+      { "method": "tasks.list", "params": { "slug": "demo" } },
+      { "method": "ui.view.set", "params": { "view": "tasks",
+          "widget": { "kind": "stack", "children": [
+            { "kind": "table", "rows": [
+              { "id": "g:backlog", "head": true },
+              { "id": "T5" },
+              { "id": "g:done", "head": true },
+              { "id": "g:dropped", "head": true }
+            ] },
+            { "kind": "text", "text": "… 1 done, 1 dropped (b shows them)" },
+            { "kind": "keys", "keys": [{ "key": "b", "label": "done" }] }
+          ] } } },
+      { "method": "ui.view.set", "params": { "view": "tasks",
+          "widget": { "kind": "stack", "children": [
+            { "kind": "table", "rows": [
+              { "id": "g:backlog", "head": true },
+              { "id": "T5" },
+              { "id": "g:done", "head": true },
+              { "id": "T6" },
+              { "id": "g:dropped", "head": true },
+              { "id": "T7", "actions": [
+                  { "id": "task.show", "target": { "project": "demo", "task": "T7" } }] }
+            ] },
+            { "kind": "keys", "keys": [{ "key": "b", "label": "hide done" }] }
+          ] } } }
+    ]
+  }
+}

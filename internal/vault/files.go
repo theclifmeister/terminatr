@@ -35,11 +35,20 @@ const baseHeader = "# Written by tm (tm vault init, tm vault render): a change h
 type base struct{ name, text string }
 
 // perProject is a view per project: name, the folder it reads, and
-// what the base's main view shows.
-func perProject(slugs []string, folder, order string) string {
+// what the base's main view shows; and, the view's further filters.
+func perProject(slugs []string, folder, order string, and ...string) string {
 	var b strings.Builder
 	for _, s := range slugs {
-		fmt.Fprintf(&b, "  - type: table\n    name: %s\n    filters: %s\n    order: %s\n", s, quote(`file.inFolder("`+s+folder+`")`), order)
+		in := quote(`file.inFolder("` + s + folder + `")`)
+		if len(and) == 0 {
+			fmt.Fprintf(&b, "  - type: table\n    name: %s\n    filters: %s\n    order: %s\n", s, in, order)
+			continue
+		}
+		fmt.Fprintf(&b, "  - type: table\n    name: %s\n    filters:\n      and:\n        - %s\n", s, in)
+		for _, f := range and {
+			fmt.Fprintf(&b, "        - %s\n", quote(f))
+		}
+		fmt.Fprintf(&b, "    order: %s\n", order)
 	}
 	return b.String()
 }
@@ -51,10 +60,9 @@ func bases(slugs []string) []base {
 	const taskOrder = "[file.name, title, status, thread, formula.progress, pr, formula.age]"
 	const threadOrder = "[file.name, task, title, agent, model, state, pr, created]"
 	const memoryOrder = "[file.name, title, touches, standing, audience, source]"
-	tasksBase := baseHeader + `filters:
-  and:
-    - file.hasTag("task")
-    - 'archived != true'
+	// Each view leaves out archived tasks (archived: true) but the one
+	// that asks for them; the board's leave out dropped ones too.
+	tasksBase := baseHeader + `filters: 'file.hasTag("task")'
 formulas:
   progress: 'if(steps > 0, steps_done + "/" + steps, "")'
   age: 'if(updated, (now() - updated).days.floor(), "")'
@@ -66,6 +74,10 @@ properties:
 views:
   - type: table
     name: Board
+    filters:
+      and:
+        - 'archived != true'
+        - 'status != "dropped"'
     groupBy:
       property: group
       direction: ASC
@@ -73,12 +85,17 @@ views:
     order: ` + taskOrder + `
   - type: cards
     name: Cards
-    filters: 'status != "done"'
+    filters:
+      and:
+        - 'archived != true'
+        - 'status != "done"'
+        - 'status != "dropped"'
     order: [title, status, thread, formula.progress]
   - type: table
     name: Done this week
     filters:
       and:
+        - 'archived != true'
         - 'status == "done"'
         - 'updated >= today() - "7d"'
     order: ` + taskOrder + `
@@ -86,13 +103,33 @@ views:
       - property: updated
         direction: DESC
   - type: table
+    name: Dropped
+    filters:
+      and:
+        - 'archived != true'
+        - 'status == "dropped"'
+    order: ` + taskOrder + `
+    sort:
+      - property: updated
+        direction: DESC
+  - type: table
     name: By design
-    filters: 'design.isTruthy()'
+    filters:
+      and:
+        - 'archived != true'
+        - 'design.isTruthy()'
     groupBy:
       property: design
       direction: ASC
     order: [file.name, title, status, after, thread, pr]
-` + perProject(slugs, "/tasks", taskOrder)
+  - type: table
+    name: Archived
+    filters: 'archived == true'
+    order: ` + taskOrder + `
+    sort:
+      - property: updated
+        direction: DESC
+` + perProject(slugs, "/tasks", taskOrder, "archived != true")
 	threadsBase := baseHeader + `filters: 'file.hasTag("thread")'
 views:
   - type: table

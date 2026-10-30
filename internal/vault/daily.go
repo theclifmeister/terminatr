@@ -173,6 +173,7 @@ type projectDay struct {
 	// memoryGone are the memory notes removed, which links can't reach.
 	memoryGone []string
 	approved   [][2]string // task, status
+	dropped    []string    // tasks the user decided not to do: never shipped
 	links      []linkEvent
 	linkMore   map[string]int
 	guard      map[string]int
@@ -296,9 +297,12 @@ func (r *replay) apply(e entry, d *projectDay) {
 		if d == nil {
 			break
 		}
-		if st == string(tasks.Done) {
+		switch {
+		case st == string(tasks.Done):
 			d.ship(shipped{task: task, thread: r.thread[task], pr: r.pr[r.thread[task]]})
-		} else if strings.HasSuffix(e.detail, "(approved by the user)") && st != "" {
+		case st == string(tasks.Dropped):
+			d.dropped = appendOnce(d.dropped, task)
+		case strings.HasSuffix(e.detail, "(approved by the user)") && st != "":
 			d.approved = append(d.approved, [2]string{task, st})
 		}
 	case a == "task.done" && task != "":
@@ -665,6 +669,13 @@ func (p *dayProject) writeDay(b *strings.Builder, d, now *projectDay) (still boo
 	}
 	for _, a := range d.approved {
 		items = append(items, p.task(a[0], true)+" → "+a[1]+", the user's word")
+	}
+	if len(d.dropped) > 0 {
+		refs := make([]string, len(d.dropped))
+		for i, t := range d.dropped {
+			refs[i] = p.task(t, true)
+		}
+		items = append(items, "dropped: "+strings.Join(refs, ", "))
 	}
 	if len(d.memory) > 0 {
 		notes := make([]string, len(d.memory))

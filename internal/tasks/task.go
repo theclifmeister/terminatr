@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-// Status is one of the six task statuses (§6.1).
+// Status is one of the seven task statuses (§6.1).
 type Status string
 
 const (
@@ -19,10 +19,15 @@ const (
 	Blocked Status = "blocked" // waiting on something
 	Review  Status = "review"  // finished, waiting for the human
 	Done    Status = "done"
+	Dropped Status = "dropped" // the user decided not to do it
 )
 
 // Statuses lists every status in board order.
-var Statuses = []Status{Blocked, Review, Started, Ready, Open, Done}
+var Statuses = []Status{Blocked, Review, Started, Ready, Open, Done, Dropped}
+
+// Closed reports whether s ends a task: done or dropped. Only the
+// human sets either (§6.4); only done counts as shipped.
+func (s Status) Closed() bool { return s == Done || s == Dropped }
 
 // ParseStatus accepts a status name, or tsk's "start" alias.
 func ParseStatus(s string) (Status, bool) {
@@ -47,10 +52,11 @@ const (
 	OnDeck   Group = "On deck"
 	Backlog  Group = "Backlog"
 	DoneG    Group = "Done"
+	DroppedG Group = "Dropped"
 )
 
 // Groups lists the board sections in order.
-var Groups = []Group{NeedsYou, InMotion, OnDeck, Backlog, DoneG}
+var Groups = []Group{NeedsYou, InMotion, OnDeck, Backlog, DoneG, DroppedG}
 
 // GroupOf returns the board section of a status.
 func GroupOf(s Status) Group {
@@ -63,6 +69,8 @@ func GroupOf(s Status) Group {
 		return Backlog
 	case Done:
 		return DoneG
+	case Dropped:
+		return DroppedG
 	}
 	return OnDeck
 }
@@ -78,8 +86,10 @@ func rank(s Status) int {
 		return 2
 	case Open:
 		return 3
+	case Done:
+		return 4
 	}
-	return 4
+	return 5
 }
 
 // Step is one checklist item. N is its 1-based position.

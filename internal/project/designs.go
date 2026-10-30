@@ -234,23 +234,25 @@ const (
 )
 
 // DesignStatus is a design's status from its build: done once every
-// task is, building once one has started, planned before, designing
-// with none.
+// task is (but the dropped ones, which count as neither), building once
+// one has started, planned before, designing with none.
 func DesignStatus(build []*tasks.Task) string {
 	if len(build) == 0 {
 		return DesignDesigning
 	}
-	done, moving := 0, false
+	done, dropped, moving := 0, 0, false
 	for _, t := range build {
 		switch t.Status {
 		case tasks.Done:
 			done++
+		case tasks.Dropped:
+			dropped++
 		case tasks.Started, tasks.Review, tasks.Blocked:
 			moving = true
 		}
 	}
 	switch {
-	case done == len(build):
+	case done > 0 && done+dropped == len(build):
 		return DesignDone
 	case done > 0 || moving:
 		return DesignBuilding

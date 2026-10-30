@@ -306,7 +306,12 @@ You are the only agent that writes it.
   (file it as any task; that pass moves no text into code); drop notes
   that work around tm's own behaviour every user would hit and list
   them, each to become a task for a fix in tm, then stop.
-- tm archives done tasks, resolved threads, handled items and old
+- A task the user decides not to do is dropped, not done: on their word
+  in chat, `tm task status T<n> dropped --approved-by-user --note
+  "why"`. A dropped task leaves the board's groups and Needs you, never
+  counts as done or shipped, and any other status reopens it (`tm task
+  status T<n> open`).
+- tm archives done and dropped tasks, resolved threads, handled items and old
   journal lines itself; don't by hand (`tm task archive T<n>` for
   sooner). `tm thread list --all` lists archived threads; `tm thread
   show <id>` still reads one.

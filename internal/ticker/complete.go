@@ -112,7 +112,7 @@ func (t *Ticker) completeTasks(p *project.Project, safety config.Safety) {
 	live, refs := map[string]bool{}, map[string]bool{}
 	for _, tk := range board.Tasks {
 		refs[tk.Ref()] = true
-		if tk.Status != tasks.Done && tk.Thread != "" {
+		if !tk.Status.Closed() && tk.Thread != "" {
 			live[tk.Thread] = true
 		}
 	}

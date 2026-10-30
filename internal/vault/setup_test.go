@@ -289,6 +289,46 @@ func TestBasesParse(t *testing.T) {
 	}
 }
 
+// TestTasksBaseArchived (T872): every view of the Tasks Base leaves out
+// archived tasks but Archived, which asks for them; the board's views
+// leave out dropped ones, which have their own.
+func TestTasksBaseArchived(t *testing.T) {
+	var doc struct {
+		Views []struct {
+			Name    string `yaml:"name"`
+			Filters any    `yaml:"filters"`
+		} `yaml:"views"`
+	}
+	if err := yaml.Unmarshal([]byte(bases([]string{"demo"})[0].text), &doc); err != nil {
+		t.Fatal(err)
+	}
+	flat := func(f any) string {
+		if m, ok := f.(map[string]any); ok {
+			var out []string
+			for _, x := range m["and"].([]any) {
+				out = append(out, x.(string))
+			}
+			return strings.Join(out, " && ")
+		}
+		s, _ := f.(string)
+		return s
+	}
+	seen := map[string]string{}
+	for _, v := range doc.Views {
+		seen[v.Name] = flat(v.Filters)
+	}
+	for name, f := range seen {
+		if want := name != "Archived"; strings.Contains(f, "archived != true") != want {
+			t.Errorf("%s: %q", name, f)
+		}
+	}
+	for name, want := range map[string]string{"Archived": "archived == true", "Board": `status != "dropped"`, "Cards": `status != "dropped"`, "Dropped": `status == "dropped"`} {
+		if !strings.Contains(seen[name], want) {
+			t.Errorf("%s: %q, want %s", name, seen[name], want)
+		}
+	}
+}
+
 func checkFilter(t *testing.T, where string, f any) {
 	t.Helper()
 	switch f := f.(type) {

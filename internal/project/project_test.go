@@ -198,7 +198,7 @@ func TestDoneApproved(t *testing.T) {
 	if items, _ := p.Inbox(); len(items) != 0 {
 		t.Fatalf("a refused done raised items: %+v", items)
 	}
-	if _, err := s.SetDoneApproved(coord, 1, ""); err != nil {
+	if _, err := s.SetApproved(coord, 1, tasks.Done, ""); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.SetStatus(human, 2, tasks.Done, ""); err != nil {

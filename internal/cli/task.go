@@ -24,9 +24,12 @@ const taskUsage = `usage: tm task <command> [--project <slug>] [--json]
   add --json < plan.json        bulk: [{"title","notes","steps":[…],"status","owner","repo"}]
   list [--status a,b] [--needs-you] [--archived]
   show T12
-  status T12 <open|ready|started|blocked|review|done> [--note "…"]
+  status T12 <open|ready|started|blocked|review|done|dropped> [--note "…"]
   status T12 done --approved-by-user
                                 the coordinator, once the user accepted the work
+  status T12 dropped --approved-by-user --note "why"
+                                the coordinator, once the user decided not to do it;
+                                never counted as done; any other status reopens it
   edit T12 [--title "…"] [--notes "…" | --notes-file F] [--owner O] [--repo R] [--design NAME] [--after T10,T11]
   steps T12 add "text" | check N | uncheck N | rename N "text" | remove N
   archive T12 | unarchive T12
@@ -103,14 +106,14 @@ func runTask(e *Env, args []string) error {
 			}
 			st, ok := tasks.ParseStatus(pos[1])
 			if !ok {
-				return &tasks.Error{Code: "invalid-status", Msg: fmt.Sprintf("%q is not one of open, ready, started, blocked, review, done", pos[1])}
+				return &tasks.Error{Code: "invalid-status", Msg: fmt.Sprintf("%q is not one of open, ready, started, blocked, review, done, dropped", pos[1])}
 			}
 			var res tasks.Result
 			switch {
-			case *approved && st != tasks.Done:
-				return usagef("--approved-by-user only goes with done")
+			case *approved && !st.Closed():
+				return usagef("--approved-by-user only goes with done or dropped")
 			case *approved:
-				res, err = s.SetDoneApproved(e.Caller, id, *note)
+				res, err = s.SetApproved(e.Caller, id, st, *note)
 			default:
 				res, err = s.SetStatus(e.Caller, id, st, *note)
 			}

@@ -249,6 +249,16 @@ func TestCallerRules(t *testing.T) {
 		t.Fatalf("inbox %q", inbox)
 	}
 
+	// Nor drops a task (T872): dropped is its own group, after Done, and
+	// any other status reopens it.
+	h.expect(1, "human-only", coord, "task", "status", "T2", "dropped")
+	h.expect(1, "coordinator-only", thr, "task", "status", "T2", "dropped", "--approved-by-user")
+	h.ok(coord, "task", "status", "T2", "dropped", "--approved-by-user", "--note", "not needed")
+	if out := h.ok(coord, "task", "list"); !strings.Contains(out, "DONE\n  T1") || !strings.Contains(out, "DROPPED\n  T2   dropped") {
+		t.Fatalf("list:\n%s", out)
+	}
+	h.ok(coord, "task", "status", "T2", "open")
+
 	// Agents can't write another project's tasks.
 	h.ok(human, "project", "new", "other")
 	h.expect(1, "other-project", coord, "task", "add", "x", "--project", "other")

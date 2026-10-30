@@ -146,15 +146,23 @@ func derived(rel string) bool {
 	return thread.ValidID(ref) && dir == "threads/"+ref+"/"
 }
 
+// archivedGroup is an archived task's group: off the board, so never
+// Backlog or Needs you whatever its status.
+const archivedGroup = "Archived"
+
 func taskNote(slug string, t *tasks.Task, r *thread.Record, pr string, archived bool) (Note, error) {
+	group := string(tasks.GroupOf(t.Status))
+	if archived {
+		group = archivedGroup
+	}
 	f := taskFront{
-		ID: t.Ref(), Title: t.Title, Status: string(t.Status), Group: string(tasks.GroupOf(t.Status)),
+		ID: t.Ref(), Title: t.Title, Status: string(t.Status), Group: group,
 		Project: vaultlink.Link(slug, vaultlink.Project, slug, ""),
 		Owner:   t.Owner, Steps: len(t.Steps), StepsDone: t.StepsDone(),
 		Created: t.Created, Updated: t.Updated, Archived: archived,
 		Tags: []string{"task"}, TM: "owned", CSSClasses: []string{"tm-owned"},
 	}
-	if t.Status == tasks.Review || t.Status == tasks.Blocked {
+	if !archived && tasks.GroupOf(t.Status) == tasks.NeedsYou {
 		f.Tags = append(f.Tags, "needs-you")
 	}
 	if t.Thread != "" {
