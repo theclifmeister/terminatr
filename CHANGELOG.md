@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.67.1](https://github.com/theclifmeister/terminatr/compare/v0.67.0...v0.67.1) (2026-10-30)
+
+
+### Bug Fixes
+
+* tm thread merge says merged only once the host shows the PR merged, and Azure DevOps completes for real ([#948](https://github.com/theclifmeister/terminatr/issues/948)) ([46ee57a](https://github.com/theclifmeister/terminatr/commit/46ee57a4a71b1c3a719e5bc54253843beba2427d))
+
 ## [0.67.0](https://github.com/theclifmeister/terminatr/compare/v0.66.0...v0.67.0) (2026-10-30)
 
 
