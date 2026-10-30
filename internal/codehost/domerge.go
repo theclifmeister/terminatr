@@ -7,10 +7,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"regexp"
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 )
 
@@ -133,17 +135,24 @@ var azMethodRE = regexp.MustCompile(`(?i)merge (strategy|type)[^.]*not (allowed|
 // Merge completes the PR through the REST API (az rest, as the reads
 // are): status completed by the method's merge strategy (noFastForward
 // for a merge commit, squash, rebase), the head read as the commit it
-// applies to, and the source branch kept. Azure DevOps finishes the
-// completion a moment after the call answers. A strategy a branch policy
+// applies to, and the source branch kept. A strategy a branch policy
 // refuses is a MethodError; Azure DevOps doesn't say which it allows.
 // A squash's commit message is the PR's title and " (!N)" (Azure
 // DevOps' PR link), as completionOptions.mergeCommitMessage; a merge
 // commit keeps Azure DevOps' own message.
+//
+// Where az rest can't sign in (its sign-in page, which az passes on
+// with exit 0, once read as success: T878), the azure-devops extension
+// completes it (az repos pr update), at the head Azure DevOps has then,
+// which tm read a moment ago. Azure DevOps finishes a completion after
+// the call answers, or not at all (a policy pending, a reviewer
+// missing), so the PR is read again until it is completed, for at most
+// azMergeWait: one still active then is a *NotMergedError saying why.
 func (a Azure) Merge(repo string, pr PR, method string) error {
 	if err := checkMerge("azure devops", pr, method); err != nil {
 		return err
 	}
-	opts := map[string]any{"mergeStrategy": azStrategy[method], "deleteSourceBranch": false}
+	subject := ""
 	if method == BySquash {
 		out, err := a.get(repo, a.prURL(pr.Number))
 		if err != nil {
@@ -155,10 +164,43 @@ func (a Azure) Merge(repo string, pr PR, method string) error {
 		if err := json.Unmarshal(out, &p); err != nil {
 			return fmt.Errorf("azure devops: PR %d: %w", pr.Number, err)
 		}
-		subject, err := squashSubject(p.Title, pr.Number, "!")
-		if err != nil {
+		if subject, err = squashSubject(p.Title, pr.Number, "!"); err != nil {
 			return fmt.Errorf("azure devops: %w", err)
 		}
+	}
+	var out []byte
+	var err error
+	ext := a.UsesExtension()
+	if !ext {
+		out, err = a.completeByREST(repo, pr, method, subject)
+		ext = err != nil && authFailure(err)
+	}
+	if ext {
+		var eerr error
+		if out, eerr = a.completeByExtension(repo, pr, method, subject); eerr == nil {
+			azVia.Store(a.Target.OrgURL, viaExt)
+		}
+		if err == nil || eerr == nil || !authFailure(eerr) {
+			err = eerr
+		}
+	}
+	if err != nil {
+		if azMethodRE.MatchString(err.Error()) {
+			return &MethodError{Method: method, Err: err}
+		}
+		return err
+	}
+	return a.awaitCompleted(repo, pr, out)
+}
+
+// completeByREST is the PATCH of status completed through az rest.
+func (a Azure) completeByREST(repo string, pr PR, method, subject string) ([]byte, error) {
+	u := a.prURL(pr.Number)
+	if !a.trusted(u) {
+		return nil, errUntrustedURL
+	}
+	opts := map[string]any{"mergeStrategy": azStrategy[method], "deleteSourceBranch": false}
+	if subject != "" {
 		opts["mergeCommitMessage"] = subject
 	}
 	body, _ := json.Marshal(map[string]any{
@@ -166,17 +208,133 @@ func (a Azure) Merge(repo string, pr PR, method string) error {
 		"lastMergeSourceCommit": map[string]string{"commitId": pr.Head},
 		"completionOptions":     opts,
 	})
-	args := []string{"rest", "--method", "patch", "--resource", azResource, "--url", a.prURL(pr.Number),
-		"--headers", "Content-Type=application/json", "--body", string(body)}
-	if !a.trusted(a.prURL(pr.Number)) {
-		return errUntrustedURL
+	out, err := a.az(repo, a.withSub([]string{"rest", "--method", "patch", "--resource", azResource, "--url", u,
+		"--headers", "Content-Type=application/json", "Accept=application/json", "--body", string(body)})...)
+	if err == nil && signInPage(out) {
+		return nil, &CLIError{CLI: "az", Err: fmt.Errorf("az rest PATCH %s: Azure DevOps answered with its sign-in page (HTTP 203), not JSON", u),
+			Problem: errSignInPage, auth: true,
+			Advice: "the user installs the azure-devops extension (az extension add --name azure-devops), which tm asks when az rest can't sign in, or checks az login in a terminal (tm doctor)"}
 	}
-	_, err := a.az(repo, a.withSub(args)...)
-	if err != nil && azMethodRE.MatchString(err.Error()) {
-		return &MethodError{Method: method, Err: err}
-	}
-	return err
+	return out, err
 }
+
+// completeByExtension completes the PR through az repos pr update,
+// which takes the PR's head as Azure DevOps has it and has no rebase.
+func (a Azure) completeByExtension(repo string, pr PR, method, subject string) ([]byte, error) {
+	if !a.trusted(a.Target.OrgURL) {
+		return nil, errUntrustedURL
+	}
+	if method == ByRebase {
+		return nil, azError(errors.New("az repos pr update (the azure-devops extension, which tm uses where az rest can't sign in) can't complete a PR by rebase"))
+	}
+	args := []string{"repos", "pr", "update", "--org", a.Target.OrgURL, "--id", strconv.Itoa(pr.Number),
+		"--status", "completed", "--delete-source-branch", "false", "--squash", strconv.FormatBool(method == BySquash)}
+	if subject != "" {
+		args = append(args, "--merge-commit-message", subject)
+	}
+	out, err := a.az(repo, args...)
+	if err == nil && signInPage(out) {
+		return nil, azError(fmt.Errorf("az repos pr update %d: Azure DevOps answered with its sign-in page", pr.Number))
+	}
+	return out, err
+}
+
+// azMergeWait is how long Merge waits for Azure DevOps to complete a
+// PR, reading it every azMergePoll; variables for tests.
+var (
+	azMergeWait = 30 * time.Second
+	azMergePoll = 2 * time.Second
+)
+
+// azCompletion is the part of a PR's answer that says how its
+// completion went.
+type azCompletion struct {
+	ID                    int       `json:"pullRequestId"`
+	Status                string    `json:"status"`
+	MergeStatus           string    `json:"mergeStatus"`
+	MergeFailureMessage   string    `json:"mergeFailureMessage"`
+	LastMergeSourceCommit *azCommit `json:"lastMergeSourceCommit"`
+	LastMergeCommit       *azCommit `json:"lastMergeCommit"`
+	Repository            struct {
+		Project struct {
+			ID string `json:"id"`
+		} `json:"project"`
+	} `json:"repository"`
+}
+
+// awaitCompleted reads the PR (first from answer, the completion's own)
+// until Azure DevOps says it is completed with a merge commit: nil
+// then; a *NotMergedError when it is abandoned, its merge failed, or
+// azMergeWait passes with it still active.
+func (a Azure) awaitCompleted(repo string, pr PR, answer []byte) error {
+	deadline := time.Now().Add(azMergeWait)
+	out := answer
+	for {
+		var c azCompletion
+		if err := json.Unmarshal(out, &c); err != nil || c.ID != pr.Number {
+			return &NotMergedError{Why: "Azure DevOps answered the completion with no PR tm can read: " + clip(clean(string(out)), 200)}
+		}
+		switch {
+		case c.Status == "completed" && c.LastMergeCommit != nil && oidRE.MatchString(c.LastMergeCommit.CommitID):
+			return nil
+		case c.Status == "abandoned":
+			return &NotMergedError{Why: "Azure DevOps shows it abandoned"}
+		case c.Status == "active" && (c.MergeStatus == "failure" || c.MergeStatus == "conflicts") && c.MergeFailureMessage != "":
+			return &NotMergedError{Why: "Azure DevOps could not merge it (mergeStatus " + c.MergeStatus + "): " + clip(clean(c.MergeFailureMessage), 200)}
+		}
+		if !time.Now().Before(deadline) {
+			return &NotMergedError{Why: a.stillActive(repo, c)}
+		}
+		time.Sleep(azMergePoll)
+		next, err := a.get(repo, a.prURL(pr.Number))
+		if err != nil {
+			return &NotMergedError{Why: "Azure DevOps took the completion, but reading the PR again failed: " + clip(clean(err.Error()), 200)}
+		}
+		out = next
+	}
+}
+
+// stillActive says why a PR Azure DevOps was asked to complete is still
+// active: its status and mergeStatus, and the blocking policies not yet
+// approved, as Azure DevOps names their types.
+func (a Azure) stillActive(repo string, c azCompletion) string {
+	why := fmt.Sprintf("Azure DevOps still shows it %s (mergeStatus %s) after %s", clip(clean(c.Status), 20), clip(clean(c.MergeStatus), 20), azMergeWait)
+	if m := clip(clean(c.MergeFailureMessage), 200); m != "" {
+		why += ": " + m
+	}
+	pid := c.Repository.Project.ID
+	if !guidRE.MatchString(pid) {
+		return why
+	}
+	b, err := a.get(repo, a.projectURL()+"/_apis/policy/evaluations?artifactId="+
+		url.QueryEscape("vstfs:///CodeReview/CodeReviewId/"+pid+"/"+strconv.Itoa(c.ID))+"&api-version=7.1-preview.1")
+	if err != nil {
+		return why
+	}
+	var pending []string
+	for _, raw := range azValues(b) {
+		var p azPolicy
+		if json.Unmarshal(raw, &p) != nil || p.Configuration.IsBlocking != nil && !*p.Configuration.IsBlocking ||
+			p.Configuration.IsEnabled != nil && !*p.Configuration.IsEnabled {
+			continue
+		}
+		switch p.Status {
+		case "approved", "notApplicable":
+			continue
+		}
+		pending = append(pending, fmt.Sprintf("%s %s", clip(clean(p.Configuration.Type.DisplayName), 60), clip(clean(p.Status), 20)))
+	}
+	if len(pending) > 0 {
+		why += "; blocking policies not approved: " + strings.Join(pending, ", ")
+	}
+	return why
+}
+
+// NotMergedError is a merge the host took but did not carry out, or
+// can't be seen to have: Why says what the host shows instead.
+type NotMergedError struct{ Why string }
+
+func (e *NotMergedError) Error() string { return "not merged: " + e.Why }
 
 // methodRefused is a mod's merge answer that refuses the method.
 type methodRefused struct {

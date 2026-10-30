@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"cmp"
 	"errors"
 	"os"
 	"path/filepath"
@@ -27,6 +28,11 @@ type fakeHost struct {
 	methods  []string
 	// head is PRHead's head branch of any PR URL, "" when it can't tell.
 	head string
+	// stays is the PR's state after a Merge that returned nil: MERGED
+	// when "", as a host that merged shows it. reread fails PR's
+	// reads after a merge.
+	stays  string
+	reread error
 }
 
 func (f *fakeHost) Kind() string { return codehost.GitHubKind }
@@ -35,6 +41,9 @@ func (f *fakeHost) ParsePRURL(s string) (int, bool) {
 }
 func (f *fakeHost) PR(_ string, ref codehost.Ref) (codehost.PR, error) {
 	f.asked = append(f.asked, ref)
+	if len(f.merged) > 0 && f.reread != nil {
+		return codehost.PR{}, f.reread
+	}
 	return f.pr, f.err
 }
 func (f *fakeHost) PRHead(_, url string) (string, int, string) {
@@ -47,6 +56,9 @@ func (f *fakeHost) PRHead(_, url string) (string, int, string) {
 func (f *fakeHost) Merge(_ string, pr codehost.PR, method string) error {
 	f.merged = append(f.merged, pr)
 	f.methods = append(f.methods, method)
+	if f.mergeErr == nil {
+		f.pr.State = cmp.Or(f.stays, "MERGED")
+	}
 	return f.mergeErr
 }
 
@@ -90,7 +102,7 @@ func TestThreadMerge(t *testing.T) {
 		*fh = fakeHost{pr: greenPR()}
 		mut(fh)
 		h.expect(1, code, coord, args()...)
-		if len(fh.merged) != 0 && fh.mergeErr == nil {
+		if len(fh.merged) != 0 && fh.mergeErr == nil && fh.stays == "" && fh.reread == nil {
 			t.Fatalf("%s: merged anyway", code)
 		}
 	}
@@ -106,6 +118,25 @@ func TestThreadMerge(t *testing.T) {
 	refuse("not-mergeable", func(f *fakeHost) { f.pr.Mergeable = "UNKNOWN" })
 	refuse("not-mergeable", func(f *fakeHost) { f.pr.Head = "" })
 	refuse("merge-failed", func(f *fakeHost) { f.mergeErr = errors.New("head moved") })
+	// T878: merged is the host's word on the PR read again, never the
+	// call's yes; the host's own "not merged" says why.
+	oldWait, oldPoll := mergeWait, mergePoll
+	mergeWait, mergePoll = 0, 0
+	t.Cleanup(func() { mergeWait, mergePoll = oldWait, oldPoll })
+	refuse("not-merged: PR #7 was not merged: the host took the merge but still shows it open after 0s (review required)", func(f *fakeHost) {
+		f.stays = "OPEN"
+		f.pr.Review = "REVIEW_REQUIRED"
+	})
+	refuse("not-merged: PR #7: the host took the merge, but tm can't read the PR to see it merged: boom", func(f *fakeHost) { f.reread = errors.New("boom") })
+	refuse("not-merged: PR #7 was not merged: Azure DevOps still shows it active", func(f *fakeHost) {
+		f.mergeErr = &codehost.NotMergedError{Why: "Azure DevOps still shows it active (mergeStatus succeeded) after 30s"}
+	})
+	if p, err := project.Open("demo"); err == nil {
+		lines, _, _ := p.JournalTail(200)
+		if j := strings.Join(lines, "\n"); strings.Contains(j, "thread.merge") {
+			t.Fatalf("a refused merge was journaled: %s", j)
+		}
+	}
 	// T497: the host refusing the method is its own refusal, naming
 	// what the repo allows and the setting.
 	refuse("merge-method-not-allowed", func(f *fakeHost) {
@@ -151,6 +182,9 @@ func TestThreadMerge(t *testing.T) {
 	out := h.ok(coord, args()...)
 	if !strings.Contains(out, "merged PR #7 (merge commit, head 0123456") || len(fh.merged) != 1 || fh.merged[0].Head != head40 || fh.methods[0] != "merge" {
 		t.Fatalf("merge: %q %+v %q", out, fh.merged, fh.methods)
+	}
+	if n := len(fh.asked); n != 2 || fh.asked[1] != (codehost.Ref{Number: 7}) {
+		t.Fatalf("merged without reading the PR again: asked %+v", fh.asked)
 	}
 
 	// The report's PR line is a hint that must agree with the branch's
