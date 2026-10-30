@@ -91,6 +91,9 @@ func Health() []Finding {
 	if markErr == nil {
 		add(foreign(root))
 	}
+	if f := linkFinding(root); f != nil {
+		add(*f)
+	}
 	add(frontMatter())
 	if Migrated() {
 		files, _ := Pending()

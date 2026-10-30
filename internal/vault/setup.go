@@ -72,6 +72,7 @@ type Plan struct {
 	Changes []Change
 	Reports []File
 	state   tmState
+	link    *LinkPlan
 }
 
 // tmState is .obsidian/tm.json.
@@ -83,6 +84,8 @@ type tmState struct {
 	Entries map[string]map[string][]string `json:"entries"`
 	// Files are the hashes of the files tm wrote whole.
 	Files map[string]string `json:"files"`
+	// Link is the visible link to the vault tm made (folderlink.go).
+	Link string `json:"link,omitempty"`
 }
 
 func readState(root string) tmState {
@@ -466,6 +469,9 @@ func Init(pl *Plan, who caller.Caller, now time.Time) (written int, err error) {
 	if err := fsx.MkdirNoLink(filepath.Join(pl.Root, humanDir), 0o755); err != nil {
 		return 0, err
 	}
+	if err := pl.makeLink(); err != nil {
+		errs = append(errs, fmt.Errorf("the link %s: %w", pl.link.Path, err))
+	}
 	st, err := json.MarshalIndent(&pl.state, "", "  ")
 	if err != nil {
 		return 0, err
@@ -623,6 +629,7 @@ func Off(who caller.Caller) (removed int, err error) {
 		errs = append(errs, err)
 	}
 	st := readState(root)
+	removeLink(&st, root)
 	for rel := range st.Files {
 		if strings.HasPrefix(rel, tmDir+"/") {
 			delete(st.Files, rel)
