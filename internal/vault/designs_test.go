@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -140,13 +141,19 @@ func TestDesign(t *testing.T) {
 		t.Error("the design task, or a task of no design, has a node")
 	}
 	for id, want := range map[string][3]any{
-		"tm-T2": {440.0, 0.0, "4"}, "tm-T5": {440.0, 160.0, nil},
-		"tm-T3": {800.0, 0.0, "5"}, "tm-T4": {1160.0, 0.0, "1"},
+		"tm-T2": {440.0, 0.0, "4"}, "tm-T5": {440.0, 140.0, nil},
+		"tm-T3": {900.0, 0.0, "5"}, "tm-T4": {1360.0, 0.0, "1"},
 	} {
 		n := c.node(id)
-		if n == nil || n["x"] != want[0] || n["y"] != want[1] || n["color"] != want[2] || n["file"] != "demo/tasks/"+id[3:]+".md" {
+		text, _ := n["text"].(string)
+		ref := id[3:]
+		if n == nil || n["x"] != want[0] || n["y"] != want[1] || n["color"] != want[2] || n["type"] != "text" || n["width"] != 380.0 ||
+			!strings.HasPrefix(text, "**") || !strings.Contains(text, "[[demo/tasks/"+ref+"|"+ref+"]]") {
 			t.Errorf("%s: %v, want x, y, colour %v", id, n, want)
 		}
+	}
+	if n := c.node("tm-T2"); !strings.HasPrefix(n["text"].(string), "**A1**\n\n<small>[[demo/tasks/T2|T2]] · done</small>") {
+		t.Errorf("T2's card: %q", n["text"])
 	}
 	for _, id := range []string{"tm-e-note-T2", "tm-e-note-T5", "tm-e-T2-T3", "tm-e-T3-T4", "tm-e-T2-T4"} {
 		if c.edge(id) == nil {
@@ -249,7 +256,7 @@ func TestDesignCanvasKeeps(t *testing.T) {
 	if g := c.node("tm-group"); g["x"] != 960.0 || g["y"] != 1960.0 {
 		t.Errorf("group moved back: %v", g)
 	}
-	if n := c.node("tm-T2"); n["x"] != 5000.0 || n["y"] != 5000.0 || n["width"] != 333.0 || n["color"] != "4" {
+	if n := c.node("tm-T2"); n["x"] != 5000.0 || n["y"] != 5000.0 || n["width"] != 380.0 || n["color"] != "4" {
 		t.Errorf("T2: %v", n)
 	}
 	if n := c.node("tm-T1"); n["color"] != nil {
@@ -261,7 +268,7 @@ func TestDesignCanvasKeeps(t *testing.T) {
 	if c.node("f3") != nil {
 		t.Error("T3's file node kept its own id")
 	}
-	if n := c.node("tm-T3"); n == nil || n["x"] != 7000.0 || n["file"] != "demo/tasks/T3.md" {
+	if n := c.node("tm-T3"); n == nil || n["x"] != 7000.0 || n["type"] != "text" || n["file"] != nil {
 		t.Errorf("T3 taken over: %v", n)
 	}
 	if e := c.edge("e1"); e == nil || e["toNode"] != "tm-T2" {
@@ -290,7 +297,7 @@ func TestDesignCanvasKeeps(t *testing.T) {
 	s.SetPlan(human, 2, &name, nil)
 	Render(p)
 	c = readCanvas(t, p, name)
-	if n := c.node("tm-T2"); n == nil || n["x"] != 800.0+1000 || n["y"] != 0.0+2000 {
+	if n := c.node("tm-T2"); n == nil || n["x"] != 900.0+1000 || n["y"] != 0.0+2000 {
 		t.Errorf("new T2: %v", n)
 	}
 
@@ -312,5 +319,72 @@ func TestDesignCanvasKeeps(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(p.Path("designs"), name+".md")); err != nil {
 		t.Errorf("a design's note removed: %v", err)
+	}
+}
+
+// TestDesignCanvasCards (T875): a task's card shows its title in bold,
+// then its linked id, status, steps, PR and thread; it is sized to its
+// text, so a long title makes a tall card and the next one in the
+// column sits below it; the title goes through the guard; a file node
+// of an older render is replaced where it was, a moved one keeps its
+// place.
+func TestDesignCanvasCards(t *testing.T) {
+	p := vaultProject(t)
+	human := caller.Caller{Kind: caller.Human}
+	s := p.Tasks()
+	long := strings.Repeat("A very long title ", 8)
+	s.Add(human, []tasks.NewTask{{Title: "Short <img src=x>", Status: "started"}, {Title: long}, {Title: "Third"}})
+	name := "plan"
+	for id := 1; id <= 3; id++ {
+		s.SetPlan(human, id, &name, nil)
+	}
+	s.StepAdd(human, 1, "one")
+	s.StepAdd(human, 1, "two")
+	s.StepCheck(human, 1, 1, true)
+	if _, _, err := Render(p); err != nil {
+		t.Fatal(err)
+	}
+	c := readCanvas(t, p, name)
+	t1, _ := c.node("tm-T1")["text"].(string)
+	if !strings.HasPrefix(t1, "**Short") || strings.Contains(t1, "<img") || !strings.Contains(t1, "<small>[[demo/tasks/T1|T1]] · started · 1/2 steps</small>") {
+		t.Errorf("T1's card: %q", t1)
+	}
+	n1, n2, n3 := c.node("tm-T1"), c.node("tm-T2"), c.node("tm-T3")
+	if n2["height"].(float64) <= n1["height"].(float64) {
+		t.Errorf("long title not taller: %v %v", n1["height"], n2["height"])
+	}
+	if n2["y"].(float64) < n1["y"].(float64)+n1["height"].(float64) || n3["y"].(float64) < n2["y"].(float64)+n2["height"].(float64) {
+		t.Errorf("cards overlap: %v %v %v", n1, n2, n3)
+	}
+	for _, n := range c.Nodes {
+		if n["type"] == "file" && n["file"] != "demo/designs/plan.md" {
+			t.Errorf("a file card: %v", n)
+		}
+	}
+
+	// PR and thread.
+	d := &design{prs: map[string]string{"t-0001": "https://github.com/o/r/pull/12"}}
+	text, _ := d.card("demo", boardTask{&tasks.Task{ID: 9, Title: "X", Status: tasks.Review, Thread: "t-0001"}})
+	if !strings.Contains(text, "[#12](https://github.com/o/r/pull/12)") || !strings.Contains(text, "t-0001") {
+		t.Errorf("PR and thread: %q", text)
+	}
+
+	// Older renders: T1 on its grid place is replaced in place by the
+	// new layout; T2 moved by the human keeps its place.
+	c.Nodes = slices.DeleteFunc(c.Nodes, func(n map[string]any) bool { return n["id"] == "tm-T1" || n["id"] == "tm-T2" })
+	c.Nodes = append(c.Nodes,
+		map[string]any{"id": "tm-T1", "type": "file", "file": "demo/tasks/T1.md", "x": 440, "y": 0, "width": 280, "height": 120},
+		map[string]any{"id": "tm-T2", "type": "file", "file": "demo/tasks/T2.md", "x": 3001, "y": 77, "width": 280, "height": 120},
+	)
+	writeCanvas(t, p, name, c)
+	if _, _, err := Render(p); err != nil {
+		t.Fatal(err)
+	}
+	c = readCanvas(t, p, name)
+	if n := c.node("tm-T1"); n["type"] != "text" || n["x"] != 440.0 || n["y"] != 0.0 || n["width"] != 380.0 {
+		t.Errorf("T1 replaced: %v", n)
+	}
+	if n := c.node("tm-T2"); n["type"] != "text" || n["x"] != 3001.0 || n["y"] != 77.0 || n["width"] != 380.0 {
+		t.Errorf("T2 replaced: %v", n)
 	}
 }

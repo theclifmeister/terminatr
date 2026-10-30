@@ -119,7 +119,7 @@ func Notes(p *project.Project) ([]Note, error) {
 		}
 		notes = append(notes, n)
 	}
-	ds, err := designNotes(p, board, archive)
+	ds, err := designNotes(p, prs, board, archive)
 	return append(notes, ds...), err
 }
 
