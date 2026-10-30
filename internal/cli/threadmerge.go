@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/theclifmeister/terminatr/internal/codehost"
 	"github.com/theclifmeister/terminatr/internal/config"
@@ -120,7 +121,16 @@ func (e *Env) threadMerge(p *project.Project, id string) error {
 		if errors.As(err, &me) {
 			return methodRefusal(pr, me)
 		}
+		var nm *codehost.NotMergedError
+		if errors.As(err, &nm) {
+			return mergeRefusal("not-merged", "%s was not merged: %s", pr.Ref(), textsafe.Line(nm.Why, 400))
+		}
 		return mergeRefusal("merge-failed", "%s was not merged: %s", pr.Ref(), textsafe.Line(err.Error(), 300))
+	}
+	// The host's yes to the call is not the merge (T878: Azure DevOps'
+	// sign-in page passed for one): only the PR read merged is.
+	if err := confirmMerged(host, r.Repo, pr); err != nil {
+		return err
 	}
 	head := pr.Head[:7]
 	if err := p.Journal(e.Caller, "thread.merge", id, fmt.Sprintf("%s merged at %s (%s)", pr.Ref(), head, methodWords[method])); err != nil {
@@ -128,6 +138,61 @@ func (e *Env) threadMerge(p *project.Project, id string) error {
 	}
 	fmt.Fprintf(e.Stdout, "%s merged %s (%s, head %s, checks green)%s\n", id, pr.Ref(), methodWords[method], head, ignored)
 	return nil
+}
+
+// mergeWait is how long tm thread merge waits for the host to show a
+// PR it merged as merged, reading it every mergePoll; variables for
+// tests.
+var (
+	mergeWait = 20 * time.Second
+	mergePoll = 2 * time.Second
+)
+
+// confirmMerged reads pr until the host shows it merged, for at most
+// mergeWait: nil then, else a not-merged refusal with what the host
+// shows instead.
+func confirmMerged(host codehost.Host, repo string, pr codehost.PR) error {
+	deadline := time.Now().Add(mergeWait)
+	for {
+		now, err := host.PR(repo, codehost.Ref{Number: pr.Number})
+		switch {
+		case err != nil:
+			return mergeRefusal("not-merged", "%s: the host took the merge, but tm can't read the PR to see it merged: %s; tm thread merge again to look",
+				pr.Ref(), textsafe.Line(err.Error(), 300))
+		case now.State == "MERGED":
+			return nil
+		case now.State != "OPEN":
+			return mergeRefusal("not-merged", "%s was not merged: the host shows it %s", pr.Ref(), strings.ToLower(now.State))
+		case !time.Now().Before(deadline):
+			return mergeRefusal("not-merged", "%s was not merged: the host took the merge but still shows it open after %s%s; tm thread merge again to look",
+				pr.Ref(), mergeWait, openWhy(now))
+		}
+		time.Sleep(mergePoll)
+	}
+}
+
+// openWhy is what an open PR shows that may hold its merge, ", …" or "".
+func openWhy(pr codehost.PR) string {
+	var why []string
+	switch pr.Checks {
+	case "pending":
+		why = append(why, "checks pending")
+	case "fail":
+		why = append(why, "checks failing")
+	}
+	switch pr.Review {
+	case "REVIEW_REQUIRED":
+		why = append(why, "review required")
+	case "CHANGES_REQUESTED":
+		why = append(why, "changes requested")
+	}
+	if pr.Mergeable == "CONFLICTING" {
+		why = append(why, "conflicts")
+	}
+	if len(why) == 0 {
+		return ""
+	}
+	return " (" + strings.Join(why, ", ") + ")"
 }
 
 // methodWords name the merge methods to the user.

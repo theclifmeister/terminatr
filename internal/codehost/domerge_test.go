@@ -2,9 +2,11 @@ package codehost
 
 import (
 	"errors"
+	"os/exec"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 const mergeHead = "0123456789abcdef0123456789abcdef01234567"
@@ -117,7 +119,7 @@ func TestAzureMerge(t *testing.T) {
 				return []byte(`{"title":"fix(merge): use\nthe title"}`), nil
 			}
 			got = args
-			return []byte("{}"), nil
+			return []byte(azCompleted), nil
 		}}
 	for method, strategy := range map[string]string{ByMerge: "noFastForward", BySquash: "squash", ByRebase: "rebase"} {
 		if err := a.Merge("/r", PR{Number: 5, Head: mergeHead}, method); err != nil {
@@ -152,5 +154,122 @@ func TestAzureMerge(t *testing.T) {
 	var me *MethodError
 	if err := a.Merge("/r", PR{Number: 5, Head: mergeHead}, ByMerge); !errors.As(err, &me) || me.Method != ByMerge || me.Allowed != nil {
 		t.Fatalf("a refused strategy: %#v", err)
+	}
+}
+
+// azCompleted is a PR's answer once Azure DevOps completed it.
+const azCompleted = `{"pullRequestId":5,"status":"completed","mergeStatus":"succeeded","lastMergeSourceCommit":{"commitId":"` + mergeHead +
+	`"},"lastMergeCommit":{"commitId":"1111111111111111111111111111111111111111"}}`
+
+// T878: Merge returns only once Azure DevOps shows the PR completed; a
+// PR still active, a sign-in page, a failed merge or a failed call is
+// an error saying why, never a merge.
+func TestAzureMergeConfirms(t *testing.T) {
+	oldWait, oldPoll := azMergeWait, azMergePoll
+	azMergeWait, azMergePoll = 50*time.Millisecond, time.Millisecond
+	t.Cleanup(func() { azMergeWait, azMergePoll = oldWait, oldPoll; azVia.Clear() })
+	const active = `{"pullRequestId":5,"status":"active","mergeStatus":"succeeded","lastMergeSourceCommit":{"commitId":"` + mergeHead +
+		`"},"repository":{"project":{"id":"b2e006cc-8463-426e-a1b2-26f75f2e224c"}}}`
+	const policies = `{"value":[{"status":"approved","configuration":{"isBlocking":true,"type":{"displayName":"Build"}}},` +
+		`{"status":"queued","configuration":{"isBlocking":true,"type":{"displayName":"Minimum number of reviewers"}}},` +
+		`{"status":"queued","configuration":{"isBlocking":false,"type":{"displayName":"Comment requirements"}}}]}`
+	type answer struct {
+		out string
+		err error
+	}
+	run := func(patch answer, reads ...string) (Azure, *[]string) {
+		var calls []string
+		return Azure{Target: Target{Kind: AzureKind, OrgURL: "https://dev.azure.com/o", Project: "p", Repo: "r"},
+			Getenv: func(string) string { return "" },
+			Run: func(_ string, args ...string) ([]byte, error) {
+				all := strings.Join(args, " ")
+				calls = append(calls, all)
+				switch {
+				case slices.Contains(args, "patch") || strings.HasPrefix(all, "repos pr update"):
+					return []byte(patch.out), patch.err
+				case strings.Contains(all, "/policy/evaluations"):
+					return []byte(policies), nil
+				}
+				if len(reads) == 0 {
+					return []byte(active), nil
+				}
+				r := reads[0]
+				reads = reads[1:]
+				return []byte(r), nil
+			}}, &calls
+	}
+	pr := PR{Number: 5, Head: mergeHead}
+
+	// Completed at once, or a read later.
+	if a, _ := run(answer{out: azCompleted}); a.Merge("/r", pr, ByMerge) != nil {
+		t.Fatal("completed: not merged")
+	}
+	a, calls := run(answer{out: active}, active, azCompleted)
+	if err := a.Merge("/r", pr, ByMerge); err != nil || len(*calls) != 3 {
+		t.Fatalf("completed later: %v, %q", err, *calls)
+	}
+
+	// Still active: the reason names the blocking policies not approved.
+	var nm *NotMergedError
+	a, _ = run(answer{out: active})
+	err := a.Merge("/r", pr, ByMerge)
+	if !errors.As(err, &nm) || !strings.Contains(nm.Why, "still shows it active (mergeStatus succeeded)") ||
+		!strings.Contains(nm.Why, "blocking policies not approved: Minimum number of reviewers queued") || strings.Contains(nm.Why, "Comment") || strings.Contains(nm.Why, "Build") {
+		t.Fatalf("still active: %v", err)
+	}
+	// Azure DevOps' own failure message.
+	a, _ = run(answer{out: strings.Replace(active, `"mergeStatus":"succeeded"`, `"mergeStatus":"failure","mergeFailureMessage":"TF401192: the target branch moved"`, 1)})
+	if err := a.Merge("/r", pr, ByMerge); !errors.As(err, &nm) || !strings.Contains(nm.Why, "could not merge it (mergeStatus failure): TF401192") {
+		t.Fatalf("merge failure: %v", err)
+	}
+	// The call fails: its error, no merge.
+	a, _ = run(answer{err: azError(errors.New("az rest: Bad Request({\"message\":\"TF401181: The pull request cannot be completed\"})"))})
+	if err := a.Merge("/r", pr, ByMerge); err == nil || !strings.Contains(err.Error(), "TF401181") {
+		t.Fatalf("API failure: %v", err)
+	}
+	// Something not a PR in answer.
+	a, _ = run(answer{out: "{}"})
+	if err := a.Merge("/r", pr, ByMerge); !errors.As(err, &nm) || !strings.Contains(nm.Why, "no PR tm can read") {
+		t.Fatalf("empty answer: %v", err)
+	}
+
+	// The sign-in page (al0ft's: az rest exits 0 with it) is no merge:
+	// the extension completes it then, and is asked first from then on.
+	var ext []string
+	a = Azure{Target: Target{Kind: AzureKind, OrgURL: "https://dev.azure.com/o", Project: "p", Repo: "r"},
+		Getenv: func(string) string { return "" },
+		Run: func(_ string, args ...string) ([]byte, error) {
+			all := strings.Join(args, " ")
+			switch {
+			case slices.Contains(args, "patch"):
+				return []byte("<!DOCTYPE html><html>Sign in</html>"), nil
+			case strings.HasPrefix(all, "repos pr update"):
+				ext = append(ext, all)
+				return []byte(azCompleted), nil
+			}
+			return nil, errors.New("unexpected " + all)
+		}}
+	if err := a.Merge("/r", pr, BySquash); err == nil || ext != nil {
+		// A squash reads the title first, which fails here.
+		t.Fatalf("squash without a title: %v %q", err, ext)
+	}
+	if err := a.Merge("/r", pr, ByMerge); err != nil || len(ext) != 1 || !a.UsesExtension() ||
+		!strings.Contains(ext[0], "repos pr update --org https://dev.azure.com/o --id 5 --status completed --delete-source-branch false --squash false") {
+		t.Fatalf("sign-in page: %v %q", err, ext)
+	}
+	if err := a.Merge("/r", pr, ByRebase); err == nil || !strings.Contains(err.Error(), "can't complete a PR by rebase") {
+		t.Fatalf("rebase through the extension: %v", err)
+	}
+	azVia.Clear()
+	// The sign-in page with no extension to fall back on: az rest's
+	// reason, not a merge.
+	a.Run = func(_ string, args ...string) ([]byte, error) {
+		if slices.Contains(args, "patch") {
+			return []byte("<html>Sign in</html>"), nil
+		}
+		return nil, azError(exec.ErrNotFound)
+	}
+	if err := a.Merge("/r", pr, ByMerge); err == nil || !strings.Contains(err.Error(), "sign-in page") {
+		t.Fatalf("sign-in page, no extension: %v", err)
 	}
 }

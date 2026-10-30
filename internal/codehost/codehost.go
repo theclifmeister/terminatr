@@ -139,8 +139,10 @@ type Host interface {
 	MergedPR(repo, commit string) int
 	// Merge merges pr (open, as PR just read it) by method (ByMerge,
 	// BySquash or ByRebase), only if its head is still pr.Head: never a
-	// forced one. A method the repo doesn't allow is a *MethodError. It
-	// checks nothing else; tm thread merge does (docs/SPEC.md §9).
+	// forced one. A method the repo doesn't allow is a *MethodError, a
+	// merge the host took but shows not done a *NotMergedError. It
+	// checks nothing else; tm thread merge does, and reads the PR merged
+	// before it says so (docs/SPEC.md §9).
 	Merge(repo string, pr PR, method string) error
 	// Hints are the commands prompts name for PR n.
 	Hints(n int) Hints
