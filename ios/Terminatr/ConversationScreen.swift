@@ -80,9 +80,10 @@ struct ConversationScreen: View {
                         .id(row.id)
                     }
                     if let session { waiting(session, need: waits) }
-                    // The foot's padding is the end row's: scrolled to,
-                    // it reaches the true end (T807).
-                    Color.clear.frame(height: 1).padding(.bottom, 16).id("end")
+                    // Scrolled to, the end row reaches the true end
+                    // (T807): the last card then sits the cards' gap
+                    // over the composer, and no more (T882).
+                    Color.clear.frame(height: 0).id("end")
                 }
                 .padding([.horizontal, .top], 16)
                 .scrollTargetLayout()
@@ -141,9 +142,10 @@ struct ConversationScreen: View {
                 }
             }
         }
-        .safeAreaInset(edge: .bottom) {
+        .safeAreaInset(edge: .bottom, spacing: 0) {
             if id != nil {
-                VStack(spacing: 0) {
+                // The cards' gap between the bar and the composer.
+                VStack(spacing: 12) {
                     // While the agent has its turn, as the Mac's (T803).
                     if let busy = Busy.of(session) {
                         WorkingBar(busy: busy, activity: Activity.of(transcript, current: session?.current ?? ""))
