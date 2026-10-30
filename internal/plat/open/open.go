@@ -1,4 +1,5 @@
-// Package open opens a web address in the user's browser.
+// Package open opens a web address in the user's browser, or a vault in
+// Obsidian.
 package open
 
 import (
@@ -30,6 +31,29 @@ func URL(addr string) error {
 	if !Web(addr) {
 		return errors.New("not a web address")
 	}
+	return start(addr)
+}
+
+// Obsidian starts the platform's opener for an obsidian://open address
+// (Obsidian registers the scheme) and returns without waiting. It refuses
+// any other address.
+func Obsidian(addr string) error {
+	if !ObsidianOpen(addr) {
+		return errors.New("not an obsidian://open address")
+	}
+	return start(addr)
+}
+
+// ObsidianOpen reports whether s is an obsidian://open address with a
+// query and nothing that could read as an option or a second argument.
+func ObsidianOpen(s string) bool {
+	u, err := url.Parse(s)
+	return err == nil && strings.HasPrefix(s, "obsidian://open?") && u.RawQuery != "" &&
+		!strings.ContainsAny(s, " \t\r\n\"")
+}
+
+// start runs the opener for addr, checked by the caller.
+func start(addr string) error {
 	name, args := command(runtime.GOOS, addr, wsl(), func(n string) bool {
 		_, err := exec.LookPath(n)
 		return err == nil

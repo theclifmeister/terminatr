@@ -12,7 +12,8 @@ import (
 	"github.com/theclifmeister/terminatr/internal/vault"
 )
 
-const vaultUsage = `usage: tm vault init [--plugin] [--link PATH | --no-link] [--yes]
+const vaultUsage = `usage: tm vault init [--plugin] [--link PATH | --no-link] [--open [--register]] [--yes]
+       tm vault open [--register]
        tm vault render [--project <slug>] [--days N] [--json]
        tm vault doctor [--json]
        tm vault off [--yes]
@@ -35,7 +36,16 @@ instead, --no-link makes none. off removes the link only while it is still the
 one init made and still leads to the vault; doctor reports a missing or broken one.
 --plugin also installs terminatr's Obsidian plugin in .obsidian/plugins/terminatr/:
 a NEEDS YOU pane whose buttons run your own tm commands (tm needs, tm task accept,
-tm ask answer, …); you turn it on in Obsidian's Community plugins.
+tm ask answer, …); you turn it on in Obsidian's Community plugins. --open then
+does what open does.
+
+open (the human): launches Obsidian at the vault (an obsidian://open address).
+Obsidian opens only the vaults in its own list (obsidian.json in its settings
+folder). When the vault isn't in it, tm offers to add it: on your yes at the
+prompt, or with --register; only while Obsidian is not running (it writes the
+file over on quit), after a backup beside it (obsidian.json.tm-<time>.bak),
+adding that one entry and changing nothing else. Otherwise it prints the one-time
+steps: Open folder as vault in Obsidian, then pick ~/terminatr-obsidian.
 
 render (the human, a coordinator; not a thread): writes the derived notes now, as
 the ticker does when what they come from changes: the task and thread notes of
@@ -76,7 +86,7 @@ type vaultFile struct {
 	Error   string `json:"error,omitempty"`
 }
 
-// runVault implements tm vault (docs/SPEC.md §5.1): init, render,
+// runVault implements tm vault (docs/SPEC.md §5.1): init, open, render,
 // doctor, off and migrate --check.
 func runVault(e *Env, args []string) error {
 	if done, err := helpOr(e, args, vaultUsage); done {
@@ -91,6 +101,8 @@ func runVault(e *Env, args []string) error {
 		return vaultInit(e, args[1:])
 	case "off":
 		return vaultOff(e, args[1:])
+	case "open":
+		return vaultOpen(e, args[1:])
 	case "migrate":
 	default:
 		return usagef("%s", vaultUsage)

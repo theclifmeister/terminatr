@@ -53,3 +53,24 @@ func TestWeb(t *testing.T) {
 		t.Error("URL opened a non-web address")
 	}
 }
+
+func TestObsidianOpen(t *testing.T) {
+	for s, want := range map[string]bool{
+		"obsidian://open?vault=8865f22ab63c6256":    true,
+		"obsidian://open?path=%2FUsers%2Fx%2Fvault": true,
+		"obsidian://open":                           false,
+		"obsidian://open?":                          false,
+		"obsidian://new?vault=x&content=y":          false,
+		"https://x.test/a":                          false,
+		"-obsidian://open?vault=x":                  false,
+		"obsidian://open?vault=x y":                 false,
+		"obsidian://open?vault=x\" --args evil":     false,
+	} {
+		if got := ObsidianOpen(s); got != want {
+			t.Errorf("ObsidianOpen(%q) = %v, want %v", s, got, want)
+		}
+	}
+	if Obsidian("https://x.test/a") == nil {
+		t.Error("Obsidian opened a web address")
+	}
+}
