@@ -782,3 +782,46 @@ func TestOriginReposLeavesOutCheckoutThreads(t *testing.T) {
 		t.Fatalf("no azure_url: %v", got)
 	}
 }
+
+// TestBoardVaultOff: the board works with no Obsidian and the vault off
+// (no state/vault): add, move to the archive and back, through the
+// tasks package's paths (T871).
+func TestBoardVaultOff(t *testing.T) {
+	root := setup(t)
+	p, err := New(Options{Slug: "demo"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Lstat(filepath.Join(root, "state", "vault")); err == nil {
+		t.Fatal("state/vault exists")
+	}
+	s := p.Tasks()
+	if _, err := s.Add(human, []tasks.NewTask{{Title: "a"}, {Title: "b"}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Archive(human, 1); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range tasks.Paths(p.Dir) {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("board file: %v", err)
+		}
+	}
+	b, err := s.Load()
+	if err != nil || len(b.Tasks) != 1 || b.Tasks[0].ID != 2 {
+		t.Fatalf("board %+v %v", b, err)
+	}
+	a, err := s.LoadArchive()
+	if err != nil || len(a.Tasks) != 1 || a.Tasks[0].ID != 1 {
+		t.Fatalf("archive %+v %v", a, err)
+	}
+	if _, err := s.Unarchive(human, 1); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := s.Load(); len(b.Tasks) != 2 {
+		t.Fatalf("unarchived %+v", b)
+	}
+	if _, err := os.Lstat(filepath.Join(root, "state", "vault")); err == nil {
+		t.Fatal("the board turned the vault on")
+	}
+}

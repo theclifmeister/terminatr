@@ -13,6 +13,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/server"
+	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/thread"
 	"github.com/theclifmeister/terminatr/internal/ticker"
 )
@@ -305,8 +306,8 @@ func (ic *infoCache) load(paths tmclient.Paths, s proto.SessionInfo, sessions []
 	}
 	p := &project.Project{Slug: s.Project, Dir: dir}
 	key := s.Project + "/" + s.Thread
-	files := []string{p.Path("PROJECT.md"), p.Path("TASKS.md"), p.Path("JOURNAL.md"), ts,
-		thread.Dir(p, s.Thread), thread.Path(p, s.Thread, "library")}
+	files := append(tasks.BoardPaths(p.Dir), p.Path("PROJECT.md"), p.Path("JOURNAL.md"), ts,
+		thread.Dir(p, s.Thread), thread.Path(p, s.Thread, "library"))
 	for _, name := range []string{"thread.toml", "STATUS.md", "REPORT.md"} {
 		files = append(files, thread.Path(p, s.Thread, name))
 	}

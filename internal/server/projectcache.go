@@ -18,6 +18,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/thread"
 )
 
@@ -102,8 +103,8 @@ func (c *projectCache) look(slug, tickerState string, gen uint64, byGen bool) (*
 // (T457).
 func snapStamp(snap *projectSnap, tickerState string) uint64 {
 	p := snap.p
-	var paths []string
-	for _, name := range []string{"PROJECT.md", "TASKS.md", "questions.json", "inbox", "threads"} {
+	paths := tasks.BoardPaths(p.Dir)
+	for _, name := range []string{"PROJECT.md", "questions.json", "inbox", "threads"} {
 		paths = append(paths, p.Path(name))
 	}
 	ents, _ := os.ReadDir(p.Path("threads"))

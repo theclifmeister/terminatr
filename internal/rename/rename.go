@@ -24,6 +24,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/mdfile"
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 	"github.com/theclifmeister/terminatr/internal/project"
+	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/thread"
 	"github.com/theclifmeister/terminatr/internal/vaultlink"
 	"github.com/theclifmeister/terminatr/internal/worktree"
@@ -213,17 +214,28 @@ func Project(o Options) (*Result, error) {
 // below a project's folder (messages/ is walked whole), and the part of
 // each that is tm's: the rest is someone's words, which tm doesn't
 // rewrite.
-var linkFiles = []struct {
-	pat  string
-	part func(line string) bool // the lines that are tm's; nil: the front matter
-}{
-	{"TASKS.md", metaLine}, {"tasks/ARCHIVE.md", metaLine}, {"MEMORY.md", indexLine},
+var linkFiles = append(boardLinkFiles(), []linkFile{
+	{"MEMORY.md", indexLine},
 	{"memory/*.md", nil}, {"inbox/*.md", nil}, {"inbox/done/*.md", nil},
 	{"threads/*/STATUS.md", nil}, {"threads/*/brief.md", func(string) bool { return true }},
+}...)
+
+type linkFile struct {
+	pat  string
+	part func(line string) bool // the lines that are tm's; nil: the front matter
 }
 
-// metaLine is a task's metadata line; indexLine a note's in MEMORY.md.
-func metaLine(l string) bool  { return strings.HasPrefix(l, "status:") }
+// boardLinkFiles are the board's files (the tasks package says where it
+// is kept), whose tm lines are the tasks' metadata (tasks.LinkLine).
+func boardLinkFiles() []linkFile {
+	var lfs []linkFile
+	for _, rel := range tasks.Rels() {
+		lfs = append(lfs, linkFile{rel, tasks.LinkLine})
+	}
+	return lfs
+}
+
+// indexLine is a note's line in MEMORY.md.
 func indexLine(l string) bool { return strings.HasPrefix(l, "- [[") }
 
 // relinked is text with the links into from pointed at to in the part

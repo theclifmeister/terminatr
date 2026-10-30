@@ -11,6 +11,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/home"
 	"github.com/theclifmeister/terminatr/internal/mdfile"
+	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/thread"
 )
 
@@ -248,7 +249,7 @@ func foreign(root string) Finding {
 func frontMatter() Finding {
 	f := Finding{Name: "front matter", Status: "ok", Detail: "every file tm reads parses"}
 	for _, p := range projects() {
-		rels := []string{"PROJECT.md", "CONTEXT.md", "MEMORY.md", "TASKS.md", "tasks/ARCHIVE.md"}
+		rels := append([]string{"PROJECT.md", "CONTEXT.md", "MEMORY.md"}, tasks.Rels()...)
 		for _, d := range []string{"memory", "inbox"} {
 			ents, _ := os.ReadDir(p.Path(d))
 			for _, e := range ents {

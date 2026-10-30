@@ -315,20 +315,22 @@ func New(o Options) (*Project, error) {
 // is, edits CONTEXT.md, MEMORY.md, memory/ and PROJECT.md and leaves
 // these to tm, which writes and appends to them outside its sandbox.
 func (p *Project) Owned() (dirs, files []string) {
-	for _, d := range []string{"threads", "inbox", "tasks", "journal", "messages", "uploads"} {
+	for _, d := range []string{"threads", "inbox", "journal", "messages", "uploads"} {
 		dirs = append(dirs, p.Path(d))
 	}
-	for _, f := range []string{"JOURNAL.md", "TASKS.md", questionsFile, designsFile, "AGENTS.md", "CLAUDE.md"} {
+	for _, f := range []string{"JOURNAL.md", questionsFile, designsFile, "AGENTS.md", "CLAUDE.md"} {
 		files = append(files, p.Path(f))
 	}
-	for _, f := range []string{"JOURNAL.md", "TASKS.md", questionsFile, designsFile, "PROJECT.md"} {
+	for _, f := range []string{"JOURNAL.md", questionsFile, designsFile, "PROJECT.md"} {
 		files = append(files, mdfile.LockPath(p.Path(f)))
 	}
-	return dirs, files
+	// The board's (the tasks package says where it is kept).
+	td, tf := tasks.Owned(p.Dir)
+	return append(dirs, td...), append(files, tf...)
 }
 
 func (p *Project) scaffold() error {
-	for _, d := range []string{"memory", "tasks", "inbox/done", "threads", "uploads"} {
+	for _, d := range []string{"memory", "inbox/done", "threads", "uploads"} {
 		if err := os.MkdirAll(p.Path(d), 0o755); err != nil {
 			return err
 		}
@@ -347,13 +349,15 @@ func (p *Project) scaffold() error {
 		"CONTEXT.md": contextTemplate,
 		"MEMORY.md":  memoryTemplate,
 		"JOURNAL.md": "# Journal\n\n",
-		"TASKS.md":   string((&tasks.Board{NextID: 1}).Render()),
 	}
 	for name, body := range files {
 		// A fresh folder has no other writers yet: no lock needed.
 		if err := fsx.WriteAtomic(p.Path(name), []byte(body), 0o644); err != nil {
 			return err
 		}
+	}
+	if err := tasks.Scaffold(p.Dir); err != nil {
+		return err
 	}
 	return p.Journal(caller.Caller{Kind: caller.Human}, "project.new", p.Slug, "")
 }
