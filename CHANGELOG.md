@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.67.0](https://github.com/theclifmeister/terminatr/compare/v0.66.0...v0.67.0) (2026-10-30)
+
+
+### Features
+
+* Azure DevOps PR lookup that says why there is none, CI from branch builds, and a fallback from az rest's sign-in page ([#945](https://github.com/theclifmeister/terminatr/issues/945)) ([a777124](https://github.com/theclifmeister/terminatr/commit/a777124b5b3ec9fff6535a51ddb9ac4ae85bf56e))
+* tm vault open launches Obsidian at the vault, registering it on the user's yes ([#944](https://github.com/theclifmeister/terminatr/issues/944)) ([e418a8f](https://github.com/theclifmeister/terminatr/commit/e418a8f0142a72e537f47c403f33b391cd0be346))
+
+
+### Bug Fixes
+
+* the Mac dashboard reads a project's designs, and says when it has none ([#942](https://github.com/theclifmeister/terminatr/issues/942)) ([0844a1f](https://github.com/theclifmeister/terminatr/commit/0844a1f327a18ca7445ae4ead37fafa118abaafc))
+
 ## [0.66.0](https://github.com/theclifmeister/terminatr/compare/v0.65.0...v0.66.0) (2026-10-30)
 
 
