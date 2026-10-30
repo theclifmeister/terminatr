@@ -9,7 +9,9 @@ import TerminatrUI
 /// decided answers, the open questions (Answer… has the coordinator put
 /// them to the user, as the TUI's enter does) and the build tasks in
 /// after order, a board task's opening the task view. Read again
-/// whenever the board changes. Nothing here changes a design.
+/// whenever the board changes. A project without designs says so, and
+/// a read that failed says why (Designs.listing). Nothing here changes
+/// a design.
 struct DesignsSection: View {
     @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
@@ -22,31 +24,40 @@ struct DesignsSection: View {
     @State private var all = false
 
     var body: some View {
-        Group {
-            if let designs, !designs.isEmpty {
-                let shown = Designs.shown(designs, all: all)
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("Designs · \(shown.count)".uppercased())
-                        .font(theme.mono(.caption2, .medium))
-                        .tracking(1)
-                        .foregroundStyle(theme.muted)
-                        .padding(.top, 6)
-                    ForEach(Designs.ordered(shown), id: \.name) { d in
-                        DesignCard(project: project.slug, design: d, open: Binding(
-                            get: { open.contains(d.name) },
-                            set: { if $0 { open.insert(d.name) } else { open.remove(d.name) } }))
-                    }
-                    let words = Designs.toggle(designs, all: all)
-                    if !words.isEmpty {
-                        Button(words) { all.toggle() }
-                            .buttonStyle(.link)
-                            .font(theme.body(.subheadline))
-                    }
-                }
-            } else if let error {
-                Text(error)
+        // A stack, not a Group: a Group with nothing in it has nothing to
+        // run its task on, so the designs were never read (T876).
+        VStack(alignment: .leading, spacing: 10) {
+            let listing = Designs.listing(designs, error: error)
+            let shown = designs.map { Designs.shown($0, all: all) } ?? []
+            let heading = if case .designs = listing { "Designs · \(shown.count)" } else { "Designs" }
+            Text(heading.uppercased())
+                .font(theme.mono(.caption2, .medium))
+                .tracking(1)
+                .foregroundStyle(theme.muted)
+                .padding(.top, 6)
+            switch listing {
+            case .reading:
+                ProgressView().controlSize(.small)
+            case .none:
+                Text(Designs.noneYet)
+                    .font(theme.body(.subheadline))
+                    .foregroundStyle(theme.muted)
+            case .failed(let error):
+                Text("The designs didn't load: \(error)")
                     .font(theme.body(.subheadline))
                     .foregroundStyle(theme.attention)
+            case .designs(let designs):
+                ForEach(Designs.ordered(shown), id: \.name) { d in
+                    DesignCard(project: project.slug, design: d, open: Binding(
+                        get: { open.contains(d.name) },
+                        set: { if $0 { open.insert(d.name) } else { open.remove(d.name) } }))
+                }
+                let words = Designs.toggle(designs, all: all)
+                if !words.isEmpty {
+                    Button(words) { all.toggle() }
+                        .buttonStyle(.link)
+                        .font(theme.body(.subheadline))
+                }
             }
         }
         .guardingLinks()

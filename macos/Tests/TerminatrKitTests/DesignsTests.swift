@@ -54,6 +54,21 @@ import Testing
         #expect(!old.archived)
     }
 
+    /// Reading, none, broken and listed each show differently (T876):
+    /// a project without designs says so rather than showing nothing.
+    @Test func listing() {
+        #expect(Designs.listing(nil, error: nil) == .reading)
+        #expect(Designs.listing([], error: nil) == .none)
+        #expect(Designs.listing(nil, error: "no server") == .failed("no server"))
+        #expect(Designs.listing([], error: "no server") == .failed("no server"))
+        #expect(Designs.listing([vault], error: nil) == .designs([vault]))
+        // A later read that failed leaves the designs read before.
+        #expect(Designs.listing([vault], error: "no server") == .designs([vault]))
+        // All done: still listed, folded behind the toggle.
+        let done = AppAPI.Design(name: "a", title: "a", status: "done", tasksDone: 0)
+        #expect(Designs.listing([done], error: nil) == .designs([done]))
+    }
+
     @Test func compatibility() {
         var h = AppAPI.Hello(appApi: 31, tm: "1", build: "", capabilities: [], methods: ["design.list"])
         h.server = AppAPI.Server(version: "1", protocol: 28, caps: ["designs"])
