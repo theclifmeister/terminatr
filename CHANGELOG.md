@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.66.0](https://github.com/theclifmeister/terminatr/compare/v0.65.0...v0.66.0) (2026-10-30)
+
+
+### Features
+
+* a dropped task status, archived tasks out of the vault's views, done designs hidden, design archive ([#939](https://github.com/theclifmeister/terminatr/issues/939)) ([192bd0c](https://github.com/theclifmeister/terminatr/commit/192bd0ced930a83b462a7920eb147adca832b029))
+* design canvases show each task as a readable text card ([#941](https://github.com/theclifmeister/terminatr/issues/941)) ([edc1c9d](https://github.com/theclifmeister/terminatr/commit/edc1c9d9aa2ed2a12701edc71cffad76a9246e6d))
+* tm vault init links ~/terminatr-obsidian to the vault ([#938](https://github.com/theclifmeister/terminatr/issues/938)) ([9b208e6](https://github.com/theclifmeister/terminatr/commit/9b208e69842380a534cba0eada370889329446cb))
+
 ## [0.65.0](https://github.com/theclifmeister/terminatr/compare/v0.64.0...v0.65.0) (2026-10-29)
 
 
