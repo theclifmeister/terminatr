@@ -3,12 +3,15 @@ package codehost
 // Azure DevOps' REST API as tm asks it (docs/SPEC.md §7.5): GETs through
 // az rest with a Microsoft Entra token of az login, the way Microsoft
 // documents ad hoc REST calls (learn.microsoft.com/azure/devops/cli/
-// entra-tokens), else with the PAT of AZURE_DEVOPS_EXT_PAT. Not through
-// the azure-devops extension: its SDK sends X-VSS-ForceMsaPassThrough,
-// which signs a work login whose email is also a personal Microsoft
-// account in as that account, one the organization doesn't have
-// (TF400813). The token is the same as the extension's, so Conditional
-// Access, which Entra applies when az login gets it, holds alike.
+// entra-tokens), else with the PAT of AZURE_DEVOPS_EXT_PAT. The
+// azure-devops extension (az devops invoke, the same JSON) only when az
+// rest can't sign in, per organization (azVia, T877): its SDK sends
+// X-VSS-ForceMsaPassThrough, which signs a work login whose email is
+// also a personal Microsoft account in as that account, one the
+// organization doesn't have (TF400813), while some organizations answer
+// az rest's token with their sign-in page. The token is the same as the
+// extension's, so Conditional Access, which Entra applies when az login
+// gets it, holds alike.
 
 import (
 	"encoding/base64"
@@ -16,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/url"
 	"os"
@@ -129,8 +133,32 @@ var errUntrustedURL = errors.New("azure devops: refusing to send credentials to 
 // get answers the JSON of the GET of u, a REST URL under the Target's
 // organization: through az rest, retried once with the subscription of
 // the organization's tenant when az's default tenant is refused, else
-// with the PAT when az can't sign in or is refused and one is set.
+// with the PAT when az can't sign in or is refused and one is set, else
+// through the azure-devops extension (invoke), which is then asked first
+// for the organization (azVia) until it fails in turn.
 func (a Azure) get(dir, u string) ([]byte, error) {
+	if a.UsesExtension() {
+		// Its failures but "no such PR" (an extension removed, a login
+		// gone) start over from az rest.
+		out, err := a.invoke(dir, u)
+		if err == nil || azNoPR.MatchString(err.Error()) {
+			return out, err
+		}
+		azVia.Delete(a.Target.OrgURL)
+	}
+	out, err := a.restOrPAT(dir, u)
+	if err == nil || !authFailure(err) || a.getenv(patEnv) != "" {
+		return out, err
+	}
+	if out, ierr := a.invoke(dir, u); ierr == nil {
+		azVia.Store(a.Target.OrgURL, viaExt)
+		return out, nil
+	}
+	return nil, err
+}
+
+// restOrPAT is get without the extension.
+func (a Azure) restOrPAT(dir, u string) ([]byte, error) {
 	out, err := a.rest(dir, u)
 	if err != nil {
 		if _, used := azSubs.Load(a.Target.OrgURL); used {
@@ -157,14 +185,152 @@ func (a Azure) get(dir, u string) ([]byte, error) {
 	return nil, err
 }
 
-// rest runs az rest's GET of u with JSON asked for.
+// rest runs az rest's GET of u with JSON asked for. Azure DevOps'
+// sign-in page in place of an answer (HTTP 203, which az rest passes on
+// with exit 0) is az not signed in to Azure DevOps, never an answer:
+// read as one, it was "no PR" (T877).
 func (a Azure) rest(dir, u string, headers ...string) ([]byte, error) {
 	if !a.trusted(u) {
 		return nil, errUntrustedURL
 	}
 	args := []string{"rest", "--method", "get", "--resource", azResource, "--url", u, "--headers", "Accept=application/json"}
 	args = append(args, headers...)
-	return a.az(dir, a.withSub(args)...)
+	out, err := a.az(dir, a.withSub(args)...)
+	if err == nil && signInPage(out) {
+		return nil, &CLIError{CLI: "az", Err: fmt.Errorf("az rest %s: Azure DevOps answered with its sign-in page (HTTP 203), not JSON", u),
+			Problem: errSignInPage, auth: true,
+			Advice: "the user installs the azure-devops extension (az extension add --name azure-devops), which tm asks when az rest can't sign in, or checks az login in a terminal (tm doctor)"}
+	}
+	return out, err
+}
+
+// errSignInPage is the Problem of az rest given the sign-in page.
+const errSignInPage = "Azure DevOps answered az rest with its sign-in page: not signed in to Azure DevOps"
+
+// signInPage reports whether an answer is a web page (Azure DevOps'
+// sign-in page, as the user "Anonymous") rather than JSON or log text.
+func signInPage(out []byte) bool {
+	return strings.HasPrefix(strings.TrimLeft(string(out), " \t\r\n\ufeff"), "<")
+}
+
+// azVia is, per organization URL, viaExt once az rest couldn't sign in
+// there and the azure-devops extension could (T877): some logins work
+// one way only. az rest's token gets one organization's sign-in page,
+// the extension's SDK is refused by another (TF400813, the note atop
+// this file).
+var azVia sync.Map
+
+const viaExt = "ext"
+
+// UsesExtension reports whether tm reaches the Target's organization
+// through the azure-devops extension (az devops invoke), az rest having
+// failed to sign in there.
+func (a Azure) UsesExtension() bool {
+	v, _ := azVia.Load(a.Target.OrgURL)
+	return v == viaExt
+}
+
+// invoke GETs u, one of the REST URLs tm builds (invokeArgs), through
+// the azure-devops extension: az devops invoke, which answers the same
+// JSON.
+func (a Azure) invoke(dir, u string) ([]byte, error) {
+	if !a.trusted(u) {
+		return nil, errUntrustedURL
+	}
+	args, ok := a.invokeArgs(u)
+	if !ok {
+		return nil, azError(fmt.Errorf("az devops invoke: no route for %s", u))
+	}
+	out, err := a.az(dir, args...)
+	if err == nil && signInPage(out) {
+		return nil, azError(fmt.Errorf("az devops invoke %s: Azure DevOps answered with its sign-in page", u))
+	}
+	return out, err
+}
+
+// invokeArgs are az devops invoke's arguments for u, a REST URL under
+// the Target's organization of the routes tm asks; ok is false for any
+// other. invoke picks a resource's first location of the highest
+// version: for pullRequests the project's, so the repo is a search
+// criterion there. It reads a preview api-version without its revision
+// only ("7.1-preview").
+func (a Azure) invokeArgs(u string) (args []string, ok bool) {
+	p, err := url.Parse(u)
+	if err != nil || !strings.HasPrefix(u, a.Target.OrgURL+"/") {
+		return nil, false
+	}
+	org, err := url.Parse(a.Target.OrgURL)
+	if err != nil {
+		return nil, false
+	}
+	rest, cut := strings.CutPrefix(p.EscapedPath(), strings.TrimRight(org.EscapedPath(), "/")+"/")
+	if !cut {
+		return nil, false
+	}
+	var seg []string
+	for _, s := range strings.Split(rest, "/") {
+		d, err := url.PathUnescape(s)
+		if err != nil || d == "" {
+			return nil, false
+		}
+		seg = append(seg, d)
+	}
+	if len(seg) < 4 || seg[1] != "_apis" {
+		return nil, false
+	}
+	q := p.Query()
+	route := []string{"project=" + seg[0]}
+	var area, resource string
+	r := seg[2:]
+	isRepo := len(r) >= 3 && r[0] == "git" && r[1] == "repositories"
+	isBuild := len(r) >= 4 && r[0] == "build" && r[1] == "builds"
+	switch {
+	case isRepo && len(r) == 3:
+		area, resource = "git", "repositories"
+		route = append(route, "repositoryId="+r[2])
+	case isRepo && len(r) == 4 && strings.EqualFold(r[3], "pullrequests"):
+		area, resource = "git", "pullRequests"
+		route = append(route, "repositoryId="+r[2])
+		q.Set("searchCriteria.repositoryId", r[2])
+	case isRepo && len(r) == 5 && strings.EqualFold(r[3], "pullrequests"):
+		area, resource = "git", "pullRequests"
+		route = append(route, "repositoryId="+r[2], "pullRequestId="+r[4])
+	case isRepo && len(r) == 6 && strings.EqualFold(r[3], "pullrequests") && r[5] == "statuses":
+		area, resource = "git", "pullRequestStatuses"
+		route = append(route, "repositoryId="+r[2], "pullRequestId="+r[4])
+	case len(r) == 2 && r[0] == "policy" && r[1] == "evaluations":
+		area, resource = "policy", "evaluations"
+	case len(r) == 2 && r[0] == "build" && r[1] == "builds":
+		area, resource = "build", "builds"
+	case isBuild && len(r) == 4 && r[3] == "timeline":
+		area, resource = "build", "timeline"
+		route = append(route, "buildId="+r[2])
+	case isBuild && len(r) == 4 && r[3] == "logs":
+		area, resource = "build", "logs"
+		route = append(route, "buildId="+r[2])
+	case isBuild && len(r) == 5 && r[3] == "logs":
+		area, resource = "build", "logs"
+		route = append(route, "buildId="+r[2], "logId="+r[4])
+	default:
+		return nil, false
+	}
+	version := q.Get("api-version")
+	if v, _, preview := strings.Cut(version, "-preview"); preview {
+		version = v + "-preview"
+	}
+	q.Del("api-version")
+	args = []string{"devops", "invoke", "--org", a.Target.OrgURL, "--area", area, "--resource", resource, "--http-method", "GET", "--route-parameters"}
+	args = append(args, route...)
+	if len(q) > 0 {
+		args = append(args, "--query-parameters")
+		for _, k := range slices.Sorted(maps.Keys(q)) {
+			args = append(args, k+"="+q.Get(k))
+		}
+	}
+	if version != "" {
+		args = append(args, "--api-version", version)
+	}
+	return args, true
 }
 
 // withSub is args with the subscription azSubs found for the

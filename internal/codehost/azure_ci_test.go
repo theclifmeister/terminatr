@@ -180,3 +180,95 @@ func TestAzureFailedLogBranch(t *testing.T) {
 		}
 	}
 }
+
+// TestAzureInvokeArgs: every URL tm asks maps onto az devops invoke's
+// area, resource and parameters, as the extension picks a location
+// (its first of the highest version: the project's for pullRequests).
+func TestAzureInvokeArgs(t *testing.T) {
+	a := Azure{Target: shop}
+	b := "https://dev.azure.com/acme/Shop/_apis/build/builds"
+	pre := "devops invoke --org https://dev.azure.com/acme "
+	for u, want := range map[string]string{
+		shopRepo + "?api-version=7.1": "--area git --resource repositories --http-method GET --route-parameters project=Shop repositoryId=web --api-version 7.1",
+		shopRepo + "/pullrequests?searchCriteria.sourceRefName=refs%2Fheads%2Fa%2Fb&searchCriteria.status=all&$top=20&api-version=7.1": "--area git --resource pullRequests --http-method GET --route-parameters project=Shop repositoryId=web " +
+			"--query-parameters $top=20 searchCriteria.repositoryId=web searchCriteria.sourceRefName=refs/heads/a/b searchCriteria.status=all --api-version 7.1",
+		shopRepo + "/pullrequests/7?api-version=7.1":                                                      "--area git --resource pullRequests --http-method GET --route-parameters project=Shop repositoryId=web pullRequestId=7 --api-version 7.1",
+		shopRepo + "/pullRequests/7/statuses?api-version=7.1-preview.1":                                   "--area git --resource pullRequestStatuses --http-method GET --route-parameters project=Shop repositoryId=web pullRequestId=7 --api-version 7.1-preview",
+		"https://dev.azure.com/acme/Shop/_apis/policy/evaluations?artifactId=x&api-version=7.1-preview.1": "--area policy --resource evaluations --http-method GET --route-parameters project=Shop --query-parameters artifactId=x --api-version 7.1-preview",
+		b + "?branchName=refs%2Fpull%2F7%2Fmerge&$top=20&api-version=7.1":                                 "--area build --resource builds --http-method GET --route-parameters project=Shop --query-parameters $top=20 branchName=refs/pull/7/merge --api-version 7.1",
+		b + "/6/timeline?api-version=7.1":                                                                 "--area build --resource timeline --http-method GET --route-parameters project=Shop buildId=6 --api-version 7.1",
+		b + "/6/logs?api-version=7.1":                                                                     "--area build --resource logs --http-method GET --route-parameters project=Shop buildId=6 --api-version 7.1",
+		b + "/6/logs/7?startLine=1&endLine=2000&api-version=7.1":                                          "--area build --resource logs --http-method GET --route-parameters project=Shop buildId=6 logId=7 --query-parameters endLine=2000 startLine=1 --api-version 7.1",
+	} {
+		args, ok := a.invokeArgs(u)
+		if got := strings.Join(args, " "); !ok || got != pre+want {
+			t.Errorf("%s:\n got %s\nwant %s", u, got, pre+want)
+		}
+	}
+	for _, u := range []string{"https://dev.azure.com/evil/Shop/_apis/git/repositories/web", "https://dev.azure.com/acme/Shop/_apis/wit/workitems/1", "https://dev.azure.com/acme/Shop/_git/web", "::"} {
+		if args, ok := a.invokeArgs(u); ok {
+			t.Errorf("%s mapped: %q", u, args)
+		}
+	}
+	// a visualstudio.com organization, a project with a space
+	v := Azure{Target: Target{Kind: AzureKind, OrgURL: "https://acme.visualstudio.com", Project: "My Shop", Repo: "web"}}
+	if args, ok := v.invokeArgs(v.prURL(3)); !ok || !slices.Contains(args, "project=My Shop") || !slices.Contains(args, "https://acme.visualstudio.com") {
+		t.Errorf("visualstudio.com: %q", args)
+	}
+}
+
+// TestAzureSignInPage (T877): az rest answering with Azure DevOps'
+// sign-in page (HTTP 203, exit 0) is not signed in, never no PR; the
+// extension is asked then, and first after for the organization.
+func TestAzureSignInPage(t *testing.T) {
+	signIn := "<!DOCTYPE html>\n<html><head><title>Azure DevOps Services | Sign In</title></head></html>"
+	var ran []string
+	ext := true
+	a := Azure{Target: shop, Getenv: func(string) string { return "" }, Run: func(dir string, args ...string) ([]byte, error) {
+		ran = append(ran, args[0])
+		if args[0] == "rest" {
+			return []byte(signIn), nil
+		}
+		if !ext {
+			return nil, azError(errors.New("az devops invoke: exit status 2 ERROR: 'devops' is misspelled or not recognized by the system."))
+		}
+		cmd := strings.Join(args, " ")
+		switch {
+		case strings.Contains(cmd, "--resource pullRequests") && strings.Contains(cmd, "searchCriteria.sourceRefName"):
+			return []byte(`{"count":1,"value":[` + string(fixture(t, "pr-branch-ci.json")) + `]}`), nil
+		case strings.Contains(cmd, "--resource builds") && strings.Contains(cmd, "refs/heads/"):
+			return fixture(t, "builds-branch.json"), nil
+		}
+		return []byte(`{"count":0,"value":[]}`), nil
+	}}
+	azVia.Clear()
+	defer azVia.Clear()
+	pr, err := a.PR("/r", Ref{Branch: "feature/ci"})
+	if err != nil || pr.Number != 7 || pr.Checks != "fail" || !a.UsesExtension() {
+		t.Fatalf("through the extension: %+v %v %q", pr, err, ran)
+	}
+	ran = nil
+	if _, err := a.PR("/r", Ref{Branch: "feature/ci"}); err != nil || slices.Contains(ran, "rest") {
+		t.Fatalf("az rest asked again: %v %q", err, ran)
+	}
+	// no extension: not signed in, in fixed words
+	azVia.Clear()
+	ext = false
+	_, err = a.PR("/r", Ref{Branch: "feature/ci"})
+	if errors.Is(err, ErrNoPR) || NoPRWhy(err) != "az failed: "+errSignInPage {
+		t.Fatalf("no extension: %q %v", NoPRWhy(err), err)
+	}
+	if _, problem, advice := Advice(err); problem != errSignInPage || !strings.Contains(advice, "az extension add --name azure-devops") {
+		t.Fatalf("advice %q %q", problem, advice)
+	}
+	// an extension that fails to sign in later: az rest again
+	azVia.Store(shop.OrgURL, viaExt)
+	ran = nil
+	a.PR("/r", Ref{Branch: "feature/ci"})
+	if !slices.Contains(ran, "rest") || a.UsesExtension() {
+		t.Fatalf("stuck on the extension: %q", ran)
+	}
+	if !signInPage([]byte("\ufeff  <html>")) || signInPage([]byte(`{"value":[]}`)) || signInPage([]byte("2026-10-30T10:00:00Z log line")) {
+		t.Fatal("signInPage")
+	}
+}

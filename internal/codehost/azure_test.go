@@ -299,6 +299,7 @@ type azFake struct {
 }
 
 func (f *azFake) host() Azure {
+	azVia.Clear() // a new host finds its own way in (az rest first)
 	return Azure{Target: shop, Getenv: func(string) string { return "" }, Run: func(dir string, args ...string) ([]byte, error) {
 		route, u := azRoute(args)
 		f.mu.Lock()
@@ -581,7 +582,10 @@ func TestAzureAccess(t *testing.T) {
 				case args[0] == "rest" && strings.Contains(cmd, "--subscription"):
 					key = "rest-sub"
 				}
-				a := answers[key]
+				a, has := answers[key]
+				if !has && key == "devops" {
+					a.err = "ERROR: 'devops' is misspelled or not recognized by the system."
+				}
 				if a.err != "" {
 					return a.err, errors.New("/bin/az " + cmd + ": " + a.err)
 				}
@@ -603,11 +607,28 @@ func TestAzureAccess(t *testing.T) {
 		}
 	}
 
+	// T877: az rest gets the sign-in page; the extension reads it, and
+	// is asked first after
+	signIn := map[string]answer{"rest": {out: "\n<!DOCTYPE html><html><head><title>Azure DevOps Services | Sign In</title>"}, "devops": {out: `{"id":"x","name":"web"}`}}
+	ran = nil
+	if c := (Azure{Target: shop}).Access(deps(signIn, &ran)); len(c) != 1 || !c[0].OK || !strings.Contains(c[0].Detail, "through the azure-devops extension") {
+		t.Fatalf("sign-in page: %+v", c)
+	}
+	if !strings.HasPrefix(ran[1], "devops invoke --org https://dev.azure.com/acme --area git --resource repositories --http-method GET --route-parameters project=Shop repositoryId=web --api-version 7.1") {
+		t.Fatalf("ran %q", ran)
+	}
+	delete(signIn, "devops")
+	azVia.Clear()
+	if c := (Azure{Target: shop}).Access(deps(signIn, &ran)); len(c) != 1 || c[0].OK || !strings.Contains(c[0].Detail, "sign-in page") || !strings.Contains(c[0].Detail, "az extension add --name azure-devops") {
+		t.Fatalf("sign-in page, no extension: %+v", c)
+	}
+	azVia.Clear()
+
 	// refused, the organization in a tenant az has no account in
 	defer func(f func(string) string) { orgTenant = f }(orgTenant)
 	orgTenant = func(string) string { return "47388324-0000-0000-0000-000000000000" }
 	azSubs.Delete(shop.OrgURL)
-	refused := map[string]answer{"rest": {err: tf400813}, "account": {out: `[{"id":"11111111-0000-0000-0000-000000000000","tenantId":"99999999-0000-0000-0000-000000000000","isDefault":true}]`}}
+	refused := map[string]answer{"rest": {err: tf400813}, "devops": {err: tf400813}, "account": {out: `[{"id":"11111111-0000-0000-0000-000000000000","tenantId":"99999999-0000-0000-0000-000000000000","isDefault":true}]`}}
 	if c := (Azure{Target: shop}).Access(deps(refused, &ran)); len(c) != 1 || c[0].OK || !strings.Contains(c[0].Detail, "TF400813") ||
 		!strings.Contains(c[0].Detail, "az login --tenant 47388324-0000-0000-0000-000000000000") {
 		t.Fatalf("%+v", c)
@@ -670,6 +691,7 @@ func TestAdvice(t *testing.T) {
 // buildLogHost answers az rest for FailedLog: the merge ref's failed
 // builds, the timeline, the log list and the log lines, by route.
 func buildLogHost(t *testing.T, builds string, asked *[]string) Azure {
+	azVia.Clear()
 	return Azure{Target: shop, Getenv: func(string) string { return "" }, Run: func(dir string, args ...string) ([]byte, error) {
 		route, u := azRoute(args)
 		*asked = append(*asked, u)

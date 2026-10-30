@@ -798,6 +798,9 @@ func (a Azure) Access(d DoctorDeps) []Check {
 	name := "az repo " + t.Project + "/" + t.Repo
 	u := b.repoURL() + "?api-version=7.1"
 	_, err := b.get("", u)
+	if err == nil && b.UsesExtension() {
+		return []Check{{Name: name, OK: true, Detail: "readable through the azure-devops extension: Azure DevOps answers az rest with its sign-in page, so tm asks with az devops invoke"}}
+	}
 	if err == nil {
 		return []Check{{Name: name, OK: true, Detail: "readable"}}
 	}
@@ -813,6 +816,8 @@ func (a Azure) Access(d DoctorDeps) []Check {
 		detail = "can't read it: install the Azure CLI and run az login, or set " + patEnv
 	case problem == "az is not logged in":
 		detail = "can't read it: az isn't logged in: run az login, or set " + patEnv
+	case problem == errSignInPage:
+		detail = "can't read it: Azure DevOps answers az rest with its sign-in page (not signed in), and the azure-devops extension can't read it either: install it (az extension add --name azure-devops), or check az login, or set " + patEnv
 	case strings.Contains(problem, patEnv):
 		detail = "can't read it with " + patEnv + " (401/403): check that it hasn't expired and has the Code and Build read scopes"
 	case isRefused(err):
