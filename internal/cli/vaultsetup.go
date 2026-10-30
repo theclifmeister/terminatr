@@ -18,19 +18,21 @@ import (
 // tm vault init and off (T720, docs/SPEC.md §5.1, Vault); render is in
 // vault.go.
 
-// vaultInit implements tm vault init [--plugin] [--yes]: the human's,
-// since it turns on files in every project and edits Obsidian's
-// settings. --plugin also installs the Obsidian plugin (obsidian/),
-// bundled from the sources tm embeds.
+// vaultInit implements tm vault init [--plugin] [--open [--register]]
+// [--yes]: the human's, since it turns on files in every project and
+// edits Obsidian's settings. --plugin also installs the Obsidian plugin
+// (obsidian/), bundled from the sources tm embeds; --open then opens the
+// vault in Obsidian (tm vault open).
 func vaultInit(e *Env, args []string) error {
 	f := newFlags()
 	yes, plugin := f.Bool("yes"), f.Bool("plugin")
 	linkAt, noLink := f.String("link"), f.Bool("no-link")
+	openIt, register := f.Bool("open"), f.Bool("register")
 	pos, err := f.Parse(args)
 	if isHelp(err) {
 		return err
 	}
-	if err != nil || len(pos) > 0 || *noLink && *linkAt != "" {
+	if err != nil || len(pos) > 0 || *noLink && *linkAt != "" || *register && !*openIt {
 		return usagef("%s", vaultUsage)
 	}
 	if e.Caller.Kind != caller.Human {
@@ -97,14 +99,17 @@ func vaultInit(e *Env, args []string) error {
 	} else {
 		fmt.Fprintf(e.Stdout, "vault on: %d derived notes written\n", n)
 	}
+	if *plugin {
+		fmt.Fprintln(e.Stdout, "The NEEDS YOU pane is in .obsidian/plugins/terminatr: turn it on in Obsidian (Settings › Community plugins › terminatr); tm turns on no plugin for you.")
+	}
+	if *openIt && err == nil {
+		return openVault(e, *register)
+	}
 	open := pl.Root
 	if lp := pl.Link(); lp != nil && lp.What != "kept" {
 		open = lp.Path
 	}
-	fmt.Fprintf(e.Stdout, "Open %s as a vault in Obsidian (Open folder as vault); tm vault doctor checks it.\n", tilde(open))
-	if *plugin {
-		fmt.Fprintln(e.Stdout, "The NEEDS YOU pane is in .obsidian/plugins/terminatr: turn it on in Obsidian (Settings › Community plugins › terminatr); tm turns on no plugin for you.")
-	}
+	fmt.Fprintf(e.Stdout, "Open %s as a vault in Obsidian (tm vault open, or Open folder as vault); tm vault doctor checks it.\n", tilde(open))
 	return err
 }
 

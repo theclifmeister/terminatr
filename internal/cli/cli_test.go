@@ -28,6 +28,14 @@ type harness struct {
 func newHarness(t *testing.T) *harness {
 	root := t.TempDir()
 	t.Setenv(home.Env, root)
+	// Never the user's home either: tm vault init links ~/terminatr-obsidian
+	// and tm vault open reads Obsidian's settings there (T874).
+	userHome := t.TempDir()
+	for _, k := range []string{"HOME", "USERPROFILE"} {
+		t.Setenv(k, userHome)
+	}
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(userHome, ".config"))
+	t.Setenv("APPDATA", filepath.Join(userHome, "AppData", "Roaming"))
 	// Never the user's server: a session's socket would win over the home.
 	t.Setenv("TERMINATR_SOCKET", "")
 	// One agent installed, whatever this machine has (modelstest).
