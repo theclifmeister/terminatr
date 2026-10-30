@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -222,10 +223,14 @@ func TestAzureInvokeArgs(t *testing.T) {
 // extension is asked then, and first after for the organization.
 func TestAzureSignInPage(t *testing.T) {
 	signIn := "<!DOCTYPE html>\n<html><head><title>Azure DevOps Services | Sign In</title></head></html>"
+	// PR asks in parallel: ran is read between its calls only.
+	var mu sync.Mutex
 	var ran []string
 	ext := true
 	a := Azure{Target: shop, Getenv: func(string) string { return "" }, Run: func(dir string, args ...string) ([]byte, error) {
+		mu.Lock()
 		ran = append(ran, args[0])
+		mu.Unlock()
 		if args[0] == "rest" {
 			return []byte(signIn), nil
 		}
