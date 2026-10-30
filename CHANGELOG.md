@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.65.0](https://github.com/theclifmeister/terminatr/compare/v0.64.0...v0.65.0) (2026-10-29)
+
+
+### Features
+
+* question cards show at once and go when answered anywhere: sessions.watch (protocol 29, app API 32) ([#933](https://github.com/theclifmeister/terminatr/issues/933)) ([d8b8e16](https://github.com/theclifmeister/terminatr/commit/d8b8e163a389f410cb11c272a3ec63ffe30bc421))
+
 ## [0.64.0](https://github.com/theclifmeister/terminatr/compare/v0.63.0...v0.64.0) (2026-10-29)
 
 
