@@ -39,6 +39,7 @@ type designFront struct {
 	Answers       int      `toml:"answers" yaml:"answers"`
 	OpenQuestions int      `toml:"open_questions" yaml:"open_questions"`
 	Canvas        string   `toml:"canvas" yaml:"canvas"`
+	Archived      bool     `toml:"archived,omitempty" yaml:"archived,omitempty"`
 	Tags          []string `toml:"tags" yaml:"tags"`
 	TM            string   `toml:"tm" yaml:"tm"`
 	CSSClasses    []string `toml:"cssclasses" yaml:"cssclasses"`
@@ -104,10 +105,11 @@ func designNote(slug string, d *design) (Note, error) {
 		Name: d.Name, Title: d.title(), Project: vaultlink.Link(slug, vaultlink.Project, slug, ""),
 		Status: d.Status(), Artifact: d.Artifact, Tasks: len(d.build), TasksDone: d.Done(),
 		Answers: len(d.Answers), OpenQuestions: len(d.Questions),
-		Canvas: vaultlink.Link(slug, vaultlink.Design, d.Name+".canvas", d.Name+".canvas"),
-		Tags:   []string{"design"}, TM: "owned", CSSClasses: []string{"tm-owned"},
+		Canvas:   vaultlink.Link(slug, vaultlink.Design, d.Name+".canvas", d.Name+".canvas"),
+		Archived: d.Archived,
+		Tags:     []string{"design"}, TM: "owned", CSSClasses: []string{"tm-owned"},
 	}
-	if len(d.Questions) > 0 {
+	if len(d.Questions) > 0 && !d.Archived {
 		f.Tags = append(f.Tags, "needs-you")
 	}
 	if d.Task != "" {

@@ -191,6 +191,22 @@ func TestDesignCanvasArchived(t *testing.T) {
 	if note := string(b); !strings.Contains(note, `status: "done"`) || !strings.Contains(note, "tasks_done: 2") || !strings.Contains(note, "[[demo/tasks/T1|T1]] A · done") {
 		t.Errorf("design note:\n%s", note)
 	}
+
+	// An archived design's note says so, and leaves Needs you even with
+	// an open question.
+	title, task := "Net", "T3"
+	p.SetDesign(name, project.DesignEdit{Title: &title, Task: &task})
+	p.AddQuestion(project.Question{Task: "T3", Question: "Still?", Options: []project.QuestionOption{{Label: "a"}, {Label: "b"}}})
+	if _, changed, err := p.ArchiveDesign(name, true); err != nil || !changed {
+		t.Fatalf("archive: %v %v", changed, err)
+	}
+	if _, _, err := Render(p); err != nil {
+		t.Fatal(err)
+	}
+	b, _ = os.ReadFile(p.Path("designs", name+".md"))
+	if note := string(b); !strings.Contains(note, "archived: true") || strings.Contains(note, "needs-you") || !strings.Contains(note, "open_questions: 1") {
+		t.Errorf("archived design note:\n%s", note)
+	}
 }
 
 // TestDesignCanvasKeeps (T723): tm keeps where the human put its nodes

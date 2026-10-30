@@ -101,3 +101,43 @@ func TestDesignsTabEmpty(t *testing.T) {
 		t.Errorf("empty designs tab:\n%s", out)
 	}
 }
+
+// TestDesignsTabHidden (T872): the done and archived designs are hidden
+// until b, which lists them, an archived one marked so; b again hides
+// them, the cursor staying on its design.
+func TestDesignsTabHidden(t *testing.T) {
+	src, m := popupData(t)
+	done := &tasks.Task{ID: 9, Title: "Shipped", Status: tasks.Done, Design: "old"}
+	src.designs = []project.DesignBuild{
+		{Design: project.Design{Name: "live"}},
+		{Design: project.Design{Name: "old"}, Build: []*tasks.Task{done}},
+		{Design: project.Design{Name: "shelved", Archived: true}},
+	}
+	feed(m, keyPress(m, "A"))
+	pv := m.top().(*projectView)
+	keyPress(m, "0")
+	out := screen(m)
+	if !strings.Contains(out, "live") || strings.Contains(out, " old ") || strings.Contains(out, "shelved") ||
+		!strings.Contains(out, "2 done or archived designs (b shows them)") || !strings.Contains(out, "b done & archived") {
+		t.Fatalf("hidden:\n%s", out)
+	}
+	keyPress(m, "b")
+	out = screen(m)
+	for _, want := range []string{"live", "old", "archived   shelved", "b hide done"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("after b lacks %q:\n%s", want, out)
+		}
+	}
+	keyPress(m, "down")
+	keyPress(m, "down")
+	keyPress(m, "enter")
+	if out := screen(m); !strings.Contains(out, "archived (tm design unarchive shelved)") {
+		t.Errorf("archived design:\n%s", out)
+	}
+	keyPress(m, "esc")
+	keyPress(m, "up")
+	keyPress(m, "b")
+	if pv.desAll || pv.sel[tabDesigns] != 0 || strings.Contains(screen(m), "shelved") {
+		t.Errorf("b again: all %v sel %d", pv.desAll, pv.sel[tabDesigns])
+	}
+}

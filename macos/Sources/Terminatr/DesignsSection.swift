@@ -18,20 +18,29 @@ struct DesignsSection: View {
     @State private var error: String?
     /// The designs opened to their detail, by name.
     @State private var open: Set<String> = []
+    /// Whether the done and archived designs show too.
+    @State private var all = false
 
     var body: some View {
         Group {
             if let designs, !designs.isEmpty {
+                let shown = Designs.shown(designs, all: all)
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("Designs · \(designs.count)".uppercased())
+                    Text("Designs · \(shown.count)".uppercased())
                         .font(theme.mono(.caption2, .medium))
                         .tracking(1)
                         .foregroundStyle(theme.muted)
                         .padding(.top, 6)
-                    ForEach(Designs.ordered(designs), id: \.name) { d in
+                    ForEach(Designs.ordered(shown), id: \.name) { d in
                         DesignCard(project: project.slug, design: d, open: Binding(
                             get: { open.contains(d.name) },
                             set: { if $0 { open.insert(d.name) } else { open.remove(d.name) } }))
+                    }
+                    let words = Designs.toggle(designs, all: all)
+                    if !words.isEmpty {
+                        Button(words) { all.toggle() }
+                            .buttonStyle(.link)
+                            .font(theme.body(.subheadline))
                     }
                 }
             } else if let error {

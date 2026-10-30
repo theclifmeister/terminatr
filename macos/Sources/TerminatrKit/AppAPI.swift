@@ -6,7 +6,7 @@ import Foundation
 /// The terminatr app API (docs/SPEC.md §3.8): what tm app bridge answers.
 public enum AppAPI {
     /// The app API version this app was generated against.
-    public static let version = 32
+    public static let version = 33
 
     public struct AdoptRequestParams: Codable, Sendable, Hashable {
         public var id: String
@@ -173,8 +173,9 @@ public enum AppAPI {
         public var answers: [String]
         public var questions: [DesignQuestion]
         public var build: [DesignTask]
+        public var archived: Bool
 
-        public init(name: String, title: String, status: String, task: String = "", taskStatus: String = "", artifact: String = "", tasks: [String] = [], tasksDone: Int, answers: [String] = [], questions: [DesignQuestion] = [], build: [DesignTask] = []) {
+        public init(name: String, title: String, status: String, task: String = "", taskStatus: String = "", artifact: String = "", tasks: [String] = [], tasksDone: Int, answers: [String] = [], questions: [DesignQuestion] = [], build: [DesignTask] = [], archived: Bool = false) {
             self.name = name
             self.title = title
             self.status = status
@@ -186,6 +187,7 @@ public enum AppAPI {
             self.answers = answers
             self.questions = questions
             self.build = build
+            self.archived = archived
         }
 
         enum CodingKeys: String, CodingKey {
@@ -200,6 +202,7 @@ public enum AppAPI {
             case answers
             case questions
             case build
+            case archived
         }
     }
 
@@ -3127,6 +3130,7 @@ extension AppAPI.Design {
         self.answers = try c.decodeIfPresent([String].self, forKey: .answers) ?? []
         self.questions = try c.decodeIfPresent([AppAPI.DesignQuestion].self, forKey: .questions) ?? []
         self.build = try c.decodeIfPresent([AppAPI.DesignTask].self, forKey: .build) ?? []
+        self.archived = try c.decodeIfPresent(Bool.self, forKey: .archived) ?? false
     }
 }
 

@@ -36,6 +36,24 @@ import Testing
         #expect(Designs.tone(task: vault.build[1]) == .working)
     }
 
+    /// The done and archived designs show only when asked for (T872);
+    /// an archived one sorts last and says so.
+    @Test func hidden() {
+        let done = AppAPI.Design(name: "a", title: "a", status: "done", tasksDone: 0)
+        let shelved = AppAPI.Design(name: "b", title: "b", status: "planned", tasksDone: 0, archived: true)
+        let building = AppAPI.Design(name: "c", title: "c", status: "building", tasksDone: 0)
+        let all = [done, shelved, building]
+        #expect(Designs.shown(all, all: false).map(\.name) == ["c"])
+        #expect(Designs.ordered(Designs.shown(all, all: true)).map(\.name) == ["c", "a", "b"])
+        #expect(Designs.toggle(all, all: false) == "Show 2 done or archived")
+        #expect(Designs.toggle(all, all: true) == "Hide done and archived")
+        #expect(Designs.toggle([building], all: false) == "")
+        #expect(Designs.facts(shelved) == ["archived", "0 answers"])
+        // An older tm's design.list has no archived: it reads as false.
+        let old = try! JSONDecoder().decode(AppAPI.Design.self, from: Data(#"{"name":"x","title":"x","status":"planned","tasks_done":0}"#.utf8))
+        #expect(!old.archived)
+    }
+
     @Test func compatibility() {
         var h = AppAPI.Hello(appApi: 31, tm: "1", build: "", capabilities: [], methods: ["design.list"])
         h.server = AppAPI.Server(version: "1", protocol: 28, caps: ["designs"])

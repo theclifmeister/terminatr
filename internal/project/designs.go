@@ -43,6 +43,9 @@ type Design struct {
 	// Answers are the user's decided answers, one line each, in the
 	// order the coordinator gave them.
 	Answers []string `json:"answers,omitempty"`
+	// Archived is set by tm design archive: the design is hidden
+	// wherever designs are listed unless a list asks for the archived.
+	Archived bool `json:"archived,omitempty"`
 }
 
 // DesignEdit is a change to a design: nil leaves a field alone, "" (or
@@ -141,6 +144,59 @@ func (p *Project) SetDesign(name string, e DesignEdit) (Design, bool, error) {
 		return append(b, '\n'), err
 	})
 	return got, changed, err
+}
+
+// ArchiveDesign sets design name's archived flag (tm design archive,
+// unarchive), recording the design when only a task names it, and
+// returns it and whether anything changed. A name neither recorded nor
+// named by a task is unknown-design.
+func (p *Project) ArchiveDesign(name string, archived bool) (Design, bool, error) {
+	name = strings.TrimSpace(name)
+	if !tasks.ValidDesign(name) {
+		return Design{}, false, refuse("invalid-design", "design %q must be a name of letters, digits, '.', '_' and '-' (as designs/<name>.md)", name)
+	}
+	builds, err := p.BoardDesigns()
+	if err != nil {
+		return Design{}, false, err
+	}
+	if !slices.ContainsFunc(builds, func(d DesignBuild) bool { return d.Name == name }) {
+		return Design{}, false, refuse("unknown-design", "no design %s: tm design list --all --archived lists them", name)
+	}
+	var got Design
+	changed := false
+	err = mdfile.Update(p.Path(designsFile), func(old []byte) ([]byte, error) {
+		st, err := decodeDesigns(old)
+		if err != nil {
+			return nil, err
+		}
+		i := slices.IndexFunc(st.Designs, func(d Design) bool { return d.Name == name })
+		if i < 0 && !archived {
+			got = Design{Name: name}
+			return old, nil
+		}
+		if i < 0 {
+			st.Designs = append(st.Designs, Design{Name: name})
+			i = len(st.Designs) - 1
+		}
+		d := &st.Designs[i]
+		if d.Archived != archived {
+			d.Archived, changed = archived, true
+		}
+		got = *d
+		slices.SortFunc(st.Designs, func(a, b Design) int { return strings.Compare(a.Name, b.Name) })
+		b, err := json.MarshalIndent(st, "", "  ")
+		return append(b, '\n'), err
+	})
+	return got, changed, err
+}
+
+// Shown reports whether a list shows d: an archived design only when it
+// asks for the archived ones, a done one only when it asks for all.
+func (d DesignBuild) Shown(all, archived bool) bool {
+	if d.Archived {
+		return archived
+	}
+	return all || d.Status() != DesignDone
 }
 
 // DesignBuild is a design with what the boards say of it: its design

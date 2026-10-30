@@ -82,6 +82,9 @@ type projectView struct {
 	designs []project.DesignBuild
 	desOK   bool
 	desErr  error
+	// desAll: the Designs tab lists the done and archived designs too
+	// (b).
+	desAll bool
 	// show is the task the popup was opened to show, 0 for none: the
 	// Tasks tab's mod hears it in view.opened, and picking puts the
 	// cursor on its row once the mod lists it.
@@ -382,7 +385,7 @@ func (pv *projectView) count(m *dash) int {
 		needs, es := pv.messages(m)
 		return len(needs) + min(len(es), msgShown)
 	case tabDesigns:
-		return len(pv.designs)
+		return len(pv.shownDesigns())
 	case tabProjMods:
 		return len(m.data.Mods)
 	}
@@ -487,7 +490,12 @@ func (pv *projectView) box(m *dash) box {
 		}
 	case tabDesigns:
 		body, sel, hits = pv.designLines(w)
-		if len(pv.designs) > 0 {
+		if pv.desAll {
+			keys = "b hide done · " + keys
+		} else if len(pv.designs) > len(pv.shownDesigns()) {
+			keys = "b done & archived · " + keys
+		}
+		if len(pv.shownDesigns()) > 0 {
 			keys = "↑ ↓ move · enter open · " + keys
 		}
 	case tabMessages:

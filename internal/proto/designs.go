@@ -28,7 +28,8 @@ type DesignListResult struct {
 // task and that task's status, page, build task ids by id, how many are
 // done, decided answers and open questions), and Build, its build tasks
 // in after order with their title, status and after, which a console
-// lists without the board's done and archived tasks.
+// lists without the board's done and archived tasks. Archived (protocol
+// 30): tm design archive hid it; a console lists it only when asked.
 type Design struct {
 	Name       string           `json:"name"`
 	Title      string           `json:"title"`
@@ -41,6 +42,7 @@ type Design struct {
 	Answers    []string         `json:"answers"`
 	Questions  []DesignQuestion `json:"questions"`
 	Build      []DesignTask     `json:"build"`
+	Archived   bool             `json:"archived,omitempty"`
 }
 
 // DesignQuestion is an open question of a design's task (tm ask).

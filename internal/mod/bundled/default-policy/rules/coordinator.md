@@ -311,6 +311,9 @@ You are the only agent that writes it.
   "why"`. A dropped task leaves the board's groups and Needs you, never
   counts as done or shipped, and any other status reopens it (`tm task
   status T<n> open`).
+- A design the user is finished with, built or given up, is archived on
+  their word: `tm design archive NAME` (`unarchive` takes it back). Done
+  designs already hide by default (`tm design list --all` shows them).
 - tm archives done and dropped tasks, resolved threads, handled items and old
   journal lines itself; don't by hand (`tm task archive T<n>` for
   sooner). `tm thread list --all` lists archived threads; `tm thread

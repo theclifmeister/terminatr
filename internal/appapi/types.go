@@ -1585,7 +1585,8 @@ type Designs struct {
 // that task's status, its page (an https URL), Tasks its build task
 // ids by id, how many are done, the user's decided answers and the
 // design task's open questions; and Build, the build tasks in after
-// order.
+// order. Archived (app API 33): tm design archive hid it; the app lists
+// it only when asked, with the done ones.
 type Design struct {
 	Name       string           `json:"name"`
 	Title      string           `json:"title"`
@@ -1598,6 +1599,7 @@ type Design struct {
 	Answers    []string         `json:"answers"`
 	Questions  []DesignQuestion `json:"questions"`
 	Build      []DesignTask     `json:"build"`
+	Archived   bool             `json:"archived,omitempty"`
 }
 
 // DesignQuestion is an open question of a design's task: its id
@@ -1624,7 +1626,7 @@ func designsOf(r proto.DesignListResult) Designs {
 	for _, d := range r.Designs {
 		ad := Design{Name: d.Name, Title: d.Title, Status: d.Status, Task: d.Task, TaskStatus: d.TaskStatus,
 			Artifact: d.Artifact, Tasks: append([]string{}, d.Tasks...), TasksDone: d.TasksDone,
-			Answers: append([]string{}, d.Answers...), Questions: []DesignQuestion{}, Build: []DesignTask{}}
+			Answers: append([]string{}, d.Answers...), Questions: []DesignQuestion{}, Build: []DesignTask{}, Archived: d.Archived}
 		for _, q := range d.Questions {
 			ad.Questions = append(ad.Questions, DesignQuestion{ID: q.ID, Header: q.Header, Question: q.Question})
 		}
