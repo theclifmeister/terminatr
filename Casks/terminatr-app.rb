@@ -2,8 +2,8 @@
 
 # Written by scripts/release/cask.sh for each release; don't edit by hand.
 cask "terminatr-app" do
-  version "0.64.0"
-  sha256 "1fec75011633c29e40ea8bc2f4168d8666d667c7bc02b6a9b6439cf60646c945"
+  version "0.65.0"
+  sha256 "4059fa3fb9c513616e6c99f10ebac1e8d95861c42343b339045f723e9329ea5c"
 
   url "https://github.com/theclifmeister/terminatr/releases/download/v#{version}/terminatr-app.zip"
   name "terminatr"
