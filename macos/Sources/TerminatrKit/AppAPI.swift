@@ -6,7 +6,7 @@ import Foundation
 /// The terminatr app API (docs/SPEC.md §3.8): what tm app bridge answers.
 public enum AppAPI {
     /// The app API version this app was generated against.
-    public static let version = 33
+    public static let version = 34
 
     public struct AdoptRequestParams: Codable, Sendable, Hashable {
         public var id: String
@@ -174,8 +174,9 @@ public enum AppAPI {
         public var questions: [DesignQuestion]
         public var build: [DesignTask]
         public var archived: Bool
+        public var working: Bool
 
-        public init(name: String, title: String, status: String, task: String = "", taskStatus: String = "", artifact: String = "", tasks: [String] = [], tasksDone: Int, answers: [String] = [], questions: [DesignQuestion] = [], build: [DesignTask] = [], archived: Bool = false) {
+        public init(name: String, title: String, status: String, task: String = "", taskStatus: String = "", artifact: String = "", tasks: [String] = [], tasksDone: Int, answers: [String] = [], questions: [DesignQuestion] = [], build: [DesignTask] = [], archived: Bool = false, working: Bool = false) {
             self.name = name
             self.title = title
             self.status = status
@@ -188,6 +189,7 @@ public enum AppAPI {
             self.questions = questions
             self.build = build
             self.archived = archived
+            self.working = working
         }
 
         enum CodingKeys: String, CodingKey {
@@ -203,6 +205,7 @@ public enum AppAPI {
             case questions
             case build
             case archived
+            case working
         }
     }
 
@@ -230,13 +233,15 @@ public enum AppAPI {
         public var status: String
         public var after: [String]
         public var archived: Bool
+        public var working: Bool
 
-        public init(id: String, title: String, status: String, after: [String] = [], archived: Bool = false) {
+        public init(id: String, title: String, status: String, after: [String] = [], archived: Bool = false, working: Bool = false) {
             self.id = id
             self.title = title
             self.status = status
             self.after = after
             self.archived = archived
+            self.working = working
         }
 
         enum CodingKeys: String, CodingKey {
@@ -245,6 +250,7 @@ public enum AppAPI {
             case status
             case after
             case archived
+            case working
         }
     }
 
@@ -3131,6 +3137,7 @@ extension AppAPI.Design {
         self.questions = try c.decodeIfPresent([AppAPI.DesignQuestion].self, forKey: .questions) ?? []
         self.build = try c.decodeIfPresent([AppAPI.DesignTask].self, forKey: .build) ?? []
         self.archived = try c.decodeIfPresent(Bool.self, forKey: .archived) ?? false
+        self.working = try c.decodeIfPresent(Bool.self, forKey: .working) ?? false
     }
 }
 
@@ -3151,6 +3158,7 @@ extension AppAPI.DesignTask {
         self.status = try c.decode(String.self, forKey: .status)
         self.after = try c.decodeIfPresent([String].self, forKey: .after) ?? []
         self.archived = try c.decodeIfPresent(Bool.self, forKey: .archived) ?? false
+        self.working = try c.decodeIfPresent(Bool.self, forKey: .working) ?? false
     }
 }
 

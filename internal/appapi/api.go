@@ -21,7 +21,7 @@ import (
 // Version is the app API's version. It goes up when a method, a field or
 // a meaning is added or changes; the app reads it, and Capabilities, from
 // the bridge's hello, so an older app works with a newer tm.
-const Version = 33
+const Version = 34
 
 // Capabilities of this bridge, in its hello: what kinds of method it
 // has (Method.Write, Method.Stream). An app checks a capability, or a

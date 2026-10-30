@@ -1586,7 +1586,8 @@ type Designs struct {
 // ids by id, how many are done, the user's decided answers and the
 // design task's open questions; and Build, the build tasks in after
 // order. Archived (app API 33): tm design archive hid it; the app lists
-// it only when asked, with the done ones.
+// it only when asked, with the done ones. Working (app API 34): a thread
+// of one of its build tasks is running a turn now.
 type Design struct {
 	Name       string           `json:"name"`
 	Title      string           `json:"title"`
@@ -1600,6 +1601,7 @@ type Design struct {
 	Questions  []DesignQuestion `json:"questions"`
 	Build      []DesignTask     `json:"build"`
 	Archived   bool             `json:"archived,omitempty"`
+	Working    bool             `json:"working,omitempty"`
 }
 
 // DesignQuestion is an open question of a design's task: its id
@@ -1611,14 +1613,16 @@ type DesignQuestion struct {
 }
 
 // DesignTask is a build task: its id ("T12"), title, status, the tasks
-// it comes after, and whether it is archived (off the board: task.get
-// doesn't read it).
+// it comes after, whether it is archived (off the board: task.get
+// doesn't read it), and Working (app API 34), whether a thread of it is
+// running a turn now.
 type DesignTask struct {
 	ID       string   `json:"id"`
 	Title    string   `json:"title"`
 	Status   string   `json:"status"`
 	After    []string `json:"after,omitempty"`
 	Archived bool     `json:"archived,omitempty"`
+	Working  bool     `json:"working,omitempty"`
 }
 
 func designsOf(r proto.DesignListResult) Designs {
@@ -1626,13 +1630,13 @@ func designsOf(r proto.DesignListResult) Designs {
 	for _, d := range r.Designs {
 		ad := Design{Name: d.Name, Title: d.Title, Status: d.Status, Task: d.Task, TaskStatus: d.TaskStatus,
 			Artifact: d.Artifact, Tasks: append([]string{}, d.Tasks...), TasksDone: d.TasksDone,
-			Answers: append([]string{}, d.Answers...), Questions: []DesignQuestion{}, Build: []DesignTask{}, Archived: d.Archived}
+			Answers: append([]string{}, d.Answers...), Questions: []DesignQuestion{}, Build: []DesignTask{}, Archived: d.Archived, Working: d.Working}
 		for _, q := range d.Questions {
 			ad.Questions = append(ad.Questions, DesignQuestion{ID: q.ID, Header: q.Header, Question: q.Question})
 		}
 		for _, t := range d.Build {
 			ad.Build = append(ad.Build, DesignTask{ID: t.ID, Title: t.Title, Status: t.Status,
-				After: append([]string(nil), t.After...), Archived: t.Archived})
+				After: append([]string(nil), t.After...), Archived: t.Archived, Working: t.Working})
 		}
 		out.Designs = append(out.Designs, ad)
 	}

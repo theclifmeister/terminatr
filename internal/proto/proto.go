@@ -44,8 +44,9 @@ import (
 // act on a paired server's need (§16.16). 28: design.list, a project's
 // designs. 29: sessions.watch, the session list pushed as it changes.
 // 30: the dropped task status, and design.list's Design.Archived (tm
-// design archive), added fields and values only.
-const Protocol = 30
+// design archive), added fields and values only. 31: design.list's
+// Design.Working and DesignTask.Working, added fields only.
+const Protocol = 31
 
 // Kind is what a connection is for.
 type Kind string

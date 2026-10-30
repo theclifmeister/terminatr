@@ -36,6 +36,34 @@ import Testing
         #expect(Designs.tone(task: vault.build[1]) == .working)
     }
 
+    /// A building design and a started build task show a still hammer
+    /// (T879), the working arc only while a thread runs a turn on one of
+    /// its build tasks; an older tm's design.list has no working.
+    @Test func hammer() {
+        let building = AppAPI.Design(name: "c", title: "c", status: "building", tasksDone: 0)
+        var busy = building
+        busy.working = true
+        #expect(Designs.symbol(building) == "hammer")
+        #expect(Designs.symbol(busy) == nil)
+        #expect(Designs.symbol(vault) == nil) // a question's glyph
+        #expect(Designs.symbol(AppAPI.Design(name: "d", title: "d", status: "planned", tasksDone: 0)) == nil)
+        #expect(Designs.symbol(task: vault.build[1]) == "hammer")
+        #expect(Designs.symbol(task: AppAPI.DesignTask(id: "T1", title: "Notes", status: "started", working: true)) == nil)
+        #expect(Designs.symbol(task: vault.build[0]) == nil)
+        let old = try! JSONDecoder().decode(AppAPI.Design.self, from: Data(
+            #"{"name":"x","title":"x","status":"building","tasks_done":0,"build":[{"id":"T1","title":"t","status":"started"}]}"#.utf8))
+        #expect(!old.working && !old.build[0].working && Designs.symbol(old) == "hammer")
+        let t0 = Date(timeIntervalSince1970: 0)
+        func s(_ id: String, role: String = "thread", project: String = "web", task: String, state: String, server: String = "") -> AppAPI.Session {
+            AppAPI.Session(id: id, role: role, project: project, thread: id, task: task, cols: 80, rows: 24, created: t0, clients: 0, state: state, server: server)
+        }
+        let sessions = [s("t-1", task: "T2", state: "working"), s("t-2", task: "T1", state: "working"), s("t-3", task: "T3", state: "idle"),
+                        s("t-4", task: "T4", state: "blocked"), s("t-5", project: "api", task: "T5", state: "working"),
+                        s("t-6", task: "T6", state: "working", server: "mini"), s("c", role: "coordinator", task: "T7", state: "working"),
+                        s("t-7", task: "T1", state: "working")]
+        #expect(Designs.working(sessions, project: "web") == ["T1", "T2"])
+    }
+
     /// The done and archived designs show only when asked for (T872);
     /// an archived one sorts last and says so.
     @Test func hidden() {
