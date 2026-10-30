@@ -8,9 +8,11 @@ package server
 // single option or the user's words.
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/proto"
@@ -99,8 +101,8 @@ func (s *Server) answerMenu(sess *session.Session, q *proto.Question, call strin
 	if choice == 0 || choice > 9 {
 		return none, proto.Errorf(proto.ErrNoQuestion, "session %s's screen shows no option for %q", p.ID, textsafe.Line(ans, 80))
 	}
-	if !strings.Contains(spaced(screen.Text), spaced(it.Question)) {
-		return none, proto.Errorf(proto.ErrNoQuestion, "session %s's screen doesn't show %q", p.ID, textsafe.Line(it.Question, 80))
+	if why := menuShows(screen.Text, it.Question); why != "" {
+		return none, proto.Errorf(proto.ErrNoQuestion, "session %s's %s", p.ID, why)
 	}
 	for i, k := range agent.MenuKeys(how, choice, text) {
 		if i > 0 {
@@ -131,3 +133,41 @@ func menuLabel(o string) string {
 }
 
 func spaced(s string) string { return strings.Join(strings.Fields(s), " ") }
+
+// minShown is how much of a question's end a pane must show when its
+// start scrolled off: enough not to be another question's ending.
+const minShown = 40
+
+// menuShows says why screen doesn't show question, as the agent's menu
+// draws it above its options; "" when it does. The menu wraps it
+// behind a bar (Claude's "│ ") or in a box, which unbar takes off, and
+// spaced folds the wrapping. A pane too short for it all shows its end
+// from its top line on: at least minShown of it, starting a word (the
+// menu's rule and the option are on the screen as well).
+func menuShows(screen, question string) string {
+	text, q := spaced(unbar(screen)), spaced(question)
+	if strings.Contains(text, q) {
+		return ""
+	}
+	for i := 0; i < len(q)-minShown; i++ {
+		if (i == 0 || q[i-1] == ' ') && strings.HasPrefix(text, q[i:]) {
+			return ""
+		}
+	}
+	if opts := agent.DialogOptions(screen); len(opts) > 0 {
+		above, _, _ := strings.Cut(screen, opts[0])
+		if !strings.ContainsFunc(unbar(above), unicode.IsLetter) {
+			return "pane is too short to show the question above its options"
+		}
+	}
+	return fmt.Sprintf("screen doesn't show %q", textsafe.Line(question, 80))
+}
+
+// unbar is screen with each line's bars and box sides taken off.
+func unbar(screen string) string {
+	lines := strings.Split(screen, "\n")
+	for i, l := range lines {
+		lines[i] = strings.Trim(l, " \t│┃▌▎|")
+	}
+	return strings.Join(lines, "\n")
+}

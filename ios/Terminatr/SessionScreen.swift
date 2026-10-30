@@ -80,5 +80,16 @@ struct SessionScreen: View {
         .hidesLiveStrip(width == .compact)
         .asksSaveClear(ref.project, isPresented: $clearing)
         .kept($tab, "tab \(ref)")
+        .environment(\.showTerminal, ShowTerminal { tab = .terminal })
     }
+}
+
+/// Switches a session's screen to its terminal: an answer its
+/// conversation's card couldn't type offers it (NeedActs).
+struct ShowTerminal {
+    let go: () -> Void
+}
+
+extension EnvironmentValues {
+    @Entry var showTerminal: ShowTerminal?
 }

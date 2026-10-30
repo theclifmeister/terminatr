@@ -21,15 +21,20 @@ import TerminatrUI
 /// (the deck's lead card), never while the Send back note is asked. A
 /// server's answer is a success or warning haptic. laidOut lays the
 /// parts out: Needs you's card (NeedCard), or under a conversation's
-/// need (NeedActsColumn).
+/// need (NeedActsColumn). An answer the agent's screen didn't confirm
+/// (QuestionPlan.useTerminal) offers its terminal, in a session's
+/// screen (showTerminal), to answer there (T884).
 struct NeedActs: View {
     @Environment(PhoneModel.self) private var model
     @Environment(\.theme) private var theme
+    @Environment(\.showTerminal) private var showTerminal
     @Environment(\.dynamicTypeSize) private var typeSize
     let need: Need
     let laidOut: (NeedParts) -> AnyView
     @State private var dialog: AppAPI.ApproveResult?
     @State private var escape = false
+    /// The last answer failed as one the terminal answers instead.
+    @State private var terminal = false
     @State private var busy = false
     @State private var said: (text: String, failed: Bool)?
     @State private var sendingBack = false
@@ -95,6 +100,11 @@ struct NeedActs: View {
                             answer(a, o)
                         }
                         .accessibilityLabel(named(o))
+                    }
+                    if terminal, let showTerminal {
+                        Button("Open the terminal", systemImage: "apple.terminal", action: showTerminal.go)
+                            .buttonStyle(.secondary)
+                            .accessibilityHint("Shows the agent's menu in its terminal, to answer there")
                     }
                 }
             }
@@ -288,6 +298,7 @@ struct NeedActs: View {
     private func act(_ f: @escaping () async throws -> String?) {
         busy = true
         said = nil
+        terminal = false
         Task {
             do {
                 if let s = try await f() { said = (s, false) }
@@ -298,6 +309,7 @@ struct NeedActs: View {
                     refused += 1
                 }
                 if (error as? AppAPI.Error)?.code == "device-escape-off" { escape = true }
+                if let e = error as? AppAPI.Error, need.kind == .question, QuestionPlan.useTerminal(e.code) { terminal = true }
             }
             busy = false
         }
@@ -314,6 +326,7 @@ struct NeedActs: View {
             case "device-level": return "This phone may only view: tm device access on your computer raises it."
             case "always-allow": return "That option allows more than once: only you pick it, on your computer."
             case "need-changed": return "That changed meanwhile: look again."
+            case "no-question", "screen-only": return "\(e.message). Answer it in the terminal view."
             case DemoTransport.refused: return "The demo shows recorded data: pair your server to do this."
             default: return e.errorDescription
             }
