@@ -356,3 +356,18 @@ func TestActGuardPicks(t *testing.T) {
 		t.Fatalf("a pick it hasn't: %v", perr)
 	}
 }
+
+// TestCodexNoMulti: Codex's request_user_input (0.163) takes one option
+// and notes, no multi-select (its multi-select schemas are MCP
+// elicitation's), and its menu is read off the screen only: its
+// [answer] types no picks, so answerMenu refuses them (screen-only).
+func TestCodexNoMulti(t *testing.T) {
+	reg, err := agent.Load("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, ok := reg.Get("codex")
+	if how := agent.AnswerOf(a); !ok || how == nil || how.Multi() || how.Tool != "" {
+		t.Fatalf("codex's [answer]: %+v", how)
+	}
+}
