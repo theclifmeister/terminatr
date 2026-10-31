@@ -107,6 +107,10 @@ final class PhoneModel {
     /// Each session's composer files (T860), by its ref: kept across the
     /// screens and the link's drops, as its draft is.
     @ObservationIgnored private var trays: [SessionRef: ComposerTray] = [:]
+    /// The prompts this phone queued for each session while its agent
+    /// worked (T893): the conversation shows them at its end, marked
+    /// queued, until they go in (QueuedPrompt.waiting).
+    private(set) var queuedSent: [SessionRef: [QueuedPrompt]] = [:]
     /// The conversation's files (session.file), the bridge's: nil when
     /// its tm sends none.
     private(set) var files: FileStore?
@@ -527,6 +531,28 @@ final class PhoneModel {
                                            AppAPI.PromptParams(id: session, text: text, mode: mode, files: files))
         await reread()
         return r
+    }
+
+    /// Notes a prompt ref's composer queued (T893), for its bubble.
+    func queued(_ ref: SessionRef, _ q: QueuedPrompt) {
+        queuedSent[ref, default: []].append(q)
+    }
+
+    /// Forgets ref's queued prompts that went in: those waiting stay.
+    func keepQueued(_ ref: SessionRef, _ waiting: [QueuedPrompt]) {
+        guard let all = queuedSent[ref], all.count != waiting.count else { return }
+        queuedSent[ref] = waiting.isEmpty ? nil : waiting
+    }
+
+    /// Stops session's running turn, sending nothing (session.prompt's
+    /// interrupt with no text, T893): the composer's Stop.
+    func stop(_ session: String) async throws {
+        do {
+            _ = try await connected().call(AppAPI.Methods.sessionPrompt, AppAPI.PromptParams(id: session, text: "", mode: "interrupt"))
+        } catch let e as AppAPI.Error where e.code == "bad-params" && e.message.contains("empty prompt") {
+            throw AppAPI.Error(code: "refused", message: "This tm stops a turn only for a prompt: update tm on your computer, or send one with Interrupt")
+        }
+        await reread()
     }
 
     /// Whether the composer takes files for ref's session (session.upload,

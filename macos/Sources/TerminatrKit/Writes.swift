@@ -27,6 +27,42 @@ public enum PromptSent {
     }
 }
 
+/// A prompt this composer queued while the agent worked (T893): the
+/// phone shows it at the conversation's end as the user's own bubble,
+/// marked queued, until it goes in.
+public struct QueuedPrompt: Sendable, Equatable, Identifiable {
+    public let id: UUID
+    public let text: String
+    /// How many files went with it.
+    public let files: Int
+    public let at: Date
+
+    public init(text: String, files: Int = 0, at: Date = Date()) {
+        id = UUID()
+        self.text = text
+        self.files = files
+        self.at = at
+    }
+
+    /// The prompts of sent still waiting: not yet in the conversation
+    /// (a prompt there that starts with one's text, written since a
+    /// minute before it was sent: tm puts the files' paths after the
+    /// text, and the clocks may differ), and no more than the session's
+    /// queue holds, the newest, as the queue goes oldest first. With
+    /// nothing queued, none: they went in, or the queue was emptied.
+    public static func waiting(_ sent: [QueuedPrompt], prompts: [(text: String, at: Date?)], queued: Int) -> [QueuedPrompt] {
+        guard queued > 0 else { return [] }
+        let left = sent.filter { q in
+            let text = q.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            return !prompts.contains { p in
+                p.text.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix(text)
+                    && (p.at.map { $0 >= q.at.addingTimeInterval(-60) } ?? true)
+            }
+        }
+        return Array(left.suffix(queued))
+    }
+}
+
 /// The phone's keys bar (T821): the keys a terminal wants that a
 /// phone's keyboard hasn't, each as the bytes session.keys writes to
 /// the session's terminal, as a terminal sends them.
