@@ -17,6 +17,10 @@ const (
 	ErrUnknownSession = "unknown-session"
 	ErrRefused        = "refused"
 	ErrInternal       = "internal"
+	// ErrTooBig: the answer is over the bytes its connection carries in
+	// a line (a paired server's link, a device's), so it wasn't sent;
+	// the message names the method and the size.
+	ErrTooBig = "too-big"
 )
 
 // Error is a structured failure.

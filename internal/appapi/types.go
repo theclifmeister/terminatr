@@ -1518,10 +1518,12 @@ type MemoryFile struct {
 }
 
 // MemoryText is memory.read's result: the file's Markdown (at most
-// 1 MiB).
+// 1 MiB), cut to fit a device's link's line (MaxText, app API 37), when
+// Truncated says so.
 type MemoryText struct {
-	Path string `json:"path"`
-	Text string `json:"text"`
+	Path      string `json:"path"`
+	Text      string `json:"text"`
+	Truncated bool   `json:"truncated,omitempty"`
 }
 
 // Library is library.list's result, newest file first.
@@ -1563,7 +1565,10 @@ func memoryFilesOf(r proto.MemoryListResult) MemoryFiles {
 	return out
 }
 
-func memoryTextOf(r proto.MemoryReadResult) MemoryText { return MemoryText{Path: r.Path, Text: r.Text} }
+func memoryTextOf(r proto.MemoryReadResult) MemoryText {
+	text, cut := fitText(r.Text, MaxText)
+	return MemoryText{Path: r.Path, Text: text, Truncated: cut}
+}
 
 func libraryOf(r proto.LibraryListResult) Library {
 	out := Library{Files: []LibraryFile{}}

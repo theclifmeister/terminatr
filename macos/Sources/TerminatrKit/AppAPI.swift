@@ -6,7 +6,7 @@ import Foundation
 /// The terminatr app API (docs/SPEC.md §3.8): what tm app bridge answers.
 public enum AppAPI {
     /// The app API version this app was generated against.
-    public static let version = 36
+    public static let version = 37
 
     public struct AdoptRequestParams: Codable, Sendable, Hashable {
         public var id: String
@@ -134,6 +134,18 @@ public enum AppAPI {
         enum CodingKeys: String, CodingKey {
             case nonce
             case sig
+        }
+    }
+
+    public struct ByeParams: Codable, Sendable, Hashable {
+        public var reason: String
+
+        public init(reason: String) {
+            self.reason = reason
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case reason
         }
     }
 
@@ -1016,15 +1028,18 @@ public enum AppAPI {
     public struct MemoryText: Codable, Sendable, Hashable {
         public var path: String
         public var text: String
+        public var truncated: Bool
 
-        public init(path: String, text: String) {
+        public init(path: String, text: String, truncated: Bool = false) {
             self.path = path
             self.text = text
+            self.truncated = truncated
         }
 
         enum CodingKeys: String, CodingKey {
             case path
             case text
+            case truncated
         }
     }
 
@@ -3064,6 +3079,7 @@ public enum AppAPI {
         public static let coordinatorClear = Call<ProjectParams, CoordinatorClear>("coordinator.clear", write: true)
         public static let designList = Call<ProjectParams, Designs>("design.list", write: false)
         public static let deviceAccess = Call<DeviceAccessParams, Device>("device.access", write: true)
+        public static let deviceBye = Call<ByeParams, Empty>("device.bye", write: false)
         public static let deviceList = Call<NoParams, Devices>("device.list", write: false)
         public static let deviceName = Call<DeviceNameParams, Device>("device.name", write: true)
         public static let deviceNonce = Call<NoParams, DeviceNonce>("device.nonce", write: false)
@@ -3181,6 +3197,13 @@ extension AppAPI.Auth {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.nonce = try c.decode(Data.self, forKey: .nonce)
         self.sig = try c.decode(Data.self, forKey: .sig)
+    }
+}
+
+extension AppAPI.ByeParams {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.reason = try c.decode(String.self, forKey: .reason)
     }
 }
 
@@ -3599,6 +3622,7 @@ extension AppAPI.MemoryText {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.path = try c.decode(String.self, forKey: .path)
         self.text = try c.decode(String.self, forKey: .text)
+        self.truncated = try c.decodeIfPresent(Bool.self, forKey: .truncated) ?? false
     }
 }
 
