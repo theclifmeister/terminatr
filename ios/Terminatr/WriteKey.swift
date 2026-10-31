@@ -15,37 +15,32 @@ import TerminatrKit
 /// Keys made before T820 were bound to Face ID (.userPresence). The
 /// server takes a write key only at pairing, so such a phone keeps
 /// signing with its old key, and the system asks as before, until it
-/// pairs again, which makes a new key (see `forPairing`).
+/// pairs again, which makes a new key (see `forPairing`). Each server
+/// paired has a key of its own (T852).
 enum WriteKey {
-    /// The signer for the bridge (WriteSigner): the key kept, or a new
-    /// one when there is none.
-    static func signer() throws -> DeviceSigner {
-        if let d = try DeviceStore.writeKey() {
-            return try DeviceSigner(stored: d)
-        }
-        return try made()
-    }
-
-    /// The signer to pair with: the key kept when it is of the current
-    /// kind, else a new one, which the pairing hands the server.
-    static func forPairing() throws -> DeviceSigner {
-        switch WriteKeyPlan.forPairing(hasKey: try DeviceStore.writeKey() != nil, open: DeviceStore.writeKeyIsOpen()) {
-        case .keep: return try signer()
-        case .make: return try made()
+    /// The signer to pair with server pid: its key kept when it is of
+    /// the current kind, else a new one, which the pairing hands the
+    /// server and keep saves once that server took it (a pairing that
+    /// fails leaves the key it had).
+    static func forPairing(_ pid: String) throws -> (signer: DeviceSigner, new: Bool) {
+        switch WriteKeyPlan.forPairing(hasKey: try DeviceStore.writeKey(pid) != nil, open: DeviceStore.writeKeyIsOpen(pid)) {
+        case .keep:
+            if let d = try DeviceStore.writeKey(pid) { return (try DeviceSigner(stored: d), false) }
+            return (try DeviceSigner.make(), true)
+        case .make: return (try DeviceSigner.make(), true)
         }
     }
 
-    private static func made() throws -> DeviceSigner {
-        let s = try DeviceSigner.make()
-        try DeviceStore.saveWriteKey(s.stored)
-        return s
+    /// Keeps s as server pid's write key: it paired with it.
+    static func keep(_ s: DeviceSigner, _ pid: String) throws {
+        try DeviceStore.saveWriteKey(s.stored, pid)
     }
 
-    /// The signer, when the phone made its key (it paired since the
-    /// write key came, T791); nil for a phone paired before, which the
-    /// server keeps at view until it pairs again.
-    static func existing() -> DeviceSigner? {
-        guard let d = try? DeviceStore.writeKey() else { return nil }
+    /// Server pid's signer, when the phone made its key (it paired since
+    /// the write key came, T791); nil for a phone paired before, which
+    /// the server keeps at view until it pairs again.
+    static func existing(_ pid: String) -> DeviceSigner? {
+        guard let d = ((try? DeviceStore.writeKey(pid)) ?? nil) else { return nil }
         return try? DeviceSigner(stored: d)
     }
 }

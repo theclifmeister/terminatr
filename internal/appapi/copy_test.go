@@ -263,11 +263,12 @@ func TestCopies(t *testing.T) {
 		".Truncated",
 	})
 	check("peer.list", homeOf(peerListOf), []string{
-		// The link's id, versions and ping: the Network popup's. Share
+		// The link's versions and ping: the Network popup's (its id
+		// crosses, for a phone paired with it directly too, T852). Share
 		// requests cross as their count, and those that wait for the
 		// user as what answers them (checked below); the clock's
 		// offset as the sessions' times.
-		".Peers[].ID", ".Peers[].Watch", ".Peers[].Popup",
+		".Peers[].Watch", ".Peers[].Popup",
 		".Peers[].Version", ".Peers[].RTT", ".Peers[].Listed", ".Peers[].Shares",
 		// A shared project's snapshot stays the TUI's remote
 		// dashboard's, but for what the sidebar lists of its threads

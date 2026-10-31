@@ -3,15 +3,18 @@ import TerminatrKit
 import TerminatrUI
 import UIKit
 
-/// Settings (T808; redesigned in T850): on the sheet's glass, the paired
-/// server first (ServerCard) and its link's drops (Connection, T859; the
-/// demo's made up), then the themes as large live previews
+/// Settings (T808; redesigned in T850): on the sheet's glass, each paired
+/// server first (ServerCard) with its link's drops (Connection, T859; the
+/// demo's made up), in the order they were paired (T852), and Pair
+/// another server; then the themes as large live previews
 /// (ThemeCarousel, the same keys as the Mac's Settings › Appearance),
-/// light, dark or the system's, the Haptics switch (T851), and with a
-/// server Forget this server, red and last (T843). Text follows the
+/// light, dark or the system's, the Haptics switch (T851), and for each
+/// server its own Forget, red and last (T843). Text follows the
 /// phone's Dynamic Type, so there is no size of its own. From the Projects tab's gear.
 struct SettingsScreen: View {
+    @Environment(Phone.self) private var phone
     @Environment(PhoneModel.self) private var model
+    @State private var pairing = false
     @Environment(\.dismiss) private var dismiss
     @Environment(\.theme) private var theme
     @AppStorage(ThemeName.key) private var name = ThemeName.bloom.rawValue
@@ -27,8 +30,23 @@ struct SettingsScreen: View {
                         .fixedSize()
                         .keyboardShortcut(.defaultAction)
                 })
-                if case .server = model.source { ServerSection() }
-                if model.source != .none { ConnectionSection() }
+                if model.source == .demo { ConnectionSection() }
+                ForEach(phone.servers, id: \.key) { m in
+                    Group {
+                        ServerSection(note: !phone.several)
+                        ConnectionSection()
+                    }
+                    .environment(m)
+                }
+                if !phone.servers.isEmpty {
+                    Button { pairing = true } label: {
+                        Label("Pair another server", systemImage: "qrcode.viewfinder")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.secondary)
+                    .padding(.horizontal, Spacing.gutter)
+                    note(phone.several ? "Each server pairs on its own (tm device pair there) and sets what the phone may do there (tm device access); Needs you shows them all." : "Each server pairs on its own (tm device pair there); Needs you shows them all.")
+                }
                 GroupLabel("Theme")
                 ThemeCarousel(selection: $name)
                 note("\(ThemeName.of(name).label): \(ThemeName.of(name).mood.lowercased()).")
@@ -38,13 +56,16 @@ struct SettingsScreen: View {
                 note("The theme in light or dark; System follows the phone. Text follows the phone's text size.")
                 GroupLabel("Feedback")
                 SwitchCard("Haptics", detail: "A tap on picking an option or a chip, and when the server answers.", isOn: $haptics)
-                if case .server = model.source { ForgetSection() }
+                ForEach(phone.servers, id: \.key) { m in
+                    ForgetSection().environment(m)
+                }
             }
             .frame(maxWidth: 640)
             .frame(maxWidth: .infinity)
             .padding(.bottom, 32)
         }
         .sheetGlass()
+        .sheet(isPresented: $pairing) { PairScreen() }
     }
 
     private func note(_ s: String) -> some View {
@@ -107,16 +128,20 @@ extension View {
 struct ServerSection: View {
     @Environment(PhoneModel.self) private var model
     @Environment(\.theme) private var theme
+    /// Whether the line on levels follows (with several servers it goes once, under Pair another server).
+    var note = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.tight) {
             ServerCard(name: model.serverName, link: model.linkWords.1, linking: model.link == .connecting,
                        down: model.link.down, level: level.word, levelSpoken: level.spoken)
-            Text("What the phone may do there; tm device access on the computer changes it.")
-                .font(theme.body(.footnote))
-                .foregroundStyle(theme.muted)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.horizontal, 6)
+            if note {
+                Text("What the phone may do there; tm device access on the computer changes it.")
+                    .font(theme.body(.footnote))
+                    .foregroundStyle(theme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 6)
+            }
         }
         .padding(.horizontal, Spacing.gutter)
     }
@@ -196,26 +221,28 @@ struct ConnectionSection: View {
     }
 }
 
-/// Forget this server: a red button, the screen's last, asked again.
+/// Forget this server: a red button, the screen's last, asked again;
+/// with several servers one for each, by name, and the others stay.
 struct ForgetSection: View {
+    @Environment(Phone.self) private var phone
     @Environment(PhoneModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     @State private var forgetting = false
 
     var body: some View {
         Button(role: .destructive) { forgetting = true } label: {
-            Text("Forget this server")
+            Text(phone.several ? "Forget \(model.serverName)" : "Forget this server")
         }
         .buttonStyle(.primary(.attention))
         .padding(.horizontal, Spacing.gutter)
         .padding(.top, Spacing.gutter)
         .confirmationDialog("Forget \(model.serverName)?", isPresented: $forgetting, titleVisibility: .visible) {
             Button("Forget", role: .destructive) {
-                dismiss()
-                Task { await model.forget() }
+                if !phone.several { dismiss() }
+                Task { await phone.forget(model) }
             }
         } message: {
-            Text("The phone forgets the server and its own key. To link again, pair again; on the computer, tm device remove takes the phone off.")
+            Text("The phone forgets the server and the key it made for it\(phone.several ? "; the other servers stay" : ""). To link again, pair again; on the computer, tm device remove takes the phone off.")
         }
     }
 }

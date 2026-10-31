@@ -929,10 +929,16 @@ func (s *Server) terminatrEnv(r SessionRecord) map[string]string {
 		set["TERMINATR_THREAD"] = r.Thread
 	}
 	// The server's own TERMINATR_* don't reach sessions (terminalEnv),
-	// but where tm hook logs what it failed to deliver (tests) does.
+	// but where tm hook logs what it failed to deliver (tests) does, and
+	// under the test hooks how long it waits (testHookWaitEnv).
 	for _, kv := range s.baseEnv() {
-		if v, ok := strings.CutPrefix(kv, hookLogEnv+"="); ok && v != "" {
-			set[hookLogEnv] = v
+		for _, name := range []string{hookLogEnv, testHookWaitEnv} {
+			if name == testHookWaitEnv && !testHooksOn {
+				continue
+			}
+			if v, ok := strings.CutPrefix(kv, name+"="); ok && v != "" {
+				set[name] = v
+			}
 		}
 	}
 	return set

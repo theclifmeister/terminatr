@@ -34,7 +34,7 @@ struct BoardScreen: View {
                 Button("New Task", systemImage: "plus") { adding = true }
             }
         }
-        .keepsPlace(Route.board(slug).listKey)
+        .keepsPlace(route: Route.board(slug))
         .kept($filter, "filter \(slug)")
         .kept($unfolded, "folds \(slug)")
         .kept($adding, "adding \(slug)")
