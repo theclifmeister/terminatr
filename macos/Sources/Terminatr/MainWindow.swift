@@ -148,7 +148,8 @@ struct MainWindow: View {
             }
         case .project(let slug, let server):
             if let peer = app.peer(server), let p = peer.projects.first(where: { $0.project == slug }) {
-                RemoteProjectDashboard(peer: peer, project: p)
+                RemoteProjectPages(peer: peer, project: p)
+                    .id(server + "/" + slug)
             } else {
                 Placeholder(phase: app.phase, empty: app.projects.isEmpty)
             }

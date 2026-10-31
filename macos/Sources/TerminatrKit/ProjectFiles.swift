@@ -138,6 +138,12 @@ public struct ProjectOverview: Equatable, Sendable {
 
     public let goal: String
     public let repos: [Repo]
+    /// A paired server's project: how many repositories it has, whose
+    /// paths stay there (repos is empty then); nil for this server's.
+    public let repoCount: Int?
+    /// PROJECT.md's body, its standing instructions: a paired server's
+    /// project's, "" for this server's (the TUI shows those).
+    public let instructions: String
     /// The coordinator's agent and state ("claude · working"); empty
     /// when none runs.
     public let coordinator: String
@@ -148,6 +154,8 @@ public struct ProjectOverview: Equatable, Sendable {
     public init(_ p: AppAPI.Project, coordinator: AppAPI.Session?, needs: Int) {
         goal = p.goal.trimmingCharacters(in: .whitespacesAndNewlines)
         repos = p.repos.map { Repo(path: $0, note: p.checkouts[$0] ?? "") }
+        repoCount = nil
+        instructions = ""
         if let c = coordinator {
             self.coordinator = [c.agent.isEmpty ? "claude" : c.agent, c.state].filter { !$0.isEmpty }.joined(separator: " · ")
         } else {
@@ -160,5 +168,29 @@ public struct ProjectOverview: Equatable, Sendable {
         agents = by.keys.sorted().map { Agent(agent: $0, threads: by[$0] ?? []) }
         let needWords = needs == 1 ? "1 needs you" : "\(needs) need you"
         tasks = "\(needWords) · \(p.counts["in_motion"] ?? 0) in motion · \(p.counts["on_deck"] ?? 0) on deck · \(p.counts["done"] ?? 0) done"
+    }
+
+    /// A paired server's project (T886): its pages, and from peer.list
+    /// its coordinator and threads (project) and what waits on that
+    /// server's user.
+    public init(_ pages: AppAPI.PeerPages, project p: AppAPI.PeerProject) {
+        goal = pages.goal.trimmingCharacters(in: .whitespacesAndNewlines)
+        repos = []
+        repoCount = pages.repos
+        instructions = pages.body.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let c = p.sessions.first(where: { $0.role == "coordinator" }) {
+            coordinator = [c.agent.isEmpty ? "claude" : c.agent, c.state].filter { !$0.isEmpty }.joined(separator: " · ")
+        } else {
+            coordinator = ""
+        }
+        var by: [String: [String]] = [:]
+        for t in p.sessions where t.role == "thread" {
+            by[t.agent.isEmpty ? "claude" : t.agent, default: []].append(t.thread)
+        }
+        agents = by.keys.sorted().map { Agent(agent: $0, threads: by[$0] ?? []) }
+        let needs = p.needsYou
+        let needWords = needs == 1 ? "1 needs you" : "\(needs) need you"
+        let motion = pages.tasks.filter { PeerPages.inMotion.contains($0.status) }.count
+        tasks = "\(needWords) · \(motion) in motion · \(PeerPages.onDeck(pages).count) on deck · \(PeerPages.done(pages).count) done"
     }
 }

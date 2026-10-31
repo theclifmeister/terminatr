@@ -120,6 +120,9 @@ struct LibraryPane: View {
     @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
     let project: String
+    /// The paired server whose project it is (T886); nil for this
+    /// server's.
+    var peer: String?
     @State private var files: [AppAPI.LibraryFile]?
     @State private var picked: String?
     @State private var looking: URL?
@@ -193,7 +196,11 @@ struct LibraryPane: View {
 
     private func list() async {
         do {
-            files = try await app.library(project)
+            if let peer {
+                files = try await app.peerLibrary(peer, project)
+            } else {
+                files = try await app.library(project)
+            }
             failure = nil
         } catch {
             failure = error.localizedDescription
@@ -235,7 +242,8 @@ struct LibraryPane: View {
     private func bytes(_ f: AppAPI.LibraryFile) async -> Data? {
         busy = true
         defer { busy = false }
-        switch await app.libraryData(project, f) {
+        let outcome = if let peer { await app.peerLibraryData(peer, project, f) } else { await app.libraryData(project, f) }
+        switch outcome {
         case .data(let d, _):
             failure = nil
             return d

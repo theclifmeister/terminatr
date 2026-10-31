@@ -632,6 +632,171 @@
      "type": "image/png"
     }
    }
+  ],
+  "peer.pages-read": [
+   {
+    "params": {
+     "alias": "work",
+     "project": "al0ft"
+    },
+    "result": {
+     "body": "Book the loft by the day or the week.\n\n- Keep pages under 1 s on a phone.\n- Photos are the guests' first look: no stock images.\n",
+     "goal": "The loft's booking site",
+     "project": "al0ft",
+     "repos": 2,
+     "tasks": [
+      {
+       "id": 12,
+       "ref": "T12",
+       "status": "started",
+       "steps": [
+        {
+         "done": true,
+         "n": 1,
+         "text": "Resize the photos"
+        },
+        {
+         "done": false,
+         "n": 2,
+         "text": "Lazy-load below the fold"
+        },
+        {
+         "done": false,
+         "n": 3,
+         "text": "Check on a slow phone"
+        }
+       ],
+       "thread": "t-0012",
+       "title": "Photo gallery with lazy loading"
+      },
+      {
+       "id": 14,
+       "ref": "T14",
+       "status": "ready",
+       "steps": [],
+       "thread": "",
+       "title": "Weekly rates in the calendar"
+      },
+      {
+       "id": 15,
+       "ref": "T15",
+       "status": "ready",
+       "steps": [],
+       "thread": "",
+       "title": "Booking confirmation email"
+      },
+      {
+       "id": 16,
+       "ref": "T16",
+       "status": "open",
+       "steps": [],
+       "thread": "",
+       "title": "Guest reviews page"
+      },
+      {
+       "id": 17,
+       "ref": "T17",
+       "status": "open",
+       "steps": [],
+       "thread": "",
+       "title": "Gift vouchers"
+      },
+      {
+       "id": 18,
+       "ref": "T18",
+       "status": "open",
+       "steps": [],
+       "thread": "",
+       "title": "Dark mode"
+      },
+      {
+       "id": 9,
+       "ref": "T9",
+       "status": "done",
+       "steps": [],
+       "thread": "",
+       "title": "Calendar of free days"
+      },
+      {
+       "id": 10,
+       "ref": "T10",
+       "status": "done",
+       "steps": [],
+       "thread": "",
+       "title": "Contact form"
+      },
+      {
+       "id": 11,
+       "ref": "T11",
+       "status": "done",
+       "steps": [],
+       "thread": "",
+       "title": "Pricing page"
+      }
+     ],
+     "truncated": false
+    }
+   },
+   {
+    "error": {
+     "code": "pages-off",
+     "message": "work doesn't share this project's pages with this server"
+    },
+    "params": {
+     "alias": "work",
+     "project": "cowork"
+    }
+   }
+  ],
+  "peer.library-list": [
+   {
+    "params": {
+     "alias": "work",
+     "project": "al0ft"
+    },
+    "result": {
+     "files": [
+      {
+       "message": "",
+       "name": "photo-sizes.md",
+       "peer": "",
+       "size": 78,
+       "state": "running",
+       "task": "T12",
+       "thread": "t-0012",
+       "time": "2026-10-27T09:30:00Z",
+       "title": "Photo gallery with lazy loading"
+      }
+     ]
+    }
+   },
+   {
+    "error": {
+     "code": "pages-off",
+     "message": "work doesn't share this project's pages with this server"
+    },
+    "params": {
+     "alias": "work",
+     "project": "cowork"
+    }
+   }
+  ],
+  "peer.library-read": [
+   {
+    "params": {
+     "alias": "work",
+     "id": "t-0012",
+     "name": "photo-sizes.md",
+     "project": "al0ft"
+    },
+    "result": {
+     "data": "IyBQaG90byBzaXplcwoKfCBXaWR0aCB8IFdlaWdodCB8CnwtLS18LS0tfAp8IDY0MCB8IDQ4IEtCIHwKfCAxMjgwIHwgMTQwIEtCIHwK",
+     "mtime": "2026-10-27T09:30:00Z",
+     "name": "photo-sizes.md",
+     "offset": 0,
+     "size": 78
+    }
+   }
   ]
  },
  "calls": {
@@ -643,7 +808,120 @@
   },
   "peer.list": {
    "gen": 1,
-   "peers": []
+   "peers": [
+    {
+     "alias": "work",
+     "conversations": "on",
+     "name": "work",
+     "needs": "off",
+     "pane": true,
+     "panes": "view",
+     "projects": [
+      {
+       "goal": "The loft's booking site",
+       "needs": [],
+       "needs_you": 0,
+       "pages": true,
+       "project": "al0ft",
+       "ready": 2,
+       "sessions": [
+        {
+         "agent": "claude",
+         "asking": false,
+         "context": 0,
+         "context_window": 0,
+         "created": "2026-10-27T08:00:00Z",
+         "current": "Planning the gallery",
+         "id": "work/s-301",
+         "model": "opus",
+         "project": "al0ft",
+         "queued_prompts": 0,
+         "reason": "",
+         "remote_control": false,
+         "role": "coordinator",
+         "state": "working",
+         "task": "",
+         "thread": "",
+         "todos_done": 0,
+         "todos_total": 0
+        },
+        {
+         "agent": "claude",
+         "asking": false,
+         "context": 0,
+         "context_window": 0,
+         "created": "2026-10-27T08:00:00Z",
+         "current": "Resizing the photos",
+         "id": "work/s-302",
+         "model": "opus",
+         "project": "al0ft",
+         "queued_prompts": 0,
+         "reason": "",
+         "remote_control": false,
+         "role": "thread",
+         "state": "working",
+         "task": "T12",
+         "thread": "t-0012",
+         "todos_done": 0,
+         "todos_total": 0
+        }
+       ],
+       "synced": "2026-10-27T09:59:58Z",
+       "threads": 1,
+       "watched": [
+        {
+         "id": "t-0012",
+         "title": "Photo gallery with lazy loading",
+         "task": "T12",
+         "steps_done": 1,
+         "steps_total": 3,
+         "session": "work/s-302",
+         "state": "working",
+         "needs_you": false,
+         "pr_checks": "",
+         "done": false
+        }
+       ]
+      },
+      {
+       "goal": "Desk sharing for the studio",
+       "needs": [],
+       "needs_you": 0,
+       "pages": false,
+       "project": "cowork",
+       "ready": 2,
+       "sessions": [
+        {
+         "agent": "claude",
+         "asking": false,
+         "context": 0,
+         "context_window": 0,
+         "created": "2026-10-27T08:00:00Z",
+         "current": "",
+         "id": "work/s-401",
+         "model": "opus",
+         "project": "cowork",
+         "queued_prompts": 0,
+         "reason": "",
+         "remote_control": false,
+         "role": "coordinator",
+         "state": "idle",
+         "task": "",
+         "thread": "",
+         "todos_done": 0,
+         "todos_total": 0
+        }
+       ],
+       "synced": "2026-10-27T09:59:58Z",
+       "threads": 0,
+       "watched": []
+      }
+     ],
+     "since": "2026-10-27T08:00:00Z",
+     "state": "up",
+     "transcript": true
+    }
+   ]
   },
   "session.list": {
    "alerts": 0,
@@ -821,7 +1099,7 @@
   }
  },
  "hello": {
-  "app_api": 34,
+  "app_api": 35,
   "build": "demo",
   "capabilities": [
    "read",
@@ -853,14 +1131,18 @@
    "project.open",
    "session.file",
    "session.upload",
-   "coordinator.clear"
+   "coordinator.clear",
+   "peer.pages-read",
+   "peer.library-list",
+   "peer.library-read"
   ],
   "server": {
    "caps": [
     "transcript",
     "project-files",
     "session-file",
-    "designs"
+    "designs",
+    "peer-pages"
    ],
    "protocol": 1,
    "version": "0.56.1"

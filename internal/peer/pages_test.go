@@ -133,7 +133,7 @@ func TestPagesCap(t *testing.T) {
 // most, and each list cut to its most.
 func TestPagesAreCleaned(t *testing.T) {
 	body := strings.Repeat("line of the body\n", 1000) + osc52
-	in := proto.PeerPages{Project: "web", Overview: proto.PeerOverview{Goal: "ship‮\nnow", Body: body, Repos: -1},
+	in := proto.PeerPages{Project: "web", Overview: proto.PeerOverview{Goal: "ship\u202e\nnow", Body: body, Repos: -1},
 		Tasks: []proto.PeerPageTask{
 			{ID: 1, Title: "fix\x1b[2J it\nnow", Status: "ready", Thread: "t-0001", Steps: []proto.PeerStep{{Text: "a\nb" + osc52, Done: true}}},
 			{ID: 0, Title: "no id"},

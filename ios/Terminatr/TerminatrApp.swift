@@ -115,12 +115,16 @@ enum Route: Hashable {
     /// A project's design by its name (T864): its answers, open
     /// questions and build.
     case design(String, name: String)
+    /// A paired server's project's page (T886): its overview, board,
+    /// memory (never shared), library or designs (not shared yet).
+    case peerPage(alias: String, project: String, page: PeerPages.Page)
 
     /// A launch argument's route: "project:SLUG", "session:SLUG" (its
     /// coordinator) or "session:SLUG/THREAD", "need:SLUG/THREAD" (its
     /// question or approval); "overview:SLUG",
     /// "board:SLUG", "memory:SLUG", "memory:SLUG/PATH", "library:SLUG",
-    /// "task:SLUG/REF" or "design:SLUG/NAME".
+    /// "task:SLUG/REF", "design:SLUG/NAME", or a paired server's
+    /// "peer:ALIAS/PROJECT" and "peer:ALIAS/PROJECT/PAGE".
     static func parse(_ s: String) -> Route? {
         let parts = s.split(separator: ":", maxSplits: 1).map(String.init)
         guard parts.count == 2 else { return nil }
@@ -136,6 +140,14 @@ enum Route: Hashable {
         case "library": return .library(slug)
         case "task": return rest.isEmpty ? nil : .task(slug, ref: rest)
         case "design": return rest.isEmpty ? nil : .design(slug, name: rest)
+        // "peer:ALIAS/PROJECT", "peer:ALIAS/PROJECT/PAGE" (overview,
+        // board, memory, library, designs).
+        case "peer":
+            let q = rest.split(separator: "/", maxSplits: 1).map(String.init)
+            guard !q.isEmpty else { return nil }
+            if q.count == 1 { return .peerProject(alias: slug, project: q[0]) }
+            guard let page = PeerPages.Page.allCases.first(where: { $0.rawValue.lowercased() == q[1] }) else { return nil }
+            return .peerPage(alias: slug, project: q[0], page: page)
         default: return nil
         }
     }
@@ -151,6 +163,7 @@ enum Route: Hashable {
         case .overview(let s), .board(let s), .memory(let s), .library(let s), .design(let s, _): [.project(s), self]
         case .memoryFile(let s, _): [.project(s), .memory(s), self]
         case .task(let s, _): [.project(s), .board(s), self]
+        case .peerPage(let alias, let project, _): [.peerProject(alias: alias, project: project), self]
         }
     }
 }
@@ -369,6 +382,7 @@ struct RouteScreen: View {
         case .library(let slug): LibraryScreen(slug: slug)
         case .task(let slug, let ref): TaskScreen(slug: slug, ref: ref)
         case .design(let slug, let name): DesignScreen(slug: slug, name: name)
+        case .peerPage(let alias, let project, let page): PeerPageScreen(alias: alias, project: project, page: page)
         }
     }
 }

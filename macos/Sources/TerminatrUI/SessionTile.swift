@@ -153,21 +153,29 @@ public struct TileGroup<Content: View>: View {
 /// face over its word, on glass: "2 on deck".
 public struct StatTile: View {
     @Environment(\.theme) private var theme
-    let count: Int
+    /// nil: a count not known here (a paired server's board it doesn't
+    /// share, T886), shown as –.
+    let count: Int?
     let label: String
 
-    public init(_ count: Int, _ label: String) {
+    public init(_ count: Int?, _ label: String) {
         self.count = count
         self.label = label
     }
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(count, format: .number)
+            Group {
+                if let count {
+                    Text(count, format: .number)
+                        .contentTransition(.numericText(value: Double(count)))
+                } else {
+                    Text("–")
+                }
+            }
                 .font(theme.title(.sheetTitle, .bold))
                 .monospacedDigit()
-                .contentTransition(.numericText(value: Double(count)))
-                .foregroundStyle(theme.ink)
+                .foregroundStyle(count == nil ? theme.muted : theme.ink)
             Text(label)
                 .font(theme.body(.footnote, .medium))
                 .foregroundStyle(theme.muted)
@@ -179,7 +187,7 @@ public struct StatTile: View {
         .surface(.glass, in: RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
         .contentShape(RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(count) \(label)")
+        .accessibilityLabel(count.map { "\($0) \(label)" } ?? "\(label), not shared")
     }
 }
 

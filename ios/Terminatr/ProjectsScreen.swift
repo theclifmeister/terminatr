@@ -232,47 +232,6 @@ struct ProjectScreen: View {
     }
 }
 
-/// A paired server's shared project: its coordinator, running there or
-/// not, and its threads (SidebarTree.sessions), as the Mac lists them,
-/// under its header as SessionTiles (T846).
-struct PeerProjectScreen: View {
-    @Environment(PhoneModel.self) private var model
-    @Environment(\.navigate) private var navigate
-    let alias: String
-    let project: String
-
-    var body: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: Spacing.row + 2) {
-                ProjectHeader(project)
-                if let p = model.peers.first(where: { $0.alias == alias })?.projects.first(where: { $0.project == project }) {
-                    let sessions = SidebarTree.sessions(of: p, alias: alias)
-                    if !sessions.isEmpty {
-                        TileGroup {
-                            ForEach(Array(sessions.enumerated()), id: \.element.ref) { i, e in
-                                let route = Route.session(e.ref)
-                                PlainRouteLink(value: route) {
-                                    SessionTile(e.ref.isCoordinator ? "Coordinator" : e.title.isEmpty ? e.ref.thread : e.title,
-                                                ref: e.task.isEmpty ? nil : e.task, state: .of(peer: e.session), rule: i > 0,
-                                                selected: navigate?.open == route)
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                    }
-                }
-            }
-            .padding(.horizontal, Spacing.gutter)
-            .padding(.bottom, Spacing.gutter)
-        }
-        .refreshable { await model.refresh() }
-        .keepsPlace(Route.peerProject(alias: alias, project: project).listKey)
-        .navigationTitle(project)
-        .headerTitle()
-        .backdrop()
-    }
-}
-
 extension View {
     /// A screen with its own header in its content (T846): the bar keeps
     /// its buttons, and the screen's title for the back button and
