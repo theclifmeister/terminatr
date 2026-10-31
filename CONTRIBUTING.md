@@ -48,7 +48,7 @@ To build you need:
 | git, curl | any | fetch Ghostty at a pinned commit, and Zig if needed |
 | a C toolchain | — | cgo (Xcode Command Line Tools on macOS, `build-essential` on Linux) |
 
-`make toolchain` checks all of these. Zig 0.16, which builds libghostty-vt, is fetched into `.build/` automatically: the pinned release, checked against its sha256, for macOS and Linux on arm64 and x86_64. A `zig` 0.16.x on your `PATH` is used instead, and `make ZIG=/path/to/zig` overrides both. Other Zig versions are skipped, because Zig's build API changes between minor releases.
+`make toolchain` checks all of these. Zig 0.17, which builds libghostty-vt, is fetched into `.build/` automatically: the pinned release, checked against its sha256, for macOS and Linux on arm64 and x86_64. A `zig` 0.17.x on your `PATH` is used instead, and `make ZIG=/path/to/zig` overrides both. Other Zig versions are skipped, because Zig's build API changes between minor releases.
 
 ### Build
 

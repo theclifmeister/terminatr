@@ -44,7 +44,7 @@ them can hang on the Mac's privacy prompt. Pipe through stdin instead:
 
 Linux: git, build-essential, pkg-config, socat, bubblewrap, curl, gh, node 22,
 Go 1.26.x (`/usr/local/go`), Claude Code (`~/.local/bin`), Codex (npm,
-global). Zig 0.16.0 is downloaded by `make` into `.build/`.
+global). Zig 0.17.0 is downloaded by `make` into `.build/`.
 
 macOS (user `clifford`): Xcode command line tools, Homebrew (`/opt/homebrew`),
 go@1.26 (as CI), git, pkgconf, node, gh,

@@ -14,7 +14,7 @@ require (
 	github.com/evanw/esbuild v0.28.2
 	github.com/kljensen/snowball v0.10.0
 	github.com/rivo/uniseg v0.4.7
-	go.mitchellh.com/libghostty v0.0.0-20261001181910-76867c77a212
+	go.mitchellh.com/libghostty v0.0.0-20261021212106-df1957cbff56
 	go.yaml.in/yaml/v3 v3.0.5
 	golang.org/x/crypto v0.58.0
 	golang.org/x/sys v0.49.0

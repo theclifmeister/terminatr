@@ -11,7 +11,7 @@ runs:
         go-version-file: go.mod
 
     # No setup-zig: `make` fetches the pinned Zig into .build/ (sha256-
-    # checked) unless a Zig 0.16 is already on PATH. Cached on its own,
+    # checked) unless a Zig 0.17 is already on PATH. Cached on its own,
     # keyed on the Zig pin in the Makefile.
     - name: Pins
       id: pins

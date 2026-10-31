@@ -2,7 +2,7 @@
 #
 # tm links libghostty-vt statically through cgo (go.mitchellh.com/libghostty).
 # `make` fetches Ghostty at a pinned commit, builds libghostty-vt with Zig
-# into .build/, and points pkg-config at it. If no Zig 0.16 is on PATH, the
+# into .build/, and points pkg-config at it. If no Zig 0.17 is on PATH, the
 # pinned Zig is downloaded into .build/ too. Nothing is installed
 # system-wide.
 #
@@ -23,9 +23,12 @@
 #   make release-snapshot  cross-build the release archives into dist/ (no tag, no upload)
 #   make clean      remove bin/      make distclean   also remove .build/
 
-# Must match the commit go.mitchellh.com/libghostty is developed against
-# (its CMakeLists.txt GIT_TAG). Bump both together; see CONTRIBUTING.md.
-GHOSTTY_REV  ?= 33da6848d63b3bba2b4f31ab1531d618f2795192
+# Ghostty v1.4.0. Must match the commit go.mitchellh.com/libghostty is
+# developed against (its CMakeLists.txt GIT_TAG), or a later one with the
+# same libghostty-vt headers: go-libghostty df1957c pins f54340ad, and
+# v1.4.0 changes only comments in include/ since. Bump both together; see
+# CONTRIBUTING.md.
+GHOSTTY_REV  ?= 83fb95624b0439ee660c2679b43b38c8b63769cd
 GHOSTTY_REPO ?= https://github.com/ghostty-org/ghostty.git
 # Zig builds for the host CPU by default, which gives a library that can
 # crash with SIGILL on older CPUs (seen in CI: AVX-512 code restored from
@@ -36,7 +39,7 @@ GHOSTTY_CPU  ?= baseline
 # builds for the host. Each target gets its own output directory.
 GHOSTTY_TARGET ?=
 GO           ?= go
-ZIG_MIN      := 0.16.0
+ZIG_MIN      := 0.17.0
 # staticcheck, pinned; `make vet` runs it after go vet.
 STATICCHECK  ?= honnef.co/go/tools/cmd/staticcheck@v0.8.1
 # every check.
@@ -61,22 +64,22 @@ MAIN_BUILD  := $(shell c=$$(git rev-parse --path-format=absolute --git-common-di
 	[ -d "$${c%/.git}/.build" ] && echo "$${c%/.git}/.build")
 BUILD       := $(abspath $(if $(wildcard .build),.build,$(or $(MAIN_BUILD),.build)))
 
-# Zig. The pinned Ghostty commit builds with Zig 0.16 (build.zig.zon), and
+# Zig. The pinned Ghostty builds with Zig 0.17 (build.zig.zon), and
 # Zig breaks its build API between minor releases, so a zig on PATH is used
-# only if it is 0.16.x. Otherwise the pinned release is downloaded into
+# only if it is 0.17.x. Otherwise the pinned release is downloaded into
 # .build/ and checked against its published sha256. ZIG=/path/to/zig wins.
-ZIG_VERSION := 0.16.0
+ZIG_VERSION := 0.17.0
 ZIG_OS      := $(shell uname -s | sed 's/Darwin/macos/;s/Linux/linux/')
 ZIG_ARCH    := $(shell uname -m | sed 's/arm64/aarch64/;s/amd64/x86_64/')
 ZIG_PKG     := zig-$(ZIG_ARCH)-$(ZIG_OS)-$(ZIG_VERSION)
 ZIG_LOCAL   := $(BUILD)/$(ZIG_PKG)/zig
-ZIG_SHA256_aarch64-macos := b23d70deaa879b5c2d486ed3316f7eaa53e84acf6fc9cc747de152450d401489
-ZIG_SHA256_x86_64-macos  := 0387557ed1877bc6a2e1802c8391953baddba76081876301c522f52977b52ba7
-ZIG_SHA256_aarch64-linux := ea4b09bfb22ec6f6c6ceac57ab63efb6b46e17ab08d21f69f3a48b38e1534f17
-ZIG_SHA256_x86_64-linux  := 70e49664a74374b48b51e6f3fdfbf437f6395d42509050588bd49abe52ba3d00
+ZIG_SHA256_aarch64-macos := b607e9b9234790a008116ae5bdb71c6243b84b9fb42a53a9e70fde41c06c536a
+ZIG_SHA256_x86_64-macos  := 4f9a1c5269aa17ebda5e6d3c2b89d6cbf36f7d2b22a0306e9ab98f25f95529c6
+ZIG_SHA256_aarch64-linux := 9e8d11661d4ae3bd57702a3832781e23ad151dde5798e16a5ccd503f65234ff8
+ZIG_SHA256_x86_64-linux  := 1cbe9df9f27e6b78d14ccbca43b6703a404ef79ef1c463de901d7f088d4e2026
 ifeq ($(origin ZIG),undefined)
   ZIG_ON_PATH := $(shell command -v zig 2>/dev/null)
-  ZIG := $(if $(and $(ZIG_ON_PATH),$(filter 0.16.%,$(shell $(ZIG_ON_PATH) version 2>/dev/null))),$(ZIG_ON_PATH),$(ZIG_LOCAL))
+  ZIG := $(if $(and $(ZIG_ON_PATH),$(filter 0.17.%,$(shell $(ZIG_ON_PATH) version 2>/dev/null))),$(ZIG_ON_PATH),$(ZIG_LOCAL))
 endif
 GHOSTTY_SRC := $(BUILD)/ghostty-src
 GHOSTTY_OUT := $(BUILD)/ghostty-$(shell echo $(GHOSTTY_REV) | cut -c1-12)-$(GHOSTTY_CPU)$(if $(GHOSTTY_TARGET),-$(GHOSTTY_TARGET))
@@ -272,7 +275,7 @@ toolchain:
 	@if [ "$(ZIG)" = "$(ZIG_LOCAL)" ]; then \
 		if [ -x "$(ZIG_LOCAL)" ]; then :; \
 		else command -v curl >/dev/null || { echo "missing: curl (to fetch Zig $(ZIG_VERSION))" >&2; exit 1; }; \
-		echo "zig: no Zig 0.16 on PATH; $(ZIG_PKG) will be fetched into .build/"; fi; \
+		echo "zig: no Zig 0.17 on PATH; $(ZIG_PKG) will be fetched into .build/"; fi; \
 		exit 0; \
 	fi; \
 	command -v $(ZIG) >/dev/null || { echo "missing: $(ZIG)" >&2; exit 1; }; \
