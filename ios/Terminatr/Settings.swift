@@ -33,8 +33,7 @@ struct SettingsScreen: View {
                 if model.source == .demo { ConnectionSection() }
                 ForEach(phone.servers, id: \.key) { m in
                     Group {
-                        if phone.several { GroupLabel(m.serverName) }
-                        ServerSection()
+                        ServerSection(note: !phone.several)
                         ConnectionSection()
                     }
                     .environment(m)
@@ -46,7 +45,7 @@ struct SettingsScreen: View {
                     }
                     .buttonStyle(.secondary)
                     .padding(.horizontal, Spacing.gutter)
-                    note("Each server pairs on its own (tm device pair there); Needs you shows them all.")
+                    note(phone.several ? "Each server pairs on its own (tm device pair there) and sets what the phone may do there (tm device access); Needs you shows them all." : "Each server pairs on its own (tm device pair there); Needs you shows them all.")
                 }
                 GroupLabel("Theme")
                 ThemeCarousel(selection: $name)
@@ -129,16 +128,20 @@ extension View {
 struct ServerSection: View {
     @Environment(PhoneModel.self) private var model
     @Environment(\.theme) private var theme
+    /// Whether the line on levels follows (with several servers it goes once, under Pair another server).
+    var note = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.tight) {
             ServerCard(name: model.serverName, link: model.linkWords.1, linking: model.link == .connecting,
                        down: model.link.down, level: level.word, levelSpoken: level.spoken)
-            Text("What the phone may do there; tm device access on the computer changes it.")
-                .font(theme.body(.footnote))
-                .foregroundStyle(theme.muted)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.horizontal, 6)
+            if note {
+                Text("What the phone may do there; tm device access on the computer changes it.")
+                    .font(theme.body(.footnote))
+                    .foregroundStyle(theme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 6)
+            }
         }
         .padding(.horizontal, Spacing.gutter)
     }

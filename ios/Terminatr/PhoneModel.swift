@@ -662,10 +662,14 @@ final class PhoneModel {
         clears[project] = c
     }
 
-    /// The paired server's name, for the screens to say.
+    /// The paired server's name, for the screens to say; when another
+    /// server paired has the same name, with the start of its id
+    /// (T852), as pairing shows it.
     var serverName: String {
-        if case .server(let s) = source { return s.name.isEmpty ? "your server" : s.name }
-        return ""
+        guard case .server(let s) = source else { return "" }
+        let name = s.name.isEmpty ? "your server" : s.name
+        let same = direct().filter { $0.name.caseInsensitiveCompare(s.name) == .orderedSame }.count
+        return same > 1 ? "\(name) \(key.prefix(4).uppercased())" : name
     }
 
     func coordinatorSession(_ project: String) -> AppAPI.Session? {

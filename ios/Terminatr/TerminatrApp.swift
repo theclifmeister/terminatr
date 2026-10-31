@@ -221,9 +221,6 @@ struct Root: View {
 
     var body: some View {
         content
-            // The screens that read one server read the first, unless
-            // their route names another (RouteScreen).
-            .environment(phone.primary)
             .environment(\.showSettings, ShowSettings { settings = true })
             .sheet(isPresented: $settings) { SettingsScreen() }
             .fullScreenCover(isPresented: $gallery) {
@@ -234,6 +231,9 @@ struct Root: View {
                             .padding(.horizontal, 16)
                     }
             }
+            // The screens that read one server read the first, unless
+            // their route names another (RouteScreen); the sheets too.
+            .environment(phone.primary)
     }
 
     @ViewBuilder private var content: some View {
