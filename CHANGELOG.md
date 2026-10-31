@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.69.0](https://github.com/theclifmeister/terminatr/compare/v0.68.0...v0.69.0) (2026-10-31)
+
+
+### Features
+
+* a clean server restart keeps the prompts still queued for an agent and delivers them after the re-prompt (T834) ([#959](https://github.com/theclifmeister/terminatr/issues/959)) ([141df95](https://github.com/theclifmeister/terminatr/commit/141df95f5ae11c5487ab4f6b756ada0d6c3f198c))
+* a project's mods on the Mac and the iPhone: on or off for the project, its consent in tm's words, its settings (T869) ([#975](https://github.com/theclifmeister/terminatr/issues/975)) ([686d229](https://github.com/theclifmeister/terminatr/commit/686d2296bb4bc569a6bbe600e0ef7e692199b0af))
+* **ios:** Claude-app style composer: pill that opens into a card with thumbnails, the keyboard's image paste, Stop while working, queued prompts as bubbles (T893) ([#974](https://github.com/theclifmeister/terminatr/issues/974)) ([7ca6025](https://github.com/theclifmeister/terminatr/commit/7ca60257d244a48858588abd9e3cb33be594fb54))
+* **ios:** pair with several servers, one merged Needs you (T852) ([#973](https://github.com/theclifmeister/terminatr/issues/973)) ([badbb4f](https://github.com/theclifmeister/terminatr/commit/badbb4fc945cfe4b34c3682b5defaa5053e0c44a))
+* paired projects share their Designs under the project pages switch, read-only; a design's page link and open questions stay home (T888) ([#968](https://github.com/theclifmeister/terminatr/issues/968)) ([bb5d919](https://github.com/theclifmeister/terminatr/commit/bb5d9196ace1d2f76eb741780803556c79523cb3))
+* paired projects show the same tiles and pages as local ones, per-project "project pages" switch, read-only, never Memory (T886) ([#967](https://github.com/theclifmeister/terminatr/issues/967)) ([744e23d](https://github.com/theclifmeister/terminatr/commit/744e23d9dca9ff62bc9370d9e15f22cec573564b))
+* threads choose agent + model per thread from several agents (T281) ([#961](https://github.com/theclifmeister/terminatr/issues/961)) ([bfc2171](https://github.com/theclifmeister/terminatr/commit/bfc21716e5668746c67aeba578a889f0a747c5c0))
+
+
+### Bug Fixes
+
+* **agent:** dialog screen rules read the dialog's shape, not its words anywhere on screen (T743) ([#960](https://github.com/theclifmeister/terminatr/issues/960)) ([13ee1f7](https://github.com/theclifmeister/terminatr/commit/13ee1f71c08d2f41b13755f617fb0e8eff44354e))
+* inbox reads skip an item still being written, and e2e hooks get a 2s budget (T890) ([#971](https://github.com/theclifmeister/terminatr/issues/971)) ([7810390](https://github.com/theclifmeister/terminatr/commit/7810390fc67b170f2d45737d2c3cd7d1a891735d))
+* **ios:** Jump to latest glides to the true end in one move (T889) ([#976](https://github.com/theclifmeister/terminatr/issues/976)) ([74f9b2c](https://github.com/theclifmeister/terminatr/commit/74f9b2cb1fce441d8d11f4357318625b7ab93e14))
+* **ios:** question cards answer each question of a menu of several, and a tap shows at once with its refusal next to the options (T887) ([#966](https://github.com/theclifmeister/terminatr/issues/966)) ([3776bb8](https://github.com/theclifmeister/terminatr/commit/3776bb8686e056273efd97c097a4554aeb09a91c))
+* **ios:** the iPad's sidebar folds away when a session opens in portrait, clear of its composer dock (T862) ([#958](https://github.com/theclifmeister/terminatr/issues/958)) ([8840bfe](https://github.com/theclifmeister/terminatr/commit/8840bfea6312a52b1c73ddcf2308b68df03e33f4))
+* **ios:** the iPad's sidebar opens at every launch, from inside a tab (T858) ([#965](https://github.com/theclifmeister/terminatr/issues/965)) ([377433a](https://github.com/theclifmeister/terminatr/commit/377433a5711712ffe863eb7d847411b41d8bd41a))
+* **relay:** no device answer goes over the link's 1 MiB line; the phone skips one from an older tm and names the call; the server logs why a device closed (T892) ([#970](https://github.com/theclifmeister/terminatr/issues/970)) ([353ff46](https://github.com/theclifmeister/terminatr/commit/353ff4648bcff269272990be39d45ce3dbfd114f))
+
 ## [0.68.0](https://github.com/theclifmeister/terminatr/compare/v0.67.1...v0.68.0) (2026-10-31)
 
 
