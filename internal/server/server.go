@@ -92,8 +92,8 @@ type Options struct {
 	// DeviceAPI runs the app API for a paired device over conn, its
 	// link past TLS, at level (set by package cli: appapi imports this
 	// package). dial opens a control connection of the server's own as
-	// the device. Nil gives devices' links nothing to serve.
-	DeviceAPI func(ctx context.Context, conn net.Conn, d device.Device, level *device.Level, dial func() (*client.Client, error)) error
+	// the device; logf is the server's log. Nil gives devices' links nothing to serve.
+	DeviceAPI func(ctx context.Context, conn net.Conn, d device.Device, level *device.Level, dial func() (*client.Client, error), logf func(string, ...any)) error
 }
 
 // Server owns every session and the control socket.

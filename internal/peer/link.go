@@ -327,6 +327,10 @@ func (l *link) once(ctx context.Context) (up bool, err error) {
 	}
 	s := newSession(tc)
 	s.methods = l.methods
+	if l.logf != nil {
+		alias := l.peer.Alias
+		s.logf = func(format string, a ...any) { l.logf("peer %s: "+format, append([]any{alias}, a...)...) }
+	}
 	s.files.slots = l.fileSlots
 	if !tlsClient(l.id.ID, l.peer.ID()) {
 		s.files.top = 1 << 31

@@ -13,6 +13,7 @@ import (
 	"bufio"
 	"bytes"
 	"cmp"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -199,8 +200,10 @@ func (w *transcriptWatch) look() bool {
 	items = append(items, w.todosChanged()...)
 	if len(items) > 0 {
 		w.took(len(items))
-		if w.send(proto.TranscriptEvent{Event: proto.EventTranscriptItems, Items: items}) != nil {
-			return false
+		for _, run := range splitItems(items, proto.TranscriptEventBytes) {
+			if w.send(proto.TranscriptEvent{Event: proto.EventTranscriptItems, Items: run}) != nil {
+				return false
+			}
 		}
 	}
 	if st := w.status(); st != w.sent {
@@ -220,7 +223,12 @@ func (w *transcriptWatch) reset() bool {
 	if w.tr != nil && w.path != "" {
 		items, at, from = w.backlog()
 	}
+	var todos []proto.TranscriptItem
+	if w.tr != nil {
+		todos = w.todosChanged()
+	}
 	skipped := max(0, len(items)-w.tail)
+	skipped += fitFrom(items[skipped:], proto.TranscriptEventBytes-itemsBytes(todos))
 	items = items[skipped:]
 	before := ""
 	switch {
@@ -229,9 +237,7 @@ func (w *transcriptWatch) reset() bool {
 	case from > 0:
 		before = itemAt{off: from}.String()
 	}
-	if w.tr != nil {
-		items = append(items, w.todosChanged()...)
-	}
+	items = append(items, todos...)
 	st := w.status()
 	w.sent = st
 	w.took(len(items))
@@ -359,6 +365,7 @@ func (s *Server) transcriptPage(p proto.TranscriptPageParams, _ callCtx) (any, *
 	start := max(0, before.off-transcriptBacklogRead)
 	items, at, from, _ := w.readItems(f, start, stop, &before)
 	cut := max(0, len(items)-limit)
+	cut += fitFrom(items[cut:], proto.TranscriptEventBytes)
 	res.Items = items[cut:]
 	switch {
 	case cut > 0:
@@ -515,4 +522,49 @@ func (w *transcriptWatch) acked(n int) {
 	case w.wake <- struct{}{}:
 	default:
 	}
+}
+
+// itemBytes is it's size in JSON, with the comma after it.
+func itemBytes(it proto.TranscriptItem) int {
+	b, _ := json.Marshal(it)
+	return len(b) + 1
+}
+
+// itemsBytes is the size of items in JSON, commas included.
+func itemsBytes(items []proto.TranscriptItem) int {
+	n := 0
+	for _, it := range items {
+		n += itemBytes(it)
+	}
+	return n
+}
+
+// fitFrom is where the last of items that fit in budget bytes of JSON
+// start: 0 when all fit. The last item always goes (an item is bounded,
+// TranscriptItemText), so a reset or page is never empty for it.
+func fitFrom(items []proto.TranscriptItem, budget int) int {
+	n := 0
+	for i := len(items) - 1; i >= 0; i-- {
+		n += itemBytes(items[i])
+		if n > budget && i < len(items)-1 {
+			return i + 1
+		}
+	}
+	return 0
+}
+
+// splitItems cuts items into runs of at most budget bytes of JSON each,
+// in order (an item over it alone in its run).
+func splitItems(items []proto.TranscriptItem, budget int) [][]proto.TranscriptItem {
+	var runs [][]proto.TranscriptItem
+	start, n := 0, 0
+	for i, it := range items {
+		b := itemBytes(it)
+		if n+b > budget && i > start {
+			runs = append(runs, items[start:i])
+			start, n = i, 0
+		}
+		n += b
+	}
+	return append(runs, items[start:])
 }

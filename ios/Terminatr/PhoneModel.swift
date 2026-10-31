@@ -123,6 +123,7 @@ final class PhoneModel {
 
     /// Back to the welcome screen.
     func disconnect() async {
+        await bye("the user disconnected")
         await drop()
         source = .none
         projects = []
@@ -242,6 +243,7 @@ final class PhoneModel {
     func suspend() async {
         guard case .server = source else { return }
         if link == .up { note(.background) }
+        await bye("the app went to the background")
         await unlink()
         link = .connecting
     }
@@ -338,6 +340,14 @@ final class PhoneModel {
         }
     }
 
+    /// Tells the server why the link closes, for its log (device.bye,
+    /// app API 37, T892), when the link is up and its tm has it: the
+    /// line goes before the close, which follows at once.
+    private func bye(_ reason: String) async {
+        guard link == .up, let b = bridge, await b.hello?.methods.contains(AppAPI.Methods.deviceBye.name) == true else { return }
+        await b.post(AppAPI.Methods.deviceBye, AppAPI.ByeParams(reason: reason))
+    }
+
     /// Whether error is the link's dropping, which the screens don't
     /// show: they keep what they have until the redial (T859).
     static func isDrop(_ error: any Error) -> Bool {
@@ -388,7 +398,11 @@ final class PhoneModel {
         case .reconnect:
             note(.path, "now on \(now.via)")
             redial()
-            transport?.close()
+            let t = transport
+            Task {
+                await bye("the network changed: now on \(now.via)")
+                t?.close()
+            }
         }
     }
 
@@ -422,6 +436,9 @@ final class PhoneModel {
                         self?.projects = e.data.projects
                     }
                     self?.dropped?(LinkError.closed)
+                } catch let e as AppAPI.Error where e.code == AppAPI.tooBig {
+                    // The link is up: a redial would ask the same (T892).
+                    self?.failure = e.localizedDescription
                 } catch {
                     if !Task.isCancelled { self?.dropped?(error) }
                 }

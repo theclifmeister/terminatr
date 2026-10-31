@@ -62,6 +62,9 @@ public actor Bridge {
     private var nextID = 1
     private var calls: [Int: @Sendable (Result<Data, any Error>) -> Void] = [:]
     private var streams: [Int: Stream] = [:]
+    /// The open requests' methods, by id: a too-big error names its
+    /// call (T892).
+    private var methods: [Int: String] = [:]
     private var helloWaiter: CheckedContinuation<AppAPI.Hello, any Error>?
     private var ended: (any Error)?
     private let decoder = AppAPI.decoder()
@@ -138,6 +141,16 @@ public actor Bridge {
         try await call(m, AppAPI.NoParams())
     }
 
+    /// Sends a call of m without waiting for its answer, which nothing
+    /// reads: device.bye, just before the link closes. Never signed.
+    public func post<P, R>(_ m: AppAPI.Call<P, R>, _ params: P) {
+        guard ended == nil else { return }
+        let id = take()
+        guard let line = try? request(id, m.name, params) else { return }
+        calls[id] = { _ in }
+        try? transport.send(line)
+    }
+
     /// Opens stream m with params: its result once the bridge answers,
     /// and its events. Cancelling the events' iteration sends cancel.
     public func subscribe<P, R, D>(_ m: AppAPI.Subscription<P, R, D>, _ params: P) async throws -> BridgeSubscription<R, D> {
@@ -210,6 +223,7 @@ public actor Bridge {
     }
 
     private func request<P: Encodable>(_ id: Int, _ method: String, _ params: P) throws -> Data {
+        methods[id] = method
         if params is AppAPI.NoParams {
             return try encoder.encode(RequestLine<P>(id: id, method: method, params: nil))
         }
@@ -245,15 +259,18 @@ public actor Bridge {
             return
         }
         guard let id = h.id else { return }
+        let error = h.error.map { Self.named($0, methods[id]) }
         if let done = calls.removeValue(forKey: id) {
-            done(h.error.map { .failure($0) } ?? .success(line))
+            methods[id] = nil
+            done(error.map { .failure($0) } ?? .success(line))
             return
         }
         guard var s = streams[id] else { return }
         if let started = s.started {
             s.started = nil
-            if let e = h.error {
+            if let e = error {
                 streams[id] = nil
+                methods[id] = nil
                 started(.failure(e))
                 s.end(e)
                 return
@@ -264,14 +281,24 @@ public actor Bridge {
         }
         if h.end == true {
             streams[id] = nil
-            s.end(h.error)
+            methods[id] = nil
+            s.end(error)
         } else if h.event != nil {
             s.event(line)
         }
     }
 
+    /// e with its call's method in front, for a too-big error that
+    /// doesn't name it already (the link's own, LinkTransport's, for a
+    /// line it skipped): which call was too big shows where it failed.
+    static func named(_ e: AppAPI.Error, _ method: String?) -> AppAPI.Error {
+        guard e.code == AppAPI.tooBig, let method, !e.message.hasPrefix(method + ":") else { return e }
+        return AppAPI.Error(code: e.code, message: "\(method): \(e.message)")
+    }
+
     private func finish(_ error: any Error) {
         ended = error
+        methods = [:]
         helloWaiter?.resume(throwing: error)
         helloWaiter = nil
         for (_, done) in calls {

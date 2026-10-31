@@ -27,7 +27,7 @@ func (s *Server) serveDeviceLink(ctx context.Context, conn net.Conn, d device.De
 		<-ctx.Done()
 		return nil
 	}
-	return s.opts.DeviceAPI(ctx, conn, d, level, func() (*client.Client, error) { return s.deviceConn(d.Name) })
+	return s.opts.DeviceAPI(ctx, conn, d, level, func() (*client.Client, error) { return s.deviceConn(d.Name) }, s.log.Printf)
 }
 
 // deviceConn is a control connection of the device name, served here.

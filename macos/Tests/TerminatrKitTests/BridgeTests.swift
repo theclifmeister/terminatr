@@ -151,3 +151,30 @@ func started(_ t: ScriptTransport) async throws -> Bridge {
     #expect(th.task?.steps == [])
     #expect(th.record.usage.costUsd == 0.25)
 }
+
+// T892: a too-big error names the call it ended: the phone's link's own
+// (a line it skipped) gets the method in front; the server's, which
+// names it already, stays as it is. post sends without waiting.
+@Test func tooBigNamesTheCall() async throws {
+    let t = ScriptTransport()
+    t.reply = { req in
+        let id = req["id"] as! Int
+        switch req["method"] as! String {
+        case "session.file":
+            return [#"{"id":\#(id),"error":{"code":"too-big","message":"its answer is over the 1048576 bytes the link carries in a line (1400000 bytes)"},"end":true}"#]
+        case "memory.read":
+            return [#"{"id":\#(id),"error":{"code":"too-big","message":"memory.read: its answer is 1100000 bytes"}}"#]
+        default:
+            return []
+        }
+    }
+    let b = try await started(t)
+    await #expect(throws: AppAPI.Error(code: "too-big", message: "session.file: its answer is over the 1048576 bytes the link carries in a line (1400000 bytes)")) {
+        try await b.call(AppAPI.Methods.sessionFile, AppAPI.SessionFileParams(session: "s1", ref: "r1"))
+    }
+    await #expect(throws: AppAPI.Error(code: "too-big", message: "memory.read: its answer is 1100000 bytes")) {
+        try await b.call(AppAPI.Methods.memoryRead, AppAPI.MemoryReadParams(project: "web", path: "CONTEXT.md"))
+    }
+    await b.post(AppAPI.Methods.deviceBye, AppAPI.ByeParams(reason: "the app went to the background"))
+    #expect(t.sent.last == #"{"id":3,"method":"device.bye","params":{"reason":"the app went to the background"}}"#)
+}

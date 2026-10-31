@@ -34,11 +34,13 @@ const CapProjectFiles = "project-files"
 
 // Bounds of the project files: a memory file of at most MaxMemoryRead
 // bytes (project.MaxMemoryRead), a library file of at most
-// MaxLibraryRead, read LibraryChunk bytes at a time.
+// MaxLibraryRead, read LibraryChunk bytes at a time: in base64 a chunk
+// stays under the 1 MiB a device's link carries in a line, as
+// SentFileChunk does.
 const (
 	MaxMemoryRead  = 1 << 20
 	MaxLibraryRead = 25 << 20
-	LibraryChunk   = 1 << 20
+	LibraryChunk   = 512 << 10
 )
 
 // ProjectFilesParams name the project of memory.list and library.list.
