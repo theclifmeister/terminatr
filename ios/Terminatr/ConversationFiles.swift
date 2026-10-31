@@ -201,7 +201,7 @@ struct PhoneAttachment: View {
             switch a {
             case .open:
                 do {
-                    looking = try FileCopy.temporary(d, name: file.name)
+                    looking = try FileCopy.temporary(d, name: file.name, type: file.type)
                 } catch {
                     show(error.localizedDescription)
                 }
@@ -210,7 +210,7 @@ struct PhoneAttachment: View {
                 show("Copied")
             case .share:
                 do {
-                    sharing = SharedFile(url: try FileCopy.temporary(d, name: file.name))
+                    sharing = SharedFile(url: try FileCopy.temporary(d, name: file.name, type: file.type))
                 } catch {
                     show(error.localizedDescription)
                 }
@@ -271,11 +271,15 @@ enum FileCopy {
     }
 
     /// A copy in a temporary folder of the app's own, for the share
-    /// sheet, under the file's name.
-    static func temporary(_ d: Data, name: String) throws -> URL {
+    /// sheet and Quick Look, under the file's name; a name without an
+    /// extension (a pasted image is "Image #1") gets its type's, which
+    /// Quick Look needs to know what it is.
+    static func temporary(_ d: Data, name: String, type: String = "") throws -> URL {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("terminatr-files/\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let url = dir.appendingPathComponent((name as NSString).lastPathComponent)
+        var base = (name as NSString).lastPathComponent
+        if (base as NSString).pathExtension.isEmpty, let ext = UTType(mimeType: type)?.preferredFilenameExtension { base += "." + ext }
+        let url = dir.appendingPathComponent(base)
         try d.write(to: url, options: .atomic)
         return url
     }
