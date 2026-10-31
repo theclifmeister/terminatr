@@ -233,6 +233,9 @@ func (m *Manager) caps() []string {
 		if _, ok := m.opts.Export.(PagesExporter); ok {
 			caps = append(caps, CapPages)
 		}
+		if _, ok := m.opts.Export.(DesignsExporter); ok {
+			caps = append(caps, CapPageDesigns)
+		}
 	}
 	if m.opts.Messages != nil {
 		caps = append(caps, CapMsg, CapShare)

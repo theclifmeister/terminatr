@@ -593,7 +593,7 @@ func (e *Env) peerPages(dir, alias, slug, word string) error {
 	case !shared:
 		fmt.Fprintf(e.Stdout, "Pages on for %s on %s; the project isn't shared, so it reads nothing until share is on in the project's Settings tab.\n", alias, slug)
 	default:
-		fmt.Fprintf(e.Stdout, "Pages on for %s on %s: it reads the board (titles, statuses, steps; no notes), the overview (goal and PROJECT.md; no repository paths) and the threads' library files. Never the memory; nothing it does writes here.\n", alias, slug)
+		fmt.Fprintf(e.Stdout, "Pages on for %s on %s: it reads the board (titles, statuses, steps; no notes), the overview (goal and PROJECT.md; no repository paths), the threads' library files and the designs (no page links, no open questions). Never the memory; nothing it does writes here.\n", alias, slug)
 	}
 	e.reload()
 	return nil

@@ -78,6 +78,10 @@ func init() {
 		unary(proto.MethodPeerPagesRead, false, peerPagesParams, peerPagesOf),
 		unary(proto.MethodPeerLibraryList, false, peerPagesParams, peerLibraryOf),
 		unary(proto.MethodPeerLibraryRead, false, peerLibraryReadParams, libraryChunkOf),
+		// A paired server's designs, read only (app API 36; the server's
+		// caps say peer-designs), under the same switch: their records
+		// and builds, never their pages or open questions.
+		unary(proto.MethodPeerDesignList, false, peerPagesParams, peerDesignsOf),
 
 		// The notice tray (mods' notifications): one console draws each.
 		unary(proto.MethodNotifyClaim, false, noticeParams, noticeResultOf),

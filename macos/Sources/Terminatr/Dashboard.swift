@@ -692,6 +692,10 @@ struct RemoteProjectDashboard: View {
                             .foregroundStyle(theme.muted)
                     }
                 }
+                // Its designs (T888), read-only, under the same switch.
+                if app.listsDesigns {
+                    DesignsSection(peer: peer, project: project)
+                }
             }
             .padding(.horizontal, 28)
             .padding(.top, 18)

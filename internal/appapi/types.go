@@ -1592,7 +1592,9 @@ type Designs struct {
 // design task's open questions; and Build, the build tasks in after
 // order. Archived (app API 33): tm design archive hid it; the app lists
 // it only when asked, with the done ones. Working (app API 34): a thread
-// of one of its build tasks is running a turn now.
+// of one of its build tasks is running a turn now. PageStays (app API
+// 36): a paired server's design (peer.design-list) has a page, which
+// stays on that server; Artifact is empty then.
 type Design struct {
 	Name       string           `json:"name"`
 	Title      string           `json:"title"`
@@ -1607,6 +1609,7 @@ type Design struct {
 	Build      []DesignTask     `json:"build"`
 	Archived   bool             `json:"archived,omitempty"`
 	Working    bool             `json:"working,omitempty"`
+	PageStays  bool             `json:"page_stays,omitempty"`
 }
 
 // DesignQuestion is an open question of a design's task: its id

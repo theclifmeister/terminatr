@@ -340,6 +340,8 @@ func init() {
 		proto.MethodPeerPagesRead:   {gate: gateHuman, call: typed((*Server).readPeerPages)},
 		proto.MethodPeerLibraryList: {gate: gateHuman, call: typed((*Server).listPeerLibrary)},
 		proto.MethodPeerLibraryRead: {gate: gateHuman, call: typed((*Server).readPeerLibrary)},
+		// A paired server's designs, read only (CapPeerDesigns, T888).
+		proto.MethodPeerDesignList: {gate: gateHuman, call: typed((*Server).listPeerDesigns)},
 		proto.MethodPeerNeedAct: {gate: gateHuman, call: typed(func(s *Server, p proto.PeerNeedActParams, c callCtx) (any, *proto.Error) {
 			return s.needAct(p, c)
 		})},

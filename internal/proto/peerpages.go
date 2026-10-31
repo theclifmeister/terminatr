@@ -160,3 +160,76 @@ type PeerLibraryReadReadParams struct {
 	Name    string `json:"name"`
 	Offset  int64  `json:"offset,omitempty"`
 }
+
+// A shared project's designs (T888), under the same project pages
+// switch: each design's record and its build, read-only. A design's page
+// is a link to a third server (an https URL, a claude.ai artifact as a
+// rule), and stays home: a shared link to such a page is a key to it,
+// and this server can't vouch for what is there. Page says only that
+// the design has one. Its design task's open questions stay home too:
+// they are its user's to answer, and cross only as needs (§16.15),
+// under the needs switch.
+const (
+	// MethodPeerPagesDesigns lists a shared project's designs
+	// (PeerPagesParams): a PeerDesigns.
+	MethodPeerPagesDesigns = "peer.pages.designs"
+	// MethodPeerDesignList is peer.pages.designs of the paired server
+	// Alias (PeerPagesReadParams): a PeerDesigns.
+	MethodPeerDesignList = "peer.design-list"
+)
+
+// CapPeerDesigns says the server answers peer.design-list.
+const CapPeerDesigns = "peer-designs"
+
+// The most a designs answer carries: designs, build tasks per design,
+// a design's title in runes; an answer is cut to MaxDesignAnswer runes
+// and a design keeps at most MaxDesignAnswers of them. The far server
+// keeps its answer under PeerPagesBudget bytes of text, dropping done
+// and archived designs first, and says Truncated.
+const (
+	PeerDesignsMax     = 200
+	PeerDesignBuild    = 100
+	PeerDesignTitle    = 200
+	PeerDesignAnswer   = 300
+	PeerDesignAnswers  = 200
+	PeerDesignAfterMax = 20
+)
+
+// PeerDesigns are a shared project's designs as a paired server may read
+// them, by name; Truncated: some didn't fit (done and archived ones go
+// first).
+type PeerDesigns struct {
+	Designs   []PeerDesign `json:"designs"`
+	Truncated bool         `json:"truncated,omitempty"`
+}
+
+// PeerDesign is one design: its name, title, status from its build, its
+// design task and that task's status, Page (it has a page, which stays
+// home), how many build tasks are done, the user's decided answers, its
+// build in after order, and whether it is archived or a thread of its
+// build is running a turn.
+type PeerDesign struct {
+	Name       string           `json:"name"`
+	Title      string           `json:"title"`
+	Status     string           `json:"status"`
+	Task       string           `json:"task,omitempty"`
+	TaskStatus string           `json:"task_status,omitempty"`
+	Page       bool             `json:"page,omitempty"`
+	TasksDone  int              `json:"tasks_done"`
+	Answers    []string         `json:"answers"`
+	Build      []PeerDesignTask `json:"build"`
+	Archived   bool             `json:"archived,omitempty"`
+	Working    bool             `json:"working,omitempty"`
+}
+
+// PeerDesignTask is a build task: its id, title, status, the tasks it
+// comes after, whether it is archived and whether a thread of it is
+// running a turn.
+type PeerDesignTask struct {
+	ID       string   `json:"id"`
+	Title    string   `json:"title"`
+	Status   string   `json:"status"`
+	After    []string `json:"after,omitempty"`
+	Archived bool     `json:"archived,omitempty"`
+	Working  bool     `json:"working,omitempty"`
+}

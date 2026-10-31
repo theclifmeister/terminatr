@@ -778,6 +778,16 @@ final class PhoneModel {
         }
     }
 
+    /// Whether this tm reads a paired server's project's designs
+    /// (peer.design-list, app API 36).
+    var readsPeerDesigns: Bool { hello.map(Compatibility.readsPeerDesigns) ?? false }
+
+    /// A paired server's project's designs, without their pages or open
+    /// questions (peer.design-list).
+    func peerDesigns(_ alias: String, _ project: String) async throws -> [AppAPI.Design] {
+        try await connected().call(AppAPI.Methods.peerDesignList, AppAPI.PeerPagesParams(alias: alias, project: project)).designs
+    }
+
     /// A paired server's project's library, its threads' files
     /// (peer.library-list).
     func peerLibrary(_ alias: String, _ project: String) async throws -> [AppAPI.LibraryFile] {
