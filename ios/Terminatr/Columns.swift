@@ -57,19 +57,25 @@ struct Columns<Content: View>: View {
     let root: () -> Content
     /// The folded list slid back over the session.
     @State private var listShown = false
+    /// The space's size without the keyboard: the layout is picked by
+    /// it, so the keyboard coming up in an iPad's portrait (less tall
+    /// than wide then) doesn't swap the layout, which built the session
+    /// afresh, dropping the keyboard, again and again (T893).
+    @State private var whole: CGSize?
 
     /// The list column's width when the layout leaves it to us.
     static var listWidth: CGFloat { PhoneColumns.listIdeal }
 
     var body: some View {
         GeometryReader { g in
+            let size = whole ?? g.size
             if #available(iOS 27.1, *) {
                 let folds = g.reservedRegions(kind: .division).contains { $0.isActive }
                 let hinge = g.reservedRegions(kind: .division, options: .includeInactive).first?.frame
                 let (list, gap) = PhoneColumns.split(g.size.width, hinge: hinge)
-                if !folds, foldsList(g.size) {
+                if !folds, foldsList(size) {
                     folded(list: list)
-                } else if folds || g.size.width > g.size.height {
+                } else if folds || size.width > size.height {
                     ArrangementView {
                         lead.splitArrangementLayoutSize(minWidth: 300, idealWidth: Self.listWidth, maxWidth: 440)
                     } secondary: {
@@ -80,11 +86,19 @@ struct Columns<Content: View>: View {
                     beside(list: list, gap: gap)
                         .environment(\.splitArrangementAxis, .horizontal)
                 }
-            } else if foldsList(g.size) {
+            } else if foldsList(size) {
                 folded(list: min(Self.listWidth, g.size.width / 2))
             } else {
                 beside(list: Self.listWidth)
             }
+        }
+        .background {
+            GeometryReader { w in
+                Color.clear
+                    .onAppear { whole = w.size }
+                    .onChange(of: w.size) { _, now in whole = now }
+            }
+            .ignoresSafeArea(.keyboard)
         }
         .onChange(of: path) { listShown = false }
     }

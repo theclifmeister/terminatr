@@ -52,8 +52,10 @@ struct ComposerField: UIViewRepresentable {
             v.placeholder.isHidden = !text.isEmpty
         }
         v.placeholder.isHidden = !v.text.isEmpty
+        v.wantsFocus = focused
         if focused, !v.isFirstResponder {
-            DispatchQueue.main.async { if v.window != nil { v.becomeFirstResponder() } }
+            // Not in a window yet: didMoveToWindow takes it.
+            DispatchQueue.main.async { if v.window != nil, v.wantsFocus { v.becomeFirstResponder() } }
         } else if !focused, v.isFirstResponder {
             DispatchQueue.main.async { v.resignFirstResponder() }
         }
@@ -94,6 +96,8 @@ struct ComposerField: UIViewRepresentable {
     /// The text view: pastes an image or a file to files.
     final class FieldView: UITextView {
         let placeholder = UILabel()
+        /// The composer asks for the keyboard: taken once in a window.
+        var wantsFocus = false
         var files: (([NSItemProvider]) -> Void)? {
             didSet { pasteConfiguration = files == nil ? nil : Self.accepted }
         }
@@ -117,6 +121,13 @@ struct ComposerField: UIViewRepresentable {
         }
 
         required init?(coder: NSCoder) { fatalError("not from a coder") }
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            if wantsFocus, window != nil, !isFirstResponder {
+                DispatchQueue.main.async { if self.wantsFocus, self.window != nil { self.becomeFirstResponder() } }
+            }
+        }
 
         /// The pasteboard has a file to take and no text to paste.
         private var pastesFiles: Bool {
