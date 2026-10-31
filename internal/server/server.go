@@ -925,7 +925,7 @@ func (s *Server) promptBy(p proto.SessionPromptParams, cc callCtx) (any, *proto.
 		p.Files = nil
 	}
 	res, perr := s.prompt(p)
-	if perr == nil {
+	if perr == nil && strings.TrimSpace(p.Text) != "" {
 		s.sent.add(p.ID, cc.who(), p.Text)
 	}
 	if perr != nil || !cc.app {
@@ -937,7 +937,9 @@ func (s *Server) promptBy(p proto.SessionPromptParams, cc callCtx) (any, *proto.
 			took()
 		}
 		detail := textsafe.Line(p.Text, 80)
-		if p.Mode != "" {
+		if strings.TrimSpace(p.Text) == "" {
+			detail = "stopped the turn"
+		} else if p.Mode != "" {
 			detail = p.Mode + ": " + detail
 		}
 		s.journalIn(info.Project, cc.who(), "session.prompt", sessionRef(info), detail)

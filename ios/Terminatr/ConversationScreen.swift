@@ -80,6 +80,8 @@ struct ConversationScreen: View {
                         .id(row.id)
                     }
                     if let session { waiting(session, need: waits) }
+                    // Queued prompts and the working line (T893).
+                    if let session { ConversationTail(ref: ref, session: session, transcript: transcript) }
                     // Scrolled to, the end row reaches the true end
                     // (T807): the last card then sits the cards' gap
                     // over the composer, and no more (T882).
@@ -123,6 +125,9 @@ struct ConversationScreen: View {
             .onChange(of: Busy.of(session) != nil) {
                 if follow.following { scroll.scrollTo("end", anchor: .bottom) }
             }
+            .onChange(of: model.queuedSent[ref]?.count ?? 0) {
+                if follow.following { scroll.scrollTo("end", anchor: .bottom) }
+            }
             .overlay(alignment: .bottom) {
                 if !follow.following {
                     Button {
@@ -143,20 +148,11 @@ struct ConversationScreen: View {
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            if id != nil {
-                // The cards' gap between the bar and the composer.
-                VStack(spacing: 12) {
-                    // While the agent has its turn, as the Mac's (T803).
-                    if let busy = Busy.of(session) {
-                        WorkingBar(busy: busy, activity: Activity.of(transcript, current: session?.current ?? ""))
-                            .padding(.horizontal, 16)
-                            .padding(.bottom, model.writes ? 0 : 8)
-                    }
-                    if model.writes, let id {
-                        PhoneComposer(ref: ref, session: id, running: session?.state == "working", queued: session?.queuedPrompts ?? 0,
-                                      held: session?.queueHeld ?? "")
-                    }
-                }
+            // The cards' gap between the conversation and the composer;
+            // the agent's turn shows at the conversation's end (T893).
+            if model.writes, let id {
+                PhoneComposer(ref: ref, session: id, running: session?.state == "working", held: session?.queueHeld ?? "")
+                    .padding(.top, 12)
             }
         }
         .refreshable { await model.refresh() }
@@ -433,7 +429,7 @@ struct EntryLine: View {
 extension View {
     /// A line over the mesh on a glass capsule: the mesh is no place for
     /// small or muted text (ThemeColours.checks, T851).
-    fileprivate func onGlass() -> some View {
+    func onGlass() -> some View {
         padding(.horizontal, Spacing.item)
             .padding(.vertical, 2)
             .surface(.glass, in: Capsule())

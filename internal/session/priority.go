@@ -156,6 +156,53 @@ func (s *Session) PromptNow(text string, interrupt bool) (via, why string, err e
 	return ViaInterrupted, "", nil
 }
 
+// StopTurn stops the agent's running turn with its interrupt key and
+// sends no prompt (session.prompt's PromptInterrupt with no text: the
+// phone's Stop, T893). It is refused, nothing typed, where PromptNow's
+// interrupt is (an agent started by hand, a dialog, an escape's prompt,
+// a draft in the box), and where there is no turn to stop or no key to
+// stop it with. Claude sends the steers it holds once stopped.
+func (s *Session) StopTurn() error {
+	rt := s.agentRT()
+	if rt == nil {
+		return ErrNoAgent
+	}
+	st := rt.tr.State().State
+	switch {
+	case st == agent.StateExited:
+		return ErrExited
+	case rt.observed:
+		return &NotInterruptedError{Why: "the agent was started by hand"}
+	case st == agent.StateBlocked:
+		return &NotInterruptedError{Why: HeldDialog}
+	case st != agent.StateWorking:
+		return &NotInterruptedError{Why: "the agent is " + string(st)}
+	}
+	escape := rt.escapeOpen()
+	rt.mu.Lock()
+	why, key := "", ""
+	if rt.man != nil {
+		key = rt.man.Inject.Interrupt
+	}
+	switch {
+	case escape:
+		why = HeldEscape
+	case rt.blocker:
+		why = HeldDialog
+	case rt.man != nil && rt.man.Inject.EmptyRule != "" && !rt.emptyBox && len(rt.steers) == 0:
+		why = HeldBox
+	case key == "":
+		why = "the agent has no interrupt key"
+	}
+	rt.mu.Unlock()
+	if why != "" {
+		return &NotInterruptedError{Why: why}
+	}
+	s.input([]byte(key))
+	s.cfg.Logf("session %s: stopped the agent's turn", s.cfg.ID)
+	return nil
+}
+
 // forgetSteers: keys were typed into the prompt box, so what it holds
 // may be a draft.
 func (s *Session) forgetSteers() {

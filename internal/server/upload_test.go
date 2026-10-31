@@ -236,4 +236,15 @@ func TestSessionUpload(t *testing.T) {
 	if err := c.Call(proto.MethodSessionPrompt, proto.SessionPromptParams{ID: "mini/s-1", Text: "x", Files: []string{res.Ref}}, nil); code(err) != proto.ErrRefused {
 		t.Errorf("prompt with files to a paired session: %v", err)
 	}
+	// No text: a plain prompt is refused as empty; an interrupt is a Stop
+	// (T893), refused while there is no turn to stop, with files a prompt.
+	if err := c.Call(proto.MethodSessionPrompt, proto.SessionPromptParams{ID: id}, nil); code(err) != proto.ErrBadParams {
+		t.Errorf("empty prompt: %v", err)
+	}
+	if err := c.Call(proto.MethodSessionPrompt, proto.SessionPromptParams{ID: id, Mode: proto.PromptInterrupt}, nil); code(err) != proto.ErrRefused {
+		t.Errorf("stop with no turn: %v", err)
+	}
+	if err := c.Call(proto.MethodSessionPrompt, proto.SessionPromptParams{ID: plain.Session.ID, Mode: proto.PromptInterrupt}, nil); code(err) != proto.ErrRefused {
+		t.Errorf("stop a plain session: %v", err)
+	}
 }

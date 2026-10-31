@@ -189,6 +189,26 @@ public enum ComposerFiles {
         return (renamed(name, ext: ext, date: date), out as Data)
     }
 
+    /// A small picture of an image for its thumbnail in the composer
+    /// (T893): a PNG at most maxPixel on its longer side, turned as its
+    /// orientation says; nil when data isn't an image.
+    public static func thumbnail(_ data: Data, maxPixel: Int = 240) -> Data? {
+        guard let src = CGImageSourceCreateWithData(data as CFData, [kCGImageSourceShouldCache: false] as CFDictionary),
+              CGImageSourceGetCount(src) > 0 else { return nil }
+        let opts: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxPixel,
+        ]
+        guard let small = CGImageSourceCreateThumbnailAtIndex(src, 0, opts as CFDictionary),
+              let image = eightBit(small) else { return nil }
+        let out = NSMutableData()
+        guard let dst = CGImageDestinationCreateWithData(out, UTType.png.identifier as CFString, 1, nil) else { return nil }
+        CGImageDestinationAddImage(dst, image, nil)
+        guard CGImageDestinationFinalize(dst) else { return nil }
+        return out as Data
+    }
+
     /// image at 8 bits a component, its colour space kept: a phone's
     /// HEIC decodes at 10 (HDR, Display P3), which a JPEG encoder may
     /// refuse (the Simulator's does).
