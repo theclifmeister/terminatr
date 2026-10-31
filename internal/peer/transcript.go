@@ -486,10 +486,30 @@ func cleanTranscriptEvent(ev proto.TranscriptEvent) (proto.TranscriptEvent, bool
 		if it.From == proto.FromTM || it.From == proto.FromCoordinator {
 			c.From = it.From
 		}
+		if it.Kind == proto.ItemResult {
+			c.Answers = cleanAnswers(it.Answers)
+		}
 		for _, t := range it.Todos[:min(len(it.Todos), proto.TranscriptTodos)] {
 			c.Todos = append(c.Todos, proto.TranscriptTodo{Text: textsafe.Line(t.Text, proto.TranscriptSummary), Status: word(peerWord, t.Status)})
 		}
 		out.Items = append(out.Items, c)
 	}
 	return out, true
+}
+
+// cleanAnswers are a far server's answered questions, cleaned and
+// bounded as this server's own are (proto.TranscriptAnswer).
+func cleanAnswers(in []proto.TranscriptAnswer) []proto.TranscriptAnswer {
+	var out []proto.TranscriptAnswer
+	line := func(s string) string { return textsafe.Line(s, proto.TranscriptAnswerText) }
+	for _, a := range in[:min(len(in), proto.TranscriptAnswers)] {
+		c := proto.TranscriptAnswer{Header: line(a.Header), Question: line(a.Question), Typed: line(a.Typed), Notes: line(a.Notes)}
+		for _, p := range a.Picked[:min(len(a.Picked), proto.TranscriptPicked)] {
+			if p = line(p); p != "" {
+				c.Picked = append(c.Picked, p)
+			}
+		}
+		out = append(out, c)
+	}
+	return out
 }

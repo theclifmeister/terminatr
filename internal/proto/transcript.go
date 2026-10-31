@@ -172,7 +172,34 @@ type TranscriptItem struct {
 	// through session.prompt by the project's coordinator); empty for
 	// the user's own.
 	From string `json:"from,omitempty"`
+	// Answers are an answered question menu's (a result of the agent's
+	// [answer] tool, Claude's AskUserQuestion): each question and what
+	// the user picked, read from the transcript (its manifest's
+	// [transcript.answers]). Empty for any other result, and for a
+	// question the user declined (Error).
+	Answers []TranscriptAnswer `json:"answers,omitempty"`
 }
+
+// TranscriptAnswer is one answered question of a menu: its Header and
+// Question, the options' labels the user Picked (several for a
+// multi-select), the user's own words (Typed, the menu's free text),
+// and the Notes they added. A menu whose questions the transcript
+// doesn't give has each answer whole in Picked.
+type TranscriptAnswer struct {
+	Header   string   `json:"header,omitempty"`
+	Question string   `json:"question"`
+	Picked   []string `json:"picked,omitempty"`
+	Typed    string   `json:"typed,omitempty"`
+	Notes    string   `json:"notes,omitempty"`
+}
+
+// Bounds of an item's Answers: questions, labels picked of each, and
+// the characters of each string (one line).
+const (
+	TranscriptAnswers    = 8
+	TranscriptPicked     = 8
+	TranscriptAnswerText = 1000
+)
 
 // TranscriptFile is a file an item puts in front of the user: Ref names
 // it to session.file, Name is its name (a sent file's base name, "Image

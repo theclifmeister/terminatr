@@ -1355,6 +1355,20 @@ type TranscriptItem struct {
 	From      string           `json:"from,omitempty"`
 	Files     []TranscriptFile `json:"files,omitempty"`
 	Display   string           `json:"display,omitempty"`
+	// Answers (app API 41) are an answered question menu's, on the
+	// result of its call (Claude's AskUserQuestion).
+	Answers []TranscriptAnswer `json:"answers,omitempty"`
+}
+
+// TranscriptAnswer is one question of an answered menu (app API 41):
+// its header and text, the options' labels picked (several for a
+// multi-select), the user's own words (Typed) and the notes they added.
+type TranscriptAnswer struct {
+	Header   string   `json:"header,omitempty"`
+	Question string   `json:"question"`
+	Picked   []string `json:"picked,omitempty"`
+	Typed    string   `json:"typed,omitempty"`
+	Notes    string   `json:"notes,omitempty"`
 }
 
 // TranscriptFile is a file an item puts in front of the user (since app
@@ -1471,6 +1485,9 @@ func transcriptItemsOf(items []proto.TranscriptItem) []TranscriptItem {
 		}
 		for _, f := range it.Files {
 			ti.Files = append(ti.Files, TranscriptFile{Ref: f.Ref, Name: f.Name, Path: f.Path, Type: f.Type})
+		}
+		for _, a := range it.Answers {
+			ti.Answers = append(ti.Answers, TranscriptAnswer{Header: a.Header, Question: a.Question, Picked: a.Picked, Typed: a.Typed, Notes: a.Notes})
 		}
 		out = append(out, ti)
 	}

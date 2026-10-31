@@ -322,6 +322,24 @@ func TestTranscriptClean(t *testing.T) {
 	if ev.Items[2].Todos[0].Text != "a[2J" || ev.Items[3].From != "" || strings.Contains(ev.Status.Reason, "\x1b") {
 		t.Errorf("todos %+v, from %q, status %+v", ev.Items[2].Todos, ev.Items[3].From, ev.Status)
 	}
+	many := make([]string, proto.TranscriptPicked+3)
+	for i := range many {
+		many[i] = "opt"
+	}
+	ev, _ = cleanTranscriptEvent(proto.TranscriptEvent{Event: proto.EventTranscriptItems, Items: []proto.TranscriptItem{
+		{Kind: proto.ItemResult, Answers: make([]proto.TranscriptAnswer, proto.TranscriptAnswers+2)},
+		{Kind: proto.ItemResult, Answers: []proto.TranscriptAnswer{{Header: "H" + osc52, Question: "Q\nnext" + strings.Repeat("q", 2000),
+			Picked: append([]string{"", "a\x1b[2J"}, many...), Typed: "t" + osc52, Notes: "n\x1b[1m"}}},
+		{Kind: proto.ItemText, Text: "x", Answers: []proto.TranscriptAnswer{{Question: "not a result's"}}},
+	}})
+	if len(ev.Items) != 3 || len(ev.Items[0].Answers) != proto.TranscriptAnswers || ev.Items[2].Answers != nil {
+		t.Fatalf("answers %+v", ev.Items)
+	}
+	a := ev.Items[1].Answers[0]
+	if strings.ContainsAny(a.Header+a.Question+a.Typed+a.Notes+strings.Join(a.Picked, ""), "\x1b\n") ||
+		len([]rune(a.Question)) > proto.TranscriptAnswerText || len(a.Picked) != proto.TranscriptPicked-1 || a.Picked[0] != "a[2J" {
+		t.Errorf("answer %+v", a)
+	}
 	if _, ok := cleanTranscriptEvent(proto.TranscriptEvent{Event: "transcript.exec"}); ok {
 		t.Error("an unknown event passed")
 	}
