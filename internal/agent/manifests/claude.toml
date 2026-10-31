@@ -336,11 +336,22 @@ disable_dialog = { contains = "Disconnect this session", keys = "\u001b[A\u001b[
 # AskUserQuestion's PreToolUse input (questions[], kept for the guard):
 # the server shows it as the session's open question, and session.answer
 # answers it with the same keys, one question at a time.
+# A multi-select question (2.1.316, T900) draws a box before each option
+# ("1. [ ] Apple", "[✔]" once ticked): its number toggles the box without
+# moving the cursor, and an unnumbered row under the options, "Next"
+# ("Submit" on a menu's only question), ends it: Down to it, then Enter.
+# A menu of several questions, or with a multi-select, ends on a review
+# step, "Review your answers" with "1. Submit answers · 2. Cancel" and no
+# footer: tm picks Submit answers once it typed the last answer.
 [answer]
 rule = "blocked-question"
 tool = "AskUserQuestion"
 text_option = "Type something"
 submit = "\r"
+multi_done = ["Next", "Submit"]
+down = "\u001b[B"
+review = "Submit answers"
+review_title = "Review your answers"
 
 # session.approve (docs/SPEC.md §11.2): what a permission dialog's
 # option allows. Read off 2.1.312's dialogs. The session ones are

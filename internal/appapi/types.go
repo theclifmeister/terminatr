@@ -58,6 +58,10 @@ type (
 		Index    int    `json:"index"`
 		Answer   string `json:"answer"`
 		Question string `json:"question,omitempty"`
+		// Picks (app API 39, server cap answer-picks) answer a
+		// multi-select, the agent's own menu's too: its options by
+		// index (from 0), in place of Answer (T900).
+		Picks []int `json:"picks,omitempty"`
 	}
 	// ApproveParams are session.approve's: option Choice (from 1, default 1) of the
 	// permission dialog on session ID's screen. Check answers without
@@ -1052,10 +1056,13 @@ type PeerNeedActParams struct {
 	Index    int    `json:"index,omitempty"`
 	Answer   string `json:"answer,omitempty"`
 	Question string `json:"question,omitempty"`
-	Choice   int    `json:"choice,omitempty"`
-	Option   string `json:"option,omitempty"`
-	Status   string `json:"status,omitempty"`
-	Note     string `json:"note,omitempty"`
+	// Picks (app API 39): a multi-select's options by index, with
+	// Answer their labels joined with ", ", the guard.
+	Picks  []int  `json:"picks,omitempty"`
+	Choice int    `json:"choice,omitempty"`
+	Option string `json:"option,omitempty"`
+	Status string `json:"status,omitempty"`
+	Note   string `json:"note,omitempty"`
 }
 
 // PeerNeedActResult is what the act did there: Asked (accept,

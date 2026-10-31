@@ -718,7 +718,7 @@ func (s *Server) hello() proto.Hello {
 		Build:    s.build,
 		Bin:      s.opts.Bin,
 		PID:      os.Getpid(),
-		Caps:     []string{proto.CapPaneVT, proto.CapTranscript, proto.CapPaneVTRemote, proto.CapSessionFile, proto.CapTranscriptRemote, proto.CapLinkAct, proto.CapTranscriptTail, proto.CapSideActs, proto.CapProjectFiles, proto.CapNeedAct, proto.CapDesigns, proto.CapSessionsWatch, proto.CapPeerPages, proto.CapPeerDesigns, proto.CapProjectMods},
+		Caps:     []string{proto.CapPaneVT, proto.CapTranscript, proto.CapPaneVTRemote, proto.CapSessionFile, proto.CapTranscriptRemote, proto.CapLinkAct, proto.CapTranscriptTail, proto.CapSideActs, proto.CapProjectFiles, proto.CapNeedAct, proto.CapDesigns, proto.CapSessionsWatch, proto.CapPeerPages, proto.CapPeerDesigns, proto.CapProjectMods, proto.CapAnswerPicks},
 	}
 }
 
@@ -973,11 +973,18 @@ func (s *Server) answer(p proto.SessionAnswerParams, cc callCtx) (any, *proto.Er
 	if !byHuman && sess.Info().Escape {
 		return nil, proto.Errorf(proto.ErrRefused, "session %s asks to run a command outside its sandbox: only the user answers that prompt", p.ID)
 	}
+	if len(p.Picks) > 0 && strings.TrimSpace(p.Answer) != "" {
+		return nil, proto.Errorf(proto.ErrBadParams, "an answer takes picks or words, not both")
+	}
 	var res proto.SessionAnswerResult
 	if q, call := sess.Menu(); q != nil && s.asks.of(p.ID) == nil {
-		res, perr = s.answerMenu(sess, q, call, p)
+		res, perr = s.answerMenu(sess, q, call, &p)
 	} else {
-		res, perr = s.asks.answer(p.ID, p.Index, p.Answer, p.Question, byHuman)
+		// The journal says the labels picked.
+		if q := s.asks.of(p.ID); q != nil && len(p.Picks) > 0 && p.Index >= 0 && p.Index < len(q.Questions) {
+			p.Answer, _ = pickedAnswer(q.Questions[p.Index], p.Picks)
+		}
+		res, perr = s.asks.answerPicks(p.ID, p.Index, p.Answer, p.Picks, p.Question, byHuman)
 	}
 	if perr == nil && (p.Question != "" || cc.app) {
 		s.journalAnswer(p, c)

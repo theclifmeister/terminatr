@@ -6,7 +6,7 @@ import Foundation
 /// The terminatr app API (docs/SPEC.md §3.8): what tm app bridge answers.
 public enum AppAPI {
     /// The app API version this app was generated against.
-    public static let version = 38
+    public static let version = 39
 
     public struct AdoptRequestParams: Codable, Sendable, Hashable {
         public var id: String
@@ -43,12 +43,14 @@ public enum AppAPI {
         public var index: Int
         public var answer: String
         public var question: String
+        public var picks: [Int]
 
-        public init(id: String, index: Int, answer: String, question: String = "") {
+        public init(id: String, index: Int, answer: String, question: String = "", picks: [Int] = []) {
             self.id = id
             self.index = index
             self.answer = answer
             self.question = question
+            self.picks = picks
         }
 
         enum CodingKeys: String, CodingKey {
@@ -56,6 +58,7 @@ public enum AppAPI {
             case index
             case answer
             case question
+            case picks
         }
     }
 
@@ -1609,12 +1612,13 @@ public enum AppAPI {
         public var index: Int
         public var answer: String
         public var question: String
+        public var picks: [Int]
         public var choice: Int
         public var option: String
         public var status: String
         public var note: String
 
-        public init(peer: String, project: String, need: String, act: String, index: Int = 0, answer: String = "", question: String = "", choice: Int = 0, option: String = "", status: String = "", note: String = "") {
+        public init(peer: String, project: String, need: String, act: String, index: Int = 0, answer: String = "", question: String = "", picks: [Int] = [], choice: Int = 0, option: String = "", status: String = "", note: String = "") {
             self.peer = peer
             self.project = project
             self.need = need
@@ -1622,6 +1626,7 @@ public enum AppAPI {
             self.index = index
             self.answer = answer
             self.question = question
+            self.picks = picks
             self.choice = choice
             self.option = option
             self.status = status
@@ -1636,6 +1641,7 @@ public enum AppAPI {
             case index
             case answer
             case question
+            case picks
             case choice
             case option
             case status
@@ -3432,6 +3438,7 @@ extension AppAPI.AnswerParams {
         self.index = try c.decode(Int.self, forKey: .index)
         self.answer = try c.decode(String.self, forKey: .answer)
         self.question = try c.decodeIfPresent(String.self, forKey: .question) ?? ""
+        self.picks = try c.decodeIfPresent([Int].self, forKey: .picks) ?? []
     }
 }
 
@@ -4167,6 +4174,7 @@ extension AppAPI.PeerNeedActParams {
         self.index = try c.decodeIfPresent(Int.self, forKey: .index) ?? 0
         self.answer = try c.decodeIfPresent(String.self, forKey: .answer) ?? ""
         self.question = try c.decodeIfPresent(String.self, forKey: .question) ?? ""
+        self.picks = try c.decodeIfPresent([Int].self, forKey: .picks) ?? []
         self.choice = try c.decodeIfPresent(Int.self, forKey: .choice) ?? 0
         self.option = try c.decodeIfPresent(String.self, forKey: .option) ?? ""
         self.status = try c.decodeIfPresent(String.self, forKey: .status) ?? ""

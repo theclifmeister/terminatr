@@ -249,7 +249,7 @@ struct ConversationScreen: View {
                 // Each card answers its own question (Need.answer), not
                 // only a menu's one open question: two questions left the
                 // first card's options untappable (T887).
-                if let need, need.kind == .question, let a = Need.answer(s.id, q, index: i),
+                if let need, need.kind == .question, let a = Need.answer(s.id, q, index: i, picks: Compatibility.answersPicks(model.hello)),
                    model.can(AppAPI.Methods.sessionAnswer.name) {
                     NeedActs(need: need, answer: a) { parts in
                         HeroCard(tone: .question, symbol: Need.Kind.question.symbol, word: word, line: line, title: item.question,
@@ -258,9 +258,10 @@ struct ConversationScreen: View {
                         }
                     }
                 } else {
-                    // A multi-select of the agent's menu is picked in its
-                    // terminal: the card says so, its options only read.
-                    let several = QuestionPlan(q, index: i).paneOnly
+                    // A multi-select of the agent's menu, before a tm that
+                    // types it (app API 39), is picked in its terminal: the
+                    // card says so, its options only read.
+                    let several = QuestionPlan(q, index: i, picks: Compatibility.answersPicks(model.hello)).paneOnly
                     HeroCard(tone: .question, symbol: Need.Kind.question.symbol, word: word, line: line, title: item.question,
                              note: several ? ("It takes several options: pick them in the terminal view.", false) : nil,
                              waiting: waits) {

@@ -1946,7 +1946,7 @@
   }
  },
  "hello": {
-  "app_api": 38,
+  "app_api": 39,
   "build": "demo",
   "capabilities": [
    "read",
@@ -1995,7 +1995,8 @@
     "designs",
     "peer-pages",
     "peer-designs",
-    "project-mods"
+    "project-mods",
+    "answer-picks"
    ],
    "protocol": 1,
    "version": "0.56.1"

@@ -337,7 +337,7 @@ func (a *app) waitDialog(ctx context.Context, d *dialog) (int, error) {
 	a.mu.Lock()
 	d.shownAt = time.Now()
 	a.dialog = d
-	if d.kind == "permission" || d.kind == "question" || d.kind == "codexq" || d.kind == "approval" {
+	if d.kind == "permission" || d.kind == "question" || d.kind == "review" || d.kind == "codexq" || d.kind == "approval" {
 		a.inTool = true
 		if n := a.notify; n != nil {
 			a.notify = nil
@@ -502,14 +502,18 @@ func (a *app) dialogKeyLocked(d *dialog, k key) {
 	switch k.kind {
 	case kRune:
 		if k.r >= '1' && k.r <= '9' && int(k.r-'0') <= len(d.options) {
-			d.sel = int(k.r - '1')
-			if d.kind == "question" && d.sel == d.textOpt {
+			n := int(k.r - '1')
+			if d.kind == "question" && n == d.textOpt {
+				d.sel = n
 				return // focused: type the text next
 			}
 			if d.checked != nil {
-				d.checked[d.sel] = !d.checked[d.sel] // a multi-select's number toggles
+				// A multi-select's number toggles its box; the
+				// cursor stays where it was.
+				d.checked[n] = !d.checked[n]
 				return
 			}
+			d.sel = n
 			choose(d.sel + 1)
 		}
 	case kUp:
@@ -517,15 +521,22 @@ func (a *app) dialogKeyLocked(d *dialog, k key) {
 			d.sel--
 		}
 	case kDown:
-		if d.sel < len(d.options)-1 {
+		last := len(d.options) - 1
+		if d.checked != nil && d.done != "" {
+			last++ // down to its Next
+		}
+		if d.sel < last {
 			d.sel++
 		}
 	case kEnter:
-		if d.checked != nil && d.sel != d.textOpt {
-			choose(len(d.options) + 1) // a multi-select submits what it toggled
-			return
+		switch {
+		case d.checked != nil && d.sel == len(d.options):
+			choose(len(d.options) + 1) // its Next: what it toggled
+		case d.checked != nil && d.sel != d.textOpt:
+			d.checked[d.sel] = !d.checked[d.sel]
+		default:
+			choose(d.sel + 1)
 		}
-		choose(d.sel + 1)
 	case kEsc, kCtrlC:
 		switch d.kind {
 		case "remote":
