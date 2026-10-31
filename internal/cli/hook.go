@@ -167,6 +167,7 @@ func runHook(e *Env, args []string) error {
 	if once {
 		tries = 1
 	}
+	total = max(total, testHookWait(e.Getenv))
 	payload = hook.Trim(payload)
 	params := proto.HookEventParams{Session: session, Agent: name, Event: event,
 		Payload: payload, Token: token}

@@ -112,7 +112,7 @@ func (p *Project) addItem(it *Item, summary func(id string) string) error {
 	}
 	// The name is taken by creating the file, so that two writers in the
 	// same second can't both pick it; mdfile.Write then replaces the empty
-	// file.
+	// file in one rename. Inbox skips the empty file meanwhile.
 	id := base
 	for i := 2; ; i++ {
 		f, err := os.OpenFile(p.Path("inbox", id+".md"), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
@@ -352,6 +352,12 @@ func (p *Project) Inbox() ([]Item, error) {
 		}
 		if err != nil {
 			return nil, err
+		}
+		if len(data) == 0 {
+			// addItem's claim on the name, not yet replaced by the item:
+			// read now, it is an item of no kind, and the coordinator's
+			// nudge would say "new item" and count it told (T890).
+			continue
 		}
 		it, err := ParseItem(strings.TrimSuffix(e.Name(), ".md"), data)
 		if err != nil {
