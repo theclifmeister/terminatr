@@ -3,6 +3,7 @@ package peer
 import (
 	"context"
 	"crypto/ed25519"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -177,7 +178,7 @@ func TestPagesAreCleaned(t *testing.T) {
 // other, kept when the server is paired again, and refuses what isn't a
 // project's slug.
 func TestSetPages(t *testing.T) {
-	dir := t.TempDir()
+	dir := filepath.Join(t.TempDir(), "peer")
 	pubKey, _, err := ed25519.GenerateKey(nil)
 	if err != nil {
 		t.Fatal(err)
