@@ -27,6 +27,9 @@ const (
 	// pid is gone, the server stops itself, so a test killed before its
 	// cleanup (a timeout, ^C, SIGKILL) leaves no server behind.
 	testOwnerEnv = "TERMINATR_TEST_OWNER"
+	// testHookWaitEnv is the least total tm hook waits for the server
+	// (internal/cli testHookWait); the server passes it on to sessions.
+	testHookWaitEnv = "TERMINATR_TEST_HOOK_WAIT"
 )
 
 // testHello parses testHelloEnv: the protocol to claim (0: the real one)
