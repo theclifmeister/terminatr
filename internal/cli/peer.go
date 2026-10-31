@@ -16,6 +16,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/client"
+	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/peer"
 	"github.com/theclifmeister/terminatr/internal/plat/proc"
 	"github.com/theclifmeister/terminatr/internal/project"
@@ -33,6 +34,7 @@ const peerUsage = `usage: tm peer pair [--relay URL] [--as ALIAS]
        tm peer panes ALIAS off|view|write
        tm peer conversations ALIAS on|off
        tm peer needs ALIAS off|view|answer
+       tm peer pages ALIAS PROJECT on|off
        tm peer relay ALIAS ADDRESS
        tm peer relay-update ALIAS
        tm peer ask-share ALIAS [--for PROJECT] [--note TEXT]
@@ -80,7 +82,7 @@ func runPeer(e *Env, args []string) error {
 			return usagef("tm peer %s takes no --%s\n%s", args[0], name, peerUsage)
 		}
 	}
-	npos := map[string]int{"pair": 0, "join": 1, "list": 0, "remove": 1, "rotate": 0, "panes": 2, "conversations": 2, "needs": 2, "relay": 2, "relay-update": 1, "name": 2,
+	npos := map[string]int{"pair": 0, "join": 1, "list": 0, "remove": 1, "rotate": 0, "panes": 2, "conversations": 2, "needs": 2, "pages": 3, "relay": 2, "relay-update": 1, "name": 2,
 		"ask-share": 1, "requests": 0, "decline": 1}
 	if n, ok := npos[args[0]]; !ok || len(pos) != n {
 		return usagef("%s", peerUsage)
@@ -116,6 +118,8 @@ func runPeer(e *Env, args []string) error {
 		return e.peerConversations(dir, pos[0], pos[1])
 	case "needs":
 		return e.peerNeeds(dir, pos[0], pos[1])
+	case "pages":
+		return e.peerPages(dir, pos[0], pos[1], pos[2])
 	case "relay":
 		return e.peerRelay(dir, pos[0], pos[1])
 	case "relay-update":
@@ -413,6 +417,9 @@ type peerEntry struct {
 	// Needs is this server's needs switch for the peer (§16.16): off,
 	// view or answer.
 	Needs string `json:"needs"`
+	// Pages are the projects whose pages it may read, the project pages
+	// switch (§16.17): on for these, off for every other.
+	Pages []string `json:"pages"`
 }
 
 func (e *Env) peerList(dir string, asJSON bool) error {
@@ -434,7 +441,7 @@ func (e *Env) peerList(dir string, asJSON bool) error {
 	entries := []peerEntry{}
 	for _, p := range peers {
 		pe := peerEntry{Alias: p.Alias, Name: p.Name, Told: p.Told, ID: p.ID().String(), Short: p.ID().Short(), Relay: p.Relay, Panes: proto.PanesWord(p.PanesLevel()),
-			Conversations: convWord(p.ConversationsOn()), Needs: p.NeedsLevel()}
+			Conversations: convWord(p.ConversationsOn()), Needs: p.NeedsLevel(), Pages: append([]string{}, p.Pages...)}
 		if l, ok := links[pe.ID]; ok {
 			pe.Link = &l
 		}
@@ -476,6 +483,9 @@ func (e *Env) peerList(dir string, asJSON bool) error {
 		}
 		if pe.Needs != proto.NeedsOff {
 			state += "; needs: " + pe.Needs
+		}
+		if len(pe.Pages) > 0 {
+			state += "; pages: " + strings.Join(pe.Pages, ", ")
 		}
 		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", peer.Both(cmp.Or(pe.Name, pe.Told), pe.Alias), pe.Short, relayHost(pe.Relay), state)
 	}
@@ -545,6 +555,45 @@ func (e *Env) peerNeeds(dir, alias, level string) error {
 		fmt.Fprintf(e.Stdout, "Needs view for %s: it sees each need of the projects this server shares in full: the questions' and permission dialogs' text and options, the tasks in review, the coordinators' questions. It answers none of them.\n", alias)
 	default:
 		fmt.Fprintf(e.Stdout, "Needs answer for %s: it sees each need in full, as at view, and its user answers them from there: questions, permission dialogs (once only), tasks in review, the coordinators' questions. Never a command outside the sandbox; the journal names each act human (peer: %s).\n", alias, alias)
+	}
+	e.reload()
+	return nil
+}
+
+// peerPages turns the project pages switch for the paired server alias
+// on or off for project (docs/SPEC.md §16.17): on, it reads the
+// project's board (titles, statuses, steps), overview (goal and
+// PROJECT.md, never the repositories' paths) and its threads' library
+// files, while the project is shared. Never its memory, and never a
+// write.
+func (e *Env) peerPages(dir, alias, slug, word string) error {
+	if word != "on" && word != "off" {
+		return usagef("tm peer pages ALIAS PROJECT on|off: %q isn't one", word)
+	}
+	if !project.ValidSlug(slug) {
+		return usagef("tm peer pages ALIAS PROJECT on|off: %q isn't a project", slug)
+	}
+	on := word == "on"
+	found, err := peer.SetPages(dir, alias, slug, on)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return &project.Error{Code: "unknown-peer", Msg: fmt.Sprintf("no peer %q (tm peer list)", alias)}
+	}
+	shared := false
+	if cfg, err := config.Load(); err == nil {
+		if s, err := cfg.Safety(slug); err == nil {
+			shared = s.Share && s.Active && !s.Archived
+		}
+	}
+	switch {
+	case !on:
+		fmt.Fprintf(e.Stdout, "Pages off for %s on %s: it sees the project's coordinator and threads, not its board, overview or library.\n", alias, slug)
+	case !shared:
+		fmt.Fprintf(e.Stdout, "Pages on for %s on %s; the project isn't shared, so it reads nothing until share is on in the project's Settings tab.\n", alias, slug)
+	default:
+		fmt.Fprintf(e.Stdout, "Pages on for %s on %s: it reads the board (titles, statuses, steps; no notes), the overview (goal and PROJECT.md; no repository paths), the threads' library files and the designs (no page links, no open questions). Never the memory; nothing it does writes here.\n", alias, slug)
 	}
 	e.reload()
 	return nil

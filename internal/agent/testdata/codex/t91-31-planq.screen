@@ -11,9 +11,9 @@
 • I’ll first inspect the project to see where a colour setting would fit, then I’ll ask you to choose a colour before
   drafting the plan. MANGO
 • Ran pwd && ls -la
-  └ -rw-------@  1 clifford  wheel    2 Oct  6 22:24 g.txt
-    -rw-------@  1 clifford  wheel    2 Oct  6 22:26 h.txt
-    -rw-------@  1 clifford  wheel    2 Oct  6 22:28 q.txt
+  └ -rw-------@  1 acmeuser  wheel    2 Oct  6 22:24 g.txt
+    -rw-------@  1 acmeuser  wheel    2 Oct  6 22:26 h.txt
+    -rw-------@  1 acmeuser  wheel    2 Oct  6 22:28 q.txt
     + 7 lines (ctrl+t to expand)
 • Exploring
   └ List rg --files -g '!*node_modules*' -g '!*.lock'

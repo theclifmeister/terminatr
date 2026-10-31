@@ -53,6 +53,12 @@ const (
 	TranscriptItemText = 8 << 10
 	TranscriptSummary  = 200
 	TranscriptTodos    = 100
+	// TranscriptEventBytes bounds the items of one event or page in
+	// JSON (T892): a device's link carries at most 1 MiB in a line, and
+	// 200 items of up to 8 KiB each don't fit. The items appended go in
+	// as many items events as they need; a reset or a page carries the
+	// last items that fit, its Before reading the earlier ones.
+	TranscriptEventBytes = 512 << 10
 )
 
 // TranscriptWatchParams are the params of transcript.watch. Tail, when
@@ -214,10 +220,13 @@ const MethodSessionFile = "session.file"
 const CapSessionFile = "session-file"
 
 // Bounds of session.file: a file of at most MaxSentFile bytes, read
-// SentFileChunk bytes at a time.
+// SentFileChunk bytes at a time. A chunk goes in base64, a third
+// larger, so its answer stays well under the 1 MiB a device's link
+// carries in a line (T892: a pasted screenshot's 1 MiB chunk dropped the
+// phone's link). Clients read on from Offset plus the bytes they got.
 const (
 	MaxSentFile   = 25 << 20
-	SentFileChunk = 1 << 20
+	SentFileChunk = 512 << 10
 )
 
 // SessionFileParams name a file of session's conversation by its Ref

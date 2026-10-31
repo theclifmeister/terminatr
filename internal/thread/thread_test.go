@@ -404,7 +404,7 @@ func TestBranchName(t *testing.T) {
 			t.Errorf("%+v: %q, %v", c, got, err)
 		}
 	}
-	for _, bad := range []string{"feature/{title}", "x/{id}/{y}", "a b/{id}", "users/clif+{id}-{title}"} {
+	for _, bad := range []string{"feature/{title}", "x/{id}/{y}", "a b/{id}", "users/sam+{id}-{title}"} {
 		if _, err := BranchName(bad, "demo", "t-0007", "", "x"); err == nil {
 			t.Errorf("%q accepted", bad)
 		}

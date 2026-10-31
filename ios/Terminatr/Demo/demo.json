@@ -632,6 +632,252 @@
      "type": "image/png"
     }
    }
+  ],
+  "peer.pages-read": [
+   {
+    "params": {
+     "alias": "studio",
+     "project": "acme-api"
+    },
+    "result": {
+     "body": "The shop's public REST API.\n\n- Keep every endpoint under 200 ms at p95.\n- Never break a published version: add, don't change.\n",
+     "goal": "The shop's public API",
+     "project": "acme-api",
+     "repos": 2,
+     "tasks": [
+      {
+       "id": 12,
+       "ref": "T12",
+       "status": "started",
+       "steps": [
+        {
+         "done": true,
+         "n": 1,
+         "text": "Token bucket per key"
+        },
+        {
+         "done": false,
+         "n": 2,
+         "text": "Return Retry-After"
+        },
+        {
+         "done": false,
+         "n": 3,
+         "text": "Load test at 2x peak"
+        }
+       ],
+       "thread": "t-0012",
+       "title": "Rate limits per API key"
+      },
+      {
+       "id": 14,
+       "ref": "T14",
+       "status": "ready",
+       "steps": [],
+       "thread": "",
+       "title": "Webhooks for order events"
+      },
+      {
+       "id": 15,
+       "ref": "T15",
+       "status": "ready",
+       "steps": [],
+       "thread": "",
+       "title": "OpenAPI spec in CI"
+      },
+      {
+       "id": 16,
+       "ref": "T16",
+       "status": "open",
+       "steps": [],
+       "thread": "",
+       "title": "GraphQL gateway"
+      },
+      {
+       "id": 17,
+       "ref": "T17",
+       "status": "open",
+       "steps": [],
+       "thread": "",
+       "title": "Bulk export endpoint"
+      },
+      {
+       "id": 18,
+       "ref": "T18",
+       "status": "open",
+       "steps": [],
+       "thread": "",
+       "title": "Sandbox keys"
+      },
+      {
+       "id": 9,
+       "ref": "T9",
+       "status": "done",
+       "steps": [],
+       "thread": "",
+       "title": "Orders endpoint"
+      },
+      {
+       "id": 10,
+       "ref": "T10",
+       "status": "done",
+       "steps": [],
+       "thread": "",
+       "title": "Key rotation"
+      },
+      {
+       "id": 11,
+       "ref": "T11",
+       "status": "done",
+       "steps": [],
+       "thread": "",
+       "title": "Pagination cursors"
+      }
+     ],
+     "truncated": false
+    }
+   },
+   {
+    "error": {
+     "code": "pages-off",
+     "message": "studio doesn't share this project's pages with this server"
+    },
+    "params": {
+     "alias": "studio",
+     "project": "acme-docs"
+    }
+   }
+  ],
+  "peer.library-list": [
+   {
+    "params": {
+     "alias": "studio",
+     "project": "acme-api"
+    },
+    "result": {
+     "files": [
+      {
+       "message": "",
+       "name": "rate-limit-load.md",
+       "peer": "",
+       "size": 85,
+       "state": "running",
+       "task": "T12",
+       "thread": "t-0012",
+       "time": "2026-10-27T09:30:00Z",
+       "title": "Rate limits per API key"
+      }
+     ]
+    }
+   },
+   {
+    "error": {
+     "code": "pages-off",
+     "message": "studio doesn't share this project's pages with this server"
+    },
+    "params": {
+     "alias": "studio",
+     "project": "acme-docs"
+    }
+   }
+  ],
+  "peer.library-read": [
+   {
+    "params": {
+     "alias": "studio",
+     "id": "t-0012",
+     "name": "rate-limit-load.md",
+     "project": "acme-api"
+    },
+    "result": {
+     "data": "IyBSYXRlIGxpbWl0IGxvYWQgdGVzdAoKfCBSYXRlIHwgcDk1IHwKfC0tLXwtLS18CnwgMTAwL3MgfCA0OCBtcyB8CnwgMjAwL3MgfCA5MSBtcyB8Cg==",
+     "mtime": "2026-10-27T09:30:00Z",
+     "name": "rate-limit-load.md",
+     "offset": 0,
+     "size": 85
+    }
+   }
+  ],
+  "peer.design-list": [
+   {
+    "params": {
+     "alias": "studio",
+     "project": "acme-api"
+    },
+    "result": {
+     "designs": [
+      {
+       "name": "rate-limits",
+       "title": "Rate limits per API key",
+       "status": "building",
+       "task": "T10",
+       "task_status": "done",
+       "page_stays": true,
+       "tasks": [
+        "T11",
+        "T12",
+        "T13"
+       ],
+       "tasks_done": 1,
+       "answers": [
+        "A token bucket per key, refilled each second",
+        "429 with Retry-After, never a silent drop",
+        "Limits per plan, set in the admin"
+       ],
+       "questions": [],
+       "build": [
+        {
+         "id": "T11",
+         "title": "Token bucket in Redis",
+         "status": "done"
+        },
+        {
+         "id": "T12",
+         "title": "Rate limits per API key",
+         "status": "started",
+         "after": [
+          "T11"
+         ],
+         "working": true
+        },
+        {
+         "id": "T13",
+         "title": "Plan limits in the admin",
+         "status": "ready",
+         "after": [
+          "T12"
+         ]
+        }
+       ],
+       "working": true
+      },
+      {
+       "name": "webhooks-v2",
+       "title": "Webhooks v2: signed, retried",
+       "status": "designing",
+       "task": "T14",
+       "task_status": "started",
+       "tasks": [],
+       "tasks_done": 0,
+       "answers": [
+        "HMAC-SHA256 signatures"
+       ],
+       "questions": [],
+       "build": []
+      }
+     ]
+    }
+   },
+   {
+    "error": {
+     "code": "pages-off",
+     "message": "studio doesn't share this project's pages with this server"
+    },
+    "params": {
+     "alias": "studio",
+     "project": "acme-docs"
+    }
+   }
   ]
  },
  "calls": {
@@ -643,7 +889,120 @@
   },
   "peer.list": {
    "gen": 1,
-   "peers": []
+   "peers": [
+    {
+     "alias": "studio",
+     "conversations": "on",
+     "name": "studio",
+     "needs": "off",
+     "pane": true,
+     "panes": "view",
+     "projects": [
+      {
+       "goal": "The shop's public API",
+       "needs": [],
+       "needs_you": 0,
+       "pages": true,
+       "project": "acme-api",
+       "ready": 2,
+       "sessions": [
+        {
+         "agent": "claude",
+         "asking": false,
+         "context": 0,
+         "context_window": 0,
+         "created": "2026-10-27T08:00:00Z",
+         "current": "Planning rate limits",
+         "id": "studio/s-301",
+         "model": "opus",
+         "project": "acme-api",
+         "queued_prompts": 0,
+         "reason": "",
+         "remote_control": false,
+         "role": "coordinator",
+         "state": "working",
+         "task": "",
+         "thread": "",
+         "todos_done": 0,
+         "todos_total": 0
+        },
+        {
+         "agent": "claude",
+         "asking": false,
+         "context": 0,
+         "context_window": 0,
+         "created": "2026-10-27T08:00:00Z",
+         "current": "Writing the limiter",
+         "id": "studio/s-302",
+         "model": "opus",
+         "project": "acme-api",
+         "queued_prompts": 0,
+         "reason": "",
+         "remote_control": false,
+         "role": "thread",
+         "state": "working",
+         "task": "T12",
+         "thread": "t-0012",
+         "todos_done": 0,
+         "todos_total": 0
+        }
+       ],
+       "synced": "2026-10-27T09:59:58Z",
+       "threads": 1,
+       "watched": [
+        {
+         "id": "t-0012",
+         "title": "Rate limits per API key",
+         "task": "T12",
+         "steps_done": 1,
+         "steps_total": 3,
+         "session": "studio/s-302",
+         "state": "working",
+         "needs_you": false,
+         "pr_checks": "",
+         "done": false
+        }
+       ]
+      },
+      {
+       "goal": "Developer docs for the API",
+       "needs": [],
+       "needs_you": 0,
+       "pages": false,
+       "project": "acme-docs",
+       "ready": 2,
+       "sessions": [
+        {
+         "agent": "claude",
+         "asking": false,
+         "context": 0,
+         "context_window": 0,
+         "created": "2026-10-27T08:00:00Z",
+         "current": "",
+         "id": "studio/s-401",
+         "model": "opus",
+         "project": "acme-docs",
+         "queued_prompts": 0,
+         "reason": "",
+         "remote_control": false,
+         "role": "coordinator",
+         "state": "idle",
+         "task": "",
+         "thread": "",
+         "todos_done": 0,
+         "todos_total": 0
+        }
+       ],
+       "synced": "2026-10-27T09:59:58Z",
+       "threads": 0,
+       "watched": []
+      }
+     ],
+     "since": "2026-10-27T08:00:00Z",
+     "state": "up",
+     "transcript": true
+    }
+   ]
   },
   "session.list": {
    "alerts": 0,
@@ -821,7 +1180,7 @@
   }
  },
  "hello": {
-  "app_api": 34,
+  "app_api": 37,
   "build": "demo",
   "capabilities": [
    "read",
@@ -853,14 +1212,20 @@
    "project.open",
    "session.file",
    "session.upload",
-   "coordinator.clear"
+   "coordinator.clear",
+   "peer.pages-read",
+   "peer.library-list",
+   "peer.library-read",
+   "peer.design-list"
   ],
   "server": {
    "caps": [
     "transcript",
     "project-files",
     "session-file",
-    "designs"
+    "designs",
+    "peer-pages",
+    "peer-designs"
    ],
    "protocol": 1,
    "version": "0.56.1"
@@ -912,7 +1277,7 @@
        }
       ],
       "checkouts": {
-       "~/work/acme-design": "behind origin by 2"
+       "~/src/acme-design": "behind origin by 2"
       },
       "counts": {
        "done": 4,
@@ -933,8 +1298,8 @@
       "pinned": true,
       "questions": 0,
       "repos": [
-       "~/work/acme-web",
-       "~/work/acme-design"
+       "~/src/acme-web",
+       "~/src/acme-design"
       ],
       "slug": "acme-web",
       "threads": [
@@ -960,7 +1325,7 @@
           "output": 0,
           "turns": 0
          },
-         "worktree": "~/work/t-0101"
+         "worktree": "~/src/t-0101"
         },
         "status": {
          "current": "Bash: npm test",
@@ -1004,7 +1369,7 @@
           "output": 0,
           "turns": 0
          },
-         "worktree": "~/work/t-0102"
+         "worktree": "~/src/t-0102"
         },
         "status": {
          "current": "",
@@ -1048,7 +1413,7 @@
           "output": 0,
           "turns": 0
          },
-         "worktree": "~/work/t-0103"
+         "worktree": "~/src/t-0103"
         },
         "status": {
          "current": "",
@@ -1092,7 +1457,7 @@
           "output": 0,
           "turns": 0
          },
-         "worktree": "~/work/t-0104"
+         "worktree": "~/src/t-0104"
         },
         "status": {
          "current": "Reading cart.spec.ts",
@@ -1136,7 +1501,7 @@
           "output": 0,
           "turns": 0
          },
-         "worktree": "~/work/t-0105"
+         "worktree": "~/src/t-0105"
         },
         "status": {
          "current": "",
@@ -1216,7 +1581,7 @@
       ],
       "questions": 1,
       "repos": [
-       "~/work/billing-api"
+       "~/src/billing-api"
       ],
       "slug": "billing-api",
       "threads": [
@@ -1242,7 +1607,7 @@
           "output": 0,
           "turns": 0
          },
-         "worktree": "~/work/t-0201"
+         "worktree": "~/src/t-0201"
         },
         "status": {
          "current": "Writing pdf.go",
@@ -1286,7 +1651,7 @@
           "output": 0,
           "turns": 0
          },
-         "worktree": "~/work/t-0202"
+         "worktree": "~/src/t-0202"
         },
         "status": {
          "current": "",
@@ -1345,7 +1710,7 @@
           "output": 0,
           "turns": 0
          },
-         "worktree": "~/work/t-0301"
+         "worktree": "~/src/t-0301"
         },
         "status": {
          "current": "",

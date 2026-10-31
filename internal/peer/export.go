@@ -61,6 +61,9 @@ type dispatcher struct {
 	// needs is this server's needs switch for the peer now
 	// (proto.NeedsOff …); nil where the server shows no needs.
 	needs func() string
+	// pages is this server's project pages switch for the peer now, for
+	// a project (§16.17); nil where the server serves no pages.
+	pages func(project string) bool
 	// nonces are the nonces given the peer for its acts (peer.nonce).
 	nonces nonces
 	// panesHere takes the peer's switches for this server, which it
@@ -100,6 +103,8 @@ func (d *dispatcher) methods() map[string]handler {
 			m[proto.MethodPeerPopup] = d.popup
 		}
 		d.needsMethods(m)
+		d.pagesMethods(m)
+		d.designsMethods(m)
 	}
 	if d.msgs != nil {
 		m[proto.MethodPeerMessage] = d.message
@@ -123,6 +128,11 @@ func (d *dispatcher) projects(ctx context.Context, _ json.RawMessage) (any, erro
 	}
 	if ps == nil {
 		ps = []proto.PeerProject{}
+	}
+	if _, ok := d.ex.(PagesExporter); ok && d.pages != nil {
+		for i := range ps {
+			ps[i].Pages = d.pages(ps[i].Project)
+		}
 	}
 	out := proto.PeerProjects{Projects: ps, Now: time.Now()}
 	if d.panes != nil && d.level != nil {

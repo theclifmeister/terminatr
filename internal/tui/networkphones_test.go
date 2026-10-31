@@ -54,11 +54,11 @@ func (f *fakeSource) PairDevice(ctx context.Context, relay string, ev DevicePair
 	return f.pairDevice(ctx, relay, ev)
 }
 
-// phonesList is two paired devices: Clif's iPhone at answer, connected;
+// phonesList is two paired devices: Sam's iPhone at answer, connected;
 // the iPad at view, away for two hours, with no write key.
 func phonesList() DeviceList {
 	return DeviceList{Running: true, Relay: "wss://relay.example.net", Devices: []DeviceEntry{
-		{Name: "Clif's iPhone", ID: "aa11", Short: "AA11-0000", Level: device.LevelAnswer, Effective: device.LevelAnswer,
+		{Name: "Sam's iPhone", ID: "aa11", Short: "AA11-0000", Level: device.LevelAnswer, Effective: device.LevelAnswer,
 			Relay: "wss://relay.example.net", WriteKey: true, LastUp: peersAt,
 			Link: &proto.DeviceLink{State: proto.LinkUp, Since: peersAt.Add(-time.Minute), LastUp: peersAt}},
 		{Name: "iPad", ID: "bb22", Short: "BB22-0000", Level: device.LevelView, Effective: device.LevelView,
@@ -86,7 +86,7 @@ func TestNetworkPhones(t *testing.T) {
 	for _, want := range []string{
 		"▾ devices · 2 paired",
 		"D pairs a device",
-		"◉ Clif's iPhone · connected",
+		"◉ Sam's iPhone · connected",
 		"level answer",
 		"○ iPad · last seen 2h ago",
 		"level view",
@@ -166,14 +166,14 @@ func TestNetworkPhoneLevel(t *testing.T) {
 		t.Fatalf("V: %T", m.top())
 	}
 	out := netBox(m)
-	for _, want := range []string{"Level for Clif's iPhone", "( ) view", "(•) answer", "( ) write", "It does what the Mac app does", "enter set"} {
+	for _, want := range []string{"Level for Sam's iPhone", "( ) view", "(•) answer", "( ) write", "It does what the Mac app does", "enter set"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("picker lacks %q:\n%s", want, out)
 		}
 	}
 	press(m, "down")
 	drain(t, m, press(m, "enter"))
-	if !slices.Equal(src.devActs, []string{"level aa11 write"}) || m.msg != "Clif's iPhone is write now" {
+	if !slices.Equal(src.devActs, []string{"level aa11 write"}) || m.msg != "Sam's iPhone is write now" {
 		t.Fatalf("picked write: %v %q", src.devActs, m.msg)
 	}
 
@@ -202,7 +202,7 @@ func TestNetworkPhoneLevel(t *testing.T) {
 	}
 	m.Update(tea.KeyPressMsg{Code: tea.KeyRight})
 	cv, ok := m.top().(*confirmView)
-	if !ok || !strings.HasPrefix(cv.question, "Let Clif's iPhone answer?") {
+	if !ok || !strings.HasPrefix(cv.question, "Let Sam's iPhone answer?") {
 		t.Fatalf("right: %T", m.top())
 	}
 	drain(t, m, press(m, "Y"))

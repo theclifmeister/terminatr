@@ -237,13 +237,37 @@ func (r *remoteTranscript) relay(c net.Conn, gone <-chan struct{}) string {
 				continue
 			}
 		}
-		if proto.WriteLine(c, ev) != nil {
-			return "write failed"
+		for _, ev := range r.fit(ev) {
+			if proto.WriteLine(c, ev) != nil {
+				return "write failed"
+			}
 		}
 		if ev.Event == proto.EventTranscriptClosed {
 			return ev.Reason
 		}
 	}
+}
+
+// fit is ev in events of at most proto.TranscriptEventBytes of items
+// each, as this server's own streams send them, whatever the paired
+// server sent (an older tm's reset may be larger): items split, a
+// reset's earliest items skipped, which this server acks for the app.
+func (r *remoteTranscript) fit(ev proto.TranscriptEvent) []proto.TranscriptEvent {
+	switch ev.Event {
+	case proto.EventTranscriptItems:
+		runs := splitItems(ev.Items, proto.TranscriptEventBytes)
+		out := make([]proto.TranscriptEvent, len(runs))
+		for i, run := range runs {
+			out[i] = proto.TranscriptEvent{Event: ev.Event, Items: run}
+		}
+		return out
+	case proto.EventTranscriptReset:
+		if cut := fitFrom(ev.Items, proto.TranscriptEventBytes); cut > 0 {
+			ev.Items, ev.Skipped = ev.Items[cut:], ev.Skipped+cut
+			r.ack(cut)
+		}
+	}
+	return []proto.TranscriptEvent{ev}
 }
 
 // reopen opens the stream again once the link is back: a zero event when

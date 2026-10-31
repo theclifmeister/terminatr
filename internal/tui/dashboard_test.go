@@ -83,6 +83,7 @@ type fakeSource struct {
 	panesSet     []string                  // "alias level" set in the Network popup
 	convSet      []string                  // "alias on" set in the Network popup
 	needsSet     []string                  // "alias level" set in the Network popup
+	pagesSet     []string                  // "alias project on" set in the Network popup
 	acts         []proto.PeerNeedActParams // paired servers' needs acted on
 	actErr       error
 	relaySet     []string // "alias relay" set in the Network popup
@@ -375,6 +376,19 @@ func (f *fakeSource) SetPeerNeeds(alias, level string) error {
 	for i := range f.peers.Peers {
 		if f.peers.Peers[i].Alias == alias {
 			f.peers.Peers[i].Needs = level
+		}
+	}
+	return nil
+}
+func (f *fakeSource) SetPeerPages(alias, project string, on bool) error {
+	f.pagesSet = append(f.pagesSet, fmt.Sprintf("%s %s %v", alias, project, on))
+	for i := range f.peers.Peers {
+		if f.peers.Peers[i].Alias == alias {
+			e := &f.peers.Peers[i]
+			e.Pages = slices.DeleteFunc(e.Pages, func(s string) bool { return s == project })
+			if on {
+				e.Pages = append(e.Pages, project)
+			}
 		}
 	}
 	return nil

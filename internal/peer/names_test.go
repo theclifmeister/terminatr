@@ -12,7 +12,7 @@ import (
 func TestNames(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "peer")
 	a, b := newKey(t), newKey(t)
-	if err := SavePeers(dir, []Peer{{Alias: "del-02-0468-lt", Key: pub(a), Relay: "wss://r"}, {Alias: "mini", Key: pub(b), Relay: "wss://r"}}); err != nil {
+	if err := SavePeers(dir, []Peer{{Alias: "acme-lt-07", Key: pub(a), Relay: "wss://r"}, {Alias: "mini", Key: pub(b), Relay: "wss://r"}}); err != nil {
 		t.Fatal(err)
 	}
 	taken := func(n string) string {
@@ -21,22 +21,22 @@ func TestNames(t *testing.T) {
 		}
 		return ""
 	}
-	p, err := SetName(dir, "del-02-0468-lt", "work", taken)
-	if err != nil || p.Name != "work" || p.Shown() != "work" || p.Both() != "work (del-02-0468-lt)" {
+	p, err := SetName(dir, "acme-lt-07", "work", taken)
+	if err != nil || p.Name != "work" || p.Shown() != "work" || p.Both() != "work (acme-lt-07)" {
 		t.Fatalf("set: %+v, %v", p, err)
 	}
 	n := LoadNames(dir)
-	for in, want := range map[string]string{"work": "del-02-0468-lt", "del-02-0468-lt": "del-02-0468-lt", "mini": "mini", "nope": "nope"} {
+	for in, want := range map[string]string{"work": "acme-lt-07", "acme-lt-07": "acme-lt-07", "mini": "mini", "nope": "nope"} {
 		if got := n.Alias(in); got != want {
 			t.Errorf("Alias(%s) = %s, want %s", in, got, want)
 		}
 	}
-	if n.Key("work/gatehouse") != "del-02-0468-lt/gatehouse" || n.Key("gatehouse") != "gatehouse" || n.ShowKey("del-02-0468-lt/gatehouse") != "work/gatehouse" || n.Show("mini") != "mini" || n.Both("mini") != "mini" {
+	if n.Key("work/acme-docs") != "acme-lt-07/acme-docs" || n.Key("acme-docs") != "acme-docs" || n.ShowKey("acme-lt-07/acme-docs") != "work/acme-docs" || n.Show("mini") != "mini" || n.Both("mini") != "mini" {
 		t.Fatalf("Names: %+v", n)
 	}
 
 	// The name finds it too: rename by it.
-	if p, err = SetName(dir, "work", "office", taken); err != nil || p.Alias != "del-02-0468-lt" || p.Name != "office" {
+	if p, err = SetName(dir, "work", "office", taken); err != nil || p.Alias != "acme-lt-07" || p.Name != "office" {
 		t.Fatalf("rename: %+v, %v", p, err)
 	}
 	var ne *NameError
@@ -64,7 +64,7 @@ func TestNames(t *testing.T) {
 		t.Fatalf("after panes: %+v", ps)
 	}
 	// Pairing again keeps it; a new pairing's alias steers clear of it.
-	if p, err := Pin(dir, pub(a), "wss://r", "del-02-0468-lt", ""); err != nil || p.Name != "office" {
+	if p, err := Pin(dir, pub(a), "wss://r", "acme-lt-07", ""); err != nil || p.Name != "office" {
 		t.Fatalf("pair again: %+v, %v", p, err)
 	}
 	if p, err := Pin(dir, pub(newKey(t)), "wss://r", "office.example", ""); err != nil || p.Alias != "office-2" {
@@ -75,11 +75,11 @@ func TestNames(t *testing.T) {
 	}
 
 	// Cleared, by "" or by its alias: the alias shows again.
-	if p, err = SetName(dir, "office", "", taken); err != nil || p.Name != "" || p.Shown() != "del-02-0468-lt" {
+	if p, err = SetName(dir, "office", "", taken); err != nil || p.Name != "" || p.Shown() != "acme-lt-07" {
 		t.Fatalf("clear: %+v, %v", p, err)
 	}
-	SetName(dir, "del-02-0468-lt", "work", taken)
-	if p, err = SetName(dir, "work", "del-02-0468-lt", taken); err != nil || p.Name != "" {
+	SetName(dir, "acme-lt-07", "work", taken)
+	if p, err = SetName(dir, "work", "acme-lt-07", taken); err != nil || p.Name != "" {
 		t.Fatalf("clear by alias: %+v, %v", p, err)
 	}
 	if ok, err := Unpin(dir, "mini"); !ok || err != nil {

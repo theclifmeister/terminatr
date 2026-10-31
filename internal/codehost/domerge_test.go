@@ -233,7 +233,7 @@ func TestAzureMergeConfirms(t *testing.T) {
 		t.Fatalf("empty answer: %v", err)
 	}
 
-	// The sign-in page (al0ft's: az rest exits 0 with it) is no merge:
+	// The sign-in page (a user's: az rest exits 0 with it) is no merge:
 	// the extension completes it then, and is asked first from then on.
 	var ext []string
 	a = Azure{Target: Target{Kind: AzureKind, OrgURL: "https://dev.azure.com/o", Project: "p", Repo: "r"},

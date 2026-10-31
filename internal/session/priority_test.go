@@ -439,3 +439,46 @@ func TestPromptInterruptAfterOwnSteer(t *testing.T) {
 		t.Fatalf("queued: %+v", st)
 	}
 }
+
+// TestStopTurn: with no prompt, the interrupt key alone stops the turn
+// (the phone's Stop, T893); an idle agent, a draft in the box or an
+// agent with no interrupt key is refused and nothing is typed.
+func TestStopTurn(t *testing.T) {
+	var ni *NotInterruptedError
+	resolved := make(chan PromptResolution, 1)
+	s := startBox(t, claudeLike(t), "", time.Hour, resolved)
+	if err := s.StopTurn(); !errors.As(err, &ni) || ni.Why != "the agent is idle" {
+		t.Fatalf("idle: %v", err)
+	}
+	working(t, s, true)
+	if err := s.StopTurn(); err != nil {
+		t.Fatal(err)
+	}
+	testwait.Eventually(t, "Esc", func() bool { return strings.Contains(screen(t, s), "^[") })
+	if st, _ := s.AgentState(); st.Queued != 0 {
+		t.Fatalf("queued: %+v", st)
+	}
+
+	d := startBox(t, claudeLike(t), "draft", time.Hour, resolved)
+	working(t, d, false)
+	testwait.Eventually(t, "the screen read", func() bool {
+		rt := d.agentRT()
+		rt.mu.Lock()
+		defer rt.mu.Unlock()
+		return !rt.emptyBox
+	})
+	if err := d.StopTurn(); !errors.As(err, &ni) || ni.Why != HeldBox {
+		t.Fatalf("draft: %v", err)
+	}
+
+	a := claudeLike(t)
+	a.m.Inject.Interrupt, a.m.Inject.InterruptPaste = "", ""
+	k := startBox(t, a, "", time.Hour, resolved)
+	working(t, k, true)
+	if err := k.StopTurn(); !errors.As(err, &ni) || ni.Why != "the agent has no interrupt key" {
+		t.Fatalf("no key: %v", err)
+	}
+	never(t, 200*time.Millisecond, "typed into the pane", func() bool {
+		return strings.Contains(screen(t, d), "^[") || strings.Contains(screen(t, k), "^[")
+	})
+}

@@ -16,7 +16,7 @@ public enum MenuBarList {
         (Array(needs.prefix(needsShown)), Array(needs.dropFirst(needsShown)))
     }
 
-    /// The projects of rest, in the order they come: "foodperfect,
+    /// The projects of rest, in the order they come: "acme-web,
     /// terminatr, toe".
     public static func projects(of rest: [Need]) -> String {
         var seen: Set<String> = [], out: [String] = []

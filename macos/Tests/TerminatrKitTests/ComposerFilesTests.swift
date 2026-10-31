@@ -255,3 +255,21 @@ private func pixels(_ d: Data) -> (String, Int, Int) {
                                        bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)?.makeImage())
     #expect(ComposerFiles.eightBit(eight) === eight)
 }
+
+/// An image added to the tray keeps a thumbnail for the phone's
+/// composer (T893), at most 240 px on its longer side; a file that
+/// isn't an image has none, and a removed or sent one loses it.
+@Test @MainActor func trayKeepsThumbnails() throws {
+    #expect(ComposerFiles.thumbnail(Data("text".utf8)) == nil)
+    let big = try #require(image(.png, w: 1200, h: 600))
+    #expect(pixels(try #require(ComposerFiles.thumbnail(big))) == (UTType.png.identifier, 240, 120))
+    let t = ComposerTray()
+    t.add(name: "shot.png", data: big)
+    t.add(name: "notes.md", data: Data("# hi".utf8))
+    #expect(t.previews[t.files[0].id] != nil && t.previews[t.files[1].id] == nil)
+    t.remove(t.files[0].id)
+    #expect(t.previews.isEmpty)
+    t.add(name: "again.png", data: big)
+    t.clear()
+    #expect(t.previews.isEmpty)
+}

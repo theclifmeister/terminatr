@@ -929,10 +929,16 @@ func (s *Server) terminatrEnv(r SessionRecord) map[string]string {
 		set["TERMINATR_THREAD"] = r.Thread
 	}
 	// The server's own TERMINATR_* don't reach sessions (terminalEnv),
-	// but where tm hook logs what it failed to deliver (tests) does.
+	// but where tm hook logs what it failed to deliver (tests) does, and
+	// under the test hooks how long it waits (testHookWaitEnv).
 	for _, kv := range s.baseEnv() {
-		if v, ok := strings.CutPrefix(kv, hookLogEnv+"="); ok && v != "" {
-			set[hookLogEnv] = v
+		for _, name := range []string{hookLogEnv, testHookWaitEnv} {
+			if name == testHookWaitEnv && !testHooksOn {
+				continue
+			}
+			if v, ok := strings.CutPrefix(kv, name+"="); ok && v != "" {
+				set[name] = v
+			}
 		}
 	}
 	return set
@@ -1186,7 +1192,8 @@ func (s *Server) promptWith(p proto.SessionPromptParams, o session.PromptOptions
 	if perr != nil {
 		return nil, perr
 	}
-	if strings.TrimSpace(p.Text) == "" {
+	stop := strings.TrimSpace(p.Text) == "" && p.Mode == proto.PromptInterrupt && len(p.Files) == 0
+	if strings.TrimSpace(p.Text) == "" && !stop {
 		return nil, proto.Errorf(proto.ErrBadParams, "empty prompt")
 	}
 	if len(p.Files) > 0 {
@@ -1195,10 +1202,13 @@ func (s *Server) promptWith(p proto.SessionPromptParams, o session.PromptOptions
 	}
 	var via, why string
 	var err error
-	switch p.Mode {
-	case "":
+	switch {
+	case stop:
+		// No text: the turn stops, nothing is sent (the phone's Stop).
+		via, err = session.ViaInterrupted, sess.StopTurn()
+	case p.Mode == "":
 		via, err = sess.PromptWith(p.Text, o)
-	case proto.PromptNow, proto.PromptInterrupt:
+	case p.Mode == proto.PromptNow, p.Mode == proto.PromptInterrupt:
 		via, why, err = sess.PromptNow(p.Text, p.Mode == proto.PromptInterrupt)
 	default:
 		return nil, proto.Errorf(proto.ErrBadParams, "mode %q is not %s or %s", p.Mode, proto.PromptNow, proto.PromptInterrupt)

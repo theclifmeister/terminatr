@@ -362,11 +362,11 @@ func TestAzurePRLookup(t *testing.T) {
 
 	// T629: a thread's long branch is asked whole, escaped.
 	f.asked = nil
-	long := "tm/gatehouse/t-0027-inference-hooks-hygiene-batch-constant-t"
+	long := "tm/acme-docs/t-0027-inference-hooks-hygiene-batch-constant-t"
 	if pr, err := a.PR("/r", Ref{Branch: long}); err != nil || pr.Number != 1 {
 		t.Fatalf("long branch: %+v %v", pr, err)
 	}
-	if f.asked[0] != shopRepo+"/pullrequests?searchCriteria.sourceRefName=refs%2Fheads%2Ftm%2Fgatehouse%2Ft-0027-inference-hooks-hygiene-batch-constant-t&searchCriteria.status=all&$top=20&api-version=7.1" {
+	if f.asked[0] != shopRepo+"/pullrequests?searchCriteria.sourceRefName=refs%2Fheads%2Ftm%2Facme-docs%2Ft-0027-inference-hooks-hygiene-batch-constant-t&searchCriteria.status=all&$top=20&api-version=7.1" {
 		t.Fatalf("long branch asked %q", f.asked)
 	}
 

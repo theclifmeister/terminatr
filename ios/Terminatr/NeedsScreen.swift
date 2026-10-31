@@ -2,8 +2,11 @@ import SwiftUI
 import TerminatrKit
 import TerminatrUI
 
-/// The start screen: every need, as the Mac app's Needs you lists them
-/// (Need.of), as a deck of answer cards (T847, direction A). Its header
+/// The start screen: every need of every server the phone pairs with,
+/// merged (Phone.needs, T852), as the Mac app's Needs you lists one
+/// server's (Need.of), as a deck of answer cards (T847, direction A);
+/// with several servers each card names its own, and its answers go
+/// to it. Its header
 /// (ScreenHeader) counts them and says where the phone is linked, with
 /// Settings; its filter chips (PulseChips) show one kind (Need.Group).
 /// Each card (NeedTile) opens its session, else its project, with its
@@ -14,6 +17,7 @@ import TerminatrUI
 /// (T826). VoiceOver's Needs rotor goes card to card; haptics follow
 /// Settings' switch (Themed), and none comes when a need arrives.
 struct NeedsScreen: View {
+    @Environment(Phone.self) private var phone
     @Environment(PhoneModel.self) private var model
     @Environment(\.theme) private var theme
     /// -needs-filter GROUP opens on a chip, for screenshots.
@@ -21,9 +25,10 @@ struct NeedsScreen: View {
     @Namespace private var rotor
 
     var body: some View {
-        let needs = model.needs
-        let shown = Need.filter(needs, group)
-        let groups = Need.groups(needs)
+        let needs = phone.needs
+        let some = needs.filter { group == .all || $0.need.group == group }
+        let shown = some.isEmpty ? needs : some
+        let groups = Need.groups(needs.map(\.need))
         ScrollView {
             VStack(alignment: .leading, spacing: Spacing.row) {
                 ScreenHeader("Needs you", count: needs.count, subtitle: subtitle.text, symbol: subtitle.symbol) {
@@ -39,14 +44,18 @@ struct NeedsScreen: View {
                 }
                 LazyVStack(spacing: Spacing.card) {
                     SourceBanner()
-                    if let f = model.failure { Failure(text: f) }
+                    ForEach(phone.models, id: \.key) { m in
+                        if let f = m.failure { Failure(text: phone.several ? "\(m.serverName): \(f)" : f) }
+                    }
                     if needs.isEmpty {
                         ContentUnavailableView("Nothing needs you", systemImage: "checkmark.circle",
                                                description: Text("Questions, approvals and reviews show here."))
                             .padding(.top, 60)
                     }
                     ForEach(shown) { n in
-                        NeedTile(need: n, route: route(n), lead: n.id == shown.first?.id)
+                        NeedTile(need: n.need, route: Self.route(n.need, in: n.model), lead: n.id == shown.first?.id,
+                                 server: phone.several ? n.model.serverName : "")
+                            .environment(n.model)
                             .accessibilityRotorEntry(id: n.id, in: rotor)
                     }
                 }
@@ -57,10 +66,10 @@ struct NeedsScreen: View {
         }
         .accessibilityRotor("Needs") {
             ForEach(shown) { n in
-                AccessibilityRotorEntry(Text(n.title), id: n.id, in: rotor)
+                AccessibilityRotorEntry(Text(n.need.title), id: n.id, in: rotor)
             }
         }
-        .refreshable { await model.refresh() }
+        .refreshable { await phone.refresh() }
         .keepsPlace("needs")
         .kept($group, "needs filter")
         .navigationTitle("Needs you")
@@ -68,15 +77,21 @@ struct NeedsScreen: View {
         .backdrop()
     }
 
-    /// The header's line: the server and its link; the demo's banner
-    /// says what it is, so none.
+    /// The header's line: the server and its link, or how many servers
+    /// are linked; the demo's banner says what it is, so none.
     private var subtitle: (text: String, symbol: String?) {
         guard case .server = model.source else { return ("", nil) }
+        if phone.several {
+            let up = phone.models.filter { $0.link == .up }.count
+            let n = phone.models.count
+            return (up == n ? "\(n) servers · Linked" : "\(n) servers · \(up) linked", up == n ? "checkmark.circle.fill" : "antenna.radiowaves.left.and.right")
+        }
         let (icon, words) = model.linkWords
         return ("\(model.serverName) · \(words)", icon)
     }
 
-    private func route(_ n: Need) -> Route {
+    /// What n's card opens, on its server (RouteLink tags it).
+    static func route(_ n: Need, in model: PhoneModel) -> Route {
         if !n.session.isEmpty, let s = model.sessions.first(where: { $0.id == n.session }), let ref = SessionRef(s) {
             return n.kind == .question || n.kind == .approval ? .need(ref) : .session(ref)
         }
@@ -96,14 +111,17 @@ struct NeedsScreen: View {
 /// open beside the list (Columns) is ringed.
 struct NeedTile: View {
     @Environment(\.navigate) private var navigate
+    @Environment(PhoneModel.self) private var model
     let need: Need
     let route: Route
     let lead: Bool
+    /// Its server's name, when the phone shows several.
+    var server = ""
 
     var body: some View {
         NeedActs(need: need) { parts in
             TerminatrUI.NeedCard(need: need, command: parts.command, note: parts.note, lead: lead, open: open,
-                                 acts: parts.acts) { head in
+                                 acts: parts.acts, server: server) { head in
                 PlainRouteLink(value: route) { head.opens() }
                     .buttonStyle(.plain)
                     .accessibilityHint(need.kind.verb)
@@ -114,7 +132,7 @@ struct NeedTile: View {
     }
 
     /// Its route is open beside the list (Columns).
-    private var open: Bool { navigate?.open == route }
+    private var open: Bool { navigate.opens(route, on: model) }
 }
 
 /// What the screens are of, on the start screen: the demo (and the way
@@ -132,7 +150,7 @@ struct SourceBanner: View {
 /// the glass and Leave, a ghost button; at accessibility sizes Leave
 /// goes under the line.
 struct DemoBanner: View {
-    @Environment(PhoneModel.self) private var model
+    @Environment(Phone.self) private var phone
     @Environment(\.theme) private var theme
     @Environment(\.dynamicTypeSize) private var typeSize
 
@@ -151,7 +169,7 @@ struct DemoBanner: View {
             }
             .font(theme.body(.footnote, .medium))
             .frame(maxWidth: .infinity, alignment: .leading)
-            Button("Leave") { Task { await model.disconnect() } }
+            Button("Leave") { Task { await phone.leaveDemo() } }
                 .buttonStyle(.ghost)
                 .fixedSize()
         }

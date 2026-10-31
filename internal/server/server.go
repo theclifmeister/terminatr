@@ -92,8 +92,8 @@ type Options struct {
 	// DeviceAPI runs the app API for a paired device over conn, its
 	// link past TLS, at level (set by package cli: appapi imports this
 	// package). dial opens a control connection of the server's own as
-	// the device. Nil gives devices' links nothing to serve.
-	DeviceAPI func(ctx context.Context, conn net.Conn, d device.Device, level *device.Level, dial func() (*client.Client, error)) error
+	// the device; logf is the server's log. Nil gives devices' links nothing to serve.
+	DeviceAPI func(ctx context.Context, conn net.Conn, d device.Device, level *device.Level, dial func() (*client.Client, error), logf func(string, ...any)) error
 }
 
 // Server owns every session and the control socket.
@@ -718,7 +718,7 @@ func (s *Server) hello() proto.Hello {
 		Build:    s.build,
 		Bin:      s.opts.Bin,
 		PID:      os.Getpid(),
-		Caps:     []string{proto.CapPaneVT, proto.CapTranscript, proto.CapPaneVTRemote, proto.CapSessionFile, proto.CapTranscriptRemote, proto.CapLinkAct, proto.CapTranscriptTail, proto.CapSideActs, proto.CapProjectFiles, proto.CapNeedAct, proto.CapDesigns, proto.CapSessionsWatch},
+		Caps:     []string{proto.CapPaneVT, proto.CapTranscript, proto.CapPaneVTRemote, proto.CapSessionFile, proto.CapTranscriptRemote, proto.CapLinkAct, proto.CapTranscriptTail, proto.CapSideActs, proto.CapProjectFiles, proto.CapNeedAct, proto.CapDesigns, proto.CapSessionsWatch, proto.CapPeerPages, proto.CapPeerDesigns},
 	}
 }
 
@@ -925,7 +925,7 @@ func (s *Server) promptBy(p proto.SessionPromptParams, cc callCtx) (any, *proto.
 		p.Files = nil
 	}
 	res, perr := s.prompt(p)
-	if perr == nil {
+	if perr == nil && strings.TrimSpace(p.Text) != "" {
 		s.sent.add(p.ID, cc.who(), p.Text)
 	}
 	if perr != nil || !cc.app {
@@ -937,7 +937,9 @@ func (s *Server) promptBy(p proto.SessionPromptParams, cc callCtx) (any, *proto.
 			took()
 		}
 		detail := textsafe.Line(p.Text, 80)
-		if p.Mode != "" {
+		if strings.TrimSpace(p.Text) == "" {
+			detail = "stopped the turn"
+		} else if p.Mode != "" {
 			detail = p.Mode + ": " + detail
 		}
 		s.journalIn(info.Project, cc.who(), "session.prompt", sessionRef(info), detail)

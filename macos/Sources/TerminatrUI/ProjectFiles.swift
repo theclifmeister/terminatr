@@ -21,7 +21,10 @@ public struct OverviewView: View {
                 }
             }
             row("Repositories") {
-                if overview.repos.isEmpty {
+                if let n = overview.repoCount {
+                    Text(n == 0 ? "None" : n == 1 ? "1, its path stays there" : "\(n), their paths stay there")
+                        .foregroundStyle(n == 0 ? theme.muted : theme.ink)
+                } else if overview.repos.isEmpty {
                     Text("None").foregroundStyle(theme.muted)
                 } else {
                     VStack(alignment: .leading, spacing: 4) {
@@ -51,6 +54,12 @@ public struct OverviewView: View {
                 }
             }
             row("Tasks") { Text(overview.tasks) }
+            if !overview.instructions.isEmpty {
+                row("PROJECT.md") {
+                    MarkdownView(text: overview.instructions)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
         }
     }
 

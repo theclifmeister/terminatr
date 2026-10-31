@@ -51,6 +51,17 @@ type Options struct {
 	// WriteKey is a device's write key: with Level set, every write
 	// needs its signature (sign.go); nil refuses them all.
 	WriteKey *ecdsa.PublicKey
+	// MaxOut bounds a line the bridge writes, its newline included; 0
+	// is none (the Mac app's pipe). A device's link carries lines of at
+	// most MaxLine (the phone's reader, LinkTransport, drops a longer
+	// one): an answer over it is answered ErrTooBig instead, an event
+	// over it ends its stream so, each logged with its method and size.
+	MaxOut int
+	// Logf logs what the bridge didn't send for MaxOut, and a device's
+	// close reason (device.bye); nil logs nothing.
+	Logf func(format string, a ...any)
+	// onBye is given the reason of a device's device.bye (ServeDevice).
+	onBye func(reason string)
 	// Caller is who the environment says runs the bridge. The guard's
 	// methods answer only the human, by it and as the server places the
 	// bridge (caller.who): the guard's log is the human's.
@@ -65,7 +76,7 @@ func Serve(in io.Reader, out io.Writer, o Options) error {
 	if o.MaxStreams <= 0 {
 		o.MaxStreams = MaxStreams
 	}
-	b := &bridge{o: o, w: json.NewEncoder(out), open: map[int64]bool{}, streams: map[int64]*openStream{},
+	b := &bridge{o: o, w: out, open: map[int64]string{}, streams: map[int64]*openStream{},
 		idle: make(chan *client.Client, idleConns)}
 	b.ctx, b.stop = context.WithCancel(context.Background())
 	defer b.stop()
@@ -167,14 +178,14 @@ func connectError(err error) *Error {
 type bridge struct {
 	o  Options
 	wm sync.Mutex
-	w  *json.Encoder
+	w  io.Writer
 	// werr is the first write that failed: the app is gone.
 	werr error
 
 	mu sync.Mutex
-	// open are the requests not yet answered, streams included;
-	// streams are the open streams.
-	open    map[int64]bool
+	// open are the requests not yet answered, streams included, by
+	// their method; streams are the open streams.
+	open    map[int64]string
 	streams map[int64]*openStream
 	wg      sync.WaitGroup
 	// idle are control connections free for a call.
@@ -213,14 +224,59 @@ func (s *openStream) send(line any) error {
 	return s.c.WriteLine(line)
 }
 
-// write writes one line; lines never interleave.
+// errTooBig is write's for a line over Options.MaxOut, which it
+// answered with ErrTooBig instead: a stream's event ends the stream.
+var errTooBig = errors.New("a line over the link's bound")
+
+// write writes one line; lines never interleave. A line over
+// Options.MaxOut goes as an ErrTooBig answer (an event's as its
+// stream's end) and is logged: errTooBig.
 func (b *bridge) write(o Out) error {
+	line, err := json.Marshal(o)
+	var big error
+	if err == nil && b.o.MaxOut > 0 && len(line)+1 > b.o.MaxOut && o.ID != 0 {
+		line, big = b.tooBig(o, len(line)+1), errTooBig
+	}
 	b.wm.Lock()
 	defer b.wm.Unlock()
 	if b.werr == nil {
-		b.werr = b.w.Encode(o)
+		if err == nil {
+			_, err = b.w.Write(append(line, '\n'))
+		}
+		b.werr = err
 	}
-	return b.werr
+	if b.werr != nil {
+		return b.werr
+	}
+	return big
+}
+
+// tooBig is the line that goes in o's place, n bytes with its newline,
+// over Options.MaxOut: an ErrTooBig answer naming its method and size,
+// which also ends a stream whose event it was. It logs it.
+func (b *bridge) tooBig(o Out, n int) []byte {
+	b.mu.Lock()
+	method := b.open[o.ID]
+	b.mu.Unlock()
+	what := "answer"
+	if o.Event != "" {
+		what = "event " + o.Event
+	}
+	b.logf("%s's %s is %d bytes, over the link's %d: not sent", method, what, n, b.o.MaxOut)
+	e := Out{ID: o.ID, Error: &Error{Code: ErrTooBig,
+		Message: fmt.Sprintf("%s: its %s is %d bytes, over the %d bytes a device's link carries, so it wasn't sent", method, what, n, b.o.MaxOut)}}
+	if o.Event != "" || o.End {
+		e.End = true
+	}
+	line, _ := json.Marshal(e)
+	return line
+}
+
+// logf logs, as Options.Logf says.
+func (b *bridge) logf(format string, a ...any) {
+	if b.o.Logf != nil {
+		b.o.Logf(format, a...)
+	}
 }
 
 // fail answers request id with an error.
@@ -302,7 +358,7 @@ func (b *bridge) handle(req Request) {
 	}
 	b.mu.Lock()
 	switch {
-	case b.open[req.ID]:
+	case b.open[req.ID] != "":
 		b.mu.Unlock()
 		b.fail(req.ID, ErrBadRequest, "request %d is still open", req.ID)
 		return
@@ -311,7 +367,7 @@ func (b *bridge) handle(req Request) {
 		b.fail(req.ID, ErrTooMany, "%d streams are open; cancel one first", b.o.MaxStreams)
 		return
 	}
-	b.open[req.ID] = true
+	b.open[req.ID] = m.Name
 	var ctx context.Context
 	var st *openStream
 	if m.Stream {
@@ -468,14 +524,14 @@ func (b *bridge) serverError(id int64, err error) {
 	b.fail(id, ErrServer, "%v", err)
 }
 
-// answer answers request id with v, made safe.
-func (b *bridge) answer(id int64, v any) {
+// answer answers request id with v, made safe: write's error.
+func (b *bridge) answer(id int64, v any) error {
 	raw, err := json.Marshal(safe(v))
 	if err != nil {
 		b.fail(id, ErrServer, "%v", err)
-		return
+		return err
 	}
-	b.write(Out{ID: id, Result: raw})
+	return b.write(Out{ID: id, Result: raw})
 }
 
 // stream answers request id of stream method m: on a connection of its
@@ -505,7 +561,9 @@ func (b *bridge) stream(ctx context.Context, id int64, m Method, params any, st 
 	st.wm.Lock()
 	st.c = c
 	st.wm.Unlock()
-	b.answer(id, res)
+	if b.answer(id, res) != nil {
+		return // too big (its error answered it), or the app is gone
+	}
 	end := Out{ID: id, End: true}
 	for {
 		var line json.RawMessage

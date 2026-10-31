@@ -57,7 +57,7 @@ struct MemoryScreen: View {
         }
         .task(id: model.generation) { await list() }
         .refreshable { await list() }
-        .keepsPlace(Route.memory(slug).listKey)
+        .keepsPlace(route: Route.memory(slug))
         .navigationTitle("Memory")
         .backdrop()
     }
@@ -126,6 +126,9 @@ struct LibraryScreen: View {
     @Environment(PhoneModel.self) private var model
     @Environment(\.theme) private var theme
     let slug: String
+    /// The paired server whose project it is (T886); nil for this
+    /// server's.
+    var peer: String?
     @State private var files: [AppAPI.LibraryFile]?
     @State private var failure: String?
     @State private var looking: URL?
@@ -187,7 +190,11 @@ struct LibraryScreen: View {
 
     private func list() async {
         do {
-            files = try await model.library(slug)
+            if let peer {
+                files = try await model.peerLibrary(peer, slug)
+            } else {
+                files = try await model.library(slug)
+            }
             failure = nil
         } catch {
             failure = error.localizedDescription
@@ -200,7 +207,8 @@ struct LibraryScreen: View {
     private func copy(_ f: AppAPI.LibraryFile) async -> URL? {
         reading = f
         defer { reading = nil }
-        switch await model.libraryData(slug, f) {
+        let outcome = if let peer { await model.peerLibraryData(peer, slug, f) } else { await model.libraryData(slug, f) }
+        switch outcome {
         case .data(let d, _):
             let dir = FileManager.default.temporaryDirectory.appendingPathComponent("terminatr-files/\(UUID().uuidString)")
             let url = dir.appendingPathComponent((f.name as NSString).lastPathComponent)

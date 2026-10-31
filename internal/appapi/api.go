@@ -21,7 +21,7 @@ import (
 // Version is the app API's version. It goes up when a method, a field or
 // a meaning is added or changes; the app reads it, and Capabilities, from
 // the bridge's hello, so an older app works with a newer tm.
-const Version = 34
+const Version = 37
 
 // Capabilities of this bridge, in its hello: what kinds of method it
 // has (Method.Write, Method.Stream). An app checks a capability, or a
@@ -70,6 +70,11 @@ const (
 	// ErrLevel: the method needs a higher level than the device's
 	// (app API 19, devices only).
 	ErrLevel = "device-level"
+	// ErrTooBig: the answer, or a stream's event (which ends the
+	// stream), is over the bytes a device's link carries in a line
+	// (MaxLine), so the bridge didn't send it (app API 37). The message
+	// names the method and the size.
+	ErrTooBig = "too-big"
 )
 
 // Request is a line the app writes: a call of Method with Params,

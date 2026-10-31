@@ -254,12 +254,21 @@ func TestCopies(t *testing.T) {
 		// An offered file's message: link.act takes the file's id.
 		".Projects[].LinkNeeds[].Message",
 	))
+	// A paired server's pages: everything that crossed crosses on, the
+	// far server's clock but.
+	check("peer.pages-read", homeOf(peerPagesOf), []string{".Now"})
+	check("peer.library-list", homeOf(peerLibraryOf), nil)
+	check("peer.design-list", homeOf(peerDesignsOf), []string{
+		// The far server's own word: the app reads the shown designs.
+		".Truncated",
+	})
 	check("peer.list", homeOf(peerListOf), []string{
-		// The link's id, versions and ping: the Network popup's. Share
+		// The link's versions and ping: the Network popup's (its id
+		// crosses, for a phone paired with it directly too, T852). Share
 		// requests cross as their count, and those that wait for the
 		// user as what answers them (checked below); the clock's
 		// offset as the sessions' times.
-		".Peers[].ID", ".Peers[].Watch", ".Peers[].Popup",
+		".Peers[].Watch", ".Peers[].Popup",
 		".Peers[].Version", ".Peers[].RTT", ".Peers[].Listed", ".Peers[].Shares",
 		// A shared project's snapshot stays the TUI's remote
 		// dashboard's, but for what the sidebar lists of its threads
@@ -510,7 +519,8 @@ func TestAllowlist(t *testing.T) {
 		proto.MethodLinkAct, proto.MethodPeerShareAnswer, proto.MethodPeerNeedAct, MethodGuardRefusals, MethodGuardDecide, proto.MethodTranscriptPage,
 		proto.MethodProjectPin, proto.MethodProjectNew, proto.MethodSessionAdoptRequest, proto.MethodSessionRemote, proto.MethodLinkSend,
 		proto.MethodMemoryList, proto.MethodMemoryRead, proto.MethodLibraryList, proto.MethodLibraryRead, proto.MethodDesignList,
-		MethodDeviceNonce, MethodDeviceList, MethodDevicePair, MethodDevicePairWait, MethodDevicePairAnswer, MethodDeviceAccess,
+		proto.MethodPeerPagesRead, proto.MethodPeerLibraryList, proto.MethodPeerLibraryRead, proto.MethodPeerDesignList,
+		MethodDeviceNonce, MethodDeviceBye, MethodDeviceList, MethodDevicePair, MethodDevicePairWait, MethodDevicePairAnswer, MethodDeviceAccess,
 		MethodDeviceName, MethodDeviceRemove}
 	slices.Sort(want)
 	if got := MethodNames(); !slices.Equal(got, want) {

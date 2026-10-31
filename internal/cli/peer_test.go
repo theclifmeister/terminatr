@@ -10,6 +10,7 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -158,6 +159,29 @@ func TestPeerListRemoveRotate(t *testing.T) {
 	}
 	h.expect(1, "human-only", coord, "peer", "needs", "mini", "view")
 	h.expect(1, "human-only", thr, "peer", "needs", "mini", "view")
+	// The project pages switch (§16.17): off for every project by
+	// default, on per project in peers.json, the human's alone.
+	h.expect(2, "on|off", human, "peer", "pages", "mini", "web", "view")
+	h.expect(2, "isn't a project", human, "peer", "pages", "mini", "../etc", "on")
+	h.expect(2, "usage: tm peer pair", human, "peer", "pages", "mini", "on")
+	h.expect(1, "unknown-peer", human, "peer", "pages", "studio", "web", "on")
+	if out := h.ok(human, "peer", "pages", "mini", "web", "on"); !strings.Contains(out, "Pages on for mini on web") || !strings.Contains(out, "isn't shared") {
+		t.Fatalf("pages on: %q", out)
+	}
+	if ps, _ := peer.LoadPeers(dir); !slices.Equal(ps[0].Pages, []string{"web"}) {
+		t.Fatalf("after pages on: %+v", ps)
+	}
+	if out := h.ok(human, "peer", "list"); !strings.Contains(out, "pages: web") {
+		t.Fatalf("list with pages: %q", out)
+	}
+	if out := h.ok(human, "peer", "pages", "mini", "web", "off"); !strings.Contains(out, "Pages off for mini on web") {
+		t.Fatalf("pages off: %q", out)
+	}
+	if ps, _ := peer.LoadPeers(dir); len(ps[0].Pages) != 0 {
+		t.Fatalf("after pages off: %+v", ps)
+	}
+	h.expect(1, "human-only", coord, "peer", "pages", "mini", "web", "on")
+	h.expect(1, "human-only", thr, "peer", "pages", "mini", "web", "on")
 	*reloads = 0
 
 	h.expect(1, "unknown-peer", human, "peer", "remove", "studio")

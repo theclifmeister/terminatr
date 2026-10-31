@@ -7,7 +7,8 @@ import TerminatrLink
 /// The device link is a Bridge's transport as tm app bridge's stdio is.
 extension LinkTransport: @retroactive BridgeTransport {}
 
-/// What the phone shows of one server: its projects (projects.watch),
+/// What the phone shows of one server (Phone holds one per pairing,
+/// T852): its projects (projects.watch),
 /// sessions (session.list) and paired servers (peer.list), and what of
 /// it needs the user (Need.of), as the Mac app's AppModel reads them;
 /// and at the answer level the acts on those needs, each signed by
@@ -21,6 +22,20 @@ extension LinkTransport: @retroactive BridgeTransport {}
 /// Settings' Connection shows.
 @MainActor @Observable
 final class PhoneModel {
+    /// The pairing it reads, by its server's id (DeviceStore): what its
+    /// screens' routes carry (Route.on); "demo" for the demo, "" for
+    /// none.
+    let key: String
+    /// The servers the phone pairs with directly (Phone), which this
+    /// one's paired servers' lists then leave out (shownPeers).
+    @ObservationIgnored var direct: @MainActor () -> [Pairings.Direct] = { [] }
+
+    init(key: String = "", places: Places = Places()) {
+        self.key = key
+        self.places = places
+        log = key == "demo" || key.isEmpty ? LinkLog() : LinkLog.load(pairing: key)
+    }
+
     enum Source: Equatable {
         /// Not connected: the welcome screen.
         case none
@@ -49,7 +64,7 @@ final class PhoneModel {
     private(set) var generation = 0
     private var linking: Task<Void, Never>?
     /// The link's drops, kept across launches; the demo's is made up.
-    private(set) var log = LinkLog.load()
+    private(set) var log: LinkLog
     /// The link while it is up, for its ping (LinkTransport.check).
     private var transport: LinkTransport?
     /// Dials failed in a row: the next one waits LinkKeep.backoff of it.
@@ -86,17 +101,27 @@ final class PhoneModel {
     /// its level and methods.
     private(set) var hello: AppAPI.Hello?
     private var watching: Task<Void, Never>?
-    /// Where the user is on each screen, which a resize keeps (T825).
-    @ObservationIgnored let places = Places()
+    /// Where the user is on each screen, which a resize keeps (T825):
+    /// the Phone's, one for every server.
+    @ObservationIgnored let places: Places
     /// Each session's composer files (T860), by its ref: kept across the
     /// screens and the link's drops, as its draft is.
     @ObservationIgnored private var trays: [SessionRef: ComposerTray] = [:]
+    /// The prompts this phone queued for each session while its agent
+    /// worked (T893): the conversation shows them at its end, marked
+    /// queued, until they go in (QueuedPrompt.waiting).
+    private(set) var queuedSent: [SessionRef: [QueuedPrompt]] = [:]
     /// The conversation's files (session.file), the bridge's: nil when
     /// its tm sends none.
     private(set) var files: FileStore?
 
-    /// Every need, as the Mac app's Needs you lists them.
-    var needs: [Need] { Need.of(projects: projects, sessions: sessions, peers: peers) }
+    /// Every need, as the Mac app's Needs you lists them; a paired
+    /// server's only when the phone isn't paired with it directly too.
+    var needs: [Need] { Need.of(projects: projects, sessions: sessions, peers: shownPeers) }
+
+    /// The paired servers the screens list: those the phone pairs with
+    /// directly show as servers of their own, so not here again (T852).
+    var shownPeers: [AppAPI.Peer] { Pairings.shown(peers, direct()) }
 
     var activeProjects: [AppAPI.Project] { SidebarTree.active(projects, needsFirst: needsFirst, sessions: sessions) }
 
@@ -121,15 +146,16 @@ final class PhoneModel {
         }
     }
 
-    /// Back to the welcome screen.
+    /// Closes it all, and forgets what it showed (the places are the
+    /// Phone's, which forgets them with the last server).
     func disconnect() async {
+        await bye("the user disconnected")
         await drop()
         source = .none
         projects = []
         sessions = []
         peers = []
         clears = [:]
-        places.forget()
         for t in trays.values { t.clear() }
         trays = [:]
     }
@@ -142,7 +168,6 @@ final class PhoneModel {
         paths = nil
         path = nil
         wasUp = false
-        if source == .demo { log = LinkLog.load() }
     }
 
     /// Closes the link and stops the redials, what it showed kept.
@@ -179,38 +204,21 @@ final class PhoneModel {
 
     // MARK: The paired server
 
-    /// Opens the server the Keychain keeps, if there is one.
-    func openPaired() {
-        guard source == .none, let s = DeviceStore.server() else { return }
-        open(s)
-    }
-
-    /// Pairs with the server code names, keeps it and opens it. It
-    /// throws why not, for the pairing screen to say.
-    func pair(_ code: PairingCode, name: String) async throws {
-        let id = try DeviceStore.identity()
-        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
-        let s = try await DevicePairing.join(code, as: id, name: name, version: version, writeKey: try WriteKey.forPairing().publicKey)
-        try DeviceStore.save(s)
-        await disconnect()
-        open(s)
-    }
-
     /// Says why something failed, on the screen at hand.
     func failed(_ error: any Error) {
         failure = error.localizedDescription
     }
 
-    /// Forgets the server and the device key, back to the welcome screen.
-    func forget() async {
-        await disconnect()
-        DeviceStore.forget()
-    }
-
-    private func open(_ s: DevicePairing.Server) {
+    /// Opens the server s, this pairing's: its link kept from now on.
+    func open(_ s: DevicePairing.Server) {
         source = .server(s)
         watchPaths()
         resume()
+    }
+
+    /// The server's name changed in a pairing again: what the screens say.
+    func renamed(_ s: DevicePairing.Server) {
+        if case .server = source { source = .server(s) }
     }
 
     /// The app came to the front: back from its grace, the link kept is
@@ -242,6 +250,7 @@ final class PhoneModel {
     func suspend() async {
         guard case .server = source else { return }
         if link == .up { note(.background) }
+        await bye("the app went to the background")
         await unlink()
         link = .connecting
     }
@@ -256,14 +265,14 @@ final class PhoneModel {
         while !Task.isCancelled {
             if link != .asleep { link = .connecting }
             do {
-                let id = try DeviceStore.identity()
+                let id = try DeviceStore.identity(key)
                 let t = try await LinkTransport.connect(to: s.endpoint, as: id) { [weak self] in
                     Task { @MainActor in self?.asleep() }
                 }
                 let lost = AsyncStream<any Error>.makeStream()
                 dropped = { lost.continuation.yield($0) }
                 transport = t
-                await connect(t, signer: WriteKey.existing())
+                await connect(t, signer: WriteKey.existing(key))
                 guard bridge != nil else { throw LinkError.closed }
                 link = .up
                 wasUp = true
@@ -271,7 +280,7 @@ final class PhoneModel {
                 fails = 0
                 rush = false
                 log.up(at: .now)
-                log.save()
+                log.save(pairing: key)
                 for await e in lost.stream {
                     throw e
                 }
@@ -320,7 +329,7 @@ final class PhoneModel {
     private func note(_ cause: LinkLog.Cause, _ detail: String = "") {
         guard wasUp, source != .demo else { return }
         log.dropped(at: .now, cause, detail: detail)
-        log.save()
+        log.save(pairing: key)
     }
 
     /// Why the link ended, as the log keeps it.
@@ -336,6 +345,14 @@ final class PhoneModel {
             if case .closed? = error as? BridgeError { return (.server, words) }
             return (.error, words)
         }
+    }
+
+    /// Tells the server why the link closes, for its log (device.bye,
+    /// app API 37, T892), when the link is up and its tm has it: the
+    /// line goes before the close, which follows at once.
+    private func bye(_ reason: String) async {
+        guard link == .up, let b = bridge, await b.hello?.methods.contains(AppAPI.Methods.deviceBye.name) == true else { return }
+        await b.post(AppAPI.Methods.deviceBye, AppAPI.ByeParams(reason: reason))
     }
 
     /// Whether error is the link's dropping, which the screens don't
@@ -388,7 +405,11 @@ final class PhoneModel {
         case .reconnect:
             note(.path, "now on \(now.via)")
             redial()
-            transport?.close()
+            let t = transport
+            Task {
+                await bye("the network changed: now on \(now.via)")
+                t?.close()
+            }
         }
     }
 
@@ -422,6 +443,9 @@ final class PhoneModel {
                         self?.projects = e.data.projects
                     }
                     self?.dropped?(LinkError.closed)
+                } catch let e as AppAPI.Error where e.code == AppAPI.tooBig {
+                    // The link is up: a redial would ask the same (T892).
+                    self?.failure = e.localizedDescription
                 } catch {
                     if !Task.isCancelled { self?.dropped?(error) }
                 }
@@ -507,6 +531,28 @@ final class PhoneModel {
                                            AppAPI.PromptParams(id: session, text: text, mode: mode, files: files))
         await reread()
         return r
+    }
+
+    /// Notes a prompt ref's composer queued (T893), for its bubble.
+    func queued(_ ref: SessionRef, _ q: QueuedPrompt) {
+        queuedSent[ref, default: []].append(q)
+    }
+
+    /// Forgets ref's queued prompts that went in: those waiting stay.
+    func keepQueued(_ ref: SessionRef, _ waiting: [QueuedPrompt]) {
+        guard let all = queuedSent[ref], all.count != waiting.count else { return }
+        queuedSent[ref] = waiting.isEmpty ? nil : waiting
+    }
+
+    /// Stops session's running turn, sending nothing (session.prompt's
+    /// interrupt with no text, T893): the composer's Stop.
+    func stop(_ session: String) async throws {
+        do {
+            _ = try await connected().call(AppAPI.Methods.sessionPrompt, AppAPI.PromptParams(id: session, text: "", mode: "interrupt"))
+        } catch let e as AppAPI.Error where e.code == "bad-params" && e.message.contains("empty prompt") {
+            throw AppAPI.Error(code: "refused", message: "This tm stops a turn only for a prompt: update tm on your computer, or send one with Interrupt")
+        }
+        await reread()
     }
 
     /// Whether the composer takes files for ref's session (session.upload,
@@ -642,10 +688,14 @@ final class PhoneModel {
         clears[project] = c
     }
 
-    /// The paired server's name, for the screens to say.
+    /// The paired server's name, for the screens to say; when another
+    /// server paired has the same name, with the start of its id
+    /// (T852), as pairing shows it.
     var serverName: String {
-        if case .server(let s) = source { return s.name.isEmpty ? "your server" : s.name }
-        return ""
+        guard case .server(let s) = source else { return "" }
+        let name = s.name.isEmpty ? "your server" : s.name
+        let same = direct().filter { $0.name.caseInsensitiveCompare(s.name) == .orderedSame }.count
+        return same > 1 ? "\(name) \(key.prefix(4).uppercased())" : name
     }
 
     func coordinatorSession(_ project: String) -> AppAPI.Session? {
@@ -756,6 +806,48 @@ final class PhoneModel {
     /// order (design.list).
     func designs(_ project: String) async throws -> [AppAPI.Design] {
         try await connected().call(AppAPI.Methods.designList, AppAPI.ProjectParams(project: project)).designs
+    }
+
+    /// Whether this tm reads a paired server's project pages
+    /// (peer.pages-read, app API 35).
+    var readsPeerPages: Bool { hello.map(Compatibility.readsPeerPages) ?? false }
+
+    /// A paired server's project's board and overview (peer.pages-read).
+    func peerPages(_ alias: String, _ project: String) async throws -> AppAPI.PeerPages {
+        try await connected().call(AppAPI.Methods.peerPagesRead, AppAPI.PeerPagesParams(alias: alias, project: project))
+    }
+
+    /// A paired server's project's pages as a screen shows them: not
+    /// shared without a tm that reads them, or when that server says so.
+    func peerPagesState(_ alias: String, _ project: String) async -> PeerPages.State<AppAPI.PeerPages> {
+        guard readsPeerPages else { return .notShared }
+        do {
+            return .shared(try await peerPages(alias, project))
+        } catch {
+            return PeerPages.state(error)
+        }
+    }
+
+    /// Whether this tm reads a paired server's project's designs
+    /// (peer.design-list, app API 36).
+    var readsPeerDesigns: Bool { hello.map(Compatibility.readsPeerDesigns) ?? false }
+
+    /// A paired server's project's designs, without their pages or open
+    /// questions (peer.design-list).
+    func peerDesigns(_ alias: String, _ project: String) async throws -> [AppAPI.Design] {
+        try await connected().call(AppAPI.Methods.peerDesignList, AppAPI.PeerPagesParams(alias: alias, project: project)).designs
+    }
+
+    /// A paired server's project's library, its threads' files
+    /// (peer.library-list).
+    func peerLibrary(_ alias: String, _ project: String) async throws -> [AppAPI.LibraryFile] {
+        try await connected().call(AppAPI.Methods.peerLibraryList, AppAPI.PeerPagesParams(alias: alias, project: project)).files
+    }
+
+    /// A paired server's library file's bytes (peer.library-read).
+    func peerLibraryData(_ alias: String, _ project: String, _ f: AppAPI.LibraryFile) async -> FileOutcome {
+        guard let b = bridge else { return .unavailable("the link is down") }
+        return await PeerPages.read({ p in try await b.call(AppAPI.Methods.peerLibraryRead, p) }, alias: alias, project: project, file: f)
     }
 
     /// The done tasks of project's board, in board order (task.done).

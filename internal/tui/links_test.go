@@ -103,17 +103,17 @@ func TestMessagesTabRemote(t *testing.T) {
 	src, m := linkDash(t)
 	now := time.Now()
 	src.data.Projects[0].Links = append(src.data.Projects[0].Links,
-		link.Row{Peer: "del-02-0468-lt/gatehouse", Remote: true, HasMine: true, Mine: config.Link{Allow: config.LinkBoth},
+		link.Row{Peer: "acme-lt-07/acme-docs", Remote: true, HasMine: true, Mine: config.Link{Allow: config.LinkBoth},
 			Send: true, Receive: true, Unread: 2, Last: "M-8F49-29", LastAt: now})
 	m.setData(src.data)
 	src.linkLogs = map[string][]*link.Message{
 		"beta": {{ID: "M-1", Peer: "beta", Created: now.Add(-150 * time.Second), State: link.StateRead, By: "coordinator", Text: "From beta"}},
-		"del-02-0468-lt/gatehouse": {
-			{ID: "M-8F49-28", Peer: "del-02-0468-lt/gatehouse", Created: now.Add(-3 * time.Minute), State: link.StateRead, By: "human", Text: "From their user"},
-			{ID: "M-F885-28", Out: true, Peer: "del-02-0468-lt/gatehouse", Created: now.Add(-2 * time.Minute), State: link.StateRead, By: "coordinator", Text: "Read there", Re: "M-8F49-28"},
-			{ID: "M-8F49-29", Peer: "del-02-0468-lt/gatehouse", Created: now.Add(-time.Minute), State: link.StateSent, By: "coordinator", Text: "Their coordinator"},
-			{ID: "M-F885-29", Out: true, Peer: "del-02-0468-lt/gatehouse", Created: now, State: link.StateQueued, By: "human", Text: "Waits in the outbox"},
-			{ID: "M-F885-30", Out: true, Peer: "del-02-0468-lt/gatehouse", Created: now, State: link.StateUndelivered, By: "coordinator", Text: "Refused there"},
+		"acme-lt-07/acme-docs": {
+			{ID: "M-8F49-28", Peer: "acme-lt-07/acme-docs", Created: now.Add(-3 * time.Minute), State: link.StateRead, By: "human", Text: "From their user"},
+			{ID: "M-F885-28", Out: true, Peer: "acme-lt-07/acme-docs", Created: now.Add(-2 * time.Minute), State: link.StateRead, By: "coordinator", Text: "Read there", Re: "M-8F49-28"},
+			{ID: "M-8F49-29", Peer: "acme-lt-07/acme-docs", Created: now.Add(-time.Minute), State: link.StateSent, By: "coordinator", Text: "Their coordinator"},
+			{ID: "M-F885-29", Out: true, Peer: "acme-lt-07/acme-docs", Created: now, State: link.StateQueued, By: "human", Text: "Waits in the outbox"},
+			{ID: "M-F885-30", Out: true, Peer: "acme-lt-07/acme-docs", Created: now, State: link.StateUndelivered, By: "coordinator", Text: "Refused there"},
 		}}
 	m.openTab("alpha", tabMessages, 0)
 	out := screen(m)
@@ -126,7 +126,7 @@ func TestMessagesTabRemote(t *testing.T) {
 			t.Errorf("%s before %s:\n%s", want, order[i-1], out)
 		}
 	}
-	if !strings.Contains(out, "→ del-02-0468-lt/gatehouse") {
+	if !strings.Contains(out, "→ acme-lt-07/acme-docs") {
 		t.Errorf("the name is cut:\n%s", out)
 	}
 	dialog := func(i int) string {
@@ -141,10 +141,10 @@ func TestMessagesTabRemote(t *testing.T) {
 		return out
 	}
 	for i, wants := range map[int][]string{
-		5: {"From      del-02-0468-lt/gatehouse (its user)", "To        alpha", "State     read", "From their user"},
+		5: {"From      acme-lt-07/acme-docs (its user)", "To        alpha", "State     read", "From their user"},
 		3: {"From      alpha", "Re        M-8F49-28", "State     read"},
-		2: {"From      del-02-0468-lt/gatehouse", "State     sent"},
-		1: {"From      alpha (you)", "queued until del-02-0468-lt takes it"},
+		2: {"From      acme-lt-07/acme-docs", "State     sent"},
+		1: {"From      alpha (you)", "queued until acme-lt-07 takes it"},
 		0: {"undelivered (see the inbox)"},
 	} {
 		out := dialog(i)
@@ -153,7 +153,7 @@ func TestMessagesTabRemote(t *testing.T) {
 				t.Errorf("dialog %d lacks %q:\n%s", i, want, out)
 			}
 		}
-		if strings.Contains(out, "gatehouse (you)") {
+		if strings.Contains(out, "acme-docs (you)") {
 			t.Errorf("the paired user's message is called yours:\n%s", out)
 		}
 	}

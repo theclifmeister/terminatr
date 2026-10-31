@@ -12,6 +12,7 @@ import Foundation
 ///     {"hello": {...},
 ///      "calls": {"session.list": {...}, ...},
 ///      "answers": {"memory.read": [{"params": {"path": "CONTEXT.md"}, "result": {...}}, ...]},
+///      (an answer may have an "error" {"code", "message"} instead of a result)
 ///      "streams": {"projects.watch": {"result": {...}, "events": [{"event": "...", "data": {...}}]}},
 ///      "transcripts": {"<session id>": {"result": {...}, "events": [...]}}}
 ///
@@ -32,6 +33,8 @@ public final class DemoTransport: BridgeTransport, @unchecked Sendable {
     private struct Answer {
         var params: [String: Any]
         var result: Data
+        /// The error it answers instead, as the bridge sends one.
+        var error: Data?
 
         func fits(_ p: [String: Any]) -> Bool {
             params.allSatisfy { k, v in (p[k] as? NSObject)?.isEqual(v) == true }
@@ -66,6 +69,9 @@ public final class DemoTransport: BridgeTransport, @unchecked Sendable {
         calls = try (r["calls"] as? [String: Any] ?? [:]).mapValues(json)
         answers = try (r["answers"] as? [String: [[String: Any]]] ?? [:]).mapValues { list in
             try list.map { a in
+                if let error = a["error"] {
+                    return Answer(params: a["params"] as? [String: Any] ?? [:], result: Data(), error: try json(error))
+                }
                 guard let result = a["result"] else { throw BridgeError.badLine("a demo answer has a result") }
                 return Answer(params: a["params"] as? [String: Any] ?? [:], result: try json(result))
             }
@@ -98,7 +104,14 @@ public final class DemoTransport: BridgeTransport, @unchecked Sendable {
                 yield(l)
             }
         } else if let a = answers[method]?.first(where: { $0.fits(params) }) {
-            reply(id, result: a.result)
+            if let error = a.error {
+                var l = Data("{\"id\":\(id),\"error\":".utf8)
+                l.append(error)
+                l.append(Data("}".utf8))
+                yield(l)
+            } else {
+                reply(id, result: a.result)
+            }
         } else if let result = calls[method] {
             reply(id, result: result)
         } else {

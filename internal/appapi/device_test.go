@@ -7,8 +7,10 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"io"
 	"log"
+	"net"
 	"net/http/httptest"
 	"slices"
 	"strings"
@@ -29,6 +31,12 @@ import (
 // write everything; the Mac app's bridge has every method.
 func TestAllowed(t *testing.T) {
 	for _, m := range appapi.Methods() {
+		if m.Name == appapi.MethodDeviceBye {
+			if appapi.Allowed(m, "") || !appapi.Allowed(m, device.LevelView) || !appapi.Allowed(m, device.LevelAnswer) || !appapi.Allowed(m, device.LevelWrite) {
+				t.Errorf("%s: devices' own, at every level", m.Name)
+			}
+			continue
+		}
 		if m.DeviceOnly() {
 			if appapi.Allowed(m, "") || appapi.Allowed(m, device.LevelView) || !appapi.Allowed(m, device.LevelAnswer) || !appapi.Allowed(m, device.LevelWrite) {
 				t.Errorf("%s: devices' own, at the levels that sign", m.Name)
@@ -153,12 +161,12 @@ func TestDeviceLink(t *testing.T) {
 	devDir := device.DirIn(p.Home)
 	wk, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	wkb, _ := wk.PublicKey.Bytes()
-	if _, err := device.Add(devDir, k.Public().(ed25519.PublicKey), wkb, "Clif's iPhone", url); err != nil {
+	if _, err := device.Add(devDir, k.Public().(ed25519.PublicKey), wkb, "Sam's iPhone", url); err != nil {
 		t.Fatal(err)
 	}
 	// The access is write: everything the Mac app's bridge has but the
 	// bridge's own methods, each write signed.
-	if _, err := device.SetLevel(devDir, "Clif's iPhone", device.LevelWrite); err != nil {
+	if _, err := device.SetLevel(devDir, "Sam's iPhone", device.LevelWrite); err != nil {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -236,7 +244,7 @@ func TestDeviceLink(t *testing.T) {
 	}
 
 	// Removed: the link closes at once.
-	if _, err := device.Remove(devDir, "clif's iphone"); err != nil {
+	if _, err := device.Remove(devDir, "sam's iphone"); err != nil {
 		t.Fatal(err)
 	}
 	if err := sc.Call(proto.MethodDeviceReload, nil, nil); err != nil {
@@ -388,5 +396,52 @@ func TestSignedWrites(t *testing.T) {
 	}
 	if err := view.Call(appapi.MethodDeviceNonce, nil, nil); code(err) != appapi.ErrLevel {
 		t.Errorf("nonce at view: %v", err)
+	}
+}
+
+// TestDeviceBye (T892): device.bye's reason is how ServeDevice says the
+// link ended, which the device manager logs ("device X: closed: the
+// device closed the link: …"); a link that just ends says the device
+// closed it. It is the device's at every level, never the Mac app's.
+func TestDeviceBye(t *testing.T) {
+	p := testPaths(t)
+	startServer(t, p)
+	d := device.Device{Name: "Clif's iPhone"}
+	serve := func() (*apptest.Client, net.Conn, chan error) {
+		ours, theirs := net.Pipe()
+		done := make(chan error, 1)
+		go func() {
+			done <- appapi.ServeDevice(context.Background(), ours, d, device.NewLevel(device.LevelView),
+				func() (*client.Client, error) { return client.ConnectAs(p, false, proto.ClientApp) }, nil)
+		}()
+		c, err := apptest.New(theirs, theirs)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return c, theirs, done
+	}
+	c, conn, done := serve()
+	if !slices.Contains(c.Hello.Methods, appapi.MethodDeviceBye) {
+		t.Fatalf("view's hello lacks device.bye: %v", c.Hello.Methods)
+	}
+	if err := c.Call(appapi.MethodDeviceBye, appapi.ByeParams{Reason: "the app went to the back\x1b[2J"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	conn.Close()
+	var bye *appapi.ByeError
+	if err := <-done; !errors.As(err, &bye) || err.Error() != "the device closed the link: the app went to the back[2J" {
+		t.Fatalf("ended: %v", err)
+	}
+	_, conn, done = serve()
+	conn.Close()
+	if err := <-done; !errors.As(err, &bye) || err.Error() != "the device closed the link" {
+		t.Fatalf("ended without a word: %v", err)
+	}
+	mac, err := bridge(t, p, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := mac.Call(appapi.MethodDeviceBye, appapi.ByeParams{}, nil); code(err) != appapi.ErrLevel {
+		t.Fatalf("the Mac app's device.bye: %v", err)
 	}
 }

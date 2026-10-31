@@ -70,6 +70,18 @@ func init() {
 		// caps say transcript-remote; app API 12), where session.prompt
 		// types into the pane.
 		unary(proto.MethodPeerList, false, noParams, peerListOf),
+		// A paired server's project pages, read only (app API 35; the
+		// server's caps say peer-pages): a shared project's board and
+		// overview, and its threads' library files, a chunk at a time,
+		// while that server's project pages switch for this one is on
+		// for it. Never its memory.
+		unary(proto.MethodPeerPagesRead, false, peerPagesParams, peerPagesOf),
+		unary(proto.MethodPeerLibraryList, false, peerPagesParams, peerLibraryOf),
+		unary(proto.MethodPeerLibraryRead, false, peerLibraryReadParams, libraryChunkOf),
+		// A paired server's designs, read only (app API 36; the server's
+		// caps say peer-designs), under the same switch: their records
+		// and builds, never their pages or open questions.
+		unary(proto.MethodPeerDesignList, false, peerPagesParams, peerDesignsOf),
 
 		// The notice tray (mods' notifications): one console draws each.
 		unary(proto.MethodNotifyClaim, false, noticeParams, noticeResultOf),
@@ -175,6 +187,9 @@ func init() {
 		// A nonce for a device's next signed write (app API 23,
 		// sign.go): only a device's bridge has it.
 		deviceOnly(local(MethodDeviceNonce, false, deviceNonce)),
+		// Why a device closes its link (app API 37), for the server's
+		// log: a device's bridge's own, at every level.
+		deviceOnly(local(MethodDeviceBye, false, deviceBye)),
 	} {
 		methods[m.Name] = m
 	}

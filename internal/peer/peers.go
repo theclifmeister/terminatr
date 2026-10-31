@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -52,7 +53,15 @@ type Peer struct {
 	// view shows it the shared projects' needs in full, question and
 	// dialog text included.
 	Needs string `json:"needs,omitempty"`
+	// Pages are the shared projects whose pages the peer may read, the
+	// project pages switch, off for every project unlisted, the default
+	// (docs/SPEC.md §16.17): their board, overview and library,
+	// read-only; never their memory.
+	Pages []string `json:"pages,omitempty"`
 }
+
+// PagesOn says whether p's project pages switch is on for project.
+func (p Peer) PagesOn(project string) bool { return project != "" && slices.Contains(p.Pages, project) }
 
 // NeedsLevel is p's needs switch, off when unset.
 func (p Peer) NeedsLevel() string {
@@ -85,7 +94,7 @@ func (p Peer) Shown() string { return cmp.Or(p.Display(), p.Alias) }
 func (p Peer) Display() string { return cmp.Or(p.Name, p.Told) }
 
 // Both is p with its alias beside its display name, "work
-// (del-02-0468-lt)", for where both help (tm peer list, Settings →
+// (acme-lt-07)", for where both help (tm peer list, Settings →
 // Peers).
 func (p Peer) Both() string { return Both(p.Display(), p.Alias) }
 
@@ -118,6 +127,11 @@ func (p Peer) check() error {
 	}
 	if _, ok := proto.ParseNeeds(p.Needs); p.Needs != "" && !ok {
 		return fmt.Errorf("peer %s: needs %q is not off, view or answer", p.Alias, p.Needs)
+	}
+	for _, slug := range p.Pages {
+		if !pageSlug.MatchString(slug) {
+			return fmt.Errorf("peer %s: pages %q is not a project", p.Alias, slug)
+		}
 	}
 	u, err := url.Parse(p.Relay)
 	if err != nil || (u.Scheme != "wss" && u.Scheme != "ws") || u.Host == "" {
@@ -300,6 +314,7 @@ func Pin(dir string, key ed25519.PublicKey, relayURL, name, as string) (Peer, er
 				}
 				// Pairing again keeps the switches and the names.
 				p.Panes, p.Conversations, p.Needs, p.Name, p.Told = q.Panes, q.Conversations, q.Needs, q.Name, q.Told
+				p.Pages = q.Pages
 			case q.Alias == as:
 			default:
 				kept = append(kept, q)
@@ -402,6 +417,40 @@ func SetConversations(dir, alias string, on bool) (bool, error) {
 					peers[i].Conversations = proto.ConversationsNot
 				}
 			}
+		}
+		return peers, nil
+	})
+	return found, err
+}
+
+// pageSlug is a project slug the pages switch names (project.ValidSlug).
+var pageSlug = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,63}$`)
+
+// SetPages turns the project pages switch for the peer called alias, or
+// named so, on or off for project (docs/SPEC.md §16.17); false when there
+// is none. The project needn't be shared now: the switch counts only
+// while it is.
+func SetPages(dir, alias, project string, on bool) (bool, error) {
+	if !pageSlug.MatchString(project) {
+		return false, fmt.Errorf("pages: %q is not a project", project)
+	}
+	found := false
+	err := change(dir, func(peers []Peer) ([]Peer, error) {
+		alias := NamesOf(peers).Alias(alias)
+		for i := range peers {
+			if peers[i].Alias != alias {
+				continue
+			}
+			found = true
+			pages := slices.DeleteFunc(slices.Clone(peers[i].Pages), func(s string) bool { return s == project })
+			if on {
+				pages = append(pages, project)
+				slices.Sort(pages)
+			}
+			if len(pages) == 0 {
+				pages = nil
+			}
+			peers[i].Pages = pages
 		}
 		return peers, nil
 	})

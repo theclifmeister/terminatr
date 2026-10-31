@@ -618,8 +618,12 @@ type PeerList struct {
 // through transcript.watch ("<alias>/<session>", the server's caps say
 // transcript-remote) while Panes is view or type and it is on.
 type Peer struct {
-	Alias         string         `json:"alias"`
-	Name          string         `json:"name,omitempty"`
+	Alias string `json:"alias"`
+	Name  string `json:"name,omitempty"`
+	// ID is its id, the SHA-256 of its key in 64 hex digits (T852): a
+	// phone paired with it directly too knows it by the same id, and
+	// shows it once.
+	ID            string         `json:"id,omitempty"`
 	State         string         `json:"state"`
 	Reason        string         `json:"reason,omitempty"`
 	Since         time.Time      `json:"since,omitzero"`
@@ -662,6 +666,11 @@ type PeerProject struct {
 	// need, while its needs switch for this server is view or answer:
 	// none otherwise (NeedsYou counts them then).
 	Needs []PeerNeed `json:"needs"`
+	// Pages (app API 35): that server's project pages switch for this
+	// one is on for the project, as its last project list said: its
+	// board, overview and library read through peer.pages-read and
+	// peer.library-list.
+	Pages bool `json:"pages,omitempty"`
 }
 
 // PeerNeed is one need of a paired server's project, in full (app API
@@ -930,7 +939,7 @@ func linkOf(r link.Row) Link {
 		Queued: r.Queued, FilesWaiting: r.FilesWaiting, FilesActive: r.FilesActive, LastAt: r.LastAt}
 }
 
-// peerListOf is l as the app sees it: a peer's id, versions, ping and
+// peerListOf is l as the app sees it: a peer's versions, ping and
 // share requests (but their count), and a project's snapshot stay
 // home but its threads (Watched). Its coordinator and threads cross as
 // their panes' ids, the sessions a remote pane and a remote
@@ -938,7 +947,7 @@ func linkOf(r link.Row) Link {
 func peerListOf(l proto.PeerList) PeerList {
 	out := PeerList{Gen: l.Gen, Peers: make([]Peer, 0, len(l.Peers))}
 	for _, p := range l.Peers {
-		peer := Peer{Alias: p.Alias, Name: p.Name, State: p.State, Reason: p.Reason, Since: p.Since,
+		peer := Peer{Alias: p.Alias, Name: p.Name, ID: p.ID, State: p.State, Reason: p.Reason, Since: p.Since,
 			Projects: make([]PeerProject, 0, len(p.Projects)), ShareWaits: proto.ShareWaits([]proto.PeerMirror{p}),
 			Pane: p.Pane, Panes: p.Panes, Transcript: p.Transcript, Conversations: p.Conversations, Needs: p.Needs}
 		for _, q := range p.Shares {
@@ -949,7 +958,7 @@ func peerListOf(l proto.PeerList) PeerList {
 		offset := time.Duration(p.Offset) * time.Millisecond
 		for _, pp := range p.Projects {
 			pr := PeerProject{Project: pp.Project, Goal: pp.Goal, Paused: pp.Paused, NeedsYou: pp.NeedsYou,
-				Threads: pp.Threads, Ready: pp.Ready, Stale: pp.Stale, Synced: pp.Synced, Sessions: []PeerSession{},
+				Threads: pp.Threads, Ready: pp.Ready, Stale: pp.Stale, Synced: pp.Synced, Sessions: []PeerSession{}, Pages: pp.Pages,
 				Watched: []PeerThread{}, Needs: []PeerNeed{}}
 			if pp.Watch != nil {
 				for _, w := range pp.Watch.Threads {
@@ -1513,10 +1522,12 @@ type MemoryFile struct {
 }
 
 // MemoryText is memory.read's result: the file's Markdown (at most
-// 1 MiB).
+// 1 MiB), cut to fit a device's link's line (MaxText, app API 37), when
+// Truncated says so.
 type MemoryText struct {
-	Path string `json:"path"`
-	Text string `json:"text"`
+	Path      string `json:"path"`
+	Text      string `json:"text"`
+	Truncated bool   `json:"truncated,omitempty"`
 }
 
 // Library is library.list's result, newest file first.
@@ -1558,7 +1569,10 @@ func memoryFilesOf(r proto.MemoryListResult) MemoryFiles {
 	return out
 }
 
-func memoryTextOf(r proto.MemoryReadResult) MemoryText { return MemoryText{Path: r.Path, Text: r.Text} }
+func memoryTextOf(r proto.MemoryReadResult) MemoryText {
+	text, cut := fitText(r.Text, MaxText)
+	return MemoryText{Path: r.Path, Text: text, Truncated: cut}
+}
 
 func libraryOf(r proto.LibraryListResult) Library {
 	out := Library{Files: []LibraryFile{}}
@@ -1587,7 +1601,9 @@ type Designs struct {
 // design task's open questions; and Build, the build tasks in after
 // order. Archived (app API 33): tm design archive hid it; the app lists
 // it only when asked, with the done ones. Working (app API 34): a thread
-// of one of its build tasks is running a turn now.
+// of one of its build tasks is running a turn now. PageStays (app API
+// 36): a paired server's design (peer.design-list) has a page, which
+// stays on that server; Artifact is empty then.
 type Design struct {
 	Name       string           `json:"name"`
 	Title      string           `json:"title"`
@@ -1602,6 +1618,7 @@ type Design struct {
 	Build      []DesignTask     `json:"build"`
 	Archived   bool             `json:"archived,omitempty"`
 	Working    bool             `json:"working,omitempty"`
+	PageStays  bool             `json:"page_stays,omitempty"`
 }
 
 // DesignQuestion is an open question of a design's task: its id

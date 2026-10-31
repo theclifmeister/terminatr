@@ -18,6 +18,9 @@ public final class ComposerTray {
     /// Why the last file wasn't added (the prompt is full), until the
     /// next one is.
     public private(set) var note: String?
+    /// Each image's thumbnail (ComposerFiles.thumbnail), by its file's
+    /// id: the phone's composer shows it (T893).
+    public private(set) var previews: [UUID: Data] = [:]
     @ObservationIgnored public var call: Call?
     /// Whether an error is the link dropping: such a file waits for
     /// resumeDropped instead of saying Retry alone.
@@ -59,6 +62,7 @@ public final class ComposerTray {
         }
         let f = ComposerFile(name: name, size: data.count)
         files.append(f)
+        if f.image { previews[f.id] = ComposerFiles.thumbnail(data) }
         payloads[f.id] = Payload(data: data)
         start(f.id)
         return true
@@ -89,6 +93,7 @@ public final class ComposerTray {
     public func remove(_ id: UUID) {
         tasks.removeValue(forKey: id)?.cancel()
         payloads[id] = nil
+        previews[id] = nil
         files.removeAll { $0.id == id }
         note = nil
     }
@@ -110,6 +115,7 @@ public final class ComposerTray {
         for t in tasks.values { t.cancel() }
         tasks = [:]
         payloads = [:]
+        previews = [:]
         files = []
         note = nil
     }

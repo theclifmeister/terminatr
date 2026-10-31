@@ -1,7 +1,9 @@
 package appapi
 
 import (
+	"encoding/json"
 	"reflect"
+	"unicode/utf8"
 
 	"github.com/theclifmeister/terminatr/internal/textsafe"
 )
@@ -66,4 +68,36 @@ func clean(v reflect.Value) {
 		}
 		v.Set(m)
 	}
+}
+
+// MaxText bounds a long text field of an answer (a memory note's
+// Markdown) in JSON, escapes included: with the rest of the answer it
+// stays under a device's link's line (MaxLine, T892).
+const MaxText = 768 << 10
+
+// fitText is s cut, at a character, to the longest start whose JSON is
+// at most max bytes, and whether it was cut.
+func fitText(s string, max int) (string, bool) {
+	if jsonLen(s) <= max {
+		return s, false
+	}
+	lo, hi := 0, len(s) // lo fits, hi doesn't
+	for hi-lo > 1 {
+		mid := (lo + hi) / 2
+		if jsonLen(s[:mid]) <= max {
+			lo = mid
+		} else {
+			hi = mid
+		}
+	}
+	for lo > 0 && !utf8.RuneStart(s[lo]) {
+		lo--
+	}
+	return s[:lo], true
+}
+
+// jsonLen is the length of s as a JSON string.
+func jsonLen(s string) int {
+	b, _ := json.Marshal(s)
+	return len(b)
 }

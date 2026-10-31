@@ -29,7 +29,7 @@ var humanOnlyMethods = []string{
 	proto.MethodTaskAccept, proto.MethodTaskSendBack, proto.MethodTaskDelegate, proto.MethodTaskAdd, proto.MethodTaskGet, proto.MethodTaskDone, proto.MethodTaskTemplates, proto.MethodDesignList, proto.MethodProjectOpen,
 	proto.MethodMemoryList, proto.MethodMemoryRead, proto.MethodLibraryList, proto.MethodLibraryRead,
 	proto.MethodSessionAdopt, proto.MethodSessionAdoptAsk, proto.MethodSessionRemote, proto.MethodSessionModel, proto.MethodQuestionsOpen, proto.MethodCoordinatorClear,
-	proto.MethodServerStop, proto.MethodAgentReload, proto.MethodPeerReload, proto.MethodDeviceReload, proto.MethodPeerList, proto.MethodPeerPopupRead, proto.MethodPeerNeedAct, proto.MethodPeerShareAsk, proto.MethodPeerShareAnswer, proto.MethodLinkAct, proto.MethodProjectsWatch, proto.MethodSessionsWatch,
+	proto.MethodServerStop, proto.MethodAgentReload, proto.MethodPeerReload, proto.MethodDeviceReload, proto.MethodPeerList, proto.MethodPeerPopupRead, proto.MethodPeerPagesRead, proto.MethodPeerLibraryList, proto.MethodPeerLibraryRead, proto.MethodPeerDesignList, proto.MethodPeerNeedAct, proto.MethodPeerShareAsk, proto.MethodPeerShareAnswer, proto.MethodLinkAct, proto.MethodProjectsWatch, proto.MethodSessionsWatch,
 	proto.MethodProjectPin, proto.MethodProjectNew, proto.MethodSessionAdoptRequest, proto.MethodLinkSend,
 	proto.MethodViewSubscribe, proto.MethodViewAttach, proto.MethodViewDashboard, proto.MethodViewProject,
 	proto.MethodViewSelect, proto.MethodViewSideSel, proto.MethodViewExpand, proto.MethodViewTree, proto.MethodViewSections,
@@ -64,6 +64,7 @@ var notControl = map[string]bool{
 	proto.MethodPeerPanes: true, proto.MethodPeerName: true, proto.MethodPeerMessage: true, proto.MethodPeerPopup: true,
 	proto.MethodPeerFileFetch: true, proto.MethodPeerTranscript: true,
 	proto.MethodPeerNeeds: true, proto.MethodPeerNonce: true, proto.MethodPeerAct: true,
+	proto.MethodPeerPages: true, proto.MethodPeerPagesLibrary: true, proto.MethodPeerPagesLibraryRead: true, proto.MethodPeerPagesDesigns: true,
 }
 
 // gateOf is method m's gate, an attach connection's among them.

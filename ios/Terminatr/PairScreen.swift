@@ -8,9 +8,11 @@ import TerminatrUI
 /// steps under it) or paste its terminatr://pair link; then confirm: the
 /// server's id as chips to check against the computer's, this phone's
 /// name, and Pair, then say yes on the computer. The code names the
-/// server's key; the pairing takes no other.
+/// server's key; the pairing takes no other. It adds the server beside
+/// those paired already (T852); one paired already is paired again in
+/// its place.
 struct PairScreen: View {
-    @Environment(PhoneModel.self) private var model
+    @Environment(Phone.self) private var phone
     @Environment(\.theme) private var theme
     @Environment(\.dismiss) private var dismiss
     /// A code that came as a link (the Camera app's scan).
@@ -124,6 +126,17 @@ struct PairScreen: View {
                 .font(theme.body(.subheadline))
                 .foregroundStyle(theme.muted)
                 .fixedSize(horizontal: false, vertical: true)
+            if let m = phone.model(DeviceStore.id(of: c)) {
+                Text("This phone is paired with \(m.serverName) already: pairing again takes its place, the other servers stay.")
+                    .font(theme.body(.subheadline, .medium))
+                    .foregroundStyle(theme.ink)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else if !phone.servers.isEmpty {
+                Text("It joins the \(phone.servers.count == 1 ? "server" : "\(phone.servers.count) servers") this phone is paired with.")
+                    .font(theme.body(.subheadline, .medium))
+                    .foregroundStyle(theme.ink)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .padding(Spacing.card)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -179,7 +192,7 @@ struct PairScreen: View {
         failure = nil
         Task {
             do {
-                try await model.pair(c, name: name.trimmingCharacters(in: .whitespaces))
+                try await phone.pair(c, name: name.trimmingCharacters(in: .whitespaces))
                 dismiss()
             } catch {
                 failure = error.localizedDescription

@@ -27,7 +27,7 @@ public struct ComponentGallery: View {
     private var page: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Spacing.card) {
-                ScreenHeader("Needs you", count: 5, subtitle: "clifford's Mac · linked, answers here", symbol: "wifi") {
+                ScreenHeader("Needs you", count: 5, subtitle: "studio · linked, answers here", symbol: "wifi") {
                     Button {} label: { Label("Search", systemImage: "magnifyingglass") }
                         .buttonStyle(.circle)
                     Button {} label: { Label("Settings", systemImage: "gearshape") }

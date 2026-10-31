@@ -6,50 +6,38 @@ import TerminatrUI
 /// (SidebarTree): this server's active ones, pinned first; each paired
 /// server's shared ones; and the inactive ones folded under one quiet
 /// row. Each is a ProjectCard (T846) under the screen's header, and
-/// opens its coordinator and threads.
+/// opens its coordinator and threads. With several servers (T852) each
+/// server's come under its name, in the order they were paired; one
+/// the phone pairs with directly isn't listed again under another that
+/// links to it (PhoneModel.shownPeers).
 struct ProjectsScreen: View {
+    @Environment(Phone.self) private var phone
     @Environment(PhoneModel.self) private var model
     @Environment(\.theme) private var theme
-    @Environment(\.navigate) private var navigate
-    @State private var showInactive = false
+    /// The servers whose inactive projects are shown, by key.
+    @State private var showInactive: Set<String> = []
 
     var body: some View {
-        let gone = model.inactiveProjects
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                ScreenHeader("Projects", subtitle: subtitle(inactive: gone.count), symbol: symbol) {
+                ScreenHeader("Projects", subtitle: subtitle, symbol: symbol) {
                     SettingsButton().buttonStyle(.circle)
                 }
                 LazyVStack(alignment: .leading, spacing: Spacing.item) {
-                    if let f = model.failure { Failure(text: f) }
-                    if !model.peers.isEmpty { SectionHeading("This server") }
-                    ForEach(model.activeProjects, id: \.slug) { card($0) }
-                    ForEach(model.peers, id: \.alias) { peer in
-                        SectionHeading(peer.name.isEmpty ? peer.alias : peer.name, detail: PeerTag.of(peer).word)
-                        ForEach(peer.projects, id: \.project) { p in
-                            let sessions = SidebarTree.sessions(of: p, alias: peer.alias)
-                            let coordinator = sessions.first { $0.ref.isCoordinator }?.session ?? nil
-                            let route = Route.peerProject(alias: peer.alias, project: p.project)
-                            PlainRouteLink(value: route) {
-                                ProjectCard(name: p.project, coordinator: .of(peer: coordinator), needs: p.stale ? 0 : p.needsYou,
-                                            threads: sessions.filter { !$0.ref.isCoordinator }.map { Attention.of(peer: $0.session).tone },
-                                            dim: peer.state != "up" || p.stale, selected: navigate?.open == route)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                    if !gone.isEmpty {
-                        InactiveFold(count: gone.count, names: gone.map(\.slug), open: $showInactive)
-                        if showInactive {
-                            ForEach(gone, id: \.slug) { card($0, dim: true) }
-                        }
+                    ForEach(phone.models, id: \.key) { m in
+                        ServerProjects(several: phone.several, showInactive: Binding {
+                            showInactive.contains(m.key)
+                        } set: {
+                            if $0 { showInactive.insert(m.key) } else { showInactive.remove(m.key) }
+                        })
+                        .environment(m)
                     }
                 }
                 .padding(.horizontal, Spacing.gutter)
                 .padding(.bottom, Spacing.gutter)
             }
         }
-        .refreshable { await model.refresh() }
+        .refreshable { await phone.refresh() }
         .keepsPlace("projects")
         .kept($showInactive, "inactive")
         .navigationTitle("Projects")
@@ -58,26 +46,72 @@ struct ProjectsScreen: View {
         .backdrop()
     }
 
+    /// "studio · 2 active · 1 inactive", or "2 servers · 5 active".
+    private var subtitle: String {
+        let active = phone.models.reduce(0) { $0 + $1.activeProjects.count }
+        let inactive = phone.models.reduce(0) { $0 + $1.inactiveProjects.count }
+        let source = model.source == .demo ? "Demo" : phone.several ? "\(phone.models.count) servers" : model.serverName
+        return [source, "\(active) active", inactive > 0 && !phone.several ? "\(inactive) inactive" : nil]
+            .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
+    }
+
+    private var symbol: String {
+        if model.source == .demo { return "sparkles" }
+        if phone.several { return phone.models.allSatisfy { $0.link == .up } ? "checkmark.circle.fill" : "antenna.radiowaves.left.and.right" }
+        return model.linkWords.0
+    }
+}
+
+/// One server's projects on the Projects screen: under its name when
+/// the phone shows several, then its own, its paired servers' and its
+/// inactive ones folded.
+private struct ServerProjects: View {
+    @Environment(PhoneModel.self) private var model
+    @Environment(\.navigate) private var navigate
+    let several: Bool
+    @Binding var showInactive: Bool
+
+    var body: some View {
+        let gone = model.inactiveProjects
+        let peers = model.shownPeers
+        if several {
+            SectionHeading(model.serverName, detail: model.link == .up ? "" : model.linkWords.1)
+                .padding(.top, Spacing.tight)
+        }
+        if let f = model.failure { Failure(text: f) }
+        if !several, !peers.isEmpty { SectionHeading("This server") }
+        ForEach(model.activeProjects, id: \.slug) { card($0) }
+        ForEach(peers, id: \.alias) { peer in
+            SectionHeading(peer.name.isEmpty ? peer.alias : peer.name, detail: PeerTag.of(peer).word)
+            ForEach(peer.projects, id: \.project) { p in
+                let sessions = SidebarTree.sessions(of: p, alias: peer.alias)
+                let coordinator = sessions.first { $0.ref.isCoordinator }?.session ?? nil
+                let route = Route.peerProject(alias: peer.alias, project: p.project)
+                PlainRouteLink(value: route) {
+                    ProjectCard(name: p.project, coordinator: .of(peer: coordinator), needs: p.stale ? 0 : p.needsYou,
+                                threads: sessions.filter { !$0.ref.isCoordinator }.map { Attention.of(peer: $0.session).tone },
+                                dim: peer.state != "up" || p.stale, selected: navigate.opens(route, on: model))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        if !gone.isEmpty {
+            InactiveFold(count: gone.count, names: gone.map(\.slug), open: $showInactive)
+            if showInactive {
+                ForEach(gone, id: \.slug) { card($0, dim: true) }
+            }
+        }
+    }
+
     private func card(_ p: AppAPI.Project, dim: Bool = false) -> some View {
         let route = Route.project(p.slug)
         return PlainRouteLink(value: route) {
             ProjectCard(name: p.slug, coordinator: .of(coordinator: model.coordinatorSession(p.slug), in: p),
                         needs: Need.count(model.needs, project: p.slug),
                         threads: SidebarTree.threads(of: p) { model.session($0) }.map { model.attention($0).tone },
-                        pinned: p.pinned, dim: dim, selected: navigate?.open == route)
+                        pinned: p.pinned, dim: dim, selected: navigate.opens(route, on: model))
         }
         .buttonStyle(.plain)
-    }
-
-    /// "clifford's Mac · 2 active · 1 inactive".
-    private func subtitle(inactive: Int) -> String {
-        let source = model.source == .demo ? "Demo" : model.serverName
-        return [source, "\(model.activeProjects.count) active", inactive > 0 ? "\(inactive) inactive" : nil]
-            .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
-    }
-
-    private var symbol: String {
-        model.source == .demo ? "sparkles" : model.linkWords.0
     }
 }
 
@@ -147,7 +181,7 @@ struct ProjectScreen: View {
                         PlainRouteLink(value: route) {
                             SessionTile("Coordinator", state: .of(coordinator: c, in: p), busy: Busy.of(coordinator: c, in: p),
                                         context: model.context(SessionRef(project: slug)), dormant: dormant,
-                                        selected: navigate?.open == route)
+                                        selected: navigate.opens(route, on: model))
                         }
                         .buttonStyle(.plain)
                         .contextMenu { SaveClearButton(project: slug, asking: $clearing) }
@@ -159,7 +193,7 @@ struct ProjectScreen: View {
                     }
                     pages
                     if model.listsDesigns {
-                        DesignsTiles(project: p)
+                        DesignsTiles(project: p, sessions: model.sessions, generation: model.generation)
                     }
                     let waiting = threads.filter { model.attention($0).waits }.count
                     SectionHeading("Threads", detail: threads.isEmpty ? "" : "\(threads.count)" + (waiting > 0 ? " · \(waiting) wait on you" : ""))
@@ -177,7 +211,7 @@ struct ProjectScreen: View {
                                 PlainRouteLink(value: route) {
                                     SessionTile(t.record.title, ref: t.task?.ref, state: model.attention(t), busy: model.busy(t),
                                                 pr: t.pr, context: ContextUse.of(model.session(t), hint: 0).flatMap { $0.level == .high ? $0 : nil }, dormant: dormant, rule: i > 0,
-                                                selected: navigate?.open == route)
+                                                selected: navigate.opens(route, on: model))
                                 }
                                 .buttonStyle(.plain)
                             }
@@ -192,7 +226,7 @@ struct ProjectScreen: View {
             }
         }
         .refreshable { await model.refresh() }
-        .keepsPlace(Route.project(slug).listKey)
+        .keepsPlace(route: Route.project(slug))
         .navigationTitle(slug)
         .headerTitle()
         .backdrop()
@@ -225,51 +259,10 @@ struct ProjectScreen: View {
             + (pages.contains(.library) ? [(.library(slug), "Library", "books.vertical")] : [])
         return TileRow {
             ForEach(tiles, id: \.1) { route, title, symbol in
-                PlainRouteLink(value: route) { PageTile(title, symbol: symbol, selected: navigate?.open == route) }
+                PlainRouteLink(value: route) { PageTile(title, symbol: symbol, selected: navigate.opens(route, on: model)) }
                     .buttonStyle(.plain)
             }
         }
-    }
-}
-
-/// A paired server's shared project: its coordinator, running there or
-/// not, and its threads (SidebarTree.sessions), as the Mac lists them,
-/// under its header as SessionTiles (T846).
-struct PeerProjectScreen: View {
-    @Environment(PhoneModel.self) private var model
-    @Environment(\.navigate) private var navigate
-    let alias: String
-    let project: String
-
-    var body: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: Spacing.row + 2) {
-                ProjectHeader(project)
-                if let p = model.peers.first(where: { $0.alias == alias })?.projects.first(where: { $0.project == project }) {
-                    let sessions = SidebarTree.sessions(of: p, alias: alias)
-                    if !sessions.isEmpty {
-                        TileGroup {
-                            ForEach(Array(sessions.enumerated()), id: \.element.ref) { i, e in
-                                let route = Route.session(e.ref)
-                                PlainRouteLink(value: route) {
-                                    SessionTile(e.ref.isCoordinator ? "Coordinator" : e.title.isEmpty ? e.ref.thread : e.title,
-                                                ref: e.task.isEmpty ? nil : e.task, state: .of(peer: e.session), rule: i > 0,
-                                                selected: navigate?.open == route)
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                    }
-                }
-            }
-            .padding(.horizontal, Spacing.gutter)
-            .padding(.bottom, Spacing.gutter)
-        }
-        .refreshable { await model.refresh() }
-        .keepsPlace(Route.peerProject(alias: alias, project: project).listKey)
-        .navigationTitle(project)
-        .headerTitle()
-        .backdrop()
     }
 }
 

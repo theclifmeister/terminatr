@@ -7,72 +7,136 @@ import TerminatrUI
 /// SectionHeading, one DesignTile each, those with open questions first
 /// (Designs.ordered), each opening its DesignScreen. Read again when
 /// the board or the link changes. A project without designs says so,
-/// apart from a read that failed (Designs.listing).
+/// apart from a read that failed (Designs.listing). A paired server's
+/// project's designs (T888, peer.design-list) show the same, read-only,
+/// or "Not shared by <server>".
 struct DesignsTiles: View {
     @Environment(PhoneModel.self) private var model
     @Environment(\.navigate) private var navigate
     @Environment(\.theme) private var theme
-    let project: AppAPI.Project
+    let slug: String
+    /// The paired server's alias, for one of its projects; nil for this
+    /// server's.
+    let peer: String?
+    /// What reads them again when it changes.
+    let key: AnyHashable
     /// nil until design.list answered.
     @State private var designs: [AppAPI.Design]?
     @State private var error: String?
+    /// That server doesn't share them.
+    @State private var notShared = false
     /// Whether the done and archived designs show too.
     @State private var all = false
+
+    init(project: AppAPI.Project, sessions: [AppAPI.Session], generation: Int) {
+        slug = project.slug
+        peer = nil
+        key = DesignsRead(project: project, sessions: sessions, generation: generation)
+    }
+
+    /// A paired server's project: read again when its switch or its
+    /// sessions change, as that server last said them, or the link
+    /// came back.
+    init(alias: String, project: AppAPI.PeerProject, generation: Int) {
+        slug = project.project
+        peer = alias
+        key = PeerDesignsRead(project: project, generation: generation)
+    }
 
     var body: some View {
         // A stack, not a Group: its task runs while it shows nothing.
         VStack(alignment: .leading, spacing: Spacing.row + 2) {
             Color.clear.frame(height: 0)
-            switch Designs.listing(designs, error: error) {
-            case .reading:
-                EmptyView()
-            case .none:
+            if notShared {
                 SectionHeading("Designs", detail: "")
-                Text(Designs.noneYet)
-                    .font(theme.body(.subheadline))
-                    .foregroundStyle(theme.muted)
-                    .padding(Spacing.card)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .surface(.card, in: RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
-            case .failed(let error):
-                SectionHeading("Designs", detail: "")
-                Failure(text: "The designs didn't load: \(error)")
-            case .designs(let designs):
-                let shown = Designs.shown(designs, all: all)
-                SectionHeading("Designs", detail: "\(shown.count)")
-                if !shown.isEmpty {
-                    TileGroup {
-                        ForEach(Array(Designs.ordered(shown).enumerated()), id: \.element.name) { i, d in
-                            let route = Route.design(project.slug, name: d.name)
-                            PlainRouteLink(value: route) {
-                                DesignTile(d, rule: i > 0, selected: navigate?.open == route)
+                quietCard(PeerPages.notShared(by: model.peers.first(where: { $0.alias == peer }).map(PeerPages.server) ?? peer ?? ""))
+            } else {
+                switch Designs.listing(designs, error: error) {
+                case .reading:
+                    EmptyView()
+                case .none:
+                    SectionHeading("Designs", detail: "")
+                    quietCard(Designs.noneYet)
+                case .failed(let error):
+                    SectionHeading("Designs", detail: "")
+                    Failure(text: "The designs didn't load: \(error)")
+                case .designs(let designs):
+                    let shown = Designs.shown(designs, all: all)
+                    SectionHeading("Designs", detail: "\(shown.count)")
+                    if !shown.isEmpty {
+                        TileGroup {
+                            ForEach(Array(Designs.ordered(shown).enumerated()), id: \.element.name) { i, d in
+                                let route = peer.map { Route.peerDesign(alias: $0, project: slug, name: d.name) } ?? Route.design(slug, name: d.name)
+                                PlainRouteLink(value: route) {
+                                    DesignTile(d, rule: i > 0, selected: navigate.opens(route, on: model))
+                                }
+                                .buttonStyle(.plain)
                             }
-                            .buttonStyle(.plain)
                         }
                     }
-                }
-                let words = Designs.toggle(designs, all: all)
-                if !words.isEmpty {
-                    Button(words) { all.toggle() }
-                        .font(.subheadline)
+                    let words = Designs.toggle(designs, all: all)
+                    if !words.isEmpty {
+                        Button(words) { all.toggle() }
+                            .font(.subheadline)
+                    }
                 }
             }
         }
-        .task(id: DesignsRead(project: project, sessions: model.sessions, generation: model.generation)) {
+        .task(id: key) {
             do {
-                designs = try await model.designs(project.slug)
+                if let peer {
+                    guard model.readsPeerDesigns else {
+                        notShared = true
+                        return
+                    }
+                    designs = try await model.peerDesigns(peer, slug)
+                } else {
+                    designs = try await model.designs(slug)
+                }
                 error = nil
+                notShared = false
             } catch {
-                self.error = Dashboard.words(error)
+                let state: PeerPages.State<Int> = PeerPages.state(error)
+                if peer != nil && state == .notShared {
+                    notShared = true
+                } else {
+                    self.error = Dashboard.words(error)
+                }
             }
         }
+    }
+
+    private func quietCard(_ s: String) -> some View {
+        Text(s)
+            .font(theme.body(.subheadline))
+            .foregroundStyle(theme.muted)
+            .padding(Spacing.card)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .surface(.card, in: RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
+    }
+}
+
+/// When a paired server's project's designs are read again: its pages
+/// switch or its sessions' states changed, as that server last said
+/// them, or the link came back.
+struct PeerDesignsRead: Hashable {
+    let project: String
+    let pages: Bool
+    let sessions: [String]
+    let generation: Int
+
+    init(project p: AppAPI.PeerProject, generation: Int) {
+        project = p.project
+        pages = p.pages
+        sessions = p.sessions.map { "\($0.id) \($0.state) \($0.task)" }
+        self.generation = generation
     }
 }
 
 /// When a project's designs are read again: its board, counts or open
 /// questions changed, a thread started or ended a turn on a task
 /// (Designs.working), or the link came back.
-struct DesignsRead: Equatable {
+struct DesignsRead: Hashable {
     let slug: String
     let board: [String]
     let counts: [String: Int]
@@ -95,13 +159,17 @@ struct DesignsRead: Equatable {
 /// the coordinator put them to the user, as the TUI's enter does) and
 /// its build tasks in after order, each a board task's opening its
 /// TaskScreen. Nothing here changes a design: the coordinator records
-/// them (tm design set).
+/// them (tm design set). A paired server's design (T888, peer set)
+/// shows the same read-only: no task opens, its page stays there, and
+/// it carries no open questions.
 struct DesignScreen: View {
     @Environment(PhoneModel.self) private var model
     @Environment(\.theme) private var theme
     @Environment(\.navigate) private var navigate
     let slug: String
     let name: String
+    /// The paired server's alias, for one of its projects' designs.
+    var peer: String?
     @State private var design: AppAPI.Design?
     @State private var loaded = false
     @State private var error: String?
@@ -114,7 +182,7 @@ struct DesignScreen: View {
                 if let d = design {
                     header(d)
                     answers(d)
-                    if !d.questions.isEmpty { questions(d) }
+                    if !d.questions.isEmpty && peer == nil { questions(d) }
                     build(d)
                 } else if let error {
                     Failure(text: error)
@@ -129,9 +197,10 @@ struct DesignScreen: View {
             .padding(.bottom, Spacing.gutter)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .task(id: model.project(slug).map { DesignsRead(project: $0, sessions: model.sessions, generation: model.generation) }) {
+        .task(id: readKey) {
             do {
-                design = try await model.designs(slug).first { $0.name == name }
+                let all = if let peer { try await model.peerDesigns(peer, slug) } else { try await model.designs(slug) }
+                design = all.first { $0.name == name }
                 error = nil
             } catch {
                 self.error = Dashboard.words(error)
@@ -142,6 +211,20 @@ struct DesignScreen: View {
         .navigationTitle(design?.title ?? name)
         .headerTitle()
         .backdrop()
+    }
+
+    /// What reads the design again when it changes.
+    private var readKey: AnyHashable? {
+        if let peer {
+            return model.peers.first(where: { $0.alias == peer })?.projects.first(where: { $0.project == slug })
+                .map { AnyHashable(PeerDesignsRead(project: $0, generation: model.generation)) }
+        }
+        return model.project(slug).map { AnyHashable(DesignsRead(project: $0, sessions: model.sessions, generation: model.generation)) }
+    }
+
+    /// The paired server's name, for one of its designs.
+    private var server: String? {
+        peer.map { alias in model.peers.first(where: { $0.alias == alias }).map(PeerPages.server) ?? alias }
     }
 
     private func header(_ d: AppAPI.Design) -> some View {
@@ -162,7 +245,7 @@ struct DesignScreen: View {
             }
             let task = Designs.designTask(d)
             if !task.isEmpty {
-                if d.taskStatus.isEmpty {
+                if d.taskStatus.isEmpty || peer != nil {
                     Text("Design task \(task)").foregroundStyle(theme.muted)
                 } else {
                     PlainRouteLink(value: Route.task(slug, ref: d.task)) {
@@ -177,6 +260,11 @@ struct DesignScreen: View {
                         .font(theme.body(.body, .medium))
                 }
                 .accessibilityHint(url.absoluteString)
+            }
+            if let server, let stays = PeerPages.pageStays(d, server: server) {
+                Label(stays, systemImage: "link")
+                    .font(theme.body(.subheadline))
+                    .foregroundStyle(theme.muted)
             }
         }
         .padding(.top, Spacing.item)
@@ -238,13 +326,13 @@ struct DesignScreen: View {
         } else {
             TileGroup {
                 ForEach(Array(d.build.enumerated()), id: \.element.id) { i, t in
-                    if t.archived {
+                    if t.archived || peer != nil {
                         buildRow(t, rule: i > 0)
                     } else {
                         let route = Route.task(slug, ref: t.id)
                         PlainRouteLink(value: route) {
                             buildRow(t, rule: i > 0)
-                                .background(navigate?.open == route ? theme.wash(.working) : .clear)
+                                .background(navigate.opens(route, on: model) ? theme.wash(.working) : .clear)
                         }
                         .buttonStyle(.plain)
                     }

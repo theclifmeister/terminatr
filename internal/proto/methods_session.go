@@ -387,7 +387,8 @@ type SessionPromptParams struct {
 	ID   string `json:"id"`
 	Text string `json:"text"`
 	// Mode is "" (queued), PromptNow or PromptInterrupt (docs/SPEC.md
-	// §8.6, Priority prompts).
+	// §8.6, Priority prompts). PromptInterrupt with no Text and no Files
+	// stops the running turn and sends nothing (Stop).
 	Mode string `json:"mode,omitempty"`
 	// Files are the refs session.upload gave, of files in the session's
 	// project's uploads/: the server names each by its path after Text

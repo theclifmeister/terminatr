@@ -4,7 +4,7 @@ import Testing
 
 private func phone(level: String = "view", effective: String? = nil, writeKey: Bool = true, link: AppAPI.DeviceLink? = nil,
                    lastUp: Date? = nil) -> AppAPI.Device {
-    AppAPI.Device(name: "Clif's iPhone", id: "4f2a91c3", short: "4F2A-91C3", level: level, effective: effective ?? level,
+    AppAPI.Device(name: "Sam's iPhone", id: "4f2a91c3", short: "4F2A-91C3", level: level, effective: effective ?? level,
                   relay: "relay.example", writeKey: writeKey, link: link, lastUp: lastUp)
 }
 

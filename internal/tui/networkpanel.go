@@ -18,7 +18,7 @@ import (
 // server it reads, without changing anything, what that server may do
 // here as a ladder, and then the other way.
 //
-//	"work (del-02-0468-lt)"
+//	"work (acme-lt-07)"
 //	"──────────────────────────────"
 //	"name          work"
 //	"connection    ◉ connected · 38 ms"
@@ -34,7 +34,7 @@ import (
 //	"  needs (N)   [off] · view · answer"
 //	"AND THE OTHER WAY"
 //	"  work lets you watch its panes · its popup read-only"
-//	"  it shares cowork, gatehouse"
+//	"  it shares acme-api, acme-docs"
 
 // The panel's items: the rows its keyboard stops on.
 const (
@@ -48,6 +48,9 @@ const (
 	itemShare   // a project's share box: enter, space or a click
 	itemDevName // a device's name: enter edits it
 	itemLevel   // a device's level switch: ← →, a click on a word, enter picks
+	// itemPages+i is the project pages switch of the i-th shared project
+	// (sharedSlugs): ← →, enter or space.
+	itemPages = 100
 )
 
 // panelLine is one line of the panel: its text, the item it belongs to
@@ -190,6 +193,13 @@ func (nv *networkView) panelLines(m *dash, r netRow, ok bool, w int) []panelLine
 		needs := needsLevel(e)
 		out = append(out, panelLine{text: "  " + fit(th().Faint.Render("needs (N)"), panelLabel-2) + needsChoices(needs), item: itemNeeds, x: panelLabel})
 		under(needsWhat(needs))
+		for i, slug := range sharedSlugs(m) {
+			on := slices.Contains(e.Pages, slug)
+			out = append(out, panelLine{text: "  " + fit(th().Faint.Render("pages"), panelLabel-2) + pagesChoices(on) + th().Faint.Render(" "+slug), item: itemPages + i, x: panelLabel})
+		}
+		if len(sharedSlugs(m)) > 0 {
+			under("pages: the board, overview and library it reads, never the memory")
+		}
 		add(itemNone, th().Faint.Render("AND THE OTHER WAY"))
 		for _, l := range wrapLines(theirWords(mirror(m, e), name), max(w-2, 8)) {
 			add(itemNone, "  "+l)
@@ -265,6 +275,16 @@ func theirWords(pm *proto.PeerMirror, name string) string {
 		return name + " lets you watch and type into its panes" + popups
 	}
 	return name + " lets you see its shared projects only"
+}
+
+// pagesChoices is the project pages switch's words, off · on, the
+// current one in brackets and the accent.
+func pagesChoices(on bool) string {
+	off, onw := th().Accent.Render("[off]"), th().Faint.Render("on")
+	if on {
+		off, onw = th().Faint.Render("off"), th().Accent.Render("[on]")
+	}
+	return off + th().Faint.Render(" · ") + onw
 }
 
 // panelItems are the items the panel's keyboard stops on, in order.
