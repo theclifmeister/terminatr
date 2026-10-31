@@ -204,6 +204,24 @@ type Answer struct {
 	TextFocus  string `toml:"text_focus"`  // key that moves down one option, in place of the number, e.g. "\x1b[B"
 	TextKey    string `toml:"text_key"`    // keys after the option's number that open its text field, e.g. "\t"
 	Submit     string `toml:"submit"`      // keys after the text, e.g. "\r"
+	// A multi-select question (MultiMenu): its options' numbers toggle
+	// their boxes; Down moves the cursor one row, down to the unnumbered
+	// row named by one of MultiDone ("Next", or "Submit" on the last
+	// question), which Submit confirms. Without them tm leaves a
+	// multi-select to the agent's pane.
+	MultiDone []string `toml:"multi_done"`
+	Down      string   `toml:"down"`
+	// Review is the option of the menu's review step ("Submit answers")
+	// that hands the answers over once each question has one, on a
+	// screen that shows ReviewTitle; tm picks it by its number after it
+	// typed the last answer.
+	Review      string `toml:"review"`
+	ReviewTitle string `toml:"review_title"`
+}
+
+// Multi reports whether tm answers the agent's multi-select questions.
+func (a *Answer) Multi() bool {
+	return a != nil && len(a.MultiDone) > 0 && a.Down != "" && a.Submit != ""
 }
 
 // Approve is a manifest's [approve] table: regular expressions,

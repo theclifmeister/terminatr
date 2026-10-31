@@ -73,6 +73,12 @@ func (a *asks) drop(id string, o *openAsk) {
 // (Question.Escape), checked under the lock: another question can't
 // take its place between the check and the answer.
 func (a *asks) answer(id string, i int, ans, question string, byHuman bool) (proto.SessionAnswerResult, *proto.Error) {
+	return a.answerPicks(id, i, ans, nil, question, byHuman)
+}
+
+// answerPicks is answer with a multi-select's picks (indexes into its
+// options) in place of ans, when there are any.
+func (a *asks) answerPicks(id string, i int, ans string, picks []int, question string, byHuman bool) (proto.SessionAnswerResult, *proto.Error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	o := a.open[id]
@@ -84,6 +90,12 @@ func (a *asks) answer(id string, i int, ans, question string, byHuman bool) (pro
 	}
 	if i < 0 || i >= len(o.q.Questions) {
 		return proto.SessionAnswerResult{}, proto.Errorf(proto.ErrBadParams, "the open question has %d question(s), not %d", len(o.q.Questions), i+1)
+	}
+	if len(picks) > 0 {
+		var perr *proto.Error
+		if ans, perr = pickedAnswer(o.q.Questions[i], picks); perr != nil {
+			return proto.SessionAnswerResult{}, perr
+		}
 	}
 	if strings.TrimSpace(ans) == "" {
 		return proto.SessionAnswerResult{}, proto.Errorf(proto.ErrBadParams, "empty answer")
@@ -99,7 +111,7 @@ func (a *asks) answer(id string, i int, ans, question string, byHuman bool) (pro
 			return proto.SessionAnswerResult{}, proto.Errorf(proto.ErrNoQuestion, "session %s's open menu no longer asks that question", id)
 		case it.Answered:
 			return proto.SessionAnswerResult{}, proto.Errorf(proto.ErrRefused, "that question is answered already")
-		case it.MultiSelect || !slices.Contains(labels, ans):
+		case len(picks) == 0 && (it.MultiSelect || !slices.Contains(labels, ans)):
 			return proto.SessionAnswerResult{}, proto.Errorf(proto.ErrBadParams, "%q is not one of that question's options", ans)
 		}
 	}

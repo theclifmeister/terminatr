@@ -70,3 +70,31 @@ func TestAsk(t *testing.T) {
 		t.Fatal("dropped, still open")
 	}
 }
+
+// TestAskPicks: tm's own multi-select takes picks, guarded by its
+// question; a single-select takes none.
+func TestAskPicks(t *testing.T) {
+	menu := menu
+	menu.Questions = slices.Clone(menu.Questions)
+	var a asks
+	o := a.put("s-1", menu)
+	if _, perr := a.answerPicks("s-1", 0, "", []int{0}, "", true); perr == nil || perr.Code != proto.ErrBadParams {
+		t.Fatalf("picks on a single-select: %v", perr)
+	}
+	if _, perr := a.answerPicks("s-1", 1, "", []int{2}, "Which fruits?", true); perr == nil || perr.Code != proto.ErrBadParams {
+		t.Fatalf("a pick it hasn't: %v", perr)
+	}
+	if _, perr := a.answerPicks("s-1", 1, "", []int{1, 0}, "Which colour?", true); perr == nil || perr.Code != proto.ErrNoQuestion {
+		t.Fatalf("another question's guard: %v", perr)
+	}
+	if res, perr := a.answerPicks("s-1", 1, "", []int{1, 0}, "Which fruits?", true); perr != nil || res.Remaining != 1 {
+		t.Fatalf("picks: %+v %v", res, perr)
+	}
+	if q := a.of("s-1"); q.Questions[1].Answer != "Apple, Pear" {
+		t.Fatalf("picked: %+v", q.Questions[1])
+	}
+	a.answer("s-1", 0, "Red", "", true)
+	if ans := <-o.answered; ans["Which fruits?"] != "Apple, Pear" {
+		t.Fatalf("the asker got %v", ans)
+	}
+}

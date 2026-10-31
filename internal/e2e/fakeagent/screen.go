@@ -203,6 +203,8 @@ type dialog struct {
 	// a multi-select's toggled options (nil for a single-select).
 	descriptions []string
 	checked      map[int]bool
+	done         string // question: a multi-select's row under its options that ends it ("Next", "Submit"); sel len(options) is on it
+	review       []string // review: "question → answer" of each of the call's questions
 	question     string
 	options      []string
 	sel          int
@@ -231,9 +233,9 @@ func (d *dialog) lines() []string {
 			if d.kind == "question" && i == d.textOpt && len(d.text) > 0 {
 				o = string(d.text)
 			}
-			if d.checked != nil && i != d.textOpt {
+			if d.checked != nil {
 				box := "[ ]"
-				if d.checked[i] {
+				if d.checked[i] && i != d.textOpt {
 					box = "[✔]"
 				}
 				o = box + " " + o
@@ -242,6 +244,15 @@ func (d *dialog) lines() []string {
 			if i < len(d.descriptions) && d.descriptions[i] != "" {
 				out = append(out, "      "+d.descriptions[i])
 			}
+		}
+		// As Claude 2.1.316 draws a multi-select: its Next (or Submit)
+		// unnumbered under the options.
+		if d.checked != nil && d.done != "" {
+			mark := "  "
+			if d.sel == len(d.options) {
+				mark = "❯ "
+			}
+			out = append(out, " "+mark+"   "+d.done)
 		}
 	}
 	switch d.kind {
@@ -300,6 +311,15 @@ func (d *dialog) lines() []string {
 		default:
 			out = append(out, "  tab to add notes | enter to submit all | ←/→ to navigate questions | esc to interrupt")
 		}
+	case "review":
+		// Claude's review step after a menu's last answer: no footer.
+		out = append(out, " ← "+d.tabs+" →", " Review your answers", "")
+		for _, r := range d.review {
+			q, a, _ := strings.Cut(r, " → ")
+			out = append(out, "  ● "+q, "    → "+a)
+		}
+		out = append(out, "", " Ready to submit your answers?", "")
+		opts()
 	case "question":
 		if d.tabs != "" {
 			out = append(out, " ← "+d.tabs+" →", " "+d.question)
