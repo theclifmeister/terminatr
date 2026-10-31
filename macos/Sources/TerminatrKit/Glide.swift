@@ -15,14 +15,18 @@ import Foundation
 /// the way costs frames. With Reduce Motion it is instant: at the end
 /// at once.
 ///
-/// It lands on the real end (T896): once the spring is done it stays on
-/// the end, moved with it, until the end holds still for hold frames.
-/// After a fast flick up the content's height still counts estimates for
-/// the rows near the end, and those rows laying out shrink it after the
-/// spring is done. An offset left where the old end was is then past
-/// the content, over the empty background, and nothing scrolls it back.
-/// The view clamps it between frames too (clamp(to:)): the rows its
-/// frame lays out can pull the end up under it before the frame draws.
+/// It starts and lands on the real end (T896). After a fast flick up the
+/// LazyVStack counts the rows near the end at its estimates, and lays
+/// them out only once they are in view, a frame on: in a coordinator's
+/// conversation (tm's one-line prompts between tall cards) the end then
+/// moves up by more than the lead, and a start lead screens above the
+/// estimate is past the real end, over the empty background. So a start
+/// that leads is aimed (covered): the view shows what it showed, the
+/// offset is on the start, and each frame aims again at the end that
+/// frame has, until it holds (or aimFrames); then the spring runs. And
+/// once the spring is done it stays on the end, moved with it, until the
+/// end holds for hold frames: an offset left where the old end was
+/// would be past the content, and nothing scrolls it back.
 public struct Glide: Equatable, Sendable {
     /// The scroll offset now.
     public private(set) var offset: Double
@@ -30,9 +34,18 @@ public struct Glide: Equatable, Sendable {
     public private(set) var velocity = 0.0
     /// Reduce Motion's: no spring, straight to the end.
     public let instant: Bool
-    /// Whether it has landed: on the end, and the end held (step, then
-    /// clamp, say for the frame).
+    /// Whether it is aiming: the view keeps showing what it showed (a
+    /// still image of it over the scroll) while the start lays out.
+    public private(set) var covered = false
+    /// Whether it has landed: on the end, and the end held.
     public private(set) var landed = false
+    /// Where it was tapped from, and the view's height: a start aimed
+    /// again is from these.
+    private let from: Double
+    private let visible: Double
+    /// The end the start was aimed at, and the frames spent aiming.
+    private var aimed: Double
+    private var aims = 0
     /// The end at the last frame, to see it hold.
     private var last: Double?
     /// Whether the spring is done: it keeps to the end until that holds.
@@ -41,6 +54,8 @@ public struct Glide: Equatable, Sendable {
     private var held = 0
     /// Seconds it has been settling.
     private var settled = 0.0
+    /// Seconds the spring has run.
+    private var elapsed = 0.0
 
     /// The spring's stiffness (its angular frequency, per second): about
     /// 0.4 s to land.
@@ -56,6 +71,10 @@ public struct Glide: Equatable, Sendable {
     /// chasing, and the follower takes over from there, as it does for
     /// each entry that comes.
     public static let longest = 0.6
+    /// Frames it aims a start at most: the rows there lay out in one or
+    /// two. It aims two at least: the end at the first frame may not have
+    /// the start's rows yet, and holds only once a second frame agrees.
+    public static let aimFrames = 4
     /// Frames in a row the end must hold, the glide on it, to have
     /// landed: rows laying out move it for a frame or two after the
     /// spring is done.
@@ -65,17 +84,28 @@ public struct Glide: Equatable, Sendable {
     public static let settleLongest = 0.4
     /// How far the end may move between frames and still hold.
     static let still = 0.5
-    /// Seconds it has run.
-    private var elapsed = 0.0
 
     /// A glide from offset, the end at target, in a view visible tall.
+    /// A start that leads is covered until it is aimed.
     public init(offset: Double, target: Double, visible: Double, instant: Bool = false) {
         self.instant = instant
-        self.offset = instant ? target : min(max(offset, target - Self.lead * max(visible, 1)), target)
+        from = offset
+        self.visible = max(visible, 1)
+        aimed = target
         if instant {
+            self.offset = target
             settling = true
             last = target
+            return
         }
+        self.offset = Self.start(from: offset, target: target, visible: self.visible)
+        covered = self.offset > offset + Self.near
+    }
+
+    /// Where a glide to target starts: lead screens above it at most,
+    /// and never past it.
+    static func start(from: Double, target: Double, visible: Double) -> Double {
+        min(max(from, target - lead * visible), target)
     }
 
     /// One frame, dt seconds on, toward target (the end now). True once
@@ -83,8 +113,15 @@ public struct Glide: Equatable, Sendable {
     /// the end held still for hold frames.
     public mutating func step(to target: Double, dt: Double) -> Bool {
         let dt = min(max(dt, 0), 0.1)
-        elapsed += dt
+        if covered {
+            aims += 1
+            if (aims > 1 && abs(target - aimed) < Self.still) || aims >= Self.aimFrames { covered = false }
+            aimed = target
+            offset = Self.start(from: from, target: target, visible: visible)
+            return false
+        }
         if settling { return settle(target, dt: dt) }
+        elapsed += dt
         let x = offset - target
         let e = exp(-Self.omega * dt)
         let k = velocity + Self.omega * x
@@ -104,24 +141,6 @@ public struct Glide: Equatable, Sendable {
         offset = target + nx
         velocity = nv
         return false
-    }
-
-    /// The end as the frame's layout left it, before the frame draws: an
-    /// offset past it goes back onto it (rows that laid out shorter than
-    /// estimated pulled it up). True when it moved the offset; the end
-    /// then has not held, and it has not landed, unless it has settled
-    /// for settleLongest already.
-    @discardableResult
-    public mutating func clamp(to end: Double) -> Bool {
-        guard offset > end else { return false }
-        offset = end
-        velocity = 0
-        if settling {
-            held = 0
-            last = end
-            landed = settled >= Self.settleLongest
-        }
-        return true
     }
 
     /// The spring is done: on the end, wherever it moves, until it holds.

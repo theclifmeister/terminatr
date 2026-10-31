@@ -290,74 +290,80 @@ private func at(_ f: inout Follow, _ offset: Double, content: Double, newest: In
     #expect(n + 1 == Glide.hold && g.offset == 1600)
 }
 
-/// A glide frame by frame, its end as the view would have it: the end
-/// read for the step (estimated), then the end after the frame's layout
-/// (clamp).
-private func run(_ g: inout Glide, frames: Int = 600, end: (Int) -> (step: Double, laid: Double)) -> (n: Int, past: Double) {
-    var n = 0, past = -Double.infinity
+/// A glide frame by frame to end(n), the end the view has at frame n:
+/// the frames it took, and how far past the end it ever was, covered
+/// frames left out (the view shows its still image then).
+private func run(_ g: inout Glide, frames: Int = 600, end: (Int) -> Double) -> (n: Int, past: Double, covered: Int) {
+    var n = 0, past = -Double.infinity, covered = 0
     while !g.landed, n < frames {
         let e = end(n)
-        _ = g.step(to: e.step, dt: 1 / 60)
-        g.clamp(to: e.laid)
-        past = max(past, g.offset - e.laid)
+        _ = g.step(to: e, dt: 1 / 60)
+        if g.covered { covered += 1 } else { past = max(past, g.offset - e) }
         n += 1
     }
-    return (n, past)
+    return (n, past, covered)
 }
 
-/// After a fast flick up, the rows near the end lay out shorter than
-/// the LazyVStack estimated, as the glide lands (T896): it
-/// keeps to the end as it shrinks, lands on the real end once it holds,
-/// and is never past it, at any frame.
-@Test func glideLandsOnTheRealEnd() {
-    var g = Glide(offset: 0, target: 40000, visible: 874)
-    // The spring is done in about 25 frames; the end shrinks 300 points
-    // a frame from frame 20 to 28 (2400 in all), then holds.
-    let r = run(&g) { n in
-        let e = 40000 - 300 * Double(min(max(n - 19, 0), 9))
-        return (e, e)
+/// After a fast flick up the rows near the end lay out a frame after
+/// they come into view, far shorter than estimated (a coordinator's
+/// one-line tm prompts, T896): the end moves up by more than the lead.
+/// The start is aimed under the cover until the end holds, then the
+/// spring runs from lead screens above the real end, never past it,
+/// and lands on it.
+@Test func glideAimsItsStartAtTheRealEnd() {
+    var g = Glide(offset: 5000, target: 15600, visible: 874)
+    #expect(g.covered && g.offset == 15600 - Glide.lead * 874)
+    // Laid out, the start's rows move the end up by 2300, then it holds.
+    let r = run(&g) { n in n == 0 ? 15600 : 13300 }
+    #expect(g.landed && g.offset == 13300)
+    #expect(r.covered == 2 && r.past <= 0)
+    // Uncovered on the start for the real end.
+    var h = Glide(offset: 5000, target: 15600, visible: 874)
+    _ = h.step(to: 13300, dt: 1 / 60)
+    #expect(h.covered)
+    _ = h.step(to: 13300, dt: 1 / 60)
+    #expect(!h.covered && h.offset == 13300 - Glide.lead * 874)
+}
+
+/// An end that never holds under the cover (output streaming in each
+/// frame): it aims at most aimFrames, then glides.
+@Test func glideAimsAtMostAimFrames() {
+    var g = Glide(offset: 0, target: 20000, visible: 800)
+    var n = 0
+    while g.covered, n < 100 {
+        _ = g.step(to: 20000 + 50 * Double(n + 1), dt: 1 / 60)
+        n += 1
     }
-    #expect(g.landed && g.offset == 37300)
+    #expect(n == Glide.aimFrames)
+}
+
+/// Near the end there is no lead to aim: no cover, and never a start
+/// past the end.
+@Test func glideNearIsUncovered() {
+    #expect(!Glide(offset: 900, target: 1500, visible: 800).covered)
+    let past = Glide(offset: 2000, target: 1500, visible: 800)
+    #expect(!past.covered && past.offset == 1500)
+}
+
+/// The rows near the end lay out shorter as the spring lands (T896):
+/// it keeps to the end as it shrinks, lands on the real end once it
+/// holds for Glide.hold frames, and is never past it.
+@Test func glideLandsOnTheRealEnd() {
+    var g = Glide(offset: 1200, target: 2000, visible: 800)
+    #expect(!g.covered)
+    // The spring is done in about 25 frames; the end shrinks 60 points a
+    // frame from frame 20 to 28, then holds.
+    let r = run(&g) { n in 2000 - 60 * Double(min(max(n - 19, 0), 9)) }
+    #expect(g.landed && g.offset == 1460)
     #expect(r.past <= 0)
     #expect(r.n >= 29 + Glide.hold - 1)
 }
 
-/// The frame's layout pulls the end up under the offset the step just
-/// set (the step read the estimate): clamp puts it back onto the end
-/// before the frame draws, and that frame doesn't land.
-@Test func glideClampsToTheLaidOutEnd() {
-    var g = Glide(offset: 0, target: 1500, visible: 800)
-    // The estimate says 1500 until the rows lay out, at 1200.
-    var n = 0
-    while !g.landed, n < 120 {
-        let laid = n < 15 ? 1500.0 : 1200
-        _ = g.step(to: n < 16 ? 1500 : laid, dt: 1 / 60)
-        let moved = g.clamp(to: laid)
-        if moved { #expect(!g.landed) }
-        #expect(g.offset <= laid)
-        n += 1
-    }
-    #expect(g.landed && g.offset == 1200)
-}
-
-/// A start lead screens up from an estimated end that is past the real
-/// one: never further down than the end it has.
-@Test func glideStartsAtMostOnTheEnd() {
-    #expect(Glide(offset: 2000, target: 1500, visible: 800).offset == 1500)
-    var g = Glide(offset: 0, target: 50000, visible: 800)
-    #expect(g.offset == 48400)
-    // The rows there lay out: the end is at 48000, above the start.
-    #expect(g.clamp(to: 48000) && g.offset == 48000 && !g.landed)
-}
-
-/// An end that never holds (shrinking or growing every frame): the
-/// glide still lands, on the end, within longest and settleLongest.
+/// An end that never holds (output streaming in each frame): the glide
+/// still lands, on the end, within longest and settleLongest.
 @Test func glideLandsOnAnEndThatNeverHolds() {
-    var g = Glide(offset: 0, target: 10000, visible: 800)
-    let r = run(&g) { n in
-        let e = 10000 + (n % 2 == 0 ? 7 : -7) * Double(n)
-        return (e, e - 2)
-    }
+    var g = Glide(offset: 9000, target: 10000, visible: 800)
+    let r = run(&g) { n in 10000 + (n % 2 == 0 ? 7 : -7) * Double(n) }
     #expect(g.landed && r.past <= 0)
     #expect(Double(r.n) / 60 <= Glide.longest + Glide.settleLongest + 2.0 / 60)
 }
