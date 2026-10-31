@@ -66,6 +66,8 @@ let backend = AppAPI.QuestionItem(question: "Which cache backend?", options: [.i
     let first = Need.answer("s", agents, index: 0)
     #expect(first?.params("Yes") == AppAPI.AnswerParams(id: "s", index: 0, answer: "Yes", question: "Shared pages?"))
     #expect(first?.descriptions == ["All of them", ""])
+    #expect(first?.screen == true)
+    #expect(Need.answerable("s", AppAPI.Question(questions: [shared], screen: true))?.screen == true)
     #expect(Need.answer("s", agents, index: 1) == nil) // asked in order
     #expect(Need.answer("s", agents, index: 2) == nil)
     agents.questions[0].answered = true

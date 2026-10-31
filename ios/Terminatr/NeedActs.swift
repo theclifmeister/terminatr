@@ -43,6 +43,9 @@ struct NeedActs: View {
     @State private var note = ""
     @State private var peerSendBack: Need.PeerAct.Choice?
     @State private var answered = 0
+    /// The option tapped: marked while it goes, and once the server took
+    /// it, until the card goes.
+    @State private var sending: String?
     @State private var refused = 0
 
     var body: some View {
@@ -98,10 +101,17 @@ struct NeedActs: View {
             if let a = answering {
                 VStack(spacing: Spacing.item) {
                     ForEach(Array(a.options.enumerated()), id: \.offset) { i, o in
-                        AnswerOption(key: i + 1, label: o, detail: i < a.descriptions.count ? a.descriptions[i] : "") {
+                        AnswerOption(key: i + 1, label: o, detail: i < a.descriptions.count ? a.descriptions[i] : "",
+                                     picked: sending == o) {
                             answer(a, o)
                         }
                         .accessibilityLabel(named(o))
+                    }
+                    // What the tap did, next to the options it came from
+                    // (T887): the answer on its way, or the server's
+                    // refusal, not at the card's foot, under the rest.
+                    if let line = QuestionPlan.tapped(sending: sending, busy: busy, screen: a.screen, said: said) {
+                        SaidLine(text: line.text, failed: line.failed)
                     }
                     if terminal, let showTerminal {
                         Button("Open the terminal", systemImage: "apple.terminal", action: showTerminal.go)
@@ -214,6 +224,8 @@ struct NeedActs: View {
     /// The card's line under the buttons: what the server said, else why
     /// the phone can't answer an escape.
     private var shownNote: (text: String, failed: Bool)? {
+        // A question's options carry their own line (SaidLine).
+        if need.kind == .question, answering != nil, model.can(AppAPI.Methods.sessionAnswer.name) { return nil }
         if let said { return said }
         if escape { return ("It runs a command outside its sandbox: answer it on your computer.", false) }
         return nil
@@ -263,6 +275,7 @@ struct NeedActs: View {
     }
 
     private func answer(_ a: Need.Answer, _ option: String) {
+        sending = option
         act { try await model.answer(a, option); return nil }
     }
 
@@ -306,6 +319,7 @@ struct NeedActs: View {
                 if let s = try await f() { said = (s, false) }
                 answered += 1
             } catch {
+                sending = nil
                 if let w = Self.words(error) {
                     said = (w, true)
                     refused += 1
@@ -359,6 +373,30 @@ struct NeedParts {
     let command: String
     let note: (text: String, failed: Bool)?
     let acts: [NeedAct]
+}
+
+/// A question card's line under its options (QuestionPlan.tapped): a
+/// refusal after the warning mark, in ink; the answer on its way muted.
+struct SaidLine: View {
+    @Environment(\.theme) private var theme
+    let text: String
+    let failed: Bool
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: Spacing.tight) {
+            if failed {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(theme.attention)
+                    .accessibilityHidden(true)
+            }
+            Text(text)
+                .foregroundStyle(failed ? theme.ink : theme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .font(theme.body(.footnote))
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+    }
 }
 
 /// NeedActs' parts one under the other: the buttons and the server's

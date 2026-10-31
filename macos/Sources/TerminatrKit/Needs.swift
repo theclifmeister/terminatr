@@ -104,6 +104,8 @@ public struct Need: Identifiable, Hashable, Sendable {
         public let options: [String]
         /// Each option's line of description ("" for none), for its row.
         public var descriptions: [String] = []
+        /// The agent's own menu, its answer typed on its screen.
+        public var screen = false
 
         public func params(_ option: String) -> AppAPI.AnswerParams {
             AppAPI.AnswerParams(id: session, index: index, answer: option, question: question)
@@ -254,7 +256,7 @@ extension Need {
         guard open.count == 1, let a = answer(session, q, index: open[0]) else { return nil }
         let n = min(a.options.count, maxButtons)
         return Answer(session: session, index: a.index, question: a.question,
-                      options: Array(a.options.prefix(n)), descriptions: Array(a.descriptions.prefix(n)))
+                      options: Array(a.options.prefix(n)), descriptions: Array(a.descriptions.prefix(n)), screen: a.screen)
     }
 
     /// The answer a conversation's card for question index of session's
@@ -269,7 +271,7 @@ extension Need {
         guard !item.answered, !item.multiSelect, !item.options.isEmpty else { return nil }
         if q.screen, q.questions.firstIndex(where: { !$0.answered }) != index { return nil }
         return Answer(session: session, index: index, question: item.question,
-                      options: item.options.map(\.label), descriptions: item.options.map(\.description))
+                      options: item.options.map(\.label), descriptions: item.options.map(\.description), screen: q.screen)
     }
 
     static func of(project p: AppAPI.Project) -> [Need] {
