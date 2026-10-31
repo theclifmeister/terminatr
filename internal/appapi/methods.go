@@ -15,8 +15,9 @@ import (
 // A method joins on purpose, here, with its copies; nothing reaches the
 // server that isn't listed. Settings, access, mods and the server's own
 // controls are never here: they stay the TUI's and the CLI's, but for
-// the two exceptions named in the spec, answering a guard refusal and
-// the user's paired devices.
+// the exceptions named in the spec: answering a guard refusal, the
+// user's paired devices, and a project's mods (on or off for it, and
+// their settings for it).
 var methods = map[string]Method{}
 
 func init() {
@@ -166,6 +167,14 @@ func init() {
 		unary(proto.MethodSessionAdoptRequest, true, adoptRequestParams, adoptRequestedOf),
 		unary(proto.MethodSessionRemote, true, remoteParams, remoteOf),
 		unary(proto.MethodLinkSend, true, linkSendParams, linkActOf),
+
+		// A project's mods, as the project popup's Mods tab (app API 38;
+		// the server's caps say project-mods): the list reads; turning
+		// one on or off for the project, and its settings for it, write.
+		// The one place mods join, the human's only.
+		unary(proto.MethodModsList, false, modsListParams, modsOf),
+		unary(proto.MethodModsSet, true, modsSetParams, modsActOf),
+		unary(proto.MethodModsSetting, true, modsSettingParams, modsActOf),
 
 		// The guard's refusals, read and answered one at a time (app
 		// API 18): the bridge's own, from the human's log (guard.go).

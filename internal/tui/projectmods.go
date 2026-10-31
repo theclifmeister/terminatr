@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -10,6 +11,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/theclifmeister/terminatr/internal/mod"
+	"github.com/theclifmeister/terminatr/internal/modproj"
 )
 
 // The project popup's Mods tab (docs/SPEC.md §4): every installed mod
@@ -24,39 +26,13 @@ import (
 // modWhere is where mod md runs, in this project's words: on or off for
 // it, or following all projects, with what all projects do.
 func modWhere(md mod.Mod, slug string) (string, lipgloss.Style) {
-	on := md.State == mod.Enabled
-	switch {
-	case md.State == mod.Invalid || md.State == mod.Incompatible:
-		return md.Status(), th().Bad
-	case len(md.Projects) == 0 && on:
-		return "follows all projects: on", th().Plain
-	case len(md.Projects) == 0:
-		return "follows all projects: off", th().Faint
-	case slices.Contains(md.Projects, slug) && on:
-		return "on for this project", th().Good
-	case slices.Contains(md.Projects, slug):
-		return "on for this project, but the mod is off", th().Warn
-	case on:
-		return "off for this project · runs for " + joinAnd(md.Projects), th().Faint
-	}
-	return "off for this project", th().Faint
+	words, tone := modproj.Where(md, slug)
+	return words, toneStyle(tone)
 }
 
 // modOwnSettings is what of mod md's settings project slug sets, "" for
 // a mod without settings.
-func modOwnSettings(md mod.Mod, slug string) string {
-	if md.Manifest == nil || len(md.Manifest.Settings) == 0 {
-		return ""
-	}
-	switch n := len(md.ProjectSettings[slug]); n {
-	case 0:
-		return "settings: all projects"
-	case 1:
-		return "settings: 1 of its own"
-	default:
-		return fmt.Sprintf("settings: %d of its own", n)
-	}
-}
+func modOwnSettings(md mod.Mod, slug string) string { return modproj.OwnSettings(md, slug) }
 
 // modsLines draws the tab w cells wide: a line per mod, then the
 // selected one's description and where it runs, in words.
@@ -209,37 +185,31 @@ func (pv *projectView) modsKey(m *dash, s string) tea.Cmd {
 // after a question, by limiting it to the others; on as tm mod enable
 // --project does, after its consent when it is off or wants more.
 func (m *dash) modToggleFor(md mod.Mod, slug string) tea.Cmd {
-	name := modName(md)
-	switch {
-	case md.State == mod.Invalid || md.State == mod.Incompatible:
-		m.fail(fmt.Errorf("%s can't be turned on: %s", name, md.Reason()))
+	t := modproj.ToggleFor(md, slug, m.localProjects())
+	switch t.Do {
+	case modproj.DoRefuse:
+		m.fail(errors.New(t.Why))
 		return nil
-	case md.Runs(slug) && md.Required:
-		m.fail(mod.ErrRequired{ID: md.ID})
+	case modproj.DoOffAll:
+		m.confirm(t.Title, t.Question, func() tea.Cmd {
+			return m.modAct(md.ID, "disable", t.Done)
+		})
 		return nil
-	case md.Runs(slug) && len(md.Projects) == 0:
-		others := slices.DeleteFunc(m.localProjects(), func(p string) bool { return p == slug })
-		if len(others) == 0 {
-			m.confirm("Turn "+name+" off", name+" runs for every project, and "+slug+" is the only one. Turn it off?", func() tea.Cmd {
-				return m.modAct(md.ID, "disable", name+" off")
-			})
-			return nil
-		}
-		m.confirm("Turn "+name+" off for "+slug, name+" runs for every project. Run it only for "+joinAnd(others)+" instead? A project made later won't run it until you turn it on there.", func() tea.Cmd {
+	case modproj.DoLimit:
+		m.confirm(t.Title, t.Question, func() tea.Cmd {
 			src := m.src
 			return m.act(func() actionMsg {
-				if err := src.SetModProjects(md.ID, others); err != nil {
+				if err := src.SetModProjects(md.ID, t.Others); err != nil {
 					return actionMsg{err: err}
 				}
-				return actionMsg{msg: name + " off for " + slug}
+				return actionMsg{msg: t.Done}
 			})
 		})
 		return nil
-	case md.Runs(slug):
-		return m.modActFor(md.ID, "disable", slug, name+" off for "+slug)
-	case md.State == mod.Enabled && len(md.WantsMore) == 0:
-		// Running it for one more project grants nothing new.
-		return m.modActFor(md.ID, "enable", slug, name+" on for "+slug)
+	case modproj.DoOff:
+		return m.modActFor(md.ID, "disable", slug, t.Done)
+	case modproj.DoOn:
+		return m.modActFor(md.ID, "enable", slug, t.Done)
 	}
 	m.push(&consentView{id: md.ID, slug: slug})
 	return nil

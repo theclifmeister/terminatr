@@ -22,6 +22,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/device"
 	"github.com/theclifmeister/terminatr/internal/peer"
+	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/relay"
 	"github.com/theclifmeister/terminatr/internal/server"
@@ -443,5 +444,50 @@ func TestDeviceBye(t *testing.T) {
 	}
 	if err := mac.Call(appapi.MethodDeviceBye, appapi.ByeParams{}, nil); code(err) != appapi.ErrLevel {
 		t.Fatalf("the Mac app's device.bye: %v", err)
+	}
+}
+
+// TestDeviceMods: a device reads a project's mods at view; turning one
+// on or off and its settings wait for write, signed, as every write.
+func TestDeviceMods(t *testing.T) {
+	p := testPaths(t)
+	startServer(t, p)
+	if _, err := project.New(project.Options{Slug: "web"}); err != nil {
+		t.Fatal(err)
+	}
+	wk, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	set := appapi.ModsSetParams{Project: "web", Mod: "nope", On: true}
+	setting := appapi.ModsSettingParams{Project: "web", Mod: "nope", Key: "k"}
+	for _, level := range []string{device.LevelView, device.LevelAnswer} {
+		c := deviceBridge(t, p, device.NewLevel(level), &wk.PublicKey)
+		c.Sign = apptest.Signer(wk)
+		var mods appapi.Mods
+		if err := c.Call(proto.MethodModsList, appapi.ModsListParams{Project: "web"}, &mods); err != nil || mods.Project != "web" {
+			t.Fatalf("mods.list at %s: %+v %v", level, mods, err)
+		}
+		if slices.Contains(c.Hello.Methods, proto.MethodModsSet) || !slices.Contains(c.Hello.Methods, proto.MethodModsList) {
+			t.Errorf("hello at %s: %v", level, c.Hello.Methods)
+		}
+		if err := c.Call(proto.MethodModsSet, set, nil); code(err) != appapi.ErrLevel {
+			t.Errorf("mods.set at %s: %v", level, err)
+		}
+		if err := c.Call(proto.MethodModsSetting, setting, nil); code(err) != appapi.ErrLevel {
+			t.Errorf("mods.setting at %s: %v", level, err)
+		}
+	}
+	c := deviceBridge(t, p, device.NewLevel(device.LevelWrite), &wk.PublicKey)
+	if err := c.Call(proto.MethodModsSet, set, nil); code(err) != appapi.ErrSignature {
+		t.Errorf("unsigned mods.set at write: %v", err)
+	}
+	c.Sign = apptest.Signer(wk)
+	// Signed at write, it reaches the server, which knows no such mod.
+	if err := c.Call(proto.MethodModsSet, set, nil); code(err) != proto.ErrBadParams {
+		t.Errorf("mods.set at write: %v", err)
+	}
+	if err := c.Call(proto.MethodModsSetting, setting, nil); code(err) != proto.ErrBadParams {
+		t.Errorf("mods.setting at write: %v", err)
 	}
 }

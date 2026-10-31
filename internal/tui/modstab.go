@@ -14,6 +14,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/mod"
+	"github.com/theclifmeister/terminatr/internal/modproj"
 	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
@@ -64,27 +65,10 @@ func modByID(m *dash, id string) (mod.Mod, bool) {
 }
 
 // modName is the mod's name, its id when its manifest doesn't load.
-func modName(md mod.Mod) string {
-	if md.Manifest != nil && strings.TrimSpace(md.Manifest.Name) != "" {
-		return oneLine(mod.Clean(md.Manifest.Name, false))
-	}
-	return md.ID
-}
+func modName(md mod.Mod) string { return modproj.Name(md) }
 
 // modKinds is what the mod provides, "built in" last for a bundled one.
-func modKinds(md mod.Mod) string {
-	var k []string
-	if md.Manifest != nil {
-		k = md.Manifest.Kinds()
-	}
-	if md.Builtin {
-		k = append(k, "built in")
-	}
-	if len(k) == 0 {
-		return "-"
-	}
-	return strings.Join(k, " · ")
-}
+func modKinds(md mod.Mod) string { return modproj.Kinds(md) }
 
 // modHost is the enabled code mod's host as the supervisor has it;
 // false for a data mod, one that is off, or when the server doesn't say.
@@ -443,15 +427,7 @@ func (m *dash) modRemove(md mod.Mod) {
 // permStyle is a permission's colour in the consent (mods design §7):
 // what reads or tells stays inside tm; agent tools, files and the network
 // reach out; and running programs reaches furthest.
-func permStyle(perm string) lipgloss.Style {
-	switch perm {
-	case mod.PermTools, mod.PermFiles, mod.PermNet:
-		return th().Warn
-	case mod.PermCommands:
-		return th().Bad
-	}
-	return th().Info
-}
+func permStyle(perm string) lipgloss.Style { return toneStyle(modproj.PermTone(perm)) }
 
 // consentView is a mod's consent (mods design §9): what it is, each
 // permission it asks for in plain words and its colour, every rules
@@ -477,81 +453,68 @@ func (cv *consentView) lines(m *dash, md mod.Mod, w int) []string {
 // every rules addendum, agent manifest, task template, tool and guard
 // rule in full, then question.
 func consentLines(md mod.Mod, question string, w int) []string {
-	man := md.Manifest
 	var out []string
-	out = append(out, th().Head.Render(ansi.Truncate(oneLine(man.Headline()), w, "…")))
-	if d := strings.TrimSpace(oneLine(mod.Clean(man.Description, false))); d != "" {
-		out = append(out, wrapLines(d, w)...)
+	for _, l := range modproj.Consent(md, question) {
+		out = append(out, consentLine(l, w)...)
 	}
-	if man.Homepage != "" {
-		out = append(out, th().Faint.Render(ansi.Truncate(oneLine(mod.Clean(man.Homepage, false)), w, "…")))
+	return out
+}
+
+// toneStyle is a modproj tone's style.
+func toneStyle(tone string) lipgloss.Style {
+	switch tone {
+	case modproj.Head:
+		return th().Head
+	case modproj.Faint:
+		return th().Faint
+	case modproj.Good:
+		return th().Good
+	case modproj.Warn:
+		return th().Warn
+	case modproj.Bad:
+		return th().Bad
+	case modproj.Info:
+		return th().Info
 	}
-	out = append(out, wrapLines("Provides: "+strings.Join(man.Kinds(), " · "), w)...)
-	if v := man.ViewWords(); len(v) > 0 {
-		out = append(out, wrapLines("Panels it draws: "+strings.Join(v, " · "), w)...)
-	}
-	if k := man.Provides.CodeHost; k != "" {
-		out = append(out, wrapLines(fmt.Sprintf("Code host %s: for projects whose code_host is %q, tm asks it about their pull requests and has it merge one tm thread merge checked.", k, k), w)...)
-	}
-	if c := man.CommandWords(); len(c) > 0 {
-		out = append(out, wrapLines("Commands you can run: "+strings.Join(c, " · "), w)...)
-	}
-	out = append(out, "")
-	changes := md.AgentChanges()
-	if len(changes) > 0 {
-		out = append(out, "It changes what agents run or read:")
-		for _, c := range changes {
-			out = append(out, wrapLines("  • "+c.Long, w)...)
+	return th().Plain
+}
+
+// consentLine is one of a consent's lines, fit to w cells.
+func consentLine(l modproj.Line, w int) []string {
+	render := func(s modproj.Span) string {
+		if s.Tone == modproj.Plain {
+			return s.Text
 		}
+		return toneStyle(s.Tone).Render(s.Text)
 	}
-	asked := man.Permissions.Requested()
-	switch {
-	case len(asked) == 0 && len(changes) > 0:
-		out = append(out, "It asks for no permission.")
-	case len(asked) == 0:
-		out = append(out, "It asks for no permission: "+th().Good.Render("safe")+".")
-		out = append(out, faintLines("Its own data, columns, settings and log, and events about sessions and the clock.", w)...)
-	default:
-		out = append(out, "It may:")
-		for _, p := range asked {
-			l := "  • " + permStyle(p).Render(oneLine(man.Permissions.PermWords(p)))
-			if md.State == mod.Enabled && slices.Contains(md.WantsMore, p) {
-				l += th().Faint.Render(" · new")
+	if len(l.Spans) == 1 {
+		s := l.Spans[0]
+		switch l.Fit {
+		case modproj.FitCut:
+			return []string{render(modproj.Span{Text: ansi.Truncate(s.Text, w, "…"), Tone: s.Tone})}
+		case modproj.FitWrap:
+			lines := wrapLines(s.Text, w)
+			for i, t := range lines {
+				lines[i] = render(modproj.Span{Text: t, Tone: s.Tone})
 			}
-			out = append(out, ansi.Truncate(l, w, "…"))
+			return lines
+		case modproj.FitHard:
+			return hardLines(s.Text, w)
 		}
+		return []string{render(s)}
 	}
-	if d := man.DefaultWords(); len(d) > 0 {
-		out = append(out, "")
-		out = append(out, wrapLines("It suggests defaults for all projects. Nothing changes until you apply them (d in the Mods tab, once it's on), and a setting your config.toml sets stays yours:", w)...)
-		for _, l := range d {
-			out = append(out, ansi.Truncate("  • "+l, w, "…"))
-		}
+	var b strings.Builder
+	for _, s := range l.Spans {
+		b.WriteString(render(s))
 	}
-	if shown := md.Shown(); shown != "" {
-		out = append(out, "")
-		out = append(out, hardLines(shown, w)...)
+	if l.Fit == modproj.FitCut {
+		return []string{ansi.Truncate(b.String(), w, "…")}
 	}
-	return append(out, "", th().Head.Render(question))
+	return []string{b.String()}
 }
 
 func (cv *consentView) question(md mod.Mod) string {
-	if md.State == mod.Enabled {
-		return "Grant " + modName(md) + " what it wants more?"
-	}
-	if cv.slug != "" {
-		return "Enable " + modName(md) + " for " + joinAnd(enabledFor(md, cv.slug)) + "?"
-	}
-	return "Enable " + modName(md) + "?"
-}
-
-// enabledFor are the projects mod md, off, runs for once tm mod enable
-// --project slug turns it on: those it was limited to, then slug.
-func enabledFor(md mod.Mod, slug string) []string {
-	if slices.Contains(md.Projects, slug) {
-		return md.Projects
-	}
-	return append(slices.Clone(md.Projects), slug)
+	return modproj.ConsentQuestion(md, cv.slug)
 }
 
 func (cv *consentView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
