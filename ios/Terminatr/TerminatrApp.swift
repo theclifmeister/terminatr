@@ -136,6 +136,10 @@ indirect enum Route: Hashable {
     case memoryFile(String, path: String)
     case library(String)
     case task(String, ref: String)
+    /// A project's mods (T869), and one of them by its id: on or off
+    /// for the project, and its settings for it.
+    case mods(String)
+    case mod(String, id: String)
     /// A project's design by its name (T864): its answers, open
     /// questions and build.
     case design(String, name: String)
@@ -149,6 +153,7 @@ indirect enum Route: Hashable {
     /// coordinator) or "session:SLUG/THREAD", "need:SLUG/THREAD" (its
     /// question or approval); "overview:SLUG",
     /// "board:SLUG", "memory:SLUG", "memory:SLUG/PATH", "library:SLUG",
+    /// "mods:SLUG", "mods:SLUG/ID",
     /// "task:SLUG/REF", "design:SLUG/NAME", or a paired server's
     /// "peer:ALIAS/PROJECT", "peer:ALIAS/PROJECT/PAGE" and
     /// "peer:ALIAS/PROJECT/designs/NAME".
@@ -165,6 +170,7 @@ indirect enum Route: Hashable {
         case "board": return .board(slug)
         case "memory": return rest.isEmpty ? .memory(slug) : .memoryFile(slug, path: rest)
         case "library": return .library(slug)
+        case "mods": return rest.isEmpty ? .mods(slug) : .mod(slug, id: rest)
         case "task": return rest.isEmpty ? nil : .task(slug, ref: rest)
         case "design": return rest.isEmpty ? nil : .design(slug, name: rest)
         // "peer:ALIAS/PROJECT", "peer:ALIAS/PROJECT/PAGE" (overview,
@@ -191,7 +197,8 @@ indirect enum Route: Hashable {
         case .project, .peerProject: [self]
         case .session(let ref), .need(let ref):
             [ref.isRemote ? .peerProject(alias: ref.server, project: ref.project) : .project(ref.project), self]
-        case .overview(let s), .board(let s), .memory(let s), .library(let s), .design(let s, _): [.project(s), self]
+        case .overview(let s), .board(let s), .memory(let s), .library(let s), .design(let s, _), .mods(let s): [.project(s), self]
+        case .mod(let s, _): [.project(s), .mods(s), self]
         case .memoryFile(let s, _): [.project(s), .memory(s), self]
         case .task(let s, _): [.project(s), .board(s), self]
         case .peerPage(let alias, let project, _), .peerDesign(let alias, let project, _): [.peerProject(alias: alias, project: project), self]
@@ -459,6 +466,8 @@ private struct BaseRouteScreen: View {
         case .memory(let slug): MemoryScreen(slug: slug)
         case .memoryFile(let slug, let path): MemoryFileScreen(slug: slug, path: path)
         case .library(let slug): LibraryScreen(slug: slug)
+        case .mods(let slug): ModsScreen(slug: slug)
+        case .mod(let slug, let id): ModScreen(slug: slug, id: id)
         case .task(let slug, let ref): TaskScreen(slug: slug, ref: ref)
         case .design(let slug, let name): DesignScreen(slug: slug, name: name)
         case .peerPage(let alias, let project, let page): PeerPageScreen(alias: alias, project: project, page: page)

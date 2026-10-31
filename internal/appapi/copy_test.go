@@ -328,6 +328,8 @@ func TestCopies(t *testing.T) {
 	check("session.file", homeOf(sessionFileOf), nil)
 	check("memory.list", homeOf(memoryFilesOf), nil)
 	check("design.list", homeOf(designsOf), nil)
+	check("mods.list", homeOf(modsOf), nil)
+	check("mods.set", homeOf(modsActOf), nil)
 	check("memory.read", homeOf(memoryTextOf), nil)
 	check("library.list", homeOf(libraryOf), nil)
 	check("library.read", homeOf(libraryChunkOf), nil)
@@ -392,6 +394,29 @@ func TestParamsCopies(t *testing.T) {
 	}
 	if _, _, err := m.toStream(json.RawMessage(`{"id":3,"ack":5}`)); err == nil {
 		t.Error("pane.input took an ack")
+	}
+	// A project's mods: what the app names goes, nothing more.
+	m, _ = Lookup(proto.MethodModsSet)
+	p, err = m.toServer(json.RawMessage(`{"project":"web","mod":"ci","on":true,"key":"k1"}`))
+	if want := (proto.ModsSetParams{Project: "web", Mod: "ci", On: true, Key: "k1"}); err != nil || p != want {
+		t.Errorf("mods.set params %+v %v", p, err)
+	}
+	if _, err := m.toServer(json.RawMessage(`{"project":"web","mod":"ci","on":true,"grants":["net"]}`)); err == nil {
+		t.Error("mods.set took grants")
+	}
+	m, _ = Lookup(proto.MethodModsSetting)
+	p, err = m.toServer(json.RawMessage(`{"project":"web","mod":"ci","key":"n","value":{"type":"int","int":3}}`))
+	if sp, ok := p.(proto.ModsSettingParams); err != nil || !ok || sp.Key != "n" || sp.Value == nil || sp.Value.Type != "int" || sp.Value.Int != 3 {
+		t.Errorf("mods.setting params %+v %v", p, err)
+	}
+	p, err = m.toServer(json.RawMessage(`{"project":"web","mod":"ci","key":"n"}`))
+	if sp, ok := p.(proto.ModsSettingParams); err != nil || !ok || sp.Value != nil {
+		t.Errorf("mods.setting clear params %+v %v", p, err)
+	}
+	m, _ = Lookup(proto.MethodModsList)
+	p, err = m.toServer(json.RawMessage(`{"project":"web","consent":"ci"}`))
+	if want := (proto.ModsListParams{Project: "web", Consent: "ci"}); err != nil || p != want {
+		t.Errorf("mods.list params %+v %v", p, err)
 	}
 	m, _ = Lookup(proto.MethodTaskAdd)
 	p, err = m.toServer(json.RawMessage(`{"project":"web","title":"Ship it","notes":"soon"}`))
@@ -521,7 +546,7 @@ func TestAllowlist(t *testing.T) {
 		proto.MethodMemoryList, proto.MethodMemoryRead, proto.MethodLibraryList, proto.MethodLibraryRead, proto.MethodDesignList,
 		proto.MethodPeerPagesRead, proto.MethodPeerLibraryList, proto.MethodPeerLibraryRead, proto.MethodPeerDesignList,
 		MethodDeviceNonce, MethodDeviceBye, MethodDeviceList, MethodDevicePair, MethodDevicePairWait, MethodDevicePairAnswer, MethodDeviceAccess,
-		MethodDeviceName, MethodDeviceRemove}
+		MethodDeviceName, MethodDeviceRemove, proto.MethodModsList, proto.MethodModsSet, proto.MethodModsSetting}
 	slices.Sort(want)
 	if got := MethodNames(); !slices.Equal(got, want) {
 		t.Errorf("methods %v, want %v", got, want)
@@ -542,7 +567,8 @@ func TestAllowlist(t *testing.T) {
 		proto.MethodLinkAct: true, proto.MethodPeerShareAnswer: true, MethodGuardRefusals: false, MethodGuardDecide: true,
 		proto.MethodMemoryList: false, proto.MethodMemoryRead: false, proto.MethodLibraryList: false, proto.MethodLibraryRead: false,
 		MethodDeviceList: false, MethodDevicePair: true, MethodDevicePairWait: true, MethodDevicePairAnswer: true,
-		MethodDeviceAccess: true, MethodDeviceName: true, MethodDeviceRemove: true} {
+		MethodDeviceAccess: true, MethodDeviceName: true, MethodDeviceRemove: true,
+		proto.MethodModsList: false, proto.MethodModsSet: true, proto.MethodModsSetting: true} {
 		if m, _ := Lookup(name); m.Write != write {
 			t.Errorf("%s: write %v", name, m.Write)
 		}

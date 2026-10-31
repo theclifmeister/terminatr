@@ -6,7 +6,7 @@ import Foundation
 /// The terminatr app API (docs/SPEC.md §3.8): what tm app bridge answers.
 public enum AppAPI {
     /// The app API version this app was generated against.
-    public static let version = 37
+    public static let version = 38
 
     public struct AdoptRequestParams: Codable, Sendable, Hashable {
         public var id: String
@@ -158,6 +158,36 @@ public enum AppAPI {
 
         enum CodingKeys: String, CodingKey {
             case id
+        }
+    }
+
+    public struct ConsentLine: Codable, Sendable, Hashable {
+        public var spans: [ConsentSpan]
+        public var fit: String
+
+        public init(spans: [ConsentSpan] = [], fit: String = "") {
+            self.spans = spans
+            self.fit = fit
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case spans
+            case fit
+        }
+    }
+
+    public struct ConsentSpan: Codable, Sendable, Hashable {
+        public var text: String
+        public var tone: String
+
+        public init(text: String, tone: String = "") {
+            self.text = text
+            self.tone = tone
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case text
+            case tone
         }
     }
 
@@ -1043,6 +1073,189 @@ public enum AppAPI {
         }
     }
 
+    public struct ModSetting: Codable, Sendable, Hashable {
+        public var key: String
+        public var label: String
+        public var type: String
+        public var `default`: ModValue
+        public var value: ModValue
+        public var own: Bool
+        public var hasMin: Bool
+        public var min: Int
+        public var hasMax: Bool
+        public var max: Int
+        public var options: [String]
+        public var maxLen: Int
+
+        public init(key: String, label: String = "", type: String, `default`: ModValue, value: ModValue, own: Bool = false, hasMin: Bool = false, min: Int = 0, hasMax: Bool = false, max: Int = 0, options: [String] = [], maxLen: Int = 0) {
+            self.key = key
+            self.label = label
+            self.type = type
+            self.default = `default`
+            self.value = value
+            self.own = own
+            self.hasMin = hasMin
+            self.min = min
+            self.hasMax = hasMax
+            self.max = max
+            self.options = options
+            self.maxLen = maxLen
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case key
+            case label
+            case type
+            case `default`
+            case value
+            case own
+            case hasMin = "has_min"
+            case min
+            case hasMax = "has_max"
+            case max
+            case options
+            case maxLen = "max_len"
+        }
+    }
+
+    public struct ModToggle: Codable, Sendable, Hashable {
+        public var `do`: String
+        public var title: String
+        public var question: String
+        public var why: String
+        public var done: String
+        public var others: [String]
+        public var key: String
+        public var consent: [ConsentLine]
+
+        public init(`do`: String, title: String = "", question: String = "", why: String = "", done: String = "", others: [String] = [], key: String = "", consent: [ConsentLine] = []) {
+            self.do = `do`
+            self.title = title
+            self.question = question
+            self.why = why
+            self.done = done
+            self.others = others
+            self.key = key
+            self.consent = consent
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case `do`
+            case title
+            case question
+            case why
+            case done
+            case others
+            case key
+            case consent
+        }
+    }
+
+    public struct ModValue: Codable, Sendable, Hashable {
+        public var type: String
+        public var bool: Bool
+        public var int: Int
+        public var text: String
+
+        public init(type: String, bool: Bool = false, int: Int = 0, text: String = "") {
+            self.type = type
+            self.bool = bool
+            self.int = int
+            self.text = text
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case type
+            case bool
+            case int
+            case text
+        }
+    }
+
+    public struct Mods: Codable, Sendable, Hashable {
+        public var project: String
+        public var mods: [ProjectMod]
+
+        public init(project: String, mods: [ProjectMod] = []) {
+            self.project = project
+            self.mods = mods
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case project
+            case mods
+        }
+    }
+
+    public struct ModsActResult: Codable, Sendable, Hashable {
+        public var words: String
+
+        public init(words: String) {
+            self.words = words
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case words
+        }
+    }
+
+    public struct ModsListParams: Codable, Sendable, Hashable {
+        public var project: String
+        public var consent: String
+
+        public init(project: String, consent: String = "") {
+            self.project = project
+            self.consent = consent
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case project
+            case consent
+        }
+    }
+
+    public struct ModsSetParams: Codable, Sendable, Hashable {
+        public var project: String
+        public var mod: String
+        public var on: Bool
+        public var key: String
+
+        public init(project: String, mod: String, on: Bool, key: String = "") {
+            self.project = project
+            self.mod = mod
+            self.on = on
+            self.key = key
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case project
+            case mod
+            case on
+            case key
+        }
+    }
+
+    public struct ModsSettingParams: Codable, Sendable, Hashable {
+        public var project: String
+        public var mod: String
+        public var key: String
+        public var value: ModValue?
+
+        public init(project: String, mod: String, key: String, value: ModValue? = nil) {
+            self.project = project
+            self.mod = mod
+            self.key = key
+            self.value = value
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case project
+            case mod
+            case key
+            case value
+        }
+    }
+
     public struct Notice: Codable, Sendable, Hashable, Identifiable {
         public var id: String
         public var mod: String
@@ -1745,6 +1958,60 @@ public enum AppAPI {
         enum CodingKeys: String, CodingKey {
             case project
             case active
+        }
+    }
+
+    public struct ProjectMod: Codable, Sendable, Hashable, Identifiable {
+        public var id: String
+        public var name: String
+        public var kinds: String
+        public var version: String
+        public var description: String
+        public var runs: Bool
+        public var `where`: String
+        public var whereTone: String
+        public var own: String
+        public var required: Bool
+        public var builtin: Bool
+        public var toggle: ModToggle
+        public var settings: [ModSetting]
+        public var settingsNote: String
+        public var bad: [String]
+
+        public init(id: String, name: String, kinds: String, version: String = "", description: String = "", runs: Bool = false, `where`: String, whereTone: String = "", own: String = "", required: Bool = false, builtin: Bool = false, toggle: ModToggle, settings: [ModSetting] = [], settingsNote: String = "", bad: [String] = []) {
+            self.id = id
+            self.name = name
+            self.kinds = kinds
+            self.version = version
+            self.description = description
+            self.runs = runs
+            self.where = `where`
+            self.whereTone = whereTone
+            self.own = own
+            self.required = required
+            self.builtin = builtin
+            self.toggle = toggle
+            self.settings = settings
+            self.settingsNote = settingsNote
+            self.bad = bad
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case id
+            case name
+            case kinds
+            case version
+            case description
+            case runs
+            case `where`
+            case whereTone = "where_tone"
+            case own
+            case required
+            case builtin
+            case toggle
+            case settings
+            case settingsNote = "settings_note"
+            case bad
         }
     }
 
@@ -3098,6 +3365,9 @@ public enum AppAPI {
         public static let linkSend = Call<LinkSendParams, LinkActResult>("link.send", write: true)
         public static let memoryList = Call<ProjectParams, MemoryFiles>("memory.list", write: false)
         public static let memoryRead = Call<MemoryReadParams, MemoryText>("memory.read", write: false)
+        public static let modsList = Call<ModsListParams, Mods>("mods.list", write: false)
+        public static let modsSet = Call<ModsSetParams, ModsActResult>("mods.set", write: true)
+        public static let modsSetting = Call<ModsSettingParams, ModsActResult>("mods.setting", write: true)
         public static let notifyClaim = Call<NoticeParams, NoticeResult>("notify.claim", write: false)
         public static let notifyDismiss = Call<NoticeParams, NoticeResult>("notify.dismiss", write: false)
         public static let paneInput = Call<PaneInputParams, Empty>("pane.input", write: true, target: "pane.vt")
@@ -3214,6 +3484,22 @@ extension AppAPI.CancelParams {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.id = try c.decode(Int.self, forKey: .id)
+    }
+}
+
+extension AppAPI.ConsentLine {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.spans = try c.decodeIfPresent([AppAPI.ConsentSpan].self, forKey: .spans) ?? []
+        self.fit = try c.decodeIfPresent(String.self, forKey: .fit) ?? ""
+    }
+}
+
+extension AppAPI.ConsentSpan {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.text = try c.decode(String.self, forKey: .text)
+        self.tone = try c.decodeIfPresent(String.self, forKey: .tone) ?? ""
     }
 }
 
@@ -3629,6 +3915,91 @@ extension AppAPI.MemoryText {
     }
 }
 
+extension AppAPI.ModSetting {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.key = try c.decode(String.self, forKey: .key)
+        self.label = try c.decodeIfPresent(String.self, forKey: .label) ?? ""
+        self.type = try c.decode(String.self, forKey: .type)
+        self.default = try c.decode(AppAPI.ModValue.self, forKey: .default)
+        self.value = try c.decode(AppAPI.ModValue.self, forKey: .value)
+        self.own = try c.decodeIfPresent(Bool.self, forKey: .own) ?? false
+        self.hasMin = try c.decodeIfPresent(Bool.self, forKey: .hasMin) ?? false
+        self.min = try c.decodeIfPresent(Int.self, forKey: .min) ?? 0
+        self.hasMax = try c.decodeIfPresent(Bool.self, forKey: .hasMax) ?? false
+        self.max = try c.decodeIfPresent(Int.self, forKey: .max) ?? 0
+        self.options = try c.decodeIfPresent([String].self, forKey: .options) ?? []
+        self.maxLen = try c.decodeIfPresent(Int.self, forKey: .maxLen) ?? 0
+    }
+}
+
+extension AppAPI.ModToggle {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.do = try c.decode(String.self, forKey: .do)
+        self.title = try c.decodeIfPresent(String.self, forKey: .title) ?? ""
+        self.question = try c.decodeIfPresent(String.self, forKey: .question) ?? ""
+        self.why = try c.decodeIfPresent(String.self, forKey: .why) ?? ""
+        self.done = try c.decodeIfPresent(String.self, forKey: .done) ?? ""
+        self.others = try c.decodeIfPresent([String].self, forKey: .others) ?? []
+        self.key = try c.decodeIfPresent(String.self, forKey: .key) ?? ""
+        self.consent = try c.decodeIfPresent([AppAPI.ConsentLine].self, forKey: .consent) ?? []
+    }
+}
+
+extension AppAPI.ModValue {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.type = try c.decode(String.self, forKey: .type)
+        self.bool = try c.decodeIfPresent(Bool.self, forKey: .bool) ?? false
+        self.int = try c.decodeIfPresent(Int.self, forKey: .int) ?? 0
+        self.text = try c.decodeIfPresent(String.self, forKey: .text) ?? ""
+    }
+}
+
+extension AppAPI.Mods {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.project = try c.decode(String.self, forKey: .project)
+        self.mods = try c.decodeIfPresent([AppAPI.ProjectMod].self, forKey: .mods) ?? []
+    }
+}
+
+extension AppAPI.ModsActResult {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.words = try c.decode(String.self, forKey: .words)
+    }
+}
+
+extension AppAPI.ModsListParams {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.project = try c.decode(String.self, forKey: .project)
+        self.consent = try c.decodeIfPresent(String.self, forKey: .consent) ?? ""
+    }
+}
+
+extension AppAPI.ModsSetParams {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.project = try c.decode(String.self, forKey: .project)
+        self.mod = try c.decode(String.self, forKey: .mod)
+        self.on = try c.decode(Bool.self, forKey: .on)
+        self.key = try c.decodeIfPresent(String.self, forKey: .key) ?? ""
+    }
+}
+
+extension AppAPI.ModsSettingParams {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.project = try c.decode(String.self, forKey: .project)
+        self.mod = try c.decode(String.self, forKey: .mod)
+        self.key = try c.decode(String.self, forKey: .key)
+        self.value = try c.decodeIfPresent(AppAPI.ModValue.self, forKey: .value)
+    }
+}
+
 extension AppAPI.Notice {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -3933,6 +4304,27 @@ extension AppAPI.ProjectActiveParams {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.project = try c.decode(String.self, forKey: .project)
         self.active = try c.decode(Bool.self, forKey: .active)
+    }
+}
+
+extension AppAPI.ProjectMod {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try c.decode(String.self, forKey: .id)
+        self.name = try c.decode(String.self, forKey: .name)
+        self.kinds = try c.decode(String.self, forKey: .kinds)
+        self.version = try c.decodeIfPresent(String.self, forKey: .version) ?? ""
+        self.description = try c.decodeIfPresent(String.self, forKey: .description) ?? ""
+        self.runs = try c.decodeIfPresent(Bool.self, forKey: .runs) ?? false
+        self.where = try c.decode(String.self, forKey: .where)
+        self.whereTone = try c.decodeIfPresent(String.self, forKey: .whereTone) ?? ""
+        self.own = try c.decodeIfPresent(String.self, forKey: .own) ?? ""
+        self.required = try c.decodeIfPresent(Bool.self, forKey: .required) ?? false
+        self.builtin = try c.decodeIfPresent(Bool.self, forKey: .builtin) ?? false
+        self.toggle = try c.decode(AppAPI.ModToggle.self, forKey: .toggle)
+        self.settings = try c.decodeIfPresent([AppAPI.ModSetting].self, forKey: .settings) ?? []
+        self.settingsNote = try c.decodeIfPresent(String.self, forKey: .settingsNote) ?? ""
+        self.bad = try c.decodeIfPresent([String].self, forKey: .bad) ?? []
     }
 }
 

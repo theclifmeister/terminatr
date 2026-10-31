@@ -6,8 +6,9 @@ import TerminatrUI
 import UniformTypeIdentifiers
 
 /// A project of this server in the window's detail: its dashboard, and
-/// beside it its read-only pages (T794), Overview, Memory and Library,
-/// picked above it. Nothing on them edits: the TUI and tm do.
+/// beside it its pages, picked above it: Overview, Memory and Library
+/// (T794), read only, and Mods (T869), its mods on or off for it and
+/// their settings for it, as the TUI's project Mods tab.
 struct ProjectPages: View {
     @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
@@ -39,6 +40,8 @@ struct ProjectPages: View {
                 MemoryPane(project: project.slug)
             case .library:
                 LibraryPane(project: project.slug)
+            case .mods:
+                ModsPane(project: project.slug)
             }
         }
     }
