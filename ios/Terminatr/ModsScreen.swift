@@ -39,6 +39,7 @@ struct ModsScreen: View {
         .refreshable { await list() }
         .keepsPlace(Route.mods(slug).listKey)
         .navigationTitle("Mods")
+        .navigationBarTitleDisplayMode(.inline)
         .backdrop()
     }
 
@@ -157,7 +158,8 @@ struct ModScreen: View {
         }
         .task(id: model.generation) { await read() }
         .refreshable { await read() }
-        .navigationTitle(mod?.name ?? "Mod")
+        .navigationTitle(mod?.name ?? id)
+        .navigationBarTitleDisplayMode(.inline)
         .backdrop()
         .sheet(item: $consenting) { m in
             PhoneConsentSheet(mod: m) {
