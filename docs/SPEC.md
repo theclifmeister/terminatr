@@ -2169,8 +2169,8 @@ Never automated, in any mode: merging PRs, force-pushes, deleting branches with 
 ## 12. Toolchain and build
 
 - **Go:** 1.26 or later. `go.mod` says `go 1.26.0`, the floor set by go.mitchellh.com/libghostty.
-- **Zig 0.16**, to build libghostty-vt (Ghostty's `build.zig.zon` declares 0.16.0 as its minimum).
-  - `make` uses a `zig` 0.16.x from `PATH`, or else downloads the pinned Zig 0.16.0 into `.build/` and checks its sha256 (macOS and Linux, arm64 and x86_64). `ZIG=…` overrides both. Other Zig versions are skipped, because Zig's build API changes between minor releases. The prerequisites are therefore Go, pkg-config, git, curl and a C toolchain.
+- **Zig 0.17**, to build libghostty-vt (Ghostty v1.4.0's `build.zig.zon` declares 0.17.0 as its minimum; T218).
+  - `make` uses a `zig` 0.17.x from `PATH`, or else downloads the pinned Zig 0.17.0 into `.build/` and checks its sha256 (macOS and Linux, arm64 and x86_64). `ZIG=…` overrides both. Other Zig versions are skipped, because Zig's build API changes between minor releases. The prerequisites are therefore Go, pkg-config, git, curl and a C toolchain.
   - The Zig build **fetches packages over the network** (aro, uucode, highway, simdutf and others) into `~/.cache/zig`, about 110 MB. CI caches it.
 - **pkg-config** is a hard dependency: the bindings link with `#cgo pkg-config: --static libghostty-vt-static`.
 - **git.**
