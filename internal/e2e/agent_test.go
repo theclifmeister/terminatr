@@ -34,6 +34,7 @@ func TestSmokeAgentPermission(t *testing.T) {
 		t.Fatalf("prompt: %q", got)
 	}
 	env.WaitState(s, "blocked/permission", agentWait)
+	waitDialog(env, s, 1)
 	env.Keys(s, "1")
 	env.WaitFake("hook", agentWait, func(r FakeRecord) bool { return r.Str("event") == "Stop" })
 	env.WaitState(s, "idle", agentWait)
@@ -42,6 +43,7 @@ func TestSmokeAgentPermission(t *testing.T) {
 	// "blocked" while the state comes back to idle.
 	env.Prompt(s, "run permission")
 	env.WaitState(s, "blocked/permission", agentWait)
+	waitDialog(env, s, 2)
 	n := len(env.HookEvents())
 	env.Keys(s, "\x1b")
 	info = env.WaitState(s, "idle", agentWait)
@@ -55,6 +57,27 @@ func TestSmokeAgentPermission(t *testing.T) {
 	if got := env.HookEvents(); len(got) != n {
 		t.Errorf("Esc fired hooks: %v", got[n:])
 	}
+}
+
+// waitDialog waits for the fake agent's nth PermissionRequest hook record
+// and its dialog on screen. The hook reaches the server, which can say
+// blocked/permission, before the fake records it (it logs once the hook
+// command returns) and draws the dialog: counting hooks or pressing a
+// key before then blames that hook on the key, or races the dialog (T885).
+func waitDialog(env *Env, s *Session, nth int) {
+	env.T.Helper()
+	if !Poll(agentWait, func() bool {
+		n := 0
+		for _, e := range env.HookEvents() {
+			if e == "PermissionRequest" {
+				n++
+			}
+		}
+		return n >= nth
+	}) {
+		env.T.Fatalf("no PermissionRequest hook #%d: %v", nth, env.HookEvents())
+	}
+	env.WaitFor(s, "Esc to cancel", agentWait)
 }
 
 // noStatusFile drops the [status_file] section: hooks, the transcript
