@@ -79,6 +79,10 @@ type SessionAnswerParams struct {
 	Picks []int `json:"picks,omitempty"`
 }
 
+// CapAnswerPicks says session.answer takes Picks: a multi-select's
+// options by index, the agent's own menu's too (T900).
+const CapAnswerPicks = "answer-picks"
+
 // SessionAnswerResult says how many questions still wait for an answer;
 // at 0 the answers went to the question's asker.
 type SessionAnswerResult struct {

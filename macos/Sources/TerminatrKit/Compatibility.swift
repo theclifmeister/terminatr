@@ -258,6 +258,19 @@ struct Release: Comparable, Sendable {
 }
 
 extension Compatibility {
+    /// The app API whose session.answer and peer.need-act take picks: a
+    /// multi-select's options by index, the agent's own menu's too (T900).
+    public static let answerPicksAPI = 39
+
+    /// Whether hello's tm types a multi-select of the agent's menu (cap
+    /// answer-picks): its cards tick options and Submit, not the pane.
+    public static func answersPicks(_ hello: AppAPI.Hello?) -> Bool {
+        guard let hello else { return false }
+        return hello.appApi >= answerPicksAPI && (hello.server?.caps ?? []).contains("answer-picks")
+    }
+}
+
+extension Compatibility {
     /// The app API that has mods.list, mods.set and mods.setting: a
     /// project's Mods page needs it (T869).
     public static let projectModsAPI = 38

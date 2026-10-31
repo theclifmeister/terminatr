@@ -5,8 +5,10 @@ import Foundation
 /// (an approved command that asks first) takes any of its questions in
 /// any order, several options too. The agent's own menu (screen:
 /// Claude's AskUserQuestion) is typed on its screen, so one question at
-/// a time, in order, a single option or the user's words: a
-/// multi-select's options are picked in the Terminal tab.
+/// a time, in order, a single option or the user's words; a
+/// multi-select's options go as picks where tm types them (app API 39,
+/// Compatibility.answersPicks), else in the Terminal tab, and its own
+/// words only there.
 public struct QuestionPlan: Equatable, Sendable {
     /// The cards a menu shows: every open question of tm's own, the
     /// first open one of the agent's (its screen shows only that one).
@@ -34,13 +36,19 @@ public struct QuestionPlan: Equatable, Sendable {
     /// "Other…": the user's own words.
     public let words: Bool
 
-    public init(_ q: AppAPI.Question, index: Int) {
+    /// picks: the server takes a multi-select's options by index
+    /// (Compatibility.answersPicks).
+    public init(_ q: AppAPI.Question, index: Int, picks: Bool = false) {
         let item = q.questions[index]
         buttons = !item.multiSelect
         checkboxes = item.multiSelect
-        paneOnly = q.screen && item.multiSelect
-        words = !paneOnly
+        paneOnly = q.screen && item.multiSelect && !picks
+        sendsPicks = q.screen && item.multiSelect && picks
+        words = !(q.screen && item.multiSelect)
     }
+
+    /// The checkboxes go as picks, typed into the agent's menu.
+    public let sendsPicks: Bool
 
     /// What the card says about it under the options, if anything.
     public var note: String? {
@@ -51,6 +59,12 @@ public struct QuestionPlan: Equatable, Sendable {
     /// joined with ", " as the agent joins them.
     public static func joined(_ item: AppAPI.QuestionItem, picked: Set<String>) -> String {
         item.options.map(\.label).filter(picked.contains).joined(separator: ", ")
+    }
+
+    /// A multi-select's picks: the indexes of the labels picked, in the
+    /// menu's order.
+    public static func picks(_ item: AppAPI.QuestionItem, picked: Set<String>) -> [Int] {
+        item.options.indices.filter { picked.contains(item.options[$0].label) }
     }
 
     /// An option for VoiceOver: its number, label and description.

@@ -42,9 +42,10 @@ struct Cards: View {
 /// meanwhile gets no stale answer. Several options, or words of the
 /// user's, can't be guarded that way (the guard takes one option's
 /// label) and go as the question's answer. An escape's question names
-/// its command in a confirmation first. The agent's own menu takes no
-/// multi-select from here: the card shows its options and sends the
-/// user to the Terminal tab. The first card's options answer ⌥⌘1–⌥⌘9.
+/// its command in a confirmation first. A multi-select of the agent's own
+/// menu goes as picks, guarded, which the server ticks in its menu (app
+/// API 39, T900); before that tm, the card shows its options and sends
+/// the user to the Terminal tab. The first card's options answer ⌥⌘1–⌥⌘9.
 struct QuestionCard: View {
     @Environment(\.theme) private var theme
     let model: SessionModel
@@ -65,7 +66,7 @@ struct QuestionCard: View {
     @State private var busy = false
 
     var body: some View {
-        let plan = QuestionPlan(menu, index: index)
+        let plan = QuestionPlan(menu, index: index, picks: model.answersPicks)
         let tag = QuestionPlan.tag(menu, index: index)
         CardFrame(tag: firstChoice == nil || plan.paneOnly ? tag : "\(tag) · ⌘↩ answer", colour: theme.question, tint: theme.questionTint, waiting: "question \(model.ref.card) \(menu.since?.timeIntervalSince1970 ?? 0) \(index)") {
             Text(item.question)
@@ -82,7 +83,7 @@ struct QuestionCard: View {
                     .accessibilityLabel(QuestionPlan.spoken(item, option: i))
                 }
                 if !plan.paneOnly {
-                    Button("Submit") { send(QuestionPlan.joined(item, picked: picked), guarded: false) }
+                    Button("Submit") { submit(plan) }
                         .buttonStyle(.borderedProminent)
                         .tint(theme.action)
                         .disabled(picked.isEmpty || busy)
@@ -153,12 +154,23 @@ struct QuestionCard: View {
 
     /// ⌘↩: the first option, or the options picked of a multi-select.
     private func takeFirst() {
-        let plan = QuestionPlan(menu, index: index)
+        let plan = QuestionPlan(menu, index: index, picks: model.answersPicks)
         guard firstChoice != nil, !busy, !plan.paneOnly else { return }
         if plan.checkboxes {
-            if !picked.isEmpty { send(QuestionPlan.joined(item, picked: picked), guarded: false) }
+            if !picked.isEmpty { submit(plan) }
         } else if let o = item.options.first {
             send(o.label, guarded: true)
+        }
+    }
+
+    /// Submit: the options checked, joined, or as picks typed into the
+    /// agent's menu (plan.sendsPicks), its question the guard.
+    private func submit(_ plan: QuestionPlan) {
+        let words = QuestionPlan.joined(item, picked: picked)
+        if plan.sendsPicks {
+            go(words, guarded: true, picks: QuestionPlan.picks(item, picked: picked))
+        } else {
+            send(words, guarded: false)
         }
     }
 
@@ -175,14 +187,14 @@ struct QuestionCard: View {
         }
     }
 
-    private func go(_ answer: String, guarded: Bool) {
+    private func go(_ answer: String, guarded: Bool, picks: [Int] = []) {
         busy = true
         error = nil
         terminal = false
         status = QuestionPlan.sending(answer, screen: menu.screen)
         Task {
             do {
-                _ = try await model.answer(index: index, answer: answer, question: item.question, guarded: guarded)
+                _ = try await model.answer(index: index, answer: answer, question: item.question, guarded: guarded, picks: picks)
                 status = "Answered “\(answer)”."
             } catch is QuestionGone {
                 status = nil

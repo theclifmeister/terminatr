@@ -481,8 +481,17 @@ final class PhoneModel {
     /// Answers a question; one answered elsewhere meanwhile throws
     /// QuestionGone, its card gone with the sessions read again.
     func answer(_ a: Need.Answer, _ option: String) async throws {
+        try await answer(a, a.params(option))
+    }
+
+    /// Answers a multi-select with the options ticked, by index (T900).
+    func answer(_ a: Need.Answer, picks: [Int]) async throws {
+        try await answer(a, a.params(picks: picks))
+    }
+
+    private func answer(_ a: Need.Answer, _ params: AppAPI.AnswerParams) async throws {
         do {
-            _ = try await connected().call(AppAPI.Methods.sessionAnswer, a.params(option))
+            _ = try await connected().call(AppAPI.Methods.sessionAnswer, params)
         } catch let e as AppAPI.Error where e.code == "no-question" {
             await reread()
             if QuestionPlan.gone(e.code, asked: a.question, now: sessions.first { $0.id == a.session }?.question) { throw QuestionGone() }
