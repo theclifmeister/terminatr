@@ -31,13 +31,32 @@ private func pages() -> AppAPI.PeerPages {
     }
     let s: PeerPages.State<AppAPI.PeerPages> = PeerPages.state(AppAPI.Error(code: "refused", message: "studio can't be reached now"))
     #expect(s == .failed("studio can't be reached now"))
-    // Memory never, designs not yet; the rest wait for a tm that reads them.
+    // Memory never; the rest wait for a tm that reads them.
     #expect(PeerPages.initial(.memory, reads: true) == PeerPages.State<Int>.notShared)
-    #expect(PeerPages.initial(.designs, reads: true) == PeerPages.State<Int>.notShared)
+    #expect(PeerPages.initial(.designs, reads: true) == PeerPages.State<Int>.loading)
+    #expect(PeerPages.initial(.designs, reads: false) == PeerPages.State<Int>.notShared)
     #expect(PeerPages.initial(.board, reads: true) == PeerPages.State<Int>.loading)
     #expect(PeerPages.initial(.library, reads: false) == PeerPages.State<Int>.notShared)
     #expect(PeerPages.notShared(by: "studio") == "Not shared by studio")
     #expect(PeerPages.notSharedDetail(.memory, server: "studio").contains("never"))
+}
+
+@Test func peerDesignsNeedAPI36AndTheCap() {
+    let caps = AppAPI.Server(version: "0.70.0", protocol: 30, caps: ["peer-pages", "peer-designs"])
+    var h = AppAPI.Hello(appApi: 36, tm: "0.70.0", build: "", methods: ["peer.pages-read", "peer.library-read", "peer.design-list"], server: caps)
+    #expect(Compatibility.readsPeerDesigns(h))
+    h.appApi = 35
+    #expect(!Compatibility.readsPeerDesigns(h))
+    h.appApi = 36
+    h.server = AppAPI.Server(version: "0.69.0", protocol: 30, caps: ["peer-pages"])
+    #expect(!Compatibility.readsPeerDesigns(h) && Compatibility.readsPeerPages(h))
+}
+
+@Test func peerDesignsKeepTheirPageThere() {
+    let d = AppAPI.Design(name: "rate-limits", title: "Rate limits", status: "building", tasksDone: 1, pageStays: true)
+    #expect(Designs.page(d) == nil)
+    #expect(PeerPages.pageStays(d, server: "studio") == "Its page stays on studio")
+    #expect(PeerPages.pageStays(AppAPI.Design(name: "x", title: "x", status: "planned", tasksDone: 0), server: "studio") == nil)
 }
 
 @Test func peerPagesBoardAndTiles() {
@@ -86,4 +105,22 @@ private func pages() -> AppAPI.PeerPages {
         return
     }
     #expect(String(decoding: d, as: UTF8.self).hasPrefix("# Rate limit load test"))
+}
+
+/// The demo's paired server shares acme-api's designs, their pages kept
+/// there and no open questions; acme-docs's read as not shared.
+@Test func demoPeerDesigns() async throws {
+    let b = try await demoBridge()
+    #expect(Compatibility.readsPeerDesigns(try #require(await b.hello)))
+    let ds = try await b.call(AppAPI.Methods.peerDesignList, AppAPI.PeerPagesParams(alias: "studio", project: "acme-api")).designs
+    #expect(Designs.ordered(ds).map(\.name) == ["rate-limits", "webhooks-v2"])
+    #expect(ds.allSatisfy { $0.artifact.isEmpty && $0.questions.isEmpty })
+    #expect(PeerPages.pageStays(ds[0], server: "studio") == "Its page stays on studio")
+    #expect(Designs.built(ds[0]) == "1/3 built" && ds[0].working)
+    do {
+        _ = try await b.call(AppAPI.Methods.peerDesignList, AppAPI.PeerPagesParams(alias: "studio", project: "acme-docs"))
+        Issue.record("acme-docs's designs answered")
+    } catch {
+        #expect(PeerPages.state(error) == PeerPages.State<AppAPI.PeerPages>.notShared)
+    }
 }

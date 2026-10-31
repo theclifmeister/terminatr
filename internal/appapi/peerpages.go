@@ -76,3 +76,23 @@ func peerLibraryOf(l proto.PeerLibrary) Library {
 	}
 	return out
 }
+
+// peerDesignsOf is a paired server's designs (peer.design-list, app API
+// 36) as design.list's, so the app draws them as its own: no page (its
+// URL stays there; PageStays says it has one) and no open questions
+// (they cross only as needs); Tasks are its build's ids.
+func peerDesignsOf(r proto.PeerDesigns) Designs {
+	out := Designs{Designs: make([]Design, 0, len(r.Designs))}
+	for _, d := range r.Designs {
+		ad := Design{Name: d.Name, Title: d.Title, Status: d.Status, Task: d.Task, TaskStatus: d.TaskStatus,
+			PageStays: d.Page, Tasks: []string{}, TasksDone: d.TasksDone, Answers: append([]string{}, d.Answers...),
+			Questions: []DesignQuestion{}, Build: []DesignTask{}, Archived: d.Archived, Working: d.Working}
+		for _, t := range d.Build {
+			ad.Tasks = append(ad.Tasks, t.ID)
+			ad.Build = append(ad.Build, DesignTask{ID: t.ID, Title: t.Title, Status: t.Status,
+				After: append([]string(nil), t.After...), Archived: t.Archived, Working: t.Working})
+		}
+		out.Designs = append(out.Designs, ad)
+	}
+	return out
+}

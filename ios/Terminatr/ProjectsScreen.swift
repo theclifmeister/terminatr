@@ -159,7 +159,7 @@ struct ProjectScreen: View {
                     }
                     pages
                     if model.listsDesigns {
-                        DesignsTiles(project: p)
+                        DesignsTiles(project: p, sessions: model.sessions, generation: model.generation)
                     }
                     let waiting = threads.filter { model.attention($0).waits }.count
                     SectionHeading("Threads", detail: threads.isEmpty ? "" : "\(threads.count)" + (waiting > 0 ? " · \(waiting) wait on you" : ""))

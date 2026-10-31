@@ -9,8 +9,9 @@ import TerminatrUI
 /// PageTiles, its designs, then its threads (SidebarTree.sessions). The
 /// counts and the pages come from that server while its project pages
 /// switch for this one is on (peer.pages-read); otherwise the counts
-/// show – and each page "Not shared by <server>". Memory always does;
-/// designs do for now. Nothing here writes.
+/// show – and each page "Not shared by <server>"; Memory always does.
+/// Its designs (T888) read the same way, read-only, without their pages
+/// or open questions. Nothing here writes.
 struct PeerProjectScreen: View {
     @Environment(PhoneModel.self) private var model
     @Environment(\.navigate) private var navigate
@@ -34,8 +35,7 @@ struct PeerProjectScreen: View {
                     }
                     pageTiles(server: PeerPages.server(peer))
                     if model.listsDesigns {
-                        SectionHeading("Designs", detail: "")
-                        notShared(PeerPages.notShared(by: PeerPages.server(peer)))
+                        DesignsTiles(alias: alias, project: p, generation: model.generation)
                     }
                     SectionHeading("Threads", detail: threads.isEmpty ? "" : "\(threads.count)")
                     if threads.isEmpty {
@@ -125,9 +125,9 @@ struct PeerProjectScreen: View {
     }
 }
 
-/// One page of a paired server's project (T886): its Overview, Board or
-/// Library while that server shares them, else "Not shared by
-/// <server>"; Memory and Designs always so.
+/// One page of a paired server's project (T886): its Overview, Board,
+/// Library or Designs (T888) while that server shares them, else "Not
+/// shared by <server>"; Memory always so.
 struct PeerPageScreen: View {
     @Environment(PhoneModel.self) private var model
     let alias: String
@@ -139,8 +139,15 @@ struct PeerPageScreen: View {
         let server = model.peers.first(where: { $0.alias == alias }).map(PeerPages.server) ?? alias
         Group {
             switch (page, pages) {
-            case (.memory, _), (.designs, _):
+            case (.memory, _):
                 PeerNotShared(page: page, server: server)
+            case (.designs, _):
+                ScrollView {
+                    if let p = model.peers.first(where: { $0.alias == alias })?.projects.first(where: { $0.project == project }) {
+                        DesignsTiles(alias: alias, project: p, generation: model.generation)
+                            .padding(.horizontal, Spacing.gutter)
+                    }
+                }
             case (.library, .shared):
                 LibraryScreen(slug: project, peer: alias)
             case (.overview, .shared(let p)):
@@ -156,7 +163,7 @@ struct PeerPageScreen: View {
             }
         }
         .task(id: Read(generation: model.generation)) {
-            guard page.shareable else { return }
+            guard page.shareable, page != .designs else { return }
             pages = await model.peerPagesState(alias, project)
         }
         .navigationTitle(page.rawValue)

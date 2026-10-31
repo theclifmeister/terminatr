@@ -258,6 +258,10 @@ func TestCopies(t *testing.T) {
 	// far server's clock but.
 	check("peer.pages-read", homeOf(peerPagesOf), []string{".Now"})
 	check("peer.library-list", homeOf(peerLibraryOf), nil)
+	check("peer.design-list", homeOf(peerDesignsOf), []string{
+		// The far server's own word: the app reads the shown designs.
+		".Truncated",
+	})
 	check("peer.list", homeOf(peerListOf), []string{
 		// The link's id, versions and ping: the Network popup's. Share
 		// requests cross as their count, and those that wait for the
@@ -514,7 +518,7 @@ func TestAllowlist(t *testing.T) {
 		proto.MethodLinkAct, proto.MethodPeerShareAnswer, proto.MethodPeerNeedAct, MethodGuardRefusals, MethodGuardDecide, proto.MethodTranscriptPage,
 		proto.MethodProjectPin, proto.MethodProjectNew, proto.MethodSessionAdoptRequest, proto.MethodSessionRemote, proto.MethodLinkSend,
 		proto.MethodMemoryList, proto.MethodMemoryRead, proto.MethodLibraryList, proto.MethodLibraryRead, proto.MethodDesignList,
-		proto.MethodPeerPagesRead, proto.MethodPeerLibraryList, proto.MethodPeerLibraryRead,
+		proto.MethodPeerPagesRead, proto.MethodPeerLibraryList, proto.MethodPeerLibraryRead, proto.MethodPeerDesignList,
 		MethodDeviceNonce, MethodDeviceList, MethodDevicePair, MethodDevicePairWait, MethodDevicePairAnswer, MethodDeviceAccess,
 		MethodDeviceName, MethodDeviceRemove}
 	slices.Sort(want)

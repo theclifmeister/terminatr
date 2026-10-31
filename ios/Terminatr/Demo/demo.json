@@ -797,6 +797,87 @@
      "size": 85
     }
    }
+  ],
+  "peer.design-list": [
+   {
+    "params": {
+     "alias": "studio",
+     "project": "acme-api"
+    },
+    "result": {
+     "designs": [
+      {
+       "name": "rate-limits",
+       "title": "Rate limits per API key",
+       "status": "building",
+       "task": "T10",
+       "task_status": "done",
+       "page_stays": true,
+       "tasks": [
+        "T11",
+        "T12",
+        "T13"
+       ],
+       "tasks_done": 1,
+       "answers": [
+        "A token bucket per key, refilled each second",
+        "429 with Retry-After, never a silent drop",
+        "Limits per plan, set in the admin"
+       ],
+       "questions": [],
+       "build": [
+        {
+         "id": "T11",
+         "title": "Token bucket in Redis",
+         "status": "done"
+        },
+        {
+         "id": "T12",
+         "title": "Rate limits per API key",
+         "status": "started",
+         "after": [
+          "T11"
+         ],
+         "working": true
+        },
+        {
+         "id": "T13",
+         "title": "Plan limits in the admin",
+         "status": "ready",
+         "after": [
+          "T12"
+         ]
+        }
+       ],
+       "working": true
+      },
+      {
+       "name": "webhooks-v2",
+       "title": "Webhooks v2: signed, retried",
+       "status": "designing",
+       "task": "T14",
+       "task_status": "started",
+       "tasks": [],
+       "tasks_done": 0,
+       "answers": [
+        "HMAC-SHA256 signatures"
+       ],
+       "questions": [],
+       "build": []
+      }
+     ]
+    }
+   },
+   {
+    "error": {
+     "code": "pages-off",
+     "message": "studio doesn't share this project's pages with this server"
+    },
+    "params": {
+     "alias": "studio",
+     "project": "acme-docs"
+    }
+   }
   ]
  },
  "calls": {
@@ -1099,7 +1180,7 @@
   }
  },
  "hello": {
-  "app_api": 35,
+  "app_api": 36,
   "build": "demo",
   "capabilities": [
    "read",
@@ -1134,7 +1215,8 @@
    "coordinator.clear",
    "peer.pages-read",
    "peer.library-list",
-   "peer.library-read"
+   "peer.library-read",
+   "peer.design-list"
   ],
   "server": {
    "caps": [
@@ -1142,7 +1224,8 @@
     "project-files",
     "session-file",
     "designs",
-    "peer-pages"
+    "peer-pages",
+    "peer-designs"
    ],
    "protocol": 1,
    "version": "0.56.1"

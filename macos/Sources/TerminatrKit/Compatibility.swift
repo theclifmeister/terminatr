@@ -138,6 +138,18 @@ public enum Compatibility: Equatable, Sendable {
             && hello.methods.contains(AppAPI.Methods.peerLibraryRead.name) && (hello.server?.caps ?? []).contains("peer-pages")
     }
 
+    /// The app API that has peer.design-list: a paired server's
+    /// project's designs need it (T888).
+    public static let peerDesignsAPI = 36
+
+    /// Whether hello's tm reads a paired server's project's designs, its
+    /// server too (caps peer-designs): else its Designs are "not
+    /// shared".
+    public static func readsPeerDesigns(_ hello: AppAPI.Hello) -> Bool {
+        hello.appApi >= peerDesignsAPI && hello.methods.contains(AppAPI.Methods.peerDesignList.name)
+            && (hello.server?.caps ?? []).contains("peer-designs")
+    }
+
     /// Whether hello's tm lists a project's designs, its server too
     /// (design.list, caps designs).
     public static func listsDesigns(_ hello: AppAPI.Hello) -> Bool {

@@ -676,10 +676,10 @@ A paired server sees a shared project's coordinator and threads, not its board. 
 
 ```
 $ tm peer pages studio acme-api on
-Pages on for studio on acme-api: it reads the board (titles, statuses, steps; no notes), the overview (goal and PROJECT.md; no repository paths) and the threads' library files. Never the memory; nothing it does writes here.
+Pages on for studio on acme-api: it reads the board (titles, statuses, steps; no notes), the overview (goal and PROJECT.md; no repository paths), the threads' library files and the designs (no page links, no open questions). Never the memory; nothing it does writes here.
 ```
 
-`studio`'s Mac app and iPhone then show `acme-api` with the same tiles and pages as one of its own: on deck, backlog and done; Overview; Board; Library. All of it is read-only from there, at every level. Memory always says `Not shared by mini`, as does every page while the switch is off (the default) and Designs for now. It is per project: turn it on for each one, and `off` turns it off. The Network popup (`N`) has a `pages` row per shared project in a paired server's details; turning one on asks first. `tm peer list` shows `pages: acme-api`. A server that runs an older tm shares no pages, and its pages say `Not shared` (SPEC §16.17).
+`studio`'s Mac app and iPhone then show `acme-api` with the same tiles and pages as one of its own: on deck, backlog and done; Overview; Board; Library; Designs. All of it is read-only from there, at every level. A design shows its status, answers and build, but its page stays here ("Its page stays on mini": a design page is a link to another site, often a private or link-shared one, so its URL never crosses) and so do its design task's open questions (they reach `studio` only as needs, under the needs switch). Memory always says `Not shared by mini`, as does every page while the switch is off (the default). A server whose tm shares pages but not designs (0.69) shows Designs as `Not shared`. It is per project: turn it on for each one, and `off` turns it off. The Network popup (`N`) has a `pages` row per shared project in a paired server's details; turning one on asks first. `tm peer list` shows `pages: acme-api`. A server that runs an older tm shares no pages, and its pages say `Not shared` (SPEC §16.17).
 
 ### Pairing a device
 

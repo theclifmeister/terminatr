@@ -6,7 +6,7 @@ import Foundation
 /// The terminatr app API (docs/SPEC.md §3.8): what tm app bridge answers.
 public enum AppAPI {
     /// The app API version this app was generated against.
-    public static let version = 35
+    public static let version = 36
 
     public struct AdoptRequestParams: Codable, Sendable, Hashable {
         public var id: String
@@ -175,8 +175,9 @@ public enum AppAPI {
         public var build: [DesignTask]
         public var archived: Bool
         public var working: Bool
+        public var pageStays: Bool
 
-        public init(name: String, title: String, status: String, task: String = "", taskStatus: String = "", artifact: String = "", tasks: [String] = [], tasksDone: Int, answers: [String] = [], questions: [DesignQuestion] = [], build: [DesignTask] = [], archived: Bool = false, working: Bool = false) {
+        public init(name: String, title: String, status: String, task: String = "", taskStatus: String = "", artifact: String = "", tasks: [String] = [], tasksDone: Int, answers: [String] = [], questions: [DesignQuestion] = [], build: [DesignTask] = [], archived: Bool = false, working: Bool = false, pageStays: Bool = false) {
             self.name = name
             self.title = title
             self.status = status
@@ -190,6 +191,7 @@ public enum AppAPI {
             self.build = build
             self.archived = archived
             self.working = working
+            self.pageStays = pageStays
         }
 
         enum CodingKeys: String, CodingKey {
@@ -206,6 +208,7 @@ public enum AppAPI {
             case build
             case archived
             case working
+            case pageStays = "page_stays"
         }
     }
 
@@ -3080,6 +3083,7 @@ public enum AppAPI {
         public static let notifyDismiss = Call<NoticeParams, NoticeResult>("notify.dismiss", write: false)
         public static let paneInput = Call<PaneInputParams, Empty>("pane.input", write: true, target: "pane.vt")
         public static let paneVt = Subscription<PaneParams, PaneResult, PaneEvent>("pane.vt", events: ["pane.repaint", "pane.output", "pane.resize", "pane.closed"])
+        public static let peerDesignList = Call<PeerPagesParams, Designs>("peer.design-list", write: false)
         public static let peerLibraryList = Call<PeerPagesParams, Library>("peer.library-list", write: false)
         public static let peerLibraryRead = Call<PeerLibraryReadParams, LibraryChunk>("peer.library-read", write: false)
         public static let peerList = Call<NoParams, PeerList>("peer.list", write: false)
@@ -3210,6 +3214,7 @@ extension AppAPI.Design {
         self.build = try c.decodeIfPresent([AppAPI.DesignTask].self, forKey: .build) ?? []
         self.archived = try c.decodeIfPresent(Bool.self, forKey: .archived) ?? false
         self.working = try c.decodeIfPresent(Bool.self, forKey: .working) ?? false
+        self.pageStays = try c.decodeIfPresent(Bool.self, forKey: .pageStays) ?? false
     }
 }
 

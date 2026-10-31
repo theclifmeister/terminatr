@@ -5,8 +5,8 @@ import Foundation
 /// (peer.pages-read, peer.library-list, peer.library-read), while that
 /// server's project pages switch for this one is on for the project.
 /// Read only: nothing here writes, there or here. Its memory is never
-/// shared, nor are its designs (yet): those pages always show
-/// "Not shared by <server>".
+/// shared: that page always shows "Not shared by <server>". Its designs
+/// are (peer.design-list, T888), without their pages or open questions.
 public enum PeerPages {
     /// One of a paired server's project's pages as the screens show it.
     public enum Page: String, CaseIterable, Identifiable, Sendable {
@@ -18,9 +18,8 @@ public enum PeerPages {
 
         public var id: String { rawValue }
 
-        /// Whether the page can be shared at all: memory never is, and
-        /// designs aren't yet.
-        public var shareable: Bool { self != .memory && self != .designs }
+        /// Whether the page can be shared at all: memory never is.
+        public var shareable: Bool { self != .memory }
     }
 
     /// What a page has to show.
@@ -59,7 +58,7 @@ public enum PeerPages {
     public static func notSharedDetail(_ page: Page, server: String) -> String {
         switch page {
         case .memory: return "A paired server's memory never crosses."
-        case .designs: return "Designs stay on \(server) for now."
+        case .designs: return "On \(server), tm peer pages <this server> <project> on shares its designs, with the board. A design's page and its open questions stay there."
         default: return "On \(server), tm peer pages <this server> <project> on shares the board, overview and library."
         }
     }
@@ -88,6 +87,12 @@ public enum PeerPages {
     public static func stats(_ p: AppAPI.PeerPages?) -> [(Int?, String)] {
         guard let p else { return [(nil, "on deck"), (nil, "backlog"), (nil, "done")] }
         return [(onDeck(p).count, "on deck"), (backlog(p).count, "backlog"), (done(p).count, "done")]
+    }
+
+    /// What a paired server's design says of its page: it stays on that
+    /// server (its URL never crosses); nil for a design without one.
+    public static func pageStays(_ d: AppAPI.Design, server: String) -> String? {
+        d.pageStays ? "Its page stays on \(server)" : nil
     }
 
     /// Reads a library file of a paired server's project, as
