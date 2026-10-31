@@ -107,7 +107,7 @@ struct ConversationScreen: View {
                 if seeking, restoring == nil, self.moment(Transcript.rows(transcript.entries), session) != nil {
                     // The hero is after the moment: the end shows both.
                     seeking = false
-                    scroll.scrollTo("end", anchor: .bottom)
+                    toEnd(scroll)
                     return
                 }
                 if let r = restoring {
@@ -119,17 +119,23 @@ struct ConversationScreen: View {
                         return
                     }
                 }
-                if follow.arrived(transcript.entries.map(\.id)) { scroll.scrollTo("end", anchor: .bottom) }
+                if follow.arrived(transcript.entries.map(\.id)) {
+                    toEnd(scroll)
+                } else if follow.gliding {
+                    // Jump to latest's glide: it stays on the end the
+                    // new output moves.
+                    glider.renew()
+                }
             }
             .onAppear {
                 if let top: Int = model.places.value("top \(ref)") { restoring = top }
                 seeking = need != nil
             }
             .onChange(of: Busy.of(session) != nil) {
-                if follow.following, !follow.gliding { scroll.scrollTo("end", anchor: .bottom) }
+                if follow.following { toEnd(scroll) }
             }
             .onChange(of: model.queuedSent[ref]?.count ?? 0) {
-                if follow.following, !follow.gliding { scroll.scrollTo("end", anchor: .bottom) }
+                if follow.following { toEnd(scroll) }
             }
             .onChange(of: follow.gliding) { _, g in if !g { glider.stop() } }
             .onDisappear { glider.stop() }
@@ -176,6 +182,22 @@ struct ConversationScreen: View {
         follow.landed()
         follow.jump(newest: transcript.entries.last?.id)
         withAnimation(reduceMotion ? nil : .default) { scroll.scrollTo("end", anchor: .bottom) }
+    }
+
+    /// The follower to the end (T901): new output, the agent's turn, a
+    /// queued prompt sent. An instant glide (Glider) that stays on the
+    /// end as each frame has it until that holds: scrollTo aims once at
+    /// the end a LazyVStack estimates, and stopped short of the true one
+    /// while output streamed. A glide already running stays on the end
+    /// for the new output too. Without the scroll view to drive,
+    /// SwiftUI's scroll.
+    private func toEnd(_ scroll: ScrollViewProxy) {
+        if glider.running { return glider.renew() }
+        if glider.start(instant: true, done: { follow.landed() }) {
+            follow.glide(newest: nil)
+            return
+        }
+        scroll.scrollTo("end", anchor: .bottom)
     }
 
     /// The row the need was asked at.

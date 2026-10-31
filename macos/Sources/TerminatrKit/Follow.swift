@@ -19,6 +19,12 @@ import Foundation
 /// to the end (the glide reads the end each frame), and the layout
 /// moving the offset while rows pass doesn't stop the follow or pull
 /// back. The user taking hold of the scroll ends it.
+///
+/// The follower's moves to the end (new output, T901) are glides too,
+/// instant ones (Glide's instant): scrollTo aimed at the end a
+/// LazyVStack estimates and stopped short of it while output streamed.
+/// The view marks them with glide(newest:) as well, so the same holds
+/// while one keeps to the end.
 public struct Follow: Equatable, Sendable {
     /// Whether the view keeps to the end as entries come.
     public private(set) var following = true

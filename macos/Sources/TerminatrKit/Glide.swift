@@ -143,6 +143,17 @@ public struct Glide: Equatable, Sendable {
         return false
     }
 
+    /// More output came (T901): the end moves again, so a glide that is
+    /// on it stays there until the end holds anew, as long again at most.
+    /// A spring still running is left as it is: it reads the end each
+    /// frame anyway.
+    public mutating func renew() {
+        guard settling else { return }
+        held = 0
+        settled = 0
+        landed = false
+    }
+
     /// The spring is done: on the end, wherever it moves, until it holds.
     private mutating func settle(_ target: Double, dt: Double) -> Bool {
         settled += dt
