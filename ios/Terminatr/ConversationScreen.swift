@@ -31,6 +31,8 @@ struct ConversationScreen: View {
     /// Whether the conversation follows its end, or the user scrolled
     /// up (iOS 18, from the scroll geometry; 17 always follows).
     @State private var follow = Follow()
+    /// Jump to latest's glide to the end (T889).
+    @State private var glider = Glider()
     /// The row the user had at the top, scrolled up, before the layout
     /// changed (an iPhone Duo opened or closed): scrolled back to once
     /// the transcript has it (Places, T825).
@@ -87,6 +89,7 @@ struct ConversationScreen: View {
                 }
                 .padding([.horizontal, .top], 16)
                 .scrollTargetLayout()
+                .background { ScrollViewHook(glider: glider) }
             }
             // A drag down the conversation folds the keyboard (T857).
             .scrollDismissesKeyboard(.interactively)
@@ -121,13 +124,14 @@ struct ConversationScreen: View {
                 seeking = need != nil
             }
             .onChange(of: Busy.of(session) != nil) {
-                if follow.following { scroll.scrollTo("end", anchor: .bottom) }
+                if follow.following, !follow.gliding { scroll.scrollTo("end", anchor: .bottom) }
             }
+            .onChange(of: follow.gliding) { _, g in if !g { glider.stop() } }
+            .onDisappear { glider.stop() }
             .overlay(alignment: .bottom) {
                 if !follow.following {
                     Button {
-                        follow.jump(newest: transcript.entries.last?.id)
-                        withAnimation(reduceMotion ? nil : .default) { scroll.scrollTo("end", anchor: .bottom) }
+                        jump(scroll)
                     } label: {
                         Label(follow.label, systemImage: "arrow.down")
                             .font(theme.body(.subheadline, .semibold))
@@ -164,6 +168,18 @@ struct ConversationScreen: View {
         // A redial is a new bridge: the stream opens again on it.
         .task(id: "\(id ?? "")/\(model.generation)") { await watch(id) }
         .kept($unfolded, "runs \(ref)")
+    }
+
+    /// Jump to latest: a glide to the end that lands on it as the rows
+    /// on the way lay out (T889); without the scroll view to drive, the
+    /// scroll SwiftUI animates (T829's pull back on top).
+    private func jump(_ scroll: ScrollViewProxy) {
+        glider.stop()
+        follow.glide(newest: transcript.entries.last?.id)
+        if glider.start(instant: reduceMotion, done: { follow.landed() }) { return }
+        follow.landed()
+        follow.jump(newest: transcript.entries.last?.id)
+        withAnimation(reduceMotion ? nil : .default) { scroll.scrollTo("end", anchor: .bottom) }
     }
 
     /// The row the need was asked at.
@@ -443,8 +459,9 @@ extension View {
 /// The scroll geometry and phases into Follow: on iOS 18; 17 has none
 /// to read, and its conversation always follows. The screen opens at the
 /// end, and content that grows keeps its place (Follow scrolls a
-/// follower down). A jump that a flick's momentum carries up is pulled
-/// back to the end (toEnd, T829).
+/// follower down). Jump to latest glides (Glider, T889); without one, a
+/// jump that a flick's momentum carries up is pulled back to the end
+/// (toEnd, T829).
 struct PhoneFollowGeometry: ViewModifier {
     @Binding var follow: Follow
     let newest: Int?
