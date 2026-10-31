@@ -65,6 +65,7 @@ struct PhoneAttachment: View {
     let session: String?
     @State private var state = Load.loading
     @State private var sharing: SharedFile?
+    @State private var looking: URL?
     @State private var said: String?
 
     static let maxHeight: CGFloat = 240
@@ -90,6 +91,7 @@ struct PhoneAttachment: View {
         }
         .task(id: "\(session ?? "")|\(file.ref)|\(model.files != nil)") { await load() }
         .sheet(item: $sharing) { ShareSheet(url: $0.url).presentationDetents([.medium, .large]) }
+        .quickLookPreview($looking)
     }
 
     @ViewBuilder private var content: some View {
@@ -112,10 +114,11 @@ struct PhoneAttachment: View {
                 .clipShape(RoundedRectangle(cornerRadius: 10))
                 .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(theme.edge, lineWidth: 1))
                 .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 10))
+                .onTapGesture { if file.sendable { act(.open) } }
                 .acts(file.sendable, image: file.kind == .image) { act($0) }
                 .accessibilityElement()
                 .accessibilityLabel(file.name)
-                .accessibilityAddTraits(.isImage)
+                .accessibilityAddTraits(file.sendable ? [.isImage, .isButton] : .isImage)
         case .row(let size):
             row(size: size)
         case .gone:
@@ -196,12 +199,18 @@ struct PhoneAttachment: View {
             case .unavailable(let why): return show(why)
             }
             switch a {
+            case .open:
+                do {
+                    looking = try FileCopy.temporary(d, name: file.name, type: file.type)
+                } catch {
+                    show(error.localizedDescription)
+                }
             case .copy:
                 FileCopy.toPasteboard(d, name: file.name, type: file.type)
                 show("Copied")
             case .share:
                 do {
-                    sharing = SharedFile(url: try FileCopy.temporary(d, name: file.name))
+                    sharing = SharedFile(url: try FileCopy.temporary(d, name: file.name, type: file.type))
                 } catch {
                     show(error.localizedDescription)
                 }
@@ -225,7 +234,7 @@ struct PhoneAttachment: View {
     }
 }
 
-enum FileAct { case copy, share, photos }
+enum FileAct { case open, copy, share, photos }
 
 extension View {
     /// A file's acts, held down and for VoiceOver: Copy, Share… and, for
@@ -233,6 +242,7 @@ extension View {
     fileprivate func acts(_ sendable: Bool, image: Bool, _ act: @escaping (FileAct) -> Void) -> some View {
         contextMenu {
             if sendable {
+                Button("Open", systemImage: "arrow.up.left.and.arrow.down.right") { act(.open) }
                 Button("Copy", systemImage: "doc.on.doc") { act(.copy) }
                 Button("Share…", systemImage: "square.and.arrow.up") { act(.share) }
                 if image { Button("Save to Photos", systemImage: "square.and.arrow.down") { act(.photos) } }
@@ -240,6 +250,7 @@ extension View {
         }
         .accessibilityActions {
             if sendable {
+                Button("Open") { act(.open) }
                 Button("Copy") { act(.copy) }
                 Button("Share") { act(.share) }
                 if image { Button("Save to Photos") { act(.photos) } }
@@ -260,11 +271,15 @@ enum FileCopy {
     }
 
     /// A copy in a temporary folder of the app's own, for the share
-    /// sheet, under the file's name.
-    static func temporary(_ d: Data, name: String) throws -> URL {
+    /// sheet and Quick Look, under the file's name; a name without an
+    /// extension (a pasted image is "Image #1") gets its type's, which
+    /// Quick Look needs to know what it is.
+    static func temporary(_ d: Data, name: String, type: String = "") throws -> URL {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("terminatr-files/\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let url = dir.appendingPathComponent((name as NSString).lastPathComponent)
+        var base = (name as NSString).lastPathComponent
+        if (base as NSString).pathExtension.isEmpty, let ext = UTType(mimeType: type)?.preferredFilenameExtension { base += "." + ext }
+        let url = dir.appendingPathComponent(base)
         try d.write(to: url, options: .atomic)
         return url
     }

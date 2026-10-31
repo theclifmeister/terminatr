@@ -82,14 +82,3 @@ extension LinkLog {
         defaults.removeObject(forKey: key(pairing))
     }
 }
-
-extension LiveWork {
-    /// Every server's work as one strip: their counts summed, led by the
-    /// session that has worked longest on any of them, with its server.
-    public static func merge<Key>(_ each: [(Key, LiveWork)]) -> (server: Key, work: LiveWork)? {
-        let lead = each.enumerated().min { a, b in
-            (a.element.1.lead.turnSince ?? .distantFuture, a.offset) < (b.element.1.lead.turnSince ?? .distantFuture, b.offset)
-        }
-        return lead.map { ($0.element.0, LiveWork(count: each.reduce(0) { $0 + $1.1.count }, lead: $0.element.1.lead)) }
-    }
-}
