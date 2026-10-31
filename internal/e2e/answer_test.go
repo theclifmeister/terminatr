@@ -30,6 +30,14 @@ question = "What should the button say?"
 options = ["OK", "Go"]
 
 [[step]]
+do = "stream"
+ms = 50
+text = "ASKED"
+`
+
+// askMultiScript is askScript with a lone multi-select before its end.
+var askMultiScript = strings.Replace(askScript, `[[step]]
+do = "stream"`, `[[step]]
 do = "question"
 header = "Fruits"
 question = "Which fruits go on it?"
@@ -37,10 +45,7 @@ options = ["Apple", "Pear", "Plum"]
 multi = true
 
 [[step]]
-do = "stream"
-ms = 50
-text = "ASKED"
-`
+do = "stream"`, 1)
 
 func TestThreadAnswer(t *testing.T) {
 	env, projDir, _ := threadEnv(t)
@@ -50,7 +55,7 @@ func TestThreadAnswer(t *testing.T) {
 			scripts = v
 		}
 	}
-	os.WriteFile(filepath.Join(scripts, "thread-ask.toml"), []byte(askScript), 0o644)
+	os.WriteFile(filepath.Join(scripts, "thread-ask.toml"), []byte(askMultiScript), 0o644)
 	th := startThread(t, env, projDir)
 	answer := func(args ...string) Result {
 		return env.CLI(append([]string{"thread", "answer", "t-0001", "--project", "demo"}, args...)...)
