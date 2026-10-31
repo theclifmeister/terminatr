@@ -51,6 +51,9 @@ public struct Transcript: Sendable, Equatable {
         public var text: String
         public var lines: Int
         public var error: Bool
+        /// An answered question menu's: each question and what the user
+        /// picked (app API 41; Entry.questionOutcome).
+        public var answers: [AppAPI.TranscriptAnswer] = []
     }
 
     public private(set) var entries: [Entry] = []
@@ -153,9 +156,9 @@ public struct Transcript: Sendable, Equatable {
                 todos = it.todos
             case "result":
                 if !it.call.isEmpty, let i = entries.lastIndex(where: { ($0.kind == .tool || $0.kind == .files) && $0.call == it.call }) {
-                    entries[i].result = Result(text: it.text, lines: it.lines, error: it.error)
+                    entries[i].result = Result(text: it.text, lines: it.lines, error: it.error, answers: it.answers)
                 } else {
-                    add(.result, it, result: Result(text: it.text, lines: it.lines, error: it.error))
+                    add(.result, it, result: Result(text: it.text, lines: it.lines, error: it.error, answers: it.answers))
                 }
             case "prompt": add(.prompt, it)
             case "text": add(.text, it)

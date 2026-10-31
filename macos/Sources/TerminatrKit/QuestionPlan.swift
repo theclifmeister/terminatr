@@ -114,4 +114,35 @@ public struct QuestionGone: Error, Equatable, Sendable {
 extension Transcript.Entry {
     /// The tool call puts a question menu to the user (AskUserQuestion).
     public var asksUser: Bool { kind == .tool && tool == "AskUserQuestion" }
+
+    /// How a question menu ended, once its result came: each question
+    /// answered, as the result's answers say (app API 41), or declined
+    /// (the call failed: the user cancelled it) with the result's line.
+    /// Nil for any other entry, and for an answered menu a tm before
+    /// app API 41 sent without its answers: its tool line shows.
+    public enum QuestionOutcome: Sendable, Equatable {
+        case answered([AppAPI.TranscriptAnswer])
+        case declined(String)
+    }
+
+    public var questionOutcome: QuestionOutcome? {
+        guard let r = result else { return nil }
+        if !r.answers.isEmpty { return .answered(r.answers) }
+        if asksUser && r.error { return .declined(r.text) }
+        return nil
+    }
+}
+
+extension AppAPI.TranscriptAnswer {
+    /// What the user answered, in words: the labels picked, then their
+    /// own words in quotes ("Server, Mac app, “docs too”").
+    public var words: String {
+        (picked + (typed.isEmpty ? [] : ["\u{201C}\(typed)\u{201D}"])).joined(separator: ", ")
+    }
+
+    /// What VoiceOver hears for it: "Parts: Which parts? Answered Server, Mac app."
+    public var spoken: String {
+        let q = header.isEmpty ? question : "\(header): \(question)"
+        return "\(q) Answered \(words.isEmpty ? "nothing" : words)." + (notes.isEmpty ? "" : " Notes: \(notes).")
+    }
 }

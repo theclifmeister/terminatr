@@ -411,7 +411,9 @@ struct EntryLine: View {
         case .tool:
             ToolLine(entry: entry)
         case .result:
-            if let r = entry.result {
+            if let outcome = entry.questionOutcome {
+                AnsweredQuestionCard(outcome: outcome)
+            } else if let r = entry.result {
                 HStack(spacing: Spacing.tight) {
                     if r.error {
                         Image(systemName: "exclamationmark.triangle.fill")

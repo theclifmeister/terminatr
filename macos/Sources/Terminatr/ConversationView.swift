@@ -502,7 +502,9 @@ struct EntryView: View {
             AttachmentCard(entry: entry, session: session,
                            turn: [entry.who(agent: agent), Self.clock(entry.at)].filter { !$0.isEmpty }.joined(separator: " · "))
         case .result:
-            if let r = entry.result {
+            if let outcome = entry.questionOutcome {
+                AnsweredQuestionCard(outcome: outcome)
+            } else if let r = entry.result {
                 Text("\(r.text)\(r.lines > 1 ? " · \(r.lines) lines" : "")")
                     .font(theme.mono(.footnote))
                     .foregroundStyle(r.error ? theme.attention : theme.muted)

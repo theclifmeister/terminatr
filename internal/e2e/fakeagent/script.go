@@ -502,6 +502,12 @@ func (a *app) questionStep(ctx context.Context, st step) error {
 	id := randID("toolu_", 24)
 	a.say("⏺ ", "AskUserQuestion("+st.Header+")")
 	a.setInTool(true)
+	// The call and its result in the transcript, as Claude 2.1.316
+	// writes them: the result's toolUseResult has the answers.
+	a.transcriptAppend(map[string]any{"type": "assistant", "requestId": randID("req_", 24), "message": map[string]any{
+		"id": randID("msg_", 24), "role": "assistant",
+		"content": []any{map[string]any{"type": "tool_use", "id": id, "name": "AskUserQuestion", "input": input}},
+	}})
 	if _, err := a.fireHook(ctx, "PreToolUse", map[string]any{"tool_name": "AskUserQuestion", "tool_input": input, "tool_use_id": id}); err != nil {
 		return err
 	}
@@ -519,6 +525,14 @@ func (a *app) questionStep(ctx context.Context, st step) error {
 		said = append(said, "· "+q.Question+" → "+answer)
 	}
 	resp := map[string]any{"questions": qs, "answers": answers}
+	var pairs []string
+	for _, q := range all {
+		pairs = append(pairs, `"`+q.Question+`"="`+fmt.Sprint(answers[q.Question])+`"`)
+	}
+	a.transcriptAppend(map[string]any{"type": "user", "message": map[string]any{"role": "user", "content": []any{map[string]any{
+		"type": "tool_result", "tool_use_id": id,
+		"content": "Your questions have been answered: " + strings.Join(pairs, ", ") + ". You can now continue with these answers in mind.",
+	}}}, "toolUseResult": map[string]any{"questions": qs, "answers": answers, "annotations": map[string]any{}}})
 	if _, err := a.fireHook(ctx, "PostToolUse", map[string]any{"tool_name": "AskUserQuestion", "tool_input": input, "tool_response": resp, "tool_use_id": id}); err != nil {
 		return err
 	}

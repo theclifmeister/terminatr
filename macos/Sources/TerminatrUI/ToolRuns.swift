@@ -59,7 +59,8 @@ public struct ToolRunHeader: View {
 /// A tool call folded to one line: the tool, its main argument and its
 /// result's first line. An AskUserQuestion call without its answer
 /// waits on the user, not on a spinner: it says so, with a link that
-/// shows the question card.
+/// shows the question card; once answered or declined, it is its
+/// AnsweredQuestionCard.
 public struct ToolLine: View {
     @Environment(\.theme) private var theme
     let entry: Transcript.Entry
@@ -71,6 +72,14 @@ public struct ToolLine: View {
     }
 
     public var body: some View {
+        if let outcome = entry.questionOutcome {
+            AnsweredQuestionCard(outcome: outcome)
+        } else {
+            line
+        }
+    }
+
+    private var line: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             // The tool's name keeps its line on a phone's width: the
             // argument truncates first.
