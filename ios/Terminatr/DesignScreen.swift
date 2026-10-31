@@ -68,7 +68,7 @@ struct DesignsTiles: View {
                             ForEach(Array(Designs.ordered(shown).enumerated()), id: \.element.name) { i, d in
                                 let route = peer.map { Route.peerDesign(alias: $0, project: slug, name: d.name) } ?? Route.design(slug, name: d.name)
                                 PlainRouteLink(value: route) {
-                                    DesignTile(d, rule: i > 0, selected: navigate?.open == route)
+                                    DesignTile(d, rule: i > 0, selected: navigate.opens(route, on: model))
                                 }
                                 .buttonStyle(.plain)
                             }
@@ -332,7 +332,7 @@ struct DesignScreen: View {
                         let route = Route.task(slug, ref: t.id)
                         PlainRouteLink(value: route) {
                             buildRow(t, rule: i > 0)
-                                .background(navigate?.open == route ? theme.wash(.working) : .clear)
+                                .background(navigate.opens(route, on: model) ? theme.wash(.working) : .clear)
                         }
                         .buttonStyle(.plain)
                     }

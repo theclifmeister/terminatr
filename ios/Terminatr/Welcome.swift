@@ -9,7 +9,7 @@ import TerminatrUI
 /// -open pair it opens pairing, with -open "pair CODE" that code's
 /// confirm step (the Simulator's screenshots).
 struct Welcome: View {
-    @Environment(PhoneModel.self) private var model
+    @Environment(Phone.self) private var phone
     @Environment(\.theme) private var theme
     @Environment(\.dynamicTypeSize) private var typeSize
     @State private var opening = false
@@ -44,7 +44,7 @@ struct Welcome: View {
             Button {
                 opening = true
                 Task {
-                    await model.startDemo()
+                    await phone.startDemo()
                     opening = false
                 }
             } label: {
@@ -58,7 +58,7 @@ struct Welcome: View {
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.secondary)
-            if let f = model.failure {
+            if let f = phone.failure {
                 Text(f)
                     .font(theme.body(.footnote))
                     .foregroundStyle(theme.attention)

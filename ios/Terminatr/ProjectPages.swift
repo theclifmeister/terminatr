@@ -57,7 +57,7 @@ struct MemoryScreen: View {
         }
         .task(id: model.generation) { await list() }
         .refreshable { await list() }
-        .keepsPlace(Route.memory(slug).listKey)
+        .keepsPlace(route: Route.memory(slug))
         .navigationTitle("Memory")
         .backdrop()
     }

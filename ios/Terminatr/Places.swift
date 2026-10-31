@@ -8,8 +8,8 @@ import TerminatrUI
 /// crossing to regular, lays the screens out afresh in the stack or the
 /// columns (TabStack), and their @State goes with the old layout; what
 /// they keep here (View.kept) comes back. Not observed: a screen reads
-/// it when it appears. Forgotten with the server (PhoneModel
-/// disconnect).
+/// it when it appears. One for every server (Phone), forgotten with the
+/// last of them and on the demo's way in or out.
 @MainActor
 final class Places {
     private var values: [String: Any] = [:]
@@ -60,6 +60,13 @@ extension EnvironmentValues {
     @Entry var navigate: Navigate?
 }
 
+extension Optional where Wrapped == Navigate {
+    /// Whether route, on model's server, is the one open beside the list.
+    @MainActor func opens(_ route: Route, on model: PhoneModel) -> Bool {
+        self?.open == route.on(model.key)
+    }
+}
+
 /// A link to a route: a NavigationLink in the stack, a button that
 /// opens it in the columns, its row marked while its route is open
 /// beside it, and lit under an iPad's pointer (T830), as a
@@ -67,13 +74,17 @@ extension EnvironmentValues {
 struct RouteLink<Label: View>: View {
     @Environment(\.navigate) private var navigate
     @Environment(\.theme) private var theme
-    let route: Route
+    @Environment(PhoneModel.self) private var model
+    let value: Route
     @ViewBuilder let label: Label
 
     init(value route: Route, @ViewBuilder label: () -> Label) {
-        self.route = route
+        value = route
         self.label = label()
     }
+
+    /// The route on the server of the screen it is in (T852).
+    private var route: Route { value.on(model.key) }
 
     var body: some View {
         if let navigate {
@@ -107,13 +118,16 @@ struct RouteLink<Label: View>: View {
 /// choice, without the chevron; lit under an iPad's pointer.
 struct PlainRouteLink<Label: View>: View {
     @Environment(\.navigate) private var navigate
-    let route: Route
+    @Environment(PhoneModel.self) private var model
+    let value: Route
     @ViewBuilder let label: Label
 
     init(value route: Route, @ViewBuilder label: () -> Label) {
-        self.route = route
+        value = route
         self.label = label()
     }
+
+    private var route: Route { value.on(model.key) }
 
     var body: some View {
         if let navigate {
@@ -142,6 +156,11 @@ extension View {
     func keepsPlace(_ list: String) -> some View {
         modifier(KeepsPlace(list: list))
     }
+
+    /// The same for route's screen, on the server it is of.
+    func keepsPlace(route: Route) -> some View {
+        modifier(KeepsPlace(list: route.listKey, route: route))
+    }
 }
 
 private struct Kept<T: Equatable>: ViewModifier {
@@ -161,11 +180,12 @@ private struct Kept<T: Equatable>: ViewModifier {
 private struct KeepsPlace: ViewModifier {
     @Environment(PhoneModel.self) private var model
     let list: String
+    var route: Route?
 
     func body(content: Content) -> some View {
         ScrollViewReader { proxy in
             content.onAppear {
-                if let r = model.places.chosen(list) { proxy.scrollTo(r) }
+                if let r = model.places.chosen(route.map { $0.on(model.key).listKey } ?? list) { proxy.scrollTo(r) }
             }
         }
     }
