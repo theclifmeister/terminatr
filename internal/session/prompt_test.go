@@ -487,3 +487,41 @@ func TestScreenClock(t *testing.T) {
 		t.Fatal("no reading after screenIdleEval")
 	}
 }
+
+// TestKeptPrompts: only the prompts queued with Keep (a client's, and
+// PromptNow's) are kept, oldest first, until delivered.
+func TestKeptPrompts(t *testing.T) {
+	resolved := make(chan PromptResolution, 1)
+	s := startBox(t, claudeLike(t), "", time.Hour, resolved)
+	working(t, s, true)
+	if _, err := s.PromptWith("first", PromptOptions{Keep: true}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.PromptWith("nudge", PromptOptions{Channel: true}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Prompt("plain"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.PromptWith("second", PromptOptions{Keep: true}); err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, k := range s.KeptPrompts() {
+		if k.Queued.IsZero() {
+			t.Errorf("%q: no queued time", k.Text)
+		}
+		got = append(got, k.Text)
+	}
+	if strings.Join(got, ",") != "first,second" {
+		t.Fatalf("kept %q", got)
+	}
+	if _, err := s.Hook("Stop", map[string]any{}); err != nil {
+		t.Fatal(err)
+	}
+	testwait.Eventually(t, "the first kept prompt pasted", func() bool { return strings.Contains(screen(t, s), "first") })
+	testwait.Eventually(t, "it is no longer kept", func() bool {
+		k := s.KeptPrompts()
+		return len(k) == 0 || k[0].Text != "first"
+	})
+}

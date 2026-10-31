@@ -55,7 +55,8 @@ func (e *NotInterruptedError) Error() string {
 // Prompt sends it, and why says why, while an interrupt is refused
 // (NotInterruptedError): the turn runs on, and nothing is queued.
 // A queued prompt with the same text is dropped, so
-// a prompt sent again with --now doesn't run twice.
+// a prompt sent again with --now doesn't run twice. Its prompts are a
+// client's: one it queues is kept (PromptOptions.Keep).
 func (s *Session) PromptNow(text string, interrupt bool) (via, why string, err error) {
 	rt := s.agentRT()
 	if rt == nil {
@@ -71,12 +72,12 @@ func (s *Session) PromptNow(text string, interrupt bool) (via, why string, err e
 		// No launch of ours: its keys aren't known.
 		return "", "", &NotInterruptedError{Why: "the agent was started by hand"}
 	case rt.observed:
-		via, err = s.Prompt(text)
+		via, err = s.PromptWith(text, PromptOptions{Keep: true})
 		return via, "the agent was started by hand", err
 	case interrupt && st == agent.StateBlocked:
 		return "", "", &NotInterruptedError{Why: HeldDialog}
 	case st != agent.StateWorking:
-		via, err = s.Prompt(text)
+		via, err = s.PromptWith(text, PromptOptions{Keep: true})
 		return via, "the agent is " + string(st), err
 	}
 	escape := rt.escapeOpen()
@@ -95,7 +96,7 @@ func (s *Session) PromptNow(text string, interrupt bool) (via, why string, err e
 		if interrupt {
 			return "", "", &NotInterruptedError{Why: why}
 		}
-		via, err = s.Prompt(text)
+		via, err = s.PromptWith(text, PromptOptions{Keep: true})
 		return via, why, err
 	}
 	kept := rt.prompts[:0]
@@ -126,7 +127,7 @@ func (s *Session) PromptNow(text string, interrupt bool) (via, why string, err e
 		rt.steers, rt.steerShown = nil, false
 		rt.promptSeq++
 		id := fmt.Sprintf("%s-%d", rt.promptGen, rt.promptSeq)
-		rt.prompts = append([]queuedPrompt{{id: id, text: text, at: time.Now()}}, rt.prompts...)
+		rt.prompts = append([]queuedPrompt{{id: id, text: text, at: time.Now(), keep: true}}, rt.prompts...)
 	case !steered:
 		rt.steers = append(rt.steers, text)
 		rt.emptyBox = false // until the screen says so again

@@ -110,6 +110,11 @@ type PromptOptions struct {
 	// returns the text to deliver, or false when the prompt is stale and
 	// is dropped (e.g. a nudge whose items were all handled meanwhile).
 	Refresh func() (string, bool)
+	// Keep marks a prompt a client sent (tm thread prompt): a clean
+	// server stop saves it while it is still queued (KeptPrompts), and
+	// the next server delivers it. The server's own prompts are made
+	// anew instead.
+	Keep bool
 }
 
 // PromptResolution is what became of a prompt held for PromptHold.
@@ -133,6 +138,7 @@ type queuedPrompt struct {
 	at      time.Time
 	channel bool
 	refresh func() (string, bool)
+	keep    bool // PromptOptions.Keep
 	// waitToken: the channel refused it for want of a token (HeldToken).
 	waitToken bool
 }
@@ -1230,9 +1236,34 @@ func (s *Session) PromptWith(text string, o PromptOptions) (string, error) {
 	rt.mu.Lock()
 	rt.promptSeq++
 	id := fmt.Sprintf("%s-%d", rt.promptGen, rt.promptSeq)
-	rt.prompts = append(rt.prompts, queuedPrompt{id: id, text: text, at: time.Now(), channel: o.Channel, refresh: o.Refresh})
+	rt.prompts = append(rt.prompts, queuedPrompt{id: id, text: text, at: time.Now(), channel: o.Channel, refresh: o.Refresh, keep: o.Keep})
 	rt.mu.Unlock()
 	return "queued", nil
+}
+
+// KeptPrompt is a kept prompt still queued (KeptPrompts).
+type KeptPrompt struct {
+	Text   string    `json:"text"`
+	Queued time.Time `json:"queued"`
+}
+
+// KeptPrompts returns the prompts queued with PromptOptions.Keep and
+// not delivered yet, oldest first: what a clean server stop saves for
+// the next server.
+func (s *Session) KeptPrompts() []KeptPrompt {
+	rt := s.agentRT()
+	if rt == nil {
+		return nil
+	}
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	var out []KeptPrompt
+	for _, p := range rt.prompts {
+		if p.keep {
+			out = append(out, KeptPrompt{Text: p.text, Queued: p.at})
+		}
+	}
+	return out
 }
 
 // promptTarget is what the agent's channel needs to reach it now.

@@ -1079,7 +1079,7 @@ func (s *Server) resume(recs []SessionRecord) (outs []restartOutcome) {
 // lost when its cwd is gone or the launch fails. s.mu not held.
 func (s *Server) resumeOne(r SessionRecord) restartOutcome {
 	kept := r
-	r.CleanExit, r.Interrupted = false, false
+	r.CleanExit, r.Interrupted, r.Queued = false, false, nil
 	if _, err := os.Stat(r.Cwd); err != nil {
 		s.log.Printf("session %s: not resumed: %v", r.ID, err)
 		return restartOutcome{rec: r, how: "lost"}
@@ -1108,13 +1108,16 @@ func (s *Server) resumeOne(r SessionRecord) restartOutcome {
 	})
 	if perr != nil {
 		s.log.Printf("session %s: not resumed: %v", r.ID, perr)
+		if n := len(kept.Queued); n > 0 {
+			s.log.Printf("session %s: %d queued prompt(s) lost with it", r.ID, n)
+		}
 		return restartOutcome{rec: r, how: "lost"}
 	}
 	// A fresh launch starts over on its kickoff: only a resumed
 	// conversation has a turn to carry on.
-	o := restartOutcome{rec: r, how: how, reprompted: how == "resumed" && kept.Interrupted}
-	if o.reprompted {
-		go s.reprompt(sess)
+	o := restartOutcome{rec: r, how: how, reprompted: how == "resumed" && kept.Interrupted, queued: len(kept.Queued)}
+	if o.reprompted || o.queued > 0 {
+		go s.reprompt(sess, o.reprompted, kept.Queued)
 	}
 	return o
 }
@@ -1172,8 +1175,10 @@ func (s *Server) droppedHook(p proto.HookEventParams) proto.HookEventResult {
 	return proto.HookEventResult{Stdout: string(agent.FailClosed(a, p.Event, p.Payload))}
 }
 
+// prompt is session.prompt, a client's prompt: one still queued at a
+// clean server stop is kept for the next server (PromptOptions.Keep).
 func (s *Server) prompt(p proto.SessionPromptParams) (any, *proto.Error) {
-	return s.promptWith(p, session.PromptOptions{})
+	return s.promptWith(p, session.PromptOptions{Keep: true})
 }
 
 func (s *Server) promptWith(p proto.SessionPromptParams, o session.PromptOptions) (any, *proto.Error) {
