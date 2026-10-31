@@ -141,6 +141,12 @@ func cleanPopup(p proto.PeerPopup) proto.PeerPopup {
 		&s.CoordinatorAgent, &s.CoordinatorModel, &s.Merge, &s.MergeMethod, &s.GuardMode} {
 		*w = textsafe.Line(*w, 60)
 	}
+	if len(s.ThreadAgents) > proto.PeerPopupMaxModels {
+		s.ThreadAgents = s.ThreadAgents[:proto.PeerPopupMaxModels]
+	}
+	for i := range s.ThreadAgents {
+		s.ThreadAgents[i] = textsafe.Line(s.ThreadAgents[i], 60)
+	}
 	if len(s.Models) > proto.PeerPopupMaxModels {
 		s.Models = s.Models[:proto.PeerPopupMaxModels]
 	}

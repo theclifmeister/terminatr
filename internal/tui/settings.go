@@ -934,6 +934,8 @@ func modelWords(allow []string) string {
 // out with enter or space; each change is saved at once. At least one
 // stays allowed. An allowed name no agent's catalog lists any more is
 // shown stale, never dropped unasked: enter leaves it out.
+// Thread agents lists the installed agents in one too (title, intro,
+// what and staleWord say what it lists).
 type modelsView struct {
 	all   []string // every model the agents' catalogs offer
 	allow []string // the allowed ones; empty is every model
@@ -941,6 +943,15 @@ type modelsView struct {
 	err   string
 	// save writes the new list (never empty).
 	save func(m *dash, list []string) tea.Cmd
+	// title, intro, what ("model") and staleWord name what the list
+	// holds; "" is Thread models' words.
+	title, intro, what, staleWord string
+}
+
+// words are the view's title, intro, item word and stale word.
+func (v *modelsView) words() (title, intro, what, stale string) {
+	return cmp.Or(v.title, "Thread models"), cmp.Or(v.intro, "The models the coordinator may pick for a thread."),
+		cmp.Or(v.what, "model"), cmp.Or(v.staleWord, "stale: no agent lists it")
 }
 
 func (v *modelsView) allowed(name string) bool {
@@ -979,7 +990,8 @@ func (v *modelsView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 			}
 		}
 		if !slices.ContainsFunc(next, func(n string) bool { return !v.stale(n) }) {
-			v.err = "at least one model stays allowed"
+			_, _, what, _ := v.words()
+			v.err = "at least one " + what + " stays allowed"
 			break
 		}
 		v.err = ""
@@ -994,16 +1006,21 @@ func (v *modelsView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 }
 
 func (v *modelsView) render(m *dash) string {
-	lines := []string{th().Faint.Render("The models the coordinator may pick for a thread.")}
+	title, intro, what, staleWord := v.words()
+	lines := []string{th().Faint.Render(intro)}
 	w := m.inner(dialogWidth)
+	width := 16
+	for _, n := range v.rows() {
+		width = max(width, min(ansi.StringWidth(n)+2, 32))
+	}
 	for i, n := range v.rows() {
 		mark, word := ic().todoOpen, "left out"
 		if v.allowed(n) {
 			mark, word = ic().todoDone, "allowed"
 		}
-		l := fit(mark+" "+n, 16) + "  " + th().Faint.Render(word)
+		l := fit(mark+" "+n, width) + "  " + th().Faint.Render(word)
 		if v.stale(n) {
-			l = fit(mark+" "+n, 16) + "  " + th().Bad.Render("stale: no agent lists it")
+			l = fit(mark+" "+n, width) + "  " + th().Bad.Render(staleWord)
 		}
 		if i == v.sel {
 			l = th().Sel.Render(fit(ansi.Strip(l), w))
@@ -1011,12 +1028,12 @@ func (v *modelsView) render(m *dash) string {
 		lines = append(lines, l)
 	}
 	if len(v.all) == 0 {
-		lines = append(lines, th().Faint.Render("no agent lists models"))
+		lines = append(lines, th().Faint.Render(map[bool]string{true: "no agent lists models", false: "no " + what + " to list"}[what == "model"]))
 	}
 	if v.err != "" {
 		lines = append(lines, "", th().Bad.Render(v.err))
 	}
-	return m.popup(box{title: "Thread models", body: lines, sel: -1, keys: "enter allow or leave out · ↑ ↓ move · esc back", dialog: true})
+	return m.popup(box{title: title, body: lines, sel: -1, keys: "enter allow or leave out · ↑ ↓ move · esc back", dialog: true})
 }
 
 // archiveAges are the retention settings, as Keep history lists them.

@@ -129,17 +129,18 @@ func (c Catalog) Names() []string {
 	return out
 }
 
-// InScope reports whether a project's models scope takes name; an
-// empty (unset) scope takes every available model.
-func InScope(scope []string, name string) bool {
-	return len(scope) == 0 || slices.Contains(scope, name)
+// InScopeName reports whether a project's models scope takes the catalog's
+// model name (config.ScopeTakes: a bare name, "agent/name" or
+// "agent/*"); an empty (unset) scope takes every available model.
+func (c Catalog) InScopeName(scope []string, name string) bool {
+	return config.ScopeTakes(scope, c.Agent, name)
 }
 
 // InScope lists the available models a project's scope takes.
 func (c Catalog) InScope(scope []string) []Model {
 	var out []Model
 	for _, x := range c.Models {
-		if InScope(scope, x.Name) {
+		if c.InScopeName(scope, x.Name) {
 			out = append(out, x)
 		}
 	}
@@ -150,7 +151,7 @@ func (c Catalog) InScope(scope []string) []Model {
 // user's default_model while it is available and in the project's
 // scope; "" otherwise, so the agent runs its own default.
 func (c Catalog) LaunchModel(scope []string) string {
-	if d := c.Settings.DefaultModel; d != "" && c.Has(d) && InScope(scope, d) {
+	if d := c.Settings.DefaultModel; d != "" && c.Has(d) && c.InScopeName(scope, d) {
 		return d
 	}
 	return ""
@@ -184,7 +185,7 @@ func (c Catalog) Check(model string, scope []string) error {
 	if !c.Has(model) {
 		return &Error{"unknown-model", fmt.Sprintf("%q isn't one of %s's models: %s (tm context says when each fits)", model, c.Agent, cmpOr(strings.Join(c.Names(), ", "), "none"))}
 	}
-	if !InScope(scope, model) {
+	if !c.InScopeName(scope, model) {
 		var in []string
 		for _, x := range c.InScope(scope) {
 			in = append(in, x.Name)

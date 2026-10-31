@@ -247,17 +247,19 @@ func (p *Project) Context(seen Ticked, threads func(prs map[string]string) (Sect
 
 // agentModelLines name the agents the coordinator may start threads
 // with and their models (docs/SPEC.md §8.2, §11.2): only the installed
-// agents; the thread agent tm thread start runs without --agent (the
-// user's setting, or the one installed agent); and each agent's
-// models in the project's scope, as the agent itself described them,
-// its older versions on one line, or why they are unknown.
+// agents the project's thread_agents allow; the thread agent tm thread
+// start runs without --agent (the user's setting, or the one installed
+// agent); and each allowed agent's models in the project's scope, as
+// the agent itself described them, its older versions on one line, or
+// why they are unknown.
 func agentModelLines(cfg *config.Config, safety config.Safety) []string {
 	reg := models.Registry()
 	if reg == nil {
 		return nil
 	}
 	installed := models.Installed(reg, nil)
-	name, auto, err := models.Resolve(reg, installed, safety.ThreadAgent, "thread agent")
+	allowed := models.ThreadAgents(installed, safety)
+	name, auto, err := models.Resolve(reg, installed, safety.DefaultThreadAgent(), "thread agent")
 	var out []string
 	switch {
 	case len(installed) == 0:
@@ -275,12 +277,27 @@ func agentModelLines(cfg *config.Config, safety config.Safety) []string {
 	default:
 		out = append(out, "Thread agent: "+name+" (config.toml; the human's): tm thread start runs it")
 	}
-	if others := slices.DeleteFunc(slices.Clone(installed), func(n string) bool { return n == name }); len(others) > 0 && err == nil {
-		out[0] += "; --agent may name another installed agent: " + strings.Join(others, ", ")
+	if others := slices.DeleteFunc(slices.Clone(allowed), func(n string) bool { return n == name }); len(others) > 0 && err == nil {
+		if len(safety.ThreadAgents) > 0 {
+			out[0] += "; --agent may name another the user allows for threads: " + strings.Join(others, ", ")
+		} else {
+			out[0] += "; --agent may name another installed agent: " + strings.Join(others, ", ")
+		}
+	}
+	if len(safety.ThreadAgents) > 0 {
+		if left := slices.DeleteFunc(slices.Clone(installed), func(n string) bool { return slices.Contains(allowed, n) }); len(left) > 0 {
+			out = append(out, "The user allows threads of "+cmpOr(strings.Join(allowed, ", "), "no installed agent")+" only (config.toml thread_agents; the human's): --agent "+strings.Join(left, ", ")+" is refused (agent-not-allowed)")
+		}
+	}
+	if len(allowed) > 1 {
+		out = append(out, "Pick the agent and model for each job: tm thread start --agent A --model M, M one of A's models below (each agent its own)")
 	}
 	var known []string
-	for _, c := range models.Catalogs(reg, cfg, installed) {
-		known = append(known, c.Names()...)
+	for _, c := range models.Catalogs(reg, cfg, allowed) {
+		for _, n := range c.Names() {
+			known = append(known, n, c.Agent+"/"+n)
+		}
+		known = append(known, config.AllThreadModels(c.Agent))
 		if !c.Known {
 			out = append(out, fmt.Sprintf("Models of %s: unknown (%s); its threads run %s's own default, and --model is refused", c.Agent, c.Reason, c.Agent))
 			continue
@@ -310,14 +327,14 @@ func agentModelLines(cfg *config.Config, safety config.Safety) []string {
 			out = append(out, "  also (older versions): "+strings.Join(older, ", "))
 		}
 		if shown == 0 {
-			out = append(out, "  (none in this project's models: start threads without --model)")
+			out = append(out, "  (none in this project's models: start "+c.Agent+"'s threads without --model)")
 		}
 		for _, m := range c.Refused {
 			out = append(out, fmt.Sprintf("  refused for the user's account: %s (%s); --model %s is refused", m.Name, m.Refusal.Reason, m.Name))
 		}
 	}
 	if len(safety.Models) > 0 {
-		out = append(out, "The user limits this project's models to: "+strings.Join(safety.Models, ", ")+" (config.toml; the human's). Any other --model is refused.")
+		out = append(out, "The user limits this project's models to: "+strings.Join(safety.Models, ", ")+" (config.toml; the human's; agent/model allows a model on that agent only). Any other --model is refused.")
 		for _, n := range safety.Models {
 			if !slices.Contains(known, n) {
 				out = append(out, "  stale: "+n+" is allowed but no installed agent offers it now; --model "+n+" is refused")
@@ -325,6 +342,13 @@ func agentModelLines(cfg *config.Config, safety config.Safety) []string {
 		}
 	}
 	return out
+}
+
+func cmpOr(s, or string) string {
+	if s == "" {
+		return or
+	}
+	return s
 }
 
 // launchDefault says what a thread without --model runs.

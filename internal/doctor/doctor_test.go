@@ -915,7 +915,7 @@ func TestModels(t *testing.T) {
 		t.Fatal(err)
 	}
 	body := "[agents.claude]\nhide = [\"alpha\"]\nadd = [\"mine-1\"]\ndefault_model = \"gone\"\n\n[agents.codex]\nmodels = [{ name = \"x\", about = \"older list\" }]\n\n[agents.nope]\ndefault_model = \"\"\n\n" +
-		"[defaults]\nthread_agent = \"claude\"\ncoordinator_agent = \"claude\"\nmodels = [\"mine-1\", \"zeta\"]\n\n[projects.demo]\nthread_agent = \"pi\"\ncoordinator_model = \"beta\"\n"
+		"[defaults]\nthread_agent = \"claude\"\ncoordinator_agent = \"claude\"\nmodels = [\"mine-1\", \"zeta\", \"claude/*\", \"codex/x\"]\n\n[projects.demo]\nthread_agent = \"pi\"\nthread_agents = [\"claude\", \"codex\"]\ncoordinator_model = \"beta\"\n"
 	os.WriteFile(filepath.Join(d.Paths.Home, "config.toml"), []byte(body), 0o600)
 	modelstest.Agents(t, "claude")
 	want := []string{
@@ -924,7 +924,9 @@ func TestModels(t *testing.T) {
 		"warn models: config.toml [agents.codex] models is the older full list: tm now asks codex for its models; the names it doesn't list count as yours, and Settings > Models saves the new form",
 		"warn models: config.toml has models settings for agent nope, which tm doesn't know (tm agent list)",
 		"fail agent: demo: thread_agent the thread agent is \"pi\", which tm doesn't know (tm agent list): pick another in the project popup",
+		"warn models: demo: thread_agents codex: codex isn't installed",
 		"warn models: demo: coordinator_model beta: claude refused beta",
+		"warn models: model codex/x is in the models of all projects, but no installed agent offers it now",
 		"warn models: model zeta is in the models of all projects, but no installed agent offers it now; --model zeta is refused",
 	}
 	got := strings.Split(lines(), "\n")

@@ -502,7 +502,7 @@ func safetyOfPeer(p proto.PeerSettings) config.Safety {
 		ParallelThreads: p.ParallelThreads, AutoClose: p.AutoClose, AutoCloseDays: p.AutoCloseDays, PRFollowup: p.PRFollowup,
 		PRPollSeconds: p.PRPollSeconds, CompleteTasks: p.CompleteTasks, CoordinatorRemoteControl: p.CoordinatorRemoteControl,
 		AutoClear: p.AutoClear, CoordinatorMerges: p.CoordinatorMerges, FastForwardCheckout: p.FastForwardCheckout,
-		Protection: p.Protection, CoordinatorAccess: p.CoordinatorAccess, ThreadAgent: p.ThreadAgent,
+		Protection: p.Protection, CoordinatorAccess: p.CoordinatorAccess, ThreadAgent: p.ThreadAgent, ThreadAgents: p.ThreadAgents,
 		CoordinatorAgent: p.CoordinatorAgent, Models: p.Models, CoordinatorModel: p.CoordinatorModel, Active: p.Active,
 		Paused: p.Paused, Share: p.Share, Merge: p.Merge, MergeMethod: p.MergeMethod, Guard: p.Guard, GuardMode: p.GuardMode,
 		ArchiveTasksDays: p.ArchiveTasksDays, ArchiveThreadsDays: p.ArchiveThreadsDays, ArchiveInboxDays: p.ArchiveInboxDays,

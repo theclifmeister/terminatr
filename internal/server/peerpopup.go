@@ -65,7 +65,7 @@ func peerSettingsOf(s config.Safety) proto.PeerSettings {
 		ParallelThreads: s.ParallelThreads, AutoClose: s.AutoClose, AutoCloseDays: s.AutoCloseDays, PRFollowup: s.PRFollowup,
 		PRPollSeconds: s.PRPollSeconds, CompleteTasks: s.CompleteTasks, CoordinatorRemoteControl: s.CoordinatorRemoteControl,
 		AutoClear: s.AutoClear, CoordinatorMerges: s.CoordinatorMerges, FastForwardCheckout: s.FastForwardCheckout,
-		Protection: s.Protection, CoordinatorAccess: s.CoordinatorAccess, ThreadAgent: s.ThreadAgent,
+		Protection: s.Protection, CoordinatorAccess: s.CoordinatorAccess, ThreadAgent: s.ThreadAgent, ThreadAgents: slices.Clone(s.ThreadAgents),
 		CoordinatorAgent: s.CoordinatorAgent, Models: slices.Clone(s.Models), CoordinatorModel: s.CoordinatorModel,
 		Active: s.Active, Paused: s.Paused, Share: s.Share, Merge: s.Merge, MergeMethod: s.MergeMethod, Guard: s.Guard,
 		GuardMode: s.GuardMode, ArchiveTasksDays: s.ArchiveTasksDays, ArchiveThreadsDays: s.ArchiveThreadsDays,

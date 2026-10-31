@@ -51,7 +51,25 @@ const (
 	CodeNotInstalled = "agent-not-installed"
 	CodeNotChosen    = "agent-not-chosen"
 	CodeUnknownAgent = "unknown-agent"
+	// CodeNotAllowed: the project's thread_agents leave the agent out.
+	CodeNotAllowed = "agent-not-allowed"
 )
+
+// ThreadAgents are the installed agents a project's coordinator may
+// start threads with (its thread_agents, thread_agent among them; unset,
+// every installed one), in the registry's order.
+func ThreadAgents(installed []string, safety config.Safety) []string {
+	return slices.DeleteFunc(slices.Clone(installed), func(n string) bool { return !safety.AllowsThreadAgent(n) })
+}
+
+// CheckThreadAgent refuses an agent the project's thread_agents leave
+// out.
+func CheckThreadAgent(name string, installed []string, safety config.Safety) error {
+	if safety.AllowsThreadAgent(name) {
+		return nil
+	}
+	return &Error{CodeNotAllowed, fmt.Sprintf("the user's settings don't allow threads of %s in this project; allowed: %s", name, cmpOr(strings.Join(ThreadAgents(installed, safety), ", "), "none installed"))}
+}
 
 // Resolve is the agent a project's thread or coordinator runs: setting
 // when the user named one (refused when it isn't installed: never

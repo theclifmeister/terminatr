@@ -256,18 +256,64 @@ func (s *ServerSource) SetRepo(slug, path string, add bool) error {
 // Catalog is one installed agent's models (models.Catalog).
 type Catalog = models.Catalog
 
-// catalogNames lists the models the catalogs offer, each name once: the
-// choices of the Thread models setting.
-func catalogNames(cats []Catalog) []string {
-	var out []string
+// scopeChoices are the Thread models list's rows for the catalogs and a
+// project's scope: each model as a row, "agent/model" with several
+// agents (one agent's alone are bare names, as before there were
+// several); allow, the rows the scope takes and its entries no row
+// matches (stale), nil while it is unset; and write, the list a choice
+// of rows saves: with several agents, an agent none of whose models is
+// left out as "agent/*" (its new ones too).
+func scopeChoices(cats []Catalog, scope []string) (rows, allow []string, write func([]string) []string) {
+	type pick struct{ agent, model, label string }
+	var picks []pick
 	for _, c := range cats {
 		for _, n := range c.Names() {
-			if !slices.Contains(out, n) {
-				out = append(out, n)
+			label := c.Agent + "/" + n
+			if len(cats) == 1 {
+				label = n
+			}
+			if !slices.Contains(rows, label) {
+				rows = append(rows, label)
+				picks = append(picks, pick{c.Agent, n, label})
 			}
 		}
 	}
-	return out
+	if len(scope) > 0 {
+		allow = []string{}
+		for _, p := range picks {
+			if config.ScopeTakes(scope, p.agent, p.model) {
+				allow = append(allow, p.label)
+			}
+		}
+		for _, e := range scope {
+			if !slices.ContainsFunc(picks, func(p pick) bool { return config.ScopeTakes([]string{e}, p.agent, p.model) }) && !slices.Contains(allow, e) {
+				allow = append(allow, e)
+			}
+		}
+	}
+	write = func(chosen []string) []string {
+		var out []string
+		for _, c := range cats {
+			if len(cats) == 1 {
+				break
+			}
+			all := len(c.Names()) > 0
+			for _, n := range c.Names() {
+				all = all && slices.Contains(chosen, c.Agent+"/"+n)
+			}
+			if all {
+				out = append(out, config.AllThreadModels(c.Agent))
+			}
+		}
+		for _, l := range chosen {
+			if a, _, ok := strings.Cut(l, "/"); ok && slices.Contains(out, config.AllThreadModels(a)) && slices.Contains(rows, l) {
+				continue
+			}
+			out = append(out, l)
+		}
+		return out
+	}
+	return rows, allow, write
 }
 
 func (s *ServerSource) Catalogs() []Catalog {

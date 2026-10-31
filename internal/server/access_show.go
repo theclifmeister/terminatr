@@ -178,11 +178,11 @@ func markChanges(launched, now []proto.AccessRule) ([]proto.AccessRule, int) {
 }
 
 // threadAgentOf is the agent a project's new thread runs: its
-// thread_agent, else the only agent installed, else "" (tm thread start
+// thread_agent (or the first of thread_agents), else the only agent installed, else "" (tm thread start
 // asks then).
 func (s *Server) threadAgentOf(safety config.Safety) string {
-	if safety.ThreadAgent != "" {
-		return safety.ThreadAgent
+	if a := safety.DefaultThreadAgent(); a != "" {
+		return a
 	}
 	reg := s.registry()
 	if reg == nil {

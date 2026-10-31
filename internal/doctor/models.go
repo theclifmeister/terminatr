@@ -159,7 +159,7 @@ func scopeChecks(cfg *config.Config, reg *agent.Registry, installed []string, ca
 	}
 	var scopes []scope
 	if all, err := cfg.AllProjects(); err == nil {
-		scopes = append(scopes, scope{config.AllProjectsName, all, []string{"thread_agent", "coordinator_agent", "models", "coordinator_model"}})
+		scopes = append(scopes, scope{config.AllProjectsName, all, []string{"thread_agent", "thread_agents", "coordinator_agent", "models", "coordinator_model"}})
 	}
 	for _, slug := range cfg.ProjectSlugs() {
 		if s, err := cfg.Safety(slug); err == nil {
@@ -179,11 +179,20 @@ func scopeChecks(cfg *config.Config, reg *agent.Registry, installed []string, ca
 				out = append(out, agentFail("%s: %s %s", sc.who, k.key, errMsg(err)))
 			}
 		}
+		if slices.Contains(sc.own, "thread_agents") {
+			for _, n := range sc.safety.ThreadAgents {
+				if _, _, err := models.Resolve(reg, installed, n, "thread agent"); err != nil {
+					out = append(out, modelsWarn("%s: thread_agents %s: %s", sc.who, n, errMsg(err)))
+				}
+			}
+		}
 		if slices.Contains(sc.own, "models") {
 			for _, n := range sc.safety.Models {
 				offered := false
 				for _, c := range cats {
-					offered = offered || c.Has(n)
+					for _, m := range c.Names() {
+						offered = offered || config.ScopeTakes([]string{n}, c.Agent, m)
+					}
 				}
 				if !offered {
 					stale[n] = append(stale[n], sc.who)
@@ -209,7 +218,7 @@ func severalAgentsChecks(cfg *config.Config, installed []string) []Check {
 		return nil
 	}
 	all, _ := cfg.AllProjects()
-	if all.ThreadAgent != "" && all.CoordinatorAgent != "" {
+	if all.DefaultThreadAgent() != "" && all.CoordinatorAgent != "" {
 		return nil
 	}
 	return []Check{modelsWarn("several agents are installed (%s) and the settings name none for all projects: the dashboard asks once when a project opens; until then tm thread start needs --agent", strings.Join(installed, ", "))}

@@ -42,8 +42,8 @@ func (e *Env) threadStart(p *project.Project, o startOpts, asJSON bool) error {
 	if err != nil {
 		return err
 	}
-	// --agent overrides the user's thread_agent setting (§11.2); unset,
-	// the one installed agent.
+	// --agent overrides the user's thread_agent setting, within its
+	// thread_agents (§11.2); unset, the one installed agent.
 	agentName, err := threadAgent(o.agent, safety)
 	if err != nil {
 		return err
@@ -158,9 +158,11 @@ func (e *Env) threadStart(p *project.Project, o startOpts, asJSON bool) error {
 }
 
 // threadAgent is the agent a thread runs: --agent, else the project's
-// thread_agent, else the one installed agent (docs/SPEC.md §8.2,
-// §11.2). One that isn't installed, none installed, or several with
-// none chosen are refused before anything is created.
+// thread_agent (or the first of its thread_agents), else the one
+// installed agent (docs/SPEC.md §8.2, §11.2). One that isn't installed
+// or thread_agents leave out, none installed, or several with none
+// chosen are refused before anything is created. The model is checked
+// against the same agent's scope (checkModel).
 func threadAgent(flag string, safety config.Safety) (string, error) {
 	reg := models.Registry()
 	if reg == nil {
@@ -168,7 +170,7 @@ func threadAgent(flag string, safety config.Safety) (string, error) {
 	}
 	installed := models.Installed(reg, nil)
 	if flag == "" {
-		name, _, err := models.Resolve(reg, installed, safety.ThreadAgent, "thread agent")
+		name, _, err := models.Resolve(reg, installed, safety.DefaultThreadAgent(), "thread agent")
 		return name, refusal(err)
 	}
 	if _, ok := reg.Get(flag); !ok {
@@ -177,7 +179,7 @@ func threadAgent(flag string, safety config.Safety) (string, error) {
 	if !slices.Contains(installed, flag) {
 		return "", refusal(models.NotInstalled(reg, flag, installed))
 	}
-	return flag, nil
+	return flag, refusal(models.CheckThreadAgent(flag, installed, safety))
 }
 
 // serverAgent refuses an agent the server doesn't know before a thread

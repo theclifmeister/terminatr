@@ -167,11 +167,15 @@ another level, ask them.
   once a slot frees; `--over-cap` passes both on the user's word). A
   `slot-free` item tells you when a slot frees, in this project or
   another.
-- `--model` from the agent's list in `tm context`: a smaller one for
-  small, well-specified work, none (the default) or the most capable for
-  design, subtle bugs or large changes; unsure, leave it off. Refusals:
-  `unknown-model` (not listed), `model-not-allowed` (outside the user's
-  limit). Pick from the list or leave it off; don't work around it.
+- Agent and model per job: `tm context` lists each agent the user
+  allows for threads with its own models. `--agent` picks one of them
+  (none: the thread agent); `--model` one of that agent's models: a
+  smaller one for small, well-specified work, none (the default) or the
+  most capable for design, subtle bugs or large changes; unsure, leave
+  both off. Refusals: `agent-not-allowed` (outside the user's thread
+  agents), `unknown-model` (not that agent's), `model-not-allowed`
+  (outside the user's limit for it). Pick from the lists or leave them
+  off; don't work around them.
 - A paused project refuses starts with `project-paused`: tell the user;
   don't retry until they resume. Pausing, archiving and deleting
   projects are the user's.
