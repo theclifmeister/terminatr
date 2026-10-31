@@ -337,3 +337,22 @@ func TestPickedAnswer(t *testing.T) {
 		t.Errorf("single-select: %v", perr)
 	}
 }
+
+// TestActGuardPicks: a paired server's multi-select answer goes by
+// index, its labels the guard: other labels mean the need changed.
+func TestActGuardPicks(t *testing.T) {
+	n := proto.PeerNeed{Question: &proto.Question{Questions: []proto.QuestionItem{subjects}}}
+	p := proto.PeerAct{Act: proto.ActAnswer, Question: subjectsQuestion, Answer: "Plants & flowers, Landscapes", Picks: []int{2, 0}}
+	got, perr := actGuard(n, p)
+	if perr != nil || got.Answer != "Plants & flowers, Landscapes" || !slices.Equal(got.Picks, []int{2, 0}) {
+		t.Fatalf("picks: %+v %v", got, perr)
+	}
+	p.Answer = "Plants & flowers"
+	if _, perr := actGuard(n, p); perr == nil || perr.Code != proto.ErrNeedChanged {
+		t.Fatalf("other labels: %v", perr)
+	}
+	p.Picks = []int{9}
+	if _, perr := actGuard(n, p); perr == nil || perr.Code != proto.ErrBadParams {
+		t.Fatalf("a pick it hasn't: %v", perr)
+	}
+}

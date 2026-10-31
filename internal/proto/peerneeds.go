@@ -205,6 +205,10 @@ type PeerAct struct {
 	Index    int    `json:"index,omitempty"`
 	Answer   string `json:"answer,omitempty"`
 	Question string `json:"question,omitempty"`
+	// Picks answer a multi-select question in place of a label: its
+	// options picked, by index (from 0); Answer is then their labels
+	// joined with ", ", as the user saw them, the guard (T900).
+	Picks []int `json:"picks,omitempty"`
 	// ActApprove: the dialog's option Choice (from 1); Option is its
 	// text, the guard.
 	Choice int    `json:"choice,omitempty"`

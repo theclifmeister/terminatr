@@ -790,6 +790,9 @@ func TestDashboardPeerNeedsInFull(t *testing.T) {
 				{ID: "approval:s-3", Kind: proto.NeedApproval, Role: proto.RoleCoordinator, Escape: true},
 				{ID: "ask:Q2", Kind: proto.NeedAsk, Role: proto.RoleCoordinator, Question: &proto.Question{Questions: []proto.QuestionItem{{Question: "Both apps?"}}}},
 				{ID: "review:T3:1", Kind: proto.NeedReview, Task: "T3", Title: "Rate limits", Status: "review"},
+				{ID: "question:s-4:m", Kind: proto.NeedQuestion, Task: "T9", Session: "s-4", Question: &proto.Question{Screen: true, Questions: []proto.QuestionItem{
+					{Question: "Which camera?", Answered: true, Answer: "DSLR", Options: []proto.QuestionOption{{Label: "DSLR"}}},
+					{Question: "Which subjects?", MultiSelect: true, Options: []proto.QuestionOption{{Label: "Plants"}, {Label: "Birds"}, {Label: "Hills"}}}}}},
 			}},
 	}}}
 	src := &fakeSource{data: d}
@@ -1660,6 +1663,9 @@ func TestDashboardPeerNeedAct(t *testing.T) {
 					Options: []string{"Yes", "Yes, and don't ask again", "No"}, Scopes: []string{"once", "persistent", "once"}}},
 				{ID: "approval:s-3", Kind: proto.NeedApproval, Role: proto.RoleCoordinator, Escape: true},
 				{ID: "review:T3:1", Kind: proto.NeedReview, Task: "T3", Title: "Rate limits", Status: "review"},
+				{ID: "question:s-4:m", Kind: proto.NeedQuestion, Task: "T9", Session: "s-4", Question: &proto.Question{Screen: true, Questions: []proto.QuestionItem{
+					{Question: "Which camera?", Answered: true, Answer: "DSLR", Options: []proto.QuestionOption{{Label: "DSLR"}}},
+					{Question: "Which subjects?", MultiSelect: true, Options: []proto.QuestionOption{{Label: "Plants"}, {Label: "Birds"}, {Label: "Hills"}}}}}},
 			}},
 	}}}
 	src := &fakeSource{data: d}
@@ -1682,7 +1688,7 @@ func TestDashboardPeerNeedAct(t *testing.T) {
 	drain(t, m, press(m, "2"))
 	drain(t, m, press(m, "Y"))
 	want := proto.PeerNeedActParams{Peer: "mini", PeerAct: proto.PeerAct{Project: "acme-api", Need: "question:s-1:a", Act: proto.ActAnswer, Question: "Which cache?", Answer: "None"}}
-	if len(src.acts) != 1 || src.acts[0] != want {
+	if len(src.acts) != 1 || !reflect.DeepEqual(src.acts[0], want) {
 		t.Fatalf("acts %+v, want %+v", src.acts, want)
 	}
 
@@ -1702,6 +1708,37 @@ func TestDashboardPeerNeedAct(t *testing.T) {
 	drain(t, m, in.submit("tests fail"))
 	if a := src.acts[len(src.acts)-1]; a.Act != proto.ActSendBack || a.Status != "review" || a.Note != "tests fail" {
 		t.Errorf("send back %+v", a)
+	}
+
+	// A multi-select (T900): numbers and space tick, submit sends the
+	// ticked ones by index, their labels the guard.
+	open("question:s-4:m")
+	if out := screen(m); !strings.Contains(out, "1  [ ] Plants") || !strings.Contains(out, "submit the options ticked") {
+		t.Fatalf("the multi-select's dialog:\n%s", out)
+	}
+	n := len(src.acts)
+	drain(t, m, press(m, "enter")) // the cursor on option 1 ticks it
+	drain(t, m, press(m, "3"))
+	drain(t, m, press(m, "2"))
+	drain(t, m, press(m, "2"))
+	if out := screen(m); !strings.Contains(out, "1  [x] Plants") || !strings.Contains(out, "2  [ ] Birds") || !strings.Contains(out, "3  [x] Hills") {
+		t.Fatalf("ticked:\n%s", out)
+	}
+	drain(t, m, press(m, "4")) // submit
+	if !strings.Contains(screen(m), "Plants, Hills?") {
+		t.Fatalf("no confirmation of Plants, Hills:\n%s", screen(m))
+	}
+	drain(t, m, press(m, "Y"))
+	want = proto.PeerNeedActParams{Peer: "mini", PeerAct: proto.PeerAct{Project: "acme-api", Need: "question:s-4:m", Act: proto.ActAnswer,
+		Index: 1, Question: "Which subjects?", Answer: "Plants, Hills", Picks: []int{0, 2}}}
+	if len(src.acts) != n+1 || !reflect.DeepEqual(src.acts[n], want) {
+		t.Fatalf("acts %+v, want %+v", src.acts[n:], want)
+	}
+	// Nothing ticked: submit says so and stays.
+	open("question:s-4:m")
+	drain(t, m, press(m, "4"))
+	if len(src.acts) != n+1 || !strings.Contains(m.msg, "tick one option or more") {
+		t.Errorf("submit with none ticked: %d acts, msg %q", len(src.acts), m.msg)
 	}
 
 	open("approval:s-3")
