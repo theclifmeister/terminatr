@@ -172,6 +172,8 @@ struct Root: View {
     @State private var gallery = false
     /// The window's size, for the iPad's sidebar (folding).
     @State private var size = CGSize.zero
+    /// Whether the iPad's sidebar was opened at launch (opening).
+    @State private var sidebarOpened = false
 
     var body: some View {
         content
@@ -236,14 +238,14 @@ extension Root {
     @available(iOS 18, *)
     private var sidebarTabs: some View {
         TabView(selection: Binding(get: { tab }, set: choose)) {
-            Tab("Needs you", systemImage: "exclamationmark.bubble", value: RootTab.needs) { needsStack }
+            Tab("Needs you", systemImage: "exclamationmark.bubble", value: RootTab.needs) { opening(needsStack) }
                 .badge(model.needs.count)
-            Tab("Projects", systemImage: "folder", value: RootTab.projects) { projectsStack }
+            Tab("Projects", systemImage: "folder", value: RootTab.projects) { opening(projectsStack) }
             ForEach(model.sidebar, id: \.section.id) { s in
                 TabSection(s.section.title) {
                     ForEach(s.rows) { r in
                         Tab(value: RootTab.place(r.route)) {
-                            projectsStack
+                            opening(projectsStack)
                         } label: {
                             Label {
                                 Text(r.title)
@@ -262,8 +264,21 @@ extension Root {
         .tabViewStyle(.sidebarAdaptable)
         .tabViewSidebarHeader { SidebarHead() }
         .onGeometryChange(for: CGSize.self) { $0.size } action: { size = $0 }
-        .onAppear { Task { if folding == nil { Self.setSidebar(hidden: false) } } }
         .onChange(of: folding) { if $1 != nil { Self.setSidebar(hidden: true) } }
+    }
+
+    /// A tab's content, which opens the sidebar as the app starts (T858):
+    /// as the first tab appears, its UITabBarController is there to ask.
+    /// From Root's onAppear it sometimes wasn't yet (1 portrait launch
+    /// in 10 to 20), and the sidebar stayed closed, its rows in the top
+    /// tab bar.
+    @available(iOS 18, *)
+    private func opening(_ content: some View) -> some View {
+        content.background(TabBarHook { tabs in
+            guard !sidebarOpened else { return }
+            sidebarOpened = true
+            if folding == nil { tabs.sidebar.isHidden = false }
+        })
     }
 
     /// The coordinator or thread the columns show across the whole
@@ -281,10 +296,9 @@ extension Root {
         }
     }
 
-    /// Opens or folds the sidebar. Opened once as the app starts: in
-    /// portrait the TabView starts with it closed behind its button,
-    /// and SwiftUI names no way to open (or close) it. The user opens
-    /// and closes it as ever.
+    /// Opens or folds the sidebar: SwiftUI names no way to (in portrait
+    /// the TabView starts with it closed behind its button). Opened once
+    /// as the app starts (opening); the user opens and closes it as ever.
     @available(iOS 18, *)
     private static func setSidebar(hidden: Bool) {
         func tabs(_ vc: UIViewController?) -> UITabBarController? {
@@ -392,5 +406,38 @@ private struct BackdropModifier: ViewModifier {
                 }
                 .ignoresSafeArea()
             }
+    }
+}
+
+/// Hands found the UITabBarController a TabView shows its tabs in, each
+/// time the tab holding it appears: from inside a tab the controller is
+/// always reachable, where a walk of the window's controllers can run
+/// before SwiftUI has put it there (T858).
+struct TabBarHook: UIViewControllerRepresentable {
+    let found: (UITabBarController) -> Void
+
+    func makeUIViewController(context: Context) -> Hook { Hook(found: found) }
+    func updateUIViewController(_ hook: Hook, context: Context) { hook.found = found }
+
+    final class Hook: UIViewController {
+        var found: (UITabBarController) -> Void
+
+        init(found: @escaping (UITabBarController) -> Void) {
+            self.found = found
+            super.init(nibName: nil, bundle: nil)
+        }
+
+        @available(*, unavailable)
+        required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+        override func viewDidLoad() {
+            super.viewDidLoad()
+            view.isUserInteractionEnabled = false
+        }
+
+        override func viewWillAppear(_ animated: Bool) {
+            super.viewWillAppear(animated)
+            if let tabs = tabBarController { found(tabs) }
+        }
     }
 }
