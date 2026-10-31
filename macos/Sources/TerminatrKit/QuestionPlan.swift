@@ -66,6 +66,17 @@ public struct QuestionPlan: Equatable, Sendable {
         screen ? "Typing “\(answer)” into the agent's menu…" : "Sending “\(answer)”…"
     }
 
+    /// The line under a phone card's options after a tap (T887): the
+    /// server's refusal (said, failed) first; while the answer goes, how
+    /// it goes (sending); once taken, nothing (the card goes with the
+    /// next session list). Nil when nothing was tapped or said.
+    public static func tapped(sending option: String?, busy: Bool, screen: Bool,
+                              said: (text: String, failed: Bool)?) -> (text: String, failed: Bool)? {
+        if let said { return said }
+        guard busy, let option else { return nil }
+        return (sending(option, screen: screen), false)
+    }
+
     /// The menu's state in words once every question has its answer but
     /// it is still open: the agent hasn't taken them yet, or its menu
     /// waits on the screen (a review step).

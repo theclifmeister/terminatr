@@ -234,15 +234,23 @@ struct ConversationScreen: View {
                 let waits = "question \(s.id) \(q.since?.timeIntervalSince1970 ?? 0) \(i)"
                 let word = "Asks · " + QuestionPlan.tag(q, index: i)
                 let line = Self.line("AskUserQuestion", since: q.since)
-                if let need, need.kind == .question, need.answer?.index == i, model.can(AppAPI.Methods.sessionAnswer.name) {
-                    NeedActs(need: need) { parts in
+                // Each card answers its own question (Need.answer), not
+                // only a menu's one open question: two questions left the
+                // first card's options untappable (T887).
+                if let need, need.kind == .question, let a = Need.answer(s.id, q, index: i),
+                   model.can(AppAPI.Methods.sessionAnswer.name) {
+                    NeedActs(need: need, answer: a) { parts in
                         HeroCard(tone: .question, symbol: Need.Kind.question.symbol, word: word, line: line, title: item.question,
                                  note: parts.note, waiting: waits) {
                             parts.buttons
                         }
                     }
                 } else {
+                    // A multi-select of the agent's menu is picked in its
+                    // terminal: the card says so, its options only read.
+                    let several = QuestionPlan(q, index: i).paneOnly
                     HeroCard(tone: .question, symbol: Need.Kind.question.symbol, word: word, line: line, title: item.question,
+                             note: several ? ("It takes several options: pick them in the terminal view.", false) : nil,
                              waiting: waits) {
                         VStack(spacing: Spacing.item) {
                             ForEach(Array(item.options.enumerated()), id: \.offset) { n, o in

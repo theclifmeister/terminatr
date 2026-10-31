@@ -52,6 +52,36 @@ let backend = AppAPI.QuestionItem(question: "Which cache backend?", options: [.i
     #expect(Need.answerable("s", menu([many]))?.options.count == Need.maxButtons)
 }
 
+/// A conversation's card answers its own question of a menu of
+/// several (T887): the agent's menu (screen) only its first open one,
+/// tm's own any open one; never a multi-select, an escape's or an
+/// answered one; every option, not only maxButtons.
+@Test func answerOfCard() {
+    let access = AppAPI.QuestionItem(question: "Access?", header: "Access", options: [.init(label: "Read"), .init(label: "Write")])
+    let shared = AppAPI.QuestionItem(question: "Shared pages?", header: "Shared pages",
+                                     options: [.init(label: "Yes", description: "All of them"), .init(label: "No")])
+    var agents = AppAPI.Question(tool: "AskUserQuestion", questions: [shared, access], since: t0, screen: true)
+    // Two open: the menu's need has no single answer, yet the first card answers.
+    #expect(Need.answerable("s", agents) == nil)
+    let first = Need.answer("s", agents, index: 0)
+    #expect(first?.params("Yes") == AppAPI.AnswerParams(id: "s", index: 0, answer: "Yes", question: "Shared pages?"))
+    #expect(first?.descriptions == ["All of them", ""])
+    #expect(first?.screen == true)
+    #expect(Need.answerable("s", AppAPI.Question(questions: [shared], screen: true))?.screen == true)
+    #expect(Need.answer("s", agents, index: 1) == nil) // asked in order
+    #expect(Need.answer("s", agents, index: 2) == nil)
+    agents.questions[0].answered = true
+    #expect(Need.answer("s", agents, index: 0) == nil)
+    #expect(Need.answer("s", agents, index: 1)?.options == ["Read", "Write"])
+    let tms = AppAPI.Question(tool: "AskUserQuestion", questions: [shared, access], since: t0)
+    #expect(Need.answer("s", tms, index: 1)?.index == 1)
+    let multi = AppAPI.QuestionItem(question: "Which ones?", multiSelect: true, options: [.init(label: "A")])
+    #expect(Need.answer("s", menu([multi, access]), index: 0) == nil)
+    #expect(Need.answer("s", menu([shared], escape: true), index: 0) == nil)
+    let many = AppAPI.QuestionItem(question: "Pick", options: (1...6).map { .init(label: "o\($0)") })
+    #expect(Need.answer("s", menu([many]), index: 0)?.options.count == 6)
+}
+
 @Test func sessionNeeds() {
     let approval = Need.of(projects: [], sessions: [session("s-2", state: "blocked", reason: "permission")])
     #expect(approval.map(\.id) == ["approval:s-2"])

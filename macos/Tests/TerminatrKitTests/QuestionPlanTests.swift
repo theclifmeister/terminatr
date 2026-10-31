@@ -93,3 +93,14 @@ private func screen(_ items: [AppAPI.QuestionItem]) -> AppAPI.Question {
     h.methods = []
     #expect(!Compatibility.watchesSessions(h))
 }
+
+/// The line under a phone card's options after a tap (T887): the
+/// refusal first, the answer on its way while it goes, else none.
+@Test func tappedLine() {
+    #expect(QuestionPlan.tapped(sending: nil, busy: false, screen: true, said: nil) == nil)
+    #expect(QuestionPlan.tapped(sending: "Yes", busy: true, screen: true, said: nil)?.text == "Typing “Yes” into the agent's menu…")
+    #expect(QuestionPlan.tapped(sending: "Yes", busy: true, screen: false, said: nil)?.failed == false)
+    #expect(QuestionPlan.tapped(sending: "Yes", busy: false, screen: true, said: nil) == nil) // taken: the card goes
+    let refused = QuestionPlan.tapped(sending: nil, busy: false, screen: true, said: ("screen doesn't show it", true))
+    #expect(refused?.text == "screen doesn't show it" && refused?.failed == true)
+}
