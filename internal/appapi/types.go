@@ -1355,12 +1355,12 @@ type TranscriptItem struct {
 	From      string           `json:"from,omitempty"`
 	Files     []TranscriptFile `json:"files,omitempty"`
 	Display   string           `json:"display,omitempty"`
-	// Answers (app API 41) are an answered question menu's, on the
+	// Answers (app API 40) are an answered question menu's, on the
 	// result of its call (Claude's AskUserQuestion).
 	Answers []TranscriptAnswer `json:"answers,omitempty"`
 }
 
-// TranscriptAnswer is one question of an answered menu (app API 41):
+// TranscriptAnswer is one question of an answered menu (app API 40):
 // its header and text, the options' labels picked (several for a
 // multi-select), the user's own words (Typed) and the notes they added.
 type TranscriptAnswer struct {

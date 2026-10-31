@@ -116,10 +116,10 @@ extension Transcript.Entry {
     public var asksUser: Bool { kind == .tool && tool == "AskUserQuestion" }
 
     /// How a question menu ended, once its result came: each question
-    /// answered, as the result's answers say (app API 41), or declined
+    /// answered, as the result's answers say (app API 40), or declined
     /// (the call failed: the user cancelled it) with the result's line.
     /// Nil for any other entry, and for an answered menu a tm before
-    /// app API 41 sent without its answers: its tool line shows.
+    /// app API 40 sent without its answers: its tool line shows.
     public enum QuestionOutcome: Sendable, Equatable {
         case answered([AppAPI.TranscriptAnswer])
         case declined(String)

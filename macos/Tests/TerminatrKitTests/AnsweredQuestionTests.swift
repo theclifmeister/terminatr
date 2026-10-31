@@ -30,7 +30,7 @@ private let parts = AppAPI.TranscriptAnswer(header: "Parts", question: "Which pa
     let o = t.entries.map(\.questionOutcome)
     #expect(o[0] == .answered([parts]))
     #expect(o[1] == .declined("The user doesn't want to proceed with this tool use."))
-    // A tm before app API 41 sends no answers: the tool line stays.
+    // A tm before app API 40 sends no answers: the tool line stays.
     #expect(o[2] == nil)
     #expect(o[3] == nil)
     // Still open: the question card answers it.

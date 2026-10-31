@@ -52,7 +52,7 @@ public struct Transcript: Sendable, Equatable {
         public var lines: Int
         public var error: Bool
         /// An answered question menu's: each question and what the user
-        /// picked (app API 41; Entry.questionOutcome).
+        /// picked (app API 40; Entry.questionOutcome).
         public var answers: [AppAPI.TranscriptAnswer] = []
     }
 
