@@ -170,6 +170,8 @@ struct Root: View {
     @State private var projectsPath: [Route] = []
     @State private var settings = false
     @State private var gallery = false
+    /// The window's size, for the iPad's sidebar (folding).
+    @State private var size = CGSize.zero
 
     var body: some View {
         content
@@ -259,21 +261,39 @@ extension Root {
         }
         .tabViewStyle(.sidebarAdaptable)
         .tabViewSidebarHeader { SidebarHead() }
-        .onAppear { Task { Self.showSidebar() } }
+        .onGeometryChange(for: CGSize.self) { $0.size } action: { size = $0 }
+        .onAppear { Task { if folding == nil { Self.setSidebar(hidden: false) } } }
+        .onChange(of: folding) { if $1 != nil { Self.setSidebar(hidden: true) } }
     }
 
-    /// Opens the sidebar once, as the app starts: in portrait the
-    /// TabView starts with it closed behind its button, and SwiftUI
-    /// names no way to open it. The user closes it as ever.
+    /// The coordinator or thread the columns show across the whole
+    /// width, the list folded away (Columns, PhoneColumns.foldsList),
+    /// else nil. There the sidebar folds away too (T862): in portrait
+    /// it lies over the content, and covered the session's composer
+    /// dock. It folds as such a session opens or the window turns to
+    /// fit one; its button opens it again, over the session.
+    private var folding: Route? {
+        guard size != .zero else { return nil }
+        let last = (tab == .needs ? needsPath : projectsPath).last
+        switch last {
+        case .session, .need: return PhoneColumns.foldsList(size) ? last : nil
+        default: return nil
+        }
+    }
+
+    /// Opens or folds the sidebar. Opened once as the app starts: in
+    /// portrait the TabView starts with it closed behind its button,
+    /// and SwiftUI names no way to open (or close) it. The user opens
+    /// and closes it as ever.
     @available(iOS 18, *)
-    private static func showSidebar() {
+    private static func setSidebar(hidden: Bool) {
         func tabs(_ vc: UIViewController?) -> UITabBarController? {
             guard let vc else { return nil }
             if let t = vc as? UITabBarController { return t }
             return vc.children.lazy.compactMap(tabs).first
         }
         for case let scene as UIWindowScene in UIApplication.shared.connectedScenes {
-            for w in scene.windows { tabs(w.rootViewController)?.sidebar.isHidden = false }
+            for w in scene.windows { tabs(w.rootViewController)?.sidebar.isHidden = hidden }
         }
     }
 
