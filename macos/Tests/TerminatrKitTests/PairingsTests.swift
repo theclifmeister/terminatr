@@ -55,18 +55,3 @@ import Testing
     LinkLog.forget(pairing: "aa", d)
     #expect(LinkLog.load(pairing: "aa", d).drops.isEmpty)
 }
-
-@Test func liveWorkMergesAcrossServers() throws {
-    var a = AppAPI.Session(id: "s-1", role: "thread", project: "p", cols: 80, rows: 24, created: Date(timeIntervalSince1970: 0), clients: 0, state: "working")
-    var b = a
-    b.id = "s-2"
-    a.turnSince = Date(timeIntervalSince1970: 100)
-    b.turnSince = Date(timeIntervalSince1970: 50)
-    let one = try #require(LiveWork.of([a, a]))
-    let two = try #require(LiveWork.of([b]))
-    let m = try #require(LiveWork.merge([("studio", one), ("mini", two)]))
-    #expect(m.server == "mini")
-    #expect(m.work.count == 3)
-    #expect(m.work.lead.id == "s-2")
-    #expect(LiveWork.merge([(String, LiveWork)]()) == nil)
-}

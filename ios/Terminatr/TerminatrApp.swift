@@ -248,7 +248,6 @@ struct Root: View {
             Welcome()
         } else if #available(iOS 18, *), Self.sidebar {
             sidebarTabs
-                .liveStrip(live?.work) { open(.session($0)) }
                 .onAppear(perform: openLaunched)
                 .onChange(of: projectsPath) { if tab != .needs { tab = Self.place(projectsPath, in: phone.sidebar) } }
         } else {
@@ -262,20 +261,8 @@ struct Root: View {
                     .tabItem { Label("Projects", systemImage: "folder") }
                     .tag(RootTab.projects)
             }
-            .liveStrip(live?.work) { open(.session($0)) }
             .onAppear(perform: openLaunched)
         }
-    }
-
-    /// The work running on every server, led by the session that has
-    /// worked longest on any, and that one's server.
-    private var live: (server: String, work: LiveWork)? {
-        LiveWork.merge(phone.models.compactMap { m in LiveWork.of(m.sessions).map { (m.key, $0) } })
-    }
-
-    /// Opens a session of the live strip's, on its server.
-    private func open(_ route: Route) {
-        open(on: route.on(live?.server ?? ""))
     }
 
     private var needsStack: some View {
