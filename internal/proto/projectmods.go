@@ -24,9 +24,9 @@ const (
 // mods.setting.
 const CapProjectMods = "project-mods"
 
-// ErrModChanged: what mods.set would do, or what it asks first, isn't
-// what the console showed (the mod, its consent or the projects changed
-// since): nothing changed; list again.
+// ErrModChanged refuses mods.set when what it would do, or what it
+// asks first, isn't what the console showed (the mod, its consent or
+// the projects changed since): nothing changed; list again.
 const ErrModChanged = "mod-changed"
 
 // ModsListParams name the project; Consent, a mod's id, has that mod's
