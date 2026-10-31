@@ -662,6 +662,11 @@ type PeerProject struct {
 	// need, while its needs switch for this server is view or answer:
 	// none otherwise (NeedsYou counts them then).
 	Needs []PeerNeed `json:"needs"`
+	// Pages (app API 35): that server's project pages switch for this
+	// one is on for the project, as its last project list said: its
+	// board, overview and library read through peer.pages-read and
+	// peer.library-list.
+	Pages bool `json:"pages,omitempty"`
 }
 
 // PeerNeed is one need of a paired server's project, in full (app API
@@ -949,7 +954,7 @@ func peerListOf(l proto.PeerList) PeerList {
 		offset := time.Duration(p.Offset) * time.Millisecond
 		for _, pp := range p.Projects {
 			pr := PeerProject{Project: pp.Project, Goal: pp.Goal, Paused: pp.Paused, NeedsYou: pp.NeedsYou,
-				Threads: pp.Threads, Ready: pp.Ready, Stale: pp.Stale, Synced: pp.Synced, Sessions: []PeerSession{},
+				Threads: pp.Threads, Ready: pp.Ready, Stale: pp.Stale, Synced: pp.Synced, Sessions: []PeerSession{}, Pages: pp.Pages,
 				Watched: []PeerThread{}, Needs: []PeerNeed{}}
 			if pp.Watch != nil {
 				for _, w := range pp.Watch.Threads {

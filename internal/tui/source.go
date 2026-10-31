@@ -386,6 +386,10 @@ type PeerSource interface {
 	// server's needs (proto.NeedsOff, NeedsView, NeedsAnswer; §16.16),
 	// as tm peer needs does, and has the server read the peers again.
 	SetPeerNeeds(alias, level string) error
+	// SetPeerPages turns the paired server alias's project pages switch
+	// on or off for project (§16.17), as tm peer pages does, and has the
+	// server read the peers again.
+	SetPeerPages(alias, project string, on bool) error
 	// ActOnNeed acts on a need of a paired server's shared project as
 	// this server's user (peer.need-act, §16.16): that server checks it
 	// again and refuses it when the need changed.

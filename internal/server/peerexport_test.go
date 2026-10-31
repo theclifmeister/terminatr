@@ -37,6 +37,13 @@ func linkedServers(t *testing.T, ex peer.Exporter) *peer.Manager {
 // studio at panes ("" for the default, off).
 func linkedServersPanes(t *testing.T, ex peer.Exporter, panes string) *peer.Manager {
 	t.Helper()
+	return linkedServersWith(t, ex, func(p *peer.Peer) { p.Panes = panes })
+}
+
+// linkedServersWith is linkedServers with mini's entry for studio set
+// by set.
+func linkedServersWith(t *testing.T, ex peer.Exporter, set func(p *peer.Peer)) *peer.Manager {
+	t.Helper()
 	rs := relay.New(relay.DefaultConfig())
 	hs := httptest.NewUnstartedServer(rs)
 	hs.StartTLS()
@@ -57,7 +64,7 @@ func linkedServersPanes(t *testing.T, ex peer.Exporter, panes string) *peer.Mana
 		other := ids[1-i]
 		p := peer.Peer{Alias: alias, Key: other.Key.Public().(ed25519.PublicKey), Relay: url}
 		if alias == "studio" {
-			p.Panes = panes
+			set(&p)
 		}
 		if err := peer.SavePeers(dirs[i], []peer.Peer{p}); err != nil {
 			t.Fatal(err)

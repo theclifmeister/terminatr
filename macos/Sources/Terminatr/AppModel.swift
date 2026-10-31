@@ -776,6 +776,32 @@ final class AppModel {
         return await LibraryPage.read({ p in try await b.call(AppAPI.Methods.libraryRead, p) }, project: project, file: f)
     }
 
+    /// Whether this tm reads a paired server's project pages
+    /// (peer.pages-read, app API 35).
+    var readsPeerPages: Bool {
+        if case .connected(let h) = phase { return Compatibility.readsPeerPages(h) }
+        return false
+    }
+
+    /// A paired server's project's board and overview (peer.pages-read):
+    /// its "not shared" errors as AppAPI.Error (PeerPages.notSharedCodes).
+    func peerPages(_ alias: String, _ project: String) async throws -> AppAPI.PeerPages {
+        try await connected().call(AppAPI.Methods.peerPagesRead, AppAPI.PeerPagesParams(alias: alias, project: project))
+    }
+
+    /// A paired server's project's library, its threads' files
+    /// (peer.library-list).
+    func peerLibrary(_ alias: String, _ project: String) async throws -> [AppAPI.LibraryFile] {
+        try await connected().call(AppAPI.Methods.peerLibraryList, AppAPI.PeerPagesParams(alias: alias, project: project)).files
+    }
+
+    /// A paired server's library file's bytes (peer.library-read, a chunk
+    /// at a time).
+    func peerLibraryData(_ alias: String, _ project: String, _ f: AppAPI.LibraryFile) async -> FileOutcome {
+        guard let b = bridge else { return .unavailable("tm isn't connected") }
+        return await PeerPages.read({ p in try await b.call(AppAPI.Methods.peerLibraryRead, p) }, alias: alias, project: project, file: f)
+    }
+
     /// The project pages this tm has (Memory and Library need app API 21).
     var projectPages: [ProjectPage] {
         if case .connected(let h) = phase { return ProjectPage.pages(h) }

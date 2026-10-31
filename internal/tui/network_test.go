@@ -12,6 +12,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/theclifmeister/terminatr/internal/config"
 )
 
 // netDash is remoteDash's dashboard w × h, with mini and nas paired as
@@ -600,4 +601,42 @@ func selCells(t *testing.T, out string) int {
 	}
 	t.Fatalf("no reverse video in\n%q", out)
 	return 0
+}
+
+// TestNetworkPagesSwitch: the details panel of a paired server has a
+// pages row per shared project, off by default; turning one on asks
+// first and names what crosses (never the memory), turning it off is at
+// once.
+func TestNetworkPagesSwitch(t *testing.T) {
+	m, src := netDash(t, 160, 40)
+	p := &src.data.Projects[0]
+	if p.Safety == nil {
+		p.Safety = &config.Safety{Active: true}
+	}
+	p.Safety.Share = true
+	m.setData(src.data)
+	nv := netOpen(t, m)
+	nv.sel = "g:mini"
+	slug := p.Slug
+	if out := netBox(m); !strings.Contains(out, "[off] · on "+slug) {
+		t.Fatalf("off by default:\n%s", out)
+	}
+	tab(m)
+	press(m, "down", "down", "down", "down", "down")
+	press(m, "enter")
+	cv, ok := m.top().(*confirmView)
+	if !ok || cv.title != "Pages for mini" || !strings.Contains(cv.question, "Never its memory") {
+		t.Fatalf("enter on pages: %T", m.top())
+	}
+	drain(t, m, press(m, "Y"))
+	if out := netBox(m); !strings.Contains(out, "off · [on] "+slug) {
+		t.Errorf("after on:\n%s", out)
+	}
+	drain(t, m, press(m, "left"))
+	if _, ok := m.top().(*confirmView); ok {
+		t.Fatal("turning it off asked")
+	}
+	if want := []string{"mini " + slug + " true", "mini " + slug + " false"}; !slices.Equal(src.pagesSet, want) {
+		t.Fatalf("set %v, want %v", src.pagesSet, want)
+	}
 }

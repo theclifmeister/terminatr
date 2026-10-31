@@ -317,6 +317,13 @@ func (nv *networkView) panelKey(m *dash, r netRow, ok bool, s string) (tea.Cmd, 
 			i %= len(needsLevels)
 		}
 		return nv.setNeeds(m, e, needsLevels[min(max(i, 0), len(needsLevels)-1)]), true
+	case item >= itemPages && item-itemPages < len(sharedSlugs(m)) && (s == "left" || s == "right" || s == "enter" || s == "space" || s == " "):
+		e, slug := nv.list.Peers[r.peer], sharedSlugs(m)[item-itemPages]
+		on := map[string]bool{"left": false, "right": true}[s]
+		if s == "enter" || s == "space" || s == " " {
+			on = !slices.Contains(e.Pages, slug)
+		}
+		return nv.setPages(m, e, slug, on), true
 	case item == itemShare && (s == "enter" || s == "space" || s == " "):
 		return nv.toggle(m, r.slug), true
 	case (item == itemDir || item == itemAsk || item == itemFiles) && (s == "left" || s == "right"):
@@ -692,6 +699,29 @@ func (nv *networkView) setNeeds(m *dash, e PeerEntry, to string) tea.Cmd {
 		proto.NeedsAnswer: fmt.Sprintf("Let %s answer what the projects this server shares ask you, on its user's word? Until both run a tm that sends answers, it sees them as at view. A command outside the sandbox is never answered from there.", name),
 	}[to]
 	m.confirmNo("Needs for "+name, q, "needs unchanged for "+name, set)
+	return nil
+}
+
+// setPages turns server e's project pages switch for slug on or off:
+// asking first when on, at once when off.
+func (nv *networkView) setPages(m *dash, e PeerEntry, slug string, on bool) tea.Cmd {
+	if on == slices.Contains(e.Pages, slug) {
+		return nil
+	}
+	name := netName(e)
+	word := map[bool]string{true: "on", false: "off"}[on]
+	set := func() tea.Cmd {
+		src, alias := m.src, e.Alias
+		return m.act(func() actionMsg {
+			err := src.SetPeerPages(alias, slug, on)
+			return actionMsg{err: err, msg: "pages " + word + " for " + name + " on " + slug, then: nv.reload}
+		})
+	}
+	if !on {
+		return set()
+	}
+	m.confirmNo("Pages for "+name, fmt.Sprintf("Let %s read %s's board (task titles, statuses and steps), its overview (goal and PROJECT.md) and its threads' library files? Never its memory, its tasks' notes or its repositories' paths, and nothing it does writes here.", name, slug),
+		"pages unchanged for "+name, set)
 	return nil
 }
 

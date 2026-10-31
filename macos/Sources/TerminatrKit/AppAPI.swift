@@ -6,7 +6,7 @@ import Foundation
 /// The terminatr app API (docs/SPEC.md §3.8): what tm app bridge answers.
 public enum AppAPI {
     /// The app API version this app was generated against.
-    public static let version = 34
+    public static let version = 35
 
     public struct AdoptRequestParams: Codable, Sendable, Hashable {
         public var id: String
@@ -1259,6 +1259,30 @@ public enum AppAPI {
         }
     }
 
+    public struct PeerLibraryReadParams: Codable, Sendable, Hashable {
+        public var alias: String
+        public var project: String
+        public var id: String
+        public var name: String
+        public var offset: Int
+
+        public init(alias: String, project: String, id: String, name: String, offset: Int = 0) {
+            self.alias = alias
+            self.project = project
+            self.id = id
+            self.name = name
+            self.offset = offset
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case alias
+            case project
+            case id
+            case name
+            case offset
+        }
+    }
+
     public struct PeerList: Codable, Sendable, Hashable {
         public var gen: Int
         public var peers: [Peer]
@@ -1409,6 +1433,48 @@ public enum AppAPI {
         }
     }
 
+    public struct PeerPages: Codable, Sendable, Hashable {
+        public var project: String
+        public var goal: String
+        public var body: String
+        public var repos: Int
+        public var tasks: [Task]
+        public var truncated: Bool
+
+        public init(project: String, goal: String = "", body: String = "", repos: Int, tasks: [Task] = [], truncated: Bool = false) {
+            self.project = project
+            self.goal = goal
+            self.body = body
+            self.repos = repos
+            self.tasks = tasks
+            self.truncated = truncated
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case project
+            case goal
+            case body
+            case repos
+            case tasks
+            case truncated
+        }
+    }
+
+    public struct PeerPagesParams: Codable, Sendable, Hashable {
+        public var alias: String
+        public var project: String
+
+        public init(alias: String, project: String) {
+            self.alias = alias
+            self.project = project
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case alias
+            case project
+        }
+    }
+
     public struct PeerProject: Codable, Sendable, Hashable {
         public var project: String
         public var goal: String
@@ -1421,8 +1487,9 @@ public enum AppAPI {
         public var sessions: [PeerSession]
         public var watched: [PeerThread]
         public var needs: [PeerNeed]
+        public var pages: Bool
 
-        public init(project: String, goal: String = "", paused: Bool = false, needsYou: Int, threads: Int, ready: Int, stale: Bool = false, synced: Date? = nil, sessions: [PeerSession] = [], watched: [PeerThread] = [], needs: [PeerNeed] = []) {
+        public init(project: String, goal: String = "", paused: Bool = false, needsYou: Int, threads: Int, ready: Int, stale: Bool = false, synced: Date? = nil, sessions: [PeerSession] = [], watched: [PeerThread] = [], needs: [PeerNeed] = [], pages: Bool = false) {
             self.project = project
             self.goal = goal
             self.paused = paused
@@ -1434,6 +1501,7 @@ public enum AppAPI {
             self.sessions = sessions
             self.watched = watched
             self.needs = needs
+            self.pages = pages
         }
 
         enum CodingKeys: String, CodingKey {
@@ -1448,6 +1516,7 @@ public enum AppAPI {
             case sessions
             case watched
             case needs
+            case pages
         }
     }
 
@@ -3011,8 +3080,11 @@ public enum AppAPI {
         public static let notifyDismiss = Call<NoticeParams, NoticeResult>("notify.dismiss", write: false)
         public static let paneInput = Call<PaneInputParams, Empty>("pane.input", write: true, target: "pane.vt")
         public static let paneVt = Subscription<PaneParams, PaneResult, PaneEvent>("pane.vt", events: ["pane.repaint", "pane.output", "pane.resize", "pane.closed"])
+        public static let peerLibraryList = Call<PeerPagesParams, Library>("peer.library-list", write: false)
+        public static let peerLibraryRead = Call<PeerLibraryReadParams, LibraryChunk>("peer.library-read", write: false)
         public static let peerList = Call<NoParams, PeerList>("peer.list", write: false)
         public static let peerNeedAct = Call<PeerNeedActParams, PeerNeedActResult>("peer.need-act", write: true)
+        public static let peerPagesRead = Call<PeerPagesParams, PeerPages>("peer.pages-read", write: false)
         public static let peerShareAnswer = Call<ShareAnswerParams, ShareAnswer>("peer.share-answer", write: true)
         public static let projectActive = Call<ProjectActiveParams, ProjectActive>("project.active", write: true)
         public static let projectNew = Call<ProjectNewParams, ProjectNew>("project.new", write: true)
@@ -3636,6 +3708,17 @@ extension AppAPI.PeerApproval {
     }
 }
 
+extension AppAPI.PeerLibraryReadParams {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.alias = try c.decode(String.self, forKey: .alias)
+        self.project = try c.decode(String.self, forKey: .project)
+        self.id = try c.decode(String.self, forKey: .id)
+        self.name = try c.decode(String.self, forKey: .name)
+        self.offset = try c.decodeIfPresent(Int.self, forKey: .offset) ?? 0
+    }
+}
+
 extension AppAPI.PeerList {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -3698,6 +3781,26 @@ extension AppAPI.PeerNeedActResult {
     }
 }
 
+extension AppAPI.PeerPages {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.project = try c.decode(String.self, forKey: .project)
+        self.goal = try c.decodeIfPresent(String.self, forKey: .goal) ?? ""
+        self.body = try c.decodeIfPresent(String.self, forKey: .body) ?? ""
+        self.repos = try c.decode(Int.self, forKey: .repos)
+        self.tasks = try c.decodeIfPresent([AppAPI.Task].self, forKey: .tasks) ?? []
+        self.truncated = try c.decodeIfPresent(Bool.self, forKey: .truncated) ?? false
+    }
+}
+
+extension AppAPI.PeerPagesParams {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.alias = try c.decode(String.self, forKey: .alias)
+        self.project = try c.decode(String.self, forKey: .project)
+    }
+}
+
 extension AppAPI.PeerProject {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -3712,6 +3815,7 @@ extension AppAPI.PeerProject {
         self.sessions = try c.decodeIfPresent([AppAPI.PeerSession].self, forKey: .sessions) ?? []
         self.watched = try c.decodeIfPresent([AppAPI.PeerThread].self, forKey: .watched) ?? []
         self.needs = try c.decodeIfPresent([AppAPI.PeerNeed].self, forKey: .needs) ?? []
+        self.pages = try c.decodeIfPresent(Bool.self, forKey: .pages) ?? false
     }
 }
 

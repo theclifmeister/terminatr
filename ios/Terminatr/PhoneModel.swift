@@ -758,6 +758,38 @@ final class PhoneModel {
         try await connected().call(AppAPI.Methods.designList, AppAPI.ProjectParams(project: project)).designs
     }
 
+    /// Whether this tm reads a paired server's project pages
+    /// (peer.pages-read, app API 35).
+    var readsPeerPages: Bool { hello.map(Compatibility.readsPeerPages) ?? false }
+
+    /// A paired server's project's board and overview (peer.pages-read).
+    func peerPages(_ alias: String, _ project: String) async throws -> AppAPI.PeerPages {
+        try await connected().call(AppAPI.Methods.peerPagesRead, AppAPI.PeerPagesParams(alias: alias, project: project))
+    }
+
+    /// A paired server's project's pages as a screen shows them: not
+    /// shared without a tm that reads them, or when that server says so.
+    func peerPagesState(_ alias: String, _ project: String) async -> PeerPages.State<AppAPI.PeerPages> {
+        guard readsPeerPages else { return .notShared }
+        do {
+            return .shared(try await peerPages(alias, project))
+        } catch {
+            return PeerPages.state(error)
+        }
+    }
+
+    /// A paired server's project's library, its threads' files
+    /// (peer.library-list).
+    func peerLibrary(_ alias: String, _ project: String) async throws -> [AppAPI.LibraryFile] {
+        try await connected().call(AppAPI.Methods.peerLibraryList, AppAPI.PeerPagesParams(alias: alias, project: project)).files
+    }
+
+    /// A paired server's library file's bytes (peer.library-read).
+    func peerLibraryData(_ alias: String, _ project: String, _ f: AppAPI.LibraryFile) async -> FileOutcome {
+        guard let b = bridge else { return .unavailable("the link is down") }
+        return await PeerPages.read({ p in try await b.call(AppAPI.Methods.peerLibraryRead, p) }, alias: alias, project: project, file: f)
+    }
+
     /// The done tasks of project's board, in board order (task.done).
     func doneTasks(_ project: String) async throws -> [AppAPI.Task] {
         try await connected().call(AppAPI.Methods.taskDone, AppAPI.ProjectParams(project: project)).tasks

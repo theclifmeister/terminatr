@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io/fs"
 	"net"
+	"slices"
 	"time"
 
 	tmclient "github.com/theclifmeister/terminatr/internal/client"
@@ -48,6 +49,9 @@ type PeerEntry struct {
 	// Needs is this server's needs switch for it (proto.NeedsOff …;
 	// §16.16).
 	Needs string
+	// Pages are the projects whose pages it may read, this server's
+	// project pages switch for it (§16.17).
+	Pages []string
 }
 
 func (s *ServerSource) Peers() (PeerList, error) {
@@ -80,7 +84,7 @@ func (s *ServerSource) Peers() (PeerList, error) {
 	}
 	for _, p := range peers {
 		e := PeerEntry{Alias: p.Alias, Name: p.Name, Told: p.Told, ID: p.ID().String(), Short: p.ID().Short(), Relay: p.Relay, Panes: p.PanesLevel(),
-			ConversationsOff: !p.ConversationsOn(), Needs: p.NeedsLevel()}
+			ConversationsOff: !p.ConversationsOn(), Needs: p.NeedsLevel(), Pages: slices.Clone(p.Pages)}
 		if pl, ok := links[e.ID]; ok {
 			e.Link = &pl
 		}
@@ -148,6 +152,24 @@ func (s *ServerSource) ActOnNeed(p proto.PeerNeedActParams) (proto.PeerActResult
 	}
 	err := s.call(proto.MethodPeerNeedAct, p, &res)
 	return res, err
+}
+
+func (s *ServerSource) SetPeerPages(alias, project string, on bool) error {
+	if s.Caller.IsAgent() {
+		return errHumanOnly
+	}
+	found, err := peer.SetPages(peer.DirIn(s.Paths.Home), alias, project, on)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return fmt.Errorf("no paired server %s (tm peer list)", alias)
+	}
+	var st *proto.LinkStatus
+	if err := s.call(proto.MethodPeerReload, nil, &st); err != nil && !errors.Is(err, tmclient.ErrNotRunning) {
+		return fmt.Errorf("set, but the server didn't read the peers again (%v); tm server restart does", err)
+	}
+	return nil
 }
 
 func (s *ServerSource) SetPeerNeeds(alias, level string) error {

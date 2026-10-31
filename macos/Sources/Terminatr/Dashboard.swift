@@ -631,6 +631,9 @@ struct RemoteProjectDashboard: View {
     @Environment(\.theme) private var theme
     let peer: AppAPI.Peer
     let project: AppAPI.PeerProject
+    /// Its pages (T886): the board shows under its sessions when that
+    /// server shares them.
+    var pages: PeerPages.State<AppAPI.PeerPages> = .notShared
 
     var body: some View {
         ScrollView {
@@ -666,6 +669,27 @@ struct RemoteProjectDashboard: View {
                         }
                         .buttonStyle(.plain)
                             .contextMenu { NewWindowButton(ref: ref) }
+                    }
+                }
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("BOARD")
+                        .font(theme.mono(.caption2, .medium))
+                        .tracking(1)
+                        .foregroundStyle(theme.muted)
+                        .padding(.top, 6)
+                    switch pages {
+                    case .shared(let p):
+                        Text(PeerPages.stats(p).map { "\($0.0 ?? 0) \($0.1)" }.joined(separator: " · "))
+                            .font(theme.mono(.footnote))
+                            .foregroundStyle(theme.muted)
+                        PeerBoard(pages: p)
+                    case .loading:
+                        ProgressView().controlSize(.small)
+                    case .failed(let why):
+                        Text(why).foregroundStyle(theme.attention)
+                    case .notShared:
+                        Text(PeerPages.notShared(by: PeerPages.server(peer)))
+                            .foregroundStyle(theme.muted)
                     }
                 }
             }

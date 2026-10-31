@@ -254,6 +254,10 @@ func TestCopies(t *testing.T) {
 		// An offered file's message: link.act takes the file's id.
 		".Projects[].LinkNeeds[].Message",
 	))
+	// A paired server's pages: everything that crossed crosses on, the
+	// far server's clock but.
+	check("peer.pages-read", homeOf(peerPagesOf), []string{".Now"})
+	check("peer.library-list", homeOf(peerLibraryOf), nil)
 	check("peer.list", homeOf(peerListOf), []string{
 		// The link's id, versions and ping: the Network popup's. Share
 		// requests cross as their count, and those that wait for the
@@ -510,6 +514,7 @@ func TestAllowlist(t *testing.T) {
 		proto.MethodLinkAct, proto.MethodPeerShareAnswer, proto.MethodPeerNeedAct, MethodGuardRefusals, MethodGuardDecide, proto.MethodTranscriptPage,
 		proto.MethodProjectPin, proto.MethodProjectNew, proto.MethodSessionAdoptRequest, proto.MethodSessionRemote, proto.MethodLinkSend,
 		proto.MethodMemoryList, proto.MethodMemoryRead, proto.MethodLibraryList, proto.MethodLibraryRead, proto.MethodDesignList,
+		proto.MethodPeerPagesRead, proto.MethodPeerLibraryList, proto.MethodPeerLibraryRead,
 		MethodDeviceNonce, MethodDeviceList, MethodDevicePair, MethodDevicePairWait, MethodDevicePairAnswer, MethodDeviceAccess,
 		MethodDeviceName, MethodDeviceRemove}
 	slices.Sort(want)
