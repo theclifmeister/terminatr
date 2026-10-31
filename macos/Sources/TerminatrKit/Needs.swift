@@ -250,12 +250,26 @@ extension Need {
     /// The buttons' answer: the menu's one open question, when it is
     /// single-select and the menu isn't an escape's. None otherwise.
     static func answerable(_ session: String, _ q: AppAPI.Question) -> Answer? {
-        guard !q.escape else { return nil }
-        let open = q.questions.enumerated().filter { !$0.element.answered }
-        guard open.count == 1, let (i, item) = open.first, !item.multiSelect, !item.options.isEmpty else { return nil }
-        let shown = item.options.prefix(maxButtons)
-        return Answer(session: session, index: i, question: item.question,
-                      options: shown.map(\.label), descriptions: shown.map(\.description))
+        let open = q.questions.indices.filter { !q.questions[$0].answered }
+        guard open.count == 1, let a = answer(session, q, index: open[0]) else { return nil }
+        let n = min(a.options.count, maxButtons)
+        return Answer(session: session, index: a.index, question: a.question,
+                      options: Array(a.options.prefix(n)), descriptions: Array(a.descriptions.prefix(n)))
+    }
+
+    /// The answer a conversation's card for question index of session's
+    /// menu q gives, every option: the question open and single-select,
+    /// the menu not an escape's, and on the agent's own menu (screen)
+    /// the first open one, as it asks them in order. A menu of several
+    /// questions answers each this way (T887); nil otherwise, and the
+    /// card's options only read.
+    public static func answer(_ session: String, _ q: AppAPI.Question, index: Int) -> Answer? {
+        guard !q.escape, q.questions.indices.contains(index) else { return nil }
+        let item = q.questions[index]
+        guard !item.answered, !item.multiSelect, !item.options.isEmpty else { return nil }
+        if q.screen, q.questions.firstIndex(where: { !$0.answered }) != index { return nil }
+        return Answer(session: session, index: index, question: item.question,
+                      options: item.options.map(\.label), descriptions: item.options.map(\.description))
     }
 
     static func of(project p: AppAPI.Project) -> [Need] {

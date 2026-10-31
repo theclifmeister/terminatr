@@ -30,6 +30,8 @@ struct NeedActs: View {
     @Environment(\.showTerminal) private var showTerminal
     @Environment(\.dynamicTypeSize) private var typeSize
     let need: Need
+    /// The question its options answer.
+    let answering: Need.Answer?
     let laidOut: (NeedParts) -> AnyView
     @State private var dialog: AppAPI.ApproveResult?
     @State private var escape = false
@@ -93,7 +95,7 @@ struct NeedActs: View {
                 .accessibilityLabel(named("Answer now"))
                 .accessibilityHint("The coordinator puts its questions to you; they show here")
         case .question where model.can(AppAPI.Methods.sessionAnswer.name):
-            if let a = need.answer {
+            if let a = answering {
                 VStack(spacing: Spacing.item) {
                     ForEach(Array(a.options.enumerated()), id: \.offset) { i, o in
                         AnswerOption(key: i + 1, label: o, detail: i < a.descriptions.count ? a.descriptions[i] : "") {
@@ -144,7 +146,7 @@ struct NeedActs: View {
         case .question where need.id.hasPrefix("questions:") && model.can(AppAPI.Methods.questionsOpen.name):
             return busy ? [] : [NeedAct("Answer now") { openQuestions() }]
         case .question where model.can(AppAPI.Methods.sessionAnswer.name):
-            guard let a = need.answer, !busy else { return [] }
+            guard let a = answering, !busy else { return [] }
             return a.options.map { o in NeedAct(o) { answer(a, o) } }
         case .review where !need.task.isEmpty && model.can(AppAPI.Methods.taskAccept.name):
             guard !busy else { return [] }
@@ -336,8 +338,11 @@ struct NeedActs: View {
 }
 
 extension NeedActs {
-    init(need: Need, laidOut: @escaping (NeedParts) -> some View) {
+    /// answer, for a question's card, is the one question it answers
+    /// (Need.answer: a menu of several), else the need's own.
+    init(need: Need, answer: Need.Answer? = nil, laidOut: @escaping (NeedParts) -> some View) {
         self.need = need
+        self.answering = answer ?? need.answer
         self.laidOut = { AnyView(laidOut($0)) }
     }
 
