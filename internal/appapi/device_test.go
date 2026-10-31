@@ -153,12 +153,12 @@ func TestDeviceLink(t *testing.T) {
 	devDir := device.DirIn(p.Home)
 	wk, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	wkb, _ := wk.PublicKey.Bytes()
-	if _, err := device.Add(devDir, k.Public().(ed25519.PublicKey), wkb, "Clif's iPhone", url); err != nil {
+	if _, err := device.Add(devDir, k.Public().(ed25519.PublicKey), wkb, "Sam's iPhone", url); err != nil {
 		t.Fatal(err)
 	}
 	// The access is write: everything the Mac app's bridge has but the
 	// bridge's own methods, each write signed.
-	if _, err := device.SetLevel(devDir, "Clif's iPhone", device.LevelWrite); err != nil {
+	if _, err := device.SetLevel(devDir, "Sam's iPhone", device.LevelWrite); err != nil {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -236,7 +236,7 @@ func TestDeviceLink(t *testing.T) {
 	}
 
 	// Removed: the link closes at once.
-	if _, err := device.Remove(devDir, "clif's iphone"); err != nil {
+	if _, err := device.Remove(devDir, "sam's iphone"); err != nil {
 		t.Fatal(err)
 	}
 	if err := sc.Call(proto.MethodDeviceReload, nil, nil); err != nil {

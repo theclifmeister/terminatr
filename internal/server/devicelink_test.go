@@ -33,7 +33,7 @@ func TestDeviceConn(t *testing.T) {
 	if _, err := pr.Tasks().SetStatus(human, 1, tasks.Review, ""); err != nil {
 		t.Fatal(err)
 	}
-	c, err := s.deviceConn("Clif's iPhone")
+	c, err := s.deviceConn("Sam's iPhone")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,10 +47,10 @@ func TestDeviceConn(t *testing.T) {
 		t.Fatalf("task.ask: %+v %v", res, err)
 	}
 	journal, _ := os.ReadFile(pr.Path("JOURNAL.md"))
-	if !strings.Contains(string(journal), " human (iphone: Clif's iPhone) task.accept.ask T1") {
+	if !strings.Contains(string(journal), " human (iphone: Sam's iPhone) task.accept.ask T1") {
 		t.Errorf("journal:\n%s", journal)
 	}
-	if got := (callCtx{device: "Clif's iPhone"}).console(); got != "device:Clif's iPhone" {
+	if got := (callCtx{device: "Sam's iPhone"}).console(); got != "device:Sam's iPhone" {
 		t.Errorf("console %q", got)
 	}
 }

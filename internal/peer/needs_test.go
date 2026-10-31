@@ -280,12 +280,12 @@ func TestPeerAct(t *testing.T) {
 		t.Errorf("a replayed nonce: %v", err)
 	}
 	sa.call(ctx, proto.MethodPeerNonce, nil, &n)
-	if err := sa.call(ctx, proto.MethodPeerAct, proto.PeerActParams{PeerAct: act, Nonce: n.Nonce, Device: "Clif's\x1b[31m phone"}, nil); err != nil {
+	if err := sa.call(ctx, proto.MethodPeerAct, proto.PeerActParams{PeerAct: act, Nonce: n.Nonce, Device: "Sam's\x1b[31m phone"}, nil); err != nil {
 		t.Fatal(err)
 	}
 	ex.mu.Lock()
 	defer ex.mu.Unlock()
-	if len(ex.acts) != 2 || ex.acts[0].String() != "human (peer: studio)" || ex.acts[1].String() != "human (peer: studio › iphone: Clif's[31m phone)" {
+	if len(ex.acts) != 2 || ex.acts[0].String() != "human (peer: studio)" || ex.acts[1].String() != "human (peer: studio › iphone: Sam's[31m phone)" {
 		t.Errorf("callers %v", ex.acts)
 	}
 	for _, c := range ex.acts {

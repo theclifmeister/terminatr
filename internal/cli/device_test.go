@@ -70,7 +70,7 @@ func TestDeviceListAccessNameRemove(t *testing.T) {
 	dir, _ := device.Dir()
 	k1, _, _ := ed25519.GenerateKey(nil)
 	k2, _, _ := ed25519.GenerateKey(nil)
-	d1, err := device.Add(dir, k1, testWriteKey(t), "Clif's iPhone", "wss://r.example.net")
+	d1, err := device.Add(dir, k1, testWriteKey(t), "Sam's iPhone", "wss://r.example.net")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -84,7 +84,7 @@ func TestDeviceListAccessNameRemove(t *testing.T) {
 	}
 	reloads := stubDeviceServer(t, []proto.DeviceLink{{Name: d1.Name, ID: d1.ID().String(), State: proto.LinkUp, Since: time.Now().Add(-2 * time.Minute)}})
 	out := h.ok(human, "device", "list")
-	for _, want := range []string{"Clif's iPhone  " + d1.ID().Short() + "  view  r.example.net  connected for 2m\n", "iPad", "no link yet, last seen 2h5m ago"} {
+	for _, want := range []string{"Sam's iPhone  " + d1.ID().Short() + "  view  r.example.net  connected for 2m\n", "iPad", "no link yet, last seen 2h5m ago"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("list lacks %q:\n%s", want, out)
 		}
@@ -103,17 +103,17 @@ func TestDeviceListAccessNameRemove(t *testing.T) {
 	if out := h.ok(human, "device", "access", "ipad", "view"); !strings.Contains(out, "iPad is view-only") || *reloads != 1 {
 		t.Fatalf("access: %q, %d reloads", out, *reloads)
 	}
-	if out := h.ok(human, "device", "access", "clif's iphone", "answer"); !strings.Contains(out, "Clif's iPhone is answer") || strings.Contains(out, "Face ID") || !strings.Contains(out, "signed by its write key") || *reloads != 2 {
+	if out := h.ok(human, "device", "access", "sam's iphone", "answer"); !strings.Contains(out, "Sam's iPhone is answer") || strings.Contains(out, "Face ID") || !strings.Contains(out, "signed by its write key") || *reloads != 2 {
 		t.Fatalf("access answer: %q, %d reloads", out, *reloads)
 	}
 	if out := h.ok(human, "device", "list"); !strings.Contains(out, "answer") {
 		t.Fatalf("list at answer: %q", out)
 	}
-	if out := h.ok(human, "device", "access", "clif's iphone", "write"); !strings.Contains(out, "Clif's iPhone is write") || !strings.Contains(out, "outside the sandbox") || *reloads != 3 {
+	if out := h.ok(human, "device", "access", "sam's iphone", "write"); !strings.Contains(out, "Sam's iPhone is write") || !strings.Contains(out, "outside the sandbox") || *reloads != 3 {
 		t.Fatalf("access write: %q, %d reloads", out, *reloads)
 	}
-	h.ok(human, "device", "access", "clif's iphone", "view")
-	h.expect(1, "name-taken", human, "device", "name", "ipad", "CLIF'S IPHONE")
+	h.ok(human, "device", "access", "sam's iphone", "view")
+	h.expect(1, "name-taken", human, "device", "name", "ipad", "SAM'S IPHONE")
 	h.expect(2, "device name", human, "device", "name", "ipad", "")
 	if out := h.ok(human, "device", "name", "ipad", "Tablet"); !strings.Contains(out, "human (iphone: Tablet)") {
 		t.Fatalf("name: %q", out)

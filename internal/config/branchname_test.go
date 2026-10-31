@@ -39,7 +39,7 @@ func TestCheckBranchName(t *testing.T) {
 		"x/{id}/":         "trailing",
 		"x--{task}{id}":   "doubled",
 		"-{id}":           "leading",
-		"users/clif+{id}": "git refuses", // git takes '+', tm's PR lookups don't
+		"users/sam+{id}":  "git refuses", // git takes '+', tm's PR lookups don't
 		"x/{id}.lock":     "git refuses",
 		strings.Repeat("team/", 8) + "{project}/{id}-{title}": "over 100 characters",
 	} {
