@@ -364,6 +364,10 @@ type LinkSource interface {
 	LinkLog(slug, other string) ([]*link.Message, error)
 	LinkFiles(slug, other string) ([]link.Transfer, error)
 	LinkAct(slug, verb, arg, text string) (string, error)
+	// LinkFileRead reads up to max bytes of a file of the message id
+	// between slug and other, an attachment or the file sent with it
+	// (link.ReadMessageFile); truncated says it was longer.
+	LinkFileRead(slug, other, id, name string, max int64) (data []byte, truncated bool, err error)
 }
 
 // PeerSource manages the paired servers (the Network popup).

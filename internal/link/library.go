@@ -72,6 +72,43 @@ func ReadFile(p *project.Project, id, name string, max int64) (data []byte, trun
 	return data, false, err
 }
 
+// ReadMessageFile reads up to max bytes of a file of p's message id
+// with other, either way: one of its attachments, or the file sent with
+// it once it is here (FilePath); never through a link. truncated says it
+// was longer. The TUI's message dialog opens it from a copy (o).
+func ReadMessageFile(p *project.Project, other, id, name string, max int64) (data []byte, truncated bool, err error) {
+	msgs, err := Log(p, other)
+	if err != nil {
+		return nil, false, err
+	}
+	var m *Message
+	for _, mm := range msgs {
+		if mm.ID == id {
+			m = mm
+		}
+	}
+	if m == nil {
+		return nil, false, refuse("unknown-message", "no message %s with %s", id, other)
+	}
+	path, err := FilePath(p, m, name)
+	if err != nil {
+		return nil, false, err
+	}
+	f, err := fsx.OpenNoLink(path, os.O_RDONLY, 0)
+	if err != nil {
+		return nil, false, err
+	}
+	defer f.Close()
+	if fi, err := f.Stat(); err != nil || !fi.Mode().IsRegular() {
+		return nil, false, refuse("unknown-file", "%s has no file %s", id, name)
+	}
+	data, err = io.ReadAll(io.LimitReader(f, max+1))
+	if int64(len(data)) > max {
+		return data[:max], true, err
+	}
+	return data, false, err
+}
+
 // ReadFileChunk reads at most n bytes from off of the file name that
 // came with p's message id, never through a link, and says its size and
 // modification time.

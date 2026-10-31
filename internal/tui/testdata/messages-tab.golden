@@ -7,7 +7,7 @@
 │⚑ mini/acme-api    M-9C1B-8  The report, attached                                                 Oct 14 15:06
 │  → mini/acme-api  M-4F2A-7  From me                                                              Oct 14 15:04
 │  beta             M-1       The API landed.                                                      Oct 14 15:02
-== M-3 · alpha → beta · A send · X drop · ↑ ↓ scroll · esc close
+== M-3 · alpha → beta · A send · X drop · o open it in your viewer · ↑ ↓ scroll · esc close
 │From      alpha
 │To        beta
 │Date      Wed Oct 14 2026 15:09

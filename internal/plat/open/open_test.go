@@ -1,6 +1,7 @@
 package open
 
 import (
+	"path/filepath"
 	"reflect"
 	"testing"
 )
@@ -72,5 +73,16 @@ func TestObsidianOpen(t *testing.T) {
 	}
 	if Obsidian("https://x.test/a") == nil {
 		t.Error("Obsidian opened a web address")
+	}
+}
+
+// TestFileRefuses: File takes only an absolute path to a regular file;
+// the opener never starts for anything else.
+func TestFileRefuses(t *testing.T) {
+	dir := t.TempDir()
+	for _, p := range []string{"", "shot.png", "-a", dir, filepath.Join(dir, "gone.png"), dir + "/a\nb.png"} {
+		if err := File(p); err == nil {
+			t.Errorf("File(%q) started the opener", p)
+		}
 	}
 }

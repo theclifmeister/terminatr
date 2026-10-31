@@ -74,6 +74,14 @@ func (s *ServerSource) LinkLog(slug, other string) ([]*link.Message, error) {
 	return link.Log(p, other)
 }
 
+func (s *ServerSource) LinkFileRead(slug, other, id, name string, max int64) ([]byte, bool, error) {
+	p, err := project.Open(slug)
+	if err != nil {
+		return nil, false, err
+	}
+	return link.ReadMessageFile(p, other, id, name, max)
+}
+
 // sentNote is what the footer says of a message that went, or waits
 // over the link's rate.
 func sentNote(m *link.Message) string {

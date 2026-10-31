@@ -307,6 +307,16 @@ func (f *fakeSource) Designs(string) ([]project.DesignBuild, error) { return f.d
 func (f *fakeSource) LibraryRead(_, id, name string, max int64) ([]byte, bool, error) {
 	return []byte(f.libFiles[id+"/"+name]), false, nil
 }
+func (f *fakeSource) LinkFileRead(_, _, id, name string, max int64) ([]byte, bool, error) {
+	data, ok := f.libFiles[id+"/"+name]
+	if !ok {
+		return nil, false, errors.New(id + " has no file " + name)
+	}
+	if int64(len(data)) > max {
+		return []byte(data[:max]), true, nil
+	}
+	return []byte(data), false, nil
+}
 func (f *fakeSource) HasNote(slug, path string) bool {
 	return path == "memory/a.md" && !slices.Contains(f.notesRemoved, slug+"/"+path)
 }

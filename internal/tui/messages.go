@@ -275,7 +275,8 @@ func msgLines(peers []proto.PeerMirror, links []link.Row, es []msgEntry, sel, w 
 // msgView is a message's dialog over the Messages tab: who it went
 // between, when, its id, what it answers, its state, its attachments and
 // file with the transfer's state, then its text, scrolling. On a
-// message here the keys act on it; one from a paired server's popup
+// message here the keys act on it, o opening a file of it in this
+// computer's viewer (msgopen.go); one from a paired server's popup
 // (alias set) is a header only and read-only.
 type msgView struct {
 	// slug is the project whose list it is from: a paired server's
@@ -352,6 +353,8 @@ func (v *msgView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	case "home":
 		v.scroll = 0
 		return nil
+	case "o":
+		return v.openKey(m)
 	}
 	if v.alias != "" {
 		if strings.Contains("AXCRM", s) && len(s) == 1 || s == "enter" {
@@ -508,6 +511,12 @@ func (v *msgView) keys(m *dash) string {
 		if t.Open() {
 			keys = append(keys, "C cancel the file")
 		}
+	}
+	switch n := len(v.openable()); {
+	case n == 1:
+		keys = append(keys, "o open it in your viewer")
+	case n > 1:
+		keys = append(keys, "o open one in your viewer")
 	}
 	if v.row(m).Paused {
 		keys = append(keys, "R resume the link")
