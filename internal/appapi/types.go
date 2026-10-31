@@ -618,8 +618,12 @@ type PeerList struct {
 // through transcript.watch ("<alias>/<session>", the server's caps say
 // transcript-remote) while Panes is view or type and it is on.
 type Peer struct {
-	Alias         string         `json:"alias"`
-	Name          string         `json:"name,omitempty"`
+	Alias string `json:"alias"`
+	Name  string `json:"name,omitempty"`
+	// ID is its id, the SHA-256 of its key in 64 hex digits (T852): a
+	// phone paired with it directly too knows it by the same id, and
+	// shows it once.
+	ID            string         `json:"id,omitempty"`
 	State         string         `json:"state"`
 	Reason        string         `json:"reason,omitempty"`
 	Since         time.Time      `json:"since,omitzero"`
@@ -935,7 +939,7 @@ func linkOf(r link.Row) Link {
 		Queued: r.Queued, FilesWaiting: r.FilesWaiting, FilesActive: r.FilesActive, LastAt: r.LastAt}
 }
 
-// peerListOf is l as the app sees it: a peer's id, versions, ping and
+// peerListOf is l as the app sees it: a peer's versions, ping and
 // share requests (but their count), and a project's snapshot stay
 // home but its threads (Watched). Its coordinator and threads cross as
 // their panes' ids, the sessions a remote pane and a remote
@@ -943,7 +947,7 @@ func linkOf(r link.Row) Link {
 func peerListOf(l proto.PeerList) PeerList {
 	out := PeerList{Gen: l.Gen, Peers: make([]Peer, 0, len(l.Peers))}
 	for _, p := range l.Peers {
-		peer := Peer{Alias: p.Alias, Name: p.Name, State: p.State, Reason: p.Reason, Since: p.Since,
+		peer := Peer{Alias: p.Alias, Name: p.Name, ID: p.ID, State: p.State, Reason: p.Reason, Since: p.Since,
 			Projects: make([]PeerProject, 0, len(p.Projects)), ShareWaits: proto.ShareWaits([]proto.PeerMirror{p}),
 			Pane: p.Pane, Panes: p.Panes, Transcript: p.Transcript, Conversations: p.Conversations, Needs: p.Needs}
 		for _, q := range p.Shares {

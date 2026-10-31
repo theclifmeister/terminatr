@@ -1211,9 +1211,10 @@ public enum AppAPI {
         }
     }
 
-    public struct Peer: Codable, Sendable, Hashable {
+    public struct Peer: Codable, Sendable, Hashable, Identifiable {
         public var alias: String
         public var name: String
+        public var id: String
         public var state: String
         public var reason: String
         public var since: Date?
@@ -1226,9 +1227,10 @@ public enum AppAPI {
         public var conversations: String
         public var needs: String
 
-        public init(alias: String, name: String = "", state: String, reason: String = "", since: Date? = nil, projects: [PeerProject] = [], shareWaits: Int = 0, shareRequests: [ShareRequest] = [], pane: Bool = false, panes: String = "", transcript: Bool = false, conversations: String = "", needs: String = "") {
+        public init(alias: String, name: String = "", id: String = "", state: String, reason: String = "", since: Date? = nil, projects: [PeerProject] = [], shareWaits: Int = 0, shareRequests: [ShareRequest] = [], pane: Bool = false, panes: String = "", transcript: Bool = false, conversations: String = "", needs: String = "") {
             self.alias = alias
             self.name = name
+            self.id = id
             self.state = state
             self.reason = reason
             self.since = since
@@ -1245,6 +1247,7 @@ public enum AppAPI {
         enum CodingKeys: String, CodingKey {
             case alias
             case name
+            case id
             case state
             case reason
             case since
@@ -3714,6 +3717,7 @@ extension AppAPI.Peer {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.alias = try c.decode(String.self, forKey: .alias)
         self.name = try c.decodeIfPresent(String.self, forKey: .name) ?? ""
+        self.id = try c.decodeIfPresent(String.self, forKey: .id) ?? ""
         self.state = try c.decode(String.self, forKey: .state)
         self.reason = try c.decodeIfPresent(String.self, forKey: .reason) ?? ""
         self.since = try c.decodeIfPresent(Date.self, forKey: .since)

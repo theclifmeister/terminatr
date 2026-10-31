@@ -55,7 +55,7 @@ struct PeerProjectScreen: View {
             await model.refresh()
             pages = await model.peerPagesState(alias, project)
         }
-        .keepsPlace(Route.peerProject(alias: alias, project: project).listKey)
+        .keepsPlace(route: Route.peerProject(alias: alias, project: project))
         .navigationTitle(project)
         .headerTitle()
         .backdrop()
@@ -88,7 +88,7 @@ struct PeerProjectScreen: View {
         return TileRow {
             ForEach(tiles, id: \.0) { page, symbol in
                 let route = Route.peerPage(alias: alias, project: project, page: page)
-                PlainRouteLink(value: route) { PageTile(page.rawValue, symbol: symbol, selected: navigate?.open == route) }
+                PlainRouteLink(value: route) { PageTile(page.rawValue, symbol: symbol, selected: navigate.opens(route, on: model)) }
                     .buttonStyle(.plain)
             }
         }
@@ -101,7 +101,7 @@ struct PeerProjectScreen: View {
                 PlainRouteLink(value: route) {
                     SessionTile(e.ref.isCoordinator ? "Coordinator" : e.title.isEmpty ? e.ref.thread : e.title,
                                 ref: e.task.isEmpty ? nil : e.task, state: .of(peer: e.session), rule: i > 0,
-                                selected: navigate?.open == route)
+                                selected: navigate.opens(route, on: model))
                 }
                 .buttonStyle(.plain)
             }

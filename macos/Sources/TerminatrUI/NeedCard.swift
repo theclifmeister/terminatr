@@ -38,6 +38,8 @@ public struct NeedCard<Link: View, Answers: View>: View {
     let open: Bool
     let acts: [NeedAct]
     let now: Date
+    /// The server it is of, when the phone shows several (T852).
+    let server: String
     let link: (NeedCardHead) -> Link
     let answers: Answers
     /// The head's middle and the card's height: where VoiceOver activates it.
@@ -46,10 +48,12 @@ public struct NeedCard<Link: View, Answers: View>: View {
 
     /// command: an approval's dialog, "" for none; note: what the server
     /// said of an answer, or why the card can't answer; link: the head in
-    /// what opens the need's session or project.
+    /// what opens the need's session or project; server: the server's
+    /// name before its project, "" for none.
     public init(need: Need, command: String = "", note: (text: String, failed: Bool)? = nil, lead: Bool = false,
-                open: Bool = false, acts: [NeedAct] = [], now: Date = Date(),
+                open: Bool = false, acts: [NeedAct] = [], now: Date = Date(), server: String = "",
                 @ViewBuilder link: @escaping (NeedCardHead) -> Link, @ViewBuilder answers: () -> Answers) {
+        self.server = server
         self.need = need
         self.command = command
         self.note = note
@@ -65,7 +69,7 @@ public struct NeedCard<Link: View, Answers: View>: View {
         let shape = RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
         let ring = lead || open
         VStack(alignment: .leading, spacing: 11) {
-            link(NeedCardHead(need: need, now: now))
+            link(NeedCardHead(need: need, now: now, server: server))
                 .onGeometryChange(for: CGFloat.self) { $0.frame(in: .named(cardSpace)).midY } action: { mid in
                     headY = mid
                 }
@@ -116,7 +120,7 @@ public struct NeedCard<Link: View, Answers: View>: View {
     /// its task, the agent's words and the dialog.
     private var spoken: String {
         var parts = [need.what]
-        if !need.project.isEmpty { parts.append(need.project) }
+        if !need.project.isEmpty { parts.append(server.isEmpty ? need.project : "\(need.project) on \(server)") }
         if let since = need.since {
             parts.append(Self.ago.localizedString(for: min(since, now), relativeTo: now))
         }
@@ -149,7 +153,13 @@ public struct NeedCardHead: View {
     @Environment(\.verticalSizeClass) private var height
     let need: Need
     let now: Date
+    var server = ""
     var chevron = false
+
+    /// Its project, after its server's name when it has one.
+    var place: String {
+        [server, need.project].filter { !$0.isEmpty }.joined(separator: " › ")
+    }
 
     /// With the chevron that says the head opens something.
     public func opens() -> NeedCardHead {
@@ -167,8 +177,8 @@ public struct NeedCardHead: View {
                     Text(need.kind.word)
                         .font(theme.body(.headline, .bold))
                         .foregroundStyle(theme.ink)
-                    if !need.project.isEmpty {
-                        Text(need.project)
+                    if !place.isEmpty {
+                        Text(place)
                             .font(theme.mono(.subheadline, .medium))
                             .foregroundStyle(theme.muted)
                             .lines(1)

@@ -92,7 +92,7 @@ struct Columns<Content: View>: View {
     /// Whether the detail is a coordinator or thread that takes the
     /// whole of a space this size.
     private func foldsList(_ size: CGSize) -> Bool {
-        switch path.last {
+        switch path.last?.base {
         case .session, .need: PhoneColumns.foldsList(size)
         default: false
         }

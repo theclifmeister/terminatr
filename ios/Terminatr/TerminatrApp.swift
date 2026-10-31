@@ -16,7 +16,7 @@ import TerminatrUI
 @main
 struct TerminatrApp: App {
     @UIApplicationDelegateAdaptor private var delegate: AppDelegate
-    @State private var model = PhoneModel()
+    @State private var phone = Phone()
     @State private var linked: LinkedCode?
     @Environment(\.scenePhase) private var phase
 
@@ -31,31 +31,31 @@ struct TerminatrApp: App {
     var body: some Scene {
         WindowGroup {
             Root()
-                .environment(model)
+                .environment(phone)
                 .themed()
                 .onHinge()
                 .task {
-                    if UserDefaults.standard.bool(forKey: "demo"), model.source == .none {
-                        await model.startDemo()
+                    if UserDefaults.standard.bool(forKey: "demo"), phone.isEmpty {
+                        await phone.startDemo()
                     }
                     if let s = UserDefaults.standard.string(forKey: "pair"), let c = try? PairingCode(s) {
                         do {
-                            try await model.pair(c, name: UIDevice.current.name)
+                            try await phone.pair(c, name: UIDevice.current.name)
                         } catch {
-                            model.failed(error)
+                            phone.failed(error)
                         }
                     }
-                    model.openPaired()
+                    phone.openPaired()
                 }
                 .onOpenURL { url in
                     if let c = try? PairingCode(url.absoluteString) { linked = LinkedCode(code: c) }
                 }
-                .sheet(item: $linked) { PairScreen(code: $0.code).environment(model) }
+                .sheet(item: $linked) { PairScreen(code: $0.code).environment(phone) }
         }
         .onChange(of: phase) { _, p in
             switch p {
-            case .active: model.resume()
-            case .background: Grace.begin(model)
+            case .active: phone.resume()
+            case .background: Grace.begin(phone)
             default: break
             }
         }
@@ -68,7 +68,7 @@ struct TerminatrApp: App {
 @MainActor final class Grace {
     private var id = UIBackgroundTaskIdentifier.invalid
 
-    static func begin(_ model: PhoneModel) {
+    static func begin(_ model: Phone) {
         let g = Grace()
         g.id = UIApplication.shared.beginBackgroundTask(withName: "link") {
             Task { @MainActor in
@@ -95,8 +95,32 @@ struct LinkedCode: Identifiable {
     let code: PairingCode
 }
 
+extension Route {
+    /// This route on the server key (keeps the one it names).
+    func on(_ key: String) -> Route {
+        if case .on = self { return self }
+        return key.isEmpty ? self : .on(key, self)
+    }
+
+    /// The route without its server.
+    var base: Route {
+        if case .on(_, let r) = self { return r.base }
+        return self
+    }
+
+    /// The server's key it names, if any.
+    var server: String? {
+        if case .on(let k, _) = self { return k }
+        return nil
+    }
+}
+
 /// Where a tap goes.
-enum Route: Hashable {
+indirect enum Route: Hashable {
+    /// A route on one of the servers (T852), by its pairing's key
+    /// (PhoneModel.key): its screen reads that server. A route without
+    /// one (a launch argument's) reads the first.
+    case on(String, Route)
     case project(String)
     case peerProject(alias: String, project: String)
     case session(SessionRef)
@@ -163,6 +187,7 @@ enum Route: Hashable {
     /// under the board.
     var path: [Route] {
         switch self {
+        case .on(let key, let r): r.path.map { $0.on(key) }
         case .project, .peerProject: [self]
         case .session(let ref), .need(let ref):
             [ref.isRemote ? .peerProject(alias: ref.server, project: ref.project) : .project(ref.project), self]
@@ -182,7 +207,7 @@ enum RootTab: Hashable {
 }
 
 struct Root: View {
-    @Environment(PhoneModel.self) private var model
+    @Environment(Phone.self) private var phone
     @Environment(\.theme) private var theme
     @State private var tab = RootTab.needs
     @State private var needsPath: [Route] = []
@@ -206,30 +231,44 @@ struct Root: View {
                             .padding(.horizontal, 16)
                     }
             }
+            // The screens that read one server read the first, unless
+            // their route names another (RouteScreen); the sheets too.
+            .environment(phone.primary)
     }
 
     @ViewBuilder private var content: some View {
-        if model.source == .none {
+        if phone.isEmpty {
             Welcome()
         } else if #available(iOS 18, *), Self.sidebar {
             sidebarTabs
-                .liveStrip(LiveWork.of(model.sessions)) { open(.session($0)) }
+                .liveStrip(live?.work) { open(.session($0)) }
                 .onAppear(perform: openLaunched)
-                .onChange(of: projectsPath) { if tab != .needs { tab = Self.place(projectsPath, in: model.sidebar) } }
+                .onChange(of: projectsPath) { if tab != .needs { tab = Self.place(projectsPath, in: phone.sidebar) } }
         } else {
             // .tabItem, not Tab: that one is iOS 18's.
             TabView(selection: $tab) {
                 needsStack
                     .tabItem { Label("Needs you", systemImage: "exclamationmark.bubble") }
-                    .badge(model.needs.count)
+                    .badge(phone.needs.count)
                     .tag(RootTab.needs)
                 projectsStack
                     .tabItem { Label("Projects", systemImage: "folder") }
                     .tag(RootTab.projects)
             }
-            .liveStrip(LiveWork.of(model.sessions)) { open(.session($0)) }
+            .liveStrip(live?.work) { open(.session($0)) }
             .onAppear(perform: openLaunched)
         }
+    }
+
+    /// The work running on every server, led by the session that has
+    /// worked longest on any, and that one's server.
+    private var live: (server: String, work: LiveWork)? {
+        LiveWork.merge(phone.models.compactMap { m in LiveWork.of(m.sessions).map { (m.key, $0) } })
+    }
+
+    /// Opens a session of the live strip's, on its server.
+    private func open(_ route: Route) {
+        open(on: route.on(live?.server ?? ""))
     }
 
     private var needsStack: some View {
@@ -246,7 +285,7 @@ struct Root: View {
 }
 
 /// The iPad's sidebar (T849): Needs you and Projects, then each
-/// project's coordinator and threads in the TUI's order (model.sidebar),
+/// project's coordinator and threads in the TUI's order (Phone.sidebar, by server),
 /// each paired server's shared ones, and the inactive projects. A row
 /// opens its session in the Projects tab's columns, beside its
 /// project; the sidebar follows the columns as they move on. An iPhone
@@ -258,10 +297,10 @@ extension Root {
     private var sidebarTabs: some View {
         TabView(selection: Binding(get: { tab }, set: choose)) {
             Tab("Needs you", systemImage: "exclamationmark.bubble", value: RootTab.needs) { opening(needsStack) }
-                .badge(model.needs.count)
+                .badge(phone.needs.count)
             Tab("Projects", systemImage: "folder", value: RootTab.projects) { opening(projectsStack) }
-            ForEach(model.sidebar, id: \.section.id) { s in
-                TabSection(s.section.title) {
+            ForEach(phone.sidebar) { s in
+                TabSection(s.title) {
                     ForEach(s.rows) { r in
                         Tab(value: RootTab.place(r.route)) {
                             opening(projectsStack)
@@ -309,7 +348,7 @@ extension Root {
     private var folding: Route? {
         guard size != .zero else { return nil }
         let last = (tab == .needs ? needsPath : projectsPath).last
-        switch last {
+        switch last?.base {
         case .session, .need: return PhoneColumns.foldsList(size) ? last : nil
         default: return nil
         }
@@ -338,7 +377,7 @@ extension Root {
 
     /// The sidebar's row for what the columns show: the last route on
     /// path that has a row, else Projects.
-    static func place(_ path: [Route], in sidebar: [(section: SidebarSection, rows: [SidebarRow])]) -> RootTab {
+    static func place(_ path: [Route], in sidebar: [SidebarGroup]) -> RootTab {
         let rows = Set(sidebar.flatMap { $0.rows.map(\.route) })
         return path.last(where: rows.contains).map(RootTab.place) ?? .projects
     }
@@ -347,7 +386,7 @@ extension Root {
 extension Root {
     /// Opens route from the Projects tab, on the path a tap would have
     /// taken (Route.path).
-    private func open(_ route: Route) {
+    private func open(on route: Route) {
         tab = .projects
         projectsPath = route.path
     }
@@ -368,7 +407,7 @@ extension Root {
         } else if open == "projects" {
             tab = .projects
         } else if let r = Route.parse(open) {
-            self.open(r)
+            self.open(on: r)
         }
     }
 }
@@ -385,12 +424,32 @@ extension View {
     }
 }
 
-/// The screen a Route opens.
+/// The screen a Route opens, reading the server it names (T852).
 struct RouteScreen: View {
+    @Environment(Phone.self) private var phone
+    let route: Route
+
+    var body: some View {
+        if case .on(let key, let r) = route {
+            if let m = phone.model(key) {
+                BaseRouteScreen(route: r).environment(m)
+            } else {
+                ContentUnavailableView("Not paired with this server now", systemImage: "iphone.slash")
+                    .backdrop()
+            }
+        } else {
+            BaseRouteScreen(route: route)
+        }
+    }
+}
+
+/// The screen a route without its server opens, on the environment's.
+private struct BaseRouteScreen: View {
     let route: Route
 
     var body: some View {
         switch route {
+        case .on(_, let r): BaseRouteScreen(route: r)
         case .project(let slug): ProjectScreen(slug: slug)
         case .peerProject(let alias, let project): PeerProjectScreen(alias: alias, project: project)
         case .session(let ref): SessionScreen(ref: ref)
