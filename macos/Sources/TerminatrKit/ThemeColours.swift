@@ -311,9 +311,6 @@ extension ThemeColours {
             ("a deck command", layered(frost + [deck, command])),
             ("an option", layered(frost + [deck, wash(ink, Self.inkWash)])),
             ("a picked option", layered(frost + [deck, wash(question, Self.pickedWash)])),
-            // The phone's live strip (T849): the glass in the tab bar's
-            // accessory, whose own glass is the frost.
-            ("the live strip", layered(frost + [glass])),
             // The phone's sheets (T850): Settings and pairing on the
             // glass, their deck cards over it, a fingerprint chip and the
             // level chip on those.
@@ -333,7 +330,7 @@ extension ThemeColours {
         let texts: [(String, Swatch, Set<String>?)] = [
             ("ink", ink, nil),
             ("muted", muted, Set(surfaces.map(\.0)).subtracting(washes)),
-            ("action", action, ["the sidebar", "the glass", "a card", "a deck card", "the live strip"]),
+            ("action", action, ["the sidebar", "the glass", "a card", "a deck card"]),
             ("attention", attention, ["the glass", "a card"]),
             ("good", good, ["a card"]),
             ("approval", approval, ["a card", "an approval card"]),
