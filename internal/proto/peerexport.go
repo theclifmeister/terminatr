@@ -39,7 +39,9 @@ type PeerProjects struct {
 }
 
 // PeerProject is one shared project as the list shows it: its goal line,
-// whether it is paused, and its counts.
+// whether it is paused, and its counts. Pages: the answering server's
+// project pages switch for the caller is on for it (§16.17), from a
+// server whose hello lists pages.
 type PeerProject struct {
 	Project  string `json:"project"`
 	Goal     string `json:"goal,omitempty"`
@@ -47,6 +49,7 @@ type PeerProject struct {
 	NeedsYou int    `json:"needs_you"`
 	Threads  int    `json:"threads"`
 	Ready    int    `json:"ready"`
+	Pages    bool   `json:"pages,omitempty"`
 }
 
 // PeerWatchParams are the params of peer.watch. Rev is the Rev of the

@@ -70,6 +70,14 @@ func init() {
 		// caps say transcript-remote; app API 12), where session.prompt
 		// types into the pane.
 		unary(proto.MethodPeerList, false, noParams, peerListOf),
+		// A paired server's project pages, read only (app API 35; the
+		// server's caps say peer-pages): a shared project's board and
+		// overview, and its threads' library files, a chunk at a time,
+		// while that server's project pages switch for this one is on
+		// for it. Never its memory.
+		unary(proto.MethodPeerPagesRead, false, peerPagesParams, peerPagesOf),
+		unary(proto.MethodPeerLibraryList, false, peerPagesParams, peerLibraryOf),
+		unary(proto.MethodPeerLibraryRead, false, peerLibraryReadParams, libraryChunkOf),
 
 		// The notice tray (mods' notifications): one console draws each.
 		unary(proto.MethodNotifyClaim, false, noticeParams, noticeResultOf),

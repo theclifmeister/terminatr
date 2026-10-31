@@ -156,6 +156,9 @@ func (m *Manager) Reload() error {
 			if p.ConversationsOn() != r.l.convOn() {
 				r.l.setConversations(p.ConversationsOn())
 			}
+			if !slices.Equal(p.Pages, r.l.pagesList()) {
+				r.l.setPages(p.Pages)
+			}
 			if p.Display() != r.l.status().Name {
 				r.l.setNames(p)
 			}
@@ -191,6 +194,9 @@ func (m *Manager) add(id *Identity, cert tls.Certificate, p Peer) {
 	if l.conversations {
 		d.transcripts, d.convOn = m.opts.Transcripts, l.convOn
 	}
+	if _, ok := m.opts.Export.(PagesExporter); ok {
+		d.pages = l.pagesOn
+	}
 	if m.opts.noPaneLevel {
 		d.panesHere = nil
 	}
@@ -223,6 +229,9 @@ func (m *Manager) caps() []string {
 		}
 		if _, ok := m.opts.Export.(NeedsExporter); ok {
 			caps = append(caps, CapNeeds)
+		}
+		if _, ok := m.opts.Export.(PagesExporter); ok {
+			caps = append(caps, CapPages)
 		}
 	}
 	if m.opts.Messages != nil {
