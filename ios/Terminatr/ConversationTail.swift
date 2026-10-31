@@ -132,9 +132,10 @@ struct WorkingLine: View {
             }
         }
         // The dots hold no text, so their baseline is their bottom edge and
-        // they would sit low: put their middle at the middle of the capitals.
+        // they would sit low: put their middle at the middle of the capitals
+        // of the font "Working…" is set in (theme.body, SF at the theme's size).
         .alignmentGuide(.firstTextBaseline) { _ in
-            3 + UIFont.preferredFont(forTextStyle: .subheadline).capHeight / 2
+            3 + UIFont.systemFont(ofSize: theme.size(.subheadline), weight: .semibold).capHeight / 2
         }
         .accessibilityHidden(true)
     }
