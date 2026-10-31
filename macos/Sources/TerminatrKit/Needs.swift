@@ -106,9 +106,23 @@ public struct Need: Identifiable, Hashable, Sendable {
         public var descriptions: [String] = []
         /// The agent's own menu, its answer typed on its screen.
         public var screen = false
+        /// A multi-select: its options tick, and Submit sends the ones
+        /// ticked as picks (params(picks:)).
+        public var multi = false
 
         public func params(_ option: String) -> AppAPI.AnswerParams {
             AppAPI.AnswerParams(id: session, index: index, answer: option, question: question)
+        }
+
+        /// A multi-select's answer: the options ticked, by index, the
+        /// question its guard.
+        public func params(picks: [Int]) -> AppAPI.AnswerParams {
+            AppAPI.AnswerParams(id: session, index: index, answer: "", question: question, picks: picks)
+        }
+
+        /// The labels of picks, joined as the agent joins them.
+        public func joined(_ picks: [Int]) -> String {
+            picks.filter(options.indices.contains).map { options[$0] }.joined(separator: ", ")
         }
     }
 
@@ -264,14 +278,16 @@ extension Need {
     /// the menu not an escape's, and on the agent's own menu (screen)
     /// the first open one, as it asks them in order. A menu of several
     /// questions answers each this way (T887); nil otherwise, and the
-    /// card's options only read.
-    public static func answer(_ session: String, _ q: AppAPI.Question, index: Int) -> Answer? {
+    /// card's options only read. A multi-select too where the server
+    /// takes picks (Compatibility.answersPicks, T900).
+    public static func answer(_ session: String, _ q: AppAPI.Question, index: Int, picks: Bool = false) -> Answer? {
         guard !q.escape, q.questions.indices.contains(index) else { return nil }
         let item = q.questions[index]
-        guard !item.answered, !item.multiSelect, !item.options.isEmpty else { return nil }
+        guard !item.answered, !item.multiSelect || picks, !item.options.isEmpty else { return nil }
         if q.screen, q.questions.firstIndex(where: { !$0.answered }) != index { return nil }
         return Answer(session: session, index: index, question: item.question,
-                      options: item.options.map(\.label), descriptions: item.options.map(\.description), screen: q.screen)
+                      options: item.options.map(\.label), descriptions: item.options.map(\.description), screen: q.screen,
+                      multi: item.multiSelect)
     }
 
     static func of(project p: AppAPI.Project) -> [Need] {

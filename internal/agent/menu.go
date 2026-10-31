@@ -6,6 +6,7 @@ package agent
 // session.answer alike.
 
 import (
+	"slices"
 	"strconv"
 	"strings"
 
@@ -77,3 +78,65 @@ func MenuKeys(ans *Answer, choice int, text string) []string {
 	}
 	return append(out, text, ans.Submit)
 }
+
+// MenuBox is a numbered option of a multi-select question on screen:
+// its number, label, whether its box is ticked and whether the cursor
+// is on it.
+type MenuBox struct {
+	N       int
+	Label   string
+	Checked bool
+	Cursor  bool
+}
+
+// MultiMenu reads the multi-select question the agent's menu shows:
+// its numbered options, each with a box ("[ ] Apple", "[✔] Pear"), down
+// to the unnumbered row that ends them (one of done, e.g. "Next"), and
+// whether the cursor (❯) is on that row. ok is false when the screen
+// shows no such question: no row of done below the options, or an
+// option without a box (a single-select), or options scrolled off (a
+// pane too short: Claude marks the row next to them ↓ or ↑).
+func MultiMenu(screen string, done []string) (boxes []MenuBox, onDone, ok bool) {
+	lines, first := dialogLines(screen)
+	if first < 0 {
+		return nil, false, false
+	}
+	for _, l := range lines[first:] {
+		t := strings.TrimSpace(l)
+		if m := optionRE.FindStringSubmatch(t); m != nil {
+			n, _ := strconv.Atoi(m[1])
+			label, checked, boxed := unbox(strings.TrimSpace(m[2]))
+			if !boxed || n != len(boxes)+1 {
+				return nil, false, false
+			}
+			lead, _, _ := strings.Cut(t, m[1]+".")
+			if strings.ContainsAny(lead, "↓↑") {
+				return nil, false, false // options scrolled off
+			}
+			boxes = append(boxes, MenuBox{N: n, Label: label, Checked: checked, Cursor: cursorMark(lead)})
+			continue
+		}
+		if len(boxes) == 0 {
+			continue
+		}
+		row := strings.TrimSpace(strings.TrimLeft(t, "❯>›↓↑ "))
+		if slices.Contains(done, row) {
+			return boxes, cursorMark(strings.TrimSuffix(t, row)), true
+		}
+	}
+	return nil, false, false
+}
+
+// unbox takes a multi-select option's box off its label.
+func unbox(o string) (label string, checked, boxed bool) {
+	for box, on := range map[string]bool{"[ ] ": false, "[✔] ": true, "[✓] ": true, "[x] ": true, "[X] ": true, "☐ ": false, "☒ ": true} {
+		if rest, cut := strings.CutPrefix(o, box); cut {
+			return strings.TrimSpace(rest), on, true
+		}
+	}
+	return o, false, false
+}
+
+// cursorMark says whether the text before a menu row's number or label
+// holds the cursor ("❯", or ">" where Claude draws no figures).
+func cursorMark(lead string) bool { return strings.ContainsAny(lead, "❯>›") }

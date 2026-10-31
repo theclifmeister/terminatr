@@ -378,7 +378,7 @@ func uploadParams(p UploadParams) proto.SessionUploadParams {
 }
 
 func answerParams(p AnswerParams) proto.SessionAnswerParams {
-	return proto.SessionAnswerParams{ID: p.ID, Index: p.Index, Answer: p.Answer, Question: p.Question}
+	return proto.SessionAnswerParams{ID: p.ID, Index: p.Index, Answer: p.Answer, Question: p.Question, Picks: p.Picks}
 }
 
 func approveParams(p ApproveParams) proto.SessionApproveParams {
@@ -472,7 +472,7 @@ func projectOpenParams(p ProjectOpenParams) proto.ProjectOpenParams {
 
 func peerNeedActParams(p PeerNeedActParams) proto.PeerNeedActParams {
 	return proto.PeerNeedActParams{Peer: p.Peer, PeerAct: proto.PeerAct{Project: p.Project, Need: p.Need, Act: p.Act, Index: p.Index,
-		Answer: p.Answer, Question: p.Question, Choice: p.Choice, Option: p.Option, Status: p.Status, Note: p.Note}}
+		Answer: p.Answer, Question: p.Question, Picks: p.Picks, Choice: p.Choice, Option: p.Option, Status: p.Status, Note: p.Note}}
 }
 
 func linkActParams(p LinkActParams) proto.LinkActParams {

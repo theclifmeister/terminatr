@@ -77,6 +77,11 @@ let backend = AppAPI.QuestionItem(question: "Which cache backend?", options: [.i
     #expect(Need.answer("s", tms, index: 1)?.index == 1)
     let multi = AppAPI.QuestionItem(question: "Which ones?", multiSelect: true, options: [.init(label: "A")])
     #expect(Need.answer("s", menu([multi, access]), index: 0) == nil)
+    // A tm that types picks answers a multi-select too (T900).
+    let several = Need.answer("s", AppAPI.Question(questions: [multi, access], screen: true), index: 0, picks: true)
+    #expect(several?.multi == true)
+    #expect(several?.params(picks: [0]) == AppAPI.AnswerParams(id: "s", index: 0, answer: "", question: "Which ones?", picks: [0]))
+    #expect(several?.joined([0]) == "A")
     #expect(Need.answer("s", menu([shared], escape: true), index: 0) == nil)
     let many = AppAPI.QuestionItem(question: "Pick", options: (1...6).map { .init(label: "o\($0)") })
     #expect(Need.answer("s", menu([many]), index: 0)?.options.count == 6)

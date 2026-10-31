@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"fmt"
 	"strconv"
+	"strings"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -29,10 +30,14 @@ type peerNeedRef struct {
 	answer bool
 }
 
-// peerNeedChoice is one pick in the dialog: its words and the act.
+// peerNeedChoice is one pick in the dialog: its words and the act. A
+// multi-select's options tick (box: the option's index, from 1) and its
+// submit sends the ones ticked.
 type peerNeedChoice struct {
-	label string
-	act   proto.PeerAct
+	label  string
+	act    proto.PeerAct
+	box    int
+	submit bool
 }
 
 // peerNeedView is the dialog for one paired server's need.
@@ -41,6 +46,7 @@ type peerNeedView struct {
 	text    []string
 	choices []peerNeedChoice
 	sel     int
+	ticked  map[int]bool // a multi-select's options ticked, by box
 }
 
 // peerNeedChoices are what the dialog offers on need n of project slug:
@@ -61,7 +67,11 @@ func peerNeedChoices(slug string, n proto.PeerNeed) (text []string, out []peerNe
 				}
 				text = append(text, it.Question)
 				if it.MultiSelect {
-					text = append(text, "(several options: pick them in its pane, on that server)")
+					act.Index, act.Question = i, it.Question
+					for j, o := range it.Options {
+						out = append(out, peerNeedChoice{label: oneLine(o.Label), act: act, box: j + 1})
+					}
+					out = append(out, peerNeedChoice{label: "submit the options ticked", act: act, submit: true})
 					break
 				}
 				for _, o := range it.Options {
@@ -122,6 +132,8 @@ func (v *peerNeedView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 		v.sel = moveSel(v.sel, scrollKeys[s], len(v.choices))
 	case "enter":
 		return v.pick(m, v.sel)
+	case "space":
+		v.tick(v.sel)
 	default:
 		if n, err := strconv.Atoi(s); err == nil && n >= 1 && n <= len(v.choices) {
 			return v.pick(m, n-1)
@@ -130,10 +142,49 @@ func (v *peerNeedView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	return nil
 }
 
+// tick toggles choice i's box, when it is a multi-select's option.
+func (v *peerNeedView) tick(i int) bool {
+	if i < 0 || i >= len(v.choices) || v.choices[i].box == 0 {
+		return false
+	}
+	if v.ticked == nil {
+		v.ticked = map[int]bool{}
+	}
+	b := v.choices[i].box
+	v.ticked[b] = !v.ticked[b]
+	return true
+}
+
+// tickedAct is the multi-select's act with the options ticked, in the
+// menu's order, and their labels as its guard; false with none ticked.
+func (v *peerNeedView) tickedAct(act proto.PeerAct) (proto.PeerAct, string, bool) {
+	var labels []string
+	act.Picks = nil
+	for _, c := range v.choices {
+		if c.box > 0 && v.ticked[c.box] {
+			act.Picks = append(act.Picks, c.box-1)
+			labels = append(labels, c.label)
+		}
+	}
+	act.Answer = strings.Join(labels, ", ")
+	return act, act.Answer, len(labels) > 0
+}
+
 // pick asks first, then sends choice i (a note first for send back).
 func (v *peerNeedView) pick(m *dash, i int) tea.Cmd {
-	m.pop()
+	if v.tick(i) {
+		return nil
+	}
 	c, ref := v.choices[i], v.ref
+	if c.submit {
+		act, label, ok := v.tickedAct(c.act)
+		if !ok {
+			m.msg = "tick one option or more first: 1-9 or space"
+			return nil
+		}
+		c.act, c.label = act, label
+	}
+	m.pop()
 	who := ref.server + " › " + ref.project
 	if c.act.Act == proto.ActSendBack {
 		task := ref.need.Task
@@ -183,13 +234,30 @@ func (v *peerNeedView) render(m *dash) string {
 	for i := range hits {
 		hits[i] = noHit
 	}
+	multi := false
 	for i, c := range v.choices {
-		body = append(body, fmt.Sprintf("  %d  %s", i+1, c.label))
+		switch {
+		case c.box > 0:
+			box := "[ ]"
+			if v.ticked[c.box] {
+				box = "[x]"
+			}
+			body = append(body, fmt.Sprintf("  %d  %s %s", i+1, box, c.label))
+			multi = true
+		case c.submit:
+			body = append(body, "     "+c.label)
+		default:
+			body = append(body, fmt.Sprintf("  %d  %s", i+1, c.label))
+		}
 		hits = append(hits, i)
 	}
 	body = append(body, "", "On "+v.ref.server+": it checks your answer again, and refuses it if this changed meanwhile.")
 	hits = append(hits, noHit, noHit)
+	keys := "1-9 or enter pick · esc cancel"
+	if multi {
+		keys = "1-9 or space tick · enter on submit sends · esc cancel"
+	}
 	title := cmp.Or(v.ref.need.Task, v.ref.need.Thread, "coordinator")
 	return m.popup(box{title: v.ref.server + " › " + v.ref.project + ": " + title, body: body, sel: head + v.sel, hits: hits,
-		keys: "1-9 or enter pick · esc cancel", dialog: true})
+		keys: keys, dialog: true})
 }

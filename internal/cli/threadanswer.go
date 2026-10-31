@@ -79,10 +79,7 @@ func questionLines(q *proto.Question) []string {
 		if it.Header != "" {
 			l = fmt.Sprintf("%d. [%s] %s", i+1, it.Header, it.Question)
 		}
-		switch {
-		case it.MultiSelect && q.Screen:
-			l += " (several: the user picks them in its pane)"
-		case it.MultiSelect:
+		if it.MultiSelect {
 			l += " (several: --choice 1,3)"
 		}
 		if it.Answered {
@@ -132,7 +129,8 @@ func (e *Env) threadAnswer(p *project.Project, id string, a answerArgs) error {
 	a.text = strings.TrimSpace(textsafe.Clean(a.text, false))
 	// The agent's own menu (Screen) is typed on its screen from here,
 	// by number, as before the server kept it.
-	if info.Question != nil && !info.Question.Screen {
+	// So is a multi-select of it: the server ticks its boxes (T900).
+	if q := info.Question; q != nil && (!q.Screen || multiAt(q, a.question)) {
 		return e.answerOpen(p, id, r.Session, info.Question, a)
 	}
 	if len(a.choices) != 1 {
@@ -162,10 +160,22 @@ func (e *Env) answerOpen(p *project.Project, id, session string, q *proto.Questi
 	if err != nil {
 		return err
 	}
+	params := proto.SessionAnswerParams{ID: session, Index: k - 1, Answer: answer, Relay: e.relay()}
+	if q.Screen && it.MultiSelect {
+		// The agent's own multi-select takes the options by index; its
+		// free text only in its pane.
+		if a.text != "" || slices.Contains(a.choices, len(it.Options)+1) {
+			return &tasks.Error{Code: "screen-only", Msg: fmt.Sprintf("%q takes the user's words only in thread %s's pane", it.Question, id)}
+		}
+		params.Answer = ""
+		for _, n := range a.choices {
+			params.Picks = append(params.Picks, n-1)
+		}
+	}
 	var res proto.SessionAnswerResult
-	err = e.call(proto.MethodSessionAnswer, proto.SessionAnswerParams{ID: session, Index: k - 1, Answer: answer, Relay: e.relay()}, &res)
+	err = e.call(proto.MethodSessionAnswer, params, &res)
 	var perr *proto.Error
-	if errors.As(err, &perr) && perr.Code == proto.ErrNoQuestion {
+	if errors.As(err, &perr) && perr.Code == proto.ErrNoQuestion && !q.Screen {
 		return &tasks.Error{Code: "no-menu", Msg: fmt.Sprintf("thread %s's menu has closed (answered in its pane?); look with tm thread read %s", id, id)}
 	}
 	if err != nil {
@@ -180,6 +190,15 @@ func (e *Env) answerOpen(p *project.Project, id, session string, q *proto.Questi
 	}
 	fmt.Fprintf(e.Stdout, "answered %s: %s\n", id, answer)
 	return nil
+}
+
+// multiAt says whether question k (from 1; 0: the first unanswered)
+// of q is a multi-select.
+func multiAt(q *proto.Question, k int) bool {
+	if k == 0 {
+		k = slices.IndexFunc(q.Questions, func(it proto.QuestionItem) bool { return !it.Answered }) + 1
+	}
+	return k >= 1 && k <= len(q.Questions) && q.Questions[k-1].MultiSelect
 }
 
 // menuAnswer is the answer to question it: the options picked by number

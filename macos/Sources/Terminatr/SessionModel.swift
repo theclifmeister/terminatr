@@ -170,13 +170,19 @@ final class SessionModel {
         return try await b.call(AppAPI.Methods.sessionUpload, p)
     }
 
+    /// Whether this tm types a multi-select of the agent's menu
+    /// (Compatibility.answersPicks).
+    var answersPicks: Bool { Compatibility.answersPicks(app?.hello) }
+
     /// Answers question index of the open menu. guarded: the server
-    /// refuses unless the menu still asks question, single-select and
-    /// unanswered, and answer is one of its options.
-    func answer(index: Int, answer: String, question: String, guarded: Bool) async throws -> AppAPI.AnswerResult {
+    /// refuses unless the menu still asks question, unanswered, and
+    /// answer is one of its options (picks, of a multi-select, in place
+    /// of answer).
+    func answer(index: Int, answer: String, question: String, guarded: Bool, picks: [Int] = []) async throws -> AppAPI.AnswerResult {
         let (b, id) = try target()
         do {
-            return try await b.call(AppAPI.Methods.sessionAnswer, AppAPI.AnswerParams(id: id, index: index, answer: answer, question: guarded ? question : ""))
+            let p = AppAPI.AnswerParams(id: id, index: index, answer: picks.isEmpty ? answer : "", question: guarded ? question : "", picks: picks)
+            return try await b.call(AppAPI.Methods.sessionAnswer, p)
         } catch let e as AppAPI.Error where e.code == "no-question" {
             if await app?.questionGone(e, session: id, asked: question) == true { throw QuestionGone() }
             throw e

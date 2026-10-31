@@ -115,6 +115,17 @@ func actGuard(n proto.PeerNeed, p proto.PeerAct) (proto.PeerAct, *proto.Error) {
 		if p.Question == "" || !sameWords(p.Question, it.Question) {
 			return p, errNeedChanged
 		}
+		if len(p.Picks) > 0 {
+			ans, perr := pickedAnswer(it, p.Picks)
+			if perr != nil {
+				return p, perr
+			}
+			if !sameWords(ans, p.Answer) {
+				return p, errNeedChanged
+			}
+			p.Question, p.Answer = it.Question, ans
+			break
+		}
 		j := slices.IndexFunc(it.Options, func(o proto.QuestionOption) bool { return sameWords(o.Label, p.Answer) })
 		if j < 0 {
 			return p, proto.Errorf(proto.ErrBadParams, "%q is not one of that question's options", textsafe.Line(p.Answer, 80))
@@ -164,7 +175,11 @@ func (s *Server) peerAct(c caller.Caller, n proto.PeerNeed, p proto.PeerAct) (pr
 	}
 	switch p.Act {
 	case proto.ActAnswer:
-		res, perr := s.answer(proto.SessionAnswerParams{ID: n.Session, Index: p.Index, Answer: p.Answer, Question: p.Question}, cc)
+		ap := proto.SessionAnswerParams{ID: n.Session, Index: p.Index, Answer: p.Answer, Question: p.Question, Picks: p.Picks}
+		if len(p.Picks) > 0 {
+			ap.Answer = ""
+		}
+		res, perr := s.answer(ap, cc)
 		if perr != nil {
 			return none, perr
 		}

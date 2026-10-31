@@ -34,8 +34,13 @@ options = ["OK", "Go"]
 [[step.more]]
 header = "Fruits"
 question = "Which fruits go on it?"
-options = ["Apple", "Pear"]
+options = ["Apple", "Pear", "Plum"]
 multi = true
+
+[[step.more]]
+header = "Size"
+question = "How big should it be?"
+options = ["Small", "Big"]
 
 [[step]]
 do = "stream"
@@ -45,7 +50,8 @@ text = "ASKED"
 
 // TestAppAgentQuestion: a thread's and a coordinator's AskUserQuestion
 // menu, answered from the app: a guarded option, the user's words,
-// questions in order, and a multi-select left to the pane.
+// questions in order, and a multi-select in the middle of three ticked
+// by picks (T900), the menu's review step submitted after the last.
 func TestAppAgentQuestion(t *testing.T) {
 	env, projDir, _ := threadEnv(t)
 	for _, kv := range env.Vars {
@@ -74,9 +80,9 @@ func appAsk(t *testing.T, env *Env, b *apptest.Bridge, s *Session) {
 		t.Fatalf("no session %s", s.ID)
 		return nil
 	}
-	answer := func(i int, ans, guard string) (appapi.AnswerResult, error) {
+	answer := func(i int, ans, guard string, picks ...int) (appapi.AnswerResult, error) {
 		var r appapi.AnswerResult
-		err := b.Call(proto.MethodSessionAnswer, appapi.AnswerParams{ID: s.ID, Index: i, Answer: ans, Question: guard}, &r)
+		err := b.Call(proto.MethodSessionAnswer, appapi.AnswerParams{ID: s.ID, Index: i, Answer: ans, Question: guard, Picks: picks}, &r)
 		return r, err
 	}
 	// sessions.watch pushes each question as it opens and as it goes
@@ -150,17 +156,18 @@ func appAsk(t *testing.T, env *Env, b *apptest.Bridge, s *Session) {
 	env.WaitFor(s, "→ Blue", agentWait)
 	pushed("the color question gone", func(q *appapi.Question) bool { return !asks("Which color should the button be?")(q) })
 
-	// Two questions in one call: in order; the user's words; a
-	// multi-select is the pane's.
+	// Three questions in one call: in order; the user's words; the
+	// multi-select in the middle by picks, its words the pane's; the
+	// last, then the review step, which the server submits.
 	env.WaitFor(s, "What should the button say?", agentWait)
 	waitReason(t, env, s, "question")
-	if q = question(); q == nil || len(q.Questions) != 2 || !q.Questions[1].MultiSelect || q.Questions[1].Header != "Fruits" {
-		t.Fatalf("two questions: %+v", q)
+	if q = question(); q == nil || len(q.Questions) != 3 || !q.Questions[1].MultiSelect || q.Questions[1].Header != "Fruits" {
+		t.Fatalf("three questions: %+v", q)
 	}
-	if _, err := answer(1, "Apple", ""); appCode(err) != proto.ErrRefused {
+	if _, err := answer(1, "", "", 0); appCode(err) != proto.ErrRefused {
 		t.Fatalf("the second first: %v", err)
 	}
-	if r, err := answer(0, "Start now", ""); err != nil || r.Remaining != 1 {
+	if r, err := answer(0, "Start now", ""); err != nil || r.Remaining != 2 {
 		t.Fatalf("answer with words: %+v %v", r, err)
 	}
 	env.WaitFor(s, "Which fruits go on it?", agentWait)
@@ -168,13 +175,30 @@ func appAsk(t *testing.T, env *Env, b *apptest.Bridge, s *Session) {
 		t.Fatalf("after the first: %+v", q)
 	}
 	if _, err := answer(1, "Apple", ""); appCode(err) != "screen-only" {
-		t.Fatalf("a multi-select: %v", err)
+		t.Fatalf("a multi-select's words: %v", err)
 	}
-	// The user picks in the pane.
-	env.Keys(s, "1")
-	env.WaitFor(s, "[✔] Apple", agentWait)
-	env.Keys(s, "\r")
-	env.WaitFor(s, "→ Apple", agentWait)
+	if _, err := answer(1, "", "Which fruits go on it?", 5); appCode(err) != proto.ErrBadParams {
+		t.Fatalf("a pick it hasn't: %v", err)
+	}
+	if _, err := answer(1, "Apple", "", 0); appCode(err) != proto.ErrBadParams {
+		t.Fatalf("picks and words: %v", err)
+	}
+	// The user ticked Pear in the pane already: picks Apple and Plum
+	// tick those and untick Pear.
+	env.Keys(s, "2")
+	env.WaitFor(s, "[✔] Pear", agentWait)
+	if r, err := answer(1, "", "Which fruits go on it?", 2, 0); err != nil || r.Remaining != 1 {
+		t.Fatalf("answer by picks: %+v %v", r, err)
+	}
+	env.WaitFor(s, "How big should it be?", agentWait)
+	if q = question(); q == nil || !q.Questions[1].Answered || q.Questions[1].Answer != "Apple, Plum" {
+		t.Fatalf("after the multi-select: %+v", q)
+	}
+	if r, err := answer(2, "Big", "How big should it be?"); err != nil || r.Remaining != 0 {
+		t.Fatalf("answer the last: %+v %v", r, err)
+	}
+	env.WaitFor(s, "→ Apple, Plum", agentWait)
+	env.WaitFor(s, "→ Big", agentWait)
 	env.WaitFor(s, "ASKED", agentWait)
 	// Answered in the pane: gone from the push at once.
 	pushed("no question", func(q *appapi.Question) bool { return q == nil })

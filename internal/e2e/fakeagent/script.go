@@ -516,6 +516,7 @@ func (a *app) questionStep(ctx context.Context, st step) error {
 	}
 	answers := map[string]any{}
 	var said []string
+	multi := false
 	for k, q := range all {
 		answer, err := a.askOne(ctx, st.Style, q, k, len(all), headers)
 		if err != nil {
@@ -523,6 +524,28 @@ func (a *app) questionStep(ctx context.Context, st step) error {
 		}
 		answers[q.Question] = answer
 		said = append(said, "· "+q.Question+" → "+answer)
+		multi = multi || q.Multi
+	}
+	// Claude 2.1.316 asks to submit a menu of several questions, or
+	// with a multi-select, on a review step.
+	if st.Style != "codex" && (len(all) > 1 || multi) {
+		var tabs []string
+		for _, h := range headers {
+			tabs = append(tabs, fmt.Sprintf("☒ %v", h))
+		}
+		var review []string
+		for _, l := range said {
+			review = append(review, strings.TrimPrefix(l, "· "))
+		}
+		d := &dialog{kind: "review", tabs: strings.Join(append(tabs, "✔ Submit"), "  "), review: review,
+			options: []string{"Submit answers", "Cancel"}, textOpt: -1}
+		c, err := a.waitDialog(ctx, d)
+		if err != nil {
+			return err
+		}
+		if c != 1 {
+			return errCancelled
+		}
 	}
 	resp := map[string]any{"questions": qs, "answers": answers}
 	var pairs []string
@@ -560,6 +583,11 @@ func (a *app) askOne(ctx context.Context, style string, st step, k, n int, heade
 		descriptions: st.Descriptions, textOpt: len(all) - 1}
 	if st.Multi {
 		d.checked = map[int]bool{}
+		d.done = "Next"
+		if n == 1 {
+			d.done = "Submit"
+		}
+		d.options[d.textOpt] = "Type something"
 	}
 	if style == "codex" {
 		all = append(append([]string(nil), opts...), "None of the above")

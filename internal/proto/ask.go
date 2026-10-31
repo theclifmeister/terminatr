@@ -71,7 +71,17 @@ type SessionAnswerParams struct {
 	// "coordinator" never answers while the session is on an escape's
 	// prompt (SessionKeysParams.Relay).
 	Relay string `json:"relay,omitempty"`
+	// Picks answer a multi-select question: the options picked, by
+	// index (from 0) into its Options, in place of Answer. The answer
+	// is then their labels in the options' order, joined with ", " as
+	// the agent joins them. The agent's own menu takes them by keys
+	// (each box ticked, then its Next), checked on its screen (T900).
+	Picks []int `json:"picks,omitempty"`
 }
+
+// CapAnswerPicks says session.answer takes Picks: a multi-select's
+// options by index, the agent's own menu's too (T900).
+const CapAnswerPicks = "answer-picks"
 
 // SessionAnswerResult says how many questions still wait for an answer;
 // at 0 the answers went to the question's asker.

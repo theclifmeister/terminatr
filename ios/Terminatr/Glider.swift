@@ -6,7 +6,10 @@ import UIKit
 /// view: it stops a flick's momentum where it is, then moves the offset
 /// each frame toward the end as that frame has it (content size and
 /// insets now, the rows a LazyVStack just laid out included), until it
-/// lands. The user's finger on the scroll ends it.
+/// lands. While Glide aims its start (T896: the rows there lay out a
+/// frame on, and can move the end up past it) a still image of the view
+/// covers it, so the start never shows past the end. The user's finger
+/// on the scroll ends it.
 @MainActor final class Glider: NSObject {
     /// The conversation's UIScrollView (ScrollViewHook finds it).
     weak var scrollView: UIScrollView?
@@ -14,6 +17,8 @@ import UIKit
     private var glide: Glide?
     private var last: CFTimeInterval?
     private var done: (() -> Void)?
+    /// The still image over the scroll view while the start is aimed.
+    private var cover: UIView?
 
     /// Whether a glide runs.
     var running: Bool { link != nil }
@@ -27,6 +32,12 @@ import UIKit
         // Where the flick has it now, and no momentum left.
         sv.setContentOffset(sv.contentOffset, animated: false)
         let g = Glide(offset: sv.contentOffset.y, target: Self.end(sv), visible: sv.bounds.height, instant: instant)
+        if g.covered, let still = sv.snapshotView(afterScreenUpdates: false) {
+            still.frame = sv.frame
+            still.isUserInteractionEnabled = false
+            sv.superview?.insertSubview(still, aboveSubview: sv)
+            cover = still
+        }
         glide = g
         set(sv, g.offset)
         self.done = done
@@ -42,6 +53,7 @@ import UIKit
         link?.invalidate()
         link = nil
         glide = nil
+        uncover()
         let d = done
         done = nil
         d?()
@@ -58,6 +70,11 @@ import UIKit
         if abs(sv.contentOffset.y - y) > 0.01 { sv.contentOffset = CGPoint(x: sv.contentOffset.x, y: y) }
     }
 
+    private func uncover() {
+        cover?.removeFromSuperview()
+        cover = nil
+    }
+
     @objc private func tick(_ l: CADisplayLink) {
         guard let sv = scrollView, sv.window != nil, !sv.isTracking, var g = glide else { return stop() }
         let dt = last.map { l.timestamp - $0 } ?? (l.targetTimestamp - l.timestamp)
@@ -65,6 +82,7 @@ import UIKit
         let landed = g.step(to: Self.end(sv), dt: dt)
         glide = g
         set(sv, g.offset)
+        if !g.covered { uncover() }
         if landed { stop() }
     }
 }

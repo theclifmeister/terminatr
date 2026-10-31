@@ -1,0 +1,39 @@
+
+ ▐▛███▛█   Claude Code v2.1.316
+▝▜██████▀  Haiku 5.5 · API Usage Billing
+ ▝▝   ▝▝   /…/a2c9ac28-7aa8-4227-851f-d9f5166605a3/scratchpad/repro
+
+▎ Auto mode is now Claude Code's default permission mode.
+▎ Auto mode lets Claude handle permission prompts automatically. Claude checks each tool call for
+▎ risky actions and prompt injection before executing, runs the ones it assesses as lower-risk, and
+▎ blocks the rest.
+▎ https://code.claude.com/docs/en/permission-modes
+
+❯ ask me
+────────────────────────────────────────────────────────────────────────────────────────────────────
+←  ☐ Subjects  ✔ Submit  →
+
+Which subjects do you photograph most often?
+
+❯ 1. [ ] Plants & flowers
+         Close-ups like the teasel shot
+  2. [ ] Birds & wildlife
+         Animals in their habitat
+  3. [ ] Landscapes
+         Wide scenes and skies
+  4. [ ] People & street
+         Portraits and everyday life
+  5. [ ] Type something
+     Submit
+────────────────────────────────────────────────────────────────────────────────────────────────────
+  6. Chat about this
+
+Enter to select · ↑/↓ to navigate · Esc to cancel
+
+
+
+
+
+
+
+

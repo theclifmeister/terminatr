@@ -38,6 +38,36 @@ private func screen(_ items: [AppAPI.QuestionItem]) -> AppAPI.Question {
     let pane = QuestionPlan(screen([colour, fruits]), index: 1)
     #expect(pane.checkboxes && pane.paneOnly && !pane.words)
     #expect(pane.note?.contains("Terminal tab") == true)
+    // A tm that types picks (app API 39, T900): checkboxes with Submit,
+    // sent as picks; the user's words still the pane's.
+    let picks = QuestionPlan(screen([colour, fruits]), index: 1, picks: true)
+    #expect(picks.checkboxes && !picks.paneOnly && picks.sendsPicks && !picks.words && picks.note == nil)
+    #expect(!QuestionPlan(menu([fruits]), index: 0, picks: true).sendsPicks)
+    #expect(!QuestionPlan(screen([colour]), index: 0, picks: true).sendsPicks)
+}
+
+@Test func questionPlanPicks() throws {
+    #expect(QuestionPlan.picks(fruits, picked: ["Plum", "Apple"]) == [0, 2])
+    #expect(QuestionPlan.picks(fruits, picked: []) == [])
+    // Empty picks stay out of the params: a bridge before 39 refuses a
+    // field it doesn't know.
+    let enc = AppAPI.encoder()
+    let plain = String(decoding: try enc.encode(AppAPI.AnswerParams(id: "s", index: 1, answer: "Blue")), as: UTF8.self)
+    #expect(plain == #"{"answer":"Blue","id":"s","index":1,"question":""}"#)
+    let picked = String(decoding: try enc.encode(AppAPI.AnswerParams(id: "s", index: 1, answer: "", question: "Which fruits?", picks: [0, 2])), as: UTF8.self)
+    #expect(picked == #"{"answer":"","id":"s","index":1,"picks":[0,2],"question":"Which fruits?"}"#)
+    let act = String(decoding: try enc.encode(AppAPI.PeerNeedActParams(peer: "mini", project: "p", need: "n", act: "answer")), as: UTF8.self)
+    #expect(!act.contains("picks"))
+}
+
+@Test func hasAnswerPicks() {
+    func hello(_ api: Int, _ caps: [String]) -> AppAPI.Hello {
+        AppAPI.Hello(appApi: api, tm: "0.70.0", build: "", server: AppAPI.Server(version: "0.70.0", protocol: 30, caps: caps))
+    }
+    #expect(!Compatibility.answersPicks(nil))
+    #expect(Compatibility.answersPicks(hello(39, ["answer-picks"])))
+    #expect(!Compatibility.answersPicks(hello(38, ["answer-picks"])))
+    #expect(!Compatibility.answersPicks(hello(39, [])))
 }
 
 @Test func questionPlanAnswers() {

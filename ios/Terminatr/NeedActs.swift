@@ -47,6 +47,8 @@ struct NeedActs: View {
     /// it, until the card goes.
     @State private var sending: String?
     @State private var refused = 0
+    /// A multi-select's options ticked, by index, until Submit.
+    @State private var ticked: Set<Int> = []
 
     var body: some View {
         laidOut(NeedParts(buttons: AnyView(answers), command: dialog.map { $0.escape ? "" : $0.question } ?? "",
@@ -101,11 +103,28 @@ struct NeedActs: View {
             if let a = answering {
                 VStack(spacing: Spacing.item) {
                     ForEach(Array(a.options.enumerated()), id: \.offset) { i, o in
-                        AnswerOption(key: i + 1, label: o, detail: i < a.descriptions.count ? a.descriptions[i] : "",
-                                     picked: sending == o) {
-                            answer(a, o)
+                        if a.multi {
+                            // A multi-select (T900): a tap ticks, Submit sends.
+                            AnswerOption(key: i + 1, label: o, detail: i < a.descriptions.count ? a.descriptions[i] : "",
+                                         picked: ticked.contains(i)) {
+                                if ticked.contains(i) { ticked.remove(i) } else { ticked.insert(i) }
+                            }
+                            .accessibilityLabel(named(o))
+                            .accessibilityValue(ticked.contains(i) ? "Ticked" : "Not ticked")
+                        } else {
+                            AnswerOption(key: i + 1, label: o, detail: i < a.descriptions.count ? a.descriptions[i] : "",
+                                         picked: sending == o) {
+                                answer(a, o)
+                            }
+                            .accessibilityLabel(named(o))
                         }
-                        .accessibilityLabel(named(o))
+                    }
+                    if a.multi {
+                        Button("Submit") { submit(a) }
+                            .buttonStyle(.primary(.question))
+                            .disabled(ticked.isEmpty)
+                            .accessibilityLabel(named("Submit"))
+                            .accessibilityHint("Answers with the options ticked")
                     }
                     // What the tap did, next to the options it came from
                     // (T887): the answer on its way, or the server's
@@ -157,6 +176,15 @@ struct NeedActs: View {
             return busy ? [] : [NeedAct("Answer now") { openQuestions() }]
         case .question where model.can(AppAPI.Methods.sessionAnswer.name):
             guard let a = answering, !busy else { return [] }
+            if a.multi {
+                var out = a.options.indices.map { i in
+                    NeedAct((ticked.contains(i) ? "Untick " : "Tick ") + a.options[i]) {
+                        if ticked.contains(i) { ticked.remove(i) } else { ticked.insert(i) }
+                    }
+                }
+                if !ticked.isEmpty { out.append(NeedAct("Submit") { submit(a) }) }
+                return out
+            }
             return a.options.map { o in NeedAct(o) { answer(a, o) } }
         case .review where !need.task.isEmpty && model.can(AppAPI.Methods.taskAccept.name):
             guard !busy else { return [] }
@@ -277,6 +305,13 @@ struct NeedActs: View {
     private func answer(_ a: Need.Answer, _ option: String) {
         sending = option
         act { try await model.answer(a, option); return nil }
+    }
+
+    /// A multi-select's Submit: the options ticked, in the menu's order.
+    private func submit(_ a: Need.Answer) {
+        let picks = ticked.sorted()
+        sending = a.joined(picks)
+        act { try await model.answer(a, picks: picks); return nil }
     }
 
     private func openQuestions() {
