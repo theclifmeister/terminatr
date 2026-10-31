@@ -19,7 +19,8 @@ struct RemoteProjectPages: View {
     var body: some View {
         VStack(spacing: 0) {
             Picker("Page", selection: $page) {
-                ForEach(ProjectPage.allCases) { Text($0.rawValue).tag($0) }
+                // A paired server's mods are its own: never here.
+                ForEach(ProjectPage.allCases.filter { $0 != .mods }) { Text($0.rawValue).tag($0) }
             }
             .pickerStyle(.segmented)
             .labelsHidden()
@@ -27,6 +28,8 @@ struct RemoteProjectPages: View {
             .padding(.top, 10)
             let server = PeerPages.server(peer)
             switch page {
+            case .mods:
+                EmptyView()
             case .dashboard:
                 RemoteProjectDashboard(peer: peer, project: project, pages: pages)
             case .overview:

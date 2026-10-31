@@ -878,6 +878,768 @@
      "project": "acme-docs"
     }
    }
+  ],
+  "mods.list": [
+   {
+    "params": {
+     "project": "acme-web",
+     "consent": "deploy-check"
+    },
+    "result": {
+     "project": "acme-web",
+     "mods": [
+      {
+       "id": "deploy-check",
+       "name": "Deploy check",
+       "kinds": "code",
+       "version": "1.2.0",
+       "description": "Checks a project's staging deploy before a thread's pull request merges.",
+       "where": "follows all projects: off",
+       "where_tone": "faint",
+       "own": "settings: all projects",
+       "toggle": {
+        "do": "consent",
+        "title": "Deploy check",
+        "question": "Enable Deploy check for acme-web?",
+        "done": "Deploy check on for acme-web",
+        "key": "03be70c1a164b33b95aa8c96",
+        "consent": [
+         {
+          "spans": [
+           {
+            "text": "Deploy check 1.2.0 (deploy-check) by Ada",
+            "tone": "head"
+           }
+          ],
+          "fit": "cut"
+         },
+         {
+          "spans": [
+           {
+            "text": "Checks a project's staging deploy before a thread's pull request merges."
+           }
+          ],
+          "fit": "wrap"
+         },
+         {
+          "spans": [
+           {
+            "text": "https://example.com/deploy-check",
+            "tone": "faint"
+           }
+          ],
+          "fit": "cut"
+         },
+         {
+          "spans": [
+           {
+            "text": "Provides: code"
+           }
+          ],
+          "fit": "wrap"
+         },
+         {
+          "spans": [
+           {
+            "text": ""
+           }
+          ]
+         },
+         {
+          "spans": [
+           {
+            "text": "It may:"
+           }
+          ]
+         },
+         {
+          "spans": [
+           {
+            "text": "  • "
+           },
+           {
+            "text": "reads your projects",
+            "tone": "info"
+           }
+          ],
+          "fit": "cut"
+         },
+         {
+          "spans": [
+           {
+            "text": "  • "
+           },
+           {
+            "text": "shows notifications",
+            "tone": "info"
+           }
+          ],
+          "fit": "cut"
+         },
+         {
+          "spans": [
+           {
+            "text": "  • "
+           },
+           {
+            "text": "talks to staging.example.com",
+            "tone": "warn"
+           }
+          ],
+          "fit": "cut"
+         },
+         {
+          "spans": [
+           {
+            "text": ""
+           }
+          ]
+         },
+         {
+          "spans": [
+           {
+            "text": "Enable Deploy check for acme-web?",
+            "tone": "head"
+           }
+          ]
+         }
+        ]
+       },
+       "settings": [
+        {
+         "key": "url",
+         "label": "Health check address",
+         "type": "string",
+         "default": {
+          "type": "text",
+          "text": "https://staging.example.com/health"
+         },
+         "value": {
+          "type": "text",
+          "text": "https://staging.example.com/health"
+         },
+         "max_len": 500
+        },
+        {
+         "key": "when",
+         "type": "choice",
+         "default": {
+          "type": "text",
+          "text": "before merge"
+         },
+         "value": {
+          "type": "text",
+          "text": "before merge"
+         },
+         "options": [
+          "before merge",
+          "after merge",
+          "both"
+         ]
+        }
+       ]
+      },
+      {
+       "id": "pr-age",
+       "name": "PR age",
+       "kinds": "code · column",
+       "version": "0.3.1",
+       "description": "How long each open pull request has waited for review, in the sidebar.",
+       "runs": true,
+       "where": "on for this project",
+       "where_tone": "good",
+       "own": "settings: 1 of its own",
+       "toggle": {
+        "do": "off",
+        "done": "PR age off for acme-web"
+       },
+       "settings": [
+        {
+         "key": "days",
+         "label": "Days before a pull request reads as old",
+         "type": "int",
+         "default": {
+          "type": "int",
+          "int": 3
+         },
+         "value": {
+          "type": "int",
+          "int": 5
+         },
+         "own": true,
+         "has_min": true,
+         "min": 1,
+         "has_max": true,
+         "max": 14
+        },
+        {
+         "key": "weekends",
+         "label": "Count weekends",
+         "type": "bool",
+         "default": {
+          "type": "bool"
+         },
+         "value": {
+          "type": "bool"
+         }
+        }
+       ]
+      },
+      {
+       "id": "ascii-icons",
+       "name": "ASCII icons",
+       "kinds": "icons · built in",
+       "version": "1.0.0",
+       "description": "ASCII only, for a terminal or font without Unicode.",
+       "runs": true,
+       "where": "follows all projects: on",
+       "required": true,
+       "builtin": true,
+       "toggle": {
+        "do": "refuse",
+        "why": "ascii-icons is built in and tm's default: it can't be turned off; pick another icon set in General settings"
+       },
+       "settings_note": "It has no settings."
+      },
+      {
+       "id": "default-keymap",
+       "name": "Default keymap",
+       "kinds": "keymap · built in",
+       "version": "1.0.0",
+       "description": "tm's own keys for every action that can be rebound.",
+       "runs": true,
+       "where": "follows all projects: on",
+       "required": true,
+       "builtin": true,
+       "toggle": {
+        "do": "refuse",
+        "why": "default-keymap is built in and tm's default: it can't be turned off; enable a keymap mod: its keys come first"
+       },
+       "settings_note": "It has no settings."
+      },
+      {
+       "id": "default-layout",
+       "name": "Default layout",
+       "kinds": "layout · built in",
+       "version": "1.1.0",
+       "description": "The built-in layout: the sidebar's column order, every other key documented.",
+       "runs": true,
+       "where": "follows all projects: on",
+       "required": true,
+       "builtin": true,
+       "toggle": {
+        "do": "refuse",
+        "why": "default-layout is built in and tm's default: it can't be turned off; pick another layout in General settings"
+       },
+       "settings_note": "It has no settings."
+      },
+      {
+       "id": "default-policy",
+       "name": "Default policy",
+       "kinds": "rules · built in",
+       "version": "1.0.0",
+       "description": "How the coordinator and its threads work: tm's own policy, after the safety rules.",
+       "runs": true,
+       "where": "follows all projects: on",
+       "required": true,
+       "builtin": true,
+       "toggle": {
+        "do": "refuse",
+        "why": "default-policy is built in and tm's default: it can't be turned off; enable a policy mod: its policy comes first"
+       },
+       "settings_note": "It has no settings."
+      },
+      {
+       "id": "default-templates",
+       "name": "Default templates",
+       "kinds": "templates · built in",
+       "version": "1.0.0",
+       "description": "Task templates: bug, spike and chore.",
+       "runs": true,
+       "where": "follows all projects: on",
+       "builtin": true,
+       "toggle": {
+        "do": "limit",
+        "title": "Turn Default templates off for acme-web",
+        "question": "Default templates runs for every project. Run it only for acme-api and acme-docs instead? A project made later won't run it until you turn it on there.",
+        "done": "Default templates off for acme-web",
+        "others": [
+         "acme-api",
+         "acme-docs"
+        ],
+        "key": "c91259e71ff46242f3d14506"
+       },
+       "settings_note": "It has no settings."
+      },
+      {
+       "id": "default-theme",
+       "name": "Default theme",
+       "kinds": "theme · built in",
+       "version": "1.0.0",
+       "description": "Follow terminal: tm draws with the terminal's 16 ANSI colours and Claude panes take Claude's ANSI theme, so all of it follows your terminal's theme (Ghostty's, say).",
+       "runs": true,
+       "where": "follows all projects: on",
+       "required": true,
+       "builtin": true,
+       "toggle": {
+        "do": "refuse",
+        "why": "default-theme is built in and tm's default: it can't be turned off; pick another theme in General settings"
+       },
+       "settings_note": "It has no settings."
+      },
+      {
+       "id": "memory-tab",
+       "name": "Memory tab",
+       "kinds": "code · view · built in",
+       "version": "1.0.0",
+       "description": "The project's memory in its popup: a list of the memory files and a text viewer; e, n and d edit, write and delete notes.",
+       "runs": true,
+       "where": "follows all projects: on",
+       "builtin": true,
+       "toggle": {
+        "do": "limit",
+        "title": "Turn Memory tab off for acme-web",
+        "question": "Memory tab runs for every project. Run it only for acme-api and acme-docs instead? A project made later won't run it until you turn it on there.",
+        "done": "Memory tab off for acme-web",
+        "others": [
+         "acme-api",
+         "acme-docs"
+        ],
+        "key": "5fad6ceef9232845f972047c"
+       },
+       "settings_note": "It has no settings."
+      },
+      {
+       "id": "nerd-icons",
+       "name": "Nerd Font icons",
+       "kinds": "icons · built in",
+       "version": "1.0.0",
+       "description": "Nerd Font glyphs, for a terminal with the Nerd Font symbols (Ghostty bundles them).",
+       "runs": true,
+       "where": "follows all projects: on",
+       "required": true,
+       "builtin": true,
+       "toggle": {
+        "do": "refuse",
+        "why": "nerd-icons is built in and tm's default: it can't be turned off; pick another icon set in General settings"
+       },
+       "settings_note": "It has no settings."
+      },
+      {
+       "id": "pr-ci-column",
+       "name": "PR/CI column",
+       "kinds": "code · column · built in",
+       "version": "1.0.0",
+       "description": "Each thread's pull request checks in a sidebar column: passing, failing or running.",
+       "runs": true,
+       "where": "follows all projects: on",
+       "builtin": true,
+       "toggle": {
+        "do": "limit",
+        "title": "Turn PR/CI column off for acme-web",
+        "question": "PR/CI column runs for every project. Run it only for acme-api and acme-docs instead? A project made later won't run it until you turn it on there.",
+        "done": "PR/CI column off for acme-web",
+        "others": [
+         "acme-api",
+         "acme-docs"
+        ],
+        "key": "3f7bbc76ad060ccaada531a6"
+       },
+       "settings_note": "It has no settings."
+      },
+      {
+       "id": "tasks-tab",
+       "name": "Tasks tab",
+       "kinds": "code · view · built in",
+       "version": "1.0.0",
+       "description": "The project's tasks in its popup, grouped as the board has them; D, A, x, c, enter and + are tm's own actions, bound on each row and in the tab.",
+       "runs": true,
+       "where": "follows all projects: on",
+       "builtin": true,
+       "toggle": {
+        "do": "limit",
+        "title": "Turn Tasks tab off for acme-web",
+        "question": "Tasks tab runs for every project. Run it only for acme-api and acme-docs instead? A project made later won't run it until you turn it on there.",
+        "done": "Tasks tab off for acme-web",
+        "others": [
+         "acme-api",
+         "acme-docs"
+        ],
+        "key": "f89c14610c1f876b10b52155"
+       },
+       "settings_note": "It has no settings."
+      },
+      {
+       "id": "ticker",
+       "name": "Ticker",
+       "kinds": "code · view · built in",
+       "version": "1.0.0",
+       "description": "When the ticker last checked PRs and synced, and whether the PR host answers: a section beside the coordinator, or in the sidebar.",
+       "runs": true,
+       "where": "follows all projects: on",
+       "own": "settings: all projects",
+       "builtin": true,
+       "toggle": {
+        "do": "limit",
+        "title": "Turn Ticker off for acme-web",
+        "question": "Ticker runs for every project. Run it only for acme-api and acme-docs instead? A project made later won't run it until you turn it on there.",
+        "done": "Ticker off for acme-web",
+        "others": [
+         "acme-api",
+         "acme-docs"
+        ],
+        "key": "2a093125f8a8c6f9bec35474"
+       },
+       "settings_note": "Built in: its settings are tm's look and layout, the same for every project here."
+      },
+      {
+       "id": "unicode-icons",
+       "name": "Unicode icons",
+       "kinds": "icons · built in",
+       "version": "1.0.0",
+       "description": "Plain Unicode glyphs, for any font.",
+       "runs": true,
+       "where": "follows all projects: on",
+       "required": true,
+       "builtin": true,
+       "toggle": {
+        "do": "refuse",
+        "why": "unicode-icons is built in and tm's default: it can't be turned off; pick another icon set in General settings"
+       },
+       "settings_note": "It has no settings."
+      }
+     ]
+    }
+   },
+   {
+    "params": {
+     "project": "acme-web"
+    },
+    "result": {
+     "project": "acme-web",
+     "mods": [
+      {
+       "id": "deploy-check",
+       "name": "Deploy check",
+       "kinds": "code",
+       "version": "1.2.0",
+       "description": "Checks a project's staging deploy before a thread's pull request merges.",
+       "where": "follows all projects: off",
+       "where_tone": "faint",
+       "own": "settings: all projects",
+       "toggle": {
+        "do": "consent",
+        "title": "Deploy check",
+        "question": "Enable Deploy check for acme-web?",
+        "done": "Deploy check on for acme-web",
+        "key": "03be70c1a164b33b95aa8c96"
+       },
+       "settings": [
+        {
+         "key": "url",
+         "label": "Health check address",
+         "type": "string",
+         "default": {
+          "type": "text",
+          "text": "https://staging.example.com/health"
+         },
+         "value": {
+          "type": "text",
+          "text": "https://staging.example.com/health"
+         },
+         "max_len": 500
+        },
+        {
+         "key": "when",
+         "type": "choice",
+         "default": {
+          "type": "text",
+          "text": "before merge"
+         },
+         "value": {
+          "type": "text",
+          "text": "before merge"
+         },
+         "options": [
+          "before merge",
+          "after merge",
+          "both"
+         ]
+        }
+       ]
+      },
+      {
+       "id": "pr-age",
+       "name": "PR age",
+       "kinds": "code · column",
+       "version": "0.3.1",
+       "description": "How long each open pull request has waited for review, in the sidebar.",
+       "runs": true,
+       "where": "on for this project",
+       "where_tone": "good",
+       "own": "settings: 1 of its own",
+       "toggle": {
+        "do": "off",
+        "done": "PR age off for acme-web"
+       },
+       "settings": [
+        {
+         "key": "days",
+         "label": "Days before a pull request reads as old",
+         "type": "int",
+         "default": {
+          "type": "int",
+          "int": 3
+         },
+         "value": {
+          "type": "int",
+          "int": 5
+         },
+         "own": true,
+         "has_min": true,
+         "min": 1,
+         "has_max": true,
+         "max": 14
+        },
+        {
+         "key": "weekends",
+         "label": "Count weekends",
+         "type": "bool",
+         "default": {
+          "type": "bool"
+         },
+         "value": {
+          "type": "bool"
+         }
+        }
+       ]
+      },
+      {
+       "id": "ascii-icons",
+       "name": "ASCII icons",
+       "kinds": "icons · built in",
+       "version": "1.0.0",
+       "description": "ASCII only, for a terminal or font without Unicode.",
+       "runs": true,
+       "where": "follows all projects: on",
+       "required": true,
+       "builtin": true,
+       "toggle": {
+        "do": "refuse",
+        "why": "ascii-icons is built in and tm's default: it can't be turned off; pick another icon set in General settings"
+       },
+       "settings_note": "It has no settings."
+      },
+      {
+       "id": "default-keymap",
+       "name": "Default keymap",
+       "kinds": "keymap · built in",
+       "version": "1.0.0",
+       "description": "tm's own keys for every action that can be rebound.",
+       "runs": true,
+       "where": "follows all projects: on",
+       "required": true,
+       "builtin": true,
+       "toggle": {
+        "do": "refuse",
+        "why": "default-keymap is built in and tm's default: it can't be turned off; enable a keymap mod: its keys come first"
+       },
+       "settings_note": "It has no settings."
+      },
+      {
+       "id": "default-layout",
+       "name": "Default layout",
+       "kinds": "layout · built in",
+       "version": "1.1.0",
+       "description": "The built-in layout: the sidebar's column order, every other key documented.",
+       "runs": true,
+       "where": "follows all projects: on",
+       "required": true,
+       "builtin": true,
+       "toggle": {
+        "do": "refuse",
+        "why": "default-layout is built in and tm's default: it can't be turned off; pick another layout in General settings"
+       },
+       "settings_note": "It has no settings."
+      },
+      {
+       "id": "default-policy",
+       "name": "Default policy",
+       "kinds": "rules · built in",
+       "version": "1.0.0",
+       "description": "How the coordinator and its threads work: tm's own policy, after the safety rules.",
+       "runs": true,
+       "where": "follows all projects: on",
+       "required": true,
+       "builtin": true,
+       "toggle": {
+        "do": "refuse",
+        "why": "default-policy is built in and tm's default: it can't be turned off; enable a policy mod: its policy comes first"
+       },
+       "settings_note": "It has no settings."
+      },
+      {
+       "id": "default-templates",
+       "name": "Default templates",
+       "kinds": "templates · built in",
+       "version": "1.0.0",
+       "description": "Task templates: bug, spike and chore.",
+       "runs": true,
+       "where": "follows all projects: on",
+       "builtin": true,
+       "toggle": {
+        "do": "limit",
+        "title": "Turn Default templates off for acme-web",
+        "question": "Default templates runs for every project. Run it only for acme-api and acme-docs instead? A project made later won't run it until you turn it on there.",
+        "done": "Default templates off for acme-web",
+        "others": [
+         "acme-api",
+         "acme-docs"
+        ],
+        "key": "c91259e71ff46242f3d14506"
+       },
+       "settings_note": "It has no settings."
+      },
+      {
+       "id": "default-theme",
+       "name": "Default theme",
+       "kinds": "theme · built in",
+       "version": "1.0.0",
+       "description": "Follow terminal: tm draws with the terminal's 16 ANSI colours and Claude panes take Claude's ANSI theme, so all of it follows your terminal's theme (Ghostty's, say).",
+       "runs": true,
+       "where": "follows all projects: on",
+       "required": true,
+       "builtin": true,
+       "toggle": {
+        "do": "refuse",
+        "why": "default-theme is built in and tm's default: it can't be turned off; pick another theme in General settings"
+       },
+       "settings_note": "It has no settings."
+      },
+      {
+       "id": "memory-tab",
+       "name": "Memory tab",
+       "kinds": "code · view · built in",
+       "version": "1.0.0",
+       "description": "The project's memory in its popup: a list of the memory files and a text viewer; e, n and d edit, write and delete notes.",
+       "runs": true,
+       "where": "follows all projects: on",
+       "builtin": true,
+       "toggle": {
+        "do": "limit",
+        "title": "Turn Memory tab off for acme-web",
+        "question": "Memory tab runs for every project. Run it only for acme-api and acme-docs instead? A project made later won't run it until you turn it on there.",
+        "done": "Memory tab off for acme-web",
+        "others": [
+         "acme-api",
+         "acme-docs"
+        ],
+        "key": "5fad6ceef9232845f972047c"
+       },
+       "settings_note": "It has no settings."
+      },
+      {
+       "id": "nerd-icons",
+       "name": "Nerd Font icons",
+       "kinds": "icons · built in",
+       "version": "1.0.0",
+       "description": "Nerd Font glyphs, for a terminal with the Nerd Font symbols (Ghostty bundles them).",
+       "runs": true,
+       "where": "follows all projects: on",
+       "required": true,
+       "builtin": true,
+       "toggle": {
+        "do": "refuse",
+        "why": "nerd-icons is built in and tm's default: it can't be turned off; pick another icon set in General settings"
+       },
+       "settings_note": "It has no settings."
+      },
+      {
+       "id": "pr-ci-column",
+       "name": "PR/CI column",
+       "kinds": "code · column · built in",
+       "version": "1.0.0",
+       "description": "Each thread's pull request checks in a sidebar column: passing, failing or running.",
+       "runs": true,
+       "where": "follows all projects: on",
+       "builtin": true,
+       "toggle": {
+        "do": "limit",
+        "title": "Turn PR/CI column off for acme-web",
+        "question": "PR/CI column runs for every project. Run it only for acme-api and acme-docs instead? A project made later won't run it until you turn it on there.",
+        "done": "PR/CI column off for acme-web",
+        "others": [
+         "acme-api",
+         "acme-docs"
+        ],
+        "key": "3f7bbc76ad060ccaada531a6"
+       },
+       "settings_note": "It has no settings."
+      },
+      {
+       "id": "tasks-tab",
+       "name": "Tasks tab",
+       "kinds": "code · view · built in",
+       "version": "1.0.0",
+       "description": "The project's tasks in its popup, grouped as the board has them; D, A, x, c, enter and + are tm's own actions, bound on each row and in the tab.",
+       "runs": true,
+       "where": "follows all projects: on",
+       "builtin": true,
+       "toggle": {
+        "do": "limit",
+        "title": "Turn Tasks tab off for acme-web",
+        "question": "Tasks tab runs for every project. Run it only for acme-api and acme-docs instead? A project made later won't run it until you turn it on there.",
+        "done": "Tasks tab off for acme-web",
+        "others": [
+         "acme-api",
+         "acme-docs"
+        ],
+        "key": "f89c14610c1f876b10b52155"
+       },
+       "settings_note": "It has no settings."
+      },
+      {
+       "id": "ticker",
+       "name": "Ticker",
+       "kinds": "code · view · built in",
+       "version": "1.0.0",
+       "description": "When the ticker last checked PRs and synced, and whether the PR host answers: a section beside the coordinator, or in the sidebar.",
+       "runs": true,
+       "where": "follows all projects: on",
+       "own": "settings: all projects",
+       "builtin": true,
+       "toggle": {
+        "do": "limit",
+        "title": "Turn Ticker off for acme-web",
+        "question": "Ticker runs for every project. Run it only for acme-api and acme-docs instead? A project made later won't run it until you turn it on there.",
+        "done": "Ticker off for acme-web",
+        "others": [
+         "acme-api",
+         "acme-docs"
+        ],
+        "key": "2a093125f8a8c6f9bec35474"
+       },
+       "settings_note": "Built in: its settings are tm's look and layout, the same for every project here."
+      },
+      {
+       "id": "unicode-icons",
+       "name": "Unicode icons",
+       "kinds": "icons · built in",
+       "version": "1.0.0",
+       "description": "Plain Unicode glyphs, for any font.",
+       "runs": true,
+       "where": "follows all projects: on",
+       "required": true,
+       "builtin": true,
+       "toggle": {
+        "do": "refuse",
+        "why": "unicode-icons is built in and tm's default: it can't be turned off; pick another icon set in General settings"
+       },
+       "settings_note": "It has no settings."
+      }
+     ]
+    }
+   }
   ]
  },
  "calls": {
@@ -1177,10 +1939,14 @@
    "size": 1,
    "type": "image/png",
    "upload": "demo"
+  },
+  "mods.list": {
+   "project": "",
+   "mods": []
   }
  },
  "hello": {
-  "app_api": 37,
+  "app_api": 38,
   "build": "demo",
   "capabilities": [
    "read",
@@ -1216,7 +1982,10 @@
    "peer.pages-read",
    "peer.library-list",
    "peer.library-read",
-   "peer.design-list"
+   "peer.design-list",
+   "mods.list",
+   "mods.set",
+   "mods.setting"
   ],
   "server": {
    "caps": [
@@ -1225,7 +1994,8 @@
     "session-file",
     "designs",
     "peer-pages",
-    "peer-designs"
+    "peer-designs",
+    "project-mods"
    ],
    "protocol": 1,
    "version": "0.56.1"

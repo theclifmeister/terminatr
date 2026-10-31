@@ -214,8 +214,8 @@ struct ProjectScreen: View {
         [(Dashboard.onDeck(p).count, "on deck"), (Dashboard.backlog(p).count, "backlog")] + (done ? [(Dashboard.doneCount(p), "done")] : [])
     }
 
-    /// The project's read-only pages, as the Mac's beside its dashboard:
-    /// Memory and Library with a tm that reads them.
+    /// The project's pages, as the Mac's beside its dashboard: Memory and
+    /// Library with a tm that reads them, Mods with one that lists them.
     private var pages: some View {
         let pages = model.pages
         let tiles: [(Route, String, String)] = [
@@ -223,6 +223,7 @@ struct ProjectScreen: View {
             (.board(slug), "Board", "list.bullet.rectangle"),
         ] + (pages.contains(.memory) ? [(.memory(slug), "Memory", "brain")] : [])
             + (pages.contains(.library) ? [(.library(slug), "Library", "books.vertical")] : [])
+            + (pages.contains(.mods) ? [(.mods(slug), "Mods", "puzzlepiece.extension")] : [])
         return TileRow {
             ForEach(tiles, id: \.1) { route, title, symbol in
                 PlainRouteLink(value: route) { PageTile(title, symbol: symbol, selected: navigate?.open == route) }

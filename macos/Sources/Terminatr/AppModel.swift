@@ -750,6 +750,31 @@ final class AppModel {
     }
 
     /// The project's memory files (memory.list, app API 21).
+    /// The project's mods (mods.list, T869); consent names the mod whose
+    /// consent's lines to read with them.
+    func mods(_ project: String, consent: String = "") async throws -> [AppAPI.ProjectMod] {
+        try await connected().call(AppAPI.Methods.modsList, AppAPI.ModsListParams(project: project, consent: consent)).mods
+    }
+
+    /// Turns mod m on or off for project as its button says, with the key
+    /// of what it asked (mods.set): what came of it.
+    func setMod(_ m: AppAPI.ProjectMod, project: String) async throws -> String {
+        try await connected().call(AppAPI.Methods.modsSet, ProjectMods.set(m, project: project)).words
+    }
+
+    /// Sets key of mod m for project, nil to follow all projects again
+    /// (mods.setting).
+    func setModSetting(_ m: AppAPI.ProjectMod, project: String, key: String, _ value: AppAPI.ModValue?) async throws -> String {
+        try await connected().call(AppAPI.Methods.modsSetting, ProjectMods.setting(m, project: project, key: key, value)).words
+    }
+
+    /// Whether this tm changes a project's mods here (mods.set, app API
+    /// 38).
+    var changesMods: Bool {
+        if case .connected(let h) = phase { return Compatibility.changesMods(h) }
+        return false
+    }
+
     func memoryFiles(_ project: String) async throws -> [AppAPI.MemoryFile] {
         try await connected().call(AppAPI.Methods.memoryList, AppAPI.ProjectParams(project: project)).files
     }

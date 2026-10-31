@@ -11,13 +11,20 @@ public enum ProjectPage: String, CaseIterable, Identifiable, Sendable {
     case overview = "Overview"
     case memory = "Memory"
     case library = "Library"
+    /// The project's mods (T869): on or off for it, and their settings
+    /// for it, as the TUI's project Mods tab.
+    case mods = "Mods"
 
     public var id: String { rawValue }
 
-    /// The pages hello's tm has: Memory and Library need project-files.
+    /// The pages hello's tm has: Memory and Library need project-files,
+    /// Mods project-mods.
     public static func pages(_ hello: AppAPI.Hello?) -> [ProjectPage] {
-        guard let hello, Compatibility.readsProjectFiles(hello) else { return [.dashboard, .overview] }
-        return allCases
+        guard let hello else { return [.dashboard, .overview] }
+        var out: [ProjectPage] = [.dashboard, .overview]
+        if Compatibility.readsProjectFiles(hello) { out += [.memory, .library] }
+        if Compatibility.listsMods(hello) { out.append(.mods) }
+        return out
     }
 }
 

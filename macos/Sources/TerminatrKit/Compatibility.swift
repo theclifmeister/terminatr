@@ -256,3 +256,24 @@ struct Release: Comparable, Sendable {
         (l.major, l.minor, l.patch) < (r.major, r.minor, r.patch)
     }
 }
+
+extension Compatibility {
+    /// The app API that has mods.list, mods.set and mods.setting: a
+    /// project's Mods page needs it (T869).
+    public static let projectModsAPI = 38
+
+    /// Whether hello's tm lists a project's mods, its server too (caps
+    /// project-mods): the Mods page shows.
+    public static func listsMods(_ hello: AppAPI.Hello) -> Bool {
+        hello.appApi >= projectModsAPI && hello.methods.contains(AppAPI.Methods.modsList.name)
+            && (hello.server?.caps ?? []).contains("project-mods")
+    }
+
+    /// Whether hello's tm turns a project's mods on or off and sets
+    /// their settings here: the Mac app's, a device's at the write
+    /// level.
+    public static func changesMods(_ hello: AppAPI.Hello) -> Bool {
+        listsMods(hello) && hello.methods.contains(AppAPI.Methods.modsSet.name)
+            && hello.methods.contains(AppAPI.Methods.modsSetting.name)
+    }
+}
