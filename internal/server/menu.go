@@ -115,7 +115,7 @@ func (s *Server) answerMenu(sess *session.Session, q *proto.Question, call strin
 			left++
 		}
 	}
-	if left == 0 {
+	if left == 0 && reviews(q) {
 		s.submitReview(sess, call, how, p)
 	}
 	return proto.SessionAnswerResult{Remaining: left}, nil
@@ -300,17 +300,25 @@ func didSoFar(done []string) string {
 // to show after the last answer (a variable for tests).
 var reviewWait = 3 * time.Second
 
+// reviews says whether menu q ends on a review step once answered:
+// Claude 2.1.316 shows one after a menu of several questions, or with a
+// multi-select; a single single-select question takes its answer at
+// once.
+func reviews(q *proto.Question) bool {
+	return len(q.Questions) > 1 || slices.ContainsFunc(q.Questions, func(it proto.QuestionItem) bool { return it.MultiSelect })
+}
+
 // submitReview picks the review step's Submit (how.Review) once the
 // agent's menu (call's) has all its answers: the step shows it under
-// how.ReviewTitle. Nothing when the menu closes first (a single
-// question takes its answer at once) or the step doesn't show in time:
-// the user submits it in the agent's pane then.
+// how.ReviewTitle (the session's state may no longer say question: the
+// step draws no footer). Nothing when another menu opens, or the step
+// doesn't show in time: the user submits it in the agent's pane then.
 func (s *Server) submitReview(sess *session.Session, call string, how *agent.Answer, p *proto.SessionAnswerParams) {
 	if how.Review == "" {
 		return
 	}
 	for end := time.Now().Add(reviewWait); time.Now().Before(end); time.Sleep(100 * time.Millisecond) {
-		if _, c := sess.Menu(); c != call {
+		if _, c := sess.Menu(); c != "" && c != call {
 			return
 		}
 		screen, err := sess.Read(false)

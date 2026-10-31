@@ -30,6 +30,13 @@ question = "What should the button say?"
 options = ["OK", "Go"]
 
 [[step]]
+do = "question"
+header = "Fruits"
+question = "Which fruits go on it?"
+options = ["Apple", "Pear", "Plum"]
+multi = true
+
+[[step]]
 do = "stream"
 ms = 50
 text = "ASKED"
@@ -86,11 +93,25 @@ func TestThreadAnswer(t *testing.T) {
 		t.Fatalf("answer with text: %+v", r)
 	}
 	env.WaitFor(th, "→ Start now", agentWait)
+
+	// A multi-select, the menu's only question (its row is Submit, then
+	// the review step): several numbers go as picks (T900); words are
+	// the pane's.
+	env.WaitFor(th, "Which fruits go on it?", agentWait)
+	waitReason(t, env, th, "question")
+	if r := answer("--choice", "1", "--text", "kiwi"); r.Code != 1 || !strings.Contains(r.Stderr+r.Stdout, "screen-only") {
+		t.Errorf("a multi-select's words: %+v", r)
+	}
+	if r := answer("--choice", "1,3"); r.Code != 0 || !strings.Contains(r.Stdout, "answered t-0001: Apple, Plum") {
+		t.Fatalf("answer 1,3: %+v", r)
+	}
+	env.WaitFor(th, "→ Apple, Plum", agentWait)
 	env.WaitFor(th, "ASKED", agentWait)
 
 	journal, _ := os.ReadFile(filepath.Join(projDir, "JOURNAL.md"))
 	for _, w := range []string{"human thread.answer t-0001 Which color should the button be? → Blue",
-		`human thread.answer t-0001 What should the button say? → "Start now"`} {
+		`human thread.answer t-0001 What should the button say? → "Start now"`,
+		"human thread.answer t-0001 Which fruits go on it? → Apple, Plum"} {
 		if !strings.Contains(string(journal), w) {
 			t.Errorf("journal lacks %q:\n%s", w, journal)
 		}
