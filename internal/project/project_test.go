@@ -825,3 +825,24 @@ func TestBoardVaultOff(t *testing.T) {
 		t.Fatal("the board turned the vault on")
 	}
 }
+
+// TestInboxSkipsClaimedName: addItem claims an item's name with an
+// empty file before it writes the item. Inbox read in between lists only
+// whole items: an empty one has no kind, and the coordinator's nudge
+// said "new item" for it and counted it told (T890).
+func TestInboxSkipsClaimedName(t *testing.T) {
+	setup(t)
+	p, _ := New(Options{Slug: "demo-app"})
+	it, err := p.AddItem(KindDelegate, "T1", "the user asks to delegate T1", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	claimed := p.Path("inbox", "20990101T000000Z-delegate-t2.md")
+	if err := os.WriteFile(claimed, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	items, err := p.Inbox()
+	if err != nil || len(items) != 1 || items[0].ID != it.ID || items[0].Kind != KindDelegate {
+		t.Fatalf("Inbox() = %+v, %v; want only %s", items, err, it.ID)
+	}
+}

@@ -51,7 +51,9 @@ func TestSmokeAgentPermission(t *testing.T) {
 		t.Errorf("sources %q, want status_file", info.StateSources)
 	}
 	if x := env.Explain(s); x.Hook == nil || x.Hook.State != "blocked" {
-		t.Errorf("hooks should still say blocked: %+v", x.Hook)
+		// A hook tm hook failed to deliver is in hook.log.
+		dropped, _ := os.ReadFile(env.HookLog)
+		t.Errorf("hooks should still say blocked: %+v; hook.log: %q", x.Hook, dropped)
 	}
 	time.Sleep(300 * time.Millisecond)
 	if got := env.HookEvents(); len(got) != n {

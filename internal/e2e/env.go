@@ -230,6 +230,10 @@ func New(t testing.TB) *Env {
 		"TM="+e.Bin,
 		"TERMINATR_ATTACH_LOG="+e.AttachLog,
 		"TERMINATR_HOOK_LOG="+e.HookLog,
+		// tm hook waits up to 2s for the server, not 250ms: a loaded
+		// runner held a hook up past its deadline and the event a
+		// scenario counted on was lost (T890; hook.log says so).
+		"TERMINATR_TEST_HOOK_WAIT=2s",
 		// No release checks against GitHub (tm doctor, tm update).
 		"TERMINATR_UPDATE_URL=off",
 		// Servers start as children, never through the user's launchd

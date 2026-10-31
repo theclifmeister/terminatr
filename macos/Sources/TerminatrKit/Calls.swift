@@ -40,6 +40,13 @@ extension AppAPI.Error: Swift.Error, LocalizedError {
 }
 
 extension AppAPI {
+    /// The error code of an answer, or a stream's event, over the 1 MiB
+    /// a device's link carries in a line (app API 37, T892): the
+    /// server's bridge didn't send it, or the phone's link skipped it.
+    public static let tooBig = "too-big"
+}
+
+extension AppAPI {
     /// The coders for bridge lines: tm writes times as RFC 3339, with
     /// fractional seconds or without.
     public static func decoder() -> JSONDecoder {

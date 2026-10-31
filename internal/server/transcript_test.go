@@ -1,11 +1,13 @@
 package server
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -304,5 +306,75 @@ func TestTranscriptTail(t *testing.T) {
 	_, _, events := watchTranscript(t, p, id)
 	if ev := nextEvent(t, events); len(ev.Items) != 32 || ev.Before != "" {
 		t.Fatalf("full reset: %d items, before %q", len(ev.Items), ev.Before)
+	}
+}
+
+// TestTranscriptBytes (T892): a conversation of long prompts never puts
+// more than proto.TranscriptEventBytes of items in one line, under the
+// 1 MiB a device's link carries: the reset carries the last that fit
+// and its cursor pages back through the rest, a page fits too, and the
+// items appended go in as many events as they need, none lost.
+func TestTranscriptBytes(t *testing.T) {
+	p, c := setupConv(t)
+	long := strings.Repeat("x", 9000) // cut at TranscriptItemText
+	prompts := func(from, to int) string {
+		var b strings.Builder
+		for i := from; i < to; i++ {
+			b.WriteString(`{"type":"user","content":"p` + strconv.Itoa(i) + ` ` + long + `"}` + "\n")
+		}
+		return b.String()
+	}
+	id, f := startConv(t, p, c, prompts(0, 150))
+	fits := func(what string, v any) {
+		t.Helper()
+		b, _ := json.Marshal(v)
+		if len(b) > proto.TranscriptEventBytes+4<<10 {
+			t.Fatalf("%s is %d bytes", what, len(b))
+		}
+	}
+	num := func(it proto.TranscriptItem) int {
+		n, _ := strconv.Atoi(strings.TrimPrefix(strings.Fields(it.Text)[0], "p"))
+		return n
+	}
+	_, _, events := watchTranscript(t, p, id)
+	ev := nextEvent(t, events)
+	fits("the reset", ev)
+	if ev.Event != proto.EventTranscriptReset || len(ev.Items) < 10 || ev.Skipped != 150-len(ev.Items) || ev.Before == "" ||
+		num(ev.Items[len(ev.Items)-1]) != 149 || !ev.Items[0].Truncated {
+		t.Fatalf("reset: %d items, skipped %d, before %q", len(ev.Items), ev.Skipped, ev.Before)
+	}
+	// Paging back reads every earlier item once, in order.
+	first, before := num(ev.Items[0]), ev.Before
+	for before != "" {
+		var pr proto.TranscriptPageResult
+		call(t, c, proto.MethodTranscriptPage, proto.TranscriptPageParams{Session: id, Before: before}, &pr)
+		fits("a page", pr)
+		if len(pr.Items) == 0 || num(pr.Items[len(pr.Items)-1]) != first-1 {
+			t.Fatalf("page before p%d: %d items", first, len(pr.Items))
+		}
+		first, before = num(pr.Items[0]), pr.Before
+	}
+	if first != 0 {
+		t.Fatalf("paging stopped at p%d", first)
+	}
+	// 150 more at once: several items events, each under the bound.
+	appendTo(t, f, prompts(150, 300))
+	next, runs := 150, 0
+	for next < 300 {
+		ev := nextEvent(t, events)
+		if ev.Event != proto.EventTranscriptItems {
+			continue
+		}
+		fits("an items event", ev)
+		runs++
+		for _, it := range ev.Items {
+			if num(it) != next {
+				t.Fatalf("item p%d, want p%d", num(it), next)
+			}
+			next++
+		}
+	}
+	if runs < 3 {
+		t.Fatalf("150 long items in %d events", runs)
 	}
 }

@@ -610,3 +610,22 @@ func TestWithBinFirstWindowsPath(t *testing.T) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 }
+
+// TestTerminatrEnvHookWait: where tm hook logs and, under the test hooks
+// only, how long it waits reach a session; the server's other
+// TERMINATR_* don't (T890).
+func TestTerminatrEnvHookWait(t *testing.T) {
+	old := testHooksOn
+	t.Cleanup(func() { testHooksOn = old })
+	s := &Server{opts: Options{Env: []string{"TERMINATR_HOOK_LOG=/x/hook.log", "TERMINATR_TEST_HOOK_WAIT=2s", "TERMINATR_TEST_OWNER=1"}}}
+	for _, on := range []bool{true, false} {
+		testHooksOn = on
+		env := s.terminatrEnv(SessionRecord{ID: "s-1"})
+		if env["TERMINATR_HOOK_LOG"] != "/x/hook.log" || env["TERMINATR_TEST_OWNER"] != "" {
+			t.Errorf("test hooks %v: %v", on, env)
+		}
+		if want := map[bool]string{true: "2s", false: ""}[on]; env["TERMINATR_TEST_HOOK_WAIT"] != want {
+			t.Errorf("test hooks %v: TERMINATR_TEST_HOOK_WAIT %q, want %q", on, env["TERMINATR_TEST_HOOK_WAIT"], want)
+		}
+	}
+}

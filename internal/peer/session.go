@@ -87,8 +87,10 @@ const (
 	// idleAfter is dead, whatever the transport says.
 	pingEvery = 30 * time.Second
 	idleAfter = 90 * time.Second
-	// maxLine bounds one NDJSON line.
-	maxLine = 1 << 20
+	// maxLine bounds one NDJSON line; maxResult an answer's result,
+	// which leaves room for the rest of its line.
+	maxLine   = 1 << 20
+	maxResult = maxLine - 256
 	// maxFrame bounds one binary frame's payload read; frameChunk is the
 	// most this tm puts in one, so a frame holds the writer only briefly.
 	maxFrame   = 64 << 10
@@ -147,6 +149,9 @@ type session struct {
 	// pinged is the last link.ping's round trip, in nanoseconds: the
 	// link's round trip without a file, for a file's pace.
 	pinged atomic.Int64
+	// logf logs what the session didn't send (an answer over maxLine);
+	// nil logs nothing.
+	logf func(format string, a ...any)
 
 	mu      sync.Mutex
 	next    int64
@@ -433,6 +438,14 @@ func (s *session) answer(l line, h handler) {
 	}
 	if err == nil {
 		r.Result, err = json.Marshal(v)
+	}
+	if err == nil && len(r.Result) > maxResult {
+		// The peer's reader would drop the link on it (readLine):
+		// say so instead, and log it here.
+		err = proto.Errorf(proto.ErrTooBig, "%s: its answer is %d bytes, over the %d a link carries in a line, so it wasn't sent", l.Method, len(r.Result), maxLine)
+		if s.logf != nil {
+			s.logf("%s's answer is %d bytes, over the link's %d: not sent", l.Method, len(r.Result), maxLine)
+		}
 	}
 	if err != nil {
 		r.Result, r.Error = nil, asProtoError(err)

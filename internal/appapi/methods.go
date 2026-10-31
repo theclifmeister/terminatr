@@ -187,6 +187,9 @@ func init() {
 		// A nonce for a device's next signed write (app API 23,
 		// sign.go): only a device's bridge has it.
 		deviceOnly(local(MethodDeviceNonce, false, deviceNonce)),
+		// Why a device closes its link (app API 37), for the server's
+		// log: a device's bridge's own, at every level.
+		deviceOnly(local(MethodDeviceBye, false, deviceBye)),
 	} {
 		methods[m.Name] = m
 	}
