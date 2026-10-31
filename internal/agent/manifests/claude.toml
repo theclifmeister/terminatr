@@ -835,21 +835,33 @@ on = ["Stop", "SessionStart"]
 # Screen rules (2.1.289): blockers and the pre-hook screens only the screen
 # can see. Highest priority wins.
 
+# A dialog's words can be in the agent's own output too: a docs table it
+# read, a test file it wrote (T743). So each blocker rule reads the
+# dialog's shape where only a dialog draws it, at the bottom where the
+# prompt box sits otherwise: its option on a line of its own, and its
+# footer on (or within two rows of) the last row.
+
+# The folder-trust dialog and the bypass warning (2.1.316): "❯ No, exit",
+# "  Yes, I accept" (no numbers, which older builds drew), a blank row,
+# "Enter to confirm · Esc to cancel" last. The bypass warning's title
+# ("Bypass Permissions") is too far up, past wrapped text, to read here.
 [[rules]]
 id = "trust-folder"
 state = "blocked"
 reason = "trust"
 priority = 50
-region = "screen"
-contains = ["Yes, I trust this folder"]
+region = "bottom:5"
+contains = ["Enter to confirm"]
+regex = '(?m)^[ \x{00A0}]*(?:[❯>][ \x{00A0}]+)?(?:\d+\.[ \x{00A0}]+)?Yes, I trust this folder[ \x{00A0}]*$'
 
 [[rules]]
 id = "trust-bypass-warning"
 state = "blocked"
 reason = "trust"
 priority = 50
-region = "screen"
-contains = ["Yes, I accept", "Bypass Permissions"]
+region = "bottom:5"
+contains = ["Enter to confirm"]
+regex = '(?m)^[ \x{00A0}]*(?:[❯>][ \x{00A0}]+)?(?:\d+\.[ \x{00A0}]+)?Yes, I accept[ \x{00A0}]*$'
 
 [[rules]]
 id = "transcript-view"
@@ -868,8 +880,10 @@ reason = "permission"
 priority = 40
 region = "screen"
 contains = ["Do you want to ", "Esc to cancel"]
-# Claude on Windows draws ">" for "❯" (its figures fallback).
-regex = '(?m)^\s*[❯>][\s\x{00A0}]+1\. Yes'
+# Claude on Windows draws ">" for "❯" (its figures fallback). The
+# dialog runs as long as its command, so the region is the screen, and
+# the footer must close it.
+regex = '(?ms)^[ \x{00A0}]*[❯>][ \x{00A0}]+1\. Yes.*^[^\n]*Esc to cancel[^\n]*(?:\n[^\n]*){0,2}\z'
 
 # A permission dialog for a Bash call outside the sandbox: the guard's
 # reason (its PreToolUse "ask": "asks to run outside the sandbox") or
@@ -882,7 +896,7 @@ reason = "permission"
 priority = 40
 region = "screen"
 contains = ["Do you want to ", "Esc to cancel"]
-regex = '(?ms)(asks to run outside the sandbox|Run outside of the sandbox).*^\s*[❯>][\s\x{00A0}]+1\. Yes'
+regex = '(?ms)(asks to run outside the sandbox|Run outside of the sandbox).*^[ \x{00A0}]*[❯>][ \x{00A0}]+1\. Yes.*^[^\n]*Esc to cancel[^\n]*(?:\n[^\n]*){0,2}\z'
 
 [[rules]]
 id = "blocked-question"
@@ -891,6 +905,7 @@ reason = "question"
 priority = 40
 region = "bottom:12"
 contains = ["Enter to select", "to navigate", "Esc to cancel"]
+regex = '(?m)^[^\n]*Enter to select[^\n]*(?:\n[^\n]*){0,2}\z'
 
 [[rules]]
 id = "working-title-spinner"

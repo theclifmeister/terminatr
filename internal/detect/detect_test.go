@@ -1,6 +1,7 @@
 package detect
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -75,7 +76,29 @@ Which color do you want?
 
 Enter to select · ↑/↓ to navigate · Esc to cancel`
 
-	trust = ` Do you trust the files in this folder?
+	// trust as 2.1.316 draws it (captured in a pane, T743); bypass from
+	// the same build's BypassPermissionsModeDialog: the same dialog, its
+	// options unnumbered ("hideIndexes"), "No, exit" first.
+	trust = `────────────────────────────────────────────────────────────────────────────────────────────────────
+ Accessing workspace:
+
+ /private/tmp/x
+
+ Quick safety check: Is this a project you created or one you trust? (Like your own code, a
+ well-known open source project, or work from your team). If not, take a moment to review what's in
+ this folder first.
+
+ Claude Code'll be able to read, edit, and execute files here.
+
+ Security guide
+
+ ❯ No, exit
+   Yes, I trust this folder
+
+ Enter to confirm · Esc to cancel`
+
+	// Older builds numbered the options.
+	trustNumbered = ` Do you trust the files in this folder?
 
  /Users/me/src/x
 
@@ -86,8 +109,20 @@ Enter to select · ↑/↓ to navigate · Esc to cancel`
 
 	bypass = ` WARNING: Claude Code running in Bypass Permissions mode
 
- ❯ 1. No, exit
-   2. Yes, I accept`
+ In Bypass Permissions mode, Claude Code will not ask for your approval before running potentially
+ dangerous commands.
+ This mode should only be used in a sandboxed container/VM that has restricted internet access and
+ can easily be restored if damaged.
+
+ By proceeding, you accept all responsibility for actions taken while running in Bypass Permissions
+ mode.
+
+ https://code.claude.com/docs/en/security
+
+ ❯ No, exit
+   Yes, I accept
+
+ Enter to confirm · Esc to cancel`
 
 	transcript = `⏺ Bash(ls)
   ⎿  a b c
@@ -110,6 +145,8 @@ func TestClaudeRules(t *testing.T) {
 		{"permission beats the idle title", "✳ Claude Code", permission, "blocked-permission-dialog", agent.StateBlocked, "permission"},
 		{"question", "✳ Claude Code", question, "blocked-question", agent.StateBlocked, "question"},
 		{"trust", "", trust, "trust-folder", agent.StateBlocked, "trust"},
+		{"trust, numbered options", "", trustNumbered, "trust-folder", agent.StateBlocked, "trust"},
+		{"trust with blank rows below", "", trust + "\n\n\n", "trust-folder", agent.StateBlocked, "trust"},
 		{"bypass warning", "", bypass, "trust-bypass-warning", agent.StateBlocked, "trust"},
 		{"transcript view abstains", "✳ Claude Code", transcript, "transcript-view", agent.StateUnknown, "transcript view"},
 	}
@@ -219,5 +256,52 @@ func TestClaudeWindowsGlyphs(t *testing.T) {
 	dlg := strings.ReplaceAll(permission, "❯ 1. Yes", "> 1. Yes")
 	if m, _ := e.Eval(screen("", dlg)); m == nil || m.Rule != "blocked-permission-dialog" {
 		t.Fatalf("dialog: %+v", m)
+	}
+}
+
+// TestClaudeDialogTextInOutput: a dialog's words in the agent's own
+// output (a docs table it read, a test file it wrote, a file it cat'd)
+// are not the dialog (T743: t-0673 and t-0804 were flagged blocked/trust
+// while working). Only the dialog's shape at the bottom of the screen,
+// where the prompt box sits otherwise, counts.
+func TestClaudeDialogTextInOutput(t *testing.T) {
+	e := claudeEngine(t)
+	box := `────────────────────────────────────────────
+❯
+────────────────────────────────────────────
+  ⏵⏵ auto mode on`
+	docs := `⏺ Bash(grep -n "trust" docs/SPEC.md)
+  ⎿  1699:     | blocked / trust | the folder-trust dialog (` + "`Yes, I trust this folder`" + `) or the bypass warning (` + "`Yes, I accept`" + ` + ` + "`Bypass Permissions`" + `) |
+     1859:| Screen text | ` + "`Yes, I trust this folder`; `Do you want to ` + `❯ 1. Yes` + `Esc to cancel`; `Enter to select` + `to navigate`" + ` |
+
+✢ Churning… (6s · ↓ 201 tokens)
+
+` + box
+	// A Write of a test file: Claude numbers the lines it shows.
+	var numbered []string
+	for i, l := range strings.Split(trust+"\n"+bypass+"\n"+permission+"\n"+question, "\n") {
+		numbered = append(numbered, fmt.Sprintf("      %3d %s", i+80, l))
+	}
+	write := "⏺ Write(internal/detect/x_test.go)\n  ⎿  Wrote 120 lines to internal/detect/x_test.go\n" +
+		strings.Join(numbered, "\n") + "\n\n" + box
+	// cat of the same text: no numbers, only the output's indent, and
+	// the agent idle right after.
+	var indented []string
+	for _, l := range strings.Split(trust+"\n"+bypass+"\n"+permission+"\n"+question, "\n") {
+		indented = append(indented, "     "+l)
+	}
+	cat := "⏺ Bash(cat fixtures.txt)\n  ⎿" + strings.Join(indented, "\n")[2:] + "\n\n⏺ Done.\n\n" + box
+	// The dialog's own last rows as the last rows of output, right above
+	// the box.
+	tail := "⏺ Bash(cat fixtures.txt)\n  ⎿" + strings.Join(indented, "\n")[2:] + "\n" + box
+	for name, body := range map[string]string{"docs table": docs, "written file": write, "cat": cat, "output tail": tail} {
+		t.Run(name, func(t *testing.T) {
+			_, all := e.Eval(screen("✳ Claude Code", body))
+			for _, m := range all {
+				if m.State == agent.StateBlocked {
+					t.Errorf("rule %s matched the agent's output: %+v", m.Rule, all)
+				}
+			}
+		})
 	}
 }

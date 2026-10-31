@@ -214,8 +214,8 @@ claude_canary() {
 	strings_in claude-task-tools "$bin" TaskCreate TaskUpdate activeForm CLAUDE_CODE_ENABLE_TODO_TOOLS
 	strings_in claude-trust-config "$bin" hasTrustDialogAccepted
 	strings_in claude-transcript "$bin" "[Request interrupted by user" turn_duration
-	strings_in claude-screen-trust-folder "$bin" "Yes, I trust this folder"
-	strings_in claude-screen-bypass "$bin" "Yes, I accept" "Bypass Permissions"
+	strings_in claude-screen-trust-folder "$bin" "Yes, I trust this folder" "Enter to confirm"
+	strings_in claude-screen-bypass "$bin" "Yes, I accept"
 	strings_in claude-screen-transcript-view "$bin" "detailed transcript"
 	strings_in claude-screen-permission "$bin" "Do you want to "
 	strings_in claude-screen-question "$bin" "Enter to select" "to navigate" "Esc to cancel" "Type something"

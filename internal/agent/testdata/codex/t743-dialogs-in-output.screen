@@ -1,0 +1,28 @@
+# source: T743, built from t98-idle.screen with the T98 dialogs as a command's output (the dialogs' words in the agent's own output are no dialog)
+# want: idle-composer
+# also: idle-empty-box
+# dim: Ask Codex to do anything
+---
+• Ran cat internal/agent/testdata/codex/t98-*.screen
+  └   Trust this folder? Codex can read, edit, and run files here.
+    › 1. Trust and continue
+      2. Back to Agent Command Center
+    
+      enter continue · esc back
+      Hooks need review
+    › 1. Review hooks
+      2. Trust all and continue
+      3. Continue without trusting (hooks won't run)
+    
+      enter confirm · esc skip
+      Update available · 0.160.0 → 0.160.1
+    › 1. Update now (runs `brew upgrade --cask codex`)
+      2. Skip
+      3. Skip until next version
+    
+      enter continue · esc skip
+
+› Ask Codex to do anything
+
+  GPT-6-Luna medium · /private/tmp/claude-501/t134/wt
+  ? for shortcuts                                                                             ⚠ 2 warnings · f2 to view
