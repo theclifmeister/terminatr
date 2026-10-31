@@ -18,10 +18,10 @@ func TestRenderPeers(t *testing.T) {
 	mdfile.WriteYAML(true)
 	t.Cleanup(func() { mdfile.WriteYAML(false) })
 	peers := []proto.PeerMirror{{Alias: "mini", State: proto.LinkUp, Listed: true,
-		Projects: []proto.PeerMirrorProject{{PeerProject: proto.PeerProject{Project: "cowork"}}}}}
+		Projects: []proto.PeerMirrorProject{{PeerProject: proto.PeerProject{Project: "acme-api"}}}}}
 	r.tk.o.Peers = func() []proto.PeerMirror { return peers }
 	d, _ := home.Dir()
-	stub := filepath.Join(d, "projects", "_peers", "mini", "cowork.md")
+	stub := filepath.Join(d, "projects", "_peers", "mini", "acme-api.md")
 	r.sweep(time.Second)
 	if _, err := os.Stat(stub); err == nil {
 		t.Fatal("a stub before the vault is on")

@@ -377,7 +377,7 @@ func TestOffKeepsCanvases(t *testing.T) {
 	dir, _ := yamlHome(t)
 	os.WriteFile(filepath.Join(dir, "state", "vault"), nil, 0o600)
 	root := filepath.Join(dir, "projects")
-	files := []string{"demo/designs/net.md", "demo/designs/net.canvas", "_peers/mini/cowork.md"}
+	files := []string{"demo/designs/net.md", "demo/designs/net.canvas", "_peers/mini/acme-api.md"}
 	l := ledger{Files: map[string]string{}}
 	for _, rel := range files {
 		os.MkdirAll(filepath.Dir(filepath.Join(root, rel)), 0o755)

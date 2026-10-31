@@ -27,9 +27,9 @@ func TestLink(t *testing.T) {
 		{ThreadFile, "t-0651/task.md", "task.md", "[[terminatr/threads/t-0651/task|task.md]]"},
 		{Memory, "memory/ci.md", "CI jobs", "[[terminatr/memory/ci|CI jobs]]"},
 		{Memory, "ci", "", "[[terminatr/memory/ci|ci]]"},
-		{Message, "foodperfect/M-16", "M-16", "[[terminatr/messages/foodperfect/M-16|M-16]]"},
+		{Message, "acme-web/M-16", "M-16", "[[terminatr/messages/acme-web/M-16|M-16]]"},
 		{Message, "mini/api/M-1", "M-1", "[[terminatr/messages/@mini/api/M-1|M-1]]"},
-		{Project, "foodperfect", "", "[[foodperfect/PROJECT|foodperfect]]"},
+		{Project, "acme-web", "", "[[acme-web/PROJECT|acme-web]]"},
 		{Project, "mini/api", "", "[[_peers/mini/api|mini/api]]"},
 		// An alias can't end or split the link.
 		{Memory, "x", "a [b] | c\nd", "[[terminatr/memory/x|a (b) / c d]]"},

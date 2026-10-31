@@ -23,13 +23,13 @@ private func need(_ id: String, _ kind: Need.Kind, project: String, session: Str
 
 @Test func menuNeeds() {
     let all = [need("a", .approval, project: "terminatr"), need("b", .question, project: "terminatr"),
-               need("c", .blocked, project: "toe"), need("d", .blocked, project: "foodperfect"),
+               need("c", .blocked, project: "toe"), need("d", .blocked, project: "acme-web"),
                need("e", .review, project: "terminatr"), need("f", .review, project: "toe")]
     let (shown, rest) = MenuBarList.needs(all)
     #expect(shown.map(\.id) == ["a", "b", "c"])
     #expect(rest.map(\.id) == ["d", "e", "f"])
     #expect(SidebarTree.moreNeeds(rest) == "+3 more: 1 blocked, 2 review")
-    #expect(MenuBarList.projects(of: rest) == "foodperfect, terminatr, toe")
+    #expect(MenuBarList.projects(of: rest) == "acme-web, terminatr, toe")
 
     let few = MenuBarList.needs(Array(all.prefix(2)))
     #expect(few.shown.count == 2 && few.rest.isEmpty)
@@ -38,11 +38,11 @@ private func need(_ id: String, _ kind: Need.Kind, project: String, session: Str
 @Test func menuProjects() {
     // Active ones in the sidebar's order: idle ones (no open thread, no
     // need) are counted, the rest keep the Go menu's ⌘ numbers.
-    let active = [project("cowork"), project("demo", threads: [thread("t-1")]),
-                  project("foodperfect"), project("mods", threads: [thread("t-2", done: true)]), project("toe")]
-    let needs = [need("r", .review, project: "foodperfect"), need("b", .blocked, project: "toe")]
+    let active = [project("acme-api"), project("demo", threads: [thread("t-1")]),
+                  project("acme-web"), project("mods", threads: [thread("t-2", done: true)]), project("toe")]
+    let needs = [need("r", .review, project: "acme-web"), need("b", .blocked, project: "toe")]
     let (shown, more) = MenuBarList.projects(active, needs: needs)
-    #expect(shown == [.init(index: 1, slug: "demo"), .init(index: 2, slug: "foodperfect"), .init(index: 4, slug: "toe")])
+    #expect(shown == [.init(index: 1, slug: "demo"), .init(index: 2, slug: "acme-web"), .init(index: 4, slug: "toe")])
     #expect(more == 2)
     #expect(MenuBarList.others(more: more, inactive: 3) == "2 more active · 3 inactive")
     #expect(MenuBarList.others(more: 1, inactive: 0) == "1 more active")
