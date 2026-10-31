@@ -4,31 +4,30 @@ import TerminatrUI
 
 /// The composer dock under a conversation, at the write level (T821,
 /// T840; the dock T848): it floats over the conversation's end, with no
-/// bar under it. In it, a circle that switches it to the terminal's
-/// keys, the prompt in a glass field, and a round Send, queued until
-/// the agent is idle; while the agent works the field has Queue and
-/// Steer (into the running turn, session.prompt "now"), and Send held
-/// down has Interrupt (stops the turn for it, after a confirmation);
-/// not on a paired server's session, whose prompt is typed into its
-/// pane there. Over it, a line: what the last send did, the queue and a
-/// held queue, and while the field has focus that sending takes the
-/// thread over, as the Mac's says; while the keyboard is up, at its
-/// end, a circle that hides it (HideKeyboard, T857). The circles, the
+/// bar under it. In it, while the keyboard is up, a circle that hides it
+/// (HideKeyboard, T857; T882), the prompt in a glass field, and a round
+/// Send, queued until the agent is idle; while the agent works the field
+/// has Queue and Steer (into the running turn, session.prompt "now"),
+/// and Send held down has Interrupt (stops the turn for it, after a
+/// confirmation); not on a paired server's session, whose prompt is
+/// typed into its pane there. Over it, a line: what the last send did,
+/// the queue and a held queue, and while the field has focus that
+/// sending takes the thread over, as the Mac's says. The circles, the
 /// field at one line and Send are one height (Theme.circle). Text
 /// pastes as in any field. On this server's sessions (session.upload)
 /// files go with the prompt as on the Mac (T860, ComposerAttach): the
-/// paperclip circle beside the mode's picks them (Photos, Files, the
-/// camera), an image or file copied pastes (⌘V, or the Paste button
-/// over the dock while the keyboard is up) and one dropped on the dock
-/// goes in; each shows as a chip over the field, its upload's progress,
-/// Retry and Remove. The session's files are PhoneModel's (its tray),
-/// kept as the draft is across screens and the link's drops. In keys mode (-keys YES at launch, the Simulator's
-/// screenshots) the key strip stays over the dock, keyboard up or not
-/// (KeyStrip), and the field types into the terminal. -compose YES
-/// focuses the field (the prompt or the keys') as it shows (the Simulator's screenshots). With a hardware
-/// keyboard (an iPad's, T830) Command-Return sends as picked and
-/// Shift-Command-Return steers, as Return makes a new line; no key
-/// without a modifier does anything here.
+/// paperclip circle picks them (Photos, Files, the camera), an image or
+/// file copied pastes (⌘V, or the Paste button over the dock while the
+/// keyboard is up, on the chips' row at their right, T882) and one
+/// dropped on the dock goes in; each shows as a chip over the field, its
+/// upload's progress, Retry and Remove. The session's files are
+/// PhoneModel's (its tray), kept as the draft is across screens and the
+/// link's drops. Keys go to the terminal on its own view
+/// (TerminalScreen), not here (T882). -compose YES focuses the field as
+/// it shows (the Simulator's screenshots). With a hardware keyboard (an
+/// iPad's, T830) Command-Return sends as picked and Shift-Command-Return
+/// steers, as Return makes a new line; no key without a modifier does
+/// anything here.
 struct PhoneComposer: View {
     @Environment(PhoneModel.self) private var model
     @Environment(\.theme) private var theme
@@ -44,42 +43,41 @@ struct PhoneComposer: View {
     @State private var said: (text: String, failed: Bool)?
     /// The note says a prompt is queued: it goes once that prompt went in.
     @State private var queuedNote = false
-    @State private var keys = UserDefaults.standard.bool(forKey: "keys")
     @State private var steer = false
     @State private var interrupting = false
     @State private var sends = 0
     @State private var keyboard = false
     @State private var dropping = false
+    /// The pasteboard has an image or a file (PasteFiles.check).
+    @State private var pasteable = PasteFiles.check()
     @FocusState private var focused: Bool
 
     var body: some View {
         let tray = model.tray(ref)
-        let files = attaches && !keys
+        let files = attaches
+        let paste = keyboard && files && pasteable && !tray.full
         VStack(alignment: .leading, spacing: Spacing.item) {
-            if note != nil || keyboard {
+            if let note {
+                DockNote(note.text, failed: note.failed)
+                    .transition(.opacity)
+            }
+            // Paste sits level with the chips, at their right; with none,
+            // at their height over the field.
+            if (files && !tray.files.isEmpty) || paste {
                 HStack(spacing: Spacing.item) {
-                    if let note {
-                        DockNote(note.text, failed: note.failed)
-                            .transition(.opacity)
-                    }
+                    if files, !tray.files.isEmpty { ComposerChips(tray: tray) }
                     Spacer(minLength: 0)
-                    if keyboard, files { PasteFiles(tray: tray) }
-                    if keyboard { HideKeyboard() }
+                    if paste { PasteFiles(tray: tray) }
                 }
+                .frame(minHeight: tapTarget)
             }
-            if files, !tray.files.isEmpty {
-                ComposerChips(tray: tray)
-            }
-            if keys {
-                TerminalKeys(session: session, mode: modeButton) { said = $0 }
-            } else {
-                DockRow {
-                    HStack(spacing: Spacing.item) {
-                        modeButton
-                        if files { AttachMenu(tray: tray) }
-                    }
-                } field: { field } send: { sendButton }
-            }
+            DockRow {
+                // A Group: with neither, the row has no gap for them.
+                Group {
+                    if keyboard { HideKeyboard() }
+                    if files { AttachMenu(tray: tray) }
+                }
+            } field: { field } send: { sendButton }
         }
         .overlay {
             if dropping {
@@ -96,13 +94,15 @@ struct PhoneComposer: View {
             Task.detached { await ComposerDrop.take(providers, into: tray) }
             return true
         }
-        .padding(.horizontal, 12)
-        .padding(.top, Spacing.tight)
+        // The conversation's column: its cards' edges (T882).
+        .padding(.horizontal, Spacing.gutter)
         .padding(.bottom, Spacing.item)
         .feedback(.impact(weight: .light), trigger: sends)
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in keyboard = true }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in keyboard = false }
-        .onAppear { if UserDefaults.standard.bool(forKey: "compose"), !keys { focused = true } }
+        .onReceive(NotificationCenter.default.publisher(for: UIPasteboard.changedNotification)) { _ in pasteable = PasteFiles.check() }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in pasteable = PasteFiles.check() }
+        .onAppear { if UserDefaults.standard.bool(forKey: "compose") { focused = true } }
         .onChange(of: [queued, running ? 1 : 0]) { old, new in
             if queuedNote, PromptSent.wentIn(queued: old[0], new[0], working: old[1] == 1, new[1] == 1) {
                 queuedNote = false
@@ -110,7 +110,6 @@ struct PhoneComposer: View {
             }
         }
         .kept($text, "prompt \(ref)")
-        .kept($keys, "keys \(ref)")
         .kept($steer, "steer \(ref)")
         .confirmationDialog("Interrupt the agent's turn?", isPresented: $interrupting, titleVisibility: .visible) {
             Button("Interrupt and Send", role: .destructive) { send(mode: "interrupt") }
@@ -133,22 +132,8 @@ struct PhoneComposer: View {
         var parts: [String] = []
         if queued > 0 { parts.append(queued == 1 ? "1 prompt queued" : "\(queued) prompts queued") }
         if !held.isEmpty { return ((parts + ["Queue held: \(held)"]).joined(separator: " · "), true) }
-        if focused, !keys, !ref.isCoordinator, !ref.isRemote { parts.append("Sending takes the thread over") }
+        if focused, !ref.isCoordinator, !ref.isRemote { parts.append("Sending takes the thread over") }
         return parts.isEmpty ? nil : (parts.joined(separator: " · "), false)
-    }
-
-    /// The circle that switches the dock between the prompt and the keys.
-    @ViewBuilder private var modeButton: some View {
-        if model.can(AppAPI.Methods.sessionKeys.name) {
-            Button {
-                keys.toggle()
-                said = nil
-            } label: {
-                Label(keys ? "Message" : "Keys", systemImage: keys ? "text.bubble" : "keyboard")
-            }
-            .buttonStyle(.circle)
-            .accessibilityHint(keys ? "Shows the prompt box" : "Shows keys for its terminal: Esc, Tab, arrows, Control C, Return")
-        }
     }
 
     /// The field; at accessibility sizes Queue and Steer go under the
@@ -252,71 +237,6 @@ struct PhoneComposer: View {
     }
 }
 
-/// The keys a terminal wants that the phone's keyboard hasn't (T821),
-/// each written to the session's terminal as typed (session.keys), and
-/// a line of text typed there, without a return unless asked for: the
-/// key strip over the dock's row (T848), the mode circle, the field
-/// and a round Type.
-struct TerminalKeys<Mode: View>: View {
-    @Environment(PhoneModel.self) private var model
-    @Environment(\.theme) private var theme
-    let session: String
-    let mode: Mode
-    let said: ((text: String, failed: Bool)?) -> Void
-    @State private var typed = ""
-    @State private var busy = false
-    @FocusState private var focused: Bool
-
-    var body: some View {
-        VStack(spacing: Spacing.item) {
-            KeyStrip { write($0.data) }
-                .disabled(busy)
-            DockRow { mode } field: {
-                TextField("Type into its terminal", text: $typed)
-                    .font(theme.mono(.body))
-                    .foregroundStyle(theme.ink)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .submitLabel(.send)
-                    .onSubmit { type(enter: true) }
-                    .focused($focused)
-                    .padding(.vertical, Spacing.item)
-                    .dockField()
-            } send: {
-                Button { type(enter: false) } label: {
-                    Label("Type", systemImage: "arrow.up")
-                }
-                .buttonStyle(.send)
-                .disabled(typed.isEmpty || busy)
-                .accessibilityHint("Types it without Return; Return on the keyboard types it with one")
-            }
-        }
-        // Not the field: disabled, it would give up the keyboard.
-        .kept($typed, "typed \(session)")
-        .onAppear { if UserDefaults.standard.bool(forKey: "compose") { focused = true } }
-    }
-
-    private func type(enter: Bool) {
-        guard !typed.isEmpty || enter, !busy else { return }
-        let t = typed + (enter ? TerminalKey.enter.data : "")
-        typed = ""
-        write(t)
-    }
-
-    private func write(_ data: String) {
-        busy = true
-        said(nil)
-        Task {
-            do {
-                try await model.keys(session, data)
-            } catch {
-                if let w = NeedActs.words(error) { said((w, true)) }
-            }
-            busy = false
-        }
-    }
-}
-
 /// A prompt goes to the agent as typed: no Writing Tools rewriting it.
 struct NoWritingTools: ViewModifier {
     func body(content: Content) -> some View {
@@ -328,9 +248,8 @@ struct NoWritingTools: ViewModifier {
     }
 }
 
-/// Folds the keyboard away, the system's or the key strip's field's
-/// (T857): a glass circle over the dock while the keyboard is up. The
-/// draft stays.
+/// Folds the keyboard away (T857): a glass circle at the dock's left
+/// while the keyboard is up (T882). The draft stays.
 struct HideKeyboard: View {
     var body: some View {
         Button {

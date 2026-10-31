@@ -7,7 +7,7 @@ import UniformTypeIdentifiers
 /// The composer's files on the phone (T860), as the Mac's composer
 /// takes them (docs/SPEC.md §3.8): picked (the paperclip: Photos, Files,
 /// the camera), pasted (the system's paste: ⌘V on a hardware keyboard
-/// reaches pasteDestination, and the Paste button over the dock reads
+/// reaches pasteDestination, and the Paste button on the chips' row reads
 /// the pasteboard without iOS asking each time) or dropped on the dock
 /// (an iPad's, a Duo's, from Photos, Files or another app). Each goes in
 /// the session's ComposerTray, which PhoneModel keeps across screens and
@@ -291,32 +291,26 @@ struct ComposerChips: View {
     }
 }
 
-/// The system's Paste button over the dock, while the field has focus
-/// and the pasteboard has an image or a file: its tap reads the
+/// The system's Paste button over the dock, on the chips' row at their
+/// right (T882), while the field has focus and the pasteboard has an
+/// image or a file (the composer asks check): its tap reads the
 /// pasteboard as the user's own act, so iOS doesn't ask (a plain paste
 /// in the field still pastes text). The pasteboard is asked only
 /// whether it has one (UIPasteboard's has- and contains, which don't
 /// ask either).
 struct PasteFiles: View {
     let tray: ComposerTray
-    @State private var has = PasteFiles.check()
 
     var body: some View {
-        Group {
-            if has, !tray.full {
-                PasteButton(payloadType: PastedFile.self) { files in
-                    Task { @MainActor in
-                        for f in files { tray.add(name: f.name, data: f.data) }
-                    }
-                }
-                .labelStyle(.titleAndIcon)
-                .buttonBorderShape(.capsule)
-                .accessibilityHint("Attaches the image or file you copied")
-                .transition(.opacity)
+        PasteButton(payloadType: PastedFile.self) { files in
+            Task { @MainActor in
+                for f in files { tray.add(name: f.name, data: f.data) }
             }
         }
-        .onReceive(NotificationCenter.default.publisher(for: UIPasteboard.changedNotification)) { _ in has = Self.check() }
-        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in has = Self.check() }
+        .labelStyle(.titleAndIcon)
+        .buttonBorderShape(.capsule)
+        .accessibilityHint("Attaches the image or file you copied")
+        .transition(.opacity)
     }
 
     static func check() -> Bool {

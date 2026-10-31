@@ -538,11 +538,6 @@ final class PhoneModel {
         return try await connected().call(AppAPI.Methods.sessionUpload, p)
     }
 
-    /// Writes data to session's terminal as if typed (TerminalKey).
-    func keys(_ session: String, _ data: String) async throws {
-        _ = try await connected().call(AppAPI.Methods.sessionKeys, AppAPI.KeysParams(id: session, data: data))
-    }
-
     /// Whether this tm offers task templates for New Task (app API 20).
     var offersTemplates: Bool { hello.map(Compatibility.offersTemplates) ?? false }
 
