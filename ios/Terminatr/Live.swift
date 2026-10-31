@@ -57,7 +57,7 @@ private struct LiveStripModifier: ViewModifier {
     }
 
     /// In the accessory: compact while the tab bar is minimised beside
-    /// it.
+    /// it, unframed on the accessory's own glass.
     @available(iOS 26.1, *)
     private struct Accessory: View {
         @Environment(\.tabViewBottomAccessoryPlacement) private var placement
@@ -65,7 +65,7 @@ private struct LiveStripModifier: ViewModifier {
         let open: (SessionRef) -> Void
 
         var body: some View {
-            LiveStrip(work, compact: placement == .inline) { open(work.ref) }
+            LiveStrip(work, compact: placement == .inline, framed: false) { open(work.ref) }
                 .hoverEffect()
         }
     }

@@ -5,19 +5,23 @@ import TerminatrKit
 /// tab bar: the turning mark, "2 working · T16 reading cart.spec.ts"
 /// and a three-bar meter; a tap opens the session that has worked
 /// longest (LiveWork). On the glass ("the live strip" in
-/// ThemeColours.checks), which also covers the tab bar accessory's own.
-/// Compact (the accessory beside a minimised tab bar) it says only how
-/// many work. With Reduce Motion the mark and the meter stand still.
+/// ThemeColours.checks). In the tab bar's accessory, whose own glass has
+/// an edge, it isn't framed: the frost and the glass's tint without
+/// the surface's edge, so one outline shows, not two (T883). Compact
+/// (the accessory beside a minimised tab bar) it says only how many
+/// work. With Reduce Motion the mark and the meter stand still.
 public struct LiveStrip: View {
     @Environment(\.theme) private var theme
     @Environment(\.accessibilityReduceMotion) private var still
     let work: LiveWork
     let compact: Bool
+    let framed: Bool
     let open: () -> Void
 
-    public init(_ work: LiveWork, compact: Bool = false, open: @escaping () -> Void) {
+    public init(_ work: LiveWork, compact: Bool = false, framed: Bool = true, open: @escaping () -> Void) {
         self.work = work
         self.compact = compact
+        self.framed = framed
         self.open = open
     }
 
@@ -44,7 +48,13 @@ public struct LiveStrip: View {
             .padding(.leading, Spacing.card)
             .padding(.trailing, Spacing.card - 2)
             .frame(maxWidth: .infinity, minHeight: tapTarget)
-            .surface(.glass, in: Capsule())
+            .background {
+                if framed {
+                    Color.clear.surface(.glass, in: Capsule())
+                } else {
+                    Color.clear.background(theme.glass, in: Capsule()).frosted(Capsule())
+                }
+            }
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
