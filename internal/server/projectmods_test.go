@@ -184,21 +184,19 @@ func TestProjectMods(t *testing.T) {
 	}
 
 	// Its settings for demo.
-	five := int64(5)
-	if got, perr := s.modsSetting(proto.ModsSettingParams{Project: "demo", Mod: "pr-age", Key: "days", Value: &proto.ModValue{Int: &five}}, phone); perr != nil ||
+	if got, perr := s.modsSetting(proto.ModsSettingParams{Project: "demo", Mod: "pr-age", Key: "days", Value: &proto.ModValue{Type: "int", Int: 5}}, phone); perr != nil ||
 		got.(proto.ModsActResult).Words != "days: 5" {
 		t.Fatalf("days 5: %+v %v", got, perr)
 	}
 	m = prAge(t, s, "demo")
-	if m.Own != "settings: 1 of its own" || m.Settings[0].Key != "days" || !m.Settings[0].Own || *m.Settings[0].Value.Int != 5 ||
-		*m.Settings[0].Default.Int != 3 || m.Settings[1].Own {
+	if m.Own != "settings: 1 of its own" || m.Settings[0].Key != "days" || !m.Settings[0].Own || m.Settings[0].Value.Int != 5 ||
+		m.Settings[0].Default.Int != 3 || m.Settings[1].Own {
 		t.Fatalf("settings: %+v", m.Settings)
 	}
-	if web := prAge(t, s, "web"); web.Settings[0].Own || *web.Settings[0].Value.Int != 3 {
+	if web := prAge(t, s, "web"); web.Settings[0].Own || web.Settings[0].Value.Int != 3 {
 		t.Fatalf("web follows all projects: %+v", web.Settings)
 	}
-	big, yes := int64(42), true
-	for _, bad := range []*proto.ModValue{{Int: &big}, {Bool: &yes}, {}, {Int: &five, Bool: &yes}} {
+	for _, bad := range []*proto.ModValue{{Type: "int", Int: 42}, {Type: "bool", Bool: true}, {}, {Type: "number", Int: 5}} {
 		if _, perr := s.modsSetting(proto.ModsSettingParams{Project: "demo", Mod: "pr-age", Key: "days", Value: bad}, phone); perrCode(perr) != proto.ErrBadParams {
 			t.Errorf("days %+v: %v", bad, perr)
 		}
@@ -209,7 +207,7 @@ func TestProjectMods(t *testing.T) {
 	if m := prAge(t, s, "demo"); m.Settings[0].Own || m.Own != "settings: all projects" {
 		t.Fatalf("days follows all projects again: %+v", m.Settings[0])
 	}
-	if _, perr := s.modsSetting(proto.ModsSettingParams{Project: "demo", Mod: "pr-age", Key: "loud", Value: &proto.ModValue{Bool: &yes}}, agent); perr == nil {
+	if _, perr := s.modsSetting(proto.ModsSettingParams{Project: "demo", Mod: "pr-age", Key: "loud", Value: &proto.ModValue{Type: "bool", Bool: true}}, agent); perr == nil {
 		t.Fatal("an agent set a setting")
 	}
 	journal, _ = os.ReadFile(demo.Path("JOURNAL.md"))

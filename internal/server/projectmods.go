@@ -93,8 +93,14 @@ func projectModOf(md mod.Mod, slug string, locals []string, consent bool) proto.
 			def := md.Manifest.Settings[k]
 			_, own := md.ProjectSettings[slug][k]
 			ms := proto.ModSetting{Key: k, Label: mod.Clean(def.Label, false), Type: def.Type,
-				Default: modValueOf(def.Default), Value: modValueOf(cur[k]), Own: own, Min: def.Min, Max: def.Max,
+				Default: modValueOf(def.Default), Value: modValueOf(cur[k]), Own: own,
 				Options: slices.Clone(def.Options)}
+			if def.Min != nil {
+				ms.HasMin, ms.Min = true, *def.Min
+			}
+			if def.Max != nil {
+				ms.HasMax, ms.Max = true, *def.Max
+			}
 			if def.Type == mod.SettingString {
 				ms.MaxLen = mod.MaxTextSetting
 			}
@@ -115,14 +121,13 @@ func projectModOf(md mod.Mod, slug string, locals []string, consent bool) proto.
 func modValueOf(v any) proto.ModValue {
 	switch x := v.(type) {
 	case bool:
-		return proto.ModValue{Bool: &x}
+		return proto.ModValue{Type: "bool", Bool: x}
 	case int64:
-		return proto.ModValue{Int: &x}
+		return proto.ModValue{Type: "int", Int: x}
 	case int:
-		n := int64(x)
-		return proto.ModValue{Int: &n}
+		return proto.ModValue{Type: "int", Int: int64(x)}
 	case string:
-		return proto.ModValue{Text: &x}
+		return proto.ModValue{Type: "text", Text: x}
 	}
 	return proto.ModValue{}
 }
@@ -202,23 +207,15 @@ func (s *Server) modsSetting(p proto.ModsSettingParams, c callCtx) (any, *proto.
 	var value any
 	words := p.Key + ": follows all projects"
 	if p.Value != nil {
-		v := *p.Value
-		n := 0
-		for _, set := range []bool{v.Bool != nil, v.Int != nil, v.Text != nil} {
-			if set {
-				n++
-			}
-		}
-		if n != 1 {
-			return nil, proto.Errorf(proto.ErrBadParams, "a value is one of bool, int and text")
-		}
-		switch {
-		case v.Bool != nil:
-			value = *v.Bool
-		case v.Int != nil:
-			value = *v.Int
+		switch v := *p.Value; v.Type {
+		case "bool":
+			value = v.Bool
+		case "int":
+			value = v.Int
+		case "text":
+			value = v.Text
 		default:
-			value = *v.Text
+			return nil, proto.Errorf(proto.ErrBadParams, "a value's type is bool, int or text, not %q", v.Type)
 		}
 		checked, err := mod.CheckSetting(md.Manifest, p.Key, value)
 		if err != nil {

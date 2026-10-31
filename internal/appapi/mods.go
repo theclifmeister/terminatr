@@ -99,17 +99,21 @@ type ModSetting struct {
 	Default ModValue `json:"default"`
 	Value   ModValue `json:"value"`
 	Own     bool     `json:"own,omitempty"`
-	Min     *int64   `json:"min,omitempty"`
-	Max     *int64   `json:"max,omitempty"`
+	HasMin  bool     `json:"has_min,omitempty"`
+	Min     int64    `json:"min,omitempty"`
+	HasMax  bool     `json:"has_max,omitempty"`
+	Max     int64    `json:"max,omitempty"`
 	Options []string `json:"options"`
 	MaxLen  int      `json:"max_len,omitempty"`
 }
 
-// ModValue is a setting's value: one of Bool, Int, Text.
+// ModValue is a setting's value: Type says which of Bool, Int and Text
+// ("bool", "int", "text"), "" for none.
 type ModValue struct {
-	Bool *bool   `json:"bool,omitempty"`
-	Int  *int64  `json:"int,omitempty"`
-	Text *string `json:"text,omitempty"`
+	Type string `json:"type"`
+	Bool bool   `json:"bool,omitempty"`
+	Int  int64  `json:"int,omitempty"`
+	Text string `json:"text,omitempty"`
 }
 
 // ModsActResult is mods.set's and mods.setting's: what came of it.
@@ -128,22 +132,14 @@ func modsSetParams(p ModsSetParams) proto.ModsSetParams {
 func modsSettingParams(p ModsSettingParams) proto.ModsSettingParams {
 	out := proto.ModsSettingParams{Project: p.Project, Mod: p.Mod, Key: p.Key}
 	if p.Value != nil {
-		v := proto.ModValue{Bool: copyPtr(p.Value.Bool), Int: copyPtr(p.Value.Int), Text: copyPtr(p.Value.Text)}
+		v := proto.ModValue(*p.Value)
 		out.Value = &v
 	}
 	return out
 }
 
-func copyPtr[T any](p *T) *T {
-	if p == nil {
-		return nil
-	}
-	v := *p
-	return &v
-}
-
 func modValueOf(v proto.ModValue) ModValue {
-	return ModValue{Bool: copyPtr(v.Bool), Int: copyPtr(v.Int), Text: copyPtr(v.Text)}
+	return ModValue{Type: v.Type, Bool: v.Bool, Int: v.Int, Text: v.Text}
 }
 
 func modsOf(r proto.ModsListResult) Mods {
@@ -164,7 +160,7 @@ func modsOf(r proto.ModsListResult) Mods {
 		}
 		for _, s := range m.Settings {
 			pm.Settings = append(pm.Settings, ModSetting{Key: s.Key, Label: s.Label, Type: s.Type, Default: modValueOf(s.Default),
-				Value: modValueOf(s.Value), Own: s.Own, Min: copyPtr(s.Min), Max: copyPtr(s.Max),
+				Value: modValueOf(s.Value), Own: s.Own, HasMin: s.HasMin, Min: s.Min, HasMax: s.HasMax, Max: s.Max,
 				Options: append([]string{}, s.Options...), MaxLen: s.MaxLen})
 		}
 		out.Mods = append(out.Mods, pm)

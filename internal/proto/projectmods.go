@@ -106,7 +106,8 @@ type ConsentSpan struct {
 // ModSetting is one of a mod's settings for the project: its key,
 // label, type (int, bool, string, choice), default, its value for the
 // project, Own when the project sets it (else it follows all projects),
-// an int's Min and Max, a choice's Options, a string's Max length.
+// an int's Min and Max (when HasMin, HasMax), a choice's Options, a
+// string's MaxLen.
 type ModSetting struct {
 	Key     string   `json:"key"`
 	Label   string   `json:"label,omitempty"`
@@ -114,18 +115,21 @@ type ModSetting struct {
 	Default ModValue `json:"default"`
 	Value   ModValue `json:"value"`
 	Own     bool     `json:"own,omitempty"`
-	Min     *int64   `json:"min,omitempty"`
-	Max     *int64   `json:"max,omitempty"`
+	HasMin  bool     `json:"has_min,omitempty"`
+	Min     int64    `json:"min,omitempty"`
+	HasMax  bool     `json:"has_max,omitempty"`
+	Max     int64    `json:"max,omitempty"`
 	Options []string `json:"options,omitempty"`
 	MaxLen  int      `json:"max_len,omitempty"`
 }
 
-// ModValue is a setting's value: one of Bool, Int, Text (a choice's is
-// Text).
+// ModValue is a setting's value: Type says which of Bool, Int and Text
+// it is ("bool", "int", "text"; a choice's is text), "" for none.
 type ModValue struct {
-	Bool *bool   `json:"bool,omitempty"`
-	Int  *int64  `json:"int,omitempty"`
-	Text *string `json:"text,omitempty"`
+	Type string `json:"type"`
+	Bool bool   `json:"bool,omitempty"`
+	Int  int64  `json:"int,omitempty"`
+	Text string `json:"text,omitempty"`
 }
 
 // ModsSetParams turn mod Mod on (On) or off for project Project. Key is

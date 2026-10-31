@@ -1080,19 +1080,23 @@ public enum AppAPI {
         public var `default`: ModValue
         public var value: ModValue
         public var own: Bool
+        public var hasMin: Bool
         public var min: Int
+        public var hasMax: Bool
         public var max: Int
         public var options: [String]
         public var maxLen: Int
 
-        public init(key: String, label: String = "", type: String, `default`: ModValue, value: ModValue, own: Bool = false, min: Int = 0, max: Int = 0, options: [String] = [], maxLen: Int = 0) {
+        public init(key: String, label: String = "", type: String, `default`: ModValue, value: ModValue, own: Bool = false, hasMin: Bool = false, min: Int = 0, hasMax: Bool = false, max: Int = 0, options: [String] = [], maxLen: Int = 0) {
             self.key = key
             self.label = label
             self.type = type
             self.default = `default`
             self.value = value
             self.own = own
+            self.hasMin = hasMin
             self.min = min
+            self.hasMax = hasMax
             self.max = max
             self.options = options
             self.maxLen = maxLen
@@ -1105,7 +1109,9 @@ public enum AppAPI {
             case `default`
             case value
             case own
+            case hasMin = "has_min"
             case min
+            case hasMax = "has_max"
             case max
             case options
             case maxLen = "max_len"
@@ -1146,17 +1152,20 @@ public enum AppAPI {
     }
 
     public struct ModValue: Codable, Sendable, Hashable {
+        public var type: String
         public var bool: Bool
         public var int: Int
         public var text: String
 
-        public init(bool: Bool = false, int: Int = 0, text: String = "") {
+        public init(type: String, bool: Bool = false, int: Int = 0, text: String = "") {
+            self.type = type
             self.bool = bool
             self.int = int
             self.text = text
         }
 
         enum CodingKeys: String, CodingKey {
+            case type
             case bool
             case int
             case text
@@ -3912,7 +3921,9 @@ extension AppAPI.ModSetting {
         self.default = try c.decode(AppAPI.ModValue.self, forKey: .default)
         self.value = try c.decode(AppAPI.ModValue.self, forKey: .value)
         self.own = try c.decodeIfPresent(Bool.self, forKey: .own) ?? false
+        self.hasMin = try c.decodeIfPresent(Bool.self, forKey: .hasMin) ?? false
         self.min = try c.decodeIfPresent(Int.self, forKey: .min) ?? 0
+        self.hasMax = try c.decodeIfPresent(Bool.self, forKey: .hasMax) ?? false
         self.max = try c.decodeIfPresent(Int.self, forKey: .max) ?? 0
         self.options = try c.decodeIfPresent([String].self, forKey: .options) ?? []
         self.maxLen = try c.decodeIfPresent(Int.self, forKey: .maxLen) ?? 0
@@ -3936,6 +3947,7 @@ extension AppAPI.ModToggle {
 extension AppAPI.ModValue {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.type = try c.decode(String.self, forKey: .type)
         self.bool = try c.decodeIfPresent(Bool.self, forKey: .bool) ?? false
         self.int = try c.decodeIfPresent(Int.self, forKey: .int) ?? 0
         self.text = try c.decodeIfPresent(String.self, forKey: .text) ?? ""

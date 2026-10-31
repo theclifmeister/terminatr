@@ -404,8 +404,8 @@ func TestParamsCopies(t *testing.T) {
 		t.Error("mods.set took grants")
 	}
 	m, _ = Lookup(proto.MethodModsSetting)
-	p, err = m.toServer(json.RawMessage(`{"project":"web","mod":"ci","key":"n","value":{"int":3}}`))
-	if sp, ok := p.(proto.ModsSettingParams); err != nil || !ok || sp.Key != "n" || sp.Value == nil || sp.Value.Int == nil || *sp.Value.Int != 3 {
+	p, err = m.toServer(json.RawMessage(`{"project":"web","mod":"ci","key":"n","value":{"type":"int","int":3}}`))
+	if sp, ok := p.(proto.ModsSettingParams); err != nil || !ok || sp.Key != "n" || sp.Value == nil || sp.Value.Type != "int" || sp.Value.Int != 3 {
 		t.Errorf("mods.setting params %+v %v", p, err)
 	}
 	p, err = m.toServer(json.RawMessage(`{"project":"web","mod":"ci","key":"n"}`))
