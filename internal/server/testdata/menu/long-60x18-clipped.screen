@@ -1,0 +1,18 @@
+│ key bar, and the Keys button (with its 'Type into its
+│ terminal' strip) exists only in the conversation's
+│ composer. What should happen?
+
+❯ 1. Drop Keys from chat (Recommended)
+     Remove Keys from the conversation composer; the
+     terminal stays as it is (tap the pane to type, with its
+     key bar). The hint text in the composer points to the
+     terminal view instead.
+  2. Add Keys to terminal
+     Remove Keys from the conversation and give the terminal
+     view a small dock with the Keys button and its key
+     strip, as the conversation has now.
+  3. Type something.
+────────────────────────────────────────────────────────────
+  4. Chat about this
+
+Enter to select · ↑/↓ to navigate · Esc to cancel
