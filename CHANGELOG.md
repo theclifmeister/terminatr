@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.68.0](https://github.com/theclifmeister/terminatr/compare/v0.67.1...v0.68.0) (2026-10-31)
+
+
+### Features
+
+* iOS Projects list shows compact project cards, "no threads" folded into the coordinator's line (T881) ([#954](https://github.com/theclifmeister/terminatr/issues/954)) ([3b27616](https://github.com/theclifmeister/terminatr/commit/3b2761614bc9c9ff6cf7a0c3b1dde544607b4486))
+* iPhone designs show a still hammer while building, the spinner only while a thread runs a turn on one (T879) ([#951](https://github.com/theclifmeister/terminatr/issues/951)) ([64ab6c7](https://github.com/theclifmeister/terminatr/commit/64ab6c79532ae3553a27dc61d2a67b9b1e65d0eb))
+
+
+### Bug Fixes
+
+* answering a long question from the app matches it behind Claude's │ bars, and the phone offers its terminal when it can't (T884) ([#957](https://github.com/theclifmeister/terminatr/issues/957)) ([f742530](https://github.com/theclifmeister/terminatr/commit/f742530576f58b6e14125e187a21fb23d0a84c8c))
+* **ios:** composer Paste level with the attachment chips, hide-keyboard in the dock's left slot, Keys out of the conversation, conversation gap and edges aligned (T882) ([#955](https://github.com/theclifmeister/terminatr/issues/955)) ([0e0f974](https://github.com/theclifmeister/terminatr/commit/0e0f9743e77ae4b2a176a6ac2c077c1b310d872b))
+* **ios:** the busy bar draws one outline, not two (T883) ([#956](https://github.com/theclifmeister/terminatr/issues/956)) ([f2ac586](https://github.com/theclifmeister/terminatr/commit/f2ac58624ead31be34bd2ea823f5616bd53b906d))
+
 ## [0.67.1](https://github.com/theclifmeister/terminatr/compare/v0.67.0...v0.67.1) (2026-10-30)
 
 
