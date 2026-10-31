@@ -197,9 +197,17 @@ type Safety struct {
 	// they are used, since config doesn't read the manifests.
 	ThreadAgent      string `json:"thread_agent"`
 	CoordinatorAgent string `json:"coordinator_agent"`
+	// ThreadAgents are the agents the coordinator may start threads with
+	// (tm thread start --agent, §11.2), ThreadAgent always among them;
+	// nil is every installed agent. Unset ThreadAgent, the first of them
+	// is the one a thread runs without --agent (DefaultThreadAgent).
+	ThreadAgents []string `json:"thread_agents,omitempty"`
 	// Models is the project's scope: the models the coordinator may pick
 	// for a thread (tm thread start --model, §8.2, §11.2), names from
-	// what the installed agents list. nil is every available model.
+	// what the installed agents list. A bare name is allowed on every
+	// agent that offers it; "agent/model" on that agent only, and
+	// "agent/*" every model of that agent (ScopeTakes). nil is every
+	// available model.
 	Models []string `json:"models,omitempty"`
 	// CoordinatorModel is the model a new coordinator runs, from the
 	// project's scope and its coordinator agent's models; "" is the
@@ -311,6 +319,7 @@ type rawSafety struct {
 	// migration moves it (MigrateProtection).
 	SandboxEsc     *bool         `toml:"sandbox_escapes"`
 	ThreadAgent    *string       `toml:"thread_agent"`
+	ThreadAgents   *[]string     `toml:"thread_agents"`
 	CoordAgent     *string       `toml:"coordinator_agent"`
 	Models         *[]string     `toml:"models"`
 	CoordModel     *string       `toml:"coordinator_model"`
@@ -385,10 +394,64 @@ func CheckModels(names []string) error {
 	return nil
 }
 
-// AllowsModel reports whether the allow-list takes model; an empty
-// (unset) list takes every model.
-func (s Safety) AllowsModel(model string) bool {
-	return len(s.Models) == 0 || slices.Contains(s.Models, model)
+// CheckAgents checks a thread_agents list's shape: at least one name,
+// each one agent's name, none twice. The registry is checked where it
+// is used.
+func CheckAgents(names []string) error {
+	if len(names) == 0 {
+		return errors.New("must name at least one agent (leave it out to allow every installed agent)")
+	}
+	for i, n := range names {
+		if err := CheckAgent(n); err != nil {
+			return err
+		}
+		if slices.Contains(names[:i], n) {
+			return fmt.Errorf("lists %q twice", n)
+		}
+	}
+	return nil
+}
+
+// DefaultThreadAgent is the agent a thread runs without --agent:
+// thread_agent, else the first of thread_agents; "" when neither is
+// set (internal/models resolves it to the one installed agent).
+func (s Safety) DefaultThreadAgent() string {
+	if s.ThreadAgent == "" && len(s.ThreadAgents) > 0 {
+		return s.ThreadAgents[0]
+	}
+	return s.ThreadAgent
+}
+
+// AllowsThreadAgent reports whether the coordinator may start a thread
+// with agent name: thread_agents lists it, it is thread_agent, or
+// thread_agents is unset (every installed agent).
+func (s Safety) AllowsThreadAgent(name string) bool {
+	return len(s.ThreadAgents) == 0 || name == s.ThreadAgent || slices.Contains(s.ThreadAgents, name)
+}
+
+// AllThreadModels is the scope entry that allows every model of agent.
+func AllThreadModels(agent string) string { return agent + "/*" }
+
+// ScopeTakes reports whether a project's models scope allows agent's
+// model: an empty (unset) scope every model; else an entry that is the
+// model's bare name (any agent that offers it), "agent/model", or
+// "agent/*".
+func ScopeTakes(scope []string, agent, model string) bool {
+	if len(scope) == 0 {
+		return true
+	}
+	return slices.Contains(scope, model) || slices.Contains(scope, agent+"/"+model) || slices.Contains(scope, AllThreadModels(agent))
+}
+
+// ScopeNames splits a scope entry into the agent it is qualified with
+// ("" for a bare name) and the model ("*" for every model), against the
+// agent names known: a model name may hold a "/" itself
+// ("provider/model"), so only a known agent's prefix qualifies it.
+func ScopeNames(entry string, agents []string) (agent, model string) {
+	if a, m, ok := strings.Cut(entry, "/"); ok && m != "" && slices.Contains(agents, a) {
+		return a, m
+	}
+	return "", entry
 }
 
 // Config is the parsed file.

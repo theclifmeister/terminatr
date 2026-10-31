@@ -188,6 +188,7 @@ func (sr safetyRows) sharedRows() []setting {
 			"thread_agent", func(s config.Safety) string { return s.ThreadAgent }, "new threads "+sr.ofWho+" run "),
 		sr.agentRow("Coordinator agent", "The agent a new coordinator runs; a running one keeps its agent until it is started anew. Enter picks the next one tm knows.",
 			"coordinator_agent", func(s config.Safety) string { return s.CoordinatorAgent }, "new coordinators "+sr.ofWho+" run "),
+		sr.threadAgentsRow(),
 		sr.modelsRow(),
 		sr.coordModelRow(),
 		sr.branchRow(),
@@ -472,22 +473,65 @@ func (sr safetyRows) agentRow(label, help, key string, get func(config.Safety) s
 		}}
 }
 
+// threadAgentsRow is Thread agents: the installed agents the
+// coordinator may start threads with, each allowed or left out, at
+// least one kept; with none left out the line goes (every installed
+// agent, new ones too) for all projects, and a project keeps its list.
+func (sr safetyRows) threadAgentsRow() setting {
+	word := func(s config.Safety) string {
+		if len(s.ThreadAgents) == 0 {
+			return "any installed"
+		}
+		return strings.Join(s.ThreadAgents, ", ")
+	}
+	return setting{label: "Thread agents", help: "The agents the coordinator may start threads with, each with its own models (Thread models); Thread agent is the one a thread runs when it names none, and is always allowed. Enter lists the installed agents to allow or leave out.",
+		keys: []string{"thread_agents"}, word: word,
+		value: func(m *dash) string { return word(sr.safety(m)) },
+		change: func(m *dash) tea.Cmd {
+			names := m.agentList()
+			if len(names) == 0 {
+				m.msg = "no agent is installed: install one tm knows (tm agent list), then tm doctor"
+				return nil
+			}
+			m.push(&modelsView{all: names, allow: slices.Clone(sr.safety(m).ThreadAgents),
+				title: "Thread agents", intro: "The agents the coordinator may start threads with.", what: "agent", staleWord: "not installed",
+				save: func(m *dash, list []string) tea.Cmd {
+					if sr.all && len(list) == len(names) && !slices.ContainsFunc(list, func(n string) bool { return !slices.Contains(names, n) }) {
+						s := sr.safety(m)
+						s.ThreadAgents = nil
+						m.data.Defaults = &s
+						return m.setSetting(sr.table, "thread_agents", nil, "the coordinator may start threads with any installed agent "+sr.forWho)
+					}
+					return sr.set(m, "thread_agents", list, "threads "+sr.ofWho+" may run "+strings.Join(list, ", "))
+				}})
+			return nil
+		},
+		note: func(m *dash) []string {
+			s := sr.safety(m)
+			if d := s.DefaultThreadAgent(); len(s.ThreadAgents) > 0 && d != "" && !slices.Contains(s.ThreadAgents, d) {
+				return []string{th().Faint.Render("Thread agent " + d + " is allowed too: threads that name no agent run it")}
+			}
+			return nil
+		}}
+}
+
 func (sr safetyRows) modelsRow() setting {
-	return setting{label: "Thread models", help: "The models the coordinator may pick for a thread, from the ones the installed agents offer (General: Models). Enter lists them to allow or leave out; with none left out it chooses from all, new ones too. A model it may not pick is refused.",
+	return setting{label: "Thread models", help: "The models the coordinator may pick for a thread, from the ones the installed agents offer (General: Models), each agent's its own. Enter lists them to allow or leave out; with none of an agent's left out it chooses from all of them, new ones too. A model it may not pick is refused.",
 		keys: []string{"models"}, word: func(s config.Safety) string { return modelWords(s.Models) },
 		value: func(m *dash) string { return modelWords(sr.safety(m).Models) },
 		change: func(m *dash) tea.Cmd {
-			names := catalogNames(m.src.Catalogs())
-			m.push(&modelsView{all: names, allow: slices.Clone(sr.safety(m).Models),
-				save: func(m *dash, list []string) tea.Cmd {
+			names, allow, write := scopeChoices(m.src.Catalogs(), sr.safety(m).Models)
+			m.push(&modelsView{all: names, allow: allow,
+				save: func(m *dash, chosen []string) tea.Cmd {
 					// Every model allowed: all projects drops the line,
 					// a project keeps the explicit list (X follows all).
-					if sr.all && len(list) == len(names) && !slices.ContainsFunc(list, func(n string) bool { return !slices.Contains(names, n) }) {
+					if sr.all && len(chosen) == len(names) && !slices.ContainsFunc(chosen, func(n string) bool { return !slices.Contains(names, n) }) {
 						s := sr.safety(m)
 						s.Models = nil
 						m.data.Defaults = &s
 						return m.setSetting(sr.table, "models", nil, "the coordinator may pick any model "+sr.forWho)
 					}
+					list := write(chosen)
 					return sr.set(m, "models", list, "the coordinator may pick "+strings.Join(list, ", ")+" "+sr.forWho)
 				}})
 			return nil

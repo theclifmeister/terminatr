@@ -38,6 +38,7 @@ Merge method                squash
 Keep my checkout current    off
 Thread agent                claude
 Coordinator agent           claude
+Thread agents               any installed
 Thread models               any
 Coordinator model           agent's default
 Link limits                 3 at once · 10 an hour · 8 KB · files up to 25 MB

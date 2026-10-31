@@ -588,6 +588,52 @@ func TestThreadAgentSetting(t *testing.T) {
 	}
 }
 
+// TestThreadAgentsAllowList: thread_agents limits the agents threads
+// may run, each with its own models (agent/model entries in models):
+// tm thread start and tm task delegate check --agent and --model
+// together, and tm context lists every allowed agent with its models.
+func TestThreadAgentsAllowList(t *testing.T) {
+	h := newHarness(t)
+	h.ok(human, "project", "new", "demo")
+	h.ok(human, "task", "add", "Fix it", "--project", "demo")
+	modelstest.Agents(t, "claude", "codex")
+	modelstest.Answer(t, "claude", "opus*", "sonnet", "haiku")
+	modelstest.Answer(t, "codex", "gpt-6.1-sol*", "gpt-6.1-mini")
+	cfg := filepath.Join(h.root, "config.toml")
+	write := func(body string) {
+		if err := os.WriteFile(cfg, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("[projects.demo]\nthread_agents = [\"claude\"]\n")
+	h.expect(1, "agent-not-allowed", coord, "thread", "start", "Fix it", "--agent", "codex", "--project", "demo")
+	h.expect(1, "allowed: claude", coord, "task", "delegate", "T1", "--agent", "codex", "--project", "demo")
+	out := h.ok(coord, "context", "--project", "demo")
+	if !strings.Contains(out, "Thread agent: claude (config.toml; the human's): tm thread start runs it\n") ||
+		!strings.Contains(out, "--agent codex is refused (agent-not-allowed)") || strings.Contains(out, "Models of codex") {
+		t.Fatalf("context:\n%s", out)
+	}
+
+	write("[projects.demo]\nthread_agents = [\"claude\", \"codex\"]\nmodels = [\"opus\", \"sonnet\", \"codex/gpt-6.1-sol\"]\n")
+	h.expect(1, "allowed for codex: gpt-6.1-sol", coord, "thread", "start", "Fix it", "--agent", "codex", "--model", "gpt-6.1-mini", "--project", "demo")
+	h.expect(1, "unknown-model", coord, "thread", "start", "Fix it", "--agent", "codex", "--model", "opus", "--project", "demo")
+	h.expect(1, "model-not-allowed", coord, "task", "delegate", "T1", "--agent", "claude", "--model", "haiku", "--project", "demo")
+	out = h.ok(coord, "context", "--project", "demo")
+	for _, want := range []string{
+		"Thread agent: claude (config.toml; the human's): tm thread start runs it; --agent may name another the user allows for threads: codex",
+		"Pick the agent and model for each job: tm thread start --agent A --model M",
+		"Models of codex (tm thread start --model; without it, codex's own default):\n  gpt-6.1-sol: about gpt-6.1-sol (codex's own default)\nThe user",
+		"  sonnet: ",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("context lacks %q:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "  haiku: ") || strings.Contains(out, "stale:") || strings.Contains(out, "is refused (agent-not-allowed)") {
+		t.Fatalf("context:\n%s", out)
+	}
+}
+
 // TestArchivedShow: tm thread show prints an archived thread from its
 // tarball, its report marked as the thread's data.
 func TestArchivedShow(t *testing.T) {

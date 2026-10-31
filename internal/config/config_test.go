@@ -280,16 +280,16 @@ yolo = true
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s, _ := c.Safety("demo"); !reflect.DeepEqual(s.Models, []string{"opus"}) || !s.AllowsModel("opus") || s.AllowsModel("sonnet") {
+	if s, _ := c.Safety("demo"); !reflect.DeepEqual(s.Models, []string{"opus"}) || !ScopeTakes(s.Models, "claude", "opus") || ScopeTakes(s.Models, "claude", "sonnet") {
 		t.Fatalf("demo: %v", s.Models)
 	}
-	if s, _ := c.Safety("other"); !reflect.DeepEqual(s.Models, []string{"opus", "sonnet"}) || s.AllowsModel("haiku") {
+	if s, _ := c.Safety("other"); !reflect.DeepEqual(s.Models, []string{"opus", "sonnet"}) || ScopeTakes(s.Models, "claude", "haiku") {
 		t.Fatalf("other: %v", s.Models)
 	}
 	if got := c.Own("demo"); !reflect.DeepEqual(got, []string{"models"}) {
 		t.Fatalf("own: %v", got)
 	}
-	if s, _ := (*Config)(nil).AllProjects(); s.Models != nil || !s.AllowsModel("haiku") {
+	if s, _ := (*Config)(nil).AllProjects(); s.Models != nil || !ScopeTakes(s.Models, "claude", "haiku") {
 		t.Fatal("no setting allows every model")
 	}
 	for _, bad := range []string{`models = []`, `models = ["a b"]`, `models = ["opus", "opus"]`, `models = "opus"`} {
@@ -474,5 +474,53 @@ func TestRepos(t *testing.T) {
 	write(t, "[defaults]\nrepos = [\"/src/a\"]\n")
 	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "defaults can't set repos") {
 		t.Fatalf("defaults repos: %v", err)
+	}
+}
+
+func TestThreadAgentsAndScopedModels(t *testing.T) {
+	write(t, `
+[defaults]
+thread_agents = ["claude", "codex"]
+models = ["opus", "codex/gpt-6.1-sol"]
+
+[projects.demo]
+thread_agent = "codex"
+thread_agents = ["claude"]
+models = ["claude/*"]
+`)
+	c, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	all, _ := c.AllProjects()
+	if all.DefaultThreadAgent() != "claude" || !all.AllowsThreadAgent("codex") || all.AllowsThreadAgent("gemini") {
+		t.Fatalf("all projects: %+v", all)
+	}
+	if !ScopeTakes(all.Models, "claude", "opus") || !ScopeTakes(all.Models, "codex", "opus") ||
+		!ScopeTakes(all.Models, "codex", "gpt-6.1-sol") || ScopeTakes(all.Models, "claude", "gpt-6.1-sol") || ScopeTakes(all.Models, "codex", "gpt-6.1") {
+		t.Fatal("all projects' scope")
+	}
+	d, _ := c.Safety("demo")
+	// thread_agent is always allowed, and the default before the list.
+	if d.DefaultThreadAgent() != "codex" || !d.AllowsThreadAgent("codex") || !d.AllowsThreadAgent("claude") || d.AllowsThreadAgent("gemini") {
+		t.Fatalf("demo: %+v", d)
+	}
+	if !ScopeTakes(d.Models, "claude", "haiku") || ScopeTakes(d.Models, "codex", "gpt-6.1-sol") {
+		t.Fatal("demo's scope")
+	}
+	if a, m := ScopeNames("codex/gpt-6.1-sol", []string{"claude", "codex"}); a != "codex" || m != "gpt-6.1-sol" {
+		t.Fatal(a, m)
+	}
+	if a, m := ScopeNames("openai/gpt-5", []string{"claude", "codex"}); a != "" || m != "openai/gpt-5" {
+		t.Fatal(a, m)
+	}
+	for _, bad := range []string{`thread_agents = []`, `thread_agents = ["a b"]`, `thread_agents = ["codex", "codex"]`, `thread_agents = "codex"`} {
+		write(t, "[projects.demo]\n"+bad+"\n")
+		if _, err := Load(); err == nil {
+			t.Errorf("%s: loaded", bad)
+		}
+	}
+	if err := CheckSetting("thread_agents", []string{"claude", "codex"}); err != nil {
+		t.Fatal(err)
 	}
 }

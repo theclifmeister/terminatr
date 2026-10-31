@@ -1271,6 +1271,83 @@ func TestModelsSetting(t *testing.T) {
 	}
 }
 
+// TestModelsSettingAgents: with several agents installed, Thread models
+// lists each agent's models as agent/model, and an agent none of whose
+// models is left out is saved as agent/* (its new ones too).
+func TestModelsSettingAgents(t *testing.T) {
+	src, m := popupData(t)
+	src.agents = []string{"claude", "codex"}
+	m.catalogs = nil
+	modelstest.Answer(t, "claude", "opus", "sonnet")
+	modelstest.Answer(t, "codex", "gpt-6.1-sol", "gpt-6.1-mini")
+	if err := config.SetProject("alpha", "models", []string{"opus", "sonnet"}); err != nil {
+		t.Fatal(err)
+	}
+	src.settings = append(src.settings, "projects.alpha.models")
+	m.setData(src.Load())
+	m.Update(tea.WindowSizeMsg{Width: 160, Height: 60})
+	keyPress(m, "A")
+	keyPress(m, "4")
+	pv := m.top().(*projectView)
+	pv.settings.sel = slices.IndexFunc(pv.settings.rows, func(r setting) bool { return r.label == "Thread models" })
+	keyPress(m, "enter")
+	mv := m.top().(*modelsView)
+	if want := []string{"claude/opus", "claude/sonnet", "codex/gpt-6.1-sol", "codex/gpt-6.1-mini"}; !slices.Equal(mv.rows(), want) || !slices.Equal(mv.allow, want[:2]) {
+		t.Fatalf("rows %v, allowed %v", mv.rows(), mv.allow)
+	}
+	keyPress(m, "down")
+	keyPress(m, "down")
+	drain(t, m, keyPress(m, "enter")) // codex/gpt-6.1-sol in
+	cfg, _ := config.Load()
+	if s, _ := cfg.Safety("alpha"); !slices.Equal(s.Models, []string{"claude/*", "codex/gpt-6.1-sol"}) {
+		t.Fatalf("saved %v", s.Models)
+	}
+}
+
+// TestThreadAgentsSetting: Thread agents lists the installed agents to
+// allow or leave out; the last one stays, and all projects drops the
+// line once every one is allowed again.
+func TestThreadAgentsSetting(t *testing.T) {
+	_, m := popupData(t)
+	m.Update(tea.WindowSizeMsg{Width: 160, Height: 60})
+	prefixed(m, ",")
+	keyPress(m, "2")
+	sv := m.top().(*settingsView)
+	i := slices.IndexFunc(sv.tabs[1].rows, func(r setting) bool { return r.label == "Thread agents" })
+	if i < 0 {
+		t.Fatal("no Thread agents row")
+	}
+	sv.tabs[1].sel = i
+	if got := sv.tabs[1].rows[i].value(m); got != "any installed" {
+		t.Fatalf("value %q", got)
+	}
+	keyPress(m, "enter")
+	mv, ok := m.top().(*modelsView)
+	if !ok || !slices.Equal(mv.rows(), []string{"claude", "pi"}) {
+		t.Fatalf("enter opened %T", m.top())
+	}
+	if out := screen(m); !strings.Contains(out, "The agents the coordinator may start threads with.") {
+		t.Fatalf("view:\n%s", out)
+	}
+	keyPress(m, "down")
+	drain(t, m, keyPress(m, "enter")) // pi out
+	cfg, _ := config.Load()
+	if s, _ := cfg.AllProjects(); !slices.Equal(s.ThreadAgents, []string{"claude"}) {
+		t.Fatalf("saved %v", s.ThreadAgents)
+	}
+	keyPress(m, "up")
+	drain(t, m, keyPress(m, "enter")) // the last one stays
+	if mv.err != "at least one agent stays allowed" {
+		t.Fatalf("err %q", mv.err)
+	}
+	keyPress(m, "down")
+	drain(t, m, keyPress(m, "enter")) // pi in again: every agent
+	cfg, _ = config.Load()
+	if s, _ := cfg.AllProjects(); s.ThreadAgents != nil {
+		t.Fatalf("saved %v", s.ThreadAgents)
+	}
+}
+
 // TestHistorySetting: Keep history lists the four retention ages; enter
 // steps one, + and - change it by a day, each saved as its own setting,
 // and x makes the project follow all projects again.

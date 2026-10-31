@@ -126,6 +126,7 @@ type PeerSettings struct {
 	Protection               string   `json:"protection"`
 	CoordinatorAccess        bool     `json:"coordinator_access"`
 	ThreadAgent              string   `json:"thread_agent"`
+	ThreadAgents             []string `json:"thread_agents,omitempty"`
 	CoordinatorAgent         string   `json:"coordinator_agent"`
 	Models                   []string `json:"models,omitempty"`
 	CoordinatorModel         string   `json:"coordinator_model,omitempty"`

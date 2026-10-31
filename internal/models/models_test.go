@@ -200,6 +200,16 @@ func TestCatalog(t *testing.T) {
 	if got := code(c.Check("beta", []string{"alpha"})); got != "model-not-allowed" {
 		t.Errorf("out of scope: %q", got)
 	}
+	// A scope qualified per agent: gem's own entries, another agent's
+	// left out.
+	for scope, want := range map[string]string{"gem/beta": "", "gem/*": "", "other/beta": "model-not-allowed", "other/*,alpha": "model-not-allowed"} {
+		if got := code(c.Check("beta", strings.Split(scope, ","))); got != want {
+			t.Errorf("scope %s: %q, want %q", scope, got, want)
+		}
+	}
+	if got := len(c.InScope([]string{"gem/*"})); got != 3 {
+		t.Errorf("gem/* takes %d models", got)
+	}
 	if c.LaunchModel(nil) != "beta" || c.LaunchModel([]string{"alpha"}) != "" {
 		t.Errorf("launch model %q %q", c.LaunchModel(nil), c.LaunchModel([]string{"alpha"}))
 	}
