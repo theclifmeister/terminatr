@@ -359,14 +359,22 @@ event = "SessionEnd"
 # Screen rules (0.160, threads/t-0083/library/T91-codex-screens.md):
 # blockers and the screens before the first hook. Highest priority wins.
 
+# A dialog's words can be in the agent's own output too (T743), and two
+# of these rules type keys. So each reads the dialog's shape at the
+# bottom, where the composer sits otherwise: its option on a line of
+# its own, numbered, and its footer last.
+
+# The titles ("Trust this folder?", "Hooks need review", "Update
+# available") sit above wrapped text, too far up to read here.
+
 # Shown when the projects flag didn't cover the folder.
 [[rules]]
 id = "trust-folder"
 state = "blocked"
 reason = "trust"
 priority = 50
-region = "screen"
-contains = ["Trust this folder?", "Trust and continue"]
+region = "bottom:6"
+regex = '(?m)^[› ]*\d+\. Trust and continue[ ]*$(?s:.*)^[^\n]*enter continue[^\n]*\z'
 
 # Shown while any of the user's own hooks is untrusted; tm's hooks are
 # trusted for the session. tm answers "Continue without trusting" itself,
@@ -377,8 +385,8 @@ id = "hooks-review"
 state = "blocked"
 reason = "trust"
 priority = 50
-region = "screen"
-contains = ["Hooks need review", "Continue without trusting"]
+region = "bottom:6"
+regex = '(?m)^[› ]*\d+\. Continue without trusting[^\n]*$(?s:.*)^[^\n]*enter confirm[^\n]*\z'
 keys = "3"
 
 # check_for_update_on_startup=false keeps it away; skipped if it shows.
@@ -387,8 +395,8 @@ id = "update-available"
 state = "blocked"
 reason = "update"
 priority = 50
-region = "screen"
-contains = ["Update available", "Skip until next version"]
+region = "bottom:6"
+regex = '(?m)^[› ]*\d+\. Skip until next version[ ]*$(?s:.*)^[^\n]*enter continue[^\n]*\z'
 keys = "2"
 
 # "Would you like to run the following command?" … "Press enter to
