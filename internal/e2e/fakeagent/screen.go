@@ -203,7 +203,7 @@ type dialog struct {
 	// a multi-select's toggled options (nil for a single-select).
 	descriptions []string
 	checked      map[int]bool
-	done         string // question: a multi-select's row under its options that ends it ("Next", "Submit"); sel len(options) is on it
+	done         string   // question: a multi-select's row under its options that ends it ("Next", "Submit"); sel len(options) is on it
 	review       []string // review: "question → answer" of each of the call's questions
 	question     string
 	options      []string
