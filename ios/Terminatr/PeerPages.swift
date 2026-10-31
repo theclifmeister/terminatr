@@ -169,7 +169,7 @@ struct PeerPageScreen: View {
     }
 }
 
-/// "Not shared by work", and what shares it.
+/// "Not shared by studio", and what shares it.
 struct PeerNotShared: View {
     let page: PeerPages.Page
     let server: String

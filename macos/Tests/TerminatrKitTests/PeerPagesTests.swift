@@ -3,7 +3,7 @@ import Testing
 @testable import TerminatrKit
 
 private func pages() -> AppAPI.PeerPages {
-    AppAPI.PeerPages(project: "al0ft", goal: " the loft \n", body: "# Rules\nKeep it small.\n", repos: 2, tasks: [
+    AppAPI.PeerPages(project: "acme-api", goal: " the shop's API \n", body: "# Rules\nKeep it small.\n", repos: 2, tasks: [
         AppAPI.Task(id: 1, ref: "T1", title: "Deck", status: "ready"),
         AppAPI.Task(id: 2, ref: "T2", title: "Later", status: "open"),
         AppAPI.Task(id: 3, ref: "T3", title: "Shipped", status: "done"),
@@ -29,15 +29,15 @@ private func pages() -> AppAPI.PeerPages {
         let s: PeerPages.State<AppAPI.PeerPages> = PeerPages.state(AppAPI.Error(code: code, message: "x"))
         #expect(s == .notShared, "\(code)")
     }
-    let s: PeerPages.State<AppAPI.PeerPages> = PeerPages.state(AppAPI.Error(code: "refused", message: "work can't be reached now"))
-    #expect(s == .failed("work can't be reached now"))
+    let s: PeerPages.State<AppAPI.PeerPages> = PeerPages.state(AppAPI.Error(code: "refused", message: "studio can't be reached now"))
+    #expect(s == .failed("studio can't be reached now"))
     // Memory never, designs not yet; the rest wait for a tm that reads them.
     #expect(PeerPages.initial(.memory, reads: true) == PeerPages.State<Int>.notShared)
     #expect(PeerPages.initial(.designs, reads: true) == PeerPages.State<Int>.notShared)
     #expect(PeerPages.initial(.board, reads: true) == PeerPages.State<Int>.loading)
     #expect(PeerPages.initial(.library, reads: false) == PeerPages.State<Int>.notShared)
-    #expect(PeerPages.notShared(by: "work") == "Not shared by work")
-    #expect(PeerPages.notSharedDetail(.memory, server: "work").contains("never"))
+    #expect(PeerPages.notShared(by: "studio") == "Not shared by studio")
+    #expect(PeerPages.notSharedDetail(.memory, server: "studio").contains("never"))
 }
 
 @Test func peerPagesBoardAndTiles() {
@@ -53,12 +53,12 @@ private func pages() -> AppAPI.PeerPages {
 
 @Test func peerOverviewKeepsPathsThere() {
     let now = Date(timeIntervalSince1970: 0)
-    let project = AppAPI.PeerProject(project: "al0ft", needsYou: 1, threads: 1, ready: 2, sessions: [
-        AppAPI.PeerSession(id: "work/s-1", role: "coordinator", agent: "claude", project: "al0ft", created: now, state: "working"),
-        AppAPI.PeerSession(id: "work/s-2", role: "thread", agent: "codex", project: "al0ft", thread: "t-0004", created: now),
+    let project = AppAPI.PeerProject(project: "acme-api", needsYou: 1, threads: 1, ready: 2, sessions: [
+        AppAPI.PeerSession(id: "studio/s-1", role: "coordinator", agent: "claude", project: "acme-api", created: now, state: "working"),
+        AppAPI.PeerSession(id: "studio/s-2", role: "thread", agent: "codex", project: "acme-api", thread: "t-0004", created: now),
     ], pages: true)
     let o = ProjectOverview(pages(), project: project)
-    #expect(o.goal == "the loft")
+    #expect(o.goal == "the shop's API")
     #expect(o.repos.isEmpty && o.repoCount == 2)
     #expect(o.instructions == "# Rules\nKeep it small.")
     #expect(o.coordinator == "claude · working")
@@ -66,24 +66,24 @@ private func pages() -> AppAPI.PeerPages {
     #expect(o.tasks == "1 needs you · 1 in motion · 2 on deck · 1 done")
 }
 
-/// The demo's paired server shares al0ft's pages, not cowork's: an
+/// The demo's paired server shares acme-api's pages, not acme-docs's: an
 /// answer can be an error (DemoTransport), which reads as not shared.
 @Test func demoPeerPages() async throws {
     let b = try await demoBridge()
     #expect(try await b.call(AppAPI.Methods.peerList).peers.first?.projects.map(\.pages) == [true, false])
-    let p = try await b.call(AppAPI.Methods.peerPagesRead, AppAPI.PeerPagesParams(alias: "work", project: "al0ft"))
+    let p = try await b.call(AppAPI.Methods.peerPagesRead, AppAPI.PeerPagesParams(alias: "studio", project: "acme-api"))
     #expect(PeerPages.stats(p).map(\.0) == [2, 3, 3])
     do {
-        _ = try await b.call(AppAPI.Methods.peerPagesRead, AppAPI.PeerPagesParams(alias: "work", project: "cowork"))
-        Issue.record("cowork's pages answered")
+        _ = try await b.call(AppAPI.Methods.peerPagesRead, AppAPI.PeerPagesParams(alias: "studio", project: "acme-docs"))
+        Issue.record("acme-docs's pages answered")
     } catch {
         #expect(PeerPages.state(error) == PeerPages.State<AppAPI.PeerPages>.notShared)
     }
-    let files = try await b.call(AppAPI.Methods.peerLibraryList, AppAPI.PeerPagesParams(alias: "work", project: "al0ft")).files
-    let read = await PeerPages.read({ p in try await b.call(AppAPI.Methods.peerLibraryRead, p) }, alias: "work", project: "al0ft", file: files[0])
+    let files = try await b.call(AppAPI.Methods.peerLibraryList, AppAPI.PeerPagesParams(alias: "studio", project: "acme-api")).files
+    let read = await PeerPages.read({ p in try await b.call(AppAPI.Methods.peerLibraryRead, p) }, alias: "studio", project: "acme-api", file: files[0])
     guard case .data(let d, _) = read else {
         Issue.record("the library file didn't read: \(read)")
         return
     }
-    #expect(String(decoding: d, as: UTF8.self).hasPrefix("# Photo sizes"))
+    #expect(String(decoding: d, as: UTF8.self).hasPrefix("# Rate limit load test"))
 }

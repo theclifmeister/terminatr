@@ -51,7 +51,7 @@ public enum PeerPages {
         reads && page.shareable ? .loading : .notShared
     }
 
-    /// "Not shared by work": the empty state of a page the server
+    /// "Not shared by studio": the empty state of a page the server
     /// doesn't share.
     public static func notShared(by server: String) -> String { "Not shared by \(server)" }
 

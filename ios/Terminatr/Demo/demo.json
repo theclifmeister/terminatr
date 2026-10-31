@@ -636,13 +636,13 @@
   "peer.pages-read": [
    {
     "params": {
-     "alias": "work",
-     "project": "al0ft"
+     "alias": "studio",
+     "project": "acme-api"
     },
     "result": {
-     "body": "Book the loft by the day or the week.\n\n- Keep pages under 1 s on a phone.\n- Photos are the guests' first look: no stock images.\n",
-     "goal": "The loft's booking site",
-     "project": "al0ft",
+     "body": "The shop's public REST API.\n\n- Keep every endpoint under 200 ms at p95.\n- Never break a published version: add, don't change.\n",
+     "goal": "The shop's public API",
+     "project": "acme-api",
      "repos": 2,
      "tasks": [
       {
@@ -653,21 +653,21 @@
         {
          "done": true,
          "n": 1,
-         "text": "Resize the photos"
+         "text": "Token bucket per key"
         },
         {
          "done": false,
          "n": 2,
-         "text": "Lazy-load below the fold"
+         "text": "Return Retry-After"
         },
         {
          "done": false,
          "n": 3,
-         "text": "Check on a slow phone"
+         "text": "Load test at 2x peak"
         }
        ],
        "thread": "t-0012",
-       "title": "Photo gallery with lazy loading"
+       "title": "Rate limits per API key"
       },
       {
        "id": 14,
@@ -675,7 +675,7 @@
        "status": "ready",
        "steps": [],
        "thread": "",
-       "title": "Weekly rates in the calendar"
+       "title": "Webhooks for order events"
       },
       {
        "id": 15,
@@ -683,7 +683,7 @@
        "status": "ready",
        "steps": [],
        "thread": "",
-       "title": "Booking confirmation email"
+       "title": "OpenAPI spec in CI"
       },
       {
        "id": 16,
@@ -691,7 +691,7 @@
        "status": "open",
        "steps": [],
        "thread": "",
-       "title": "Guest reviews page"
+       "title": "GraphQL gateway"
       },
       {
        "id": 17,
@@ -699,7 +699,7 @@
        "status": "open",
        "steps": [],
        "thread": "",
-       "title": "Gift vouchers"
+       "title": "Bulk export endpoint"
       },
       {
        "id": 18,
@@ -707,7 +707,7 @@
        "status": "open",
        "steps": [],
        "thread": "",
-       "title": "Dark mode"
+       "title": "Sandbox keys"
       },
       {
        "id": 9,
@@ -715,7 +715,7 @@
        "status": "done",
        "steps": [],
        "thread": "",
-       "title": "Calendar of free days"
+       "title": "Orders endpoint"
       },
       {
        "id": 10,
@@ -723,7 +723,7 @@
        "status": "done",
        "steps": [],
        "thread": "",
-       "title": "Contact form"
+       "title": "Key rotation"
       },
       {
        "id": 11,
@@ -731,7 +731,7 @@
        "status": "done",
        "steps": [],
        "thread": "",
-       "title": "Pricing page"
+       "title": "Pagination cursors"
       }
      ],
      "truncated": false
@@ -740,32 +740,32 @@
    {
     "error": {
      "code": "pages-off",
-     "message": "work doesn't share this project's pages with this server"
+     "message": "studio doesn't share this project's pages with this server"
     },
     "params": {
-     "alias": "work",
-     "project": "cowork"
+     "alias": "studio",
+     "project": "acme-docs"
     }
    }
   ],
   "peer.library-list": [
    {
     "params": {
-     "alias": "work",
-     "project": "al0ft"
+     "alias": "studio",
+     "project": "acme-api"
     },
     "result": {
      "files": [
       {
        "message": "",
-       "name": "photo-sizes.md",
+       "name": "rate-limit-load.md",
        "peer": "",
-       "size": 78,
+       "size": 85,
        "state": "running",
        "task": "T12",
        "thread": "t-0012",
        "time": "2026-10-27T09:30:00Z",
-       "title": "Photo gallery with lazy loading"
+       "title": "Rate limits per API key"
       }
      ]
     }
@@ -773,28 +773,28 @@
    {
     "error": {
      "code": "pages-off",
-     "message": "work doesn't share this project's pages with this server"
+     "message": "studio doesn't share this project's pages with this server"
     },
     "params": {
-     "alias": "work",
-     "project": "cowork"
+     "alias": "studio",
+     "project": "acme-docs"
     }
    }
   ],
   "peer.library-read": [
    {
     "params": {
-     "alias": "work",
+     "alias": "studio",
      "id": "t-0012",
-     "name": "photo-sizes.md",
-     "project": "al0ft"
+     "name": "rate-limit-load.md",
+     "project": "acme-api"
     },
     "result": {
-     "data": "IyBQaG90byBzaXplcwoKfCBXaWR0aCB8IFdlaWdodCB8CnwtLS18LS0tfAp8IDY0MCB8IDQ4IEtCIHwKfCAxMjgwIHwgMTQwIEtCIHwK",
+     "data": "IyBSYXRlIGxpbWl0IGxvYWQgdGVzdAoKfCBSYXRlIHwgcDk1IHwKfC0tLXwtLS18CnwgMTAwL3MgfCA0OCBtcyB8CnwgMjAwL3MgfCA5MSBtcyB8Cg==",
      "mtime": "2026-10-27T09:30:00Z",
-     "name": "photo-sizes.md",
+     "name": "rate-limit-load.md",
      "offset": 0,
-     "size": 78
+     "size": 85
     }
    }
   ]
@@ -810,19 +810,19 @@
    "gen": 1,
    "peers": [
     {
-     "alias": "work",
+     "alias": "studio",
      "conversations": "on",
-     "name": "work",
+     "name": "studio",
      "needs": "off",
      "pane": true,
      "panes": "view",
      "projects": [
       {
-       "goal": "The loft's booking site",
+       "goal": "The shop's public API",
        "needs": [],
        "needs_you": 0,
        "pages": true,
-       "project": "al0ft",
+       "project": "acme-api",
        "ready": 2,
        "sessions": [
         {
@@ -831,10 +831,10 @@
          "context": 0,
          "context_window": 0,
          "created": "2026-10-27T08:00:00Z",
-         "current": "Planning the gallery",
-         "id": "work/s-301",
+         "current": "Planning rate limits",
+         "id": "studio/s-301",
          "model": "opus",
-         "project": "al0ft",
+         "project": "acme-api",
          "queued_prompts": 0,
          "reason": "",
          "remote_control": false,
@@ -851,10 +851,10 @@
          "context": 0,
          "context_window": 0,
          "created": "2026-10-27T08:00:00Z",
-         "current": "Resizing the photos",
-         "id": "work/s-302",
+         "current": "Writing the limiter",
+         "id": "studio/s-302",
          "model": "opus",
-         "project": "al0ft",
+         "project": "acme-api",
          "queued_prompts": 0,
          "reason": "",
          "remote_control": false,
@@ -871,11 +871,11 @@
        "watched": [
         {
          "id": "t-0012",
-         "title": "Photo gallery with lazy loading",
+         "title": "Rate limits per API key",
          "task": "T12",
          "steps_done": 1,
          "steps_total": 3,
-         "session": "work/s-302",
+         "session": "studio/s-302",
          "state": "working",
          "needs_you": false,
          "pr_checks": "",
@@ -884,11 +884,11 @@
        ]
       },
       {
-       "goal": "Desk sharing for the studio",
+       "goal": "Developer docs for the API",
        "needs": [],
        "needs_you": 0,
        "pages": false,
-       "project": "cowork",
+       "project": "acme-docs",
        "ready": 2,
        "sessions": [
         {
@@ -898,9 +898,9 @@
          "context_window": 0,
          "created": "2026-10-27T08:00:00Z",
          "current": "",
-         "id": "work/s-401",
+         "id": "studio/s-401",
          "model": "opus",
-         "project": "cowork",
+         "project": "acme-docs",
          "queued_prompts": 0,
          "reason": "",
          "remote_control": false,
