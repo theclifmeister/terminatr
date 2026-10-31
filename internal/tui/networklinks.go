@@ -27,7 +27,7 @@ import (
 //	"   ■ terminatr          [x] shared · seen by work           2 links ⚑"
 //	"     ├─ ⇄ beta          both · files: ask me                 paused ⚑"
 //	"     │  ⚑ paused: too many messages without you"
-//	"     └─ ⇄ work/cowork   both · ask first · files: ask me  linked back"
+//	"     └─ ⇄ work/acme-api   both · ask first · files: ask me  linked back"
 //	"        ⚑ M-4F2A-31 waits for your OK · Draft of the API notes"
 //
 // enter on a link, and L on a project (then a picker of the projects

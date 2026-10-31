@@ -588,7 +588,7 @@ Both terminals then show the other server's name and id and the same six digits,
 
 A relay without a domain pairs the same way, with its whole address: `tm peer pair --relay wss://203.0.113.5#sha256=…` (see [Without a domain](#without-a-domain-an-ip-address)). When a relay moves or gets a new key, `tm peer relay mini wss://…` (or the relay row in the Network popup) gives a paired server the new one, on each side; nothing else changes.
 
-To call a paired server something else here, give it a display name: `tm peer name del-02-0468-lt work` (or `E` on it in the Network popup). Its alias stays as it was, and either names it from then on: `work/gatehouse` and `del-02-0468-lt/gatehouse` are the same project in `tm link`, `tm project link` and every `tm peer` command, and screens and agents see `work`, with `work (del-02-0468-lt)` where both help. The name can't be another paired server's alias or name, this server's own name or a project's here; `tm peer name work ""` clears it. It stays on this server: the other side never sees it.
+To call a paired server something else here, give it a display name: `tm peer name acme-lt-07 work` (or `E` on it in the Network popup). Its alias stays as it was, and either names it from then on: `work/acme-docs` and `acme-lt-07/acme-docs` are the same project in `tm link`, `tm project link` and every `tm peer` command, and screens and agents see `work`, with `work (acme-lt-07)` where both help. The name can't be another paired server's alias or name, this server's own name or a project's here; `tm peer name work ""` clears it. It stays on this server: the other side never sees it.
 
 This server's own name is its host name (up to the first dot, in lower case) until you give it one: `tm network name studio` (or `E` on this server in the Network popup) writes `[server] name = "studio"` in `config.toml`, so renaming the Mac isn't needed. It heads this server's group in the sidebar and the Network popup, it is the name a pairing offers the other side, and a running server tells every paired server at once (and again whenever the link comes up): there it shows in the alias's place, `studio (mbp)` where both help, while the alias they chose at pairing stays theirs and never changes. A display name their user gave this server (`tm peer name`) wins over it, and one that is another paired server's word or a project's there isn't shown (their server's log says why). A paired server on an older tm keeps showing what it showed. The same rules as `tm peer name` apply: a-z, 0-9 and -, and not a paired server's alias or name or a project's here (`name-taken`). `tm network name ""` goes back to the host name; a paired server that knows names then shows its alias for this one again. The name set by hand in `config.toml` is read on `tm network name`, `tm peer` changes and `tm server restart`.
 
@@ -668,7 +668,7 @@ $ tm peer needs studio view
 Needs view for studio: it sees each need of the projects this server shares in full: the questions' and permission dialogs' text and options, the tasks in review, the coordinators' questions. It answers none of them.
 ```
 
-`studio`'s NEEDS YOU (all projects) then lists each as a row of its own (`mini › acme-api  T7  asks: Which cache?  answer on mini`), and its Mac app and phone a card each. At `view` they are read-only there: answer on `mini`. At `answer` `studio`'s user answers them from there: enter on a row opens its dialog (a question's options, a permission dialog's allow-once options, accept or send back a task in review, have the coordinator open its questions), and the Mac app's and the phone's cards get the same buttons (a phone at answer level or above). `mini` takes `studio`'s word that its user chose so, and checks each act as its own user's: the need must still be the one shown (a changed menu, dialog or task status answers `that need on mini changed: look again`), each act needs a one-time nonce from `mini`, and `mini`'s journal names it `human (peer: studio)`, or `human (peer: studio › iphone: Clif's iPhone)` for a phone. Only allow-once options cross; one that allows for the session or beyond stays `mini`'s user's, in the pane. A command that asks to run outside the sandbox never crosses with what it would run, only that it asks (`only on mini`). The Network popup (`N`) sets it too: `N` on the server, or its `needs` row in the details; raising it asks first. `tm peer list` shows `needs: view`, `tm network` both sides' switches, and `off` (the default) goes back to the count (SPEC §16.16).
+`studio`'s NEEDS YOU (all projects) then lists each as a row of its own (`mini › acme-api  T7  asks: Which cache?  answer on mini`), and its Mac app and phone a card each. At `view` they are read-only there: answer on `mini`. At `answer` `studio`'s user answers them from there: enter on a row opens its dialog (a question's options, a permission dialog's allow-once options, accept or send back a task in review, have the coordinator open its questions), and the Mac app's and the phone's cards get the same buttons (a phone at answer level or above). `mini` takes `studio`'s word that its user chose so, and checks each act as its own user's: the need must still be the one shown (a changed menu, dialog or task status answers `that need on mini changed: look again`), each act needs a one-time nonce from `mini`, and `mini`'s journal names it `human (peer: studio)`, or `human (peer: studio › iphone: Sam's iPhone)` for a phone. Only allow-once options cross; one that allows for the session or beyond stays `mini`'s user's, in the pane. A command that asks to run outside the sandbox never crosses with what it would run, only that it asks (`only on mini`). The Network popup (`N`) sets it too: `N` on the server, or its `needs` row in the details; raising it asks first. `tm peer list` shows `needs: view`, `tm network` both sides' switches, and `off` (the default) goes back to the count (SPEC §16.16).
 
 ### Project pages
 
@@ -694,9 +694,9 @@ Scan this with the terminatr app on an iPhone or iPad (it works once, for 10 min
 This server: server id 4F2A-91C3, through relay.example.net.
 Waiting…
 
-The device: "Clif's iPhone", device id 91C3-77AB, app 1.0
-Add it as "Clif's iPhone", a view-only device? [y/N] y
-Paired Clif's iPhone (device id 91C3-77AB, view-only) through relay.example.net.
+The device: "Sam's iPhone", device id 91C3-77AB, app 1.0
+Add it as "Sam's iPhone", a view-only device? [y/N] y
+Paired Sam's iPhone (device id 91C3-77AB, view-only) through relay.example.net.
 ```
 
 In the console it is the Network popup (`N` on the dashboard): `D` shows the same QR code in the popup, with the code as text under it to paste in the app if the camera can't scan it (make the window bigger if it says so), asks for a relay when none is set up yet, and asks the same question once the device joins: `Y` adds it, `E` names it first, `N` doesn't. The devices are listed under the paired servers, each with its connection or when it was last seen and its level; on one, `V` picks its level, `E` renames it and `X` removes it after asking. The Mac app's Settings › Devices does the same.
@@ -705,8 +705,8 @@ The relay is the one your paired servers use, or `--relay URL`. The QR code hold
 
 ```
 $ tm device list
-Clif's iPhone  91C3-77AB  view  relay.example.net  waiting for it, last seen 2h5m ago
-$ tm device name "clif's iphone" "Work phone"
+Sam's iPhone  91C3-77AB  view  relay.example.net  waiting for it, last seen 2h5m ago
+$ tm device name "sam's iphone" "Work phone"
 $ tm device remove "work phone"
 Removed Work phone; its link closes now and its key is no longer taken. On the device, Forget this server deletes its keys.
 ```

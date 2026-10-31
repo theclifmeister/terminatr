@@ -103,15 +103,15 @@ func TestBridgeDevices(t *testing.T) {
 		t.Errorf("a taken name: %v", err)
 	}
 	var paired appapi.DevicePaired
-	if err := c.Call(appapi.MethodDevicePairAnswer, appapi.DevicePairAnswerParams{Pairing: pg.Pairing, Accept: true, Name: "Clif's iPhone"}, &paired); err != nil ||
-		paired.Device == nil || paired.Device.Name != "Clif's iPhone" || !paired.Device.WriteKey {
+	if err := c.Call(appapi.MethodDevicePairAnswer, appapi.DevicePairAnswerParams{Pairing: pg.Pairing, Accept: true, Name: "Sam's iPhone"}, &paired); err != nil ||
+		paired.Device == nil || paired.Device.Name != "Sam's iPhone" || !paired.Device.WriteKey {
 		t.Fatalf("device.pair.answer: %+v %v", paired, err)
 	}
 	if err := <-joined; err != nil {
 		t.Fatalf("join: %v", err)
 	}
 	ds, _ := device.Load(devDir)
-	if len(ds) != 2 || ds[1].Name != "Clif's iPhone" || !ds[1].Key.Equal(phoneKey.Public()) || ds[1].Relay != url || !bytes.Equal(ds[1].WriteKey, wkb) {
+	if len(ds) != 2 || ds[1].Name != "Sam's iPhone" || !ds[1].Key.Equal(phoneKey.Public()) || ds[1].Relay != url || !bytes.Equal(ds[1].WriteKey, wkb) {
 		t.Fatalf("devices %+v", ds)
 	}
 	if err := c.Call(appapi.MethodDevicePairWait, appapi.DevicePairingParams{Pairing: pg.Pairing}, nil); code(err) != appapi.ErrPairEnded {
@@ -175,11 +175,11 @@ func TestBridgeDevices(t *testing.T) {
 	}()
 	offer = appapi.DeviceOffer{}
 	if err := c.Call(appapi.MethodDevicePairWait, appapi.DevicePairingParams{Pairing: pg.Pairing}, &offer); err != nil ||
-		offer.Again != "Clif's iPhone" || !offer.KeyChanged || offer.Level != device.LevelView || offer.Name != "iPhone 2" {
+		offer.Again != "Sam's iPhone" || !offer.KeyChanged || offer.Level != device.LevelView || offer.Name != "iPhone 2" {
 		t.Fatalf("offer again: %+v %v", offer, err)
 	}
 	paired = appapi.DevicePaired{}
-	if err := c.Call(appapi.MethodDevicePairAnswer, appapi.DevicePairAnswerParams{Pairing: pg.Pairing, Accept: true, Name: "Clif's iPhone"}, &paired); err != nil ||
+	if err := c.Call(appapi.MethodDevicePairAnswer, appapi.DevicePairAnswerParams{Pairing: pg.Pairing, Accept: true, Name: "Sam's iPhone"}, &paired); err != nil ||
 		paired.Device == nil || paired.Device.Level != device.LevelView || paired.Device.ID != id {
 		t.Fatalf("device.pair.answer again: %+v %v", paired, err)
 	}

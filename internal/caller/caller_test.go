@@ -83,7 +83,7 @@ func TestPeerHuman(t *testing.T) {
 	if got := c.String(); got != "human (peer: mini)" {
 		t.Errorf("String() = %q", got)
 	}
-	if got := ForPeerHuman("mini", "Clif's phone").String(); got != "human (peer: mini › iphone: Clif's phone)" {
+	if got := ForPeerHuman("mini", "Sam's phone").String(); got != "human (peer: mini › iphone: Sam's phone)" {
 		t.Errorf("String() = %q", got)
 	}
 	if !ForPeer("mini").IsAgent() || ForPeer("mini").Remote() {

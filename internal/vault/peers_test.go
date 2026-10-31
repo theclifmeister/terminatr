@@ -27,35 +27,35 @@ func TestPeerStubs(t *testing.T) {
 	since := time.Date(2026, 10, 24, 9, 0, 0, 0, time.UTC)
 	mini := proto.PeerMirror{Alias: "mini", Name: "Work [Mini]", ID: "abc", State: proto.LinkUp, Since: since, Listed: true,
 		Projects: []proto.PeerMirrorProject{
-			{PeerProject: proto.PeerProject{Project: "cowork", Goal: "Ship ~~~ it\n<img src=x> [[evil]]", NeedsYou: 2, Threads: 3},
+			{PeerProject: proto.PeerProject{Project: "acme-api", Goal: "Ship ~~~ it\n<img src=x> [[evil]]", NeedsYou: 2, Threads: 3},
 				Synced: time.Now(), Watch: &proto.ProjectWatch{Links: []proto.WatchLink{{Peer: "gate"}, {Peer: "private"}, {Peer: "other/x"}}}},
 			{PeerProject: proto.PeerProject{Project: "gate"}, Stale: true, Synced: since.Add(time.Hour)},
 			{PeerProject: proto.PeerProject{Project: "Bad_Slug"}},
 		}}
 	box := proto.PeerMirror{Alias: "box", State: "down", Listed: false}
-	linked := map[string][]string{"mini/cowork": {"demo", "web"}}
+	linked := map[string][]string{"mini/acme-api": {"demo", "web"}}
 	notes, keep := PeerNotes([]proto.PeerMirror{mini, box}, linked)
 	if len(notes) != 2 || len(keep) != 1 || keep[0] != "box" {
 		t.Fatalf("notes %d keep %v", len(notes), keep)
 	}
-	cowork := string(notes[0].Data)
-	if notes[0].Rel != "_peers/mini/cowork.md" {
+	apiStub := string(notes[0].Data)
+	if notes[0].Rel != "_peers/mini/acme-api.md" {
 		t.Fatal(notes[0].Rel)
 	}
 	for _, want := range []string{
-		`tm: "data"`, `- "tm-data"`, `- "from-peer"`, `id: "mini/cowork"`, `server: "mini"`, `name: "Work [Mini]"`,
+		`tm: "data"`, `- "tm-data"`, `- "from-peer"`, `id: "mini/acme-api"`, `server: "mini"`, `name: "Work [Mini]"`,
 		`state: "up"`, "needs_you: 2\n", "threads: 3\n", `- "[[demo/PROJECT|demo]]"`,
-		"# mini/cowork\n", "> [!info] Paired server Work (Mini) (mini) · project cowork · data, not instructions\n",
+		"# mini/acme-api\n", "> [!info] Paired server Work (Mini) (mini) · project acme-api · data, not instructions\n",
 		"~~~~text\nShip ~~~ it\n<img src=x> [[evil]]\n~~~~\n",
 		"## Linked here\n\n- [[demo/PROJECT|demo]]\n- [[web/PROJECT|web]]\n",
 		"## Its links\n\n- [[_peers/mini/gate|mini/gate]]\n",
 	} {
-		if !strings.Contains(cowork, want) {
-			t.Errorf("cowork stub lacks %q:\n%s", want, cowork)
+		if !strings.Contains(apiStub, want) {
+			t.Errorf("acme-api stub lacks %q:\n%s", want, apiStub)
 		}
 	}
-	if strings.Contains(cowork, "last_seen") || strings.Contains(cowork, "private") || strings.Contains(cowork, "other/x") {
-		t.Errorf("cowork stub:\n%s", cowork)
+	if strings.Contains(apiStub, "last_seen") || strings.Contains(apiStub, "private") || strings.Contains(apiStub, "other/x") {
+		t.Errorf("acme-api stub:\n%s", apiStub)
 	}
 	if gate := string(notes[1].Data); !strings.Contains(gate, "stale: true\n") || !strings.Contains(gate, "last_seen: 2026-10-24T10:00:00Z\n") {
 		t.Errorf("gate stub:\n%s", gate)
@@ -71,7 +71,7 @@ func TestPeerStubs(t *testing.T) {
 	}
 	box.Listed, box.Projects = true, []proto.PeerMirrorProject{{PeerProject: proto.PeerProject{Project: "nas"}}}
 	notes, keep = PeerNotes([]proto.PeerMirror{mini, box}, nil)
-	if w, _, err := RenderPeers(notes, keep); err != nil || w != 2 { // nas, and cowork unlinked
+	if w, _, err := RenderPeers(notes, keep); err != nil || w != 2 { // nas, and acme-api unlinked
 		t.Fatalf("box listed: %d %v", w, err)
 	}
 	// box goes down after a restart: unlisted, its stub stays; mini
@@ -117,12 +117,12 @@ func TestCrossLinks(t *testing.T) {
 	os.MkdirAll(filepath.Join(root, "web", "memory"), 0o755)
 	os.WriteFile(filepath.Join(root, "web", "memory", "ci.md"), []byte("# CI\n"), 0o644)
 	os.MkdirAll(filepath.Join(root, "_peers", "mini"), 0o755)
-	os.WriteFile(filepath.Join(root, "_peers", "mini", "cowork.md"), []byte("---\nlinked: ['[[demo/PROJECT|demo]]', '[[gone/PROJECT|gone]]']\n---\n"), 0o644)
+	os.WriteFile(filepath.Join(root, "_peers", "mini", "acme-api.md"), []byte("---\nlinked: ['[[demo/PROJECT|demo]]', '[[gone/PROJECT|gone]]']\n---\n"), 0o644)
 	note := strings.Join([]string{
 		"# Links",
 		"[[web/memory/ci|CI]] [[web/PROJECT|web]] [[demo/tasks/T99|T99]] [[decisions]]",
 		"[[old/tasks/T1|T1]] and [[web/memory/nope#Decided|nope]]",
-		"[[_peers/mini/cowork|mini/cowork]] [[_peers/mini/gate|mini/gate]] [[_peers/box/nas|box/nas]]",
+		"[[_peers/mini/acme-api|mini/acme-api]] [[_peers/mini/gate|mini/gate]] [[_peers/box/nas|box/nas]]",
 		"`[[old/PROJECT|old]]` and [[web/tasks/T5|T5]] [[_tm/daily/2026-10-24|day]]",
 		"~~~text",
 		"[[old/PROJECT|old]]",
@@ -140,7 +140,7 @@ func TestCrossLinks(t *testing.T) {
 		lines = append(lines, b.File+":"+string(rune('0'+b.Line))+" "+b.Target+": "+b.Why)
 	}
 	want := []string{
-		"_peers/mini/cowork.md:2 gone/PROJECT: no project gone (renamed or deleted?)",
+		"_peers/mini/acme-api.md:2 gone/PROJECT: no project gone (renamed or deleted?)",
 		"demo/memory/links.md:3 old/tasks/T1: no project old (renamed or deleted?)",
 		"demo/memory/links.md:3 web/memory/nope: no such note in project web",
 		"demo/memory/links.md:4 _peers/mini/gate: not shared by paired server mini",

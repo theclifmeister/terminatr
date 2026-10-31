@@ -67,17 +67,17 @@ func TestRegistry(t *testing.T) {
 	a, b := newKey(t), newKey(t)
 	const r = "wss://relay.example.net"
 	wk := writeKey(t)
-	d, err := Add(dir, pub(a), wk, "Clif's iPhone", r)
+	d, err := Add(dir, pub(a), wk, "Sam's iPhone", r)
 	if err != nil || d.Level != LevelView {
 		t.Fatalf("Add: %+v, %v", d, err)
 	}
-	if _, err := Add(dir, pub(b), nil, "clif's iphone", r); !errors.As(err, new(*TakenError)) {
+	if _, err := Add(dir, pub(b), nil, "sam's iphone", r); !errors.As(err, new(*TakenError)) {
 		t.Fatalf("a taken name: %v", err)
 	}
 	if _, err := Add(dir, pub(b), wk[:64], "iPad", r); err == nil {
 		t.Fatal("took a write key that isn't a point")
 	}
-	if _, err := SetLevel(dir, "CLIF'S IPHONE", LevelAnswer); err != nil {
+	if _, err := SetLevel(dir, "SAM'S IPHONE", LevelAnswer); err != nil {
 		t.Fatal(err)
 	}
 	// Pairing the same key again with the same write key keeps its
@@ -137,7 +137,7 @@ func TestNames(t *testing.T) {
 			t.Errorf("CheckName(%q) took it", bad)
 		}
 	}
-	if got := CleanName("  Clif's\n iPhone "); got != "Clif's iPhone" {
+	if got := CleanName("  Sam's\n iPhone "); got != "Sam's iPhone" {
 		t.Errorf("CleanName: %q", got)
 	}
 	if CleanName("\x00") != "iPhone" {
@@ -221,7 +221,7 @@ func pairBoth(t *testing.T, url string, tc *tls.Config, srv, phone *peer.Identit
 		t.Fatalf("pair: %v", err)
 	}
 	in.Server = server
-	pp, ep := Join(ctx, phone, in, "Clif's\x1b[2J iPhone", "1.0", phoneWriteKey, tc)
+	pp, ep := Join(ctx, phone, in, "Sam's\x1b[2J iPhone", "1.0", phoneWriteKey, tc)
 	es := <-errs
 	return offer, ps, pp, es, ep
 }
@@ -237,7 +237,7 @@ func TestPairThroughRelay(t *testing.T) {
 	if es != nil || ep != nil {
 		t.Fatalf("pair: %v / %v", es, ep)
 	}
-	if offer.Name != "Clif's[2J iPhone" || offer.ID != phone.ID || offer.Version != "1.0" || !bytes.Equal(offer.WriteKey, phoneWriteKey) {
+	if offer.Name != "Sam's[2J iPhone" || offer.ID != phone.ID || offer.Version != "1.0" || !bytes.Equal(offer.WriteKey, phoneWriteKey) {
 		t.Fatalf("offer %+v", offer)
 	}
 	if !ps.Key.Equal(pub(phone)) || !pp.Key.Equal(pub(srv)) || pp.Name != "studio" || !bytes.Equal(ps.WriteKey, phoneWriteKey) {

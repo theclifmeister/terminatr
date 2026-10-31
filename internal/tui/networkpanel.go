@@ -18,7 +18,7 @@ import (
 // server it reads, without changing anything, what that server may do
 // here as a ladder, and then the other way.
 //
-//	"work (del-02-0468-lt)"
+//	"work (acme-lt-07)"
 //	"──────────────────────────────"
 //	"name          work"
 //	"connection    ◉ connected · 38 ms"
@@ -34,7 +34,7 @@ import (
 //	"  needs (N)   [off] · view · answer"
 //	"AND THE OTHER WAY"
 //	"  work lets you watch its panes · its popup read-only"
-//	"  it shares cowork, gatehouse"
+//	"  it shares acme-api, acme-docs"
 
 // The panel's items: the rows its keyboard stops on.
 const (

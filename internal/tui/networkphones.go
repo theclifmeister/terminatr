@@ -27,7 +27,7 @@ import (
 //     when it lets the device do more.
 //
 //	"▾ devices · 2 paired                                D pairs a device"
-//	"   ◉ Clif's iPhone · connected                        level answer"
+//	"   ◉ Sam's iPhone · connected                         level answer"
 //	"   ○ iPad · last seen 2h ago                            level view"
 
 // devicesEvery is how often the open popup reads the devices again: their

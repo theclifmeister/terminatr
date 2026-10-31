@@ -1277,7 +1277,7 @@
        }
       ],
       "checkouts": {
-       "~/work/acme-design": "behind origin by 2"
+       "~/src/acme-design": "behind origin by 2"
       },
       "counts": {
        "done": 4,
@@ -1298,8 +1298,8 @@
       "pinned": true,
       "questions": 0,
       "repos": [
-       "~/work/acme-web",
-       "~/work/acme-design"
+       "~/src/acme-web",
+       "~/src/acme-design"
       ],
       "slug": "acme-web",
       "threads": [
@@ -1325,7 +1325,7 @@
           "output": 0,
           "turns": 0
          },
-         "worktree": "~/work/t-0101"
+         "worktree": "~/src/t-0101"
         },
         "status": {
          "current": "Bash: npm test",
@@ -1369,7 +1369,7 @@
           "output": 0,
           "turns": 0
          },
-         "worktree": "~/work/t-0102"
+         "worktree": "~/src/t-0102"
         },
         "status": {
          "current": "",
@@ -1413,7 +1413,7 @@
           "output": 0,
           "turns": 0
          },
-         "worktree": "~/work/t-0103"
+         "worktree": "~/src/t-0103"
         },
         "status": {
          "current": "",
@@ -1457,7 +1457,7 @@
           "output": 0,
           "turns": 0
          },
-         "worktree": "~/work/t-0104"
+         "worktree": "~/src/t-0104"
         },
         "status": {
          "current": "Reading cart.spec.ts",
@@ -1501,7 +1501,7 @@
           "output": 0,
           "turns": 0
          },
-         "worktree": "~/work/t-0105"
+         "worktree": "~/src/t-0105"
         },
         "status": {
          "current": "",
@@ -1581,7 +1581,7 @@
       ],
       "questions": 1,
       "repos": [
-       "~/work/billing-api"
+       "~/src/billing-api"
       ],
       "slug": "billing-api",
       "threads": [
@@ -1607,7 +1607,7 @@
           "output": 0,
           "turns": 0
          },
-         "worktree": "~/work/t-0201"
+         "worktree": "~/src/t-0201"
         },
         "status": {
          "current": "Writing pdf.go",
@@ -1651,7 +1651,7 @@
           "output": 0,
           "turns": 0
          },
-         "worktree": "~/work/t-0202"
+         "worktree": "~/src/t-0202"
         },
         "status": {
          "current": "",
@@ -1710,7 +1710,7 @@
           "output": 0,
           "turns": 0
          },
-         "worktree": "~/work/t-0301"
+         "worktree": "~/src/t-0301"
         },
         "status": {
          "current": "",

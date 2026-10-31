@@ -94,7 +94,7 @@ func (p Peer) Shown() string { return cmp.Or(p.Display(), p.Alias) }
 func (p Peer) Display() string { return cmp.Or(p.Name, p.Told) }
 
 // Both is p with its alias beside its display name, "work
-// (del-02-0468-lt)", for where both help (tm peer list, Settings →
+// (acme-lt-07)", for where both help (tm peer list, Settings →
 // Peers).
 func (p Peer) Both() string { return Both(p.Display(), p.Alias) }
 

@@ -417,7 +417,7 @@ func TestOneRunner(t *testing.T) {
 func TestValidBranch(t *testing.T) {
 	long := strings.Repeat("a", MaxBranch)
 	for b, want := range map[string]bool{
-		"main": true, "tm/x/t-1-fix": true, "users/clif.v2_x": true, long: true,
+		"main": true, "tm/x/t-1-fix": true, "users/sam.v2_x": true, long: true,
 		"": false, long + "a": false, "-x": false, "/x": false, "a+b": false, "a b": false,
 		"a..b": false, "a//b": false, "a/": false, "a.": false, "a/.b": false, ".a": false,
 		"a.lock": false, "a.lock/b": false, "HEAD": false, "a@{b": false, "a~1": false,

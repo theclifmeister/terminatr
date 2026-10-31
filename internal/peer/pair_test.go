@@ -74,7 +74,7 @@ func TestCheckDigits(t *testing.T) {
 
 func TestAlias(t *testing.T) {
 	for in, want := range map[string]string{
-		"Mini.local": "mini", "studio": "studio", "Clif's MacBook Pro": "clif-s-macbook-pro", "": "peer", "...": "peer",
+		"Mini.local": "mini", "studio": "studio", "Sam's MacBook Pro": "sam-s-macbook-pro", "": "peer", "...": "peer",
 		strings.Repeat("x", 40): strings.Repeat("x", MaxAlias-3),
 	} {
 		if got := DefaultAlias(in); got != want || CheckAlias(got) != nil {

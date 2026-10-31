@@ -69,7 +69,7 @@ struct ProjectsScreen: View {
         .buttonStyle(.plain)
     }
 
-    /// "clifford's Mac · 2 active · 1 inactive".
+    /// "studio · 2 active · 1 inactive".
     private func subtitle(inactive: Int) -> String {
         let source = model.source == .demo ? "Demo" : model.serverName
         return [source, "\(model.activeProjects.count) active", inactive > 0 ? "\(inactive) inactive" : nil]

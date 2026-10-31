@@ -653,7 +653,7 @@ func TestWriteFolderCode(t *testing.T) {
 	if caps.CaseFold {
 		// The whole home, or a folder one below it, in another case
 		// (#655 re-review).
-		for _, e := range []string{"/USERS/clifford", "/USERS/clifford/Work", "/users/clifford/Work", "/Home/me/x"} {
+		for _, e := range []string{"/USERS/sam", "/USERS/sam/Work", "/users/sam/Work", "/Home/me/x"} {
 			if err := CheckWriteFolder(e); err == nil {
 				t.Errorf("%q passed with case folded", e)
 			}
