@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
+	"github.com/theclifmeister/terminatr/internal/session"
 )
 
 // State is sessions.json: what the server knows about its sessions, kept
@@ -53,10 +54,15 @@ type SessionRecord struct {
 	Prompted bool `json:"prompted,omitempty"`
 	// Interrupted: a clean server stop stopped the agent mid-turn; the
 	// next server re-prompts it once resumed (restart.go).
-	Interrupted bool   `json:"interrupted,omitempty"`
-	Cols        uint16 `json:"cols,omitempty"`
-	Rows        uint16 `json:"rows,omitempty"`
-	Yolo        bool   `json:"yolo,omitempty"`
+	Interrupted bool `json:"interrupted,omitempty"`
+	// Queued: the prompts a client sent (tm thread prompt) still queued
+	// for the agent when a clean server stop stopped it, oldest first;
+	// the next server delivers them once resumed, after the re-prompt
+	// (restart.go).
+	Queued []session.KeptPrompt `json:"queued,omitempty"`
+	Cols   uint16               `json:"cols,omitempty"`
+	Rows   uint16               `json:"rows,omitempty"`
+	Yolo   bool                 `json:"yolo,omitempty"`
 	// NoSandboxEscapes: the agent can't run a command outside its
 	// sandbox, across resumes too.
 	NoSandboxEscapes bool `json:"no_sandbox_escapes,omitempty"`

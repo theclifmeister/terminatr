@@ -633,6 +633,7 @@ func (s *Server) shutdown() {
 		}()
 	}
 	wg.Wait()
+	s.keepQueued(sessions)
 	if s.modelsStop != nil {
 		s.modelsStop()
 	}

@@ -1,6 +1,7 @@
 package server
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
@@ -16,6 +17,10 @@ type restartOutcome struct {
 	// reprompted: resumed after a turn the stop interrupted, and told to
 	// carry on (reprompt).
 	reprompted bool
+	// queued is how many prompts a client queued for it were kept
+	// across the stop (SessionRecord.Queued), delivered after the
+	// re-prompt.
+	queued int
 }
 
 // restartLabel names a session in the restart item: the thread id, the
@@ -35,8 +40,8 @@ func restartLabel(r SessionRecord) string {
 }
 
 // restartSummary is the log line: "server restarted after crash;
-// resumed coordinator, t-0003; re-prompted t-0003; started fresh t-0005;
-// lost shell s-12".
+// resumed coordinator, t-0003; re-prompted t-0003; kept queued prompts
+// for t-0003 (2); started fresh t-0005; lost shell s-12".
 func restartSummary(prevShut string, outs []restartOutcome) string {
 	by := map[string][]string{}
 	for _, o := range outs {
@@ -44,13 +49,16 @@ func restartSummary(prevShut string, outs []restartOutcome) string {
 		if o.reprompted {
 			by["reprompted"] = append(by["reprompted"], restartLabel(o.rec))
 		}
+		if o.queued > 0 {
+			by["queued"] = append(by["queued"], fmt.Sprintf("%s (%d)", restartLabel(o.rec), o.queued))
+		}
 	}
 	head := "server restarted"
 	if prevShut == "crash" {
 		head = "server restarted after crash"
 	}
 	parts := []string{head}
-	for _, k := range []struct{ how, verb string }{{"resumed", "resumed"}, {"reprompted", "re-prompted"}, {"fresh", "started fresh"}, {"lost", "lost"}} {
+	for _, k := range []struct{ how, verb string }{{"resumed", "resumed"}, {"reprompted", "re-prompted"}, {"queued", "kept queued prompts for"}, {"fresh", "started fresh"}, {"lost", "lost"}} {
 		if l := by[k.how]; len(l) > 0 {
 			parts = append(parts, k.verb+" "+strings.Join(l, ", "))
 		}
@@ -94,31 +102,76 @@ func (s *Server) markInterrupted(sessions []*session.Session) {
 	}
 }
 
-// reprompt tells a session resumed after an interrupted turn to carry
-// on, once it is idle: a prompt sent before the resumed agent is up
-// could reach a conversation it hasn't loaded yet. It gives up when the
-// session ends or stays busy for interruptedWait.
-func (s *Server) reprompt(sess *session.Session) {
+// keepQueued saves in the records of the stopped agent sessions the
+// prompts a client queued for them that are still undelivered
+// (session.KeptPrompts): the next server delivers them once resumed.
+// After the sessions stopped, so none is both saved and pasted. s.mu
+// not held.
+func (s *Server) keepQueued(sessions []*session.Session) {
+	kept := map[string][]session.KeptPrompt{}
+	for _, sess := range sessions {
+		if q := sess.KeptPrompts(); len(q) > 0 {
+			kept[sess.ID()] = q
+		}
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for id, q := range kept {
+		if r, ok := s.records[id]; ok && r.Agent != "" {
+			r.Queued = q
+			s.records[id] = r
+		}
+	}
+}
+
+// reprompt delivers what a session resumed after a clean stop is owed,
+// once it is idle: with interrupted, the re-prompt to carry on the turn
+// the stop interrupted, then the prompts a client had queued for it
+// (keepQueued), in their order, queued again behind it. A prompt sent
+// before the resumed agent is up could reach a conversation it hasn't
+// loaded yet. It gives up when the session ends or stays busy for
+// interruptedWait.
+func (s *Server) reprompt(sess *session.Session, interrupted bool, queued []session.KeptPrompt) {
 	deadline := time.After(interruptedWait)
 	for {
 		ch := sess.StateChanged()
 		st, ok := sess.AgentState()
 		if !ok || st.State == agent.StateExited {
+			s.dropKept(sess, queued, "the agent exited")
 			return
 		}
 		if st.State == agent.StateIdle {
-			if _, perr := s.promptWith(proto.SessionPromptParams{ID: sess.ID(), Text: interruptedPrompt}, session.PromptOptions{Channel: true}); perr != nil {
-				s.log.Printf("session %s: re-prompt after the restart: %s", sess.ID(), perr.Message)
+			if interrupted {
+				if _, perr := s.promptWith(proto.SessionPromptParams{ID: sess.ID(), Text: interruptedPrompt}, session.PromptOptions{Channel: true}); perr != nil {
+					s.log.Printf("session %s: re-prompt after the restart: %s", sess.ID(), perr.Message)
+				}
+			}
+			for i, q := range queued {
+				if _, perr := s.promptWith(proto.SessionPromptParams{ID: sess.ID(), Text: q.Text}, session.PromptOptions{Keep: true}); perr != nil {
+					s.dropKept(sess, queued[i:], perr.Message)
+					return
+				}
 			}
 			return
 		}
 		select {
 		case <-ch:
 		case <-sess.Done():
+			s.dropKept(sess, queued, "the session ended")
 			return
 		case <-deadline:
 			s.log.Printf("session %s: not re-prompted after the restart: still %s after %s", sess.ID(), st.State, interruptedWait)
+			s.dropKept(sess, queued, "the agent never came up idle")
 			return
 		}
+	}
+}
+
+// dropKept logs the kept prompts reprompt couldn't deliver (never
+// their text).
+func (s *Server) dropKept(sess *session.Session, queued []session.KeptPrompt, why string) {
+	for _, q := range queued {
+		s.log.Printf("session %s: prompt queued %s, kept across the restart, not delivered: %s",
+			sess.ID(), q.Queued.Format(time.DateTime), why)
 	}
 }

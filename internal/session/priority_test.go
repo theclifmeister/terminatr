@@ -129,6 +129,9 @@ func TestPromptInterruptAfter(t *testing.T) {
 	if st, _ := s.AgentState(); st.Queued != 2 {
 		t.Fatalf("queued: %+v", st)
 	}
+	if k := s.KeptPrompts(); len(k) != 1 || k[0].Text != "after-stop" {
+		t.Fatalf("kept %+v: want PromptNow's prompt only", k)
+	}
 	if _, err := s.Hook("Stop", map[string]any{}); err != nil {
 		t.Fatal(err)
 	}
