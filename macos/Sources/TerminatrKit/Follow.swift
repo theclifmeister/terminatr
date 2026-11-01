@@ -25,6 +25,15 @@ import Foundation
 /// LazyVStack estimates and stopped short of it while output streamed.
 /// The view marks them with glide(newest:) as well, so the same holds
 /// while one keeps to the end.
+///
+/// An offset past the end is pulled back to it (T930): set straight on
+/// the scroll view (a glide's frames) at an end that was taller than the
+/// content laid out a moment on, it stays there, over the empty
+/// background, and nothing scrolls it back: the conversation shows
+/// blank, only the composer under it, and as it is "at the end" no Jump
+/// to latest either. Once the scroll rests there, the view goes to the
+/// end again (scrolled(…) or moved(…) says so). A bounce past the end
+/// under the user's finger or its momentum is left to UIKit.
 public struct Follow: Equatable, Sendable {
     /// Whether the view keeps to the end as entries come.
     public private(set) var following = true
@@ -45,9 +54,14 @@ public struct Follow: Equatable, Sendable {
     private var atEnd = true
     /// Whether the scroll is at rest (its phase idle).
     private var resting = true
+    /// Whether the last geometry had the offset past the end.
+    private var past = false
 
     /// How near the end counts as at it, in points.
     public static let slack = 80.0
+    /// How far past the end an offset at rest may be before it is
+    /// pulled back, in points: a rounding's worth.
+    public static let beyond = 2.0
 
     public init() {}
 
@@ -63,11 +77,15 @@ public struct Follow: Equatable, Sendable {
     /// (contentInsets.bottom): scrolled fully down, offset + visible is
     /// content + inset. Not containerSize: it leaves the insets out
     /// already, and less the inset again a view at its end read as the
-    /// bars' height short of it (T807).
+    /// bars' height short of it (T807). top is the bars' inset over its
+    /// head (contentInsets.top): content shorter than the view ends at
+    /// its top, -top. Past the end at rest it says to scroll to the end
+    /// too (T930).
     @discardableResult
-    public mutating func scrolled(offset: Double, visible: Double, content: Double, inset: Double = 0, newest: Int?) -> Bool {
+    public mutating func scrolled(offset: Double, visible: Double, content: Double, inset: Double = 0, top: Double = 0, newest: Int?) -> Bool {
         defer { self.offset = offset }
         atEnd = offset + visible >= content + inset - Self.slack
+        past = offset > max(-top, content + inset - visible) + Self.beyond
         if atEnd {
             // At rest there: no momentum left to fight.
             if resting { jumping = false }
@@ -80,7 +98,7 @@ public struct Follow: Equatable, Sendable {
             if jumping { return true }
             following = false
         }
-        return false
+        return pullsBack
     }
 
     /// The transcript's entries now (their ids; appended ones have
@@ -131,10 +149,20 @@ public struct Follow: Equatable, Sendable {
     /// The scroll's phase changed: the user's finger on it (a drag, a
     /// trackpad touch) or the scroll at rest ends a jump; a scroll that
     /// decelerates or animates doesn't. The finger ends a glide too.
-    public mutating func moved(by user: Bool, resting: Bool) {
+    /// True when the scroll came to rest past the end: the view scrolls
+    /// to the end (T930).
+    @discardableResult
+    public mutating func moved(by user: Bool, resting: Bool) -> Bool {
         self.resting = resting
         if user || resting { jumping = false }
         if user { gliding = false }
+        return !user && pullsBack
+    }
+
+    /// Past the end, at rest, no glide on it: what nothing else scrolls
+    /// back (T930).
+    private var pullsBack: Bool {
+        past && resting && !gliding
     }
 
     /// Jump to latest's words: with what came meanwhile, "Jump to

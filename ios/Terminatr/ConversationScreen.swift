@@ -81,6 +81,10 @@ struct ConversationScreen: View {
                         }
                         .id(row.id)
                     }
+                    // Never a blank conversation (T930): until the stream
+                    // answers, while the agent names its transcript, or
+                    // when tm can't read it, it says so, as the Mac's does.
+                    if let id, failure == nil { state(id, session) }
                     if let session { waiting(session, need: waits) }
                     // Queued prompts and the working line (T893).
                     if let session { ConversationTail(ref: ref, session: session, transcript: transcript) }
@@ -198,6 +202,40 @@ struct ConversationScreen: View {
             return
         }
         scroll.scrollTo("end", anchor: .bottom)
+    }
+
+    /// What the conversation is short of, under its rows: a spinner
+    /// until the stream's first answer (a fresh launch over the relay),
+    /// the transcript not named yet, one tm can't read, nothing in it
+    /// yet, or the session ended (ConversationState, the Mac's words).
+    @ViewBuilder
+    private func state(_ id: String, _ session: AppAPI.Session?) -> some View {
+        let state = ConversationState.of(caps: model.hello?.server?.caps ?? [], agent: session?.agent ?? "",
+                                         status: watched == id ? transcript.status : nil, failure: nil)
+        if state == .loading {
+            ProgressView()
+                .frame(maxWidth: .infinity)
+                .padding(.top, transcript.entries.isEmpty ? 40 : 0)
+                .accessibilityLabel("Loading the conversation")
+        } else if let words = Self.words(state, closed: transcript.closed, empty: transcript.entries.isEmpty) {
+            Text(words)
+                .font(theme.body(.subheadline))
+                .foregroundStyle(theme.muted)
+                .multilineTextAlignment(.center)
+                .onGlass()
+                .frame(maxWidth: .infinity)
+                .padding(.top, transcript.entries.isEmpty ? 40 : 0)
+        }
+    }
+
+    /// The line a conversation's state says, if any.
+    private static func words(_ state: ConversationState, closed: String?, empty: Bool) -> String? {
+        if let closed { return "The session ended (\(closed))." }
+        switch state {
+        case .loading, .mapped: return empty ? "No messages yet." : nil
+        case .waiting: return "Waiting for the agent to name its transcript…"
+        case .unavailable(let why): return why
+        }
     }
 
     /// The row the need was asked at.
@@ -496,12 +534,12 @@ struct PhoneFollowGeometry: ViewModifier {
                 .defaultScrollAnchor(.bottom, for: .initialOffset)
                 .defaultScrollAnchor(.top, for: .sizeChanges)
                 .onScrollGeometryChange(for: [Double].self) { g in
-                    [g.contentOffset.y, g.visibleRect.height, g.contentSize.height, g.contentInsets.bottom]
+                    [g.contentOffset.y, g.visibleRect.height, g.contentSize.height, g.contentInsets.bottom, g.contentInsets.top]
                 } action: { _, g in
-                    if follow.scrolled(offset: g[0], visible: g[1], content: g[2], inset: g[3], newest: newest) { toEnd() }
+                    if follow.scrolled(offset: g[0], visible: g[1], content: g[2], inset: g[3], top: g[4], newest: newest) { toEnd() }
                 }
                 .onScrollPhaseChange { _, p in
-                    follow.moved(by: p == .tracking || p == .interacting, resting: p == .idle)
+                    if follow.moved(by: p == .tracking || p == .interacting, resting: p == .idle) { toEnd() }
                 }
                 .onScrollTargetVisibilityChange(idType: Int.self, threshold: 0.01) { top($0.first) }
         } else {
