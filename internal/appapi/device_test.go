@@ -12,6 +12,8 @@ import (
 	"log"
 	"net"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -489,5 +491,63 @@ func TestDeviceMods(t *testing.T) {
 	}
 	if err := c.Call(proto.MethodModsSetting, setting, nil); code(err) != proto.ErrBadParams {
 		t.Errorf("mods.setting at write: %v", err)
+	}
+}
+
+// TestDeviceSearch: search reads reach a device at every level, with the
+// human's scope (the coordinator's notes and the inbox too), through
+// the app's own params (no reindex) and types (no folder path).
+func TestDeviceSearch(t *testing.T) {
+	p := testPaths(t)
+	startServer(t, p)
+	pr, err := project.New(project.Options{Slug: "web"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, text := range map[string]string{
+		"memory/relay.md":                         "## Decided\n- The wombat relay runs on port 4433.\n",
+		"memory/coord.md":                         "---\naudience: coordinator\n---\n## Decided\n- Wombat reviews on Fridays.\n",
+		"inbox/20261031T100000Z-report-t-0001.md": "The wombat report.\n",
+	} {
+		path := pr.Path(filepath.FromSlash(name))
+		os.MkdirAll(filepath.Dir(path), 0o755)
+		if err := os.WriteFile(path, []byte(text), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, level := range []string{device.LevelView, device.LevelAnswer, device.LevelWrite} {
+		c := deviceBridge(t, p, device.NewLevel(level), nil)
+		for _, m := range []string{proto.MethodSearchQuery, proto.MethodSearchTimeline, proto.MethodSearchShow} {
+			if !slices.Contains(c.Hello.Methods, m) {
+				t.Errorf("hello at %s lacks %s", level, m)
+			}
+		}
+		var r appapi.SearchResult
+		if err := c.Call(proto.MethodSearchQuery, appapi.SearchQueryParams{Project: "web", Words: "wombat"}, &r); err != nil {
+			t.Fatalf("search.query at %s: %v", level, err)
+		}
+		var ids []string
+		for _, h := range r.Hits {
+			ids = append(ids, h.ID)
+		}
+		for _, want := range []string{"note:relay#decided", "note:coord#decided", "inbox:20261031T100000Z-report-t-0001"} {
+			if !slices.Contains(ids, want) {
+				t.Errorf("search.query at %s: %v lacks %s", level, ids, want)
+			}
+		}
+		var tl appapi.SearchTimeline
+		if err := c.Call(proto.MethodSearchTimeline, appapi.SearchTimelineParams{Project: "web", ID: "note:coord#decided"}, &tl); err != nil || tl.At.ID != "note:coord#decided" {
+			t.Errorf("search.timeline at %s: %+v %v", level, tl, err)
+		}
+		var sh appapi.SearchShown
+		if err := c.Call(proto.MethodSearchShow, appapi.SearchShowParams{Project: "web", IDs: []string{"note:coord#decided", "nope"}}, &sh); err != nil ||
+			len(sh.Items) != 2 || !strings.Contains(sh.Items[0].Text, "Fridays") || sh.Items[0].Hit.Path != "memory/coord.md" || sh.Items[1].Error == "" {
+			t.Errorf("search.show at %s: %+v %v", level, sh, err)
+		}
+	}
+	c := deviceBridge(t, p, device.NewLevel(device.LevelView), nil)
+	raw := json.RawMessage(`{"project":"web","words":"wombat","reindex":true}`)
+	if err := c.Call(proto.MethodSearchQuery, raw, nil); code(err) != appapi.ErrBadParams {
+		t.Errorf("search.query took a reindex: %v", err)
 	}
 }
