@@ -122,6 +122,7 @@ type fakeSource struct {
 	fetchedMods []string // what FetchMod was asked for
 	templates   []mod.Template
 	added       []string // "slug title|notes|step;step"
+	priorities  []string // "slug T12 must", as SetPriority was called
 	// links are SetLink's and SetLinkAsk's calls ("slug other both",
 	// "slug other ask true"), linkActs
 	// LinkAct's ("slug verb arg text"); linkLog is what LinkLog gives.
@@ -154,6 +155,19 @@ func (f *fakeSource) AddTask(slug, title string, tpl *mod.Template) (string, err
 	}
 	f.added = append(f.added, slug+" "+title+"|"+notes+"|"+strings.Join(steps, ";"))
 	return fmt.Sprintf("T%d", 10+len(f.added)), nil
+}
+
+// SetPriority sets the fake board's task, as the store would.
+func (f *fakeSource) SetPriority(slug string, id int, p tasks.Priority) (bool, error) {
+	f.priorities = append(f.priorities, fmt.Sprintf("%s T%d %s", slug, id, p.String()))
+	if f.board != nil {
+		if t := f.board.Find(id); t != nil {
+			changed := t.Priority != p
+			t.Priority = p
+			return changed, nil
+		}
+	}
+	return false, fmt.Errorf("unknown-task: T%d does not exist", id)
 }
 
 func (f *fakeSource) SetRemote(slug string, on bool) (string, error) {

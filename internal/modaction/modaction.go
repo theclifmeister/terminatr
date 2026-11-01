@@ -109,6 +109,8 @@ var Actions = []Action{
 		Precondition: "the task is in review, and nothing already asks the coordinator about it"},
 	{ID: "task.send-back", Label: "send back", Key: "X", On: OnTask, Confirm: true,
 		Precondition: "the task is in review or done, and nothing already asks the coordinator about it; the human writes the note"},
+	{ID: "task.priority", Label: "priority", Key: "P", On: OnTask,
+		Precondition: "the task is on the project's board, not done or dropped; the human picks must, should, could or none (mod API 1.13)"},
 	{ID: "task.new", Label: "new task", Key: "+", On: OnProject,
 		Precondition: "the project exists; the human picks a template, if any, and types the title"},
 	{ID: "task.coordinator", Label: "coordinator", Key: "c", On: OnProject,
@@ -207,6 +209,9 @@ func Why(id string, st State, t Target) string {
 	task := st.Task(t.Project, t.Task)
 	if task == nil {
 		return t.Project + " has no task " + t.Task
+	}
+	if id == "task.priority" && task.Status.Closed() {
+		return task.Ref() + " is " + string(task.Status)
 	}
 	kind := askKind(id)
 	if kind == "" {

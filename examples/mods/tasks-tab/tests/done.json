@@ -20,7 +20,7 @@
           "widget": { "kind": "stack", "children": [
             { "kind": "table", "rows": [{ "id": "g:done", "head": true }] },
             { "kind": "text", "text": "… 2 done (b shows them)" },
-            { "kind": "keys", "keys": [{ "key": "b", "label": "done" }] }
+            { "kind": "keys", "keys": [{ "key": "b", "label": "done" }, { "key": "p", "label": "must only" }] }
           ] } } },
       { "method": "ui.view.set", "params": { "view": "tasks",
           "widget": { "kind": "stack", "children": [
@@ -33,7 +33,7 @@
                   { "id": "task.show", "target": { "project": "demo", "task": "T6" } },
                   { "id": "task.send-back", "target": { "project": "demo", "task": "T6" } }] }
             ] },
-            { "kind": "keys", "keys": [{ "key": "b", "label": "hide done" }] }
+            { "kind": "keys", "keys": [{ "key": "b", "label": "hide done" }, { "key": "p", "label": "must only" }] }
           ] } } }
     ]
   }

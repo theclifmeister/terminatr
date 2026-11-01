@@ -61,6 +61,10 @@ func tasksTabTree(slug string, b *tasks.Board, items []project.Item, doneAll boo
 	var rows []widget.Row
 	var group tasks.Group
 	done, dropped := 0, 0
+	// The priority column, only while a listed task has one.
+	prio := slices.ContainsFunc(b.Tasks, func(t *tasks.Task) bool {
+		return t.Priority != tasks.NoPriority && (doneAll || !t.Status.Closed())
+	})
 	for _, g := range tasks.Groups {
 		var in []*tasks.Task
 		for _, t := range b.Tasks {
@@ -80,6 +84,10 @@ func tasksTabTree(slug string, b *tasks.Board, items []project.Item, doneAll boo
 			slices.SortStableFunc(in, func(a, b *tasks.Task) int {
 				return cmp.Or(-strings.Compare(a.Updated, b.Updated), b.ID-a.ID)
 			})
+		} else {
+			slices.SortStableFunc(in, func(a, b *tasks.Task) int {
+				return cmp.Or(a.Priority.Rank()-b.Priority.Rank(), a.ID-b.ID)
+			})
 		}
 		for _, t := range in {
 			if g != group {
@@ -87,7 +95,7 @@ func tasksTabTree(slug string, b *tasks.Board, items []project.Item, doneAll boo
 				title := strings.ToUpper(string(g))
 				rows = append(rows, widget.Row{ID: "g:" + string(g), Head: true, Spans: []widget.Span{{Text: title, Role: "head"}}})
 			}
-			rows = append(rows, tasksTabRow(slug, t, project.TaskAsked(items, t.Ref()) != ""))
+			rows = append(rows, tasksTabRow(slug, t, project.TaskAsked(items, t.Ref()) != "", prio))
 		}
 	}
 	folded := !doneAll && done+dropped > 0
@@ -97,7 +105,7 @@ func tasksTabTree(slug string, b *tasks.Board, items []project.Item, doneAll boo
 	if folded && dropped > 0 {
 		rows = append(rows, widget.Row{ID: "g:dropped", Head: true, Spans: []widget.Span{{Text: "DROPPED", Role: "head"}}})
 	}
-	children := []widget.Widget{{Kind: widget.KindTable, ID: "tasks", Empty: "no tasks", Columns: make([]widget.Column, 4), Rows: rows}}
+	children := []widget.Widget{{Kind: widget.KindTable, ID: "tasks", Empty: "no tasks", Columns: make([]widget.Column, map[bool]int{true: 5, false: 4}[prio]), Rows: rows}}
 	if folded {
 		var counts []string
 		if done > 0 {
@@ -113,13 +121,17 @@ func tasksTabTree(slug string, b *tasks.Board, items []project.Item, doneAll boo
 	if doneAll || done+dropped > 0 {
 		keys.Keys = []widget.Key{{Key: "b", Label: map[bool]string{true: "hide done", false: "done"}[doneAll]}}
 	}
+	keys.Keys = append(keys.Keys, widget.Key{Key: "p", Label: "must only"})
 	return &widget.Widget{Kind: widget.KindStack, Children: append(children, keys)}
 }
 
 // tasksTabRow is task t's row, binding the actions its status allows.
-func tasksTabRow(slug string, t *tasks.Task, asked bool) widget.Row {
+func tasksTabRow(slug string, t *tasks.Task, asked, prio bool) widget.Row {
 	target := map[string]string{"project": slug, "task": t.Ref()}
 	acts := []widget.Action{{ID: "task.show", Target: target}}
+	if !t.Status.Closed() {
+		acts = append(acts, widget.Action{ID: "task.priority", Target: target})
+	}
 	ask := func(id string) {
 		if !asked {
 			acts = append(acts, widget.Action{ID: id, Target: target})
@@ -154,8 +166,11 @@ func tasksTabRow(slug string, t *tasks.Task, asked bool) widget.Row {
 	if len(more) > 0 {
 		rest = append(rest, widget.Span{Text: strings.Join(more, " "), Role: "faint"})
 	}
-	r := widget.Row{ID: t.Ref(), Actions: acts, Cells: [][]widget.Span{
-		{{Text: t.Ref()}}, {{Text: t.Title}}, {{Icon: icon, Role: role}, {Text: " " + string(t.Status), Role: role}}, rest}}
+	cells := [][]widget.Span{{{Text: t.Ref()}}}
+	if prio {
+		cells = append(cells, tasksTabPriority(t.Priority))
+	}
+	r := widget.Row{ID: t.Ref(), Actions: acts, Cells: append(cells, []widget.Span{{Text: t.Title}}, []widget.Span{{Icon: icon, Role: role}, {Text: " " + string(t.Status), Role: role}}, rest)}
 	if !t.Status.Closed() {
 		for _, s := range t.Steps {
 			icon, role := "todo.open", "faint"
@@ -166,6 +181,14 @@ func tasksTabRow(slug string, t *tasks.Task, asked bool) widget.Row {
 		}
 	}
 	return r
+}
+
+// tasksTabPriority is a task's priority cell, as the mod draws it.
+func tasksTabPriority(p tasks.Priority) []widget.Span {
+	if p == tasks.NoPriority {
+		return nil
+	}
+	return []widget.Span{{Text: string(p), Role: map[tasks.Priority]string{tasks.Must: "warn", tasks.Could: "faint"}[p]}}
 }
 
 // pollModViews polls the mod views as the console's tick does, saying

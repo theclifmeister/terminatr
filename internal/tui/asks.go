@@ -166,6 +166,10 @@ func (m *dash) taskKey(slug string, t *tasks.Task, key string) tea.Cmd {
 		return m.sendBack(slug, t, nil)
 	case "c":
 		return m.openProject(slug)
+	case "P":
+		if !t.Status.Closed() {
+			return m.pickPriority(slug, t, nil)
+		}
 	}
 	return nil
 }
@@ -181,15 +185,17 @@ func taskKeys(t *tasks.Task) string {
 	}
 	switch t.Status {
 	case tasks.Review:
-		return "A accept · X send back"
+		return "A accept · X send back · P priority"
 	case tasks.Done:
 		return "X send back"
+	case tasks.Dropped:
+		return ""
 	case tasks.Blocked:
-		return "c coordinator · D delegate"
+		return "c coordinator · D delegate · P priority"
 	case tasks.Open, tasks.Ready:
-		return "D delegate"
+		return "D delegate · P priority"
 	}
-	return ""
+	return "P priority"
 }
 
 // blockedOn is what task t is blocked on: its latest "blocked (date):"

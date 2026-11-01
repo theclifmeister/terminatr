@@ -341,7 +341,7 @@ func (tv *taskView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	switch k.String() {
 	case "esc":
 		m.pop()
-	case "D", "A", "X", "c":
+	case "D", "A", "X", "c", "P":
 		if t := tv.task(); t != nil {
 			return m.taskKey(tv.pv.slug, t, k.String())
 		}

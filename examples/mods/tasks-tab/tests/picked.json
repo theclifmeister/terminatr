@@ -23,7 +23,7 @@
               { "id": "g:done", "head": true },
               { "id": "T6" }
             ] },
-            { "kind": "keys", "keys": [{ "key": "b", "label": "hide done" }] }
+            { "kind": "keys", "keys": [{ "key": "b", "label": "hide done" }, { "key": "p", "label": "must only" }] }
           ] } } },
       { "method": "tasks.list", "params": { "slug": "demo" } },
       { "method": "ui.view.set", "params": { "view": "tasks" } }
