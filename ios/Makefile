@@ -32,6 +32,12 @@
 #                again (the agents resume, idle), touch $(DEV)/stop to end;
 #                LEVEL=write pairs the phone at write (its prompt box and
 #                its terminal's keys), else at answer
+#   make store-shots  the App Store's screenshots from the demo, in
+#                $(SHOTS)/<set>/ with an index.html (store-shots.sh): sets
+#                iphone-medium 1206x2622 and ipad-13 2064x2752 (required),
+#                iphone-large 1320x2868, duo-outer 1398x2034; SETS picks
+#                some; duo-inner 2007x2853 needs DUO, the UDID of an iPhone
+#                Duo Simulator opened in Xcode's Device Hub
 #   make run-paired  as run, pairing with dev-server's code instead of
 #                the demo (the Simulator has no camera)
 #   make archive the Release build for devices, in $(ARCHIVE):
@@ -59,6 +65,7 @@ APP          := $(DERIVED)/Build/Products/$(CONFIG)-iphonesimulator/Terminatr.ap
 BUNDLE_ID    := dev.terminatr.ios
 DEV          ?= build/dev
 ARCHIVE      ?= build/Terminatr.xcarchive
+SHOTS        ?= build/store-shots
 VERSION      ?= 0.0.0
 BUILD        ?= 1
 # The Release config's team, passed to every target when signing: the
@@ -66,7 +73,7 @@ BUILD        ?= 1
 TEAM         ?= $(shell sed -n 's/^[[:space:]]*DEVELOPMENT_TEAM = \([A-Z0-9]*\);$$/\1/p' Terminatr.xcodeproj/project.pbxproj)
 unexport TERMINATR_WERROR
 
-.PHONY: build run dev-server run-paired archive clean
+.PHONY: build run dev-server run-paired store-shots archive clean
 
 # The scheme is Terminatr-iOS (xcshareddata): a scheme named Terminatr
 # can resolve to the package's Mac executable of that name, which then
@@ -93,6 +100,9 @@ run-paired: build
 	xcrun simctl boot "$(DEVICE)" 2>/dev/null || true
 	xcrun simctl install "$(DEVICE)" $(APP)
 	xcrun simctl launch "$(DEVICE)" $(BUNDLE_ID) -pair "$$(cat $(DEV)/invite.txt)"
+
+store-shots: build
+	./store-shots.sh $(APP) $(SHOTS) $(SETS)
 
 # Signed, the profile goes to the app target only (TM_IOS_PROFILE, read
 # by its Release PROVISIONING_PROFILE_SPECIFIER): set for every target,

@@ -11,7 +11,8 @@ import TerminatrUI
 /// opens the demo at once, and -open ROUTE (Route.parse) on that
 /// screen: the Simulator's screenshots; with -pair CODE it pairs with
 /// that code at once, as this phone (the Simulator has no camera:
-/// internal/e2e TestPhoneDev's codes); -open settings shows Settings; on Welcome -open pair (or "pair CODE") opens pairing. A terminatr://pair link (the
+/// internal/e2e TestPhoneDev's codes); -sidebar NO keeps an iPad's
+/// sidebar closed as it starts; -open settings shows Settings; on Welcome -open pair (or "pair CODE") opens pairing. A terminatr://pair link (the
 /// Camera app's scan of the code) opens the pairing screen.
 @main
 struct TerminatrApp: App {
@@ -332,13 +333,15 @@ extension Root {
     /// as the first tab appears, its UITabBarController is there to ask.
     /// From Root's onAppear it sometimes wasn't yet (1 portrait launch
     /// in 10 to 20), and the sidebar stayed closed, its rows in the top
-    /// tab bar.
+    /// tab bar. -sidebar NO leaves it closed (the App Store's portrait
+    /// screenshots, T911: open, it lies over the list).
     @available(iOS 18, *)
     private func opening(_ content: some View) -> some View {
         content.background(TabBarHook { tabs in
             guard !sidebarOpened else { return }
             sidebarOpened = true
-            if folding == nil { tabs.sidebar.isHidden = false }
+            let launched = UserDefaults.standard.object(forKey: "sidebar") == nil || UserDefaults.standard.bool(forKey: "sidebar")
+            if folding == nil, launched { tabs.sidebar.isHidden = false }
         })
     }
 
