@@ -168,3 +168,31 @@ func argvTooLong(goos string, argv []string) bool {
 	}
 	return n > winCmdLine
 }
+
+// StartupBlock is the SessionStart block a session of role (coordinator
+// or thread) in project slug would get if it started now, with its rules
+// in its system prompt: what `tm context --startup` prints. threadID is
+// the thread's; tickerState the ticker's state file. cut says the block
+// passed its budget and the hook would clip it (as returned).
+func StartupBlock(role, slug, threadID, tickerState string) (text string, cut bool, err error) {
+	rules, ok := roleRules(role, slug)
+	if !ok {
+		return "", false, fmt.Errorf("no rules for role %s", role)
+	}
+	stamp := &PromptStamp{Version: version.Version, Rules: textHash([]byte(rules))}
+	if role == proto.RoleCoordinator {
+		p, err := project.Open(slug)
+		if err != nil {
+			return "", false, err
+		}
+		if text, err := os.ReadFile(p.Path("PROJECT.md")); err == nil {
+			stamp.Project = textHash(text)
+		}
+	}
+	b, err := contextFor(SessionRecord{Role: role, Project: slug, Thread: threadID, Prompt: stamp}, tickerState)()
+	if err != nil {
+		return "", false, err
+	}
+	text, cut = clipStartup(string(b))
+	return text, cut, nil
+}

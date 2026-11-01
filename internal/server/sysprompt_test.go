@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/theclifmeister/terminatr/internal/agent"
+	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/version"
 )
@@ -113,8 +114,8 @@ func TestStartupBlock(t *testing.T) {
 	if !strings.HasPrefix(got, "Your rules (`tm skill coordinator`) and PROJECT.md are in your system prompt") || strings.Contains(got, "tm skill coordinator v") {
 		t.Errorf("coordinator block head:\n%.400s", got)
 	}
-	if len(got) > startupBudget || !strings.Contains(got[max(len(got)-200, 0):], "\nThat is `tm context` as of this conversation's start") {
-		t.Errorf("coordinator block: %d bytes (budget %d), ends %q", len(got), startupBudget, got[max(len(got)-120, 0):])
+	if len(got) > project.StartupBudget || !strings.HasSuffix(got, "\n"+project.StartupTail) || !strings.Contains(got, "lines: tm context --part context]") {
+		t.Errorf("coordinator block: %d bytes (budget %d), ends %q", len(got), project.StartupBudget, got[max(len(got)-400, 0):])
 	}
 	for _, drift := range []string{"tm was upgraded", "rules changed", "PROJECT.md changed"} {
 		if strings.Contains(got, drift) {
@@ -151,7 +152,7 @@ func TestStartupBlock(t *testing.T) {
 		Prompt: &PromptStamp{Version: version.Version, Rules: textHash([]byte(trules))}}
 	got = block(thr)
 	if !strings.HasPrefix(got, "Your brief and your rules (`tm skill thread`) are in your system prompt") || strings.Contains(got, "tm skill thread v") ||
-		strings.Contains(got, "PROJECT.md changed") || len(got) > startupBudget {
+		strings.Contains(got, "PROJECT.md changed") || len(got) > project.StartupBudget {
 		t.Errorf("thread block:\n%s", got)
 	}
 	thr.Prompt = nil

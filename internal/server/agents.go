@@ -398,11 +398,10 @@ func contextFor(r SessionRecord, tickerState string) func() ([]byte, error) {
 			if err != nil {
 				return []byte(head), nil
 			}
-			budget := coordinatorBudget
 			if r.Prompt != nil {
-				budget = startupBudget - len(head) - 2 // and "\n\n"
+				return []byte(project.Startup(head, secs)), nil
 			}
-			return []byte(head + "\n\n" + coordinatorEssentials(secs, budget)), nil
+			return []byte(head + "\n\n" + coordinatorEssentials(secs, coordinatorBudget)), nil
 		case proto.RoleThread:
 			rules, _ := roleRules("thread", slug)
 			head := rules
@@ -433,18 +432,12 @@ func contextFor(r SessionRecord, tickerState string) func() ([]byte, error) {
 // the block (no system prompt).
 const coordinatorBudget = 16 << 10
 
-// startupBudget bounds the whole SessionStart block of a session whose
-// rules are in its system prompt, in bytes: under Claude's 10,000
-// characters for hook output (a byte count is never below a character
-// count), with room for the header Claude adds (docs/SPEC.md §7.8), and
-// under Codex's 2,500 tokens (its count is ceil(bytes/4), so 10,000
-// bytes; codex-rs/hooks/src/output_spill.rs:12 at rust-v0.163.0).
-const startupBudget = 9000
-
 // coordinatorEssentials is `tm context` within budget bytes, with a
-// last line saying when to run it again. Whole, it is all a fresh
-// coordinator needs (T109): its rules say not to run `tm context` again
-// at once; cut, the last line says to run it now.
+// last line saying when to run it again, for a coordinator whose rules
+// come first in the block (no system prompt; with one, the block is
+// project.Startup's index). Whole, it is all a fresh coordinator needs
+// (T109): its rules say not to run `tm context` again at once; cut, the
+// last line says to run it now.
 func coordinatorEssentials(secs []project.Section, budget int) string {
 	full := project.RenderContext(secs)
 	tail := "\nThat is `tm context` as of this conversation's start; run it (or tm inbox list, tm thread list) again when you need the current state.\n"
@@ -455,14 +448,45 @@ func coordinatorEssentials(secs []project.Section, budget int) string {
 }
 
 // contextOf is contextFor the session's current record, so that a
-// session adopted as a thread gets a thread's context (§9, Adopt).
+// session adopted as a thread gets a thread's context (§9, Adopt). A
+// block of a session whose rules are in its system prompt is clipped at
+// project.StartupCut, should its parts ever pass their budgets; a clip
+// is journaled (context.startup.cut), for tm doctor to warn of.
 func (s *Server) contextOf(id string) func() ([]byte, error) {
 	return func() ([]byte, error) {
 		s.mu.Lock()
 		r := s.records[id]
 		s.mu.Unlock()
-		return contextFor(r, ticker.StatePath(s.opts.Paths.Sessions))()
+		b, err := blockFor(r, ticker.StatePath(s.opts.Paths.Sessions))()
+		if err != nil || r.Prompt == nil {
+			return b, err
+		}
+		text, cut := clipStartup(string(b))
+		if cut {
+			if p, err := project.Open(r.Project); err == nil {
+				ref := r.Role
+				if r.Thread != "" {
+					ref = r.Thread
+				}
+				p.Journal(caller.Caller{Kind: caller.Ticker}, project.ActionStartupCut, ref,
+					fmt.Sprintf("session %s: the start-up block was %d bytes, clipped at %d (budget %d)", r.ID, len(b), project.StartupCut, project.StartupBudget))
+			}
+		}
+		return []byte(text), nil
 	}
+}
+
+// blockFor is contextFor; a test makes a block past the budget with it.
+var blockFor = contextFor
+
+// clipStartup is a start-up block within project.StartupCut bytes, and
+// whether it had to be cut; a cut one ends saying to run `tm context`.
+func clipStartup(text string) (string, bool) {
+	if len(text) <= project.StartupCut {
+		return text, false
+	}
+	const tail = "The start-up block passed its size budget and was cut: run `tm context` now for the rest.\n"
+	return thread.Clip(text, project.StartupCut-len(tail)) + tail, true
 }
 
 // hookContextOf is what the session's SessionStart hook prints: the

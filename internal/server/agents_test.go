@@ -106,7 +106,7 @@ func TestCoordinatorEssentials(t *testing.T) {
 		long[i] = "T1 a task with a long enough title to fill the budget"
 	}
 	secs[3].Lines = long
-	if got := coordinatorEssentials(secs, startupBudget); len(got) > startupBudget || !strings.HasSuffix(got, "run `tm context` now for the rest.\n") {
+	if got := coordinatorEssentials(secs, project.StartupBudget); len(got) > project.StartupBudget || !strings.HasSuffix(got, "run `tm context` now for the rest.\n") {
 		t.Fatalf("%d bytes at the start-up budget, ends %q", len(got), got[len(got)-100:])
 	}
 	got = coordinatorEssentials(secs, coordinatorBudget)
@@ -470,10 +470,10 @@ func TestThemePickReachesClaude(t *testing.T) {
 
 // Codex spills a hook's additionalContext above 2,500 tokens, counted as
 // ceil(bytes/4) (codex-rs/hooks/src/output_spill.rs at rust-v0.163.0,
-// T919): the startup block must stay under it with no additionalContextLimit.
+// T919): the start-up block, clipped at StartupCut, must stay under it with no additionalContextLimit.
 func TestStartupBudgetUnderCodexLimit(t *testing.T) {
 	const codexTokens = 2500
-	if tokens := (startupBudget + 3) / 4; tokens > codexTokens {
-		t.Errorf("startupBudget %d bytes is %d tokens for Codex, over its %d", startupBudget, tokens, codexTokens)
+	if tokens := (project.StartupCut + 3) / 4; tokens > codexTokens {
+		t.Errorf("StartupCut %d bytes is %d tokens for Codex, over its %d", project.StartupCut, tokens, codexTokens)
 	}
 }
