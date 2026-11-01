@@ -14,11 +14,17 @@ import Foundation
 ///      "answers": {"memory.read": [{"params": {"path": "CONTEXT.md"}, "result": {...}}, ...]},
 ///      (an answer may have an "error" {"code", "message"} instead of a result)
 ///      "streams": {"projects.watch": {"result": {...}, "events": [{"event": "...", "data": {...}}]}},
-///      "transcripts": {"<session id>": {"result": {...}, "events": [...]}}}
+///      "transcripts": {"<session id>": {"result": {...}, "events": [...]}},
+///      "panes": {"<session id>": {"result": {...}, "events": [...]}},
+///      "now": "2026-10-27T10:00:00Z"}
 ///
 /// answers are a method's results by its params: the first whose params
 /// the request's has, each the same, answers it, before calls'.
-/// transcripts are transcript.watch's, by its params' session.
+/// transcripts are transcript.watch's, by its params' session, and panes
+/// pane.vt's the same way. now is when the recording was made: every
+/// time in it (RFC 3339 in UTC, or a bare date) moves by as much as now
+/// is past it, so its ages read the same on any day (the App Store's
+/// screenshots, App Review).
 public final class DemoTransport: BridgeTransport, @unchecked Sendable {
     public let lines: AsyncThrowingStream<Data, any Error>
 
@@ -27,6 +33,7 @@ public final class DemoTransport: BridgeTransport, @unchecked Sendable {
     private let answers: [String: [Answer]]
     private let streams: [String: Stream]
     private let transcripts: [String: Stream]
+    private let panes: [String: Stream]
     private let lock = NSLock()
     private var closed = false
 
@@ -50,9 +57,13 @@ public final class DemoTransport: BridgeTransport, @unchecked Sendable {
     /// The error code of what the recording has no answer for.
     public static let refused = "demo"
 
-    public init(recording: Data) throws {
-        guard let r = try JSONSerialization.jsonObject(with: recording) as? [String: Any],
-              let hello = r["hello"] as? [String: Any]
+    public init(recording: Data, now: Date = Date()) throws {
+        guard var r = try JSONSerialization.jsonObject(with: recording) as? [String: Any]
+        else { throw BridgeError.badLine("a demo recording is an object with a hello") }
+        if let then = (r["now"] as? String).flatMap(DemoClock.time) {
+            r = DemoClock(by: now.timeIntervalSince(then)).shift(r) as? [String: Any] ?? r
+        }
+        guard let hello = r["hello"] as? [String: Any]
         else { throw BridgeError.badLine("a demo recording is an object with a hello") }
         func json(_ v: Any) throws -> Data {
             try JSONSerialization.data(withJSONObject: v, options: [.fragmentsAllowed, .sortedKeys])
@@ -78,6 +89,7 @@ public final class DemoTransport: BridgeTransport, @unchecked Sendable {
         }
         streams = try (r["streams"] as? [String: Any] ?? [:]).mapValues(stream)
         transcripts = try (r["transcripts"] as? [String: Any] ?? [:]).mapValues(stream)
+        panes = try (r["panes"] as? [String: Any] ?? [:]).mapValues(stream)
         (lines, sink) = AsyncThrowingStream<Data, any Error>.makeStream()
         sink.yield(try json(["hello": hello]))
     }
@@ -92,9 +104,12 @@ public final class DemoTransport: BridgeTransport, @unchecked Sendable {
             if let stream = params["id"] as? Int { yield("{\"id\":\(stream),\"end\":true}") }
             return
         }
-        let s = method == AppAPI.Methods.transcriptWatch.name
-            ? (params["session"] as? String).flatMap { transcripts[$0] }
-            : streams[method]
+        let session = params["session"] as? String
+        let s = switch method {
+        case AppAPI.Methods.transcriptWatch.name: session.flatMap { transcripts[$0] }
+        case AppAPI.Methods.paneVt.name: session.flatMap { panes[$0] }
+        default: streams[method]
+        }
         if let s {
             reply(id, result: s.result)
             for e in s.events {
@@ -141,5 +156,42 @@ public final class DemoTransport: BridgeTransport, @unchecked Sendable {
     private func yield(_ d: Data) {
         guard !lock.withLock({ closed }) else { return }
         sink.yield(d)
+    }
+}
+
+/// Moves a recording's times by a span: RFC 3339 times in UTC by it to
+/// the second, bare dates (2026-10-27) by its whole days.
+struct DemoClock {
+    let by: TimeInterval
+
+    static func time(_ s: String) -> Date? {
+        try? Date(s, strategy: .iso8601)
+    }
+
+    func shift(_ v: Any) -> Any {
+        switch v {
+        case let o as [String: Any]: return o.mapValues(shift)
+        case let a as [Any]: return a.map(shift)
+        case let s as String: return shift(s)
+        default: return v
+        }
+    }
+
+    private func shift(_ s: String) -> String {
+        if Self.shaped(s, "dddd-dd-ddTdd:dd:ddZ"), let t = Self.time(s) {
+            return t.addingTimeInterval(by.rounded()).formatted(.iso8601)
+        }
+        if Self.shaped(s, "dddd-dd-dd"), let t = try? Date(s + "T00:00:00Z", strategy: .iso8601) {
+            let days = (by / 86_400).rounded()
+            return t.addingTimeInterval(days * 86_400).formatted(.iso8601.year().month().day())
+        }
+        return s
+    }
+
+    /// Whether s is shape's characters, each d a digit.
+    private static func shaped(_ s: String, _ shape: String) -> Bool {
+        s.utf8.count == shape.utf8.count && zip(s.utf8, shape.utf8).allSatisfy { c, d in
+            d == UInt8(ascii: "d") ? (UInt8(ascii: "0")...UInt8(ascii: "9")).contains(c) : c == d
+        }
     }
 }

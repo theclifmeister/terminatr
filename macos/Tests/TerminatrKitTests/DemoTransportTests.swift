@@ -178,3 +178,41 @@ func demoBridge() async throws -> Bridge {
         #expect(shown == h.id && m.timeline?.at.id == h.id, "\(h.id)")
     }
 }
+
+/// The demo's terminal (T911): T12's session streams its pane, a repaint
+/// at the pane's size, for the App Store's screenshot and App Review.
+@Test func demoPane() async throws {
+    let b = try await demoBridge()
+    #expect(try #require(await b.hello).server?.caps.contains("pane-vt") == true)
+    let sub = try await b.subscribe(AppAPI.Methods.paneVt, AppAPI.PaneParams(session: "s-101"))
+    #expect(sub.result.session.cols == 72)
+    for try await e in sub.events {
+        #expect(e.name == "pane.repaint")
+        #expect(e.data.cols == 72 && e.data.rows == 34)
+        #expect(String(decoding: e.data.data, as: UTF8.self).contains("Do you want to proceed?"))
+        break
+    }
+}
+
+/// The recording's times move to now (T911), so its ages read the same on
+/// any day: a time by the span to the second, a bare date by whole days;
+/// a time inside text stays.
+@Test func demoTimesMoveToNow() async throws {
+    let rec = Data("""
+    {"now": "2026-10-27T10:00:00Z", "hello": {"app_api": 1},
+     "calls": {"x": {"at": "2026-10-27T09:41:00Z", "day": "2026-10-26", "list": ["2026-10-20T08:00:00Z"],
+                     "text": "seen 2026-10-27T09:41:00Z", "n": 3}}}
+    """.utf8)
+    let now = try Date("2026-11-03T22:30:00Z", strategy: .iso8601)
+    let t = try DemoTransport(recording: rec, now: now)
+    var lines = t.lines.makeAsyncIterator()
+    _ = try await lines.next()
+    try t.send(Data(#"{"id": 1, "method": "x"}"#.utf8))
+    let line = try #require(try await lines.next())
+    let r = try #require(try JSONSerialization.jsonObject(with: line) as? [String: Any])["result"] as? [String: Any]
+    #expect(r?["at"] as? String == "2026-11-03T22:11:00Z")
+    #expect(r?["day"] as? String == "2026-11-03")
+    #expect(r?["list"] as? [String] == ["2026-10-27T20:30:00Z"])
+    #expect(r?["text"] as? String == "seen 2026-10-27T09:41:00Z")
+    #expect(r?["n"] as? Int == 3)
+}

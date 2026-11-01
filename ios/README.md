@@ -18,7 +18,7 @@ An iPad turns all four ways (`AppDelegate` in `Duo.swift`; Info.plist's iPad ori
 A regular-width window shows the two columns (`Columns.swift`), a compact one (a narrow Split View or Stage Manager window) the stack; resizing across them keeps your place (`Places.swift`).
 With a hardware keyboard, Command-Return sends a prompt and Shift-Command-Return steers; list rows and cards light up under the pointer.
 Check it in the Simulator on an iPad (iOS 27.0 runtime: 27.1 takes only iPhone Duo): `make run DEVICE="…"`. Resizing the window into compact width needs Stage Manager or Split View, by hand: `simctl` can't, and iPadOS refuses programmatic orientation and size changes to an app that joins multitasking.
-App Store submission (not TestFlight) needs iPad screenshots: 13-inch, 2064×2752 or 2048×2732 portrait (landscape the same, turned), which the iPad Pro 13-inch (M5) Simulator shoots as is; App Store Connect scales them down for the smaller iPads.
+App Store submission (not TestFlight) needs iPad screenshots: 13-inch, 2064×2752 or 2048×2732 portrait (landscape the same, turned), which the iPad Pro 13-inch (M5) Simulator shoots as is; App Store Connect scales them down for the smaller iPads. `make store-shots` makes them (App Store screenshots, below).
 
 ## Terminal
 
@@ -86,9 +86,32 @@ The App Store listing's text and the App Review notes live in `AppStore/`, in fa
 What's New holds the first version's line; later versions take the release notes' iPhone lines.
 
 - **Names:** "Claude Code" and "Codex" appear only in the description, saying what tm works with, with a line that terminatr isn't affiliated with Anthropic or OpenAI. Under App Review 2.3.7 the name, subtitle and keywords carry no other company's or app's name.
-- **App Review:** "Sign-in required" stays off: the notes send the reviewer to Explore the demo, and the submission attaches a screen recording of a real pairing (T911 records it against `make dev-server`). A live session is offered only if Apple asks; the notes can't carry a pairing code, which works once and expires in 10 minutes.
+- **App Review:** "Sign-in required" stays off: the notes send the reviewer to Explore the demo, and the submission attaches a screen recording of a real pairing (`make review-video` records it against `make dev-server`, below). A live session is offered only if Apple asks; the notes can't carry a pairing code, which works once and expires in 10 minutes.
 - **Privacy policy in the app** (App Review 5.1.1(i)): Settings → About links the privacy policy, support and terminatr.dev, and shows the version; the welcome screen's footer links the first two. The pages themselves are T909's, on terminatr.dev.
 - **Third-party AI** (App Review 5.1.2(i)): the confirm step of pairing says, above Pair, that prompts and photos go to the user's tm server and that its agents may pass them to the AI provider set up there. The app itself never contacts one.
+
+## App Store screenshots
+
+`make store-shots` (T911, `store-shots.sh`) shoots the App Store's screenshots from the demo, so they carry fictional names only, into `build/store-shots/<set>/NN-screen.png`, with `index.html` to look them over:
+
+| Set | Pixels | Simulator | |
+|---|---|---|---|
+| `iphone-medium` | 1206×2622 | iPhone 17 | required (Dynamic Island, medium) |
+| `ipad-13` | 2064×2752 | iPad Pro 13-inch (M5) | required |
+| `iphone-large` | 1320×2868 | iPhone 17 Pro Max | |
+| `duo-outer` | 1398×2034 | iPhone Duo, closed | required from April 2027 |
+| `duo-inner` | 2007×2853 | iPhone Duo, opened | required from April 2027; by hand, below |
+
+The screens, in the store's order: Needs you, answering T14's question, T12's conversation at its approval, T12's terminal, the acme-web project and its board. The outer Duo display takes the first, second and terminal; the iPad all but Needs you, which in portrait shows its list beside an empty detail, and its board with the sidebar closed (`-sidebar NO`), which open lies over the list.
+Each set gets a new Simulator, deleted after, in light appearance with a 9:41 status bar; every file is checked against its set's size and written without alpha, which App Store Connect refuses.
+`SETS="iphone-medium ipad-13"` shoots only those.
+
+The demo's times are recorded ones that move to now as it opens (its `now`, `DemoTransport`), so ages read the same on any day ("19m"), and the script launches the app in the time zone where now is nearest 10:00, so its clock times read within half an hour of 9:02 to 9:41, as recorded, on any run.
+The demo's terminal is T12's pane, recorded in its `panes`.
+
+App Review's screen recording of a real pairing: start `make dev-server LEVEL=write`, then `make review-video`, which records a fresh DEVICE to `build/store-shots/review.mp4` while it pairs with the dev server's code; you answer a question, send a prompt and type into a terminal (simctl can't tap), and Return stops it.
+
+simctl can't open an iPhone Duo or turn a device, so every set is portrait and `duo-inner` isn't in the default sets: create an iPhone Duo Simulator, open it in Xcode's Device Hub, and run `make store-shots SETS=duo-inner DUO=<its UDID>`.
 
 ## Encryption
 
