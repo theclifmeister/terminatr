@@ -329,6 +329,16 @@ func TestSkillAndOpen(t *testing.T) {
 	}
 	h.expect(2, "no rules for role", human, "skill", "boss")
 	h.expect(2, "usage", human, "skill")
+	// --section prints one section after the version line.
+	sec := h.ok(coord, "skill", "coordinator", "--section", "QUESTIONS")
+	if !strings.HasPrefix(sec, "tm skill coordinator v") || !strings.Contains(sec, "\n\n## Questions\n") || strings.Count(sec, "\n## ") != 1 {
+		t.Errorf("--section:\n%s", sec)
+	}
+	if sec := h.ok(thr, "skill", "thread", "--section", "how you"); strings.Count(sec, "\n## ") != 2 || strings.Contains(sec, "## Safety") {
+		t.Errorf("--section by prefix:\n%s", sec)
+	}
+	h.expect(1, "Safety, How you work, How you report", thr, "skill", "thread", "--section", "nope")
+	h.expect(2, "usage", thr, "skill", "thread", "--section", " ")
 
 	h.ok(human, "project", "new", "demo")
 	// Opening needs the server (the e2e scenarios); refusals come first.

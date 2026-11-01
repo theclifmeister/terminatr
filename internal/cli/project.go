@@ -598,19 +598,24 @@ func runInbox(e *Env, args []string) error {
 	return usagef("unknown subcommand %q\n%s", args[0], inboxUsage)
 }
 
-const skillUsage = `usage: tm skill coordinator|thread [--project <slug>]`
+const skillUsage = `usage: tm skill coordinator|thread [--section <heading>] [--project <slug>]
+
+Prints the role's standing rules, with the rules of the mods that run
+for the project. --section prints only the sections under that "## "
+heading (ignoring case; else the headings that start with it, such as
+"house rules"), after the rules' version line.`
 
 // runSkill prints a role's standing rules (§7.7), for any caller, with
 // the rules of the mods that run for its project (the caller's, or
 // --project; every enabled mod's without either, §5.3).
 func runSkill(e *Env, args []string) error {
 	f := newFlags()
-	slug := f.String("project")
+	slug, section := f.String("project"), f.String("section")
 	pos, err := f.Parse(args)
 	if err != nil {
 		return err
 	}
-	if len(pos) != 1 {
+	if len(pos) != 1 || f.IsSet("section") && strings.TrimSpace(*section) == "" {
 		return usagef("%s", skillUsage)
 	}
 	if *slug != "" {
@@ -621,6 +626,14 @@ func runSkill(e *Env, args []string) error {
 	text, ok := skill.ForProject(pos[0], version.Version, cmp.Or(*slug, e.Caller.Project))
 	if !ok {
 		return usagef("no rules for role %q\n%s", pos[0], skillUsage)
+	}
+	if f.IsSet("section") {
+		body := skill.Sections(text, *section)
+		if body == "" {
+			return &project.Error{Code: "no-section", Msg: fmt.Sprintf("the %s rules have no section %q; theirs: %s", pos[0], *section, strings.Join(skill.Headings(text), ", "))}
+		}
+		first, _, _ := strings.Cut(text, "\n")
+		text = first + "\n\n" + body
 	}
 	_, err = fmt.Fprint(e.Stdout, text)
 	return err

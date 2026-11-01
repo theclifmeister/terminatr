@@ -180,8 +180,8 @@ func (m Memory) Render(dir, slug string) string {
 		return ""
 	}
 	head := "## Memory notes\n\nNotes from the project's memory for this task: standing ones every thread gets,\n" +
-		"matched ones by the task's words and paths. Each is cut to fit; the full note is in\n" +
-		filepath.Join(dir, "memory") + "/ (and `tm memory find` looks for more).\n\n"
+		"matched ones by the task's words and paths. Each is cut to fit; `tm memory show <note>` prints\n" +
+		"one in full (the notes are in " + filepath.Join(dir, "memory") + "/), `tm memory find` looks for more.\n\n"
 	share := (ResetBudget - len(head)) / len(m.Notes)
 	var b strings.Builder
 	b.WriteString(head)
