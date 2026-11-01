@@ -290,3 +290,18 @@ extension Compatibility {
             && hello.methods.contains(AppAPI.Methods.modsSetting.name)
     }
 }
+
+extension Compatibility {
+    /// The app API that has search.query, search.timeline and search.show
+    /// (T924): the Mac's Search Project… and the phone's search need it.
+    public static let searchAPI = 41
+
+    /// Whether hello's tm searches a project's history, its server too
+    /// (caps search).
+    public static func searches(_ hello: AppAPI.Hello?) -> Bool {
+        guard let hello else { return false }
+        return hello.appApi >= searchAPI && hello.methods.contains(AppAPI.Methods.searchQuery.name)
+            && hello.methods.contains(AppAPI.Methods.searchShow.name) && hello.methods.contains(AppAPI.Methods.searchTimeline.name)
+            && (hello.server?.caps ?? []).contains("search")
+    }
+}

@@ -15,6 +15,7 @@ struct ShortcutsSheet: View {
         ]),
         ("Go", [
             ("⌘K", "Command palette: go to a project, thread, task or need"),
+            ("⇧⌘F", "Search the project's history: notes, tasks, threads, journal"),
             ("⌥⌘↓  ⌥⌘↑", "Next and previous thing that needs you"),
             ("⌘1 – ⌘9", "The active projects"),
             ("⌘[  ⌘]", "Back and forward"),

@@ -833,6 +833,21 @@ final class PhoneModel {
         try await connected().call(AppAPI.Methods.modsSetting, ProjectMods.setting(m, project: project, key: key, value)).words
     }
 
+    /// Whether this tm searches a project's history (search.query, app
+    /// API 41; T924).
+    var searches: Bool { Compatibility.searches(hello) }
+
+    /// A search's calls, on the bridge up when each is made.
+    var searchCalls: Search.Calls {
+        let bridge: @Sendable () async throws -> Bridge = { [weak self] in
+            guard let b = await self?.bridge else { throw LinkError.closed }
+            return b
+        }
+        return Search.Calls(query: { try await bridge().call(AppAPI.Methods.searchQuery, $0) },
+                            timeline: { try await bridge().call(AppAPI.Methods.searchTimeline, $0) },
+                            show: { try await bridge().call(AppAPI.Methods.searchShow, $0) })
+    }
+
     /// The project's designs, by name, each with its build in after
     /// order (design.list).
     func designs(_ project: String) async throws -> [AppAPI.Design] {

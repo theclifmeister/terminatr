@@ -6,7 +6,7 @@ import Foundation
 /// The terminatr app API (docs/SPEC.md §3.8): what tm app bridge answers.
 public enum AppAPI {
     /// The app API version this app was generated against.
-    public static let version = 40
+    public static let version = 41
 
     public struct AdoptRequestParams: Codable, Sendable, Hashable {
         public var id: String
@@ -2312,6 +2312,201 @@ public enum AppAPI {
         }
     }
 
+    public struct SearchHit: Codable, Sendable, Hashable, Identifiable {
+        public var id: String
+        public var kind: String
+        public var title: String
+        public var time: Date
+        public var task: String
+        public var thread: String
+        public var path: String
+        public var member: String
+        public var terms: [String]
+        public var more: Int
+
+        public init(id: String, kind: String, title: String, time: Date, task: String = "", thread: String = "", path: String, member: String = "", terms: [String] = [], more: Int = 0) {
+            self.id = id
+            self.kind = kind
+            self.title = title
+            self.time = time
+            self.task = task
+            self.thread = thread
+            self.path = path
+            self.member = member
+            self.terms = terms
+            self.more = more
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case id
+            case kind
+            case title
+            case time
+            case task
+            case thread
+            case path
+            case member
+            case terms
+            case more
+        }
+    }
+
+    public struct SearchQueryParams: Codable, Sendable, Hashable {
+        public var project: String
+        public var words: String
+        public var `in`: [String]
+        public var since: String
+        public var until: String
+        public var task: String
+        public var thread: String
+        public var limit: Int
+
+        public init(project: String, words: String, `in`: [String] = [], since: String = "", until: String = "", task: String = "", thread: String = "", limit: Int = 0) {
+            self.project = project
+            self.words = words
+            self.in = `in`
+            self.since = since
+            self.until = until
+            self.task = task
+            self.thread = thread
+            self.limit = limit
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case project
+            case words
+            case `in`
+            case since
+            case until
+            case task
+            case thread
+            case limit
+        }
+    }
+
+    public struct SearchResult: Codable, Sendable, Hashable {
+        public var project: String
+        public var hits: [SearchHit]
+        public var total: Int
+        public var terms: [String]
+
+        public init(project: String, hits: [SearchHit] = [], total: Int, terms: [String] = []) {
+            self.project = project
+            self.hits = hits
+            self.total = total
+            self.terms = terms
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case project
+            case hits
+            case total
+            case terms
+        }
+    }
+
+    public struct SearchShowParams: Codable, Sendable, Hashable {
+        public var project: String
+        public var ids: [String]
+
+        public init(project: String, ids: [String] = []) {
+            self.project = project
+            self.ids = ids
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case project
+            case ids
+        }
+    }
+
+    public struct SearchShown: Codable, Sendable, Hashable {
+        public var project: String
+        public var items: [SearchText]
+
+        public init(project: String, items: [SearchText] = []) {
+            self.project = project
+            self.items = items
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case project
+            case items
+        }
+    }
+
+    public struct SearchText: Codable, Sendable, Hashable {
+        public var hit: SearchHit
+        public var text: String
+        public var bytes: Int
+        public var cut: Bool
+        public var chunks: [SearchHit]
+        public var error: String
+
+        public init(hit: SearchHit, text: String = "", bytes: Int = 0, cut: Bool = false, chunks: [SearchHit] = [], error: String = "") {
+            self.hit = hit
+            self.text = text
+            self.bytes = bytes
+            self.cut = cut
+            self.chunks = chunks
+            self.error = error
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case hit
+            case text
+            case bytes
+            case cut
+            case chunks
+            case error
+        }
+    }
+
+    public struct SearchTimeline: Codable, Sendable, Hashable {
+        public var project: String
+        public var at: SearchHit
+        public var before: [SearchHit]
+        public var after: [SearchHit]
+
+        public init(project: String, at: SearchHit, before: [SearchHit] = [], after: [SearchHit] = []) {
+            self.project = project
+            self.at = at
+            self.before = before
+            self.after = after
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case project
+            case at
+            case before
+            case after
+        }
+    }
+
+    public struct SearchTimelineParams: Codable, Sendable, Hashable {
+        public var project: String
+        public var id: String
+        public var before: Int
+        public var after: Int
+        public var all: Bool
+
+        public init(project: String, id: String, before: Int = 0, after: Int = 0, all: Bool = false) {
+            self.project = project
+            self.id = id
+            self.before = before
+            self.after = after
+            self.all = all
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case project
+            case id
+            case before
+            case after
+            case all
+        }
+    }
+
     public struct SendBackParams: Codable, Sendable, Hashable {
         public var project: String
         public var task: String
@@ -3421,6 +3616,9 @@ public enum AppAPI {
         public static let projectPin = Call<ProjectPinParams, ProjectPinned>("project.pin", write: true)
         public static let projectsWatch = Subscription<ProjectsWatchParams, Projects, Projects>("projects.watch", events: ["projects.changed"])
         public static let questionsOpen = Call<ProjectParams, QuestionsOpen>("questions.open", write: true)
+        public static let searchQuery = Call<SearchQueryParams, SearchResult>("search.query", write: false)
+        public static let searchShow = Call<SearchShowParams, SearchShown>("search.show", write: false)
+        public static let searchTimeline = Call<SearchTimelineParams, SearchTimeline>("search.timeline", write: false)
         public static let sessionAdoptRequest = Call<AdoptRequestParams, AdoptRequested>("session.adopt.request", write: true)
         public static let sessionAnswer = Call<AnswerParams, AnswerResult>("session.answer", write: true)
         public static let sessionApprove = Call<ApproveParams, ApproveResult>("session.approve", write: true)
@@ -4511,6 +4709,95 @@ extension AppAPI.RemoteParams {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.id = try c.decode(String.self, forKey: .id)
         self.on = try c.decode(Bool.self, forKey: .on)
+    }
+}
+
+extension AppAPI.SearchHit {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try c.decode(String.self, forKey: .id)
+        self.kind = try c.decode(String.self, forKey: .kind)
+        self.title = try c.decode(String.self, forKey: .title)
+        self.time = try c.decode(Date.self, forKey: .time)
+        self.task = try c.decodeIfPresent(String.self, forKey: .task) ?? ""
+        self.thread = try c.decodeIfPresent(String.self, forKey: .thread) ?? ""
+        self.path = try c.decode(String.self, forKey: .path)
+        self.member = try c.decodeIfPresent(String.self, forKey: .member) ?? ""
+        self.terms = try c.decodeIfPresent([String].self, forKey: .terms) ?? []
+        self.more = try c.decodeIfPresent(Int.self, forKey: .more) ?? 0
+    }
+}
+
+extension AppAPI.SearchQueryParams {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.project = try c.decode(String.self, forKey: .project)
+        self.words = try c.decode(String.self, forKey: .words)
+        self.in = try c.decodeIfPresent([String].self, forKey: .in) ?? []
+        self.since = try c.decodeIfPresent(String.self, forKey: .since) ?? ""
+        self.until = try c.decodeIfPresent(String.self, forKey: .until) ?? ""
+        self.task = try c.decodeIfPresent(String.self, forKey: .task) ?? ""
+        self.thread = try c.decodeIfPresent(String.self, forKey: .thread) ?? ""
+        self.limit = try c.decodeIfPresent(Int.self, forKey: .limit) ?? 0
+    }
+}
+
+extension AppAPI.SearchResult {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.project = try c.decode(String.self, forKey: .project)
+        self.hits = try c.decodeIfPresent([AppAPI.SearchHit].self, forKey: .hits) ?? []
+        self.total = try c.decode(Int.self, forKey: .total)
+        self.terms = try c.decodeIfPresent([String].self, forKey: .terms) ?? []
+    }
+}
+
+extension AppAPI.SearchShowParams {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.project = try c.decode(String.self, forKey: .project)
+        self.ids = try c.decodeIfPresent([String].self, forKey: .ids) ?? []
+    }
+}
+
+extension AppAPI.SearchShown {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.project = try c.decode(String.self, forKey: .project)
+        self.items = try c.decodeIfPresent([AppAPI.SearchText].self, forKey: .items) ?? []
+    }
+}
+
+extension AppAPI.SearchText {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.hit = try c.decode(AppAPI.SearchHit.self, forKey: .hit)
+        self.text = try c.decodeIfPresent(String.self, forKey: .text) ?? ""
+        self.bytes = try c.decodeIfPresent(Int.self, forKey: .bytes) ?? 0
+        self.cut = try c.decodeIfPresent(Bool.self, forKey: .cut) ?? false
+        self.chunks = try c.decodeIfPresent([AppAPI.SearchHit].self, forKey: .chunks) ?? []
+        self.error = try c.decodeIfPresent(String.self, forKey: .error) ?? ""
+    }
+}
+
+extension AppAPI.SearchTimeline {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.project = try c.decode(String.self, forKey: .project)
+        self.at = try c.decode(AppAPI.SearchHit.self, forKey: .at)
+        self.before = try c.decodeIfPresent([AppAPI.SearchHit].self, forKey: .before) ?? []
+        self.after = try c.decodeIfPresent([AppAPI.SearchHit].self, forKey: .after) ?? []
+    }
+}
+
+extension AppAPI.SearchTimelineParams {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.project = try c.decode(String.self, forKey: .project)
+        self.id = try c.decode(String.self, forKey: .id)
+        self.before = try c.decodeIfPresent(Int.self, forKey: .before) ?? 0
+        self.after = try c.decodeIfPresent(Int.self, forKey: .after) ?? 0
+        self.all = try c.decodeIfPresent(Bool.self, forKey: .all) ?? false
     }
 }
 

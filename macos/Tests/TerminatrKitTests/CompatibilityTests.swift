@@ -73,3 +73,15 @@ private func hello(_ api: Int, _ tm: String) -> AppAPI.Hello {
         #expect(Release(bad) == nil, "\(bad)")
     }
 }
+
+/// Search needs app API 41, its three methods and the server's search
+/// cap (T924).
+@Test func searchNeedsAPI41() {
+    var h = hello(41, "v0.72.0")
+    h.methods = [AppAPI.Methods.searchQuery.name, AppAPI.Methods.searchShow.name, AppAPI.Methods.searchTimeline.name]
+    #expect(!Compatibility.searches(h))
+    h.server = AppAPI.Server(version: "v0.72.0", protocol: 33, caps: ["search"])
+    #expect(Compatibility.searches(h))
+    h.appApi = 40
+    #expect(!Compatibility.searches(h) && !Compatibility.searches(nil))
+}
