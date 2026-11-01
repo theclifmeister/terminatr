@@ -314,7 +314,9 @@ extension Root {
             }
         }
         .tabViewStyle(.sidebarAdaptable)
-        .tabViewSidebarHeader { SidebarHead() }
+        // Given its models: laid out again on a rotation, its cell's
+        // host has no Phone from the scene, and reading it crashed (T895).
+        .tabViewSidebarHeader { SidebarHead().environment(phone).environment(phone.primary) }
         .onGeometryChange(for: CGSize.self) { $0.size } action: { size = $0 }
         .onChange(of: folding) { if $1 != nil { Self.setSidebar(hidden: true) } }
     }
