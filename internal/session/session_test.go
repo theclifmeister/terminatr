@@ -3,6 +3,7 @@ package session
 import (
 	"bytes"
 	"fmt"
+	"os/exec"
 	"strings"
 	"testing"
 	"time"
@@ -322,6 +323,20 @@ func TestExitClosesSubscribers(t *testing.T) {
 	}
 }
 
+// ttyProcs lists the processes on s's terminal with their states, for a
+// failure message.
+func ttyProcs(s *Session) string {
+	tty, err := exec.Command("ps", "-o", "tty=", "-p", fmt.Sprint(s.con.PID())).Output()
+	if err != nil {
+		return fmt.Sprintf("ps: %v", err)
+	}
+	out, err := exec.Command("ps", "-o", "pid,ppid,pgid,tpgid,stat,wchan,command", "-t", strings.TrimSpace(string(tty))).CombinedOutput()
+	if err != nil {
+		return fmt.Sprintf("ps -t %s: %v\n%s", strings.TrimSpace(string(tty)), err, out)
+	}
+	return string(out)
+}
+
 // TestColors: the program's OSC 11 query is answered with the colours a
 // client reported, and with new ones once they change.
 func TestColors(t *testing.T) {
@@ -337,10 +352,15 @@ func TestColors(t *testing.T) {
 		n++
 		marker := fmt.Sprintf("sane-%d", 100+n)
 		s.Input([]byte(fmt.Sprintf("clear; stty raw -echo; printf '\\033]11;?\\007'; head -c 24 | tr '\\033\\007' EB; stty sane; echo; echo sane-$((100+%d))\r", n)))
-		testwait.Eventually(t, want, func() bool {
-			sc := screen(t, s)
+		var sc string
+		if !testwait.Poll(testwait.Timeout, func() bool {
+			sc = screen(t, s)
 			return strings.Contains(sc, want) && strings.Contains(sc, marker)
-		})
+		}) {
+			// Where the shell stopped (T907: on macOS the answer showed
+			// and nothing after it, the shell idle).
+			t.Fatalf("query %d: timed out waiting for %s and %s; screen:\n%s\nthe shell's tty:\n%s", n, want, marker, sc, ttyProcs(s))
+		}
 	}
 	var c emu.Colors
 	c.Bg, c.Known = emu.RGB{R: 0x12, G: 0x34, B: 0x56}, emu.KnownBg
