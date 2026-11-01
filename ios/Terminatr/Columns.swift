@@ -131,6 +131,8 @@ struct Columns<Content: View>: View {
             .destinations()
         }
         .environment(\.navigate, Navigate(open: path.last) { r in path = Array(path.prefix(max(n - 1, 0))) + [r] })
+        // The Back of a screen with its own bar (ScreenBar).
+        .environment(\.back, n >= 2 ? GoBack { path.removeLast() } : nil)
         .id(list)
     }
 
