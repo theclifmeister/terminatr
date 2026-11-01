@@ -92,6 +92,60 @@ func rank(s Status) int {
 	return 5
 }
 
+// Priority ranks a task inside its board group: must, should or could;
+// "" is none, which sorts last.
+type Priority string
+
+const (
+	Must   Priority = "must"
+	Should Priority = "should"
+	Could  Priority = "could"
+	// NoPriority is a task without one.
+	NoPriority Priority = ""
+)
+
+// Priorities lists the levels, highest first.
+var Priorities = []Priority{Must, Should, Could}
+
+// ParsePriority accepts must, should or could, and none (or "") for
+// none.
+func ParsePriority(s string) (Priority, bool) {
+	s = strings.ToLower(strings.TrimSpace(s))
+	if s == "" || s == "none" {
+		return NoPriority, true
+	}
+	for _, p := range Priorities {
+		if string(p) == s {
+			return p, true
+		}
+	}
+	return "", false
+}
+
+// Rank orders priorities: must 0, should 1, could 2, none 3.
+func (p Priority) Rank() int {
+	if i := slices.Index(Priorities, p); i >= 0 {
+		return i
+	}
+	return len(Priorities)
+}
+
+// String is the level's name, or "none".
+func (p Priority) String() string {
+	if p == NoPriority {
+		return "none"
+	}
+	return string(p)
+}
+
+func checkPriority(s string) (Priority, error) {
+	p, ok := ParsePriority(s)
+	if !ok {
+		return "", refuse("invalid-priority", fmt.Sprintf("unknown priority %q (must, should, could or none)", s))
+	}
+	return p, nil
+}
+
 // Step is one checklist item. N is its 1-based position.
 type Step struct {
 	N    int    `json:"n"`
@@ -104,6 +158,7 @@ type Task struct {
 	ID       int
 	Title    string
 	Status   Status
+	Priority Priority // must, should, could or none ("")
 	Notes    string
 	Steps    []Step
 	Thread   string
@@ -177,15 +232,25 @@ func (b *Board) Remove(id int) *Task {
 	return nil
 }
 
-// Sort puts tasks in canonical order: board groups, then id.
-func (b *Board) Sort() {
-	sort.SliceStable(b.Tasks, func(i, j int) bool {
-		ri, rj := rank(b.Tasks[i].Status), rank(b.Tasks[j].Status)
-		if ri != rj {
-			return ri < rj
-		}
-		return b.Tasks[i].ID < b.Tasks[j].ID
-	})
+// Sort puts tasks in canonical order: board groups, then priority
+// (must first, none last), then id.
+func (b *Board) Sort() { SortTasks(b.Tasks) }
+
+// SortTasks orders tasks as the board does: by group, then priority,
+// then id.
+func SortTasks(ts []*Task) {
+	sort.SliceStable(ts, func(i, j int) bool { return Less(ts[i], ts[j]) })
+}
+
+// Less is the board's order: group, then priority, then id.
+func Less(a, b *Task) bool {
+	if ra, rb := rank(a.Status), rank(b.Status); ra != rb {
+		return ra < rb
+	}
+	if pa, pb := a.Priority.Rank(), b.Priority.Rank(); pa != pb {
+		return pa < pb
+	}
+	return a.ID < b.ID
 }
 
 // SortByID orders tasks by id only, as the archive does.
@@ -217,6 +282,9 @@ func checkNotes(s string) (string, error) {
 		if isStructural(line) {
 			return "", refuse("invalid-notes", fmt.Sprintf("notes line %d looks like a heading of TASKS.md (%q); use #### or deeper", i+1, line))
 		}
+	}
+	if priorityLine.MatchString(lines[0]) {
+		return "", refuse("invalid-notes", fmt.Sprintf("notes can't start with %q, which reads as the task's priority; set it with --priority", lines[0]))
 	}
 	if stepLine.MatchString(lines[len(lines)-1]) {
 		return "", refuse("invalid-notes", "notes end in a checklist, which would read as steps; add steps with `tm task steps add` or end the notes with text")

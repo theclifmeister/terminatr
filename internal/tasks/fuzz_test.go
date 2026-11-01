@@ -18,6 +18,7 @@ func FuzzParse(f *testing.F) {
 	f.Add("### T3 C\nstatus: ready\n\n#### sub\n- [ ] in notes\n\ntext\n\n- [X] step\n")
 	f.Add("+++\n+++\n### T1 x\r\nstatus: done\r\n\r\nwin\r\n")
 	f.Add("### T1 0\nstatus:done\n0\r") // a stray CR on the last line
+	f.Add("### T1 P\nstatus: ready\npriority: must\n\npriority: could\n- [ ] a\n### T2 Q\nstatus: open\n\npriority: should \n")
 	f.Fuzz(func(t *testing.T, in string) {
 		b, err := Parse([]byte(in))
 		if err != nil {
@@ -81,6 +82,7 @@ func FuzzStoreInputs(f *testing.F) {
 	f.Add("t", "  lead\n\ntrail  ", "", " pad ")
 	f.Add("### T1 t", "+++\nnext_id = 9\n+++", "", "- [ ] x")
 	f.Add("0", "0\r", "", "0") // a lone CR in notes
+	f.Add("p", "priority: must\nx", "", "s")
 	f.Fuzz(func(t *testing.T, title, notes, owner, step string) {
 		s := &Store{Dir: t.TempDir()}
 		res, err := s.Add(human, []NewTask{{Title: title, Notes: notes, Owner: owner, Steps: []string{step}}})
