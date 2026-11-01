@@ -39,6 +39,9 @@ type taskFront struct {
 	Project    string   `toml:"project" yaml:"project"`
 	Status     string   `toml:"status" yaml:"status"`
 	Group      string   `toml:"group" yaml:"group"`
+	// Priority is must, should or could, absent for none; the Bases
+	// sort by it (formula.rank).
+	Priority string `toml:"priority,omitempty" yaml:"priority,omitempty"`
 	Thread     string   `toml:"thread,omitempty" yaml:"thread,omitempty"`
 	PR         string   `toml:"pr,omitempty" yaml:"pr,omitempty"`
 	Design     string   `toml:"design,omitempty" yaml:"design,omitempty"`
@@ -156,7 +159,7 @@ func taskNote(slug string, t *tasks.Task, r *thread.Record, pr string, archived 
 		group = archivedGroup
 	}
 	f := taskFront{
-		ID: t.Ref(), Title: t.Title, Status: string(t.Status), Group: group,
+		ID: t.Ref(), Title: t.Title, Status: string(t.Status), Group: group, Priority: string(t.Priority),
 		Project: vaultlink.Link(slug, vaultlink.Project, slug, ""),
 		Owner:   t.Owner, Steps: len(t.Steps), StepsDone: t.StepsDone(),
 		Created: t.Created, Updated: t.Updated, Archived: archived,
