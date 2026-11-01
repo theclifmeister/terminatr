@@ -25,6 +25,8 @@ struct TaskSheet: View {
     @State private var fetchError: String?
     @State private var asking = false
     @State private var askError: String?
+    @State private var prioritizing = false
+    @State private var priorityError: String?
 
     var body: some View {
         let detail = app.project(shown.project).flatMap { TaskDetail.of(shown.task, in: $0, fetched: full) }
@@ -71,6 +73,7 @@ struct TaskSheet: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .textSelection(.enabled)
                 Spacer(minLength: 8)
+                PriorityTag(d.task.priority)
                 Text(TaskDetail.words(d.task.status))
                     .font(theme.mono(.caption, .medium))
                     .padding(.horizontal, 7)
@@ -81,6 +84,11 @@ struct TaskSheet: View {
             Text(d.facts)
                 .font(theme.mono(.footnote))
                 .foregroundStyle(theme.muted)
+            if let priorityError {
+                Text(priorityError)
+                    .font(theme.body(.footnote))
+                    .foregroundStyle(theme.attention)
+            }
             TaskOutcome(project: d.project, task: d.task.ref)
         }
         .padding(20)
@@ -111,6 +119,12 @@ struct TaskSheet: View {
             }
             if let d {
                 askButton(d)
+            }
+            if let d, app.canSetPriority, Priority.settable(d.task.status) {
+                PriorityMenu(task: d.task.ref, current: d.task.priority, busy: prioritizing) { p in
+                    setPriority(d, p)
+                }
+                .fixedSize()
             }
             Spacer()
             Button("Close") { dismiss() }
@@ -158,6 +172,21 @@ struct TaskSheet: View {
         }
     }
 
+    /// Sets the task's priority (task.priority, the TUI's P); the
+    /// watch brings the board's new order.
+    private func setPriority(_ d: TaskDetail, _ p: String) {
+        prioritizing = true
+        priorityError = nil
+        Task {
+            do {
+                _ = try await app.setPriority(project: d.project, task: d.task.ref, priority: p)
+            } catch {
+                priorityError = Dashboard.words(error, task: d.task.ref)
+            }
+            prioritizing = false
+        }
+    }
+
     // MARK: task.get
 
     /// Reads a board task whole (task.get), which the watch sends
@@ -189,5 +218,18 @@ extension AppModel {
     var canGetTask: Bool {
         if case .connected(let h) = phase { return Compatibility.getsTasks(h) }
         return false
+    }
+
+    /// Whether this tm sets a task's priority (task.priority, app API 42).
+    var canSetPriority: Bool {
+        if case .connected(let h) = phase { return Priority.sets(h) }
+        return false
+    }
+
+    /// Sets project's task's priority: must, should, could, or "" for
+    /// none (task.priority, the TUI's P). False when it had it already.
+    func setPriority(project: String, task: String, priority: String) async throws -> Bool {
+        try await connected().call(AppAPI.Methods.taskPriority,
+                                   AppAPI.TaskPriorityParams(project: project, task: task, priority: priority)).changed
     }
 }

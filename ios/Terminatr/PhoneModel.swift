@@ -785,6 +785,18 @@ final class PhoneModel {
     /// Whether this tm reads a task whole (task.get, app API 14).
     var getsTasks: Bool { hello.map(Compatibility.getsTasks) ?? false }
 
+    /// Whether the link sets a task's priority: write level, and a tm
+    /// with task.priority (app API 42).
+    var setsPriority: Bool { hello.map(Priority.sets) ?? false }
+
+    /// Sets project's task's priority: must, should, could, or "" for
+    /// none (task.priority, the TUI's P), signed as every write is.
+    /// False when it had it already.
+    func setPriority(project: String, task: String, priority: String) async throws -> Bool {
+        try await connected().call(AppAPI.Methods.taskPriority,
+                                   AppAPI.TaskPriorityParams(project: project, task: task, priority: priority)).changed
+    }
+
     private func connected() throws -> Bridge {
         guard let bridge else { throw LinkError.closed }
         return bridge

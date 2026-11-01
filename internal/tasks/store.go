@@ -66,8 +66,16 @@ func readBoard(path string) (*Board, error) {
 	return b, nil
 }
 
-// Load reads TASKS.md.
-func (s *Store) Load() (*Board, error) { return readBoard(s.TasksPath()) }
+// Load reads TASKS.md, its tasks in board order (Sort: by group, then
+// priority, then id) however the file has them.
+func (s *Store) Load() (*Board, error) {
+	b, err := readBoard(s.TasksPath())
+	if err != nil {
+		return nil, err
+	}
+	b.Sort()
+	return b, nil
+}
 
 // LoadArchive reads tasks/ARCHIVE.md; its tasks have Archived set.
 func (s *Store) LoadArchive() (*Board, error) {

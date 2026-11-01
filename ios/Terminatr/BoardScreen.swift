@@ -110,6 +110,7 @@ struct BoardScreen: View {
                         .font(theme.mono(.subheadline, .medium))
                         .foregroundStyle(theme.action)
                         .frame(minWidth: 40, alignment: .leading)
+                    PriorityTag(t.priority)
                     Text(t.title)
                         .font(theme.body(.body))
                         .lines(2)
@@ -134,7 +135,8 @@ struct BoardScreen: View {
 /// in review, its steps and its notes. A board task's notes and steps,
 /// and a done task as a whole, come from task.get. Its thread's
 /// conversation opens from here; at the write level an open, on-deck or
-/// blocked task has Delegate… (DelegateButton).
+/// blocked task has Delegate… (DelegateButton), and one not done or
+/// dropped its Priority menu.
 struct TaskScreen: View {
     @Environment(PhoneModel.self) private var model
     @Environment(\.theme) private var theme
@@ -142,6 +144,8 @@ struct TaskScreen: View {
     let ref: String
     @State private var full: AppAPI.Task?
     @State private var fetchError: String?
+    @State private var prioritizing = false
+    @State private var priorityError: String?
 
     var body: some View {
         let project = model.project(slug)
@@ -159,6 +163,14 @@ struct TaskScreen: View {
                     }
                     if model.can(AppAPI.Methods.taskDelegate.name), Palette.delegable(detail.task.status) {
                         DelegateButton(project: slug, task: ref, status: detail.task.status)
+                    }
+                    if model.setsPriority, Priority.settable(detail.task.status) {
+                        PriorityMenu(task: ref, current: detail.task.priority, busy: prioritizing) { setPriority($0) }
+                            .font(theme.body(.body, .medium))
+                            .buttonStyle(.bordered)
+                        if let priorityError {
+                            Failure(text: priorityError)
+                        }
                     }
                     TaskDetailView(detail) {
                         if let fetchError {
@@ -198,6 +210,7 @@ struct TaskScreen: View {
                     .font(theme.mono(.title3, .medium))
                     .foregroundStyle(theme.action)
                 Spacer()
+                PriorityTag(d.task.priority)
                 Text(TaskDetail.words(d.task.status))
                     .font(theme.mono(.caption, .medium))
                     .padding(.horizontal, 7)
@@ -212,6 +225,21 @@ struct TaskScreen: View {
             Text(d.facts)
                 .font(theme.mono(.footnote))
                 .foregroundStyle(theme.muted)
+        }
+    }
+
+    /// Sets the task's priority (task.priority); the watch brings the
+    /// board's new order.
+    private func setPriority(_ p: String) {
+        prioritizing = true
+        priorityError = nil
+        Task {
+            do {
+                _ = try await model.setPriority(project: slug, task: ref, priority: p)
+            } catch {
+                priorityError = Dashboard.words(error, task: ref)
+            }
+            prioritizing = false
         }
     }
 
