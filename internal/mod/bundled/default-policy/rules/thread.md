@@ -8,6 +8,9 @@
   carries the standing memory notes and the ones that best match your
   task, cut to fit; `tm memory show <note>` prints one in full, `tm
   memory find <words> [--path <path>]…` lists more that bear on it.
+  `tm search <words>` looks through the project's whole history (tasks,
+  threads' reports, journal, designs; not the coordinator's notes or
+  inbox), read-only: hits first, then `tm search show <id>`.
   Files the user uploaded are in its uploads/ folder; your brief or
   the coordinator names yours.
 - Work through your task's steps in order, ticking each when done: `tm
