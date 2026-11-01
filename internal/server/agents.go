@@ -337,7 +337,7 @@ var coordinatorRules = []struct {
 	on       func(config.Safety) bool
 }{
 	// Read-only: they change nothing.
-	{[]string{"tm context", "tm inbox list", "tm task list", "tm task show", "tm thread list", "tm thread show", "tm thread read", "tm library list", "tm memory find", "tm memory check", "tm access show", "tm access explain"}, "", nil},
+	{[]string{"tm context", "tm inbox list", "tm task list", "tm task show", "tm thread list", "tm thread show", "tm thread read", "tm library list", "tm memory find", "tm memory show", "tm memory list", "tm memory check", "tm access show", "tm access explain"}, "", nil},
 	// Its own project's rules within the level (accessedit.go accessFor).
 	{[]string{"tm access add", "tm access rm", "tm access edit", "tm access drop", "tm access undrop", "tm access set local-ports"}, "coordinator_access", func(s config.Safety) bool { return s.CoordinatorAccess }},
 	{[]string{"tm thread start", "tm task delegate"}, "start_threads", func(s config.Safety) bool { return s.StartThreads == config.StartAuto }},
