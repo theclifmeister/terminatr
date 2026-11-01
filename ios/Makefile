@@ -43,6 +43,8 @@
 #                terminatr's; TEAM overrides it). scripts/release/ios.sh, which
 #                the release workflow runs, exports and uploads it
 #                (README.md, TestFlight)
+#   make store-text  check the App Store text in AppStore/ against App
+#                Store Connect's field limits (README.md, App Store)
 #
 # The app's warnings are errors (SWIFT_TREAT_WARNINGS_AS_ERRORS in the
 # project). The package's aren't here: Xcode 26 builds it as a dependency
@@ -66,7 +68,7 @@ BUILD        ?= 1
 TEAM         ?= $(shell sed -n 's/^[[:space:]]*DEVELOPMENT_TEAM = \([A-Z0-9]*\);$$/\1/p' Terminatr.xcodeproj/project.pbxproj)
 unexport TERMINATR_WERROR
 
-.PHONY: build run dev-server run-paired archive clean
+.PHONY: build run dev-server run-paired archive store-text clean
 
 # The scheme is Terminatr-iOS (xcshareddata): a scheme named Terminatr
 # can resolve to the package's Mac executable of that name, which then
@@ -103,6 +105,9 @@ archive:
 		MARKETING_VERSION=$(VERSION) CURRENT_PROJECT_VERSION=$(BUILD) \
 		$(if $(PROFILE),CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="Apple Distribution" DEVELOPMENT_TEAM=$(TEAM) TM_IOS_PROFILE=$(PROFILE),CODE_SIGNING_ALLOWED=NO) \
 		archive
+
+store-text:
+	AppStore/check.sh
 
 clean:
 	rm -rf build

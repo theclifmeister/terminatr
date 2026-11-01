@@ -1,0 +1,1 @@
+agent,ai,coding,terminal,developer,tmux,worktree,git,llm,remote,coordinator,tasks,prompt,cli,ssh

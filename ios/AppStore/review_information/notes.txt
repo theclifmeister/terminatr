@@ -1,0 +1,14 @@
+terminatr is the iPhone and iPad companion to tm, an open-source program (https://terminatr.dev) that developers install on their own Mac or Linux computer to run AI coding agents. The app has no accounts and we run no server for it. It connects only to the user's own tm, which they pair by scanning a QR code that the command "tm device pair" shows on their computer.
+
+HOW TO REVIEW
+On first launch, tap "Explore the demo". No sign-in is needed. The demo opens recorded example projects with fictional data (acme-web, billing-api, docs-site) and every screen of the app: Needs you (questions and prompts waiting for the user), a thread's conversation, its terminal (the switch in the navigation bar), the project board, designs and settings. Actions that would change a real server answer "The demo shows recorded data". A banner marks the demo, and leaving it returns to the welcome screen.
+
+The attached screen recording shows the app paired with a real tm server: pairing by QR code, answering an agent's question, sending a prompt, and typing into the terminal. Pairing codes are single-use and expire after 10 minutes, so we can't include one in these notes. If you'd like a live session, write to the contact below and we'll set one up.
+
+ABOUT THE APP
+- The app runs no code on the device. Prompts and key presses go to the user's own computer, like an SSH client's. The terminal screen draws a text terminal stream (VT), not a mirrored screen.
+- Everything the app shows comes from the user's own server and stays between the user and that server. Nothing is shared between users.
+- App Privacy: Data Not Collected. The link is end-to-end TLS through a relay that the user hosts.
+- The app never contacts an AI provider. The agents run on the user's computer under the user's own accounts, and the app says so where pairing completes and in the privacy policy.
+- The privacy policy is linked in Settings > About and on the welcome screen.
+- Encryption: standard TLS only. ITSAppUsesNonExemptEncryption is NO, and the app is not offered in France.

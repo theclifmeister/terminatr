@@ -65,6 +65,31 @@ To try it locally: `scripts/release/ios.sh v0.57.0` makes an unsigned archive (a
 
 The next release then uploads the app. To upload a release already published, rerun its `testflight` job once the secrets are set (Actions → the release run → Re-run jobs).
 
+## App Store
+
+The App Store listing's text and the App Review notes live in `AppStore/`, in fastlane deliver's layout (a later automated submission, T913, can read it as is), drafted in the App Store design (T908) and copied from there into App Store Connect by hand until then:
+
+| App Store Connect field | File | Limit |
+|---|---|---|
+| Name | [`AppStore/en-US/name.txt`](AppStore/en-US/name.txt) | 30 characters |
+| Subtitle | [`AppStore/en-US/subtitle.txt`](AppStore/en-US/subtitle.txt) | 30 characters |
+| Promotional Text | [`AppStore/en-US/promotional_text.txt`](AppStore/en-US/promotional_text.txt) | 170 characters |
+| Keywords | [`AppStore/en-US/keywords.txt`](AppStore/en-US/keywords.txt) | 100 bytes, commas without spaces |
+| Description | [`AppStore/en-US/description.txt`](AppStore/en-US/description.txt) | 4000 characters |
+| What's New | [`AppStore/en-US/release_notes.txt`](AppStore/en-US/release_notes.txt) | 4000 characters |
+| Support, Marketing and Privacy Policy URLs | [`support_url.txt`](AppStore/en-US/support_url.txt), [`marketing_url.txt`](AppStore/en-US/marketing_url.txt), [`privacy_url.txt`](AppStore/en-US/privacy_url.txt) | |
+| Copyright | [`AppStore/copyright.txt`](AppStore/copyright.txt) | |
+| Category | [`primary_category.txt`](AppStore/primary_category.txt), [`secondary_category.txt`](AppStore/secondary_category.txt) | |
+| App Review Information → Notes | [`AppStore/review_information/notes.txt`](AppStore/review_information/notes.txt) | 4000 bytes |
+
+`make store-text` checks each file against its limit (Apple's [App information](https://developer.apple.com/help/app-store-connect/reference/app-information/app-information) and [Platform version information](https://developer.apple.com/help/app-store-connect/reference/app-information/platform-version-information) pages).
+What's New holds the first version's line; later versions take the release notes' iPhone lines.
+
+- **Names:** "Claude Code" and "Codex" appear only in the description, saying what tm works with, with a line that terminatr isn't affiliated with Anthropic or OpenAI. Under App Review 2.3.7 the name, subtitle and keywords carry no other company's or app's name.
+- **App Review:** "Sign-in required" stays off: the notes send the reviewer to Explore the demo, and the submission attaches a screen recording of a real pairing (T911 records it against `make dev-server`). A live session is offered only if Apple asks; the notes can't carry a pairing code, which works once and expires in 10 minutes.
+- **Privacy policy in the app** (App Review 5.1.1(i)): Settings → About links the privacy policy, support and terminatr.dev, and shows the version; the welcome screen's footer links the first two. The pages themselves are T909's, on terminatr.dev.
+- **Third-party AI** (App Review 5.1.2(i)): the confirm step of pairing says, above Pair, that prompts and photos go to the user's tm server and that its agents may pass them to the AI provider set up there. The app itself never contacts one.
+
 ## Encryption
 
 `Info.plist` says `ITSAppUsesNonExemptEncryption` is `NO`, so App Store Connect doesn't ask about export compliance on every upload.
