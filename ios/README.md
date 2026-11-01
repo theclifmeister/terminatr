@@ -84,6 +84,8 @@ Each set gets a new Simulator, deleted after, in light appearance with a 9:41 st
 The demo's times are recorded ones that move to now as it opens (its `now`, `DemoTransport`), so ages read the same on any day ("19m"), and the script launches the app in the time zone where now is nearest 10:00, so its clock times read within half an hour of 9:02 to 9:41, as recorded, on any run.
 The demo's terminal is T12's pane, recorded in its `panes`.
 
+App Review's screen recording of a real pairing: start `make dev-server LEVEL=write`, then `make review-video`, which records a fresh DEVICE to `build/store-shots/review.mp4` while it pairs with the dev server's code; you answer a question, send a prompt and type into a terminal (simctl can't tap), and Return stops it.
+
 simctl can't open an iPhone Duo or turn a device, so every set is portrait and `duo-inner` isn't in the default sets: create an iPhone Duo Simulator, open it in Xcode's Device Hub, and run `make store-shots SETS=duo-inner DUO=<its UDID>`.
 
 ## Encryption

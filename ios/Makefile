@@ -38,6 +38,12 @@
 #                iphone-large 1320x2868, duo-outer 1398x2034; SETS picks
 #                some; duo-inner 2007x2853 needs DUO, the UDID of an iPhone
 #                Duo Simulator opened in Xcode's Device Hub
+#   make review-video  App Review's screen recording (T911): as
+#                run-paired on a fresh DEVICE (light, 9:41), recording it
+#                to $(SHOTS)/review.mp4 while you pair, answer a question,
+#                send a prompt and type into a terminal (dev-server
+#                LEVEL=write); Return stops it. simctl can't tap, so you
+#                drive it
 #   make run-paired  as run, pairing with dev-server's code instead of
 #                the demo (the Simulator has no camera)
 #   make archive the Release build for devices, in $(ARCHIVE):
@@ -73,7 +79,7 @@ BUILD        ?= 1
 TEAM         ?= $(shell sed -n 's/^[[:space:]]*DEVELOPMENT_TEAM = \([A-Z0-9]*\);$$/\1/p' Terminatr.xcodeproj/project.pbxproj)
 unexport TERMINATR_WERROR
 
-.PHONY: build run dev-server run-paired store-shots archive clean
+.PHONY: build run dev-server run-paired store-shots review-video archive clean
 
 # The scheme is Terminatr-iOS (xcshareddata): a scheme named Terminatr
 # can resolve to the package's Mac executable of that name, which then
@@ -103,6 +109,21 @@ run-paired: build
 
 store-shots: build
 	./store-shots.sh $(APP) $(SHOTS) $(SETS)
+
+review-video: build
+	@test -s $(DEV)/invite.txt || { echo "review-video: start make dev-server LEVEL=write first"; exit 1; }
+	mkdir -p $(SHOTS)
+	xcrun simctl boot "$(DEVICE)" 2>/dev/null || true
+	xcrun simctl bootstatus "$(DEVICE)" >/dev/null
+	xcrun simctl ui "$(DEVICE)" appearance light
+	xcrun simctl status_bar "$(DEVICE)" override --time "2026-11-10T09:41:00.000$$(date +%z | sed -E 's/(..)$$/:\1/')" \
+		--dataNetwork wifi --wifiMode active --wifiBars 3 --cellularMode active --cellularBars 4 --batteryState charged --batteryLevel 100
+	xcrun simctl uninstall "$(DEVICE)" $(BUNDLE_ID) 2>/dev/null || true
+	xcrun simctl install "$(DEVICE)" $(APP)
+	xcrun simctl io "$(DEVICE)" recordVideo --codec=h264 --force $(SHOTS)/review.mp4 & rec=$$!; sleep 2; \
+	xcrun simctl launch "$(DEVICE)" $(BUNDLE_ID) -pair "$$(cat $(DEV)/invite.txt)" >/dev/null; \
+	read -p "Recording: pair, answer, prompt, type; Return stops it. " _; \
+	kill -INT $$rec; wait $$rec; echo "review-video: $(SHOTS)/review.mp4"
 
 # Signed, the profile goes to the app target only (TM_IOS_PROFILE, read
 # by its Release PROVISIONING_PROFILE_SPECIFIER): set for every target,
