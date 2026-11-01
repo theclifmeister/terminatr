@@ -180,6 +180,9 @@ func (s *Server) sessionTools(rec SessionRecord) []proto.ToolDef {
 	if rec.Role == proto.RoleCoordinator && rec.Project != "" {
 		out = append(out, CoordinatorTools...)
 	}
+	if (rec.Role == proto.RoleThread && thread.ValidID(rec.Thread) || rec.Role == proto.RoleCoordinator) && rec.Project != "" {
+		out = append(out, SearchTools...)
+	}
 	for _, t := range s.modToolsFor(rec) {
 		out = append(out, t.def)
 	}
@@ -227,6 +230,12 @@ func (s *Server) runTool(rec SessionRecord, name string, b []byte) (int, ModTool
 	// The coordinator's own tool first: its name is in a mod tool's form.
 	if rec.Role == proto.RoleCoordinator && name == "link_files" {
 		return s.runLinkFiles(rec, b)
+	}
+	if isSearchTool(name) {
+		if strings.TrimSpace(string(b)) == "" {
+			b = []byte("{}")
+		}
+		return s.runSearchTool(rec, name, b)
 	}
 	if _, _, ok := mod.ParseToolName(name); ok {
 		return s.runModTool(rec, name, b)

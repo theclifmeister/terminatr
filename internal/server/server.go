@@ -122,6 +122,9 @@ type Server struct {
 	// coordinator.
 	openMu sync.Mutex
 
+	// searchIdx are the projects' search indexes (search.go).
+	searchIdx SearchService
+
 	mu       sync.Mutex
 	sessions map[string]*session.Session
 	records  map[string]SessionRecord
@@ -452,6 +455,11 @@ func Run(ctx context.Context, opts Options) error {
 	ectx, stopEvents := context.WithCancel(context.Background())
 	defer stopEvents()
 	go s.runModEvents(ectx)
+	searchDone := make(chan struct{})
+	go func() {
+		defer close(searchDone)
+		s.runSearchIdle(ectx)
+	}()
 	hostsDone := make(chan struct{})
 	if sup := s.newModHosts(); sup != nil {
 		s.modSup.Store(sup)
@@ -476,6 +484,7 @@ func Run(ctx context.Context, opts Options) error {
 	// The mod hosts go first: nothing waits on them.
 	stopEvents()
 	<-hostsDone
+	<-searchDone
 	// The cells they published last show again after a restart.
 	if err := s.cells().Flush(); err != nil {
 		logger.Printf("mods: cells: %v", err)
@@ -718,7 +727,7 @@ func (s *Server) hello() proto.Hello {
 		Build:    s.build,
 		Bin:      s.opts.Bin,
 		PID:      os.Getpid(),
-		Caps:     []string{proto.CapPaneVT, proto.CapTranscript, proto.CapPaneVTRemote, proto.CapSessionFile, proto.CapTranscriptRemote, proto.CapLinkAct, proto.CapTranscriptTail, proto.CapSideActs, proto.CapProjectFiles, proto.CapNeedAct, proto.CapDesigns, proto.CapSessionsWatch, proto.CapPeerPages, proto.CapPeerDesigns, proto.CapProjectMods, proto.CapAnswerPicks},
+		Caps:     []string{proto.CapPaneVT, proto.CapTranscript, proto.CapPaneVTRemote, proto.CapSessionFile, proto.CapTranscriptRemote, proto.CapLinkAct, proto.CapTranscriptTail, proto.CapSideActs, proto.CapProjectFiles, proto.CapNeedAct, proto.CapDesigns, proto.CapSessionsWatch, proto.CapPeerPages, proto.CapPeerDesigns, proto.CapProjectMods, proto.CapAnswerPicks, proto.CapSearch},
 	}
 }
 
