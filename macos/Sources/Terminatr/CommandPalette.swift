@@ -250,6 +250,10 @@ struct CommandPalette: View {
             out.append(PaletteItem(id: "cmd:newproject", group: .actions, title: "New project", command: .newProject,
                                    keys: "⇧⌘N", keywords: "create add make project"))
         }
+        if app.searches {
+            out.append(PaletteItem(id: "cmd:search", group: .actions, title: "Search the project's history", command: .search,
+                                   keys: "⇧⌘F", keywords: "find recall notes journal tm search"))
+        }
         out += [
             PaletteItem(id: "cmd:filter", group: .actions, title: "Filter the sidebar", command: .filter, keys: "⌥⌘F"),
             PaletteItem(id: "cmd:back", group: .actions, title: "Back", command: .back, keys: "⌘["),
@@ -268,6 +272,7 @@ struct CommandPalette: View {
         case .inspector: app.inspector.toggle()
         case .find: app.findInConversation()
         case .filter: app.focusFilter()
+        case .search: app.showSearch()
         case .back: app.goBack()
         case .forward: app.goForward()
         case .shortcuts: app.shortcuts = true

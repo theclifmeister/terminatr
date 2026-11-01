@@ -21,7 +21,17 @@ struct ProjectsScreen: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 ScreenHeader("Projects", subtitle: subtitle, symbol: symbol) {
-                    SettingsButton().buttonStyle(.circle)
+                    HStack(spacing: Spacing.tight) {
+                        // Search (T924): this server's history, from its
+                        // first active project; the screen picks another.
+                        if model.searches, let first = (model.activeProjects + model.inactiveProjects).first {
+                            PlainRouteLink(value: Route.search(first.slug)) {
+                                Label("Search", systemImage: "magnifyingglass")
+                            }
+                            .buttonStyle(.circle)
+                        }
+                        SettingsButton().buttonStyle(.circle)
+                    }
                 }
                 LazyVStack(alignment: .leading, spacing: Spacing.item) {
                     ForEach(phone.models, id: \.key) { m in
@@ -258,6 +268,7 @@ struct ProjectScreen: View {
         ] + (pages.contains(.memory) ? [(.memory(slug), "Memory", "brain")] : [])
             + (pages.contains(.library) ? [(.library(slug), "Library", "books.vertical")] : [])
             + (pages.contains(.mods) ? [(.mods(slug), "Mods", "puzzlepiece.extension")] : [])
+            + (model.searches ? [(.search(slug), "Search", "magnifyingglass")] : [])
         return TileRow {
             ForEach(tiles, id: \.1) { route, title, symbol in
                 PlainRouteLink(value: route) { PageTile(title, symbol: symbol, selected: navigate.opens(route, on: model)) }

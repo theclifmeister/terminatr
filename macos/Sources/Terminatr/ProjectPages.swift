@@ -14,6 +14,8 @@ struct ProjectPages: View {
     @Environment(\.theme) private var theme
     let project: AppAPI.Project
     @State private var page: ProjectPage = .dashboard
+    /// The note a search hit opened (AppModel.noteShown), for Memory.
+    @State private var note: String?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -37,11 +39,17 @@ struct ProjectPages: View {
                 }
                 .scrollEdges()
             case .memory:
-                MemoryPane(project: project.slug)
+                MemoryPane(project: project.slug, note: note)
             case .library:
                 LibraryPane(project: project.slug)
             case .mods:
                 ModsPane(project: project.slug)
+            }
+        }
+        .task(id: app.noteShown) {
+            if let path = app.takeNote(project.slug), app.projectPages.contains(.memory) {
+                note = path
+                page = .memory
             }
         }
     }
@@ -53,6 +61,8 @@ struct MemoryPane: View {
     @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
     let project: String
+    /// The file to show first: a search hit's note.
+    var note: String?
     @State private var files: [AppAPI.MemoryFile]?
     @State private var picked: String?
     @State private var text: String?
@@ -91,13 +101,20 @@ struct MemoryPane: View {
         }
         .task(id: project) { await list() }
         .task(id: picked) { await read() }
+        .onChange(of: note) {
+            if let note, files?.contains(where: { $0.path == note }) != false { picked = note }
+        }
     }
 
     private func list() async {
         do {
             let fs = try await app.memoryFiles(project)
             files = fs
-            if picked == nil || !fs.contains(where: { $0.path == picked }) { picked = MemoryPage.first(fs) }
+            if let note, fs.contains(where: { $0.path == note }) {
+                picked = note
+            } else if picked == nil || !fs.contains(where: { $0.path == picked }) {
+                picked = MemoryPage.first(fs)
+            }
         } catch {
             failure = error.localizedDescription
         }
