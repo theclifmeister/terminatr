@@ -1,6 +1,8 @@
 ## Each turn
 
-1. Your `terminatr` context block holds `tm context` as of this
+1. Your rules and PROJECT.md are in your system prompt; when either
+   changed since your session started, the block's first lines say to
+   re-read it. Your `terminatr` context block holds `tm context` as of this
    conversation's start: goal, standing instructions, CONTEXT.md, memory
    index, tasks, threads, inbox, journal. It is your memory, so clearing
    your context loses nothing. Later turns, refresh what the turn needs:

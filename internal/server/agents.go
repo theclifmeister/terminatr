@@ -28,7 +28,6 @@ import (
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/session"
-	"github.com/theclifmeister/terminatr/internal/skill"
 	"github.com/theclifmeister/terminatr/internal/theme"
 	"github.com/theclifmeister/terminatr/internal/thread"
 	"github.com/theclifmeister/terminatr/internal/ticker"
@@ -337,7 +336,7 @@ var coordinatorRules = []struct {
 	on       func(config.Safety) bool
 }{
 	// Read-only: they change nothing.
-	{[]string{"tm context", "tm inbox list", "tm task list", "tm task show", "tm thread list", "tm thread show", "tm thread read", "tm library list", "tm memory find", "tm memory show", "tm memory list", "tm memory check", "tm access show", "tm access explain"}, "", nil},
+	{[]string{"tm context", "tm inbox list", "tm task list", "tm task show", "tm thread list", "tm thread show", "tm thread read", "tm library list", "tm memory find", "tm memory show", "tm memory list", "tm memory check", "tm access show", "tm access explain", "tm skill"}, "", nil},
 	// Its own project's rules within the level (accessedit.go accessFor).
 	{[]string{"tm access add", "tm access rm", "tm access edit", "tm access drop", "tm access undrop", "tm access set local-ports"}, "coordinator_access", func(s config.Safety) bool { return s.CoordinatorAccess }},
 	{[]string{"tm thread start", "tm task delegate"}, "start_threads", func(s config.Safety) bool { return s.StartThreads == config.StartAuto }},
@@ -373,23 +372,43 @@ func commandSetting(c string) string {
 // compaction (docs/SPEC.md §7.8): the role's rules plus `tm context`
 // for a coordinator, the rules plus the brief, task, PR
 // and latest follow-up for a thread, nothing for a session outside a
-// project. Each stays within its size budget, the rules aside.
-func contextFor(role, slug, threadID, brief, tickerState string) func() ([]byte, error) {
+// project. Each stays within its size budget, the rules aside. A
+// session whose rules are in its system prompt (r.Prompt) gets a header
+// saying so in their place, with a line to re-read what changed since
+// it started.
+func contextFor(r SessionRecord, tickerState string) func() ([]byte, error) {
+	role, slug, threadID, brief := r.Role, r.Project, r.Thread, r.Brief
 	return func() ([]byte, error) {
 		switch role {
 		case proto.RoleCoordinator:
-			rules, _ := skill.ForProject("coordinator", version.Version, slug)
+			rules, _ := roleRules("coordinator", slug)
 			p, err := project.Open(slug)
+			head := rules
+			if r.Prompt != nil {
+				file := ""
+				if err == nil {
+					file = p.Path("PROJECT.md")
+				}
+				head = strings.TrimRight(promptHeader(role, r.Prompt, rules, file), "\n")
+			}
 			if err != nil {
-				return []byte(rules), nil
+				return []byte(head), nil
 			}
 			secs, err := thread.Context(p, ticker.Seen(tickerState, slug))
 			if err != nil {
-				return []byte(rules), nil
+				return []byte(head), nil
 			}
-			return []byte(rules + "\n\n" + coordinatorEssentials(secs)), nil
+			budget := coordinatorBudget
+			if r.Prompt != nil {
+				budget = startupBudget - len(head) - 2 // and "\n\n"
+			}
+			return []byte(head + "\n\n" + coordinatorEssentials(secs, budget)), nil
 		case proto.RoleThread:
-			rules, _ := skill.ForProject("thread", version.Version, slug)
+			rules, _ := roleRules("thread", slug)
+			head := rules
+			if r.Prompt != nil {
+				head = strings.TrimRight(promptHeader(role, r.Prompt, rules, ""), "\n")
+			}
 			if p, err := project.Open(slug); err == nil && threadID != "" {
 				pr := ticker.PRs(tickerState, slug)[threadID]
 				line := pr.Summary()
@@ -397,28 +416,40 @@ func contextFor(role, slug, threadID, brief, tickerState string) func() ([]byte,
 					line += " " + pr.URL
 				}
 				if ctx := thread.ResetContext(p, threadID, line); ctx != "" {
-					return []byte(rules + "\n\n" + ctx), nil
+					return []byte(head + "\n\n" + ctx), nil
 				}
 			}
 			if brief != "" {
-				rules += "\n\nYour brief: " + brief + "\nRead it again, then continue with your task's unchecked steps.\n"
+				head += "\n\nYour brief: " + brief + "\nRead it again, then continue with your task's unchecked steps.\n"
 			}
-			return []byte(rules), nil
+			return []byte(head), nil
 		}
 		return nil, nil
 	}
 }
 
 // coordinatorBudget bounds the `tm context` a coordinator gets back
-// after a clear or a compaction, in bytes.
+// after a clear or a compaction, in bytes, when its rules come first in
+// the block (no system prompt).
 const coordinatorBudget = 16 << 10
 
-// coordinatorEssentials is `tm context` within coordinatorBudget, with a
-// last line saying when to run it again. It is all a fresh coordinator
-// needs (T109): its rules say not to run `tm context` again at once.
-func coordinatorEssentials(secs []project.Section) string {
+// startupBudget bounds the whole SessionStart block of a session whose
+// rules are in its system prompt, in bytes: under Claude's 10,000
+// characters for hook output (a byte count is never below a character
+// count), with room for the header Claude adds (docs/SPEC.md §7.8).
+const startupBudget = 9000
+
+// coordinatorEssentials is `tm context` within budget bytes, with a
+// last line saying when to run it again. Whole, it is all a fresh
+// coordinator needs (T109): its rules say not to run `tm context` again
+// at once; cut, the last line says to run it now.
+func coordinatorEssentials(secs []project.Section, budget int) string {
+	full := project.RenderContext(secs)
 	tail := "\nThat is `tm context` as of this conversation's start; run it (or tm inbox list, tm thread list) again when you need the current state.\n"
-	return thread.Clip(project.RenderContext(secs), coordinatorBudget-len(tail)) + tail
+	if len(full)+len(tail) > budget {
+		tail = "\nThat is `tm context` as of this conversation's start, cut at this block's size budget: run `tm context` now for the rest.\n"
+	}
+	return thread.Clip(full, budget-len(tail)) + tail
 }
 
 // contextOf is contextFor the session's current record, so that a
@@ -428,7 +459,7 @@ func (s *Server) contextOf(id string) func() ([]byte, error) {
 		s.mu.Lock()
 		r := s.records[id]
 		s.mu.Unlock()
-		return contextFor(r.Role, r.Project, r.Thread, r.Brief, ticker.StatePath(s.opts.Paths.Sessions))()
+		return contextFor(r, ticker.StatePath(s.opts.Paths.Sessions))()
 	}
 }
 
@@ -792,7 +823,30 @@ func (s *Server) prepareLaunch(l agentLaunch, v launchView) (*preparedLaunch, *p
 			s.log.Printf("session %s: %s", r.ID, w)
 		}
 	}
+	// The rules in the system prompt, and a coordinator's PROJECT.md
+	// (sysprompt.go), for an agent that takes one; else they stay in
+	// the SessionStart block. Stamped anew at every launch, a resume
+	// too: the agent reads its system prompt then.
+	r.Prompt = nil
+	plain := spec.BriefPath
+	if m := agent.ManifestOf(a); m != nil && m.Launch.SystemPrompt {
+		path, stamp, err := writeSystemPrompt(p.rt, r.Role, r.Project, spec.BriefPath)
+		switch {
+		case err != nil:
+			s.log.Printf("session %s: system prompt: %v; the rules stay in the SessionStart block", r.ID, err)
+		case stamp != nil:
+			spec.BriefPath, r.Prompt = path, stamp
+		}
+	}
 	launch, err := a.Launch(spec)
+	if err == nil && r.Prompt != nil && argvTooLong(caps.OS, launch.Argv) {
+		// An agent that takes the prompt as an argument (Codex) and a
+		// command line too long for the platform: the rules go back to
+		// the block.
+		s.log.Printf("session %s: the system prompt makes the command line too long for %s; the rules stay in the SessionStart block", r.ID, caps.OS)
+		spec.BriefPath, r.Prompt = plain, nil
+		launch, err = a.Launch(spec)
+	}
 	if err != nil {
 		p.abandon()
 		return nil, proto.Errorf(proto.ErrRefused, "%v", err)

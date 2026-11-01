@@ -94,7 +94,7 @@ func TestCoordinatorEssentials(t *testing.T) {
 		{Title: "Tasks", Lines: []string{"T1 a task"}},
 		{Title: "Journal (last 10)", Lines: []string{"a journal line"}},
 	}
-	got := coordinatorEssentials(secs)
+	got := coordinatorEssentials(secs, coordinatorBudget)
 	for _, want := range []string{"## Project\n", "Where things stand", "a memory", "## Tasks\n", "a journal line",
 		"That is `tm context` as of this conversation's start; run it"} {
 		if !strings.Contains(got, want) {
@@ -106,11 +106,14 @@ func TestCoordinatorEssentials(t *testing.T) {
 		long[i] = "T1 a task with a long enough title to fill the budget"
 	}
 	secs[3].Lines = long
-	got = coordinatorEssentials(secs)
+	if got := coordinatorEssentials(secs, startupBudget); len(got) > startupBudget || !strings.HasSuffix(got, "run `tm context` now for the rest.\n") {
+		t.Fatalf("%d bytes at the start-up budget, ends %q", len(got), got[len(got)-100:])
+	}
+	got = coordinatorEssentials(secs, coordinatorBudget)
 	if len(got) > coordinatorBudget {
 		t.Fatalf("%d bytes, over the budget", len(got))
 	}
-	if !strings.Contains(got, "[… cut at the size budget]") || !strings.HasSuffix(got, "the current state.\n") {
+	if !strings.Contains(got, "[… cut at the size budget]") || !strings.HasSuffix(got, "run `tm context` now for the rest.\n") {
 		t.Fatalf("no cut mark or no last line:\n%s", got[len(got)-300:])
 	}
 }

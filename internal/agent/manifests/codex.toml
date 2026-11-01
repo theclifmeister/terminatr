@@ -34,7 +34,7 @@ command = "codex"
 # - the folder trusted for this run only. Codex keys trust by the main
 #   repo's root, even in a linked worktree, and only the inline-table form
 #   is honoured (a dotted projects."<dir>".trust_level is not);
-# - the brief as developer instructions, which Codex sends again after
+# - the system prompt (brief, rules) as developer instructions, which Codex sends again after
 #   /clear and /compact (a value, not a file: read here);
 # - tm mcp as an MCP server for the thread tools. Codex runs it outside
 #   its sandbox with a cleared environment (tm mcp finds the session by
@@ -110,6 +110,9 @@ args = [
   "{{if .SecretEnv}}-c{{end}}", "{{if .SecretEnv}}shell_environment_policy.ignore_default_excludes=true{{end}}",
   "{{if .SecretEnv}}-c{{end}}", "{{if .SecretEnv}}shell_environment_policy.exclude={{json .EnvHide}}{{end}}",
 ]
+# .BriefPath is the session's system prompt: the brief and rules of a
+# thread, the rules and PROJECT.md of a coordinator (docs/SPEC.md §7.8).
+system_prompt = true
 yolo_args = ["--dangerously-bypass-approvals-and-sandbox"]
 model_args = ["-m", "{{.Model}}"]
 kickoff_args = ["--", "{{.Kickoff}}"]
