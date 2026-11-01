@@ -33,7 +33,7 @@ const (
 	BudgetContext = 3 << 10  // CONTEXT.md
 	BudgetIndex   = 4 << 10  // MEMORY.md
 	BudgetNote    = 6 << 10  // each file under memory/
-	BudgetNotes   = 40 << 10 // all files under memory/ together
+	BudgetNotes   = 80 << 10 // all files under memory/ together
 )
 
 // Oversize is a context file over its budget.
