@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Support: terminatr for iPhone and iPad</title>
+<meta name="description" content="How to pair the terminatr app with tm, and what to do when it will not connect.">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#0b0d14">
+<link rel="canonical" href="https://terminatr.dev/support">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="top">
+  <a class="brand" href="/" aria-label="terminatr, home"><span class="prompt" aria-hidden="true">❯</span> tm</a>
+  <nav aria-label="Pages">
+    <a href="/support">support</a>
+    <a href="/privacy">privacy</a>
+    <a href="https://github.com/theclifmeister/terminatr">github</a>
+  </nav>
+</header>
+
+<main id="main" class="doc">
+<h1>terminatr for iPhone and iPad: support</h1>
+<p class="meta">Needs tm 0.57.0 or later</p>
+
+<h2>What it is</h2>
+<p>The app is the phone end of tm, which runs coding agents on your own Mac, Linux or Windows computer. It needs tm 0.57.0 or later, the first release that pairs phones; a newer tm works with an older app, and <code>tm update</code> brings tm up to date. Install tm: <a href="/#install">terminatr.dev, Install</a>.</p>
+
+<h2>Pair your phone</h2>
+<ol>
+  <li>On your computer, run <code>tm device pair</code>.</li>
+  <li>Scan the QR code with the iPhone camera or from the app's Pair screen. Codes work once and expire after 10 minutes.</li>
+  <li>Choose the level on your computer: view, answer or write. Write lets the phone send prompts and type into terminals.</li>
+</ol>
+<p>Just looking? Tap Explore the demo on the welcome screen.</p>
+
+<h2>Common problems</h2>
+<ul>
+  <li>"Can't reach your server": tm must be running on your computer and its relay reachable (<code>tm device list</code> shows the phone).</li>
+  <li>The code was refused: make a new one; each works once.</li>
+  <li>Keys don't type in the terminal: the phone was paired below write. Pair again at write.</li>
+  <li>The app says tm is too old: run <code>tm update</code> on your computer.</li>
+</ul>
+
+<h2>Contact</h2>
+<p><a href="https://github.com/theclifmeister/terminatr/issues">GitHub issues</a>. Please leave out pairing codes and anything private.</p>
+<p>Privacy policy: <a href="/privacy">terminatr.dev/privacy</a></p>
+</main>
+
+<footer>
+  <pre class="foot-art" aria-hidden="true">─── ❯ tm ───────────────────────────────────────</pre>
+  <p>terminatr · MIT · <a href="https://github.com/theclifmeister/terminatr">github.com/theclifmeister/terminatr</a> · <a href="/support">support</a> · <a href="/privacy">privacy</a></p>
+  <p class="quiet">No cookies, no analytics, no trackers. Just HTML.</p>
+</footer>
+</body>
+</html>
