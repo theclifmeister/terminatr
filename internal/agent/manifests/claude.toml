@@ -622,6 +622,18 @@ TaskUpdate = "subject"
 ToolSearch = "query"
 SendUserFile = "caption"
 
+# An answered question menu (AskUserQuestion's result): its text says
+# "Your questions have been answered: "Q"="A", …" (before 2.1.3xx "User
+# has answered your questions: …"), and the line's toolUseResult has the
+# call's questions, the answers by question text and the user's notes
+# (2.1.316).
+[transcript.answers]
+text_prefix = ["Your questions have been answered:", "User has answered your questions:"]
+result = "toolUseResult"
+questions = "questions"
+answers = "answers"
+notes = "annotations"
+
 # What the conversation puts in front of the user (the app's attachment
 # cards, session.file): SendUserFile's files, and images pasted into a
 # prompt (their base64 bytes are in the line).

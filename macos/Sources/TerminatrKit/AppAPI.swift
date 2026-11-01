@@ -6,7 +6,7 @@ import Foundation
 /// The terminatr app API (docs/SPEC.md §3.8): what tm app bridge answers.
 public enum AppAPI {
     /// The app API version this app was generated against.
-    public static let version = 39
+    public static let version = 40
 
     public struct AdoptRequestParams: Codable, Sendable, Hashable {
         public var id: String
@@ -2978,6 +2978,30 @@ public enum AppAPI {
         }
     }
 
+    public struct TranscriptAnswer: Codable, Sendable, Hashable {
+        public var header: String
+        public var question: String
+        public var picked: [String]
+        public var typed: String
+        public var notes: String
+
+        public init(header: String = "", question: String, picked: [String] = [], typed: String = "", notes: String = "") {
+            self.header = header
+            self.question = question
+            self.picked = picked
+            self.typed = typed
+            self.notes = notes
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case header
+            case question
+            case picked
+            case typed
+            case notes
+        }
+    }
+
     public struct TranscriptEvent: Codable, Sendable, Hashable {
         public var items: [TranscriptItem]
         public var skipped: Int
@@ -3036,8 +3060,9 @@ public enum AppAPI {
         public var from: String
         public var files: [TranscriptFile]
         public var display: String
+        public var answers: [TranscriptAnswer]
 
-        public init(kind: String, text: String = "", truncated: Bool = false, tool: String = "", call: String = "", error: Bool = false, lines: Int = 0, todos: [TranscriptTodo] = [], at: Date? = nil, from: String = "", files: [TranscriptFile] = [], display: String = "") {
+        public init(kind: String, text: String = "", truncated: Bool = false, tool: String = "", call: String = "", error: Bool = false, lines: Int = 0, todos: [TranscriptTodo] = [], at: Date? = nil, from: String = "", files: [TranscriptFile] = [], display: String = "", answers: [TranscriptAnswer] = []) {
             self.kind = kind
             self.text = text
             self.truncated = truncated
@@ -3050,6 +3075,7 @@ public enum AppAPI {
             self.from = from
             self.files = files
             self.display = display
+            self.answers = answers
         }
 
         enum CodingKeys: String, CodingKey {
@@ -3065,6 +3091,7 @@ public enum AppAPI {
             case from
             case files
             case display
+            case answers
         }
     }
 
@@ -4778,6 +4805,17 @@ extension AppAPI.Todo {
     }
 }
 
+extension AppAPI.TranscriptAnswer {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.header = try c.decodeIfPresent(String.self, forKey: .header) ?? ""
+        self.question = try c.decode(String.self, forKey: .question)
+        self.picked = try c.decodeIfPresent([String].self, forKey: .picked) ?? []
+        self.typed = try c.decodeIfPresent(String.self, forKey: .typed) ?? ""
+        self.notes = try c.decodeIfPresent(String.self, forKey: .notes) ?? ""
+    }
+}
+
 extension AppAPI.TranscriptEvent {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -4814,6 +4852,7 @@ extension AppAPI.TranscriptItem {
         self.from = try c.decodeIfPresent(String.self, forKey: .from) ?? ""
         self.files = try c.decodeIfPresent([AppAPI.TranscriptFile].self, forKey: .files) ?? []
         self.display = try c.decodeIfPresent(String.self, forKey: .display) ?? ""
+        self.answers = try c.decodeIfPresent([AppAPI.TranscriptAnswer].self, forKey: .answers) ?? []
     }
 }
 

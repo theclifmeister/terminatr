@@ -575,6 +575,16 @@ do = "stream"
 ms = 300
 text = "Adding the Apple Pay button to checkout, behind the payment-request check."
 
+# An answered question, as Claude writes it (T903): a multi-select and
+# the user's own words.
+[[step]]
+do = "transcript"
+payload = { type = "assistant", message = { role = "assistant", content = [{ type = "tool_use", id = "toolu_wallets", name = "AskUserQuestion", input = { questions = [{ question = "Which wallets should checkout offer?", header = "Wallets", multiSelect = true, options = [{ label = "Apple Pay" }, { label = "Google Pay" }, { label = "PayPal" }] }, { question = "What should the button say?", header = "Label", multiSelect = false, options = [{ label = "Buy" }, { label = "Pay" }] }] } }] } }
+
+[[step]]
+do = "transcript"
+payload = { type = "user", message = { role = "user", content = [{ type = "tool_result", tool_use_id = "toolu_wallets", content = 'Your questions have been answered: "Which wallets should checkout offer?"="Apple Pay, Google Pay", "What should the button say?"="Pay now". You can now continue with these answers in mind.' }] }, toolUseResult = { questions = [{ question = "Which wallets should checkout offer?", header = "Wallets", multiSelect = true, options = [{ label = "Apple Pay" }, { label = "Google Pay" }, { label = "PayPal" }] }, { question = "What should the button say?", header = "Label", multiSelect = false, options = [{ label = "Buy" }, { label = "Pay" }] }], answers = { "Which wallets should checkout offer?" = "Apple Pay, Google Pay", "What should the button say?" = "Pay now" } } }
+
 [[step]]
 do = "tool"
 tool = "Edit"

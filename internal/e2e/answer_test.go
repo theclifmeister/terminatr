@@ -9,11 +9,14 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/agent"
+	"github.com/theclifmeister/terminatr/internal/appapi"
+	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
 const askScript = `
@@ -120,6 +123,32 @@ func TestThreadAnswer(t *testing.T) {
 		if !strings.Contains(string(journal), w) {
 			t.Errorf("journal lacks %q:\n%s", w, journal)
 		}
+	}
+
+	// The conversation shows each answered question and what was picked
+	// (T903): the option's label, the user's own words.
+	b := runBridge(t, env)
+	var tr appapi.TranscriptResult
+	ts, err := b.Stream(proto.MethodTranscriptWatch, appapi.TranscriptParams{Session: th.ID}, &tr)
+	if err != nil {
+		t.Fatalf("transcript.watch: %v", err)
+	}
+	defer ts.Cancel()
+	var got []appapi.TranscriptAnswer
+	for len(got) < 2 {
+		var ev appapi.TranscriptEvent
+		if _, err := ts.Next(&ev); err != nil {
+			t.Fatalf("transcript: %v (answers so far %+v)", err, got)
+		}
+		for _, it := range ev.Items {
+			if it.Kind == proto.ItemResult {
+				got = append(got, it.Answers...)
+			}
+		}
+	}
+	if got[0].Question != "Which color should the button be?" || !slices.Equal(got[0].Picked, []string{"Blue"}) ||
+		got[1].Question != "What should the button say?" || got[1].Typed != "Start now" || len(got[1].Picked) != 0 {
+		t.Errorf("answers %+v", got)
 	}
 }
 

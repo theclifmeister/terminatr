@@ -39,6 +39,8 @@ type Transcript struct {
 	Items  []TranscriptRule `toml:"items"`
 	// Files are the files the conversation puts in front of the user.
 	Files *TranscriptFiles `toml:"files"`
+	// Answers reads an answered question menu's result.
+	Answers *TranscriptAnswers `toml:"answers"`
 	// ToolArgs is the field of a call's input that its folded line
 	// shows, by tool name ("Bash" = "command"); "*" for any other tool.
 	ToolArgs map[string]string `toml:"tool_args"`
@@ -90,6 +92,11 @@ func (t *Transcript) validate() error {
 	}
 	if t.Files != nil {
 		if err := t.Files.validate(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if t.Answers != nil {
+		if err := t.Answers.validate(); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -152,6 +159,7 @@ func (t *Transcript) Map(line []byte) TranscriptLine {
 		out.Units, out.Unknown = 1, 1
 		return out
 	}
+	lineObj := obj
 	var images []proto.TranscriptFile
 	prompt := -1
 	for i, b := range blocks {
@@ -182,6 +190,9 @@ func (t *Transcript) Map(line []byte) TranscriptLine {
 		}
 		if it, ok := t.item(r, obj, str, i); ok {
 			it.At = at
+			if it.Kind == proto.ItemResult && !it.Error {
+				it.Answers = t.Answers.answersOf(lineObj, blockText(obj, str, r.Text))
+			}
 			if it.Kind == proto.ItemPrompt {
 				prompt = len(out.Items)
 			}
