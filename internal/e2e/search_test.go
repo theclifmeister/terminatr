@@ -88,6 +88,22 @@ func TestSearch(t *testing.T) {
 		t.Errorf("the server's index: %v", err)
 	}
 
+	// The TUI's search popup: F, the words, a hit's text and timeline.
+	w := env.Window(140, 36)
+	w.WaitFor("demo", wait)
+	w.Keys("F")
+	w.WaitFor("Search demo", wait)
+	w.Keys("wombat", keyEnter)
+	w.WaitFor("note:relay#decided", wait)
+	w.WaitFor("t timeline", wait)
+	w.Key(keyEnter)
+	w.WaitFor("==> ", wait)
+	w.Key(keyEsc)
+	w.Keys("t")
+	w.WaitFor("Timeline of", wait)
+	w.Key(keyEsc)
+	w.Key(keyEsc)
+
 	// A thread: through the CLI and through tm mcp.
 	env.MustCLI("thread", "start", "Look up the relay", "--project", "demo")
 	th := threadSession(t, env, "demo", "t-0001")
