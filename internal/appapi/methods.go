@@ -102,6 +102,15 @@ func init() {
 		// its build in after order. This server's projects only.
 		unary(proto.MethodDesignList, false, designListParams, designsOf),
 
+		// A project's history, as tm search asks it (app API 41; the
+		// server's caps say search): hits, a hit's timeline and the
+		// chunks' text, as the human sees them (the coordinator's notes
+		// and the inbox too). Reads, so at every device level; never a
+		// reindex. This server's projects only.
+		unary(proto.MethodSearchQuery, false, searchQueryParams, searchResultOf),
+		unary(proto.MethodSearchTimeline, false, searchTimelineParams, searchTimelineOf),
+		unary(proto.MethodSearchShow, false, searchShowParams, searchShownOf),
+
 		// Acting as the human; the server checks each as it checks the
 		// TUI's, and journals it as "human (app)".
 		unary(proto.MethodSessionPrompt, true, promptParams, promptResultOf),
@@ -517,6 +526,19 @@ func libraryListParams(p ProjectParams) proto.ProjectFilesParams {
 
 func designListParams(p ProjectParams) proto.DesignListParams {
 	return proto.DesignListParams{Project: p.Project}
+}
+
+func searchQueryParams(p SearchQueryParams) proto.SearchQueryParams {
+	return proto.SearchQueryParams{Project: p.Project, Words: p.Words, In: append([]string(nil), p.In...), Since: p.Since,
+		Until: p.Until, Task: p.Task, Thread: p.Thread, Limit: p.Limit}
+}
+
+func searchTimelineParams(p SearchTimelineParams) proto.SearchTimelineParams {
+	return proto.SearchTimelineParams{Project: p.Project, ID: p.ID, Before: p.Before, After: p.After, All: p.All}
+}
+
+func searchShowParams(p SearchShowParams) proto.SearchShowParams {
+	return proto.SearchShowParams{Project: p.Project, IDs: append([]string(nil), p.IDs...)}
 }
 
 func libraryReadParams(p LibraryReadParams) proto.LibraryReadParams {

@@ -236,7 +236,7 @@ struct ThemeMenu: View {
 /// ⌘1–⌘9 the active projects, ⌘[ and ⌘] back and forward, ⌘K the
 /// command palette, ⌥⌘↓ and ⌥⌘↑ the next and previous need, ⌘L the
 /// composer, ⌘↩ the open card's first choice, ⌘F find in the
-/// conversation, ⌥⌘F the sidebar's filter; Help has the tm docs and
+/// conversation, ⌥⌘F the sidebar's filter, ⇧⌘F Search Project… (T924); Help has the tm docs and
 /// Keyboard Shortcuts (⌘/), which lists them (Shortcuts).
 struct GoCommands: Commands {
     let model: AppModel
@@ -262,6 +262,9 @@ struct GoCommands: Commands {
                 .disabled(model.selectedRef == nil || model.palette)
             Button("Filter Sidebar") { model.focusFilter() }
                 .keyboardShortcut("f", modifiers: [.command, .option])
+            Button("Search Project…") { model.showSearch() }
+                .keyboardShortcut("f", modifiers: [.command, .shift])
+                .disabled(!model.searches)
         }
         CommandGroup(replacing: .help) {
             Button("Getting Started") { model.welcome = true }

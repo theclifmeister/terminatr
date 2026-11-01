@@ -17,6 +17,7 @@
 "project.new" = ["+"]
 "project.popup" = ["A"]
 "project.tasks" = ["T"]
+"project.search" = ["F"]
 "project.inbox" = ["I"]
 "access.show" = ["E"]
 "project.next" = ["]"]

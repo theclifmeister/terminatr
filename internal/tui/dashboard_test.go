@@ -58,6 +58,7 @@ type fakeSource struct {
 	saveCleared []string // slugs whose coordinators were saved and cleared
 	reviews     map[int]Review
 	designs     []project.DesignBuild // the Designs tab's (designs_test.go)
+	searched    searchFake            // the search popup's calls (search_test.go)
 	peers       PeerList
 	// devices and devErr are Devices' answer; devActs the changes to
 	// them ("level <id> answer", "name <id> New", "remove <id>"), and

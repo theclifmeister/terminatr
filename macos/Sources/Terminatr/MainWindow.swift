@@ -107,6 +107,11 @@ struct MainWindow: View {
             }
         }
         .sheet(item: $app.taskShown) { TaskSheet(shown: $0) }
+        .sheet(isPresented: $app.searchShown) {
+            if let m = app.search {
+                SearchSheet(model: m)
+            }
+        }
         .sheet(isPresented: $app.newProject) { NewProjectSheet() }
         .sheet(isPresented: Binding(get: { app.linkMessage != nil }, set: { if !$0 { app.linkMessage = nil } })) {
             if let m = app.linkMessage {

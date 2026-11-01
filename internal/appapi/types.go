@@ -1687,3 +1687,131 @@ func designsOf(r proto.DesignListResult) Designs {
 	}
 	return out
 }
+
+// Search over a project's history (app API 41; the server's caps say
+// search): the three layers of tm search, as the human sees them: the
+// coordinator's notes and the inbox too. This server's projects only.
+// The index's own controls (reindex) and the project folder's path stay
+// home.
+type (
+	// SearchQueryParams are search.query's: Words to find, and
+	// optionally only In these kinds (notes, tasks, threads, journal,
+	// designs, library, context, inbox), Since and Until (YYYY-MM-DD,
+	// both days included), of Task or Thread, at most Limit hits (20
+	// when 0).
+	SearchQueryParams struct {
+		Project string   `json:"project"`
+		Words   string   `json:"words"`
+		In      []string `json:"in,omitempty"`
+		Since   string   `json:"since,omitempty"`
+		Until   string   `json:"until,omitempty"`
+		Task    string   `json:"task,omitempty"`
+		Thread  string   `json:"thread,omitempty"`
+		Limit   int      `json:"limit,omitempty"`
+	}
+	// SearchTimelineParams are search.timeline's: the chunk ID, how many
+	// chunks Before and After it (8 each when 0), and All for the
+	// project's journal lines besides its task's and thread's.
+	SearchTimelineParams struct {
+		Project string `json:"project"`
+		ID      string `json:"id"`
+		Before  int    `json:"before,omitempty"`
+		After   int    `json:"after,omitempty"`
+		All     bool   `json:"all,omitempty"`
+	}
+	// SearchShowParams are search.show's: chunks by id; a bare thread
+	// (t-0833) or task (T914) id names its chunks.
+	SearchShowParams struct {
+		Project string   `json:"project"`
+		IDs     []string `json:"ids"`
+	}
+)
+
+// SearchHit is a chunk of a project's history: its id
+// (note:decisions#ruled-out, T914, t-0833/report.3#next,
+// j:20261101T095912Z, lib:t-0359/x.md), kind, title, time, task and
+// thread, its file in the project folder (memory.read takes a note's),
+// and for a hit the query's stems it holds (Terms) and More, the
+// journal lines of its task folded into it.
+type SearchHit struct {
+	ID     string    `json:"id"`
+	Kind   string    `json:"kind"`
+	Title  string    `json:"title"`
+	Time   time.Time `json:"time"`
+	Task   string    `json:"task,omitempty"`
+	Thread string    `json:"thread,omitempty"`
+	Path   string    `json:"path"`
+	Member string    `json:"member,omitempty"`
+	Terms  []string  `json:"terms,omitempty"`
+	More   int       `json:"more,omitempty"`
+}
+
+// SearchResult is search.query's: the hits, best first, of Total in
+// all, and Terms, the stems searched.
+type SearchResult struct {
+	Project string      `json:"project"`
+	Hits    []SearchHit `json:"hits"`
+	Total   int         `json:"total"`
+	Terms   []string    `json:"terms"`
+}
+
+// SearchTimeline is search.timeline's: the chunk At and those Before
+// and After it, each in time order.
+type SearchTimeline struct {
+	Project string      `json:"project"`
+	At      SearchHit   `json:"at"`
+	Before  []SearchHit `json:"before"`
+	After   []SearchHit `json:"after"`
+}
+
+// SearchShown is search.show's: an item for each id, in the order
+// asked.
+type SearchShown struct {
+	Project string       `json:"project"`
+	Items   []SearchText `json:"items"`
+}
+
+// SearchText is one id search.show answers: the chunk (Hit), its Text,
+// Cut when it was longer than what is given (of Bytes in all); for a
+// bare thread or task id its Chunks; or Error for an id it can't show.
+type SearchText struct {
+	Hit    SearchHit   `json:"hit"`
+	Text   string      `json:"text,omitempty"`
+	Bytes  int         `json:"bytes,omitempty"`
+	Cut    bool        `json:"cut,omitempty"`
+	Chunks []SearchHit `json:"chunks,omitempty"`
+	Error  string      `json:"error,omitempty"`
+}
+
+func searchHitOf(h proto.SearchHit) SearchHit {
+	return SearchHit{ID: h.ID, Kind: h.Kind, Title: h.Title, Time: h.Time, Task: h.Task, Thread: h.Thread, Path: h.Path,
+		Member: h.Member, Terms: append([]string(nil), h.Terms...), More: h.More}
+}
+
+func searchHitsOf(hs []proto.SearchHit) []SearchHit {
+	out := []SearchHit{}
+	for _, h := range hs {
+		out = append(out, searchHitOf(h))
+	}
+	return out
+}
+
+func searchResultOf(r proto.SearchQueryResult) SearchResult {
+	return SearchResult{Project: r.Project, Hits: searchHitsOf(r.Hits), Total: r.Total, Terms: append([]string{}, r.Terms...)}
+}
+
+func searchTimelineOf(r proto.SearchTimelineResult) SearchTimeline {
+	return SearchTimeline{Project: r.Project, At: searchHitOf(r.At), Before: searchHitsOf(r.Before), After: searchHitsOf(r.After)}
+}
+
+func searchShownOf(r proto.SearchShowResult) SearchShown {
+	out := SearchShown{Project: r.Project, Items: []SearchText{}}
+	for _, it := range r.Items {
+		st := SearchText{Hit: searchHitOf(it.SearchHit), Text: it.Text, Bytes: it.Bytes, Cut: it.Cut, Error: it.Error}
+		if len(it.Chunks) > 0 {
+			st.Chunks = searchHitsOf(it.Chunks)
+		}
+		out.Items = append(out.Items, st)
+	}
+	return out
+}

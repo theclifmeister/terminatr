@@ -143,6 +143,10 @@ indirect enum Route: Hashable {
     /// A project's design by its name (T864): its answers, open
     /// questions and build.
     case design(String, name: String)
+    /// A project's history searched (T924), and one hit by its chunk's
+    /// id: its text and its timeline.
+    case search(String)
+    case searchHit(String, id: String)
     /// A paired server's project's page (T886): its overview, board,
     /// memory (never shared), library or designs.
     case peerPage(alias: String, project: String, page: PeerPages.Page)
@@ -154,7 +158,8 @@ indirect enum Route: Hashable {
     /// question or approval); "overview:SLUG",
     /// "board:SLUG", "memory:SLUG", "memory:SLUG/PATH", "library:SLUG",
     /// "mods:SLUG", "mods:SLUG/ID",
-    /// "task:SLUG/REF", "design:SLUG/NAME", or a paired server's
+    /// "task:SLUG/REF", "design:SLUG/NAME", "search:SLUG",
+    /// "search:SLUG/ID", or a paired server's
     /// "peer:ALIAS/PROJECT", "peer:ALIAS/PROJECT/PAGE" and
     /// "peer:ALIAS/PROJECT/designs/NAME".
     static func parse(_ s: String) -> Route? {
@@ -173,6 +178,7 @@ indirect enum Route: Hashable {
         case "mods": return rest.isEmpty ? .mods(slug) : .mod(slug, id: rest)
         case "task": return rest.isEmpty ? nil : .task(slug, ref: rest)
         case "design": return rest.isEmpty ? nil : .design(slug, name: rest)
+        case "search": return rest.isEmpty ? .search(slug) : .searchHit(slug, id: rest)
         // "peer:ALIAS/PROJECT", "peer:ALIAS/PROJECT/PAGE" (overview,
         // board, memory, library, designs).
         case "peer":
@@ -197,7 +203,8 @@ indirect enum Route: Hashable {
         case .project, .peerProject: [self]
         case .session(let ref), .need(let ref):
             [ref.isRemote ? .peerProject(alias: ref.server, project: ref.project) : .project(ref.project), self]
-        case .overview(let s), .board(let s), .memory(let s), .library(let s), .design(let s, _), .mods(let s): [.project(s), self]
+        case .overview(let s), .board(let s), .memory(let s), .library(let s), .design(let s, _), .mods(let s), .search(let s): [.project(s), self]
+        case .searchHit(let s, _): [.project(s), .search(s), self]
         case .mod(let s, _): [.project(s), .mods(s), self]
         case .memoryFile(let s, _): [.project(s), .memory(s), self]
         case .task(let s, _): [.project(s), .board(s), self]
@@ -459,6 +466,8 @@ private struct BaseRouteScreen: View {
         case .mod(let slug, let id): ModScreen(slug: slug, id: id)
         case .task(let slug, let ref): TaskScreen(slug: slug, ref: ref)
         case .design(let slug, let name): DesignScreen(slug: slug, name: name)
+        case .search(let slug): SearchScreen(slug: slug)
+        case .searchHit(let slug, let id): SearchHitScreen(slug: slug, id: id)
         case .peerPage(let alias, let project, let page): PeerPageScreen(alias: alias, project: project, page: page)
         case .peerDesign(let alias, let project, let name): DesignScreen(slug: project, name: name, peer: alias)
         }

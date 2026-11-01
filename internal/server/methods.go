@@ -213,6 +213,14 @@ func init() {
 			call: typed(func(s *Server, p proto.SessionIDParams, _ callCtx) (any, *proto.Error) { return s.explain(p.ID) })},
 		proto.MethodProjectWatch: {scope: scopeProject, name: scoped(func(p proto.ProjectWatchParams) string { return p.Project }),
 			stream: stream((*Server).serveProjectWatch)},
+		// tm search (CapSearch): the human any project, an agent its own;
+		// a thread without the coordinator's chunks (seesAll).
+		proto.MethodSearchQuery: {gate: gateAgentOrHuman, scope: scopeProject, name: scoped(func(p proto.SearchQueryParams) string { return p.Project }),
+			call: typed((*Server).searchQuery)},
+		proto.MethodSearchTimeline: {gate: gateAgentOrHuman, scope: scopeProject, name: scoped(func(p proto.SearchTimelineParams) string { return p.Project }),
+			call: typed((*Server).searchTimeline)},
+		proto.MethodSearchShow: {gate: gateAgentOrHuman, scope: scopeProject, name: scoped(func(p proto.SearchShowParams) string { return p.Project }),
+			call: typed((*Server).searchShow)},
 
 		// The human's.
 		proto.MethodPaneVT:          {gate: gateHuman, stream: (*Server).servePaneVT},

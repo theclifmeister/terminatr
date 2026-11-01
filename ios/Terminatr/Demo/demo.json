@@ -1640,6 +1640,667 @@
      ]
     }
    }
+  ],
+  "search.query": [
+   {
+    "params": {
+     "project": "acme-web"
+    },
+    "result": {
+     "project": "acme-web",
+     "hits": [
+      {
+       "id": "note:checkout#decided",
+       "kind": "notes",
+       "title": "Checkout · Decided",
+       "time": "2026-10-25T16:10:00Z",
+       "path": "memory/checkout.md",
+       "terms": [
+        "checkout"
+       ]
+      },
+      {
+       "id": "T12",
+       "kind": "tasks",
+       "title": "Checkout: Apple Pay button",
+       "time": "2026-10-27T09:30:00Z",
+       "task": "T12",
+       "thread": "t-0101",
+       "path": "TASKS.md",
+       "terms": [
+        "checkout"
+       ],
+       "more": 2
+      },
+      {
+       "id": "t-0103/report.1#report",
+       "kind": "threads",
+       "title": "t-0103 report 1 · Report",
+       "time": "2026-10-26T18:42:00Z",
+       "task": "T15",
+       "thread": "t-0103",
+       "path": "threads/t-0103/reports/1.md",
+       "terms": [
+        "checkout"
+       ]
+      },
+      {
+       "id": "T18",
+       "kind": "tasks",
+       "title": "Gift cards at checkout",
+       "time": "2026-10-26T11:00:00Z",
+       "task": "T18",
+       "path": "TASKS.md",
+       "terms": [
+        "checkout"
+       ]
+      },
+      {
+       "id": "note:checkout#ruled-out",
+       "kind": "notes",
+       "title": "Checkout · Ruled out",
+       "time": "2026-10-25T16:10:00Z",
+       "path": "memory/checkout.md",
+       "terms": [
+        "checkout"
+       ]
+      },
+      {
+       "id": "design:one-page-checkout",
+       "kind": "designs",
+       "title": "One-page checkout · Answers",
+       "time": "2026-10-24T10:05:00Z",
+       "task": "T9",
+       "path": "designs/one-page-checkout.md",
+       "terms": [
+        "checkout"
+       ]
+      },
+      {
+       "id": "j:20261026T141200Z",
+       "kind": "journal",
+       "title": "coordinator: delegate T18 Gift cards at checkout",
+       "time": "2026-10-26T14:12:00Z",
+       "task": "T18",
+       "path": "JOURNAL.md",
+       "terms": [
+        "checkout"
+       ]
+      }
+     ],
+     "total": 7,
+     "terms": [
+      "checkout"
+     ]
+    }
+   }
+  ],
+  "search.timeline": [
+   {
+    "params": {
+     "project": "acme-web",
+     "id": "note:checkout#decided"
+    },
+    "result": {
+     "project": "acme-web",
+     "at": {
+      "id": "note:checkout#decided",
+      "kind": "notes",
+      "title": "Checkout · Decided",
+      "time": "2026-10-25T16:10:00Z",
+      "path": "memory/checkout.md"
+     },
+     "before": [
+      {
+       "id": "design:one-page-checkout",
+       "kind": "designs",
+       "title": "One-page checkout · Answers",
+       "time": "2026-10-24T10:05:00Z",
+       "task": "T9",
+       "path": "designs/one-page-checkout.md"
+      }
+     ],
+     "after": [
+      {
+       "id": "note:checkout#ruled-out",
+       "kind": "notes",
+       "title": "Checkout · Ruled out",
+       "time": "2026-10-25T16:10:00Z",
+       "path": "memory/checkout.md"
+      },
+      {
+       "id": "T18",
+       "kind": "tasks",
+       "title": "Gift cards at checkout",
+       "time": "2026-10-26T11:00:00Z",
+       "task": "T18",
+       "path": "TASKS.md"
+      },
+      {
+       "id": "j:20261026T141200Z",
+       "kind": "journal",
+       "title": "coordinator: delegate T18 Gift cards at checkout",
+       "time": "2026-10-26T14:12:00Z",
+       "task": "T18",
+       "path": "JOURNAL.md"
+      }
+     ]
+    }
+   },
+   {
+    "params": {
+     "project": "acme-web",
+     "id": "T12"
+    },
+    "result": {
+     "project": "acme-web",
+     "at": {
+      "id": "T12",
+      "kind": "tasks",
+      "title": "Checkout: Apple Pay button",
+      "time": "2026-10-27T09:30:00Z",
+      "task": "T12",
+      "thread": "t-0101",
+      "path": "TASKS.md",
+      "more": 2
+     },
+     "before": [
+      {
+       "id": "T18",
+       "kind": "tasks",
+       "title": "Gift cards at checkout",
+       "time": "2026-10-26T11:00:00Z",
+       "task": "T18",
+       "path": "TASKS.md"
+      },
+      {
+       "id": "j:20261026T141200Z",
+       "kind": "journal",
+       "title": "coordinator: delegate T18 Gift cards at checkout",
+       "time": "2026-10-26T14:12:00Z",
+       "task": "T18",
+       "path": "JOURNAL.md"
+      },
+      {
+       "id": "t-0103/report.1#report",
+       "kind": "threads",
+       "title": "t-0103 report 1 · Report",
+       "time": "2026-10-26T18:42:00Z",
+       "task": "T15",
+       "thread": "t-0103",
+       "path": "threads/t-0103/reports/1.md"
+      }
+     ],
+     "after": []
+    }
+   },
+   {
+    "params": {
+     "project": "acme-web",
+     "id": "t-0103/report.1#report"
+    },
+    "result": {
+     "project": "acme-web",
+     "at": {
+      "id": "t-0103/report.1#report",
+      "kind": "threads",
+      "title": "t-0103 report 1 · Report",
+      "time": "2026-10-26T18:42:00Z",
+      "task": "T15",
+      "thread": "t-0103",
+      "path": "threads/t-0103/reports/1.md"
+     },
+     "before": [
+      {
+       "id": "note:checkout#ruled-out",
+       "kind": "notes",
+       "title": "Checkout · Ruled out",
+       "time": "2026-10-25T16:10:00Z",
+       "path": "memory/checkout.md"
+      },
+      {
+       "id": "T18",
+       "kind": "tasks",
+       "title": "Gift cards at checkout",
+       "time": "2026-10-26T11:00:00Z",
+       "task": "T18",
+       "path": "TASKS.md"
+      },
+      {
+       "id": "j:20261026T141200Z",
+       "kind": "journal",
+       "title": "coordinator: delegate T18 Gift cards at checkout",
+       "time": "2026-10-26T14:12:00Z",
+       "task": "T18",
+       "path": "JOURNAL.md"
+      }
+     ],
+     "after": [
+      {
+       "id": "T12",
+       "kind": "tasks",
+       "title": "Checkout: Apple Pay button",
+       "time": "2026-10-27T09:30:00Z",
+       "task": "T12",
+       "thread": "t-0101",
+       "path": "TASKS.md",
+       "more": 2
+      }
+     ]
+    }
+   },
+   {
+    "params": {
+     "project": "acme-web",
+     "id": "T18"
+    },
+    "result": {
+     "project": "acme-web",
+     "at": {
+      "id": "T18",
+      "kind": "tasks",
+      "title": "Gift cards at checkout",
+      "time": "2026-10-26T11:00:00Z",
+      "task": "T18",
+      "path": "TASKS.md"
+     },
+     "before": [
+      {
+       "id": "design:one-page-checkout",
+       "kind": "designs",
+       "title": "One-page checkout · Answers",
+       "time": "2026-10-24T10:05:00Z",
+       "task": "T9",
+       "path": "designs/one-page-checkout.md"
+      },
+      {
+       "id": "note:checkout#decided",
+       "kind": "notes",
+       "title": "Checkout · Decided",
+       "time": "2026-10-25T16:10:00Z",
+       "path": "memory/checkout.md"
+      },
+      {
+       "id": "note:checkout#ruled-out",
+       "kind": "notes",
+       "title": "Checkout · Ruled out",
+       "time": "2026-10-25T16:10:00Z",
+       "path": "memory/checkout.md"
+      }
+     ],
+     "after": [
+      {
+       "id": "j:20261026T141200Z",
+       "kind": "journal",
+       "title": "coordinator: delegate T18 Gift cards at checkout",
+       "time": "2026-10-26T14:12:00Z",
+       "task": "T18",
+       "path": "JOURNAL.md"
+      },
+      {
+       "id": "t-0103/report.1#report",
+       "kind": "threads",
+       "title": "t-0103 report 1 · Report",
+       "time": "2026-10-26T18:42:00Z",
+       "task": "T15",
+       "thread": "t-0103",
+       "path": "threads/t-0103/reports/1.md"
+      },
+      {
+       "id": "T12",
+       "kind": "tasks",
+       "title": "Checkout: Apple Pay button",
+       "time": "2026-10-27T09:30:00Z",
+       "task": "T12",
+       "thread": "t-0101",
+       "path": "TASKS.md",
+       "more": 2
+      }
+     ]
+    }
+   },
+   {
+    "params": {
+     "project": "acme-web",
+     "id": "note:checkout#ruled-out"
+    },
+    "result": {
+     "project": "acme-web",
+     "at": {
+      "id": "note:checkout#ruled-out",
+      "kind": "notes",
+      "title": "Checkout · Ruled out",
+      "time": "2026-10-25T16:10:00Z",
+      "path": "memory/checkout.md"
+     },
+     "before": [
+      {
+       "id": "design:one-page-checkout",
+       "kind": "designs",
+       "title": "One-page checkout · Answers",
+       "time": "2026-10-24T10:05:00Z",
+       "task": "T9",
+       "path": "designs/one-page-checkout.md"
+      },
+      {
+       "id": "note:checkout#decided",
+       "kind": "notes",
+       "title": "Checkout · Decided",
+       "time": "2026-10-25T16:10:00Z",
+       "path": "memory/checkout.md"
+      }
+     ],
+     "after": [
+      {
+       "id": "T18",
+       "kind": "tasks",
+       "title": "Gift cards at checkout",
+       "time": "2026-10-26T11:00:00Z",
+       "task": "T18",
+       "path": "TASKS.md"
+      },
+      {
+       "id": "j:20261026T141200Z",
+       "kind": "journal",
+       "title": "coordinator: delegate T18 Gift cards at checkout",
+       "time": "2026-10-26T14:12:00Z",
+       "task": "T18",
+       "path": "JOURNAL.md"
+      },
+      {
+       "id": "t-0103/report.1#report",
+       "kind": "threads",
+       "title": "t-0103 report 1 · Report",
+       "time": "2026-10-26T18:42:00Z",
+       "task": "T15",
+       "thread": "t-0103",
+       "path": "threads/t-0103/reports/1.md"
+      }
+     ]
+    }
+   },
+   {
+    "params": {
+     "project": "acme-web",
+     "id": "design:one-page-checkout"
+    },
+    "result": {
+     "project": "acme-web",
+     "at": {
+      "id": "design:one-page-checkout",
+      "kind": "designs",
+      "title": "One-page checkout · Answers",
+      "time": "2026-10-24T10:05:00Z",
+      "task": "T9",
+      "path": "designs/one-page-checkout.md"
+     },
+     "before": [],
+     "after": [
+      {
+       "id": "note:checkout#decided",
+       "kind": "notes",
+       "title": "Checkout · Decided",
+       "time": "2026-10-25T16:10:00Z",
+       "path": "memory/checkout.md"
+      },
+      {
+       "id": "note:checkout#ruled-out",
+       "kind": "notes",
+       "title": "Checkout · Ruled out",
+       "time": "2026-10-25T16:10:00Z",
+       "path": "memory/checkout.md"
+      },
+      {
+       "id": "T18",
+       "kind": "tasks",
+       "title": "Gift cards at checkout",
+       "time": "2026-10-26T11:00:00Z",
+       "task": "T18",
+       "path": "TASKS.md"
+      }
+     ]
+    }
+   },
+   {
+    "params": {
+     "project": "acme-web",
+     "id": "j:20261026T141200Z"
+    },
+    "result": {
+     "project": "acme-web",
+     "at": {
+      "id": "j:20261026T141200Z",
+      "kind": "journal",
+      "title": "coordinator: delegate T18 Gift cards at checkout",
+      "time": "2026-10-26T14:12:00Z",
+      "task": "T18",
+      "path": "JOURNAL.md"
+     },
+     "before": [
+      {
+       "id": "note:checkout#decided",
+       "kind": "notes",
+       "title": "Checkout · Decided",
+       "time": "2026-10-25T16:10:00Z",
+       "path": "memory/checkout.md"
+      },
+      {
+       "id": "note:checkout#ruled-out",
+       "kind": "notes",
+       "title": "Checkout · Ruled out",
+       "time": "2026-10-25T16:10:00Z",
+       "path": "memory/checkout.md"
+      },
+      {
+       "id": "T18",
+       "kind": "tasks",
+       "title": "Gift cards at checkout",
+       "time": "2026-10-26T11:00:00Z",
+       "task": "T18",
+       "path": "TASKS.md"
+      }
+     ],
+     "after": [
+      {
+       "id": "t-0103/report.1#report",
+       "kind": "threads",
+       "title": "t-0103 report 1 · Report",
+       "time": "2026-10-26T18:42:00Z",
+       "task": "T15",
+       "thread": "t-0103",
+       "path": "threads/t-0103/reports/1.md"
+      },
+      {
+       "id": "T12",
+       "kind": "tasks",
+       "title": "Checkout: Apple Pay button",
+       "time": "2026-10-27T09:30:00Z",
+       "task": "T12",
+       "thread": "t-0101",
+       "path": "TASKS.md",
+       "more": 2
+      }
+     ]
+    }
+   }
+  ],
+  "search.show": [
+   {
+    "params": {
+     "project": "acme-web",
+     "ids": [
+      "note:checkout#decided"
+     ]
+    },
+    "result": {
+     "project": "acme-web",
+     "items": [
+      {
+       "hit": {
+        "id": "note:checkout#decided",
+        "kind": "notes",
+        "title": "Checkout · Decided",
+        "time": "2026-10-25T16:10:00Z",
+        "path": "memory/checkout.md"
+       },
+       "text": "## Decided\n\n- Payments go through billing-api's `/charges`, never Stripe directly from the web app.\n- Apple Pay shows only on Safari with a card in the wallet.\n",
+       "bytes": 160
+      }
+     ]
+    }
+   },
+   {
+    "params": {
+     "project": "acme-web",
+     "ids": [
+      "T12"
+     ]
+    },
+    "result": {
+     "project": "acme-web",
+     "items": [
+      {
+       "hit": {
+        "id": "T12",
+        "kind": "tasks",
+        "title": "Checkout: Apple Pay button",
+        "time": "2026-10-27T09:30:00Z",
+        "task": "T12",
+        "thread": "t-0101",
+        "path": "TASKS.md",
+        "more": 2
+       },
+       "text": "## T12 Checkout: Apple Pay button\n\nstatus: in-progress · thread t-0101\n\nAn Apple Pay button above the card form on the checkout page, for Safari with a card in the wallet.\n\n- [x] Merchant validation through billing-api\n- [x] The button and its sheet\n- [ ] Tests on Safari\n- [ ] Docs\n",
+       "bytes": 284
+      }
+     ]
+    }
+   },
+   {
+    "params": {
+     "project": "acme-web",
+     "ids": [
+      "t-0103/report.1#report"
+     ]
+    },
+    "result": {
+     "project": "acme-web",
+     "items": [
+      {
+       "hit": {
+        "id": "t-0103/report.1#report",
+        "kind": "threads",
+        "title": "t-0103 report 1 · Report",
+        "time": "2026-10-26T18:42:00Z",
+        "task": "T15",
+        "thread": "t-0103",
+        "path": "threads/t-0103/reports/1.md"
+       },
+       "text": "## Report\n\nImages now come from the CDN at `img.acme.example`, sized per breakpoint. The checkout's product thumbnails were the last on the old host.\n\nPR #412 moves them; Lighthouse's LCP on the product page went from 3.1 s to 1.9 s.\n",
+       "bytes": 234
+      }
+     ]
+    }
+   },
+   {
+    "params": {
+     "project": "acme-web",
+     "ids": [
+      "T18"
+     ]
+    },
+    "result": {
+     "project": "acme-web",
+     "items": [
+      {
+       "hit": {
+        "id": "T18",
+        "kind": "tasks",
+        "title": "Gift cards at checkout",
+        "time": "2026-10-26T11:00:00Z",
+        "task": "T18",
+        "path": "TASKS.md"
+       },
+       "text": "## T18 Gift cards at checkout\n\nstatus: ready\n\nGift card codes at checkout, applied before tax. Partial balances stay on the card.\n",
+       "bytes": 130
+      }
+     ]
+    }
+   },
+   {
+    "params": {
+     "project": "acme-web",
+     "ids": [
+      "note:checkout#ruled-out"
+     ]
+    },
+    "result": {
+     "project": "acme-web",
+     "items": [
+      {
+       "hit": {
+        "id": "note:checkout#ruled-out",
+        "kind": "notes",
+        "title": "Checkout · Ruled out",
+        "time": "2026-10-25T16:10:00Z",
+        "path": "memory/checkout.md"
+       },
+       "text": "## Ruled out\n\n- A one-page checkout: the address step stays separate for tax.\n",
+       "bytes": 78
+      }
+     ]
+    }
+   },
+   {
+    "params": {
+     "project": "acme-web",
+     "ids": [
+      "design:one-page-checkout"
+     ]
+    },
+    "result": {
+     "project": "acme-web",
+     "items": [
+      {
+       "hit": {
+        "id": "design:one-page-checkout",
+        "kind": "designs",
+        "title": "One-page checkout · Answers",
+        "time": "2026-10-24T10:05:00Z",
+        "task": "T9",
+        "path": "designs/one-page-checkout.md"
+       },
+       "text": "## Answers\n\n1. One page: address, delivery and payment together, no steps\n2. Wallets (Apple Pay) above the card form\n3. Prices in the shopper's currency, charged in it\n",
+       "bytes": 168
+      }
+     ]
+    }
+   },
+   {
+    "params": {
+     "project": "acme-web",
+     "ids": [
+      "j:20261026T141200Z"
+     ]
+    },
+    "result": {
+     "project": "acme-web",
+     "items": [
+      {
+       "hit": {
+        "id": "j:20261026T141200Z",
+        "kind": "journal",
+        "title": "coordinator: delegate T18 Gift cards at checkout",
+        "time": "2026-10-26T14:12:00Z",
+        "task": "T18",
+        "path": "JOURNAL.md"
+       },
+       "text": "2026-10-26 14:12 coordinator: delegate T18 Gift cards at checkout (ready; after T12)\n",
+       "bytes": 85
+      }
+     ]
+    }
+   }
   ]
  },
  "calls": {
@@ -1946,7 +2607,7 @@
   }
  },
  "hello": {
-  "app_api": 40,
+  "app_api": 41,
   "build": "demo",
   "capabilities": [
    "read",
@@ -1985,7 +2646,10 @@
    "peer.design-list",
    "mods.list",
    "mods.set",
-   "mods.setting"
+   "mods.setting",
+   "search.query",
+   "search.timeline",
+   "search.show"
   ],
   "server": {
    "caps": [
@@ -1996,7 +2660,8 @@
     "peer-pages",
     "peer-designs",
     "project-mods",
-    "answer-picks"
+    "answer-picks",
+    "search"
    ],
    "protocol": 1,
    "version": "0.56.1"

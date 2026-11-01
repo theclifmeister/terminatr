@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.71.0](https://github.com/theclifmeister/terminatr/compare/v0.70.0...v0.71.0) (2026-11-01)
+
+
+### Features
+
+* rules and PROJECT.md in the agent's system prompt, not the start-up block ([#994](https://github.com/theclifmeister/terminatr/issues/994)) ([69277fc](https://github.com/theclifmeister/terminatr/commit/69277fc659bc4ae4b3ab1970f8b85e7b26ea28e5))
+* the start-up block is an index of tm context under the cap, with per-part budgets ([#996](https://github.com/theclifmeister/terminatr/issues/996)) ([616b494](https://github.com/theclifmeister/terminatr/commit/616b4941acb7e9a834cf82a0e6e278c1583abf21))
+* tm memory show/list, tm skill --section, CONTEXT.md budget 3 KB ([#993](https://github.com/theclifmeister/terminatr/issues/993)) ([878f9cf](https://github.com/theclifmeister/terminatr/commit/878f9cf0776c54df1d21e7bf39d5609afa3c865d))
+
+
+### Bug Fixes
+
+* **ios:** the Working… line starts at the conversation's left edge ([#998](https://github.com/theclifmeister/terminatr/issues/998)) ([0004d9f](https://github.com/theclifmeister/terminatr/commit/0004d9f5bb4f96f0d89c7c3c8e5d9cf3b3708a87))
+
 ## [0.70.0](https://github.com/theclifmeister/terminatr/compare/v0.69.0...v0.70.0) (2026-11-01)
 
 

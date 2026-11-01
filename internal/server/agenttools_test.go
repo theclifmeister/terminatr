@@ -75,7 +75,7 @@ func TestModAgentTools(t *testing.T) {
 
 	// No mod hosts run: no mod tools.
 	thr := SessionRecord{ID: "s-1", Role: proto.RoleThread, Project: "proj", Thread: "t-0001", Cwd: rt}
-	if got := toolNames(s.sessionTools(thr)); got != "report,status,steps,done" {
+	if got := toolNames(s.sessionTools(thr)); got != "report,status,steps,done,search,search_timeline,search_show" {
 		t.Fatalf("without hosts: %s", got)
 	}
 	sup := s.newModHosts()
@@ -92,13 +92,13 @@ func TestModAgentTools(t *testing.T) {
 	for _, tc := range []struct {
 		rec  SessionRecord
 		want string
-	}{{thr, "report,status,steps,done,lint_lint_report,lint_ping"}, {coord, "link_files,lint_ping"}, {other, "report,status,steps,done"}} {
+	}{{thr, "report,status,steps,done,search,search_timeline,search_show,lint_lint_report,lint_ping"}, {coord, "link_files,search,search_timeline,search_show,lint_ping"}, {other, "report,status,steps,done,search,search_timeline,search_show"}} {
 		if got := toolNames(s.sessionTools(tc.rec)); got != tc.want {
 			t.Errorf("%s of %s: %s, want %s", tc.rec.Role, tc.rec.Project, got, tc.want)
 		}
 	}
 	tools := s.sessionTools(thr)
-	if d := tools[4]; d.Description != "[mod: lint] Lints a report draft." || d.InputSchema["additionalProperties"] != false {
+	if d := tools[len(ThreadTools)+len(SearchTools)]; d.Description != "[mod: lint] Lints a report draft." || d.InputSchema["additionalProperties"] != false {
 		t.Fatalf("def %+v", d)
 	}
 
@@ -154,7 +154,7 @@ func TestModAgentTools(t *testing.T) {
 
 	// tool.list and tool.run (tm mcp), the session found from the pid.
 	res, perr := s.toolListRPC(s.callerOf(sess.PID()))
-	if perr != nil || toolNames(res.(proto.ToolListResult).Tools) != "report,status,steps,done,lint_lint_report,lint_ping" {
+	if perr != nil || toolNames(res.(proto.ToolListResult).Tools) != "report,status,steps,done,search,search_timeline,search_show,lint_lint_report,lint_ping" {
 		t.Fatalf("tool.list: %+v %v", res, perr)
 	}
 	res, perr = s.toolRunRPC(proto.ToolRunParams{Name: "lint_lint_report", Input: json.RawMessage(`{"text":"abc"}`)}, s.callerOf(sess.PID()))
@@ -168,14 +168,14 @@ func TestModAgentTools(t *testing.T) {
 	s.modBr.mu.Lock()
 	s.modBr.reg = nil // what modRegistryAge does within a second
 	s.modBr.mu.Unlock()
-	if got := toolNames(s.sessionTools(thr)); got != "report,status,steps,done" {
+	if got := toolNames(s.sessionTools(thr)); got != "report,status,steps,done,search,search_timeline,search_show" {
 		t.Fatalf("after the revoke: %s", got)
 	}
 	if code, _ := call("lint_lint_report", `{"text":"x"}`); code != http.StatusNotFound {
 		t.Fatalf("a call after the revoke: %d", code)
 	}
 	res, perr = s.toolListRPC(s.callerOf(sess.PID()))
-	if perr != nil || toolNames(res.(proto.ToolListResult).Tools) != "report,status,steps,done" {
+	if perr != nil || toolNames(res.(proto.ToolListResult).Tools) != "report,status,steps,done,search,search_timeline,search_show" {
 		t.Fatalf("tool.list after the revoke: %+v %v", res, perr)
 	}
 	res, _ = s.toolRunRPC(proto.ToolRunParams{Name: "lint_lint_report", Input: json.RawMessage(`{"text":"abc"}`)}, s.callerOf(sess.PID()))

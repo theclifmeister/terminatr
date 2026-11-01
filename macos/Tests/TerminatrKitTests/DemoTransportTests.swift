@@ -160,3 +160,21 @@ func demoBridge() async throws -> Bridge {
                                             call: { try await b.call(AppAPI.Methods.sessionUpload, $0) })
     #expect(!up.ref.isEmpty)
 }
+
+/// The demo's search (T924): acme-web's hits, each with its text and
+/// its timeline, through the search model the apps share.
+@MainActor @Test func demoSearch() async throws {
+    let b = try await demoBridge()
+    let hello = await b.hello
+    #expect(Compatibility.searches(hello))
+    let m = SearchModel(project: "acme-web", calls: Search.Calls(b))
+    m.words = "checkout"
+    await m.search()
+    let hits = try #require(m.result?.hits)
+    #expect(hits.count == 7 && m.failure == nil)
+    for h in hits {
+        await m.show(h)
+        let shown = m.text?.hit.id
+        #expect(shown == h.id && m.timeline?.at.id == h.id, "\(h.id)")
+    }
+}

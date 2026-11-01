@@ -525,7 +525,7 @@ func TestUpkeep(t *testing.T) {
 	}
 	// MEMORY.md has its own, smaller budget; the notes one together.
 	os.WriteFile(p.Path("MEMORY.md"), []byte(strings.Repeat("z", BudgetIndex+1024)), 0o644)
-	for i := range 6 {
+	for i := range 13 {
 		os.WriteFile(p.Path("memory", fmt.Sprintf("n%d.md", i)), []byte(strings.Repeat("n", BudgetNote)), 0o644)
 	}
 	over, err := p.Oversized()
@@ -539,7 +539,7 @@ func TestUpkeep(t *testing.T) {
 	if want := []string{"CONTEXT.md", "MEMORY.md", "memory/", "memory/old/decisions.md"}; !slices.Equal(files, want) {
 		t.Fatalf("oversized %v, want %v", files, want)
 	}
-	if got, want := over[2].String(), "memory/ is 43.0 KB in all (~11.0k tokens), over its 40 KB budget (~10.2k tokens): consolidate it"; got != want {
+	if got, want := over[2].String(), "memory/ is 85.0 KB in all (~21.8k tokens), over its 80 KB budget (~20.5k tokens): consolidate it"; got != want {
 		t.Errorf("total: %q, want %q", got, want)
 	}
 	if ctx := render(); !strings.Contains(ctx, "MEMORY.md is ") || !strings.Contains(ctx, "over its 4 KB budget") {

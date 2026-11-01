@@ -328,6 +328,11 @@ func TestCopies(t *testing.T) {
 	check("session.file", homeOf(sessionFileOf), nil)
 	check("memory.list", homeOf(memoryFilesOf), nil)
 	check("design.list", homeOf(designsOf), nil)
+	// The project folder's path, the index's score and its walk's
+	// counts are the CLI's.
+	check("search.query", homeOf(searchResultOf), []string{".Dir", ".Hits[].Score", ".Read", ".Errors"})
+	check("search.timeline", homeOf(searchTimelineOf), []string{".At.Score", ".Before[].Score", ".After[].Score"})
+	check("search.show", homeOf(searchShownOf), []string{".Dir", ".Items[].SearchHit.Score", ".Items[].Chunks[].Score"})
 	check("mods.list", homeOf(modsOf), nil)
 	check("mods.set", homeOf(modsActOf), nil)
 	check("memory.read", homeOf(memoryTextOf), nil)
@@ -543,7 +548,7 @@ func TestAllowlist(t *testing.T) {
 		proto.MethodSessionFile, proto.MethodCoordinatorClear, proto.MethodProjectActive, proto.MethodSessionUpload,
 		proto.MethodLinkAct, proto.MethodPeerShareAnswer, proto.MethodPeerNeedAct, MethodGuardRefusals, MethodGuardDecide, proto.MethodTranscriptPage,
 		proto.MethodProjectPin, proto.MethodProjectNew, proto.MethodSessionAdoptRequest, proto.MethodSessionRemote, proto.MethodLinkSend,
-		proto.MethodMemoryList, proto.MethodMemoryRead, proto.MethodLibraryList, proto.MethodLibraryRead, proto.MethodDesignList,
+		proto.MethodMemoryList, proto.MethodMemoryRead, proto.MethodLibraryList, proto.MethodLibraryRead, proto.MethodDesignList, proto.MethodSearchQuery, proto.MethodSearchTimeline, proto.MethodSearchShow,
 		proto.MethodPeerPagesRead, proto.MethodPeerLibraryList, proto.MethodPeerLibraryRead, proto.MethodPeerDesignList,
 		MethodDeviceNonce, MethodDeviceBye, MethodDeviceList, MethodDevicePair, MethodDevicePairWait, MethodDevicePairAnswer, MethodDeviceAccess,
 		MethodDeviceName, MethodDeviceRemove, proto.MethodModsList, proto.MethodModsSet, proto.MethodModsSetting}

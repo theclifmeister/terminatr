@@ -21,7 +21,17 @@ struct ProjectsScreen: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 ScreenHeader("Projects", subtitle: subtitle, symbol: symbol) {
-                    SettingsButton().buttonStyle(.circle)
+                    HStack(spacing: Spacing.tight) {
+                        // Search (T924): this server's history, from its
+                        // first active project; the screen picks another.
+                        if model.searches, let first = (model.activeProjects + model.inactiveProjects).first {
+                            PlainRouteLink(value: Route.search(first.slug)) {
+                                Label("Search", systemImage: "magnifyingglass")
+                            }
+                            .buttonStyle(.circle)
+                        }
+                        SettingsButton().buttonStyle(.circle)
+                    }
                 }
                 LazyVStack(alignment: .leading, spacing: Spacing.item) {
                     ForEach(phone.models, id: \.key) { m in
@@ -229,6 +239,14 @@ struct ProjectScreen: View {
         .keepsPlace(route: Route.project(slug))
         .navigationTitle(slug)
         .headerTitle()
+        .toolbar {
+            // Search (T924): the project's history.
+            if model.searches {
+                ToolbarItem(placement: .primaryAction) {
+                    PlainRouteLink(value: Route.search(slug)) { Label("Search", systemImage: "magnifyingglass") }
+                }
+            }
+        }
         .backdrop()
     }
 

@@ -561,6 +561,15 @@ func (m *dash) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case remotePopupMsg:
 		m.remotePopupTook(msg)
 		return m, nil
+	case searchMsg:
+		m.searchTook(msg)
+		return m, nil
+	case searchTimelineMsg:
+		m.searchTimelineTook(msg)
+		return m, nil
+	case searchShowMsg:
+		m.searchShowTook(msg)
+		return m, nil
 	case boardMsg:
 		if pv := m.projectPopupView(); pv != nil && pv.slug == msg.slug {
 			if msg.err == nil {

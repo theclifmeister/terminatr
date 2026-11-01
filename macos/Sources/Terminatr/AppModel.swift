@@ -1046,6 +1046,78 @@ final class AppModel {
         showWindow?()
     }
 
+    /// Search Project… (⇧⌘F, T924): whether its sheet shows, and the
+    /// search it shows, kept while it is closed so ⇧⌘F comes back to its
+    /// hits; a new bridge starts a new one.
+    var searchShown = false
+    private(set) var search: SearchModel?
+    @ObservationIgnored private var searchBridge: ObjectIdentifier?
+
+    /// The memory file the project's Memory page shows next (a search
+    /// hit's Open Note); n tells one ask from the next.
+    struct NoteShown: Equatable {
+        let n: Int
+        let project: String
+        let path: String
+    }
+    private(set) var noteShown: NoteShown?
+
+    /// The note to show on project's Memory page, once: nil when none
+    /// waits for it.
+    func takeNote(_ project: String) -> String? {
+        guard let n = noteShown, n.project == project else { return nil }
+        noteShown = nil
+        return n.path
+    }
+
+    /// Whether this tm searches a project's history (search.query, app
+    /// API 41, the server's caps say search).
+    var searches: Bool {
+        if case .connected(let h) = phase { return Compatibility.searches(h) }
+        return false
+    }
+
+    /// Search Project… (⇧⌘F): the sheet, on the shown project of this
+    /// server, else the one searched last, else the first.
+    func showSearch() {
+        guard searches, let b = bridge else { return }
+        let shown = boardProject
+        if search == nil || searchBridge != ObjectIdentifier(b) {
+            guard let p = shown ?? search?.project ?? activeProjects.first?.slug ?? projects.first?.slug else { return }
+            search = SearchModel(project: p, calls: Search.Calls(b))
+            searchBridge = ObjectIdentifier(b)
+        } else if let shown {
+            search?.switchProject(shown)
+        }
+        searchShown = true
+        showWindow?()
+    }
+
+    /// Whether project lists thread id (an open thread: a resolved one
+    /// is no longer in the sidebar).
+    func listsThread(_ id: String, in project: String) -> Bool {
+        self.project(project)?.threads.contains { $0.record.id == id } == true
+    }
+
+    /// Shows what a search hit opens: its task in the task view, its
+    /// thread, or its note on the project's Memory page. The search sheet
+    /// closes first; the task view opens once it has.
+    func openSearchTarget(_ t: Search.Target, project: String) {
+        searchShown = false
+        switch t {
+        case .task(let id):
+            Task {
+                try? await Task.sleep(for: .milliseconds(350))
+                taskShown = TaskShown(project: project, task: id)
+            }
+        case .thread(let id):
+            select(.session(SessionRef(project: project, thread: id)))
+        case .note(let path):
+            noteShown = NoteShown(n: (noteShown?.n ?? 0) + 1, project: project, path: path)
+            select(.project(project))
+        }
+    }
+
     /// Whether this tm lists a project's designs (design.list, app API
     /// 31).
     var listsDesigns: Bool {
