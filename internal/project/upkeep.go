@@ -27,8 +27,10 @@ import (
 // `tm context` and `tm doctor` say when one is over it, and the
 // coordinator's skill says to consolidate it. The notes have a budget
 // together too: many small notes cost as much as a few large ones.
+// CONTEXT.md's is the smallest: a fresh coordinator must get it whole
+// in its start-up context, so it holds only the current state.
 const (
-	BudgetContext = 6 << 10  // CONTEXT.md
+	BudgetContext = 3 << 10  // CONTEXT.md
 	BudgetIndex   = 4 << 10  // MEMORY.md
 	BudgetNote    = 6 << 10  // each file under memory/
 	BudgetNotes   = 40 << 10 // all files under memory/ together
@@ -43,12 +45,26 @@ type Oversize struct {
 	Budget int64
 }
 
+// ContextAdvice is what to do with a CONTEXT.md over its budget.
+const ContextAdvice = "keep only the current state (Needs you, what is in flight, what comes next), so a fresh coordinator gets it whole, and move lasting facts to memory notes"
+
 func (o Oversize) String() string {
+	s := o.Head() + ": consolidate it"
+	if o.File == "CONTEXT.md" {
+		s += "; " + ContextAdvice
+	}
+	return s
+}
+
+// Head is the file, its size and its budget, without what to do:
+// "CONTEXT.md is 3.5 KB (~896 tokens), over its 3 KB budget (~768
+// tokens)".
+func (o Oversize) Head() string {
 	all := ""
 	if strings.HasSuffix(o.File, "/") {
 		all = " in all"
 	}
-	return fmt.Sprintf("%s is %s%s (%s), over its %s budget (%s): consolidate it", o.File, kb(o.Size), all, tokens(o.Size), kb(o.Budget), tokens(o.Budget))
+	return fmt.Sprintf("%s is %s%s (%s), over its %s budget (%s)", o.File, kb(o.Size), all, tokens(o.Size), kb(o.Budget), tokens(o.Budget))
 }
 
 // tokens is an estimate of the tokens n bytes of text cost an agent:

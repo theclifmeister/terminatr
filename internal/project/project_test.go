@@ -514,7 +514,7 @@ func TestUpkeep(t *testing.T) {
 	os.WriteFile(p.Path("memory", "old", "decisions.md"), []byte(strings.Repeat("y", BudgetNote+1024)), 0o644)
 	os.WriteFile(p.Path("memory", "small.md"), []byte("ok\n"), 0o644)
 	ctx := render()
-	for _, w := range []string{"## Upkeep", "CONTEXT.md is 6.5 KB (~1.7k tokens), over its 6 KB budget (~1.5k tokens): consolidate it",
+	for _, w := range []string{"## Upkeep", "CONTEXT.md is 3.5 KB (~896 tokens), over its 3 KB budget (~768 tokens): consolidate it; keep only the current state (Needs you, what is in flight, what comes next), so a fresh coordinator gets it whole, and move lasting facts to memory notes",
 		"memory/old/decisions.md is 7 KB (~1.8k tokens), over its 6 KB budget (~1.5k tokens)"} {
 		if !strings.Contains(ctx, w) {
 			t.Errorf("context lacks %q:\n%s", w, ctx)

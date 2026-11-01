@@ -361,7 +361,8 @@ func TestUpkeepAfterClear(t *testing.T) {
 	if len(r.host.asked) != 2 || r.host.asked[1] != want {
 		t.Fatalf("asked %v, want %q last", r.host.asked, want)
 	}
-	for _, w := range []string{"[tm] Upkeep after the clear: CONTEXT.md is 6.5 KB (~1.7k tokens), over its 6 KB budget (~1.5k tokens). Consolidate them:",
+	for _, w := range []string{"[tm] Upkeep after the clear: CONTEXT.md is 3.5 KB (~896 tokens), over its 3 KB budget (~768 tokens). Consolidate them:",
+		"so each fits its budget. In CONTEXT.md, keep only the current state (Needs you, what is in flight, what comes next), so a fresh coordinator gets it whole, and move lasting facts to memory notes. Check",
 		"Check version-specific facts (agent versions, flakes) against today's versions and main", "as candidates for a code task", "don't move text into code",
 		"Drop notes that work around tm's own behaviour every user would hit", "not the project's own setup", "a task for a fix in tm"} {
 		if !strings.Contains(want, w) {
