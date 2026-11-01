@@ -114,6 +114,20 @@ extension Route {
         if case .on(let k, _) = self { return k }
         return nil
     }
+
+    /// The project of this server whose screen this is, which the
+    /// Search tab searches (T929); nil for a paired server's project,
+    /// which this server's search doesn't reach.
+    var searchSlug: String? {
+        switch base {
+        case .project(let s), .overview(let s), .board(let s), .memory(let s), .memoryFile(let s, _),
+             .library(let s), .task(let s, _), .mods(let s), .mod(let s, _), .design(let s, _),
+             .search(let s), .searchHit(let s, _):
+            s
+        case .session(let ref), .need(let ref): ref.isRemote ? nil : ref.project
+        case .on, .peerProject, .peerPage, .peerDesign: nil
+        }
+    }
 }
 
 /// Where a tap goes.
@@ -216,6 +230,8 @@ indirect enum Route: Hashable {
 
 enum RootTab: Hashable {
     case needs, projects
+    /// Search (T929): the project in view's history (SearchScope).
+    case search
     /// A row of the iPad's sidebar (T849): a session or an inactive
     /// project, opened in the Projects tab's columns.
     case place(Route)
@@ -227,6 +243,9 @@ struct Root: View {
     @State private var tab = RootTab.needs
     @State private var needsPath: [Route] = []
     @State private var projectsPath: [Route] = []
+    @State private var searchPath: [Route] = []
+    /// The project the Search tab searches, picked as it's chosen.
+    @State private var searchScope: SearchScope?
     @State private var settings = false
     @State private var gallery = false
     /// The window's size, for the iPad's sidebar (folding).
@@ -257,9 +276,14 @@ struct Root: View {
         } else if #available(iOS 18, *), Self.sidebar {
             sidebarTabs
                 .onAppear(perform: openLaunched)
-                .onChange(of: projectsPath) { if tab != .needs { tab = Self.place(projectsPath, in: phone.sidebar) } }
+                .onChange(of: projectsPath) { if tab != .needs, tab != .search { tab = Self.place(projectsPath, in: phone.sidebar) } }
+        } else if #available(iOS 18, *) {
+            phoneTabs
+                .onAppear(perform: openLaunched)
         } else {
-            // .tabItem, not Tab: that one is iOS 18's.
+            // .tabItem, not Tab: that one is iOS 18's. No Search tab:
+            // the project screen and the Projects header keep their
+            // Search buttons (Root.searchTab).
             TabView(selection: $tab) {
                 needsStack
                     .tabItem { Label("Needs you", systemImage: "exclamationmark.bubble") }
@@ -284,6 +308,106 @@ struct Root: View {
             ProjectsScreen()
         }
     }
+
+    /// The iPhone's tabs, the iPhone Duo's too (its rail on iOS 27.1):
+    /// Needs you, Projects and Search.
+    @available(iOS 18, *)
+    private var phoneTabs: some View {
+        TabView(selection: Binding(get: { tab }, set: choose)) {
+            Tab("Needs you", systemImage: "exclamationmark.bubble", value: RootTab.needs) { needsStack }
+                .badge(phone.needs.count)
+            Tab("Projects", systemImage: "folder", value: RootTab.projects) { projectsStack }
+            searchTab
+        }
+    }
+}
+
+/// The Search tab (T929): the project search the project screen's
+/// Search button opened (SearchScreen), as a tab of the app's own, role
+/// .search: on an iPhone the tab bar's search circle, on an open iPhone
+/// Duo in the rail, on an iPad the sidebar's first row. It is the
+/// TabView's, never a screen's bar item, so no page or column change
+/// leaves it behind (Columns builds each column's stack afresh, T928),
+/// and it takes the project screen's button's place (searchTab), as
+/// the Projects header's: one Search on every screen. Chosen, it
+/// searches the project in view (the last screen of the tab left that
+/// has one, this server's), else the first project of the first server
+/// that searches, as the Projects header's did; the screen's title
+/// picks another of that server's. Its hits and what they open stay in
+/// its own stack while the project in view stays the same.
+struct SearchScope: Hashable {
+    /// The server's key (PhoneModel.key).
+    let key: String
+    let slug: String
+}
+
+extension Root {
+    /// Whether the app has the Search tab (Tab's role is iOS 18's);
+    /// without it the screens keep their Search buttons.
+    static var searchTab: Bool {
+        if #available(iOS 18, *) { true } else { false }
+    }
+
+    /// Whether any server searches (Compatibility.searches): else no tab.
+    private var searches: Bool { phone.models.contains(where: \.searches) }
+
+    @available(iOS 18, *)
+    @TabContentBuilder<RootTab>
+    private var searchTab: some TabContent<RootTab> {
+        if searches {
+            Tab(value: RootTab.search, role: .search) { searchStack }
+        }
+    }
+
+    @ViewBuilder
+    private var searchStack: some View {
+        if let scope = searchScope, let m = phone.model(scope.key) {
+            TabStack(path: $searchPath, key: "search", empty: ("Pick a hit", "magnifyingglass")) {
+                SearchScreen(slug: scope.slug)
+            }
+            .environment(m)
+            .id(scope)
+        } else {
+            ContentUnavailableView("Nothing to search", systemImage: "magnifyingglass")
+                .backdrop()
+        }
+    }
+
+    /// The path of the tab t shows (the sidebar's rows show Projects').
+    private func path(_ t: RootTab) -> [Route] {
+        switch t {
+        case .needs: needsPath
+        case .search: searchPath
+        case .projects, .place: projectsPath
+        }
+    }
+
+    /// What Search searches, chosen from tab: the project of its last
+    /// screen that has one on a server that searches, else the first
+    /// project of the first server that searches.
+    private func scope(from t: RootTab) -> SearchScope? {
+        for r in path(t).reversed() {
+            guard let slug = r.searchSlug else { continue }
+            let m = r.server.flatMap(phone.model) ?? phone.primary
+            if m.searches { return SearchScope(key: m.key, slug: slug) }
+        }
+        for m in phone.models where m.searches {
+            if let p = (m.activeProjects + m.inactiveProjects).first { return SearchScope(key: m.key, slug: p.slug) }
+        }
+        return nil
+    }
+
+    /// A tab chosen. Search searches the project in view as it's
+    /// chosen; a new project starts its search afresh. A row picked in
+    /// the sidebar opens its route in the columns.
+    private func choose(_ t: RootTab) {
+        if t == .search, tab != .search, let s = scope(from: tab), s != searchScope {
+            searchScope = s
+            searchPath = []
+        }
+        tab = t
+        if case .place(let r) = t { projectsPath = r.path }
+    }
 }
 
 /// The iPad's sidebar (T849): Needs you and Projects, then each
@@ -301,6 +425,7 @@ extension Root {
             Tab("Needs you", systemImage: "exclamationmark.bubble", value: RootTab.needs) { opening(needsStack) }
                 .badge(phone.needs.count)
             Tab("Projects", systemImage: "folder", value: RootTab.projects) { opening(projectsStack) }
+            searchTab
             ForEach(phone.sidebar) { s in
                 TabSection(s.title) {
                     ForEach(s.rows) { r in
@@ -353,7 +478,7 @@ extension Root {
     /// fit one; its button opens it again, over the session.
     private var folding: Route? {
         guard size != .zero else { return nil }
-        let last = (tab == .needs ? needsPath : projectsPath).last
+        let last = path(tab).last
         switch last?.base {
         case .session, .need: return PhoneColumns.foldsList(size) ? last : nil
         default: return nil
@@ -375,12 +500,6 @@ extension Root {
         }
     }
 
-    /// A row picked in the sidebar opens its route in the columns.
-    private func choose(_ t: RootTab) {
-        tab = t
-        if case .place(let r) = t { projectsPath = r.path }
-    }
-
     /// The sidebar's row for what the columns show: the last route on
     /// path that has a row, else Projects.
     static func place(_ path: [Route], in sidebar: [SidebarGroup]) -> RootTab {
@@ -400,8 +519,10 @@ extension Root {
     /// -open: "settings", "gallery" (the redesign's components, T845;
     /// with -gallery-lower YES at its states and buttons),
     /// "projects", "needs ROUTE" (a need's route
-    /// opened from Needs you), or a route opened from the Projects tab, on
-    /// the path a tap would have taken (Route.path).
+    /// opened from Needs you), "search:SLUG" or "search:SLUG/ID" in the
+    /// Search tab (on iOS 17 from the project, as below), or a route
+    /// opened from the Projects tab, on the path a tap would have taken
+    /// (Route.path).
     private func openLaunched() {
         guard let open = UserDefaults.standard.string(forKey: "open") else { return }
         if open.hasPrefix("needs "), let r = Route.parse(String(open.dropFirst(6))) {
@@ -413,8 +534,22 @@ extension Root {
         } else if open == "projects" {
             tab = .projects
         } else if let r = Route.parse(open) {
-            self.open(on: r)
+            if Self.searchTab, case .search(let slug) = r {
+                openSearch(slug)
+            } else if Self.searchTab, case .searchHit(let slug, _) = r {
+                openSearch(slug)
+                searchPath = [r]
+            } else {
+                self.open(on: r)
+            }
         }
+    }
+
+    /// The Search tab on the first server's project slug (-open search:SLUG).
+    private func openSearch(_ slug: String) {
+        searchScope = SearchScope(key: phone.primary.key, slug: slug)
+        searchPath = []
+        tab = .search
     }
 }
 
