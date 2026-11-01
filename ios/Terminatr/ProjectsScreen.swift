@@ -239,6 +239,14 @@ struct ProjectScreen: View {
         .keepsPlace(route: Route.project(slug))
         .navigationTitle(slug)
         .headerTitle()
+        .toolbar {
+            // Search (T924): the project's history.
+            if model.searches {
+                ToolbarItem(placement: .primaryAction) {
+                    PlainRouteLink(value: Route.search(slug)) { Label("Search", systemImage: "magnifyingglass") }
+                }
+            }
+        }
         .backdrop()
     }
 
@@ -268,7 +276,6 @@ struct ProjectScreen: View {
         ] + (pages.contains(.memory) ? [(.memory(slug), "Memory", "brain")] : [])
             + (pages.contains(.library) ? [(.library(slug), "Library", "books.vertical")] : [])
             + (pages.contains(.mods) ? [(.mods(slug), "Mods", "puzzlepiece.extension")] : [])
-            + (model.searches ? [(.search(slug), "Search", "magnifyingglass")] : [])
         return TileRow {
             ForEach(tiles, id: \.1) { route, title, symbol in
                 PlainRouteLink(value: route) { PageTile(title, symbol: symbol, selected: navigate.opens(route, on: model)) }

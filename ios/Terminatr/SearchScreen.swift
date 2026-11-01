@@ -36,7 +36,6 @@ struct SearchScreen: View {
                     await m.search()
                 } else {
                     search = m
-                    focused = true
                 }
             }
         }
@@ -127,6 +126,7 @@ struct SearchScreen: View {
                     PlainRouteLink(value: Route.searchHit(s.project, id: h.id)) {
                         SearchHitRow(h)
                     }
+                    .buttonStyle(.plain)
                 }
             } header: {
                 Text(Search.summary(r))
@@ -151,7 +151,8 @@ struct SearchHitScreen: View {
     let slug: String
     let id: String
     @State private var search: SearchModel?
-    @State private var layer = 0
+    /// Text (0) or Timeline (1); a launch argument (-searchLayer 1) picks it.
+    @State private var layer = UserDefaults.standard.integer(forKey: "searchLayer")
 
     var body: some View {
         List {
@@ -238,6 +239,7 @@ struct SearchHitScreen: View {
                             .listRowBackground(theme.cardTint)
                     } else {
                         PlainRouteLink(value: Route.searchHit(slug, id: row.hit.id)) { SearchHitRow(row.hit) }
+                            .buttonStyle(.plain)
                     }
                 }
             } header: {
