@@ -37,7 +37,8 @@ const (
 
 // StartupBudget bounds the whole start-up block, in bytes: under
 // Claude's 10,000 characters for hook output (a byte count is never
-// below a character count), with room for the header Claude adds.
+// below a character count), with room for the header Claude adds, and
+// under Codex's 2,500 tokens (10,000 bytes; T919, docs/SPEC.md §7.8).
 const StartupBudget = 9000
 
 // StartupCut is where the block is clipped at run time, should a part
