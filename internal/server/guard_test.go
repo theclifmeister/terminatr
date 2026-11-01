@@ -643,7 +643,7 @@ func TestAccessCoordinatorCommands(t *testing.T) {
 		}
 		return a.Commands
 	}
-	readOnly := []string{"tm context", "tm inbox list", "tm task list", "tm task show", "tm thread list", "tm thread show", "tm thread read", "tm library list", "tm memory find", "tm memory check", "tm access show", "tm access explain", "tm skill"}
+	readOnly := []string{"tm context", "tm inbox list", "tm task list", "tm task show", "tm thread list", "tm thread show", "tm thread read", "tm library list", "tm memory find", "tm memory show", "tm memory list", "tm memory check", "tm access show", "tm access explain", "tm skill"}
 	access := []string{"tm access add", "tm access rm", "tm access edit", "tm access drop", "tm access undrop", "tm access set local-ports"}
 	with := func(c ...string) []string { return append(slices.Clone(readOnly), c...) }
 	own := "[projects." + p.Slug + "]\n"

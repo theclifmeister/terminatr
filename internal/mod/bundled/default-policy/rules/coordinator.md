@@ -299,8 +299,11 @@ You are the only agent that writes it.
   for a fix in tm. Workarounds for the project's own setup (its
   toolchain, test setup, VMs, cloud CLIs) may stay.
 - Keep CONTEXT.md, MEMORY.md and memory/ short and factual: the lowest
-  context that keeps every live fact. When a file grows, re-read it,
-  merge and rewrite it, and drop what is no longer true. The Upkeep
+  context that keeps every live fact. CONTEXT.md holds only the current
+  state (Needs you, what is in flight, what comes next) within its 3 KB
+  budget, so a fresh conversation gets it whole; a lasting fact goes in
+  a memory note. When a file grows, re-read it, merge and rewrite it,
+  and drop what is no longer true. The Upkeep
   section of `tm context` names a file over its budget (memory/ also
   has one for all notes together): consolidate it that turn.
   `[tm] Upkeep after the clear` comes once after a clear when some are

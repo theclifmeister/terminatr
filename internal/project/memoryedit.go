@@ -438,25 +438,10 @@ func (p *Project) RebuildIndex() (bool, error) {
 		}
 	}
 	lines := strings.Split(strings.ReplaceAll(string(old), "\r\n", "\n"), "\n")
-	type said struct{ title, desc string }
-	kept := map[string]said{}
-	for _, l := range lines {
-		if isIndexLine(l) {
-			if path, title, desc, ok := keptLine(l); ok {
-				if _, seen := kept[path]; !seen {
-					kept[path] = said{title, desc}
-				}
-			}
-		}
-	}
-	// By the title each line shows.
-	slices.SortFunc(notes, func(a, b Note) int {
-		ta, tb := indexTitle(a, kept[a.Path].title), indexTitle(b, kept[b.Path].title)
-		return cmp.Or(cmp.Compare(strings.ToLower(ta), strings.ToLower(tb)), cmp.Compare(a.Path, b.Path))
-	})
-	list := make([]string, len(notes))
-	for i, n := range notes {
-		list[i] = IndexLine(p.Slug, n, kept[n.Path].title, kept[n.Path].desc)
+	entries := p.indexEntries(notes, lines)
+	list := make([]string, len(entries))
+	for i, en := range entries {
+		list[i] = en.Line
 	}
 	var out []string
 	placed := false
@@ -481,6 +466,68 @@ func (p *Project) RebuildIndex() (bool, error) {
 		return false, nil
 	}
 	return true, fsx.WriteAtomic(file, data, 0o644)
+}
+
+// IndexEntry is one note's line in MEMORY.md (IndexLine), with the
+// note it lists.
+type IndexEntry struct {
+	Note Note
+	Line string
+}
+
+// indexEntries are the notes' lines in MEMORY.md, by the title each
+// shows: a note that has a line among lines keeps that line's title
+// and description.
+func (p *Project) indexEntries(notes []Note, lines []string) []IndexEntry {
+	type said struct{ title, desc string }
+	kept := map[string]said{}
+	for _, l := range lines {
+		if isIndexLine(l) {
+			if path, title, desc, ok := keptLine(l); ok {
+				if _, seen := kept[path]; !seen {
+					kept[path] = said{title, desc}
+				}
+			}
+		}
+	}
+	notes = slices.Clone(notes)
+	slices.SortFunc(notes, func(a, b Note) int {
+		ta, tb := indexTitle(a, kept[a.Path].title), indexTitle(b, kept[b.Path].title)
+		return cmp.Or(cmp.Compare(strings.ToLower(ta), strings.ToLower(tb)), cmp.Compare(a.Path, b.Path))
+	})
+	out := make([]IndexEntry, len(notes))
+	for i, n := range notes {
+		out[i] = IndexEntry{Note: n, Line: IndexLine(p.Slug, n, kept[n.Path].title, kept[n.Path].desc)}
+	}
+	return out
+}
+
+// MemoryIndex is MEMORY.md's list of the notes as RebuildIndex would
+// write it, without writing it: one IndexEntry per note in memory/,
+// each line in PlainIndex's form (a Markdown link to the note's file),
+// by title. forThreads leaves out the notes threads aren't shown
+// (ForThreads).
+func (p *Project) MemoryIndex(forThreads bool) ([]IndexEntry, error) {
+	notes, err := p.indexNotes()
+	if err != nil {
+		return nil, err
+	}
+	if forThreads {
+		notes = ThreadNotes(notes)
+	}
+	var lines []string
+	if fi, err := os.Lstat(p.Path("MEMORY.md")); err == nil && fi.Mode().IsRegular() {
+		if f, err := fsx.OpenNoLink(p.Path("MEMORY.md"), os.O_RDONLY, 0); err == nil {
+			data, _ := io.ReadAll(io.LimitReader(f, MaxMemoryRead))
+			f.Close()
+			lines = strings.Split(strings.ReplaceAll(string(data), "\r\n", "\n"), "\n")
+		}
+	}
+	entries := p.indexEntries(notes, lines)
+	for i := range entries {
+		entries[i].Line = PlainIndex(entries[i].Line)
+	}
+	return entries, nil
 }
 
 // indexStamps are SyncIndex's stamps of what it found in sync, by

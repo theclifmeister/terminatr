@@ -128,9 +128,11 @@ func promptHeader(role string, stamp *PromptStamp, rules, projectFile string) st
 	var b strings.Builder
 	switch role {
 	case proto.RoleCoordinator:
-		b.WriteString("Your rules (`tm skill coordinator`) and PROJECT.md are in your system prompt; this block is the project's state.\n")
+		b.WriteString("Your rules (`tm skill coordinator`) and PROJECT.md are in your system prompt; this block is the project's state. " +
+			"One rules section again: `tm skill coordinator --section <heading>`.\n")
 	default:
-		b.WriteString("Your brief and your rules (`tm skill thread`) are in your system prompt; this block is your thread's state.\n")
+		b.WriteString("Your brief and your rules (`tm skill thread`) are in your system prompt; this block is your thread's state. " +
+			"One rules section again: `tm skill thread --section <heading>`.\n")
 	}
 	if rules != "" && textHash([]byte(rules)) != stamp.Rules {
 		cmd := "`tm skill " + role + "`"

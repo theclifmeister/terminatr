@@ -438,7 +438,8 @@ cmd = '` + tm + `inbox done "$(` + tm + `inbox list | grep t-0003 | cut -d" " -f
 		return err == nil && strings.HasPrefix(string(b), rules) && strings.Contains(string(b), "\n# PROJECT.md\n")
 	})
 	full := env.MustCLI("context", "--project", slug)
-	want := "Your rules (`tm skill coordinator`) and PROJECT.md are in your system prompt; this block is the project's state.\n\n" + full +
+	want := "Your rules (`tm skill coordinator`) and PROJECT.md are in your system prompt; this block is the project's state. " +
+		"One rules section again: `tm skill coordinator --section <heading>`.\n\n" + full +
 		"\nThat is `tm context` as of this conversation's start; run it (or tm inbox list, tm thread list) again when you need the current state.\n"
 
 	n := len(env.FakeRecords("context"))

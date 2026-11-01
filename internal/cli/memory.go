@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -17,6 +18,8 @@ import (
 )
 
 const memoryUsage = `usage: tm memory find [<words>…] [--path <path>]… [--limit <n>] [--project <slug>] [--json]
+       tm memory show <note>… [--project <slug>] [--json]
+       tm memory list [--project <slug>] [--json]
        tm memory check [--thread <id>] [--project <slug>] [--json]
        tm memory template
        tm memory new [<name>] [--file <path>|-] [--project <slug>]
@@ -33,6 +36,11 @@ words under three letters and stop words never match. A path the note
 touches adds 10 and ranks it first; a note without one shows when its
 words stand out from the other notes'.
 
+show prints notes in full (a note is <name>, <name>.md or
+memory/<name>.md), each under a "==> memory/<name>.md <==" line when
+there are several. list prints MEMORY.md's line for each note: its
+title, what it holds and what it touches.
+
 check reads a thread's diff since its base (a thread's own, else
 --thread's) and, for the notes that touch its files, flags a number
 the note's Decided section holds that the diff changes, and words of
@@ -40,8 +48,8 @@ its Ruled out section the diff adds; tm report adds what it flags to
 the report's ## Check, never refusing for it. template prints a new note with the optional
 front matter (title, touches, standing, audience, source) and its
 sections (Decided, Ruled out, Watch out). A note with audience:
-"coordinator" is never shown to a thread: not in its brief, find or
-check.
+"coordinator" is never shown to a thread: not in its brief, find,
+show, list or check.
 
 new, edit and rm change the notes in the project's memory/ folder
 (a note is <name>, <name>.md or memory/<name>.md; tm refuses any other
@@ -122,6 +130,18 @@ func runMemory(e *Env, args []string) error {
 		}
 		_, err := fmt.Fprint(e.Stdout, project.NoteTemplate)
 		return err
+	case "show", "list":
+		if f.anySet("limit", "path") || args[0] == "show" && len(pos) == 0 || args[0] == "list" && len(pos) > 0 {
+			return usagef("%s", memoryUsage)
+		}
+		p, err := e.openProject(*slug)
+		if err != nil {
+			return err
+		}
+		if args[0] == "list" {
+			return e.memoryList(p, *asJSON)
+		}
+		return e.memoryShow(p, pos, *asJSON)
 	case "find":
 		n := 5
 		if *limit != "" {
@@ -176,6 +196,81 @@ func runMemory(e *Env, args []string) error {
 		return nil
 	}
 	return usagef("unknown subcommand %q\n%s", args[0], memoryUsage)
+}
+
+// memoryShow prints the notes args name, in full; a thread is never
+// shown a note for the coordinator (ForThreads), which it is told the
+// project hasn't.
+func (e *Env) memoryShow(p *project.Project, args []string, asJSON bool) error {
+	type shownNote struct {
+		project.Note
+		Text string `json:"text"`
+	}
+	var notes []shownNote
+	for _, a := range args {
+		rel, err := p.NotePath(a)
+		if err != nil {
+			return err
+		}
+		if slices.ContainsFunc(notes, func(n shownNote) bool { return n.Path == rel }) {
+			continue
+		}
+		data, err := p.ReadNote(rel)
+		if err != nil {
+			return noNote(rel, err)
+		}
+		n := project.ParseNote(rel, string(data))
+		if e.Caller.Kind == caller.Thread && !n.ForThreads() {
+			return noNote(rel, fs.ErrNotExist)
+		}
+		notes = append(notes, shownNote{n, string(data)})
+	}
+	if asJSON {
+		return e.printJSON(map[string]any{"project": p.Slug, "dir": p.Dir, "notes": notes})
+	}
+	for i, n := range notes {
+		if len(notes) > 1 {
+			if i > 0 {
+				fmt.Fprintln(e.Stdout)
+			}
+			fmt.Fprintf(e.Stdout, "==> %s <==\n", n.Path)
+		}
+		text := shownText(n.Text)
+		if !strings.HasSuffix(text, "\n") {
+			text += "\n"
+		}
+		fmt.Fprint(e.Stdout, text)
+	}
+	return nil
+}
+
+// memoryList prints MEMORY.md's line for each note (MemoryIndex), only
+// those a thread may see when a thread asks.
+func (e *Env) memoryList(p *project.Project, asJSON bool) error {
+	entries, err := p.MemoryIndex(e.Caller.Kind == caller.Thread)
+	if err != nil {
+		return err
+	}
+	if asJSON {
+		type listed struct {
+			project.Note
+			Line string `json:"line"`
+		}
+		out := make([]listed, len(entries))
+		for i, en := range entries {
+			out[i] = listed{en.Note, en.Line}
+		}
+		return e.printJSON(map[string]any{"project": p.Slug, "dir": p.Dir, "notes": out})
+	}
+	if len(entries) == 0 {
+		fmt.Fprintf(e.Stdout, "%s has no memory notes\n", p.Slug)
+		return nil
+	}
+	for _, en := range entries {
+		fmt.Fprintln(e.Stdout, shown(en.Line))
+	}
+	fmt.Fprintln(e.Stdout, shown("(paths are in "+p.Dir+"; tm memory show <note> prints one)"))
+	return nil
 }
 
 // Bounds of a memory check: its time, and the touched files whose

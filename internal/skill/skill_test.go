@@ -107,3 +107,23 @@ func TestBundledPolicy(t *testing.T) {
 		}
 	}
 }
+
+// TestSections: Sections finds a section by its heading, ignoring case,
+// else every heading that starts with the name.
+func TestSections(t *testing.T) {
+	text := "tm skill r v1\n\n## Safety\n\nBe safe.\n\n## House rules (mod: a)\n\nA.\n\n\n## House rules (mod: b)\n\nB.\n### Sub\nb2\n"
+	if got := Headings(text); strings.Join(got, "|") != "Safety|House rules (mod: a)|House rules (mod: b)" {
+		t.Errorf("headings: %q", got)
+	}
+	for name, want := range map[string]string{
+		"safety":                "## Safety\n\nBe safe.\n",
+		" House rules (MOD: b)": "## House rules (mod: b)\n\nB.\n### Sub\nb2\n",
+		"house rules":           "## House rules (mod: a)\n\nA.\n\n## House rules (mod: b)\n\nB.\n### Sub\nb2\n",
+		"sub":                   "",
+		"":                      "",
+	} {
+		if got := Sections(text, name); got != want {
+			t.Errorf("Sections(%q) = %q, want %q", name, got, want)
+		}
+	}
+}

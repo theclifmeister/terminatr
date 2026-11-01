@@ -164,3 +164,50 @@ func TestContextThread(t *testing.T) {
 	h.expect(2, "", coord, "context", "--thread", "nope", "--project", "demo")
 	h.expect(1, "", coord, "context", "--thread", "t-0009", "--project", "demo")
 }
+
+// TestMemoryShowList: tm memory show prints notes in full and tm memory
+// list MEMORY.md's line for each; a thread is never shown a note for
+// the coordinator.
+func TestMemoryShowList(t *testing.T) {
+	h := newHarness(t)
+	h.ok(human, "project", "new", "demo")
+	p, _ := project.Open("demo")
+	if out := h.ok(thr, "memory", "list", "--project", "demo"); !strings.Contains(out, "demo has no memory notes") {
+		t.Errorf("empty list:\n%s", out)
+	}
+	os.MkdirAll(p.Path("memory"), 0o755)
+	retries := "---\ntitle: \"Retries stay at 4\"\ntouches:\n  - \"internal/ticker/\"\n---\n## Decided\nKeep 4 for the gh poller.\n"
+	os.WriteFile(p.Path("memory", "retries.md"), []byte(retries), 0o644)
+	os.WriteFile(p.Path("memory", "budget.md"), []byte("---\ntitle: \"Poller budget\"\naudience: \"coordinator\"\n---\nThe poller's budget.\n"), 0o644)
+
+	if out := h.ok(thr, "memory", "show", "retries", "--project", "demo"); out != retries {
+		t.Errorf("show:\n%q", out)
+	}
+	out := h.ok(coord, "memory", "show", "memory/retries.md", "budget.md", "retries", "--project", "demo")
+	if want := "==> memory/retries.md <==\n" + retries + "\n==> memory/budget.md <==\n"; !strings.HasPrefix(out, want) || strings.Count(out, "==>") != 2 {
+		t.Errorf("show of two:\n%s", out)
+	}
+	h.expect(1, "no-note", thr, "memory", "show", "budget", "--project", "demo")
+	h.expect(1, "no-note", coord, "memory", "show", "nothing", "--project", "demo")
+	h.expect(1, "not-memory", coord, "memory", "show", "../PROJECT.md", "--project", "demo")
+	h.expect(2, "", coord, "memory", "show", "--project", "demo")
+	h.expect(2, "", coord, "memory", "list", "x", "--project", "demo")
+
+	line := "- [Retries stay at 4](memory/retries.md): Keep 4 for the gh poller. (touches: internal/ticker/)"
+	out = h.ok(thr, "memory", "list", "--project", "demo")
+	if !strings.Contains(out, line) || strings.Contains(out, "budget") {
+		t.Errorf("thread's list:\n%s", out)
+	}
+	out = h.ok(coord, "memory", "list", "--project", "demo")
+	if !strings.Contains(out, line) || !strings.Contains(out, "- [Poller budget](memory/budget.md): The poller's budget.") {
+		t.Errorf("coordinator's list:\n%s", out)
+	}
+	var res struct {
+		Notes []struct {
+			Path, Title, Line string
+		} `json:"notes"`
+	}
+	if err := json.Unmarshal([]byte(h.ok(thr, "memory", "list", "--json", "--project", "demo")), &res); err != nil || len(res.Notes) != 1 || res.Notes[0].Line != line {
+		t.Fatalf("json: %v %+v", err, res)
+	}
+}
