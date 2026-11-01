@@ -81,9 +81,12 @@ type SessionRecord struct {
 	// ModelNext, with ModelPending, is the model a coordinator's setting
 	// wants and its agent couldn't switch to live: the next start
 	// (a resume too) launches with it (session.model).
-	ModelNext    string    `json:"model_next,omitempty"`
-	ModelPending bool      `json:"model_pending,omitempty"`
-	Created      time.Time `json:"created"`
+	ModelNext    string `json:"model_next,omitempty"`
+	ModelPending bool   `json:"model_pending,omitempty"`
+	// Prompt is what the session's system prompt was last launched with
+	// (sysprompt.go); nil when its rules aren't in one.
+	Prompt  *PromptStamp `json:"prompt,omitempty"`
+	Created time.Time    `json:"created"`
 	// CleanExit is true when the session was stopped by a clean server
 	// stop rather than lost in a crash.
 	CleanExit bool `json:"clean_exit"`
