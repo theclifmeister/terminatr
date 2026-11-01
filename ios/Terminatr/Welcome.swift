@@ -4,7 +4,8 @@ import TerminatrUI
 
 /// The first screen (T850): the theme's mesh, drifting, with two needs
 /// floating over it to show what the app is for, and at the foot the
-/// wordmark on glass with the demo and pairing. At accessibility text
+/// wordmark on glass with the demo and pairing, and under them the
+/// privacy policy and support (T910). At accessibility text
 /// sizes the needs step aside and the panel scrolls. Launched with
 /// -open pair it opens pairing, with -open "pair CODE" that code's
 /// confirm step (the Simulator's screenshots).
@@ -64,6 +65,7 @@ struct Welcome: View {
                     .foregroundStyle(theme.attention)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            WelcomeLinks()
         }
     }
 

@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.72.0](https://github.com/theclifmeister/terminatr/compare/v0.71.0...v0.72.0) (2026-11-01)
+
+
+### Features
+
+* **apps:** search a project's history in the Mac and iPhone apps (app API 41) ([#1005](https://github.com/theclifmeister/terminatr/issues/1005)) ([281a04d](https://github.com/theclifmeister/terminatr/commit/281a04d6900e9ae070bc52caf29aed311749cb3e))
+* **search:** rules and brief text for tm search; memory budget 80 KB ([#1004](https://github.com/theclifmeister/terminatr/issues/1004)) ([d11b0e5](https://github.com/theclifmeister/terminatr/commit/d11b0e563d6793b4bd55b4cefc20547c7b1209c0))
+* **search:** the search index over a project's history ([#1000](https://github.com/theclifmeister/terminatr/issues/1000)) ([fe41856](https://github.com/theclifmeister/terminatr/commit/fe418566817fa0c445510aa2d714863ff5ded097))
+* **search:** tm search, timeline and show; search.* on both sockets; MCP tools; the TUI's search popup ([#1003](https://github.com/theclifmeister/terminatr/issues/1003)) ([6c947db](https://github.com/theclifmeister/terminatr/commit/6c947db7525b99b9cdacff28c2c50f5619e12cb1))
+
+
+### Bug Fixes
+
+* **macos:** Jump to latest glides to the true end; iPad rotation crash fixed ([#1006](https://github.com/theclifmeister/terminatr/issues/1006)) ([f090a98](https://github.com/theclifmeister/terminatr/commit/f090a98438f1da76d11961c5f48f066882d265ec))
+
 ## [0.71.0](https://github.com/theclifmeister/terminatr/compare/v0.70.0...v0.71.0) (2026-11-01)
 
 

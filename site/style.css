@@ -351,3 +351,14 @@ footer p { margin: 0.3rem 0; }
   .top nav a:last-child { display: none; }
   .scroll { padding: 10px; }
 }
+
+/* Document pages (privacy, support) */
+
+.doc { max-width: 74ch; padding-top: clamp(2rem, 6vw, 4rem); padding-bottom: 2rem; }
+.doc h1 { font-size: clamp(1.7rem, 5vw, 2.4rem); line-height: 1.15; font-weight: 800; letter-spacing: -0.02em; margin: 0 0 0.5rem; }
+.doc h2 { font-size: 1.25rem; margin: 2.2rem 0 0.6rem; }
+.doc p, .doc li { max-width: 70ch; }
+.doc ol, .doc ul { padding-left: 1.4rem; }
+.doc li { margin: 0.35rem 0; }
+.doc .meta { color: var(--muted); margin: 0 0 1.6rem; }
+.doc code { color: var(--cyan); }
