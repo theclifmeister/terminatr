@@ -19,9 +19,10 @@ import TerminatrKit
 /// took hold.
 ///
 /// While Glide aims its start (T896: the rows there lay out a frame on,
-/// and can move the end up past it) a still image of the view covers
-/// it. The follower goes to the end by one too, an instant one (T901),
-/// renewed as more output comes.
+/// and move the end) the start only moves down (Glide's aimsUp off):
+/// no still image covers it here, as an NSView's cached image of
+/// SwiftUI's layers can come out blank. The follower goes to the end by
+/// one too, an instant one (T901), renewed as more output comes.
 @MainActor final class Glider: NSObject {
     /// The conversation's NSScrollView (ScrollViewHook finds it).
     weak var scrollView: NSScrollView?
@@ -29,8 +30,6 @@ import TerminatrKit
     private var glide: Glide?
     private var last: CFTimeInterval?
     private var done: (() -> Void)?
-    /// The still image over the scroll view while the start is aimed.
-    private var cover: NSView?
     /// The scroll events' monitor: momentum stilled, the user's own
     /// scroll ending a glide.
     private var monitor: Any?
@@ -52,8 +51,7 @@ import TerminatrKit
         guard let sv = scrollView, sv.window != nil else { return false }
         watch()
         if !instant { stilling = CACurrentMediaTime() }
-        let g = Glide(offset: Self.offset(sv), target: Self.end(sv), visible: sv.contentView.bounds.height, instant: instant)
-        if g.covered { coverUp(sv) }
+        let g = Glide(offset: Self.offset(sv), target: Self.end(sv), visible: sv.contentView.bounds.height, instant: instant, aimsUp: false)
         glide = g
         set(sv, g.offset)
         self.done = done
@@ -75,7 +73,6 @@ import TerminatrKit
         link?.invalidate()
         link = nil
         glide = nil
-        uncover()
         let d = done
         done = nil
         d?()
@@ -110,23 +107,6 @@ import TerminatrKit
         guard abs(clip.bounds.origin.y - y) > 0.01 else { return }
         clip.scroll(to: NSPoint(x: clip.bounds.origin.x, y: y))
         sv.reflectScrolledClipView(clip)
-    }
-
-    private func coverUp(_ sv: NSScrollView) {
-        guard let host = sv.superview, let rep = sv.bitmapImageRepForCachingDisplay(in: sv.bounds) else { return }
-        sv.cacheDisplay(in: sv.bounds, to: rep)
-        let image = NSImage(size: sv.bounds.size)
-        image.addRepresentation(rep)
-        let still = NSImageView(frame: sv.frame)
-        still.image = image
-        still.imageScaling = .scaleNone
-        host.addSubview(still, positioned: .above, relativeTo: sv)
-        cover = still
-    }
-
-    private func uncover() {
-        cover?.removeFromSuperview()
-        cover = nil
     }
 
     /// The scroll events of the app, seen before any view: the user's
@@ -185,7 +165,6 @@ import TerminatrKit
         let landed = g.step(to: Self.end(sv), dt: dt)
         glide = g
         set(sv, g.offset)
-        if !g.covered { uncover() }
         if landed { stop() }
     }
 }

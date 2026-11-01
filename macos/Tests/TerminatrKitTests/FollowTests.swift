@@ -325,6 +325,32 @@ private func run(_ g: inout Glide, frames: Int = 600, end: (Int) -> Double) -> (
     #expect(!h.covered && h.offset == 13300 - Glide.lead * 874)
 }
 
+/// The Mac's aim (T895, aimsUp off: no still image there): the end
+/// moving up as the start's rows lay out leaves the start where it was,
+/// nearer the end; nothing moves up, and it lands on the end.
+@Test func glideAimedDownOnlyNeverMovesUp() {
+    var g = Glide(offset: 5000, target: 10000, visible: 500, aimsUp: false)
+    #expect(g.covered && g.offset == 9000)
+    var last = g.offset, n = 0
+    while !g.landed, n < 600 {
+        _ = g.step(to: n == 0 ? 10000 : 9950, dt: 1 / 60)
+        #expect(g.offset >= last - 0.001 && g.offset <= 9950 + 0.001)
+        last = g.offset
+        n += 1
+    }
+    #expect(g.landed && g.offset == 9950)
+}
+
+/// Aimed down only, an end that moved up past the start puts it on the
+/// end: never past it, and still never up from where it was.
+@Test func glideAimedDownOnlyPastTheEndTakesTheEnd() {
+    var g = Glide(offset: 5000, target: 15600, visible: 874, aimsUp: false)
+    _ = g.step(to: 13300, dt: 1 / 60)
+    #expect(g.offset == 13300)
+    _ = g.step(to: 13300, dt: 1 / 60)
+    #expect(!g.covered && g.offset == 13300)
+}
+
 /// An end that never holds under the cover (output streaming in each
 /// frame): it aims at most aimFrames, then glides.
 @Test func glideAimsAtMostAimFrames() {

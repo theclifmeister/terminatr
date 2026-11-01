@@ -34,6 +34,12 @@ public struct Glide: Equatable, Sendable {
     public private(set) var velocity = 0.0
     /// Reduce Motion's: no spring, straight to the end.
     public let instant: Bool
+    /// Whether aiming may move the start up (the iPhone's, under its
+    /// still image). Without (the Mac's, T895: no still image there)
+    /// the start only ever moves down as it is aimed: an end that moved
+    /// up leaves it where it was, nearer the end, and one that moved up
+    /// past it puts it on the end.
+    public let aimsUp: Bool
     /// Whether it is aiming: the view keeps showing what it showed (a
     /// still image of it over the scroll) while the start lays out.
     public private(set) var covered = false
@@ -87,8 +93,9 @@ public struct Glide: Equatable, Sendable {
 
     /// A glide from offset, the end at target, in a view visible tall.
     /// A start that leads is covered until it is aimed.
-    public init(offset: Double, target: Double, visible: Double, instant: Bool = false) {
+    public init(offset: Double, target: Double, visible: Double, instant: Bool = false, aimsUp: Bool = true) {
         self.instant = instant
+        self.aimsUp = aimsUp
         from = offset
         self.visible = max(visible, 1)
         aimed = target
@@ -117,7 +124,8 @@ public struct Glide: Equatable, Sendable {
             aims += 1
             if (aims > 1 && abs(target - aimed) < Self.still) || aims >= Self.aimFrames { covered = false }
             aimed = target
-            offset = Self.start(from: from, target: target, visible: visible)
+            let start = Self.start(from: from, target: target, visible: visible)
+            offset = aimsUp ? start : min(max(offset, start), target)
             return false
         }
         if settling { return settle(target, dt: dt) }
