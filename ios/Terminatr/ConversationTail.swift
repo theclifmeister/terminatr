@@ -107,7 +107,7 @@ struct WorkingLine: View {
                     .truncationMode(.middle)
             }
             .onGlass()
-            .padding(.leading, 12)
+            // No leading inset: the pill's edge is the folds' and cards' (T920).
             .padding(.vertical, Spacing.hair)
             .frame(maxWidth: .infinity, alignment: .leading)
             .accessibilityElement(children: .ignore)
