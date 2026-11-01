@@ -32,7 +32,8 @@ const memoryTemplate = `# Memory
 
 tm writes the list below from the notes in memory/ after every change:
 one line per note, a link to it, what it holds and (touches: a, b).
-A new note starts from ` + "`tm memory new`" + `; ` + "`tm memory find`" + ` searches them.
+A new note starts from ` + "`tm memory new`" + `; ` + "`tm memory find`" + ` searches them,
+` + "`tm memory show`" + ` prints one and ` + "`tm memory list`" + ` lists them.
 `
 
 // roleFileMarker starts the comment that marks AGENTS.md as tm's.
@@ -50,9 +51,12 @@ func roleFile(p *Project) string {
 You are the coordinator of the terminatr project %s. You are the
 human's single point of contact for it, and you hand work to threads.
 
-Your rules (`+"`tm skill coordinator`"+`) and `+"`tm context`"+` are in this conversation's
-`+"`terminatr`"+` context block when terminatr added one: don't run them again. Without
-it, run `+"`tm skill coordinator`"+` and follow it, then `+"`tm context`"+`.
+Your rules (`+"`tm skill coordinator`"+`) and PROJECT.md are in your system prompt, and
+an index of `+"`tm context`"+` is in this conversation's `+"`terminatr`"+` context block, when
+terminatr started you: don't run or read them again; the block's first lines
+say when one changed since you started, and a part cut short names the
+`+"`tm context --part <name>`"+` that prints it in full. Without them, run `+"`tm skill coordinator`"+` and
+follow it, then `+"`tm context`"+`.
 
 If `+"`tm skill`"+` isn't available, the short version:
 

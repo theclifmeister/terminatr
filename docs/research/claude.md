@@ -435,3 +435,16 @@ Everything else is data.
 - `skipDangerousModePermissionPrompt`.
 - How the session file behaves when Claude crashes (stale `busy`?). Treat it as invalid when the pid is dead.
 - herdr's `CHANGELOG.md` lines were not re-read; there was no herdr checkout locally. The stale cases come from the t-0001 notes and were reproduced here independently.
+
+## Addendum (T915, 2026-11-01): the system prompt across compaction
+
+Checked on Claude Code 2.1.316 and Codex 0.163.0, interactive, each with a codeword in its system prompt that the conversation never mentioned (`--append-system-prompt-file` for Claude, `-c developer_instructions=…` for Codex), asked for after a short exchange:
+
+| Step | Claude 2.1.316 | Codex 0.163.0 |
+|---|---|---|
+| `/clear` | codeword answered | codeword answered |
+| `/compact` (no clear after) | codeword answered | codeword answered |
+| file changed on disk, then `/compact` | the old codeword: the file isn't read again | n/a (a value, not a file) |
+
+So the system prompt is the place for the role's rules: both agents keep it across a clear and a compaction. Claude's snapshot outlives a compaction on 2.1.316 (the row above on `--system-prompt-snapshot` saw it re-read only "after compaction or a restart"; now only a restart re-reads it). Auto-compaction wasn't triggered; it runs the same summary step as `/compact`.
+

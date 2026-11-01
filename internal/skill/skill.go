@@ -95,3 +95,54 @@ func ForProject(role, version, slug string) (string, bool) {
 	}
 	return WithMods(role, version, policy, addenda)
 }
+
+// Headings are the "## " headings of rules text, in order.
+func Headings(text string) []string {
+	var out []string
+	for _, l := range strings.Split(text, "\n") {
+		if h, ok := strings.CutPrefix(strings.TrimRight(l, "\r"), "## "); ok {
+			out = append(out, strings.TrimSpace(h))
+		}
+	}
+	return out
+}
+
+// Sections are the sections of rules text whose "## " heading is name,
+// ignoring case, each from its heading up to the next "## " one, one
+// blank line between them; with none, those whose heading starts with
+// name ("house rules" finds each mod's). "" when no heading matches.
+func Sections(text, name string) string {
+	name = strings.ToLower(strings.TrimSpace(name))
+	if name == "" {
+		return ""
+	}
+	for _, prefix := range []bool{false, true} {
+		var out []string
+		in := false
+		for _, l := range strings.Split(text, "\n") {
+			l = strings.TrimRight(l, "\r")
+			if h, ok := strings.CutPrefix(l, "## "); ok {
+				h = strings.ToLower(strings.TrimSpace(h))
+				in = h == name || prefix && strings.HasPrefix(h, name)
+				if in && len(out) > 0 {
+					out = append(trimBlank(out), "")
+				}
+			}
+			if in {
+				out = append(out, l)
+			}
+		}
+		if out = trimBlank(out); len(out) > 0 {
+			return strings.Join(out, "\n") + "\n"
+		}
+	}
+	return ""
+}
+
+// trimBlank is lines without the blank ones at the end.
+func trimBlank(lines []string) []string {
+	for len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) == "" {
+		lines = lines[:len(lines)-1]
+	}
+	return lines
+}

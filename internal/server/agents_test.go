@@ -94,7 +94,7 @@ func TestCoordinatorEssentials(t *testing.T) {
 		{Title: "Tasks", Lines: []string{"T1 a task"}},
 		{Title: "Journal (last 10)", Lines: []string{"a journal line"}},
 	}
-	got := coordinatorEssentials(secs)
+	got := coordinatorEssentials(secs, coordinatorBudget)
 	for _, want := range []string{"## Project\n", "Where things stand", "a memory", "## Tasks\n", "a journal line",
 		"That is `tm context` as of this conversation's start; run it"} {
 		if !strings.Contains(got, want) {
@@ -106,11 +106,14 @@ func TestCoordinatorEssentials(t *testing.T) {
 		long[i] = "T1 a task with a long enough title to fill the budget"
 	}
 	secs[3].Lines = long
-	got = coordinatorEssentials(secs)
+	if got := coordinatorEssentials(secs, project.StartupBudget); len(got) > project.StartupBudget || !strings.HasSuffix(got, "run `tm context` now for the rest.\n") {
+		t.Fatalf("%d bytes at the start-up budget, ends %q", len(got), got[len(got)-100:])
+	}
+	got = coordinatorEssentials(secs, coordinatorBudget)
 	if len(got) > coordinatorBudget {
 		t.Fatalf("%d bytes, over the budget", len(got))
 	}
-	if !strings.Contains(got, "[… cut at the size budget]") || !strings.HasSuffix(got, "the current state.\n") {
+	if !strings.Contains(got, "[… cut at the size budget]") || !strings.HasSuffix(got, "run `tm context` now for the rest.\n") {
 		t.Fatalf("no cut mark or no last line:\n%s", got[len(got)-300:])
 	}
 }
@@ -462,5 +465,15 @@ func TestThemePickReachesClaude(t *testing.T) {
 			t.Fatalf("follow terminal didn't reach the running Claude: base %q", base())
 		}
 		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+// Codex spills a hook's additionalContext above 2,500 tokens, counted as
+// ceil(bytes/4) (codex-rs/hooks/src/output_spill.rs at rust-v0.163.0,
+// T919): the start-up block, clipped at StartupCut, must stay under it with no additionalContextLimit.
+func TestStartupBudgetUnderCodexLimit(t *testing.T) {
+	const codexTokens = 2500
+	if tokens := (project.StartupCut + 3) / 4; tokens > codexTokens {
+		t.Errorf("StartupCut %d bytes is %d tokens for Codex, over its %d", project.StartupCut, tokens, codexTokens)
 	}
 }

@@ -30,6 +30,15 @@ const (
 	// Journal lines are clipped to this width (runes): the full text is
 	// in JOURNAL.md.
 	capJournalLine = 160
+
+	// The start-up block's index (startup.go) shows less: the inbox's
+	// first items, the last journal lines at a narrower width, task
+	// titles at a width (runes).
+	capIndexInbox       = 5
+	capIndexJournal     = 5
+	capIndexJournalLine = 120
+	capIndexTitle       = 50
+	capIndexItem        = 120
 )
 
 // Section is one part of `tm context`.
@@ -38,6 +47,18 @@ type Section struct {
 	Lines []string `json:"lines"`
 	// Omitted says what the cap left out, e.g. "12 more lines in CONTEXT.md".
 	Omitted string `json:"omitted,omitempty"`
+	// Part is the start-up block's part the section belongs to
+	// (StartupParts; `tm context --part <name>` prints it).
+	Part string `json:"part,omitempty"`
+	// Index is the section's lines in the start-up block when they are
+	// fewer or shorter than Lines (the rest one `tm context --part`
+	// away); nil shows Lines.
+	Index []string `json:"-"`
+	// IndexTitle is the title over Index, when it differs from Title.
+	IndexTitle string `json:"-"`
+	// IndexWhole: Index leaves nothing out, it only moves lines to
+	// another part (CONTEXT.md's Needs you), so it needs no pointer.
+	IndexWhole bool `json:"-"`
 }
 
 // Ticked is what the ticker last saw (state/ticker.json, ticker.Seen):
@@ -147,9 +168,18 @@ func (p *Project) Context(seen Ticked, threads func(prs map[string]string) (Sect
 			head = append(head, "  "+l)
 		}
 	}
-	head = append(head, agentModelLines(cfg, safety)...)
-	out = append(out, Section{Title: "Project", Lines: head})
-	out = append(out, capLines("Standing instructions (PROJECT.md)", splitLines(p.Instructions), capInstructions, "PROJECT.md"))
+	// The index names the thread agent; the models are one --part away.
+	agents := agentModelLines(cfg, safety)
+	index := append(slices.Clone(head), agents[:min(len(agents), 1)]...)
+	head = append(head, agents...)
+	proj := Section{Title: "Project", Lines: head, Part: PartProject}
+	if len(index) < len(head) {
+		proj.Index = index
+	}
+	out = append(out, proj)
+	ins := capLines("Standing instructions (PROJECT.md)", splitLines(p.Instructions), capInstructions, "PROJECT.md")
+	ins.Part = PartInstructions
+	out = append(out, ins)
 
 	// The memory index as tm keeps it: a note added or removed by hand,
 	// or a list an older tm left, is brought in line first.
@@ -157,18 +187,28 @@ func (p *Project) Context(seen Ticked, threads func(prs map[string]string) (Sect
 		return nil, err
 	}
 	for _, f := range []struct {
-		title, file string
-		cap         int
-	}{{"Context (CONTEXT.md)", "CONTEXT.md", capContext}, {"Memory index (MEMORY.md)", "MEMORY.md", capMemory}} {
+		title, file, part string
+		cap               int
+	}{{"Context (CONTEXT.md)", "CONTEXT.md", PartContext, capContext}, {"Memory index (MEMORY.md)", "MEMORY.md", PartMemory, capMemory}} {
 		data, err := os.ReadFile(p.Path(f.file))
 		if err != nil && !errors.Is(err, fs.ErrNotExist) {
 			return nil, err
 		}
 		text := string(data)
+		var index []string
 		if f.file == "MEMORY.md" {
+			index = memoryIndex(text)
 			text = PlainIndex(text) // the notes by their files, not wikilinks
 		}
-		out = append(out, capLines(f.title, splitLines(text), f.cap, f.file))
+		sec := capLines(f.title, splitLines(text), f.cap, f.file)
+		sec.Part, sec.Index = f.part, index
+		if f.file == "CONTEXT.md" {
+			if _, rest, ok := needsYou(sec.Lines); ok {
+				// Needs you leads the block on its own.
+				sec.Index, sec.IndexWhole = rest, sec.Omitted == ""
+			}
+		}
+		out = append(out, sec)
 	}
 	// The coordinator's stored questions (tm ask); only when some are open.
 	qs, err := p.Questions()
@@ -176,7 +216,7 @@ func (p *Project) Context(seen Ticked, threads func(prs map[string]string) (Sect
 		return nil, err
 	}
 	if len(qs) > 0 {
-		sec := Section{Title: "Open questions (tm ask)"}
+		sec := Section{Title: "Open questions (tm ask)", Part: PartNeeds}
 		for _, q := range qs {
 			sec.Lines = append(sec.Lines, QuestionLine(q))
 		}
@@ -188,7 +228,7 @@ func (p *Project) Context(seen Ticked, threads func(prs map[string]string) (Sect
 		return nil, err
 	}
 	if len(over) > 0 {
-		up := Section{Title: "Upkeep"}
+		up := Section{Title: "Upkeep", Part: PartUpkeep}
 		for _, o := range over {
 			up.Lines = append(up.Lines, o.String())
 		}
@@ -206,6 +246,7 @@ func (p *Project) Context(seen Ticked, threads func(prs map[string]string) (Sect
 		if err != nil {
 			return nil, err
 		}
+		th.Part = PartThreads
 		out = append(out, th)
 	}
 
@@ -213,7 +254,7 @@ func (p *Project) Context(seen Ticked, threads func(prs map[string]string) (Sect
 	if err != nil {
 		return nil, err
 	}
-	inbox := Section{Title: "Inbox"}
+	inbox := Section{Title: "Inbox", Part: PartInbox}
 	for i, it := range items {
 		if i == capInbox {
 			inbox.Omitted = fmt.Sprintf("%d more items (tm inbox list)", len(items)-capInbox)
@@ -225,9 +266,15 @@ func (p *Project) Context(seen Ticked, threads func(prs map[string]string) (Sect
 		}
 		inbox.Lines = append(inbox.Lines, fmt.Sprintf("%s  %s%s: %s", it.ID, it.Kind, flag, it.Summary))
 	}
+	if len(items) > 0 {
+		inbox.Index = []string{fmt.Sprintf("%d items", len(items))}
+		for _, l := range inbox.Lines[:min(len(inbox.Lines), capIndexInbox)] {
+			inbox.Index = append(inbox.Index, textsafe.Clip(l, capIndexItem))
+		}
+	}
 	out = append(out, inbox)
 	if len(seen.Links) > 0 {
-		out = append(out, Section{Title: "Links (tm link)", Lines: seen.Links})
+		out = append(out, Section{Title: "Links (tm link)", Lines: seen.Links, Part: PartLinks})
 	}
 
 	lines, total, err := p.JournalTail(capJournal)
@@ -237,7 +284,18 @@ func (p *Project) Context(seen Ticked, threads func(prs map[string]string) (Sect
 	for i, l := range lines {
 		lines[i] = textsafe.Clip(l, capJournalLine)
 	}
-	j := Section{Title: fmt.Sprintf("Journal (last %d)", capJournal), Lines: lines}
+	j := Section{Title: fmt.Sprintf("Journal (last %d)", capJournal), Lines: lines, Part: PartJournal}
+	short := false
+	for _, l := range lines[max(len(lines)-capIndexJournal, 0):] {
+		c := textsafe.Clip(l, capIndexJournalLine)
+		short = short || c != l
+		j.Index = append(j.Index, c)
+	}
+	if !short && len(lines) <= capIndexJournal {
+		j.Index = nil
+	} else if len(j.Index) < len(lines) {
+		j.IndexTitle = fmt.Sprintf("Journal (last %d)", len(j.Index))
+	}
 	if total > len(lines) {
 		j.Omitted = fmt.Sprintf("%d earlier lines in JOURNAL.md", total-len(lines))
 	}
@@ -365,7 +423,7 @@ func (p *Project) taskSection() (Section, error) {
 		return Section{}, err
 	}
 	b.Sort()
-	s := Section{Title: "Tasks"}
+	s := Section{Title: "Tasks", Part: PartTasks}
 	var omitted []string
 	for _, g := range tasks.Groups {
 		var ts []*tasks.Task
@@ -386,6 +444,14 @@ func (p *Project) taskSection() (Section, error) {
 			}
 		}
 		s.Lines = append(s.Lines, fmt.Sprintf("%s (%d)", g, countGroup(b, g)))
+		// The index counts every group and lists only what is moving or
+		// waiting on a review or the user.
+		s.Index = append(s.Index, fmt.Sprintf("%s (%d)", g, countGroup(b, g)))
+		if g == tasks.InMotion || g == tasks.NeedsYou {
+			for _, t := range ts {
+				s.Index = append(s.Index, "  "+indexTaskLine(t))
+			}
+		}
 		for _, l := range tasks.Lines(ts[:min(len(ts), limit)]) {
 			s.Lines = append(s.Lines, "  "+l)
 		}
@@ -394,12 +460,25 @@ func (p *Project) taskSection() (Section, error) {
 		}
 	}
 	if len(s.Lines) == 0 {
-		s.Lines = []string{"(no tasks)"}
+		s.Lines, s.Index = []string{"(no tasks)"}, nil
+	}
+	if slices.Equal(s.Index, s.Lines) {
+		s.Index = nil
 	}
 	if len(omitted) > 0 {
 		s.Omitted = strings.Join(omitted, ", ") + " tasks not shown (tm task list)"
 	}
 	return s, nil
+}
+
+// indexTaskLine is a task's line in the start-up block's index: its id,
+// status, title at capIndexTitle and thread.
+func indexTaskLine(t *tasks.Task) string {
+	line := t.Ref() + "  " + string(t.Status) + "  " + textsafe.Clip(textsafe.Clean(t.Title, false), capIndexTitle)
+	if t.Thread != "" {
+		line += "  " + textsafe.Clean(t.Thread, false)
+	}
+	return line
 }
 
 func countGroup(b *tasks.Board, g tasks.Group) int {

@@ -1,0 +1,29 @@
+Your brief and your rules (`tm skill thread`) are in your system prompt; this block is your thread's state. One rules section again: `tm skill thread --section <heading>`.
+tm was upgraded since this session started (0.0.1 → $VERSION): run `tm skill thread` once and follow it over the rules in your system prompt.
+
+You are thread t-0001 of project demo, in  (a plain folder: no git, no branch, no PR; hand in what you make with tm report --attach, and leave the folder empty).
+Your brief: $TERMINATR_HOME/projects/demo/threads/t-0001/brief.md (your system prompt when your agent loaded it there; else read it).
+Continue with your task's unchecked steps.
+
+Task T1 000 Ünïcødé ✓ 日本語 words that go on words that go on words that go on words that go on words that go on words (0/20 steps):
+1. [ ] 000 Ünïcødé ✓ 日本語 words that go on words that go on words that go on words that go on wo
+2. [ ] 001 Ünïcødé ✓ 日本語 words that go on words that go on words that go on words that go on wo
+3. [ ] 002 Ünïcødé ✓ 日本語 words that go on words that go on words that go on words that go on wo
+4. [ ] 003 Ünïcødé ✓ 日本語 words that go on words that go on words that go on words that go on wo
+5. [ ] 004 Ünïcødé ✓ 日本語 words that go on words that go on words that go on words that go on wo
+6. [ ] 005 Ünïcødé ✓ 日本語 words that go on words that go on words that go on words that go on wo
+7. [ ] 006 Ünïcødé ✓ 日本語 words that go on words that go on words that go on words that go on wo
+8. [ ] 007 Ünïcødé ✓ 日本語 words that go on words that go on words that go on words that go on wo
+9. [ ] 008 Ünïcødé ✓ 日本語 words that go on words that go on words that go on words that go on wo
+10. [ ] 009 Ünïcødé ✓ 日本語 words that go on words that go on words that go on words that go on wo
+11. [ ] 010 Ünïcødé ✓ 日本語 words that go on words that go on words that go on words that go on wo
+12. [ ] 011 Ünïcødé ✓ 日本語 words that go on words that go on words that go on words that go on wo
+13. [ ] 012 Ünïcødé ✓ 日本語 words that go on words that go on words that go on words that go on wo
+14. [ ] 013 Ünïcødé ✓ 日本語 words that go on words that go on words that go on words that go on wo
+15. [ ] 014 Ünïcødé ✓ 日本語 words that go on words that go on words that go on words that go on wo
+16. [ ] 015 Ünïcødé ✓ 日本語 words that go on words that go on words that go on words that go on wo
+17. [ ] 016 Ünïcødé ✓ 日本語 words that go on words that go on words that go on words that go on wo
+18. [ ] 017 Ünïcødé ✓ 日本語 words that go on words that go on words that go on words that go on wo
+19. [ ] 018 Ünïcødé ✓ 日本語 words that go on words that go on words that go on words that go on wo
+20. [ ] 019 Ünïcødé ✓ 日本語 words that go on words that go on words that go on words that go on wo
+Report: new (1 stored; tm report --show prints the latest)

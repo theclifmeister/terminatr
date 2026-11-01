@@ -43,8 +43,11 @@ type LaunchSpec struct {
 	RuntimeDir string // per-session scratch dir owned by the server; generated files go here
 	// TempDir is a thread's own temp folder (home.ThreadTempDir), which
 	// the manifest's [launch.env] makes the agent's TMPDIR; "" for none.
-	TempDir   string
-	BriefPath string // thread brief, or the coordinator role file
+	TempDir string
+	// BriefPath is the session's system prompt file: a thread's brief,
+	// with its rules when the manifest has [launch] system_prompt, or a
+	// coordinator's rules and PROJECT.md; "" for none.
+	BriefPath string
 	Kickoff   string // the first user prompt, e.g. "Read your brief and do what it says."
 	Resume    bool   // resume AgentSID instead of starting fresh; AgentSID must be set
 	Yolo      bool   // skip the agent's own permission prompts (project setting)

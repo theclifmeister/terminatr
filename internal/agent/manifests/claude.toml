@@ -34,7 +34,8 @@ last_tested = "2.1.296"
 command = "claude"
 # Hooks (--plugin-dir) and --settings are additive to the user's own
 # settings. --session-id only for fresh sessions: reusing an id fails.
-# The brief survives /clear as an appended system prompt.
+# The system prompt (brief, rules) survives /clear and compaction
+# appended to Claude's own.
 # tm mcp is the MCP server "terminatr" for the typed tools (docs/SPEC.md
 # §8.6, tm mcp). --mcp-config is additive to the user's own servers.
 args = [
@@ -44,6 +45,9 @@ args = [
   "{{if not .Resume}}--session-id{{end}}", "{{if not .Resume}}{{.AgentSID}}{{end}}",
   "{{if .BriefPath}}--append-system-prompt-file{{end}}", "{{.BriefPath}}",
 ]
+# .BriefPath is the session's system prompt: the brief and rules of a
+# thread, the rules and PROJECT.md of a coordinator (docs/SPEC.md §7.8).
+system_prompt = true
 resume_args = ["--resume", "{{.AgentSID}}"]
 yolo_args = ["--dangerously-skip-permissions"]
 model_args = ["--model", "{{.Model}}"]

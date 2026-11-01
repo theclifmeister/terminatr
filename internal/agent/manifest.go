@@ -64,6 +64,14 @@ type Manifest struct {
 		Env         map[string]string `toml:"env"`        // values are templates; an empty result sets nothing
 		UnsetEnv    []string          `toml:"unset_env"`  // inherited variables to drop; trailing * = prefix
 		Files       []ManifestFile    `toml:"files"`
+		// SystemPrompt says the agent takes .BriefPath as its system
+		// prompt (Claude's --append-system-prompt-file, Codex's
+		// developer_instructions), which it keeps across a clear and a
+		// compaction: tm then puts the role's rules there too (and a
+		// coordinator's PROJECT.md), and leaves them out of the
+		// SessionStart block (docs/SPEC.md §7.8). False (the default):
+		// the rules stay in the block, as for an adopted session.
+		SystemPrompt bool `toml:"system_prompt"`
 	} `toml:"launch"`
 
 	Inject struct {

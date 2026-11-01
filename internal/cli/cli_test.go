@@ -308,6 +308,32 @@ func TestContextAndCwdResolution(t *testing.T) {
 	h.expect(1, "invalid-project", human, "context", "--project", "../etc")
 }
 
+// TestContextPartAndStartup: tm context --part prints one part in full,
+// --startup the block a coordinator would start with (T917).
+func TestContextPartAndStartup(t *testing.T) {
+	h := newHarness(t)
+	h.ok(human, "project", "new", "demo", "--goal", "Ship v1")
+	h.cwd = filepath.Join(h.root, "projects", "demo")
+	h.ok(human, "task", "add", "First")
+	if out := h.ok(human, "context", "--part", "tasks"); !strings.HasPrefix(out, "## Tasks\nBacklog (1)\n  T1   open     First") || strings.Contains(out, "## Project") {
+		t.Errorf("--part tasks:\n%s", out)
+	}
+	if out := h.ok(human, "context", "--part", "upkeep"); out != "(nothing in upkeep now)\n" {
+		t.Errorf("--part upkeep: %q", out)
+	}
+	h.expect(2, "--part takes one of project", human, "context", "--part", "bogus")
+	h.expect(2, "usage", human, "context", "--part", "tasks", "--startup")
+	out := h.ok(human, "context", "--startup")
+	if !strings.HasPrefix(out, "Your rules (`tm skill coordinator`) and PROJECT.md are in your system prompt") ||
+		!strings.Contains(out, "## Tasks\nBacklog (1)\n") || !strings.HasSuffix(out, project.StartupTail) || len(out) > project.StartupBudget {
+		t.Errorf("--startup (%d bytes):\n%s", len(out), out)
+	}
+	var js map[string]any
+	if err := json.Unmarshal([]byte(h.ok(human, "context", "--startup", "--json")), &js); err != nil || js["role"] != "coordinator" || js["cut"] != false || js["text"] != out {
+		t.Errorf("--startup --json: %v %v", js, err)
+	}
+}
+
 func TestBrokenTasksFileExits3(t *testing.T) {
 	h := newHarness(t)
 	h.ok(human, "project", "new", "demo")
@@ -329,6 +355,16 @@ func TestSkillAndOpen(t *testing.T) {
 	}
 	h.expect(2, "no rules for role", human, "skill", "boss")
 	h.expect(2, "usage", human, "skill")
+	// --section prints one section after the version line.
+	sec := h.ok(coord, "skill", "coordinator", "--section", "QUESTIONS")
+	if !strings.HasPrefix(sec, "tm skill coordinator v") || !strings.Contains(sec, "\n\n## Questions\n") || strings.Count(sec, "\n## ") != 1 {
+		t.Errorf("--section:\n%s", sec)
+	}
+	if sec := h.ok(thr, "skill", "thread", "--section", "how you"); strings.Count(sec, "\n## ") != 2 || strings.Contains(sec, "## Safety") {
+		t.Errorf("--section by prefix:\n%s", sec)
+	}
+	h.expect(1, "Safety, How you work, How you report", thr, "skill", "thread", "--section", "nope")
+	h.expect(2, "usage", thr, "skill", "thread", "--section", " ")
 
 	h.ok(human, "project", "new", "demo")
 	// Opening needs the server (the e2e scenarios); refusals come first.

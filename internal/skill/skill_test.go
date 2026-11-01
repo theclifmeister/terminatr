@@ -42,7 +42,7 @@ func TestText(t *testing.T) {
 		"`accept` T<n>: their word", "It is the only way besides chat", "`send-back` T<n>", "propose a new thread for it with the note", "`--note \"Check: …\"`", "standing acceptance", "`task-done`: tm completed a task", "A send-back on a done task reopens it", "`pr-conflict`", "`close-held`", "Approve a thread's permission prompt only", "--model", "unknown-model", "project-paused", "model-not-allowed", "agent-not-allowed", "Agent and model per job",
 		"Propose nothing yet", "to memory as they happen, without being asked", "only when the user asks you to", "a slot is free", "anything it assumed",
 		"`tm thread answer <id> --choice N`", "`--question K`", "Never choose an answer yourself", "uploads/ folder", "attachments",
-		"or a task id", "Talk to the user in task ids", "short and factual", "merge and rewrite", "re-read it", "no longer true", "your own short summary", "Upkeep section", "`[tm] Upkeep after the clear`", "the lowest context that keeps every live fact", "rules, not stories", "except on a user decision someone may question", "others link `[[note]]`", "never store what the code, git or docs already say", "version-specific facts", "candidates for a code task", "workaround for tm's own behaviour that every user would hit", "Workarounds for the project's own setup", "work around tm's own behaviour every user would hit and list them", "`## Needs you` heading", "auto_clear", "`terminatr` context block holds `tm context`",
+		"or a task id", "Talk to the user in task ids", "short and factual", "merge and rewrite", "re-read it", "no longer true", "your own short summary", "Upkeep section", "`[tm] Upkeep after the clear`", "the lowest context that keeps every live fact", "rules, not stories", "except on a user decision someone may question", "others link `[[note]]`", "never store what the code, git or docs already say", "version-specific facts", "candidates for a code task", "workaround for tm's own behaviour that every user would hit", "Workarounds for the project's own setup", "work around tm's own behaviour every user would hit and list them", "`## Needs you` heading", "auto_clear", "`terminatr` context block holds an index of `tm",
 		"`tm thread merge T<n>`", "as its own command, never chained", "never `gh pr merge`, `az repos pr update`", "don't poll it", "`not-green`", "`conflicting`", "`merge-not-allowed`", "`no-pr`", "a merge is `tm thread merge`, never gh or az",
 		"Run `tm` commands bare", "no `cd` (your working folder is the project folder already)", "no pipe (`| tail`), no `2>&1`",
 		"## Opening PRs", "Threads push their branch and report; they don't open PRs", "gh pr create --head <branch> --base <default>", "--body-file", "az repos pr create --source-branch", "az rest --method post", "tm finds the PR by the thread's branch", "`tm ask add", "`[tm] answer questions`", "`tm ask list --json`", "AskUserQuestion", "`tm ask done Q<n>`", "Never open the dialog unasked"} {
@@ -104,6 +104,26 @@ func TestBundledPolicy(t *testing.T) {
 		}
 		if strings.Contains(got, "(mod: "+mod.BundledPolicy+")") {
 			t.Errorf("%s: the built-in policy is marked as a mod's", role)
+		}
+	}
+}
+
+// TestSections: Sections finds a section by its heading, ignoring case,
+// else every heading that starts with the name.
+func TestSections(t *testing.T) {
+	text := "tm skill r v1\n\n## Safety\n\nBe safe.\n\n## House rules (mod: a)\n\nA.\n\n\n## House rules (mod: b)\n\nB.\n### Sub\nb2\n"
+	if got := Headings(text); strings.Join(got, "|") != "Safety|House rules (mod: a)|House rules (mod: b)" {
+		t.Errorf("headings: %q", got)
+	}
+	for name, want := range map[string]string{
+		"safety":                "## Safety\n\nBe safe.\n",
+		" House rules (MOD: b)": "## House rules (mod: b)\n\nB.\n### Sub\nb2\n",
+		"house rules":           "## House rules (mod: a)\n\nA.\n\n## House rules (mod: b)\n\nB.\n### Sub\nb2\n",
+		"sub":                   "",
+		"":                      "",
+	} {
+		if got := Sections(text, name); got != want {
+			t.Errorf("Sections(%q) = %q, want %q", name, got, want)
 		}
 	}
 }

@@ -1,9 +1,13 @@
 ## Each turn
 
-1. Your `terminatr` context block holds `tm context` as of this
-   conversation's start: goal, standing instructions, CONTEXT.md, memory
-   index, tasks, threads, inbox, journal. It is your memory, so clearing
-   your context loses nothing. Later turns, refresh what the turn needs:
+1. Your rules and PROJECT.md are in your system prompt; when either
+   changed since your session started, the block's first lines say to
+   re-read it. Your `terminatr` context block holds an index of `tm
+   context` as of this conversation's start: goal, needs you, CONTEXT.md,
+   memory index, tasks, threads, inbox, journal. A part that shows less
+   ends with the `tm context --part <name>` that prints it in full; run
+   it when the turn needs that part. It is your memory, so clearing your
+   context loses nothing. Later turns, refresh what the turn needs:
    `tm inbox list`, `tm thread list`, `tm thread show <id>`, `tm task
    list`, or `tm context` again for everything. No block: run `tm
    context`.
@@ -297,8 +301,11 @@ You are the only agent that writes it.
   for a fix in tm. Workarounds for the project's own setup (its
   toolchain, test setup, VMs, cloud CLIs) may stay.
 - Keep CONTEXT.md, MEMORY.md and memory/ short and factual: the lowest
-  context that keeps every live fact. When a file grows, re-read it,
-  merge and rewrite it, and drop what is no longer true. The Upkeep
+  context that keeps every live fact. CONTEXT.md holds only the current
+  state (Needs you, what is in flight, what comes next) within its 3 KB
+  budget, so a fresh conversation gets it whole; a lasting fact goes in
+  a memory note. When a file grows, re-read it, merge and rewrite it,
+  and drop what is no longer true. The Upkeep
   section of `tm context` names a file over its budget (memory/ also
   has one for all notes together): consolidate it that turn.
   `[tm] Upkeep after the clear` comes once after a clear when some are
