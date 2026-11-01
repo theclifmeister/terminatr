@@ -17,12 +17,14 @@ import (
 
 const taskUsage = `usage: tm task <command> [--project <slug>] [--json]
 
-  add "title" [--notes "…" | --notes-file F] [--step "…"]... [--status S] [--owner O] [--repo R]
+  add "title" [--notes "…" | --notes-file F] [--step "…"]... [--status S] [--priority P] [--owner O] [--repo R]
       [--template NAME]         a mod's task template: its title around "title", its notes, its steps first
       --repo R                  the repo its thread works in: a project repo's name or path, or none
                                 (a folder without git); needed to delegate in a project with several repos
-  add --json < plan.json        bulk: [{"title","notes","steps":[…],"status","owner","repo"}]
-  list [--status a,b] [--needs-you] [--archived]
+      --priority P              must, should, could or none: ranks the task within its group
+  add --json < plan.json        bulk: [{"title","notes","steps":[…],"status","priority","owner","repo"}]
+  list [--status a,b] [--priority a,b] [--needs-you] [--archived]
+                                by group, then priority (must, should, could, none), then id
   show T12
   status T12 <open|ready|started|blocked|review|done|dropped> [--note "…"]
   status T12 done --approved-by-user
@@ -30,7 +32,7 @@ const taskUsage = `usage: tm task <command> [--project <slug>] [--json]
   status T12 dropped --approved-by-user --note "why"
                                 the coordinator, once the user decided not to do it;
                                 never counted as done; any other status reopens it
-  edit T12 [--title "…"] [--notes "…" | --notes-file F] [--owner O] [--repo R] [--design NAME] [--after T10,T11]
+  edit T12 [--title "…"] [--notes "…" | --notes-file F] [--priority P] [--owner O] [--repo R] [--design NAME] [--after T10,T11]
   steps T12 add "text" | check N | uncheck N | rename N "text" | remove N
   archive T12 | unarchive T12
   delegate T12 [--agent A] [--model M] [--repo R] [--base B] [--approved-by-user] [--over-cap]
@@ -53,7 +55,7 @@ func runTask(e *Env, args []string) error {
 	case "add":
 		notes, notesFile := f.String("notes"), f.String("notes-file")
 		steps, status, owner := f.List("step"), f.String("status"), f.String("owner")
-		template, repo := f.String("template"), f.String("repo")
+		template, repo, priority := f.String("template"), f.String("repo"), f.String("priority")
 		run = func(p *project.Project, s *tasks.Store, pos []string) error {
 			var tpl *mod.Template
 			if *template != "" {
@@ -66,12 +68,14 @@ func runTask(e *Env, args []string) error {
 				}
 				tpl = &t
 			}
-			return taskAdd(e, p, s, pos, *asJSON, f, *notes, *notesFile, *steps, *status, *owner, *repo, tpl)
+			it := tasks.NewTask{Steps: *steps, Status: *status, Priority: *priority, Owner: *owner, Repo: *repo}
+			return taskAdd(e, p, s, pos, *asJSON, f, *notes, *notesFile, it, tpl)
 		}
 	case "list", "ls":
-		status, needsYou, archived := f.String("status"), f.Bool("needs-you"), f.Bool("archived")
+		status, priority := f.String("status"), f.String("priority")
+		needsYou, archived := f.Bool("needs-you"), f.Bool("archived")
 		run = func(p *project.Project, s *tasks.Store, pos []string) error {
-			return taskList(e, s, pos, *asJSON, *status, *needsYou, *archived)
+			return taskList(e, s, pos, *asJSON, *status, *priority, *needsYou, *archived)
 		}
 	case "show":
 		run = func(p *project.Project, s *tasks.Store, pos []string) error {
@@ -122,13 +126,19 @@ func runTask(e *Env, args []string) error {
 	case "edit":
 		title, notes, notesFile, owner := f.String("title"), f.String("notes"), f.String("notes-file"), f.String("owner")
 		repo, design, after := f.String("repo"), f.String("design"), f.String("after")
+		priority := f.String("priority")
 		run = func(p *project.Project, s *tasks.Store, pos []string) error {
-			id, err := oneRef(pos, 1, "edit T12 [--title …] [--notes … | --notes-file F] [--owner O] [--repo R] [--design NAME] [--after T10,T11]")
+			id, err := oneRef(pos, 1, "edit T12 [--title …] [--notes … | --notes-file F] [--priority P] [--owner O] [--repo R] [--design NAME] [--after T10,T11]")
 			if err != nil {
 				return err
 			}
-			if !f.anySet("title", "notes", "notes-file", "owner", "repo", "design", "after") {
-				return usagef("nothing to edit: pass --title, --notes, --notes-file, --owner, --repo, --design or --after")
+			if !f.anySet("title", "notes", "notes-file", "priority", "owner", "repo", "design", "after") {
+				return usagef("nothing to edit: pass --title, --notes, --notes-file, --priority, --owner, --repo, --design or --after")
+			}
+			if f.IsSet("priority") {
+				if _, ok := tasks.ParsePriority(*priority); !ok {
+					return &tasks.Error{Code: "invalid-priority", Msg: fmt.Sprintf("%q is not one of must, should, could, none", *priority)}
+				}
 			}
 			var tp, np, op, rp *string
 			if f.IsSet("title") {
@@ -160,7 +170,14 @@ func runTask(e *Env, args []string) error {
 					al = []string{*after}
 				}
 				changed := res.Changed
-				res, err = s.SetPlan(e.Caller, id, dp, al)
+				if res, err = s.SetPlan(e.Caller, id, dp, al); err != nil {
+					return e.done(res, err, *asJSON, "edited")
+				}
+				res.Changed = res.Changed || changed
+			}
+			if f.IsSet("priority") {
+				changed := res.Changed
+				res, err = s.SetPriority(e.Caller, id, *priority)
 				res.Changed = res.Changed || changed
 			}
 			return e.done(res, err, *asJSON, "edited")
@@ -294,23 +311,26 @@ func findTemplate(slug, ref string) (mod.Template, error) {
 // taskAdd adds the tasks: one from the title and flags, laid on tpl when
 // given (its title around the title; the notes flag's, else its notes;
 // its steps, then the step flags'), or a JSON plan's.
-func taskAdd(e *Env, p *project.Project, s *tasks.Store, pos []string, asJSON bool, f *flagSet, notes, notesFile string, steps []string, status, owner, repo string, tpl *mod.Template) error {
+// taskAdd adds the task named by pos, with its fields from the flags,
+// or the JSON plan on stdin.
+func taskAdd(e *Env, p *project.Project, s *tasks.Store, pos []string, asJSON bool, f *flagSet, notes, notesFile string, it tasks.NewTask, tpl *mod.Template) error {
 	var items []tasks.NewTask
 	switch {
 	case len(pos) == 0 && asJSON:
-		if f.anySet("notes", "notes-file", "step", "status", "owner", "repo") {
+		if f.anySet("notes", "notes-file", "step", "status", "priority", "owner", "repo") {
 			return usagef("a JSON plan on stdin carries its own fields; drop the other flags")
 		}
 		dec := json.NewDecoder(e.Stdin)
 		dec.DisallowUnknownFields()
 		if err := dec.Decode(&items); err != nil {
-			return usagef("plan on stdin: %v (want [{\"title\",\"notes\",\"steps\",\"status\",\"owner\",\"repo\"}])", err)
+			return usagef("plan on stdin: %v (want [{\"title\",\"notes\",\"steps\",\"status\",\"priority\",\"owner\",\"repo\"}])", err)
 		}
 		if len(items) == 0 {
 			return usagef("the plan is empty")
 		}
 	case len(pos) == 1:
-		it := tasks.NewTask{Title: pos[0], Steps: steps, Status: status, Owner: owner, Repo: repo}
+		steps := it.Steps
+		it.Title = pos[0]
 		if tpl != nil {
 			title, tnotes, tsteps := tpl.Apply(pos[0])
 			it.Title, it.Notes, it.Steps = title, tnotes, append(tsteps, steps...)
@@ -359,9 +379,20 @@ func taskAdd(e *Env, p *project.Project, s *tasks.Store, pos []string, asJSON bo
 	return nil
 }
 
-func taskList(e *Env, s *tasks.Store, pos []string, asJSON bool, status string, needsYou, archived bool) error {
+func taskList(e *Env, s *tasks.Store, pos []string, asJSON bool, status, priority string, needsYou, archived bool) error {
 	if len(pos) != 0 {
-		return usagef("usage: tm task list [--status a,b] [--needs-you] [--archived] (tm task show T12 for one task)")
+		return usagef("usage: tm task list [--status a,b] [--priority a,b] [--needs-you] [--archived] (tm task show T12 for one task)")
+	}
+	prio := map[tasks.Priority]bool{}
+	for _, name := range strings.Split(priority, ",") {
+		if strings.TrimSpace(name) == "" {
+			continue
+		}
+		p, ok := tasks.ParsePriority(name)
+		if !ok {
+			return usagef("unknown priority %q (must, should, could or none)", name)
+		}
+		prio[p] = true
 	}
 	want := map[tasks.Status]bool{}
 	for _, name := range strings.Split(status, ",") {
@@ -390,7 +421,7 @@ func taskList(e *Env, s *tasks.Store, pos []string, asJSON bool, status string, 
 	}
 	var shown []*tasks.Task
 	for _, t := range b.Tasks {
-		if len(want) == 0 || want[t.Status] {
+		if (len(want) == 0 || want[t.Status]) && (len(prio) == 0 || prio[t.Priority]) {
 			shown = append(shown, t)
 		}
 	}
