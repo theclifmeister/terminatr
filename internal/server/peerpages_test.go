@@ -38,7 +38,9 @@ func TestPeerPagesAllowlist(t *testing.T) {
 	if b, _ := json.Marshal(pt); strings.Count(string(b), "SECRET") != 5 {
 		t.Errorf("a task's other words crossed: %s", b)
 	}
-	if want := []string{"After", "Archived", "Created", "Design", "ID", "Notes", "Owner", "Repo", "Status", "Steps", "Thread", "Title", "Updated"}; !slices.Equal(fieldNames(reflect.TypeFor[tasks.Task]()), want) {
+	// Priority (T927) stays home: a paired server's board lists in its
+	// own order, without one.
+	if want := []string{"After", "Archived", "Created", "Design", "ID", "Notes", "Owner", "Priority", "Repo", "Status", "Steps", "Thread", "Title", "Updated"}; !slices.Equal(fieldNames(reflect.TypeFor[tasks.Task]()), want) {
 		t.Errorf("tasks.Task has %v: decide what of a new field a paired server's board sees (peerPageTaskOf)", fieldNames(reflect.TypeFor[tasks.Task]()))
 	}
 	if want := []string{"Done", "N", "Text"}; !slices.Equal(fieldNames(reflect.TypeFor[tasks.Step]()), want) {

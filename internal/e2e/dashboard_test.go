@@ -79,7 +79,7 @@ func TestSmokeDashboard(t *testing.T) {
 	w.Key(keyUp)
 	w.WaitFor("enter show", wait)
 	w.Key(keyEnter)
-	w.WaitFor("enter show · A accept · X send back · + new task", wait)
+	w.WaitFor("enter show · P priority · A accept · X send back · + new task", wait)
 	w.Prefix("a")
 	w.WaitFor("+ add repository", wait)
 	if strings.Contains(w.Screen(), "Accept T1?") {

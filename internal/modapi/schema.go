@@ -154,6 +154,9 @@ type Task struct {
 	// it comes after ("T10").
 	Design string   `json:"design,omitempty"`
 	After  []string `json:"after,omitempty"`
+	// Mod API 1.13: its priority, must, should or could; none while it
+	// has none. The list is in board order: by group, then priority.
+	Priority string `json:"priority,omitempty"`
 }
 
 // TaskStep is one step of a task (mod API 1.2).

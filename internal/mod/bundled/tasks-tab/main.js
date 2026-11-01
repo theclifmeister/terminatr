@@ -16,10 +16,12 @@
     for (const g of GROUPS) if (g.statuses.includes(status2)) return g.id;
     return "on-deck";
   }
+  var PRIOS = ["", "must", "should", "could", "none"];
   var tabs = /* @__PURE__ */ new Map();
   function actions(project, t) {
     const task = { project, task: t.id };
     const out = [{ id: "task.show", target: task }];
+    if (!closed(groupOf(t.status))) out.push({ id: "task.priority", target: task });
     const ask = (id) => {
       if (!t.asked) out.push({ id, target: task });
     };
@@ -58,7 +60,12 @@
       { text: " " + s, role }
     ];
   }
-  function row(project, t) {
+  function priority(p) {
+    if (!p) return [];
+    const role = { must: "warn", should: void 0, could: "faint" };
+    return [{ text: p, role: role[p] }];
+  }
+  function row(project, t, prio) {
     var _a, _b;
     const rest = [];
     if (t.asked) rest.push({ text: "asked the coordinator", role: "warn" });
@@ -66,7 +73,7 @@
     if (more) rest.push({ text: (rest.length > 0 ? "  " : "") + more, role: "faint" });
     const r = {
       id: t.id,
-      cells: [[{ text: t.id }], [{ text: t.title }], status(t.status), rest],
+      cells: [[{ text: t.id }], ...prio ? [priority(t.priority)] : [], [{ text: t.title }], status(t.status), rest],
       actions: actions(project, t)
     };
     if (!closed(groupOf(t.status)) && ((_b = t.steps) != null ? _b : []).length > 0) {
@@ -82,7 +89,10 @@
     const out = [];
     for (const g of GROUPS) {
       if (closed(g.id) && !t.doneAll) continue;
-      const in_ = t.tasks.filter((x) => groupOf(x.status) === g.id);
+      const in_ = t.tasks.filter((x) => groupOf(x.status) === g.id && wanted(t, x));
+      if (!closed(g.id)) {
+        in_.sort((a, b) => rank(a.priority) - rank(b.priority) || num(a.id) - num(b.id));
+      }
       if (closed(g.id)) {
         in_.sort((a, b) => {
           var _a, _b;
@@ -93,6 +103,14 @@
     }
     return out;
   }
+  function wanted(t, x) {
+    var _a;
+    return t.prio === "" || ((_a = x.priority) != null ? _a : "none") === t.prio;
+  }
+  function rank(p) {
+    const i = ["must", "should", "could"].indexOf(p != null ? p : "");
+    return i < 0 ? 3 : i;
+  }
   function num(id) {
     return Number(id.slice(1)) || 0;
   }
@@ -102,17 +120,19 @@
     }
     const rows = [];
     let group = "";
-    for (const task of shown(t)) {
+    const list = shown(t);
+    const prio = list.some((x) => !!x.priority);
+    for (const task of list) {
       const g = groupOf(task.status);
       if (g !== group) {
         group = g;
         const title = GROUPS.find((x) => x.id === g).title;
         rows.push({ id: "g:" + g, head: true, spans: [{ text: title, role: g === "needs-you" ? "warn" : "head" }] });
       }
-      rows.push(row(project, task));
+      rows.push(row(project, task, prio));
     }
-    const done = t.tasks.filter((x) => x.status === "done").length;
-    const dropped = t.tasks.filter((x) => x.status === "dropped").length;
+    const done = t.tasks.filter((x) => x.status === "done" && wanted(t, x)).length;
+    const dropped = t.tasks.filter((x) => x.status === "dropped" && wanted(t, x)).length;
     const folded = !t.doneAll && done + dropped > 0;
     if (folded && done > 0) rows.push({ id: "g:done", head: true, spans: [{ text: "DONE", role: "head" }] });
     if (folded && dropped > 0) rows.push({ id: "g:dropped", head: true, spans: [{ text: "DROPPED", role: "head" }] });
@@ -120,8 +140,8 @@
       {
         kind: "table",
         id: TABLE,
-        empty: "no tasks",
-        columns: [{ title: "" }, { title: "" }, { title: "" }, { title: "" }],
+        empty: t.prio ? `no ${t.prio === "none" ? "tasks without a priority" : t.prio + " tasks"}` : "no tasks",
+        columns: Array.from({ length: prio ? 5 : 4 }, () => ({ title: "" })),
         rows
       }
     ];
@@ -129,7 +149,13 @@
       const counts = [done > 0 ? `${done} done` : "", dropped > 0 ? `${dropped} dropped` : ""].filter((s) => s !== "").join(", ");
       children.push({ kind: "text", text: `… ${counts} (b shows them)`, role: "faint" });
     }
+    if (t.prio) {
+      const which = t.prio === "none" ? "the tasks without a priority" : `the ${t.prio} tasks`;
+      children.push({ kind: "text", text: `only ${which} (p for the next)`, role: "faint" });
+    }
     const keys = t.doneAll || done + dropped > 0 ? [{ key: "b", label: t.doneAll ? "hide done" : "done" }] : [];
+    const next = PRIOS[(PRIOS.indexOf(t.prio) + 1) % PRIOS.length];
+    keys.push({ key: "p", label: next === "" ? "all priorities" : next === "none" ? "no priority only" : `${next} only` });
     children.push({ kind: "keys", id: "keys", keys, actions: [{ id: "task.new", target: { project } }] });
     return { kind: "stack", children };
   }
@@ -161,7 +187,7 @@
   $.on("view.opened", async (e) => {
     var _a;
     if (e.view !== VIEW || !e.project) return;
-    const t = (_a = tabs.get(e.project)) != null ? _a : { tasks: [], doneAll: false, error: "" };
+    const t = (_a = tabs.get(e.project)) != null ? _a : { tasks: [], doneAll: false, prio: "", error: "" };
     tabs.set(e.project, t);
     await load(e.project, t);
     if (e.task && t.tasks.some((x) => x.id === e.task && closed(groupOf(x.status)))) t.doneAll = true;
@@ -176,10 +202,11 @@
   $.on("ui.key", async (e) => {
     var _a;
     const project = (_a = e.target) == null ? void 0 : _a.project;
-    if (e.view !== VIEW || !project || e.key !== "b") return;
+    if (e.view !== VIEW || !project || e.key !== "b" && e.key !== "p") return;
     const t = tabs.get(project);
     if (!t) return;
-    t.doneAll = !t.doneAll;
+    if (e.key === "b") t.doneAll = !t.doneAll;
+    else t.prio = PRIOS[(PRIOS.indexOf(t.prio) + 1) % PRIOS.length];
     await publish(project, t);
   });
 })();

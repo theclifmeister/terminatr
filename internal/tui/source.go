@@ -257,6 +257,10 @@ type ProjectSource interface {
 	// tpl laid on it when not nil (tm task add --template), and returns
 	// its ref (T12). It is refused when tm runs inside an agent.
 	AddTask(slug, title string, tpl *mod.Template) (string, error)
+	// SetPriority sets the priority of the project's task id as the
+	// human (tm task edit --priority): must, should, could or none ("").
+	// It reports whether that changed it.
+	SetPriority(slug string, id int, p tasks.Priority) (bool, error)
 	// Ask asks the project's coordinator to act on task id: an inbox
 	// item of kind (project.KindDelegate, KindAccept or KindSendBack,
 	// with the user's note) that is the user's word (docs/SPEC.md §4).

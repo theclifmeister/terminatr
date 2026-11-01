@@ -376,6 +376,7 @@
      "notes": "A page listing what the shopper saved, with Add to cart on each.\n\nSaved items sync across devices once signed in.",
      "ref": "T17",
      "status": "ready",
+     "priority": "should",
      "steps": [
       {
        "done": false,
@@ -408,6 +409,7 @@
      "notes": "Gift card codes at checkout, applied before tax. Partial balances stay on the card.",
      "ref": "T18",
      "status": "ready",
+     "priority": "must",
      "steps": [],
      "title": "Gift cards at checkout",
      "updated": "2026-10-26"
@@ -440,6 +442,7 @@
      "notes": "Run axe and VoiceOver over the product page; file a task for each finding.",
      "ref": "T20",
      "status": "open",
+     "priority": "should",
      "steps": [],
      "title": "Accessibility audit of the product page",
      "updated": "2026-10-26"
@@ -2607,7 +2610,7 @@
   }
  },
  "hello": {
-  "app_api": 41,
+  "app_api": 42,
   "build": "demo",
   "capabilities": [
    "read",
@@ -2634,6 +2637,7 @@
    "session.prompt",
    "session.keys",
    "task.add",
+   "task.priority",
    "task.templates",
    "task.delegate",
    "project.open",
@@ -2663,7 +2667,8 @@
     "peer-designs",
     "project-mods",
     "answer-picks",
-    "search"
+    "search",
+    "task-priority"
    ],
    "protocol": 1,
    "version": "0.56.1"
@@ -2679,17 +2684,27 @@
       "active": true,
       "board": [
        {
+        "id": 18,
+        "ref": "T18",
+        "status": "ready",
+        "priority": "must",
+        "title": "Gift cards at checkout",
+        "updated": "2026-10-26"
+       },
+       {
         "id": 17,
         "ref": "T17",
         "status": "ready",
+        "priority": "should",
         "title": "Wishlist page",
         "updated": "2026-10-26"
        },
        {
-        "id": 18,
-        "ref": "T18",
-        "status": "ready",
-        "title": "Gift cards at checkout",
+        "id": 20,
+        "ref": "T20",
+        "status": "open",
+        "priority": "should",
+        "title": "Accessibility audit of the product page",
         "updated": "2026-10-26"
        },
        {
@@ -2697,13 +2712,6 @@
         "ref": "T19",
         "status": "open",
         "title": "Recently viewed strip on the product page",
-        "updated": "2026-10-26"
-       },
-       {
-        "id": 20,
-        "ref": "T20",
-        "status": "open",
-        "title": "Accessibility audit of the product page",
         "updated": "2026-10-26"
        },
        {

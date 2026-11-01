@@ -36,14 +36,16 @@ public enum Dashboard {
         return ThreadGroup.allCases.compactMap { g in by[g].map { (g, $0) } }
     }
 
-    /// The board's tasks on deck (ready), in board order.
+    /// The board's tasks on deck (ready), in board order: by priority
+    /// (must, should, could, none), then id.
     public static func onDeck(_ p: AppAPI.Project) -> [AppAPI.Task] {
-        p.board.filter { $0.status == "ready" }
+        Priority.sorted(p.board.filter { $0.status == "ready" })
     }
 
-    /// The board's backlog (open tasks), in board order.
+    /// The board's backlog (open tasks), in board order: by priority,
+    /// then id.
     public static func backlog(_ p: AppAPI.Project) -> [AppAPI.Task] {
-        p.board.filter { $0.status == "open" }
+        Priority.sorted(p.board.filter { $0.status == "open" })
     }
 
     /// How many of the board's tasks are done (its counts'), which the

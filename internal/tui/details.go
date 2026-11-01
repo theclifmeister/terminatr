@@ -291,6 +291,7 @@ func (m *dash) taskUsage(slug string, id int) thread.Usage {
 func taskPanelWith(d *panel, t *tasks.Task, rv *Review, asked string, usage thread.Usage, badges []modstore.Badge) {
 	d.title(t.Ref()+" "+t.Title, string(t.Status))
 	d.badges(badges)
+	d.field("priority", string(t.Priority))
 	d.field("thread", t.Thread)
 	d.field("usage", usage.String())
 	d.field("design", t.Design)

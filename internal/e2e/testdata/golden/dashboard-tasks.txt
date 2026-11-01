@@ -9,6 +9,7 @@
      │                                                                                        │
      │ IN MOTION ──────────────────────────────────────────────────────────────────────────── │
      │ T2  Ship it           ● started                                                        │
+     │ p must only                                                                            │
      │                                                                                        │
      │                                                                                        │
      │                                                                                        │
@@ -16,9 +17,8 @@
      │                                                                                        │
      │                                                                                        │
      │                                                                                        │
-     │                                                                                        │
-     │ enter show · A accept · X send back · + new task · ↑ ↓ move · / filter · ← → tabs      │
- ────│ esc close                                                                              │
+     │ enter show · P priority · A accept · X send back · + new task · ↑ ↓ move · / filter    │
+ ────│ ← → tabs · esc close                                                                   │
  demo╰────────────────────────────────────────────────────────────────────────────────────────╯─────
  0 threads · coordinator not runn… │
  tab sidebar · ? help              │

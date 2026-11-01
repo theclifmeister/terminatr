@@ -118,7 +118,7 @@ func TestProjectPopup(t *testing.T) {
 	}
 	keyPress(m, "right")
 	out = screen(m)
-	for _, want := range []string{"IN MOTION", "T1  Write the README  ● started  1/2 t-0002", "✓ Draft", "Review", "ON DECK", "T2  Ship it", "enter show · + new task · ↑ ↓ move"} {
+	for _, want := range []string{"IN MOTION", "T1  Write the README  ● started  1/2 t-0002", "✓ Draft", "Review", "ON DECK", "T2  Ship it", "enter show · P priority · + new task · ↑ ↓ move"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("tasks tab lacks %q:\n%s", want, out)
 		}
@@ -693,7 +693,7 @@ func TestAcceptTask(t *testing.T) {
 	src, m := needsYouData(t, 86+sideDefault)
 	feed(m, keyPress(m, "A"))
 	keyPress(m, "3")
-	if out := screen(m); !strings.Contains(out, "enter show · A accept · X send back · + new task") {
+	if out := screen(m); !strings.Contains(out, "enter show · P priority · A accept · X send back · + new task") {
 		t.Fatalf("review keys:\n%s", out)
 	}
 	pressKey(t, m, "A")
@@ -828,7 +828,7 @@ func TestReviewDetail(t *testing.T) {
 	pressKey(t, m, "enter")
 	out := screen(m)
 	for _, want := range []string{"PR #61 merged",
-		"HOW TO CHECK", "• Run tm, press t", "• the bell shows whole", "A accept · X send back · esc back"} {
+		"HOW TO CHECK", "• Run tm, press t", "• the bell shows whole", "A accept · X send back · P priority · esc back"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("review detail lacks %q:\n%s", want, out)
 		}
@@ -872,12 +872,12 @@ func TestBlockedTask(t *testing.T) {
 	src, m := needsYouData(t, 86+sideDefault)
 	feed(m, keyPress(m, "T"))
 	keyPress(m, "down")
-	if out := screen(m); !strings.Contains(out, "enter show · c coordinator · D delegate · + new task") {
+	if out := screen(m); !strings.Contains(out, "enter show · P priority · c coordinator · D delegate · + new task") {
 		t.Fatalf("blocked keys:\n%s", out)
 	}
 	pressKey(t, m, "enter")
 	out := screen(m)
-	if !strings.Contains(out, "Blocked on: which licence, MIT or Apache?") || !strings.Contains(out, "c coordinator · D delegate · esc back") {
+	if !strings.Contains(out, "Blocked on: which licence, MIT or Apache?") || !strings.Contains(out, "c coordinator · D delegate · P priority · esc back") {
 		t.Fatalf("blocked detail:\n%s", out)
 	}
 	drain(t, m, keyPress(m, "c"))
@@ -900,7 +900,7 @@ func TestNeedsYouNarrow(t *testing.T) {
 	feed(m, keyPress(m, "T"))
 	// The keys are the popup's action row, inside its frame.
 	foot := func() string { return screen(m) }
-	if f := foot(); !strings.Contains(f, "enter show · A accept · X send back · + new task") {
+	if f := foot(); !strings.Contains(f, "enter show · P priority · A accept · X send back · + new task") {
 		t.Fatalf("t list keys:\n%s", f)
 	}
 	pressKey(t, m, "A")
@@ -910,16 +910,16 @@ func TestNeedsYouNarrow(t *testing.T) {
 	}
 	stillRows(t) // T3's row changed
 	pressKey(t, m, "enter")
-	if f := foot(); !strings.Contains(f, "A accept · X send back · esc back") {
+	if f := foot(); !strings.Contains(f, "A accept · X send back · P priority · esc back") {
 		t.Fatalf("shown task keys:\n%s", f)
 	}
 	keyPress(m, "esc")
 	keyPress(m, "down")
-	if f := foot(); !strings.Contains(f, "enter show · c coordinator · D delegate · + new task") {
+	if f := foot(); !strings.Contains(f, "enter show · P priority · c coordinator · D delegate · + new task") {
 		t.Fatalf("blocked keys:\n%s", f)
 	}
 	pressKey(t, m, "enter")
-	if f := foot(); !strings.Contains(f, "c coordinator · D delegate · esc back") {
+	if f := foot(); !strings.Contains(f, "c coordinator · D delegate · P priority · esc back") {
 		t.Fatalf("blocked shown keys:\n%s", f)
 	}
 	keyPress(m, "esc")
@@ -927,7 +927,7 @@ func TestNeedsYouNarrow(t *testing.T) {
 	feed(m, keyPress(m, "A"))
 	keyPress(m, "3")
 	keyPress(m, "up") // the tab keeps its cursor: back to T3
-	if f := foot(); !strings.Contains(f, "enter show · + new task") || strings.Contains(f, "A accept") {
+	if f := foot(); !strings.Contains(f, "enter show · P priority · + new task") || strings.Contains(f, "A accept") {
 		t.Fatalf("Tasks tab keys:\n%s", f)
 	}
 	if out := screen(m); !strings.Contains(lineWith(out, "Check it"), "asked the coordinator") {

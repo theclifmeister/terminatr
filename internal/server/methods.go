@@ -291,6 +291,9 @@ func init() {
 		proto.MethodTaskAdd: {gate: gateHuman, call: typed(func(s *Server, p proto.TaskAddParams, c callCtx) (any, *proto.Error) {
 			return s.taskAdd(p, c)
 		})},
+		proto.MethodTaskPriority: {gate: gateHuman, call: typed(func(s *Server, p proto.TaskPriorityParams, c callCtx) (any, *proto.Error) {
+			return s.taskPriority(p, c)
+		})},
 		proto.MethodProjectOpen: {gate: gateHuman, call: typed(func(s *Server, p proto.ProjectOpenParams, c callCtx) (any, *proto.Error) {
 			return s.projectOpen(p, c)
 		})},

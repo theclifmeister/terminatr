@@ -10,6 +10,7 @@
       │                                                                                                          │
       │ ON DECK ──────────────────────────────────────────────────────────────────────────────────────────────── │
       │ T2  Ship it           ○ ready                                                                            │
+      │ p must only                                                                                              │
       │                                                                                                          │
       │                                                                                                          │
       │                                                                                                          │
@@ -33,8 +34,7 @@
       │                                                                                                          │
       │                                                                                                          │
       │                                                                                                          │
-      │                                                                                                          │
- ─────│ enter show · + new task · ↑ ↓ move · / filter · ← → tabs · esc close                                     │
+ ─────│ enter show · P priority · + new task · ↑ ↓ move · / filter · ← → tabs · esc close                        │
  demo ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────╯──────
  0 threads · coordinator not runn… │
  tab sidebar · ? help              │

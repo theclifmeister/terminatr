@@ -17,7 +17,7 @@
       │ ● Memory tab         code · view · built in    1.0.0  built in · reads your projects · draws its own pa… │─────
       │ ● Nerd Font icons    icons · built in          1.0.0  built in · safe                                    │
       │ ● PR/CI column       code · column · built in  1.0.0  built in · reads your projects                     │
-      │ ● Tasks tab          code · view · built in    1.0.0  built in · reads your projects · draws its own pa… │
+      │ ● Tasks tab          code · view · built in    1.1.0  built in · reads your projects · draws its own pa… │
       │ ● Ticker             code · view · built in    1.0.0  built in · reads your projects · draws its own pa… │
       │ ● Unicode icons      icons · built in          1.0.0  built in · safe                                    │
       │                                                                                                          │

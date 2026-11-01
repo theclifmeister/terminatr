@@ -398,3 +398,34 @@ func TestOffKeepsCanvases(t *testing.T) {
 		t.Errorf("canvas removed: %v", err)
 	}
 }
+
+// TestTasksBasePriority (T927): the Tasks Base shows a task's priority
+// and its Board and Cards sort by it, must first, through a rank
+// formula (priority is text, which sorts could, must, should).
+func TestTasksBasePriority(t *testing.T) {
+	var doc struct {
+		Formulas map[string]string `yaml:"formulas"`
+		Views    []struct {
+			Name  string   `yaml:"name"`
+			Order []string `yaml:"order"`
+			Sort  []struct {
+				Property  string `yaml:"property"`
+				Direction string `yaml:"direction"`
+			} `yaml:"sort"`
+		} `yaml:"views"`
+	}
+	if err := yaml.Unmarshal([]byte(bases([]string{"demo"})[0].text), &doc); err != nil {
+		t.Fatal(err)
+	}
+	if f := doc.Formulas["rank"]; !strings.Contains(f, `priority == "must", 1`) || !strings.Contains(f, `priority == "could", 3, 4`) {
+		t.Errorf("rank formula %q", f)
+	}
+	for _, v := range doc.Views {
+		if v.Name != "Board" && v.Name != "Cards" {
+			continue
+		}
+		if len(v.Sort) == 0 || v.Sort[0].Property != "formula.rank" || v.Sort[0].Direction != "ASC" || !slices.Contains(v.Order, "priority") {
+			t.Errorf("%s: sort %+v, order %v", v.Name, v.Sort, v.Order)
+		}
+	}
+}
