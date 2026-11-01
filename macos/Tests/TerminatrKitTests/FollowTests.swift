@@ -367,3 +367,53 @@ private func run(_ g: inout Glide, frames: Int = 600, end: (Int) -> Double) -> (
     #expect(g.landed && r.past <= 0)
     #expect(Double(r.n) / 60 <= Glide.longest + Glide.settleLongest + 2.0 / 60)
 }
+
+/// The follower's glide (T901): output that comes while it settles
+/// keeps it on the end until that holds again, settleLongest anew; a
+/// spring still running is left as it is.
+@Test func glideRenewedByOutput() {
+    var g = Glide(offset: 1500, target: 1500, visible: 800, instant: true)
+    for _ in 0..<(Glide.hold - 1) { _ = g.step(to: 1500, dt: 1 / 60) }
+    g.renew()
+    // The next entry's estimate, then its height: on it each frame.
+    let first = g.step(to: 1580, dt: 1 / 60)
+    #expect(!first && g.offset == 1580)
+    let second = g.step(to: 1640, dt: 1 / 60)
+    #expect(!second && g.offset == 1640)
+    var n = 0
+    while !g.step(to: 1640, dt: 1 / 60) { n += 1 }
+    #expect(n + 1 == Glide.hold && g.offset == 1640)
+
+    // Renewed near settleLongest, it settles that long again.
+    var h = Glide(offset: 0, target: 1000, visible: 800, instant: true)
+    var t = 0
+    while t < 20 { _ = h.step(to: 1000 + Double(t) * 3, dt: 1 / 60); t += 1 }
+    #expect(!h.landed)
+    h.renew()
+    t = 0
+    while !h.step(to: 2000 + Double(t) * 3, dt: 1 / 60) { t += 1 }
+    #expect(Double(t + 1) / 60 >= Glide.settleLongest - 1e-9 && h.offset == 2000 + Double(t) * 3)
+
+    var s = Glide(offset: 0, target: 1500, visible: 800)
+    _ = s.step(to: 1500, dt: 1 / 60)
+    let before = s
+    s.renew()
+    #expect(s == before)
+}
+
+/// The follower's glide marks the follow as gliding: rows laying out
+/// as it goes don't stop the follow, new output doesn't scroll on its
+/// own, and the user's finger ends it.
+@Test func followGlideKeepsFollowing() {
+    var f = Follow()
+    let toEnd = f.arrived([1, 2])
+    #expect(toEnd)
+    f.glide(newest: nil)
+    f.scrolled(offset: 1000, visible: 800, content: 2400, newest: 2)
+    f.scrolled(offset: 900, visible: 800, content: 2600, newest: 2)
+    #expect(f.following && f.gliding)
+    let again = f.arrived([1, 2, 3])
+    #expect(!again)
+    f.moved(by: true, resting: false)
+    #expect(!f.gliding && f.following)
+}

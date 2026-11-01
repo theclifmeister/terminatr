@@ -9,7 +9,8 @@ import UIKit
 /// lands. While Glide aims its start (T896: the rows there lay out a
 /// frame on, and can move the end up past it) a still image of the view
 /// covers it, so the start never shows past the end. The user's finger
-/// on the scroll ends it.
+/// on the scroll ends it. The follower goes to the end by one too, an
+/// instant one (T901), renewed as more output comes.
 @MainActor final class Glider: NSObject {
     /// The conversation's UIScrollView (ScrollViewHook finds it).
     weak var scrollView: UIScrollView?
@@ -46,6 +47,12 @@ import UIKit
         l.add(to: .main, forMode: .common)
         link = l
         return true
+    }
+
+    /// More output came while a glide runs (T901): it keeps to the end
+    /// until that holds again (Glide.renew).
+    func renew() {
+        glide?.renew()
     }
 
     /// Ends a glide where it is.
