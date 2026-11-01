@@ -95,13 +95,14 @@ import TerminatrKit
         sv.contentView.bounds.origin.y
     }
 
-    /// The offset at the end: the furthest down the clip view lets it
-    /// be, the insets of the bars at its foot included.
+    /// The offset at the end: the document's foot at the clip view's,
+    /// past the insets of the bars over it (footBar's). Not the clip
+    /// view's constrainBoundsRect: SwiftUI's answers 0, the top, for an
+    /// origin far down.
     static func end(_ sv: NSScrollView) -> Double {
         let clip = sv.contentView
-        var r = clip.bounds
-        r.origin.y = .greatestFiniteMagnitude / 4
-        return clip.constrainBoundsRect(r).origin.y
+        let doc = sv.documentView?.frame.height ?? 0
+        return max(-clip.contentInsets.top, doc + clip.contentInsets.bottom - clip.bounds.height)
     }
 
     private func set(_ sv: NSScrollView, _ y: Double) {
