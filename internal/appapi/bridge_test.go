@@ -298,9 +298,16 @@ func TestBridgeTaskActions(t *testing.T) {
 	if err := c.Call(proto.MethodTaskAdd, appapi.TaskAddParams{Project: "web", Title: "Add docs"}, &added); err != nil || added.Task != "T4" || !added.Existing {
 		t.Fatalf("task.add again: %+v %v", added, err)
 	}
+	var prio appapi.TaskPriorityResult
+	if err := c.Call(proto.MethodTaskPriority, appapi.TaskPriorityParams{Project: "web", Task: "T4", Priority: "should"}, &prio); err != nil || !prio.Changed {
+		t.Fatalf("task.priority: %+v %v", prio, err)
+	}
+	if err := c.Call(proto.MethodTaskPriority, appapi.TaskPriorityParams{Project: "web", Task: "T4", Priority: "urgent"}, nil); code(err) != "invalid-priority" {
+		t.Errorf("task.priority urgent: %v", err)
+	}
 	var got appapi.Task
 	if err := c.Call(proto.MethodTaskGet, appapi.TaskGetParams{Project: "web", Task: "T4"}, &got); err != nil ||
-		got.Ref != "T4" || got.Title != "Add docs" || got.Notes != "From the app." {
+		got.Ref != "T4" || got.Title != "Add docs" || got.Notes != "From the app." || got.Priority != "should" {
 		t.Fatalf("task.get: %+v %v", got, err)
 	}
 	if err := c.Call(proto.MethodTaskGet, appapi.TaskGetParams{Project: "web", Task: "T9"}, nil); code(err) != "unknown-task" {

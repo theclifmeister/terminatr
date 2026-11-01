@@ -185,6 +185,33 @@ type TaskAddResult struct {
 	Existing bool   `json:"existing,omitempty"`
 }
 
+// MethodTaskPriority sets a task's priority as the user, as tm task
+// edit --priority does (since protocol 32; the server's caps say
+// task-priority): must, should, could, or none to clear it. Refusals
+// carry the task store's codes ("unknown-task", "archived",
+// "invalid-priority"). Params TaskPriorityParams, result
+// TaskPriorityResult. The human's, journaled as the caller
+// (task.priority).
+const MethodTaskPriority = "task.priority"
+
+// CapTaskPriority says the server answers task.priority, and its tasks
+// carry their priority.
+const CapTaskPriority = "task-priority"
+
+// TaskPriorityParams are task.priority's: project's task ("T12") and
+// its priority, must, should, could or none.
+type TaskPriorityParams struct {
+	Project  string `json:"project"`
+	Task     string `json:"task"`
+	Priority string `json:"priority"`
+}
+
+// TaskPriorityResult says whether task.priority changed the task (false
+// when it had that priority already).
+type TaskPriorityResult struct {
+	Changed bool `json:"changed"`
+}
+
 // TaskActionParams are the params of task.accept, task.send-back and
 // task.delegate: project's task ("T12") and, for a send-back, the
 // user's note (required).
