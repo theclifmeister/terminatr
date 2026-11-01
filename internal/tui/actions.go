@@ -136,6 +136,8 @@ func init() {
 			foot: withProject("project"), run: (*dash).projectPopup},
 		{id: "project.tasks", keys: []string{"T"}, label: "T", help: "the project popup on its Tasks tab; enter shows a task; D delegates, A accepts, X sends back (asking the coordinator); c opens it", menu: "tasks",
 			foot: withProject("tasks"), run: (*dash).taskTab},
+		{id: "project.search", keys: []string{"F"}, label: "F", help: "search the project's history (tm search): notes, tasks, threads' briefs and reports, the journal, designs, the library; enter shows a hit's text, t its timeline", menu: "search",
+			run: (*dash).openSearch},
 		{id: "project.inbox", keys: []string{"I"}, label: "I", help: "the Inbox tab of the project popup: what the coordinator is told about", menu: "inbox",
 			foot: withProject("inbox"), run: (*dash).inbox},
 		{id: "access.show", keys: []string{"E"}, label: "E", help: "effective access: on a thread, what it launched with (RESTART TO APPLY marks what the settings changed since); elsewhere, what a new thread of the project gets: every sandbox, prompt, guard and secret rule with where it comes from, read-only (tm access show)",

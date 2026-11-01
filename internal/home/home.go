@@ -102,6 +102,10 @@ func ModsDir() (string, error) { return sub("mods") }
 // ModStateDir is <home>/state/mods, each mod's own data and store.
 func ModStateDir() (string, error) { return sub(filepath.Join("state", "mods")) }
 
+// SearchDir is <home>/state/search, each project's search index in
+// <slug>/ (internal/search): derived, rebuilt at will.
+func SearchDir() (string, error) { return sub(filepath.Join("state", "search")) }
+
 // ModCacheDir is <home>/cache/mods, each code mod's bundle and what its
 // last host said (the mod supervisor's, never the mod's).
 func ModCacheDir() (string, error) { return sub(filepath.Join("cache", "mods")) }

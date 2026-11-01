@@ -73,6 +73,10 @@ type Index struct {
 	segs     map[string]*segment
 	byID     map[string]*chunk
 	lastSave time.Time
+	// lastWalk is when an update last walked the project; fresh is how
+	// long after it a query takes the index as it is (SetFresh).
+	lastWalk time.Time
+	fresh    time.Duration
 	// now is time.Now, or a test's clock.
 	now func() time.Time
 }
@@ -85,6 +89,26 @@ func Open(projectDir, dir string) *Index {
 
 // Dir is the index's folder.
 func (x *Index) Dir() string { return x.dir }
+
+// SetFresh lets a query (Search, Text, Timeline, Children) skip the
+// stat walk when the last one is less than d old: an agent's search,
+// timeline and show in a row walk the project once. Update and Reindex
+// always walk. 0, the default, walks before every query.
+func (x *Index) SetFresh(d time.Duration) {
+	x.mu.Lock()
+	x.fresh = d
+	x.mu.Unlock()
+}
+
+// refresh is a query's update: none when the last walk is fresh.
+func (x *Index) refresh() (Stats, error) {
+	if x.loaded && x.fresh > 0 && x.now().Sub(x.lastWalk) < x.fresh {
+		var st Stats
+		x.fill(&st)
+		return st, nil
+	}
+	return x.update(false)
+}
 
 // segment is one segment in memory: its files, their chunks, and the
 // postings of each stem. Stems are ids into the segment's dict, so a
@@ -203,7 +227,7 @@ func (x *Index) Flush() error {
 func (x *Index) Close() error {
 	err := x.Flush()
 	x.mu.Lock()
-	x.loaded, x.segs, x.byID = false, nil, nil
+	x.loaded, x.segs, x.byID, x.lastWalk = false, nil, nil, time.Time{}
 	x.mu.Unlock()
 	return err
 }
@@ -236,6 +260,7 @@ func (x *Index) update(rebuild bool) (Stats, error) {
 	if err != nil {
 		return st, err
 	}
+	x.lastWalk = x.now()
 	bySeg := map[string][]source{}
 	for _, s := range srcs {
 		bySeg[s.Seg] = append(bySeg[s.Seg], s)
@@ -674,8 +699,8 @@ func (x *Index) fill(st *Stats) {
 
 // Query is what to search for and where.
 type Query struct {
-	// Words are matched by stem, each once (project.Terms); a chunk
-	// holding any scores, more and rarer ones score higher.
+	// Words are matched by stem, each once (project.Terms); more and
+	// rarer ones score higher (see Search for the floor).
 	Words string
 	// Kinds limits the hits to these kinds (Kinds); none is all.
 	Kinds []string
@@ -697,10 +722,15 @@ type Hit struct {
 	Chunk
 	Score float64  `json:"score"`
 	Terms []string `json:"terms"`
+	// More is how many journal lines of this hit's task ranked below it
+	// and were folded into it (search's grouping): they are in its
+	// timeline.
+	More int `json:"more,omitempty"`
 }
 
 // Result is a search's hits, best first, and how many there were in
-// all before Limit.
+// all before Limit (journal lines folded into their task's hit not
+// counted).
 type Result struct {
 	Hits  []Hit    `json:"hits"`
 	Total int      `json:"total"`
@@ -710,11 +740,15 @@ type Result struct {
 
 // Search updates the index (Update) and answers q's hits: BM25 over
 // stems, the collection being the chunks the caller may see, a chunk's
-// head weighing TitleWeight. Ties go to the newer chunk.
+// head weighing TitleWeight, a journal line weighing as a chunk of
+// average length. With several words a hit holding half of them (at
+// least two) ranks above those holding fewer. Journal lines are folded
+// into their task's or thread's best hit (group). Ties go to the newer
+// chunk.
 func (x *Index) Search(q Query) (Result, error) {
 	x.mu.Lock()
 	defer x.mu.Unlock()
-	st, err := x.update(false)
+	st, err := x.refresh()
 	if err != nil {
 		return Result{}, err
 	}
@@ -771,23 +805,68 @@ func (x *Index) search(q Query) Result {
 					a = &acc{c: c}
 					found[c] = a
 				}
-				a.score += project.BM25(float64(p.tf), df[i], float64(n), float64(c.length), avg)
+				length := float64(c.length)
+				if c.Kind == KindJournal {
+					// A journal line is short by nature, not because
+					// the words are all it is about: it scores as a
+					// chunk of average length, so lines don't crowd
+					// out the tasks and reports they name.
+					length = max(length, avg)
+				}
+				a.score += project.BM25(float64(p.tf), df[i], float64(n), length, avg)
 				a.terms = append(a.terms, t)
 			}
 		}
+	}
+	// The floor: with several words, a chunk holding half of them (at
+	// least two) ranks above one holding fewer, whatever their scores;
+	// one common word alone would match most of the project.
+	need := 1
+	if len(terms) > 1 {
+		need = max((len(terms)+1)/2, 2)
 	}
 	r.Hits = make([]Hit, 0, len(found))
 	for _, a := range found {
 		r.Hits = append(r.Hits, Hit{Chunk: a.c.Chunk, Score: math.Round(a.score*100) / 100, Terms: a.terms})
 	}
 	slices.SortFunc(r.Hits, func(a, b Hit) int {
-		return cmp.Or(cmp.Compare(b.Score, a.Score), b.Time.Compare(a.Time), cmp.Compare(a.ID, b.ID))
+		return cmp.Or(cmp.Compare(min(len(b.Terms), need), min(len(a.Terms), need)),
+			cmp.Compare(b.Score, a.Score), b.Time.Compare(a.Time), cmp.Compare(a.ID, b.ID))
 	})
+	r.Hits = group(r.Hits)
 	r.Total = len(r.Hits)
 	if q.Limit > 0 && len(r.Hits) > q.Limit {
 		r.Hits = r.Hits[:q.Limit]
 	}
 	return r
+}
+
+// group folds each journal line of a task or thread into the best hit
+// of that task or thread ranked above it (its More), so the many short
+// lines that name one don't crowd out the task, its reports and the
+// other hits. A journal line of neither, or the best of its own, stays.
+func group(hits []Hit) []Hit {
+	first := map[string]int{} // task or thread → its best hit's index in out
+	out := hits[:0]
+	for _, h := range hits {
+		if h.Kind == KindJournal {
+			if i, ok := first[h.Task]; ok && h.Task != "" {
+				out[i].More++
+				continue
+			}
+			if i, ok := first[h.Thread]; ok && h.Thread != "" {
+				out[i].More++
+				continue
+			}
+		}
+		for _, ref := range []string{h.Task, h.Thread} {
+			if _, ok := first[ref]; !ok && ref != "" {
+				first[ref] = len(out)
+			}
+		}
+		out = append(out, h)
+	}
+	return out
 }
 
 // wants reports whether a chunk is of the kinds, time, task and thread
@@ -813,7 +892,7 @@ var ErrNoChunk = errors.New("no such chunk in the index")
 func (x *Index) Text(id string, coordinator bool) (Chunk, string, error) {
 	x.mu.Lock()
 	defer x.mu.Unlock()
-	if _, err := x.update(false); err != nil {
+	if _, err := x.refresh(); err != nil {
 		return Chunk{}, "", err
 	}
 	c := x.byID[id]
@@ -843,6 +922,8 @@ func readText(dir string, c Chunk) (string, error) {
 		file = fileJournalZ
 	case c.Path == "JOURNAL.md":
 		file = fileJournal
+	case c.Path == "TASKS.md" || c.Path == "tasks/ARCHIVE.md":
+		file = fileTasks // read up to MaxArchive, as the walk did
 	}
 	data, err := readSource(dir, source{Rel: c.Path, File: file})
 	if err != nil {
