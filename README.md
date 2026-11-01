@@ -111,4 +111,4 @@ Then pair two machines: in the Network popup (`N` on the dashboard), press `P` o
 
 ## Licence
 
-[MIT](LICENSE) © 2026 Clifmeister.
+[MIT](LICENSE) © 2026 Clifford van Slimming.
