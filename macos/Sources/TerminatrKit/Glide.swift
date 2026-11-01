@@ -151,6 +151,14 @@ public struct Glide: Equatable, Sendable {
         return false
     }
 
+    /// Something else moved the offset by d between frames: SwiftUI
+    /// keeping the rows in view where they are as rows above them change
+    /// height (T895). The glide goes on from there: set back where it
+    /// was, the rows would jump by d.
+    public mutating func moved(by d: Double) {
+        offset += d
+    }
+
     /// More output came (T901): the end moves again, so a glide that is
     /// on it stays there until the end holds anew, as long again at most.
     /// A spring still running is left as it is: it reads the end each

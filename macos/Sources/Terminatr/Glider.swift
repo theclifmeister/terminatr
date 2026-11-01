@@ -29,6 +29,9 @@ import TerminatrKit
     private var link: CADisplayLink?
     private var glide: Glide?
     private var last: CFTimeInterval?
+    /// The offset the glide last set: one that differs at the next
+    /// frame was moved by SwiftUI's layout (Glide.moved).
+    private var placed: Double?
     private var done: (() -> Void)?
     /// The scroll events' monitor: momentum stilled, the user's own
     /// scroll ending a glide.
@@ -53,6 +56,7 @@ import TerminatrKit
         if !instant { stilling = CACurrentMediaTime() }
         let g = Glide(offset: Self.offset(sv), target: Self.end(sv), visible: sv.contentView.bounds.height, instant: instant, aimsUp: false)
         glide = g
+        placed = nil
         set(sv, g.offset)
         self.done = done
         last = nil
@@ -104,6 +108,7 @@ import TerminatrKit
 
     private func set(_ sv: NSScrollView, _ y: Double) {
         let clip = sv.contentView
+        placed = y
         guard abs(clip.bounds.origin.y - y) > 0.01 else { return }
         clip.scroll(to: NSPoint(x: clip.bounds.origin.x, y: y))
         sv.reflectScrolledClipView(clip)
@@ -162,6 +167,7 @@ import TerminatrKit
         guard let sv = scrollView, sv.window != nil, !Self.holdsScroller(sv), var g = glide else { return stop() }
         let dt = last.map { l.timestamp - $0 } ?? (l.targetTimestamp - l.timestamp)
         last = l.timestamp
+        if let placed, abs(Self.offset(sv) - placed) > 0.5 { g.moved(by: Self.offset(sv) - placed) }
         let landed = g.step(to: Self.end(sv), dt: dt)
         glide = g
         set(sv, g.offset)

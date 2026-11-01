@@ -351,6 +351,23 @@ private func run(_ g: inout Glide, frames: Int = 600, end: (Int) -> Double) -> (
     #expect(!g.covered && g.offset == 13300)
 }
 
+/// SwiftUI moved the offset between frames (rows above changed height,
+/// T895): the glide goes on from where it is, and still lands on the
+/// end.
+@Test func glideGoesOnFromALayoutShift() {
+    var g = Glide(offset: 9000, target: 10000, visible: 500)
+    _ = g.step(to: 10000, dt: 1 / 60)
+    let was = g.offset
+    g.moved(by: -117)
+    #expect(g.offset == was - 117)
+    var n = 0
+    while !g.landed, n < 600 {
+        _ = g.step(to: 9883, dt: 1 / 60)
+        n += 1
+    }
+    #expect(g.landed && g.offset == 9883)
+}
+
 /// An end that never holds under the cover (output streaming in each
 /// frame): it aims at most aimFrames, then glides.
 @Test func glideAimsAtMostAimFrames() {
