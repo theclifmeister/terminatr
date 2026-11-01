@@ -341,24 +341,31 @@ func ttyProcs(s *Session) string {
 // client reported, and with new ones once they change.
 func TestColors(t *testing.T) {
 	s := start(t, "/bin/sh")
+	// The shell first: its start is not the first query's to wait for
+	// (T907: on a starved macOS runner start and query together took
+	// more than the wait; the shell finished them, late).
+	testwait.Eventually(t, "the shell's prompt", func() bool { return strings.Contains(screen(t, s), "$") })
 	n := 0
 	query := func(want string) {
 		t.Helper()
 		// The answer is 24 bytes; ESC and BEL shown as E and B. The
 		// query is done only once stty sane has run and printed the
-		// marker (computed, so the echoed command never matches): keys
-		// typed while the tty is still raw reach Linux's sh as a line
-		// with no newline, and it waits for the rest forever.
+		// marker: keys typed while the tty is still raw reach Linux's
+		// sh as a line with no newline, and it waits for the rest
+		// forever. The answer and the marker are computed, so the
+		// echoed command never matches. In raw mode the answer starts
+		// where the cursor is (after the echoed command, or a "child
+		// setpgid …: Operation not permitted" from a loaded Mac's sh),
+		// so it may wrap; and no clear, a process less within the wait.
 		n++
 		marker := fmt.Sprintf("sane-%d", 100+n)
-		s.Input([]byte(fmt.Sprintf("clear; stty raw -echo; printf '\\033]11;?\\007'; head -c 24 | tr '\\033\\007' EB; stty sane; echo; echo sane-$((100+%d))\r", n)))
+		s.Input([]byte(fmt.Sprintf("stty raw -echo; printf '\\033]11;?\\007'; head -c 24 | tr '\\033\\007' EB; stty sane; echo; echo sane-$((100+%d))\r", n)))
 		var sc string
 		if !testwait.Poll(testwait.Timeout, func() bool {
 			sc = screen(t, s)
-			return strings.Contains(sc, want) && strings.Contains(sc, marker)
+			return strings.Contains(strings.ReplaceAll(sc, "\n", ""), want) && strings.Contains(sc, marker)
 		}) {
-			// Where the shell stopped (T907: on macOS the answer showed
-			// and nothing after it, the shell idle).
+			// Where the shell stopped.
 			t.Fatalf("query %d: timed out waiting for %s and %s; screen:\n%s\nthe shell's tty:\n%s", n, want, marker, sc, ttyProcs(s))
 		}
 	}
