@@ -76,12 +76,10 @@ func Match(notes []Note, query string, paths []string, limit int) []Hit {
 		h, d := Hit{Note: n}, docs[i]
 		for _, t := range terms {
 			tf := d.tf[t]
-			nt := float64(df[t])
-			idf := math.Log(1 + (size-nt+0.5)/(nt+0.5))
 			if tf == 0 {
 				continue
 			}
-			scores[i] += idf * tf * (bm25K1 + 1) / (tf + bm25K1*(1-bm25B+bm25B*d.length/avg))
+			scores[i] += BM25(tf, float64(df[t]), size, d.length, avg)
 			h.Terms = append(h.Terms, said[t])
 			d.inTitle = d.inTitle || d.title[t]
 		}
@@ -115,6 +113,19 @@ func Match(notes []Note, query string, paths []string, limit int) []Hit {
 	}
 	return hits
 }
+
+// BM25 is one query word's score in a document: tf is its (weighted)
+// count there, df how many of the size documents hold it, length the
+// document's (weighted) length and avg the mean length. Match and tm
+// search (internal/search) both score with it, so they rank alike.
+func BM25(tf, df, size, length, avg float64) float64 {
+	idf := math.Log(1 + (size-df+0.5)/(df+0.5))
+	return idf * tf * (bm25K1 + 1) / (tf + bm25K1*(1-bm25B+bm25B*length/avg))
+}
+
+// Stems are s's words as Terms has them, as stems, repeats kept: what
+// Match counts in a note's title and body.
+func Stems(s string) []string { return stems(s) }
 
 // standOut is the word score a note needs to stand out from the others
 // without a shared path: StandOut standard deviations above the mean
