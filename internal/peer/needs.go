@@ -24,6 +24,11 @@ import (
 // it, and says that switch on peer.projects and peer.panes.
 const CapNeeds = "needs"
 
+// CapNeedPicks says peer.act takes a multi-select's Picks (T900): a
+// paired server without it refuses them, so its apps leave such a
+// question to the pane there (T904).
+const CapNeedPicks = "need-picks"
+
 // NeedsExporter is an Exporter that shows a shared project's needs in
 // full (CapNeeds).
 type NeedsExporter interface {

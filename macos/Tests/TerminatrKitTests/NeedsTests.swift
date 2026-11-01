@@ -189,6 +189,36 @@ let backend = AppAPI.QuestionItem(question: "Which cache backend?", options: [.i
     #expect(Need.of(projects: [], sessions: [], peers: [peer]).allSatisfy { $0.peer == nil })
 }
 
+/// A paired server's multi-select (T904): where that server's peer.act
+/// takes picks (Peer.picks) its options tick, Submit sending the picks
+/// in the menu's order with their labels joined as the guard; without,
+/// the card takes no answer and it stays that server's pane's.
+@Test func peerNeedTicks() {
+    let several = AppAPI.QuestionItem(question: "Which ones?", multiSelect: true,
+                                      options: [.init(label: "Lint", description: "fast"), .init(label: "Unit"), .init(label: "E2E")])
+    let done = AppAPI.QuestionItem(question: "Which cache?", options: [.init(label: "Redis")], answered: true)
+    let need = AppAPI.PeerNeed(id: "question:s-1:a", kind: "question", session: "mini/s-1", task: "T7",
+                               question: AppAPI.Question(questions: [done, several]), acts: ["answer"])
+    var peer = AppAPI.Peer(alias: "mini", name: "work", state: "up", projects: [
+        AppAPI.PeerProject(project: "acme", needsYou: 1, threads: 1, ready: 0, needs: [need]),
+    ], needs: "answer", picks: true)
+    let t = Need.of(projects: [], sessions: [], peers: [peer])[0].peer?.ticks
+    #expect(t?.options == ["Lint", "Unit", "E2E"])
+    #expect(t?.descriptions == ["fast", "", ""])
+    #expect(Need.of(projects: [], sessions: [], peers: [peer])[0].peer?.choices.isEmpty == true)
+    #expect(t?.params(picks: [2, 0, 2, 7]) == AppAPI.PeerNeedActParams(peer: "mini", project: "acme", need: "question:s-1:a", act: "answer",
+                                                                          index: 1, answer: "Lint, E2E", question: "Which ones?", picks: [0, 2]))
+    #expect(t?.params(picks: []) == nil && t?.params(picks: [5]) == nil)
+    #expect(t?.joined([1]) == "Unit")
+    // The params leave picks out when there are none, as before 39.
+    let one = try? JSONSerialization.jsonObject(with: JSONEncoder().encode(AppAPI.PeerNeedActParams(peer: "mini", project: "acme", need: "n", act: "answer"))) as? [String: Any]
+    #expect(one?["picks"] == nil)
+    // A paired server without need-picks: no card answer, answered there.
+    peer.picks = false
+    let old = Need.of(projects: [], sessions: [], peers: [peer])[0]
+    #expect(old.peer == nil && old.detail == "answer on work")
+}
+
 @Test func tracker() {
     func need(_ id: String) -> Need { Need(id: id, kind: .review, project: "p", what: id, detail: "") }
     var t = NeedTracker()

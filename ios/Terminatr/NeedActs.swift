@@ -107,7 +107,7 @@ struct NeedActs: View {
                             // A multi-select (T900): a tap ticks, Submit sends.
                             AnswerOption(key: i + 1, label: o, detail: i < a.descriptions.count ? a.descriptions[i] : "",
                                          picked: ticked.contains(i)) {
-                                if ticked.contains(i) { ticked.remove(i) } else { ticked.insert(i) }
+                                tick(i)
                             }
                             .accessibilityLabel(named(o))
                             .accessibilityValue(ticked.contains(i) ? "Ticked" : "Not ticked")
@@ -178,9 +178,7 @@ struct NeedActs: View {
             guard let a = answering, !busy else { return [] }
             if a.multi {
                 var out = a.options.indices.map { i in
-                    NeedAct((ticked.contains(i) ? "Untick " : "Tick ") + a.options[i]) {
-                        if ticked.contains(i) { ticked.remove(i) } else { ticked.insert(i) }
-                    }
+                    NeedAct((ticked.contains(i) ? "Untick " : "Tick ") + a.options[i]) { tick(i) }
                 }
                 if !ticked.isEmpty { out.append(NeedAct("Submit") { submit(a) }) }
                 return out
@@ -195,6 +193,13 @@ struct NeedActs: View {
             return out
         case .network where need.peer != nil && model.can(AppAPI.Methods.peerNeedAct.name):
             guard let p = need.peer, !busy else { return [] }
+            if let t = p.ticks {
+                var out = t.options.indices.map { i in
+                    NeedAct((ticked.contains(i) ? "Untick " : "Tick ") + t.options[i]) { tick(i) }
+                }
+                if !ticked.isEmpty { out.append(NeedAct("Submit") { peerSubmit(t) }) }
+                return out
+            }
             return p.choices.map { c in NeedAct(c.title) { peerPick(c) } }
         default:
             return []
@@ -206,6 +211,47 @@ struct NeedActs: View {
     /// the coordinator's questions as Answer now.
     @ViewBuilder
     private func peerButtons(_ p: Need.PeerAct) -> some View {
+        if let t = p.ticks {
+            peerTicks(t)
+        } else {
+            peerChoices(p)
+        }
+    }
+
+    /// A paired server's multi-select (T904), as this server's own: a
+    /// tap ticks an option, Submit sends the ones ticked there.
+    private func peerTicks(_ t: Need.PeerAct.Ticks) -> some View {
+        VStack(spacing: Spacing.item) {
+            ForEach(Array(t.options.enumerated()), id: \.offset) { i, o in
+                AnswerOption(key: i + 1, label: o, detail: i < t.descriptions.count ? t.descriptions[i] : "",
+                             picked: ticked.contains(i)) {
+                    tick(i)
+                }
+                .accessibilityLabel(named(o))
+                .accessibilityValue(ticked.contains(i) ? "Ticked" : "Not ticked")
+            }
+            Button("Submit") { peerSubmit(t) }
+                .buttonStyle(.primary(.question))
+                .disabled(ticked.isEmpty)
+                .accessibilityLabel(named("Submit"))
+                .accessibilityHint("Answers with the options ticked, on \(need.peer?.server ?? "the paired server")")
+        }
+        .tint(theme.colour(Need.Kind.question))
+    }
+
+    private func tick(_ i: Int) {
+        if ticked.contains(i) { ticked.remove(i) } else { ticked.insert(i) }
+    }
+
+    /// Sends the options ticked; the labels joined are the guard, so a
+    /// menu changed meanwhile comes back need-changed.
+    private func peerSubmit(_ t: Need.PeerAct.Ticks) {
+        guard let p = t.params(picks: Array(ticked)) else { return }
+        peerAct(p)
+    }
+
+    @ViewBuilder
+    private func peerChoices(_ p: Need.PeerAct) -> some View {
         let tone: Need.Kind = p.choices.first.map { $0.params.act == "approve" ? .approval : .question } ?? .question
         switch p.choices.first?.params.act {
         case "answer", "approve":

@@ -146,24 +146,65 @@ public struct Need: Identifiable, Hashable, Sendable {
             }
         }
 
+        /// A multi-select's options, ticked on the card and sent
+        /// together by Submit (T904): picks by index, their labels
+        /// joined as the guard, as the TUI sends them.
+        public struct Ticks: Hashable, Sendable {
+            public let options: [String]
+            public let descriptions: [String]
+            /// The answer act, its question index and text set.
+            let base: AppAPI.PeerNeedActParams
+
+            /// The act with picks, in the menu's order and once each,
+            /// answer their labels joined with ", " (the server's guard:
+            /// other labels are need-changed); nil with none.
+            public func params(picks: [Int]) -> AppAPI.PeerNeedActParams? {
+                let picks = Array(Set(picks.filter(options.indices.contains))).sorted()
+                guard !picks.isEmpty else { return nil }
+                var p = base
+                p.picks = picks
+                p.answer = joined(picks)
+                return p
+            }
+
+            /// The labels of picks, joined as the agent joins them.
+            public func joined(_ picks: [Int]) -> String {
+                picks.filter(options.indices.contains).map { options[$0] }.joined(separator: ", ")
+            }
+        }
+
         public let server: String
         public let choices: [Choice]
+        /// The first open question's ticks when it is a multi-select
+        /// and that server's peer.act takes picks; choices then has no
+        /// answer of its own.
+        public let ticks: Ticks?
 
         /// The acts on need n of the paired server alias's project: the
-        /// first open question's options (single-select), a dialog's
-        /// options that allow once (the rest stay that server's user's),
-        /// accept and send back, or opening the coordinator's questions.
-        /// Nil when there is none.
-        public init?(need n: AppAPI.PeerNeed, alias: String, project: String, server: String) {
+        /// first open question's options (a multi-select's as ticks
+        /// where that server takes picks, Peer.picks; else none, its
+        /// pane's), a dialog's options that allow once (the rest stay
+        /// that server's user's), accept and send back, or opening the
+        /// coordinator's questions. Nil when there is none.
+        public init?(need n: AppAPI.PeerNeed, alias: String, project: String, server: String, picks: Bool = false) {
             guard !n.escape else { return nil }
             func p(_ act: String) -> AppAPI.PeerNeedActParams {
                 AppAPI.PeerNeedActParams(peer: alias, project: project, need: n.id, act: act)
             }
             var out: [Choice] = []
+            var ticks: Ticks?
             for act in n.acts {
                 switch act {
                 case "answer":
-                    guard let qs = n.question?.questions, let i = qs.firstIndex(where: { !$0.answered }), !qs[i].multiSelect else { continue }
+                    guard let qs = n.question?.questions, let i = qs.firstIndex(where: { !$0.answered }) else { continue }
+                    if qs[i].multiSelect {
+                        guard picks, !qs[i].options.isEmpty else { continue }
+                        var a = p(act)
+                        a.index = i
+                        a.question = qs[i].question
+                        ticks = Ticks(options: qs[i].options.map(\.label), descriptions: qs[i].options.map(\.description), base: a)
+                        continue
+                    }
                     for o in qs[i].options {
                         var a = p(act)
                         a.index = i
@@ -189,9 +230,10 @@ public struct Need: Identifiable, Hashable, Sendable {
                     continue
                 }
             }
-            guard !out.isEmpty else { return nil }
+            guard !out.isEmpty || ticks != nil else { return nil }
             self.server = server
             self.choices = out
+            self.ticks = ticks
         }
     }
 }
@@ -413,7 +455,7 @@ extension Need {
             text = ""
         }
         // At answer, its buttons answer it there (app API 30).
-        let acts = peer.needs == "answer" ? PeerAct(need: n, alias: peer.alias, project: project, server: server) : nil
+        let acts = peer.needs == "answer" ? PeerAct(need: n, alias: peer.alias, project: project, server: server, picks: peer.picks) : nil
         let where_ = n.escape ? "only on \(server)" : acts != nil ? "for \(server)" : "answer on \(server)"
         return Need(id: "paired:\(peer.alias)/\(project):\(n.id)", kind: .network, project: "\(peer.alias)/\(project)",
                     what: "\(server) › \(project): \(what)", detail: line(n.title, where_), text: text,

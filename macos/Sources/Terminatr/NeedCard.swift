@@ -23,6 +23,8 @@ struct NeedCard: View {
     @State private var confirmAll = false
     @State private var sendingBack: Need.PeerAct.Choice?
     @State private var note = ""
+    /// A paired server's multi-select's options ticked, by index (T904).
+    @State private var ticked: Set<Int> = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -163,7 +165,21 @@ struct NeedCard: View {
                 if let l = need.link {
                     LinkActs(need: need, act: l)
                 } else if let p = need.peer {
-                    // A paired server's need, answered there (app API 30).
+                    // A paired server's need, answered there (app API 30);
+                    // a multi-select's options tick, Submit sends them (T904).
+                    if let t = p.ticks {
+                        ForEach(Array(t.options.enumerated()), id: \.offset) { i, o in
+                            Toggle(o, isOn: Binding(get: { ticked.contains(i) },
+                                                    set: { if $0 { ticked.insert(i) } else { ticked.remove(i) } }))
+                                .toggleStyle(.checkbox)
+                                .accessibilityLabel(named(o))
+                                .help(i < t.descriptions.count && !t.descriptions[i].isEmpty ? t.descriptions[i] : "Ticks it; Submit sends the options ticked")
+                        }
+                        Button("Submit") { if let a = t.params(picks: Array(ticked)) { send(a) } }
+                            .disabled(ticked.isEmpty)
+                            .accessibilityLabel(named("Submit"))
+                            .help("Goes to \(p.server) as your answer, the options ticked; it refuses it if the menu changed meanwhile")
+                    }
                     ForEach(p.choices, id: \.self) { c in
                         Button(c.title) { peerAct(c) }
                             .accessibilityLabel(named(c.title))

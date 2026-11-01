@@ -55,6 +55,9 @@ type PeerMirror struct {
 	// (NeedsOff, NeedsView, NeedsAnswer; docs/SPEC.md §16.16).
 	NeedsCap bool   `json:"needs_cap,omitempty"`
 	Needs    string `json:"needs,omitempty"`
+	// NeedPicks: the peer's peer.act takes a multi-select's picks (its
+	// hello lists need-picks, T904).
+	NeedPicks bool `json:"need_picks,omitempty"`
 	// Offset is the peer's clock minus this server's, in milliseconds,
 	// as last measured; the peer's times (a session's created, the
 	// ticker's) less Offset are this server's. Unset (and 0) until a
