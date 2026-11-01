@@ -24,7 +24,8 @@ struct ProjectsScreen: View {
                     HStack(spacing: Spacing.tight) {
                         // Search (T924): this server's history, from its
                         // first active project; the screen picks another.
-                        if model.searches, let first = (model.activeProjects + model.inactiveProjects).first {
+                        // With the Search tab (T929), that instead.
+                        if model.searches, !Root.searchTab, let first = (model.activeProjects + model.inactiveProjects).first {
                             PlainRouteLink(value: Route.search(first.slug)) {
                                 Label("Search", systemImage: "magnifyingglass")
                             }
@@ -241,8 +242,9 @@ struct ProjectScreen: View {
         // Back and Search on the screen's own bar, in line with the
         // content's edges (T925).
         .screenBar {
-            // Search (T924): the project's history.
-            if model.searches {
+            // Search (T924): the project's history; with the Search tab
+            // (T929), that instead, which searches the project in view.
+            if model.searches, !Root.searchTab {
                 PlainRouteLink(value: Route.search(slug)) { Label("Search", systemImage: "magnifyingglass") }
             }
         }

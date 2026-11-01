@@ -5,9 +5,11 @@ import TerminatrUI
 /// Search over a project's history (T924), as the Mac's Search Project…
 /// and the TUI's search popup: a project picked (this server's only),
 /// words, a kind, then the hits (kind, id, title, day), each opening its
-/// SearchHitScreen. From the Projects header and a project's pages
-/// (Route.search, -open search:SLUG). The search stays while the screen
-/// is in the path, so Back from a hit comes back to its hits.
+/// SearchHitScreen. The Search tab's (T929, Root.searchTab), on the
+/// project in view; on iOS 17 from the Projects header and a project's
+/// screen (Route.search). -open search:SLUG opens it. The search stays
+/// while the screen is in the path, so Back from a hit comes back to
+/// its hits.
 struct SearchScreen: View {
     @Environment(PhoneModel.self) private var model
     @Environment(\.theme) private var theme
@@ -41,13 +43,12 @@ struct SearchScreen: View {
         }
         .navigationTitle("Search")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .principal) { projectMenu }
-        }
         .backdrop()
     }
 
-    /// The title: the project searched, a menu of this server's others.
+    /// The project searched, a menu of this server's others, above the
+    /// words: in the screen, not the bar's title, which an open iPhone
+    /// Duo's column never showed (its bar goes to the rail, T929).
     private var projectMenu: some View {
         Menu {
             ForEach(model.activeProjects + model.inactiveProjects, id: \.slug) { p in
@@ -73,6 +74,8 @@ struct SearchScreen: View {
     private func query(_ s: SearchModel) -> some View {
         @Bindable var s = s
         return VStack(alignment: .leading, spacing: 10) {
+            projectMenu
+                .padding(.horizontal, 4)
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
                     .foregroundStyle(theme.muted)
