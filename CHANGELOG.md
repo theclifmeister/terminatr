@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.73.0](https://github.com/theclifmeister/terminatr/compare/v0.72.0...v0.73.0) (2026-11-01)
+
+
+### Features
+
+* **ios:** a Search tab in the tab bar, the open iPhone Duo's rail and the iPad's sidebar ([#1016](https://github.com/theclifmeister/terminatr/issues/1016)) ([be674ea](https://github.com/theclifmeister/terminatr/commit/be674eaa52507af5eeb96b6dabefcd40e4345f46))
+* **ios:** App Store listing text and review notes; Settings → About, privacy links, AI-provider line at pairing ([#1009](https://github.com/theclifmeister/terminatr/issues/1009)) ([baa48ae](https://github.com/theclifmeister/terminatr/commit/baa48aeff62c74e96e1c04cc5c79f3095f6d7c96))
+* **ios:** App Store screenshots and the App Review recording from make targets ([#1010](https://github.com/theclifmeister/terminatr/issues/1010)) ([75cb5cc](https://github.com/theclifmeister/terminatr/commit/75cb5cc4f77d979701eed3b116ad8ad52bab9227))
+* **site:** privacy policy and support pages for the iPhone and iPad app ([#1007](https://github.com/theclifmeister/terminatr/issues/1007)) ([35cb83b](https://github.com/theclifmeister/terminatr/commit/35cb83b5ddb2f09e8719420140fec4019ae1d1ff))
+* task priorities (must, should, could) in the CLI, the TUI, the apps and the vault ([#1015](https://github.com/theclifmeister/terminatr/issues/1015)) ([4563919](https://github.com/theclifmeister/terminatr/commit/4563919937c77ea63279ea9173d3d7edfe0819be))
+
+
+### Bug Fixes
+
+* **ios:** Board's filter stays in the screen, no dead magnifier in an open iPhone Duo's rail ([#1014](https://github.com/theclifmeister/terminatr/issues/1014)) ([05accc3](https://github.com/theclifmeister/terminatr/commit/05accc3c0124fa116377a52299f772f5f6f0c7fd))
+* **ios:** project screen's Back and Search line up with its content's edges ([#1013](https://github.com/theclifmeister/terminatr/issues/1013)) ([a480b63](https://github.com/theclifmeister/terminatr/commit/a480b6398806c2747cad843b88fc7ca7014b4945))
+
 ## [0.72.0](https://github.com/theclifmeister/terminatr/compare/v0.71.0...v0.72.0) (2026-11-01)
 
 
