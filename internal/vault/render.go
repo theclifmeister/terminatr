@@ -34,14 +34,14 @@ type Note struct {
 
 // taskFront is a task note's properties.
 type taskFront struct {
-	ID         string   `toml:"id" yaml:"id"`
-	Title      string   `toml:"title" yaml:"title"`
-	Project    string   `toml:"project" yaml:"project"`
-	Status     string   `toml:"status" yaml:"status"`
-	Group      string   `toml:"group" yaml:"group"`
+	ID      string `toml:"id" yaml:"id"`
+	Title   string `toml:"title" yaml:"title"`
+	Project string `toml:"project" yaml:"project"`
+	Status  string `toml:"status" yaml:"status"`
+	Group   string `toml:"group" yaml:"group"`
 	// Priority is must, should or could, absent for none; the Bases
 	// sort by it (formula.rank).
-	Priority string `toml:"priority,omitempty" yaml:"priority,omitempty"`
+	Priority   string   `toml:"priority,omitempty" yaml:"priority,omitempty"`
 	Thread     string   `toml:"thread,omitempty" yaml:"thread,omitempty"`
 	PR         string   `toml:"pr,omitempty" yaml:"pr,omitempty"`
 	Design     string   `toml:"design,omitempty" yaml:"design,omitempty"`
