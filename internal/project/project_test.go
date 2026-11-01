@@ -265,6 +265,37 @@ func TestContextDeterministicAndCapped(t *testing.T) {
 	}
 }
 
+// TestContextTasksByPriority (T927): the context lists each group by
+// priority, must first, with the priority in its column and in the
+// index's lines; the done ones it shows are still the newest.
+func TestContextTasksByPriority(t *testing.T) {
+	setup(t)
+	p, _ := New(Options{Slug: "demo-app", Goal: "Ship v1"})
+	var items []tasks.NewTask
+	for i := 0; i < 5; i++ {
+		items = append(items, tasks.NewTask{Title: "done " + string(rune('a'+i)), Status: "done"})
+	}
+	items = append(items,
+		tasks.NewTask{Title: "Docs", Status: "ready"},
+		tasks.NewTask{Title: "Login", Status: "ready", Priority: "must"},
+		tasks.NewTask{Title: "Fix it", Status: "started", Priority: "should"})
+	p.Tasks().Add(human, items)
+	p.Tasks().SetPriority(human, 1, "must") // the oldest done task, which stays out
+	secs, err := p.Context(Ticked{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := RenderContext(secs)
+	for _, want := range []string{"On deck (2)\n  T7   ready    must  Login\n  T6   ready          Docs", "T8   started  should  Fix it"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("context lacks %q:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "T1   done") {
+		t.Errorf("the oldest done task shows for its priority:\n%s", out)
+	}
+}
+
 // FuzzParseItem: an inbox file, whatever it holds, parses or fails
 // without panicking, and a parsed item's fields are single lines.
 func FuzzParseItem(f *testing.F) {

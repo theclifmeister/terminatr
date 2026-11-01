@@ -216,6 +216,56 @@ func TestTaskAdd(t *testing.T) {
 	}
 }
 
+// TestTaskPriority: task.priority sets a task's priority as tm task edit
+// --priority does, journaled as the caller; again is unchanged, and a
+// bad priority, task or project is refused with its code. task.get
+// carries it.
+func TestTaskPriority(t *testing.T) {
+	p := testPaths(t)
+	startServer(t, p)
+	pr, err := project.New(project.Options{Slug: "web"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pr.Tasks().Add(human, []tasks.NewTask{{Title: "Ship it"}}); err != nil {
+		t.Fatal(err)
+	}
+	app, err := client.DialAs(p, proto.ClientApp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer app.Close()
+	var res proto.TaskPriorityResult
+	if err := app.Call(proto.MethodTaskPriority, proto.TaskPriorityParams{Project: "web", Task: "T1", Priority: "must"}, &res); err != nil || !res.Changed {
+		t.Fatalf("task.priority: %+v %v", res, err)
+	}
+	if err := app.Call(proto.MethodTaskPriority, proto.TaskPriorityParams{Project: "web", Task: "T1", Priority: "must"}, &res); err != nil || res.Changed {
+		t.Fatalf("task.priority again: %+v %v", res, err)
+	}
+	for _, c := range []struct {
+		p    proto.TaskPriorityParams
+		code string
+	}{
+		{proto.TaskPriorityParams{Project: "web", Task: "T1", Priority: "high"}, "invalid-priority"},
+		{proto.TaskPriorityParams{Project: "web", Task: "T9", Priority: "must"}, "unknown-task"},
+		{proto.TaskPriorityParams{Project: "web", Task: "x", Priority: "must"}, proto.ErrBadParams},
+		{proto.TaskPriorityParams{Project: "nope", Task: "T1", Priority: "must"}, proto.ErrBadParams},
+	} {
+		var perr *proto.Error
+		if err := app.Call(proto.MethodTaskPriority, c.p, nil); !errors.As(err, &perr) || perr.Code != c.code {
+			t.Errorf("task.priority %+v: %v, want %s", c.p, err, c.code)
+		}
+	}
+	var got SideTask
+	if err := app.Call(proto.MethodTaskGet, proto.TaskGetParams{Project: "web", Task: "T1"}, &got); err != nil || got.Priority != tasks.Must {
+		t.Fatalf("task.get: %+v %v", got, err)
+	}
+	journal, _ := os.ReadFile(pr.Path("JOURNAL.md"))
+	if want := " human (app) task.priority T1 must"; !strings.Contains(string(journal), want) {
+		t.Errorf("journal lacks %q:\n%s", want, journal)
+	}
+}
+
 // TestTaskGet: task.get reads a task of the board with its notes and
 // steps; an unknown task or project is refused with its code.
 func TestTaskGet(t *testing.T) {

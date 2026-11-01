@@ -446,6 +446,7 @@ var coreActions = []struct {
 	{"popup", bindable{id: "task.delegate", keys: []string{"D"}, fixed: true, help: "delegate the task; the coordinator starts a thread for it (asks first)"}},
 	{"popup", bindable{id: "task.accept", keys: []string{"A"}, fixed: true, help: "accept the task in review; the coordinator marks it done (asks first)"}},
 	{"popup", bindable{id: "task.send-back", keys: []string{"X"}, fixed: true, help: "send the task in review back with a note"}},
+	{"popup", bindable{id: "task.priority", keys: []string{"P"}, fixed: true, help: "set the task's priority: must, should, could or none (a picker)"}},
 	{"popup", bindable{id: "task.coordinator", keys: []string{"c"}, fixed: true, help: "open the project's coordinator about the task"}},
 	{"popup", bindable{id: "tasks.done", keys: []string{"b"}, fixed: true, help: "list the done tasks, or collapse them"}},
 	{"popup", bindable{id: "library.read", keys: []string{"enter"}, fixed: true, help: "read the library file"}},

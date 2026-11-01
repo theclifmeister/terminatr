@@ -16,11 +16,16 @@ import (
 // The TASKS.md format (§6.2): front matter with next_id, "# Tasks",
 // one "## <group>" heading per non-empty group, and per task a
 // "### T<n> <title>" heading, a metadata line straight after it, notes, and
-// a trailing run of "- [ ]"/"- [x]" steps.
+// a trailing run of "- [ ]"/"- [x]" steps. A task with a priority has a
+// "priority: must" line straight after the metadata line (priorityLine).
 
 var (
 	taskHeading = regexp.MustCompile(`^### T([0-9]+) (.*\S)\s*$`)
 	stepLine    = regexp.MustCompile(`^- \[([ xX])\] (.*\S)\s*$`)
+	// priorityLine is a task's priority, on its own line straight after
+	// the metadata line: older tm, which refuses a metadata key it
+	// doesn't know, reads it as the notes' first line and writes it back.
+	priorityLine = regexp.MustCompile(`^priority: (must|should|could)\s*$`)
 )
 
 const sep = " · "
@@ -85,6 +90,7 @@ func Parse(data []byte) (*Board, error) {
 	flush := func() {
 		if cur != nil {
 			cur.Notes, cur.Steps = splitBody(curBody)
+			cur.Priority, cur.Notes = splitPriority(cur.Notes)
 			b.Tasks = append(b.Tasks, cur)
 		}
 		cur, curBody = nil, nil
@@ -177,6 +183,18 @@ func parseMeta(t *Task, line string) error {
 	return nil
 }
 
+// splitPriority takes the priority line off the top of a task's notes:
+// tm writes it straight after the metadata line, older tm after a blank
+// line, as the notes' first.
+func splitPriority(notes string) (Priority, string) {
+	first, rest, _ := strings.Cut(notes, "\n")
+	m := priorityLine.FindStringSubmatch(first)
+	if m == nil {
+		return NoPriority, notes
+	}
+	return Priority(m[1]), trimBlankLines(rest)
+}
+
 // splitBody separates notes from the trailing run of checklist items.
 func splitBody(lines []string) (string, []Step) {
 	end := len(lines)
@@ -267,6 +285,9 @@ func writeTask(w *bytes.Buffer, t *Task, slug string) {
 		}
 	}
 	w.WriteString(strings.Join(meta, sep) + "\n")
+	if t.Priority != NoPriority {
+		w.WriteString("priority: " + string(t.Priority) + "\n")
+	}
 	if t.Notes != "" {
 		w.WriteString("\n" + t.Notes + "\n")
 	}

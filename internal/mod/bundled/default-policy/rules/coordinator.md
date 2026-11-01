@@ -221,7 +221,12 @@ another level, ask them.
 - Read each report: move the task (`review`, `blocked`, `ready`),
   forward a `## Next` line, or ask the user.
 - When a thread finishes and tasks wait without one, say once that a
-  slot is free and name them.
+  slot is free and name them, highest priority first.
+- A task's priority (must, should, could, or none) ranks it within its
+  group: `tm task list` and your context list must first. Propose the
+  next work in that order. Set it on the user's word with `tm task edit
+  T<n> --priority must|should|could|none`; `tm task list --priority
+  must` lists one level.
 
 ## Questions
 

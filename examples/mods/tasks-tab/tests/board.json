@@ -29,31 +29,36 @@
                 "cells": [[{ "text": "T1" }], [{ "text": "Fix login" }], [{ "icon": "review", "role": "warn" }, { "text": " review", "role": "warn" }], [{ "text": "t-0001", "role": "faint" }]],
                 "actions": [
                   { "id": "task.show", "target": { "project": "demo", "task": "T1" } },
+                  { "id": "task.priority", "target": { "project": "demo", "task": "T1" } },
                   { "id": "task.accept", "target": { "project": "demo", "task": "T1" } },
                   { "id": "task.send-back", "target": { "project": "demo", "task": "T1" } }] },
               { "id": "T2", "actions": [
                   { "id": "task.show", "target": { "project": "demo", "task": "T2" } },
+                  { "id": "task.priority", "target": { "project": "demo", "task": "T2" } },
                   { "id": "task.coordinator", "target": { "project": "demo", "task": "T2" } },
                   { "id": "task.delegate", "target": { "project": "demo", "task": "T2" } }] },
               { "id": "g:in-motion", "head": true },
               { "id": "T3",
                 "cells": [[{ "text": "T3" }], [{ "text": "Dark mode" }], [{ "icon": "working", "role": "good" }, { "text": " started", "role": "good" }], [{ "text": "1/2 t-0003", "role": "faint" }]],
-                "actions": [{ "id": "task.show", "target": { "project": "demo", "task": "T3" } }],
+                "actions": [{ "id": "task.show", "target": { "project": "demo", "task": "T3" } },
+                  { "id": "task.priority", "target": { "project": "demo", "task": "T3" } }],
                 "more": [
                   [{ "text": "      " }, { "icon": "todo.done", "role": "good" }, { "text": " Theme roles" }],
                   [{ "text": "      " }, { "icon": "todo.open", "role": "faint" }, { "text": " Settings picker" }]] },
               { "id": "g:on-deck", "head": true },
               { "id": "T4",
                 "cells": [[{ "text": "T4" }], [{ "text": "Search" }], [{ "icon": "idle" }, { "text": " ready" }], [{ "text": "asked the coordinator", "role": "warn" }]],
-                "actions": [{ "id": "task.show", "target": { "project": "demo", "task": "T4" } }] },
+                "actions": [{ "id": "task.show", "target": { "project": "demo", "task": "T4" } },
+                  { "id": "task.priority", "target": { "project": "demo", "task": "T4" } }] },
               { "id": "g:backlog", "head": true },
               { "id": "T5", "actions": [
                   { "id": "task.show", "target": { "project": "demo", "task": "T5" } },
+                  { "id": "task.priority", "target": { "project": "demo", "task": "T5" } },
                   { "id": "task.delegate", "target": { "project": "demo", "task": "T5" } }] },
               { "id": "g:done", "head": true, "spans": [{ "text": "DONE", "role": "head" }] }
             ] },
             { "kind": "text", "text": "… 2 done (b shows them)", "role": "faint" },
-            { "kind": "keys", "id": "keys", "keys": [{ "key": "b", "label": "done" }],
+            { "kind": "keys", "id": "keys", "keys": [{ "key": "b", "label": "done" }, { "key": "p", "label": "must only" }],
               "actions": [{ "id": "task.new", "target": { "project": "demo" } }] }
           ] } } }
     ]

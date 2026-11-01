@@ -48,6 +48,7 @@ func TestRender(t *testing.T) {
 	}
 	design := "network-view"
 	s.SetPlan(human, 2, &design, []string{"T1"})
+	s.SetPriority(human, 2, "must")
 	r, _ := thread.Create(p, thread.Record{Title: "Build it", Task: "T2", State: thread.Running, Agent: "claude", Branch: "tm/demo/x"})
 	s.SetThread(human, 2, r.ID)
 	os.WriteFile(thread.Path(p, r.ID, "brief.md"), []byte("# Brief\n"), 0o644)
@@ -76,6 +77,7 @@ func TestRender(t *testing.T) {
 	task := read("tasks/T2.md")
 	for _, want := range []string{
 		`id: "T2"`, `project: "[[demo/PROJECT|demo]]"`, `status: "review"`, `group: "Needs you"`,
+		`priority: "must"`,
 		`thread: "[[demo/threads/` + r.ID + `/` + r.ID + `|` + r.ID + `]]"`, `pr: "https://github.com/o/r/pull/7"`,
 		`design: "[[demo/designs/network-view|network-view]]"`, "after:\n  - \"[[demo/tasks/T1|T1]]\"",
 		"steps: 2", "steps_done: 0", "tags:\n  - \"task\"\n  - \"needs-you\"", `tm: "owned"`, "cssclasses:\n  - \"tm-owned\"",

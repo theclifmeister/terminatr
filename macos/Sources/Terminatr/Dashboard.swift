@@ -480,8 +480,8 @@ private struct BoardFilter: View {
     }
 }
 
-/// A task on the board: its id, title and its action (Delegate…); its
-/// words show it in the task view.
+/// A task on the board: its id, priority, title and its action
+/// (Delegate…); its words show it in the task view.
 private struct BoardRow: View {
     @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
@@ -497,6 +497,7 @@ private struct BoardRow: View {
                             .font(theme.mono(.subheadline, .medium))
                             .foregroundStyle(theme.action)
                             .frame(minWidth: 44, alignment: .leading)
+                        PriorityTag(task.priority)
                         Text(task.title)
                             .font(theme.body(.body))
                             .lineLimit(1)

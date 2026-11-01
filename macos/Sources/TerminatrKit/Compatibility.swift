@@ -29,6 +29,10 @@ public enum Compatibility: Equatable, Sendable {
     /// template: the board's Done fold and New Task's templates need it.
     public static let boardAPI = 20
 
+    /// The app API that has task.priority and a task's priority: the
+    /// board's priority tags and the task view's Priority menu need it.
+    public static let priorityAPI = 42
+
     /// The app API that has design.list: the project's Designs need it.
     public static let designsAPI = 31
 

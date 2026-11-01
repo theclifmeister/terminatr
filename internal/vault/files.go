@@ -57,7 +57,7 @@ func perProject(slugs []string, folder, order string, and ...string) string {
 func quote(s string) string { return "'" + strings.ReplaceAll(s, "'", "''") + "'" }
 
 func bases(slugs []string) []base {
-	const taskOrder = "[file.name, title, status, thread, formula.progress, pr, formula.age]"
+	const taskOrder = "[file.name, title, status, priority, thread, formula.progress, pr, formula.age]"
 	const threadOrder = "[file.name, task, title, agent, model, state, pr, created]"
 	const memoryOrder = "[file.name, title, touches, standing, audience, source]"
 	// Each view leaves out archived tasks (archived: true) but the one
@@ -66,9 +66,12 @@ func bases(slugs []string) []base {
 formulas:
   progress: 'if(steps > 0, steps_done + "/" + steps, "")'
   age: 'if(updated, (now() - updated).days.floor(), "")'
+  rank: 'if(priority == "must", 1, if(priority == "should", 2, if(priority == "could", 3, 4)))'
 properties:
   formula.progress:
     displayName: steps
+  formula.rank:
+    displayName: priority rank
   formula.age:
     displayName: age (days)
 views:
@@ -83,6 +86,9 @@ views:
       direction: ASC
     groupOrder: ["Needs you", "In motion", "On deck", "Backlog", "Done"]
     order: ` + taskOrder + `
+    sort:
+      - property: formula.rank
+        direction: ASC
   - type: cards
     name: Cards
     filters:
@@ -90,7 +96,10 @@ views:
         - 'archived != true'
         - 'status != "done"'
         - 'status != "dropped"'
-    order: [title, status, thread, formula.progress]
+    order: [title, status, priority, thread, formula.progress]
+    sort:
+      - property: formula.rank
+        direction: ASC
   - type: table
     name: Done this week
     filters:

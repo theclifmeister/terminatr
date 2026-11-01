@@ -191,6 +191,26 @@ func (s *Server) taskAdd(p proto.TaskAddParams, cc callCtx) (any, *proto.Error) 
 	return proto.TaskAddResult{Task: r.ID, Existing: r.Result == "existing"}, nil
 }
 
+// taskPriority sets a task's priority as the caller (task.priority).
+func (s *Server) taskPriority(p proto.TaskPriorityParams, cc callCtx) (any, *proto.Error) {
+	pr, err := project.Open(p.Project)
+	if err != nil {
+		return nil, proto.Errorf(proto.ErrBadParams, "%v", err)
+	}
+	id, ok := tasks.ParseRef(p.Task)
+	if !ok {
+		return nil, proto.Errorf(proto.ErrBadParams, "%q is not a task id (T12)", p.Task)
+	}
+	res, err := pr.Tasks().SetPriority(cc.who(), id, p.Priority)
+	if err != nil {
+		return nil, taskError(err)
+	}
+	if res.Changed {
+		s.watch.wake()
+	}
+	return proto.TaskPriorityResult{Changed: res.Changed}, nil
+}
+
 // taskError is a task store's refusal with its code (unknown-task,
 // not-accept, invalid-note, already-asked, …), anything else internal.
 func taskError(err error) *proto.Error {

@@ -139,6 +139,8 @@ func (m *dash) runBinding(msg bindingMsg) tea.Cmd {
 		return m.accept(t.Project, task, &b)
 	case "task.send-back":
 		return m.sendBack(t.Project, task, &b)
+	case "task.priority":
+		return m.pickPriority(t.Project, task, &b)
 	case "task.new":
 		return tea.Batch(m.newTask(t.Project), m.bindingDone(&b, true))
 	case "task.coordinator":

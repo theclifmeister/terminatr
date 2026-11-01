@@ -115,7 +115,7 @@ func TestBuiltinTasksTab(t *testing.T) {
 	if !rows[0].Head || !rows[4].Head || len(rows[1].More) != 2 {
 		t.Errorf("heads or steps: %+v", rows)
 	}
-	if a := rows[3].Actions; len(a) != 2 || a[0].ID != "task.show" || a[1].ID != "task.delegate" || a[1].Target["task"] != "T2" {
+	if a := rows[3].Actions; len(a) != 3 || a[0].ID != "task.show" || a[1].ID != "task.priority" || a[2].ID != "task.delegate" || a[2].Target["task"] != "T2" {
 		t.Errorf("T2 binds %+v", a)
 	}
 	if k := board.Children[len(board.Children)-1]; k.Kind != widget.KindKeys || len(k.Actions) != 1 || k.Actions[0].ID != "task.new" || k.Actions[0].Target["project"] != "demo" {

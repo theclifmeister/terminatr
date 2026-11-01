@@ -116,6 +116,19 @@ func (s *ServerSource) AddTask(slug, title string, tpl *mod.Template) (string, e
 	return res[0].ID, nil
 }
 
+func (s *ServerSource) SetPriority(slug string, id int, prio tasks.Priority) (bool, error) {
+	defer s.touch()
+	if s.Caller.IsAgent() {
+		return false, errHumanOnly
+	}
+	p, err := project.Open(slug)
+	if err != nil {
+		return false, err
+	}
+	res, err := p.Tasks().SetPriority(s.Caller, id, string(prio))
+	return res.Changed, err
+}
+
 func (s *ServerSource) Ask(slug string, id int, kind, note string) (bool, error) {
 	defer s.touch()
 	if s.Caller.IsAgent() {

@@ -1,0 +1,59 @@
+{
+  "name": "each section lists must, should, could, then none, the priority in its own cell; p narrows the list to one priority, then the next",
+  "answers": [
+    { "method": "tasks.list", "params": { "slug": "demo" },
+      "result": [
+        { "id": "T2", "title": "Login", "status": "ready", "priority": "must", "steps_done": 0, "steps_total": 0, "steps": [] },
+        { "id": "T3", "title": "Search", "status": "ready", "priority": "could", "steps_done": 0, "steps_total": 0, "steps": [] },
+        { "id": "T1", "title": "Docs", "status": "ready", "steps_done": 0, "steps_total": 0, "steps": [] },
+        { "id": "T4", "title": "Theme", "status": "ready", "priority": "should", "steps_done": 0, "steps_total": 0, "steps": [] },
+        { "id": "T5", "title": "Idea", "status": "open", "priority": "must", "steps_done": 0, "steps_total": 0, "steps": [] }
+      ] }
+  ],
+  "events": [
+    { "name": "view.opened", "project": "demo",
+      "data": { "view": "tasks", "slot": "project.tab", "project": "demo", "width": 70, "height": 20 } },
+    { "name": "ui.key", "project": "demo",
+      "data": { "view": "tasks", "widget": "tasks", "key": "p", "target": { "project": "demo" } } },
+    { "name": "ui.key", "project": "demo",
+      "data": { "view": "tasks", "widget": "tasks", "key": "p", "target": { "project": "demo" } } }
+  ],
+  "expect": {
+    "calls": [
+      { "method": "tasks.list", "params": { "slug": "demo" } },
+      { "method": "ui.view.set", "params": { "view": "tasks",
+          "widget": { "kind": "stack", "children": [
+            { "kind": "table", "rows": [
+              { "id": "g:on-deck", "head": true },
+              { "id": "T2", "cells": [[{ "text": "T2" }], [{ "text": "must", "role": "warn" }], [{ "text": "Login" }], [{ "icon": "idle" }, { "text": " ready" }], []] },
+              { "id": "T4", "cells": [[{ "text": "T4" }], [{ "text": "should" }], [{ "text": "Theme" }], [{ "icon": "idle" }, { "text": " ready" }], []] },
+              { "id": "T3", "cells": [[{ "text": "T3" }], [{ "text": "could", "role": "faint" }], [{ "text": "Search" }], [{ "icon": "idle" }, { "text": " ready" }], []] },
+              { "id": "T1", "cells": [[{ "text": "T1" }], [], [{ "text": "Docs" }], [{ "icon": "idle" }, { "text": " ready" }], []] },
+              { "id": "g:backlog", "head": true },
+              { "id": "T5" }
+            ] },
+            { "kind": "keys", "keys": [{ "key": "p", "label": "must only" }] }
+          ] } } },
+      { "method": "ui.view.set", "params": { "view": "tasks",
+          "widget": { "kind": "stack", "children": [
+            { "kind": "table", "rows": [
+              { "id": "g:on-deck", "head": true },
+              { "id": "T2" },
+              { "id": "g:backlog", "head": true },
+              { "id": "T5" }
+            ] },
+            { "kind": "text", "text": "only the must tasks (p for the next)", "role": "faint" },
+            { "kind": "keys", "keys": [{ "key": "p", "label": "should only" }] }
+          ] } } },
+      { "method": "ui.view.set", "params": { "view": "tasks",
+          "widget": { "kind": "stack", "children": [
+            { "kind": "table", "empty": "no should tasks", "rows": [
+              { "id": "g:on-deck", "head": true },
+              { "id": "T4" }
+            ] },
+            { "kind": "text", "text": "only the should tasks (p for the next)" },
+            { "kind": "keys", "keys": [{ "key": "p", "label": "could only" }] }
+          ] } } }
+    ]
+  }
+}

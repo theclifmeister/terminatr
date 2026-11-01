@@ -7,9 +7,9 @@
 # install it by path (tm mod install refuses a built-in mod's id).
 id = "tasks-tab"
 name = "Tasks tab"
-version = "1.0.0"
-api = "1.4"
-description = "The project's tasks in its popup, grouped as the board has them; D, A, x, c, enter and + are tm's own actions, bound on each row and in the tab."
+version = "1.1.0"
+api = "1.13"
+description = "The project's tasks in its popup, grouped as the board has them; D, A, x, P, c, enter and + are tm's own actions, bound on each row and in the tab."
 authors = ["terminatr"]
 homepage = "https://github.com/theclifmeister/terminatr/tree/main/examples/mods/tasks-tab"
 

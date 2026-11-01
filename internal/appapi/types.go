@@ -103,6 +103,13 @@ type (
 		Task    string `json:"task"`
 		Note    string `json:"note"`
 	}
+	// TaskPriorityParams are task.priority's (app API 42): Project's
+	// task ("T12") and its priority, must, should, could or none.
+	TaskPriorityParams struct {
+		Project  string `json:"project"`
+		Task     string `json:"task"`
+		Priority string `json:"priority"`
+	}
 	// TaskGetParams are task.get's (app API 14): Project's task
 	// ("T12").
 	TaskGetParams struct {
@@ -381,16 +388,19 @@ type Project struct {
 // Task is a task on the board; Ref is its id as the user reads it
 // ("T12").
 type Task struct {
-	ID      int    `json:"id"`
-	Ref     string `json:"ref"`
-	Title   string `json:"title"`
-	Status  string `json:"status"`
-	Notes   string `json:"notes,omitempty"`
-	Steps   []Step `json:"steps,omitempty"`
-	Thread  string `json:"thread,omitempty"`
-	Owner   string `json:"owner,omitempty"`
-	Created string `json:"created,omitempty"`
-	Updated string `json:"updated,omitempty"`
+	ID     int    `json:"id"`
+	Ref    string `json:"ref"`
+	Title  string `json:"title"`
+	Status string `json:"status"`
+	// Priority is must, should or could, "" for none (app API 42); the
+	// board lists each group by it.
+	Priority string `json:"priority,omitempty"`
+	Notes    string `json:"notes,omitempty"`
+	Steps    []Step `json:"steps,omitempty"`
+	Thread   string `json:"thread,omitempty"`
+	Owner    string `json:"owner,omitempty"`
+	Created  string `json:"created,omitempty"`
+	Updated  string `json:"updated,omitempty"`
 }
 
 // Step is one step of a task.
@@ -593,6 +603,12 @@ type ApproveResult struct {
 // something of the task.
 type TaskAskResult struct {
 	Asked bool `json:"asked"`
+}
+
+// TaskPriorityResult is task.priority's (app API 42): Changed false
+// when the task had that priority already.
+type TaskPriorityResult struct {
+	Changed bool `json:"changed"`
 }
 
 // NoticeResult is notify.claim's and notify.dismiss's: OK for the first console to claim a notice, and for a
@@ -879,7 +895,7 @@ func projectOf(p server.SideProject) Project {
 }
 
 func taskOf(t server.SideTask) Task {
-	out := Task{ID: t.ID, Ref: (&tasks.Task{ID: t.ID}).Ref(), Title: t.Title, Status: string(t.Status), Notes: t.Notes,
+	out := Task{ID: t.ID, Ref: (&tasks.Task{ID: t.ID}).Ref(), Title: t.Title, Status: string(t.Status), Priority: string(t.Priority), Notes: t.Notes,
 		Thread: t.Thread, Owner: t.Owner, Created: t.Created, Updated: t.Updated}
 	for _, s := range t.Steps {
 		out.Steps = append(out.Steps, Step{N: s.N, Text: s.Text, Done: s.Done})

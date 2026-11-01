@@ -136,6 +136,9 @@ func init() {
 		unary(proto.MethodQuestionsOpen, true, questionsOpenParams, questionsOpenOf),
 		// A task added to a project's board, as tm task add (app API 7).
 		unary(proto.MethodTaskAdd, true, taskAddParams, taskAddedOf),
+		// A task's priority set, as tm task edit --priority (app API
+		// 42; the server's caps say task-priority).
+		unary(proto.MethodTaskPriority, true, taskPriorityParams, taskPriorityOf),
 		// The coordinator's save and clear (tm clear, prefix+C), and a
 		// project activated or deactivated (tm project activate, S in
 		// the sidebar), each asked first in the app (app API 13).
@@ -453,6 +456,14 @@ func sendBackParams(p SendBackParams) proto.TaskActionParams {
 
 func questionsOpenParams(p ProjectParams) proto.QuestionsOpenParams {
 	return proto.QuestionsOpenParams{Project: p.Project}
+}
+
+func taskPriorityParams(p TaskPriorityParams) proto.TaskPriorityParams {
+	return proto.TaskPriorityParams{Project: p.Project, Task: p.Task, Priority: p.Priority}
+}
+
+func taskPriorityOf(r proto.TaskPriorityResult) TaskPriorityResult {
+	return TaskPriorityResult{Changed: r.Changed}
 }
 
 func taskGetParams(p TaskGetParams) proto.TaskGetParams {

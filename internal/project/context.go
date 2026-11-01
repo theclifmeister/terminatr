@@ -437,8 +437,10 @@ func (p *Project) taskSection() (Section, error) {
 		}
 		limit := capTasksGroup
 		if g == tasks.DoneG || g == tasks.DroppedG {
-			// The most recent done or dropped tasks matter; show the highest ids.
+			// The most recent done or dropped tasks matter; show the
+			// highest ids, whatever their priority.
 			limit = capDone
+			slices.SortStableFunc(ts, func(a, b *tasks.Task) int { return a.ID - b.ID })
 			if len(ts) > limit {
 				ts = ts[len(ts)-limit:]
 			}
@@ -472,9 +474,13 @@ func (p *Project) taskSection() (Section, error) {
 }
 
 // indexTaskLine is a task's line in the start-up block's index: its id,
-// status, title at capIndexTitle and thread.
+// status, priority, title at capIndexTitle and thread.
 func indexTaskLine(t *tasks.Task) string {
-	line := t.Ref() + "  " + string(t.Status) + "  " + textsafe.Clip(textsafe.Clean(t.Title, false), capIndexTitle)
+	status := string(t.Status)
+	if t.Priority != tasks.NoPriority {
+		status += "  " + string(t.Priority)
+	}
+	line := t.Ref() + "  " + status + "  " + textsafe.Clip(textsafe.Clean(t.Title, false), capIndexTitle)
 	if t.Thread != "" {
 		line += "  " + textsafe.Clean(t.Thread, false)
 	}

@@ -66,8 +66,16 @@ func readBoard(path string) (*Board, error) {
 	return b, nil
 }
 
-// Load reads TASKS.md.
-func (s *Store) Load() (*Board, error) { return readBoard(s.TasksPath()) }
+// Load reads TASKS.md, its tasks in board order (Sort: by group, then
+// priority, then id) however the file has them.
+func (s *Store) Load() (*Board, error) {
+	b, err := readBoard(s.TasksPath())
+	if err != nil {
+		return nil, err
+	}
+	b.Sort()
+	return b, nil
+}
 
 // LoadArchive reads tasks/ARCHIVE.md; its tasks have Archived set.
 func (s *Store) LoadArchive() (*Board, error) {
@@ -195,6 +203,8 @@ type NewTask struct {
 	Status string   `json:"status,omitempty"`
 	Owner  string   `json:"owner,omitempty"`
 	Repo   string   `json:"repo,omitempty"`
+	// Priority is must, should, could, or none ("").
+	Priority string `json:"priority,omitempty"`
 }
 
 // AddResult reports one NewTask: created, existing or failed.
@@ -287,7 +297,11 @@ func (s *Store) addOne(c caller.Caller, b *Board, it NewTask) (AddResult, *Task)
 	if err != nil {
 		return fail(err)
 	}
-	t := &Task{ID: b.NextID, Title: title, Status: status, Notes: notes, Owner: owner, Repo: repo, Created: s.today(), Updated: s.today()}
+	prio, err := checkPriority(it.Priority)
+	if err != nil {
+		return fail(err)
+	}
+	t := &Task{ID: b.NextID, Title: title, Status: status, Priority: prio, Notes: notes, Owner: owner, Repo: repo, Created: s.today(), Updated: s.today()}
 	for _, st := range it.Steps {
 		text, err := checkStep(st)
 		if err != nil {
@@ -441,6 +455,24 @@ func (s *Store) Edit(c caller.Caller, id int, title, notes, owner, repo *string)
 		return res, err
 	}
 	return res, s.journal(c, "task.edit", res.Task, "")
+}
+
+// SetPriority sets a task's priority: must, should, could, or none
+// ("" too) to clear it; idempotent.
+func (s *Store) SetPriority(c caller.Caller, id int, priority string) (Result, error) {
+	p, err := checkPriority(priority)
+	if err != nil {
+		return Result{}, err
+	}
+	res, err := s.edit(c, id, opWrite, func(t *Task) (bool, error) {
+		changed := t.Priority != p
+		t.Priority = p
+		return changed, nil
+	})
+	if err != nil || !res.Changed {
+		return res, err
+	}
+	return res, s.journal(c, "task.priority", res.Task, p.String())
 }
 
 // SetPlan sets the design a task builds and the tasks it comes after

@@ -123,27 +123,29 @@ type SideThread struct {
 
 // SideTask is a task (tasks.Task) on the wire.
 type SideTask struct {
-	ID       int          `json:"id"`
-	Title    string       `json:"title"`
-	Status   tasks.Status `json:"status"`
-	Notes    string       `json:"notes,omitempty"`
-	Steps    []tasks.Step `json:"steps,omitempty"`
-	Thread   string       `json:"thread,omitempty"`
-	Owner    string       `json:"owner,omitempty"`
-	Created  string       `json:"created,omitempty"`
-	Updated  string       `json:"updated,omitempty"`
-	Archived bool         `json:"archived,omitempty"`
+	ID     int          `json:"id"`
+	Title  string       `json:"title"`
+	Status tasks.Status `json:"status"`
+	// Priority is must, should or could, absent for none (protocol 32).
+	Priority tasks.Priority `json:"priority,omitempty"`
+	Notes    string         `json:"notes,omitempty"`
+	Steps    []tasks.Step   `json:"steps,omitempty"`
+	Thread   string         `json:"thread,omitempty"`
+	Owner    string         `json:"owner,omitempty"`
+	Created  string         `json:"created,omitempty"`
+	Updated  string         `json:"updated,omitempty"`
+	Archived bool           `json:"archived,omitempty"`
 }
 
 // sideTask is t on the wire.
 func sideTask(t *tasks.Task) SideTask {
-	return SideTask{ID: t.ID, Title: t.Title, Status: t.Status, Notes: t.Notes, Steps: t.Steps, Thread: t.Thread,
+	return SideTask{ID: t.ID, Title: t.Title, Status: t.Status, Priority: t.Priority, Notes: t.Notes, Steps: t.Steps, Thread: t.Thread,
 		Owner: t.Owner, Created: t.Created, Updated: t.Updated, Archived: t.Archived}
 }
 
 // Task is the task t is on the wire.
 func (t SideTask) Task() *tasks.Task {
-	return &tasks.Task{ID: t.ID, Title: t.Title, Status: t.Status, Notes: t.Notes, Steps: t.Steps, Thread: t.Thread,
+	return &tasks.Task{ID: t.ID, Title: t.Title, Status: t.Status, Priority: t.Priority, Notes: t.Notes, Steps: t.Steps, Thread: t.Thread,
 		Owner: t.Owner, Created: t.Created, Updated: t.Updated, Archived: t.Archived}
 }
 

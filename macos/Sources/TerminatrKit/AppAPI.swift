@@ -6,7 +6,7 @@ import Foundation
 /// The terminatr app API (docs/SPEC.md §3.8): what tm app bridge answers.
 public enum AppAPI {
     /// The app API version this app was generated against.
-    public static let version = 41
+    public static let version = 42
 
     public struct AdoptRequestParams: Codable, Sendable, Hashable {
         public var id: String
@@ -2824,6 +2824,7 @@ public enum AppAPI {
         public var ref: String
         public var title: String
         public var status: String
+        public var priority: String
         public var notes: String
         public var steps: [Step]
         public var thread: String
@@ -2831,11 +2832,12 @@ public enum AppAPI {
         public var created: String
         public var updated: String
 
-        public init(id: Int, ref: String, title: String, status: String, notes: String = "", steps: [Step] = [], thread: String = "", owner: String = "", created: String = "", updated: String = "") {
+        public init(id: Int, ref: String, title: String, status: String, priority: String = "", notes: String = "", steps: [Step] = [], thread: String = "", owner: String = "", created: String = "", updated: String = "") {
             self.id = id
             self.ref = ref
             self.title = title
             self.status = status
+            self.priority = priority
             self.notes = notes
             self.steps = steps
             self.thread = thread
@@ -2849,6 +2851,7 @@ public enum AppAPI {
             case ref
             case title
             case status
+            case priority
             case notes
             case steps
             case thread
@@ -2954,6 +2957,36 @@ public enum AppAPI {
         enum CodingKeys: String, CodingKey {
             case project
             case task
+        }
+    }
+
+    public struct TaskPriorityParams: Codable, Sendable, Hashable {
+        public var project: String
+        public var task: String
+        public var priority: String
+
+        public init(project: String, task: String, priority: String) {
+            self.project = project
+            self.task = task
+            self.priority = priority
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case project
+            case task
+            case priority
+        }
+    }
+
+    public struct TaskPriorityResult: Codable, Sendable, Hashable {
+        public var changed: Bool
+
+        public init(changed: Bool) {
+            self.changed = changed
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case changed
         }
     }
 
@@ -3636,6 +3669,7 @@ public enum AppAPI {
         public static let taskDelegate = Call<TaskParams, TaskAskResult>("task.delegate", write: true)
         public static let taskDone = Call<ProjectParams, DoneTasks>("task.done", write: false)
         public static let taskGet = Call<TaskGetParams, Task>("task.get", write: false)
+        public static let taskPriority = Call<TaskPriorityParams, TaskPriorityResult>("task.priority", write: true)
         public static let taskSendBack = Call<SendBackParams, TaskAskResult>("task.send-back", write: true)
         public static let taskTemplates = Call<ProjectParams, Templates>("task.templates", write: false)
         public static let transcriptPage = Call<TranscriptPageParams, TranscriptPage>("transcript.page", write: false)
@@ -4945,6 +4979,7 @@ extension AppAPI.Task {
         self.ref = try c.decode(String.self, forKey: .ref)
         self.title = try c.decode(String.self, forKey: .title)
         self.status = try c.decode(String.self, forKey: .status)
+        self.priority = try c.decodeIfPresent(String.self, forKey: .priority) ?? ""
         self.notes = try c.decodeIfPresent(String.self, forKey: .notes) ?? ""
         self.steps = try c.decodeIfPresent([AppAPI.Step].self, forKey: .steps) ?? []
         self.thread = try c.decodeIfPresent(String.self, forKey: .thread) ?? ""
@@ -5002,6 +5037,22 @@ extension AppAPI.TaskParams {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.project = try c.decode(String.self, forKey: .project)
         self.task = try c.decode(String.self, forKey: .task)
+    }
+}
+
+extension AppAPI.TaskPriorityParams {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.project = try c.decode(String.self, forKey: .project)
+        self.task = try c.decode(String.self, forKey: .task)
+        self.priority = try c.decode(String.self, forKey: .priority)
+    }
+}
+
+extension AppAPI.TaskPriorityResult {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.changed = try c.decode(Bool.self, forKey: .changed)
     }
 }
 
