@@ -46,7 +46,7 @@ func WriteHits(w io.Writer, words string, r proto.SearchQueryResult) {
 		width = max(width, min(utf8.RuneCountInString(h.ID), idWidth))
 	}
 	for _, h := range r.Hits {
-		fmt.Fprintln(w, hitLine(h, width, true))
+		fmt.Fprintln(w, HitLine(h, width, true))
 	}
 	fmt.Fprintln(w, "tm search show <id>… prints the text; tm search timeline <id> what came before and after.")
 	writeErrors(w, r.Errors)
@@ -68,7 +68,7 @@ func WriteTimeline(w io.Writer, t proto.SearchTimelineResult) {
 		if h.ID == t.At.ID {
 			mark = "> "
 		}
-		fmt.Fprintln(w, mark+h.Time.UTC().Format("2006-01-02 15:04")+"  "+hitLine(h, width, false))
+		fmt.Fprintln(w, mark+h.Time.UTC().Format("2006-01-02 15:04")+"  "+HitLine(h, width, false))
 	}
 }
 
@@ -106,16 +106,16 @@ func WriteShow(w io.Writer, r proto.SearchShowResult) {
 				width = max(width, min(utf8.RuneCountInString(h.ID), idWidth))
 			}
 			for _, h := range it.Chunks {
-				fmt.Fprintln(w, hitLine(h, width, true))
+				fmt.Fprintln(w, HitLine(h, width, true))
 			}
 		}
 	}
 }
 
-// hitLine is a hit's line: its id padded to width, its date when dated,
+// HitLine is a hit's line: its id padded to width, its date when dated,
 // its title cut to TitleRunes, its task and thread when its id doesn't
 // say them, and the journal lines folded into it.
-func hitLine(h proto.SearchHit, width int, dated bool) string {
+func HitLine(h proto.SearchHit, width int, dated bool) string {
 	var b strings.Builder
 	b.WriteString(h.ID)
 	if pad := width - utf8.RuneCountInString(h.ID); pad > 0 {
@@ -147,6 +147,16 @@ func about(h proto.SearchHit) string {
 		return ""
 	}
 	return " (" + strings.Join(refs, ", ") + ")"
+}
+
+// IDWidth is the id column's width for hits: the longest id, at most
+// idWidth.
+func IDWidth(hits []proto.SearchHit) int {
+	w := 0
+	for _, h := range hits {
+		w = max(w, min(utf8.RuneCountInString(h.ID), idWidth))
+	}
+	return w
 }
 
 func writeErrors(w io.Writer, errs []string) {

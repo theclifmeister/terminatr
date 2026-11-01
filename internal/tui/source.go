@@ -190,6 +190,7 @@ type Source interface {
 	ModViewSource
 	SessionSource
 	LogSource
+	SearchSource
 }
 
 // LogSource reads the logs on the server's host (the , popup's Logs

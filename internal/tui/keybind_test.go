@@ -24,7 +24,7 @@ func keymap(t *testing.T, km map[string][]string) error {
 // that binds it, so a rename keeps the old id as an alias.
 var wantIDs = []string{
 	"list.up", "list.down", "list.page-up", "list.page-down", "focus.next", "focus.prev", "place.last", "row.open",
-	"session.adopt", "project.activate", "card.fold", "project.new", "project.popup", "project.tasks", "project.inbox", "access.show",
+	"session.adopt", "project.activate", "card.fold", "project.new", "project.popup", "project.tasks", "project.search", "project.inbox", "access.show",
 	"project.next", "project.prev", "list.narrower", "list.wider", "sidebar.narrower", "sidebar.wider",
 	"sidebar.slim", "details.toggle", "settings.open", "network.open", "pane.repaint", "notices.open", "help.open", "console.quit",
 	"side.up", "side.down", "side.enter", "side.unfold", "side.fold", "side.back", "side.activate",
@@ -111,7 +111,7 @@ func TestKeymapRefuses(t *testing.T) {
 			for k, v := range c.km {
 				km[k] = v
 			}
-			km["sidebar.slim"] = []string{"F"} // a good one beside it applies
+			km["sidebar.slim"] = []string{"G"} // a good one beside it applies
 			err := keymap(t, km)
 			if err == nil || !strings.Contains(err.Error(), c.want) {
 				t.Fatalf("err %v, want %q", err, c.want)
@@ -121,7 +121,7 @@ func TestKeymapRefuses(t *testing.T) {
 					t.Errorf("%s was rebound anyway", id)
 				}
 			}
-			if !slices.Equal(binds.list.keys("sidebar.slim", nil), []string{"F"}) {
+			if !slices.Equal(binds.list.keys("sidebar.slim", nil), []string{"G"}) {
 				t.Errorf("the good binding didn't apply")
 			}
 		})
