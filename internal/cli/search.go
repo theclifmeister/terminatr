@@ -30,7 +30,7 @@ are folded into its best hit ("+3 journal lines"). --in takes kinds,
 comma-separated: ` + "notes, tasks, threads, journal, designs, library, context, inbox" + `.
 --since and --until take days (YYYY-MM-DD, both included). --reindex
 rebuilds the index first (not a thread). To search for the word
-"timeline" or "show", put -- before it.
+"timeline" or "show", put -- before the words (flags go before --).
 
 timeline prints what happened around a chunk, in time order: the
 chunks of its task and its thread (8 before and 8 after unless
