@@ -26,7 +26,11 @@ struct BoardScreen: View {
                 groups(p)
             }
         }
-        .searchable(text: $filter, prompt: "Filter by id or title")
+        // In the screen, under its title (T928): left to the system, on
+        // iOS 27.1 an open iPhone Duo's column put it in the vertical
+        // bar (the rail), where it stayed once the column showed another
+        // screen, a magnifier that did nothing.
+        .searchable(text: $filter, placement: .navigationBarDrawer(displayMode: .always), prompt: "Filter by id or title")
         .refreshable { await model.refresh() }
         .navigationTitle("Board")
         .toolbar {
