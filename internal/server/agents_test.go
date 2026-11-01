@@ -106,7 +106,7 @@ func TestCoordinatorEssentials(t *testing.T) {
 		long[i] = "T1 a task with a long enough title to fill the budget"
 	}
 	secs[3].Lines = long
-	if got := coordinatorEssentials(secs, startupBudget); len(got) > startupBudget || !strings.HasSuffix(got, "run `tm context` now for the rest.\n") {
+	if got := coordinatorEssentials(secs, project.StartupBudget); len(got) > project.StartupBudget || !strings.HasSuffix(got, "run `tm context` now for the rest.\n") {
 		t.Fatalf("%d bytes at the start-up budget, ends %q", len(got), got[len(got)-100:])
 	}
 	got = coordinatorEssentials(secs, coordinatorBudget)

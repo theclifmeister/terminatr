@@ -2,14 +2,22 @@ package doctor
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/theclifmeister/terminatr/internal/project"
+	"github.com/theclifmeister/terminatr/internal/textsafe"
 )
+
+// startupCutWindow is how far back tm doctor looks for a clipped
+// start-up block (project.ActionStartupCut).
+const startupCutWindow = 7 * 24 * time.Hour
 
 // Upkeep warns about each project's context files over their size
 // budgets (CONTEXT.md, MEMORY.md and memory/, docs/SPEC.md §7.6): they
 // are read on every coordinator turn, so the coordinator consolidates
-// them. There is no fix: rewriting them is the coordinator's work.
+// them. There is no fix: rewriting them is the coordinator's work. It
+// also warns of a start-up block clipped at run time in the last week
+// (§7.8): that is tm's budgets failing, not the project's files.
 func Upkeep(d Deps) []Check {
 	list, err := project.List()
 	if err != nil {
@@ -23,6 +31,11 @@ func Upkeep(d Deps) []Check {
 		p, err := project.Open(s.Slug)
 		if err != nil {
 			continue
+		}
+		if n, last, err := p.StartupCuts(time.Now().Add(-startupCutWindow)); err == nil && n > 0 {
+			out = append(out, Check{Group: "upkeep", Name: s.Slug, Status: Warn,
+				Detail: fmt.Sprintf("an agent's start-up block passed its %d-byte budget and was clipped %d time(s) in the last 7 days (JOURNAL.md %s; latest: %s): a part's budget needs a fix in tm, so report it",
+					project.StartupBudget, n, project.ActionStartupCut, textsafe.Clip(last, 160))})
 		}
 		over, err := p.Oversized()
 		if err != nil {

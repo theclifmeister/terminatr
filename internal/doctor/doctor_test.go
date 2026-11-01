@@ -590,6 +590,25 @@ func TestUpkeep(t *testing.T) {
 	if len(got) != 1 || got[0].Status != Warn || got[0].Name != "demo" || !strings.Contains(got[0].Detail, "memory/big.md is 6.0 KB (~1.5k tokens), over its 6 KB budget (~1.5k tokens)") || got[0].Fix != nil {
 		t.Fatalf("over budget: %+v", got)
 	}
+
+	// A start-up block clipped at run time this week warns; an older
+	// clip doesn't (T917).
+	os.Remove(p.Path("memory", "big.md"))
+	old := time.Now().Add(-8 * 24 * time.Hour).UTC().Format(time.RFC3339)
+	recent := time.Now().Add(-time.Hour).UTC().Format(time.RFC3339)
+	f, _ := os.OpenFile(p.Path("JOURNAL.md"), os.O_APPEND|os.O_WRONLY, 0o644)
+	f.WriteString(old + " ticker " + project.ActionStartupCut + " coordinator session s1: the start-up block was 9600 bytes\n")
+	f.Close()
+	if got := Upkeep(d); len(got) != 1 || got[0].Status != OK {
+		t.Fatalf("an old clip: %+v", got)
+	}
+	f, _ = os.OpenFile(p.Path("JOURNAL.md"), os.O_APPEND|os.O_WRONLY, 0o644)
+	f.WriteString(recent + " ticker " + project.ActionStartupCut + " t-0001 session s2: the start-up block was 9700 bytes\n")
+	f.Close()
+	got = Upkeep(d)
+	if len(got) != 1 || got[0].Status != Warn || !strings.Contains(got[0].Detail, "clipped 1 time(s) in the last 7 days") || !strings.Contains(got[0].Detail, "9700 bytes") {
+		t.Fatalf("a recent clip: %+v", got)
+	}
 }
 
 // TestSettingsOldAccess: an old switch, a file allow rule and a

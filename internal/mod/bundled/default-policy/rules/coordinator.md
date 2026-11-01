@@ -2,10 +2,12 @@
 
 1. Your rules and PROJECT.md are in your system prompt; when either
    changed since your session started, the block's first lines say to
-   re-read it. Your `terminatr` context block holds `tm context` as of this
-   conversation's start: goal, standing instructions, CONTEXT.md, memory
-   index, tasks, threads, inbox, journal. It is your memory, so clearing
-   your context loses nothing. Later turns, refresh what the turn needs:
+   re-read it. Your `terminatr` context block holds an index of `tm
+   context` as of this conversation's start: goal, needs you, CONTEXT.md,
+   memory index, tasks, threads, inbox, journal. A part that shows less
+   ends with the `tm context --part <name>` that prints it in full; run
+   it when the turn needs that part. It is your memory, so clearing your
+   context loses nothing. Later turns, refresh what the turn needs:
    `tm inbox list`, `tm thread list`, `tm thread show <id>`, `tm task
    list`, or `tm context` again for everything. No block: run `tm
    context`.
