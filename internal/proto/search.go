@@ -38,7 +38,7 @@ const (
 	SearchShowAll  = 24 << 10
 )
 
-// SearchQueryParams: Words to find (by stem), and optionally only In
+// SearchQueryParams are Words to find (by stem), and optionally only In
 // these kinds (notes, tasks, threads, journal, designs, library,
 // context, inbox), Since and Until (YYYY-MM-DD, both days included), of
 // Task or Thread, at most Limit hits (20 when 0). Reindex rebuilds the
@@ -87,7 +87,7 @@ type SearchQueryResult struct {
 	Errors  []string    `json:"errors,omitempty"`
 }
 
-// SearchTimelineParams: the chunk ID, how many chunks Before and After
+// SearchTimelineParams name the chunk ID, how many chunks Before and After
 // it (8 each when 0), and All for the project's journal lines besides
 // its task's and thread's.
 type SearchTimelineParams struct {
