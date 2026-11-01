@@ -1442,8 +1442,9 @@ public enum AppAPI {
         public var transcript: Bool
         public var conversations: String
         public var needs: String
+        public var picks: Bool
 
-        public init(alias: String, name: String = "", id: String = "", state: String, reason: String = "", since: Date? = nil, projects: [PeerProject] = [], shareWaits: Int = 0, shareRequests: [ShareRequest] = [], pane: Bool = false, panes: String = "", transcript: Bool = false, conversations: String = "", needs: String = "") {
+        public init(alias: String, name: String = "", id: String = "", state: String, reason: String = "", since: Date? = nil, projects: [PeerProject] = [], shareWaits: Int = 0, shareRequests: [ShareRequest] = [], pane: Bool = false, panes: String = "", transcript: Bool = false, conversations: String = "", needs: String = "", picks: Bool = false) {
             self.alias = alias
             self.name = name
             self.id = id
@@ -1458,6 +1459,7 @@ public enum AppAPI {
             self.transcript = transcript
             self.conversations = conversations
             self.needs = needs
+            self.picks = picks
         }
 
         enum CodingKeys: String, CodingKey {
@@ -1475,6 +1477,7 @@ public enum AppAPI {
             case transcript
             case conversations
             case needs
+            case picks
         }
     }
 
@@ -4134,6 +4137,7 @@ extension AppAPI.Peer {
         self.transcript = try c.decodeIfPresent(Bool.self, forKey: .transcript) ?? false
         self.conversations = try c.decodeIfPresent(String.self, forKey: .conversations) ?? ""
         self.needs = try c.decodeIfPresent(String.self, forKey: .needs) ?? ""
+        self.picks = try c.decodeIfPresent(Bool.self, forKey: .picks) ?? false
     }
 }
 

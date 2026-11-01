@@ -642,6 +642,10 @@ type Peer struct {
 	// last said ("off", "view", "answer"; "" for a tm without one): at
 	// view or answer its projects carry their needs in full (Needs).
 	Needs string `json:"needs,omitempty"`
+	// Picks (T904): its peer.act takes a multi-select's picks
+	// (PeerNeedActParams.Picks); without, such a question is answered
+	// in its pane there.
+	Picks bool `json:"picks,omitempty"`
 }
 
 // PeerProject is a project a paired server shares: its goal line,
@@ -953,7 +957,7 @@ func peerListOf(l proto.PeerList) PeerList {
 	for _, p := range l.Peers {
 		peer := Peer{Alias: p.Alias, Name: p.Name, ID: p.ID, State: p.State, Reason: p.Reason, Since: p.Since,
 			Projects: make([]PeerProject, 0, len(p.Projects)), ShareWaits: proto.ShareWaits([]proto.PeerMirror{p}),
-			Pane: p.Pane, Panes: p.Panes, Transcript: p.Transcript, Conversations: p.Conversations, Needs: p.Needs}
+			Pane: p.Pane, Panes: p.Panes, Transcript: p.Transcript, Conversations: p.Conversations, Needs: p.Needs, Picks: p.NeedPicks}
 		for _, q := range p.Shares {
 			if !q.Out && q.Pending() {
 				peer.ShareRequests = append(peer.ShareRequests, shareRequestOf(q))

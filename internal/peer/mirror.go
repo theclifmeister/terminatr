@@ -509,7 +509,8 @@ func (m *Mirror) List() proto.PeerList {
 	for _, l := range st.Peers {
 		pm := proto.PeerMirror{Alias: l.Alias, Name: l.Name, ID: l.ID, State: l.State, Reason: l.Reason, Since: l.Since, RTT: l.RTT,
 			Watch: slices.Contains(l.Caps, CapWatch), Popup: slices.Contains(l.Caps, CapPopup), Pane: slices.Contains(l.Caps, CapPane), Version: l.Version,
-			Transcript: slices.Contains(l.Caps, CapTranscript), NeedsCap: slices.Contains(l.Caps, CapNeeds), Projects: []proto.PeerMirrorProject{}}
+			Transcript: slices.Contains(l.Caps, CapTranscript), NeedsCap: slices.Contains(l.Caps, CapNeeds),
+			NeedPicks: slices.Contains(l.Caps, CapNeedPicks), Projects: []proto.PeerMirrorProject{}}
 		if p := m.peers[l.ID]; p != nil {
 			if pm.Pane {
 				pm.Panes = p.panes

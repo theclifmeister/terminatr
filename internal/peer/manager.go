@@ -230,6 +230,9 @@ func (m *Manager) caps() []string {
 		if _, ok := m.opts.Export.(NeedsExporter); ok {
 			caps = append(caps, CapNeeds)
 		}
+		if _, ok := m.opts.Export.(ActExporter); ok {
+			caps = append(caps, CapNeedPicks)
+		}
 		if _, ok := m.opts.Export.(PagesExporter); ok {
 			caps = append(caps, CapPages)
 		}

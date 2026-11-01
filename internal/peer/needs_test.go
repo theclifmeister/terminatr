@@ -319,3 +319,17 @@ func TestNonces(t *testing.T) {
 		t.Error("no nonce was taken")
 	}
 }
+
+// TestNeedPicksCap: a server whose exporter takes acts says need-picks
+// in its hello, as its peer.act takes a multi-select's picks (T904); one
+// that only shows its needs doesn't.
+func TestNeedPicksCap(t *testing.T) {
+	shows := &needsExport{fakeExport: newFakeExport()}
+	if caps := (&Manager{opts: Options{Export: shows}}).caps(); !slices.Contains(caps, CapNeeds) || slices.Contains(caps, CapNeedPicks) {
+		t.Errorf("needs only: caps %v", caps)
+	}
+	acts := &actExport{needsExport: shows}
+	if caps := (&Manager{opts: Options{Export: acts}}).caps(); !slices.Contains(caps, CapNeedPicks) {
+		t.Errorf("acts: caps %v, want %s", caps, CapNeedPicks)
+	}
+}
