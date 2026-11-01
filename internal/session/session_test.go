@@ -326,11 +326,21 @@ func TestExitClosesSubscribers(t *testing.T) {
 // client reported, and with new ones once they change.
 func TestColors(t *testing.T) {
 	s := start(t, "/bin/sh")
+	n := 0
 	query := func(want string) {
 		t.Helper()
-		// The answer is 24 bytes; ESC and BEL shown as E and B.
-		s.Input([]byte("clear; stty raw -echo; printf '\\033]11;?\\007'; head -c 24 | tr '\\033\\007' EB; stty sane; echo\r"))
-		testwait.Eventually(t, want, func() bool { return strings.Contains(screen(t, s), want) })
+		// The answer is 24 bytes; ESC and BEL shown as E and B. The
+		// query is done only once stty sane has run and printed the
+		// marker (computed, so the echoed command never matches): keys
+		// typed while the tty is still raw reach Linux's sh as a line
+		// with no newline, and it waits for the rest forever.
+		n++
+		marker := fmt.Sprintf("sane-%d", 100+n)
+		s.Input([]byte(fmt.Sprintf("clear; stty raw -echo; printf '\\033]11;?\\007'; head -c 24 | tr '\\033\\007' EB; stty sane; echo; echo sane-$((100+%d))\r", n)))
+		testwait.Eventually(t, want, func() bool {
+			sc := screen(t, s)
+			return strings.Contains(sc, want) && strings.Contains(sc, marker)
+		})
 	}
 	var c emu.Colors
 	c.Bg, c.Known = emu.RGB{R: 0x12, G: 0x34, B: 0x56}, emu.KnownBg

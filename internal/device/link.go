@@ -245,11 +245,12 @@ func (m *Manager) run(ctx context.Context, id *peer.Identity, t peer.Transport, 
 func (m *Manager) once(ctx context.Context, id *peer.Identity, t peer.Transport, l *link) (bool, error) {
 	d := l.dev(m)
 	c, err := t.Dial(ctx, func() {
-		l.set(proto.LinkOffline, proto.LinkReasonPeer, nil)
+		// The log line first: whoever sees the link waiting finds it.
 		if !l.waitLogged {
 			l.waitLogged = true
 			m.logf("device %s: waiting for it in link room %s on %s", d.Name, roomPrefix(id.ID, d.ID()), t)
 		}
+		l.set(proto.LinkOffline, proto.LinkReasonPeer, nil)
 	})
 	if err != nil {
 		return false, err

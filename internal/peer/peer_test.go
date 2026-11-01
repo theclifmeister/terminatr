@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -233,9 +234,25 @@ func TestLinkRelayShutdown(t *testing.T) {
 	a, b := newServer(t), newServer(t)
 	a.pair(t, "mini", b, url)
 	b.pair(t, "studio", a, url)
-	ma, mb := a.start(t, "1", tc), b.start(t, "1", tc)
+	// Once the relay is down the links wait before they dial again: a
+	// redial would replace the shutdown with the refusal of a relay
+	// that is gone, between two polls of the status (T905).
+	var down atomic.Bool
+	start := func(s *server) *Manager {
+		m := Start(Options{Dir: s.dir, Version: "1", Logf: t.Logf, RelayTLS: tc,
+			Backoff: func(int) time.Duration {
+				if down.Load() {
+					return time.Hour
+				}
+				return 20 * time.Millisecond
+			}})
+		t.Cleanup(m.Close)
+		return m
+	}
+	ma, mb := start(a), start(b)
 	waitLink(t, ma, "mini", "up", isUp)
 	waitLink(t, mb, "studio", "up", isUp)
+	down.Store(true)
 	rs.Shutdown()
 	waitLink(t, ma, "mini", "offline · relay", func(p proto.PeerLink) bool {
 		return p.State == proto.LinkOffline && p.Reason == proto.LinkReasonRelay && strings.Contains(p.Error, relay.ErrShutdown)
