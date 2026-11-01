@@ -7,7 +7,9 @@ import TerminatrUI
 /// the QR code tm device pair shows on the computer (PairHero, with the
 /// steps under it) or paste its terminatr://pair link; then confirm: the
 /// server's id as chips to check against the computer's, this phone's
-/// name, and Pair, then say yes on the computer. The code names the
+/// name, the line on where what you send goes (T910: App Review
+/// 5.1.2(i), third-party AI, said before Pair so pairing is the
+/// consent), and Pair, then say yes on the computer. The code names the
 /// server's key; the pairing takes no other. It adds the server beside
 /// those paired already (T852); one paired already is paired again in
 /// its place.
@@ -156,6 +158,11 @@ struct PairScreen: View {
                 .padding(.horizontal, 6)
         }
         .padding(.horizontal, Spacing.gutter)
+        Text("Prompts and photos you send go to your tm server; its agents may pass them to the AI provider you set up there.")
+            .font(theme.body(.footnote))
+            .foregroundStyle(theme.muted)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, Spacing.gutter + 6)
         VStack(spacing: Spacing.row) {
             Button {
                 pair(c)

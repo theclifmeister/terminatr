@@ -8,8 +8,9 @@ import UIKit
 /// demo's made up), in the order they were paired (T852), and Pair
 /// another server; then the themes as large live previews
 /// (ThemeCarousel, the same keys as the Mac's Settings › Appearance),
-/// light, dark or the system's, the Haptics switch (T851), and for each
-/// server its own Forget, red and last (T843). Text follows the
+/// light, dark or the system's, the Haptics switch (T851), About (T910:
+/// the privacy policy, support, terminatr.dev and the version), and for
+/// each server its own Forget, red and last (T843). Text follows the
 /// phone's Dynamic Type, so there is no size of its own. From the Projects tab's gear.
 struct SettingsScreen: View {
     @Environment(Phone.self) private var phone
@@ -56,6 +57,7 @@ struct SettingsScreen: View {
                 note("The theme in light or dark; System follows the phone. Text follows the phone's text size.")
                 GroupLabel("Feedback")
                 SwitchCard("Haptics", detail: "A tap on picking an option or a chip, and when the server answers.", isOn: $haptics)
+                AboutSection()
                 ForEach(phone.servers, id: \.key) { m in
                     ForgetSection().environment(m)
                 }

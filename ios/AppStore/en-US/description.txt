@@ -1,0 +1,19 @@
+terminatr is the phone end of tm, the open-source coordinator that runs coding agents on your own computer: one coordinator per project, and every task in its own thread, worktree and branch.
+
+Away from your desk, the app shows you what needs you and lets you act on it.
+
+• Needs you: every question, permission prompt and finished report across your projects, in one list.
+• Answer from the card: pick an option on an agent's question, or approve or refuse a prompt.
+• Conversations: follow each thread as it works, with its files and images, and send the next prompt or a photo.
+• Terminal: see a session's own terminal, pinch to zoom, and type into it with Esc, Ctrl and the arrow keys.
+• Projects: the board, tasks and their steps, designs, memory and the library of every project.
+• Several servers: pair with more than one tm, and see the projects your paired servers share with you.
+• iPad: two columns, Stage Manager and Split View, and keyboard shortcuts.
+
+Private by design
+The app talks only to your own tm server, end to end encrypted through your relay, which forwards the link but can't read it. There is no account, no analytics and no tracking. The developer receives nothing.
+
+What you need
+tm on your Mac or Linux computer (terminatr.dev). Pair by scanning the code that tm device pair shows. Don't have tm yet? Tap Explore the demo to look around recorded example projects.
+
+terminatr works with the coding agents tm supports, such as Claude Code and Codex. It is not affiliated with Anthropic or OpenAI.
