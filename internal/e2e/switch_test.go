@@ -2,6 +2,7 @@ package e2e
 
 import (
 	"bytes"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -40,11 +41,14 @@ func TestSmokeSwitchOneFrame(t *testing.T) {
 			t.Errorf("switch %d: the session's frame clears the screen", i)
 		}
 
+		// prefix d: the prefix alone draws the session with its hint for
+		// a footer, a frame of its own whenever the d comes after a
+		// render, as under load (T907).
 		n = len(raw)
 		w.Detach()
 		w.WaitFor("OTHER SESSIONS", wait)
 		w.Quiet(300 * time.Millisecond)
-		checkSwitch(t, w.Raw(), n, 120, 30, attached, dash)
+		checkSwitch(t, w.Raw(), n, 120, 30, attached, dash, "prefix ▸ ")
 	}
 	w.Quit()
 	w.WaitExit(wait)
@@ -85,10 +89,11 @@ func TestSwitchSidebarOneFrame(t *testing.T) {
 }
 
 // checkSwitch checks the output from raw[n:], a switch from the screen
-// showing from to the one showing to (text each shows): replayed on a
-// terminal of cols×rows, wherever it could show the window (outside a
-// synchronised update) it shows one of them, and nothing is drawn there.
-func checkSwitch(t *testing.T, raw []byte, n, cols, rows int, from, to string) {
+// showing from (or any of fromToo, other forms of it) to the one showing
+// to: replayed on a terminal of cols×rows, wherever it could show the
+// window (outside a synchronised update) it shows one of them, and
+// nothing is drawn there.
+func checkSwitch(t *testing.T, raw []byte, n, cols, rows int, from, to string, fromToo ...string) {
 	t.Helper()
 	sw := raw[n:]
 	if bytes.Contains(sw, []byte("\x1b[?1049")) {
@@ -105,7 +110,7 @@ func checkSwitch(t *testing.T, raw []byte, n, cols, rows int, from, to string) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !strings.Contains(sc, from) && !strings.Contains(sc, to) {
+		if !strings.Contains(sc, to) && !slices.ContainsFunc(append([]string{from}, fromToo...), func(f string) bool { return strings.Contains(sc, f) }) {
 			t.Errorf("%s → %s: %s the window shows neither:\n%s", from, to, where, sc)
 		}
 	}
