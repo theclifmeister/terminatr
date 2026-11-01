@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"text/tabwriter"
 	"time"
+	"unicode/utf16"
 
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/caller"
@@ -378,25 +380,41 @@ func (e *Env) ownProject(slug string) error {
 	return &project.Error{Code: "other-project", Msg: "a thread sees only its own project"}
 }
 
-const contextUsage = `usage: tm context [--thread <id>|<task>] [--project <slug>] [--json]
+const contextUsage = `usage: tm context [--part <name>] [--project <slug>] [--json]
+       tm context --startup [--thread <id>] [--project <slug>] [--json]
+       tm context --thread <id>|<task> [--project <slug>] [--json]
 
---thread previews the memory notes a thread's brief carries (the
+--part prints one part in full: project, instructions, needs, context,
+upkeep, memory, tasks, threads, inbox, links or journal.
+
+--startup prints the start-up block a coordinator (or with --thread,
+that thread) would get if it started now: the index of tm context under
+the agent's cap on hook output, with its size on stderr.
+
+--thread alone previews the memory notes a thread's brief carries (the
 standing ones, and the best 3 for its task's words and paths), for a
 thread or for a task's thread before it starts.`
 
 func runContext(e *Env, args []string) error {
 	f := newFlags()
 	slug, asJSON, of := f.String("project"), f.Bool("json"), f.String("thread")
+	part, startup := f.String("part"), f.Bool("startup")
 	pos, err := f.Parse(args)
 	if err != nil {
 		return err
 	}
-	if len(pos) != 0 {
+	if len(pos) != 0 || *part != "" && (*startup || *of != "") {
 		return usagef("%s", contextUsage)
+	}
+	if *part != "" && !slices.Contains(project.ContextParts, *part) {
+		return usagef("--part takes one of %s", strings.Join(project.ContextParts, ", "))
 	}
 	p, err := e.openProject(*slug)
 	if err != nil {
 		return err
+	}
+	if *startup {
+		return e.printStartup(p, *of, *asJSON)
 	}
 	if *of != "" {
 		return e.previewMemory(p, *of, *asJSON)
@@ -415,10 +433,62 @@ func runContext(e *Env, args []string) error {
 	if err != nil {
 		return err
 	}
+	if *part != "" {
+		sections = project.PartSections(sections, *part)
+		if *asJSON {
+			return e.printJSON(map[string]any{"project": p.Slug, "part": *part, "sections": orEmpty(sections)})
+		}
+		if len(sections) == 0 {
+			_, err = fmt.Fprintf(e.Stdout, "(nothing in %s now)\n", *part)
+			return err
+		}
+	}
 	if *asJSON {
 		return e.printJSON(map[string]any{"project": p.Slug, "sections": sections})
 	}
 	_, err = fmt.Fprint(e.Stdout, project.RenderContext(sections))
+	return err
+}
+
+// orEmpty is ss, or an empty list for JSON's [].
+func orEmpty(ss []project.Section) []project.Section {
+	if ss == nil {
+		return []project.Section{}
+	}
+	return ss
+}
+
+// printStartup prints what tm context --startup shows: the start-up
+// block a coordinator, or thread of (an id), would get if it started
+// now, as the server builds it, with its size on stderr.
+func (e *Env) printStartup(p *project.Project, of string, asJSON bool) error {
+	role := proto.RoleCoordinator
+	if of != "" {
+		if !thread.ValidID(of) {
+			return usagef("--startup --thread takes a thread id like t-0007")
+		}
+		if _, err := thread.Load(p, of); err != nil {
+			return err
+		}
+		role = proto.RoleThread
+	}
+	text, cut, err := server.StartupBlock(role, p.Slug, of, tickerState())
+	if err != nil {
+		return err
+	}
+	units := len(utf16.Encode([]rune(text)))
+	if asJSON {
+		return e.printJSON(map[string]any{"project": p.Slug, "role": role, "thread": of, "bytes": len(text), "utf16": units,
+			"budget": project.StartupBudget, "cut": cut, "text": text})
+	}
+	if _, err := fmt.Fprint(e.Stdout, text); err != nil {
+		return err
+	}
+	note := fmt.Sprintf("%d bytes, %d characters (UTF-16) of the %d-byte budget; Claude's cap is 10,000 characters", len(text), units, project.StartupBudget)
+	if cut {
+		note += fmt.Sprintf("; over the budget, so the hook clips it at %d bytes", project.StartupCut)
+	}
+	_, err = fmt.Fprintln(e.Stderr, note)
 	return err
 }
 

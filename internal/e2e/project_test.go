@@ -430,23 +430,26 @@ cmd = '` + tm + `inbox done "$(` + tm + `inbox list | grep t-0003 | cut -d" " -f
 		t.Fatalf("after the work: inbox\n%s\ndone %v", inboxBefore, doneBefore)
 	}
 	// The rules are in the system prompt (T915); the block says so, then
-	// all of tm context and a last line on when to run it again (T66,
-	// T109).
+	// the index of tm context and a last line on how to get the rest
+	// (T66, T109, T917).
 	rules := env.MustCLI("skill", "coordinator")
 	env.WaitFake("start", agentWait, func(r FakeRecord) bool {
 		b, err := os.ReadFile(r.Str("brief_path"))
 		return err == nil && strings.HasPrefix(string(b), rules) && strings.Contains(string(b), "\n# PROJECT.md\n")
 	})
-	full := env.MustCLI("context", "--project", slug)
-	want := "Your rules (`tm skill coordinator`) and PROJECT.md are in your system prompt; this block is the project's state. " +
-		"One rules section again: `tm skill coordinator --section <heading>`.\n\n" + full +
-		"\nThat is `tm context` as of this conversation's start; run it (or tm inbox list, tm thread list) again when you need the current state.\n"
+	// The block is tm context's start-up index, as tm context --startup
+	// prints it (T917).
+	want := env.MustCLI("context", "--startup", "--project", slug)
+	if !strings.HasPrefix(want, "Your rules (`tm skill coordinator`) and PROJECT.md are in your system prompt; this block is the project's state. ") ||
+		!strings.Contains(want, "\n## Inbox\n") || !strings.HasSuffix(want, "`tm context` prints all of it as it is now.\n") {
+		t.Fatalf("tm context --startup:\n%s", want)
+	}
 
 	n := len(env.FakeRecords("context"))
 	env.Keys(s, "/clear\r")
 	r := env.WaitFake("context", agentWait, func(r FakeRecord) bool { return r.Str("source") == "clear" })
 	if got := r.Str("text"); got != want {
-		t.Fatalf("context after /clear differs from rules + tm context before it\n--- got\n%s\n--- want\n%s", got, want)
+		t.Fatalf("context after /clear differs from tm context --startup before it\n--- got\n%s\n--- want\n%s", got, want)
 	}
 	if len(env.FakeRecords("context")) != n+1 {
 		t.Errorf("clear injected the context %d times", len(env.FakeRecords("context"))-n)

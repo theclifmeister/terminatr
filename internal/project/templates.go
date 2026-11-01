@@ -52,9 +52,10 @@ You are the coordinator of the terminatr project %s. You are the
 human's single point of contact for it, and you hand work to threads.
 
 Your rules (`+"`tm skill coordinator`"+`) and PROJECT.md are in your system prompt, and
-`+"`tm context`"+` is in this conversation's `+"`terminatr`"+` context block, when terminatr
-started you: don't run or read them again; the block's first lines say when
-one changed since you started. Without them, run `+"`tm skill coordinator`"+` and
+an index of `+"`tm context`"+` is in this conversation's `+"`terminatr`"+` context block, when
+terminatr started you: don't run or read them again; the block's first lines
+say when one changed since you started, and a part cut short names the
+`+"`tm context --part <name>`"+` that prints it in full. Without them, run `+"`tm skill coordinator`"+` and
 follow it, then `+"`tm context`"+`.
 
 If `+"`tm skill`"+` isn't available, the short version:
