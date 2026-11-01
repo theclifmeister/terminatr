@@ -432,6 +432,14 @@ func TestShutdownClosesRooms(t *testing.T) {
 	if r := closeReason(err); r != ErrShutdown && r != ErrPeerGone {
 		t.Fatalf("err = %v, want shutdown", err)
 	}
+	// A new connection is refused as unavailable, not as too many (T905).
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	_, err = linkDialer(newKey(t), newKey(t), tc).Dial(ctx, url)
+	var he *HTTPError
+	if !errors.As(err, &he) || he.Status != http.StatusServiceUnavailable {
+		t.Fatalf("after shutdown: %v, want HTTP 503", err)
+	}
 }
 
 func TestUpgradeChecks(t *testing.T) {

@@ -25,6 +25,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/peer"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/relay"
+	"github.com/theclifmeister/terminatr/internal/testwait"
 )
 
 func newKey(t *testing.T) *peer.Identity {
@@ -343,7 +344,12 @@ func TestLink(t *testing.T) {
 	m := Start(Options{Dir: devDir, PeerDir: peerDir, Serve: echo, Logf: logf, RelayTLS: tc,
 		Backoff: func(int) time.Duration { return 20 * time.Millisecond }})
 	t.Cleanup(m.Close)
-	waitState(t, m, "iPhone", proto.LinkOffline) // waiting for the phone
+	// Waiting for the phone in its room: offline for the peer, not for a
+	// relay error a retry would get past.
+	testwait.Eventually(t, "iPhone waiting in its room", func() bool {
+		st := m.Status()
+		return len(st) == 1 && st[0].State == proto.LinkOffline && st[0].Reason == proto.LinkReasonPeer
+	})
 	// The log names the room as the relay's log does (T809).
 	room := relay.LinkRoom(srv.ID, phone.ID)
 	want := fmt.Sprintf("device iPhone: waiting for it in link room %x on relay ", room[:4])

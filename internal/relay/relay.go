@@ -262,6 +262,13 @@ func waitKey(ip netip.Addr) string {
 	return ip.String()
 }
 
+// shuttingDown reports whether Shutdown was called.
+func (s *Server) shuttingDown() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.closing
+}
+
 // admit counts a new connection from key, or says why not.
 func (s *Server) admit(key string) bool {
 	s.mu.Lock()
@@ -442,6 +449,12 @@ func (s *Server) serveWS(w http.ResponseWriter, r *http.Request) {
 	ip := s.clientIP(r)
 	key := ipKey(ip)
 	if !ip.IsValid() || !s.admit(key) {
+		// A relay shutting down says so, not that the client came too
+		// often: its links show why they are offline.
+		if s.shuttingDown() {
+			http.Error(w, "relay shutting down", http.StatusServiceUnavailable)
+			return
+		}
 		http.Error(w, "too many connections", http.StatusTooManyRequests)
 		return
 	}
