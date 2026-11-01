@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.70.0](https://github.com/theclifmeister/terminatr/compare/v0.69.0...v0.70.0) (2026-11-01)
+
+
+### Features
+
+* an answered question shows each question and the answer picked ([#983](https://github.com/theclifmeister/terminatr/issues/983)) ([cc71088](https://github.com/theclifmeister/terminatr/commit/cc710887ca508ed59ee831162f07cc7b28f80857))
+* answer multi-select questions from the TUI, the Mac app and the iPhone ([#984](https://github.com/theclifmeister/terminatr/issues/984)) ([5c6d96e](https://github.com/theclifmeister/terminatr/commit/5c6d96e3ea342060b4dfbf90e409f3d7ae832e13))
+* **ios:** answer a paired server's multi-select from its need card ([#988](https://github.com/theclifmeister/terminatr/issues/988)) ([448eaa4](https://github.com/theclifmeister/terminatr/commit/448eaa41904cb9e3ffd97254d979930c9d9b83ef))
+* **ios:** remove the live strip above the tab bar ([#981](https://github.com/theclifmeister/terminatr/issues/981)) ([f3171e0](https://github.com/theclifmeister/terminatr/commit/f3171e00b06d9a91d7a98ea407eb13539ddbf229))
+* **ios:** tap a conversation image or PDF preview to open it full screen ([#980](https://github.com/theclifmeister/terminatr/issues/980)) ([9527691](https://github.com/theclifmeister/terminatr/commit/95276918cd4d2bf6fffddb194a413ee15b99c45c))
+* **tui:** o opens a message's attachment in the system's viewer ([#982](https://github.com/theclifmeister/terminatr/issues/982)) ([51ef8ec](https://github.com/theclifmeister/terminatr/commit/51ef8ecf4ca40efb3ca7eb9407314a0c3b69e4ad))
+
+
+### Bug Fixes
+
+* **ios:** follow new output with the Glider, so streaming never stops short ([#986](https://github.com/theclifmeister/terminatr/issues/986)) ([ee12cd2](https://github.com/theclifmeister/terminatr/commit/ee12cd23120f3b0aa5709ce4464a8849e1908195))
+* **ios:** Jump to latest never lands past the end after a fast flick ([#979](https://github.com/theclifmeister/terminatr/issues/979)) ([935af8f](https://github.com/theclifmeister/terminatr/commit/935af8fd822d9ee38b32534243909581c27c22dc))
+* **ios:** the Working… line's dots sit level with its text ([#978](https://github.com/theclifmeister/terminatr/issues/978)) ([9e5d5c7](https://github.com/theclifmeister/terminatr/commit/9e5d5c75c69517bf146623ef9591dfc39ee03b5d))
+* root-cause three flaky tests seen on main ([#987](https://github.com/theclifmeister/terminatr/issues/987)) ([3e35c3c](https://github.com/theclifmeister/terminatr/commit/3e35c3c1ea0f3bc6c32e1e02d56c710f7bcdb1b6))
+
 ## [0.69.0](https://github.com/theclifmeister/terminatr/compare/v0.68.0...v0.69.0) (2026-10-31)
 
 
