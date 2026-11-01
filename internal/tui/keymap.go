@@ -56,6 +56,7 @@ var popupKeys = []keyHelp{
 	{"enter", "on a task (Tasks tab): show it, with what it is blocked on, or how to check it and whether its pull request merged"},
 	{"enter", "on a file (Library tab): read it, read-only: text as it is, JSON indented, other files by name and size"},
 	{"X D", "on a file (Library tab): delete it / all of its thread's files (asks first, journaled)"},
+	{"o", "in a message's dialog (Messages tab): open its attached file, or the file it brought once received, in your viewer (Preview, a PDF reader; xdg-open, Windows' default app), from a copy in the temporary folder; a menu when it has several. Images, PDFs, text, documents and media only"},
 	{"b", "on the Tasks tab: list the done and dropped tasks (collapsed to a line by default), or collapse them again"},
 	{"b", "on the Designs tab: list the done and archived designs too (hidden by default), or hide them again"},
 	{"D", "on an open, ready or blocked task (Tasks tab): delegate it; the coordinator starts a thread for it (asks first)"},

@@ -1,5 +1,5 @@
-// Package open opens a web address in the user's browser, or a vault in
-// Obsidian.
+// Package open opens a web address in the user's browser, a vault in
+// Obsidian, or a file in its viewer.
 package open
 
 import (
@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 )
@@ -42,6 +43,24 @@ func Obsidian(addr string) error {
 		return errors.New("not an obsidian://open address")
 	}
 	return start(addr)
+}
+
+// File starts the platform's opener for path, a file the user opens in
+// their viewer (an image in Preview, a PDF in its reader), and returns
+// without waiting. It refuses anything but an absolute path to a
+// regular file: the opener never takes it for an option or an address.
+func File(path string) error {
+	if !filepath.IsAbs(path) || strings.ContainsAny(path, "\r\n") {
+		return errors.New("not an absolute path")
+	}
+	fi, err := os.Lstat(path)
+	if err != nil {
+		return err
+	}
+	if !fi.Mode().IsRegular() {
+		return errors.New("not a regular file")
+	}
+	return start(path)
 }
 
 // ObsidianOpen reports whether s is an obsidian://open address with a
