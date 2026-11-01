@@ -436,7 +436,9 @@ const coordinatorBudget = 16 << 10
 // startupBudget bounds the whole SessionStart block of a session whose
 // rules are in its system prompt, in bytes: under Claude's 10,000
 // characters for hook output (a byte count is never below a character
-// count), with room for the header Claude adds (docs/SPEC.md §7.8).
+// count), with room for the header Claude adds (docs/SPEC.md §7.8), and
+// under Codex's 2,500 tokens (its count is ceil(bytes/4), so 10,000
+// bytes; codex-rs/hooks/src/output_spill.rs:12 at rust-v0.163.0).
 const startupBudget = 9000
 
 // coordinatorEssentials is `tm context` within budget bytes, with a

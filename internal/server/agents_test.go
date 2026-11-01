@@ -467,3 +467,13 @@ func TestThemePickReachesClaude(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 }
+
+// Codex spills a hook's additionalContext above 2,500 tokens, counted as
+// ceil(bytes/4) (codex-rs/hooks/src/output_spill.rs at rust-v0.163.0,
+// T919): the startup block must stay under it with no additionalContextLimit.
+func TestStartupBudgetUnderCodexLimit(t *testing.T) {
+	const codexTokens = 2500
+	if tokens := (startupBudget + 3) / 4; tokens > codexTokens {
+		t.Errorf("startupBudget %d bytes is %d tokens for Codex, over its %d", startupBudget, tokens, codexTokens)
+	}
+}
