@@ -389,7 +389,7 @@ func contextFor(r SessionRecord, tickerState string) func() ([]byte, error) {
 				if err == nil {
 					file = p.Path("PROJECT.md")
 				}
-				head = promptHeader(role, r.Prompt, rules, file)
+				head = strings.TrimRight(promptHeader(role, r.Prompt, rules, file), "\n")
 			}
 			if err != nil {
 				return []byte(head), nil
@@ -400,14 +400,14 @@ func contextFor(r SessionRecord, tickerState string) func() ([]byte, error) {
 			}
 			budget := coordinatorBudget
 			if r.Prompt != nil {
-				budget = startupBudget - len(head) - 2
+				budget = startupBudget - len(head) - 2 // and "\n\n"
 			}
 			return []byte(head + "\n\n" + coordinatorEssentials(secs, budget)), nil
 		case proto.RoleThread:
 			rules, _ := roleRules("thread", slug)
 			head := rules
 			if r.Prompt != nil {
-				head = promptHeader(role, r.Prompt, rules, "")
+				head = strings.TrimRight(promptHeader(role, r.Prompt, rules, ""), "\n")
 			}
 			if p, err := project.Open(slug); err == nil && threadID != "" {
 				pr := ticker.PRs(tickerState, slug)[threadID]

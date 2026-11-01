@@ -429,11 +429,16 @@ cmd = '` + tm + `inbox done "$(` + tm + `inbox list | grep t-0003 | cut -d" " -f
 	if !strings.Contains(inboxBefore, "t-0002") || strings.Contains(inboxBefore, "t-0003") || len(doneBefore) != 1 {
 		t.Fatalf("after the work: inbox\n%s\ndone %v", inboxBefore, doneBefore)
 	}
-	// The rules, then all of tm context and a last line on when to run
-	// it again (T66, T109).
+	// The rules are in the system prompt (T915); the block says so, then
+	// all of tm context and a last line on when to run it again (T66,
+	// T109).
 	rules := env.MustCLI("skill", "coordinator")
+	env.WaitFake("start", agentWait, func(r FakeRecord) bool {
+		b, err := os.ReadFile(r.Str("brief_path"))
+		return err == nil && strings.HasPrefix(string(b), rules) && strings.Contains(string(b), "\n# PROJECT.md\n")
+	})
 	full := env.MustCLI("context", "--project", slug)
-	want := rules + "\n\n" + full +
+	want := "Your rules (`tm skill coordinator`) and PROJECT.md are in your system prompt; this block is the project's state.\n\n" + full +
 		"\nThat is `tm context` as of this conversation's start; run it (or tm inbox list, tm thread list) again when you need the current state.\n"
 
 	n := len(env.FakeRecords("context"))
