@@ -238,13 +238,12 @@ struct ProjectScreen: View {
         .refreshable { await model.refresh() }
         .keepsPlace(route: Route.project(slug))
         .navigationTitle(slug)
-        .headerTitle()
-        .toolbar {
+        // Back and Search on the screen's own bar, in line with the
+        // content's edges (T925).
+        .screenBar {
             // Search (T924): the project's history.
             if model.searches {
-                ToolbarItem(placement: .primaryAction) {
-                    PlainRouteLink(value: Route.search(slug)) { Label("Search", systemImage: "magnifyingglass") }
-                }
+                PlainRouteLink(value: Route.search(slug)) { Label("Search", systemImage: "magnifyingglass") }
             }
         }
         .backdrop()
