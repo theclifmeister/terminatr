@@ -3,6 +3,8 @@ package search
 import (
 	"os"
 	"testing"
+
+	"github.com/theclifmeister/terminatr/internal/project"
 )
 
 func BenchmarkWalk(b *testing.B) {
@@ -11,7 +13,7 @@ func BenchmarkWalk(b *testing.B) {
 		b.Skip("TM_SEARCH_PROJECT not set")
 	}
 	for b.Loop() {
-		if _, err := walk(dir); err != nil {
+		if _, err := walk(dir, project.KindProject); err != nil {
 			b.Fatal(err)
 		}
 	}

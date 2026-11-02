@@ -12,7 +12,9 @@ import (
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
+	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/home"
+	"github.com/theclifmeister/terminatr/internal/program"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/search"
@@ -50,9 +52,13 @@ type SearchService struct {
 
 type searchEnt struct {
 	x    *search.Index
-	dir  string // the project's folder
+	dir  string // the project's folder, or the program's
 	used time.Time
 }
+
+// programKey is a program's key in SearchService.m: the kind in the key,
+// as the sidebar's g:<slug>, so it never meets a project's.
+func programKey(slug string) string { return "g:" + slug }
 
 // index is project slug's index and folder, opened on first use.
 func (si *SearchService) index(slug string) (*search.Index, string, *proto.Error) {
@@ -81,6 +87,48 @@ func (si *SearchService) index(slug string) (*search.Index, string, *proto.Error
 		x.SetFresh(SearchFresh)
 		e = &searchEnt{x: x, dir: dir}
 		si.m[slug] = e
+	}
+	e.used = time.Now()
+	return e.x, dir, nil
+}
+
+// programIndex is program slug's index and folder, opened on first use
+// and kept at <home>/state/search-programs/<slug>, apart from the
+// projects' (the programs design §3.4). It is never opened while
+// programs are off (cfg, the server's config; programs-off), for a
+// program a project's slug clashes with (the project wins), or for one
+// with no folder.
+func (si *SearchService) programIndex(cfg *config.Config, slug string) (*search.Index, string, *proto.Error) {
+	if !cfg.ProgramsOn() {
+		return nil, "", proto.Errorf(config.ProgramsOff, "programs are off on this server; the user turns them on in Settings → all projects → Features")
+	}
+	dir, err := program.Dir(slug)
+	if err != nil {
+		return nil, "", proto.Errorf(proto.ErrBadParams, "%v", err)
+	}
+	if fi, err := os.Stat(filepath.Join(dir, program.File)); err != nil || !fi.Mode().IsRegular() {
+		return nil, "", proto.Errorf(proto.ErrBadParams, "no program %q", slug)
+	}
+	if project.ProgramLeftOut(slug) {
+		return nil, "", proto.Errorf(proto.ErrRefused, "program %s is left out: a project has its name (tm doctor)", slug)
+	}
+	root, err := home.ProgramSearchDir()
+	if err != nil {
+		return nil, "", proto.Errorf(proto.ErrInternal, "%v", err)
+	}
+	si.mu.Lock()
+	defer si.mu.Unlock()
+	if si.m == nil {
+		si.m = map[string]*searchEnt{}
+	}
+	key := programKey(slug)
+	e := si.m[key]
+	if e == nil || e.dir != dir {
+		f := project.Folder{Slug: slug, Dir: dir, Kind: project.KindProgram}
+		x := search.OpenFolder(&f, filepath.Join(root, slug))
+		x.SetFresh(SearchFresh)
+		e = &searchEnt{x: x, dir: dir}
+		si.m[key] = e
 	}
 	e.used = time.Now()
 	return e.x, dir, nil
