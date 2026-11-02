@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.73.1](https://github.com/theclifmeister/terminatr/compare/v0.73.0...v0.73.1) (2026-11-02)
+
+
+### Bug Fixes
+
+* **ios:** a session's conversation never shows blank ([#1018](https://github.com/theclifmeister/terminatr/issues/1018)) ([3c63759](https://github.com/theclifmeister/terminatr/commit/3c6375946bf1b89d23917b65d902aef957fd902b))
+* **ios:** Search's filter chips scroll to the screen's edges ([#1020](https://github.com/theclifmeister/terminatr/issues/1020)) ([4283a15](https://github.com/theclifmeister/terminatr/commit/4283a15899c97597bb9e97b249b22b54c75ff516))
+* **ios:** the search hit's kind pill sizes to its content ([#1021](https://github.com/theclifmeister/terminatr/issues/1021)) ([ff4ae88](https://github.com/theclifmeister/terminatr/commit/ff4ae88438dac10b0b581b5f5ec60aa8d0fe18d6))
+
 ## [0.73.0](https://github.com/theclifmeister/terminatr/compare/v0.72.0...v0.73.0) (2026-11-01)
 
 
