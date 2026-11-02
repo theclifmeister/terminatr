@@ -18,16 +18,18 @@ struct SearchScreen: View {
     @FocusState private var focused: Bool
 
     var body: some View {
-        List {
+        VStack(spacing: 0) {
             if let search {
-                Section {
-                    query(search)
-                }
-                .listRowBackground(Color.clear)
-                results(search)
+                // Above the list, not a row of its inset-grouped section:
+                // that section's rounded clip cut the chips short at both
+                // ends (T931). Here they scroll to the screen's edges.
+                query(search)
+                List { results(search) }
+                    .listStyle(.insetGrouped)
+            } else {
+                Spacer(minLength: 0)
             }
         }
-        .listStyle(.insetGrouped)
         .task {
             if search == nil {
                 let m = SearchModel(project: slug, calls: model.searchCalls)
@@ -75,7 +77,7 @@ struct SearchScreen: View {
         @Bindable var s = s
         return VStack(alignment: .leading, spacing: 10) {
             projectMenu
-                .padding(.horizontal, 4)
+                .padding(.horizontal, Spacing.gutter + 4)
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
                     .foregroundStyle(theme.muted)
@@ -91,14 +93,16 @@ struct SearchScreen: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
             .surface(.card, in: RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
+            .padding(.horizontal, Spacing.gutter)
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 6) {
                     kindChip(s, id: "", label: "All")
                     ForEach(Search.kinds) { kindChip(s, id: $0.id, label: $0.label) }
                 }
+                .padding(.horizontal, Spacing.gutter)
             }
         }
-        .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+        .padding(.vertical, 8)
     }
 
     private func kindChip(_ s: SearchModel, id: String, label: String) -> some View {
