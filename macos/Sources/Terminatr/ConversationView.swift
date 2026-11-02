@@ -369,12 +369,12 @@ struct FollowGeometry: ViewModifier {
     func body(content: Content) -> some View {
         if #available(macOS 15, *) {
             content.onScrollGeometryChange(for: [Double].self) { g in
-                [g.contentOffset.y, g.visibleRect.height, g.contentSize.height, g.contentInsets.bottom]
+                [g.contentOffset.y, g.visibleRect.height, g.contentSize.height, g.contentInsets.bottom, g.contentInsets.top]
             } action: { _, g in
-                if follow.scrolled(offset: g[0], visible: g[1], content: g[2], inset: g[3], newest: newest) { toEnd() }
+                if follow.scrolled(offset: g[0], visible: g[1], content: g[2], inset: g[3], top: g[4], newest: newest) { toEnd() }
             }
             .onScrollPhaseChange { _, p in
-                follow.moved(by: p == .tracking || p == .interacting, resting: p == .idle)
+                if follow.moved(by: p == .tracking || p == .interacting, resting: p == .idle) { toEnd() }
             }
         } else {
             content

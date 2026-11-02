@@ -460,3 +460,62 @@ private func run(_ g: inout Glide, frames: Int = 600, end: (Int) -> Double) -> (
     f.moved(by: true, resting: false)
     #expect(!f.gliding && f.following)
 }
+
+// An offset past the end at rest is pulled back (T930): the blank
+// conversation, only the composer showing, that nothing scrolled back.
+
+/// Whether a geometry says to scroll back to the end.
+private func back(_ f: inout Follow, offset: Double, visible: Double, content: Double, inset: Double = 0, top: Double = 0, newest: Int?) -> Bool {
+    f.scrolled(offset: offset, visible: visible, content: content, inset: inset, top: top, newest: newest)
+}
+
+@Test func pastTheEndAtRestPullsBack() {
+    var f = Follow()
+    // At the end: nothing to do.
+    #expect(!back(&f, offset: 500, visible: 500, content: 1000, newest: 2))
+    // The content shrank under it (an end laid out shorter than its
+    // estimate): past the end at rest, back to it. Still following.
+    #expect(back(&f, offset: 2000, visible: 500, content: 1000, newest: 2))
+    #expect(f.following)
+    // Within a rounding of the end it is at the end.
+    #expect(!back(&f, offset: 501, visible: 500, content: 1000, newest: 2))
+    // The bars' insets count: the end is content + inset - visible.
+    #expect(!back(&f, offset: 655, visible: 500, content: 1000, inset: 155, newest: 2))
+    #expect(back(&f, offset: 900, visible: 500, content: 1000, inset: 155, newest: 2))
+}
+
+@Test func shortContentEndsAtItsTop() {
+    var f = Follow()
+    // Content shorter than the view, under a bar 116 tall: its end is
+    // the top, -116.
+    #expect(!back(&f, offset: -116, visible: 874, content: 300, inset: 155, top: 116, newest: 1))
+    #expect(back(&f, offset: 2000, visible: 874, content: 300, inset: 155, top: 116, newest: 1))
+}
+
+@Test func aBouncePastTheEndIsLeftAlone() {
+    var f = Follow()
+    _ = f.scrolled(offset: 500, visible: 500, content: 1000, newest: 2)
+    // The user drags past the end and lets go: UIKit bounces it back.
+    f.moved(by: true, resting: false)
+    #expect(!back(&f, offset: 560, visible: 500, content: 1000, newest: 2))
+    let letGo = f.moved(by: false, resting: false)
+    #expect(!letGo)
+    #expect(!back(&f, offset: 530, visible: 500, content: 1000, newest: 2))
+    // It came to rest past the end (the bounce left it there): back.
+    let rested = f.moved(by: false, resting: true)
+    #expect(rested)
+    // At rest at the end: nothing.
+    _ = f.scrolled(offset: 500, visible: 500, content: 1000, newest: 2)
+    let still = f.moved(by: false, resting: true)
+    #expect(!still)
+}
+
+@Test func aGlidePastTheEndIsItsOwn() {
+    var f = Follow()
+    f.glide(newest: 2)
+    // A glide's frames are its own: it reads the end each frame.
+    #expect(!back(&f, offset: 2000, visible: 500, content: 1000, newest: 2))
+    f.landed()
+    // Landed past the end (the end moved up after): back.
+    #expect(back(&f, offset: 2000, visible: 500, content: 1000, newest: 2))
+}
