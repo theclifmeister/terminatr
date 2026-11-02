@@ -29,23 +29,23 @@ type Folder struct {
 }
 
 // IsProgram reports whether the folder is a program's.
-func (f *Folder) IsProgram() bool { return f.Kind == KindProgram }
+func (p *Folder) IsProgram() bool { return p.Kind == KindProgram }
 
 // Path joins a name onto the folder.
-func (f *Folder) Path(elem ...string) string {
-	return filepath.Join(append([]string{f.Dir}, elem...)...)
+func (p *Folder) Path(elem ...string) string {
+	return filepath.Join(append([]string{p.Dir}, elem...)...)
 }
 
 // SharedOwned is what in the folder only tm writes, of the parts every
 // Folder has (Project.Owned lists a project's, which adds threads and
 // the role files): the inbox, journal archives, messages, uploads, the
 // journal, questions.json and designs.json, with their lock files.
-func (f *Folder) SharedOwned() (dirs, files []string) {
+func (p *Folder) SharedOwned() (dirs, files []string) {
 	for _, d := range []string{"inbox", "journal", "messages", "uploads"} {
-		dirs = append(dirs, f.Path(d))
+		dirs = append(dirs, p.Path(d))
 	}
 	for _, name := range []string{"JOURNAL.md", questionsFile, designsFile} {
-		files = append(files, f.Path(name), mdfile.LockPath(f.Path(name)))
+		files = append(files, p.Path(name), mdfile.LockPath(p.Path(name)))
 	}
 	return dirs, files
 }
@@ -54,9 +54,9 @@ func (f *Folder) SharedOwned() (dirs, files []string) {
 // A program's folder writes its ids as plain text for now ("" makes
 // vaultlink give the alias alone): its links take the vault's
 // _programs/<slug>/ form, which comes with the vault's program support.
-func (f *Folder) linkSlug() string {
-	if f.IsProgram() {
+func (p *Folder) linkSlug() string {
+	if p.IsProgram() {
 		return ""
 	}
-	return f.Slug
+	return p.Slug
 }
