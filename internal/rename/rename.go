@@ -74,6 +74,9 @@ func Check(o Options) error {
 	if _, err := os.Lstat(dir); err == nil {
 		return refuse("project-exists", "a project %s exists already (%s)", o.To, dir)
 	}
+	if why := project.ProgramTaken(o.To, nil); why != "" {
+		return refuse("slug-taken", "%s", why)
+	}
 	wt, err := home.WorktreesDir()
 	if err != nil {
 		return err

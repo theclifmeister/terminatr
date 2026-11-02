@@ -162,7 +162,8 @@ func vaultProjects(root string) []string {
 }
 
 // scanVault finds the parts for tm in the human's files: _human/ and
-// everything outside tm's folders, and the projects' design canvases.
+// everything outside tm's folders (_tm/, _peers/, _programs/ and the
+// projects'), and the projects' design canvases.
 // keep reports whether a ledger key is of a file the scan didn't read
 // to the end (not settled, too big, unreadable), whose old hashes stay.
 func scanVault(root string, slugs []string, now time.Time) (parts []part, keep func(key string) bool) {
@@ -198,7 +199,7 @@ func scanVault(root string, slugs []string, now time.Time) (parts []part, keep f
 	for _, e := range ents {
 		name := e.Name()
 		switch {
-		case strings.HasPrefix(name, ".") || name == tmDir || name == PeersDir:
+		case strings.HasPrefix(name, ".") || name == tmDir || name == PeersDir || name == programsDir:
 			continue
 		case slices.Contains(slugs, name):
 			// A project's folder is tm's; only its design canvases have

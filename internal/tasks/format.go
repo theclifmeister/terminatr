@@ -167,11 +167,11 @@ func parseMeta(t *Task, line string) error {
 			}
 			t.Design = d
 		case "after":
-			after, err := checkAfter(t.ID, []string{vaultlink.Plain(v)})
+			after, cross, err := readAfter(t.ID, []string{vaultlink.Plain(v)})
 			if err != nil {
 				return fmt.Errorf("T%d: after: %s", t.ID, err.(*Error).Msg)
 			}
-			t.After = after
+			t.After, t.AfterX = after, cross
 		case "created":
 			t.Created = v
 		case "updated":
@@ -279,6 +279,7 @@ func writeTask(w *bytes.Buffer, t *Task, slug string) {
 			after[i] = vaultlink.Link(slug, vaultlink.Task, r, "")
 		}
 	}
+	after = append(after, t.AfterX...) // kept as text (programs, §6.1)
 	for _, kv := range [][2]string{{"owner", t.Owner}, {"repo", t.Repo}, {"thread", thread}, {"design", design}, {"after", strings.Join(after, ", ")}, {"created", t.Created}, {"updated", t.Updated}} {
 		if kv[1] != "" {
 			meta = append(meta, kv[0]+": "+kv[1])

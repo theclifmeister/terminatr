@@ -166,9 +166,23 @@ type Task struct {
 	Repo     string // the repo its thread works in, by name or path, or NoRepo
 	Design   string // the design it builds, by name (designs/<name>.md), or ""
 	After    []int  // the tasks it comes after, by id
+	// AfterX are the tasks in other projects it comes after, as
+	// "<slug>/T<n>" or, on a paired server, "<alias>/<slug>/T<n>"
+	// (programs, §6.1). tm reads and keeps them; nothing writes them yet.
+	AfterX   []string
 	Created  string
 	Updated  string
 	Archived bool
+}
+
+// AfterRefs is every task it comes after as a ref: "T10", then the
+// other projects' ("acme-api/T12"), for display.
+func (t *Task) AfterRefs() []string {
+	out := make([]string, 0, len(t.After)+len(t.AfterX))
+	for _, n := range t.After {
+		out = append(out, "T"+strconv.Itoa(n))
+	}
+	return append(out, t.AfterX...)
 }
 
 // Ref is the task's display id, "T12".
@@ -319,17 +333,40 @@ func checkDesign(s string) (string, error) {
 
 // checkAfter reads the tasks a task comes after: refs as "T12", split
 // by commas or spaces; an empty list clears them. They are sorted, once
-// each, and never the task itself.
+// each, and never the task itself. It takes only this board's refs: it
+// checks what a command writes.
 func checkAfter(id int, refs []string) ([]int, error) {
+	out, cross, err := readAfter(id, refs)
+	if err == nil && len(cross) > 0 {
+		err = refuse("invalid-after", fmt.Sprintf("%q is not a task id (T12)", cross[0]))
+	}
+	return out, err
+}
+
+// readAfter reads an "after" value as TASKS.md holds it: this board's
+// refs ("T12") and, kept as text, refs to other projects' tasks
+// ("acme-api/T12", "mini/acme-ios/T7"; CrossRef). Each list is sorted,
+// once each.
+func readAfter(id int, refs []string) ([]int, []string, error) {
 	var out []int
+	var cross []string
 	for _, r := range refs {
 		for _, f := range strings.FieldsFunc(r, func(c rune) bool { return c == ',' || c == ' ' }) {
+			if strings.Contains(f, "/") {
+				if _, _, _, ok := CrossRef(f); !ok {
+					return nil, nil, refuse("invalid-after", fmt.Sprintf("%q is not a task ref (T12, <project>/T12 or <server>/<project>/T12)", f))
+				}
+				if !slices.Contains(cross, f) {
+					cross = append(cross, f)
+				}
+				continue
+			}
 			n, ok := ParseRef(f)
 			if !ok {
-				return nil, refuse("invalid-after", fmt.Sprintf("%q is not a task id (T12)", f))
+				return nil, nil, refuse("invalid-after", fmt.Sprintf("%q is not a task id (T12)", f))
 			}
 			if n == id {
-				return nil, refuse("invalid-after", fmt.Sprintf("T%d can't come after itself", id))
+				return nil, nil, refuse("invalid-after", fmt.Sprintf("T%d can't come after itself", id))
 			}
 			if !slices.Contains(out, n) {
 				out = append(out, n)
@@ -337,7 +374,8 @@ func checkAfter(id int, refs []string) ([]int, error) {
 		}
 	}
 	slices.Sort(out)
-	return out, nil
+	slices.Sort(cross)
+	return out, cross, nil
 }
 
 // checkLabel validates owner, repo and thread values, which live in the

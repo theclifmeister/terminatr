@@ -267,7 +267,7 @@ func pairFailed(err error) error {
 
 // pin keeps the paired server and tells a running server.
 func (e *Env) pin(dir string, p *peer.Paired, relayURL, as string) error {
-	got, err := peer.Pin(dir, p.Key, relayURL, p.Name, as)
+	got, err := peer.PinTaken(dir, p.Key, relayURL, p.Name, as, func(n string) string { return project.ProgramTaken(n, nil) })
 	if err != nil {
 		return err
 	}

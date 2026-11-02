@@ -78,6 +78,11 @@ func realUserHome() (string, bool) {
 // ProjectsDir is <home>/projects.
 func ProjectsDir() (string, error) { return sub("projects") }
 
+// ProgramsDir is <home>/projects/_programs, the programs' folders (the
+// programs design §3.1): inside the projects folder, and so the vault,
+// under a name no project slug can take.
+func ProgramsDir() (string, error) { return sub(filepath.Join("projects", "_programs")) }
+
 // WorktreesDir is <home>/worktrees.
 func WorktreesDir() (string, error) { return sub("worktrees") }
 

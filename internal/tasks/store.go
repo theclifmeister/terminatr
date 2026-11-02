@@ -477,7 +477,8 @@ func (s *Store) SetPriority(c caller.Caller, id int, priority string) (Result, e
 
 // SetPlan sets the design a task builds and the tasks it comes after
 // (refs as "T12", split by commas or spaces); nil leaves one alone, and
-// "" or an empty list clears it.
+// "" or an empty list clears it. It writes this board's refs only, and
+// keeps the refs to other projects' tasks (AfterX) as they are.
 func (s *Store) SetPlan(c caller.Caller, id int, design *string, after []string) (Result, error) {
 	var d string
 	var a []int

@@ -358,6 +358,13 @@ type rawSafety struct {
 	// safety setting; read by ThreadSandbox and SandboxOf, written by
 	// EditSandbox.
 	Sandbox *rawSandbox `toml:"sandbox"`
+	// Program, ProgramTasks, ProgramStarts and ProgramStatus are the
+	// project's membership of a paired server's program (programs.go):
+	// a project's own, never [defaults]'s.
+	Program       *string `toml:"program"`
+	ProgramTasks  *string `toml:"program_tasks"`
+	ProgramStarts *bool   `toml:"program_starts"`
+	ProgramStatus *bool   `toml:"program_status"`
 	// Mods are a project's [projects.<slug>.mods.<id>] tables, the
 	// mods' settings for it (readProjectMods): not a safety setting, and
 	// never [defaults]'s, since [mods.<id>.settings] are all projects'.
@@ -494,7 +501,12 @@ type Config struct {
 	// screens show and paired servers are told (peer.SelfName); "" when
 	// unset, for its host name.
 	ServerName string
-	projects   map[string]rawSafety
+	// Features is the [features] table: server-wide opt-ins
+	// (programs.go).
+	Features Features
+	// programs are the [programs.<slug>] tables (programs.go).
+	programs map[string]rawProgram
+	projects map[string]rawSafety
 	// defaults is the [defaults] table: the all-projects settings.
 	defaults rawSafety
 	agent    string
@@ -562,6 +574,8 @@ func parse(path string, data []byte) (*Config, error) {
 		Server struct {
 			Name string `toml:"name"`
 		} `toml:"server"`
+		Features rawFeatures           `toml:"features"`
+		Programs map[string]rawProgram `toml:"programs"`
 		// AgentMod is the removed agent mod's [agent_mod], any keys.
 		AgentMod map[string]any `toml:"agent_mod"`
 		// Mods are the user mods' [mods.<id>] tables and, under the
@@ -583,7 +597,10 @@ func parse(path string, data []byte) (*Config, error) {
 	c := &Config{AzureHosts: raw.Azure.Hosts, Mods: mods, Path: path, projects: raw.Projects, defaults: raw.Defaults, agent: raw.DefaultAgent, agents: raw.Agents,
 		Prefix: cmp.Or(raw.Keys.Prefix, raw.Keys.Detach), Icons: raw.UI.Icons, Theme: raw.UI.Theme, Layout: raw.UI.Layout, AgentMod: old,
 		ContextHint: DefaultContextHint, UpdateCheck: raw.UI.UpdateCheck == nil || *raw.UI.UpdateCheck, NeedsFirst: raw.UI.NeedsFirst,
-		ServerName: raw.Server.Name}
+		ServerName: raw.Server.Name, programs: raw.Programs}
+	if raw.Features.Programs != nil {
+		c.Features.Programs = *raw.Features.Programs
+	}
 	if h := raw.UI.ContextHint; h != nil {
 		if *h < 0 || *h > 100 {
 			return c, fmt.Errorf("%s: ui.context_hint is a percent from 0 (never) to 100", path)
@@ -614,7 +631,9 @@ func parse(path string, data []byte) (*Config, error) {
 			// readProjectMods.
 		case len(k) >= 3 && k[0] == "projects", len(k) >= 2 && k[0] == "defaults":
 			return c, fmt.Errorf("%s: unknown setting %s", path, k.String())
-		case len(k) >= 2 && (k[0] == "keys" || k[0] == "ui" || k[0] == "mods" || k[0] == "server"),
+		case len(k) >= 3 && k[0] == "programs":
+			return c, fmt.Errorf("%s: unknown setting %s", path, k.String())
+		case len(k) >= 2 && (k[0] == "keys" || k[0] == "ui" || k[0] == "mods" || k[0] == "server" || k[0] == "features"),
 			len(k) >= 3 && k[0] == "agents":
 			c.Unknown = append(c.Unknown, k.String())
 		}
@@ -644,6 +663,9 @@ func parse(path string, data []byte) (*Config, error) {
 		if err := c.agents[name].settings().check(); err != nil {
 			return c, fmt.Errorf("%s: agents.%s.%w", path, name, err)
 		}
+	}
+	if err := c.checkPrograms(); err != nil {
+		return c, err
 	}
 	return c, nil
 }
