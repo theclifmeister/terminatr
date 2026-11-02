@@ -16,7 +16,7 @@ func report(src, kind string, at time.Time, payload string) Report {
 }
 
 func TestAddListGet(t *testing.T) {
-	dir := t.TempDir()
+	dir := filepath.Join(t.TempDir(), "x")
 	now := time.Date(2026, 11, 2, 12, 0, 0, 0, time.UTC)
 	s := &Store{Dir: dir, Now: func() time.Time { return now }}
 	src := DeviceSource("ab12")
@@ -55,7 +55,7 @@ func TestAddListGet(t *testing.T) {
 }
 
 func TestAddRefuses(t *testing.T) {
-	s := &Store{Dir: t.TempDir()}
+	s := &Store{Dir: filepath.Join(t.TempDir(), "x")}
 	for name, r := range map[string]Report{
 		"source":   report("../x", KindCrash, time.Time{}, `{}`),
 		"kind":     report(SourceMac, "boom", time.Time{}, `{}`),
@@ -72,7 +72,7 @@ func TestAddRefuses(t *testing.T) {
 }
 
 func TestPrune(t *testing.T) {
-	dir := t.TempDir()
+	dir := filepath.Join(t.TempDir(), "x")
 	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	s := &Store{Dir: dir, Now: func() time.Time { return now }}
 	for i := range MaxPerSource + 3 {

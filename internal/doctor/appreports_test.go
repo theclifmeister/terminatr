@@ -2,6 +2,7 @@ package doctor
 
 import (
 	"encoding/json"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -10,7 +11,7 @@ import (
 )
 
 func TestAppReports(t *testing.T) {
-	dir := t.TempDir()
+	dir := filepath.Join(t.TempDir(), "x")
 	now := time.Date(2026, 11, 2, 12, 0, 0, 0, time.UTC)
 	if cs := appReports(dir, now); cs != nil {
 		t.Fatalf("no reports: %+v", cs)
