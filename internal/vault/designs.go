@@ -66,7 +66,7 @@ func DesignNote(name string) string   { return "designs/" + name + ".md" }
 func DesignCanvas(name string) string { return "designs/" + name + ".canvas" }
 
 // designNotes renders the note and canvas of every design.
-func designNotes(p *project.Project, prs map[string]string, boards ...*tasks.Board) ([]Note, error) {
+func designNotes(p *project.Folder, prs map[string]string, boards ...*tasks.Board) ([]Note, error) {
 	builds, err := p.DesignBuilds(boards...)
 	if err != nil {
 		return nil, err
@@ -81,7 +81,7 @@ func designNotes(p *project.Project, prs map[string]string, boards ...*tasks.Boa
 			d.build = append(d.build, boardTask{t})
 		}
 		d.depth = project.BuildDepths(db.Build)
-		n, err := designNote(p.Slug, d)
+		n, err := designNote(p.LinkSlug(), d)
 		if err != nil {
 			return nil, fmt.Errorf("design %s: %w", d.Name, err)
 		}
@@ -103,7 +103,7 @@ func (d *design) title() string {
 func designNote(slug string, d *design) (Note, error) {
 	link := func(t *tasks.Task) string { return vaultlink.Link(slug, vaultlink.Task, t.Ref(), "") }
 	f := designFront{
-		Name: d.Name, Title: d.title(), Project: vaultlink.Link(slug, vaultlink.Project, slug, ""),
+		Name: d.Name, Title: d.title(), Project: vaultlink.Owner(slug),
 		Status: d.Status(), Artifact: d.Artifact, Tasks: len(d.build), TasksDone: d.Done(),
 		Answers: len(d.Answers), OpenQuestions: len(d.Questions),
 		Canvas:   vaultlink.Link(slug, vaultlink.Design, d.Name+".canvas", d.Name+".canvas"),
@@ -327,7 +327,7 @@ func lines(s string, w int) int {
 
 // designCanvas renders d's canvas over the one there: false when that
 // can't be read as a canvas, which tm then leaves alone.
-func designCanvas(p *project.Project, d *design) (Note, bool) {
+func designCanvas(p *project.Folder, d *design) (Note, bool) {
 	rel := DesignCanvas(d.Name)
 	var old []byte
 	if fi, err := os.Lstat(p.Path("designs", d.Name+".canvas")); err == nil && fi.Mode().IsRegular() {
@@ -338,7 +338,7 @@ func designCanvas(p *project.Project, d *design) (Note, bool) {
 			return Note{}, false
 		}
 	}
-	nodes, edges := layout(p.Slug, d)
+	nodes, edges := layout(p.LinkSlug(), d)
 	data, err := mergeCanvas(old, nodes, edges)
 	if err != nil {
 		return Note{}, false

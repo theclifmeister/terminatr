@@ -144,6 +144,16 @@ func Link(slug string, k Kind, id, alias string) string {
 	return "[[" + t + "|" + alias + "]]"
 }
 
+// Owner is the link to the note of the folder slug leads (as Link takes
+// it): a project's PROJECT, or a program's PROGRAM for its folder
+// (ProgramFolder).
+func Owner(slug string) string {
+	if name, ok := strings.CutPrefix(slug, ProgramsDir+"/"); ok {
+		return Link(slug, Program, name, "")
+	}
+	return Link(slug, Project, slug, "")
+}
+
 // File is the wikilink to the file at path in the vault (a note
 // without its .md, another file with its extension), showing its name:
 // [[_human/deploy idea|deploy idea]]. It is "" when path can't be
