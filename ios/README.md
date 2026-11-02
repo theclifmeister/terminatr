@@ -65,6 +65,16 @@ To try it locally: `scripts/release/ios.sh v0.57.0` makes an unsigned archive (a
 
 The next release then uploads the app. To upload a release already published, rerun its `testflight` job once the secrets are set (Actions → the release run → Re-run jobs).
 
+### Crash reports
+
+A crash or watchdog report (`.ips`) from a TestFlight build names the app by its `slice_uuid`, and its app frames are bare offsets until the dSYM of exactly that build symbolicates them. A rebuild of the same commit doesn't match: another Xcode lays the binary out differently. So the `testflight` job keeps each build's dSYMs as the artifact `ios-dsyms-<tag>` (`Terminatr-<version>-<build>-dSYMs.zip`, 90 days), and its log lists their UUIDs ("Archive and upload"). App Store Connect has them too (`uploadSymbols`), for the reports Xcode's Organizer shows.
+
+To read one: `gh run download <run> -n ios-dsyms-v0.73.1`, unzip, check `dwarfdump --uuid` against the report's `slice_uuid`, then for each app frame (`imageOffset`):
+
+```sh
+atos -o dSYMs/Terminatr.app.dSYM/Contents/Resources/DWARF/Terminatr -arch arm64 -l 0x100000000 0x$(printf %x $((0x100000000 + OFFSET)))
+```
+
 ## App Store
 
 The App Store listing's text and the App Review notes live in `AppStore/`, in fastlane deliver's layout (a later automated submission, T913, can read it as is), drafted in the App Store design (T908) and copied from there into App Store Connect by hand until then:

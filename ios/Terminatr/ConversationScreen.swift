@@ -30,7 +30,7 @@ struct ConversationScreen: View {
     @State private var pages = false
     /// Whether the conversation follows its end, or the user scrolled
     /// up (iOS 18, from the scroll geometry; 17 always follows).
-    @State private var follow = Follow()
+    @State private var follow = Follower()
     /// Jump to latest's glide to the end (T889).
     @State private var glider = Glider()
     /// The row the user had at the top, scrolled up, before the layout
@@ -99,7 +99,7 @@ struct ConversationScreen: View {
             }
             // A drag down the conversation folds the keyboard (T857).
             .scrollDismissesKeyboard(.interactively)
-            .modifier(PhoneFollowGeometry(follow: $follow, newest: transcript.entries.last?.id) { top in
+            .modifier(PhoneFollowGeometry(follow: follow, newest: transcript.entries.last?.id) { top in
                 if restoring == nil { model.places.keep("top \(ref)", follow.following ? nil : top) }
             } toEnd: {
                 scroll.scrollTo("end", anchor: .bottom)
@@ -522,7 +522,7 @@ extension View {
 /// jump that a flick's momentum carries up is pulled back to the end
 /// (toEnd, T829).
 struct PhoneFollowGeometry: ViewModifier {
-    @Binding var follow: Follow
+    let follow: Follower
     let newest: Int?
     /// Told the row at the top as the user scrolls (iOS 18).
     let top: (Int?) -> Void

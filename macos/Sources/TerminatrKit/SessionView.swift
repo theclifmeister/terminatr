@@ -5,7 +5,7 @@ import Foundation
 /// server's (its alias), whose pane and conversation come through the
 /// server's peer link. It names the session by its place, not its id, so the window
 /// outlives a restart of the agent.
-public struct SessionRef: Codable, Hashable, Sendable {
+public struct SessionRef: Codable, Hashable, Sendable, CustomStringConvertible {
     public var project: String
     public var thread: String
     public var server: String
@@ -26,6 +26,14 @@ public struct SessionRef: Codable, Hashable, Sendable {
     }
 
     public var isCoordinator: Bool { thread.isEmpty }
+
+    /// Its place as text, for keys ("prompt \(ref)"): "project",
+    /// "project/thread", and a paired server's "server:project/thread".
+    /// Written out: without it "\(ref)" walks the struct by reflection
+    /// (a Mirror) on every view update that builds such a key (T956).
+    public var description: String {
+        (server.isEmpty ? "" : server + ":") + project + (thread.isEmpty ? "" : "/" + thread)
+    }
 
     /// A paired server's session: its conversation crosses the link
     /// only under that server's switches (RemoteConversation).
