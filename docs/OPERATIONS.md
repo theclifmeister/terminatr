@@ -715,6 +715,18 @@ Removed Work phone; its link closes now and its key is no longer taken. On the d
 
 A device is `waiting for it` while the app isn't open (with when it was `last seen`, once it has connected): the server keeps a connection waiting in the device's room on the relay (one per device; the relay lets one address wait in 16 rooms). Removing a device cuts it off at once. Its acts are journaled as `human (iphone: NAME)`; it never answers a prompt to run a command outside the sandbox. `tm device access NAME view|answer|write` sets what it may do: `view` reads, `answer` answers questions and approvals and accepts or sends back tasks, `write` does what the Mac app does (prompts, new tasks, delegating, starting a coordinator, terminal keys and the rest); above `view` it needs the write key it made at pairing. A project's **Mods** page (in the Mac app beside its dashboard, on the phone among its pages) lists every installed mod with where it runs for that project, as the TUI's project Mods tab does: at `write` (and in the Mac app) **Turn on…** shows the mod's consent in full, the same words the TUI asks, and **Enable** grants what that sheet showed and nothing more (tm refuses one whose mod changed since: the page reads it again); **Turn off** takes it off the project, and a mod that runs for every project asks before it runs only for the others; its settings for the project are below it, each one the project doesn't set following all projects. Each change is journaled in the project as its device and logged in `tm server log` (`device NAME: mod.enable …`). Rotating this server's key (`tm peer rotate`) means every device pairs again (SPEC §16.15).
 
+### Crash and hang reports from the apps
+
+The iPhone and Mac apps pass on what iOS and macOS tell them about their own crashes, hangs, CPU and disk-write exceptions and slow launches (MetricKit hands these to the app on its next launch). The phone sends them over its device link, the Mac app through its bridge, to this server only: nothing goes to a crash service or to the developers. `tm doctor` warns under **apps** when one arrived in the last 7 days.
+
+```
+$ tm device reports
+20261102-101500-crash-9f3a1c22  crash  Sam's iPhone  0.73.1 (212)  2h ago  EXC_BAD_ACCESS, code 0, SIGSEGV
+$ tm device report 20261102-101500-crash
+```
+
+`tm device report ID` (an id or a unique start of one) prints the app's version and build, the binary UUID that matches the build's dSYM, the OS and device model, and MetricKit's JSON with the call stacks; `--json` gives it all as one object. Threads can run both, so you can hand a crash to one. The server keeps 50 reports per device (and 50 from the Mac app), none older than 90 days, under `~/.terminatr/state/appreports/`.
+
 ### The servers' side
 
 Each paired server keeps a link to the relay by itself; nothing to start. `tm server status` shows the server's id and each link:

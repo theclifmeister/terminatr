@@ -29,7 +29,7 @@ var humanOnlyMethods = []string{
 	proto.MethodTaskAccept, proto.MethodTaskSendBack, proto.MethodTaskDelegate, proto.MethodTaskAdd, proto.MethodTaskPriority, proto.MethodTaskGet, proto.MethodTaskDone, proto.MethodTaskTemplates, proto.MethodDesignList, proto.MethodProjectOpen,
 	proto.MethodMemoryList, proto.MethodMemoryRead, proto.MethodLibraryList, proto.MethodLibraryRead,
 	proto.MethodSessionAdopt, proto.MethodSessionAdoptAsk, proto.MethodSessionRemote, proto.MethodSessionModel, proto.MethodQuestionsOpen, proto.MethodCoordinatorClear,
-	proto.MethodServerStop, proto.MethodAgentReload, proto.MethodPeerReload, proto.MethodDeviceReload, proto.MethodPeerList, proto.MethodPeerPopupRead, proto.MethodPeerPagesRead, proto.MethodPeerLibraryList, proto.MethodPeerLibraryRead, proto.MethodPeerDesignList, proto.MethodPeerNeedAct, proto.MethodPeerShareAsk, proto.MethodPeerShareAnswer, proto.MethodLinkAct, proto.MethodProjectsWatch, proto.MethodSessionsWatch,
+	proto.MethodServerStop, proto.MethodAgentReload, proto.MethodPeerReload, proto.MethodDeviceReload, proto.MethodAppReportAdd, proto.MethodPeerList, proto.MethodPeerPopupRead, proto.MethodPeerPagesRead, proto.MethodPeerLibraryList, proto.MethodPeerLibraryRead, proto.MethodPeerDesignList, proto.MethodPeerNeedAct, proto.MethodPeerShareAsk, proto.MethodPeerShareAnswer, proto.MethodLinkAct, proto.MethodProjectsWatch, proto.MethodSessionsWatch,
 	proto.MethodProjectPin, proto.MethodProjectNew, proto.MethodSessionAdoptRequest, proto.MethodLinkSend,
 	proto.MethodModsList, proto.MethodModsSet, proto.MethodModsSetting,
 	proto.MethodViewSubscribe, proto.MethodViewAttach, proto.MethodViewDashboard, proto.MethodViewProject,
@@ -58,6 +58,8 @@ var notHumanOnly = map[string]gate{
 	proto.MethodViewDigest: gateNotAgent,
 	// tm search: an agent its own project (scopeProject), the human any.
 	proto.MethodSearchQuery:    gateAgentOrHuman,
+	proto.MethodAppReportList:  gateAgentOrHuman,
+	proto.MethodAppReportShow:  gateAgentOrHuman,
 	proto.MethodSearchTimeline: gateAgentOrHuman,
 	proto.MethodSearchShow:     gateAgentOrHuman,
 }

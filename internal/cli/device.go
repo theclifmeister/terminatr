@@ -27,7 +27,9 @@ const deviceUsage = `usage: tm device pair [--relay URL] [--as NAME]
        tm device list [--json]
        tm device remove NAME
        tm device access NAME view|answer|write
-       tm device name NAME NEW`
+       tm device name NAME NEW
+       tm device reports [--json]
+       tm device report ID [--json]`
 
 func init() {
 	commands["device"] = runDevice
@@ -45,11 +47,15 @@ var (
 )
 
 // runDevice is tm device (docs/SPEC.md §16.15): pairing a device with this
-// server through a relay, and the paired devices. All of it is the
-// human's.
+// server through a relay, and the paired devices, all of it the
+// human's; and the apps' crash and hang reports (devicereports.go),
+// which agents read too.
 func runDevice(e *Env, args []string) error {
 	if len(args) == 0 {
 		return usagef("%s", deviceUsage)
+	}
+	if args[0] == "reports" || args[0] == "report" {
+		return e.deviceReports(args)
 	}
 	f := newFlags()
 	relayFlag, as := f.String("relay"), f.String("as")

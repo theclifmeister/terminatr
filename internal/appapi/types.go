@@ -1,6 +1,7 @@
 package appapi
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -1830,4 +1831,48 @@ func searchShownOf(r proto.SearchShowResult) SearchShown {
 		out.Items = append(out.Items, st)
 	}
 	return out
+}
+
+// The apps' crash and hang reports (app API 43; the server's caps say
+// app-reports): a MetricKit diagnostic the app was handed on launch,
+// sent to its own server, which keeps it per source (tm device
+// reports). A device's bridge has it at every level, as the Mac app's
+// does: it acts on nothing. Nothing else reads or sends them.
+type (
+	// AppReportAddParams are appreport.add's: Kind is crash, hang,
+	// cpu-exception, disk-write-exception or app-launch; Time when it
+	// happened; AppVersion and Build the app's then
+	// (CFBundleShortVersionString, CFBundleVersion) and BinaryUUID its
+	// executable's (what matches a dSYM); OS and Model MetricKit's
+	// osVersion and deviceType; Summary one line (a crash's exception
+	// and signal, a hang's duration); Payload MetricKit's JSON for the
+	// diagnostic (jsonRepresentation) as text, an object of at most
+	// 512 KiB.
+	AppReportAddParams struct {
+		Kind       string    `json:"kind"`
+		Time       time.Time `json:"time,omitzero"`
+		AppVersion string    `json:"app_version"`
+		Build      string    `json:"build"`
+		BinaryUUID string    `json:"binary_uuid,omitempty"`
+		OS         string    `json:"os,omitempty"`
+		Model      string    `json:"model,omitempty"`
+		Summary    string    `json:"summary,omitempty"`
+		Payload    string    `json:"payload"`
+	}
+	// AppReportAdded is appreport.add's result: the report's ID, and
+	// Added false when the server had it already. Either way the app
+	// may forget it.
+	AppReportAdded struct {
+		ID    string `json:"id"`
+		Added bool   `json:"added"`
+	}
+)
+
+func appReportAddParams(p AppReportAddParams) proto.AppReportAddParams {
+	return proto.AppReportAddParams{Kind: p.Kind, Time: p.Time, AppVersion: p.AppVersion, Build: p.Build, BinaryUUID: p.BinaryUUID,
+		OS: p.OS, Model: p.Model, Summary: p.Summary, Payload: json.RawMessage(p.Payload)}
+}
+
+func appReportAddedOf(r proto.AppReportAddResult) AppReportAdded {
+	return AppReportAdded{ID: r.ID, Added: r.Added}
 }

@@ -125,6 +125,8 @@ Before the app goes on the App Store in France, file the French declaration, upl
 
 `Terminatr/PrivacyInfo.xcprivacy` declares no tracking and no collected data: the app talks only to the user's own tm server, end to end through a relay that can't read the link. Its one required-reason API is UserDefaults, for its own launch arguments (reason CA92.1). The swift-nio packages ship their own manifests. In App Store Connect, the app's privacy answer is then Data Not Collected, as long as the relay only forwards the link and keeps nothing.
 
+The app's crash and hang reports (T957) keep that answer true. They are MetricKit's diagnostics, which iOS hands the app on a later launch; the app keeps them in its own container until it is linked, then sends each over the device link to the user's own tm server (app API `appreport.add`), which keeps them for `tm device reports`. They go nowhere else: no crash service, no developer server, and the relay can't read them. Apple counts data as collected only when the developer or a partner can access it, which never happens here. Whether a device shares analytics with Apple and developers (Settings › Privacy & Security › Analytics & Improvements) is the user's own switch and doesn't change what this app sends.
+
 ## Icon
 
 The app's icon is the Mac app's, `../macos/Icon/AppIcon.icon` (Icon Composer), which the project compiles for iOS: every iPhone size, the 1024-pixel App Store icon, and the dark, tinted and clear looks. Edit it there; the iPhone app follows on its next build, the Mac app once `macos/Icon/icon.sh` regenerates its compiled copies.

@@ -8,7 +8,7 @@ The attached screen recording shows the app paired with a real tm server: pairin
 ABOUT THE APP
 - The app runs no code on the device. Prompts and key presses go to the user's own computer, like an SSH client's. The terminal screen draws a text terminal stream (VT), not a mirrored screen.
 - Everything the app shows comes from the user's own server and stays between the user and that server. Nothing is shared between users.
-- App Privacy: Data Not Collected. The link is end-to-end TLS through a relay that the user hosts.
+- App Privacy: Data Not Collected. The link is end-to-end TLS through a relay that the user hosts. Crash and hang reports (MetricKit) go only to the user's own server, never to us.
 - The app never contacts an AI provider. The agents run on the user's computer under the user's own accounts, and the app says so where pairing completes and in the privacy policy.
 - The privacy policy is linked in Settings > About and on the welcome screen.
 - Encryption: standard TLS only. ITSAppUsesNonExemptEncryption is NO, and the app is not offered in France.

@@ -220,6 +220,11 @@ final class AppModel {
             if fit.blocks { throw BridgeError.closed(fit.message ?? "") }
             self.hello = hello
             files = Compatibility.sendsFiles(hello) ? FileStore { p in try await b.call(AppAPI.Methods.sessionFile, p) } : nil
+            // The app's crash and hang reports go to this computer's tm
+            // server and nowhere else (T957).
+            if hello.methods.contains(AppAPI.Methods.appreportAdd.name) {
+                CrashReporter.shared.setSender({ p in try await b.call(AppAPI.Methods.appreportAdd, p) }, for: "mac")
+            }
             phase = .connected(hello)
             log.add(BridgeLog.connected(hello, tm: tm.lastPathComponent))
             // An older tm's bridge has no peer.list: no paired servers.
@@ -250,6 +255,7 @@ final class AppModel {
         }
         await started?.close()
         if bridge === started {
+            CrashReporter.shared.setSender(nil, for: "mac")
             bridge = nil
             files = nil
         }

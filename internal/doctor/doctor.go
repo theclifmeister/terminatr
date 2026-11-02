@@ -201,6 +201,7 @@ func Each(d Deps, emit func([]Check), waiting func(group string)) {
 	emit(SecretEnv(d))
 	emit(Mods(d, live))
 	emit(Peers(d, live))
+	emit(AppReports(d))
 	emit(Upkeep(d))
 	emit(Vault(d))
 	select {
