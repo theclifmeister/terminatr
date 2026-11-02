@@ -166,3 +166,51 @@ func TestText(t *testing.T) {
 		t.Errorf("without links: %q", got)
 	}
 }
+
+// TestProgramLink: a program's links lead with its vault folder,
+// _programs/<slug>/ (the programs design §3.4), and a link to a
+// program's own note is Program.
+func TestProgramLink(t *testing.T) {
+	on(t)
+	acme := ProgramFolder("acme")
+	for _, c := range []struct {
+		k         Kind
+		id, alias string
+		want      string
+	}{
+		{Task, "T4", "acme/T4", "[[_programs/acme/tasks/T4|acme/T4]]"},
+		{Memory, "plan", "", "[[_programs/acme/memory/plan|plan]]"},
+		{Design, "rollout", "", "[[_programs/acme/designs/rollout|rollout]]"},
+		{Program, "acme", "", "[[_programs/acme/PROGRAM|acme]]"},
+		{Program, "a/b", "", "a/b"},
+	} {
+		if got := Link(acme, c.k, c.id, c.alias); got != c.want {
+			t.Errorf("Link(%v, %q, %q) = %q, want %q", c.k, c.id, c.alias, got, c.want)
+		}
+	}
+	if got := Ref(acme, "T4"); got != "[[_programs/acme/tasks/T4|T4]]" {
+		t.Errorf("Ref: %q", got)
+	}
+	if got := Text(acme, "after T4"); got != "after [[_programs/acme/tasks/T4|T4]]" {
+		t.Errorf("Text: %q", got)
+	}
+	for _, bad := range []string{"_programs/", "_programs/a/b", "_programs/.."} {
+		if got := Link(bad, Task, "T4", ""); got != "T4" {
+			t.Errorf("Link(%q) = %q, want no link", bad, got)
+		}
+	}
+}
+
+// TestRenameProgram: a program's rename moves the links into its folder
+// and nothing else: not a project of the same name, not another program.
+func TestRenameProgram(t *testing.T) {
+	in := "[[_programs/acme/tasks/T4|T4]] [[_programs/acme/PROGRAM|acme]] [[acme/tasks/T1|T1]] [[_programs/acme-two/tasks/T1|T1]] [[_programs/acme/memory/x]]"
+	want := "[[_programs/studio/tasks/T4|T4]] [[_programs/studio/PROGRAM|studio]] [[acme/tasks/T1|T1]] [[_programs/acme-two/tasks/T1|T1]] [[_programs/studio/memory/x]]"
+	if got := Rename(in, ProgramFolder("acme"), ProgramFolder("studio")); got != want {
+		t.Errorf("got  %s\nwant %s", got, want)
+	}
+	// A project's rename leaves a program's links alone.
+	if got := Rename("[[_programs/acme/tasks/T4|T4]]", "acme", "web"); got != "[[_programs/acme/tasks/T4|T4]]" {
+		t.Errorf("project rename changed a program link: %s", got)
+	}
+}

@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 
 	"github.com/theclifmeister/terminatr/internal/mdfile"
+	"github.com/theclifmeister/terminatr/internal/vaultlink"
 )
 
 // Kind is what a Folder holds: a project or a program.
@@ -50,13 +51,12 @@ func (p *Folder) SharedOwned() (dirs, files []string) {
 	return dirs, files
 }
 
-// linkSlug is the slug the folder's vault links name: the project's.
-// A program's folder writes its ids as plain text for now ("" makes
-// vaultlink give the alias alone): its links take the vault's
-// _programs/<slug>/ form, which comes with the vault's program support.
-func (p *Folder) linkSlug() string {
+// LinkSlug is the slug the folder's vault links lead with: a project's
+// slug, or a program's folder in the vault, _programs/<slug>
+// (vaultlink.ProgramFolder), so a program's ids link to its own notes.
+func (p *Folder) LinkSlug() string {
 	if p.IsProgram() {
-		return ""
+		return vaultlink.ProgramFolder(p.Slug)
 	}
 	return p.Slug
 }
