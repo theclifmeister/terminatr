@@ -519,3 +519,51 @@ private func back(_ f: inout Follow, offset: Double, visible: Double, content: D
     // Landed past the end (the end moved up after): back.
     #expect(back(&f, offset: 2000, visible: 500, content: 1000, newest: 2))
 }
+
+// The views' Follower (T956): a scroll's frames tell its views nothing
+// until what they show changes, so the conversation's body doesn't run
+// again on every frame.
+
+/// Whether f's views hear of a change while body runs.
+@MainActor private func tells(_ f: Follower, _ body: () -> Void) -> Bool {
+    final class Told: @unchecked Sendable { var told = false }
+    let t = Told()
+    withObservationTracking {
+        _ = (f.following, f.unseen, f.gliding, f.label)
+    } onChange: {
+        t.told = true
+    }
+    body()
+    return t.told
+}
+
+@MainActor @Test func followerFramesTellNothing() {
+    let f = Follower()
+    _ = f.arrived([0, 1, 2])
+    // The content grows and the offset moves along the end, frame after
+    // frame: still following, nothing told.
+    #expect(!tells(f) {
+        for i in 0..<120 {
+            f.scrolled(offset: 500 + Double(i), visible: 500, content: 1000 + Double(i), newest: 2)
+            f.moved(by: false, resting: i == 119)
+        }
+    })
+    #expect(f.following)
+    // The user scrolls up: that is told, once it stops following.
+    #expect(tells(f) { f.scrolled(offset: 200, visible: 500, content: 1120, newest: 2) })
+    #expect(!f.following)
+    // Output while scrolled up: counted, and told.
+    #expect(tells(f) { _ = f.arrived([0, 1, 2, 3]) })
+    #expect(f.label == "Jump to latest · 1 new message")
+    // A glide and its landing are told.
+    #expect(tells(f) { f.glide(newest: 3) })
+    #expect(f.gliding && f.following && f.unseen == 0)
+    #expect(tells(f) { f.landed() })
+    #expect(!f.gliding)
+}
+
+@Test func sessionRefDescribesItsPlace() {
+    #expect("\(SessionRef(project: "acme"))" == "acme")
+    #expect("\(SessionRef(project: "acme", thread: "t-1"))" == "acme/t-1")
+    #expect("\(SessionRef(project: "acme", thread: "t-1", server: "studio"))" == "studio:acme/t-1")
+}

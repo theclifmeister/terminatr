@@ -32,7 +32,7 @@ struct ConversationTab: View {
     @FocusState private var findFocused: Bool
     /// Whether the transcript follows its end, or the user scrolled up
     /// (macOS 15, from the scroll geometry; 14 always follows).
-    @State private var follow = Follow()
+    @State private var follow = Follower()
     /// Jump to latest's glide to the end, and the follower's (T895).
     @State private var glider = Glider()
     /// Bumped by Jump to the open card: the cards flash.
@@ -126,7 +126,7 @@ struct ConversationTab: View {
                 .modifier(FollowAnchor())
                 // Streamed text lands in place: no implicit animation.
                 .transaction { if reduceMotion { $0.animation = nil } }
-                .modifier(FollowGeometry(follow: $follow, newest: model.transcript.entries.last?.id) {
+                .modifier(FollowGeometry(follow: follow, newest: model.transcript.entries.last?.id) {
                     proxy.scrollTo(Self.end, anchor: .bottom)
                 })
                 // New output, or a growing last entry: the follower goes
@@ -362,7 +362,7 @@ struct ViewOnlyLine: View {
 /// (Glider, T895); without one, a jump that trackpad momentum carries up
 /// is pulled back to the end (toEnd, T829).
 struct FollowGeometry: ViewModifier {
-    @Binding var follow: Follow
+    let follow: Follower
     let newest: Int?
     let toEnd: () -> Void
 

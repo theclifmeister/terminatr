@@ -42,8 +42,31 @@ final class Places {
 }
 
 extension Route {
-    /// This route's screen as a list, for Places.chosen.
-    var listKey: String { "\(self)" }
+    /// This route's screen as a list, for Places.chosen. Written out,
+    /// never "\(self)": that walks the enum and its SessionRef by
+    /// reflection on each view update that asks for it (T956).
+    var listKey: String {
+        switch self {
+        case .on(let key, let r): "on \(key) " + r.listKey
+        case .project(let s): "project \(s)"
+        case .peerProject(let alias, let project): "peerProject \(alias)/\(project)"
+        case .session(let ref): "session \(ref.description)"
+        case .need(let ref): "need \(ref.description)"
+        case .overview(let s): "overview \(s)"
+        case .board(let s): "board \(s)"
+        case .memory(let s): "memory \(s)"
+        case .memoryFile(let s, let path): "memoryFile \(s)/\(path)"
+        case .library(let s): "library \(s)"
+        case .task(let s, let ref): "task \(s)/\(ref)"
+        case .mods(let s): "mods \(s)"
+        case .mod(let s, let id): "mod \(s)/\(id)"
+        case .design(let s, let name): "design \(s)/\(name)"
+        case .search(let s): "search \(s)"
+        case .searchHit(let s, let id): "searchHit \(s)/\(id)"
+        case .peerPage(let alias, let project, let page): "peerPage \(alias)/\(project)/\(page.rawValue)"
+        case .peerDesign(let alias, let project, let name): "peerDesign \(alias)/\(project)/\(name)"
+        }
+    }
 }
 
 /// How a screen's links open their routes. In the stack (compact width)

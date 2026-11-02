@@ -45,8 +45,20 @@ mkdir -p "$out"
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/tm-ios.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT
 
+# The archive's dSYMs, zipped beside it as Terminatr-<version>-<build>-dSYMs.zip
+# (the release workflow keeps it as an artifact, T956), with their UUIDs
+# in the log: a crash report (.ips) names the app by its slice_uuid, and
+# only the dSYM of that build symbolicates its frames (ios/README.md,
+# Crash reports).
+keep_dsyms() {
+	[ -d "$archive/dSYMs" ] || { echo "ios: the archive has no dSYMs" >&2; exit 1; }
+	dwarfdump --uuid "$archive"/dSYMs/*.dSYM | sed "s|$archive/dSYMs/||"
+	(cd "$archive" && ditto -c -k --keepParent dSYMs "$out/Terminatr-$version-$build-dSYMs.zip")
+}
+
 if [ -z "${TM_IOS_PROFILE:-}" ]; then
 	make -C "$root/ios" archive ARCHIVE="$archive" VERSION="$version" BUILD="$build"
+	keep_dsyms
 	echo "ios: TM_IOS_PROFILE not set; Terminatr.xcarchive is not signed and not uploaded (version $version, build $build)"
 	exit 0
 fi
@@ -73,6 +85,7 @@ done
 
 make -C "$root/ios" archive ARCHIVE="$archive" VERSION="$version" BUILD="$build" PROFILE="$uuid" TEAM="$team"
 codesign --verify --deep --strict "$archive/Products/Applications/Terminatr.app"
+keep_dsyms
 
 cp "$root/ios/ExportOptions.plist" "$tmp/export.plist"
 plutil -replace teamID -string "$team" "$tmp/export.plist"

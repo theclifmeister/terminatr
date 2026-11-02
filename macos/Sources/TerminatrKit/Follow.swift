@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 
 /// Whether a conversation follows its end (T803): at the bottom it keeps
 /// following what the agent writes; once the user scrolls up it stays
@@ -167,11 +168,70 @@ public struct Follow: Equatable, Sendable {
 
     /// Jump to latest's words: with what came meanwhile, "Jump to
     /// latest · 3 new messages".
-    public var label: String {
+    public var label: String { Self.label(unseen: unseen) }
+
+    static func label(unseen: Int) -> String {
         switch unseen {
         case 0: "Jump to latest"
         case 1: "Jump to latest · 1 new message"
         default: "Jump to latest · \(unseen) new messages"
         }
+    }
+}
+
+/// A conversation's Follow as the views hold it (T956): the scroll's
+/// bookkeeping (its offset, at the end, at rest, past the end) changes
+/// on every frame of a scroll or a glide and is kept out of observation;
+/// only what the views show or act on (following, unseen, gliding) is
+/// observed, and changes only when it does. Held as a value in @State,
+/// each geometry change was a change of the screen's state: the whole
+/// conversation's body ran again on every frame, its rows rebuilt from
+/// every entry, and a long conversation spent the frame on it (the
+/// iPhone's watchdog kill and hangs).
+@MainActor
+@Observable
+public final class Follower {
+    @ObservationIgnored private var state = Follow()
+    /// Follow.following, observed.
+    public private(set) var following = true
+    /// Follow.unseen, observed.
+    public private(set) var unseen = 0
+    /// Follow.gliding, observed.
+    public private(set) var gliding = false
+
+    public init() {}
+
+    /// Jump to latest's words (Follow.label).
+    public var label: String { Follow.label(unseen: unseen) }
+
+    @discardableResult
+    public func scrolled(offset: Double, visible: Double, content: Double, inset: Double = 0, top: Double = 0, newest: Int?) -> Bool {
+        change { $0.scrolled(offset: offset, visible: visible, content: content, inset: inset, top: top, newest: newest) }
+    }
+
+    @discardableResult
+    public func moved(by user: Bool, resting: Bool) -> Bool {
+        change { $0.moved(by: user, resting: resting) }
+    }
+
+    public func arrived(_ ids: some Collection<Int>) -> Bool {
+        change { $0.arrived(ids) }
+    }
+
+    public func jump(newest: Int?) { change { $0.jump(newest: newest) } }
+
+    public func glide(newest: Int?) { change { $0.glide(newest: newest) } }
+
+    public func landed() { change { $0.landed() } }
+
+    /// Applies a change to the Follow, then publishes what the views
+    /// observe, each only when it differs (an observed property's set
+    /// tells its views even when the value is the same).
+    private func change<R>(_ f: (inout Follow) -> R) -> R {
+        let r = f(&state)
+        if following != state.following { following = state.following }
+        if unseen != state.unseen { unseen = state.unseen }
+        if gliding != state.gliding { gliding = state.gliding }
+        return r
     }
 }
