@@ -64,22 +64,38 @@ public struct SearchHitHeader: View {
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 8) {
-                Label(Search.kind(hit.kind).label, systemImage: Search.kind(hit.kind).symbol)
-                    .font(theme.mono(.caption, .medium))
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 2)
-                    .background(theme.cardTint, in: Capsule())
-                    .overlay(Capsule().strokeBorder(theme.edge, lineWidth: 1))
-                Text(hit.id)
-                    .font(theme.mono(.caption, .medium))
-                    .foregroundStyle(theme.action)
-                    .textSelection(.enabled)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                Text(Search.day(hit.time))
-                    .font(theme.mono(.caption))
-                    .foregroundStyle(theme.muted)
+            // The pill and the day keep their size; the id gives way, then
+            // drops to its own line when the row is too narrow for all three.
+            let kind = Search.kind(hit.kind)
+            let pill = HStack(spacing: 4) {
+                Image(systemName: kind.symbol)
+                Text(kind.label)
+            }
+            .font(theme.mono(.caption, .medium))
+            .lineLimit(1)
+            .fixedSize()
+            .padding(.horizontal, 7)
+            .padding(.vertical, 2)
+            .background(theme.cardTint, in: Capsule())
+            .overlay(Capsule().strokeBorder(theme.edge, lineWidth: 1))
+            .accessibilityElement(children: .combine)
+            let id = Text(hit.id)
+                .font(theme.mono(.caption, .medium))
+                .foregroundStyle(theme.action)
+                .textSelection(.enabled)
+                .lineLimit(1)
+                .truncationMode(.middle)
+            let day = Text(Search.day(hit.time))
+                .font(theme.mono(.caption))
+                .foregroundStyle(theme.muted)
+                .lineLimit(1)
+                .fixedSize()
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) { pill; id.fixedSize(); day }
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 8) { pill; day }
+                    id
+                }
             }
             Text(hit.title.isEmpty ? hit.id : hit.title)
                 .font(theme.title(.title3, .heavy))
