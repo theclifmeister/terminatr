@@ -18,6 +18,9 @@ struct TerminatrApp: App {
 
     init() {
         Fonts.register()
+        // MetricKit's crash and hang reports of earlier runs, for this
+        // computer's tm server only (T957, AppModel's bridge).
+        CrashReporter.shared.start()
     }
 
     var body: some Scene {

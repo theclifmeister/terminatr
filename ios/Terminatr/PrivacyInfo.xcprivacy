@@ -3,7 +3,8 @@
 <!-- The app's privacy manifest (T797; ios/README.md, Privacy). No
      tracking, nothing collected: what the app shows and sends goes over
      an end-to-end TLS link to the user's own tm server, which the relay
-     in between can't read, and to no one else. The one required-reason
+     in between can't read, and to no one else. That includes MetricKit's
+     crash and hang reports (T957), sent to that server only. The one required-reason
      API is UserDefaults (CA92.1: the app's own launch arguments, -demo,
      -pair, -open, -filter). swift-nio's bundles carry their own manifests. -->
 <plist version="1.0">

@@ -339,6 +339,11 @@ func init() {
 			s.peers.Reload()
 			return s.peers.Status()
 		})},
+		// The apps' crash and hang reports (appreport.go): added by an
+		// app only, read by the human and any agent.
+		proto.MethodAppReportAdd:  {gate: gateHuman, call: typed((*Server).addAppReport)},
+		proto.MethodAppReportList: {gate: gateAgentOrHuman, call: func(s *Server, _ proto.Request, c callCtx) (any, *proto.Error) { return s.listAppReports(c) }},
+		proto.MethodAppReportShow: {gate: gateAgentOrHuman, call: typed((*Server).showAppReport)},
 		proto.MethodDeviceReload: {gate: gateHuman, call: plain(func(s *Server, _ callCtx) any {
 			s.devices.Reload()
 			return s.devices.Status()

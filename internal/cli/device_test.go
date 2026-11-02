@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/theclifmeister/terminatr/internal/appreport"
 	"github.com/theclifmeister/terminatr/internal/device"
 	"github.com/theclifmeister/terminatr/internal/peer"
 	"github.com/theclifmeister/terminatr/internal/proto"
@@ -203,4 +204,46 @@ func TestDevicePair(t *testing.T) {
 			t.Fatalf("devices after pairing again %+v", ds)
 		}
 	}
+}
+
+// tm device reports and report: the apps' crash and hang reports, read
+// from their folder with no server running, by the human and threads.
+func TestDeviceReports(t *testing.T) {
+	h := newHarness(t)
+	stubDeviceServer(t, nil)
+	if out := h.ok(thr, "device", "reports"); !strings.Contains(out, "no crash or hang reports") {
+		t.Fatalf("reports before any: %q", out)
+	}
+	dir, err := appreport.Dir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := &appreport.Store{Dir: dir}
+	m, _, err := s.Add(appreport.Report{Meta: appreport.Meta{Source: appreport.DeviceSource("ab12"), Device: "Sam's iPhone", App: "ios",
+		Kind: appreport.KindHang, AppVersion: "0.73.1", Build: "212", BinaryUUID: "UUID-1", Summary: "hang 2.5 s"},
+		Payload: json.RawMessage(`{"hangDuration":"2.5 sec","x":"\u001b[31m"}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := h.ok(thr, "device", "reports")
+	for _, want := range []string{m.ID, "hang", "Sam's iPhone", "0.73.1 (212)", "hang 2.5 s"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("reports: no %q in %q", want, out)
+		}
+	}
+	out = h.ok(human, "device", "report", m.ID[:18])
+	for _, want := range []string{"Binary UUID:", "UUID-1", `"hangDuration": "2.5 sec"`} {
+		if !strings.Contains(out, want) {
+			t.Errorf("report: no %q in %q", want, out)
+		}
+	}
+	if strings.Contains(out, "\x1b") {
+		t.Errorf("report prints an escape: %q", out)
+	}
+	var r proto.AppReport
+	if err := json.Unmarshal([]byte(h.ok(coord, "device", "report", m.ID, "--json")), &r); err != nil || r.BinaryUUID != "UUID-1" {
+		t.Fatalf("report --json: %+v %v", r, err)
+	}
+	h.expect(1, "no report", thr, "device", "report", "nope")
+	h.expect(2, "usage: tm device", thr, "device", "reports", "x")
 }

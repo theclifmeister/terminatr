@@ -47,7 +47,9 @@ import (
 // design archive), added fields and values only. 31: design.list's
 // Design.Working and DesignTask.Working, added fields only. 32:
 // task.priority, and a task's priority on the tasks the server sends.
-const Protocol = 32
+// 33: appreport.add, appreport.list and appreport.show, the apps' crash
+// and hang reports (CapAppReports).
+const Protocol = 33
 
 // Kind is what a connection is for.
 type Kind string

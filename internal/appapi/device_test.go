@@ -551,3 +551,17 @@ func TestDeviceSearch(t *testing.T) {
 		t.Errorf("search.query took a reindex: %v", err)
 	}
 }
+
+// appreport.add is every level's (app API 43): a report acts on
+// nothing, so a view-only device sends its crashes too, unsigned.
+func TestAppReportEveryLevel(t *testing.T) {
+	m, ok := appapi.Lookup(proto.MethodAppReportAdd)
+	if !ok || m.Write || m.DeviceOnly() {
+		t.Fatalf("appreport.add %+v %v", m, ok)
+	}
+	for _, level := range append([]string{""}, device.Levels...) {
+		if !appapi.Allowed(m, level) {
+			t.Errorf("level %q lacks appreport.add", level)
+		}
+	}
+}

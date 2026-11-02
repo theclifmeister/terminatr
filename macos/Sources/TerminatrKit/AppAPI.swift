@@ -6,7 +6,7 @@ import Foundation
 /// The terminatr app API (docs/SPEC.md §3.8): what tm app bridge answers.
 public enum AppAPI {
     /// The app API version this app was generated against.
-    public static let version = 42
+    public static let version = 43
 
     public struct AdoptRequestParams: Codable, Sendable, Hashable {
         public var id: String
@@ -71,6 +71,57 @@ public enum AppAPI {
 
         enum CodingKeys: String, CodingKey {
             case remaining
+        }
+    }
+
+    public struct AppReportAddParams: Codable, Sendable, Hashable {
+        public var kind: String
+        public var time: Date?
+        public var appVersion: String
+        public var build: String
+        public var binaryUuid: String
+        public var os: String
+        public var model: String
+        public var summary: String
+        public var payload: String
+
+        public init(kind: String, time: Date? = nil, appVersion: String, build: String, binaryUuid: String = "", os: String = "", model: String = "", summary: String = "", payload: String) {
+            self.kind = kind
+            self.time = time
+            self.appVersion = appVersion
+            self.build = build
+            self.binaryUuid = binaryUuid
+            self.os = os
+            self.model = model
+            self.summary = summary
+            self.payload = payload
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case kind
+            case time
+            case appVersion = "app_version"
+            case build
+            case binaryUuid = "binary_uuid"
+            case os
+            case model
+            case summary
+            case payload
+        }
+    }
+
+    public struct AppReportAdded: Codable, Sendable, Hashable, Identifiable {
+        public var id: String
+        public var added: Bool
+
+        public init(id: String, added: Bool) {
+            self.id = id
+            self.added = added
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case id
+            case added
         }
     }
 
@@ -3610,6 +3661,7 @@ public enum AppAPI {
 
     /// Every method of the app API, by name.
     public enum Methods {
+        public static let appreportAdd = Call<AppReportAddParams, AppReportAdded>("appreport.add", write: false)
         public static let coordinatorClear = Call<ProjectParams, CoordinatorClear>("coordinator.clear", write: true)
         public static let designList = Call<ProjectParams, Designs>("design.list", write: false)
         public static let deviceAccess = Call<DeviceAccessParams, Device>("device.access", write: true)
@@ -3708,6 +3760,29 @@ extension AppAPI.AnswerResult {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.remaining = try c.decode(Int.self, forKey: .remaining)
+    }
+}
+
+extension AppAPI.AppReportAddParams {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.kind = try c.decode(String.self, forKey: .kind)
+        self.time = try c.decodeIfPresent(Date.self, forKey: .time)
+        self.appVersion = try c.decode(String.self, forKey: .appVersion)
+        self.build = try c.decode(String.self, forKey: .build)
+        self.binaryUuid = try c.decodeIfPresent(String.self, forKey: .binaryUuid) ?? ""
+        self.os = try c.decodeIfPresent(String.self, forKey: .os) ?? ""
+        self.model = try c.decodeIfPresent(String.self, forKey: .model) ?? ""
+        self.summary = try c.decodeIfPresent(String.self, forKey: .summary) ?? ""
+        self.payload = try c.decode(String.self, forKey: .payload)
+    }
+}
+
+extension AppAPI.AppReportAdded {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try c.decode(String.self, forKey: .id)
+        self.added = try c.decode(Bool.self, forKey: .added)
     }
 }
 

@@ -27,6 +27,9 @@ struct TerminatrApp: App {
         for f in Bundle.main.urls(forResourcesWithExtension: "ttf", subdirectory: nil) ?? [] {
             CTFontManagerRegisterFontsForURL(f as CFURL, .process, nil)
         }
+        // MetricKit's crash and hang reports of earlier runs, for the
+        // paired server only (T957, PhoneModel's link).
+        CrashReporter.shared.start()
     }
 
     var body: some Scene {

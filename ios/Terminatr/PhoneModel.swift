@@ -172,6 +172,7 @@ final class PhoneModel {
 
     /// Closes the link and stops the redials, what it showed kept.
     private func unlink() async {
+        CrashReporter.shared.setSender(nil, for: key)
         linking?.cancel()
         linking = nil
         napping?.cancel()
@@ -195,6 +196,11 @@ final class PhoneModel {
             await b.setSigner(signer)
             bridge = b
             files = Compatibility.sendsFiles(h) ? FileStore { p in try await b.call(AppAPI.Methods.sessionFile, p) } : nil
+            // The app's crash and hang reports go to this server, the
+            // user's own, and nowhere else (T957); never the demo's.
+            if !(transport is DemoTransport), h.methods.contains(AppAPI.Methods.appreportAdd.name) {
+                CrashReporter.shared.setSender({ p in try await b.call(AppAPI.Methods.appreportAdd, p) }, for: key)
+            }
             generation += 1
             await refresh()
         } catch {

@@ -205,6 +205,11 @@ func init() {
 		local(MethodDeviceName, true, deviceName),
 		local(MethodDeviceRemove, true, deviceRemove),
 
+		// The app's crash and hang reports, to its own server (app API
+		// 43; the server's caps say app-reports): every level's, it
+		// acts on nothing.
+		unary(proto.MethodAppReportAdd, false, appReportAddParams, appReportAddedOf),
+
 		// A nonce for a device's next signed write (app API 23,
 		// sign.go): only a device's bridge has it.
 		deviceOnly(local(MethodDeviceNonce, false, deviceNonce)),

@@ -2610,7 +2610,7 @@
   }
  },
  "hello": {
-  "app_api": 42,
+  "app_api": 43,
   "build": "demo",
   "capabilities": [
    "read",

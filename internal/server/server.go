@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/theclifmeister/terminatr/internal/appreport"
 	"log"
 	"net"
 	"os"
@@ -245,6 +246,10 @@ type Server struct {
 	// devices are the links to paired devices (internal/device); set
 	// before Run serves.
 	devices *device.Manager
+	// home is tm's home; appReports the apps' crash and hang reports
+	// (appreport.go). Set before Run serves.
+	home       string
+	appReports *appreport.Store
 	// mirror is what the links last read of the paired servers' shared
 	// projects (peer.list); set before Run serves.
 	mirror *peer.Mirror
@@ -401,6 +406,8 @@ func Run(ctx context.Context, opts Options) error {
 	s.remotes = newRemotes(s)
 	// And the links to paired devices, each running the app API as the
 	// device on the server's side (§16.15).
+	s.home = p.Home
+	s.appReports = &appreport.Store{Dir: appreport.DirIn(p.Home)}
 	s.devices = device.Start(device.Options{Dir: device.DirIn(p.Home), PeerDir: peer.DirIn(p.Home), Logf: logger.Printf, Serve: s.serveDeviceLink})
 	defer s.devices.Close()
 	s.mirror = peer.StartMirror(s.peers, peer.MirrorOptions{Logf: logger.Printf, Changed: s.watch.wake, Panes: s.remotes.setLevel})
@@ -727,7 +734,7 @@ func (s *Server) hello() proto.Hello {
 		Build:    s.build,
 		Bin:      s.opts.Bin,
 		PID:      os.Getpid(),
-		Caps:     []string{proto.CapPaneVT, proto.CapTranscript, proto.CapPaneVTRemote, proto.CapSessionFile, proto.CapTranscriptRemote, proto.CapLinkAct, proto.CapTranscriptTail, proto.CapSideActs, proto.CapProjectFiles, proto.CapNeedAct, proto.CapDesigns, proto.CapSessionsWatch, proto.CapPeerPages, proto.CapPeerDesigns, proto.CapProjectMods, proto.CapAnswerPicks, proto.CapSearch, proto.CapTaskPriority},
+		Caps:     []string{proto.CapPaneVT, proto.CapTranscript, proto.CapPaneVTRemote, proto.CapSessionFile, proto.CapTranscriptRemote, proto.CapLinkAct, proto.CapTranscriptTail, proto.CapSideActs, proto.CapProjectFiles, proto.CapNeedAct, proto.CapDesigns, proto.CapSessionsWatch, proto.CapPeerPages, proto.CapPeerDesigns, proto.CapProjectMods, proto.CapAnswerPicks, proto.CapSearch, proto.CapTaskPriority, proto.CapAppReports},
 	}
 }
 
