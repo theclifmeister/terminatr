@@ -54,6 +54,8 @@ func TestCheckRefuses(t *testing.T) {
 		{name: "settings for the new slug", from: "demo", to: "demo2", config: "[projects.demo2]\nyolo = true\n", want: "project-exists"},
 		{name: "dotted keys", from: "demo", to: "demo2", config: "projects.demo.yolo = true\n", want: "settings-form"},
 		{name: "inline table", from: "demo", to: "demo2", config: "projects = { demo = { yolo = true } }\n", want: "settings-form"},
+		{name: "a program's table", from: "demo", to: "acme", config: "[programs.acme]\n", want: "slug-taken"},
+		{name: "a program's folder", from: "demo", to: "acme", mkdir: []string{"projects/_programs/acme"}, want: "slug-taken"},
 		{name: "ok", from: "demo", to: "demo2", config: "[projects.demo]\nyolo = true\n"},
 		{name: "ok without config", from: "demo", to: "demo2"},
 	}

@@ -70,6 +70,8 @@ func (s *Server) callerOf(pid int) caller.Caller {
 			switch r.Role {
 			case proto.RoleCoordinator:
 				return caller.Caller{Kind: caller.Coordinator, Project: r.Project, Session: r.ID}
+			case proto.RoleDirector:
+				return caller.Caller{Kind: caller.Director, Project: r.Project, Session: r.ID}
 			case proto.RoleThread:
 				return caller.Caller{Kind: caller.Thread, Project: r.Project, Thread: r.Thread, Session: r.ID}
 			}

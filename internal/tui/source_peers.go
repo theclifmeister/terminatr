@@ -350,7 +350,7 @@ func (s *ServerSource) pairing(ctx context.Context, code peer.Code, ev PairEvent
 	if err != nil {
 		return "", pairWords(err, code.Relay)
 	}
-	got, err := peer.Pin(dir, p.Key, code.Relay, p.Name, "")
+	got, err := peer.PinTaken(dir, p.Key, code.Relay, p.Name, "", func(n string) string { return project.ProgramTaken(n, nil) })
 	if err != nil {
 		return "", err
 	}

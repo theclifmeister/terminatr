@@ -1148,3 +1148,26 @@ func TestModelsSubchecks(t *testing.T) {
 		t.Fatal("one agent should give no several-agents warning")
 	}
 }
+
+// TestSettingsPrograms: doctor names a program whose slug a project or
+// a paired server has too (the project wins), and a member that isn't
+// there, whether programs are on or not.
+func TestSettingsPrograms(t *testing.T) {
+	d := testDeps(t)
+	if _, err := project.New(project.Options{Slug: "web"}); err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(filepath.Join(d.Paths.Home, "config.toml"), []byte("[programs.shop]\nprojects = [\"web\"]\n"), 0o600)
+	if cs := Settings(d); len(cs) != 0 {
+		t.Fatalf("a sound program: %+v", cs)
+	}
+	// By hand: a program web next to the project web, and members that
+	// aren't there.
+	os.WriteFile(filepath.Join(d.Paths.Home, "config.toml"), []byte("[programs.web]\nprojects = [\"nope\", \"mini/app\"]\n"), 0o600)
+	cs := Settings(d)
+	if len(cs) != 2 || cs[0].Status != Warn ||
+		!strings.Contains(cs[0].Detail, "program web: a project is called web too, so the program is left out and the project keeps working") ||
+		!strings.Contains(cs[1].Detail, "web → nope, web → mini/app (no paired server mini)") {
+		t.Fatalf("%+v", cs)
+	}
+}

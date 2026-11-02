@@ -164,7 +164,7 @@ func Dir(slug string) (string, error) {
 
 // PeerNameTaken says why name can't be a paired server's display name
 // here (docs/SPEC.md §16.8): it is this server's own name self, or a
-// project here, and <name>/<project> would read as either. "" when it
+// project or a program here, and <name>/<project> would read as either. "" when it
 // can be.
 func PeerNameTaken(name, self string) string {
 	if name == self {
@@ -174,6 +174,9 @@ func PeerNameTaken(name, self string) string {
 		if _, err := os.Stat(dir); err == nil {
 			return "a project here is called that"
 		}
+	}
+	if programExists(name, nil) {
+		return "a program here is called that"
 	}
 	return ""
 }
@@ -256,7 +259,8 @@ type Options struct {
 }
 
 // New creates a project folder with the layout of §5.1. It refuses with
-// project-exists if the slug is taken.
+// project-exists if the slug is taken, and slug-taken if a program has
+// it (ProgramTaken).
 func New(o Options) (*Project, error) {
 	slug, err := SlugFor(o.Slug)
 	if err != nil {
@@ -279,6 +283,9 @@ func New(o Options) (*Project, error) {
 	dir, err := Dir(slug)
 	if err != nil {
 		return nil, err
+	}
+	if why := ProgramTaken(slug, nil); why != "" {
+		return nil, refuse("slug-taken", "%s", why)
 	}
 	if err := os.MkdirAll(filepath.Dir(dir), 0o700); err != nil {
 		return nil, err

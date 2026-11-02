@@ -3,7 +3,6 @@ package tui
 import (
 	"cmp"
 	"fmt"
-	"strconv"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -338,8 +337,8 @@ func (dv *designView) render(m *dash) string {
 		g, st := stateLook(string(t.Status))
 		lead, state := fmt.Sprintf("%-5s ", t.Ref())+oneLine(t.Title)+" ", strings.TrimSpace(g+" "+string(t.Status))
 		after := ""
-		if len(t.After) > 0 {
-			after = " · after " + taskRefList(t.After)
+		if refs := t.AfterRefs(); len(refs) > 0 {
+			after = " · after " + strings.Join(refs, ", ")
 		}
 		row(i, lead+state+after, lead+st.Render(state)+th().Faint.Render(after))
 		i++
@@ -354,13 +353,4 @@ func (dv *designView) render(m *dash) string {
 	}
 	b := box{title: title, body: body, sel: sel, hits: hits, keys: keys}
 	return m.popup(b)
-}
-
-// taskRefList is "T10, T11".
-func taskRefList(ids []int) string {
-	refs := make([]string, len(ids))
-	for i, id := range ids {
-		refs[i] = "T" + strconv.Itoa(id)
-	}
-	return strings.Join(refs, ", ")
 }

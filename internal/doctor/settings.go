@@ -94,5 +94,51 @@ func Settings(d Deps) []Check {
 		out = append(out, Check{Group: "settings", Name: "links", Status: Warn,
 			Detail: fmt.Sprintf("linked to a project that isn't there: %s; remove the link in the Network popup", strings.Join(dangling, ", "))})
 	}
+	return append(out, programChecks(c, peers, paired)...)
+}
+
+// programChecks reports the programs config.toml or the projects folder
+// has that can't work as they are, whether programs are on or not (the
+// programs design §3.4): a name a project or a paired server has too,
+// which a hand edit made (the project or server keeps it, and the
+// program is left out until one is renamed), and members that aren't
+// there.
+func programChecks(c *config.Config, peers []peer.Peer, paired map[string]bool) []Check {
+	var out []Check
+	var names []string
+	for _, p := range peers {
+		names = append(names, p.Alias)
+		if p.Name != "" {
+			names = append(names, p.Name)
+		}
+	}
+	for _, cl := range project.ProgramClashes(c, names) {
+		who, how := "project", "tm project rename "+cl.Program+" NEW"
+		if cl.With != "a project" {
+			who, how = "paired server", "tm peer name "+cl.Program+" NEW"
+		}
+		out = append(out, Check{Group: "settings", Name: "programs", Status: Warn,
+			Detail: fmt.Sprintf("program %s: %s is called %s too, so the program is left out and the %s keeps working; rename one (%s, or the program's [programs.%s] table and its folder projects/%s/%s)",
+				cl.Program, cl.With, cl.Program, who, how, cl.Program, config.ProgramsDirName, cl.Program)})
+	}
+	var missing []string
+	for _, slug := range c.ProgramSlugs() {
+		p, _ := c.Program(slug)
+		for _, m := range p.Projects {
+			alias, ps, _ := config.SplitMember(m)
+			switch {
+			case alias != "" && !paired[alias]:
+				missing = append(missing, slug+" → "+m+" (no paired server "+alias+")")
+			case alias == "":
+				if _, err := project.Open(ps); err != nil {
+					missing = append(missing, slug+" → "+m)
+				}
+			}
+		}
+	}
+	if len(missing) > 0 {
+		out = append(out, Check{Group: "settings", Name: "programs", Status: Warn,
+			Detail: fmt.Sprintf("a program lists a project that isn't there: %s; remove it from the program's projects", strings.Join(missing, ", "))})
+	}
 	return out
 }

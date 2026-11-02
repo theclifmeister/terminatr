@@ -135,6 +135,9 @@ const (
 	RoleShell       = "shell"
 	RoleCoordinator = "coordinator"
 	RoleThread      = "thread"
+	// RoleDirector is a program's director (the programs design §4.1):
+	// its Project is the program's slug. Nothing starts one yet.
+	RoleDirector = "director"
 )
 
 // CoordinatorOf is project slug's coordinator among sessions, nil when

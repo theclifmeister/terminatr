@@ -93,3 +93,26 @@ func TestPeerHuman(t *testing.T) {
 		t.Error("Remote() is wrong for a device, the human or the app")
 	}
 }
+
+// TestDirector: a program's director is an agent, as narrow as a
+// coordinator, and the server's record wins a tie with one.
+func TestDirector(t *testing.T) {
+	d := Caller{Kind: Director, Project: "acme"}
+	if !d.IsAgent() || d.String() != "director:acme" {
+		t.Fatalf("%v %q", d.IsAgent(), d.String())
+	}
+	coord := Caller{Kind: Coordinator, Project: "acme"}
+	human := Caller{Kind: Human}
+	thread := Caller{Kind: Thread, Project: "p", Thread: "t-0001"}
+	for _, c := range []struct{ env, srv, want Caller }{
+		{human, d, d}, {d, human, d}, {coord, d, d}, {d, coord, coord}, {d, thread, thread}, {thread, d, thread},
+	} {
+		if got := Narrower(c.env, c.srv); got != c.want {
+			t.Errorf("Narrower(%v, %v) = %v, want %v", c.env, c.srv, got, c.want)
+		}
+	}
+	env := map[string]string{EnvSession: "s-1", EnvRole: "director", EnvProject: "acme"}
+	if got := FromLookup(func(k string) string { return env[k] }); got != d {
+		t.Errorf("FromLookup = %v", got)
+	}
+}

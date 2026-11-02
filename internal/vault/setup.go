@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
+	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/home"
 	"github.com/theclifmeister/terminatr/internal/mdfile"
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
@@ -51,6 +52,10 @@ const (
 	obsidianDir = ".obsidian"
 	tmDir       = "_tm"
 	humanDir    = "_human"
+	// programsDir holds the programs' folders (home.ProgramsDir): tm's,
+	// like a project's, so the scan for the human's notes never reads
+	// one, whether programs are on or not.
+	programsDir = config.ProgramsDirName
 )
 
 // Change is one file init or render writes, or keeps because the user

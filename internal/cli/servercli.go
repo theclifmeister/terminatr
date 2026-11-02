@@ -105,6 +105,8 @@ func identifyByServer() (caller.Caller, bool) {
 	switch caller.Kind(info.Kind) {
 	case caller.Coordinator:
 		return caller.Caller{Kind: caller.Coordinator, Project: info.Project}, true
+	case caller.Director:
+		return caller.Caller{Kind: caller.Director, Project: info.Project}, true
 	case caller.Thread:
 		return caller.Caller{Kind: caller.Thread, Project: info.Project, Thread: info.Thread}, true
 	}

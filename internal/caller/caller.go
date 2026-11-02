@@ -33,6 +33,11 @@ const (
 	// It has no rights beyond reading shared projects, and is journaled
 	// as "peer:<alias>".
 	Peer Kind = "peer"
+	// Director is a program's director (the programs design §4.2): an
+	// agent whose Project is its program's slug. The server's pid walk
+	// finds it from a session record with role "director"; next to a
+	// coordinator the server's record wins (Narrower).
+	Director Kind = "director"
 )
 
 // Caller is one tm invocation's identity.
@@ -94,15 +99,15 @@ func ForMod(id string) Caller { return Caller{Kind: Mod, Mod: id} }
 // ForPeer is the caller for the paired server alias's link requests.
 func ForPeer(alias string) Caller { return Caller{Kind: Peer, Alias: alias} }
 
-// IsAgent reports whether the caller is not the human: a coordinator or
-// thread agent, a mod or a paired server. Every human-only check refuses
+// IsAgent reports whether the caller is not the human: a coordinator,
+// director or thread agent, a mod or a paired server. Every human-only check refuses
 // them all.
 func (c Caller) IsAgent() bool {
-	return c.Kind == Coordinator || c.Kind == Thread || c.Kind == Mod || c.Kind == Peer
+	return c.Kind == Coordinator || c.Kind == Director || c.Kind == Thread || c.Kind == Mod || c.Kind == Peer
 }
 
 // String is the name used in the journal: "human", "human (app)",
-// "coordinator", the thread id or "mod:<id>".
+// "coordinator", "director:<program>", the thread id or "mod:<id>".
 func (c Caller) String() string {
 	switch {
 	case c.Kind == Human && c.Via != "":
@@ -113,6 +118,8 @@ func (c Caller) String() string {
 		return "mod:" + c.Mod
 	case c.Kind == Peer:
 		return "peer:" + c.Alias
+	case c.Kind == Director && c.Project != "":
+		return "director:" + c.Project
 	}
 	return string(c.Kind)
 }
@@ -138,6 +145,8 @@ func FromLookup(getenv func(string) string) Caller {
 	switch getenv(EnvRole) {
 	case string(Coordinator):
 		return Caller{Kind: Coordinator, Project: getenv(EnvProject)}
+	case string(Director):
+		return Caller{Kind: Director, Project: getenv(EnvProject)}
 	case string(Thread):
 		return Caller{Kind: Thread, Project: getenv(EnvProject), Thread: getenv(EnvThread)}
 	case "":
@@ -158,8 +167,8 @@ func rank(k Kind) int {
 		return 3
 	case Thread:
 		return 2
-	case Coordinator:
-		return 1
+	case Coordinator, Director:
+		return 1 // a tie: the server's record wins
 	}
 	return 0
 }

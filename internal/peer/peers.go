@@ -298,11 +298,25 @@ func DefaultAlias(name string) string {
 // already called that; else a key already pinned keeps its alias, and a
 // new one gets DefaultAlias(name), with -2, -3 … when that is taken.
 func Pin(dir string, key ed25519.PublicKey, relayURL, name, as string) (Peer, error) {
+	return PinTaken(dir, key, relayURL, name, as, nil)
+}
+
+// PinTaken is Pin where taken, when set, says why an alias can't be
+// used though no peer has it: a program here has the name (the
+// programs design §3.4). It refuses such an alias as, and a default
+// alias steps past it as past a peer's.
+func PinTaken(dir string, key ed25519.PublicKey, relayURL, name, as string, taken NameTaken) (Peer, error) {
 	if as != "" {
 		if err := CheckAlias(as); err != nil {
 			return Peer{}, err
 		}
+		if taken != nil {
+			if why := taken(as); why != "" {
+				return Peer{}, &NameError{Name: as, Why: why}
+			}
+		}
 	}
+	free := func(a string) bool { return taken == nil || taken(a) == "" }
 	p := Peer{Key: key, Relay: relayURL}
 	err := change(dir, func(peers []Peer) ([]Peer, error) {
 		var kept []Peer
@@ -332,7 +346,7 @@ func Pin(dir string, key ed25519.PublicKey, relayURL, name, as string) (Peer, er
 		if p.Alias == "" {
 			base := DefaultAlias(name)
 			p.Alias = base
-			for n := 2; slices.ContainsFunc(kept, func(q Peer) bool { return q.Alias == p.Alias || q.Name == p.Alias || q.Told == p.Alias }); n++ {
+			for n := 2; !free(p.Alias) || slices.ContainsFunc(kept, func(q Peer) bool { return q.Alias == p.Alias || q.Name == p.Alias || q.Told == p.Alias }); n++ {
 				p.Alias = fmt.Sprintf("%s-%d", base, n)
 			}
 		}

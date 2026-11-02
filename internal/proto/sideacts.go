@@ -13,8 +13,8 @@ const (
 	MethodProjectPin = "project.pin"
 	// MethodProjectNew makes a project (ProjectNewParams), as tm
 	// project new does: refusals carry the project store's codes
-	// ("project-exists", "invalid-slug", "invalid-repo"). Result
-	// ProjectNewResult.
+	// ("project-exists", "slug-taken" for a program's name,
+	// "invalid-slug", "invalid-repo"). Result ProjectNewResult.
 	MethodProjectNew = "project.new"
 	// MethodSessionAdoptRequest asks a project's coordinator to adopt an
 	// agent session outside the projects as a thread (O on the
