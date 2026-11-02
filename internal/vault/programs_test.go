@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -117,4 +118,69 @@ func TestProgramNotes(t *testing.T) {
 	if l := readLedger(file); l.Files["_programs/acme/tasks/T1.md"] == "" {
 		t.Fatalf("ledger %v", l.Files)
 	}
+}
+
+// fromObsidian lists the from-obsidian items of folder f, as
+// "path|part", sorted.
+func fromObsidian(t *testing.T, f *project.Folder) []string {
+	t.Helper()
+	items, err := f.Inbox()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out []string
+	for _, it := range items {
+		if it.Kind == project.KindFromObsidian {
+			out = append(out, it.Path+"|"+it.Part)
+		}
+	}
+	slices.Sort(out)
+	return out
+}
+
+// TestProgramRouting: _human/<slug>/, for: <slug>, #for-tm/<slug> and a
+// card on a program's design canvas reach the program's inbox (the
+// programs design §3.4) while programs are on; a bare #for-tm still goes
+// to the vault's only project, never to a program. Off, nothing reaches
+// a program, and a note for it is nobody's.
+func TestProgramRouting(t *testing.T) {
+	root, ps := vaultOn(t, "web")
+	p := programOn(t, "acme", true)
+	write(t, root, "_human/acme/idea.md", "# Idea\n")
+	write(t, root, "_human/for.md", "---\nfor: acme\n---\nFor the program.\n")
+	write(t, root, "Notes/plan.md", "- split the rollout #for-tm/acme\n- and cache #for-tm\n")
+	write(t, root, "_programs/acme/designs/rollout.canvas", `{"nodes":[{"id":"tm-T1","type":"text","text":"#for-tm"},{"id":"h1","type":"text","text":"Reorder #for-tm"}]}`)
+	write(t, root, "_programs/acme/memory/x.md", "- not read #for-tm/acme\n")
+	n, err := ScanHuman(time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"Notes/plan.md|line", "_human/acme/idea.md|", "_human/for.md|", "_programs/acme/designs/rollout.canvas|card h1"}
+	if got := fromObsidian(t, &p.Folder); n != 5 || !slices.Equal(got, want) {
+		t.Fatalf("raised %d; acme has %q", n, got)
+	}
+	if got := fromObsidian(t, &ps[0].Folder); !slices.Equal(got, []string{"Notes/plan.md|line"}) {
+		t.Fatalf("web has %q", got)
+	}
+	items, _ := p.Inbox()
+	for _, it := range items {
+		if raw, _ := os.ReadFile(p.Path("inbox", it.ID+".md")); strings.Contains(string(raw), "For the program") || strings.Contains(string(raw), "[[acme/") {
+			t.Errorf("item file:\n%s", raw)
+		}
+	}
+
+	// Off: a new note for acme raises nothing anywhere.
+	programOff(t)
+	write(t, root, "_human/acme/two.md", "# Two\n")
+	write(t, root, "_human/for2.md", "---\nfor: acme\n---\nAgain.\n")
+	if n, err := ScanHuman(time.Now()); err != nil || n != 0 {
+		t.Fatalf("programs off, yet raised %d: %v", n, err)
+	}
+}
+
+// programOff turns programs off in config.toml.
+func programOff(t *testing.T) {
+	t.Helper()
+	d, _ := home.Dir()
+	os.WriteFile(filepath.Join(d, "config.toml"), []byte("[features]\nprograms = false\n"), 0o600)
 }
