@@ -188,7 +188,7 @@ func (s *Server) accessFor(role, slug string, tree *gitx.Tree, lc launchConfig) 
 		// Its folder, but for what tm alone writes there (§5.2).
 		// The folders are made first, so that each sandbox has a real
 		// path to close.
-		owned, ownedFiles := (&project.Project{Slug: slug, Dir: dir}).Owned()
+		owned, ownedFiles := (&project.Project{Folder: project.Folder{Slug: slug, Dir: dir}}).Owned()
 		for _, d := range owned {
 			if err := os.MkdirAll(d, 0o755); err != nil {
 				return agent.Access{}, err

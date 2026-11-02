@@ -34,7 +34,7 @@ var hashRE = regexp.MustCompile(`^[0-9a-f]{64}$`)
 // AddVaultItem writes a from-obsidian item about the text of hash at
 // path, in the vault, which is part of it (PartNote and the others);
 // summary makes its fixed words from the item's id.
-func (p *Project) AddVaultItem(path, hash, part string, summary func(id string) string) (*Item, error) {
+func (p *Folder) AddVaultItem(path, hash, part string, summary func(id string) string) (*Item, error) {
 	it := &Item{Kind: KindFromObsidian, Subject: path, Path: path, Hash: hash, Part: part}
 	if err := p.addItem(it, summary); err != nil {
 		return nil, err

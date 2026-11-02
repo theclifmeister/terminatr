@@ -355,7 +355,7 @@ func (s *Server) guardNoWrite(r SessionRecord) []string {
 	case proto.RoleThread:
 		out = append(out, dir)
 	case proto.RoleCoordinator:
-		dirs, files := (&project.Project{Slug: r.Project, Dir: dir}).Owned()
+		dirs, files := (&project.Project{Folder: project.Folder{Slug: r.Project, Dir: dir}}).Owned()
 		out = append(append(out, dirs...), files...)
 	}
 	return withReal(out)

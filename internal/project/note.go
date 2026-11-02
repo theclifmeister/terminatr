@@ -151,7 +151,7 @@ var sourceRE = regexp.MustCompile(`^source:[ \t]*(["']?)(` + tasks.RefPattern + 
 // (vaultlink) when it names a task or a thread of the project plainly:
 // source: "T481" becomes source: "[[<slug>/tasks/T481|T481]]". Only that
 // line of YAML front matter changes; the rest is the writer's own.
-func (p *Project) LinkSource(data []byte) []byte {
+func (p *Folder) LinkSource(data []byte) []byte {
 	front, _, err := mdfile.Split(data)
 	if err != nil || front == nil || !bytes.HasPrefix(data, []byte("---")) {
 		return data
@@ -203,7 +203,7 @@ func (n Note) Section(name string) string {
 
 // Notes reads the project's notes (memory/*.md, regular files of at
 // most MaxMemoryRead bytes), sorted by title as MemoryFiles lists them.
-func (p *Project) Notes() ([]Note, error) {
+func (p *Folder) Notes() ([]Note, error) {
 	ents, err := os.ReadDir(p.Path("memory"))
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {

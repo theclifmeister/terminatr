@@ -24,14 +24,14 @@ var now = time.Now
 // Journal appends one line to JOURNAL.md:
 // "<time> <who> <action> <ref> <detail>", as plain text (textsafe.Line):
 // the detail is often an agent's words.
-func (p *Project) Journal(c caller.Caller, action, ref, detail string) error {
+func (p *Folder) Journal(c caller.Caller, action, ref, detail string) error {
 	line := textsafe.Line(fmt.Sprintf("%s %s %s %s %s",
 		now().UTC().Format(time.RFC3339), c.String(), action, ref, detail), 0)
 	return mdfile.Append(p.Path("JOURNAL.md"), []byte(line+"\n"))
 }
 
 // JournalTail returns the last n journal lines, skipping the heading.
-func (p *Project) JournalTail(n int) (lines []string, total int, err error) {
+func (p *Folder) JournalTail(n int) (lines []string, total int, err error) {
 	data, err := os.ReadFile(p.Path("JOURNAL.md"))
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, 0, nil
@@ -85,12 +85,12 @@ type Item struct {
 }
 
 // AddItem writes inbox/<ts>-<kind>-<subject>.md.
-func (p *Project) AddItem(kind, subject, summary string, needsUser bool) (*Item, error) {
+func (p *Folder) AddItem(kind, subject, summary string, needsUser bool) (*Item, error) {
 	return p.AddMessageItem(kind, subject, summary, needsUser, "")
 }
 
 // AddMessageItem is AddItem for a link item about message id (Item.Message).
-func (p *Project) AddMessageItem(kind, subject, summary string, needsUser bool, message string) (*Item, error) {
+func (p *Folder) AddMessageItem(kind, subject, summary string, needsUser bool, message string) (*Item, error) {
 	it := &Item{Kind: kind, Subject: subject, Summary: summary, NeedsUser: needsUser, Message: message}
 	if m := labelled.FindStringSubmatch(summary); m != nil && m[3] != subject {
 		it.Thread = m[3]
@@ -103,7 +103,7 @@ func (p *Project) AddMessageItem(kind, subject, summary string, needsUser bool, 
 
 // addItem writes item it under a new id, which it sets with its time;
 // summary, when not nil, makes its summary from the id.
-func (p *Project) addItem(it *Item, summary func(id string) string) error {
+func (p *Folder) addItem(it *Item, summary func(id string) string) error {
 	t := now().UTC().Truncate(time.Second)
 	kind, subject := it.Kind, it.Subject
 	base := fmt.Sprintf("%s-%s-%s", t.Format("20060102T150405Z"), kind, Slugify(subject))
@@ -136,7 +136,7 @@ func (p *Project) addItem(it *Item, summary func(id string) string) error {
 // subject that is a task or a thread, or the other project of a message
 // item, the thread, and the message a message item is about; and the
 // vault's properties (vaultlink.Owned).
-func (p *Project) linkedItem(it *Item) *Item {
+func (p *Folder) linkedItem(it *Item) *Item {
 	f := *it
 	f.Subject = vaultlink.Ref(p.Slug, it.Subject)
 	f.Thread = vaultlink.Ref(p.Slug, it.Thread)
@@ -166,7 +166,7 @@ const KindTakeover = "takeover"
 // TookOver records that the user typed into thread id's pane: an inbox
 // item for the coordinator and a journal line. name is how the item names
 // the thread (thread.Label).
-func (p *Project) TookOver(c caller.Caller, id, name string) error {
+func (p *Folder) TookOver(c caller.Caller, id, name string) error {
 	summary := "the user typed into " + name + "'s pane"
 	if c.Kind == caller.Peer {
 		// From a console of a paired server (docs/SPEC.md §16.12).
@@ -202,7 +202,7 @@ const KindAdopt = "adopt"
 // AskAdopt records that the user asks to adopt session sid; where says
 // what runs in it and where ("claude in /src/app on fix-login"). It
 // reports false when an unhandled item already asks it.
-func (p *Project) AskAdopt(c caller.Caller, sid, where string) (bool, error) {
+func (p *Folder) AskAdopt(c caller.Caller, sid, where string) (bool, error) {
 	items, err := p.Inbox()
 	if err != nil {
 		return false, err
@@ -228,18 +228,18 @@ const MaxSendBackNote = 200
 // AskDelegate records that the user asks to delegate task ref ("T12"):
 // an inbox item for the coordinator and a journal line. It reports false
 // when an unhandled item already asks something of task ref.
-func (p *Project) AskDelegate(c caller.Caller, ref string) (bool, error) {
+func (p *Folder) AskDelegate(c caller.Caller, ref string) (bool, error) {
 	return p.askTask(c, KindDelegate, ref, "the user asks to delegate "+ref, "")
 }
 
 // AskAccept records that the user accepts task ref, as AskDelegate.
-func (p *Project) AskAccept(c caller.Caller, ref string) (bool, error) {
+func (p *Folder) AskAccept(c caller.Caller, ref string) (bool, error) {
 	return p.askTask(c, KindAccept, ref, "the user accepts "+ref, "")
 }
 
 // AskSendBack records that the user sends task ref back with note, as
 // AskDelegate. The note is one line of at most MaxSendBackNote runes.
-func (p *Project) AskSendBack(c caller.Caller, ref, note string) (bool, error) {
+func (p *Folder) AskSendBack(c caller.Caller, ref, note string) (bool, error) {
 	note, err := SendBackNote(note)
 	if err != nil {
 		return false, err
@@ -265,7 +265,7 @@ func SendBackNote(note string) (string, error) {
 	return note, nil
 }
 
-func (p *Project) askTask(c caller.Caller, kind, ref, summary, detail string) (bool, error) {
+func (p *Folder) askTask(c caller.Caller, kind, ref, summary, detail string) (bool, error) {
 	items, err := p.Inbox()
 	if err != nil {
 		return false, err
@@ -287,7 +287,7 @@ func (p *Project) askTask(c caller.Caller, kind, ref, summary, detail string) (b
 // waits on the coordinator ("already-asked"), each a *tasks.Error. The
 // same ask waiting already reports false. Who may ask is the caller's
 // check.
-func (p *Project) AskTask(c caller.Caller, t *tasks.Task, kind, note string) (bool, error) {
+func (p *Folder) AskTask(c caller.Caller, t *tasks.Task, kind, note string) (bool, error) {
 	ref := t.Ref()
 	if why := modaction.NotAskable(t, kind); why != "" {
 		return false, &tasks.Error{Code: "not-" + kind, Msg: why}
@@ -333,7 +333,7 @@ func TaskAsked(items []Item, ref string) string {
 }
 
 // Inbox lists the unhandled items, oldest first.
-func (p *Project) Inbox() ([]Item, error) {
+func (p *Folder) Inbox() ([]Item, error) {
 	entries, err := os.ReadDir(p.Path("inbox"))
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, nil
@@ -393,7 +393,7 @@ func ParseItem(id string, data []byte) (Item, error) {
 }
 
 // DoneItem moves an item to inbox/done/. An item already done is fine.
-func (p *Project) DoneItem(id string) error {
+func (p *Folder) DoneItem(id string) error {
 	if id == "" || strings.ContainsAny(id, "/\\") || strings.HasPrefix(id, ".") {
 		return refuse("unknown-item", "%q is not an inbox item", id)
 	}
@@ -413,7 +413,7 @@ func (p *Project) DoneItem(id string) error {
 }
 
 // events connects a task store to the project's journal.
-type events struct{ p *Project }
+type events struct{ p *Folder }
 
 func (e events) Journal(c caller.Caller, action, ref, detail string) error {
 	return e.p.Journal(c, action, ref, detail)
@@ -470,7 +470,7 @@ func Rows(items []Item) []Row {
 }
 
 // DoneItems moves every unhandled item of kind for subject to inbox/done/.
-func (p *Project) DoneItems(kind, subject string) error {
+func (p *Folder) DoneItems(kind, subject string) error {
 	items, err := p.Inbox()
 	if err != nil {
 		return err

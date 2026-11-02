@@ -287,7 +287,7 @@ func memoryIndex(text string) []string {
 // StartupCuts are the journal's context.startup.cut lines since since:
 // how many, and the latest. tm doctor warns of them, since a cut block
 // means a part passed its budget and an agent lost some of its state.
-func (p *Project) StartupCuts(since time.Time) (n int, last string, err error) {
+func (p *Folder) StartupCuts(since time.Time) (n int, last string, err error) {
 	data, err := os.ReadFile(p.Path("JOURNAL.md"))
 	if errors.Is(err, fs.ErrNotExist) {
 		return 0, "", nil

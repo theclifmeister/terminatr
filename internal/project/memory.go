@@ -40,7 +40,7 @@ const MaxMemoryRead = 1 << 20
 // MemoryFiles lists the project's memory files: CONTEXT.md and MEMORY.md
 // when they are there, then the notes by title (ParseNote's). Only regular files
 // count, never a link, so a link can't show a file from elsewhere.
-func (p *Project) MemoryFiles() ([]MemoryFile, error) {
+func (p *Folder) MemoryFiles() ([]MemoryFile, error) {
 	var out []MemoryFile
 	for _, f := range []struct{ name, title string }{{"CONTEXT.md", "Context"}, {"MEMORY.md", "Memory"}} {
 		fi, err := os.Lstat(p.Path(f.name))
@@ -88,7 +88,7 @@ var ErrNotMemory = errors.New("not a memory file of the project")
 
 // ReadMemoryFile reads the memory file at path, one MemoryFiles lists;
 // any other path is ErrNotMemory. A file over MaxMemoryRead is refused.
-func (p *Project) ReadMemoryFile(path string) (string, error) {
+func (p *Folder) ReadMemoryFile(path string) (string, error) {
 	files, err := p.MemoryFiles()
 	if err != nil {
 		return "", err
