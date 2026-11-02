@@ -174,13 +174,38 @@ func (s *Server) accessFor(role, slug string, tree *gitx.Tree, lc launchConfig) 
 	if slug == "" || role == proto.RoleShell {
 		return agent.Access{}, nil
 	}
+	cfgFile := filepath.Join(realPath(s.opts.Paths.Home), "config.toml")
+	pRead, pNoWrite, pNoWriteFiles, err := programAccess(role, slug, lc.cfg)
+	if err != nil {
+		return agent.Access{}, err
+	}
+	if role == proto.RoleDirector {
+		// Its program's folder, but for what tm alone writes there; no
+		// project's folder, no other program's (programAccess). Never
+		// while programs are off: no director runs then.
+		if !lc.cfg.ProgramsOn() {
+			return agent.Access{}, &proto.Error{Code: config.ProgramsOff, Message: "programs are off on this server"}
+		}
+		// The folders are made first, so that each sandbox has a real
+		// path to close.
+		owned, _, err := programOwned(slug)
+		if err != nil {
+			return agent.Access{}, err
+		}
+		for _, d := range owned {
+			if err := os.MkdirAll(d, 0o755); err != nil {
+				return agent.Access{}, err
+			}
+		}
+		return agent.Access{Read: pRead, NoWrite: pNoWrite, NoWriteFiles: append([]string{cfgFile}, pNoWriteFiles...)}, nil
+	}
 	dir, err := project.Dir(slug)
 	if err != nil {
 		return agent.Access{}, err
 	}
 	dir = realPath(dir)
 	// The human's safety settings (docs/SPEC.md §11.2).
-	cfg := filepath.Join(realPath(s.opts.Paths.Home), "config.toml")
+	cfg := cfgFile
 	switch role {
 	case proto.RoleCoordinator:
 		wt := realPath(filepath.Join(s.opts.Paths.Home, "worktrees", slug))
@@ -196,6 +221,9 @@ func (s *Server) accessFor(role, slug string, tree *gitx.Tree, lc launchConfig) 
 		}
 		a.NoWrite = owned
 		a.NoWriteFiles = append(a.NoWriteFiles, ownedFiles...)
+		// Its program's folder, read only; no program's written.
+		a.Read = append(a.Read, pRead...)
+		a.NoWrite = append(a.NoWrite, pNoWrite...)
 		a.Commands = coordinatorCommands(lc.safety(slug))
 		return a, nil
 	case proto.RoleThread:
@@ -205,7 +233,7 @@ func (s *Server) accessFor(role, slug string, tree *gitx.Tree, lc launchConfig) 
 		if err := os.MkdirAll(runs, 0o700); err != nil {
 			return agent.Access{}, err
 		}
-		a := agent.Access{Read: []string{dir}, NoWrite: []string{dir, runs}, NoWriteFiles: []string{cfg}}
+		a := agent.Access{Read: []string{dir}, NoWrite: append([]string{dir, runs}, pNoWrite...), NoWriteFiles: []string{cfg}}
 		// No tree: a thread to come (access.show), whose git dirs aren't
 		// known yet, or one whose folder isn't its recorded checkout.
 		if tree != nil {
