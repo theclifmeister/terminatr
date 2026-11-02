@@ -38,6 +38,9 @@
 <h2>On your device</h2>
 <p>The app keeps each pairing (your server's key and address) in the Keychain, a signing key in the Secure Enclave for write access, and its settings. Unpair a server in Settings to remove it; deleting the app removes everything.</p>
 
+<h2>Crash and hang reports</h2>
+<p>If the app crashes, hangs or starts slowly, iOS and macOS give it a diagnostic report, and the app passes it on to your own tm server over your device link. A report holds the technical details of what went wrong, plus the app version, build and device model. It never goes to us or to anyone else. Your tm server keeps up to 50 reports per device, for 90 days. To see them, run <code>tm device reports</code>; to delete them, remove the files in the folder <code>~/.terminatr/state/appreports</code> on that server.</p>
+
 <h2>Camera and photos</h2>
 <p>The camera reads tm's pairing code and takes photos you choose to attach to a prompt. Photos you save from a conversation go to your library. Neither is sent anywhere but your tm server.</p>
 
