@@ -164,7 +164,7 @@ func (p *Folder) LinkSource(data []byte) []byte {
 		if m == nil || m[1] != m[3] {
 			continue
 		}
-		link := vaultlink.Ref(p.Slug, m[2])
+		link := vaultlink.Ref(p.linkSlug(), m[2])
 		if link == m[2] {
 			return data
 		}

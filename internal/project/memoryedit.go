@@ -497,7 +497,7 @@ func (p *Folder) indexEntries(notes []Note, lines []string) []IndexEntry {
 	})
 	out := make([]IndexEntry, len(notes))
 	for i, n := range notes {
-		out[i] = IndexEntry{Note: n, Line: IndexLine(p.Slug, n, kept[n.Path].title, kept[n.Path].desc)}
+		out[i] = IndexEntry{Note: n, Line: IndexLine(p.linkSlug(), n, kept[n.Path].title, kept[n.Path].desc)}
 	}
 	return out
 }
