@@ -125,7 +125,7 @@ func pending(slug, dir string) ([]File, error) {
 		}
 		return nil
 	})
-	p := &project.Project{Slug: slug, Dir: dir}
+	p := &project.Project{Folder: project.Folder{Slug: slug, Dir: dir}}
 	recs, err := thread.List(p)
 	for _, r := range recs {
 		if r.State != thread.Resolved {
@@ -198,7 +198,7 @@ func Migrate(now time.Time) (int, error) {
 			n++
 		}
 		for _, slug := range sortedKeys(done) {
-			p := &project.Project{Slug: slug}
+			p := &project.Project{Folder: project.Folder{Slug: slug}}
 			p.Dir, _ = project.Dir(slug)
 			detail := fmt.Sprintf("%d files to YAML front matter, originals in state/migrate/%s", done[slug], filepath.Base(backup))
 			if err := p.Journal(caller.Caller{Kind: caller.Ticker}, "vault.migrate", slug, detail); err != nil {

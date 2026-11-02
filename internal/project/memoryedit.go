@@ -55,7 +55,7 @@ func errNotNote(arg string) error {
 // else, a path in a folder below memory/ or with a .. step included,
 // is refused (not-memory). It only checks the name; the file may not
 // exist.
-func (p *Project) NotePath(arg string) (string, error) {
+func (p *Folder) NotePath(arg string) (string, error) {
 	name := arg
 	if filepath.IsAbs(arg) {
 		rel, ok := fsx.Within(p.Path("memory"), filepath.Clean(arg))
@@ -76,7 +76,7 @@ func (p *Project) NotePath(arg string) (string, error) {
 // NewNotePath is the path of a new note named name: NotePath's, or for
 // words that aren't a file name ("Retries for the poller") their slug.
 // A name with a folder in it is refused.
-func (p *Project) NewNotePath(name string) (string, error) {
+func (p *Folder) NewNotePath(name string) (string, error) {
 	if rel, err := p.NotePath(name); err == nil {
 		return rel, nil
 	}
@@ -92,7 +92,7 @@ func (p *Project) NewNotePath(name string) (string, error) {
 
 // notesDir is the memory/ folder, refused when it is a link (it would
 // lead a write out of the project); made when make is set.
-func (p *Project) notesDir(make bool) error {
+func (p *Folder) notesDir(make bool) error {
 	dir := p.Path("memory")
 	if make {
 		if err := fsx.MkdirNoLink(dir, 0o755); err != nil {
@@ -112,7 +112,7 @@ func (p *Project) notesDir(make bool) error {
 
 // noteFile checks that note rel (NotePath's) is a regular file, not a
 // link; fs.ErrNotExist when there is none.
-func (p *Project) noteFile(rel string) (fs.FileInfo, error) {
+func (p *Folder) noteFile(rel string) (fs.FileInfo, error) {
 	if err := p.notesDir(false); err != nil {
 		return nil, err
 	}
@@ -128,7 +128,7 @@ func (p *Project) noteFile(rel string) (fs.FileInfo, error) {
 
 // HasNote says whether path is a note of the project: NotePath's form
 // of itself, and a regular file in memory/.
-func (p *Project) HasNote(path string) bool {
+func (p *Folder) HasNote(path string) bool {
 	rel, err := p.NotePath(path)
 	if err != nil || rel != path {
 		return false
@@ -139,7 +139,7 @@ func (p *Project) HasNote(path string) bool {
 
 // ReadNote reads note rel (NotePath's), never through a link, at most
 // MaxMemoryRead bytes.
-func (p *Project) ReadNote(rel string) ([]byte, error) {
+func (p *Folder) ReadNote(rel string) ([]byte, error) {
 	if _, err := p.noteFile(rel); err != nil {
 		return nil, err
 	}
@@ -157,7 +157,7 @@ func (p *Project) ReadNote(rel string) ([]byte, error) {
 
 // CreateNote writes note rel (NotePath's), which must not exist yet
 // (exists), its source linked (LinkSource).
-func (p *Project) CreateNote(rel string, data []byte) error {
+func (p *Folder) CreateNote(rel string, data []byte) error {
 	if err := p.notesDir(true); err != nil {
 		return err
 	}
@@ -176,7 +176,7 @@ func (p *Project) CreateNote(rel string, data []byte) error {
 // WriteNote replaces note rel (NotePath's), which must be there, with
 // data, its source linked (LinkSource). The new file takes the old one's place by a rename, so a link
 // planted meanwhile is replaced, never followed.
-func (p *Project) WriteNote(rel string, data []byte) error {
+func (p *Folder) WriteNote(rel string, data []byte) error {
 	if _, err := p.noteFile(rel); err != nil {
 		return err
 	}
@@ -184,7 +184,7 @@ func (p *Project) WriteNote(rel string, data []byte) error {
 }
 
 // RemoveNote deletes note rel (NotePath's).
-func (p *Project) RemoveNote(rel string) error {
+func (p *Folder) RemoveNote(rel string) error {
 	if _, err := p.noteFile(rel); err != nil {
 		return err
 	}
@@ -201,7 +201,7 @@ type NoteStamp struct {
 }
 
 // StampNote is note rel's NoteStamp now, and its text.
-func (p *Project) StampNote(rel string) (NoteStamp, []byte, error) {
+func (p *Folder) StampNote(rel string) (NoteStamp, []byte, error) {
 	fi, err := p.noteFile(rel)
 	if errors.Is(err, fs.ErrNotExist) {
 		return NoteStamp{Gone: true}, nil, nil
@@ -219,7 +219,7 @@ func (p *Project) StampNote(rel string) (NoteStamp, []byte, error) {
 // Changed says whether note rel differs from s: removed, created, or
 // its text changed (the same time and size are taken as unchanged; an
 // other time is checked by the hash).
-func (s NoteStamp) Changed(p *Project, rel string) (bool, error) {
+func (s NoteStamp) Changed(p *Folder, rel string) (bool, error) {
 	now, err := p.noteFile(rel)
 	if errors.Is(err, fs.ErrNotExist) {
 		return !s.Gone, nil
@@ -247,7 +247,7 @@ func ConflictPath(rel string) string { return rel + ".conflict" }
 
 // WriteConflict writes data to note rel's ConflictPath (replacing an
 // older one), never through a link.
-func (p *Project) WriteConflict(rel string, data []byte) error {
+func (p *Folder) WriteConflict(rel string, data []byte) error {
 	if err := p.notesDir(false); err != nil {
 		return err
 	}
@@ -262,7 +262,7 @@ func (p *Project) WriteConflict(rel string, data []byte) error {
 // rel by c: MEMORY.md's list is written again, a journal line
 // memory.<op> <rel>, and, when the human made it, a memory item for the
 // coordinator (one per note and change while unhandled).
-func (p *Project) NoteChanged(c caller.Caller, op, rel string) error {
+func (p *Folder) NoteChanged(c caller.Caller, op, rel string) error {
 	_, ierr := p.RebuildIndex()
 	jerr := p.Journal(c, "memory."+op, rel, "")
 	if c.Kind != caller.Human {
@@ -411,7 +411,7 @@ func PlainIndex(text string) string {
 // that line's description. The rest of the file stays as it is: its heading and text, the list where its first line was (else
 // at the end). A missing MEMORY.md starts from the new project's. It
 // says whether the file changed.
-func (p *Project) RebuildIndex() (bool, error) {
+func (p *Folder) RebuildIndex() (bool, error) {
 	notes, err := p.indexNotes()
 	if err != nil {
 		return false, err
@@ -478,7 +478,7 @@ type IndexEntry struct {
 // indexEntries are the notes' lines in MEMORY.md, by the title each
 // shows: a note that has a line among lines keeps that line's title
 // and description.
-func (p *Project) indexEntries(notes []Note, lines []string) []IndexEntry {
+func (p *Folder) indexEntries(notes []Note, lines []string) []IndexEntry {
 	type said struct{ title, desc string }
 	kept := map[string]said{}
 	for _, l := range lines {
@@ -497,7 +497,7 @@ func (p *Project) indexEntries(notes []Note, lines []string) []IndexEntry {
 	})
 	out := make([]IndexEntry, len(notes))
 	for i, n := range notes {
-		out[i] = IndexEntry{Note: n, Line: IndexLine(p.Slug, n, kept[n.Path].title, kept[n.Path].desc)}
+		out[i] = IndexEntry{Note: n, Line: IndexLine(p.linkSlug(), n, kept[n.Path].title, kept[n.Path].desc)}
 	}
 	return out
 }
@@ -507,7 +507,7 @@ func (p *Project) indexEntries(notes []Note, lines []string) []IndexEntry {
 // each line in PlainIndex's form (a Markdown link to the note's file),
 // by title. forThreads leaves out the notes threads aren't shown
 // (ForThreads).
-func (p *Project) MemoryIndex(forThreads bool) ([]IndexEntry, error) {
+func (p *Folder) MemoryIndex(forThreads bool) ([]IndexEntry, error) {
 	notes, err := p.indexNotes()
 	if err != nil {
 		return nil, err
@@ -536,7 +536,7 @@ var indexStamps sync.Map
 
 // indexStamp is the stat stamp of MEMORY.md, memory/ and the entries in
 // it: what a rebuild reads.
-func (p *Project) indexStamp() uint64 {
+func (p *Folder) indexStamp() uint64 {
 	paths := []string{p.Path("MEMORY.md"), p.Path("memory")}
 	if ents, err := os.ReadDir(p.Path("memory")); err == nil {
 		for _, e := range ents {
@@ -552,7 +552,7 @@ func (p *Project) indexStamp() uint64 {
 // is a few stats while nothing changed since it last found the list in
 // sync; it writes only when the list differs, and journals that as the
 // ticker's memory.index. It says whether it wrote.
-func (p *Project) SyncIndex() (bool, error) {
+func (p *Folder) SyncIndex() (bool, error) {
 	key := p.Path("MEMORY.md")
 	st := p.indexStamp()
 	if v, ok := indexStamps.Load(key); ok && v.(uint64) == st {
@@ -575,7 +575,7 @@ func (p *Project) SyncIndex() (bool, error) {
 }
 
 // indexNotes are the notes RebuildIndex lists.
-func (p *Project) indexNotes() ([]Note, error) {
+func (p *Folder) indexNotes() ([]Note, error) {
 	ents, err := os.ReadDir(p.Path("memory"))
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, nil

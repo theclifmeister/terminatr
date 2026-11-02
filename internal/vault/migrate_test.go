@@ -24,7 +24,7 @@ func TestMigrate(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv(home.Env, dir)
 	pdir := filepath.Join(dir, "projects", "demo")
-	p := &project.Project{Slug: "demo", Dir: pdir}
+	p := &project.Project{Folder: project.Folder{Slug: "demo", Dir: pdir}}
 	open, _ := thread.Create(p, thread.Record{Title: "open", State: thread.Running})
 	gone, _ := thread.Create(p, thread.Record{Title: "gone", State: thread.Resolved})
 	files := map[string]string{

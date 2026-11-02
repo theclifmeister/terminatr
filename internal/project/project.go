@@ -83,8 +83,9 @@ func (p *Project) originRepos() []string {
 
 // Project is one project folder, ~/.terminatr/projects/<slug>/.
 type Project struct {
-	Slug string
-	Dir  string
+	// Folder is the folder's shared part (journal, inbox, questions,
+	// memory, designs); its Kind is KindProject.
+	Folder
 	Meta Meta
 	// Repos are the project's repositories, those the user approved for
 	// its threads' worktrees: [projects.<slug>] repos in config.toml,
@@ -194,7 +195,7 @@ func OpenWith(slug string, cfg *config.Config) (*Project, error) {
 	if err != nil {
 		return nil, err
 	}
-	p := &Project{Slug: slug, Dir: dir}
+	p := &Project{Folder: Folder{Slug: slug, Dir: dir, Kind: KindProject}}
 	data, err := os.ReadFile(p.Path("PROJECT.md"))
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, refuse("unknown-project", "no project %q (tm project list)", slug)
@@ -239,15 +240,10 @@ func legacyRepos(data []byte) []string {
 	return out
 }
 
-// Path joins a name onto the project folder.
-func (p *Project) Path(elem ...string) string {
-	return filepath.Join(append([]string{p.Dir}, elem...)...)
-}
-
 // Tasks returns the task store for this project, journaling into it and
 // raising confirmations in its inbox.
 func (p *Project) Tasks() *tasks.Store {
-	return &tasks.Store{Dir: p.Dir, Slug: p.Slug, Now: func() time.Time { return now() }, Events: events{p}, Repos: p.Repos}
+	return &tasks.Store{Dir: p.Dir, Slug: p.Slug, Now: func() time.Time { return now() }, Events: events{&p.Folder}, Repos: p.Repos}
 }
 
 // Options for New.
@@ -300,7 +296,7 @@ func New(o Options) (*Project, error) {
 	if now.IsZero() {
 		now = time.Now()
 	}
-	p := &Project{Slug: slug, Dir: dir, Repos: repos, Meta: Meta{Goal: strings.TrimSpace(o.Goal), Created: now.UTC().Truncate(time.Second)}}
+	p := &Project{Folder: Folder{Slug: slug, Dir: dir, Kind: KindProject}, Repos: repos, Meta: Meta{Goal: strings.TrimSpace(o.Goal), Created: now.UTC().Truncate(time.Second)}}
 	p.Instructions = strings.TrimSpace(instructionsTemplate)
 	if err := p.scaffold(); err != nil {
 		return nil, fmt.Errorf("create %s: %w", dir, err)

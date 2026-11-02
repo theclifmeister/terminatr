@@ -74,7 +74,7 @@ var questionRefRE = regexp.MustCompile(`^[Qq]([1-9][0-9]*)$`)
 func IsQuestionID(s string) bool { return questionRefRE.MatchString(s) && s[0] == 'Q' }
 
 // Questions are the open questions, oldest first.
-func (p *Project) Questions() ([]Question, error) {
+func (p *Folder) Questions() ([]Question, error) {
 	data, err := os.ReadFile(p.Path(questionsFile))
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, nil
@@ -101,7 +101,7 @@ func decodeQuestions(data []byte) (questionStore, error) {
 }
 
 // updateQuestions is a locked read-modify-write of the store.
-func (p *Project) updateQuestions(fn func(st *questionStore) error) error {
+func (p *Folder) updateQuestions(fn func(st *questionStore) error) error {
 	return mdfile.Update(p.Path(questionsFile), func(old []byte) ([]byte, error) {
 		st, err := decodeQuestions(old)
 		if err != nil {
@@ -170,7 +170,7 @@ func (q *Question) Check() error {
 // AddQuestion checks q and stores it under the next id, which it
 // returns. Asking the same question again (same task and text) gives the
 // open one back, updated.
-func (p *Project) AddQuestion(q Question) (Question, error) {
+func (p *Folder) AddQuestion(q Question) (Question, error) {
 	if err := q.Check(); err != nil {
 		return Question{}, err
 	}
@@ -198,7 +198,7 @@ func (p *Project) AddQuestion(q Question) (Question, error) {
 // DoneQuestion closes the open question ref (Q3 or q3): answered, or no
 // longer asked; an answer item to it is done with it. Closing one that
 // isn't open refuses with unknown-question.
-func (p *Project) DoneQuestion(ref string) (Question, error) {
+func (p *Folder) DoneQuestion(ref string) (Question, error) {
 	m := questionRefRE.FindStringSubmatch(strings.TrimSpace(ref))
 	if m == nil {
 		return Question{}, refuse("invalid-question", "%q is not a question id like Q3", ref)
@@ -337,7 +337,7 @@ func (q Question) Pick(choices []string, other string) (Answer, error) {
 // AnswerQuestion records the user's answer to open question ref: an
 // answer item for the coordinator and a journal line. It reports false,
 // recording nothing, while an earlier answer to it waits in the inbox.
-func (p *Project) AnswerQuestion(c caller.Caller, ref string, choices []string, other string) (Question, Answer, bool, error) {
+func (p *Folder) AnswerQuestion(c caller.Caller, ref string, choices []string, other string) (Question, Answer, bool, error) {
 	m := questionRefRE.FindStringSubmatch(strings.TrimSpace(ref))
 	if m == nil {
 		return Question{}, Answer{}, false, refuse("invalid-question", "%q is not a question id like Q3", ref)

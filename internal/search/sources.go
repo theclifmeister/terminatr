@@ -33,6 +33,7 @@ const (
 	fileNote     = "note"     // memory/<name>.md
 	fileContext  = "context"  // CONTEXT.md
 	fileProject  = "project"  // PROJECT.md
+	fileProgram  = "program"  // PROGRAM.md, a program folder's
 	fileTasks    = "tasks"    // TASKS.md, tasks/ARCHIVE.md
 	fileDesign   = "design"   // designs/<name>.md
 	fileBrief    = "brief"    // threads/<id>/brief.md
@@ -76,13 +77,20 @@ func threadSeg(id string) string {
 // walkWorkers is how many folders walk lists at once.
 const walkWorkers = 8
 
-// walk lists the files of the project at dir the index reads, with
-// their sizes and times. Only regular files count, never a link. The
-// threads' folders and the inbox are listed by walkWorkers at once.
-func walk(dir string) ([]source, error) {
+// walk lists the files of the folder at dir the index reads, a
+// project's or a program's (kind), with their sizes and times. Only
+// regular files count, never a link. The threads' folders and the inbox
+// are listed by walkWorkers at once. A program's folder has PROGRAM.md
+// for PROJECT.md, and no threads: none are read there.
+func walk(dir string, kind project.Kind) ([]source, error) {
+	program := kind == project.KindProgram
 	w := walker{dir: dir}
 	w.add("CONTEXT.md", "notes", fileContext, w.lstat("CONTEXT.md"))
-	w.add("PROJECT.md", "notes", fileProject, w.lstat("PROJECT.md"))
+	if program {
+		w.add("PROGRAM.md", "notes", fileProgram, w.lstat("PROGRAM.md"))
+	} else {
+		w.add("PROJECT.md", "notes", fileProject, w.lstat("PROJECT.md"))
+	}
 	w.each("memory", nil, func(name string, fi fs.FileInfo) {
 		if strings.HasSuffix(name, ".md") {
 			w.add("memory/"+name, "notes", fileNote, fi)
@@ -101,11 +109,13 @@ func walk(dir string) ([]source, error) {
 			w.add("journal/"+name, "journal-"+m[1], fileJournalZ, fi)
 		}
 	})
-	w.each("threads/archive", nil, func(name string, fi fs.FileInfo) {
-		if id, ok := strings.CutSuffix(name, ".tar.gz"); ok && threadIDRE.MatchString(id) && fi.Size() <= MaxArchive {
-			w.add("threads/archive/"+name, threadSeg(id), fileThreadZ, fi)
-		}
-	})
+	if !program {
+		w.each("threads/archive", nil, func(name string, fi fs.FileInfo) {
+			if id, ok := strings.CutSuffix(name, ".tar.gz"); ok && threadIDRE.MatchString(id) && fi.Size() <= MaxArchive {
+				w.add("threads/archive/"+name, threadSeg(id), fileThreadZ, fi)
+			}
+		})
+	}
 	w.each("inbox", nil, func(name string, fi fs.FileInfo) {
 		if strings.HasSuffix(name, ".md") {
 			w.add("inbox/"+name, "inbox", fileInbox, fi)
@@ -122,7 +132,7 @@ func walk(dir string) ([]source, error) {
 			}
 		})
 	}}
-	if ents, err := os.ReadDir(filepath.Join(dir, "threads")); err == nil {
+	if ents, err := os.ReadDir(filepath.Join(dir, "threads")); err == nil && !program {
 		for _, e := range ents {
 			if id := e.Name(); e.IsDir() && threadIDRE.MatchString(id) {
 				jobs = append(jobs, func(w *walker) { w.thread(id) })
@@ -433,9 +443,9 @@ func parseText(dir string, s source, text string) ([]piece, error) {
 		}
 		c.Kind, c.Coordinator = KindNote, !n.ForThreads()
 		return markdown(text, start, 3, "note:"+name, n.Title, c), nil
-	case fileContext, fileProject:
+	case fileContext, fileProject, fileProgram:
 		c.Kind = KindContext
-		title := map[string]string{fileContext: "Context", fileProject: "Project"}[s.File]
+		title := map[string]string{fileContext: "Context", fileProject: "Project", fileProgram: "Program"}[s.File]
 		return markdown(text, frontEnd(text), 3, s.File, title, c), nil
 	case fileTasks:
 		return tasksFile(text, c), nil

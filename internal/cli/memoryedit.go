@@ -178,7 +178,7 @@ func (e *Env) memoryEdit(p *project.Project, arg string, text *string) error {
 		fmt.Fprintf(e.Stdout, "%s unchanged\n", rel)
 		return nil
 	}
-	changed, err := stamp.Changed(p, rel)
+	changed, err := stamp.Changed(&p.Folder, rel)
 	if err != nil {
 		return err
 	}

@@ -167,7 +167,7 @@ func (s *Server) guardRulesFor(r SessionRecord) GuardRules {
 	if r.Role == proto.RoleThread && set.Merge == config.MergeCoordinator {
 		g.Floor = append(g.Floor, "merge")
 	}
-	g.NoWrite = s.guardNoWrite(r)
+	g.NoWrite = s.guardNoWrite(r, lc)
 	g.CdPath = s.sessionCdPath(lc.cfg.SecretEnvNames(r.Project), home)
 	if home != "" {
 		g.NoWriteNames = withLanding(agent.ShellPatterns(home, os.Getenv))
@@ -329,8 +329,11 @@ func ownExcluded(reg *agent.Registry, r SessionRecord, home string, lc launchCon
 // see), and a thread's project folder, or the
 // parts of it only tm writes for the coordinator, whose folder it is. The sandbox and the
 // agent's deny rules hold them too, where there are those (not under
-// yolo).
-func (s *Server) guardNoWrite(r SessionRecord) []string {
+// yolo). While programs are on (lc), a thread's and a coordinator's
+// floor has the programs' folder, and a director's every project's
+// folder, the other programs' and what tm alone writes in its own
+// (programAccess).
+func (s *Server) guardNoWrite(r SessionRecord, lc launchConfig) []string {
 	var out []string
 	if h := s.opts.Paths.Home; h != "" {
 		out = append(out, homeFloor(h)...)
@@ -347,6 +350,12 @@ func (s *Server) guardNoWrite(r SessionRecord) []string {
 		s.mu.Unlock()
 		out = append(out, withLanding(agent.ShellState(reg, home, os.Getenv))...)
 	}
+	if _, noWrite, noWriteFiles, err := programAccess(r.Role, r.Project, lc.cfg); err == nil {
+		out = append(append(out, noWrite...), noWriteFiles...)
+	}
+	if r.Role == proto.RoleDirector {
+		return withReal(out)
+	}
 	dir, err := project.Dir(r.Project)
 	if err != nil {
 		return withReal(out)
@@ -355,7 +364,7 @@ func (s *Server) guardNoWrite(r SessionRecord) []string {
 	case proto.RoleThread:
 		out = append(out, dir)
 	case proto.RoleCoordinator:
-		dirs, files := (&project.Project{Slug: r.Project, Dir: dir}).Owned()
+		dirs, files := (&project.Project{Folder: project.Folder{Slug: r.Project, Dir: dir}}).Owned()
 		out = append(append(out, dirs...), files...)
 	}
 	return withReal(out)

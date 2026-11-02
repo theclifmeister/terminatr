@@ -65,7 +65,8 @@ const tailLen = 64
 // Index is one project's search index. Its methods are safe for
 // concurrent use; one process should hold it (the server).
 type Index struct {
-	project string // the project's folder
+	project string // the folder it indexes: a project's, or a program's
+	kind    project.Kind
 	dir     string // the index's folder
 
 	mu       sync.Mutex
@@ -84,7 +85,18 @@ type Index struct {
 // Open is the index of the project at projectDir, kept in dir. It reads
 // nothing until it is used.
 func Open(projectDir, dir string) *Index {
-	return &Index{project: projectDir, dir: dir, now: time.Now}
+	return &Index{project: projectDir, kind: project.KindProject, dir: dir, now: time.Now}
+}
+
+// OpenFolder is the index of folder f, a project's or a program's, kept
+// in dir. A program's has PROGRAM.md where a project's has PROJECT.md,
+// and no threads.
+func OpenFolder(f *project.Folder, dir string) *Index {
+	kind := f.Kind
+	if kind == "" {
+		kind = project.KindProject
+	}
+	return &Index{project: f.Dir, kind: kind, dir: dir, now: time.Now}
 }
 
 // Dir is the index's folder.
@@ -256,7 +268,7 @@ func (x *Index) update(rebuild bool) (Stats, error) {
 	if !x.loaded {
 		x.load()
 	}
-	srcs, err := walk(x.project)
+	srcs, err := walk(x.project, x.kind)
 	if err != nil {
 		return st, err
 	}

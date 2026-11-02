@@ -111,6 +111,11 @@ func ModStateDir() (string, error) { return sub(filepath.Join("state", "mods")) 
 // <slug>/ (internal/search): derived, rebuilt at will.
 func SearchDir() (string, error) { return sub(filepath.Join("state", "search")) }
 
+// ProgramSearchDir is <home>/state/search-programs, each program's search
+// index in <slug>/: apart from the projects', so a program and a project
+// never share one, even when a hand edit gives them one name.
+func ProgramSearchDir() (string, error) { return sub(filepath.Join("state", "search-programs")) }
+
 // ModCacheDir is <home>/cache/mods, each code mod's bundle and what its
 // last host said (the mod supervisor's, never the mod's).
 func ModCacheDir() (string, error) { return sub(filepath.Join("cache", "mods")) }
