@@ -184,3 +184,93 @@ func programOff(t *testing.T) {
 	d, _ := home.Dir()
 	os.WriteFile(filepath.Join(d, "config.toml"), []byte("[features]\nprograms = false\n"), 0o600)
 }
+
+// TestProgramHealth: tm vault doctor reads a program's folder as a
+// project's (the programs design §3.4): its links are checked (a link
+// into a program that isn't there is broken, one into a program that is
+// resolves), its front matter is checked, and tm vault off removes its
+// derived notes.
+func TestProgramHealth(t *testing.T) {
+	root, _ := vaultOn(t, "web")
+	p := programOn(t, "acme", true)
+	if _, err := p.Tasks().Add(caller.Caller{Kind: caller.Human}, []tasks.NewTask{{Title: "one"}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := RenderProgram(p); err != nil {
+		t.Fatal(err)
+	}
+	write(t, root, "web/memory/links.md", "[[_programs/acme/tasks/T1|acme/T1]] [[_programs/acme/PROGRAM|acme]] [[_programs/gone/tasks/T1|T1]] [[_programs/acme/memory/nope|nope]]\n")
+	write(t, root, "_programs/acme/memory/back.md", "[[web/PROJECT|web]] [[web/tasks/T7|T7]] [[_programs/acme/tasks/T9|T9]]\n")
+	got, err := Links()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var lines []string
+	for _, b := range got {
+		lines = append(lines, b.File+" "+b.Target+": "+b.Why)
+	}
+	want := []string{
+		"_programs/acme/memory/back.md _programs/acme/tasks/T9: no such note in program acme",
+		"_programs/acme/memory/back.md web/tasks/T7: no such note in project web",
+		"web/memory/links.md _programs/gone/tasks/T1: no program gone (renamed or deleted?)",
+		"web/memory/links.md _programs/acme/memory/nope: no such note in program acme",
+	}
+	slices.Sort(lines)
+	slices.Sort(want)
+	if !slices.Equal(lines, want) {
+		t.Fatalf("broken links:\n%s", strings.Join(lines, "\n"))
+	}
+
+	write(t, root, "_programs/acme/memory/bad.md", "---\nkey: [unclosed\n---\n")
+	if f := frontMatter(); f.Status != "fail" || !slices.Contains(f.Files, "_programs/acme/memory/bad.md") {
+		t.Fatalf("front matter %+v", f)
+	}
+
+	if _, err := Off(caller.Caller{Kind: caller.Human}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(p.Path("tasks", "T1.md")); err == nil {
+		t.Fatal("tm vault off left the program's task note")
+	}
+}
+
+// TestProgramDaily: a program's journal is in the daily notes under its
+// own name while programs are on, and not while they are off.
+func TestProgramDaily(t *testing.T) {
+	vaultOn(t, "web")
+	p := programOn(t, "acme", true)
+	who := caller.Caller{Kind: caller.Human}
+	if _, err := p.Tasks().Add(who, []tasks.NewTask{{Title: "SSO everywhere"}}); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	notes, err := renderDays(t, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(notes, "## [[_programs/acme/PROGRAM|acme]]") || !strings.Contains(notes, "[[_programs/acme/tasks/T1|T1]]") {
+		t.Fatalf("no program section:\n%s", notes)
+	}
+	stamp := DailyStamp(now)
+	programOff(t)
+	if DailyStamp(now) == stamp {
+		t.Error("the stamp missed programs going off")
+	}
+	if notes, _ := renderDays(t, now); strings.Contains(notes, "_programs/acme") {
+		t.Fatalf("programs off, yet:\n%s", notes)
+	}
+}
+
+// renderDays is the text of today's daily note, as dailyNotes renders it.
+func renderDays(t *testing.T, now time.Time) (string, error) {
+	t.Helper()
+	ps, err := dayProjects()
+	if err != nil {
+		return "", err
+	}
+	notes, err := dailyNotes(ps, now, 1)
+	if err != nil || len(notes) == 0 {
+		return "", err
+	}
+	return string(notes[0].Data), nil
+}

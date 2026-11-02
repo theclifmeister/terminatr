@@ -117,10 +117,17 @@ var IgnoreFilters = []string{"*/inbox/done/", "*/threads/archive/", "*/journal/"
 // Ignored reports whether rel, a path in the vault (a folder's ending
 // in "/"), is one IgnoreFilters hides: a log or an archive, not a note
 // the graph or the link check looks at.
+//
+// A program's folder, _programs/<slug>/, is read as a project's.
 func Ignored(rel string) bool {
 	_, rest, ok := strings.Cut(rel, "/")
 	if !ok {
 		return false
+	}
+	if strings.HasPrefix(rel, programsDir+"/") {
+		if _, rest, ok = strings.Cut(rest, "/"); !ok {
+			return false
+		}
 	}
 	for _, f := range IgnoreFilters {
 		f = strings.TrimPrefix(f, "*/")
@@ -664,6 +671,9 @@ func offRemoves(key string) bool {
 		return true
 	}
 	slug, rel, ok := strings.Cut(key, "/")
+	if ok && slug == programsDir { // a program's note: _programs/<slug>/<rel>
+		slug, rel, ok = strings.Cut(rel, "/")
+	}
 	if !ok || !project.ValidSlug(slug) {
 		return false
 	}
