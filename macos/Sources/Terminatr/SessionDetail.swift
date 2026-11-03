@@ -135,8 +135,9 @@ struct SessionWindow: View {
 }
 
 /// The ref names no running session: the thread is done or stopped,
-/// the coordinator isn't running (Start starts it, project.open), or
-/// the bridge is down.
+/// the coordinator isn't running (Start starts it, project.open), the
+/// director isn't (Start starts it, program.open), or the bridge is
+/// down.
 struct NotRunning: View {
     @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
@@ -159,6 +160,10 @@ struct NotRunning: View {
                     StartButton(project: p, title: "Start the Coordinator")
                         .padding(.top, 4)
                 }
+            }
+            if ref.director, app.bridge != nil, app.opensDirector, app.program(ref.project) != nil {
+                StartDirectorButton(program: ref.project)
+                    .padding(.top, 4)
             }
         }
         .padding(28)
@@ -183,6 +188,9 @@ struct NotRunning: View {
             return "The window shows it once \(ref.server) lists it again."
         }
         if ref.director {
+            if app.opensDirector, app.program(ref.project) != nil {
+                return "Start it with the program's director agent, as enter on its row in tm's console does."
+            }
             return "Open it in tm's console: enter on its row under \(ref.project). The window shows it once it runs."
         }
         if ref.isCoordinator {
@@ -196,3 +204,51 @@ struct NotRunning: View {
     }
 }
 
+
+/// The director pane's Start: starts program's director (program.open),
+/// as enter on its row in tm's console does; a refusal (programs off, a
+/// project with the program's name) shows under it.
+struct StartDirectorButton: View {
+    @Environment(AppModel.self) private var app
+    @Environment(\.theme) private var theme
+    let program: String
+    @State private var busy = false
+    @State private var error: String?
+
+    var body: some View {
+        VStack(spacing: 4) {
+            Button {
+                start()
+            } label: {
+                if busy {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Text("Start the Director")
+                }
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(theme.action)
+            .disabled(busy)
+            .help("Starts the director with the program's director agent, as tm program open does")
+            if let error {
+                Text(error)
+                    .font(theme.body(.footnote))
+                    .foregroundStyle(theme.attention)
+                    .multilineTextAlignment(.center)
+            }
+        }
+    }
+
+    private func start() {
+        busy = true
+        error = nil
+        Task {
+            do {
+                try await app.startDirector(program)
+            } catch {
+                self.error = Dashboard.words(error)
+            }
+            busy = false
+        }
+    }
+}

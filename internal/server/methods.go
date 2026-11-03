@@ -370,6 +370,7 @@ func init() {
 			return s.programUmbrella(p, c, false)
 		})},
 		proto.MethodProgramDelete: {gate: gateHuman, call: typed((*Server).programDelete)},
+		proto.MethodProgramOpen:   {gate: gateHuman, call: typed((*Server).programOpen)},
 		proto.MethodProgramRename: {gate: gateHuman, call: typed(func(s *Server, p proto.ProgramRenameParams, c callCtx) (any, *proto.Error) {
 			return s.renameProgram(p, c.who())
 		})},
