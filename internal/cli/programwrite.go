@@ -14,14 +14,14 @@ import (
 )
 
 // The director's writes (the programs design §4.4, §5): tm program
-// route, task, send and read. An agent's run goes through the server
+// route, task, start, send and read. An agent's run goes through the server
 // (programForwarded), which tells the caller from the process tree and
 // writes the children's folders that the director's own launch rules
 // keep it from writing.
 
 // programForwarded are the tm program subcommands an agent runs through
 // the server.
-var programForwarded = map[string]bool{"route": true, "task": true, "send": true, "read": true}
+var programForwarded = map[string]bool{"route": true, "task": true, "start": true, "send": true, "read": true}
 
 // forwardedProgram reports whether args are a tm program write an
 // agent runs in the server.

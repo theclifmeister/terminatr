@@ -100,7 +100,7 @@ func (e *Env) coordinatorOnly(p *project.Project, what string) error {
 		return &tasks.Error{Code: "coordinator-only", Msg: what + " is the coordinator's"}
 	}
 	if e.Caller.Kind == caller.Director {
-		return &tasks.Error{Code: "other-project", Msg: fmt.Sprintf("%s is %s's coordinator's (or the user's); a director acts in a child only through tm program route, task edit and send", what, p.Slug)}
+		return &tasks.Error{Code: "other-project", Msg: fmt.Sprintf("%s is %s's coordinator's (or the user's); a director acts in a child only through tm program route, task edit, start and send", what, p.Slug)}
 	}
 	if e.Caller.IsAgent() && e.Caller.Project != "" && e.Caller.Project != p.Slug {
 		return &tasks.Error{Code: "other-project", Msg: fmt.Sprintf("agents of project %s can't change project %s", e.Caller.Project, p.Slug)}
