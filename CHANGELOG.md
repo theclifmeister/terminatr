@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.75.0](https://github.com/theclifmeister/terminatr/compare/v0.74.0...v0.75.0) (2026-11-03)
+
+
+### Features
+
+* **programs:** start a program's director from the Mac app ([#1056](https://github.com/theclifmeister/terminatr/issues/1056)) ([c346b81](https://github.com/theclifmeister/terminatr/commit/c346b81ce1d316f96946c07a6a4ced21e298af8f))
+* **programs:** your paired iPhone answers program questions at write level ([#1058](https://github.com/theclifmeister/terminatr/issues/1058)) ([b8acd8a](https://github.com/theclifmeister/terminatr/commit/b8acd8a873af327f3b58f2b6179b1db125353fef))
+* **tui:** new program on P at the PROJECTS header; + is a new project only ([#1055](https://github.com/theclifmeister/terminatr/issues/1055)) ([e549de9](https://github.com/theclifmeister/terminatr/commit/e549de9680ca6eacafaca59c936537c432eb3693))
+
 ## [0.74.0](https://github.com/theclifmeister/terminatr/compare/v0.73.1...v0.74.0) (2026-11-03)
 
 
