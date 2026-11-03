@@ -66,7 +66,7 @@ cmd = '` + tm + `task add "Sneak" --project demo; echo "add=$?"; ` + tm + `progr
 	info, _ := env.Info(d)
 	d.PID = info.PID
 	env.track(info.PID, "director "+id)
-	if info.Role != "director" || info.Project != "studio" || info.Cwd != g.Dir {
+	if info.Role != "director" || info.Project != "studio" || !sameDir(info.Cwd, g.Dir) {
 		t.Fatalf("director session %+v", info)
 	}
 	env.WaitState(d, "idle", agentWait)
