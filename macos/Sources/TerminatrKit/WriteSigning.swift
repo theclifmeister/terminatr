@@ -53,6 +53,8 @@ public enum SignedWrite {
         case AppAPI.Methods.taskSendBack.name: return "Send the task back"
         case AppAPI.Methods.questionsOpen.name: return "Open the coordinator's questions"
         case AppAPI.Methods.peerNeedAct.name: return "Answer on the paired server"
+        case AppAPI.Methods.programUmbrellaAccept.name: return "Accept the umbrella task"
+        case AppAPI.Methods.programUmbrellaSendBack.name: return "Send the umbrella task back"
         default: return "Act on your server"
         }
     }

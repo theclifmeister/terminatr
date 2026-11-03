@@ -50,6 +50,7 @@ extension Route {
         case .on(let key, let r): "on \(key) " + r.listKey
         case .project(let s): "project \(s)"
         case .peerProject(let alias, let project): "peerProject \(alias)/\(project)"
+        case .program(let s): "program \(s)"
         case .session(let ref): "session \(ref.description)"
         case .need(let ref): "need \(ref.description)"
         case .overview(let s): "overview \(s)"

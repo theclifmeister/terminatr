@@ -136,6 +136,17 @@ func (g *schemaGen) object(t reflect.Type) JSONSchema {
 		if !f.IsExported() || name == "-" {
 			continue
 		}
+		if name == "" && f.Anonymous && f.Type.Kind() == reflect.Struct {
+			// An embedded struct's fields are its outer one's, as
+			// encoding/json writes them (ProgramDetail's Program).
+			in := g.object(f.Type)
+			for _, k := range in.Order {
+				s.Properties[k] = in.Properties[k]
+				s.Order = append(s.Order, k)
+			}
+			s.Required = append(s.Required, in.Required...)
+			continue
+		}
 		if name == "" {
 			name = f.Name
 		}

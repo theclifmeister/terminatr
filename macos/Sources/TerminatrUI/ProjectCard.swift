@@ -104,10 +104,14 @@ public struct ProjectCard: View {
     let pinned: Bool
     let dim: Bool
     let selected: Bool
+    /// A dim word after the name: what holds it ("· acme", its program)
+    /// or why it doesn't open.
+    let tag: String
 
     public init(name: String, coordinator: Attention, needs: Int, threads: [Attention.Tone], pinned: Bool = false,
-                dim: Bool = false, selected: Bool = false) {
+                dim: Bool = false, selected: Bool = false, tag: String = "") {
         self.name = name
+        self.tag = tag
         self.coordinator = coordinator
         self.needs = needs
         self.threads = threads
@@ -139,7 +143,7 @@ public struct ProjectCard: View {
         }
         .contentShape(shape)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(pinned ? "\(name), pinned" : name)
+        .accessibilityLabel([name, tag.isEmpty ? nil : tag, pinned ? "pinned" : nil].compactMap { $0 }.joined(separator: ", "))
         .accessibilityValue(spoken)
     }
 
@@ -150,6 +154,13 @@ public struct ProjectCard: View {
                     .font(theme.title(.title3, .bold))
                     .foregroundStyle(theme.ink)
                     .lines(1)
+                if !tag.isEmpty {
+                    Text("· " + tag)
+                        .font(theme.body(.subheadline, .medium))
+                        .foregroundStyle(theme.muted)
+                        .lineLimit(1)
+                        .fixedSize()
+                }
                 if pinned {
                     Image(systemName: "pin.fill")
                         .font(theme.body(.footnote))

@@ -2371,7 +2371,8 @@
        "after": "studio/acme-api/T12"
       }
      ],
-     "working": 1
+     "working": 1,
+     "questions": 1
     }
    }
   ],
@@ -2382,7 +2383,45 @@
     },
     "result": {
      "program": "acme",
-     "needs": [],
+     "needs": [
+      {
+       "need": {
+        "id": "ask:Q1",
+        "kind": "question",
+        "title": "Where do gift card balances live?",
+        "question": {
+         "questions": [
+          {
+           "question": "Where do gift card balances live: in the API's ledger or in the payment provider?",
+           "options": [
+            {
+             "label": "API ledger",
+             "description": "acme-api keeps them; checkout reads them"
+            },
+            {
+             "label": "Payment provider",
+             "description": "Stored with the provider, fetched at checkout"
+            }
+           ]
+          }
+         ]
+        },
+        "acts": [
+         "answer"
+        ]
+       },
+       "project": "acme",
+       "priority": "must",
+       "acts": [
+        "answer"
+       ],
+       "program": true,
+       "merged": [
+        "acme-web/Q4",
+        "studio/acme-api/Q2"
+       ]
+      }
+     ],
      "members": [
       {
        "project": "acme-web",
@@ -3302,7 +3341,8 @@
       ],
       "authority": "propose",
       "parallel_threads": 4,
-      "goal": "Ship the new shop: web storefront and its API together"
+      "goal": "Ship the new shop: web storefront and its API together",
+      "questions": 1
      }
     ]
    }

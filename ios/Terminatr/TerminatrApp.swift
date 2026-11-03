@@ -128,7 +128,7 @@ extension Route {
              .search(let s), .searchHit(let s, _):
             s
         case .session(let ref), .need(let ref): ref.isRemote ? nil : ref.project
-        case .on, .peerProject, .peerPage, .peerDesign: nil
+        case .on, .peerProject, .program, .peerPage, .peerDesign: nil
         }
     }
 }
@@ -141,6 +141,8 @@ indirect enum Route: Hashable {
     case on(String, Route)
     case project(String)
     case peerProject(alias: String, project: String)
+    /// A program (B19): its rolled-up Needs you, then its members.
+    case program(String)
     case session(SessionRef)
     /// A session's question or approval from Needs you (T826): its
     /// conversation with the need's card above it, scrolled to where it
@@ -176,7 +178,7 @@ indirect enum Route: Hashable {
     /// question or approval); "overview:SLUG",
     /// "board:SLUG", "memory:SLUG", "memory:SLUG/PATH", "library:SLUG",
     /// "mods:SLUG", "mods:SLUG/ID",
-    /// "task:SLUG/REF", "design:SLUG/NAME", "search:SLUG",
+    /// "program:SLUG", "task:SLUG/REF", "design:SLUG/NAME", "search:SLUG",
     /// "search:SLUG/ID", or a paired server's
     /// "peer:ALIAS/PROJECT", "peer:ALIAS/PROJECT/PAGE" and
     /// "peer:ALIAS/PROJECT/designs/NAME".
@@ -187,6 +189,7 @@ indirect enum Route: Hashable {
         let slug = p[0], rest = p.count > 1 ? p[1] : ""
         switch parts[0] {
         case "project": return .project(parts[1])
+        case "program": return .program(parts[1])
         case "session": return .session(SessionRef(project: slug, thread: rest))
         case "need": return .need(SessionRef(project: slug, thread: rest))
         case "overview": return .overview(slug)
@@ -218,7 +221,7 @@ indirect enum Route: Hashable {
     var path: [Route] {
         switch self {
         case .on(let key, let r): r.path.map { $0.on(key) }
-        case .project, .peerProject: [self]
+        case .project, .peerProject, .program: [self]
         case .session(let ref), .need(let ref):
             [ref.isRemote ? .peerProject(alias: ref.server, project: ref.project) : .project(ref.project), self]
         case .overview(let s), .board(let s), .memory(let s), .library(let s), .design(let s, _), .mods(let s), .search(let s): [.project(s), self]
@@ -596,6 +599,7 @@ private struct BaseRouteScreen: View {
         case .on(_, let r): BaseRouteScreen(route: r)
         case .project(let slug): ProjectScreen(slug: slug)
         case .peerProject(let alias, let project): PeerProjectScreen(alias: alias, project: project)
+        case .program(let slug): ProgramScreen(slug: slug)
         case .session(let ref): SessionScreen(ref: ref)
         case .need(let ref): NeedConversation(ref: ref)
         case .overview(let slug): OverviewScreen(slug: slug)

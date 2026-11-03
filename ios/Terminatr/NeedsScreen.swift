@@ -95,6 +95,9 @@ struct NeedsScreen: View {
         if !n.session.isEmpty, let s = model.sessions.first(where: { $0.id == n.session }), let ref = SessionRef(s) {
             return n.kind == .question || n.kind == .approval ? .need(ref) : .session(ref)
         }
+        // A program's own (its director's): the program, where its
+        // card answers it.
+        if model.program(n.project) != nil { return .program(n.project) }
         if n.kind == .question, n.id.hasPrefix("questions:") { return .session(SessionRef(project: n.project)) }
         if let slash = n.project.firstIndex(of: "/") {
             return .peerProject(alias: String(n.project[..<slash]), project: String(n.project[n.project.index(after: slash)...]))
