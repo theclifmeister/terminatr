@@ -66,9 +66,6 @@ public struct ConversationScroll: ViewModifier {
                     ScrollGuard.trace("phase \(p) fix=\(f) \(follow.trace)")
                     if f { fix() }
                 }
-                // New entries under a follower: the end again, later, by
-                // the follow alone (see settle).
-                .onChange(of: newest) { settle() }
                 .modifier(TopRow(top: top))
         } else {
             content.defaultScrollAnchor(.bottom)
@@ -97,42 +94,7 @@ public struct ConversationScroll: ViewModifier {
             }
         }
         CFRunLoopWakeUp(CFRunLoopGetMain())
-        // And again if it didn't land: a loaded device drops a scroll
-        // asked mid-layout, and a content that then holds still gives no
-        // geometry change to ask again (2 runs in 20 on a busy
-        // simulator rested a screen short of the end).
-        later("check") { $0.behind }
     }
-
-    /// A follower stays at the end as entries come, without a geometry
-    /// change to say it fell short: under load, a part that came while
-    /// a scroll to the end was landing left the view a part short, with
-    /// no geometry change after it and so nothing to ask again (3 runs
-    /// in 20 on a busy simulator: the conversation's last answers below
-    /// the screen). So after new entries, while the follow keeps to the
-    /// end (not held, no jump), the view scrolls to its end again, as
-    /// the last geometry has it or not; at the end, that moves nothing.
-    private func settle() {
-        later("settle") { $0.keeping }
-    }
-
-    /// toEnd at each of checks, when the follow then says to.
-    private func later(_ what: String, _ when: @escaping @MainActor (Follower) -> Bool) {
-        let toEnd = self.toEnd
-        let follow = self.follow
-        for delay in Self.checks {
-            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-                MainActor.assumeIsolated {
-                    let go = when(follow)
-                    ScrollGuard.trace("\(what) \(delay) go=\(go) \(follow.trace)")
-                    if go { toEnd() }
-                }
-            }
-        }
-    }
-
-    /// When a scroll to the end is checked for having landed, in seconds.
-    static let checks = [0.25, 0.75]
 }
 
 /// The row at the top, as the user scrolls (iOS 18, macOS 15).

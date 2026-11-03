@@ -307,52 +307,6 @@ private func back(_ f: inout Follow, offset: Double, visible: Double, content: D
     #expect("\(SessionRef(project: "acme", thread: "t-1", server: "studio"))" == "studio:acme/t-1")
 }
 
-// A scroll to the end that didn't land leaves the follower behind, and
-// the view checks for that after (T976); scrolled up, held or jumping,
-// it isn't.
-@Test func behindIsAFollowerShortOfTheEnd() {
-    var f = Follow()
-    #expect(!f.behind)
-    at(&f, 500, content: 1000, newest: 2)
-    #expect(!f.behind)
-    // The content grew and the scroll didn't follow.
-    at(&f, 500, content: 1800, newest: 3)
-    #expect(f.behind)
-    at(&f, 1300, content: 1800, newest: 3)
-    #expect(!f.behind)
-    // Held by the user: not behind, whatever the geometry.
-    f.moved(by: true, resting: false)
-    at(&f, 1300, content: 2400, newest: 4)
-    #expect(!f.behind)
-    f.moved(by: false, resting: true)
-    #expect(f.behind)
-    // Scrolled up: the user's place, not behind.
-    user(&f, 600, content: 2400, newest: 4)
-    #expect(!f.following)
-    #expect(!f.behind)
-}
-
-@Test func keepingIsAFollowerNotHeldNorJumping() {
-    var f = Follow()
-    #expect(f.keeping)
-    at(&f, 500, content: 1000, newest: 2)
-    #expect(f.keeping)
-    // Held by the user.
-    f.moved(by: true, resting: false)
-    #expect(!f.keeping)
-    f.moved(by: false, resting: true)
-    #expect(f.keeping)
-    // Scrolled up: the user's place.
-    user(&f, 100, content: 1000, newest: 2)
-    #expect(!f.keeping)
-    // A jump under way, until it rests.
-    f.jump(newest: 2)
-    #expect(f.following)
-    #expect(!f.keeping)
-    f.moved(by: false, resting: true)
-    #expect(f.keeping)
-}
-
 /// A scroll of SwiftUI's that lands a little up at rest (one asked
 /// before the last rows were laid out, T976: 12 points under load) is
 /// no scroll of the user's: the follow holds and says to go to the end.

@@ -132,21 +132,6 @@ public struct Follow: Equatable, Sendable {
         return breach
     }
 
-    /// A follower left short of the end, or at rest past it, as the last
-    /// geometry has it: a scroll to the end asked for that didn't land
-    /// (one asked during a layout or an animation can be dropped, with no
-    /// geometry change after to ask again).
-    public var behind: Bool {
-        guard offset != nil else { return false }
-        return (keeping && geometry.offset < geometry.end - 1) || breach
-    }
-
-    /// Whether the view keeps to the end now: following, the scroll
-    /// neither held by the user nor running a jump.
-    public var keeping: Bool {
-        following && !held && !jumping
-    }
-
     /// The transcript's entries now (their ids; appended ones have
     /// higher ids than the rest). Following, they are seen; scrolled up,
     /// it counts the ones newer than those seen. True when following.
@@ -247,12 +232,6 @@ public final class Follower {
 
     /// Follow.breach.
     public var breach: Bool { state.breach }
-
-    /// Follow.behind.
-    public var behind: Bool { state.behind }
-
-    /// Follow.keeping.
-    public var keeping: Bool { state.keeping }
 
     /// Follow.trace.
     public var trace: String { state.trace }
