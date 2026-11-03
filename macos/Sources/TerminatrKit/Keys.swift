@@ -108,6 +108,13 @@ extension Navigation {
         collapsed.remove(key)
         unfolded.insert(key)
     }
+
+    /// The iPad's disclosure chevron and its Fold/Unfold: a program
+    /// member unfolds when it was folded, as the Mac's context menu
+    /// writes it (fold, unfold). open is whether its rows show now.
+    public mutating func toggle(_ key: String, open: Bool) {
+        if open { fold(key) } else { unfold(key) }
+    }
 }
 
 extension Transcript {
