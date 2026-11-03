@@ -60,3 +60,36 @@ func TestArchiveDeleteMember(t *testing.T) {
 		t.Errorf("loner:\n%s", out)
 	}
 }
+
+// TestProgramNewTable: tm program new lists the program in config.toml
+// (so the list and the sidebar's source show it), --projects sets its
+// members as the Members picker checks them, and a refusal makes nothing.
+func TestProgramNewTable(t *testing.T) {
+	h, _ := programHarness(t)
+	h.ok(human, "program", "new", "solo")
+	cfg, _ := config.Load()
+	if g, ok := cfg.Program("solo"); !ok || len(g.Projects) != 0 {
+		t.Fatalf("solo table: %+v %v", g, ok)
+	}
+	if out := h.ok(human, "program", "list"); !strings.Contains(out, "solo") {
+		t.Errorf("list:\n%s", out)
+	}
+	h.ok(human, "project", "new", "api")
+	h.ok(human, "project", "new", "site")
+	h.ok(human, "program", "new", "duo", "--projects", "api, site")
+	cfg, _ = config.Load()
+	if g, _ := cfg.Program("duo"); strings.Join(g.Projects, ",") != "api,site" {
+		t.Errorf("duo members %v", g.Projects)
+	}
+	h.expect(1, "bad-member", human, "program", "new", "trio", "--projects", "demo")
+	h.expect(1, "bad-member", human, "program", "new", "trio", "--projects", "acme")
+	h.expect(1, "unknown-project", human, "program", "new", "trio", "--projects", "ghost")
+	if _, err := os.Stat(h.root + "/projects/_programs/trio"); err == nil {
+		t.Error("a refused new made a folder")
+	}
+	cfg, _ = config.Load()
+	if _, ok := cfg.Program("trio"); ok {
+		t.Error("a refused new wrote a table")
+	}
+	h.expect(1, "human-only", directorAcme, "program", "new", "trio")
+}

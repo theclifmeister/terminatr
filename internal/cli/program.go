@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -31,7 +32,7 @@ import (
 // programs is off, but for the human's two that manage dormant data
 // (§3.5): status and delete.
 
-const programUsage = `usage: tm program new <slug> [--goal "…"] [--json]   (the human's; members are set in Settings or config.toml)
+const programUsage = `usage: tm program new <slug> [--goal "…"] [--projects a,b] [--json]   (the human's; more members are set in Settings)
        tm program list [--json]
        tm program show <slug> [--json]
        tm program open <slug> [--agent NAME]   (start or attach its director)
@@ -108,7 +109,7 @@ func programsOff() error {
 
 func programNew(e *Env, args []string) error {
 	f := newFlags()
-	goal, asJSON := f.String("goal"), f.Bool("json")
+	goal, members, asJSON := f.String("goal"), f.String("projects"), f.Bool("json")
 	pos, err := f.Parse(args)
 	if err != nil {
 		return err
@@ -119,18 +120,69 @@ func programNew(e *Env, args []string) error {
 	if e.Caller.IsAgent() {
 		return &project.Error{Code: "human-only", Msg: "only the human creates programs"}
 	}
+	cfg, _ := config.Load()
+	projects, err := programNewMembers(cfg, pos[0], *members)
+	if err != nil {
+		return err
+	}
 	g, err := program.New(program.Options{Slug: pos[0], Goal: *goal, Taken: peer.ProgramNameTaken})
 	if err != nil {
 		return err
+	}
+	// List it in config.toml as the TUI's new program does, so the
+	// sidebar shows it and its settings open, with its members.
+	if _, listed := cfg.Program(g.Slug); !listed || len(projects) > 0 {
+		if err := config.SetProgram(g.Slug, "projects", projects); err != nil {
+			return err
+		}
+		g.Members = projects
 	}
 	if *asJSON {
 		return e.printJSON(map[string]any{"slug": g.Slug, "dir": g.Dir, "goal": g.Meta.Goal, "members": g.Members})
 	}
 	fmt.Fprintf(e.Stdout, "created program %s at %s\n", g.Slug, g.Dir)
 	if len(g.Members) == 0 {
-		fmt.Fprintf(e.Stdout, "it has no members yet: add projects in config.toml's [programs.%s] projects, then tm program open %s\n", g.Slug, g.Slug)
+		fmt.Fprintf(e.Stdout, "it has no members yet: pick them in its settings, or add projects to config.toml's [programs.%s] projects, then tm program open %s\n", g.Slug, g.Slug)
 	}
 	return nil
+}
+
+// programNewMembers parses --projects and checks each as the Members
+// picker does: a project on this server, in no program yet, and not a
+// program; none twice.
+func programNewMembers(cfg *config.Config, slug, csv string) ([]string, error) {
+	out := []string{}
+	if strings.TrimSpace(csv) == "" {
+		return out, nil
+	}
+	all, err := project.List()
+	if err != nil {
+		return nil, err
+	}
+	have := map[string]bool{}
+	for _, s := range all {
+		have[s.Slug] = true
+	}
+	for _, m := range strings.Split(csv, ",") {
+		m = strings.TrimSpace(m)
+		switch {
+		case m == "":
+			continue
+		case slices.Contains(out, m):
+			continue
+		case strings.Contains(m, "/"):
+			return nil, usagef("--projects takes this server's projects; add %s in its settings", m)
+		case slices.Contains(project.ProgramSlugs(cfg), m) || m == slug:
+			return nil, &project.Error{Code: "bad-member", Msg: m + " is a program: a program holds projects, never another program"}
+		case !have[m]:
+			return nil, &project.Error{Code: "unknown-project", Msg: "no project " + m}
+		}
+		if p := cfg.ProgramOf(m); p != "" {
+			return nil, &project.Error{Code: "bad-member", Msg: m + " is in program " + p + ": a project is in one program at most"}
+		}
+		out = append(out, m)
+	}
+	return out, nil
 }
 
 func programList(e *Env, cfg *config.Config, args []string) error {
