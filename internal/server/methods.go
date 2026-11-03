@@ -256,7 +256,10 @@ func init() {
 		proto.MethodServerStop: {gate: gateHuman, call: typed(func(s *Server, p proto.ServerStopParams, _ callCtx) (any, *proto.Error) {
 			return s.stop(p)
 		})},
-		proto.MethodSessionStart: {gate: gateHuman, call: typed(func(s *Server, p proto.SessionStartParams, _ callCtx) (any, *proto.Error) {
+		proto.MethodSessionStart: {gate: gateHuman, call: typed(func(s *Server, p proto.SessionStartParams, cc callCtx) (any, *proto.Error) {
+			if p.Role == proto.RoleCoordinator {
+				return s.startCoordinator(p, cc.who())
+			}
 			return s.startSession(p)
 		})},
 		proto.MethodSessionStop: {gate: gateHuman, call: typed(func(s *Server, p proto.SessionIDParams, _ callCtx) (any, *proto.Error) {

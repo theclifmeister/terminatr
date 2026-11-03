@@ -25,7 +25,7 @@ func (s *iconSet) glyphs() map[string]*string {
 		"coord": &s.coord, "thread": &s.thread,
 		"hint": &s.hint, "current": &s.current, "remote": &s.remote, "paused": &s.paused, "inactive": &s.inactive,
 		"working": &s.working, "blocked": &s.blocked, "idle": &s.idle, "starting": &s.starting, "running": &s.running,
-		"review": &s.review, "done": &s.done, "other": &s.other, "none": &s.none,
+		"review": &s.review, "done": &s.done, "other": &s.other, "none": &s.none, "asleep": &s.asleep,
 		"ciPass": &s.ciPass, "ciFail": &s.ciFail, "ciRun": &s.ciRun,
 		"fold": &s.fold, "unfold": &s.unfold, "linked": &s.linked,
 		"todoDone": &s.todoDone, "todoNow": &s.todoNow, "todoOpen": &s.todoOpen,

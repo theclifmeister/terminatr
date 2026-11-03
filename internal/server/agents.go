@@ -1246,7 +1246,7 @@ func (s *Server) resume(recs []SessionRecord) (outs []restartOutcome) {
 // lost when its cwd is gone or the launch fails. s.mu not held.
 func (s *Server) resumeOne(r SessionRecord) restartOutcome {
 	kept := r
-	r.CleanExit, r.Interrupted, r.Queued = false, false, nil
+	r.CleanExit, r.Interrupted, r.Queued, r.Asleep = false, false, nil, false
 	if _, err := os.Stat(r.Cwd); err != nil {
 		s.log.Printf("session %s: not resumed: %v", r.ID, err)
 		return restartOutcome{rec: r, how: "lost"}

@@ -5,12 +5,13 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 // TestSettingKeys: the lists derived from the one table keep their keys
 // and order.
 func TestSettingKeys(t *testing.T) {
-	want := []string{"start_threads", "yolo", "coordinator_approves", "parallel_threads", "global_parallel_threads", "auto_close", "auto_close_days", "auto_resolve", "pr_followup", "pr_poll_seconds", "complete_tasks", "coordinator_remote_control", "auto_clear", "coordinator_merges", "merge_method", "fast_forward_checkout", "protection", "coordinator_access", "thread_agent", "thread_agents", "coordinator_agent", "models", "coordinator_model", "active", "paused", "archived", "pinned", "share",
+	want := []string{"start_threads", "yolo", "coordinator_approves", "parallel_threads", "global_parallel_threads", "auto_close", "auto_close_days", "auto_resolve", "pr_followup", "pr_poll_seconds", "complete_tasks", "coordinator_remote_control", "auto_clear", "coordinator_sleep_after", "coordinator_merges", "merge_method", "fast_forward_checkout", "protection", "coordinator_access", "thread_agent", "thread_agents", "coordinator_agent", "models", "coordinator_model", "active", "paused", "archived", "pinned", "share",
 		"archive_tasks_days", "archive_threads_days", "archive_inbox_days", "archive_journal_days", "link_burst", "link_per_hour", "link_max_kb", "link_file_mb", "link_file_kbps", "branch_name", "guard", "guard_off", "guard_mode", "guard_allow"}
 	if !slices.Equal(ProjectKeys, want) {
 		t.Errorf("ProjectKeys %v", ProjectKeys)
@@ -179,5 +180,36 @@ func TestSafetySet(t *testing.T) {
 	s.Set("nope", 1)
 	if !reflect.DeepEqual(s, before) {
 		t.Errorf("changed: %+v", s)
+	}
+}
+
+// TestSleepAfter: coordinator_sleep_after's values, and its default of
+// 4h for a program's member, never for a standalone project.
+func TestSleepAfter(t *testing.T) {
+	for _, v := range []string{"off", "0", "5m", "4h", "168h"} {
+		if err := CheckSleepAfter(v); err != nil {
+			t.Errorf("%q: %v", v, err)
+		}
+	}
+	for _, v := range []string{"", "soon", "1m", "200h", "-4h", "4"} {
+		if err := CheckSleepAfter(v); err == nil {
+			t.Errorf("%q passed", v)
+		}
+	}
+	for _, tc := range []struct {
+		set       string
+		inProgram bool
+		want      time.Duration
+	}{
+		{"", true, ProgramSleepAfter},
+		{"", false, 0},
+		{"off", true, 0},
+		{"0", true, 0},
+		{"2h", false, 2 * time.Hour},
+		{"2h", true, 2 * time.Hour},
+	} {
+		if got := SleepAfter(Safety{CoordinatorSleepAfter: tc.set}, tc.inProgram); got != tc.want {
+			t.Errorf("%q in program %v: %v, want %v", tc.set, tc.inProgram, got, tc.want)
+		}
 	}
 }

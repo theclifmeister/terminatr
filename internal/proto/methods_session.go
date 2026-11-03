@@ -332,6 +332,18 @@ type SessionListResult struct {
 	// Scoped is set when the list holds only the sessions the caller
 	// sees (a session's connection), not every session of the server.
 	Scoped bool `json:"scoped,omitempty"`
+	// Asleep are the coordinators the ticker put to sleep after a long
+	// idle (docs/SPEC.md §7.5, Sleep): stopped with their conversation
+	// kept, resumed on demand. Not in Sessions; nil for none.
+	Asleep []AsleepCoordinator `json:"asleep,omitempty"`
+}
+
+// AsleepCoordinator is a sleeping coordinator: its project, the session
+// id it resumes under and since when it sleeps.
+type AsleepCoordinator struct {
+	Project string    `json:"project"`
+	ID      string    `json:"id"`
+	Since   time.Time `json:"since"`
 }
 
 // SessionIDParams name one session.

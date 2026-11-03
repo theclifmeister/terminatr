@@ -16,7 +16,7 @@ func TestSafetyRowKeys(t *testing.T) {
 		"Start threads": {"start_threads"}, "Yolo mode": {"yolo"}, "Coordinator approves": {"coordinator_approves"},
 		"Parallel threads": {"parallel_threads"}, "Auto-close finished threads": {"auto_close", "auto_close_days"},
 		"Complete tasks": {"complete_tasks"}, "Pull request follow-up": {"pr_followup"}, "Remote control": {"coordinator_remote_control"},
-		"Auto-clear coordinator": {"auto_clear"}, "Coordinator may merge": {"coordinator_merges"}, "Merge method": {"merge_method"}, "Keep my checkout current": {"fast_forward_checkout"},
+		"Auto-clear coordinator": {"auto_clear"}, "Coordinator sleep": {"coordinator_sleep_after"}, "Coordinator may merge": {"coordinator_merges"}, "Merge method": {"merge_method"}, "Keep my checkout current": {"fast_forward_checkout"},
 		"Thread agent": {"thread_agent"}, "Coordinator agent": {"coordinator_agent"}, "Thread agents": {"thread_agents"}, "Thread models": {"models"},
 		"Coordinator model": {"coordinator_model"}, "Branch names": {"branch_name"}, "Keep history": config.ArchiveKeys, "Link limits": config.LinkKeys,
 		"Guard": {"guard"}, "Guard mode": {"guard_mode"}, "Guard rules": {"guard_off"}, "Protection": {"protection"}, "Coordinator sets access": {"coordinator_access"},
