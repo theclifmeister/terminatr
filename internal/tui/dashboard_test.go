@@ -228,6 +228,12 @@ func (f *fakeSource) SetSetting(table, key string, value any) error {
 		}
 		return config.SetDefaults(key, value)
 	}
+	if slug, ok := strings.CutPrefix(table, "programs."); ok {
+		if value == nil {
+			return config.UnsetProgram(slug, key)
+		}
+		return config.SetProgram(slug, key, value)
+	}
 	if slug, ok := strings.CutPrefix(table, "projects."); ok {
 		if value == nil {
 			return config.UnsetProject(slug, key)
@@ -376,6 +382,10 @@ func (f *fakeSource) NewProject(name string) (string, error) { return name, nil 
 func (f *fakeSource) OpenProject(slug string, c, r int) (string, error) {
 	f.opened = append(f.opened, slug)
 	return "s-" + slug, nil
+}
+func (f *fakeSource) OpenDirector(slug string, c, r int) (string, error) {
+	f.opened = append(f.opened, "g:"+slug)
+	return "s-g-" + slug, nil
 }
 
 func (f *fakeSource) Peers() (PeerList, error) { return f.peers, f.peerErr }

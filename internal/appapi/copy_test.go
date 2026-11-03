@@ -253,6 +253,9 @@ func TestCopies(t *testing.T) {
 		".Projects[].Links[].Asks.Project", ".Projects[].Links[].Asks.State",
 		// An offered file's message: link.act takes the file's id.
 		".Projects[].LinkNeeds[].Message",
+		// The programs and each project's: the app API gets them with
+		// the programs' own types (the programs design §12, B17).
+		".Programs", ".Projects[].Program",
 	))
 	// A paired server's pages: everything that crossed crosses on, the
 	// far server's clock but.

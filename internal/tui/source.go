@@ -97,6 +97,9 @@ type Data struct {
 	// without any, or from a server that doesn't say. With any the
 	// sidebar shows server groups (sidepeers.go).
 	Peers []proto.PeerMirror
+	// Programs are the programs while [features] programs is on (the
+	// programs design §11.1), in slug order; none while it is off.
+	Programs []ProgramData
 }
 
 // ServerInfo is the running server's identity, from session.list.
@@ -146,6 +149,9 @@ type ProjectData struct {
 	// host failed, as the ticker last saw them; 0 while they work, or
 	// when it has no PR host. The sidebar marks its name red (▲).
 	PRHostFails int
+	// Program is the program the project is in, while programs are on;
+	// "" for none.
+	Program string
 	// Links are the project's links to other projects' coordinators
 	// (link.Rows); LinkWaits counts its messages waiting for the user's
 	// OK, its links the breaker paused and the paired servers' link
@@ -246,6 +252,9 @@ type ProjectSource interface {
 	// OpenProject returns the project's coordinator session, started
 	// first if none runs.
 	OpenProject(slug string, cols, rows int) (string, error)
+	// OpenDirector returns program slug's director session, started
+	// first if none runs.
+	OpenDirector(slug string, cols, rows int) (string, error)
 	// Lifecycle activates, deactivates, pauses, resumes, archives,
 	// deletes, pins or unpins a project (verb "activate", "deactivate",
 	// "pause", "resume", "archive", "delete", "pin", "unpin"), saying
@@ -781,6 +790,7 @@ func (s *ServerSource) Load() Data {
 			d.Env[slug] = cfg.EnvOf(slug)
 			d.Sandbox[slug] = cfg.SandboxOf(slug)
 		}
+		d.Programs = programsOf(cfg)
 	}
 	d.NoAgent = sc.noAgent
 	if ps, ok := s.watched(); ok {

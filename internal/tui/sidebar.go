@@ -266,6 +266,9 @@ type Target struct {
 	// Activate activates the project first: its coordinator's row in
 	// the tree of an inactive project the user expanded (§4, §5.1).
 	Activate bool
+	// Program opens that program's director, started first when none
+	// runs (sideprograms.go); Project is "" then.
+	Program string
 }
 
 // OpenTarget opens t in the view vc: shows the project's dashboard, or
@@ -277,6 +280,24 @@ func OpenTarget(p tmclient.Paths, vc *ViewConn, t Target) error {
 	switch {
 	case t.Session != "":
 		_, err := vc.Do(proto.MethodViewAttach, proto.ViewParams{Session: t.Session, Project: t.Project})
+		return err
+	case t.Program != "":
+		c, err := tmclient.Connect(p, true)
+		if err != nil {
+			return err
+		}
+		v := vc.View()
+		cols, rows := int(v.Cols), int(v.Rows)
+		if cols == 0 || rows == 0 {
+			cols, rows = 80, 24
+		}
+		area := v.Lay(cols, rows).Area
+		id, err := OpenDirector(c.Call, t.Program, area.W, area.H)
+		c.Close()
+		if err != nil {
+			return err
+		}
+		_, err = vc.Do(proto.MethodViewAttach, proto.ViewParams{Session: id})
 		return err
 	case t.Coordinator:
 		c, err := tmclient.Connect(p, true)
@@ -331,8 +352,10 @@ type sidebar struct {
 	// (mods.sections), band the band's lines (sidesections.go).
 	sections []proto.ModSection
 	band     sectionCache
-	// peers are the paired servers (Data.Peers), for the server groups.
-	peers []proto.PeerMirror
+	// peers are the paired servers (Data.Peers), for the server groups;
+	// programs the programs (Data.Programs).
+	peers    []proto.PeerMirror
+	programs []ProgramData
 }
 
 // pinIn marks project slug of ps pinned (on) or not, until the next

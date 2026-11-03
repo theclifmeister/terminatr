@@ -334,6 +334,10 @@ func (c *client) sideName(r treeRow) string {
 	switch r.kind {
 	case treeCoordinator:
 		return r.slug + " coordinator"
+	case treeProgram:
+		return "program " + r.slug
+	case treeDirector:
+		return r.slug + " director"
 	case treeThread:
 		return r.thread
 	case treeDivider:
@@ -362,6 +366,8 @@ func (c *client) sideItems(r treeRow, t Target) []aitem {
 			key := it.popup
 			ai.key = "prefix+" + key
 			ai.run = func() { c.popupOver(r.slug, key) }
+		case menuProgram:
+			ai.run = func() { c.popupOver(r.slug, thenProgram) }
 		case menuActive:
 			ai.run = func() { c.askActive(r.slug, r.inactive) }
 		case menuPin:

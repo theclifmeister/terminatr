@@ -143,10 +143,12 @@ func sideRows(rows []treeRow, needsFirst bool) []treeRow {
 // thread by its name, title or id, the coordinator by its word.
 func filterHit(r treeRow, q string) bool {
 	switch r.kind {
-	case treeProject:
+	case treeProject, treeProgram:
 		return strings.Contains(strings.ToLower(r.slug), q)
 	case treeCoordinator:
 		return strings.Contains("coordinator", q)
+	case treeDirector:
+		return strings.Contains("director", q)
 	case treeThread:
 		return strings.Contains(strings.ToLower(r.name+" "+r.title+" "+r.thread), q)
 	}
@@ -161,15 +163,22 @@ func filterTree(rows []treeRow, q string) []treeRow {
 	if q == "" {
 		return rows
 	}
-	keep := map[string]bool{}
+	keep, progs := map[string]bool{}, map[string]bool{}
 	for _, r := range rows {
 		if filterHit(r, q) {
 			keep[r.slug] = true
+			progs[r.prog] = true
 		}
 	}
 	var out []treeRow
 	for _, r := range rows {
-		if r.kind == treeProject && keep[r.slug] || r.kind != treeProject && filterHit(r, q) {
+		switch {
+		case r.kind == treeProgram:
+			// The program of a match stays, as a project does.
+			if progs[r.slug] {
+				out = append(out, r)
+			}
+		case r.kind == treeProject && keep[r.slug] || r.kind != treeProject && filterHit(r, q):
 			out = append(out, r)
 		}
 	}
@@ -215,6 +224,23 @@ func needsFirstOrder(rows []treeRow) []treeRow {
 		run = nil
 	}
 	for _, r := range rows {
+		switch {
+		case r.kind == treeDirector || r.prog != "" && r.kind != treeProgram:
+			// A program's rows move with it, in their order.
+			if len(run) > 0 {
+				b := &run[len(run)-1]
+				b.rows = append(b.rows, r)
+				continue
+			}
+			out = append(out, r)
+			continue
+		case r.kind == treeProgram:
+			if len(run) > 0 && run[0].rows[0].inactive {
+				flush()
+			}
+			run = append(run, block{rows: []treeRow{r}, hint: r.hint})
+			continue
+		}
 		switch r.kind {
 		case treeProject:
 			if len(run) > 0 && run[0].rows[0].inactive != r.inactive {
@@ -581,6 +607,10 @@ func gridTip(r treeRow, c sideCol) string {
 		switch r.kind {
 		case treeProject:
 			return "open threads"
+		case treeProgram:
+			return "open threads in its projects"
+		case treeDirector:
+			return "context use"
 		case treeCoordinator:
 			if r.ctxHint {
 				return "context use past the hint: c saves and clears it (tm clear)"
@@ -594,6 +624,10 @@ func gridTip(r treeRow, c sideCol) string {
 			return "dormant: its project is inactive"
 		case r.kind == treeProject:
 			return "its coordinator: " + stateMeaning(r.state)
+		case r.kind == treeProgram:
+			return "its director: " + stateMeaning(r.state)
+		case r.kind == treeDirector:
+			return "director: " + stateMeaning(r.state)
 		case r.kind == treeCoordinator:
 			return "coordinator: " + stateMeaning(r.state)
 		}

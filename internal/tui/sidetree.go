@@ -36,6 +36,11 @@ const (
 	// The PROJECTS header as the cursor's row (headRow): never in the
 	// tree, drawn as its header.
 	treeHead
+	// A program (sideprograms.go, the programs design §11.1) and its
+	// director: the program's members hang under them, one level in.
+	// Only while programs are on.
+	treeProgram
+	treeDirector
 )
 
 // dividerKey is the inactive divider's row key.
@@ -132,6 +137,10 @@ type treeRow struct {
 	// gap: a blank line is drawn above the row (a paired server's
 	// header); the row itself starts the group.
 	gap bool
+	// prog is the program of a program's or a director's row, and of a
+	// member project's rows, which are one level in (sideprograms.go);
+	// "" outside programs.
+	prog string
 }
 
 // folded says a project row hides its coordinator and threads, or the
@@ -154,6 +163,10 @@ func (r treeRow) key() string {
 		return peerKey(r)
 	case treeHead:
 		return headKey
+	case treeProgram:
+		return programKey(r.slug)
+	case treeDirector:
+		return "r:" + r.slug
 	}
 	return "p:" + r.slug
 }
@@ -277,6 +290,9 @@ type treeIn struct {
 	// host names this server's, thisHost when "".
 	peers []proto.PeerMirror
 	host  string
+	// programs are the programs (Data.Programs): their members hang
+	// under them (sideprograms.go). None while programs are off.
+	programs []ProgramData
 }
 
 // buildTree lays out the tree: the active projects, pinned ones first,
@@ -289,8 +305,12 @@ func buildTree(ps []ProjectData, sessions []proto.SessionInfo, in treeIn) []tree
 	for _, s := range sessions {
 		byID[s.ID] = s
 	}
+	members := programMembers(in.programs, ps)
 	var active, inactive []ProjectData
 	for _, p := range ps {
+		if members[p.Slug] != "" {
+			continue // under its program (programRows)
+		}
 		if p.inactive() {
 			inactive = append(inactive, p)
 		} else {
@@ -300,8 +320,17 @@ func buildTree(ps []ProjectData, sessions []proto.SessionInfo, in treeIn) []tree
 	// Pinned changes the order only.
 	sort.SliceStable(active, func(i, j int) bool { return active[i].pinned() && !active[j].pinned() })
 	var out []treeRow
+	progs := in.programs
 	for _, p := range active {
+		// A program sorts with the projects that aren't pinned, by slug.
+		for len(progs) > 0 && !p.pinned() && progs[0].Slug < p.Slug {
+			out = append(out, programRows(progs[0], ps, sessions, byID, in)...)
+			progs = progs[1:]
+		}
 		out = append(out, projectRows(p, sessions, byID, in)...)
+	}
+	for _, g := range progs {
+		out = append(out, programRows(g, ps, sessions, byID, in)...)
 	}
 	if len(inactive) > 0 {
 		div := treeRow{kind: treeDivider, pct: -1, threads: len(inactive), fold: !in.tree.InactiveOpen}
@@ -397,7 +426,7 @@ func projectRows(p ProjectData, sessions []proto.SessionInfo, byID map[string]pr
 func slimRows(rows []treeRow) []treeRow {
 	var out []treeRow
 	for _, r := range rows {
-		if r.kind == treeProject || r.kind == treeDivider || r.kind == treeServer || r.kind == treePeerProject {
+		if r.kind == treeProject || r.kind == treeProgram || r.kind == treeDivider || r.kind == treeServer || r.kind == treePeerProject {
 			r.here = r.current
 			out = append(out, r)
 		}
@@ -545,12 +574,18 @@ func treeLayout(r treeRow, cw int, slim, focused bool) (string, rowGeo) {
 			geo.prAt, geo.prW = runsWidth(lead)+runsWidth(label)+runsWidth(name[:1])+1, ansi.StringWidth(ic().blocked)
 		}
 		label = append(label, name...)
-	case treeCoordinator:
+	case treeCoordinator, treeDirector:
 		look := th().Plain
 		if r.state == "" || r.dormant {
 			look = th().Faint
 		}
-		label = append(label, cellRun{fitLabel("coordinator", lw), look})
+		word := "coordinator"
+		if r.kind == treeDirector {
+			word = "director"
+		}
+		label = append(label, cellRun{fitLabel(word, lw), look})
+	case treeProgram:
+		label = append(label, cellRun{fitLabel(r.slug, lw), th().Head})
 	default:
 		look := th().Plain
 		if r.dormant {
@@ -638,18 +673,26 @@ func treeLead(r treeRow) (lead, label []cellRun) {
 	if i.wide {
 		wide = " " // a Nerd Font icon draws over the blank after it
 	}
+	// A program's member is one level in, under a │ from its program.
+	var in []cellRun
+	if r.prog != "" && r.kind != treeProgram && r.kind != treeDirector {
+		in = []cellRun{{memberBar(), th().Faint}}
+	}
+	if r.kind == treeProgram {
+		return []cellRun{{" ", th().Plain}}, []cellRun{{programGlyph() + wide + " ", th().Accent}}
+	}
 	if r.kind == treeProject {
 		folder, fst := i.folder, th().Faint
 		if r.current {
 			folder, fst = i.folderOpen, th().Accent
 		}
-		return []cellRun{{" ", th().Plain}}, []cellRun{{folder + wide + " ", fst}}
+		return append([]cellRun{{" ", th().Plain}}, in...), []cellRun{{folder + wide + " ", fst}}
 	}
 	conn, node := i.mid, i.thread
 	if r.last {
 		conn = i.end
 	}
-	if r.kind == treeCoordinator {
+	if r.kind == treeCoordinator || r.kind == treeDirector {
 		node = i.coord
 	}
 	if node != "" {
@@ -662,7 +705,8 @@ func treeLead(r treeRow) (lead, label []cellRun) {
 	if r.kind == treeThread {
 		indent = "   "
 	}
-	return []cellRun{{" " + indent, th().Plain}, {conn + node, th().Faint}, {" ", th().Plain}}, nil
+	lead = append([]cellRun{{" ", th().Plain}}, in...)
+	return append(lead, cellRun{indent, th().Plain}, cellRun{conn + node, th().Faint}, cellRun{" ", th().Plain}), nil
 }
 
 // rowCols are the grid's columns row r keeps in a row cw cells wide
@@ -763,12 +807,13 @@ func gridCell(r treeRow, c sideCol) cellRun {
 		}
 		return cellRun{g + " ", st}
 	}
-	thread, proj := r.kind == treeThread, r.kind == treeProject
+	thread, proj := r.kind == treeThread, r.kind == treeProject || r.kind == treeProgram
+	coord := r.kind == treeCoordinator || r.kind == treeDirector
 	switch c.id {
 	case view.ColCount:
 		num, nst := "", th().Faint
 		switch r.kind {
-		case treeProject:
+		case treeProject, treeProgram:
 			n := r.threads
 			if r.inactive {
 				n = 0 // nothing of it runs
@@ -777,7 +822,7 @@ func gridCell(r treeRow, c sideCol) cellRun {
 			if n > 0 {
 				nst = th().Plain
 			}
-		case treeCoordinator:
+		case treeCoordinator, treeDirector:
 			if r.ctx >= 0 && !r.dormant {
 				num = fmt.Sprintf("%d%%", r.ctx)
 				switch {
@@ -809,7 +854,7 @@ func gridCell(r treeRow, c sideCol) cellRun {
 		}
 		return col(g != "", g, st)
 	case view.ColRemote:
-		return col(r.kind == treeCoordinator && r.remote && !r.dormant, i.remote, th().Accent)
+		return col(coord && r.remote && !r.dormant, i.remote, th().Accent)
 	case view.ColPaused:
 		return col(proj && r.paused, i.paused, th().Warn)
 	case view.ColInactive:
@@ -1007,6 +1052,11 @@ func (r treeRow) target() (t Target, ok bool, why string) {
 	if r.kind == treeServer || r.isPeer() {
 		return peerTarget(r)
 	}
+	if r.kind == treeProgram || r.kind == treeDirector {
+		// Its director, started when none runs (the program's dashboard
+		// comes with B8).
+		return Target{Program: r.slug}, true, ""
+	}
 	t.Project = r.slug
 	switch r.kind {
 	case treeCoordinator:
@@ -1047,6 +1097,11 @@ func (r treeRow) preview() (t Target, ok bool) {
 	}
 	if r.here || r.kind == treeDivider || r.kind == treeSection || r.kind == treeServer || r.isPeer() {
 		return t, false
+	}
+	if r.kind == treeProgram || r.kind == treeDirector {
+		// Its director's session while one runs; a preview never starts
+		// one.
+		return Target{Session: r.session}, r.session != ""
 	}
 	t.Project = r.slug
 	if r.kind != treeProject && r.session != "" {

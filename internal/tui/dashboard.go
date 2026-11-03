@@ -706,13 +706,27 @@ func (m *dash) openTarget(t Target) tea.Cmd {
 		})
 	case t.Coordinator:
 		return m.openProject(t.Project)
+	case t.Program != "":
+		return m.openDirector(t.Program)
 	}
 	return m.showProject(t.Project)
 }
 
 // targetActs reports whether openTarget runs t as an action (m.act): a
-// session or a coordinator; a project's dashboard only moves the view.
-func targetActs(t Target) bool { return t.Session != "" || t.Coordinator }
+// session, a coordinator or a director; a project's dashboard only moves
+// the view.
+func targetActs(t Target) bool { return t.Session != "" || t.Coordinator || t.Program != "" }
+
+// openDirector attaches program slug's director, started first when
+// none runs (sideprograms.go).
+func (m *dash) openDirector(slug string) tea.Cmd {
+	cols, rows := m.paneSize()
+	src := m.src
+	return m.act(func() actionMsg {
+		id, err := src.OpenDirector(slug, cols, rows)
+		return actionMsg{attach: id, sel: "r:" + slug, err: err}
+	})
+}
 
 // showProject shows project's dashboard: it becomes current, with its
 // coordinator's row selected, on every console of the view.
@@ -830,6 +844,9 @@ func (m *dash) setData(d Data) tea.Cmd {
 		// A server's header clicked in a session's sidebar.
 		m.openNetwork(m.over.Server)
 		m.then = ""
+	case first && m.then == thenProgram && m.over != nil:
+		m.openProgramSettings(m.over.Project)
+		m.then = ""
 	case first && m.then == thenNeeds:
 		// The needs-you badge clicked in a session.
 		cmds = append(cmds, m.goNeeds())
@@ -877,6 +894,11 @@ func (m *dash) needsCount() int {
 // thenNeeds is the then (DashState.Then) of the needs-you badge clicked
 // in a session: NEEDS YOU's first row selected.
 const thenNeeds = "needs-you"
+
+// thenProgram is the then of a program row's settings item picked in a
+// session's sidebar: the program's settings popup, Over.Project its
+// program.
+const thenProgram = "program-settings"
 
 // goNeeds shows every project's NEEDS YOU and selects its first row: a
 // click on the needs-you badge, which counts them all.

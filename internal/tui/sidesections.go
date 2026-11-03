@@ -255,7 +255,7 @@ func projRows(tree []treeRow, in bandIn) []treeRow {
 	out := make([]treeRow, 0, len(tree)+len(vs))
 	for i, r := range tree {
 		out = append(out, r)
-		if i+1 < len(tree) && tree[i+1].kind != treeProject && tree[i+1].kind != treeDivider {
+		if i+1 < len(tree) && tree[i+1].kind != treeProject && tree[i+1].kind != treeDivider && tree[i+1].kind != treeProgram {
 			continue // not its project's last row
 		}
 		p := i
