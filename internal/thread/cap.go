@@ -7,14 +7,16 @@ import (
 	"strings"
 	"time"
 
+	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/features"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
 // The parallel threads cap (docs/SPEC.md §9, §11.2): tm thread start
 // refuses a new thread while Working counts the project's cap or more,
-// or WorkingAll the cap across projects (global_parallel_threads) or
-// more.
+// InProgram its program's cap (programs on) or more, or WorkingAll the
+// cap across projects (global_parallel_threads) or more.
 
 // DoneSince is when the thread called tm done, if it did so after its
 // last prompt; zero otherwise (a new prompt gives it work again).
@@ -113,4 +115,32 @@ func ByProjectWords(by map[string]int) string {
 		return "none"
 	}
 	return strings.Join(parts, ", ")
+}
+
+// ProgramOf is the program on this server whose cap and slot ranking
+// apply to project slug (the programs design §1, §3.3): only while
+// [features] programs is on, and never a left-out program's (a project
+// has its name). ok is false for none.
+func ProgramOf(cfg *config.Config, slug string) (config.Program, bool) {
+	if !features.Programs(cfg) {
+		return config.Program{}, false
+	}
+	name := cfg.ProgramOf(slug)
+	if name == "" || project.ProgramLeftOut(name) {
+		return config.Program{}, false
+	}
+	return cfg.Program(name)
+}
+
+// InProgram sums WorkingAll's counts over a program's members on this
+// server (a paired server's members, <alias>/<slug>, run their threads
+// there).
+func InProgram(by map[string]int, g config.Program) int {
+	n := 0
+	for _, m := range g.Projects {
+		if !strings.Contains(m, "/") {
+			n += by[m]
+		}
+	}
+	return n
 }

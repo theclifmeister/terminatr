@@ -13,16 +13,22 @@ import (
 )
 
 // Slot waiters (docs/SPEC.md §9): a coordinator that tm thread start or
-// tm task delegate refused at a cap (over-cap, over-global-cap) waits
-// for a slot. The ticker tells the waiters, oldest first and one per
-// free slot, with one slot-free item each (ticker/slots.go), and holds
-// that slot for it SlotHold; its next start that passes the caps
-// forgets it, as does the end of the hold, or a day.
+// tm task delegate refused at a cap (over-cap, over-program-cap,
+// over-global-cap) waits for a slot. The ticker tells the waiters,
+// oldest first (ranked within a program) and one per free slot, with
+// one slot-free item each (ticker/slots.go), and holds that slot for it
+// SlotHold; its next start that passes the caps forgets it, as does the
+// end of the hold, or a day. In a delegate program the slot is held for
+// the program's director instead, which gets the ranked candidates (the
+// programs design §1).
 
-// Waiter is one project's coordinator refused at a cap.
+// Waiter is one project's coordinator refused at a cap, or a slot held
+// for a program's director (Director set, Project empty).
 type Waiter struct {
 	Project string `json:"project"`
-	// Code is the refusal: over-cap or over-global-cap.
+	// Director is, on a director's hold, its program.
+	Director string `json:"director,omitempty"`
+	// Code is the refusal: over-cap, over-program-cap or over-global-cap.
 	Code string `json:"code"`
 	// At is the first refusal, its place in line; Last the latest,
 	// What what it wanted to start then (a task ref and title, or a
@@ -33,6 +39,9 @@ type Waiter struct {
 	// Told is when the ticker told it a slot freed: the slot is held for
 	// it for SlotHold, so the next waiter isn't told about the same one.
 	Told time.Time `json:"told,omitzero"`
+	// Offered is when the waiter was named to its program's director as
+	// a candidate: once that hold lapses, it is told itself.
+	Offered time.Time `json:"offered,omitzero"`
 }
 
 // SlotHold is how long a slot a waiter was told of stays its own.
@@ -94,7 +103,7 @@ func UpdateWaiters(fn func([]Waiter) []Waiter) error {
 func Refused(slug, code, what string, now time.Time) error {
 	return UpdateWaiters(func(ws []Waiter) []Waiter {
 		for i := range ws {
-			if ws[i].Project == slug {
+			if ws[i].Project == slug && ws[i].Director == "" {
 				ws[i].Code, ws[i].Last, ws[i].What, ws[i].Told = code, now, what, time.Time{}
 				return ws
 			}
@@ -103,12 +112,45 @@ func Refused(slug, code, what string, now time.Time) error {
 	})
 }
 
-// Started forgets slug's waiter: its coordinator got a slot.
-func Started(slug string) error {
-	if !slices.ContainsFunc(Waiters(), func(w Waiter) bool { return w.Project == slug }) {
+// Started forgets slug's waiter: its coordinator got a slot. program,
+// when slug is a member of one, also ends a slot held for that
+// program's director: the slot is taken.
+func Started(slug, program string) error {
+	gone := func(w Waiter) bool {
+		if w.Director != "" {
+			return program != "" && w.Director == program
+		}
+		return w.Project == slug
+	}
+	if !slices.ContainsFunc(Waiters(), gone) {
 		return nil
 	}
-	return UpdateWaiters(func(ws []Waiter) []Waiter {
-		return slices.DeleteFunc(ws, func(w Waiter) bool { return w.Project == slug })
+	return UpdateWaiters(func(ws []Waiter) []Waiter { return slices.DeleteFunc(ws, gone) })
+}
+
+// ReleaseDirectors ends every slot held for a director, for programs
+// switched off (the programs design §3.5): the waiters named to a
+// director go back to the plain oldest-first line. It names the
+// programs whose holds it ended.
+func ReleaseDirectors() ([]string, error) {
+	held := func(w Waiter) bool { return w.Director != "" || !w.Offered.IsZero() }
+	if !slices.ContainsFunc(Waiters(), held) {
+		return nil, nil
+	}
+	var names []string
+	err := UpdateWaiters(func(ws []Waiter) []Waiter {
+		names = nil
+		var keep []Waiter
+		for _, w := range ws {
+			if w.Director != "" {
+				names = append(names, w.Director)
+				continue
+			}
+			w.Offered = time.Time{}
+			keep = append(keep, w)
+		}
+		return keep
 	})
+	slices.Sort(names)
+	return names, err
 }

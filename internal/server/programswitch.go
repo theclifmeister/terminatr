@@ -23,6 +23,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/session"
+	"github.com/theclifmeister/terminatr/internal/thread"
 )
 
 // programsNow reads the switch now (a broken config.toml still gives
@@ -192,9 +193,11 @@ func onOffWord(on bool) string {
 var programsMu sync.Mutex
 
 // applyPrograms makes the sessions match the switch: off stops the
-// running directors into dormant records; on resumes the dormant ones,
-// each with the back-on nudge. Held director slots, the paused program
-// outbox and dependency states (later build steps) hang off here too.
+// running directors into dormant records and releases the thread slots
+// held for them (the waiters they held go back to the plain line); on
+// resumes the dormant ones, each with the back-on nudge. The paused
+// program outbox and dependency states (later build steps) hang off
+// here too.
 func (s *Server) applyPrograms(on bool) (stopped, resumed, lost []string) {
 	programsMu.Lock()
 	defer programsMu.Unlock()
@@ -204,7 +207,11 @@ func (s *Server) applyPrograms(on bool) (stopped, resumed, lost []string) {
 // applyProgramsLocked is applyPrograms, programsMu held.
 func (s *Server) applyProgramsLocked(on bool) (stopped, resumed, lost []string) {
 	if !on {
-		return s.sleepDirectors(), nil, nil
+		stopped = s.sleepDirectors()
+		if names, err := thread.ReleaseDirectors(); err != nil || len(names) > 0 {
+			s.log.Printf("programs off: released the slots held for %v (%v)", names, err)
+		}
+		return stopped, nil, nil
 	}
 	resumed, lost = s.wakeDirectors()
 	return nil, resumed, lost
