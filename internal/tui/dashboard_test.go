@@ -385,6 +385,16 @@ func (f *fakeSource) OpenProject(slug string, c, r int) (string, error) {
 	f.opened = append(f.opened, slug)
 	return "s-" + slug, nil
 }
+func (f *fakeSource) RenameProgram(from, to string) (string, error) {
+	f.programActs = append(f.programActs, "rename "+from+" "+to)
+	return "renamed program " + from + " to " + to, nil
+}
+
+func (f *fakeSource) DeleteProgram(slug string) (string, error) {
+	f.programActs = append(f.programActs, "delete "+slug)
+	return "deleted program " + slug, nil
+}
+
 func (f *fakeSource) OpenDirector(slug string, c, r int) (string, error) {
 	f.opened = append(f.opened, "g:"+slug)
 	return "s-g-" + slug, nil

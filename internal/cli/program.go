@@ -3,19 +3,26 @@ package cli
 import (
 	"bufio"
 	"cmp"
+	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"text/tabwriter"
 	"time"
 
+	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/caller"
+	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/features"
 	"github.com/theclifmeister/terminatr/internal/peer"
 	"github.com/theclifmeister/terminatr/internal/program"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/rename"
 	"github.com/theclifmeister/terminatr/internal/server"
+	"github.com/theclifmeister/terminatr/internal/ticker"
+	"github.com/theclifmeister/terminatr/internal/vaultlink"
 )
 
 // tm program (the programs design §4.4): programs group projects under a
@@ -39,6 +46,7 @@ const programUsage = `usage: tm program new <slug> [--goal "…"] [--json]   (th
        tm program accept|decline P-… [--project <slug>]   (the human's: a paired server's program invite; tm program accept --help)
        tm program leave [--project <slug>]   (the human's: out of a paired server's program)
        tm program status [--json]   (the human's: on or off, and the programs, dormant while off)
+       tm program rename <slug> <new-slug> [--json]   (the human's: its folder, settings, links and its members' refs; restarts a running director)
        tm program delete <slug> [--yes]   (the human's: its folder to the trash, its table out of config.toml; asks first)`
 
 func runProgram(e *Env, args []string) error {
@@ -84,6 +92,8 @@ func runProgram(e *Env, args []string) error {
 		return programAsk(e, cfg, args[1:])
 	case "accept", "decline", "leave":
 		return programMember(e, args[0], args[1:])
+	case "rename":
+		return programRename(e, args[1:])
 	}
 	return usagef("unknown subcommand %q\n%s", args[0], programUsage)
 }
@@ -107,7 +117,7 @@ func programNew(e *Env, args []string) error {
 	if e.Caller.IsAgent() {
 		return &project.Error{Code: "human-only", Msg: "only the human creates programs"}
 	}
-	g, err := program.New(program.Options{Slug: pos[0], Goal: *goal, Taken: peerTaken})
+	g, err := program.New(program.Options{Slug: pos[0], Goal: *goal, Taken: peer.ProgramNameTaken})
 	if err != nil {
 		return err
 	}
@@ -119,27 +129,6 @@ func programNew(e *Env, args []string) error {
 		fmt.Fprintf(e.Stdout, "it has no members yet: add projects in config.toml's [programs.%s] projects, then tm program open %s\n", g.Slug, g.Slug)
 	}
 	return nil
-}
-
-// peerTaken says why slug can't name a program for the paired servers
-// (the one namespace, §3.4): this server's own name, or a paired
-// server's alias, name or the name it gives itself, where <name>/T4
-// would read as either. "" when none has it.
-func peerTaken(slug string) string {
-	if slug == peer.SelfName() {
-		return "it is this server's own name"
-	}
-	dir, err := peer.Dir()
-	if err != nil {
-		return ""
-	}
-	peers, _ := peer.LoadPeers(dir)
-	for _, p := range peers {
-		if p.Alias == slug || p.Name == slug || p.Told == slug {
-			return "a paired server is called that"
-		}
-	}
-	return ""
 }
 
 func programList(e *Env, cfg *config.Config, args []string) error {
@@ -397,4 +386,81 @@ func programDelete(e *Env, args []string) error {
 	}
 	fmt.Fprintf(e.Stdout, "deleted program %s: moved to %s\n", slug, dst)
 	return nil
+}
+
+// programRename is tm program rename <slug> <new-slug>, the human's:
+// through the server when one runs, which stops and restarts the
+// director and carries the ticker's memos over; else here.
+func programRename(e *Env, args []string) error {
+	f := newFlags()
+	asJSON := f.Bool("json")
+	pos, err := f.Parse(args)
+	if err != nil {
+		return err
+	}
+	if len(pos) != 2 {
+		return usagef("%s", programUsage)
+	}
+	if e.Caller.IsAgent() {
+		return &project.Error{Code: "human-only", Msg: "the user renames programs"}
+	}
+	params := proto.ProgramRenameParams{From: pos[0], To: strings.TrimSpace(pos[1])}
+	var res proto.ProgramRenameResult
+	c, _, err := connect(false)
+	switch {
+	case err == nil:
+		defer c.Close()
+		if err := c.Call(proto.MethodProgramRename, params, &res); err != nil {
+			return fromProto(err)
+		}
+	case errors.Is(err, client.ErrNotRunning):
+		if res, err = programRenameOffline(e, params); err != nil {
+			return err
+		}
+	default:
+		return err
+	}
+	if *asJSON {
+		return e.printJSON(res)
+	}
+	where := res.Dir
+	if where == "" {
+		where = "its settings (it has no folder yet)"
+	}
+	fmt.Fprintf(e.Stdout, "renamed program %s to %s: %s\n", params.From, params.To, where)
+	if res.Director != "" {
+		fmt.Fprintf(e.Stdout, "  director started again: %s (tm program open %s)\n", res.Director, params.To)
+	}
+	for _, n := range res.Notes {
+		fmt.Fprintf(e.Stdout, "  note: %s\n", n)
+	}
+	return nil
+}
+
+// programRenameOffline renames with no server running: no director can
+// run, and the ticker's memos are in its state file.
+func programRenameOffline(e *Env, p proto.ProgramRenameParams) (proto.ProgramRenameResult, error) {
+	var out proto.ProgramRenameResult
+	paths, err := client.ResolvePaths()
+	if err != nil {
+		return out, err
+	}
+	o := rename.ProgramOptions{From: p.From, To: p.To, Caller: e.Caller, Taken: peer.ProgramNameTaken}
+	if hd, err := os.UserHomeDir(); err == nil {
+		if reg, _ := agent.Load(paths.AgentsDir()); reg != nil {
+			o.MoveAgentDir = func(from, to string) error { return server.MoveAgentDirs(reg, hd, from, to) }
+		}
+	}
+	res, err := rename.Program(o)
+	if res == nil {
+		return out, err
+	}
+	out = proto.ProgramRenameResult{Dir: res.Dir, Notes: res.Notes}
+	if err != nil {
+		out.Notes = append(out.Notes, err.Error())
+	}
+	if err := ticker.RenameProjectState(ticker.StatePath(paths.Sessions), vaultlink.ProgramFolder(p.From), vaultlink.ProgramFolder(p.To)); err != nil {
+		out.Notes = append(out.Notes, "ticker memos not carried over: "+err.Error())
+	}
+	return out, nil
 }

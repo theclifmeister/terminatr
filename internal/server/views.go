@@ -325,6 +325,29 @@ func (vs *views) collapse(slug string) {
 	}
 }
 
+// renameProgram follows a renamed program in every view's selected
+// rows and folds (tm program rename): its rows are keyed g:<slug>.
+func (vs *views) renameProgram(from, to string) {
+	oldKey, newKey := "g:"+from, "g:"+to
+	key := func(k string) string {
+		if rest, ok := strings.CutPrefix(k, oldKey); ok && (rest == "" || rest[0] == '/') {
+			return newKey + rest
+		}
+		return k
+	}
+	vs.mu.Lock()
+	defer vs.mu.Unlock()
+	for _, lv := range vs.byName {
+		v := &lv.v
+		sel, side := key(v.Selected), key(v.SideSel)
+		moved := v.Tree.Rename(oldKey, newKey)
+		if moved || sel != v.Selected || side != v.SideSel {
+			v.Selected, v.SideSel = sel, side
+			vs.changedLocked(lv)
+		}
+	}
+}
+
 // renameProject follows a renamed project in every view's current
 // project and selected rows (tm project rename).
 func (vs *views) renameProject(from, to string) {

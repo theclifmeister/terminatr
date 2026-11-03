@@ -258,3 +258,68 @@ func TestAfterText(t *testing.T) {
 		t.Errorf("panel:\n%s", out)
 	}
 }
+
+// TestProgramRenameDelete (the programs design §3.4): the program
+// popup's Rename asks for the new name and renames through the source,
+// refusing a name that isn't one; Delete asks first and deletes only on
+// Y.
+func TestProgramRenameDelete(t *testing.T) {
+	writeConfig(t, "[features]\nprograms = true\n[programs.acme]\nprojects = [\"web\"]\n")
+	cfg, _ := config.Load()
+	g, _ := cfg.Program("acme")
+	data := Data{Projects: []ProjectData{{Slug: "web"}},
+		Programs: []ProgramData{{SideProgram: server.SideProgram{Slug: "acme", Projects: g.Projects}, Settings: g}}}
+	src := &fakeSource{data: data}
+	m := newDash(DashOptions{Source: src, Width: 120 + sideDefault, Height: 40})
+	m.setData(data)
+	m.focus, m.sideSel = areaSide, "g:acme"
+	open := func(label string) {
+		t.Helper()
+		drain(t, m, press(m, "A"))
+		pv, ok := m.top().(*programView)
+		if !ok {
+			t.Fatalf("popup %T", m.top())
+		}
+		pv.list.sel = slices.IndexFunc(pv.list.rows, func(r setting) bool { return r.label == label })
+		if pv.list.sel < 0 {
+			t.Fatalf("no %s row", label)
+		}
+		drain(t, m, press(m, "enter"))
+	}
+	open("Rename")
+	in, ok := m.top().(*inputView)
+	if !ok {
+		t.Fatalf("rename asked nothing: %T", m.top())
+	}
+	in.lineEdit = newLine("Bad Name")
+	drain(t, m, press(m, "enter"))
+	if len(src.programActs) != 0 || !strings.Contains(m.msg, "not a program name") {
+		t.Fatalf("bad name: %v, %q", src.programActs, m.msg)
+	}
+	for m.top() != nil {
+		m.pop()
+	}
+	open("Rename")
+	m.top().(*inputView).lineEdit = newLine("studio")
+	drain(t, m, press(m, "enter"))
+	if !slices.Equal(src.programActs, []string{"rename acme studio"}) || m.top() != nil {
+		t.Fatalf("rename: %v, top %T", src.programActs, m.top())
+	}
+
+	open("Delete")
+	if _, ok := m.top().(*confirmView); !ok {
+		t.Fatalf("delete didn't ask: %T", m.top())
+	}
+	drain(t, m, press(m, "N"))
+	if len(src.programActs) != 1 {
+		t.Fatalf("N deleted: %v", src.programActs)
+	}
+	for m.top() != nil {
+		m.pop()
+	}
+	open("Delete")
+	drain(t, m, press(m, "Y"))
+	if !slices.Equal(src.programActs, []string{"rename acme studio", "delete acme"}) {
+		t.Fatalf("delete: %v", src.programActs)
+	}
+}
