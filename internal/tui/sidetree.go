@@ -210,6 +210,9 @@ func hereKey(rows []treeRow) string {
 // markCursor marks the keyboard's row among the rows a sidebar w columns
 // wide shows: the sidebar has the keyboard focus.
 func markCursor(all []treeRow, w int, sel string) {
+	if sel == headKey {
+		return // the header is the cursor's row, drawn by sideLines: no tree row is
+	}
 	rows, i := cursorAt(all, w, sel)
 	if i < 0 {
 		return
