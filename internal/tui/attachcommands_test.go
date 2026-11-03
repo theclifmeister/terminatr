@@ -24,7 +24,7 @@ func sessionCmds() []mod.ModCommand {
 		{Mod: "lab", Name: "Labeller", Command: mod.Command{ID: "sweep", Title: "Sweep", Key: "Z"}},
 		{Mod: "lab", Name: "Labeller", Command: mod.Command{ID: "quiet", Title: "Quiet", Menu: &no}},
 		{Mod: "lab", Name: "Labeller", Command: mod.Command{ID: "pop", Title: "Pop", Key: "a"}},
-		{Mod: "only", Name: "Only", Projects: []string{"beta"}, Command: mod.Command{ID: "go", Title: "Go beta", Key: "G"}},
+		{Mod: "only", Name: "Only", Projects: []string{"beta"}, Command: mod.Command{ID: "go", Title: "Go beta", Key: "Y"}},
 	}
 }
 
@@ -75,7 +75,7 @@ func TestSessionCommandKeys(t *testing.T) {
 	if w := c.waiting(); w == nil || w.mod != "lab" || w.after != 4 {
 		t.Fatalf("wait %+v", w)
 	}
-	for _, k := range []string{"Z", "G"} {
+	for _, k := range []string{"Z", "Y"} {
 		press(k)
 	}
 	if !strings.Contains(c.flash, "Go beta (only) doesn't run for alpha") {

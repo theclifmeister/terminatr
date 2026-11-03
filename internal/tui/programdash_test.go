@@ -159,10 +159,10 @@ func TestProgramNeedsDialog(t *testing.T) {
 	}
 }
 
-// TestNewProgram: P on the PROJECTS header, while programs are on, asks
+// TestNewProgram: G on the PROJECTS header, while programs are on, asks
 // for a new program; its name and goal asked, it is made (NewProgram),
 // its dashboard shows and its settings open for its members. + there
-// is a new project only, and with programs off P does nothing new.
+// is a new project only, P is pin only, and with programs off G does nothing new.
 func TestNewProgram(t *testing.T) {
 	data := Data{Projects: []ProjectData{{Slug: "api"}}, ProgramsOn: true}
 	src := &fakeSource{data: data}
@@ -174,12 +174,16 @@ func TestNewProgram(t *testing.T) {
 		t.Fatalf("+ on the header: %T", m.top())
 	}
 	m.pop()
-	if bar := ansi.Strip(sideKeyBar(&treeRow{kind: treeHead, newProg: true}, true, false, 200)); !strings.Contains(bar, "P new program") {
+	if bar := ansi.Strip(sideKeyBar(&treeRow{kind: treeHead, newProg: true}, true, false, 200)); !strings.Contains(bar, "G new program") {
 		t.Errorf("key bar %q", bar)
 	}
 	drain(t, m, press(m, "P"))
+	if in, ok := m.top().(*inputView); ok && in.title == "New program" {
+		t.Fatalf("P on the header asked for a program")
+	}
+	drain(t, m, press(m, "G"))
 	if in, ok := m.top().(*inputView); !ok || in.title != "New program" {
-		t.Fatalf("P on the header: %T", m.top())
+		t.Fatalf("G on the header: %T", m.top())
 	}
 	drain(t, m, typeLine(m, "acme"))
 	if in, ok := m.top().(*inputView); !ok || !strings.Contains(in.title, "acme") {
@@ -195,9 +199,9 @@ func TestNewProgram(t *testing.T) {
 	// Programs off: the new project's prompt.
 	m.stack, m.data.ProgramsOn = nil, false
 	m.focus, m.sideSel = areaSide, headKey
-	drain(t, m, press(m, "P"))
+	drain(t, m, press(m, "G"))
 	if in, ok := m.top().(*inputView); ok && in.title == "New program" {
-		t.Errorf("programs off: P asked for a program")
+		t.Errorf("programs off: G asked for a program")
 	}
 }
 

@@ -138,9 +138,9 @@ func (m *dash) sectionCmd(st sideStep) tea.Cmd {
 // goes into it, and the keyboard follows.
 func (m *dash) sideKeyboard(key string) (tea.Cmd, bool) {
 	if m.data.ProgramsOn && m.sideSel == headKey {
-		// P on the PROJECTS header, while programs are on: a new program
-		// (the programs design §11.1); pinning is for a project's row.
-		if op, ok := sideOp(key); ok && op == sidePin {
+		// G (side.new-program) on the PROJECTS header, while programs are
+		// on: a new program (the programs design §11.1).
+		if op, ok := sideOp(key); ok && op == sideNewProgram {
 			m.newProgram()
 			return nil, true
 		}

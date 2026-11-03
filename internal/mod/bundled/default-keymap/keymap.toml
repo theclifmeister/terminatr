@@ -41,6 +41,7 @@
 "side.activate" = ["S"]
 "side.fold-toggle" = ["Z"]
 "side.pin" = ["P"]
+"side.new-program" = ["G"]
 "side.first" = ["home"]
 "side.last" = ["end"]
 "side.page-up" = ["pgup"]

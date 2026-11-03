@@ -202,7 +202,7 @@ func sideKeyBar(r *treeRow, focused, session bool, cw int) string {
 	case r.kind == treeHead:
 		keys = []string{enter + " show all"}
 		if r.newProg {
-			keys = append(keys, barKey("side.pin", "P")+" new program")
+			keys = append(keys, barKey("side.new-program", "G")+" new program")
 		}
 	case r.kind == treeSection:
 		keys = sectionKeys(r.sec)

@@ -12,7 +12,7 @@ import (
 
 // commandDash is a dashboard with three mods' commands: lab's relabel
 // on g (prefix+g only: an unshifted letter) and its sweep on Z (the
-// core's card.fold), beta-only's on G, and
+// core's card.fold), beta-only's on Y, and
 // a second mod's g, which lost it to lab.
 func commandDash(t *testing.T) (*fakeSource, *dash) {
 	t.Helper()
@@ -22,7 +22,7 @@ func commandDash(t *testing.T) (*fakeSource, *dash) {
 		{Mod: "lab", Name: "Labeller", Command: mod.Command{ID: "relabel", Title: "Relabel", Key: "g"}},
 		{Mod: "lab", Name: "Labeller", Command: mod.Command{ID: "sweep", Title: "Sweep", Key: "Z"}},
 		{Mod: "lab", Name: "Labeller", Command: mod.Command{ID: "quiet", Title: "Quiet", Menu: &no}},
-		{Mod: "only", Name: "Only", Projects: []string{"beta"}, Command: mod.Command{ID: "go", Title: "Go beta", Key: "G"}},
+		{Mod: "only", Name: "Only", Projects: []string{"beta"}, Command: mod.Command{ID: "go", Title: "Go beta", Key: "Y"}},
 		{Mod: "late", Name: "Late", Conflict: "key conflict: g is lab:relabel's", Command: mod.Command{ID: "sync", Title: "Sync"}},
 	}
 	m := newDash(DashOptions{Source: src, Width: 120 + sideDefault, Height: 40, State: DashState{Current: "alpha"}})
@@ -61,7 +61,7 @@ func TestModCommandKeys(t *testing.T) {
 	if len(src.commands) != 1 {
 		t.Fatalf("Z ran a command (%d)", len(src.commands))
 	}
-	prefixed(m, "G")
+	prefixed(m, "Y")
 	if len(src.commands) != 1 || !strings.Contains(m.msg, "doesn't run for alpha") {
 		t.Fatalf("a beta-only command ran in alpha: %+v, %q", src.commands, m.msg)
 	}
@@ -127,7 +127,7 @@ func TestModHelpScope(t *testing.T) {
 		t.Fatalf("a disabled mod's command is listed:\n%s", h)
 	}
 	m.over = &Over{Project: "beta"}
-	if h := strings.Join(keyLines(200, m.commandHelp()), "\n"); !strings.Contains(h, "Go beta · Only") || !strings.Contains(h, "G prefix+G") {
+	if h := strings.Join(keyLines(200, m.commandHelp()), "\n"); !strings.Contains(h, "Go beta · Only") || !strings.Contains(h, "Y prefix+Y") {
 		t.Fatalf("beta's help lacks its command:\n%s", h)
 	}
 	m.over = nil

@@ -26,6 +26,7 @@ const (
 	sideUnfoldAll
 	sideFoldToggle // fold all while any is open, else unfold all
 	sidePin        // on a project, pin it to the top or unpin it
+	sideNewProgram // on the PROJECTS header, while programs are on: a new program
 	// sideUnfoldOnly is side.unfold from an unshifted letter a keymap
 	// gave it (vim-keys' l): it unfolds, and never goes in, so typed
 	// text can't open a pane or start a coordinator.
@@ -56,7 +57,8 @@ var sideActions = []sideAction{
 	// The toggle's two halves, kept bindable with no key of their own.
 	{id: "side.fold-all", op: sideFoldAll},
 	{id: "side.unfold-all", op: sideUnfoldAll},
-	{id: "side.pin", keys: []string{"P"}, op: sidePin, label: "P", help: "on a project: pin it to the top of the active projects, or unpin it (its order only); on the PROJECTS header while programs are on: a new program"},
+	{id: "side.pin", keys: []string{"P"}, op: sidePin, label: "P", help: "on a project: pin it to the top of the active projects, or unpin it (its order only)"},
+	{id: "side.new-program", keys: []string{"G"}, op: sideNewProgram, label: "G", help: "on the PROJECTS header while programs are on: a new program"},
 	{id: "side.first", keys: []string{"home"}, op: sideFirst, label: "home end", help: "the first / last row"},
 	{id: "side.last", keys: []string{"end"}, op: sideLast},
 	{id: "side.page-up", keys: []string{"pgup"}, op: sidePageUp, label: "pgup pgdown", help: "a page up / down"},
@@ -294,6 +296,8 @@ func sideKeyStep(all []treeRow, w int, sel string, op int) sideStep {
 			return sideStep{msg: barKey("side.pin", "P") + " on a project pins it to the top"}
 		}
 		return sideStep{pin: r.slug, pinOn: !r.pinned}
+	case sideNewProgram: // only on the header, and dashside.go asks there
+		return sideStep{}
 	case sideFoldAll, sideUnfoldAll:
 		// The sections too: view.tree, then view.sections.
 		st := sideStep{refold: foldAll(all, op == sideFoldAll), sections: sectionIDs(all), foldOn: op == sideFoldAll,
@@ -337,6 +341,8 @@ func headStep(all []treeRow, w, op int) sideStep {
 		return sideStep{msg: barKey("side.activate", "S") + " on a project activates or deactivates it"}
 	case sidePin:
 		return sideStep{msg: barKey("side.pin", "P") + " on a project pins it to the top"}
+	case sideNewProgram:
+		return sideStep{}
 	case sideFoldAll, sideUnfoldAll:
 		return sideStep{refold: foldAll(all, op == sideFoldAll), sections: sectionIDs(all), foldOn: op == sideFoldAll,
 			everySection: op == sideUnfoldAll}

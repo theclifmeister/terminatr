@@ -53,7 +53,7 @@ const (
 type sideHeadIn struct {
 	needs        int
 	cursor, here bool
-	// programs: programs are on, so P on the header is a new program.
+	// programs: programs are on, so G on the header is a new program.
 	programs bool
 }
 

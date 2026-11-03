@@ -17,7 +17,7 @@
 "side.unfold"    = ["right", "l"]
 "side.fold"      = ["left", "h"]
 "side.first"     = ["home", "g"]
-"side.last"      = ["end", "G"]
+"side.last"      = ["end"]
 "side.page-up"   = ["pgup", "ctrl+u"]
 "side.page-down" = ["pgdown", "ctrl+d"]
 
