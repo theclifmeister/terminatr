@@ -3,7 +3,8 @@ import Foundation
 /// The programs as the iPhone's Projects screen lists them (programs
 /// design §11.1, §12; B19): a program is one row, sorted with the
 /// projects that aren't pinned by slug, as the TUI's buildTree places
-/// it, its local members under it alone; its needs are its director's
+/// it, with no members listed under it (they are on its page only,
+/// T977); its needs are its director's
 /// and its members', a paired member's as that server's mirror has
 /// them, each counted once, so the row, the badge and Needs you agree.
 /// Only while the server's hello lists the capability programs: without
@@ -35,6 +36,14 @@ public enum ProgramList {
     public static func standalone(_ projects: [AppAPI.Project], programs: [AppAPI.Program]) -> [AppAPI.Project] {
         let held = members(programs)
         return held.isEmpty ? projects : projects.filter { held[$0.slug] == nil }
+    }
+
+    /// peer's projects less those a program holds (it lists a paired
+    /// member as "server/slug"), or that its server tags with a program:
+    /// they are listed on the program's page only.
+    public static func standalone(_ peer: AppAPI.Peer, programs: [AppAPI.Program]) -> [AppAPI.PeerProject] {
+        let held = Set(programs.flatMap(\.members).filter { $0.server == peer.alias }.map(\.project))
+        return peer.projects.filter { !held.contains($0.project) && $0.program.isEmpty }
     }
 
     /// The needs of program g among needs: its own (its director's,
