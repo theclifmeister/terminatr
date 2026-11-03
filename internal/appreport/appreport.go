@@ -34,17 +34,22 @@ import (
 	"github.com/theclifmeister/terminatr/internal/textsafe"
 )
 
-// The kinds of report: MetricKit's diagnostics.
+// The kinds of report: MetricKit's diagnostics, and the apps' own
+// guards' (KindScroll).
 const (
 	KindCrash     = "crash"                // MXCrashDiagnostic
 	KindHang      = "hang"                 // MXHangDiagnostic
 	KindCPU       = "cpu-exception"        // MXCPUExceptionDiagnostic
 	KindDiskWrite = "disk-write-exception" // MXDiskWriteExceptionDiagnostic
 	KindLaunch    = "app-launch"           // MXAppLaunchDiagnostic
+	// KindScroll is a conversation's scroll guard (T976): it came to
+	// rest past its content's end, and the app scrolled it back. Its
+	// payload is the scroll geometry, not MetricKit's.
+	KindScroll = "scroll"
 )
 
 // Kinds are the kinds a report may have.
-var Kinds = []string{KindCrash, KindHang, KindCPU, KindDiskWrite, KindLaunch}
+var Kinds = []string{KindCrash, KindHang, KindCPU, KindDiskWrite, KindLaunch, KindScroll}
 
 // SourceMac is the Mac app's source; a device's is DeviceSource's.
 const SourceMac = "mac"

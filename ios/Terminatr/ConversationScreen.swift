@@ -28,11 +28,14 @@ struct ConversationScreen: View {
     @State private var unfolded: Set<Int> = []
     @State private var paging = false
     @State private var pages = false
-    /// Whether the conversation follows its end, or the user scrolled
-    /// up (iOS 18, from the scroll geometry; 17 always follows).
+    /// Whether the conversation is at its end, or the user scrolled up
+    /// (iOS 18, from the scroll geometry; 17 always follows): a signal
+    /// only, the scroll is SwiftUI's (ConversationScroll, T976).
     @State private var follow = Follower()
-    /// Jump to latest's glide to the end (T889).
-    @State private var glider = Glider()
+    /// How many of the last entries the conversation draws: laid out
+    /// exactly, not lazily (T976), so a long one draws its last turns,
+    /// and Earlier messages more.
+    @State private var drawn = Self.page
     /// The row the user had at the top, scrolled up, before the layout
     /// changed (an iPhone Duo opened or closed): scrolled back to once
     /// the transcript has it (Places, T825).
@@ -45,6 +48,9 @@ struct ConversationScreen: View {
     /// worth and some.
     static let tailItems = 60
 
+    /// The entries drawn at first, and added by each Earlier messages.
+    static let page = 60
+
     /// What changes as output comes: the entries' count, and the last
     /// one's text and result as it streams.
     static func tail(_ t: Transcript) -> [Int] {
@@ -54,12 +60,14 @@ struct ConversationScreen: View {
     var body: some View {
         let id = model.sessionID(ref)
         let session = id.flatMap { id in model.sessions.first { $0.id == id } }
-        let rows = Transcript.rows(transcript.entries)
+        let entries = transcript.tail(drawn)
+        let earlier = transcript.entries.count - entries.count
+        let rows = Transcript.rows(entries)
         let moment = moment(rows, session)
         let waits = need ?? model.needs.first { $0.session == id && ($0.kind == .question || $0.kind == .approval) }
         ScrollViewReader { scroll in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 12) {
                     if id == nil {
                         if ref.director {
                             ContentUnavailableView("The director isn't running", systemImage: "moon.zzz",
@@ -72,7 +80,7 @@ struct ConversationScreen: View {
                         }
                     }
                     if let failure { Failure(text: failure) }
-                    if pages, !transcript.before.isEmpty, let id { earlier(id) }
+                    if earlier > 0 || (pages && !transcript.before.isEmpty), let id { earlierButton(id, drawnOnly: earlier > 0) }
                     ForEach(rows) { row in
                         Group {
                             switch row {
@@ -101,27 +109,27 @@ struct ConversationScreen: View {
                 }
                 .padding([.horizontal, .top], 16)
                 .scrollTargetLayout()
-                .background { ScrollViewHook(glider: glider) }
             }
             // A drag down the conversation folds the keyboard (T857).
             .scrollDismissesKeyboard(.interactively)
-            .modifier(PhoneFollowGeometry(follow: follow, newest: transcript.entries.last?.id) { top in
-                if restoring == nil { model.places.keep("top \(ref)", follow.following ? nil : top) }
-            } toEnd: {
-                scroll.scrollTo("end", anchor: .bottom)
-            })
-            // New output: the follower goes to the end; scrolled up, the
-            // screen stays and Jump to latest counts it. Laid out afresh,
-            // it goes back to the row the user had at the top.
+            .modifier(ConversationScroll(follow: follow, newest: transcript.entries.last?.id, screen: "iphone conversation",
+                                         detail: { ["role": session?.role ?? "", "rows": "\(rows.count)", "entries": "\(transcript.entries.count)"] },
+                                         top: { top in
+                                             if restoring == nil { model.places.keep("top \(ref)", follow.following ? nil : top) }
+                                         }, toEnd: { toEnd(scroll) }))
+            // New output: the follower stays at the end by the scroll's
+            // bottom anchor; scrolled up, the screen stays and Jump to
+            // latest counts it. Laid out afresh, it goes back to the row
+            // the user had at the top.
             .onChange(of: Self.tail(transcript)) {
-                if seeking, restoring == nil, self.moment(Transcript.rows(transcript.entries), session) != nil {
+                if seeking, restoring == nil, self.moment(Transcript.rows(transcript.tail(drawn)), session) != nil {
                     // The hero is after the moment: the end shows both.
                     seeking = false
                     toEnd(scroll)
                     return
                 }
                 if let r = restoring {
-                    let rows = Transcript.rows(transcript.entries).map(\.id)
+                    let rows = Transcript.rows(transcript.tail(drawn)).map(\.id)
                     guard let first = rows.first, rows.last ?? Int.min >= r else { return }
                     restoring = nil
                     if r >= first {
@@ -129,26 +137,12 @@ struct ConversationScreen: View {
                         return
                     }
                 }
-                if follow.arrived(transcript.entries.map(\.id)) {
-                    toEnd(scroll)
-                } else if follow.gliding {
-                    // Jump to latest's glide: it stays on the end the
-                    // new output moves.
-                    glider.renew()
-                }
+                follow.arrived(transcript.entries.map(\.id))
             }
             .onAppear {
                 if let top: Int = model.places.value("top \(ref)") { restoring = top }
                 seeking = need != nil
             }
-            .onChange(of: Busy.of(session) != nil) {
-                if follow.following { toEnd(scroll) }
-            }
-            .onChange(of: model.queuedSent[ref]?.count ?? 0) {
-                if follow.following { toEnd(scroll) }
-            }
-            .onChange(of: follow.gliding) { _, g in if !g { glider.stop() } }
-            .onDisappear { glider.stop() }
             .overlay(alignment: .bottom) {
                 if !follow.following {
                     Button {
@@ -182,31 +176,17 @@ struct ConversationScreen: View {
         .kept($unfolded, "runs \(ref)")
     }
 
-    /// Jump to latest: a glide to the end that lands on it as the rows
-    /// on the way lay out (T889); without the scroll view to drive, the
-    /// scroll SwiftUI animates (T829's pull back on top).
+    /// Jump to latest: follow again, and SwiftUI's
+    /// scroll to the end row, exact as the rows are laid out exactly
+    /// (T976). Follow holds it through a flick's momentum (T829).
     private func jump(_ scroll: ScrollViewProxy) {
-        glider.stop()
-        follow.glide(newest: transcript.entries.last?.id)
-        if glider.start(instant: reduceMotion, done: { follow.landed() }) { return }
-        follow.landed()
         follow.jump(newest: transcript.entries.last?.id)
-        withAnimation(reduceMotion ? nil : .default) { scroll.scrollTo("end", anchor: .bottom) }
+        withAnimation(reduceMotion ? nil : .default) { toEnd(scroll) }
     }
 
-    /// The follower to the end (T901): new output, the agent's turn, a
-    /// queued prompt sent. An instant glide (Glider) that stays on the
-    /// end as each frame has it until that holds: scrollTo aims once at
-    /// the end a LazyVStack estimates, and stopped short of the true one
-    /// while output streamed. A glide already running stays on the end
-    /// for the new output too. Without the scroll view to drive,
-    /// SwiftUI's scroll.
+    /// SwiftUI's scroll to the end row: the only scroll here besides
+    /// the bottom anchor and the user's (T976).
     private func toEnd(_ scroll: ScrollViewProxy) {
-        if glider.running { return glider.renew() }
-        if glider.start(instant: true, done: { follow.landed() }) {
-            follow.glide(newest: nil)
-            return
-        }
         scroll.scrollTo("end", anchor: .bottom)
     }
 
@@ -250,9 +230,15 @@ struct ConversationScreen: View {
         return Transcript.row(of: e, in: rows)
     }
 
-    private func earlier(_ id: String) -> some View {
+    /// Earlier messages: the ones the transcript has and the view
+    /// doesn't draw yet first, then the server's earlier page.
+    private func earlierButton(_ id: String, drawnOnly: Bool) -> some View {
         Button {
-            Task { await page(id) }
+            if drawnOnly {
+                drawn += Self.page
+            } else {
+                Task { await page(id) }
+            }
         } label: {
             HStack {
                 Text("Earlier messages")
@@ -270,7 +256,9 @@ struct ConversationScreen: View {
         paging = true
         defer { paging = false }
         do {
+            let had = transcript.entries.count
             transcript.prepend(try await b.call(AppAPI.Methods.transcriptPage, AppAPI.TranscriptPageParams(session: id, before: transcript.before)))
+            drawn = max(drawn, had) + transcript.entries.count - had
         } catch {
             failure = error.localizedDescription
         }
@@ -518,38 +506,5 @@ extension View {
         padding(.horizontal, Spacing.item)
             .padding(.vertical, 2)
             .surface(.glass, in: Capsule())
-    }
-}
-
-/// The scroll geometry and phases into Follow: on iOS 18; 17 has none
-/// to read, and its conversation always follows. The screen opens at the
-/// end, and content that grows keeps its place (Follow scrolls a
-/// follower down). Jump to latest glides (Glider, T889); without one, a
-/// jump that a flick's momentum carries up is pulled back to the end
-/// (toEnd, T829).
-struct PhoneFollowGeometry: ViewModifier {
-    let follow: Follower
-    let newest: Int?
-    /// Told the row at the top as the user scrolls (iOS 18).
-    let top: (Int?) -> Void
-    let toEnd: () -> Void
-
-    func body(content: Content) -> some View {
-        if #available(iOS 18, *) {
-            content
-                .defaultScrollAnchor(.bottom, for: .initialOffset)
-                .defaultScrollAnchor(.top, for: .sizeChanges)
-                .onScrollGeometryChange(for: [Double].self) { g in
-                    [g.contentOffset.y, g.visibleRect.height, g.contentSize.height, g.contentInsets.bottom, g.contentInsets.top]
-                } action: { _, g in
-                    if follow.scrolled(offset: g[0], visible: g[1], content: g[2], inset: g[3], top: g[4], newest: newest) { toEnd() }
-                }
-                .onScrollPhaseChange { _, p in
-                    if follow.moved(by: p == .tracking || p == .interacting, resting: p == .idle) { toEnd() }
-                }
-                .onScrollTargetVisibilityChange(idType: Int.self, threshold: 0.01) { top($0.first) }
-        } else {
-            content.defaultScrollAnchor(.bottom)
-        }
     }
 }

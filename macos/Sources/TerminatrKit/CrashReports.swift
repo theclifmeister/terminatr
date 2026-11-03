@@ -18,6 +18,9 @@ public enum CrashReports {
         case cpuException = "cpu-exception"
         case diskWriteException = "disk-write-exception"
         case appLaunch = "app-launch"
+        /// A conversation's scroll guard (T976): at rest past its
+        /// content's end, scrolled back (scroll(...)).
+        case scroll
     }
 
     /// The server's bound on a diagnostic's JSON (appreport.MaxPayload).
@@ -78,8 +81,27 @@ public enum CrashReports {
             add("wrote", "writesCaused")
         case .appLaunch:
             add("launch took", "launchDuration")
+        case .scroll:
+            add("", "summary")
         }
         return String(parts.joined(separator: ", ").prefix(200))
+    }
+
+    /// A conversation's scroll guard's report (T976): the scroll came to
+    /// rest with its visible rect past the content's end, which the
+    /// layout never makes; the view scrolled back to the end, and this
+    /// is the evidence. Its payload is the geometry and where (`screen`:
+    /// which view, `detail`: its rows, the session's role), not
+    /// MetricKit's JSON; the build's own UUID names the binary.
+    public static func scroll(_ g: Follow.Geometry, past: Double, screen: String, detail: [String: String], at: Date = Date(),
+                              appVersion: String, build: String, os: String, model: String, ownUUID: String?) -> AppAPI.AppReportAddParams {
+        let summary = "\(screen) at rest \(Int(past.rounded())) pt past its end"
+        var obj: [String: Any] = ["screen": screen, "past": past, "offset": g.offset, "visible": g.visible,
+                                  "content": g.content, "inset": g.inset, "top": g.top, "summary": summary]
+        for (k, v) in detail where obj[k] == nil { obj[k] = v }
+        let payload = (try? JSONSerialization.data(withJSONObject: obj, options: [.sortedKeys])).map { String(decoding: $0, as: UTF8.self) } ?? "{}"
+        return AppAPI.AppReportAddParams(kind: Kind.scroll.rawValue, time: at, appVersion: appVersion, build: build,
+                                         binaryUuid: ownUUID ?? "", os: os, model: model, summary: summary, payload: payload)
     }
 
     /// The UUID of the first frame of `executable` in a call stack tree.
@@ -253,6 +275,15 @@ public final class CrashReporter: NSObject, MXMetricManagerSubscriber, @unchecke
     public func flush() async {
         guard let s = lock.withLock({ senders.sorted { $0.key < $1.key }.first?.value }) else { return }
         await queue.flush(s)
+    }
+
+    /// Keeps a report of the app's own (a scroll guard's, T976) and
+    /// sends it when linked, as MetricKit's.
+    public func report(_ p: AppAPI.AppReportAddParams) {
+        Task {
+            await queue.add(p)
+            await flush()
+        }
     }
 
     public func didReceive(_ payloads: [MXDiagnosticPayload]) {
