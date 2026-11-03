@@ -32,7 +32,7 @@ func TestAfterCrossRefs(t *testing.T) {
 	}
 	b.Slug = "acme-web"
 	linked := string(b.Render())
-	if !strings.Contains(linked, "after: [[acme-web/tasks/T3|T3]], [[acme-web/tasks/T10|T10]], acme-api/T12, mini/acme-ios/T7\n") {
+	if !strings.Contains(linked, "after: [[acme-web/tasks/T3|T3]], [[acme-web/tasks/T10|T10]], [[acme-api/tasks/T12|acme-api/T12]], mini/acme-ios/T7\n") {
 		t.Fatalf("linked render:\n%s", linked)
 	}
 	// Round trip, and the form a later tm writes, a vault link with the
@@ -58,8 +58,9 @@ func TestAfterCrossRefs(t *testing.T) {
 	}
 }
 
-// TestSetPlanKeepsCrossRefs: tm writes no cross-project refs yet, and a
-// plan edit keeps the ones the file has.
+// TestSetPlanKeepsCrossRefs: without CrossRefs (programs off, or no
+// program) a plan edit writes no cross-project refs and keeps the ones
+// the file has.
 func TestSetPlanKeepsCrossRefs(t *testing.T) {
 	s, _ := newStore(t)
 	mustAdd(t, s, coord, NewTask{Title: "A"}, NewTask{Title: "B"})
@@ -80,6 +81,40 @@ func TestSetPlanKeepsCrossRefs(t *testing.T) {
 	tk, _ := s.Get(2)
 	if !slices.Equal(tk.After, []int{1}) || !slices.Equal(tk.AfterX, []string{"acme/T4"}) {
 		t.Fatalf("%v %v", tk.After, tk.AfterX)
+	}
+}
+
+// TestSetPlanCrossRefs: with CrossRefs a plan edit writes the whole
+// list, this board's refs and other projects', each cross ref checked
+// by the hook; a ref by this project's own slug is this board's.
+func TestSetPlanCrossRefs(t *testing.T) {
+	s, _ := newStore(t)
+	mustAdd(t, s, coord, NewTask{Title: "A"}, NewTask{Title: "B"})
+	var asked []string
+	s.CrossRefs = func(refs []string) error {
+		asked = append(asked, refs...)
+		for _, r := range refs {
+			if strings.HasPrefix(r, "other/") {
+				return &Error{Code: "not-member", Msg: r + " is not in the program"}
+			}
+		}
+		return nil
+	}
+	if _, err := s.SetPlan(coord, 2, nil, []string{"T1, acme-api/T12 " + s.Slug + "/T1"}); err != nil {
+		t.Fatal(err)
+	}
+	tk, _ := s.Get(2)
+	if !slices.Equal(tk.After, []int{1}) || !slices.Equal(tk.AfterX, []string{"acme-api/T12"}) || !slices.Equal(asked, []string{"acme-api/T12"}) {
+		t.Fatalf("%v %v asked %v", tk.After, tk.AfterX, asked)
+	}
+	if _, err := s.SetPlan(coord, 2, nil, []string{"other/T3"}); code(err) != "not-member" {
+		t.Fatalf("non-member: %v", err)
+	}
+	if _, err := s.SetPlan(coord, 2, nil, []string{"T1"}); err != nil {
+		t.Fatal(err)
+	}
+	if tk, _ = s.Get(2); len(tk.AfterX) != 0 {
+		t.Fatalf("the list replaces the cross refs too: %v", tk.AfterX)
 	}
 }
 

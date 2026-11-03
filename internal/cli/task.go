@@ -10,6 +10,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/mod"
+	"github.com/theclifmeister/terminatr/internal/program"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/thread"
@@ -33,6 +34,8 @@ const taskUsage = `usage: tm task <command> [--project <slug>] [--json]
                                 the coordinator, once the user decided not to do it;
                                 never counted as done; any other status reopens it
   edit T12 [--title "…"] [--notes "…" | --notes-file F] [--priority P] [--owner O] [--repo R] [--design NAME] [--after T10,T11]
+                                --after is the whole list; while programs are on, a member's
+                                task also takes its program's tasks (acme-api/T12)
   steps T12 add "text" | check N | uncheck N | rename N "text" | remove N
   archive T12 | unarchive T12
   delegate T12 [--agent A] [--model M] [--repo R] [--base B] [--approved-by-user] [--over-cap]
@@ -168,6 +171,12 @@ func runTask(e *Env, args []string) error {
 				}
 				if f.IsSet("after") {
 					al = []string{*after}
+					// Refs to other projects' tasks, while programs
+					// are on, within the project's program (§6.1).
+					cfg, _ := config.Load()
+					if s.CrossRefs = program.CrossRefs(cfg, p.Slug); s.CrossRefs == nil && strings.Contains(*after, "/") {
+						return e.done(res, program.NoCrossRefs(cfg, p.Slug), *asJSON, "edited")
+					}
 				}
 				changed := res.Changed
 				if res, err = s.SetPlan(e.Caller, id, dp, al); err != nil {
