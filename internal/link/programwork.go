@@ -515,6 +515,37 @@ func ProgramRenamed(c caller.Caller, from, to string) error {
 	return nil
 }
 
+// TellRenamed is the rename's hook for paired members
+// (rename.ProgramOptions.TellPaired): program from, renamed to to here,
+// tells each of paired ("<alias>/<slug>") its new name, as the user's
+// rename. It returns a note for each it couldn't tell (no invite
+// answered or waiting, or a server no longer paired); those keep naming
+// from until the user there re-joins.
+func TellRenamed(from, to string, paired []string) []string {
+	if err := ProgramRenamed(caller.Caller{Kind: caller.Human}, from, to); err != nil {
+		return []string{fmt.Sprintf("paired members not told of the new name: %v", err)}
+	}
+	told := map[string]bool{}
+	readStore(func(s *store) {
+		for _, r := range s.Invites {
+			if r.Out && r.Project == to && (r.State == ReqAccepted || r.Pending()) {
+				told[r.Peer] = true
+			}
+		}
+	})
+	var notes []string
+	for _, m := range paired {
+		alias, slug, ok := config.Remote(m)
+		if !ok {
+			continue
+		}
+		if _, err := remoteTo(alias, slug); err != nil || !told[m] {
+			notes = append(notes, fmt.Sprintf("%s not told of the new name %s: it has no membership here to tell (invite it again from the program's settings)", Shown(m), to))
+		}
+	}
+	return notes
+}
+
 // --- what arrives ---
 
 // childOf is the project here that program prog on the server alias

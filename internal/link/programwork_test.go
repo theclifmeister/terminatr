@@ -407,8 +407,8 @@ func TestProgramRename(t *testing.T) {
 		if err := os.Rename(filepath.Join(root, "apps"), filepath.Join(root, "mobile")); err != nil {
 			t.Fatal(err)
 		}
-		if err := ProgramRenamed(userHere, "apps", "mobile"); err != nil {
-			t.Fatal(err)
+		if notes := TellRenamed("apps", "mobile", []string{"mini/api", "mini/never"}); len(notes) != 1 || !strings.Contains(notes[0], "mini/never not told") {
+			t.Fatalf("notes %q", notes)
 		}
 		if r := inviteIn(t, "mobile"); r.Peer != "mini/api" {
 			t.Fatalf("invite after rename %+v", r)
