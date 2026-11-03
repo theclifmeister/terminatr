@@ -27,24 +27,67 @@ import (
 // programNeeds is program.needs': the human's for any program, a
 // director's for its own; programs-off while programs are off.
 func (s *Server) programNeeds(p proto.ProgramNeedsParams, cc callCtx) (any, *proto.Error) {
-	c := cc.who()
-	if c.IsAgent() {
-		switch {
-		case c.Kind != caller.Director:
-			return nil, proto.Errorf("director-only", "program.needs is a program's director's (and the human's)")
-		case p.Program != "" && p.Program != c.Project:
-			return nil, proto.Errorf("other-program", "a director reads only its own program's needs")
-		}
-		p.Program = c.Project
-	}
-	if p.Program == "" {
-		return nil, proto.Errorf(proto.ErrBadParams, "program.needs needs the program")
+	p, perr := needsCaller(p, cc)
+	if perr != nil {
+		return nil, perr
 	}
 	res, perr := s.rolledUpNeeds(p.Program)
 	if perr != nil {
 		return nil, perr
 	}
 	return res, nil
+}
+
+// programNeedsOpen is program.needs.open's: the director's session is
+// stamped, so a console that shows its pane opens the program's needs
+// dialog over it for the user, who answers there. Nothing waiting
+// stamps nothing.
+func (s *Server) programNeedsOpen(p proto.ProgramNeedsParams, cc callCtx) (any, *proto.Error) {
+	p, perr := needsCaller(p, cc)
+	if perr != nil {
+		return nil, perr
+	}
+	res, perr := s.rolledUpNeeds(p.Program)
+	if perr != nil {
+		return nil, perr
+	}
+	out := proto.ProgramNeedsOpenResult{Waiting: len(res.Needs)}
+	for _, m := range res.Members {
+		out.Waiting += m.Count
+	}
+	for _, si := range s.list().Sessions {
+		if si.Role == proto.RoleDirector && si.Project == p.Program {
+			out.Session = si.ID
+			break
+		}
+	}
+	if out.Session == "" {
+		return nil, proto.Errorf("not-running", "program %s's director isn't running: the dialog opens over its pane (tm program open %s)", p.Program, p.Program)
+	}
+	if out.Waiting > 0 {
+		s.needsOpen.Store(out.Session, time.Now().UTC())
+		s.watch.wake()
+	}
+	return out, nil
+}
+
+// needsCaller is p for caller cc: the human's for any program, a
+// director's for its own (named or not); others are refused.
+func needsCaller(p proto.ProgramNeedsParams, cc callCtx) (proto.ProgramNeedsParams, *proto.Error) {
+	c := cc.who()
+	if c.IsAgent() {
+		switch {
+		case c.Kind != caller.Director:
+			return p, proto.Errorf("director-only", "program.needs is a program's director's (and the human's)")
+		case p.Program != "" && p.Program != c.Project:
+			return p, proto.Errorf("other-program", "a director reads only its own program's needs")
+		}
+		p.Program = c.Project
+	}
+	if p.Program == "" {
+		return p, proto.Errorf(proto.ErrBadParams, "program.needs needs the program")
+	}
+	return p, nil
 }
 
 // rolledUpNeeds is program slug's Needs you now, refused as

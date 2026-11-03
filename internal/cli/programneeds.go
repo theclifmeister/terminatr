@@ -11,10 +11,12 @@ import (
 
 // programNeeds prints tm program needs: the program's rolled-up Needs
 // you (the programs design §7.1), as tm's server ranks it; a director
-// its own program's, the human any program's. Read only.
+// its own program's, the human any program's. Read only; --open has the
+// consoles open the program's needs dialog over the director's pane for
+// the user (§7.3), which the director never fills.
 func programNeeds(e *Env, args []string) error {
 	f := newFlags()
-	asJSON := f.Bool("json")
+	asJSON, open := f.Bool("json"), f.Bool("open")
 	pos, err := f.Parse(args)
 	if err != nil {
 		return err
@@ -34,6 +36,21 @@ func programNeeds(e *Env, args []string) error {
 		return err
 	}
 	defer c.Close()
+	if *open {
+		var res proto.ProgramNeedsOpenResult
+		if err := c.Call(proto.MethodProgramNeedsOpen, proto.ProgramNeedsParams{Program: slug}, &res); err != nil {
+			return err
+		}
+		if *asJSON {
+			return e.printJSON(res)
+		}
+		if res.Waiting == 0 {
+			_, err = fmt.Fprintf(e.Stdout, "nothing waits on the user in %s: no dialog opened\n", slug)
+			return err
+		}
+		_, err = fmt.Fprintf(e.Stdout, "asked: the program's needs dialog opens over the director's pane for the user (%d waiting); they answer it there, not you\n", res.Waiting)
+		return err
+	}
 	var res proto.ProgramNeedsResult
 	if err := c.Call(proto.MethodProgramNeeds, proto.ProgramNeedsParams{Program: slug}, &res); err != nil {
 		return err

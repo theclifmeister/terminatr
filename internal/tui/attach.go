@@ -390,6 +390,9 @@ type client struct {
 	// (offerQuestion): its session, its time and the question's place,
 	// so closing it doesn't open it again.
 	askedKey string
+	// needsKey names the program needs dialog last opened for a
+	// director's pane (offerNeeds): its session and the time it asked.
+	needsKey string
 
 	// The mouse (attachmouse.go): the open menu and the status bar's
 	// buttons, by column from its start.
@@ -2657,6 +2660,7 @@ func (c *client) applyPoll(pl *polled, now time.Time) bool {
 	if c.offerQuestion() {
 		changed = true
 	}
+	needs := c.offerNeeds()
 	if cells := newModCells(res.Mods, res.Sessions); !reflect.DeepEqual(cells, c.cells) {
 		c.cells, changed = cells, true
 	}
@@ -2684,6 +2688,9 @@ func (c *client) applyPoll(pl *polled, now time.Time) bool {
 	c.mu.Unlock()
 	if draw {
 		c.poke()
+	}
+	if needs != "" {
+		c.programNeedsOver(needs)
 	}
 	return draw
 }

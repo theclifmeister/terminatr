@@ -67,3 +67,32 @@ func TestProgramNeedsOver(t *testing.T) {
 		t.Fatalf("top %T %+v", m.top(), m.top())
 	}
 }
+
+// TestOfferNeeds: a director's pane asked to open its program's needs
+// dialog (tm program needs --open) opens it once; an old request, a
+// coordinator's pane or an open menu doesn't.
+func TestOfferNeeds(t *testing.T) {
+	now := time.Now()
+	dir := proto.SessionInfo{ID: "s-d", Role: proto.RoleDirector, Project: "acme", NeedsOpen: now}
+	c := &client{focus: &pane{info: dir}}
+	if got := c.offerNeeds(); got != "acme" {
+		t.Fatalf("offer %q", got)
+	}
+	if got := c.offerNeeds(); got != "" {
+		t.Errorf("again: %q", got)
+	}
+	c.focus.info.NeedsOpen = now.Add(time.Second)
+	c.menu = &amenu{}
+	if got := c.offerNeeds(); got != "" {
+		t.Errorf("over a menu: %q", got)
+	}
+	c.menu = nil
+	if got := c.offerNeeds(); got != "acme" {
+		t.Errorf("a new request: %q", got)
+	}
+	old := &client{focus: &pane{info: proto.SessionInfo{ID: "s-d", Role: proto.RoleDirector, Project: "acme", NeedsOpen: now.Add(-time.Hour)}}}
+	coord := &client{focus: &pane{info: proto.SessionInfo{ID: "s-c", Role: proto.RoleCoordinator, Project: "api", NeedsOpen: now}}}
+	if old.offerNeeds() != "" || coord.offerNeeds() != "" {
+		t.Error("an old request, or a coordinator's pane, opened it")
+	}
+}

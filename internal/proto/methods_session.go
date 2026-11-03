@@ -213,6 +213,10 @@ type SessionInfo struct {
 	// Question is tm's own question open on the session (an approved
 	// command that asks first, docs/SPEC.md §3.3); nil without one.
 	Question *Question `json:"question,omitempty"`
+	// NeedsOpen is when a director last asked the consoles to open its
+	// program's needs dialog for the user (program.needs.open): a
+	// console showing its pane opens it once, while it is recent.
+	NeedsOpen time.Time `json:"needs_open,omitzero"`
 	// Context is how many tokens the agent's latest turn read as context
 	// (input and cache, not the running total), ContextWindow the window
 	// of its model, both as the agent's hooks or transcript report them;

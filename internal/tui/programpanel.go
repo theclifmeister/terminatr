@@ -189,3 +189,30 @@ func (c *client) programNeedsOver(slug string) {
 	c.kb = areaMain
 	c.goOver(&Over{Key: thenProgramNeeds, Project: slug})
 }
+
+// needsOpenFor is how long a director's request to open its program's
+// needs dialog (SessionInfo.NeedsOpen) stays one: a console that comes
+// to its pane later doesn't open an old one.
+const needsOpenFor = 2 * time.Minute
+
+// offerNeeds is the program whose needs dialog to open over the focused
+// pane: a director's that asked for it (tm program needs --open) since
+// this console last opened it, recently, with no menu, dialog or
+// confirm open; "" for none. The caller opens it once c.mu is
+// released (programNeedsOver). c.mu held.
+func (c *client) offerNeeds() string {
+	p := c.focus
+	if p == nil || c.menu != nil || c.dialog != nil || c.confirm != nil {
+		return ""
+	}
+	at := p.info.NeedsOpen
+	if p.info.Role != proto.RoleDirector || p.info.Server != "" || at.IsZero() || time.Since(at) > needsOpenFor {
+		return ""
+	}
+	key := fmt.Sprintf("%s %d", p.info.ID, at.UnixNano())
+	if c.needsKey == key {
+		return ""
+	}
+	c.needsKey = key
+	return p.info.Project
+}
