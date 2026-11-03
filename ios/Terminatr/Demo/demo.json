@@ -2588,6 +2588,25 @@
     {
      "agent": "claude",
      "clients": 1,
+     "cols": 120,
+     "context": 52000,
+     "context_window": 200000,
+     "created": "2026-10-27T07:30:00Z",
+     "current": "",
+     "id": "s-d1",
+     "model": "opus",
+     "project": "acme",
+     "reason": "",
+     "role": "director",
+     "rows": 36,
+     "state": "idle",
+     "task": "",
+     "thread": "",
+     "title": ""
+    },
+    {
+     "agent": "claude",
+     "clients": 1,
      "cols": 72,
      "context": 62000,
      "context_window": 200000,
@@ -2743,7 +2762,7 @@
   }
  },
  "hello": {
-  "app_api": 45,
+  "app_api": 46,
   "build": "demo",
   "capabilities": [
    "read",
@@ -3764,6 +3783,80 @@
     "status": {
      "agent": "claude",
      "state": "ok"
+    }
+   }
+  },
+  "s-d1": {
+   "events": [
+    {
+     "event": "transcript.reset",
+     "data": {
+      "status": {
+       "agent": "claude",
+       "state": "mapped"
+      },
+      "items": [
+       {
+        "kind": "note",
+        "text": "Director started"
+       },
+       {
+        "at": "2026-10-27T08:40:00Z",
+        "kind": "prompt",
+        "text": "Where does the new shop stand across both projects?"
+       },
+       {
+        "call": "d1",
+        "kind": "tool",
+        "text": "acme-web TASKS.md",
+        "tool": "Read"
+       },
+       {
+        "call": "d2",
+        "kind": "tool",
+        "text": "tm program needs acme",
+        "tool": "Bash"
+       },
+       {
+        "at": "2026-10-27T08:41:00Z",
+        "kind": "text",
+        "text": "**T3 Gift cards end to end** is the umbrella that matters this week:\n\n- **acme-web** builds the checkout side (T18), ready to start once you say so.\n- **acme-api** on studio has the balance endpoint in review.\n\nNothing blocks the beta yet. I'd start T18 next; acme-web has a free thread."
+       },
+       {
+        "at": "2026-10-27T08:43:00Z",
+        "kind": "prompt",
+        "text": "Go ahead with T18, and keep the API's review in front of me."
+       },
+       {
+        "at": "2026-10-27T08:43:30Z",
+        "kind": "text",
+        "text": "Proposed T18 to acme-web's coordinator for you to start, and I'll bring the acme-api review to your Needs you as soon as it's ready."
+       }
+      ]
+     }
+    }
+   ],
+   "result": {
+    "session": {
+     "agent": "claude",
+     "clients": 1,
+     "cols": 120,
+     "created": "2026-10-27T07:30:00Z",
+     "current": "",
+     "id": "s-d1",
+     "model": "opus",
+     "project": "acme",
+     "reason": "",
+     "role": "director",
+     "rows": 36,
+     "state": "idle",
+     "task": "",
+     "thread": "",
+     "title": ""
+    },
+    "status": {
+     "agent": "claude",
+     "state": "mapped"
     }
    }
   }

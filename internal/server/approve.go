@@ -10,6 +10,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/program"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/textsafe"
@@ -101,7 +102,7 @@ func (s *Server) approve(p proto.SessionApproveParams, cc callCtx) (any, *proto.
 	if scope == agent.ScopeSession {
 		detail += " (for this session)"
 	}
-	s.journalIn(info.Project, who, "thread.approve", ref, textsafe.Line(detail, 160))
+	s.journalSession(info, who, "thread.approve", ref, textsafe.Line(detail, 160))
 	s.watch.wake()
 	return res, nil
 }
@@ -145,6 +146,36 @@ func coordinatorApproves(slug string) *proto.Error {
 		return proto.Errorf("human-only", "coordinator_approves = false: the user answers project %s's prompts", slug)
 	}
 	return nil
+}
+
+// sessionDir is the folder of session info's project: its program's
+// for a director (whose Project is the program's slug), "" for a
+// session in none.
+func sessionDir(info proto.SessionInfo) (string, error) {
+	switch {
+	case info.Project == "":
+		return "", nil
+	case info.Role == proto.RoleDirector:
+		return program.Dir(info.Project)
+	}
+	return project.Dir(info.Project)
+}
+
+// journalSession journals action on session info in its project's
+// journal, or its program's for a director.
+func (s *Server) journalSession(info proto.SessionInfo, who caller.Caller, action, ref, detail string) {
+	if info.Role != proto.RoleDirector {
+		s.journalIn(info.Project, who, action, ref, detail)
+		return
+	}
+	dir, err := sessionDir(info)
+	if err == nil {
+		f := project.Folder{Slug: info.Project, Dir: dir, Kind: project.KindProgram}
+		err = f.Journal(who, action, ref, detail)
+	}
+	if err != nil {
+		s.log.Printf("program %s: journal: %v", info.Project, err)
+	}
 }
 
 // journalIn journals action in project slug's journal, when the session

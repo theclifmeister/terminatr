@@ -194,7 +194,7 @@ struct PhoneComposer: View {
         if attaches, let n = model.tray(ref).note { return (n, true) }
         if let said { return said }
         if !held.isEmpty { return ("Queue held: \(held)", true) }
-        if focused, !ref.isCoordinator, !ref.isRemote { return ("Sending takes the thread over", false) }
+        if focused, !ref.thread.isEmpty, !ref.isRemote { return ("Sending takes the thread over", false) }
         return nil
     }
 

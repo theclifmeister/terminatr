@@ -50,6 +50,17 @@ private func hello(_ api: Int, _ tm: String) -> AppAPI.Hello {
     #expect(!Compatibility.opensDirector(h))
 }
 
+@Test func directorFilesNeedAPI46() {
+    var h = hello(45, "v0.75.0")
+    h.methods = [AppAPI.Methods.sessionUpload.name]
+    #expect(Compatibility.takesFiles(h, for: SessionRef(project: "demo")))
+    #expect(!Compatibility.takesFiles(h, for: .director("acme")))
+    h.appApi = 46
+    #expect(Compatibility.takesFiles(h, for: .director("acme")))
+    h.methods = []
+    #expect(!Compatibility.takesFiles(h, for: .director("acme")))
+}
+
 @Test func compatibilityByRelease() {
     let api = AppAPI.version
     #expect(Compatibility.check(hello(api, "v0.54.0"), appVersion: "0.54.0") == .ok)

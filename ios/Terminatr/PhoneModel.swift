@@ -672,7 +672,7 @@ final class PhoneModel {
     /// Whether the composer takes files for ref's session (session.upload,
     /// app API 15, at the write level): this server's sessions only.
     func attaches(_ ref: SessionRef) -> Bool {
-        !ref.isRemote && hello.map(Compatibility.takesFiles) == true && can(AppAPI.Methods.sessionUpload.name)
+        !ref.isRemote && hello.map { Compatibility.takesFiles($0, for: ref) } == true && can(AppAPI.Methods.sessionUpload.name)
     }
 
     /// ref's composer files, sent in phone-sized chunks to whichever
@@ -761,14 +761,14 @@ final class PhoneModel {
     }
 
     /// Takes a session list: the sessions, the hint, and each Save &
-    /// Clear moved on from its coordinator.
+    /// Clear moved on from its coordinator or director.
     private func listed(_ l: AppAPI.SessionList) {
         sessions = l.sessions
         contextHint = l.contextHint
         let now = Date.now
-        for (p, var c) in clears {
-            c.follow(coordinatorSession(p), at: now)
-            clears[p] = c.over(at: now) ? nil : c
+        for (k, var c) in clears {
+            c.follow(clearedSession(k), at: now)
+            clears[k] = c.over(at: now) ? nil : c
         }
     }
 
@@ -783,23 +783,42 @@ final class PhoneModel {
     /// thread's only when nearly full; a paired server's none.
     func context(_ ref: SessionRef) -> ContextUse? {
         guard !ref.isRemote else { return nil }
-        if ref.isCoordinator { return ContextUse.of(coordinatorSession(ref.project), hint: contextHint) }
+        if ref.isCoordinator || ref.director { return ContextUse.of(leadSession(ref), hint: contextHint) }
         return sessionID(ref).flatMap { id in ContextUse.of(sessions.first { $0.id == id }, hint: 0) }
     }
 
-    /// Saves and clears project's coordinator (coordinator.clear), as
-    /// tm clear does, and follows it in clears.
-    func saveClear(_ project: String) async {
-        guard clears[project]?.running != true else { return }
-        var c = SaveClear(coordinator: coordinatorSession(project), at: .now)
-        clears[project] = c
+    /// The key ref's Save & Clear is followed by in clears: its
+    /// project's slug, "director:<slug>" for a program's director (T973).
+    static func clearKey(_ ref: SessionRef) -> String {
+        ref.director ? "director:" + ref.project : ref.project
+    }
+
+    /// The session a Save & Clear keyed key follows.
+    private func clearedSession(_ key: String) -> AppAPI.Session? {
+        key.hasPrefix("director:") ? directorSession(String(key.dropFirst("director:".count))) : coordinatorSession(key)
+    }
+
+    /// Saves and clears ref's coordinator, or its program's director
+    /// (coordinator.clear's program), as tm clear does, and follows it
+    /// in clears.
+    func saveClear(_ ref: SessionRef) async {
+        let key = Self.clearKey(ref)
+        guard clears[key]?.running != true else { return }
+        var c = SaveClear(coordinator: clearedSession(key), at: .now)
+        clears[key] = c
         do {
-            _ = try await connected().call(AppAPI.Methods.coordinatorClear, AppAPI.CoordinatorClearParams(project: project))
+            let p = ref.director ? AppAPI.CoordinatorClearParams(program: ref.project) : AppAPI.CoordinatorClearParams(project: ref.project)
+            _ = try await connected().call(AppAPI.Methods.coordinatorClear, p)
             c.asked()
         } catch {
             c.fail(NeedActs.words(error) ?? error.localizedDescription, at: .now)
         }
-        clears[project] = c
+        clears[key] = c
+    }
+
+    /// The coordinator or director session ref names, while one runs.
+    func leadSession(_ ref: SessionRef) -> AppAPI.Session? {
+        ref.director ? directorSession(ref.project) : ref.isCoordinator ? coordinatorSession(ref.project) : nil
     }
 
     /// The paired server's name, for the screens to say; when another
@@ -814,6 +833,11 @@ final class PhoneModel {
 
     func coordinatorSession(_ project: String) -> AppAPI.Session? {
         sessions.first { $0.role == "coordinator" && $0.project == project && $0.server.isEmpty }
+    }
+
+    /// Program slug's director's session, while one runs.
+    func directorSession(_ slug: String) -> AppAPI.Session? {
+        sessions.first { $0.role == "director" && $0.project == slug && $0.server.isEmpty }
     }
 
     func session(_ t: AppAPI.Thread) -> AppAPI.Session? {
@@ -849,28 +873,34 @@ final class PhoneModel {
         RemotePane.of(caps: caps, peer: peers.first { $0.alias == ref.server }, alias: ref.server)
     }
 
-    /// A ref's title: its thread's, else "Coordinator".
+    /// A ref's title: its thread's, else "Coordinator" or "Director".
     func title(_ ref: SessionRef) -> String {
+        if ref.director { return "Director" }
         if ref.isCoordinator { return "Coordinator" }
         return project(ref.project)?.threads.first { $0.record.id == ref.thread }?.record.title ?? ref.thread
     }
 
     /// A ref's thread as it is named: its task's ref ("T14"), else its id.
     func tag(_ ref: SessionRef) -> String {
+        if ref.director { return "the director" }
         if ref.isCoordinator { return "the coordinator" }
         if ref.isRemote { return ref.thread }
         return project(ref.project)?.threads.first { $0.record.id == ref.thread }?.task?.ref ?? ref.thread
     }
 
     /// Where a ref's session is, under its title (T848): "T14 · acme-web",
-    /// a coordinator's project, and a paired server's alias after.
+    /// a coordinator's project, a director's program, and a paired
+    /// server's alias after.
     func place(_ ref: SessionRef) -> String {
-        [ref.isCoordinator ? "" : tag(ref), ref.project, ref.server].filter { !$0.isEmpty }.joined(separator: " · ")
+        [ref.thread.isEmpty ? "" : tag(ref), ref.project, ref.server].filter { !$0.isEmpty }.joined(separator: " · ")
     }
 
     /// A ref's state, as its row says it: its pill in the header.
     func attention(_ ref: SessionRef) -> Attention? {
         if ref.isRemote { return Attention.of(peer: ref.session(in: peers)) }
+        if ref.director {
+            return Attention.of(director: directorSession(ref.project), questions: program(ref.project)?.questions ?? 0)
+        }
         guard let p = project(ref.project) else { return nil }
         if ref.isCoordinator { return Attention.of(coordinator: coordinatorSession(ref.project), in: p) }
         return p.threads.first { $0.record.id == ref.thread }.map(attention)

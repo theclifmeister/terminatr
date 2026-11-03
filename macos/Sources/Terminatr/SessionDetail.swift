@@ -43,15 +43,19 @@ struct SessionDetail: View {
         .onChange(of: active, initial: true) { _, a in app.shown(model.ref, inFront: a == .key) }
         .onDisappear { app.shown(model.ref, inFront: false) }
         .toolbar {
-            // A running coordinator's save and clear, as the TUI's
-            // prefix+C (app API 13); its context use says when.
-            if model.ref.isCoordinator, !model.ref.isRemote, model.sessionID != nil, app.controlsProjects {
+            // A running coordinator's or director's save and clear, as
+            // the TUI's prefix+C (app API 13; a director's 44); its
+            // context use says when.
+            if model.ref.isCoordinator || model.ref.director, !model.ref.isRemote, model.sessionID != nil, app.controlsProjects {
                 ToolbarItem(placement: .primaryAction) {
                     let ctx = ContextUse.of(session, hint: app.contextHint)
-                    Button { app.ask(.saveClear(project: model.ref.project)) } label: {
+                    let who = model.ref.director ? "the director" : "the coordinator"
+                    Button {
+                        app.ask(model.ref.director ? .saveClearDirector(program: model.ref.project) : .saveClear(project: model.ref.project))
+                    } label: {
                         Label("Save & Clear", systemImage: "eraser")
                     }
-                    .help(["Save & Clear: the coordinator saves what it learned, then its conversation is cleared, as tm clear does",
+                    .help(["Save & Clear: \(who) saves what it learned, then its conversation is cleared, as tm clear does",
                            ctx.map { "(\($0.spoken))" }].compactMap { $0 }.joined(separator: " "))
                 }
             }

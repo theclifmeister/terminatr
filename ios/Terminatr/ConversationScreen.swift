@@ -61,9 +61,15 @@ struct ConversationScreen: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 12) {
                     if id == nil {
-                        ContentUnavailableView("No session runs", systemImage: "moon.zzz",
-                                               description: Text("Its conversation shows while a session runs it."))
-                            .padding(.top, 60)
+                        if ref.director {
+                            ContentUnavailableView("The director isn't running", systemImage: "moon.zzz",
+                                                   description: Text(DirectorStart.words))
+                                .padding(.top, 60)
+                        } else {
+                            ContentUnavailableView("No session runs", systemImage: "moon.zzz",
+                                                   description: Text("Its conversation shows while a session runs it."))
+                                .padding(.top, 60)
+                        }
                     }
                     if let failure { Failure(text: failure) }
                     if pages, !transcript.before.isEmpty, let id { earlier(id) }

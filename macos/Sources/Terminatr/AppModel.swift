@@ -118,10 +118,10 @@ final class AppModel {
     /// Whether the first-run sheet shows (FirstRun; Help › Getting
     /// Started shows it again).
     var welcome = false
-    /// Whether this tm takes files for a prompt (session.upload, app API
-    /// 15).
-    var canAttach: Bool {
-        if case .connected(let h) = phase { return Compatibility.takesFiles(h) }
+    /// Whether this tm takes files for a prompt to ref's session
+    /// (session.upload, app API 15; a director's from app API 46).
+    func attaches(_ ref: SessionRef) -> Bool {
+        if case .connected(let h) = phase { return !ref.isRemote && Compatibility.takesFiles(h, for: ref) }
         return false
     }
 
@@ -1024,6 +1024,8 @@ final class AppModel {
                 switch a {
                 case .saveClear(let p):
                     _ = try await connected().call(AppAPI.Methods.coordinatorClear, AppAPI.CoordinatorClearParams(project: p))
+                case .saveClearDirector(let g):
+                    _ = try await connected().call(AppAPI.Methods.coordinatorClear, AppAPI.CoordinatorClearParams(program: g))
                 case .activate(let p), .deactivate(let p, _):
                     let on: Bool
                     if case .activate = a { on = true } else { on = false }

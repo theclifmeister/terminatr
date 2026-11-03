@@ -2,7 +2,7 @@ import SwiftUI
 import TerminatrKit
 import TerminatrUI
 
-/// A coordinator or thread (T840): its conversation or its terminal,
+/// A coordinator, a program's director (T973) or a thread (T840): its conversation or its terminal,
 /// as the Mac's session window switches them (SessionTab). Its header
 /// (T848) is the bar's, glass: the back button, the title with where it
 /// is, its state's pill and its context use (SessionTitle), a
@@ -33,7 +33,7 @@ struct SessionScreen: View {
             }
         }
         .safeAreaInset(edge: .top) {
-            if ref.isCoordinator, !ref.isRemote, let clear = model.clears[ref.project] {
+            if ref.isCoordinator || ref.director, !ref.isRemote, let clear = model.clears[PhoneModel.clearKey(ref)] {
                 SaveClearStatus(clear: clear).padding(.top, Spacing.tight)
             }
         }
@@ -43,14 +43,14 @@ struct SessionScreen: View {
             ToolbarItem(placement: .principal) {
                 SessionTitle(model.title(ref), place: model.place(ref), state: model.attention(ref), context: model.context(ref))
             }
-            if ref.isCoordinator, !ref.isRemote, model.clearsCoordinators, model.coordinatorSession(ref.project) != nil {
+            if ref.isCoordinator || ref.director, !ref.isRemote, model.clearsCoordinators, model.leadSession(ref) != nil {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
-                        SaveClearButton(project: ref.project, asking: $clearing)
+                        SaveClearButton(ref: ref, asking: $clearing)
                     } label: {
-                        Label("Coordinator", systemImage: "ellipsis")
+                        Label(model.title(ref), systemImage: "ellipsis")
                     }
-                    .accessibilityLabel("Coordinator actions")
+                    .accessibilityLabel("\(model.title(ref)) actions")
                 }
                 if #available(iOS 26, *) {
                     ToolbarSpacer(.fixed, placement: .topBarTrailing)
@@ -77,7 +77,7 @@ struct SessionScreen: View {
             }
         }
         .toolbar(width == .compact ? .hidden : .automatic, for: .tabBar)
-        .asksSaveClear(ref.project, isPresented: $clearing)
+        .asksSaveClear(ref, isPresented: $clearing)
         .kept($tab, "tab \(ref)")
         .environment(\.showTerminal, ShowTerminal { tab = .terminal })
     }

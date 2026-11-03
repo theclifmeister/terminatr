@@ -114,17 +114,9 @@ func (s *Server) journalAnswer(p proto.SessionAnswerParams, c caller.Caller) {
 	if perr != nil {
 		return
 	}
-	slug := sess.Info().Project
-	if slug == "" {
-		return
+	q := p.Question
+	if q == "" {
+		q = fmt.Sprintf("question %d", p.Index+1)
 	}
-	if pr, err := project.Open(slug); err == nil {
-		q := p.Question
-		if q == "" {
-			q = fmt.Sprintf("question %d", p.Index+1)
-		}
-		if err := pr.Journal(c, "session.answer", p.ID, q+" → "+p.Answer); err != nil {
-			s.log.Printf("journal: %v", err)
-		}
-	}
+	s.journalSession(sess.Info(), c, "session.answer", p.ID, q+" → "+p.Answer)
 }
