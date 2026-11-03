@@ -697,19 +697,19 @@ func (sr safetyRows) projectOnlyRows() []setting {
 				}
 				return m.lifecycle(slug, verb)
 			}},
-		{label: "Archive", help: "Hide the project from the sidebar, and stop all background work for it; tm project unarchive brings it back. Not while its coordinator or threads run. Asks first.",
+		{label: "Archive", help: "Hide the project from the sidebar, and stop all background work for it; tm project unarchive brings it back. Not while its coordinator or threads run. A program's member leaves the program. Asks first.",
 			value: func(m *dash) string { return "enter archives" },
 			change: func(m *dash) tea.Cmd {
-				m.confirmNo("Archive "+slug, "Archive "+slug+"? It leaves the sidebar, and nothing runs for it until tm project unarchive "+slug+".", "not archived", func() tea.Cmd {
+				m.confirmNo("Archive "+slug, "Archive "+slug+"? It leaves the sidebar, and nothing runs for it until tm project unarchive "+slug+"."+LeavesProgram(slug), "not archived", func() tea.Cmd {
 					m.pop() // the project popup
 					return m.lifecycle(slug, "archive")
 				})
 				return nil
 			}},
-		{label: "Delete", help: "Move the project's folder to the trash; its worktrees and branches stay. Not while its coordinator or threads run. Asks first.",
+		{label: "Delete", help: "Move the project's folder to the trash; its worktrees and branches stay. Not while its coordinator or threads run. A program's member leaves the program. Asks first.",
 			value: func(m *dash) string { return "enter deletes" },
 			change: func(m *dash) tea.Cmd {
-				m.confirmNo("Delete "+slug, "Delete "+slug+"? Its folder (tasks, memory, threads' reports) moves to the trash; its worktrees and branches stay.", "not deleted", func() tea.Cmd {
+				m.confirmNo("Delete "+slug, "Delete "+slug+"? Its folder (tasks, memory, threads' reports) moves to the trash; its worktrees and branches stay."+LeavesProgram(slug), "not deleted", func() tea.Cmd {
 					m.pop() // the project popup
 					return m.lifecycle(slug, "delete")
 				})

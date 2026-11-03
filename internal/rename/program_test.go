@@ -123,3 +123,22 @@ func TestRenameProgram(t *testing.T) {
 		t.Errorf("journal:\n%s", j)
 	}
 }
+
+// TestRenameProgramTellsPaired: with TellPaired set, a program with
+// paired members is renamed and their servers told, in order; its notes
+// are the rename's.
+func TestRenameProgramTellsPaired(t *testing.T) {
+	programSetup(t, "[programs.acme]\nprojects = [\"demo\", \"mini/ios\", \"lab/api\"]\n")
+	var told []string
+	o := ProgramOptions{From: "acme", To: "studio", Caller: human, TellPaired: func(from, to string, paired []string) []string {
+		told = append([]string{from, to}, paired...)
+		return []string{"lab didn't answer"}
+	}}
+	res, err := Program(o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(told, []string{"acme", "studio", "mini/ios", "lab/api"}) || !slices.Equal(res.Notes, []string{"lab didn't answer"}) {
+		t.Errorf("told %v, notes %v", told, res.Notes)
+	}
+}

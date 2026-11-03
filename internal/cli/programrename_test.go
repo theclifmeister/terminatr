@@ -35,3 +35,28 @@ func TestProgramRename(t *testing.T) {
 		t.Errorf("an off rename moved it: %v", err)
 	}
 }
+
+// TestArchiveDeleteMember (the programs design §3.4): archiving a
+// program's member asks first (--yes off a terminal) and takes it out
+// of the program, as deleting one does; a project in no program is
+// archived without asking.
+func TestArchiveDeleteMember(t *testing.T) {
+	h, _ := programHarness(t)
+	h.expect(2, "takes it out of program acme: confirm with --yes", human, "project", "archive", "demo")
+	if cfg, _ := config.Load(); cfg.ProgramOf("demo") != "acme" {
+		t.Fatal("an unconfirmed archive took demo out")
+	}
+	if out := h.ok(human, "project", "archive", "demo", "--yes"); !strings.Contains(out, "it left program acme") {
+		t.Errorf("archive:\n%s", out)
+	}
+	if out := h.ok(human, "project", "delete", "web", "--yes"); !strings.Contains(out, "it left program acme") {
+		t.Errorf("delete:\n%s", out)
+	}
+	cfg, _ := config.Load()
+	if g, _ := cfg.Program("acme"); len(g.Projects) != 0 {
+		t.Errorf("acme still lists %v", g.Projects)
+	}
+	if out := h.ok(human, "project", "archive", "loner"); strings.Contains(out, "program") {
+		t.Errorf("loner:\n%s", out)
+	}
+}

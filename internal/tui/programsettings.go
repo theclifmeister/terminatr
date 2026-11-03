@@ -19,7 +19,8 @@ import (
 // director's sidebar row (its menu, or prefix+a with the sidebar's
 // cursor on the row). Delegate gains reach, so it asks first; back to
 // propose is one key. Members on paired servers are listed and kept as
-// they are: inviting one comes with B14.
+// they are: inviting one comes with B14. Rename and Delete end the
+// list, the user's too (the programs design §3.4).
 
 // programView is program slug's settings popup.
 type programView struct {
@@ -166,7 +167,49 @@ func programSettings(slug string) []setting {
 		toggle("Answer facts", "answer_facts", "The director passes settled facts (merged, released, decided by you) from one project to another without asking, citing where they come from. Decisions always come to you.", func(p config.Program) bool { return p.AnswerFacts }),
 		toggle("Search projects", "search_children", "The director may search its projects' histories, as a thread sees them: never their inbox or coordinator notes.", func(p config.Program) bool { return p.SearchChildren }),
 		toggle("Paused", "paused", "The director keeps running, but routing tasks and starting threads are refused until you resume.", func(p config.Program) bool { return p.Paused }),
+		{label: "Rename", help: "Give the program a new name: its folder, its settings, the links into it and its projects' references to it follow. A running director is stopped and started again under the new name.",
+			value:  func(m *dash) string { return "enter renames" },
+			change: func(m *dash) tea.Cmd { m.renameProgram(slug); return nil }},
+		{label: "Delete", help: "Move the program's folder to the trash and its settings out of the settings file. Its projects stay as they are, out of the program. Not while its director runs. Asks first.",
+			value: func(m *dash) string { return "enter deletes" },
+			change: func(m *dash) tea.Cmd {
+				m.confirmNo("Delete program "+slug, "Delete program "+slug+"? Its folder (umbrella tasks, memory, journal) moves to the trash and its settings leave the settings file; its projects stay as they are, out of the program.", "not deleted", func() tea.Cmd {
+					m.pop() // the program popup
+					src := m.src
+					return m.act(func() actionMsg {
+						msg, err := src.DeleteProgram(slug)
+						return actionMsg{msg: msg, err: err}
+					})
+				})
+				return nil
+			}},
 	}
+}
+
+// renameProgram asks for program slug's new name and renames it, as tm
+// program rename does.
+func (m *dash) renameProgram(slug string) {
+	m.push(&inputView{title: "Rename " + slug, lineEdit: newLine(slug), max: 64, cancel: slug + " keeps its name",
+		label: "The program's new name (a-z, 0-9 and -), not a project's or a paired server's:",
+		submit: func(to string) tea.Cmd {
+			to = strings.TrimSpace(to)
+			if to == slug {
+				m.msg = slug + " keeps its name"
+				return nil
+			}
+			if !config.ValidProgramSlug(to) {
+				m.msg = fmt.Sprintf("%q is not a program name (a-z, 0-9 and -, lower case)", to)
+				return nil
+			}
+			if _, ok := m.top().(*programView); ok {
+				m.pop() // the popup of the old name
+			}
+			src := m.src
+			return m.act(func() actionMsg {
+				msg, err := src.RenameProgram(slug, to)
+				return actionMsg{msg: msg, err: err}
+			})
+		}})
 }
 
 // directorModels are the models program slug's director may run: its

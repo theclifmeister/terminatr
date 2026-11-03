@@ -26,8 +26,9 @@ import (
 //
 // The caller makes sure the program's director doesn't run (the server).
 // Members on paired servers know the program by its name there
-// (program = "<server>/<from>"), so a program with one is refused until
-// telling them (program-rename) comes with the paired children's build.
+// (program = "<server>/<from>"): a program with one is refused unless
+// the caller tells their servers (ProgramOptions.TellPaired, the
+// program-rename peer kind).
 
 // ProgramOptions say which program to rename.
 type ProgramOptions struct {
@@ -40,6 +41,13 @@ type ProgramOptions struct {
 	// MoveAgentDir carries the director's state kept by folder path, as
 	// Options.MoveAgentDir.
 	MoveAgentDir func(from, to string) error
+	// TellPaired tells the servers of the program's paired members
+	// (<alias>/<slug>, in the program's order) that it is called to now,
+	// once the rename here stands: the program-rename peer message
+	// (§9.2). It returns what didn't go through, as notes. nil refuses a
+	// program with paired members (paired-members), so no paired side is
+	// left naming a program that is gone.
+	TellPaired func(from, to string, paired []string) []string
 }
 
 // ProgramResult is what a program rename did.
@@ -86,13 +94,8 @@ func CheckProgram(o ProgramOptions) error {
 			return refuse("slug-taken", "%s: %s", o.To, why)
 		}
 	}
-	var paired []string
-	for _, m := range t.Projects {
-		if alias, _, ok := config.SplitMember(m); ok && alias != "" {
-			paired = append(paired, m)
-		}
-	}
-	if len(paired) > 0 {
+	paired := pairedMembers(t.Projects)
+	if len(paired) > 0 && o.TellPaired == nil {
 		return refuse("paired-members", "%s has members on paired servers (%s), whose servers know it as %s: take them out of the program first, then rename it", o.From, strings.Join(paired, ", "), o.From)
 	}
 	path, err := config.Path()
@@ -126,6 +129,9 @@ func Program(o ProgramOptions) (*ProgramResult, error) {
 	}
 	oldDir, _ := program.Dir(o.From)
 	newDir, _ := program.Dir(o.To)
+	cfg, _ := config.Load()
+	before, _ := cfg.Program(o.From)
+	paired := pairedMembers(before.Projects)
 	res := &ProgramResult{}
 	if _, err := os.Stat(oldDir); err == nil {
 		if err := os.Rename(oldDir, newDir); err != nil {
@@ -149,9 +155,23 @@ func Program(o ProgramOptions) (*ProgramResult, error) {
 	if n, err := relink(vaultlink.ProgramFolder(o.From), vaultlink.ProgramFolder(o.To), o.From, o.To); err != nil {
 		note("links to %s not all renamed (%d files done): %v", o.From, n, err)
 	}
+	if len(paired) > 0 && o.TellPaired != nil {
+		res.Notes = append(res.Notes, o.TellPaired(o.From, o.To, paired)...)
+	}
 	if res.Dir == "" {
 		return res, nil
 	}
 	f := project.Folder{Slug: o.To, Dir: newDir, Kind: project.KindProgram}
 	return res, f.Journal(o.Caller, "program.rename", o.To, o.From+" → "+o.To)
+}
+
+// pairedMembers are the members on paired servers (<alias>/<slug>).
+func pairedMembers(members []string) []string {
+	var out []string
+	for _, m := range members {
+		if alias, _, ok := config.SplitMember(m); ok && alias != "" {
+			out = append(out, m)
+		}
+	}
+	return out
 }

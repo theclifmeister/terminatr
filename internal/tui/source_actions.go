@@ -3,9 +3,13 @@ package tui
 import (
 	"errors"
 	"fmt"
+	"strings"
+	"time"
 
+	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/mod"
+	"github.com/theclifmeister/terminatr/internal/program"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/server"
@@ -63,6 +67,61 @@ func OpenCoordinator(call func(method string, params, result any) error, slug, a
 // if none runs.
 func (s *ServerSource) OpenDirector(slug string, cols, rows int) (string, error) {
 	return OpenDirector(s.call, slug, cols, rows)
+}
+
+func (s *ServerSource) RenameProgram(from, to string) (string, error) {
+	defer s.touch()
+	if s.Caller.IsAgent() {
+		return "", errHumanOnly
+	}
+	var res proto.ProgramRenameResult
+	if err := s.call(proto.MethodProgramRename, proto.ProgramRenameParams{From: from, To: to}, &res); err != nil {
+		return "", err
+	}
+	msg := "renamed program " + from + " to " + to
+	if res.Director != "" {
+		msg += "; its director started again"
+	}
+	if len(res.Notes) > 0 {
+		msg += "; note: " + strings.Join(res.Notes, "; ")
+	}
+	return msg, nil
+}
+
+func (s *ServerSource) DeleteProgram(slug string) (string, error) {
+	defer s.touch()
+	return DeleteProgram(s.call, s.Caller, slug)
+}
+
+// DeleteProgram deletes program slug (program.Delete), the human's:
+// refused while its director runs (call lists the sessions; nil when no
+// server runs).
+func DeleteProgram(call callFn, c caller.Caller, slug string) (string, error) {
+	if err := humanOnly(c, "deletes programs"); err != nil {
+		return "", err
+	}
+	if _, err := program.Dir(slug); err != nil {
+		return "", err
+	}
+	if call != nil {
+		var list proto.SessionListResult
+		if err := call(proto.MethodSessionList, nil, &list); err != nil {
+			return "", err
+		}
+		for _, s := range list.Sessions {
+			if s.Role == proto.RoleDirector && s.Project == slug {
+				return "", &project.Error{Code: "director-running", Msg: fmt.Sprintf("program %s's director is running (%s): stop it first", slug, s.ID)}
+			}
+		}
+	}
+	dst, err := program.Delete(c, slug, time.Now())
+	if err != nil {
+		return "", err
+	}
+	if dst == "" {
+		return "deleted program " + slug + ": its settings are gone (it had no folder)", nil
+	}
+	return "deleted program " + slug + ": moved to " + dst + "; its projects stay as they are", nil
 }
 
 // OpenDirector returns the id of program slug's director session by

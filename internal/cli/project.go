@@ -39,7 +39,7 @@ const projectUsage = `usage: tm project new <slug> [--goal "…"] [--repo PATH].
        tm project remote on|off [<slug>]   (remote control of its running coordinator)
        tm project activate|deactivate <slug> [--yes]  (only an active project's agents run)
        tm project pause|resume [<slug>]    (no nudges, PR follow-up or new threads while paused)
-       tm project archive|unarchive <slug> (hidden from the sidebar; the ticker leaves it alone)
+       tm project archive|unarchive <slug> [--yes] (hidden from the sidebar; the ticker leaves it alone; a program's member leaves it, asked first)
        tm project delete <slug> [--yes]    (moves it to the trash; asks first)
        tm project rename <slug> <new-slug> [--json]   (no thread may run; restarts its coordinator)
        tm project link <a> <b>|<server>/<b> [both|send|receive|off] [--ask|--no-ask] [--request]   (links both sides at once; only this side for a paired server's, --request asking its user to link back)`
@@ -118,7 +118,7 @@ func projectLifecycle(e *Env, verb string, args []string) error {
 		return err
 	}
 	pause := verb == "pause" || verb == "resume"
-	if len(pos) > 1 || (len(pos) == 0 && !pause) || (*yes && verb != "delete" && verb != "deactivate") {
+	if len(pos) > 1 || (len(pos) == 0 && !pause) || (*yes && verb != "delete" && verb != "deactivate" && verb != "archive") {
 		return usagef("%s", projectUsage)
 	}
 	if e.Caller.IsAgent() {
@@ -158,6 +158,11 @@ func projectLifecycle(e *Env, verb string, args []string) error {
 	case "pause", "resume":
 		msg, err = tui.PauseProject(e.Caller, p.Slug, verb == "pause")
 	case "archive", "unarchive":
+		if verb == "archive" && !*yes {
+			if err := e.confirmArchive(p.Slug); err != nil {
+				return err
+			}
+		}
 		msg, err = tui.ArchiveProject(call, e.Caller, p.Slug, verb == "archive")
 	case "delete":
 		if !*yes {
@@ -261,10 +266,27 @@ func (e *Env) confirmDelete(p *project.Project) error {
 	if !ok || !isTTY(in) {
 		return usagef("tm project delete %s moves the project to the trash: confirm with --yes", p.Slug)
 	}
-	fmt.Fprintf(e.Stdout, "Delete project %s (%s)? Its folder moves to the trash; its worktrees and branches stay. Type %s to confirm: ", p.Slug, p.Dir, p.Slug)
+	fmt.Fprintf(e.Stdout, "Delete project %s (%s)? Its folder moves to the trash; its worktrees and branches stay.%s Type %s to confirm: ", p.Slug, p.Dir, tui.LeavesProgram(p.Slug), p.Slug)
 	line, _ := bufio.NewReader(in).ReadString('\n')
 	if strings.TrimSpace(line) != p.Slug {
 		return &project.Error{Code: "not-confirmed", Msg: "nothing deleted"}
+	}
+	return nil
+}
+
+// confirmArchive asks before archiving a program's member takes it
+// out of its program (the programs design §3.4): y on a terminal, else
+// --yes. Archiving any other project asks nothing.
+func (e *Env) confirmArchive(slug string) error {
+	leaves := tui.LeavesProgram(slug)
+	if leaves == "" {
+		return nil
+	}
+	if !stdinTTY(e) {
+		return usagef("tm project archive %s takes it out of program %s: confirm with --yes", slug, tui.ProgramOfMember(slug))
+	}
+	if !ask(e, "Archive "+slug+"?"+leaves+" [y/N] ") {
+		return &project.Error{Code: "not-confirmed", Msg: slug + " not archived"}
 	}
 	return nil
 }

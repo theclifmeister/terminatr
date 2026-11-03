@@ -260,6 +260,13 @@ type ProjectSource interface {
 	// OpenDirector returns program slug's director session, started
 	// first if none runs.
 	OpenDirector(slug string, cols, rows int) (string, error)
+	// RenameProgram renames program from to to (program.rename: its
+	// director is stopped and started again), saying what it did.
+	RenameProgram(from, to string) (string, error)
+	// DeleteProgram moves program slug's folder to the trash and its
+	// table out of the settings file (tm program delete), after the
+	// caller's confirmation; refused while its director runs.
+	DeleteProgram(slug string) (string, error)
 	// Lifecycle activates, deactivates, pauses, resumes, archives,
 	// deletes, pins or unpins a project (verb "activate", "deactivate",
 	// "pause", "resume", "archive", "delete", "pin", "unpin"), saying
