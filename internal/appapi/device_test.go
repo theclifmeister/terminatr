@@ -84,11 +84,13 @@ func TestAllowed(t *testing.T) {
 		t.Errorf("answer adds %v, want %v", got, want)
 	}
 	// A program's question is the user's own phone's to answer at write
-	// (Q208); renaming and deleting a program stay the Mac app's.
+	// (Q208); renaming and deleting a program, and starting its
+	// director, stay the Mac app's.
 	for name, levels := range map[string][]string{
 		proto.MethodProgramAnswer: {device.LevelWrite},
 		proto.MethodProgramRename: nil,
 		proto.MethodProgramDelete: nil,
+		proto.MethodProgramOpen:   nil,
 	} {
 		m, _ := appapi.Lookup(name)
 		for _, l := range device.Levels {

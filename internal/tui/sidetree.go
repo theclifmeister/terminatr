@@ -74,6 +74,7 @@ func sideRowOf(rows []treeRow, sel string, here bool) (treeRow, bool) {
 // treeRow is one row of the sidebar's tree.
 type treeRow struct {
 	kind    int
+	newProg bool   // the header: P makes a new program (programs on)
 	slug    string // its project
 	session string // the coordinator's or the thread's live session, "" for none
 	thread  string // a thread's id

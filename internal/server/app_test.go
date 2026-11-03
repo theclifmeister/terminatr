@@ -12,6 +12,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/mod"
+	"github.com/theclifmeister/terminatr/internal/program"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/tasks"
@@ -444,6 +445,74 @@ func TestProjectOpen(t *testing.T) {
 	}
 	journal, _ := os.ReadFile(pr.Path("JOURNAL.md"))
 	if want := " human (app) coordinator.start " + res.Session; strings.Count(string(journal), want) != 1 {
+		t.Errorf("journal lacks one %q:\n%s", want, journal)
+	}
+}
+
+// TestProgramOpen: program.open opens a program's director for the app,
+// as the sidebar's director row does: started once (its director_agent,
+// role director, the program's folder), the running one after, the
+// start journaled in the program as the app; refused while programs are
+// off and for a program that isn't there.
+func TestProgramOpen(t *testing.T) {
+	p := testPaths(t)
+	t.Setenv("PATH", nowhere+"/usr/bin:/bin")
+	if err := os.MkdirAll(p.AgentsDir(), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	manifest := "manifest_version = 1\nname = \"fake\"\n[launch]\ncommand = " + strconv.Quote(testSh(t)) + "\nargs = [\"-c\", \"sleep 30\"]\n"
+	if err := os.WriteFile(filepath.Join(p.AgentsDir(), "fake.toml"), []byte(manifest), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := project.New(project.Options{Slug: "web"}); err != nil {
+		t.Fatal(err)
+	}
+	g, err := program.New(program.Options{Slug: "acme", Goal: "Ship the shop"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeConfig(t, "[programs.acme]\nprojects = [\"web\"]\ndirector_agent = \"fake\"\n")
+	startServer(t, p)
+	app, err := client.DialAs(p, proto.ClientApp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer app.Close()
+	var perr *proto.Error
+	if err := app.Call(proto.MethodProgramOpen, proto.ProgramOpenParams{Program: "acme"}, nil); !errors.As(err, &perr) || perr.Code != config.ProgramsOff {
+		t.Fatalf("open with programs off: %v", err)
+	}
+	writeConfig(t, "[features]\nprograms = true\n[programs.acme]\nprojects = [\"web\"]\ndirector_agent = \"fake\"\n")
+	var res proto.ProgramOpenResult
+	if err := app.Call(proto.MethodProgramOpen, proto.ProgramOpenParams{Program: "acme", Cols: 100, Rows: 30}, &res); err != nil || !res.Started || res.Session == "" {
+		t.Fatalf("open acme: %+v %v", res, err)
+	}
+	var again proto.ProgramOpenResult
+	if err := app.Call(proto.MethodProgramOpen, proto.ProgramOpenParams{Program: "acme"}, &again); err != nil || again.Started || again.Session != res.Session {
+		t.Fatalf("open acme again: %+v %v", again, err)
+	}
+	var list proto.SessionListResult
+	call(t, app, proto.MethodSessionList, nil, &list)
+	found := false
+	for _, s := range list.Sessions {
+		if s.ID == res.Session {
+			found = true
+			if s.Role != proto.RoleDirector || s.Project != "acme" || s.Agent != "fake" {
+				t.Errorf("director %+v", s)
+			}
+		}
+	}
+	if !found {
+		t.Errorf("no session %s", res.Session)
+	}
+	if err := app.Call(proto.MethodProgramOpen, proto.ProgramOpenParams{Program: "nope"}, nil); !errors.As(err, &perr) || perr.Code != "unknown-program" {
+		t.Errorf("open no program: %v", err)
+	}
+	if err := app.Call(proto.MethodProgramOpen, proto.ProgramOpenParams{}, nil); !errors.As(err, &perr) || perr.Code != proto.ErrBadParams {
+		t.Errorf("open no name: %v", err)
+	}
+	journal, _ := os.ReadFile(g.Path("JOURNAL.md"))
+	if want := " human (app) director.start " + res.Session; strings.Count(string(journal), want) != 1 {
 		t.Errorf("journal lacks one %q:\n%s", want, journal)
 	}
 }

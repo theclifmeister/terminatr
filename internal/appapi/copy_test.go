@@ -540,6 +540,20 @@ func TestParamsCopies(t *testing.T) {
 	if _, err := m.toServer(json.RawMessage(`{"project":"web","session":"s-1"}`)); err == nil {
 		t.Error("coordinator.clear took a session")
 	}
+	// program.open's size crosses; never an agent or a cwd.
+	m, _ = Lookup(proto.MethodProgramOpen)
+	p, err = m.toServer(json.RawMessage(`{"program":"acme","cols":100,"rows":30}`))
+	if want := (proto.ProgramOpenParams{Program: "acme", Cols: 100, Rows: 30}); err != nil || p != want {
+		t.Errorf("program.open params %+v %v", p, err)
+	}
+	for _, bad := range []string{`{"program":"acme","agent":"claude"}`, `{"program":"acme","cwd":"/tmp"}`} {
+		if _, err := m.toServer(json.RawMessage(bad)); err == nil {
+			t.Errorf("program.open took %s", bad)
+		}
+	}
+	if !m.MacOnly() || !m.Write {
+		t.Errorf("program.open: mac-only %v, write %v", m.MacOnly(), m.Write)
+	}
 	// session.file takes a ref, never a path.
 	m, _ = Lookup(proto.MethodSessionFile)
 	p, err = m.toServer(json.RawMessage(`{"session":"s-1","ref":"0.0123456789abcdef.1.0","offset":5,"stat":true}`))
@@ -609,7 +623,7 @@ func TestAllowlist(t *testing.T) {
 		MethodDeviceName, MethodDeviceRemove, proto.MethodModsList, proto.MethodModsSet, proto.MethodModsSetting,
 		proto.MethodProgramGet, proto.MethodProgramNeeds, proto.MethodProgramRead, proto.MethodProgramSearch, proto.MethodProgramSearchTimeline,
 		proto.MethodProgramSearchShow, proto.MethodProgramRoute, proto.MethodProgramTaskEdit, proto.MethodProgramSend, proto.MethodProgramAnswer,
-		proto.MethodProgramUmbrellaAccept, proto.MethodProgramUmbrellaSendBack, proto.MethodProgramRename, proto.MethodProgramDelete}
+		proto.MethodProgramUmbrellaAccept, proto.MethodProgramUmbrellaSendBack, proto.MethodProgramRename, proto.MethodProgramDelete, proto.MethodProgramOpen}
 	slices.Sort(want)
 	if got := MethodNames(); !slices.Equal(got, want) {
 		t.Errorf("methods %v, want %v", got, want)
@@ -634,7 +648,7 @@ func TestAllowlist(t *testing.T) {
 		proto.MethodModsList: false, proto.MethodModsSet: true, proto.MethodModsSetting: true,
 		proto.MethodProgramGet: false, proto.MethodProgramNeeds: false, proto.MethodProgramRead: false, proto.MethodProgramSearch: false,
 		proto.MethodProgramRoute: true, proto.MethodProgramTaskEdit: true, proto.MethodProgramSend: true, proto.MethodProgramAnswer: true,
-		proto.MethodProgramUmbrellaAccept: true, proto.MethodProgramUmbrellaSendBack: true, proto.MethodProgramRename: true, proto.MethodProgramDelete: true} {
+		proto.MethodProgramUmbrellaAccept: true, proto.MethodProgramUmbrellaSendBack: true, proto.MethodProgramRename: true, proto.MethodProgramDelete: true, proto.MethodProgramOpen: true} {
 		if m, _ := Lookup(name); m.Write != write {
 			t.Errorf("%s: write %v", name, m.Write)
 		}

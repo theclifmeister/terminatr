@@ -53,6 +53,8 @@ const (
 type sideHeadIn struct {
 	needs        int
 	cursor, here bool
+	// programs: programs are on, so P on the header is a new program.
+	programs bool
 }
 
 // sideLines draws the sidebar w columns wide (its border included) and

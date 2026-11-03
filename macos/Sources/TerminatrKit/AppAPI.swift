@@ -6,7 +6,7 @@ import Foundation
 /// The terminatr app API (docs/SPEC.md §3.8): what tm app bridge answers.
 public enum AppAPI {
     /// The app API version this app was generated against.
-    public static let version = 44
+    public static let version = 45
 
     public struct AdoptRequestParams: Codable, Sendable, Hashable {
         public var id: String
@@ -2246,6 +2246,39 @@ public enum AppAPI {
         }
     }
 
+    public struct ProgramOpen: Codable, Sendable, Hashable {
+        public var session: String
+        public var started: Bool
+
+        public init(session: String, started: Bool = false) {
+            self.session = session
+            self.started = started
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case session
+            case started
+        }
+    }
+
+    public struct ProgramOpenParams: Codable, Sendable, Hashable {
+        public var program: String
+        public var cols: Int
+        public var rows: Int
+
+        public init(program: String, cols: Int = 0, rows: Int = 0) {
+            self.program = program
+            self.cols = cols
+            self.rows = rows
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case program
+            case cols
+            case rows
+        }
+    }
+
     public struct ProgramParams: Codable, Sendable, Hashable {
         public var program: String
 
@@ -4458,6 +4491,7 @@ public enum AppAPI {
         public static let programDelete = Call<ProgramDeleteParams, ProgramDeleted>("program.delete", write: true)
         public static let programGet = Call<ProgramParams, ProgramDetail>("program.get", write: false)
         public static let programNeeds = Call<ProgramParams, ProgramNeeds>("program.needs", write: false)
+        public static let programOpen = Call<ProgramOpenParams, ProgramOpen>("program.open", write: true)
         public static let programRead = Call<ProgramReadParams, ProgramMessage>("program.read", write: false)
         public static let programRename = Call<ProgramRenameParams, ProgramRenamed>("program.rename", write: true)
         public static let programRoute = Call<ProgramRouteParams, ProgramRouted>("program.route", write: true)
@@ -5528,6 +5562,23 @@ extension AppAPI.ProgramNeedsFor {
         self.needs = try c.decode(Int.self, forKey: .needs)
         self.count = try c.decodeIfPresent(Int.self, forKey: .count) ?? 0
         self.error = try c.decodeIfPresent(String.self, forKey: .error) ?? ""
+    }
+}
+
+extension AppAPI.ProgramOpen {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.session = try c.decode(String.self, forKey: .session)
+        self.started = try c.decodeIfPresent(Bool.self, forKey: .started) ?? false
+    }
+}
+
+extension AppAPI.ProgramOpenParams {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.program = try c.decode(String.self, forKey: .program)
+        self.cols = try c.decodeIfPresent(Int.self, forKey: .cols) ?? 0
+        self.rows = try c.decodeIfPresent(Int.self, forKey: .rows) ?? 0
     }
 }
 

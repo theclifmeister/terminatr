@@ -464,3 +464,40 @@ type SideAfter struct {
 	Merged bool   `json:"merged,omitempty"`
 	Why    string `json:"why,omitempty"`
 }
+
+// programOpen is program.open's: program p.Program's director, started
+// if none runs (OpenDirector), as tm program open and the sidebar's
+// director row do; a start is journaled in the program (director.start).
+// Refused, as a director's start is, while programs are off.
+func (s *Server) programOpen(p proto.ProgramOpenParams, cc callCtx) (any, *proto.Error) {
+	if p.Program == "" {
+		return nil, proto.Errorf(proto.ErrBadParams, "name the program")
+	}
+	s.openMu.Lock()
+	defer s.openMu.Unlock()
+	list := func() ([]proto.SessionInfo, error) { return s.list().Sessions, nil }
+	start := func(sp proto.SessionStartParams) (string, error) {
+		res, perr := s.startSession(sp)
+		if perr != nil {
+			return "", perr
+		}
+		started, ok := res.(proto.SessionStartResult)
+		if !ok {
+			return "", fmt.Errorf("unexpected result %T", res)
+		}
+		return started.Session.ID, nil
+	}
+	id, started, err := OpenDirector(list, start, p.Program, "", p.Cols, p.Rows)
+	if err != nil {
+		return nil, openError(err)
+	}
+	if started {
+		if g, gerr := program.Open(p.Program, nil); gerr == nil {
+			if err := g.Journal(cc.who(), "director.start", id, ""); err != nil {
+				s.log.Printf("program.open %s: journal: %v", p.Program, err)
+			}
+		}
+		s.watch.wake()
+	}
+	return proto.ProgramOpenResult{Session: id, Started: started}, nil
+}
