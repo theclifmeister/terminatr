@@ -348,6 +348,7 @@ func TestCopies(t *testing.T) {
 	check("program.send", homeOf(programSentOf), nil)
 	check("program.read", homeOf(programMessageOf), nil)
 	check("program.answer", homeOf(programAnsweredOf), nil)
+	check("program.recommend.accept", homeOf(recommendAcceptedOf), nil)
 	check("program.umbrella", homeOf(programUmbrellaOf), nil)
 	check("program.rename", homeOf(programRenamedOf), []string{".Dir"})
 	check("program.delete", homeOf(programDeletedOf), nil)
@@ -623,7 +624,8 @@ func TestAllowlist(t *testing.T) {
 		MethodDeviceName, MethodDeviceRemove, proto.MethodModsList, proto.MethodModsSet, proto.MethodModsSetting,
 		proto.MethodProgramGet, proto.MethodProgramNeeds, proto.MethodProgramRead, proto.MethodProgramSearch, proto.MethodProgramSearchTimeline,
 		proto.MethodProgramSearchShow, proto.MethodProgramRoute, proto.MethodProgramTaskEdit, proto.MethodProgramSend, proto.MethodProgramAnswer,
-		proto.MethodProgramUmbrellaAccept, proto.MethodProgramUmbrellaSendBack, proto.MethodProgramRename, proto.MethodProgramDelete, proto.MethodProgramOpen}
+		proto.MethodProgramUmbrellaAccept, proto.MethodProgramUmbrellaSendBack, proto.MethodProgramRename, proto.MethodProgramDelete, proto.MethodProgramOpen,
+		proto.MethodProgramRecommendAccept}
 	slices.Sort(want)
 	if got := MethodNames(); !slices.Equal(got, want) {
 		t.Errorf("methods %v, want %v", got, want)
@@ -648,7 +650,8 @@ func TestAllowlist(t *testing.T) {
 		proto.MethodModsList: false, proto.MethodModsSet: true, proto.MethodModsSetting: true,
 		proto.MethodProgramGet: false, proto.MethodProgramNeeds: false, proto.MethodProgramRead: false, proto.MethodProgramSearch: false,
 		proto.MethodProgramRoute: true, proto.MethodProgramTaskEdit: true, proto.MethodProgramSend: true, proto.MethodProgramAnswer: true,
-		proto.MethodProgramUmbrellaAccept: true, proto.MethodProgramUmbrellaSendBack: true, proto.MethodProgramRename: true, proto.MethodProgramDelete: true, proto.MethodProgramOpen: true} {
+		proto.MethodProgramUmbrellaAccept: true, proto.MethodProgramUmbrellaSendBack: true, proto.MethodProgramRename: true, proto.MethodProgramDelete: true, proto.MethodProgramOpen: true,
+		proto.MethodProgramRecommendAccept: true} {
 		if m, _ := Lookup(name); m.Write != write {
 			t.Errorf("%s: write %v", name, m.Write)
 		}

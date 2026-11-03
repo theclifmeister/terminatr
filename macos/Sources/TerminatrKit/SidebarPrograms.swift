@@ -208,6 +208,22 @@ public enum ProgramFacts {
         server.isEmpty ? project : "\(server)/\(project)"
     }
 
+    /// The director's recommendation on a need, as the TUI says it
+    /// (T982): "director recommends: EU — acme-web runs in the EU
+    /// (acme-web/T4)". A recommendation is never an answer: the user
+    /// accepts it, or picks another.
+    public static func recommends(_ r: AppAPI.Recommendation) -> String {
+        "director recommends: \(answer(r)) — \(r.why)"
+    }
+
+    /// A recommendation's answer in words: its options' labels, or
+    /// its own words in quotes.
+    public static func answer(_ r: AppAPI.Recommendation) -> String {
+        var bits = r.choices
+        if !r.other.isEmpty { bits.append("“\(r.other)”") }
+        return bits.joined(separator: ", ")
+    }
+
     /// A program need's words: its task and what it is.
     public static func need(_ n: AppAPI.ProgramNeed) -> String {
         let what = n.need.title.isEmpty ? n.need.text : n.need.title

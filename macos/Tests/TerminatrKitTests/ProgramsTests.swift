@@ -114,3 +114,10 @@ private let acme = AppAPI.Program(slug: "acme", members: [AppAPI.ProgramMember(p
     let entries = SidebarTree.entries(projects.projects, programs: projects.programs, peers: peers)
     #expect(entries.map(\.slug).contains("acme") && !entries.map(\.slug).contains("acme-web"))
 }
+
+@Test func recommendationWords() {
+    let r = AppAPI.Recommendation(question: "web/Q3", choices: ["EU"], why: "api runs in the EU (api/T4)", at: Date())
+    #expect(ProgramFacts.recommends(r) == "director recommends: EU — api runs in the EU (api/T4)")
+    let words = AppAPI.Recommendation(question: "acme/Q1", other: "after the release", why: "the freeze", at: Date())
+    #expect(ProgramFacts.answer(words) == "“after the release”")
+}

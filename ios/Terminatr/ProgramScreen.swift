@@ -154,6 +154,8 @@ struct ProgramScreen: View {
     @State private var failure: String?
     /// The program's own questions, as program.needs sends them.
     @State private var questions: [AppAPI.ProgramNeed] = []
+    /// Members' questions the director recommends an answer to (T982).
+    @State private var recommended: [AppAPI.ProgramNeed] = []
     @State private var clearing = false
 
     var body: some View {
@@ -171,6 +173,9 @@ struct ProgramScreen: View {
                     let shown = questions.isEmpty ? needs : needs.filter { !$0.id.hasPrefix(PhoneModel.programQuestionsPrefix) }
                     ForEach(questions, id: \.need.id) { q in
                         ProgramQuestionCard(program: slug, need: q) { await load() }
+                    }
+                    ForEach(recommended, id: \.need.id) { n in
+                        RecommendationCard(program: slug, need: n) { await load() }
                     }
                     if needs.isEmpty {
                         quiet("Nothing in \(slug) needs you")
@@ -224,10 +229,13 @@ struct ProgramScreen: View {
         guard let g = model.program(slug), model.can(AppAPI.Methods.programGet.name) else { return }
         do {
             detail = try await model.programDetail(slug)
-            if g.questions > 0, model.can(AppAPI.Methods.programNeeds.name) {
-                questions = try await model.programNeedsList(slug).needs.filter(ProgramQuestionCard.shows)
+            if model.can(AppAPI.Methods.programNeeds.name) {
+                let all = try await model.programNeedsList(slug).needs
+                questions = g.questions > 0 ? all.filter(ProgramQuestionCard.shows) : []
+                recommended = all.filter { $0.recommend != nil && !ProgramQuestionCard.shows($0) }
             } else {
                 questions = []
+                recommended = []
             }
             failure = nil
         } catch {
@@ -491,6 +499,9 @@ struct ProgramQuestionCard: View {
                         .disabled(picks.isEmpty || working)
                 }
             }
+            if let r = need.recommend {
+                RecommendationLine(program: program, recommendation: r, answered: answered)
+            }
             if !need.merged.isEmpty {
                 Text("Covers " + need.merged.joined(separator: ", "))
                     .font(theme.body(.footnote))
@@ -568,5 +579,88 @@ struct ProgramQuestionCard: View {
             }
             working = false
         }
+    }
+}
+
+/// The director's recommended answer to a question (T982): what it
+/// recommends and why, and Accept, the user's own answer as
+/// program.recommend.accept gives it, while the bridge lists that (the
+/// write level). Picking another stays where the question is answered.
+struct RecommendationLine: View {
+    @Environment(PhoneModel.self) private var model
+    @Environment(\.theme) private var theme
+    let program: String
+    let recommendation: AppAPI.Recommendation
+    let answered: () async -> Void
+    @State private var working = false
+    @State private var outcome: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.tight) {
+            Label(ProgramFacts.recommends(recommendation), systemImage: "lightbulb")
+                .font(theme.body(.footnote))
+                .foregroundStyle(theme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+            if model.acceptsRecommendations {
+                Button("Accept: \(ProgramFacts.answer(recommendation))") { accept() }
+                    .buttonStyle(.ghost)
+                    .disabled(working)
+            }
+            if let outcome {
+                Text(outcome)
+                    .font(theme.body(.footnote))
+                    .foregroundStyle(theme.muted)
+            }
+        }
+    }
+
+    private func accept() {
+        working = true
+        Task {
+            do {
+                let r = try await model.acceptRecommendation(program, question: recommendation.question)
+                outcome = r.fanned.isEmpty ? "Answered \(r.question)" : "Answered · sent to \(r.fanned.count) member questions"
+                await answered()
+            } catch {
+                outcome = error.localizedDescription
+            }
+            working = false
+        }
+    }
+}
+
+/// A member coordinator's question the director recommends an answer to
+/// (T982): its member, its words, and the recommendation with Accept.
+/// Picking another answer is done where its tile leads, as before.
+struct RecommendationCard: View {
+    @Environment(\.theme) private var theme
+    let program: String
+    let need: AppAPI.ProgramNeed
+    let answered: () async -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.item) {
+            HStack(spacing: Spacing.tight) {
+                Image(systemName: "questionmark.bubble")
+                    .foregroundStyle(theme.colour(Attention.Tone.question))
+                    .accessibilityHidden(true)
+                Text(ProgramFacts.place(need.project, server: need.server) + " · " + (need.recommend?.question.split(separator: "/").last.map(String.init) ?? ""))
+                    .font(theme.body(.subheadline, .semibold))
+                    .foregroundStyle(theme.ink)
+                Spacer(minLength: 0)
+            }
+            if let q = need.need.question?.questions.first {
+                Text(q.question)
+                    .font(theme.body(.headline))
+                    .foregroundStyle(theme.ink)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if let r = need.recommend {
+                RecommendationLine(program: program, recommendation: r, answered: answered)
+            }
+        }
+        .padding(Spacing.card)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .surface(.card, in: RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
     }
 }

@@ -3,6 +3,7 @@ package appapi
 import (
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/program"
@@ -141,6 +142,25 @@ type ProgramNeed struct {
 	Similar  []string   `json:"similar,omitempty"`
 	Program  bool       `json:"program,omitempty"`
 	Merged   []string   `json:"merged,omitempty"`
+	// Recommend is the director's recommended answer to the row's
+	// question (app API 48): the user accepts it with
+	// program.recommend.accept (Question its RecommendKey) or picks
+	// another; never an answer by itself.
+	Recommend *Recommendation `json:"recommend,omitempty"`
+}
+
+// Recommendation is the director's recommended answer (app API 48):
+// Choices, the options' labels it recommends (one, or a
+// multi-select's), or Other, an answer in words; Why, its one-line
+// reason, with its sources; At, when; Question, the question as
+// program.recommend.accept names it (acme-api/Q3, mini/acme-ios/Q3,
+// <program>/Q2).
+type Recommendation struct {
+	Question string    `json:"question"`
+	Choices  []string  `json:"choices,omitempty"`
+	Other    string    `json:"other,omitempty"`
+	Why      string    `json:"why"`
+	At       time.Time `json:"at"`
 }
 
 // ProgramNeedsFor is one member as a program's Needs you counts it: its
@@ -230,6 +250,13 @@ type (
 		Ref     string   `json:"ref"`
 		Choices []string `json:"choices,omitempty"`
 		Other   string   `json:"other,omitempty"`
+	}
+	// ProgramRecommendAcceptParams are program.recommend.accept's (app
+	// API 48): the question, as its row's Recommendation.Question names
+	// it.
+	ProgramRecommendAcceptParams struct {
+		Program  string `json:"program"`
+		Question string `json:"question"`
 	}
 	// ProgramUmbrellaParams are program.umbrella.accept's and
 	// .send-back's: umbrella Task ("T4") of Program, with the user's
@@ -333,6 +360,17 @@ type (
 		Other    string          `json:"other,omitempty"`
 		Fanned   []ProgramFanned `json:"fanned"`
 	}
+	// RecommendAccepted is program.recommend.accept's: the question
+	// answered with the director's recommendation, the answer in words,
+	// and where it went: a member question's Result (answered, or
+	// waiting: an earlier answer waits on its coordinator), or a
+	// program question's covered members (Fanned).
+	RecommendAccepted struct {
+		Question string          `json:"question"`
+		Answer   string          `json:"answer"`
+		Result   string          `json:"result,omitempty"`
+		Fanned   []ProgramFanned `json:"fanned"`
+	}
 	// ProgramFanned is one member question an answer went to:
 	// Result is answered, waiting (an earlier answer waits on its
 	// coordinator), closed (no longer open there) or failed (Error).
@@ -430,6 +468,10 @@ func programNeedsOf(r proto.ProgramNeedsResult) ProgramNeeds {
 		// The row's acts are the server's (ProgramNeed.Acts), not the
 		// need's alone.
 		pn.Need.Acts = append([]string(nil), n.Acts...)
+		if rec := n.Recommend; rec != nil {
+			pn.Recommend = &Recommendation{Question: proto.RecommendKey(r.Program, n), Choices: append([]string(nil), rec.Labels...),
+				Other: rec.Text, Why: rec.Why, At: rec.At}
+		}
 		for _, a := range n.Also {
 			pn.Also = append(pn.Also, memberNeedOf(n.Server, a))
 		}
@@ -479,6 +521,18 @@ func programAnsweredOf(r program.AnswerResult) ProgramAnswered {
 		out.Fanned = append(out.Fanned, ProgramFanned{Project: f.Project, Question: f.Question, Result: f.Result, Answer: f.Answer, Error: f.Error})
 	}
 	return out
+}
+
+func recommendAcceptedOf(r program.AcceptResult) RecommendAccepted {
+	out := RecommendAccepted{Question: r.Key, Answer: r.Answer, Result: r.Result, Fanned: make([]ProgramFanned, 0, len(r.Fanned))}
+	for _, f := range r.Fanned {
+		out.Fanned = append(out.Fanned, ProgramFanned{Project: f.Project, Question: f.Question, Result: f.Result, Answer: f.Answer, Error: f.Error})
+	}
+	return out
+}
+
+func programRecommendAcceptParams(p ProgramRecommendAcceptParams) proto.ProgramRecommendAcceptParams {
+	return proto.ProgramRecommendAcceptParams{Program: p.Program, Question: p.Question}
 }
 
 func programUmbrellaOf(r proto.ProgramUmbrellaResult) ProgramUmbrellaDone {
