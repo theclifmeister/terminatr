@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.77.1](https://github.com/theclifmeister/terminatr/compare/v0.77.0...v0.77.1) (2026-11-03)
+
+
+### Bug Fixes
+
+* **app:** conversations scroll only by SwiftUI over exact layout, never past the end ([#1080](https://github.com/theclifmeister/terminatr/issues/1080)) ([c5ebd94](https://github.com/theclifmeister/terminatr/commit/c5ebd941a1d6109a34c53011db24859794885dee))
+* **transcript:** show Claude's compaction summary as a "Conversation compacted" divider ([#1078](https://github.com/theclifmeister/terminatr/issues/1078)) ([f10f35b](https://github.com/theclifmeister/terminatr/commit/f10f35b8791e13097e45af4f9cb165d3cd9caf09))
+
 ## [0.77.0](https://github.com/theclifmeister/terminatr/compare/v0.76.0...v0.77.0) (2026-11-03)
 
 
