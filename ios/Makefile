@@ -100,11 +100,19 @@ build:
 	xcodebuild -project Terminatr.xcodeproj -scheme Terminatr-iOS -configuration $(CONFIG) $(PLUGINS) \
 		-destination 'generic/platform=iOS Simulator' -derivedDataPath $(DERIVED) $(if $(ARCHS),ARCHS="$(ARCHS)") build
 
+# xcodebuild's -test-iterations resolves the UI tests' target app to
+# the package's Mac executable, also named Terminatr, and can't run
+# them: one build, then each run on its own.
+UITEST       := -project Terminatr.xcodeproj -scheme Terminatr-iOS -configuration Debug $(PLUGINS) -derivedDataPath $(DERIVED) \
+		-destination 'platform=iOS Simulator,$(if $(shell echo '$(DEVICE)' | grep -E '^[0-9A-F-]{36}$$'),id,name)=$(DEVICE)'
+
 ui-test:
-	xcodebuild -project Terminatr.xcodeproj -scheme Terminatr-iOS -configuration Debug $(PLUGINS) \
-		-destination 'platform=iOS Simulator,$(if $(shell echo '$(DEVICE)' | grep -E '^[0-9A-F-]{36}$$'),id,name)=$(DEVICE)' -derivedDataPath $(DERIVED) \
-		$(if $(filter-out 1,$(ITERATIONS)),-test-iterations $(ITERATIONS)) $(if $(ONLY),-only-testing:TerminatrUITests/ConversationScrollTests/$(ONLY)) \
-		$(if $(RESULT),-resultBundlePath $(RESULT)) test
+	xcodebuild $(UITEST) build-for-testing
+	@fails=0; for i in $$(seq 1 $(ITERATIONS)); do \
+		echo "ui-test: run $$i of $(ITERATIONS)"; \
+		xcodebuild $(UITEST) $(if $(ONLY),-only-testing:TerminatrUITests/ConversationScrollTests/$(ONLY)) \
+			$(if $(RESULT),-resultBundlePath $(RESULT)/$$i.xcresult) test-without-building || fails=$$((fails + 1)); \
+	done; echo "ui-test: $$fails of $(ITERATIONS) runs failed"; [ $$fails -eq 0 ]
 
 run: build
 	xcrun simctl boot "$(DEVICE)" 2>/dev/null || true

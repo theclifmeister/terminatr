@@ -30,6 +30,25 @@ At the write level a tap brings the keyboard with SwiftTerm's key bar (Esc, Ctrl
 SwiftTerm runs a build-tool plugin, so `xcodebuild` takes `-skipPackagePluginValidation` (the Makefile passes it); Xcode asks once to trust it.
 `-terminal YES` opens sessions on the terminal (the Simulator's screenshots), and `make dev-server LEVEL=write` pairs the phone at write, to type into a pane.
 
+## Conversation scroll tests
+
+A conversation must always show its end, whatever happens to the screen (T976). Its rows are laid out exactly: a `VStack` of the last drawn entries, with Earlier messages for more. Only SwiftUI scrolls it: its bottom anchor while it follows, and its `scrollTo` of the end row for Jump to latest. SwiftUI clamps every offset it sets to the content, so the view can't rest past its end. No code writes the scroll offset (`ConversationScroll` in TerminatrUI, `Follow` in TerminatrKit). A guard holds this anyway: a rest past the end is scrolled back, and goes to the server as an app report of kind `scroll` (`tm device reports`).
+
+`TerminatrUITests` checks it on the demo with a scroll fixture (`-scroll-fixture YES`, `ScrollFixture`): acme-web's coordinator has a long conversation, and t-0104 streams an answer every 0.35 s. Each case asserts that the last message is on the screen, at its end:
+- opening;
+- switching to the terminal and to another session;
+- background and foreground;
+- rotating;
+- the keyboard opening and closing;
+- streaming;
+- a fast flick, then Jump to latest, both mid-flick and at rest.
+
+```sh
+make ui-test DEVICE="iPhone 17" ITERATIONS=20      # ONLY=testStreaming runs one case
+```
+
+Run it on an iPhone, an iPad and an iPhone Duo. Neither `simctl` nor XCTest can open or close a Duo, so a fold while the app runs is checked by hand: open the Duo in Xcode's Device Hub (it then runs on the inner display), and fold and unfold it with a conversation on screen.
+
 ## TestFlight
 
 Each release uploads the app to TestFlight: the `testflight` job of `.github/workflows/release.yml` runs `scripts/release/ios.sh` on the tag, once the release is published.
