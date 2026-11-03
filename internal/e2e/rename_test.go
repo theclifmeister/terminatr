@@ -74,7 +74,7 @@ func TestProjectRenameLive(t *testing.T) {
 	}
 	env.WaitFake("start", agentWait, func(r FakeRecord) bool { return r.Str("resume") == rec.SID })
 	readTOML(t, filepath.Join(newDir, "threads", "t-0001", "thread.toml"), &rec)
-	if info, ok := env.Info(&Session{ID: rec.Session}); !ok || info.Cwd != wt {
+	if info, ok := env.Info(&Session{ID: rec.Session}); !ok || !sameDir(info.Cwd, wt) {
 		t.Fatalf("restarted thread: %+v %v", info, ok)
 	}
 }
