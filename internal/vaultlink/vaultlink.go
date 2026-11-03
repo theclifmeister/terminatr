@@ -235,13 +235,13 @@ func Each(s string, fn func(target, alias string)) {
 //
 // from and to may be program folders (ProgramFolder), after a program's
 // rename: a target in _programs/<from>/ then points into _programs/<to>/,
-// and the link to its PROGRAM that shows the old slug shows the new.
+// one in a member's messages/<from>/ into its messages/<to>/, and the
+// link to its PROGRAM that shows the old slug shows the new.
 func Rename(s, from, to string) string {
 	if !strings.Contains(s, "[[") || from == "" || to == "" {
 		return s
 	}
 	fromParts, toParts := strings.Split(from, "/"), strings.Split(to, "/")
-	program := len(fromParts) > 1
 	oldName, newName := fromParts[len(fromParts)-1], toParts[len(toParts)-1]
 	return linkRE.ReplaceAllStringFunc(s, func(l string) string {
 		m := linkRE.FindStringSubmatch(l)
@@ -250,8 +250,15 @@ func Rename(s, from, to string) string {
 		if len(parts) > len(fromParts) && slices.Equal(parts[:len(fromParts)], fromParts) {
 			parts, changed = append(slices.Clone(toParts), parts[len(fromParts):]...), true
 		}
-		if !program && len(parts) > 3 && parts[1] == "messages" && parts[2] == from {
-			parts[2], changed = to, true
+		// Messages with from, in another folder: <x>/messages/<from>/…,
+		// or a program's _programs/<x>/messages/<from>/… (a program and a
+		// project share one namespace, so the name is either's).
+		at := 1
+		if parts[0] == ProgramsDir {
+			at = 2
+		}
+		if len(parts) > at+2 && parts[at] == "messages" && parts[at+1] == oldName {
+			parts[at+1], changed = newName, true
 		}
 		if !changed {
 			return l

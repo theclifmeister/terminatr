@@ -764,16 +764,28 @@ var ErrProjectSet = errors.New("config.toml already has settings for that projec
 
 // RenameProject moves a project's settings, [projects.<from>] and any
 // table below it, to [projects.<to>] (tm project rename, docs/SPEC.md
-// §5.1). Only the header lines change: comments, order and the settings
-// themselves stay. ErrForm when the file sets them in a form the line
-// editor doesn't change (dotted keys, an inline table).
+// §5.1), and names it to in the [programs.*] projects that list it (the
+// programs design §3.4). Only the header lines and those lists change:
+// comments, order and the settings themselves stay. ErrForm when the
+// file sets them in a form the line editor doesn't change (dotted keys,
+// an inline table).
 func RenameProject(from, to string) error {
 	return edit(func(data []byte) ([]byte, error) {
 		if data == nil {
 			return nil, nil
 		}
-		return RenameTable(data, from, to)
+		return RenameProjectIn(data, from, to)
 	})
+}
+
+// RenameProjectIn is RenameProject on data: RenameTable, then
+// RenameMembers.
+func RenameProjectIn(data []byte, from, to string) ([]byte, error) {
+	out, err := RenameTable(data, from, to)
+	if err != nil {
+		return nil, err
+	}
+	return RenameMembers(out, from, to)
 }
 
 // RenameTable returns data with the tables of project from renamed to

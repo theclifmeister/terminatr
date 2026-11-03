@@ -348,6 +348,9 @@ func init() {
 			s.kick()
 			return res, perr
 		})},
+		proto.MethodProgramRename: {gate: gateHuman, call: typed(func(s *Server, p proto.ProgramRenameParams, c callCtx) (any, *proto.Error) {
+			return s.renameProgram(p, c.who())
+		})},
 		proto.MethodProgramsSwitch: {gate: gateHuman, call: typed(func(s *Server, p proto.ProgramsSwitchParams, c callCtx) (any, *proto.Error) {
 			res, perr := s.setPrograms(p, c.who())
 			s.kick()

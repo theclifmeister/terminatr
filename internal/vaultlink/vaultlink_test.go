@@ -127,6 +127,7 @@ func TestRename(t *testing.T) {
 		{"[[other/messages/old/M-1|M-1]]", "[[other/messages/new/M-1|M-1]]"},
 		{"[[old/messages/old/M-1|M-1]]", "[[new/messages/new/M-1|M-1]]"},
 		{"[[old/tasks/T1]]", "[[new/tasks/T1]]"},
+		{"[[_programs/acme/messages/old/M-1|M-1]]", "[[_programs/acme/messages/new/M-1|M-1]]"},
 		{"[[old/tasks/T1|]]", "[[new/tasks/T1|]]"},
 		// Not old's: another project, a prefix, plain text.
 		{"[[older/tasks/T1|T1]]", "[[older/tasks/T1|T1]]"},
@@ -208,6 +209,10 @@ func TestRenameProgram(t *testing.T) {
 	want := "[[_programs/studio/tasks/T4|T4]] [[_programs/studio/PROGRAM|studio]] [[acme/tasks/T1|T1]] [[_programs/acme-two/tasks/T1|T1]] [[_programs/studio/memory/x]]"
 	if got := Rename(in, ProgramFolder("acme"), ProgramFolder("studio")); got != want {
 		t.Errorf("got  %s\nwant %s", got, want)
+	}
+	// A member's channel with the program moves with it.
+	if got := Rename("[[api/messages/acme/M-2|M-2]] [[api/messages/acme-two/M-2|M-2]]", ProgramFolder("acme"), ProgramFolder("studio")); got != "[[api/messages/studio/M-2|M-2]] [[api/messages/acme-two/M-2|M-2]]" {
+		t.Errorf("member's messages: %s", got)
 	}
 	// A project's rename leaves a program's links alone.
 	if got := Rename("[[_programs/acme/tasks/T4|T4]]", "acme", "web"); got != "[[_programs/acme/tasks/T4|T4]]" {

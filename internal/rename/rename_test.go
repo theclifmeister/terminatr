@@ -6,13 +6,17 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
+	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/home"
 	"github.com/theclifmeister/terminatr/internal/home/hometest"
+	"github.com/theclifmeister/terminatr/internal/program"
 	"github.com/theclifmeister/terminatr/internal/project"
+	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/thread"
 )
 
@@ -321,5 +325,82 @@ func TestProjectRelinks(t *testing.T) {
 	}
 	if _, err := os.Lstat(filepath.Join(p.Path("inbox", "done"), ".i.md.lock")); err == nil {
 		t.Error("a lock file beside a handled item")
+	}
+}
+
+// TestRenameMemberOfProgram (the programs design §3.4): renaming a
+// program's member renames it in [programs.*] projects, in the cross
+// refs of the other members' boards and in the program's umbrella
+// parts, and points the program's links and its channel at the new
+// slug. A paired server's project of the same name, and words outside
+// tm's lines, stay as they were.
+func TestRenameMemberOfProgram(t *testing.T) {
+	root := setup(t)
+	web, err := project.New(project.Options{Slug: "web"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(filepath.Join(root, "config.toml"), []byte("[programs.acme]\nprojects = [\"demo\", \"web\", \"mini/demo\"]\n"), 0o600)
+	g, err := program.New(program.Options{Slug: "acme"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	demo, _ := project.Open("demo")
+	if _, err := demo.Tasks().Add(human, []tasks.NewTask{{Title: "API"}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := web.Tasks().Add(human, []tasks.NewTask{{Title: "UI", Notes: "demo/T1 first, said the user"}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := g.Tasks().Add(human, []tasks.NewTask{{Title: "Ship"}}); err != nil {
+		t.Fatal(err)
+	}
+	edit := func(path, old, new string) {
+		t.Helper()
+		data, err := os.ReadFile(path)
+		if err != nil || !strings.Contains(string(data), old) {
+			t.Fatalf("%s: no %q in\n%s", path, old, data)
+		}
+		os.WriteFile(path, []byte(strings.Replace(string(data), old, new, 1)), 0o644)
+	}
+	edit(web.Path("TASKS.md"), "status: open", "status: open · owner: director:acme · after: [[demo/tasks/T1|demo/T1]], mini/demo/T1")
+	edit(web.Path("TASKS.md"), "demo/T1 first", "filed by the director of acme (acme/T1)\n\ndirector:acme (2026-11-03): after demo/T1\n\ndemo/T1 first")
+	data, _ := os.ReadFile(g.Path("TASKS.md"))
+	os.WriteFile(g.Path("TASKS.md"), append(data, []byte("\ndirector:acme (2026-11-03): routed demo/T1, web/T1\n")...), 0o644)
+	os.MkdirAll(g.Path("messages", "demo"), 0o755)
+	os.WriteFile(g.Path("messages", "demo", "M-1.md"), []byte("---\nre: \"[[_programs/acme/messages/demo/M-0|M-0]]\"\n---\nhi\n"), 0o644)
+
+	if _, err := Project(Options{From: "demo", To: "core", Caller: human}); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := cfg.Program("acme"); !slices.Equal(got.Projects, []string{"core", "web", "mini/demo"}) {
+		t.Errorf("acme lists %v", got.Projects)
+	}
+	board, _ := os.ReadFile(web.Path("TASKS.md"))
+	for _, want := range []string{
+		"after: [[core/tasks/T1|core/T1]], mini/demo/T1",
+		"owner: director:acme",
+		"filed by the director of acme (acme/T1)",
+		"director:acme (2026-11-03): after core/T1",
+		"demo/T1 first, said the user", // the user's words
+	} {
+		if !strings.Contains(string(board), want) {
+			t.Errorf("web's board has no %q:\n%s", want, board)
+		}
+	}
+	if b, err := web.Tasks().Load(); err != nil || !slices.Equal(b.Tasks[0].AfterX, []string{"core/T1", "mini/demo/T1"}) {
+		t.Errorf("web T1 after: %v, %v", b, err)
+	}
+	umb, _ := os.ReadFile(g.Path("TASKS.md"))
+	if !strings.Contains(string(umb), "routed core/T1, web/T1") {
+		t.Errorf("umbrella parts:\n%s", umb)
+	}
+	msg, err := os.ReadFile(g.Path("messages", "core", "M-1.md"))
+	if err != nil || !strings.Contains(string(msg), "[[_programs/acme/messages/core/M-0|M-0]]") {
+		t.Errorf("program's channel with core: %s, %v", msg, err)
 	}
 }

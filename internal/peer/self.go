@@ -64,3 +64,24 @@ func SetSelfName(dir, name string, taken NameTaken) error {
 	}
 	return config.Set(config.ServerTable, config.ServerNameKey, name)
 }
+
+// ProgramNameTaken says why slug can't name a program for the paired
+// servers (the one namespace, the programs design §3.4): this server's
+// own name, or a paired server's alias, name or the name it gives
+// itself, where <name>/T4 would read as either. "" when none has it.
+func ProgramNameTaken(slug string) string {
+	if slug == SelfName() {
+		return "it is this server's own name"
+	}
+	dir, err := Dir()
+	if err != nil {
+		return ""
+	}
+	peers, _ := LoadPeers(dir)
+	for _, p := range peers {
+		if p.Alias == slug || p.Name == slug || p.Told == slug {
+			return "a paired server is called that"
+		}
+	}
+	return ""
+}

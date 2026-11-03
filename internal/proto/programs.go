@@ -71,3 +71,27 @@ type ProgramShowParams struct {
 	Program string   `json:"program"`
 	IDs     []string `json:"ids"`
 }
+
+// MethodProgramRename renames a program (tm program rename, the
+// programs design §3.4): the server stops its director, renames it
+// between two ticker sweeps (rename.Program: the folder, the
+// [programs.<slug>] table, links and the members' boards), and starts
+// the director again under the new name. The human's; programs-off while
+// programs are off.
+const MethodProgramRename = "program.rename"
+
+// ProgramRenameParams are the params of program.rename.
+type ProgramRenameParams struct {
+	From string `json:"from"`
+	To   string `json:"to"`
+}
+
+// ProgramRenameResult says what program.rename did: the program's
+// folder now ("" when it had only a table), the director started again
+// (its session id, "" when none ran) and what didn't go through after
+// the rename stood.
+type ProgramRenameResult struct {
+	Dir      string   `json:"dir,omitempty"`
+	Director string   `json:"director,omitempty"`
+	Notes    []string `json:"notes,omitempty"`
+}
