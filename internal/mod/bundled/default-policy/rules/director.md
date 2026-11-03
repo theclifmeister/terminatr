@@ -50,7 +50,8 @@ from its inbox, and starts no threads beyond what its own settings
 allow. You may wake
 under propose and delegate. Wake only for work you just gave it or that
 waits on it, never to start threads yourself. tm refuses an inactive
-or paused child (`project-inactive`, `project-paused`): those stay the
+or paused child (`project-inactive`, `project-paused`), and every wake
+while the user paused the program (`program-paused`): those stay the
 user's; tell them the child waits on them instead. A paired member's
 coordinator is its user's to start (`paired-member`).
 

@@ -18,7 +18,8 @@ import (
 
 // TestProgramWakeRefusals: program.wake refuses every caller but the
 // program's own director and the human here, and every member that
-// isn't a local, active, unpaused one, before it starts anything.
+// isn't a local, active, unpaused one, or whose program is paused,
+// before it starts anything.
 func TestProgramWakeRefusals(t *testing.T) {
 	s, _ := programFixture(t)
 	for _, slug := range []string{"off", "held", "lone"} {
@@ -62,6 +63,17 @@ func TestProgramWakeRefusals(t *testing.T) {
 		if perr := wake(tc.c, tc.prog, tc.member); perr == nil || perr.Code != tc.code {
 			t.Errorf("%s: %v, want %s", tc.name, perr, tc.code)
 		}
+	}
+	// A paused program refuses its director and the human alike, for
+	// any member, the active and unpaused demo among them.
+	writeConfig(t, "[features]\nprograms = true\n"+strings.Replace(conf, "[programs.acme]\n", "[programs.acme]\npaused = true\n", 1))
+	for _, c := range []caller.Caller{dir, human} {
+		if perr := wake(c, "acme", "demo"); perr == nil || perr.Code != "program-paused" {
+			t.Errorf("%v, paused program: %v", c, perr)
+		}
+	}
+	if perr := wake(caller.Caller{Kind: caller.Director, Project: "beta"}, "", "web"); perr != nil && perr.Code == "program-paused" {
+		t.Errorf("beta isn't paused: %v", perr)
 	}
 	writeConfig(t, conf)
 	if perr := wake(dir, "", "demo"); perr == nil || perr.Code != "programs-off" {

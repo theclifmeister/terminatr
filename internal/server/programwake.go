@@ -19,7 +19,8 @@ const WakeKickoff = "You are this project's coordinator. Program %s's director s
 // programWake is program.wake's: member p.Project's coordinator,
 // started if none runs, as enter on its coordinator row does, for the
 // program's own director or the human. Refused while programs are off,
-// for a program that isn't there or is left out, for a project that
+// for a program that isn't there, is left out or is paused (the user's
+// pause holds its director's wakes too), for a project that
 // isn't a local member (a paired member's coordinator is its user's),
 // and for an inactive or paused one, which stays the user's. A start is
 // journaled in the member and in the program (coordinator.wake).
@@ -36,6 +37,9 @@ func (s *Server) programWake(p proto.ProgramWakeParams, cc callCtx) (any, *proto
 	cfg, _ := config.Load()
 	if _, perr := directorReady(cfg, slug); perr != nil {
 		return nil, perr
+	}
+	if cfg.DirectorSafety(slug).Paused {
+		return nil, proto.Errorf("program-paused", "program %s is paused by the user: its members' coordinators stay theirs to start until they resume it", slug)
 	}
 	if strings.Contains(member, "/") {
 		if cfg.ProgramOf(member) == slug {

@@ -106,8 +106,9 @@ its coordinator row does, so the tasks you filed and the messages you sent
 there don't wait until the user opens the project. It starts no threads, so
 a director may under propose and delegate. A coordinator already running is
 left as it is. Refused for a project that isn't a local member of your
-program (a paired member's coordinator is its user's), and for an inactive
-or paused one: those stay the user's.`
+program (a paired member's coordinator is its user's), for an inactive or
+paused one, and for any member while the user paused the program: those
+stay the user's.`
 
 // programWake runs tm program wake: the server's program.wake, which
 // checks the caller (the program's own director, or the human) and the

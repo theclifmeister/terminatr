@@ -166,8 +166,8 @@ type ProgramDeleteResult struct {
 // tm program wake. The program's own director's (under propose and
 // delegate: waking starts no threads) and the human's. Refused while
 // programs are off, for a project that isn't a local member (a paired
-// member's is its user's), and for an inactive or paused one, which
-// stays the user's. A start is journaled in the member and the program
+// member's is its user's), for an inactive or paused one, and for every
+// member while the program is paused: those stay the user's. A start is journaled in the member and the program
 // as the caller (coordinator.wake). The result is ProgramOpenResult's:
 // the coordinator's session, and whether this call started it.
 const MethodProgramWake = "program.wake"
