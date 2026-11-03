@@ -16,7 +16,7 @@
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "7E0000000000000000000701"
                BuildableName = "Terminatr.app"
-               BlueprintName = "Terminatr"
+               BlueprintName = "TerminatrApp"
                ReferencedContainer = "container:Terminatr.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
@@ -56,7 +56,7 @@
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "7E0000000000000000000701"
             BuildableName = "Terminatr.app"
-            BlueprintName = "Terminatr"
+            BlueprintName = "TerminatrApp"
             ReferencedContainer = "container:Terminatr.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>

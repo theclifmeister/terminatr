@@ -6,6 +6,8 @@ import Foundation
 /// - The coordinator's (`coordinator`, acme-web's) is `long` items:
 ///   prompts, the agent's answers from a line to a long Markdown card,
 ///   runs of tool calls, so its rows differ in height as a real one's.
+///   It comes as over a relay: its first part `delay` seconds after the
+///   screen opens, the rest (`late` items) in a few parts after.
 /// - The working thread's (`streaming`, acme-web/t-0104) opens with
 ///   `long / 2` items, then one more answer comes every `drip` seconds,
 ///   `streamed` of them.
@@ -18,6 +20,8 @@ public enum ScrollFixture {
     public static let long = 240
     public static let streamed = 400
     public static let drip = 0.35
+    public static let delay = 1.2
+    public static let late = 12
 
     /// The recording, from the demo's.
     public static func recording(from demo: Data) throws -> Data {
@@ -25,7 +29,15 @@ public enum ScrollFixture {
               var transcripts = r["transcripts"] as? [String: Any] else {
             throw BridgeError.badLine("the demo's recording has no transcripts")
         }
-        transcripts[coordinator] = stream(transcripts[coordinator], items: items(long))
+        var coord = stream(transcripts[coordinator], items: items(long - late))
+        coord["delay"] = delay
+        coord["drip"] = 0.25
+        var parts = coord["events"] as? [[String: Any]] ?? []
+        for i in stride(from: long - late, to: long, by: 4) {
+            parts.append(["event": "transcript.items", "data": ["items": (i..<min(i + 4, long)).map(item)]])
+        }
+        coord["events"] = parts
+        transcripts[coordinator] = coord
         var thread = stream(transcripts[streaming], items: items(long / 2))
         thread["drip"] = drip
         var events = thread["events"] as? [[String: Any]] ?? []

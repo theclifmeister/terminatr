@@ -43,5 +43,9 @@ let package = Package(
             swiftSettings: werror
         ),
         .testTarget(name: "TerminatrKitTests", dependencies: ["TerminatrKit"], swiftSettings: werror),
+        // The conversation's scroll (T976) in a real NSScrollView: a
+        // window with ConversationScroll over exact rows, its geometry
+        // read back after each change.
+        .testTarget(name: "ConversationScrollTests", dependencies: ["TerminatrKit", "TerminatrUI"], swiftSettings: werror),
     ]
 )

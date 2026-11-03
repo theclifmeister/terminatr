@@ -237,9 +237,11 @@ func demoBridge() async throws -> Bridge {
     _ = try await b.start()
     let sub = try await b.subscribe(AppAPI.Methods.transcriptWatch, AppAPI.TranscriptParams(session: ScrollFixture.coordinator))
     var t = Transcript()
+    var parts = 0
     for try await e in sub.events {
         t.apply(e.name, e.data)
-        break
+        parts += 1
+        if parts == 4 { break }
     }
     #expect(t.entries.count > 150)
     #expect(t.entries.last?.text.hasPrefix(ScrollFixture.words(ScrollFixture.long - 1)) == true)

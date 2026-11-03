@@ -21,7 +21,8 @@ import Foundation
 /// A stream may have "drip": seconds: its first event comes at once,
 /// each after it that much later, as a live stream's would (the scroll
 /// tests' streaming conversation, ScrollFixture), until the stream is
-/// cancelled or the transport closed.
+/// cancelled or the transport closed; and "delay": seconds before its
+/// first event, as a relay's round trip.
 ///
 /// answers are a method's results by its params: the first whose params
 /// the request's has, each the same, answers it, before calls'.
@@ -61,6 +62,8 @@ public final class DemoTransport: BridgeTransport, @unchecked Sendable {
         var events: [Data]
         /// Seconds between events after the first; 0 sends them at once.
         var drip: Double = 0
+        /// Seconds before the first event.
+        var delay: Double = 0
     }
 
     /// The error code of what the recording has no answer for.
@@ -84,7 +87,8 @@ public final class DemoTransport: BridgeTransport, @unchecked Sendable {
             let events = try (s["events"] as? [[String: Any]] ?? []).map { e in
                 try json(["event": e["event"] ?? "", "data": e["data"] ?? [String: Any]()])
             }
-            return Stream(result: try json(result), events: events, drip: (s["drip"] as? NSNumber)?.doubleValue ?? 0)
+            return Stream(result: try json(result), events: events, drip: (s["drip"] as? NSNumber)?.doubleValue ?? 0,
+                          delay: (s["delay"] as? NSNumber)?.doubleValue ?? 0)
         }
         calls = try (r["calls"] as? [String: Any] ?? [:]).mapValues(json)
         answers = try (r["answers"] as? [String: [[String: Any]]] ?? [:]).mapValues { list in
@@ -130,13 +134,13 @@ public final class DemoTransport: BridgeTransport, @unchecked Sendable {
                 l.append(e.dropFirst())
                 return l
             }
-            if s.drip > 0, let first = s.events.first {
-                yield(line(first))
-                let rest = s.events.dropFirst().map(line)
-                let gap = UInt64(s.drip * 1e9)
+            if s.drip > 0 || s.delay > 0 {
+                let lines = s.events.map(line)
+                let gap = UInt64(s.drip * 1e9), delay = UInt64(s.delay * 1e9)
                 Task.detached { [weak self] in
-                    for l in rest {
-                        try? await Task.sleep(nanoseconds: gap)
+                    for (i, l) in lines.enumerated() {
+                        let wait = i == 0 ? delay : gap
+                        if wait > 0 { try? await Task.sleep(nanoseconds: wait) }
                         guard let self, !self.lock.withLock({ self.cancelled.contains(id) }) else { return }
                         self.yield(l)
                     }

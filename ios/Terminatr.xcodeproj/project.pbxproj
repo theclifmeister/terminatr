@@ -20,7 +20,7 @@
 			containerPortal = 7E0000000000000000000001 /* Project object */;
 			proxyType = 1;
 			remoteGlobalIDString = 7E0000000000000000000701;
-			remoteInfo = Terminatr;
+			remoteInfo = TerminatrApp;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -97,7 +97,7 @@
 				7E0000000000000000000401 /* Terminatr */,
 				7E0000000000000000000402 /* Fonts */,
 			);
-			name = Terminatr;
+			name = TerminatrApp;
 			packageProductDependencies = (
 				7E0000000000000000000201 /* TerminatrKit */,
 				7E0000000000000000000202 /* TerminatrUI */,
@@ -322,7 +322,7 @@
 				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
 				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_TARGET_NAME = Terminatr;
+				TEST_TARGET_NAME = TerminatrApp;
 			};
 			name = Debug;
 		};
@@ -342,7 +342,7 @@
 				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
 				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_TARGET_NAME = Terminatr;
+				TEST_TARGET_NAME = TerminatrApp;
 			};
 			name = Release;
 		};

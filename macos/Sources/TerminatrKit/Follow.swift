@@ -41,6 +41,8 @@ public struct Follow: Equatable, Sendable {
     public private(set) var atEnd = true
     /// Whether the scroll is at rest (its phase idle).
     private var resting = true
+    /// Whether the user holds the scroll (a drag, a trackpad touch).
+    private var held = false
     /// How far the last geometry had the visible rect's foot past the
     /// content's end, in points (0 when it wasn't).
     public private(set) var past = 0.0
@@ -80,20 +82,29 @@ public struct Follow: Equatable, Sendable {
     /// The scroll view moved or resized: at the end (within slack), it
     /// follows again; scrolled up from where it was, it stops. Content
     /// that grows while the offset stays (new output, a taller bar)
-    /// changes nothing: the anchor keeps a follower at the end. During a
-    /// jump a scroll up (the momentum it cut into) doesn't stop it: the
-    /// result says to scroll to the end again.
+    /// leaves a follower behind the end: the result says to scroll there
+    /// (the view's anchor for size changes is the top, so what a user
+    /// scrolled up reads stays put). During a jump a scroll up (the
+    /// momentum it cut into) doesn't stop it: the result says to scroll
+    /// to the end again.
     ///
     /// visible is the scroll view's whole height, the bars over its foot
     /// included (ScrollGeometry's visibleRect), and inset those bars'
     /// (contentInsets.bottom): scrolled fully down, offset + visible is
     /// content + inset (T807). top is the bars' inset over its head.
-    /// True when the view must scroll to the end: a jump's momentum, or
-    /// at rest past it (a breach).
+    /// True when the view must scroll to the end: a follower behind it,
+    /// a jump's momentum, or at rest past it (a breach).
     @discardableResult
     public mutating func scrolled(offset: Double, visible: Double, content: Double, inset: Double = 0, top: Double = 0, newest: Int?) -> Bool {
-        defer { self.offset = offset }
         let g = Geometry(offset: offset, visible: visible, content: content, inset: inset, top: top)
+        // Up by the user: the offset went up by more than the end did. A
+        // content or view that shrank pulls the offset up with its end
+        // (the scroll view's clamp): that is no scroll of the user's.
+        let up = self.offset.map { was in
+            let endUp = max(0, geometry.end - g.end)
+            return offset < was - 1 - (atEnd || past > 0 ? endUp : 0)
+        } ?? false
+        defer { self.offset = offset }
         geometry = g
         atEnd = offset + visible >= content + inset - Self.slack
         past = max(0, offset - g.end)
@@ -102,11 +113,15 @@ public struct Follow: Equatable, Sendable {
             following = true
             unseen = 0
             if let newest { seen = newest }
-        } else if let was = self.offset, offset < was - 1 {
+        } else if up {
             // A jump's momentum: back to the end, by SwiftUI's scroll.
             if jumping { return true }
             following = false
         }
+        // The content or the view changed size under a follower (new
+        // output, a fold, a rotation, the keyboard): back to the end.
+        // Not while the user holds the scroll, or a jump's scroll runs.
+        if following, !held, !jumping, !up, offset < g.end - 1 { return true }
         return breach
     }
 
@@ -144,6 +159,7 @@ public struct Follow: Equatable, Sendable {
     @discardableResult
     public mutating func moved(by user: Bool, resting: Bool) -> Bool {
         self.resting = resting
+        held = user
         if user {
             jumping = false
             return false

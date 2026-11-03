@@ -10,11 +10,12 @@ import TerminatrKit
 /// rows only, not a lazy stack whose estimated heights made every end
 /// computed from them wrong), and nothing writes the scroll offset by
 /// hand. It opens at the end (the initial offset's anchor is the
-/// bottom). While Follow says it follows, the anchor for size changes
-/// is the bottom too: streamed output, a fold or rotation, the keyboard
-/// or a taller composer keep the end in place, and no code scrolls for
-/// them. Once the user scrolled up it is the top: what they read stays.
-/// Jump to latest is the view's animated scrollTo of its end row.
+/// bottom). For size changes the anchor is the top, so what a user
+/// scrolled up reads stays put; under a follower, streamed output, a
+/// fold or rotation, the keyboard or a taller composer leave the end
+/// below, and Follow says so: the view's scrollTo of its end row (a
+/// live switch of the anchor isn't honoured: the Mac kept its first).
+/// Jump to latest is that scrollTo, animated.
 ///
 /// SwiftUI clamps the offsets it sets to the content as laid out, so
 /// the view never rests past its end; the guard here holds that anyway:
@@ -52,7 +53,7 @@ public struct ConversationScroll: ViewModifier {
         if #available(iOS 18, macOS 15, *) {
             content
                 .defaultScrollAnchor(.bottom, for: .initialOffset)
-                .defaultScrollAnchor(follow.following ? .bottom : .top, for: .sizeChanges)
+                .defaultScrollAnchor(.top, for: .sizeChanges)
                 .onScrollGeometryChange(for: [Double].self) { g in
                     [g.contentOffset.y, g.visibleRect.height, g.contentSize.height, g.contentInsets.bottom, g.contentInsets.top]
                 } action: { _, g in
@@ -77,7 +78,14 @@ public struct ConversationScroll: ViewModifier {
             CrashReporter.shared.report(p)
             #endif
         }
-        toEnd()
+        // After this update, on the main run loop: a scroll asked for
+        // inside the geometry's own update (a resize's layout) is
+        // dropped.
+        let toEnd = self.toEnd
+        CFRunLoopPerformBlock(CFRunLoopGetMain(), CFRunLoopMode.commonModes.rawValue) {
+            MainActor.assumeIsolated { toEnd() }
+        }
+        CFRunLoopWakeUp(CFRunLoopGetMain())
     }
 }
 

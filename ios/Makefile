@@ -100,9 +100,9 @@ build:
 	xcodebuild -project Terminatr.xcodeproj -scheme Terminatr-iOS -configuration $(CONFIG) $(PLUGINS) \
 		-destination 'generic/platform=iOS Simulator' -derivedDataPath $(DERIVED) $(if $(ARCHS),ARCHS="$(ARCHS)") build
 
-# xcodebuild's -test-iterations resolves the UI tests' target app to
-# the package's Mac executable, also named Terminatr, and can't run
-# them: one build, then each run on its own.
+# The app's target is TerminatrApp (its product Terminatr.app): named
+# Terminatr, the UI tests' target app resolved now and then to the
+# package's Mac executable of that name. One build, then each run.
 UITEST       := -project Terminatr.xcodeproj -scheme Terminatr-iOS -configuration Debug $(PLUGINS) -derivedDataPath $(DERIVED) \
 		-destination 'platform=iOS Simulator,$(if $(shell echo '$(DEVICE)' | grep -E '^[0-9A-F-]{36}$$'),id,name)=$(DEVICE)'
 
