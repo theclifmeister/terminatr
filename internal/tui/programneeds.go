@@ -10,6 +10,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/tasks"
 )
 
 // The program needs dialog (the programs design §7.2, §7.3): what waits
@@ -194,6 +195,17 @@ func needActs(m *dash, slug string, n proto.ProgramNeed) []pnItem {
 		add("show its dashboard on "+where+" (answered there)", func(m *dash) tea.Cmd { return m.showProject(peerFold(n.Server, n.Project)) })
 		return out
 	}
+	if n.Kind == proto.NeedUmbrella {
+		for _, a := range n.Acts {
+			switch a {
+			case proto.ActAccept:
+				add("accept: marks "+slug+"/"+n.Task+" done", func(m *dash) tea.Cmd { return m.acceptUmbrellaNeed(slug, n) })
+			case proto.ActSendBack:
+				add("send back, with a note: reopens it", func(m *dash) tea.Cmd { return m.sendBackUmbrellaNeed(slug, n) })
+			}
+		}
+		return out
+	}
 	if n.Program {
 		return out // a program question the answer act doesn't offer: nothing here
 	}
@@ -252,6 +264,36 @@ func (m *dash) acceptNeed(n proto.ProgramNeed) tea.Cmd {
 	ref := n.Project + " " + n.Task
 	m.confirmNo("Accept "+ref, "Accept "+ref+" "+oneLine(n.Title)+"? "+n.Project+"'s coordinator marks it done.", ref+" not accepted", func() tea.Cmd {
 		return m.askNeed(n.Project, id, project.KindAccept, "", "asked "+n.Project+"'s coordinator to accept "+n.Task)
+	})
+	return nil
+}
+
+// acceptUmbrellaNeed asks first, then marks umbrella need n of program
+// slug done: the user's own accept, as the dashboard's UMBRELLAS pane.
+func (m *dash) acceptUmbrellaNeed(slug string, n proto.ProgramNeed) tea.Cmd {
+	id := needTask(n)
+	if id == 0 {
+		return nil
+	}
+	return m.openUmbrella(umbrellaRef{program: slug, id: id, status: tasks.Review, title: n.Title})
+}
+
+// sendBackUmbrellaNeed asks for a note, then reopens umbrella need n of
+// program slug with it.
+func (m *dash) sendBackUmbrellaNeed(slug string, n proto.ProgramNeed) tea.Cmd {
+	id := needTask(n)
+	if id == 0 {
+		return nil
+	}
+	ref := slug + "/" + n.Task
+	m.promptNo("Send "+ref+" back", "What should change? The note stays on the task; it reopens.", "", ref+" not sent back", project.MaxSendBackNote, func(note string) tea.Cmd {
+		src := m.src
+		return m.act(func() actionMsg {
+			if err := src.SendBackUmbrella(slug, id, note); err != nil {
+				return actionMsg{err: err}
+			}
+			return actionMsg{msg: "sent " + ref + " back"}
+		})
 	})
 	return nil
 }

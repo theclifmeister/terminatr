@@ -6,7 +6,6 @@ import (
 	"github.com/theclifmeister/terminatr/internal/peer"
 	"github.com/theclifmeister/terminatr/internal/program"
 	"github.com/theclifmeister/terminatr/internal/proto"
-	"github.com/theclifmeister/terminatr/internal/tasks"
 )
 
 // ProgramSource is what the program dashboard and the program needs
@@ -31,6 +30,9 @@ type ProgramSource interface {
 	// the user's accept once every part is in (the programs design
 	// §5.3). Refused inside an agent and while programs are off.
 	AcceptUmbrella(slug string, id int) error
+	// SendBackUmbrella reopens umbrella task id of program slug's board
+	// with the user's note (§5.3). Refused as AcceptUmbrella is.
+	SendBackUmbrella(slug string, id int, note string) error
 }
 
 func (s *ServerSource) ProgramNeeds(slug string) (proto.ProgramNeedsResult, error) {
@@ -98,7 +100,27 @@ func (s *ServerSource) AcceptUmbrella(slug string, id int) error {
 	if err != nil {
 		return err
 	}
-	_, err = g.Tasks().SetStatus(s.Caller, id, tasks.Done, "accepted on the program dashboard")
+	_, err = g.AcceptUmbrella(s.Caller, id, "accepted on the program dashboard")
+	s.touch()
+	return err
+}
+
+func (s *ServerSource) SendBackUmbrella(slug string, id int, note string) error {
+	if s.Caller.IsAgent() {
+		return errHumanOnly
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	if !features.Programs(cfg) {
+		return errProgramsOff
+	}
+	g, err := program.Open(slug, cfg)
+	if err != nil {
+		return err
+	}
+	_, err = g.SendBackUmbrella(s.Caller, id, note)
 	s.touch()
 	return err
 }

@@ -2,6 +2,7 @@ package program
 
 import (
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
@@ -81,6 +82,7 @@ func TestDerive(t *testing.T) {
 		{"one met", tasks.Ready, []PartState{open, met}, tasks.Started, true},
 		{"blocked wins", tasks.Ready, []PartState{met, part(DepOpen, "blocked"), part(DepOpen, "started")}, tasks.Blocked, true},
 		{"all met", tasks.Started, []PartState{met, part(DepMet, "review")}, tasks.Review, true},
+		{"sent back stays open", tasks.Open, []PartState{met, part(DepMet, "review")}, tasks.Open, true},
 		{"gone left out", tasks.Started, []PartState{met, gone}, tasks.Review, true},
 		{"only gone", tasks.Started, []PartState{gone}, "", false},
 		{"unknown waits", tasks.Ready, []PartState{met, part(DepUnknown, "")}, tasks.Started, true},
@@ -96,5 +98,54 @@ func TestDerive(t *testing.T) {
 	}
 	if got := PartsText([]PartState{{Ref: "acme-api/T12", Dep: Dep{State: DepMet, Status: "review", Merged: true}}, {Ref: "acme-web/T40", Dep: Dep{State: DepOpen, Status: "started"}}}); got != "1/2: acme-api/T12 merged, acme-web/T40 started" {
 		t.Fatalf("PartsText %q", got)
+	}
+}
+
+// TestAcceptSendBackUmbrella: only the user accepts an umbrella in review
+// or sends it back (which reopens it); both close its umbrella-review
+// item, and neither takes an umbrella not in review.
+func TestAcceptSendBackUmbrella(t *testing.T) {
+	g, cfg := routeFixture(t, routeConfig)
+	if _, err := g.Route(director, cfg, RouteRequest{Umbrella: "SSO", Tasks: []RouteTask{{Project: "acme-api", Title: "OIDC login"}}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := g.AcceptUmbrella(human, 1, ""); code(err) != "not-in-review" {
+		t.Fatalf("not in review: %v", err)
+	}
+	if _, err := g.Tasks().SetDerived(caller.Caller{Kind: caller.Ticker}, 1, tasks.Review); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := g.AddItem(KindUmbrellaReview, "T1", "every part is in", true); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []caller.Caller{director, {Kind: caller.Coordinator, Project: "acme-api"}} {
+		if _, err := g.AcceptUmbrella(c, 1, ""); code(err) != "human-only" {
+			t.Errorf("accept as %v: %v", c.Kind, err)
+		}
+		if _, err := g.SendBackUmbrella(c, 1, "x"); code(err) != "human-only" {
+			t.Errorf("send back as %v: %v", c.Kind, err)
+		}
+	}
+	if _, err := g.SendBackUmbrella(human, 1, "needs the web part"); err != nil {
+		t.Fatal(err)
+	}
+	u, _ := g.Tasks().Get(1)
+	if u.Status != tasks.Open || !strings.Contains(u.Notes, "sent back: needs the web part") {
+		t.Fatalf("after send back: %s %q", u.Status, u.Notes)
+	}
+	if items, _ := g.Inbox(); len(items) != 0 {
+		t.Fatalf("item left: %+v", items)
+	}
+	if _, err := g.AcceptUmbrella(human, 1, ""); code(err) != "not-in-review" {
+		t.Fatalf("open: %v", err)
+	}
+	if _, err := g.Tasks().SetDerived(caller.Caller{Kind: caller.Ticker}, 1, tasks.Review); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := g.AcceptUmbrella(human, 1, "ok"); err != nil {
+		t.Fatal(err)
+	}
+	if u, _ = g.Tasks().Get(1); u.Status != tasks.Done {
+		t.Fatalf("accepted: %s", u.Status)
 	}
 }

@@ -124,6 +124,8 @@ const programTaskUsage = `usage: tm program task edit <project>/T<n> [--priority
        tm program task add "title" [--priority P] [--notes "…"] [--parts acme-api/T12,…]
                                                   (an umbrella task)
        tm program task list [--json]              (the umbrella tasks, with their parts)
+       tm program task accept T<n> [--note "…"]      (the user's: marks an umbrella in review done)
+       tm program task send-back T<n> --note "…"      (the user's: reopens an umbrella in review)
        tm program task edit T<n> [--title "…"] [--priority P] [--note "…"]
                 [--parts acme-api/T12,acme-web/T40 | --add-parts acme-web/T41]
  [--program <slug>] on each, for the human.
@@ -225,6 +227,21 @@ func programTask(e *Env, cfg *config.Config, args []string) error {
 		}
 		fmt.Fprintf(e.Stdout, "%s/%s %s\n", g.Slug, r.ID, r.Result)
 		return nil
+	case "accept", "send-back":
+		if len(pos) != 1 || strings.Contains(pos[0], "/") || f.anySet("priority", "after", "design", "title", "repo", "status", "notes", "parts", "add-parts") {
+			return usagef("%s", programTaskUsage)
+		}
+		id, ok := tasks.ParseRef(pos[0])
+		if !ok {
+			return usagef("%q is not an umbrella task of %s (T4)", pos[0], g.Slug)
+		}
+		var res tasks.Result
+		if sub == "accept" {
+			res, err = g.AcceptUmbrella(e.Caller, id, *note)
+		} else {
+			res, err = g.SendBackUmbrella(e.Caller, id, *note)
+		}
+		return e.done(res, err, *asJSON, map[string]string{"accept": "accepted", "send-back": "sent back"}[sub])
 	case "edit":
 		if len(pos) != 1 {
 			return usagef("%s", programTaskUsage)

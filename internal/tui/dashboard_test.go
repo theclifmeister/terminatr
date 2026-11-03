@@ -1853,6 +1853,11 @@ func (f *fakeSource) AcceptUmbrella(slug string, id int) error {
 	return nil
 }
 
+func (f *fakeSource) SendBackUmbrella(slug string, id int, note string) error {
+	f.programActs = append(f.programActs, fmt.Sprintf("%s send-back T%d %s", slug, id, note))
+	return nil
+}
+
 func (f *fakeSource) NewProgram(slug, goal string) (string, error) {
 	f.newPrograms = append(f.newPrograms, slug+":"+goal)
 	f.data.Programs = append(f.data.Programs, ProgramData{SideProgram: server.SideProgram{Slug: slug, Authority: "propose"}})
