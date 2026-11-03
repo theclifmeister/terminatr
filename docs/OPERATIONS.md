@@ -817,7 +817,7 @@ A project on a paired server can be a member (`mini/acme-ios`). Joining needs th
 
 ### Renaming and deleting
 
-Renaming a project updates the program that lists it. **Rename** in the program's settings (or `tm program rename old new`) renames a program: its folder, settings and the links into it follow, a running director is stopped and started again under the new name, and paired members are told. **Delete** (or `tm program delete`) asks first, moves the folder to the trash and removes the settings; the projects stay as they are, out of the program. It is refused while the director runs. Archiving a member project asks whether to take it out of its program.
+Renaming a project updates the program that lists it. **Rename** in the program's settings (or `tm program rename old new`) renames a program: its folder, settings and the links into it follow, a running director is stopped and started again under the new name, and paired members are told. **Delete** (or `tm program delete`) asks first, moves the folder to the trash and removes the settings; the projects stay as they are, out of the program. It is refused while the director runs. Archiving or deleting a member project takes it out of its program, and its confirm says so.
 
 ## Obsidian: the projects folder as a vault
 
