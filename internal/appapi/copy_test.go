@@ -222,6 +222,9 @@ func TestCopies(t *testing.T) {
 		".Sessions[].AgentSID", ".Sessions[].Identified",
 		// The settings' side of remote control and the model.
 		".Sessions[].RemoteHeld", ".Sessions[].ModelNext", ".Sessions[].ModelPending",
+		// A director's program questions: the apps learn of them with
+		// the program types (the programs design B17).
+		".Sessions[].Question.HumanOnly",
 	})
 	check("session.watch", homeOf(watchOf), nil)
 	check("projects.watch", homeOf(projectsOf), append(settingsHome(".Projects[].Safety"),
@@ -299,7 +302,7 @@ func TestCopies(t *testing.T) {
 	check("peer.list needs", homeOf(func(n proto.PeerNeed) PeerNeed {
 		n.Escape = false
 		return peerNeedOf("mini", time.Second, n)
-	}), []string{".Escape"})
+	}), []string{".Escape", ".Question.HumanOnly"})
 	// Of a request that waits, what answers it: its state, the project
 	// it shared, its end are none yet.
 	check("peer.list shares", homeOf(shareRequestOf), []string{".Out", ".Peer", ".State", ".Project", ".Answered", ".Code",
@@ -357,10 +360,11 @@ func TestCopies(t *testing.T) {
 }
 
 // sessionHome is what of a SessionInfo at path stays home (session.list's
-// list).
+// list). Question.HumanOnly is a director's program questions', which
+// the apps learn with the program types (the programs design B17).
 func sessionHome(path string) []string {
 	var out []string
-	for _, f := range []string{"Cells", "Argv", "Cwd", "PID", "StateSources", "AgentSID", "Identified", "RemoteHeld", "ModelNext", "ModelPending"} {
+	for _, f := range []string{"Cells", "Argv", "Cwd", "PID", "StateSources", "AgentSID", "Identified", "RemoteHeld", "ModelNext", "ModelPending", "Question.HumanOnly"} {
 		out = append(out, path+"."+f)
 	}
 	return out

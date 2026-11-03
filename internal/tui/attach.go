@@ -386,6 +386,10 @@ type client struct {
 	// dialog is the yes/no dialog drawn over the panes while one asks
 	// (confirm), nil otherwise.
 	dialog *amenu
+	// askedKey names the program question the menu last opened for
+	// (offerQuestion): its session, its time and the question's place,
+	// so closing it doesn't open it again.
+	askedKey string
 
 	// The mouse (attachmouse.go): the open menu and the status bar's
 	// buttons, by column from its start.
@@ -2649,6 +2653,9 @@ func (c *client) applyPoll(pl *polled, now time.Time) bool {
 				p.info, changed = s, true
 			}
 		}
+	}
+	if c.offerQuestion() {
+		changed = true
 	}
 	if cells := newModCells(res.Mods, res.Sessions); !reflect.DeepEqual(cells, c.cells) {
 		c.cells, changed = cells, true

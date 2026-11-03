@@ -21,7 +21,7 @@ import (
 
 // programForwarded are the tm program subcommands an agent runs through
 // the server.
-var programForwarded = map[string]bool{"route": true, "task": true, "start": true, "send": true, "read": true}
+var programForwarded = map[string]bool{"route": true, "task": true, "start": true, "send": true, "read": true, "ask": true}
 
 // forwardedProgram reports whether args are a tm program write an
 // agent runs in the server.

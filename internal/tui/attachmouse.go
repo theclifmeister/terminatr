@@ -79,7 +79,7 @@ const menuActs = "enter pick · esc close"
 
 // acts are the box's action rows.
 func (mn *amenu) acts() []string {
-	if len(mn.text) > 0 {
+	if mn.isDialog() {
 		return actionRows(confirmKeys, mn.w-4)
 	}
 	lw, kw := mn.widths()
@@ -105,11 +105,26 @@ type aitem struct {
 	run        func()
 }
 
+// isDialog reports whether the box is a yes/no dialog: text and no
+// items. A menu with text (a question's) shows it above its items.
+func (mn *amenu) isDialog() bool { return len(mn.text) > 0 && len(mn.items) == 0 }
+
+// head is the rows above a menu's items: its text and a blank line.
+func (mn *amenu) head() int {
+	if len(mn.text) == 0 || mn.isDialog() {
+		return 0
+	}
+	return len(mn.text) + 1
+}
+
 // size is the box: its width and height.
 func (mn *amenu) size() (int, int) {
 	h := len(mn.items) + len(mn.text) + 2 + 1 + len(mn.acts())
-	if len(mn.text) > 0 {
+	if mn.isDialog() {
 		return mn.w, max(h, mn.h)
+	}
+	if mn.head() > 0 {
+		return mn.w, h + 1
 	}
 	lw, kw := mn.widths()
 	w := lw
@@ -131,7 +146,7 @@ func (mn *amenu) widths() (lw, kw int) {
 // colour) or the text, then the action row.
 func (mn *amenu) lines() []string {
 	bw, _ := mn.size()
-	if len(mn.text) > 0 {
+	if mn.isDialog() {
 		text := mn.text
 		_, h := mn.size()
 		for len(text)+2+1+len(mn.acts()) < h {
@@ -142,6 +157,9 @@ func (mn *amenu) lines() []string {
 	_, kw := mn.widths()
 	inner := bw - 4
 	var rows []string
+	if mn.head() > 0 {
+		rows = append(append(rows, mn.text...), "")
+	}
 	for i, it := range mn.items {
 		key := fmt.Sprintf("%*s", kw, it.key)
 		l := fit(it.label, inner-kw) + th().Accent.Render(key)
@@ -164,7 +182,7 @@ func (mn *amenu) at(x, y int) (i int, in bool) {
 	if x < mn.x || x >= mn.x+w || y < mn.y || y >= mn.y+h {
 		return -1, false
 	}
-	if i = y - mn.y - 1; i < 0 || i >= len(mn.items) || x == mn.x || x == mn.x+w-1 {
+	if i = y - mn.y - 1 - mn.head(); i < 0 || i >= len(mn.items) || x == mn.x || x == mn.x+w-1 {
 		return -1, true
 	}
 	return i, true
@@ -225,6 +243,15 @@ func (c *client) menuKey(k uv.Key) {
 		run = mn.items[mn.sel].run
 		c.closeMenu()
 	default:
+		// A digit picks the item it is the key of (a question's
+		// options); any other key closes the menu.
+		if n := keyName(k); len(n) == 1 && n[0] >= '1' && n[0] <= '9' {
+			for _, it := range mn.items {
+				if it.key == n {
+					run = it.run
+				}
+			}
+		}
 		c.closeMenu()
 	}
 	c.mu.Unlock()

@@ -60,7 +60,26 @@ type Question struct {
 	// the dialog lists it first, marked "(Recommended)".
 	Recommended string    `json:"recommended,omitempty"`
 	Asked       time.Time `json:"asked"`
+	// Covers are the member projects' questions a program's question
+	// was merged from (the programs design §7.2, tm program ask merge):
+	// the user's answer to it goes to each of them. A program's only.
+	Covers []Cover `json:"covers,omitempty"`
+	// CoveredBy names the program question that covers this one, as
+	// <program>/Q2: the user answers it at program level, once.
+	CoveredBy string `json:"covered_by,omitempty"`
 }
+
+// Cover is one member question a program question covers: project's
+// question ID, and Map, the member question's option label for each of
+// the program question's options, in their order.
+type Cover struct {
+	Project  string   `json:"project"`
+	Question string   `json:"question"`
+	Map      []string `json:"map"`
+}
+
+// Ref is the cover as tm names it: acme-api/Q3.
+func (c Cover) Ref() string { return c.Project + "/" + c.Question }
 
 // questionStore is questions.json.
 type questionStore struct {
@@ -174,10 +193,16 @@ func (p *Folder) AddQuestion(q Question) (Question, error) {
 	if err := q.Check(); err != nil {
 		return Question{}, err
 	}
+	// Only tm's program merge sets what covers what: never a
+	// coordinator's question JSON.
+	q.CoveredBy = ""
+	if !p.IsProgram() {
+		q.Covers = nil
+	}
 	err := p.updateQuestions(func(st *questionStore) error {
 		for i, o := range st.Open {
 			if o.Task == q.Task && o.Question == q.Question {
-				q.ID, q.Asked = o.ID, o.Asked
+				q.ID, q.Asked, q.CoveredBy = o.ID, o.Asked, o.CoveredBy
 				st.Open[i] = q
 				return nil
 			}
@@ -222,6 +247,56 @@ func (p *Folder) DoneQuestion(ref string) (Question, error) {
 	return done, p.DoneItems(KindAnswer, id)
 }
 
+// questionID is ref (Q3 or q3) as stored, or why it is no question id.
+func questionID(ref string) (string, error) {
+	m := questionRefRE.FindStringSubmatch(strings.TrimSpace(ref))
+	if m == nil {
+		return "", refuse("invalid-question", "%q is not a question id like Q3", ref)
+	}
+	return "Q" + m[1], nil
+}
+
+// Question is open question ref, or unknown-question.
+func (p *Folder) Question(ref string) (Question, error) {
+	id, err := questionID(ref)
+	if err != nil {
+		return Question{}, err
+	}
+	qs, err := p.Questions()
+	if err != nil {
+		return Question{}, err
+	}
+	i := slices.IndexFunc(qs, func(q Question) bool { return q.ID == id })
+	if i < 0 {
+		return Question{}, refuse("unknown-question", "no open question %s in %s", id, p.Slug)
+	}
+	return qs[i], nil
+}
+
+// SetCoveredBy marks open question ref as covered by program question
+// by (<program>/Q2), "" to clear the mark, while its mark is was: a
+// question covered by another program question refuses covered. Gone,
+// it refuses unknown-question.
+func (p *Folder) SetCoveredBy(ref, by, was string) error {
+	id, err := questionID(ref)
+	if err != nil {
+		return err
+	}
+	return p.updateQuestions(func(st *questionStore) error {
+		for i, o := range st.Open {
+			if o.ID != id {
+				continue
+			}
+			if o.CoveredBy != was {
+				return refuse("covered", "%s/%s is covered by %s", p.Slug, id, o.CoveredBy)
+			}
+			st.Open[i].CoveredBy = by
+			return nil
+		}
+		return refuse("unknown-question", "no open question %s in %s", id, p.Slug)
+	})
+}
+
 // QuestionsWaiting is "2 questions waiting", or "" for none.
 func QuestionsWaiting(n int) string {
 	switch {
@@ -244,6 +319,16 @@ func QuestionLine(q Question) string {
 	fmt.Fprintf(&b, " [%s] %s", q.Header, strings.Join(strings.Fields(q.Question), " "))
 	if q.MultiSelect {
 		b.WriteString(" (multi-select)")
+	}
+	if q.CoveredBy != "" {
+		b.WriteString(" (covered by " + q.CoveredBy + ": the user answers it at program level)")
+	}
+	if len(q.Covers) > 0 {
+		refs := make([]string, len(q.Covers))
+		for i, c := range q.Covers {
+			refs[i] = c.Ref()
+		}
+		b.WriteString(" (covers " + strings.Join(refs, ", ") + ")")
 	}
 	b.WriteString(" Options:")
 	for i, o := range q.Options {

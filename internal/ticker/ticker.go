@@ -1129,7 +1129,8 @@ var verbs = map[string]string{
 	"link-file":          "a file over a link (tm link files)",
 	program.KindDepReady: "can start: its dependencies are met", program.KindDepGone: "a dependency is gone",
 	link.KindProgramMessage: "wrote to you (tm program read)", program.KindTask: "filed by the program's director",
-	KindSlotFree: "a thread slot is free", KindRemember: "has lessons to file", KindPromptWaiting: "a prompt waits in its queue",
+	program.KindAnswer: "answered by the user (its answer in tm inbox list)",
+	KindSlotFree:       "a thread slot is free", KindRemember: "has lessons to file", KindPromptWaiting: "a prompt waits in its queue",
 }
 
 // linkKinds name a linked project in their subject: the nudge says its
@@ -1184,7 +1185,7 @@ func nudgeParts(items []project.Item, label func(id string) string) []string {
 		if !ok {
 			verb = "new item"
 		}
-		if linkKinds[it.Kind] && config.ValidLinkKey(it.Subject) || it.Kind == project.KindAnswer && project.IsQuestionID(it.Subject) {
+		if linkKinds[it.Kind] && config.ValidLinkKey(it.Subject) || (it.Kind == project.KindAnswer || it.Kind == program.KindAnswer) && project.IsQuestionID(it.Subject) {
 			parts = append(parts, it.Subject+" "+verb)
 		} else if depKinds[it.Kind] && crossRef(it.Subject) {
 			parts = append(parts, it.Subject+" "+verb)

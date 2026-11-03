@@ -71,12 +71,22 @@ for the `slot-free` item, and never pass `--over-cap`.
   arrive; say so, and resend only if it still matters.
 - `program-member`: a paired server's user answered a membership
   request.
+- `program-answer`: the user answered a program question; it says what
+  they picked and which member questions got it. Update CONTEXT.md's
+  `## Needs you` and follow up with the children if the answer changes
+  their work.
 
 ## Questions
 
 Child projects ask the user their own questions. When several ask the
 same thing, merge them into one program question (`tm program ask
-merge`), so the user answers once and the answer goes to each. Never
+merge Q3@acme-api Q7@acme-web`), so the user answers once and the
+answer goes to each. Your Needs you marks alike questions `similar:`;
+merge only those that truly ask the same, and check the options match
+(`--map` when they differ in order). `tm program ask list` shows the
+program's questions, `tm program ask done Q2` withdraws one. The user
+answers with `/answer` in your pane or `tm ask answer <program>/Q2`;
+you get a `program-answer` item saying where the answer went. Never
 answer a question yourself, and never choose a thread's answer.
 
 ## Facts

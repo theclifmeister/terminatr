@@ -11,11 +11,14 @@ package server
 import (
 	"cmp"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/link"
+	"github.com/theclifmeister/terminatr/internal/program"
+	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/ticker"
@@ -52,6 +55,10 @@ func (s *Server) rolledUpNeeds(slug string) (proto.ProgramNeedsResult, *proto.Er
 		return proto.ProgramNeedsResult{}, perr
 	}
 	t, _ := cfg.Program(slug)
+	var asks []project.Question
+	if g, err := program.Open(slug, cfg); err == nil {
+		asks, _ = g.Questions()
+	}
 	sessions := s.list().Sessions
 	var mirror []proto.PeerMirror
 	members := make([]memberNeeds, 0, len(t.Projects))
@@ -69,7 +76,7 @@ func (s *Server) rolledUpNeeds(slug string) (proto.ProgramNeedsResult, *proto.Er
 		}
 		members = append(members, s.localMember(member, sessions))
 	}
-	return rollUp(slug, members), nil
+	return rollUp(slug, members, asks), nil
 }
 
 // directorNeeds is rolledUpNeeds for a director's context: nil when it
@@ -90,10 +97,13 @@ type memberNeeds struct {
 	needs           []proto.PeerNeed
 	priority        map[string]tasks.Priority
 	links           []link.Need
-	hostFails       int
-	count           int
-	synced          time.Time
-	err             string
+	// questions are its coordinator's open questions by id, which the
+	// similarity hints and the program's merged questions read.
+	questions map[string]project.Question
+	hostFails int
+	count     int
+	synced    time.Time
+	err       string
 }
 
 // localMember reads local member slug's needs from its snapshot and the
@@ -106,6 +116,12 @@ func (s *Server) localMember(slug string, sessions []proto.SessionInfo) memberNe
 		return m
 	}
 	m.needs = needsOf(sn.p, sn.watch(sessions), sessions, s.peerApproval)
+	if qs, err := sn.p.Questions(); err == nil && len(qs) > 0 {
+		m.questions = map[string]project.Question{}
+		for _, q := range qs {
+			m.questions[q.ID] = q
+		}
+	}
 	if sn.board != nil {
 		m.priority = map[string]tasks.Priority{}
 		for _, t := range sn.board.Tasks {
@@ -142,13 +158,25 @@ func pairedMember(alias, slug string, peers []proto.PeerMirror) memberNeeds {
 
 // rollUp is program slug's Needs you from its members, in the program's
 // order: each member's needs as rows, the same need seen twice folded
-// into one (foldNeeds), then ranked (rankNeeds).
-func rollUp(slug string, members []memberNeeds) proto.ProgramNeedsResult {
+// into one (foldNeeds), the program's own open questions (asks) as rows
+// that stand for the member questions they cover (programAsks), alike
+// questions flagged (flagSimilar), then ranked (rankNeeds).
+func rollUp(slug string, members []memberNeeds, asks []project.Question) proto.ProgramNeedsResult {
 	res := proto.ProgramNeedsResult{Program: slug, Needs: []proto.ProgramNeed{}, Members: []proto.NeedMember{}}
-	order := map[string]int{}
+	order := map[string]int{"/" + slug: -1}
+	covered := map[string]bool{} // member questions an open program question covers, as acme-api/Q3
+	for _, q := range asks {
+		for _, cv := range q.Covers {
+			covered[cv.Ref()] = true
+		}
+	}
+	res.Needs = append(res.Needs, programAsks(slug, asks)...)
 	for i, m := range members {
 		order[m.server+"/"+m.project] = i
 		rows := foldNeeds(m)
+		rows = slices.DeleteFunc(rows, func(n proto.ProgramNeed) bool {
+			return n.Server == "" && n.Kind == proto.NeedAsk && covered[n.Project+"/"+strings.TrimPrefix(n.ID, "ask:")]
+		})
 		nm := proto.NeedMember{Project: m.project, Server: m.server, Needs: len(rows), Count: m.count, Synced: m.synced, Error: m.err}
 		if nm.Needs == 0 && nm.Count == 0 && nm.Error == "" {
 			res.Quiet++
@@ -156,8 +184,67 @@ func rollUp(slug string, members []memberNeeds) proto.ProgramNeedsResult {
 		res.Members = append(res.Members, nm)
 		res.Needs = append(res.Needs, rows...)
 	}
+	flagSimilar(res.Needs, members)
 	rankNeeds(res.Needs, func(n proto.ProgramNeed) int { return order[n.Server+"/"+n.Project] })
 	return res
+}
+
+// programAsks are program slug's open questions as rows: the user
+// answers each once, for the member questions it covers (Merged).
+func programAsks(slug string, asks []project.Question) []proto.ProgramNeed {
+	var out []proto.ProgramNeed
+	for _, q := range asks {
+		n := proto.ProgramNeed{Project: slug, Program: true, Acts: []string{proto.ActAnswer}}
+		n.ID, n.Kind, n.Role, n.Since = "ask:"+q.ID, proto.NeedAsk, proto.RoleDirector, q.Asked
+		n.Question = &proto.Question{Questions: []proto.QuestionItem{questionItem(q)}}
+		for _, cv := range q.Covers {
+			n.Merged = append(n.Merged, cv.Ref())
+		}
+		out = append(out, n)
+	}
+	return out
+}
+
+// questionItem is stored question q as a menu's question.
+func questionItem(q project.Question) proto.QuestionItem {
+	item := proto.QuestionItem{Question: q.Question, Header: q.Header, MultiSelect: q.MultiSelect}
+	for _, o := range q.Options {
+		item.Options = append(item.Options, proto.QuestionOption{Label: o.Label, Description: o.Description})
+	}
+	return item
+}
+
+// flagSimilar sets Similar on each local member's coordinator question
+// row that asks what another member's does (program.Similar): the
+// server suggests, the director merges.
+func flagSimilar(ns []proto.ProgramNeed, members []memberNeeds) {
+	qs := map[string]map[string]project.Question{}
+	for _, m := range members {
+		if m.server == "" {
+			qs[m.project] = m.questions
+		}
+	}
+	question := func(n proto.ProgramNeed) (project.Question, bool) {
+		if n.Program || n.Server != "" || n.Kind != proto.NeedAsk {
+			return project.Question{}, false
+		}
+		q, ok := qs[n.Project][strings.TrimPrefix(n.ID, "ask:")]
+		return q, ok && q.CoveredBy == ""
+	}
+	for i := range ns {
+		a, ok := question(ns[i])
+		if !ok {
+			continue
+		}
+		for j := range ns {
+			if j == i || ns[j].Project == ns[i].Project {
+				continue
+			}
+			if b, ok := question(ns[j]); ok && program.Similar(a, b) {
+				ns[i].Similar = append(ns[i].Similar, b.ID+"@"+ns[j].Project)
+			}
+		}
+	}
 }
 
 // foldNeeds are member m's rows: its needs, a task's coordinator

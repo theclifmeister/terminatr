@@ -38,7 +38,7 @@ func TestRollUpRanks(t *testing.T) {
 	}, links: []link.Need{{Kind: link.NeedHeld, Peer: "ops", ID: "M-4", Created: at(3), Title: "deploy?"}}, hostFails: 2}
 	docs := memberNeeds{project: "docs"}
 	ios := memberNeeds{project: "ios", server: "mini", count: 3}
-	res := rollUp("acme", []memberNeeds{api, web, docs, ios})
+	res := rollUp("acme", []memberNeeds{api, web, docs, ios}, nil)
 	var got []string
 	for _, n := range res.Needs {
 		got = append(got, n.Project+" "+n.ID)

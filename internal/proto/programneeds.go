@@ -53,6 +53,17 @@ type ProgramNeed struct {
 	// into the row (need-level dedupe): a coordinator's open question
 	// about the task in review, kept whole so its own act still runs.
 	Also []PeerNeed `json:"also,omitempty"`
+	// Similar are other members' open coordinator questions that ask
+	// what this one asks (§7.1: alike words and the same options), as
+	// Q7@acme-web: a hint that the director may merge them (tm program
+	// ask merge); nothing merges them by itself.
+	Similar []string `json:"similar,omitempty"`
+	// Program: the row is one of the program's own questions (Kind
+	// NeedAsk, Project the program's slug), which the user answers
+	// once for the member questions it covers, Merged (acme-api/Q3);
+	// those have no rows of their own while it is open.
+	Program bool     `json:"program,omitempty"`
+	Merged  []string `json:"merged,omitempty"`
 }
 
 // ProgramNeedsParams are program.needs' params.
