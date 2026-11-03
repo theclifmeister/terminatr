@@ -86,7 +86,7 @@ func (e peerExport) Act(c caller.Caller, p proto.PeerAct) (proto.PeerActResult, 
 	if n.Escape {
 		return proto.PeerActResult{}, errEscapeHere
 	}
-	if !slices.Contains(proto.ActsOf(n), p.Act) {
+	if !slices.Contains(proto.ActsOf(n), p.Act) && !proto.AnswersAsk(n, p) {
 		return proto.PeerActResult{}, proto.Errorf(proto.ErrBadParams, "a %s need takes no %s", n.Kind, p.Act)
 	}
 	p, perr := actGuard(n, p)
@@ -126,6 +126,15 @@ func actGuard(n proto.PeerNeed, p proto.PeerAct) (proto.PeerAct, *proto.Error) {
 		it := qs[p.Index]
 		if p.Question == "" || !sameWords(p.Question, it.Question) {
 			return p, errNeedChanged
+		}
+		if p.Other != "" {
+			if n.Kind != proto.NeedAsk {
+				return p, proto.Errorf(proto.ErrBadParams, "a menu's question takes one of its options, not words of the user's own")
+			}
+			if p.Answer == "" && len(p.Picks) == 0 {
+				p.Question = it.Question
+				break
+			}
 		}
 		if len(p.Picks) > 0 {
 			ans, perr := pickedAnswer(it, p.Picks)
@@ -176,6 +185,9 @@ func sameWords(theirs, ours string) bool {
 func (s *Server) peerAct(c caller.Caller, n proto.PeerNeed, p proto.PeerAct) (proto.PeerActResult, *proto.Error) {
 	cc := callCtx{method: proto.MethodPeerAct, human: true, who: func() caller.Caller { return c }}
 	var none proto.PeerActResult
+	if proto.AnswersAsk(n, p) {
+		return s.peerAskAnswer(c, n, p)
+	}
 	if p.Act == proto.ActAnswer || p.Act == proto.ActApprove {
 		sess, perr := s.session(n.Session)
 		if perr != nil {
@@ -227,6 +239,39 @@ func (s *Server) peerAct(c caller.Caller, n proto.PeerNeed, p proto.PeerAct) (pr
 		return proto.PeerActResult{Open: r.Open}, nil
 	}
 	return none, proto.Errorf(proto.ErrBadParams, "%q is no act", p.Act)
+}
+
+// peerAskAnswer answers need n, one of the coordinator's open
+// questions, for c, the paired server's user, as tm ask answer does
+// here: the user's answer item for the coordinator, journaled with c
+// (a program's answer fanned out to this member, the programs design
+// §7.2). p went through actGuard: its Answer is one option's label,
+// or its Picks a multi-select's options; Other the user's own words.
+func (s *Server) peerAskAnswer(c caller.Caller, n proto.PeerNeed, p proto.PeerAct) (proto.PeerActResult, *proto.Error) {
+	pr, err := project.Open(p.Project)
+	if err != nil {
+		return proto.PeerActResult{}, errNeedChanged
+	}
+	it := n.Question.Questions[0]
+	var labels []string
+	switch {
+	case len(p.Picks) > 0:
+		for _, j := range p.Picks {
+			labels = append(labels, it.Options[j].Label)
+		}
+	case p.Answer != "":
+		labels = []string{p.Answer}
+	}
+	_, _, asked, err := pr.AnswerQuestion(c, strings.TrimPrefix(n.ID, "ask:"), labels, p.Other)
+	if err != nil {
+		var e *project.Error
+		if errors.As(err, &e) && e.Code == "unknown-question" {
+			return proto.PeerActResult{}, errNeedChanged
+		}
+		return proto.PeerActResult{}, codeErr(err)
+	}
+	s.watch.wake()
+	return proto.PeerActResult{Asked: asked}, nil
 }
 
 // peerApproval is the permission dialog on session id's screen, as
@@ -383,6 +428,11 @@ func (s *Server) needAct(p proto.PeerNeedActParams, cc callCtx) (any, *proto.Err
 			return nil, proto.Errorf(proto.ErrBadParams, "%v", err)
 		}
 	}
+	if p.Act == proto.ActAnswer && strings.HasPrefix(p.Need, "ask:") || p.Other != "" {
+		if perr := s.needAskCap(p.Peer); perr != nil {
+			return nil, perr
+		}
+	}
 	who := cc.who()
 	res, err := s.peers.Act(context.Background(), p.Peer, p.PeerAct, who.Device)
 	if err != nil {
@@ -391,6 +441,17 @@ func (s *Server) needAct(p proto.PeerNeedActParams, cc callCtx) (any, *proto.Err
 	s.log.Printf("peer %s: %s %s on %s, by %s", p.Peer, p.Act, textsafe.Line(p.Need, 80), p.Project, who)
 	s.watch.wake()
 	return res, nil
+}
+
+// needAskCap refuses an answer to a coordinator's question on paired
+// server alias while its hello doesn't say it takes one (need-ask).
+func (s *Server) needAskCap(alias string) *proto.Error {
+	for _, m := range s.mirror.List().Peers {
+		if m.Alias == alias && m.State == proto.LinkUp && !m.NeedAsk {
+			return proto.Errorf(proto.ErrUnknownMethod, "%s's tm takes no answers to its coordinators' questions from here; update it to answer there", alias)
+		}
+	}
+	return nil
 }
 
 // needActError is a failed peer.act in this server's words, its code

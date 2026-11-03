@@ -476,6 +476,8 @@ func Receive(alias string, id peer.ID, m proto.PeerMessage) proto.PeerMessageRes
 			res = s.receiveProgramStatus(alias, fingerprint(id), m)
 		case proto.PeerProgramRename:
 			res = s.receiveProgramRename(alias, fingerprint(id), m)
+		case proto.PeerProgramWatch:
+			res = s.receiveProgramWatch(alias, fingerprint(id), m)
 		default:
 			res = proto.PeerMessageResult{Status: proto.PeerRefused, Code: "bad-message"}
 		}

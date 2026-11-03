@@ -15,7 +15,7 @@ import (
 // the same thing. The director merges and withdraws them; only the user
 // answers them, once for every member question they cover.
 
-const programAskUsage = `usage: tm program ask merge Q3@acme-api Q7@acme-web… [--text "…"] [--header H] [--map acme-web/Q7=2,1]
+const programAskUsage = `usage: tm program ask merge Q3@acme-api Q7@acme-web Q4@mini/acme-ios… [--text "…"] [--header H] [--map acme-web/Q7=2,1]
        tm program ask list [--json]
        tm program ask done Q2   (no longer asked: the member questions are their own again)
        tm program ask answer Q2 --choice N|LABEL… [--other "…"]   (the user's; as tm ask answer <program>/Q2)
@@ -26,7 +26,10 @@ that ask the same thing: it takes the first one's options, and each other
 one's must match them by label, or --map says which of its options each of
 the first's is (1-based, in the first's order). tm program needs flags alike
 questions (similar: Q7@acme-web); nothing merges them by itself. The user's
-answer goes to every question it covers as their own answer there.`
+answer goes to every question it covers as their own answer there. A member
+on a paired server (Q4@mini/acme-ios) merges while that server shows its needs
+to this one (needs view), and takes the answer while it takes answers from
+here (needs answer); else its question is answered there.`
 
 func programAsk(e *Env, cfg *config.Config, args []string) error {
 	if len(args) == 0 {
@@ -151,5 +154,6 @@ func askProgramAnswer(e *Env, ref string, choices []string, other string, asJSON
 	if err != nil {
 		return true, err
 	}
+	g.Paired = program.PairedVia(e.Caller, g.Slug, e.call)
 	return true, programAnswer(e, cfg, g, id, choices, other, asJSON)
 }

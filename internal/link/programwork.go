@@ -1220,6 +1220,90 @@ func (s *store) receiveProgramRename(alias, fp string, m proto.PeerMessage) prot
 	return proto.PeerMessageResult{Status: proto.PeerDelivered}
 }
 
+// maxWatched bounds the tasks of one project here that a paired
+// director has its pushes cover.
+const maxWatched = 500
+
+// AskWatch asks the paired member whose task ref is ("mini/acme-ios/T7")
+// to push that task's state to program prog here (program-watch): a
+// task the director didn't file, change or start, which an umbrella has
+// as a part or a member's task comes after. Asked once per program and
+// ref, and only of a member that granted status pushes; the ticker asks
+// for the paired refs it has no state of.
+func AskWatch(prog, ref string) error {
+	if !programsOnNow() {
+		return refuseOff()
+	}
+	alias, slug, n, ok := tasks.CrossRef(ref)
+	if !ok || alias == "" {
+		return refuse("invalid-ref", "%q is not a paired member's task (mini/acme-ios/T7)", ref)
+	}
+	member := alias + "/" + slug
+	d, err := remoteTo(alias, slug)
+	if err != nil {
+		return err
+	}
+	asked := false
+	err = withStore(func(s *store) error {
+		k := prog + " " + ref
+		if s.WatchAsked[k] {
+			return nil
+		}
+		if err := s.checkMember(prog, member, proto.ProgramFeatureStatus); err != nil {
+			return err
+		}
+		m := proto.PeerMessage{Kind: proto.PeerProgramWatch, From: prog, To: slug, ID: d.(remote).newID(s), By: "director",
+			Created: now().UTC().Truncate(time.Second), Task: &proto.ProgramTask{Ref: "T" + strconv.Itoa(n)}}
+		if err := s.queue(alias, m); err != nil {
+			return err
+		}
+		if s.WatchAsked == nil {
+			s.WatchAsked = map[string]bool{}
+		}
+		s.WatchAsked[k], asked = true, true
+		return nil
+	})
+	if asked {
+		Kick()
+	}
+	return err
+}
+
+// receiveProgramWatch takes a paired director's program-watch: its task
+// joins what the program's status pushes cover (and is pushed at the
+// next sweep), while this project is its member and grants status.
+func (s *store) receiveProgramWatch(alias, fp string, m proto.PeerMessage) proto.PeerMessageResult {
+	if g := remoteIDRE.FindStringSubmatch(m.ID); g == nil || g[1] != fp || m.Task == nil || !config.ValidProgramSlug(m.From) {
+		return proto.PeerMessageResult{Status: proto.PeerRefused, Code: "bad-message"}
+	}
+	n, ok := tasks.ParseRef(m.Task.Ref)
+	if !ok || strings.Contains(m.Task.Ref, "/") {
+		return proto.PeerMessageResult{Status: proto.PeerRefused, Code: "bad-message"}
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		return proto.PeerMessageResult{Status: proto.PeerRetry, Code: "refused"}
+	}
+	to, l := childOf(cfg, alias, m.From, m.To)
+	if to == nil {
+		return proto.PeerMessageResult{Status: proto.PeerRefused, Code: "not-member"}
+	}
+	if !l.Status {
+		return proto.PeerMessageResult{Status: proto.PeerRefused, Code: "status-off"}
+	}
+	ref := "T" + strconv.Itoa(n)
+	if slices.Contains(s.Watch[to.Slug], n) {
+		return proto.PeerMessageResult{Status: proto.PeerDelivered}
+	}
+	if len(s.Watch[to.Slug]) >= maxWatched {
+		return proto.PeerMessageResult{Status: proto.PeerRefused, Code: "too-many"}
+	}
+	s.watch(to.Slug, n)
+	delete(s.Pushed, to.Slug+"/"+ref)
+	to.Journal(caller.ForPeerDirector(alias, m.From), "program.watch", ref, "its state goes to "+alias+"/"+m.From)
+	return proto.PeerMessageResult{Status: proto.PeerDelivered}
+}
+
 // workSettled tells a program here that its paired member's server
 // refused, or didn't take in time, the work m (a task, change or start):
 // the sent record is undelivered and an item says why. A program

@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/link"
 	"github.com/theclifmeister/terminatr/internal/models/modelstest"
 	"github.com/theclifmeister/terminatr/internal/program"
 	"github.com/theclifmeister/terminatr/internal/proto"
@@ -326,5 +327,65 @@ func TestProgramRenameDelete(t *testing.T) {
 	drain(t, m, press(m, "Y"))
 	if !slices.Equal(src.programActs, []string{"rename acme studio", "delete acme"}) {
 		t.Fatalf("delete: %v", src.programActs)
+	}
+}
+
+// TestProgramPairedMember: a paired member shows under its program,
+// named alias/slug, and under its server's group, tagged with its
+// program; each place folds apart, ← on it folded goes to its program
+// or its server, and enter opens the same dashboard from both. An
+// invited member the mirror doesn't have is a dim row saying so.
+func TestProgramPairedMember(t *testing.T) {
+	peers := []proto.PeerMirror{{Alias: "mini", State: proto.LinkUp, Projects: []proto.PeerMirrorProject{
+		{PeerProject: proto.PeerProject{Project: "ios", NeedsYou: 1}, Watch: &proto.ProjectWatch{Project: "ios"}}}}}
+	progs := []ProgramData{{SideProgram: server.SideProgram{Slug: "acme", Projects: []string{"mini/ios", "mini/mac"}},
+		Invites: map[string]link.Invite{"mini/mac": {ID: "P-1", Out: true, Peer: "mini/mac", State: link.ReqWaiting}}}}
+	build := func(tr view.Tree) []treeRow {
+		return buildTree(nil, nil, treeIn{tree: tr, peers: peers, host: "here", programs: progs})
+	}
+	rows := build(view.Tree{})
+	want := []string{"g:", "g:acme", "r:acme", "g:acme/r:mini/ios", "g:acme/rc:mini/ios", "g:acme/r:mini/mac", "g:mini", "r:mini/ios", "rc:mini/ios"}
+	if keys := rowKeys(rows); !slices.Equal(keys, want) {
+		t.Fatalf("rows %v", keys)
+	}
+	line := func(key string) string {
+		r, _ := sideRowOf(rows, key, false)
+		return ansi.Strip(treeCells(r, 50, false, false))
+	}
+	if l := line("g:acme/r:mini/ios"); !strings.Contains(l, "│") || !strings.Contains(l, "mini/ios") {
+		t.Errorf("under the program %q", l)
+	}
+	if l := line("g:acme/r:mini/mac"); !strings.Contains(l, "mini/mac") || !strings.Contains(l, "invited") {
+		t.Errorf("invited %q", l)
+	}
+	if l := line("r:mini/ios"); !strings.Contains(l, "ios · acme") {
+		t.Errorf("under its server %q", l)
+	}
+	if g, _ := sideRowOf(rows, "g:acme", false); !g.hint {
+		t.Errorf("the program row doesn't say its paired member needs you")
+	}
+	// Folding it under its program leaves it unfolded under its server.
+	st := sideKeyStep(rows, 50, "g:acme/r:mini/ios", sideOut)
+	var tr view.Tree
+	if st.refold == nil {
+		t.Fatalf("← under the program: %+v", st)
+	}
+	st.refold(&tr)
+	if !tr.IsFolded("g:acme/@mini/ios") || tr.IsFolded("@mini/ios") {
+		t.Fatalf("tree %+v", tr)
+	}
+	rows = build(tr)
+	if keys := rowKeys(rows); slices.Contains(keys, "g:acme/rc:mini/ios") || !slices.Contains(keys, "rc:mini/ios") {
+		t.Errorf("folded under the program: %v", keys)
+	}
+	if st := sideKeyStep(rows, 50, "g:acme/r:mini/ios", sideOut); st.sel != "g:acme" {
+		t.Errorf("← on it folded: %+v", st)
+	}
+	a, _ := sideRowOf(rows, "g:acme/r:mini/ios", false)
+	b, _ := sideRowOf(rows, "r:mini/ios", false)
+	ta, _, _ := a.target()
+	tb, _, _ := b.target()
+	if ta != tb || ta.Project != "@mini/ios" {
+		t.Errorf("targets %+v %+v", ta, tb)
 	}
 }

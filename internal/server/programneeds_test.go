@@ -244,3 +244,54 @@ func needRefOf(n proto.ProgramNeed) string {
 	}
 	return strings.TrimPrefix(n.ID, "ask:")
 }
+
+// TestPairedMemberNeeds: a paired member whose server shows this one
+// its needs (view or answer) has them as rows in the queue, with acts
+// at answer only; its coordinator's questions are flagged alike with a
+// local member's (as Q4@mini/ios) and, once a program question covers
+// one, have no row. At off it is a count.
+func TestPairedMemberNeeds(t *testing.T) {
+	opts := []proto.QuestionOption{{Label: "EU"}, {Label: "US"}}
+	ask := proto.PeerNeed{ID: "ask:Q4", Kind: proto.NeedAsk, Role: proto.RoleCoordinator,
+		Question: &proto.Question{Questions: []proto.QuestionItem{{Question: "Which region do we deploy to?", Options: opts}}}}
+	review := proto.PeerNeed{ID: "review:T7:1", Kind: proto.NeedReview, Task: "T7", Status: "review", Title: "Login"}
+	mirror := func(level string) []proto.PeerMirror {
+		return []proto.PeerMirror{{Alias: "mini", NeedsCap: true, Needs: level, Projects: []proto.PeerMirrorProject{
+			{PeerProject: proto.PeerProject{Project: "ios", NeedsYou: 2}, Needs: []proto.PeerNeed{ask, review}}}}}
+	}
+	local := memberNeeds{project: "api", questions: map[string]project.Question{
+		"Q1": {ID: "Q1", Question: "Which region should we deploy to?", Options: []project.QuestionOption{{Label: "us"}, {Label: "eu"}}}}}
+	local.needs = []proto.PeerNeed{{ID: "ask:Q1", Kind: proto.NeedAsk, Role: proto.RoleCoordinator}}
+
+	res := rollUp("acme", []memberNeeds{local, pairedMember("mini", "ios", mirror(proto.NeedsAnswer))}, nil)
+	byID := map[string]proto.ProgramNeed{}
+	for _, n := range res.Needs {
+		byID[n.Server+"/"+n.Project+" "+n.ID] = n
+	}
+	r, a := byID["mini/ios review:T7:1"], byID["mini/ios ask:Q4"]
+	if !slices.Equal(r.Acts, []string{proto.ActAccept, proto.ActSendBack}) || !slices.Equal(a.Similar, []string{"Q1@api"}) {
+		t.Errorf("answer: review %+v ask %+v", r, a)
+	}
+	if l := byID["/api ask:Q1"]; !slices.Equal(l.Similar, []string{"Q4@mini/ios"}) {
+		t.Errorf("local ask: %+v", l)
+	}
+	if m := res.Members[1]; m.Server != "mini" || m.Needs != 2 || m.Count != 0 {
+		t.Errorf("member: %+v", m)
+	}
+
+	view := pairedMember("mini", "ios", mirror(proto.NeedsView))
+	res = rollUp("acme", []memberNeeds{view}, nil)
+	if len(res.Needs) != 2 || slices.ContainsFunc(res.Needs, func(n proto.ProgramNeed) bool { return len(n.Acts) > 0 }) {
+		t.Errorf("view: %+v", res.Needs)
+	}
+	covers := []project.Question{{ID: "Q1", Question: "Region?", Covers: []project.Cover{{Project: "mini/ios", Question: "Q4"}}}}
+	res = rollUp("acme", []memberNeeds{view}, covers)
+	if len(res.Needs) != 2 || !res.Needs[0].Program && !res.Needs[1].Program || slices.ContainsFunc(res.Needs, func(n proto.ProgramNeed) bool { return n.ID == "ask:Q4" }) {
+		t.Errorf("covered: %+v", res.Needs)
+	}
+
+	off := pairedMember("mini", "ios", mirror(proto.NeedsOff))
+	if res = rollUp("acme", []memberNeeds{off}, nil); len(res.Needs) != 0 || res.Members[0].Count != 2 {
+		t.Errorf("off: %+v", res)
+	}
+}

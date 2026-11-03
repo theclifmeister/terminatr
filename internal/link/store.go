@@ -63,6 +63,10 @@ type store struct {
 	RemoteTasks map[string]*RemoteTask `json:"remote_tasks,omitempty"`
 	Watch       map[string][]int       `json:"program_watch,omitempty"`
 	Pushed      map[string]string      `json:"program_pushed,omitempty"`
+	// WatchAsked are the paired members' tasks a program here asked to
+	// have pushed (program-watch), by "<program> <alias>/<slug>/T<n>":
+	// each is asked once.
+	WatchAsked map[string]bool `json:"program_watch_asked,omitempty"`
 }
 
 // bucket is one direction's token bucket (limits).

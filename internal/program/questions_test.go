@@ -1,12 +1,14 @@
 package program
 
 import (
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/project"
+	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
 func ask(t *testing.T, p *project.Project, text string, multi bool, labels ...string) project.Question {
@@ -203,15 +205,116 @@ func TestAnswerClosedCover(t *testing.T) {
 
 // TestMemberQuestionRef reads both forms.
 func TestMemberQuestionRef(t *testing.T) {
-	for in, want := range map[string]string{"Q3@acme-api": "acme-api Q3", "acme-api/q3": "acme-api Q3", " q12@web ": "web Q12"} {
+	for in, want := range map[string]string{"Q3@acme-api": "acme-api Q3", "acme-api/q3": "acme-api Q3", " q12@web ": "web Q12",
+		"Q3@mini/acme-ios": "mini/acme-ios Q3", "mini/acme-ios/q3": "mini/acme-ios Q3"} {
 		slug, id, err := MemberQuestionRef(in)
 		if err != nil || slug+" "+id != want {
 			t.Errorf("%q: %s %s %v", in, slug, id, err)
 		}
 	}
-	for _, in := range []string{"Q3", "acme-api/T3", "@acme", "Q0@x"} {
+	for _, in := range []string{"Q3", "acme-api/T3", "@acme", "Q0@x", "Q3@a/b/c", "x/y/z/Q3"} {
 		if _, _, err := MemberQuestionRef(in); err == nil {
 			t.Errorf("%q: no error", in)
 		}
+	}
+}
+
+// fakePaired is a paired server's coordinator questions as tm's server
+// would read them, and the acts sent to them.
+type fakePaired struct {
+	qs    map[string]project.Question // by key/id
+	acts  []proto.PeerAct
+	keys  []string
+	asked bool
+	err   error
+}
+
+func (f *fakePaired) Question(key, id string) (project.Question, error) {
+	if q, ok := f.qs[key+"/"+id]; ok {
+		return q, nil
+	}
+	return project.Question{}, refuse("unknown-question", "no open question %s in %s", id, key)
+}
+
+func (f *fakePaired) Answer(key string, act proto.PeerAct) (bool, error) {
+	f.keys, f.acts = append(f.keys, key), append(f.acts, act)
+	return f.asked, f.err
+}
+
+// TestMergeAndAnswerPaired: a paired member's question merges with a
+// local one's (covered by the program question only: nothing is marked
+// on its server, and a second merge of it refuses covered); the user's
+// answer goes to it over peer.act, mapped to its labels and guarded by
+// its words, picks for a multi-select, the user's own words as Other;
+// one closed there meanwhile is closed, and without a way to the
+// server the fan-out fails remote-member.
+func TestMergeAndAnswerPaired(t *testing.T) {
+	g, cfg := routeFixture(t, routeConfig)
+	api := openChild(t, "acme-api")
+	qa := ask(t, api, "Which region do we deploy to?", false, "EU", "US")
+	ios := project.Question{ID: "Q4", Question: "Which region should we deploy to?", Options: []project.QuestionOption{{Label: "us"}, {Label: "eu"}}}
+	fp := &fakePaired{qs: map[string]project.Question{"mini/acme-ios/Q4": ios}, asked: true}
+	g.Paired = fp
+
+	pq, err := g.Merge(director, cfg, MergeRequest{Questions: []string{"acme-api/" + qa.ID, "Q4@mini/acme-ios"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pq.Covers) != 2 || pq.Covers[1].Ref() != "mini/acme-ios/Q4" || !slices.Equal(pq.Covers[1].Map, []string{"eu", "us"}) {
+		t.Fatalf("merged: %+v", pq.Covers)
+	}
+	if _, err := g.Merge(director, cfg, MergeRequest{Questions: []string{"mini/acme-ios/Q4", "acme-web/Q1"}}); code(err) != "covered" {
+		t.Errorf("merging a covered paired question: %v", err)
+	}
+	res, err := g.Answer(human, cfg, pq.ID, []string{"EU"}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := proto.PeerAct{Project: "acme-ios", Need: "ask:Q4", Act: proto.ActAnswer, Question: ios.Question, Answer: "eu"}
+	if len(fp.acts) != 1 || fp.keys[0] != "mini/acme-ios" || !reflect.DeepEqual(fp.acts[0], want) {
+		t.Fatalf("acts: %v %+v", fp.keys, fp.acts)
+	}
+	if res.Fanned[1].Result != "answered" || res.Fanned[1].Project != "mini/acme-ios" {
+		t.Errorf("fanned: %+v", res.Fanned)
+	}
+
+	// A multi-select goes as picks, the user's own words as Other; an
+	// earlier answer waiting there is waiting.
+	multi := project.Question{ID: "Q5", Question: "Which platforms?", MultiSelect: true, Options: []project.QuestionOption{{Label: "iOS"}, {Label: "Android"}, {Label: "Web"}}}
+	fp.qs["mini/acme-ios/Q5"], fp.acts, fp.asked = multi, nil, false
+	qm := ask(t, api, "Which platforms?", true, "iOS", "Android", "Web")
+	pq, err = g.Merge(director, cfg, MergeRequest{Questions: []string{"acme-api/" + qm.ID, "mini/acme-ios/Q5"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err = g.Answer(human, cfg, pq.ID, []string{"Web", "iOS"}, "and watchOS later")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want = proto.PeerAct{Project: "acme-ios", Need: "ask:Q5", Act: proto.ActAnswer, Question: "Which platforms?", Picks: []int{0, 2}, Answer: "iOS, Web", Other: "and watchOS later"}
+	if len(fp.acts) != 1 || !reflect.DeepEqual(fp.acts[0], want) || res.Fanned[1].Result != "waiting" {
+		t.Fatalf("multi: %+v %+v", fp.acts, res.Fanned)
+	}
+
+	// Closed there meanwhile; and with no way to the server.
+	qc := ask(t, api, "Which logo?", false, "Round", "Square")
+	fp.qs["mini/acme-ios/Q6"] = project.Question{ID: "Q6", Question: "Which logo?", Options: []project.QuestionOption{{Label: "Round"}, {Label: "Square"}}}
+	pq, err = g.Merge(director, cfg, MergeRequest{Questions: []string{"acme-api/" + qc.ID, "mini/acme-ios/Q6"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	delete(fp.qs, "mini/acme-ios/Q6")
+	if res, err = g.Answer(human, cfg, pq.ID, []string{"Round"}, ""); err != nil || res.Fanned[1].Result != "closed" {
+		t.Errorf("closed there: %+v %v", res.Fanned, err)
+	}
+	qd := ask(t, api, "Dark mode?", false, "Yes", "No")
+	fp.qs["mini/acme-ios/Q7"] = project.Question{ID: "Q7", Question: "Dark mode?", Options: []project.QuestionOption{{Label: "Yes"}, {Label: "No"}}}
+	pq, err = g.Merge(director, cfg, MergeRequest{Questions: []string{"acme-api/" + qd.ID, "mini/acme-ios/Q7"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	g.Paired = nil
+	if res, err = g.Answer(human, cfg, pq.ID, []string{"Yes"}, ""); err != nil || res.Fanned[1].Result != "failed" || !strings.Contains(res.Fanned[1].Error, "paired server") {
+		t.Errorf("no way there: %+v %v", res.Fanned, err)
 	}
 }

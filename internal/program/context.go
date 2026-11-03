@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/link"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/textsafe"
@@ -87,8 +88,9 @@ func (p *Program) withParts(s project.Section) project.Section {
 }
 
 // childrenSection is one line per member: a local project's goal and
-// its board's counts by group; a paired server's member by name only
-// (its state comes over the link, B16).
+// its board's counts by group; a paired server's member by name and its
+// invite's state (its needs are in the Needs you part, its tasks' states
+// in the umbrellas' parts).
 func (p *Program) childrenSection(cfg *config.Config) project.Section {
 	s := project.Section{Title: "Children", Part: project.PartThreads}
 	for i, m := range p.Members {
@@ -96,7 +98,7 @@ func (p *Program) childrenSection(cfg *config.Config) project.Section {
 			s.Omitted = fmt.Sprintf("%d more members (tm program show %s)", len(p.Members)-capChildren, p.Slug)
 			break
 		}
-		s.Lines = append(s.Lines, childLine(m, cfg))
+		s.Lines = append(s.Lines, childLine(p.Slug, m, cfg))
 	}
 	if len(s.Lines) == 0 {
 		s.Lines = []string{"(no members yet: the user adds them in Settings, or in config.toml's [programs." + p.Slug + "] projects)"}
@@ -105,13 +107,13 @@ func (p *Program) childrenSection(cfg *config.Config) project.Section {
 }
 
 // childLine is member m's line in the Children part.
-func childLine(m string, cfg *config.Config) string {
+func childLine(prog, m string, cfg *config.Config) string {
 	alias, slug, ok := config.SplitMember(m)
 	switch {
 	case !ok:
 		return m + ": not a project's name"
 	case alias != "":
-		return m + ": on the paired server " + alias
+		return m + ": on the paired server " + alias + " (" + link.MemberState(prog, m) + ")"
 	}
 	c, err := project.OpenWith(slug, cfg)
 	if err != nil {

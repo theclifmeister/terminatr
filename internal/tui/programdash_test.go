@@ -317,6 +317,45 @@ func TestProgramUmbrellas(t *testing.T) {
 	}
 }
 
+// TestProgramNeedsPaired: a paired member's need in the program's queue
+// with acts (its server takes this one's at needs answer) is acted on
+// from the dialog through the paired need dialog (peer.need-act, as the
+// user's); one without acts (needs view) only shows its dashboard
+// there.
+func TestProgramNeedsPaired(t *testing.T) {
+	m, src := progDash(t)
+	res := src.pneeds["acme"]
+	rv := proto.ProgramNeed{PeerNeed: proto.PeerNeed{ID: "review:T7:1", Kind: proto.NeedReview, Task: "T7", Title: "Login", Status: "review"},
+		Project: "ios", Server: "mini", Acts: []string{proto.ActAccept, proto.ActSendBack}}
+	res.Needs = append(res.Needs, rv)
+	src.pneeds["acme"] = res
+	drain(t, m, m.showProject("g:acme"))
+	drain(t, m, m.openProgramNeeds("acme", rv.ID))
+	if !strings.Contains(screen(m), "act on it here: it goes to mini as your answer") {
+		t.Fatalf("paired page:\n%s", screen(m))
+	}
+	drain(t, m, press(m, "1"))
+	if _, ok := m.top().(*peerNeedView); !ok {
+		t.Fatalf("top %T", m.top())
+	}
+	drain(t, m, press(m, "1"))
+	if _, ok := m.top().(*confirmView); ok {
+		drain(t, m, press(m, "Y"))
+	}
+	if len(src.acts) != 1 || src.acts[0].Peer != "mini" || src.acts[0].Project != "ios" || src.acts[0].Act != proto.ActAccept || src.acts[0].Status != "review" {
+		t.Errorf("acts %+v", src.acts)
+	}
+
+	m.pop()
+	rv.Acts = nil
+	res.Needs[len(res.Needs)-1] = rv
+	src.pneeds["acme"] = res
+	drain(t, m, m.openProgramNeeds("acme", rv.ID))
+	if out := screen(m); strings.Contains(out, "act on it here") || !strings.Contains(out, "(answered there)") {
+		t.Errorf("view page:\n%s", out)
+	}
+}
+
 // TestProgramNeedsUmbrella: an umbrella in review is a row of the
 // program's needs; its dialog page offers accept (asks first) and
 // send-back (asks for a note).

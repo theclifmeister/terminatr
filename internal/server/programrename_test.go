@@ -3,7 +3,9 @@ package server
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/theclifmeister/terminatr/internal/client"
@@ -70,5 +72,32 @@ func TestProgramRenameRestartsDirector(t *testing.T) {
 	cfg, _ := config.Load()
 	if cfg.ProgramOf("demo") != "studio" {
 		t.Errorf("demo in %q", cfg.ProgramOf("demo"))
+	}
+}
+
+// TestProgramRenamePairedMembers: a program with a paired member is
+// renamed (no paired-members refusal any more); a member with no
+// invite to tell is a note.
+func TestProgramRenamePairedMembers(t *testing.T) {
+	p := testPaths(t)
+	newWatchProject(t)
+	if _, err := program.New(program.Options{Slug: "acme"}); err != nil {
+		t.Fatal(err)
+	}
+	writeConfig(t, "[features]\nprograms = true\n[programs.acme]\nprojects = [\"demo\", \"mini/ios\"]\n")
+	startServer(t, p)
+	c, err := client.Dial(p, proto.KindControl)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	var res proto.ProgramRenameResult
+	call(t, c, proto.MethodProgramRename, proto.ProgramRenameParams{From: "acme", To: "studio"}, &res)
+	if len(res.Notes) != 1 || !strings.Contains(res.Notes[0], "mini/ios") {
+		t.Errorf("notes: %q", res.Notes)
+	}
+	cfg, _ := config.Load()
+	if t2, ok := cfg.Program("studio"); !ok || !slices.Contains(t2.Projects, "mini/ios") {
+		t.Errorf("studio: %+v %v", t2, ok)
 	}
 }

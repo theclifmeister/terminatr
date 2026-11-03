@@ -56,6 +56,7 @@ func (s *ServerSource) AnswerProgram(slug, ref string, choices []string, other s
 	if err != nil {
 		return program.AnswerResult{}, err
 	}
+	g.Paired = program.PairedVia(s.Caller, g.Slug, s.call)
 	res, err := g.Answer(s.Caller, cfg, ref, choices, other)
 	s.touch()
 	return res, err

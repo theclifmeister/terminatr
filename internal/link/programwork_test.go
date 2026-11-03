@@ -515,3 +515,51 @@ func TestProgramWorkReceive(t *testing.T) {
 		_ = apps
 	})
 }
+
+// TestProgramWatch: studio's program asks mini's api for the state of
+// a task its director didn't file (an umbrella's part): asked once, it
+// joins what api pushes, and studio has its state. A member that
+// didn't grant status pushes isn't asked.
+func TestProgramWatch(t *testing.T) {
+	sv, _, api, toMini, toStudio := joined(t, AnswerOpts{Tasks: config.ProgramTasksFile, Status: true}, false)
+	sv.in(sv.mini, func() {
+		if _, err := api.Tasks().Add(userHere, []tasks.NewTask{{Title: "Keychain login", Status: "ready"}}); err != nil {
+			t.Fatal(err)
+		}
+	})
+	sv.in(sv.studio, func() {
+		for range 2 {
+			if err := AskWatch("apps", "mini/api/T1"); err != nil {
+				t.Fatal(err)
+			}
+		}
+		n := len(toMini.got)
+		Flush(context.Background(), toMini)
+		if sent := len(toMini.got) - n; sent != 1 {
+			t.Fatalf("%d program-watch messages sent", sent)
+		}
+		if err := AskWatch("apps", "acme/T1"); code(err) != "invalid-ref" {
+			t.Errorf("a local ref: %v", err)
+		}
+	})
+	sv.in(sv.mini, func() {
+		resetPush()
+		Flush(context.Background(), toStudio)
+	})
+	sv.in(sv.studio, func() {
+		rt, ok := RemoteTaskOf("mini/api/T1")
+		if !ok || rt.Status != "ready" || rt.Title != "Keychain login" {
+			t.Fatalf("pushed: %+v %v", rt, ok)
+		}
+	})
+}
+
+// TestProgramWatchNoStatus: without status granted, nothing is asked.
+func TestProgramWatchNoStatus(t *testing.T) {
+	sv, _, _, _, _ := joined(t, AnswerOpts{Tasks: config.ProgramTasksFile}, false)
+	sv.in(sv.studio, func() {
+		if err := AskWatch("apps", "mini/api/T1"); code(err) != "not-granted" {
+			t.Errorf("no status: %v", err)
+		}
+	})
+}

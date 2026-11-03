@@ -15,6 +15,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/features"
+	"github.com/theclifmeister/terminatr/internal/link"
 	"github.com/theclifmeister/terminatr/internal/peer"
 	"github.com/theclifmeister/terminatr/internal/program"
 	"github.com/theclifmeister/terminatr/internal/project"
@@ -446,7 +447,9 @@ func programRenameOffline(e *Env, p proto.ProgramRenameParams) (proto.ProgramRen
 	if err != nil {
 		return out, err
 	}
-	o := rename.ProgramOptions{From: p.From, To: p.To, Caller: e.Caller, Taken: peer.ProgramNameTaken}
+	// Paired members are told through the link's outbox, which the
+	// server sends once it runs.
+	o := rename.ProgramOptions{From: p.From, To: p.To, Caller: e.Caller, Taken: peer.ProgramNameTaken, TellPaired: link.TellRenamed}
 	if hd, err := os.UserHomeDir(); err == nil {
 		if reg, _ := agent.Load(paths.AgentsDir()); reg != nil {
 			o.MoveAgentDir = func(from, to string) error { return server.MoveAgentDirs(reg, hd, from, to) }

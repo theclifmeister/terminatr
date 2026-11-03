@@ -134,6 +134,12 @@ func appCases() []appCase {
 		{Name: "program, folded", Projects: projects, Sessions: progSessions, Programs: progs, Folded: []string{"g:acme"}},
 		{Name: "program, member folded", Projects: projects, Sessions: progSessions, Programs: progs, Folded: []string{"alpha"}, Expanded: []string{"delta"}},
 		{Name: "program, needs first", Projects: needs, Sessions: needsSessions, Programs: needsProgs, NeedsFirst: true, InactiveOpen: true},
+		// A paired member shows under its program and under its
+		// server's group, each with its own keys and fold; one the
+		// mirror doesn't have shows under its program alone.
+		{Name: "program, paired member", Projects: projects[2:3], Sessions: progSessions[:1], Peers: peers, Programs: pairedProgs},
+		{Name: "program, paired member folded under its program", Projects: projects[2:3], Sessions: progSessions[:1], Peers: peers, Programs: pairedProgs,
+			Folded: []string{"g:acme/@mini/demo"}},
 	}
 }
 
@@ -159,7 +165,8 @@ var (
 		{Slug: "acme", Projects: []string{"eps", "delta", "gone", "alpha"}},
 		{Slug: "zed", Projects: nil, Questions: 1},
 	}
-	needsProgs = []appProgram{{Slug: "m-prog", Projects: []string{"n-none", "n-task"}}}
+	needsProgs  = []appProgram{{Slug: "m-prog", Projects: []string{"n-none", "n-task"}}}
+	pairedProgs = []appProgram{{Slug: "acme", Projects: []string{"gamma", "mini/demo", "mini/gone"}}}
 	// peers: a project read, one stale, one not watched yet, and a
 	// server whose group folds.
 	peers = []appPeer{

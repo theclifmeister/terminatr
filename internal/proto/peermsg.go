@@ -88,6 +88,10 @@ const (
 //     ProgramStarted or ProgramFiledRefused, Task.Thread, Code.
 //   - program-rename: the director's program was renamed from From to
 //     Rename.
+//   - program-watch: the director asks the member to push the state of
+//     Task.Ref, a task of its board the director didn't file, change or
+//     start (an umbrella's part, or a task a member's task comes after):
+//     it joins the tasks program-status covers, while status is granted.
 const (
 	PeerProgramTask        = "program-task"
 	PeerProgramTaskFiled   = "program-task-filed"
@@ -96,6 +100,7 @@ const (
 	PeerProgramStart       = "program-start"
 	PeerProgramStartResult = "program-start-result"
 	PeerProgramRename      = "program-rename"
+	PeerProgramWatch       = "program-watch"
 )
 
 // The words of a program-task-filed's and a program-start-result's

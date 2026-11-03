@@ -6,6 +6,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/features"
+	"github.com/theclifmeister/terminatr/internal/link"
 	"github.com/theclifmeister/terminatr/internal/peer"
 	"github.com/theclifmeister/terminatr/internal/program"
 	"github.com/theclifmeister/terminatr/internal/proto"
@@ -122,10 +123,9 @@ func (s *Server) restartDirector(rec SessionRecord, slug string) (string, error)
 
 // tellPairedRename is the hook that tells a renamed program's paired
 // members' servers its new name (rename.ProgramOptions.TellPaired): the
-// program-rename peer kind (the programs design §9.2), which the paired
-// children's build returns here. While it returns nil, a program with
-// paired members is refused (paired-members), so no paired side is left
-// naming a program that is gone.
+// program-rename peer kind (the programs design §9.2), queued in the
+// link's outbox for each member whose invite was answered or waits, its
+// invites moved to the new name. A member it can't tell is a note.
 func (s *Server) tellPairedRename() func(from, to string, paired []string) []string {
-	return nil
+	return link.TellRenamed
 }

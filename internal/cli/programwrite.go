@@ -56,7 +56,12 @@ func (e *Env) ownProgram(cfg *config.Config, flag string) (*program.Program, err
 	default:
 		return nil, &project.Error{Code: "director-only", Msg: "tm program writes are the director's"}
 	}
-	return program.Open(slug, cfg)
+	g, err := program.Open(slug, cfg)
+	if err != nil {
+		return nil, err
+	}
+	g.Paired = program.PairedVia(e.Caller, g.Slug, e.call)
+	return g, nil
 }
 
 const programRouteUsage = `usage: tm program route --file <path>|- [--program <slug>] [--json]

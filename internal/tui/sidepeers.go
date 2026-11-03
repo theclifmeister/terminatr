@@ -81,11 +81,29 @@ func peerFold(alias, slug string) string {
 	return "@" + alias + "/" + slug
 }
 
+// peerFoldOf is remote project row r's view.Tree.Folded entry: its
+// peerFold, under its program's key when it is listed there
+// ("g:acme/@mini/acme-ios"), so the two places fold apart.
+func peerFoldOf(r treeRow) string {
+	id := peerFold(r.peer, r.slug)
+	if r.prog != "" {
+		id = programKey(r.prog) + "/" + id
+	}
+	return id
+}
+
 // peerKey names a server header or a remote row as View.SideSel does:
 // "g:" for this server's header, "g:<alias>" for a paired one's,
 // "r:<alias>/<project>" for its project, "rc:…" for the project's
 // coordinator and "rt:<alias>/<project>/<thread>" for a thread.
 func peerKey(r treeRow) string {
+	if r.prog != "" && r.kind != treeServer {
+		// A paired member's row under its program: its own key, beside
+		// the one under its server's group (sideprograms.go).
+		prog := r.prog
+		r.prog = ""
+		return programKey(prog) + "/" + peerKey(r)
+	}
 	switch r.kind {
 	case treePeerProject:
 		return "r:" + r.peer + "/" + r.slug
@@ -151,7 +169,7 @@ func withPeers(tree []treeRow, in treeIn) []treeRow {
 	}
 	out = append(out, tree...)
 	for _, pm := range in.peers {
-		rows := peerRows(pm, in.tree, in.current)
+		rows := peerRows(pm, in.tree, in.current, pairedMembers(in.programs))
 		rows[0].gap = true
 		out = append(out, rows...)
 	}
@@ -244,9 +262,8 @@ func paneWords(r treeRow) string {
 // (its link down, or its last read failed) shows its row alone, its
 // last values dimmed. The project whose dashboard shows (current, its
 // peerFold) is the row you are on.
-func peerRows(pm proto.PeerMirror, t view.Tree, current string) []treeRow {
-	link := peerLink{state: pm.State, reason: pm.Reason, since: pm.Since, rtt: pm.RTT, watch: pm.Watch,
-		pane: pm.Pane, panes: pm.Panes, version: pm.Version, name: pm.Name}
+func peerRows(pm proto.PeerMirror, t view.Tree, current string, progOf map[string]string) []treeRow {
+	link := mirrorLink(pm)
 	for _, p := range pm.Projects {
 		if p.Synced.After(link.synced) {
 			link.synced = p.Synced
@@ -258,11 +275,15 @@ func peerRows(pm proto.PeerMirror, t view.Tree, current string) []treeRow {
 	for _, p := range pm.Projects {
 		pl := link
 		pl.synced = p.Synced
-		rows = append(rows, peerProjectRows(pm.Alias, p, &pl, t)...)
+		rows = append(rows, peerProjectRows(pm.Alias, p, &pl, t, "")...)
 	}
 	for i := range rows {
 		if rows[i].kind == treePeerProject && peerFold(pm.Alias, rows[i].slug) == current {
 			rows[i].current, rows[i].here = true, true
+		}
+		if rows[i].kind == treePeerProject {
+			// A program's member: its program named, dim.
+			rows[i].tag = progOf[pm.Alias+"/"+rows[i].slug]
 		}
 	}
 	for _, r := range rows {
@@ -274,10 +295,18 @@ func peerRows(pm proto.PeerMirror, t view.Tree, current string) []treeRow {
 	return append([]treeRow{head}, rows...)
 }
 
+// mirrorLink is paired server pm's link as its rows carry it.
+func mirrorLink(pm proto.PeerMirror) peerLink {
+	return peerLink{state: pm.State, reason: pm.Reason, since: pm.Since, rtt: pm.RTT, watch: pm.Watch,
+		pane: pm.Pane, panes: pm.Panes, version: pm.Version, name: pm.Name}
+}
+
 // peerProjectRows are a paired server's shared project's rows: its own,
 // and unless it is stale or folded its coordinator's and its threads',
-// as projectRows lays out a project of this server.
-func peerProjectRows(alias string, p proto.PeerMirrorProject, link *peerLink, t view.Tree) []treeRow {
+// as projectRows lays out a project of this server. prog is the program
+// it is listed under ("" under its server's group): its rows' keys and
+// fold are that place's own.
+func peerProjectRows(alias string, p proto.PeerMirrorProject, link *peerLink, t view.Tree, prog string) []treeRow {
 	pr := treeRow{kind: treePeerProject, peer: alias, slug: p.Project, pct: -1, link: link, threads: p.Threads,
 		hint: p.NeedsYou > 0, paused: p.Paused, stale: p.Stale}
 	ctx, asks := -1, 0
@@ -322,14 +351,18 @@ func peerProjectRows(alias string, p proto.PeerMirrorProject, link *peerLink, t 
 			kids = append(kids, tr)
 		}
 	}
-	if pr.stale || t.IsFolded(peerFold(alias, p.Project)) {
+	pr.prog = prog
+	if pr.stale || t.IsFolded(peerFoldOf(pr)) {
 		pr.fold = true
 		return []treeRow{pr}
 	}
 	coord := treeRow{kind: treePeerCoord, peer: alias, slug: p.Project, session: pr.session, state: pr.state, remote: pr.remote,
-		pct: -1, last: true, link: link, hint: asks > 0, asks: asks, ctx: ctx}
+		pct: -1, last: true, link: link, hint: asks > 0, asks: asks, ctx: ctx, prog: prog}
 	if len(kids) > 0 {
 		kids[len(kids)-1].last = true
+	}
+	for i := range kids {
+		kids[i].prog = prog
 	}
 	return append([]treeRow{pr, coord}, kids...)
 }
@@ -580,8 +613,9 @@ func peerFoldStep(rows []treeRow, i, op int, slim bool) (sideStep, bool) {
 	case op == sideIn && r.fold && !r.stale, op == sideOut && !r.fold:
 		return sideStep{refold: foldPeer(r, !r.fold)}, true
 	case op == sideOut:
+		// Up to its server's header, or its program's row.
 		for j := i - 1; j >= 0; j-- {
-			if rows[j].kind == treeServer {
+			if r.prog == "" && rows[j].kind == treeServer || r.prog != "" && rows[j].kind == treeProgram {
 				return sideStep{sel: rows[j].key()}, true
 			}
 		}
@@ -594,7 +628,7 @@ func peerFoldStep(rows []treeRow, i, op int, slim bool) (sideStep, bool) {
 func foldPeer(r treeRow, fold bool) func(*view.Tree) {
 	id := peerFold(r.peer, "")
 	if r.kind == treePeerProject {
-		id = peerFold(r.peer, r.slug)
+		id = peerFoldOf(r)
 	}
 	return func(t *view.Tree) { t.Fold(id, fold) }
 }
@@ -605,7 +639,7 @@ func peerFolds(all []treeRow) []string {
 	var out []string
 	for _, r := range all {
 		if r.kind == treePeerProject {
-			out = append(out, peerFold(r.peer, r.slug))
+			out = append(out, peerFoldOf(r))
 		}
 	}
 	return out

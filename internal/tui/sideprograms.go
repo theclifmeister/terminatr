@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/theclifmeister/terminatr/internal/config"
@@ -27,8 +28,17 @@ import (
 // A program sorts with the projects that aren't pinned, by slug, and
 // folds as a project does; its fold key is g:<slug> (programKey), so a
 // program and a project never share one. With programs off the server
-// sends no programs, and the tree is today's. Members on paired servers
-// come with B16: only local members show here.
+// sends no programs, and the tree is today's.
+//
+// A member on a paired server shows twice (the programs design §11.1):
+// under its program, named alias/slug, and under its server's group as
+// ever, tagged with its program ("acme-ios · acme"). Both are built from
+// the one mirror entry (peer.list), so they never drift; their keys and
+// folds are each place's own ("g:acme/r:mini/acme-ios" and
+// "r:mini/acme-ios"), and enter opens the same from either. A member
+// the mirror doesn't have (invited, or not shared with this server) is
+// a dim row under its program alone, saying so. Need counts come from
+// the data, not the rows, so the same need is never counted twice.
 
 // ProgramData is one program as the sidebar shows it: the server's
 // (server.SidePrograms), with its settings read from the settings file,
@@ -166,8 +176,17 @@ func programRows(g ProgramData, ps []ProjectData, sessions []proto.SessionInfo, 
 	}
 	var kids []treeRow
 	for _, m := range g.Projects {
+		if alias, slug, remote := config.Remote(m); remote {
+			rows := pairedMemberRows(g, alias, slug, in)
+			if rows[0].kind == treePeerProject && !rows[0].stale {
+				pr.threads += rows[0].threads
+			}
+			pr.hint = pr.hint || rows[0].hint
+			kids = append(kids, rows...)
+			continue
+		}
 		p, ok := bySlug[m]
-		if !ok || strings.Contains(m, "/") {
+		if !ok {
 			continue
 		}
 		rows := projectRows(p, sessions, byID, in)
@@ -188,6 +207,56 @@ func programRows(g ProgramData, ps []ProjectData, sessions []proto.SessionInfo, 
 		return []treeRow{pr}
 	}
 	return append([]treeRow{pr, dir}, kids...)
+}
+
+// pairedMembers maps the paired members of progs ("mini/acme-ios") to
+// their program: the tag of their rows under their server's group.
+func pairedMembers(progs []ProgramData) map[string]string {
+	out := map[string]string{}
+	for _, g := range progs {
+		for _, m := range g.Projects {
+			if _, _, remote := config.Remote(m); remote && out[m] == "" {
+				out[m] = g.Slug
+			}
+		}
+	}
+	return out
+}
+
+// pairedMemberRows are paired member alias/slug's rows under program g:
+// the mirror's entry for it as its server's group has it (peerProjectRows),
+// named alias/slug, with keys and a fold of their own; else, while the
+// mirror has none (its invite waits, or it isn't shared with this
+// server), its row alone, dim, saying why.
+func pairedMemberRows(g ProgramData, alias, slug string, in treeIn) []treeRow {
+	name := alias + "/" + slug
+	i := slices.IndexFunc(in.peers, func(pm proto.PeerMirror) bool { return pm.Alias == alias })
+	pl := &peerLink{state: proto.LinkOffline}
+	if i >= 0 {
+		pm := in.peers[i]
+		l := mirrorLink(pm)
+		pl = &l
+		name = peerShown(in.peers, alias) + "/" + slug
+		if j := slices.IndexFunc(pm.Projects, func(p proto.PeerMirrorProject) bool { return p.Project == slug }); j >= 0 {
+			l.synced = pm.Projects[j].Synced
+			rows := peerProjectRows(alias, pm.Projects[j], pl, in.tree, g.Slug)
+			rows[0].label = name
+			rows[0].current = peerFold(alias, slug) == in.current
+			return rows
+		}
+	}
+	// A short word: the dashboard's CHILDREN says the invite in full.
+	tag := "not shared"
+	if r, ok := g.Invites[alias+"/"+slug]; ok {
+		switch {
+		case r.Pending():
+			tag = "invited"
+		case r.State == link.ReqDeclined:
+			tag = "declined"
+		}
+	}
+	return []treeRow{{kind: treePeerProject, peer: alias, slug: slug, prog: g.Slug, pct: -1, link: pl, stale: true, fold: true,
+		label: name, tag: tag}}
 }
 
 // programGlyph marks a program's row, before its name.

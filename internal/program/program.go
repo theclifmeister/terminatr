@@ -55,6 +55,9 @@ type Program struct {
 	// project wins, and the program's director isn't started and nothing
 	// routes to it until one is renamed (§3.4).
 	LeftOut bool
+	// Paired reaches members' questions on paired servers through tm's
+	// server (merges and answers, §7.2); nil refuses them.
+	Paired Paired
 }
 
 // Error is a refusal with a stable code.
