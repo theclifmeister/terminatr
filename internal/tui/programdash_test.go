@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/link"
 	"github.com/theclifmeister/terminatr/internal/program"
@@ -158,11 +159,10 @@ func TestProgramNeedsDialog(t *testing.T) {
 	}
 }
 
-// TestNewProgram: + on the PROJECTS header, while programs are on,
-// offers a new project or a new program; the program's name and goal
-// asked, it is made (NewProgram), its dashboard shows and its settings
-// open for its members. Elsewhere, or with programs off, + is the new
-// project's prompt as ever.
+// TestNewProgram: P on the PROJECTS header, while programs are on, asks
+// for a new program; its name and goal asked, it is made (NewProgram),
+// its dashboard shows and its settings open for its members. + there
+// is a new project only, and with programs off P does nothing new.
 func TestNewProgram(t *testing.T) {
 	data := Data{Projects: []ProjectData{{Slug: "api"}}, ProgramsOn: true}
 	src := &fakeSource{data: data}
@@ -170,12 +170,17 @@ func TestNewProgram(t *testing.T) {
 	m.setData(data)
 	m.focus, m.sideSel = areaSide, headKey
 	drain(t, m, press(m, "+"))
-	mv, ok := m.top().(*menuView)
-	if !ok || len(mv.items) != 2 || mv.items[1].label != "new program" {
-		t.Fatalf("menu %T %+v", m.top(), m.top())
+	if in, ok := m.top().(*inputView); !ok || in.title != "New project" {
+		t.Fatalf("+ on the header: %T", m.top())
 	}
 	m.pop()
-	drain(t, m, mv.items[1].run(m))
+	if bar := ansi.Strip(sideKeyBar(&treeRow{kind: treeHead, newProg: true}, true, false, 200)); !strings.Contains(bar, "P new program") {
+		t.Errorf("key bar %q", bar)
+	}
+	drain(t, m, press(m, "P"))
+	if in, ok := m.top().(*inputView); !ok || in.title != "New program" {
+		t.Fatalf("P on the header: %T", m.top())
+	}
 	drain(t, m, typeLine(m, "acme"))
 	if in, ok := m.top().(*inputView); !ok || !strings.Contains(in.title, "acme") {
 		t.Fatalf("goal prompt %T", m.top())
@@ -189,9 +194,10 @@ func TestNewProgram(t *testing.T) {
 	}
 	// Programs off: the new project's prompt.
 	m.stack, m.data.ProgramsOn = nil, false
-	drain(t, m, press(m, "+"))
-	if in, ok := m.top().(*inputView); !ok || in.title != "New project" {
-		t.Errorf("programs off: %T", m.top())
+	m.focus, m.sideSel = areaSide, headKey
+	drain(t, m, press(m, "P"))
+	if in, ok := m.top().(*inputView); ok && in.title == "New program" {
+		t.Errorf("programs off: P asked for a program")
 	}
 }
 

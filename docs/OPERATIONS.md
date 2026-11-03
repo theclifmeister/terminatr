@@ -763,7 +763,7 @@ Settings → all projects → **Features → Programs** (`,` opens Settings). Tu
 
 ### Making a program
 
-Press `+` on the sidebar's PROJECTS header and pick **new program**, or run `tm program new acme --projects acme-api,acme-web`. A program's name is a lower-case slug that no project and no paired server's alias already has. A project belongs to at most one program, and a program holds projects, never another program. Press `A` on the program to open its settings: **Members** (Enter picks them), **Authority**, **Thread cap**, **Dependency met**, the director's agent and model, **Rename** and **Delete**. The program shows in the sidebar with its projects under it, and Enter on it opens its dashboard: what needs you across all its projects first, then each project, the umbrella tasks and the director.
+Press `P` on the sidebar's PROJECTS header (`+` there is a new project only), or run `tm program new acme --projects acme-api,acme-web`. A program's name is a lower-case slug that no project and no paired server's alias already has. A project belongs to at most one program, and a program holds projects, never another program. Press `A` on the program to open its settings: **Members** (Enter picks them), **Authority**, **Thread cap**, **Dependency met**, the director's agent and model, **Rename** and **Delete**. The program shows in the sidebar with its projects under it, and Enter on it opens its dashboard: what needs you across all its projects first, then each project, the umbrella tasks and the director.
 
 The settings of a program live in `config.toml` under `[programs.<name>]`, which only you edit:
 

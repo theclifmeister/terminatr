@@ -56,7 +56,7 @@ var sideActions = []sideAction{
 	// The toggle's two halves, kept bindable with no key of their own.
 	{id: "side.fold-all", op: sideFoldAll},
 	{id: "side.unfold-all", op: sideUnfoldAll},
-	{id: "side.pin", keys: []string{"P"}, op: sidePin, label: "P", help: "on a project: pin it to the top of the active projects, or unpin it (its order only)"},
+	{id: "side.pin", keys: []string{"P"}, op: sidePin, label: "P", help: "on a project: pin it to the top of the active projects, or unpin it (its order only); on the PROJECTS header while programs are on: a new program"},
 	{id: "side.first", keys: []string{"home"}, op: sideFirst, label: "home end", help: "the first / last row"},
 	{id: "side.last", keys: []string{"end"}, op: sideLast},
 	{id: "side.page-up", keys: []string{"pgup"}, op: sidePageUp, label: "pgup pgdown", help: "a page up / down"},
