@@ -3,10 +3,11 @@ package server
 import (
 	"crypto/ed25519"
 	"net/http/httptest"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/theclifmeister/terminatr/internal/home/hometest"
 
 	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/peer"
@@ -29,7 +30,7 @@ func TestServerStatusShowsLinks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	otherDir := filepath.Join(t.TempDir(), "peer")
+	otherDir := hometest.PrivateDir(t)
 	other, _, err := peer.EnsureIdentity(otherDir)
 	if err != nil {
 		t.Fatal(err)

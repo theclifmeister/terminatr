@@ -113,3 +113,9 @@ func PrivateDir(t testing.TB) string {
 	}
 	return dir
 }
+
+// CIUmask sets the process umask to 022, Linux CI's, so a test that hands
+// a bare t.TempDir() (then 0755) to a private store fails on a developer's
+// machine with a stricter umask (077 makes it 0700) as it would on CI. It
+// does nothing where there is no umask.
+func CIUmask() { fsx.SetUmask(0o022) }

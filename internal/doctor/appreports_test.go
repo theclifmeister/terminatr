@@ -2,16 +2,17 @@ package doctor
 
 import (
 	"encoding/json"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/theclifmeister/terminatr/internal/home/hometest"
 
 	"github.com/theclifmeister/terminatr/internal/appreport"
 )
 
 func TestAppReports(t *testing.T) {
-	dir := filepath.Join(t.TempDir(), "x")
+	dir := hometest.PrivateDir(t)
 	now := time.Date(2026, 11, 2, 12, 0, 0, 0, time.UTC)
 	if cs := appReports(dir, now); cs != nil {
 		t.Fatalf("no reports: %+v", cs)

@@ -20,12 +20,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/theclifmeister/terminatr/internal/home/hometest"
+
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/relay"
 )
 
 func TestIdentity(t *testing.T) {
-	dir := filepath.Join(t.TempDir(), "peer")
+	dir := hometest.PrivateDir(t)
 	if _, err := LoadIdentity(dir); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("LoadIdentity on nothing: %v, want not-exist", err)
 	}
@@ -62,7 +64,7 @@ func TestIdentity(t *testing.T) {
 }
 
 func TestPeers(t *testing.T) {
-	dir := filepath.Join(t.TempDir(), "peer")
+	dir := hometest.PrivateDir(t)
 	if ps, err := LoadPeers(dir); err != nil || ps != nil {
 		t.Fatalf("LoadPeers on nothing: %v, %v", ps, err)
 	}
@@ -129,7 +131,7 @@ type server struct {
 
 func newServer(t *testing.T) *server {
 	t.Helper()
-	dir := filepath.Join(t.TempDir(), "peer")
+	dir := hometest.PrivateDir(t)
 	id, _, err := EnsureIdentity(dir)
 	if err != nil {
 		t.Fatal(err)
@@ -261,7 +263,7 @@ func TestLinkRelayShutdown(t *testing.T) {
 
 func TestReload(t *testing.T) {
 	_, _, url, tc := startRelay(t)
-	a := &server{dir: filepath.Join(t.TempDir(), "peer")}
+	a := &server{dir: hometest.PrivateDir(t)}
 	m := Start(Options{Dir: a.dir, Version: "1", RelayTLS: tc})
 	t.Cleanup(m.Close)
 	if m.Status() != nil {

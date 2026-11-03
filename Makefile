@@ -132,11 +132,13 @@ test-bin: $(READY)
 	$(GO) build -tags testhooks $(if $(filter 1,$(E2E_RACE)),-race) -o $(TESTBIN)/tm ./cmd/tm
 	$(GO) build -o $(TESTBIN)/ $(addprefix ./internal/e2e/apps/,$(TEST_APPS)) ./internal/e2e/fakeagent
 
+# test and test-race run under umask 022, Linux CI's, so a bare t.TempDir()
+# handed to a private store fails here too (T960; hometest.PrivateDir).
 test: test-bin
-	E2E_BIN=$(TESTBIN) $(GO) test ./...
+	umask 022 && E2E_BIN=$(TESTBIN) $(GO) test ./...
 
 test-race: test-bin
-	E2E_BIN=$(TESTBIN) $(GO) test -race ./...
+	umask 022 && E2E_BIN=$(TESTBIN) $(GO) test -race ./...
 
 FUZZTIME ?= 5m
 # -fuzzminimizetime: Go minimizes each new interesting input for up to 60s

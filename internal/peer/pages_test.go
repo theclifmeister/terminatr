@@ -3,12 +3,13 @@ package peer
 import (
 	"context"
 	"crypto/ed25519"
-	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/theclifmeister/terminatr/internal/home/hometest"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/proto"
@@ -178,7 +179,7 @@ func TestPagesAreCleaned(t *testing.T) {
 // other, kept when the server is paired again, and refuses what isn't a
 // project's slug.
 func TestSetPages(t *testing.T) {
-	dir := filepath.Join(t.TempDir(), "peer")
+	dir := hometest.PrivateDir(t)
 	pubKey, _, err := ed25519.GenerateKey(nil)
 	if err != nil {
 		t.Fatal(err)

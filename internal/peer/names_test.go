@@ -2,15 +2,16 @@ package peer
 
 import (
 	"errors"
-	"path/filepath"
 	"testing"
+
+	"github.com/theclifmeister/terminatr/internal/home/hometest"
 )
 
 // A display name: set, renamed and cleared by either word; refused when
 // another peer has it, or taken says so; Names maps both words to the
 // alias and the alias to what shows.
 func TestNames(t *testing.T) {
-	dir := filepath.Join(t.TempDir(), "peer")
+	dir := hometest.PrivateDir(t)
 	a, b := newKey(t), newKey(t)
 	if err := SavePeers(dir, []Peer{{Alias: "acme-lt-07", Key: pub(a), Relay: "wss://r"}, {Alias: "mini", Key: pub(b), Relay: "wss://r"}}); err != nil {
 		t.Fatal(err)

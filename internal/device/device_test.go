@@ -22,6 +22,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/theclifmeister/terminatr/internal/home/hometest"
+
 	"github.com/theclifmeister/terminatr/internal/peer"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/relay"
@@ -64,7 +66,7 @@ func startRelay(t *testing.T) (string, *tls.Config) {
 }
 
 func TestRegistry(t *testing.T) {
-	dir := filepath.Join(t.TempDir(), "device")
+	dir := hometest.PrivateDir(t)
 	a, b := newKey(t), newKey(t)
 	const r = "wss://relay.example.net"
 	wk := writeKey(t)
