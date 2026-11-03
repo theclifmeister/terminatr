@@ -5,9 +5,11 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/theclifmeister/terminatr/internal/program"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/tasks"
@@ -177,7 +179,15 @@ func (v *programNeedsView) items(m *dash) []pnItem {
 				out = append(out, pnItem{label: oneLine(o.Label), q: qi, opt: oi})
 			}
 		}
-		return append(out, pnItem{label: "submit the answers picked", submit: true})
+		out = append(out, pnItem{label: "submit the answers picked", submit: true})
+		for _, n := range p.questions {
+			if n.Recommend != nil {
+				slug := v.slug
+				out = append(out, pnItem{label: "accept the director's recommendation on " + questionID(n) + ": " + oneLine(program.RecommendWords(*n.Recommend)),
+					run: func(m *dash) tea.Cmd { return m.acceptRecommendation(slug, n) }})
+			}
+		}
+		return out
 	}
 	return needActs(m, v.slug, *p.need)
 }
@@ -190,6 +200,9 @@ func needActs(m *dash, slug string, n proto.ProgramNeed) []pnItem {
 		out = append(out, pnItem{label: label, run: run})
 	}
 	show := func(m *dash) tea.Cmd { return m.showProject(n.Project) }
+	if n.Recommend != nil && proto.RecommendKey(slug, n) != "" {
+		add("accept the director's recommendation: "+oneLine(program.RecommendWords(*n.Recommend)), func(m *dash) tea.Cmd { return m.acceptRecommendation(slug, n) })
+	}
 	if n.Server != "" {
 		// A paired member's need: acted on from here while its server
 		// takes this one's acts (its Acts: needs answer), through
@@ -244,6 +257,41 @@ func needActs(m *dash, slug string, n proto.ProgramNeed) []pnItem {
 	}
 	add("show "+n.Project+"'s dashboard", show)
 	return out
+}
+
+// recommendsWords are the director's recommendation as a row says it:
+// "director recommends: "EU" — acme-web runs in the EU (acme-web/T4)".
+func recommendsWords(r proto.Recommendation) string {
+	return "director recommends: " + oneLine(program.RecommendWords(r)) + " — " + oneLine(r.Why)
+}
+
+// acceptRecommendation answers need n's question of program slug with
+// its director's recommendation, as the user's own answer: the key is
+// the user's confirmation (one key, T982).
+func (m *dash) acceptRecommendation(slug string, n proto.ProgramNeed) tea.Cmd {
+	key := proto.RecommendKey(slug, n)
+	if key == "" || n.Recommend == nil {
+		return nil
+	}
+	src := m.src
+	return m.act(func() actionMsg {
+		res, err := src.AcceptRecommendation(slug, key)
+		if err != nil {
+			return actionMsg{err: fmt.Errorf("%s: %w", key, err)}
+		}
+		msg := "answered " + res.Key + ": " + res.Answer
+		if res.Result != "" {
+			msg += " (" + res.Result + ")"
+		}
+		if len(res.Fanned) > 0 {
+			var to []string
+			for _, f := range res.Fanned {
+				to = append(to, f.Project+"/"+f.Question+" "+f.Result)
+			}
+			msg += " → " + strings.Join(to, ", ")
+		}
+		return actionMsg{msg: msg, then: func(m *dash) { m.pneeds.at = time.Time{} }}
+	})
 }
 
 // attachNeed attaches need n's session, where its menu or dialog is
@@ -485,9 +533,17 @@ func (v *programNeedsView) render(m *dash) string {
 				if len(n.Merged) > 0 {
 					line(th().Faint.Render(fit("covers "+strings.Join(n.Merged, ", "), w)), noHit)
 				}
+				if rec := n.Recommend; rec != nil {
+					for _, l := range wrapLines(recommendsWords(*rec), w) {
+						line(th().Faint.Render(l), noHit)
+					}
+				}
 				for oi, o := range it.Options {
 					mark := optionMark(it.MultiSelect, v.picks[questionID(n)][oi])
 					label := o.Label
+					if n.Recommend != nil && slices.Contains(n.Recommend.Labels, o.Label) {
+						label += " (Recommended)"
+					}
 					if o.Description != "" {
 						label += " — " + o.Description
 					}
@@ -496,7 +552,9 @@ func (v *programNeedsView) render(m *dash) string {
 				}
 			}
 			line("", noHit)
-			line("     "+items[len(items)-1].label, at)
+			for ; at < len(items); at++ {
+				line("     "+items[at].label, at)
+			}
 			line("", noHit)
 			for _, l := range wrapLines("Each answer goes to every member question it covers, as yours: tm answers there for you.", w) {
 				line(th().Faint.Render(l), noHit)
@@ -521,6 +579,11 @@ func (v *programNeedsView) render(m *dash) string {
 			}
 			if n.PRURL != "" {
 				line(th().Faint.Render(fit("PR "+prRef(n.PRURL)+" "+oneLine(n.PR), w)), noHit)
+			}
+			if rec := n.Recommend; rec != nil {
+				for _, l := range wrapLines(recommendsWords(*rec), w) {
+					line(th().Faint.Render(l), noHit)
+				}
 			}
 			line("", noHit)
 			for i, it := range items {
