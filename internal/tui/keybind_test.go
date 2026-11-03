@@ -28,7 +28,7 @@ var wantIDs = []string{
 	"project.next", "project.prev", "list.narrower", "list.wider", "sidebar.narrower", "sidebar.wider",
 	"sidebar.slim", "details.toggle", "settings.open", "network.open", "pane.repaint", "notices.open", "help.open", "console.quit",
 	"side.up", "side.down", "side.enter", "side.unfold", "side.fold", "side.back", "side.activate",
-	"side.fold-toggle", "side.fold-all", "side.unfold-all", "side.pin", "side.first", "side.last", "side.page-up", "side.page-down",
+	"side.fold-toggle", "side.fold-all", "side.unfold-all", "side.pin", "side.new-program", "side.first", "side.last", "side.page-up", "side.page-down",
 	"side.nth", "side.needs-next", "side.needs-prev", "side.filter", "side.help",
 	"panel.up", "panel.down", "panel.page-up", "panel.page-down", "panel.first", "panel.last",
 	"panel.section-next", "panel.section-prev", "panel.unfold", "panel.fold", "panel.enter", "panel.back",
@@ -111,7 +111,7 @@ func TestKeymapRefuses(t *testing.T) {
 			for k, v := range c.km {
 				km[k] = v
 			}
-			km["sidebar.slim"] = []string{"G"} // a good one beside it applies
+			km["sidebar.slim"] = []string{"L"} // a good one beside it applies
 			err := keymap(t, km)
 			if err == nil || !strings.Contains(err.Error(), c.want) {
 				t.Fatalf("err %v, want %q", err, c.want)
@@ -121,7 +121,7 @@ func TestKeymapRefuses(t *testing.T) {
 					t.Errorf("%s was rebound anyway", id)
 				}
 			}
-			if !slices.Equal(binds.list.keys("sidebar.slim", nil), []string{"G"}) {
+			if !slices.Equal(binds.list.keys("sidebar.slim", nil), []string{"L"}) {
 				t.Errorf("the good binding didn't apply")
 			}
 		})
