@@ -15,6 +15,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/theclifmeister/terminatr/internal/home/hometest"
+
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/home"
 	"github.com/theclifmeister/terminatr/internal/peer"
@@ -51,7 +53,7 @@ func linkedServersWith(t *testing.T, ex peer.Exporter, set func(p *peer.Peer)) *
 	tc := hs.Client().Transport.(*http.Transport).TLSClientConfig.Clone()
 	url := "wss" + strings.TrimPrefix(hs.URL, "https")
 
-	dirs := [2]string{filepath.Join(t.TempDir(), "studio"), filepath.Join(t.TempDir(), "mini")}
+	dirs := [2]string{hometest.PrivateDir(t), hometest.PrivateDir(t)}
 	var ids [2]*peer.Identity
 	for i, d := range dirs {
 		id, _, err := peer.EnsureIdentity(d)

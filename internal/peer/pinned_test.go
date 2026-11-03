@@ -6,10 +6,11 @@ import (
 	"errors"
 	"net"
 	"net/netip"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/theclifmeister/terminatr/internal/home/hometest"
 
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/relay"
@@ -57,7 +58,7 @@ func TestRelayURLPin(t *testing.T) {
 		}
 	}
 	// peers.json takes a pinned relay, and refuses a bad pin.
-	dir := filepath.Join(t.TempDir(), "peer")
+	dir := hometest.PrivateDir(t)
 	key := pub(newKey(t))
 	if err := SavePeers(dir, []Peer{{Alias: "nas", Key: key, Relay: "wss://203.0.113.5#sha256=" + pin}}); err != nil {
 		t.Fatal(err)
@@ -137,7 +138,7 @@ func TestCodePin(t *testing.T) {
 // The client takes a self-signed relay by its pin alone, and refuses it
 // under another pin, or without one.
 func TestDialPinned(t *testing.T) {
-	_, url := startPinnedRelay(t, filepath.Join(t.TempDir(), "relay"))
+	_, url := startPinnedRelay(t, hometest.PrivateDir(t))
 	a := newServer(t)
 	dial := func(u string) error {
 		ctx, cancel := context.WithCancel(context.Background())
@@ -169,7 +170,7 @@ func TestDialPinned(t *testing.T) {
 // comes up through it with no CA at all. The relay set up again with a
 // new key is refused until both are given its new address.
 func TestPairThroughPinnedRelay(t *testing.T) {
-	_, url := startPinnedRelay(t, filepath.Join(t.TempDir(), "relay"))
+	_, url := startPinnedRelay(t, hometest.PrivateDir(t))
 	a, b := newServer(t), newServer(t)
 	code, err := NewCode(url)
 	if err != nil {
@@ -197,7 +198,7 @@ func TestPairThroughPinnedRelay(t *testing.T) {
 	}
 
 	// The relay comes back with another key: refused, and said why.
-	_, moved := startPinnedRelay(t, filepath.Join(t.TempDir(), "relay2"))
+	_, moved := startPinnedRelay(t, hometest.PrivateDir(t))
 	base, _, _ := relay.SplitPin(moved)
 	_, oldPin, _ := relay.SplitPin(url)
 	for _, s := range []*server{a, b} {

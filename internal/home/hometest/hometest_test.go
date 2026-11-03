@@ -4,9 +4,11 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/theclifmeister/terminatr/internal/home"
+	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 )
 
 // TestRunReplacesRealHome: a test binary started from a tm session
@@ -29,5 +31,18 @@ func TestRunReplacesRealHome(t *testing.T) {
 	Run(func() int { got = os.Getenv(home.Env); return 0 })
 	if got != other {
 		t.Fatalf("Run moved a temp home: %q", got)
+	}
+}
+
+// TestPrivateDir: the helper's folder passes fsx.CheckPrivate, while a bare
+// t.TempDir() does not under CIUmask (on Unix), the mistake it is there to
+// catch before CI does (T960).
+func TestPrivateDir(t *testing.T) {
+	CIUmask()
+	if err := fsx.CheckPrivate(PrivateDir(t)); err != nil {
+		t.Fatal(err)
+	}
+	if runtime.GOOS != "windows" && fsx.CheckPrivate(t.TempDir()) == nil {
+		t.Fatal("a bare t.TempDir() passed as private: the umask is not CI's")
 	}
 }

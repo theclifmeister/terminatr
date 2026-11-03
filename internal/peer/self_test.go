@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/theclifmeister/terminatr/internal/home/hometest"
+
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/proto"
 )
@@ -74,7 +76,7 @@ func TestSelfName(t *testing.T) {
 // place, never instead of a name set there or another peer's word; the
 // alias stays.
 func TestToldNames(t *testing.T) {
-	dir := filepath.Join(t.TempDir(), "peer")
+	dir := hometest.PrivateDir(t)
 	a, b, c := newKey(t), newKey(t), newKey(t)
 	if err := SavePeers(dir, []Peer{
 		{Alias: "mbp", Told: "office", Key: pub(a), Relay: "wss://r"},
