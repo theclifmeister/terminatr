@@ -194,3 +194,13 @@ func TestApplyProgramsLinks(t *testing.T) {
 		t.Fatal("off after the sweep")
 	}
 }
+
+// The flusher's transport says a paired server takes program messages
+// (link.ProgramTransport); with no links, none does.
+var _ link.ProgramTransport = peerTransport{}
+
+func TestProgramReadyNoLinks(t *testing.T) {
+	if (peerTransport{}).ProgramReady("mini") {
+		t.Fatal("ready without links")
+	}
+}

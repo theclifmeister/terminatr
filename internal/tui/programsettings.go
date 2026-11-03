@@ -9,6 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/link"
 	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
@@ -281,18 +282,25 @@ func programCapWords(n int) string {
 	return fmt.Sprint(n)
 }
 
-// membersView picks a program's members among this server's projects:
-// space ticks or unticks one, enter saves the list in its order (ticked
-// ones keep their place, new ones go last), esc leaves it unchanged. A
-// project in another program can't be ticked; members on paired servers
-// stay as they are.
+// membersView picks a program's members among this server's projects
+// and the projects paired servers share with it: space ticks or unticks
+// one, enter saves the list in its order (ticked ones keep their place,
+// new ones go last), esc leaves it unchanged. A project in another
+// program can't be ticked. A paired project can be ticked only on a
+// server whose programs are on (its hello lists program); saving
+// invites it, and its user accepts there (the programs design §9.1);
+// unticking a paired member tells it it left.
 type membersView struct {
 	slug  string
 	order []string        // the members, in order, the paired ones among them
 	on    map[string]bool // ticked
-	all   []string        // this server's projects
+	all   []string        // this server's projects, then the paired ones
 	other map[string]string
-	sel   int
+	// invites are the program's invites to its paired members, by
+	// member; off names the paired servers whose programs are off.
+	invites map[string]link.Invite
+	off     []string
+	sel     int
 }
 
 func newMembersView(m *dash, slug string) *membersView {
@@ -314,7 +322,52 @@ func newMembersView(m *dash, slug string) *membersView {
 	for _, p := range m.data.Projects {
 		v.all = append(v.all, p.Slug)
 	}
+	for _, pm := range m.data.Peers {
+		if !pm.Program {
+			if len(pm.Projects) > 0 {
+				v.off = append(v.off, peerShownKey(m.data.Peers, pm.Alias))
+			}
+			continue
+		}
+		for _, pp := range pm.Projects {
+			v.all = append(v.all, pm.Alias+"/"+pp.Project)
+		}
+	}
+	for _, s := range v.order {
+		if strings.Contains(s, "/") && !slices.Contains(v.all, s) {
+			v.all = append(v.all, s)
+		}
+	}
+	v.invites = map[string]link.Invite{}
+	if rs, err := m.src.ProgramInvites(slug); err == nil {
+		for _, r := range rs {
+			if r.Out {
+				v.invites[r.Peer] = r
+			}
+		}
+	}
 	return v
+}
+
+// memberNote is what follows paired member s's name: its invite's
+// state, or what enter does to it.
+func (v *membersView) memberNote(s string) string {
+	if !strings.Contains(s, "/") {
+		return ""
+	}
+	was := slices.Contains(v.order, s)
+	switch {
+	case v.on[s] && !was:
+		return " · invited when you save; its user accepts there"
+	case !v.on[s] && was:
+		return " · hears it left when you save"
+	case !v.on[s]:
+		return " · on a paired server"
+	}
+	if r, ok := v.invites[s]; ok {
+		return " · " + r.Words()
+	}
+	return " · not invited yet: enter invites it"
 }
 
 // members is the list enter saves.
@@ -352,12 +405,22 @@ func (v *membersView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	case "enter":
 		m.pop()
 		ms := v.members()
-		return m.setSetting(config.ProgramTable(v.slug), "projects", ms, "members: "+membersWords(ms))
+		msg := "members: " + membersWords(ms)
+		var asked []string
+		for _, s := range ms {
+			if r, ok := v.invites[s]; strings.Contains(s, "/") && (!ok || !r.Pending() && r.State != link.ReqAccepted) {
+				asked = append(asked, peerShownKey(m.data.Peers, s))
+			}
+		}
+		if len(asked) > 0 {
+			msg += " · invited " + joinAnd(asked) + "; their users accept there"
+		}
+		return m.setSetting(config.ProgramTable(v.slug), "projects", ms, msg)
 	}
 	return nil
 }
 
-func (v *membersView) lines(w int) []string {
+func (v *membersView) lines(m *dash, w int) []string {
 	var out []string
 	for i, s := range v.all {
 		mark := "[ ] "
@@ -365,9 +428,13 @@ func (v *membersView) lines(w int) []string {
 			mark = "[x] "
 		}
 		line := mark + s
+		if strings.Contains(s, "/") {
+			line = mark + peerShownKey(m.data.Peers, s)
+		}
 		if g := v.other[s]; g != "" {
 			line += " · in " + g
 		}
+		line += v.memberNote(s)
 		if i == v.sel {
 			out = append(out, th().Sel.Render(fit(line, w)))
 		} else if v.other[s] != "" {
@@ -376,10 +443,8 @@ func (v *membersView) lines(w int) []string {
 			out = append(out, fit(line, w))
 		}
 	}
-	for _, s := range v.order {
-		if strings.Contains(s, "/") {
-			out = append(out, th().Faint.Render(fit("    "+s+" · on a paired server, kept", w)))
-		}
+	for _, alias := range v.off {
+		out = append(out, th().Faint.Render(fit("    "+alias+" has programs off: its projects can't be invited", w)))
 	}
 	if len(out) == 0 {
 		out = append(out, th().Faint.Render("No projects on this server."))
@@ -393,5 +458,5 @@ func (v *membersView) render(m *dash) string {
 	if len(v.all) > 0 {
 		sel = v.sel
 	}
-	return m.popup(box{title: v.slug + " · members", body: v.lines(w), sel: sel, keys: "space tick · enter save · ↑ ↓ move · esc cancel"})
+	return m.popup(box{title: v.slug + " · members", body: v.lines(m, w), sel: sel, keys: "space tick · enter save · ↑ ↓ move · esc cancel"})
 }

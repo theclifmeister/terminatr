@@ -32,6 +32,8 @@ const programUsage = `usage: tm program new <slug> [--goal "…"] [--json]   (th
        tm program task edit <project>/T<n> …   (priority, after, design, a note; tm program task --help)
        tm program send <to> "text" [--re M-n]   (the program channel, director and member coordinators)
        tm program read M-n   (a program channel message, framed as data)
+       tm program accept|decline P-… [--project <slug>]   (the human's: a paired server's program invite; tm program accept --help)
+       tm program leave [--project <slug>]   (the human's: out of a paired server's program)
        tm program status [--json]   (the human's: on or off, and the programs, dormant while off)
        tm program delete <slug> [--yes]   (the human's: its folder to the trash, its table out of config.toml; asks first)`
 
@@ -68,6 +70,8 @@ func runProgram(e *Env, args []string) error {
 		return programSend(e, cfg, args[1:])
 	case "read":
 		return programRead(e, cfg, args[1:])
+	case "accept", "decline", "leave":
+		return programMember(e, args[0], args[1:])
 	}
 	return usagef("unknown subcommand %q\n%s", args[0], programUsage)
 }

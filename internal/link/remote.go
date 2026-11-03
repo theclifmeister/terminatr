@@ -243,6 +243,9 @@ func Flush(ctx context.Context, t Transport) {
 	ExpireRequests()
 	ExpireShares()
 	ExpireFiles()
+	if ProgramsOn() {
+		ExpireInvites()
+	}
 	SettleOffers(caller.Caller{Kind: caller.Ticker}, "", "")
 	root, err := outboxDir()
 	if err != nil {
@@ -319,12 +322,14 @@ func settled(alias string, m proto.PeerMessage, code string) {
 		requestDelivered(alias, m)
 		shareDelivered(alias, m)
 		fileSent(alias, m)
+		inviteDelivered(alias, m)
 		return
 	}
 	undelivered(alias, m, code)
 	requestUndelivered(alias, m, code)
 	shareUndelivered(alias, m, code)
 	fileUnsent(alias, m, code)
+	inviteUndelivered(alias, m, code)
 }
 
 // sender finds the sending project's copy of an outgoing message m to
@@ -411,6 +416,8 @@ func Receive(alias string, id peer.ID, m proto.PeerMessage) proto.PeerMessageRes
 		idOK, slugsOK = ValidShareID(m.ID), m.From == "" && m.To == ""
 	case proto.PeerShareAnswer:
 		idOK, slugsOK = m.ID == "" && ValidShareID(m.Re), m.From == "" && m.To == ""
+	case proto.PeerProgramInvite, proto.PeerProgramAnswer, proto.PeerProgramLeave:
+		idOK = ValidInviteID(m.ID)
 	}
 	if m.Epoch == "" || m.Seq < 1 || !slugsOK || !idOK {
 		return res
@@ -442,6 +449,12 @@ func Receive(alias string, id peer.ID, m proto.PeerMessage) proto.PeerMessageRes
 			res = s.receiveFileDone(alias, m)
 		case proto.PeerFileCancel:
 			res = s.receiveFileCancel(alias, m)
+		case proto.PeerProgramInvite:
+			res = s.receiveInvite(alias, fingerprint(id), m)
+		case proto.PeerProgramAnswer:
+			res = s.receiveProgramAnswer(alias, m)
+		case proto.PeerProgramLeave:
+			res = s.receiveProgramLeave(alias, m)
 		default:
 			res = proto.PeerMessageResult{Status: proto.PeerRefused, Code: "bad-message"}
 		}

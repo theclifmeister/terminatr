@@ -110,7 +110,7 @@ func (m *dash) projectPopup(string) tea.Cmd {
 // newProjectView is slug's popup on its first tab, its settings rows
 // made: the Access tab's for the platform the server is on.
 func (m *dash) newProjectView(slug string) *projectView {
-	return &projectView{slug: slug, settings: settingsList{rows: m.projectRows(slug)},
+	return &projectView{slug: slug, settings: settingsList{rows: m.projectRows(slug), build: func(m *dash) []setting { return m.projectSettingRows(slug) }},
 		access: accessList(slug, m.serverOS())}
 }
 
@@ -261,20 +261,21 @@ func (pv *projectView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 // message as new ones come in above it.
 func (pv *projectView) messages(m *dash) ([]msgNeed, []msgEntry) {
 	links := pv.data(m).Links
-	needs := msgNeeds(links)
 	if pv.msgs.stale(pv.slug) {
 		var at *link.Message
-		if i := pv.sel[tabMessages] - len(needs); i >= 0 && i < len(pv.msgs.entries) {
+		before := len(msgNeeds(links)) + len(inviteRows(pv.msgs.invites))
+		if i := pv.sel[tabMessages] - before; i >= 0 && i < len(pv.msgs.entries) {
 			at = pv.msgs.entries[i].msg
 		}
 		pv.msgs.load(m, pv.slug, links)
+		needs := append(msgNeeds(links), inviteRows(pv.msgs.invites)...)
 		for j, e := range pv.msgs.entries {
 			if at != nil && e.msg.ID == at.ID && e.msg.Out == at.Out && j < msgShown {
 				pv.sel[tabMessages] = len(needs) + j
 			}
 		}
 	}
-	return needs, pv.msgs.entries
+	return append(msgNeeds(links), inviteRows(pv.msgs.invites)...), pv.msgs.entries
 }
 
 // messagesKey: enter opens the selected message's dialog; on a link's
@@ -291,7 +292,7 @@ func (pv *projectView) messagesKey(m *dash, s string) tea.Cmd {
 	switch {
 	case s == "N":
 		at := "p:" + pv.slug
-		if i < len(needs) {
+		if i < len(needs) && needs[i].inv == nil {
 			kind := map[bool]int{true: needAsk, false: needPaused}[needs[i].ask]
 			at = needKey(pv.slug, needs[i].row.Peer, kind, "")
 		}
@@ -301,10 +302,12 @@ func (pv *projectView) messagesKey(m *dash, s string) tea.Cmd {
 		first := ""
 		if e != nil {
 			first = e.other
-		} else if i < len(needs) {
+		} else if i < len(needs) && needs[i].inv == nil {
 			first = needs[i].row.Peer
 		}
 		return m.writeMessage(pv.slug, links, first)
+	case i < len(needs) && needs[i].inv != nil:
+		return m.programRowKey(pv.slug, needs[i], s)
 	case i < len(needs):
 		n := needs[i]
 		switch {
@@ -507,7 +510,7 @@ func (pv *projectView) box(m *dash) box {
 		}
 	case tabMessages:
 		needs, es := pv.messages(m)
-		body, sel, hits = msgLines(m.data.Peers, p.Links, es, pv.sel[tabMessages], w)
+		body, sel, hits = msgLines(m.data.Peers, p.Links, inviteRows(pv.msgs.invites), es, pv.sel[tabMessages], w)
 		if pv.msgs.err != nil {
 			body = append(body, th().Bad.Render(fit("error: "+oneLine(pv.msgs.err.Error()), w)))
 		}
@@ -521,6 +524,11 @@ func (pv *projectView) box(m *dash) box {
 			keys = "M write as you · " + keys
 		}
 		switch i := pv.sel[tabMessages]; {
+		case i < len(needs) && needs[i].inv != nil && needs[i].inv.Pending():
+			keys = "A accept the invite · X decline · " + keys
+		case i < len(needs) && needs[i].inv != nil && needs[i].inv.State == link.ReqAccepted:
+			keys = "L leave the program · " + keys
+		case i < len(needs) && needs[i].inv != nil:
 		case i < len(needs) && needs[i].ask:
 			keys = "A accept the link · X decline · " + keys
 		case i < len(needs):
@@ -835,27 +843,31 @@ func (pv *projectView) coordinatorLine(m *dash, p ProjectData) string {
 // kindWords are the inbox kinds in words, where the kind's own name is a
 // code (docs/STYLE.md Y3).
 var kindWords = map[string]string{
-	"thread-resolved":  "resolved",
-	"takeover":         "you typed",
-	"server-restart":   "server restart",
-	"pr-opened":        "PR opened",
-	"pr-checks-failed": "checks failed",
-	"pr-review":        "PR review",
-	"pr-merged":        "PR merged",
-	"pr-closed":        "PR closed",
-	"pr-conflict":      "PR conflict",
-	"close-held":       "kept open",
-	"gh-failing":       "PR host failing",
-	"link-message":     "message",
-	"link-held":        "message held",
-	"link-paused":      "link paused",
-	"link-undelivered": "not delivered",
-	"link-request":     "link request",
-	"link-answer":      "link answer",
-	"link-file":        "file",
-	"slot-free":        "slot free",
-	"guard":            "guard refused",
-	"model-refused":    "model refused",
+	"thread-resolved":     "resolved",
+	"takeover":            "you typed",
+	"server-restart":      "server restart",
+	"pr-opened":           "PR opened",
+	"pr-checks-failed":    "checks failed",
+	"pr-review":           "PR review",
+	"pr-merged":           "PR merged",
+	"pr-closed":           "PR closed",
+	"pr-conflict":         "PR conflict",
+	"close-held":          "kept open",
+	"gh-failing":          "PR host failing",
+	"link-message":        "message",
+	"link-held":           "message held",
+	"link-paused":         "link paused",
+	"link-undelivered":    "not delivered",
+	"link-request":        "link request",
+	"link-answer":         "link answer",
+	"link-file":           "file",
+	"program-request":     "program invite",
+	"program-answer":      "invite answer",
+	"program-left":        "left the program",
+	"program-undelivered": "invite not delivered",
+	"slot-free":           "slot free",
+	"guard":               "guard refused",
+	"model-refused":       "model refused",
 }
 
 // kindWord is an inbox kind (or an ask, "send-back") in words.

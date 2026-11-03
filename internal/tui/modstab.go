@@ -1032,6 +1032,19 @@ func (m *dash) projectRows(slug string) []setting {
 	return append(projectSettings(slug), modsPointerRow(slug))
 }
 
+// projectSettingRows are projectRows with the Program section of a
+// project in a paired server's program (programinvite.go) before the
+// Mods line.
+func (m *dash) projectSettingRows(slug string) []setting {
+	rows := m.projectRows(slug)
+	prog := programLinkRows(m, slug)
+	if len(prog) == 0 {
+		return rows
+	}
+	last := rows[len(rows)-1]
+	return append(append(rows[:len(rows)-1:len(rows)-1], prog...), last)
+}
+
 // modsPointerRow is the Mods line of project slug's Settings tab.
 func modsPointerRow(slug string) setting {
 	return setting{label: "Mods",

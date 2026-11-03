@@ -65,3 +65,56 @@ func TestSetProgram(t *testing.T) {
 		t.Error("authority isn't back to propose")
 	}
 }
+
+// TestProgramLinkWrites (B14): the child side's program keys are written
+// only by their own writers: accepting writes all four, the settings
+// change one of the three on a member only, leaving removes them; the
+// generic setting writer, which tm access and agents' paths reach,
+// refuses them.
+func TestProgramLinkWrites(t *testing.T) {
+	write(t, "# mine\n[projects.ios]\nshare = true\n[programs.side]\nprojects = [\"web\"]\n")
+	for _, k := range ProgramLinkKeys {
+		if err := SetProject("ios", k, true); err == nil {
+			t.Errorf("SetProject wrote %s", k)
+		}
+	}
+	if err := SetProgramLinkKey("ios", "program_starts", true); err == nil {
+		t.Error("program_starts on a project in no program")
+	}
+	if err := SetProgramLink("web", ProgramLink{Program: "studio/acme", Tasks: ProgramTasksFile}); err == nil {
+		t.Error("a project of a program here joined a paired one")
+	}
+	if err := SetProgramLink("ios", ProgramLink{Program: "acme", Tasks: ProgramTasksFile}); err == nil {
+		t.Error("a program that isn't a paired server's")
+	}
+	if err := SetProgramLink("ios", ProgramLink{Program: "studio/acme", Tasks: ProgramTasksPropose, Status: true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetProgramLinkKey("ios", "program_starts", true); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetProgramLinkKey("ios", "program_tasks", "sideways"); err == nil {
+		t.Error("a bad program_tasks")
+	}
+	if err := SetProgramLinkKey("ios", "program", "nas/x"); err == nil {
+		t.Error("program changed by the settings writer")
+	}
+	c, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if l, in := c.ProgramLink("ios"); !in || l != (ProgramLink{Program: "studio/acme", Tasks: ProgramTasksPropose, Starts: true, Status: true}) {
+		t.Fatalf("ios %+v %v", l, in)
+	}
+	if err := UnsetProgramLink("ios"); err != nil {
+		t.Fatal(err)
+	}
+	c, _ = Load()
+	if _, in := c.ProgramLink("ios"); in {
+		t.Fatal("still a member")
+	}
+	path, _ := Path()
+	if b, _ := os.ReadFile(path); !strings.HasPrefix(string(b), "# mine\n") || !strings.Contains(string(b), "share = true") {
+		t.Fatalf("the file:\n%s", b)
+	}
+}

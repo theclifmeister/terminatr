@@ -56,6 +56,36 @@ const (
 // off.
 const PeerProgramPrefix = "program-"
 
+// Program membership (the programs design §9.1): the director's server
+// invites a paired server's project into one of its programs, for the
+// features it asks (Features); that server's user answers (Allow
+// accepted or declined, Features the ones granted); either side ends it
+// (program-leave). From and To are each side's slug: the program's on
+// the director's server, the project's on the child's. ID is the
+// invite's, P-<the inviting server's fingerprint>-<n>.
+const (
+	PeerProgramInvite = "program-invite"
+	PeerProgramAnswer = "program-answer"
+	PeerProgramLeave  = "program-leave"
+)
+
+// The words of a program-answer's Allow.
+const (
+	ProgramAccepted = "accepted"
+	ProgramDeclined = "declined"
+)
+
+// The features a program invite asks for and an answer grants.
+const (
+	ProgramFeatureTasks    = "tasks"    // the director files tasks (program_tasks)
+	ProgramFeatureMessages = "messages" // the program channel
+	ProgramFeatureStatus   = "status"   // status pushes (program_status)
+	ProgramFeatureStarts   = "starts"   // the director starts threads (program_starts)
+)
+
+// ProgramFeatures are the features, in order.
+var ProgramFeatures = []string{ProgramFeatureTasks, ProgramFeatureMessages, ProgramFeatureStatus, ProgramFeatureStarts}
+
 // IsProgramKind says whether kind is a program kind.
 func IsProgramKind(kind string) bool { return strings.HasPrefix(kind, PeerProgramPrefix) }
 
@@ -98,6 +128,9 @@ type PeerMessage struct {
 	Size   int64  `json:"size,omitempty"`
 	SHA256 string `json:"sha256,omitempty"`
 	Code   string `json:"code,omitempty"`
+	// Features are a program-invite's asked features and a
+	// program-answer's granted ones (ProgramFeatures).
+	Features []string `json:"features,omitempty"`
 }
 
 // MethodPeerFileFetch is the data half of a file over the link (docs/SPEC.md
