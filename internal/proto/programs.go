@@ -8,7 +8,7 @@ package proto
 const CapPrograms = "programs"
 
 // MethodProgramsSwitch turns programs on or off (the TUI's Settings →
-// all projects → Features: Programs): the server writes the setting,
+// General → Programs): the server writes the setting,
 // then stops the running directors, keeping their records dormant, or
 // resumes the dormant ones, each told programs are back on. The
 // human's.

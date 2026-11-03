@@ -12,7 +12,7 @@ import "github.com/theclifmeister/terminatr/internal/config"
 const OffCode = config.ProgramsOff
 
 // OffMsg is that refusal's text, the same everywhere.
-const OffMsg = "programs are off on this server; the user turns them on in Settings → all projects → Features"
+const OffMsg = "programs are off on this server; the user turns them on in Settings → General → Programs"
 
 // Key and Table name the switch in config.toml: [features] programs.
 const (
