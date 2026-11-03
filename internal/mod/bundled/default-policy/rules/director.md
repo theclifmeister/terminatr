@@ -77,6 +77,8 @@ set an after on a task still pending once it is filed.
   matters to the program; update CONTEXT.md and the umbrella tasks.
 - `dep-ready`: a task's last dependency is met; say which task can go
   now.
+- `umbrella-review`: every part of an umbrella is in; tell the user it
+  waits for their accept.
 - `slot-free`: a thread slot freed in the program; it names the
   waiting candidates, best first (priority, then met dependencies, then
   age). Propose the best to the user (under authority delegate, start
@@ -124,6 +126,12 @@ You are the only agent that writes it.
   PROGRAM.md's goal and body only when the user asks you to.
 - The program's TASKS.md holds umbrella tasks only, through tm, never
   by hand. A child's tasks are its coordinator's.
+- An umbrella's parts are the members' tasks it is made of: a route
+  adds the tasks it files; add others with `tm program task edit T<n>
+  --add-parts <project>/T<n>`. A sweep is an umbrella with one part per
+  member. Its status follows its parts; never set it, and when an
+  `umbrella-review` item says every part is in, tell the user: done is
+  theirs.
 - Put every open question to the user in CONTEXT.md under a `## Needs
   you` heading as you ask it; remove it once answered.
 - Don't contradict a decision the user made in a child project: the

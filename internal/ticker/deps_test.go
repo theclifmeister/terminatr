@@ -157,3 +157,115 @@ func mustTask(t *testing.T, p *project.Project, id int) *tasks.Task {
 	}
 	return tk
 }
+
+// TestSweepUmbrellas (the programs design §5.3): the sweep writes an
+// umbrella's status from its parts (started while any part moves,
+// blocked while one is, review once all are met, with an
+// umbrella-review item for the user, once), its parts' states and the
+// members' waits to deps.json; done is the user's and stays.
+func TestSweepUmbrellas(t *testing.T) {
+	r := newRig(t)
+	g, err := program.New(program.Options{Slug: "acme"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	api, err := project.New(project.Options{Slug: "api"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	web := r.p // "demo"
+	if _, err := api.Tasks().Add(human, []tasks.NewTask{{Title: "OIDC"}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := web.Tasks().Add(human, []tasks.NewTask{{Title: "Login page"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(os.Getenv("TERMINATR_HOME"), "config.toml"), []byte("[features]\nprograms = true\n[programs.acme]\nprojects = [\"demo\", \"api\"]\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ws := web.Tasks()
+	ws.CrossRefs = program.CrossRefs(cfg, "demo")
+	if _, err := ws.SetPlan(human, 1, nil, []string{"api/T1"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := g.Tasks().Add(human, []tasks.NewTask{{Title: "SSO"}}); err != nil {
+		t.Fatal(err)
+	}
+	// As an older route noted them: the sweep adopts them as parts.
+	if _, err := g.Tasks().ProgramEdit(human, "acme", 1, tasks.ProgramChange{Note: "routed api/T1, demo/T1, mini/ios (pending M-1)"}); err != nil {
+		t.Fatal(err)
+	}
+	umbrella := func() tasks.Status {
+		t.Helper()
+		u, err := g.Tasks().Get(1)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return u.Status
+	}
+	r.tk.sweepDeps(cfg)
+	if u, _ := g.Tasks().Get(1); strings.Join(u.Parts, " ") != "api/T1 demo/T1" {
+		t.Fatalf("adopted parts %v", u.Parts)
+	}
+	if st := umbrella(); st != tasks.Open {
+		t.Fatalf("all waiting: %s", st)
+	}
+	snap, err := program.ReadSnapshot("acme")
+	if err != nil || len(snap.Waits) != 1 || snap.Waits[0] != (program.Wait{Task: "demo/T1", Title: "Login page", Status: "open", After: "api/T1"}) {
+		t.Fatalf("waits %+v %v", snap.Waits, err)
+	}
+	if snap.States["demo/T1"].State != program.DepOpen || snap.States["api/T1"].Status != "open" {
+		t.Fatalf("states %+v", snap.States)
+	}
+	if _, err := api.Tasks().SetStatus(human, 1, tasks.Started, ""); err != nil {
+		t.Fatal(err)
+	}
+	r.tk.sweepDeps(cfg)
+	if st := umbrella(); st != tasks.Started {
+		t.Fatalf("one started: %s", st)
+	}
+	if _, err := web.Tasks().SetStatus(human, 1, tasks.Blocked, ""); err != nil {
+		t.Fatal(err)
+	}
+	r.tk.sweepDeps(cfg)
+	if st := umbrella(); st != tasks.Blocked {
+		t.Fatalf("one blocked: %s", st)
+	}
+	if !strings.Contains(journalText(t, &g.Folder), "ticker task.status T1 blocked (from its parts)") {
+		t.Fatalf("journal:\n%s", journalText(t, &g.Folder))
+	}
+	for _, p := range []*project.Project{api, web} {
+		if _, err := p.Tasks().SetApproved(human, 1, tasks.Done, ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	r.tk.sweepDeps(cfg)
+	r.tk.sweepDeps(cfg)
+	if st := umbrella(); st != tasks.Review {
+		t.Fatalf("all done: %s", st)
+	}
+	items := depItems(t, &g.Folder, program.KindUmbrellaReview)
+	if len(items) != 1 || items[0].Subject != "T1" || !items[0].NeedsUser || !strings.Contains(items[0].Summary, "every part of acme/T1 is in (api/T1, demo/T1)") {
+		t.Fatalf("items %+v", items)
+	}
+	if _, err := g.Tasks().SetStatus(human, 1, tasks.Done, ""); err != nil {
+		t.Fatal(err)
+	}
+	r.tk.sweepDeps(cfg)
+	if st := umbrella(); st != tasks.Done {
+		t.Fatalf("done by the user: %s", st)
+	}
+}
+
+func journalText(t *testing.T, f *project.Folder) string {
+	t.Helper()
+	lines, _, err := f.JournalTail(50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return strings.Join(lines, "\n")
+}

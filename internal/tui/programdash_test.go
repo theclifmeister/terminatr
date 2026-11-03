@@ -8,8 +8,10 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/link"
+	"github.com/theclifmeister/terminatr/internal/program"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/server"
+	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/thread"
 )
 
@@ -250,5 +252,67 @@ func TestProgramPages(t *testing.T) {
 	}
 	if want := []string{"Q1+Q2+Q3+Q4", "Q5", "ask:Q9", "rv:T1"}; !slices.Equal(got, want) {
 		t.Errorf("pages %v, want %v", got, want)
+	}
+}
+
+// TestProgramUmbrellas: the program dashboard's UMBRELLAS show each open
+// umbrella with how far its parts are and its parts as a checklist
+// (programs §5.3), and DEPENDENCIES each member task that waits on
+// another's; enter on a part shows that task in its project, on an
+// umbrella in review accepts it once the user says yes.
+func TestProgramUmbrellas(t *testing.T) {
+	m, src := progDash(t)
+	g := &m.data.Programs[0]
+	g.Umbrellas = []*tasks.Task{
+		{ID: 4, Title: "SSO with Okta", Status: tasks.Started, Priority: tasks.Must, Parts: []string{"api/T12", "web/T40", "mini/ios/T7"}},
+		{ID: 5, Title: "Bump axios", Status: tasks.Review, Parts: []string{"api/T14", "web/T41"}},
+	}
+	g.Deps = map[string]program.Dep{
+		"api/T12":     {State: program.DepMet, Status: "review", Merged: true, Title: "OIDC login"},
+		"web/T40":     {State: program.DepOpen, Status: "started", Title: "Login button"},
+		"mini/ios/T7": {State: program.DepUnknown, Why: "on mini"},
+		"api/T14":     {State: program.DepMet, Status: "done", Title: "axios api"},
+		"web/T41":     {State: program.DepMet, Status: "done", Title: "axios web"},
+	}
+	g.Waits = []program.Wait{{Task: "web/T40", Title: "Login button", Status: "started", After: "api/T12"}}
+	g.Tasks = map[string]*tasks.Task{"web/T40": {ID: 40, Title: "Login button", Status: tasks.Started}, "api/T12": {ID: 12, Title: "OIDC login", Status: tasks.Review}}
+	src.data = m.data
+	m.current = "g:acme"
+	m.rebuild()
+	out := screen(m)
+	for _, want := range []string{"UMBRELLAS", "T4", "SSO with Okta", "1/3 parts · must", "[x] api/T12 OIDC login", "merged",
+		"[ ] web/T40 Login button", "[ ] mini/ios/T7", "on mini", "T5", "2/2 parts · every part is in: enter accepts",
+		"DEPENDENCIES", "web/T40 Login button", "← api/T12 (merged) · met"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("no %q:\n%s", want, out)
+		}
+	}
+	if strings.Index(out, "CHILDREN") > strings.Index(out, "UMBRELLAS") || strings.Index(out, "UMBRELLAS") > strings.Index(out, "DEPENDENCIES") {
+		t.Error("panes out of order")
+	}
+	// A local part shows its task in its project; a paired one its
+	// server's dashboard.
+	m.focus, m.sel = areaMain, "pu:T4:api/T12"
+	if r, _ := m.selected(); r.project != "api" || r.task == nil || r.task.ID != 12 {
+		t.Fatalf("part row %+v", r)
+	}
+	m.sel = "pu:T4:mini/ios/T7"
+	if r, _ := m.selected(); r.remote == "" || r.task != nil {
+		t.Fatalf("paired part row %+v", r)
+	}
+	// Started: enter says what its status follows.
+	m.sel = "pu:T4"
+	drain(t, m, press(m, "enter"))
+	if !strings.Contains(m.msg, "follows its parts") || len(src.programActs) != 0 {
+		t.Fatalf("msg %q acts %v", m.msg, src.programActs)
+	}
+	m.sel = "pu:T5"
+	drain(t, m, press(m, "enter"))
+	if _, ok := m.top().(*confirmView); !ok {
+		t.Fatal("no confirm")
+	}
+	drain(t, m, press(m, "Y"))
+	if !slices.Equal(src.programActs, []string{"acme accept T5"}) {
+		t.Fatalf("acts %v", src.programActs)
 	}
 }

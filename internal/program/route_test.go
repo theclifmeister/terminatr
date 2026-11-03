@@ -119,7 +119,7 @@ func TestRoute(t *testing.T) {
 		}
 	}
 	u, _ := g.Tasks().Get(1)
-	if u.Title != "SSO with Okta" || !strings.Contains(u.Notes, "routed acme-api/T1, acme-api/T2, acme-web/T1") {
+	if u.Title != "SSO with Okta" || strings.Join(u.Parts, ", ") != "acme-api/T1, acme-api/T2, acme-web/T1" || strings.Contains(u.Notes, "routed") {
 		t.Fatalf("umbrella %+v", u)
 	}
 	// Retried, nothing is filed twice and no item is raised again.

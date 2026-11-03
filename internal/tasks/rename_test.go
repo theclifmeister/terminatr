@@ -11,12 +11,13 @@ func TestRenameRefs(t *testing.T) {
 		{"status: open · after: mini/api/T3, api-web/T3, xapi/T3", "status: open · after: mini/api/T3, api-web/T3, xapi/T3"},
 		{"status: open · owner: director:api-web", "status: open · owner: director:api-web"},
 		{"status: open · after: api/T", "status: open · after: api/T"},
+		{"parts: [[api/tasks/T2|api/T2]], web/T1, api/T5", "parts: [[api/tasks/T2|core/T2]], web/T1, core/T5"},
 	} {
 		if got := RenameRefs(c.in, "api", "core"); got != c.want {
 			t.Errorf("RenameRefs(%q)\n got %q\nwant %q", c.in, got, c.want)
 		}
 	}
-	if !RenameLine("director:acme (2026-11-03): x") || !RenameLine("status: open") || RenameLine("api/T3 is next") {
+	if !RenameLine("director:acme (2026-11-03): x") || !RenameLine("status: open") || !RenameLine("parts: [[api/tasks/T2|api/T2]], web/T1") || RenameLine("api/T3 is next") || RenameLine("parts: of it") {
 		t.Error("RenameLine")
 	}
 }

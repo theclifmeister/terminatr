@@ -121,15 +121,21 @@ func programRoute(e *Env, cfg *config.Config, args []string) error {
 const programTaskUsage = `usage: tm program task edit <project>/T<n> [--priority P] [--after T10,acme-web/T40]
                 [--design NAME] [--note "…"] [--title "…"] [--repo R] [--status ready|open]
        tm program task show <project>/T<n> | T<n> [--json]
-       tm program task add "title" [--priority P] [--notes "…"]   (an umbrella task)
-       tm program task list [--json]                                (the umbrella tasks)
+       tm program task add "title" [--priority P] [--notes "…"] [--parts acme-api/T12,…]
+                                                  (an umbrella task)
+       tm program task list [--json]              (the umbrella tasks, with their parts)
        tm program task edit T<n> [--title "…"] [--priority P] [--note "…"]
+                [--parts acme-api/T12,acme-web/T40 | --add-parts acme-web/T41]
  [--program <slug>] on each, for the human.
 
 A director changes a child's task only in these fields: priority, after,
 design and a note line; the title, repo, and ready or open only on a task it
 filed, before it starts. Other statuses are the child coordinator's, and
-done and dropped the user's.`
+done and dropped the user's.
+
+An umbrella's parts are member tasks; a route adds the tasks it files. Its
+status follows them (tm sets started, blocked and review); by hand it takes
+open or ready, and only the user sets done or dropped.`
 
 func programTask(e *Env, cfg *config.Config, args []string) error {
 	if len(args) == 0 {
@@ -140,6 +146,7 @@ func programTask(e *Env, cfg *config.Config, args []string) error {
 	slug, asJSON := f.String("program"), f.Bool("json")
 	priority, after, design := f.String("priority"), f.String("after"), f.String("design")
 	note, notes, title, repo, status := f.String("note"), f.String("notes"), f.String("title"), f.String("repo"), f.String("status")
+	parts, addParts := f.String("parts"), f.String("add-parts")
 	pos, err := f.Parse(args[1:])
 	if err != nil {
 		return err
@@ -156,7 +163,10 @@ func programTask(e *Env, cfg *config.Config, args []string) error {
 		if len(pos) != 0 {
 			return usagef("%s", programTaskUsage)
 		}
-		return taskList(e, g.Tasks(), nil, *asJSON, "", "", false, false)
+		if err := taskList(e, g.Tasks(), nil, *asJSON, "", "", false, false); err != nil || *asJSON {
+			return err
+		}
+		return e.umbrellaParts(g)
 	case "show":
 		if len(pos) != 1 {
 			return usagef("%s", programTaskUsage)
@@ -175,11 +185,27 @@ func programTask(e *Env, cfg *config.Config, args []string) error {
 		if *asJSON {
 			return e.printJSON(tasks.ToJSON(t))
 		}
-		_, err = fmt.Fprint(e.Stdout, shownText(tasks.Detail(t)))
-		return err
+		if _, err = fmt.Fprint(e.Stdout, shownText(tasks.Detail(t))); err != nil || !t.IsUmbrella() || strings.Contains(pos[0], "/") {
+			return err
+		}
+		deps, _ := program.ReadDeps(g.Slug)
+		fmt.Fprintln(e.Stdout, shown("\nParts "+program.PartsText(program.Parts(t, deps))))
+		return nil
 	case "add":
 		if len(pos) != 1 {
 			return usagef("%s", programTaskUsage)
+		}
+		var want []string
+		if f.IsSet("parts") {
+			// Checked before the task is filed, so a bad part files none.
+			if want, err = tasks.ReadParts([]string{*parts}); err != nil {
+				return err
+			}
+			for _, x := range want {
+				if err := g.CheckCrossRef(cfg, x); err != nil {
+					return err
+				}
+			}
 		}
 		out, err := g.Tasks().Add(e.Caller, []tasks.NewTask{{Title: pos[0], Priority: *priority, Notes: *notes}})
 		if err != nil {
@@ -188,6 +214,11 @@ func programTask(e *Env, cfg *config.Config, args []string) error {
 		r := out[0]
 		if r.Result == "failed" {
 			return &project.Error{Code: r.Code, Msg: r.Error}
+		}
+		if len(want) > 0 {
+			if _, err := g.SetParts(e.Caller, cfg, r.ID, want, true); err != nil {
+				return err
+			}
 		}
 		if *asJSON {
 			return e.printJSON(r)
@@ -199,7 +230,7 @@ func programTask(e *Env, cfg *config.Config, args []string) error {
 			return usagef("%s", programTaskUsage)
 		}
 		if !strings.Contains(pos[0], "/") {
-			return e.umbrellaEdit(g, pos[0], f, *asJSON, *title, *priority, *note)
+			return e.umbrellaEdit(cfg, g, pos[0], f, *asJSON, *title, *priority, *note, *parts, *addParts)
 		}
 		var ch tasks.ProgramChange
 		if f.IsSet("priority") {
@@ -227,6 +258,9 @@ func programTask(e *Env, cfg *config.Config, args []string) error {
 		ch.Note = *note
 		if f.IsSet("notes") {
 			return usagef("a director adds a note line with --note; it never rewrites a child's notes")
+		}
+		if f.anySet("parts", "add-parts") {
+			return usagef("parts belong to an umbrella task of the program's board: tm program task edit T<n> --parts …")
 		}
 		if program.IsRemoteRef(pos[0]) {
 			sent, err := g.EditRemote(e.Caller, cfg, pos[0], ch)
@@ -298,14 +332,17 @@ func (e *Env) remoteTaskShow(cfg *config.Config, g *program.Program, ref string,
 }
 
 // umbrellaEdit changes an umbrella task of g's board: its title,
-// priority, or a note line.
-func (e *Env) umbrellaEdit(g *program.Program, ref string, f *flagSet, asJSON bool, title, priority, note string) error {
+// priority, a note line, or its parts (set, or added to).
+func (e *Env) umbrellaEdit(cfg *config.Config, g *program.Program, ref string, f *flagSet, asJSON bool, title, priority, note, parts, addParts string) error {
 	n, ok := tasks.ParseRef(ref)
 	if !ok {
 		return usagef("%q is not T12 or <project>/T12", ref)
 	}
 	if f.anySet("design", "after", "repo", "status", "notes") {
-		return usagef("an umbrella task takes --title, --priority and --note")
+		return usagef("an umbrella task takes --title, --priority, --note, --parts and --add-parts (its status follows its parts)")
+	}
+	if f.IsSet("parts") && f.IsSet("add-parts") {
+		return usagef("--parts sets the parts, --add-parts adds to them: pass one")
 	}
 	s := g.Tasks()
 	var res tasks.Result
@@ -329,11 +366,37 @@ func (e *Env) umbrellaEdit(g *program.Program, ref string, f *flagSet, asJSON bo
 		}
 		changed = changed || res.Changed
 	}
+	if f.IsSet("parts") || f.IsSet("add-parts") {
+		list, add := parts, false
+		if f.IsSet("add-parts") {
+			list, add = addParts, true
+		}
+		if res, err = g.SetParts(e.Caller, cfg, ref, []string{list}, add); err != nil {
+			return err
+		}
+		changed = changed || res.Changed
+	}
 	if res.Task == nil {
-		return usagef("nothing to edit: pass --title, --priority or --note")
+		return usagef("nothing to edit: pass --title, --priority, --note, --parts or --add-parts")
 	}
 	res.Changed = changed
 	return e.done(res, nil, asJSON, "edited")
+}
+
+// umbrellaParts prints each open umbrella's parts, with their states as
+// the ticker last computed them.
+func (e *Env) umbrellaParts(g *program.Program) error {
+	b, err := g.Tasks().Load()
+	if err != nil {
+		return err
+	}
+	deps, _ := program.ReadDeps(g.Slug)
+	for _, t := range b.Tasks {
+		if t.IsUmbrella() && !t.Status.Closed() {
+			fmt.Fprintln(e.Stdout, shown(fmt.Sprintf("  %s parts %s", t.Ref(), program.PartsText(program.Parts(t, deps)))))
+		}
+	}
+	return nil
 }
 
 // programTaskStore is the board ref is on: a member's (<project>/T<n>)

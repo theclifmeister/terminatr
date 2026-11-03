@@ -9,6 +9,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/tasks"
 )
 
 // Actions: the list's keys. One table drives the key handling, the help
@@ -70,7 +71,7 @@ func init() {
 		{id: "focus.prev", keys: []string{"shift+tab"}, fixed: true, mouse: "a click on the area", run: (*dash).cycleFocus},
 		{id: "place.last", keys: []string{";"}, label: ";", help: "back to the last place: the area, sidebar row or session the keyboard was in before (prefix+; anywhere)",
 			menu: "back to the last place", run: (*dash).goLastPlace},
-		{id: "row.open", keys: []string{"enter"}, label: "enter", help: "attach to the selected session; on a project, open its coordinator; a task in NEEDS YOU shows in the project popup; questions waiting there open in the coordinator's question dialog; a held message or a file offered opens its dialog, a link request, a paused link or a paired server's share request the Network popup at its row; a paired server's need in the all-projects NEEDS YOU opens its dialog to answer it there while that server takes answers from this one (tm peer needs … answer, on it), else shows its read-only dashboard",
+		{id: "row.open", keys: []string{"enter"}, label: "enter", help: "attach to the selected session; on a project, open its coordinator; a task in NEEDS YOU shows in the project popup; questions waiting there open in the coordinator's question dialog; a held message or a file offered opens its dialog, a link request, a paused link or a paired server's share request the Network popup at its row; a paired server's need in the all-projects NEEDS YOU opens its dialog to answer it there while that server takes answers from this one (tm peer needs … answer, on it), else shows its read-only dashboard; on the program dashboard, an umbrella in review is accepted (asks first) and a part or a waiting task shows in its project",
 			menu: "open the selected row",
 			foot: func(_ *dash, r row, ok bool) string {
 				switch {
@@ -80,6 +81,8 @@ func init() {
 					return "answer"
 				case r.pneed != nil:
 					return "answer"
+				case r.umbrella != nil && r.umbrella.status == tasks.Review:
+					return "accept"
 				case r.task != nil, r.remote != "", isChildRow(r) && r.project != "":
 					return "show"
 				case r.card:
@@ -247,6 +250,8 @@ func (m *dash) enter(string) tea.Cmd {
 		return m.openPeerNeed(*r.peerNeed)
 	case r.pneed != nil:
 		return m.openProgramNeeds(r.pneed.program, r.pneed.need.ID)
+	case r.umbrella != nil:
+		return m.openUmbrella(*r.umbrella)
 	case r.remote != "":
 		return m.showProject(r.remote)
 	case isChildRow(r) && r.project != "":

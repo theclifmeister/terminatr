@@ -1057,10 +1057,28 @@ func (s *store) receiveWorkAnswer(alias, fp string, m proto.PeerMessage) proto.P
 		if x.Umbrella != "" {
 			words += ", part of " + x.Umbrella
 		}
+		if x.Ref != "" && (x.State == proto.ProgramFiled || x.State == proto.ProgramExisting) {
+			AddFiledPart(g, x.Umbrella, ref)
+		}
 	}
 	g.AddMessageItem(kind, key, words, false, x.ID)
 	g.Journal(caller.ForPeer(alias), "program."+x.State, ref, strings.TrimSpace(x.ID+" "+code+" "+x.Thread))
 	return ok
+}
+
+// AddFiledPart adds paired member task ref ("mini/acme-ios/T7"), which
+// its server filed for a route, to the parts of the route's umbrella
+// ("acme/T4") on program g's board (the programs design §5.3), as tm
+// (the ticker's caller: the member's server can't write the board).
+// An umbrella of another program, gone or archived, is left alone.
+func AddFiledPart(g *project.Folder, umbrella, ref string) {
+	prog, id, ok := strings.Cut(umbrella, "/")
+	n, isRef := tasks.ParseRef(id)
+	if !ok || prog != g.Slug || !isRef || !tasks.ValidRef(id) {
+		return
+	}
+	s := &tasks.Store{Dir: g.Dir, Slug: g.Slug, LinkSlug: g.LinkSlug(), Events: g, Program: true}
+	_, _ = s.SetParts(caller.Caller{Kind: caller.Ticker}, n, []string{ref}, true)
 }
 
 func sentWhat(x *ProgramSent) string {

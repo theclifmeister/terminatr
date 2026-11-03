@@ -49,6 +49,9 @@ type Dep struct {
 	Merged bool `json:"merged,omitempty"`
 	// Why says why it is unknown or gone, in tm's words.
 	Why string `json:"why,omitempty"`
+	// Title is the task's title when it was read: its board's words (a
+	// paired member's capped as it pushed it).
+	Title string `json:"title,omitempty"`
 }
 
 // Word is how a dashboard shows d after its ref: "review", "merged",
@@ -155,7 +158,7 @@ func (d *Deps) State(ref string) Dep {
 		if !ok {
 			return Dep{State: DepUnknown, Why: "on " + alias}
 		}
-		dep := Dep{State: DepOpen, Status: rt.Status, Merged: rt.Merged}
+		dep := Dep{State: DepOpen, Status: rt.Status, Merged: rt.Merged, Title: rt.Title}
 		switch {
 		case rt.Status == string(tasks.Dropped):
 			dep.State = DepGone
@@ -174,7 +177,7 @@ func (d *Deps) State(ref string) Dep {
 	if t == nil {
 		return Dep{State: DepGone, Why: "no such task"}
 	}
-	dep := Dep{State: DepOpen, Status: string(t.Status)}
+	dep := Dep{State: DepOpen, Status: string(t.Status), Title: t.Title}
 	if t.Thread != "" && d.merged != nil && d.merged(slug, t.Thread) {
 		dep.Merged = true
 	}
@@ -219,17 +222,41 @@ func (d *Deps) board(slug string) *boardRead {
 }
 
 // DepsFile is the program folder's file of its members' cross-project
-// dependency states, by ref, as the ticker last computed them; the
-// dashboards read it. Only tm writes it.
+// dependency states and its umbrellas' parts' (Snapshot), as the ticker
+// last computed them; the dashboards read it and never recompute
+// merges. Only tm writes it.
 const DepsFile = "deps.json"
 
-// WriteDeps writes program slug's dependency states, when they changed.
-func WriteDeps(slug string, deps map[string]Dep) error {
+// Snapshot is what DepsFile holds.
+type Snapshot struct {
+	// States are the states of the tasks members' tasks come after and
+	// of the umbrellas' parts, by ref ("acme-api/T12").
+	States map[string]Dep `json:"states"`
+	// Waits are the members' open tasks that come after other members'
+	// tasks, one per ref, by task then ref: the dashboard's
+	// DEPENDENCIES.
+	Waits []Wait `json:"waits,omitempty"`
+}
+
+// Wait is one member task that comes after another member's task: Task
+// ("acme-web/T40") after After ("acme-api/T12").
+type Wait struct {
+	Task   string `json:"task"`
+	Title  string `json:"title,omitempty"`
+	Status string `json:"status,omitempty"`
+	After  string `json:"after"`
+}
+
+// WriteDeps writes program slug's snapshot, when it changed.
+func WriteDeps(slug string, snap Snapshot) error {
 	dir, err := Dir(slug)
 	if err != nil {
 		return err
 	}
-	data, err := json.MarshalIndent(deps, "", "  ")
+	if snap.States == nil {
+		snap.States = map[string]Dep{}
+	}
+	data, err := json.MarshalIndent(snap, "", "  ")
 	if err != nil {
 		return err
 	}
@@ -241,25 +268,32 @@ func WriteDeps(slug string, deps map[string]Dep) error {
 	return fsx.WriteAtomic(path, data, 0o644)
 }
 
-// ReadDeps reads program slug's dependency states; none before the
-// ticker wrote any.
-func ReadDeps(slug string) (map[string]Dep, error) {
+// ReadSnapshot reads program slug's snapshot; empty before the ticker
+// wrote one.
+func ReadSnapshot(slug string) (Snapshot, error) {
 	dir, err := Dir(slug)
 	if err != nil {
-		return nil, err
+		return Snapshot{}, err
 	}
 	data, err := os.ReadFile(dir + "/" + DepsFile)
 	if errors.Is(err, fs.ErrNotExist) {
-		return nil, nil
+		return Snapshot{}, nil
 	}
 	if err != nil {
-		return nil, err
+		return Snapshot{}, err
 	}
-	var out map[string]Dep
+	var out Snapshot
 	if err := json.Unmarshal(data, &out); err != nil {
-		return nil, fmt.Errorf("%s: %w", DepsFile, err)
+		return Snapshot{}, fmt.Errorf("%s: %w", DepsFile, err)
 	}
 	return out, nil
+}
+
+// ReadDeps reads program slug's dependency states by ref; none before
+// the ticker wrote any.
+func ReadDeps(slug string) (map[string]Dep, error) {
+	snap, err := ReadSnapshot(slug)
+	return snap.States, err
 }
 
 // AfterText is a task's after refs as a child's dashboard shows them

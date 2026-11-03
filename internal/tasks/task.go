@@ -171,7 +171,13 @@ type Task struct {
 	// (programs, §6.1). tm reads and keeps them; only a program's director
 	// writes them (ProgramAdd, ProgramEdit), the program layer checking
 	// they are its members'.
-	AfterX   []string
+	AfterX []string
+	// Parts are the member tasks an umbrella task of a program's board
+	// is made of (the programs design §5.3), as CrossRef refs
+	// ("acme-api/T12", "mini/acme-ios/T7"), in the order they were
+	// added. Its status is derived from theirs (program.Derive). Only
+	// a program's board holds them (SetParts).
+	Parts    []string
 	Created  string
 	Updated  string
 	Archived bool
@@ -301,6 +307,9 @@ func checkNotes(s string) (string, error) {
 	}
 	if priorityLine.MatchString(lines[0]) {
 		return "", refuse("invalid-notes", fmt.Sprintf("notes can't start with %q, which reads as the task's priority; set it with --priority", lines[0]))
+	}
+	if _, ok := readPartsLine(lines[0]); ok {
+		return "", refuse("invalid-notes", fmt.Sprintf("notes can't start with %q, which reads as an umbrella task's parts; set them with tm program task edit --parts", lines[0]))
 	}
 	if stepLine.MatchString(lines[len(lines)-1]) {
 		return "", refuse("invalid-notes", "notes end in a checklist, which would read as steps; add steps with `tm task steps add` or end the notes with text")

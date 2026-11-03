@@ -2,6 +2,7 @@ package tasks
 
 import (
 	"fmt"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -374,4 +375,141 @@ func (s *Store) ProgramStarted(c caller.Caller, id int, thread string) (Result, 
 		return res, s.journal(c, "task.status", res.Task, string(Started))
 	}
 	return res, nil
+}
+
+// Umbrella tasks (the programs design §5.3): a task of a program's
+// board whose parts are member tasks. Its status is derived from
+// theirs by the ticker (SetDerived), never set by hand, except open,
+// ready and, the user's, done and dropped.
+
+// maxParts caps an umbrella's parts: a sweep has one per member.
+const maxParts = 64
+
+// IsUmbrella reports whether t is an umbrella with parts.
+func (t *Task) IsUmbrella() bool { return len(t.Parts) > 0 }
+
+// derived reports whether st is a status an umbrella's parts set.
+func derived(st Status) bool { return st == Started || st == Blocked || st == Review }
+
+// ReadParts reads parts refs as a command passes them: other projects'
+// tasks ("acme-api/T12", "mini/acme-ios/T7"), split by commas or
+// spaces, once each, in their order; an empty list is none.
+func ReadParts(refs []string) ([]string, error) {
+	out := []string{}
+	for _, r := range refs {
+		for _, f := range strings.FieldsFunc(r, func(c rune) bool { return c == ',' || c == ' ' }) {
+			if _, _, _, ok := CrossRef(f); !ok {
+				return nil, refuse("invalid-parts", fmt.Sprintf("%q is not a member's task (<project>/T12 or <server>/<project>/T12)", f))
+			}
+			if !slices.Contains(out, f) {
+				out = append(out, f)
+			}
+		}
+	}
+	if len(out) > maxParts {
+		return nil, refuse("invalid-parts", fmt.Sprintf("an umbrella has at most %d parts", maxParts))
+	}
+	return out, nil
+}
+
+// SetParts sets umbrella task id's parts on a program's board: replace
+// them (add false; an empty list clears them) or add those it hasn't
+// (add true). The program layer checks they are its members' tasks.
+// Journaled "task.parts T4 acme-api/T12, …".
+func (s *Store) SetParts(c caller.Caller, id int, parts []string, add bool) (Result, error) {
+	if !s.Program {
+		return Result{}, refuse("not-a-program", "only a program's umbrella tasks have parts")
+	}
+	parts, err := ReadParts(parts)
+	if err != nil {
+		return Result{}, err
+	}
+	res, err := s.edit(c, id, opWrite, func(t *Task) (bool, error) {
+		next := parts
+		if add {
+			next = slices.Clone(t.Parts)
+			for _, x := range parts {
+				if !slices.Contains(next, x) {
+					next = append(next, x)
+				}
+			}
+		}
+		if len(next) > maxParts {
+			return false, refuse("invalid-parts", fmt.Sprintf("an umbrella has at most %d parts", maxParts))
+		}
+		if slices.Equal(t.Parts, next) {
+			return false, nil
+		}
+		if len(next) == 0 {
+			next = nil
+		}
+		t.Parts = next
+		return true, nil
+	})
+	if err != nil || !res.Changed {
+		return res, err
+	}
+	return res, s.journal(c, "task.parts", res.Task, orNone(strings.Join(res.Task.Parts, ", ")))
+}
+
+// refuseDerived refuses setting st by hand on task id when it is an
+// umbrella with parts and st a status its parts set.
+func (s *Store) refuseDerived(id int, st Status) error {
+	if !s.Program || !derived(st) {
+		return nil
+	}
+	t, err := s.Get(id)
+	if err != nil || !t.IsUmbrella() {
+		return nil
+	}
+	return refuse("derived-status", fmt.Sprintf("%s's status comes from its parts (%s): tm sets started, blocked and review itself; by hand it takes open, ready, and the user's done or dropped", t.Ref(), strings.Join(t.Parts, ", ")))
+}
+
+// SetDerived moves umbrella task id to st, the status its parts give it
+// (program.Derive), on the ticker's call: a task that is closed, gone,
+// or has no parts any more is left alone (Changed false). Journaled
+// "task.status T4 started (from its parts)".
+func (s *Store) SetDerived(c caller.Caller, id int, st Status) (Result, error) {
+	if c.IsAgent() {
+		return Result{}, refuse("ticker-only", "an umbrella's status follows its parts; tm sets it")
+	}
+	if st.Closed() {
+		return Result{}, refuse("human-only", "only the user accepts or drops an umbrella")
+	}
+	res, err := s.edit(c, id, opWrite, func(t *Task) (bool, error) {
+		if t.Status.Closed() || !t.IsUmbrella() || t.Status == st {
+			return false, nil
+		}
+		t.Status = st
+		return true, nil
+	})
+	if err != nil || !res.Changed {
+		return res, err
+	}
+	return res, s.journal(c, "task.status", res.Task, string(st)+" (from its parts)")
+}
+
+// routedLine is the note line older routes wrote on an umbrella instead
+// of its parts: "director:acme (2026-11-03): routed acme-api/T12,
+// mini/acme-ios (pending M-3)".
+var routedLine = regexp.MustCompile(`^director:\S+ \([0-9-]+\): routed (.+)$`)
+
+// NotedParts are the parts an umbrella's older note lines name (routed
+// …): the refs among them, a paired member's pending one left out. The
+// notes stay as they are; the ticker adopts these as parts once.
+func NotedParts(notes string) []string {
+	var out []string
+	for _, line := range strings.Split(notes, "\n") {
+		m := routedLine.FindStringSubmatch(strings.TrimSpace(line))
+		if m == nil {
+			continue
+		}
+		for _, f := range strings.Split(m[1], ",") {
+			f = strings.TrimSpace(f)
+			if _, _, _, ok := CrossRef(f); ok && !slices.Contains(out, f) {
+				out = append(out, f)
+			}
+		}
+	}
+	return out
 }

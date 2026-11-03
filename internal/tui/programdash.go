@@ -10,7 +10,9 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/link"
+	"github.com/theclifmeister/terminatr/internal/program"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/tasks"
 )
 
 // The program dashboard (the programs design §11.2): enter on a
@@ -177,7 +179,150 @@ func programDashRows(d Data, g ProgramData, pn programNeeds) []row {
 	if len(kids) == 0 {
 		rows = append(rows, row{note: "  no members yet: the program's settings (" + keyShown(boundKey("A")) + ") pick them"})
 	}
-	return append(rows, kids...)
+	rows = append(rows, kids...)
+	rows = append(rows, umbrellaRows(d, g)...)
+	return append(rows, waitRows(d, g)...)
+}
+
+// umbrellaRows are the UMBRELLAS: each open umbrella task of g's board
+// (§5.3) with how far its parts are, its bar their share met, and its
+// parts under it as a checklist ("[x] acme-api/T12 OIDC login  merged"),
+// with their states as the ticker last wrote them. A sweep is an
+// umbrella with one part per member, so its checklist reads down the
+// members. Enter on an umbrella in review accepts it (asks first); on a
+// part, shows that task in its project.
+//
+//	" UMBRELLAS 2"
+//	"   T4  SSO with Okta        ◐ started   ▰▰▱▱▱  2/4 parts · must"
+//	"         [x] acme-infra/T21 Terraform OIDC    merged"
+//	"         [ ] acme-api/T12 OIDC login          ◔ review"
+func umbrellaRows(d Data, g ProgramData) []row {
+	if len(g.Umbrellas) == 0 {
+		return nil
+	}
+	out := []row{{head: "UMBRELLAS", count: len(g.Umbrellas)}}
+	for _, t := range g.Umbrellas {
+		u := umbrellaRef{program: g.Slug, id: t.ID, status: t.Status, title: t.Title}
+		r := row{key: "pu:" + t.Ref(), mark: markTop, who: t.Ref(), whoW: max(len(t.Ref()), 4), what: oneLine(t.Title),
+			state: string(t.Status), pct: -1, umbrella: &u}
+		if t.Status == tasks.Review {
+			r.mark = markNeeds
+		}
+		var rest []string
+		parts := program.Parts(t, g.Deps)
+		if len(parts) > 0 {
+			met, of := program.Progress(parts)
+			r.pct = pctOf(met, of)
+			rest = append(rest, fmt.Sprintf("%d/%d %s", met, of, map[bool]string{true: "part", false: "parts"}[of == 1]))
+		} else {
+			rest = append(rest, "no parts yet")
+		}
+		if t.Priority != tasks.NoPriority {
+			rest = append(rest, string(t.Priority))
+		}
+		if t.Status == tasks.Review {
+			rest = append(rest, "every part is in: enter accepts")
+		}
+		r.rest = strings.Join(rest, " · ")
+		out = append(out, r)
+		for _, ps := range parts {
+			box := "[ ]"
+			if ps.Checked() {
+				box = "[x]"
+			}
+			if ps.State == program.DepGone {
+				box = "[-]"
+			}
+			what := box + " " + ps.Ref
+			if ps.Title != "" {
+				what += " " + oneLine(ps.Title)
+			}
+			pr := row{key: "pu:" + t.Ref() + ":" + ps.Ref, mark: markTop + "    ", what: what, state: ps.Word(), pct: -1}
+			pr.whatMin = len([]rune(what))
+			linkTaskRow(&pr, g, d, ps.Ref)
+			out = append(out, pr)
+		}
+	}
+	return out
+}
+
+// waitRows are the DEPENDENCIES: each member task that comes after
+// another member's, as the ticker last saw it, its own status, then
+// what it waits on and that one's state:
+// "web/T40 Login button  ● started  ← api/T12 (review)".
+// Enter shows the waiting task in its project.
+func waitRows(d Data, g ProgramData) []row {
+	if len(g.Waits) == 0 {
+		return nil
+	}
+	out := []row{{head: "DEPENDENCIES", count: len(g.Waits)}}
+	for _, w := range g.Waits {
+		dep, ok := g.Deps[w.After]
+		word := "not known yet"
+		if ok {
+			word = dep.Word()
+		}
+		rest := "← " + w.After + " (" + word + ")"
+		switch {
+		case ok && dep.State == program.DepMet:
+			rest += " · met"
+		case ok && dep.State == program.DepGone:
+			rest += " · gone: the user decides whether it still waits"
+		}
+		what := w.Task
+		if w.Title != "" {
+			what += " " + oneLine(w.Title)
+		}
+		r := row{key: "pw:" + w.Task + ":" + w.After, mark: markTop, what: what, state: cmp.Or(w.Status, "—"), pct: -1, rest: rest}
+		linkTaskRow(&r, g, d, w.Task)
+		out = append(out, r)
+	}
+	return out
+}
+
+// linkTaskRow points r at member task ref: a local member's task, which
+// enter shows in its project; a paired member's project, whose
+// read-only dashboard enter shows.
+func linkTaskRow(r *row, g ProgramData, d Data, ref string) {
+	alias, slug, _, ok := tasks.CrossRef(ref)
+	switch {
+	case !ok:
+	case alias != "":
+		r.remote = peerFold(alias, slug)
+	default:
+		if _, here := findProject(d.Projects, slug); here {
+			r.project = slug
+			r.task = g.Tasks[ref]
+		}
+	}
+}
+
+// umbrellaRef is an umbrella task's row on the program dashboard.
+type umbrellaRef struct {
+	program string
+	id      int
+	status  tasks.Status
+	title   string
+}
+
+// openUmbrella is enter on an umbrella's row: one in review is the
+// user's to accept (asks first); else it says what its status follows.
+func (m *dash) openUmbrella(u umbrellaRef) tea.Cmd {
+	ref := fmt.Sprintf("%s/T%d", u.program, u.id)
+	if u.status != tasks.Review {
+		m.msg = ref + " is " + string(u.status) + ": its status follows its parts, and it waits for your accept once every part is in"
+		return nil
+	}
+	m.confirmNo("Accept "+ref, "Every part of "+ref+" ("+oneLine(u.title)+") is in. Accept it as done?", "not accepted", func() tea.Cmd {
+		src := m.src
+		return m.act(func() actionMsg {
+			if err := src.AcceptUmbrella(u.program, u.id); err != nil {
+				return actionMsg{err: err}
+			}
+			return actionMsg{msg: "accepted " + ref}
+		})
+	})
+	return nil
 }
 
 // errText is err's message; a refusal's own words.
