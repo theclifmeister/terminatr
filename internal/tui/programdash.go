@@ -419,7 +419,7 @@ func needWhatShort(n proto.ProgramNeed) string {
 
 // needState is the state word whose glyph need n's row gets.
 func needState(n proto.ProgramNeed) string {
-	if n.Kind == proto.NeedReview {
+	if n.Kind == proto.NeedReview || n.Kind == proto.NeedUmbrella {
 		return "review"
 	}
 	return "blocked"
@@ -430,7 +430,7 @@ func needKindWords(n proto.ProgramNeed) string {
 	switch {
 	case n.Escape:
 		return "only in its pane"
-	case n.Program:
+	case n.Program && n.Kind != proto.NeedUmbrella:
 		return "program question"
 	}
 	switch n.Kind {
@@ -441,7 +441,7 @@ func needKindWords(n proto.ProgramNeed) string {
 			return "coordinator asks"
 		}
 		return "thread asks"
-	case proto.NeedReview:
+	case proto.NeedReview, proto.NeedUmbrella:
 		return "in review"
 	case proto.NeedAsk:
 		return "coordinator question"

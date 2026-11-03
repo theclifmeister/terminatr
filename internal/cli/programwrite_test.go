@@ -10,6 +10,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/program"
 	"github.com/theclifmeister/terminatr/internal/project"
+	"github.com/theclifmeister/terminatr/internal/tasks"
 )
 
 var directorAcme = caller.Caller{Kind: caller.Director, Project: "acme"}
@@ -354,4 +355,32 @@ func TestUmbrellaPartsCLI(t *testing.T) {
 	h.expect(1, "not-member", directorAcme, "program", "task", "add", "Nope", "--parts", "loner/T1")
 	h.expect(2, "", directorAcme, "program", "task", "edit", "T2", "--parts", "web/T1", "--add-parts", "web/T2")
 	h.expect(2, "", directorAcme, "program", "task", "edit", "web/T1", "--parts", "web/T2")
+}
+
+// TestUmbrellaAcceptCLI: tm program task accept and send-back are the
+// user's: an umbrella in review is accepted (done) or sent back
+// (reopened with the note); a director is refused, and so is one not in
+// review.
+func TestUmbrellaAcceptCLI(t *testing.T) {
+	h, g := programHarness(t)
+	h.ok(human, "task", "add", "OIDC login", "--project", "demo")
+	h.ok(directorAcme, "program", "task", "add", "Bump axios", "--parts", "demo/T1")
+	h.expect(1, "not-in-review", human, "program", "task", "accept", "T1", "--program", "acme")
+	if _, err := g.Tasks().SetDerived(caller.Caller{Kind: caller.Ticker}, 1, tasks.Review); err != nil {
+		t.Fatal(err)
+	}
+	h.expect(1, "human-only", directorAcme, "program", "task", "accept", "T1")
+	h.expect(1, "human-only", directorAcme, "program", "task", "send-back", "T1", "--note", "no")
+	h.expect(2, "", human, "program", "task", "accept", "demo/T1", "--program", "acme")
+	h.ok(human, "program", "task", "send-back", "T1", "--program", "acme", "--note", "add the web part")
+	if out := h.ok(directorAcme, "program", "task", "show", "T1"); !strings.Contains(out, "open") || !strings.Contains(out, "sent back: add the web part") {
+		t.Fatalf("after send back:\n%s", out)
+	}
+	if _, err := g.Tasks().SetDerived(caller.Caller{Kind: caller.Ticker}, 1, tasks.Review); err != nil {
+		t.Fatal(err)
+	}
+	h.ok(human, "program", "task", "accept", "T1", "--program", "acme")
+	if u, _ := g.Tasks().Get(1); u.Status != tasks.Done {
+		t.Fatalf("status %s", u.Status)
+	}
 }

@@ -100,8 +100,10 @@ func (s *Server) rolledUpNeeds(slug string) (proto.ProgramNeedsResult, *proto.Er
 	}
 	t, _ := cfg.Program(slug)
 	var asks []project.Question
+	var umbrellas []proto.ProgramNeed
 	if g, err := program.Open(slug, cfg); err == nil {
 		asks, _ = g.Questions()
+		umbrellas = umbrellaNeeds(g)
 	}
 	sessions := s.list().Sessions
 	var mirror []proto.PeerMirror
@@ -120,7 +122,48 @@ func (s *Server) rolledUpNeeds(slug string) (proto.ProgramNeedsResult, *proto.Er
 		}
 		members = append(members, s.localMember(member, sessions))
 	}
-	return rollUp(slug, members, asks), nil
+	res := rollUp(slug, members, asks)
+	if len(umbrellas) > 0 {
+		res.Needs = append(res.Needs, umbrellas...)
+		order := map[string]int{"/" + slug: -1}
+		for i, m := range members {
+			order[m.server+"/"+m.project] = i
+		}
+		rankNeeds(res.Needs, func(n proto.ProgramNeed) int { return order[n.Server+"/"+n.Project] })
+	}
+	return res, nil
+}
+
+// umbrellaNeeds are program g's umbrella tasks in review as rows: every
+// part is in, and the user accepts it as done or sends it back (§5.3).
+// The row is the program's own (Project its slug, Program true), the
+// umbrella-review item's age its Since.
+func umbrellaNeeds(g *program.Program) []proto.ProgramNeed {
+	board, err := g.Tasks().Load()
+	if err != nil {
+		return nil
+	}
+	since := map[string]time.Time{}
+	if items, err := g.Inbox(); err == nil {
+		for _, it := range items {
+			if it.Kind == program.KindUmbrellaReview {
+				since[it.Subject] = it.Created
+			}
+		}
+	}
+	var out []proto.ProgramNeed
+	for _, t := range board.Tasks {
+		if t.Status != tasks.Review || !t.IsUmbrella() {
+			continue
+		}
+		n := proto.ProgramNeed{Project: g.Slug, Program: true, Priority: string(t.Priority)}
+		n.ID, n.Kind, n.Task, n.Title, n.Status = "umbrella:"+t.Ref(), proto.NeedUmbrella, t.Ref(), t.Title, string(t.Status)
+		n.Text = "every part is in: " + strings.Join(t.Parts, ", ")
+		n.Since = since[t.Ref()]
+		n.Acts = proto.ActsOf(n.PeerNeed)
+		out = append(out, n)
+	}
+	return out
 }
 
 // directorNeeds is rolledUpNeeds for a director's context: nil when it
@@ -421,7 +464,7 @@ func kindWeight(kind string, escape bool) int {
 		return 0
 	case proto.NeedQuestion:
 		return 1
-	case proto.NeedReview:
+	case proto.NeedReview, proto.NeedUmbrella:
 		return 2
 	case proto.NeedAsk:
 		return 3

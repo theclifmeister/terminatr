@@ -135,6 +135,8 @@ func needWords(n proto.ProgramNeed) string {
 		return "thread asks"
 	case proto.NeedReview:
 		return "review"
+	case proto.NeedUmbrella:
+		return "umbrella review"
 	case proto.NeedAsk:
 		if n.Program {
 			return "program question"

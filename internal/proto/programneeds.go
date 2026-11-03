@@ -26,6 +26,10 @@ const (
 	// NeedHost: the member's PR host fails its polls (PR states go
 	// stale until it answers again); the user fixes its sign-in.
 	NeedHost = "host"
+	// NeedUmbrella: an umbrella task of the program's board whose
+	// parts are all in (status review): the user accepts it as done
+	// or sends it back (the programs design §5.3).
+	NeedUmbrella = "umbrella-review"
 )
 
 // ProgramNeed is one row of a program's Needs you: a need of member

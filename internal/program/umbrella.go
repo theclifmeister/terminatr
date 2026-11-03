@@ -95,7 +95,8 @@ func Parts(t *tasks.Task, deps map[string]Dep) []PartState {
 //     other part it keeps its own;
 //   - blocked while any part is blocked;
 //   - review when every part is met (done, or merged as the program's
-//     dependency_met says);
+//     dependency_met says), unless the umbrella is open: the user sent
+//     it back, and it stays open until a part moves;
 //   - started while any part is under way (started, review, blocked or
 //     met);
 //   - else ready, or open if it was open (a part that went back).
@@ -125,6 +126,10 @@ func Derive(t *tasks.Task, parts []PartState) (tasks.Status, bool) {
 		return "", false
 	case blocked:
 		return tasks.Blocked, true
+	case met == live && t.Status == tasks.Open:
+		// Sent back by the user (or never in review): it stays open
+		// until a part moves, rather than asking again at once.
+		return tasks.Open, true
 	case met == live:
 		return tasks.Review, true
 	case moving > 0:
@@ -160,4 +165,61 @@ func PartsText(parts []PartState) string {
 		words[i] = ps.Ref + " " + ps.Word()
 	}
 	return fmt.Sprintf("%d/%d: %s", met, of, strings.Join(words, ", "))
+}
+
+// UmbrellaInReview is umbrella task id of p's board when it waits for the
+// user's decision: an umbrella (it has parts) in review.
+func (p *Program) UmbrellaInReview(id int) (*tasks.Task, error) {
+	t, err := p.Tasks().Get(id)
+	if err != nil {
+		return nil, err
+	}
+	if !t.IsUmbrella() {
+		return nil, refuse("not-umbrella", "%s/%s is not an umbrella task (it has no parts)", p.Slug, t.Ref())
+	}
+	if t.Status != tasks.Review {
+		return nil, refuse("not-in-review", "%s/%s is %s: it waits for the user once every part is in (review)", p.Slug, t.Ref(), t.Status)
+	}
+	return t, nil
+}
+
+// AcceptUmbrella marks umbrella task id of p's board done, the user's
+// accept once every part is in (§5.3), and closes its umbrella-review
+// item. Refused inside an agent: only the user accepts (human-only).
+func (p *Program) AcceptUmbrella(c caller.Caller, id int, note string) (tasks.Result, error) {
+	if c.IsAgent() {
+		return tasks.Result{}, refuse("human-only", "only the user accepts an umbrella task, by their own word: tell them which key or command does it")
+	}
+	t, err := p.UmbrellaInReview(id)
+	if err != nil {
+		return tasks.Result{}, err
+	}
+	res, err := p.Tasks().SetStatus(c, id, tasks.Done, note)
+	if err != nil {
+		return res, err
+	}
+	return res, p.DoneItems(KindUmbrellaReview, t.Ref())
+}
+
+// SendBackUmbrella reopens umbrella task id of p's board for the user
+// (note says what should change, kept on the task), and closes its
+// umbrella-review item. It stays open until a part moves again. Refused
+// inside an agent (human-only).
+func (p *Program) SendBackUmbrella(c caller.Caller, id int, note string) (tasks.Result, error) {
+	if c.IsAgent() {
+		return tasks.Result{}, refuse("human-only", "only the user sends an umbrella task back, by their own word")
+	}
+	t, err := p.UmbrellaInReview(id)
+	if err != nil {
+		return tasks.Result{}, err
+	}
+	why := "sent back"
+	if n := strings.TrimSpace(note); n != "" {
+		why += ": " + n
+	}
+	res, err := p.Tasks().SetStatus(c, id, tasks.Open, why)
+	if err != nil {
+		return res, err
+	}
+	return res, p.DoneItems(KindUmbrellaReview, t.Ref())
 }
