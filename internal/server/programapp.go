@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/device"
 	"github.com/theclifmeister/terminatr/internal/features"
 	"github.com/theclifmeister/terminatr/internal/link"
 	"github.com/theclifmeister/terminatr/internal/program"
@@ -327,17 +328,25 @@ func (s *Server) programRead(p proto.ProgramReadParams) (any, *proto.Error) {
 
 // programAnswer is program.answer's: the user's answer to the
 // program's open question, fanned out to the member questions it
-// covers. program.Answer refuses an agent; a paired device, which isn't
-// the user at this computer, is refused here (as a program question's
-// menu in the director's pane is, Question.HumanOnly).
+// covers. program.Answer refuses an agent. The user's own paired phone
+// answers too, at write level (Q208), its act signed with its device
+// key and journaled as the device ("human (iphone: <name> › program
+// acme)"); a device below write (which its app API refuses first) and
+// a paired server's user, who has only the answer acts of peer.act, are
+// refused here.
 func (s *Server) programAnswer(p proto.ProgramAnswerParams, cc callCtx) (any, *proto.Error) {
 	cfg, g, perr := programFor(p.Program)
 	if perr != nil {
 		return nil, perr
 	}
 	c := cc.who()
-	if c.IsAgent() || c.Remote() {
-		return nil, proto.Errorf("human-only", "only the user answers a program's question, at this computer")
+	if c.IsAgent() || c.Peer != "" {
+		return nil, proto.Errorf("human-only", "only the user answers a program's question: at this computer, in the Mac app or on their own paired iPhone")
+	}
+	if c.Device != "" {
+		if d, ok := s.deviceNamed(c.Device); !ok || d.Effective() != device.LevelWrite {
+			return nil, proto.Errorf("human-only", "device %s answers a program's question only at write level (tm device access %q write)", c.Device, c.Device)
+		}
 	}
 	g.Paired = serverPaired{s}
 	res, err := g.Answer(c, cfg, p.Ref, p.Choices, p.Other)

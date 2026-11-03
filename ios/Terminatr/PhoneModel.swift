@@ -609,9 +609,8 @@ final class PhoneModel {
         try await connected().call(AppAPI.Methods.programNeeds, AppAPI.ProgramParams(program: slug))
     }
 
-    /// Whether this phone answers a program's question: only while its
-    /// bridge lists program.answer, which the Mac app's alone has for
-    /// now (appapi macOnly; the user's call, Q208).
+    /// Whether this phone answers a program's question: while its
+    /// bridge lists program.answer, at the write level (Q208).
     var answersPrograms: Bool { can(AppAPI.Methods.programAnswer.name) }
 
     /// Answers program question ref with the options picked, or other:

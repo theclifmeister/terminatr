@@ -408,9 +408,8 @@ private struct UmbrellaTile: View {
 /// One of a program's own questions (programs design §7.2): its words,
 /// its options, and the member questions it covers. Its answer goes to
 /// all of them (program.answer), the user's alone: the phone answers it
-/// only while its bridge lists program.answer, which today the Mac
-/// app's alone does (Q208); until then the card says to answer at the
-/// computer, and turning it on takes no change here.
+/// while its bridge lists program.answer, at the write level (Q208);
+/// below it the card says to answer at the computer.
 struct ProgramQuestionCard: View {
     @Environment(PhoneModel.self) private var model
     @Environment(\.theme) private var theme
@@ -469,7 +468,7 @@ struct ProgramQuestionCard: View {
                     .foregroundStyle(theme.muted)
             }
             if !answers {
-                Label("Answer it at your computer: the phone doesn't answer a program's questions yet.", systemImage: "desktopcomputer")
+                Label("Answer it at your computer: this phone answers a program's questions only with write access.", systemImage: "desktopcomputer")
                     .font(theme.body(.footnote))
                     .foregroundStyle(theme.muted)
             }

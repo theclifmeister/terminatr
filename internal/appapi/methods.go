@@ -194,9 +194,9 @@ func init() {
 		// director's writes made as the user (a route, a member's task
 		// changed, the program channel), the program's question
 		// answered for the member questions it covers, an umbrella in
-		// review accepted or sent back. Renaming and deleting a program,
-		// and answering its question, are the Mac app's alone (macOnly);
-		// its settings stay the TUI's. A member's own needs are acted on with their methods
+		// review accepted or sent back (the program's question at a
+		// device's write level too). Renaming and deleting a program are
+		// the Mac app's alone (macOnly); its settings stay the TUI's. A member's own needs are acted on with their methods
 		// (session.answer, task.accept, peer.need-act, link.act …).
 		unary(proto.MethodProgramGet, false, programParams, programDetailOf),
 		unary(proto.MethodProgramNeeds, false, programNeedsParams, programNeedsOf),

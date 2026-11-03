@@ -83,6 +83,20 @@ func TestAllowed(t *testing.T) {
 	}); !slices.Equal(got, want) {
 		t.Errorf("answer adds %v, want %v", got, want)
 	}
+	// A program's question is the user's own phone's to answer at write
+	// (Q208); renaming and deleting a program stay the Mac app's.
+	for name, levels := range map[string][]string{
+		proto.MethodProgramAnswer: {device.LevelWrite},
+		proto.MethodProgramRename: nil,
+		proto.MethodProgramDelete: nil,
+	} {
+		m, _ := appapi.Lookup(name)
+		for _, l := range device.Levels {
+			if appapi.Allowed(m, l) != slices.Contains(levels, l) {
+				t.Errorf("%s at %s: %v", name, l, appapi.Allowed(m, l))
+			}
+		}
+	}
 }
 
 // TestBridgeLevel: a bridge at a device's level lists only what the

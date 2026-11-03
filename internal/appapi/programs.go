@@ -18,8 +18,8 @@ import (
 // projects.watch sends no programs and every program method answers
 // programs-off, so the apps draw no program rows, screens or badges.
 // Program settings stay the TUI's, as safety settings do; renaming and
-// deleting a program, and answering its question, are the Mac app's
-// alone (macOnly).
+// deleting a program are the Mac app's alone (macOnly); its question is
+// answered at the write level too.
 
 // Program is a program on this server as the sidebar shows it: its
 // Members in its table's order, a paired one by (Server, Project),
@@ -557,11 +557,10 @@ func programShowParams(p ProgramShowParams) proto.ProgramShowParams {
 
 // macOnly are the methods only the Mac app has, at no device level:
 // renaming and deleting a program, which the user does at this computer
-// (as program settings, which stay the TUI's), and answering a
-// program's question, which only the user answers there (as its menu in
-// the director's pane, Question.HumanOnly: the server refuses a
-// device's either way).
-var macOnly = []string{proto.MethodProgramRename, proto.MethodProgramDelete, proto.MethodProgramAnswer}
+// (as program settings, which stay the TUI's). A program's question is
+// answered by the user's own paired phone too, at write level (Q208):
+// program.answer is an ordinary write.
+var macOnly = []string{proto.MethodProgramRename, proto.MethodProgramDelete}
 
 // MacOnly says m is the Mac app's alone, at no device level (macOnly).
 func (m Method) MacOnly() bool { return slices.Contains(macOnly, m.Name) }
