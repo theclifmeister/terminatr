@@ -190,7 +190,16 @@ func needActs(m *dash, slug string, n proto.ProgramNeed) []pnItem {
 	}
 	show := func(m *dash) tea.Cmd { return m.showProject(n.Project) }
 	if n.Server != "" {
+		// A paired member's need: acted on from here while its server
+		// takes this one's acts (its Acts: needs answer), through
+		// peer.need-act in the paired need dialog; else answered there.
 		where := peerShown(m.data.Peers, n.Server)
+		ref := peerNeedRef{alias: n.Server, server: where, project: n.Project, need: n.PeerNeed, answer: len(n.Acts) > 0}
+		if _, choices := peerNeedChoices(n.Project, n.PeerNeed); ref.answer && len(choices) > 0 && !n.Escape {
+			add("act on it here: it goes to "+where+" as your answer", func(m *dash) tea.Cmd { return m.openPeerNeed(ref) })
+			add("show its dashboard on "+where, func(m *dash) tea.Cmd { return m.showProject(peerFold(n.Server, n.Project)) })
+			return out
+		}
 		add("show its dashboard on "+where+" (answered there)", func(m *dash) tea.Cmd { return m.showProject(peerFold(n.Server, n.Project)) })
 		return out
 	}
