@@ -57,11 +57,14 @@ var notHumanOnly = map[string]gate{
 	proto.MethodCommandRun: gateAgentOrHuman,
 	proto.MethodViewDigest: gateNotAgent,
 	// tm search: an agent its own project (scopeProject), the human any.
-	proto.MethodSearchQuery:    gateAgentOrHuman,
-	proto.MethodAppReportList:  gateAgentOrHuman,
-	proto.MethodAppReportShow:  gateAgentOrHuman,
-	proto.MethodSearchTimeline: gateAgentOrHuman,
-	proto.MethodSearchShow:     gateAgentOrHuman,
+	proto.MethodSearchQuery:           gateAgentOrHuman,
+	proto.MethodProgramSearch:         gateAgentOrHuman,
+	proto.MethodProgramSearchTimeline: gateAgentOrHuman,
+	proto.MethodProgramSearchShow:     gateAgentOrHuman,
+	proto.MethodAppReportList:         gateAgentOrHuman,
+	proto.MethodAppReportShow:         gateAgentOrHuman,
+	proto.MethodSearchTimeline:        gateAgentOrHuman,
+	proto.MethodSearchShow:            gateAgentOrHuman,
 }
 
 // notControl are proto's methods of the peer link (internal/peer), not

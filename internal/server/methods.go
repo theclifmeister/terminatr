@@ -223,6 +223,21 @@ func init() {
 		proto.MethodSearchShow: {gate: gateAgentOrHuman, scope: scopeProject, name: scoped(func(p proto.SearchShowParams) string { return p.Project }),
 			call: typed((*Server).searchShow)},
 
+		// program.search (CapProgramSearch): the human, or the program's
+		// own director, over the program and its members (thread view).
+		proto.MethodProgramSearch: {gate: gateAgentOrHuman, scope: scopeDirects, name: scoped(func(p proto.ProgramSearchParams) string { return p.Program }),
+			call: typed(func(s *Server, p proto.ProgramSearchParams, c callCtx) (any, *proto.Error) {
+				return s.searchIdx.ProgramQuery(s.cfgNow(), p, c.who().Kind == caller.Director)
+			})},
+		proto.MethodProgramSearchTimeline: {gate: gateAgentOrHuman, scope: scopeDirects, name: scoped(func(p proto.ProgramTimelineParams) string { return p.Program }),
+			call: typed(func(s *Server, p proto.ProgramTimelineParams, c callCtx) (any, *proto.Error) {
+				return s.searchIdx.ProgramTimeline(s.cfgNow(), p, c.who().Kind == caller.Director)
+			})},
+		proto.MethodProgramSearchShow: {gate: gateAgentOrHuman, scope: scopeDirects, name: scoped(func(p proto.ProgramShowParams) string { return p.Program }),
+			call: typed(func(s *Server, p proto.ProgramShowParams, c callCtx) (any, *proto.Error) {
+				return s.searchIdx.ProgramShow(s.cfgNow(), p, c.who().Kind == caller.Director)
+			})},
+
 		// The human's.
 		proto.MethodPaneVT:          {gate: gateHuman, stream: (*Server).servePaneVT},
 		proto.MethodTranscriptWatch: {gate: gateHuman, stream: stream((*Server).serveTranscript)},
