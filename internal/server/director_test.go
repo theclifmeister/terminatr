@@ -178,6 +178,22 @@ func TestDirectorContext(t *testing.T) {
 			t.Errorf("block lacks %q:\n%s", want, text)
 		}
 	}
+	if strings.Contains(text, "Needs you (rolled up)") {
+		t.Errorf("a Needs you part without a needs reader:\n%s", text)
+	}
+	needs := func(slug string) *proto.ProgramNeedsResult {
+		return &proto.ProgramNeedsResult{Program: slug, Needs: []proto.ProgramNeed{{PeerNeed: proto.PeerNeed{ID: "review:T1:1", Kind: proto.NeedReview, Task: "T1", Title: "OIDC login"},
+			Project: "demo", Priority: "must", Acts: []string{proto.ActAccept, proto.ActSendBack}}}}
+	}
+	b, _ = contextWith(r, "", needs)()
+	if !strings.Contains(string(b), "## Needs you (rolled up)\nmust demo T1 review: OIDC login · acts: accept, send-back\n") ||
+		strings.Index(string(b), "## Needs you") > strings.Index(string(b), "## Children") {
+		t.Errorf("needs part:\n%s", b)
+	}
+	b, _ = contextWith(r, "", func(string) *proto.ProgramNeedsResult { return nil })()
+	if !strings.Contains(string(b), "(not known now") {
+		t.Errorf("unknown needs:\n%s", b)
+	}
 	r.Prompt = &PromptStamp{Version: "dev"}
 	b, _ = contextFor(r, "")()
 	if !strings.HasPrefix(string(b), "Your rules (`tm skill director`) are in your system prompt") || len(b) > project.StartupCut {

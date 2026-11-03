@@ -8,6 +8,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/program"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/thread"
 	"github.com/theclifmeister/terminatr/internal/vaultlink"
 )
 
@@ -41,6 +42,20 @@ func seatKey(role, slug string) string {
 		return vaultlink.ProgramFolder(slug)
 	}
 	return slug
+}
+
+// label names an inbox item's subject id for a nudge: a project's
+// thread or task by its label (thread.Label, thread.TaskLabel); a
+// program's bare, since its board's titles aren't the director's
+// alone to write.
+func (s seat) label(id string) string {
+	switch {
+	case s.p == nil:
+		return id
+	case thread.ValidID(id):
+		return thread.Label(s.p, id)
+	}
+	return thread.TaskLabel(s.p, id)
 }
 
 // of is the seat's running session among sessions, nil for none.
@@ -82,7 +97,11 @@ func (t *Ticker) sweepDirectors(cfg *config.Config, sessions []proto.SessionInfo
 		}
 		st := directorSeat(g)
 		unlock := t.lockProjects(st.key())
-		t.keepSeat(st, sessions, cfg.DirectorSafety(g.Slug), cfg.ContextHint, now)
+		safety := cfg.DirectorSafety(g.Slug)
+		if !safety.Paused {
+			t.nudge(st, sessions, now)
+		}
+		t.keepSeat(st, sessions, safety, cfg.ContextHint, now)
 		unlock()
 	}
 }

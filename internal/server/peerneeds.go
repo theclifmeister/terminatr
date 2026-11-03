@@ -28,11 +28,13 @@ func (e peerExport) Needs(c caller.Caller, slug string) ([]proto.PeerNeed, error
 	if c.Kind != caller.Peer {
 		return nil, proto.Errorf(proto.ErrRefused, "peer.watch is a paired server's")
 	}
-	return e.needsOf(slug)
+	return e.sharedNeeds(slug)
 }
 
-// needsOf are shared project slug's needs now.
-func (e peerExport) needsOf(slug string) ([]proto.PeerNeed, error) {
+// sharedNeeds are shared project slug's needs now (needsOf), for a
+// paired server: a project not shared, or one that doesn't read, is
+// refused as one that isn't there.
+func (e peerExport) sharedNeeds(slug string) ([]proto.PeerNeed, error) {
 	if !slices.Contains(sharedProjects(), slug) {
 		return nil, errNotShared(slug)
 	}
@@ -45,12 +47,22 @@ func (e peerExport) needsOf(slug string) ([]proto.PeerNeed, error) {
 	if err != nil {
 		return nil, errNotShared(slug)
 	}
+	return needsOf(p, w, sessions, e.approval), nil
+}
+
+// needsOf are project p's needs now, in full (peerNeeds), from its
+// watch w and the server's sessions: what a paired server at needs view
+// or answer reads of a shared project (sharedNeeds), and what a
+// program's rolled-up Needs you is built from for its local members
+// (programNeeds, the programs design §7.1). approval reads a session's
+// permission dialog (nil reads none). It checks no share: its callers
+// do.
+func needsOf(p *project.Project, w proto.ProjectWatch, sessions []proto.SessionInfo, approval func(id string) *proto.PeerApproval) []proto.PeerNeed {
 	asks, _ := p.Questions()
-	approval := e.approval
 	if approval == nil {
 		approval = func(string) *proto.PeerApproval { return nil }
 	}
-	return peerNeeds(slug, w, sessions, asks, approval), nil
+	return peerNeeds(p.Slug, w, sessions, asks, approval)
 }
 
 // Act is peer.act's, for c, the paired server's user (caller.ForPeerHuman):
@@ -62,7 +74,7 @@ func (e peerExport) Act(c caller.Caller, p proto.PeerAct) (proto.PeerActResult, 
 	if c.Kind != caller.Human || c.Peer == "" {
 		return proto.PeerActResult{}, proto.Errorf(proto.ErrRefused, "peer.act is a paired server's user's")
 	}
-	ns, err := e.needsOf(p.Project)
+	ns, err := e.sharedNeeds(p.Project)
 	if err != nil {
 		return proto.PeerActResult{}, err
 	}

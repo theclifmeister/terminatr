@@ -49,8 +49,9 @@ import (
 // task.priority, and a task's priority on the tasks the server sends.
 // 33: appreport.add, appreport.list and appreport.show, the apps' crash
 // and hang reports (CapAppReports). 34: programs.switch, and the hello's
-// CapPrograms while programs are on.
-const Protocol = 34
+// CapPrograms while programs are on. 35: program.needs, a program's
+// rolled-up Needs you.
+const Protocol = 35
 
 // Kind is what a connection is for.
 type Kind string

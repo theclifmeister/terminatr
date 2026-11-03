@@ -28,6 +28,7 @@ const programUsage = `usage: tm program new <slug> [--goal "…"] [--json]   (th
        tm program show <slug> [--json]
        tm program open <slug> [--agent NAME]   (start or attach its director)
        tm program context [<slug>] [--json]   (the director's context; a director reads its own program's)
+       tm program needs [<slug>] [--json]   (the rolled-up Needs you, ranked; a director reads its own program's)
        tm program route --file <path>|-   (file one task per member project; tm program route --help)
        tm program task edit <project>/T<n> …   (priority, after, design, a note; tm program task --help)
        tm program search <words>… [--project p]   (the members' histories, as a thread sees them; tm program search --help)
@@ -61,6 +62,8 @@ func runProgram(e *Env, args []string) error {
 		return programOpen(e, args[1:])
 	case "context":
 		return programContext(e, cfg, args[1:])
+	case "needs":
+		return programNeeds(e, args[1:])
 	case "route":
 		return programRoute(e, cfg, args[1:])
 	case "task":
@@ -256,18 +259,8 @@ func programContext(e *Env, cfg *config.Config, args []string) error {
 	if len(pos) == 1 {
 		slug = pos[0]
 	}
-	switch e.Caller.Kind {
-	case caller.Director:
-		if slug != "" && slug != e.Caller.Project {
-			return &project.Error{Code: "other-program", Msg: "a director reads only its own program's context"}
-		}
-		slug = e.Caller.Project
-	case caller.Human:
-	default:
-		return &project.Error{Code: "director-only", Msg: "tm program context is the director's (and the human's)"}
-	}
-	if slug == "" {
-		return usagef("name the program: tm program context <slug> (tm program list)\n%s", programUsage)
+	if slug, err = programOfCaller(e, slug, "context"); err != nil {
+		return err
 	}
 	g, err := program.Open(slug, cfg)
 	if err != nil {
@@ -277,6 +270,7 @@ func programContext(e *Env, cfg *config.Config, args []string) error {
 	if err != nil {
 		return err
 	}
+	secs = program.WithNeeds(secs, program.NeedsSection(liveProgramNeeds(slug)))
 	if *asJSON {
 		return e.printJSON(secs)
 	}

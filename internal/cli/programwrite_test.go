@@ -250,6 +250,26 @@ func TestDirectorAuthority(t *testing.T) {
 	h.ok(directorAcme, "program", "task", "edit", "web/T1", "--priority", "must")
 }
 
+// TestProgramNeedsCLI: tm program needs is a director's own program's
+// and the human's; without a server it says it can't read them, and tm
+// program context says the part isn't known now.
+func TestProgramNeedsCLI(t *testing.T) {
+	h, _ := programHarness(t)
+	h.env[caller.EnvProject] = "acme"
+	h.expect(1, "other-program", directorAcme, "program", "needs", "beta")
+	h.expect(1, "director-only", caller.Caller{Kind: caller.Coordinator, Project: "demo"}, "program", "needs")
+	h.expect(2, "", human, "program", "needs")
+	if code, _, errs := h.run(directorAcme, "", "program", "needs"); code != 3 || !strings.Contains(errs, "not running") {
+		t.Errorf("no server: %d %s", code, errs)
+	}
+	out := h.ok(directorAcme, "program", "context")
+	if !strings.Contains(out, "## Needs you (rolled up)\n(not known now") || strings.Index(out, "## Needs you") > strings.Index(out, "## Children") {
+		t.Errorf("context:\n%s", out)
+	}
+	writeTestConfig(t, h, "[programs.acme]\nprojects = [\"demo\", \"web\"]\n")
+	h.expect(1, "programs-off", directorAcme, "program", "needs")
+}
+
 // TestTaskEditCrossAfter (the programs design §6.1): while programs are
 // on, a member's coordinator writes refs to its program's tasks with tm
 // task edit --after, which then replaces the whole list; a non-member's
