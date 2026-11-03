@@ -107,6 +107,12 @@ func programRoute(e *Env, cfg *config.Config, args []string) error {
 		fmt.Fprintf(e.Stdout, "umbrella %s/%s\n", g.Slug, res.Umbrella)
 	}
 	for _, r := range res.Tasks {
+		if r.Ref == "" {
+			// A paired member's: filed there, answered by a
+			// program-task-filed item.
+			fmt.Fprintln(e.Stdout, shown(fmt.Sprintf("%s %s %s: %s", r.Project, r.Message, r.Result, r.Title)))
+			continue
+		}
 		fmt.Fprintln(e.Stdout, shown(fmt.Sprintf("%s %s %s: %s", r.Project, r.Ref, r.Result, r.Title)))
 	}
 	return err
@@ -154,6 +160,9 @@ func programTask(e *Env, cfg *config.Config, args []string) error {
 	case "show":
 		if len(pos) != 1 {
 			return usagef("%s", programTaskUsage)
+		}
+		if program.IsRemoteRef(pos[0]) {
+			return e.remoteTaskShow(cfg, g, pos[0], *asJSON)
 		}
 		s, id, err := programTaskStore(cfg, g, pos[0])
 		if err != nil {
@@ -219,10 +228,73 @@ func programTask(e *Env, cfg *config.Config, args []string) error {
 		if f.IsSet("notes") {
 			return usagef("a director adds a note line with --note; it never rewrites a child's notes")
 		}
+		if program.IsRemoteRef(pos[0]) {
+			sent, err := g.EditRemote(e.Caller, cfg, pos[0], ch)
+			if err != nil {
+				return err
+			}
+			return e.printSent(sent, *asJSON)
+		}
 		res, err := g.EditTask(e.Caller, cfg, pos[0], ch)
 		return e.done(res, err, *asJSON, "edited")
 	}
 	return usagef("unknown subcommand %q\n%s", sub, programTaskUsage)
+}
+
+// printSent says what was queued for a paired member.
+func (e *Env) printSent(sent *link.ProgramSent, asJSON bool) error {
+	if asJSON {
+		return e.printJSON(sent)
+	}
+	what := map[string]string{"task": "program-task", "edit": "program-task", "start": "program-start"}[sent.Kind]
+	answer := "a program-task-filed item"
+	if sent.Kind == "start" {
+		answer = "a program-start-result item"
+	}
+	ref := sent.Member
+	if sent.Ref != "" {
+		ref += "/" + sent.Ref
+	}
+	fmt.Fprintln(e.Stdout, shown(fmt.Sprintf("queued %s %s to %s: %s says how it went", what, sent.ID, ref, answer)))
+	return nil
+}
+
+// remoteTaskShow prints a paired member's task as it last pushed it
+// (program-status), and what the program sent it that waits.
+func (e *Env) remoteTaskShow(cfg *config.Config, g *program.Program, ref string, asJSON bool) error {
+	key, n, err := program.ChildRef(ref)
+	if err != nil {
+		return err
+	}
+	if cfg.ProgramOf(key) != g.Slug {
+		return &project.Error{Code: "not-member", Msg: fmt.Sprintf("%s is not a member of program %s", key, g.Slug)}
+	}
+	full := fmt.Sprintf("%s/T%d", key, n)
+	t, ok := link.RemoteTaskOf(full)
+	if asJSON {
+		if !ok {
+			return e.printJSON(map[string]any{"ref": full, "known": false})
+		}
+		return e.printJSON(map[string]any{"ref": full, "known": true, "task": t})
+	}
+	if !ok {
+		fmt.Fprintln(e.Stdout, shown(fmt.Sprintf("%s: no status from %s yet (it pushes the tasks the director filed or referenced, while its program_status is on)", full, key)))
+		return nil
+	}
+	line := fmt.Sprintf("%s %s: %s", full, t.Status, t.Title)
+	if t.PR > 0 {
+		line += fmt.Sprintf(" (PR %d", t.PR)
+		if t.Merged {
+			line += ", merged"
+		}
+		line += ")"
+	}
+	fmt.Fprintln(e.Stdout, shown(line))
+	if t.URL != "" {
+		fmt.Fprintln(e.Stdout, shown("  "+t.URL))
+	}
+	fmt.Fprintln(e.Stdout, shown("  pushed "+t.Seen.Local().Format("Jan 2 15:04")))
+	return nil
 }
 
 // umbrellaEdit changes an umbrella task of g's board: its title,
@@ -293,7 +365,9 @@ const programSendUsage = `usage: tm program send <to> "text" | --file <path>|- [
 The program channel: the director writes to a member project's coordinator
 (<to> a member's slug); a member's coordinator writes to its program (<to> the
 program's slug). Text only, framed as data on the other side, where the item
-says how to read it. The human names the sending side with --from.`
+says how to read it. The human names the sending side with --from.
+A paired member (<server>/<project>) gets it over the link; a member of a
+paired server's program writes to it as <server>/<program>.`
 
 func programSend(e *Env, cfg *config.Config, args []string) error {
 	f := newFlags()
@@ -313,6 +387,16 @@ func programSend(e *Env, cfg *config.Config, args []string) error {
 		text = pos[1]
 	} else if text, err = e.readArg(*file); err != nil {
 		return err
+	}
+	if m, done, err := e.sendToPairedProgram(cfg, *from, pos[0], link.Opts{Text: text, Re: *re}); done {
+		if err != nil {
+			return err
+		}
+		if *asJSON {
+			return e.printJSON(m)
+		}
+		fmt.Fprintf(e.Stdout, "queued %s to %s (%s)\n", m.ID, pos[0], link.KB(m.Bytes))
+		return nil
 	}
 	pslug := *slug
 	if pslug == "" && !e.Caller.IsAgent() {
@@ -337,8 +421,39 @@ func programSend(e *Env, cfg *config.Config, args []string) error {
 	if *asJSON {
 		return e.printJSON(m)
 	}
-	fmt.Fprintf(e.Stdout, "sent %s to %s (%s)\n", m.ID, pos[0], link.KB(m.Bytes))
+	verb := "sent"
+	if m.State == link.StateQueued {
+		verb = "queued" // to a paired member, through the outbox
+	}
+	fmt.Fprintf(e.Stdout, "%s %s to %s (%s)\n", verb, m.ID, pos[0], link.KB(m.Bytes))
 	return nil
+}
+
+// sendToPairedProgram sends a member project's message to the paired
+// server's program it is in (to is "<server>/<program>", as its program
+// key names it): its coordinator, or the human with --from. done is
+// false when to isn't that.
+func (e *Env) sendToPairedProgram(cfg *config.Config, from, to string, o link.Opts) (*link.Message, bool, error) {
+	if !program.IsRemote(to) {
+		return nil, false, nil
+	}
+	slug := from
+	switch {
+	case e.Caller.Kind == caller.Coordinator:
+		slug = e.Caller.Project
+	case e.Caller.IsAgent():
+		return nil, false, nil
+	}
+	l, in := cfg.ProgramLink(slug)
+	if slug == "" || !in || l.Program != to {
+		return nil, false, nil
+	}
+	p, err := project.OpenWith(slug, cfg)
+	if err != nil {
+		return nil, true, err
+	}
+	m, err := link.SendProgramRemote(e.Caller, &p.Folder, to, o)
+	return m, true, err
 }
 
 // programRead prints a program channel message, framed as data: in the

@@ -16,6 +16,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/features"
+	"github.com/theclifmeister/terminatr/internal/link"
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/tasks"
@@ -149,7 +150,21 @@ func (d *Deps) State(ref string) Dep {
 		return Dep{State: DepUnknown, Why: "not in the program"}
 	}
 	if alias != "" {
-		return Dep{State: DepUnknown, Why: "on " + alias}
+		// A paired member's task: as it last pushed it (program-status).
+		rt, ok := link.RemoteTaskOf(ref)
+		if !ok {
+			return Dep{State: DepUnknown, Why: "on " + alias}
+		}
+		dep := Dep{State: DepOpen, Status: rt.Status, Merged: rt.Merged}
+		switch {
+		case rt.Status == string(tasks.Dropped):
+			dep.State = DepGone
+		case rt.Status == string(tasks.Done):
+			dep.State = DepMet
+		case rt.Merged && d.met == config.DependencyMerged:
+			dep.State = DepMet
+		}
+		return dep
 	}
 	b := d.board(slug)
 	if b.err != nil {

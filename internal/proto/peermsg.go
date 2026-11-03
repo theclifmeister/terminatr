@@ -69,6 +69,99 @@ const (
 	PeerProgramLeave  = "program-leave"
 )
 
+// The program's work over the link (the programs design §9.2), once a
+// membership is accepted. From and To are each side's slug, as for the
+// membership kinds. ID is a remote message's, M-<the sending server's
+// fingerprint>-<n>; an answer's Re is the ID it answers.
+//   - program-task: the director files a task (Task without Ref) or
+//     changes one (Task.Ref and Task.Edit) on the member's board;
+//     program-task-filed answers it: Allow a ProgramFiled… word, Task.Ref
+//     the task, Code a refusal.
+//   - program-message: the program channel, either way, as a link
+//     message (Text, Re, By "director", "coordinator" or "human").
+//   - program-status: the member pushes the state of a task the
+//     director filed or referenced (Task: Ref, Status, Title, PR, URL,
+//     Merged, Changed).
+//   - program-start: the director starts a thread for Task.Ref (Agent
+//     and Model are hints; Allow ProgramStartDelegate or
+//     ProgramStartApproved); program-start-result answers it: Allow
+//     ProgramStarted or ProgramFiledRefused, Task.Thread, Code.
+//   - program-rename: the director's program was renamed from From to
+//     Rename.
+const (
+	PeerProgramTask        = "program-task"
+	PeerProgramTaskFiled   = "program-task-filed"
+	PeerProgramMessage     = "program-message"
+	PeerProgramStatus      = "program-status"
+	PeerProgramStart       = "program-start"
+	PeerProgramStartResult = "program-start-result"
+	PeerProgramRename      = "program-rename"
+)
+
+// The words of a program-task-filed's and a program-start-result's
+// Allow.
+const (
+	ProgramFiled    = "created"  // filed on the board
+	ProgramExisting = "existing" // an open task of that title was there
+	ProgramEdited   = "edited"   // the change was made
+	ProgramProposed = "proposed" // program_tasks = "propose": an item the coordinator proposes
+	ProgramRefused  = "refused"  // Code says why
+	ProgramStarted  = "started"  // the thread started
+)
+
+// The words of a program-start's Allow: why the director may start it.
+const (
+	ProgramStartDelegate = "delegate" // the program's authority is delegate
+	ProgramStartApproved = "approved" // the director's user said so (--approved-by-user)
+)
+
+// ProgramTask is the task part of the program work kinds; the
+// receiver cleans and caps every string.
+type ProgramTask struct {
+	// Ref is the member's task, "T7": the one changed, filed, pushed or
+	// started.
+	Ref string `json:"ref,omitempty"`
+	// A new task (program-task without Ref): Key names it in the route,
+	// After are refs into the member's own board ("T3") and the
+	// director's server's member tasks ("acme-api/T12", kept there as
+	// text), Umbrella the program's task it is part of ("acme/T4").
+	Key      string   `json:"key,omitempty"`
+	Title    string   `json:"title,omitempty"`
+	Notes    string   `json:"notes,omitempty"`
+	Steps    []string `json:"steps,omitempty"`
+	Priority string   `json:"priority,omitempty"`
+	Status   string   `json:"status,omitempty"`
+	Repo     string   `json:"repo,omitempty"`
+	Design   string   `json:"design,omitempty"`
+	After    []string `json:"after,omitempty"`
+	Umbrella string   `json:"umbrella,omitempty"`
+	// Edit is a program-task's change of task Ref.
+	Edit *ProgramTaskEdit `json:"edit,omitempty"`
+	// A program-status: the thread's PR, its https URL, whether it
+	// merged, and when the task last changed.
+	PR      int       `json:"pr,omitempty"`
+	URL     string    `json:"url,omitempty"`
+	Merged  bool      `json:"merged,omitempty"`
+	Changed time.Time `json:"changed,omitzero"`
+	// A program-start's hints, and its result's thread.
+	Agent  string `json:"agent,omitempty"`
+	Model  string `json:"model,omitempty"`
+	Thread string `json:"thread,omitempty"`
+}
+
+// ProgramTaskEdit is a director's change of a member's task (the
+// programs design §5.2); nil leaves a field alone. After replaces the
+// refs, an empty list clears them.
+type ProgramTaskEdit struct {
+	Priority *string   `json:"priority,omitempty"`
+	Design   *string   `json:"design,omitempty"`
+	Title    *string   `json:"title,omitempty"`
+	Repo     *string   `json:"repo,omitempty"`
+	Status   *string   `json:"status,omitempty"`
+	After    *[]string `json:"after,omitempty"`
+	Note     string    `json:"note,omitempty"`
+}
+
 // The words of a program-answer's Allow.
 const (
 	ProgramAccepted = "accepted"
@@ -131,6 +224,10 @@ type PeerMessage struct {
 	// Features are a program-invite's asked features and a
 	// program-answer's granted ones (ProgramFeatures).
 	Features []string `json:"features,omitempty"`
+	// Task is the task part of the program work kinds; Rename a
+	// program-rename's new slug.
+	Task   *ProgramTask `json:"task,omitempty"`
+	Rename string       `json:"rename,omitempty"`
 }
 
 // MethodPeerFileFetch is the data half of a file over the link (docs/SPEC.md

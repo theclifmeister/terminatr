@@ -153,7 +153,8 @@ func (s *Store) allow(c caller.Caller, t *Task, o op) error {
 	if !c.IsAgent() {
 		return nil
 	}
-	if c.Kind == caller.Director {
+	if c.DirectorOf() != "" {
+		// A director here, or a paired server's over the link.
 		return s.allowDirector(c, o)
 	}
 	if c.Project != "" && s.Slug != "" && c.Project != s.Slug {

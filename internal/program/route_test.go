@@ -151,7 +151,7 @@ func TestRouteRefusals(t *testing.T) {
 		"other director":  {caller.Caller{Kind: caller.Director, Project: "beta"}, routeConfig, one(RouteTask{Project: "acme-web", Title: "x"}), "other-program"},
 		"not a member":    {director, routeConfig, one(RouteTask{Project: "loner", Title: "x"}), "not-member"},
 		"other's member":  {director, routeConfig, one(RouteTask{Project: "other", Title: "x"}), "not-member"},
-		"paired member":   {director, routeConfig, one(RouteTask{Project: "mini/acme-ios", Title: "x"}), "remote-member"},
+		"paired member":   {director, routeConfig, one(RouteTask{Project: "mini/acme-ios", Title: "x"}), "not-accepted"},
 		"paused":          {director, strings.Replace(routeConfig, "[programs.beta]", "paused = true\n[programs.beta]", 1), one(RouteTask{Project: "acme-web", Title: "x"}), "program-paused"},
 		"done":            {director, routeConfig, one(RouteTask{Project: "acme-web", Title: "x", Status: "done"}), "human-only"},
 		"started":         {director, routeConfig, one(RouteTask{Project: "acme-web", Title: "x", Status: "started"}), "coordinator-only"},
@@ -379,7 +379,7 @@ func TestSend(t *testing.T) {
 		code     string
 	}{
 		"non-member":       {director, "", "loner", "not-member"},
-		"paired":           {director, "", "mini/acme-ios", "remote-member"},
+		"paired":           {director, "", "mini/acme-ios", "not-accepted"},
 		"other director":   {caller.Caller{Kind: caller.Director, Project: "beta"}, "", "acme-web", "other-program"},
 		"thread":           {caller.Caller{Kind: caller.Thread, Project: "acme-web", Thread: "t-0001"}, "", "acme", "coordinator-only"},
 		"coordinator away": {coord, "", "beta", "not-member"},

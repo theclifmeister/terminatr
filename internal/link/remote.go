@@ -245,6 +245,7 @@ func Flush(ctx context.Context, t Transport) {
 	ExpireFiles()
 	if ProgramsOn() {
 		ExpireInvites()
+		PushProgramStatus()
 	}
 	SettleOffers(caller.Caller{Kind: caller.Ticker}, "", "")
 	root, err := outboxDir()
@@ -323,6 +324,7 @@ func settled(alias string, m proto.PeerMessage, code string) {
 		shareDelivered(alias, m)
 		fileSent(alias, m)
 		inviteDelivered(alias, m)
+		workSettled(alias, m, "")
 		return
 	}
 	undelivered(alias, m, code)
@@ -330,6 +332,7 @@ func settled(alias string, m proto.PeerMessage, code string) {
 	shareUndelivered(alias, m, code)
 	fileUnsent(alias, m, code)
 	inviteUndelivered(alias, m, code)
+	workSettled(alias, m, code)
 }
 
 // sender finds the sending project's copy of an outgoing message m to
@@ -418,11 +421,17 @@ func Receive(alias string, id peer.ID, m proto.PeerMessage) proto.PeerMessageRes
 		idOK, slugsOK = m.ID == "" && ValidShareID(m.Re), m.From == "" && m.To == ""
 	case proto.PeerProgramInvite, proto.PeerProgramAnswer, proto.PeerProgramLeave:
 		idOK = ValidInviteID(m.ID)
+	case proto.PeerProgramStatus:
+		// A member's push: From is its project, To the program.
+		slugsOK = project.ValidSlug(m.From) && config.ValidProgramSlug(m.To)
 	}
 	if m.Epoch == "" || m.Seq < 1 || !slugsOK || !idOK {
 		return res
 	}
 	key := streamKey(alias, m.Kind)
+	// run is what the message starts once the store is unlocked (a
+	// program-start's thread).
+	var run []func()
 	err := withStore(func(s *store) error {
 		if in := s.In[key]; in != nil && in.Epoch == m.Epoch && m.Seq <= in.Seq {
 			res = proto.PeerMessageResult{Status: proto.PeerDuplicate}
@@ -455,6 +464,18 @@ func Receive(alias string, id peer.ID, m proto.PeerMessage) proto.PeerMessageRes
 			res = s.receiveProgramAnswer(alias, m)
 		case proto.PeerProgramLeave:
 			res = s.receiveProgramLeave(alias, m)
+		case proto.PeerProgramTask:
+			res = s.receiveProgramTask(alias, fingerprint(id), m)
+		case proto.PeerProgramMessage:
+			res = s.receiveProgramMessage(alias, fingerprint(id), m)
+		case proto.PeerProgramStart:
+			res = s.receiveProgramStart(alias, fingerprint(id), m, &run)
+		case proto.PeerProgramTaskFiled, proto.PeerProgramStartResult:
+			res = s.receiveWorkAnswer(alias, fingerprint(id), m)
+		case proto.PeerProgramStatus:
+			res = s.receiveProgramStatus(alias, fingerprint(id), m)
+		case proto.PeerProgramRename:
+			res = s.receiveProgramRename(alias, fingerprint(id), m)
 		default:
 			res = proto.PeerMessageResult{Status: proto.PeerRefused, Code: "bad-message"}
 		}
@@ -466,8 +487,15 @@ func Receive(alias string, id peer.ID, m proto.PeerMessage) proto.PeerMessageRes
 	if err != nil {
 		return proto.PeerMessageResult{Status: proto.PeerRetry, Code: "refused"}
 	}
+	for _, fn := range run {
+		runAfter(fn)
+	}
 	return res
 }
+
+// runAfter runs what a message started once the store is unlocked, on
+// its own: a thread's start takes longer than a delivery should.
+var runAfter = func(fn func()) { go fn() }
 
 // remoteIDRE is a remote message's id; the middle must be the sending
 // server's fingerprint.

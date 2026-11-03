@@ -7,7 +7,9 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/link"
 	"github.com/theclifmeister/terminatr/internal/project"
+	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 )
 
@@ -58,8 +60,12 @@ type Routed struct {
 	Ref     string `json:"ref"`
 	Title   string `json:"title"`
 	// Result is created, or existing when an open task of that title was
-	// there already (a retried route files nothing twice).
+	// there already (a retried route files nothing twice); pending for a
+	// paired member's, until its server answers.
 	Result string `json:"result"`
+	// Message is a paired member's task's program-task id (M-…): the
+	// program-task-filed item names it, and the task's ref there.
+	Message string `json:"message,omitempty"`
 }
 
 // RouteResult is what a route filed.
@@ -86,11 +92,12 @@ func (p *Program) mayDirect(c caller.Caller, what string) error {
 }
 
 // Member opens member project slug of p for a program write: a local
-// member, not archived. A paired server's member gets its tasks over
-// the link (§9), which this tm doesn't send yet.
+// member, not archived. A paired server's member (remote-member) gets
+// its work over the link instead (remote.go): the callers that take one
+// check IsRemote first.
 func (p *Program) Member(cfg *config.Config, slug string) (*project.Project, error) {
 	if _, _, remote := config.Remote(slug); remote {
-		return nil, refuse("remote-member", "%s is on a paired server: program writes there come with paired members", slug)
+		return nil, refuse("remote-member", "%s is on a paired server: this works on local members only", slug)
 	}
 	if !project.ValidSlug(slug) || cfg.ProgramOf(slug) != p.Slug {
 		return nil, refuse("not-member", "%s is not a member of program %s (tm program show %s)", slug, p.Slug, p.Slug)
@@ -133,8 +140,23 @@ func (p *Program) Route(c caller.Caller, cfg *config.Config, req RouteRequest) (
 	}
 	children := map[string]*project.Project{}
 	keys := map[string]bool{}
+	// remoteKeys are the keys of tasks that go to paired members: they
+	// have no number here until filed there.
+	remoteKeys := map[string]bool{}
 	for i, rt := range req.Tasks {
 		what := fmt.Sprintf("task %d (%s)", i+1, oneLine(rt.Title, 40))
+		if rt.Key != "" && (keys[rt.Key] || remoteKeys[rt.Key]) {
+			return nil, refuse("invalid-route", "%s: two tasks have key %s", what, rt.Key)
+		}
+		if IsRemote(rt.Project) {
+			if err := p.checkRemoteRoute(cfg, rt, keys, remoteKeys); err != nil {
+				return nil, prefixed(what, err)
+			}
+			if rt.Key != "" {
+				remoteKeys[rt.Key] = true
+			}
+			continue
+		}
 		child, ok := children[rt.Project]
 		if !ok {
 			var err error
@@ -158,6 +180,9 @@ func (p *Program) Route(c caller.Caller, cfg *config.Config, req RouteRequest) (
 			return nil, prefixed(what, err)
 		}
 		for _, a := range rt.After {
+			if remoteKeys[strings.TrimSpace(a)] {
+				return nil, prefixed(what, refuse("pending-ref", "after %s: it goes to a paired server, and has no number until it is filed there; set the after with tm program task edit once a program-task-filed item names it", a))
+			}
 			if err := p.checkRouteAfter(cfg, child, keys, a); err != nil {
 				return nil, prefixed(what, err)
 			}
@@ -181,7 +206,13 @@ func (p *Program) Route(c caller.Caller, cfg *config.Config, req RouteRequest) (
 			}
 			after = append(after, a)
 		}
-		r, err := p.file(c, children[rt.Project], umbrella, rt, after)
+		var r Routed
+		var err error
+		if IsRemote(rt.Project) {
+			r, err = p.fileRemote(c, cfg, rt.Project, umbrella, rt, filed)
+		} else {
+			r, err = p.file(c, children[rt.Project], umbrella, rt, after)
+		}
 		if err != nil {
 			return res, err
 		}
@@ -193,6 +224,10 @@ func (p *Program) Route(c caller.Caller, cfg *config.Config, req RouteRequest) (
 	if umbrella != "" {
 		var parts []string
 		for _, r := range res.Tasks {
+			if r.Ref == "" {
+				parts = append(parts, r.Project+" (pending "+r.Message+")")
+				continue
+			}
 			parts = append(parts, r.Project+"/"+r.Ref)
 		}
 		if _, err := p.Tasks().ProgramEdit(c, p.Slug, refID(umbrella), tasks.ProgramChange{Note: "routed " + strings.Join(parts, ", ")}); err != nil {
@@ -200,6 +235,35 @@ func (p *Program) Route(c caller.Caller, cfg *config.Config, req RouteRequest) (
 		}
 	}
 	return res, nil
+}
+
+// checkRemoteRoute checks a routed task for paired member rt.Project:
+// an accepted member that granted tasks, the fields, and its after refs
+// (remoteAfter), keys of earlier tasks of the route included.
+func (p *Program) checkRemoteRoute(cfg *config.Config, rt RouteTask, keys, remoteKeys map[string]bool) error {
+	if err := p.remoteMember(cfg, rt.Project, proto.ProgramFeatureTasks); err != nil {
+		return err
+	}
+	if rt.Key != "" {
+		if !keyRE.MatchString(rt.Key) {
+			return refuse("invalid-route", "key %q must start with a letter, then lower case letters, digits, - and _", rt.Key)
+		}
+		if _, isRef := tasks.ParseRef(rt.Key); isRef {
+			return refuse("invalid-route", "key %q reads as a task ref; name it by what it is", rt.Key)
+		}
+	}
+	if err := checkRemoteTask(rt); err != nil {
+		return err
+	}
+	for _, a := range rt.After {
+		if remoteKeys[strings.TrimSpace(a)] {
+			return refuse("pending-ref", "after %s: it goes to a paired server, and has no number until it is filed there; set the after with tm program task edit once a program-task-filed item names it", a)
+		}
+		if _, err := p.remoteAfter(cfg, rt.Project, a, keys, nil); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // checkRouteAfter checks one after ref of a task for child: the key of
@@ -222,7 +286,8 @@ func (p *Program) checkRouteAfter(cfg *config.Config, child *project.Project, ke
 }
 
 // CheckCrossRef checks a ref to a member project's task (§6.1): a local
-// member's task that exists. A paired member's isn't written yet.
+// member's task that exists, or a paired member's that accepted the
+// invite (its board is that server's: its state comes with its pushes).
 func (p *Program) CheckCrossRef(cfg *config.Config, ref string) error {
 	alias, slug, n, ok := tasks.CrossRef(strings.TrimSpace(ref))
 	if !ok {
@@ -236,7 +301,10 @@ func (p *Program) CheckCrossRef(cfg *config.Config, ref string) error {
 		return refuse("not-member", "after %s: %s is not a member of program %s", ref, key, p.Slug)
 	}
 	if alias != "" {
-		return refuse("remote-member", "after %s: refs to a paired server's tasks come with paired members", ref)
+		if _, ok := link.MemberGrants(p.Slug, key); !ok {
+			return refuse("not-accepted", "after %s: %s hasn't accepted program %s's invite (%s)", ref, key, p.Slug, link.MemberState(p.Slug, key))
+		}
+		return nil
 	}
 	child, err := project.OpenWith(slug, cfg)
 	if err != nil {

@@ -1,10 +1,13 @@
 package cli
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
+	"github.com/theclifmeister/terminatr/internal/project"
+	"github.com/theclifmeister/terminatr/internal/tasks"
 )
 
 // TestProgramStartChecks (B12; the programs design §10): tm program
@@ -29,7 +32,7 @@ func TestProgramStartChecks(t *testing.T) {
 	}
 	h.expect(1, "director-only", coordWeb, "program", "start", "demo/T1")
 	h.expect(1, "not-member", directorAcme, "program", "start", "loner/T1")
-	h.expect(1, "remote-member", directorAcme, "program", "start", "mini/demo/T1")
+	h.expect(1, "not-member", directorAcme, "program", "start", "mini/demo/T1") // not listed: paired members go over the link
 	h.expect(1, "invalid-ref", directorAcme, "program", "start", "T1")
 	h.expect(1, "human-only", directorAcme, "program", "start", "demo/T1", "--over-cap", "--approved-by-user")
 	h.expect(1, "other-program", directorAcme, "program", "start", "demo/T1", "--program", "other")
@@ -62,4 +65,29 @@ func TestProgramStartChecks(t *testing.T) {
 
 	writeTestConfig(t, h, "[programs.acme]\nprojects = [\"demo\", \"web\"]\nauthority = \"delegate\"\n")
 	h.expect(1, "programs-off", directorAcme, "program", "start", "web/T1")
+}
+
+// TestStartForPeer: a paired server's director's start (link's
+// ProgramStarter) meets the member's own start_threads: under propose it
+// is refused needs-approval, since that user's word can't come over the
+// link (Q207 keeps it so for local directors under delegate too). Only a
+// paired director calls it.
+func TestStartForPeer(t *testing.T) {
+	h, _ := programHarness(t)
+	h.ok(human, "task", "add", "Login", "--project", "demo")
+	p, err := project.Open("demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := StartForPeer(caller.Caller{Kind: caller.Coordinator, Project: "demo"}, p, 1, "", ""); err == nil {
+		t.Fatal("a coordinator went through the peer start")
+	}
+	_, err = StartForPeer(caller.ForPeerDirector("studio", "acme"), p, 1, "", "")
+	var e *tasks.Error
+	if !errors.As(err, &e) || e.Code != "needs-approval" {
+		t.Fatalf("propose: %v", err)
+	}
+	if task, _ := p.Tasks().Get(1); task.Thread != "" {
+		t.Fatalf("linked a thread: %+v", task)
+	}
 }

@@ -51,6 +51,24 @@ open (`waiting-on`) unless the user said to start it anyway, and one
 over a cap (`over-cap`, `over-program-cap`, `over-global-cap`): wait
 for the `slot-free` item, and never pass `--over-cap`.
 
+## Paired members
+
+A member on a paired server (`mini/acme-ios`) takes the same commands
+once its user accepted the invite, over the link: `tm program route`
+(its task shows `pending` with an `M-` id until its server answers),
+`tm program task edit mini/acme-ios/T7`, `tm program send mini/acme-ios
+"…"` and `tm program start mini/acme-ios/T7`. That server decides: its
+user may take your tasks as proposals, keep starts off, or refuse a
+start under its own `start_threads`. `tm program task show
+mini/acme-ios/T7` shows the task's state as it last pushed it. A task
+there can come after its own tasks and this server's members' only;
+set an after on a task still pending once it is filed.
+
+- `program-task-filed`: a paired member filed, changed, refused or will
+  propose what you sent; it names the task there.
+- `program-start-result`: a paired member started a thread, or refused
+  the start (why is in the item).
+
 ## Program items
 
 - `program-needs`: the rolled-up Needs you changed; tell the user what
