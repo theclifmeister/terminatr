@@ -64,7 +64,9 @@ final class ConversationScrollTests: XCTestCase {
         }
     }
 
-    /// The keyboard opening over the composer, and closing.
+    /// The keyboard opening over the composer, and closing. A simulator
+    /// set to its Mac's keyboard (the iPad's, once its keyboard was
+    /// hidden) shows none: then the focus and typing only.
     @MainActor func testKeyboard() {
         let app = launch("session:acme-web")
         lastOnScreen(app, "opened")
@@ -72,10 +74,11 @@ final class ConversationScrollTests: XCTestCase {
         XCTAssertTrue(field.waitForExistence(timeout: 10), "the composer")
         for i in 0..<2 {
             field.tap()
-            XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 10), "the keyboard")
+            let soft = shown(app.keyboards.firstMatch)
             lastOnScreen(app, "keyboard open \(i)")
             field.typeText("Hello")
             lastOnScreen(app, "typed \(i)")
+            guard soft else { continue }
             dismissKeyboard(app)
             // The drag that folds it scrolled up a little: back down.
             let jump = jumpButton(app)
@@ -178,18 +181,48 @@ final class ConversationScrollTests: XCTestCase {
             // By its place: the iPad's keyboard refuses the scroll to it
             // that a plain tap asks first.
             hide.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
-        } else {
+        }
+        if !folded(kb, within: 3) {
             // A drag down the conversation, from what shows of it above
             // the composer into the keyboard, folds it (interactively,
             // T857); on the Duo's outer screen that is a sliver.
             let area = seen(app)
-            let window = app.windows.firstMatch.frame
+            let keys = kb.frame
             let origin = app.coordinate(withNormalizedOffset: .zero)
-            let from = origin.withOffset(CGVector(dx: area.midX, dy: area.minY + min(20, area.height / 2)))
-            from.press(forDuration: 0.05, thenDragTo: origin.withOffset(CGVector(dx: area.midX, dy: window.maxY - 4)))
+            let from = origin.withOffset(CGVector(dx: area.midX, dy: area.midY))
+            from.press(forDuration: 0.05, thenDragTo: origin.withOffset(CGVector(dx: area.midX, dy: keys.minY + keys.height * 0.7)))
         }
-        let gone = expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: kb)
-        wait(for: [gone], timeout: 10)
+        XCTAssertTrue(folded(kb, within: 10), "the keyboard folded: \(kb.exists ? "\(kb.frame) in \(app.windows.firstMatch.frame)" : "gone")")
+    }
+
+    /// Whether the keyboard is down: gone from the tree, kept in it
+    /// below the window or with no height, or folded to the iPad's
+    /// shortcut bar (under 100 pt at the window's foot).
+    @MainActor private func away(_ kb: XCUIElement) -> Bool {
+        guard kb.exists else { return true }
+        let f = kb.frame
+        return f.height < 100 || f.minY >= XCUIApplication().windows.firstMatch.frame.maxY - 1
+    }
+
+    /// Whether the keyboard shows within 10 s, with its height.
+    @MainActor private func shown(_ kb: XCUIElement) -> Bool {
+        let until = Date().addingTimeInterval(10)
+        repeat {
+            if !away(kb) { return true }
+            usleep(200_000)
+        } while Date() < until
+        return false
+    }
+
+    /// Whether the keyboard goes within the time: gone from the tree,
+    /// or, on the iPad, kept there with no height at the screen's foot.
+    @MainActor private func folded(_ kb: XCUIElement, within seconds: TimeInterval) -> Bool {
+        let until = Date().addingTimeInterval(seconds)
+        repeat {
+            if away(kb) { return true }
+            usleep(200_000)
+        } while Date() < until
+        return false
     }
 
     /// The part of the conversation the user sees: its scroll view in
@@ -205,13 +238,15 @@ final class ConversationScrollTests: XCTestCase {
         let field = app.textViews.firstMatch
         if field.exists, field.frame.minY < foot { foot = field.frame.minY - 12 }
         let kb = app.keyboards.firstMatch
-        if kb.exists, kb.frame.minY < foot { foot = kb.frame.minY }
+        if kb.exists, kb.frame.height >= 1, kb.frame.minY < foot { foot = kb.frame.minY }
         return CGRect(x: r.minX, y: r.minY, width: r.width, height: max(0, foot - r.minY))
     }
 
     /// The last message's frame on the screen (all its parts).
     /// One snapshot of the conversation, so a streamed row coming
-    /// between a query and its frames can't fail it.
+    /// between a query and its frames can't fail it. (A query for the
+    /// row alone read a row that had been the last: the tree keeps an
+    /// identifier a moment after it moves.)
     @MainActor private func last(_ app: XCUIApplication) -> CGRect {
         guard let root = try? app.scrollViews["conversation"].snapshot() else { return .null }
         var r = CGRect.null

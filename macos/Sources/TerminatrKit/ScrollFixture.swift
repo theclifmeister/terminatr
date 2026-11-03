@@ -18,7 +18,7 @@ public enum ScrollFixture {
     public static let coordinator = "s-c1"
     public static let streaming = "s-104"
     public static let long = 240
-    public static let streamed = 400
+    public static let streamed = 150
     public static let drip = 0.35
     public static let delay = 1.2
     public static let late = 12
