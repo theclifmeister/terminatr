@@ -224,3 +224,36 @@ func demoBridge() async throws -> Bridge {
     #expect(r?["text"] as? String == "seen 2026-10-27T09:41:00Z")
     #expect(r?["n"] as? Int == 3)
 }
+
+/// The scroll tests' demo (T976, ScrollFixture): a long coordinator
+/// conversation whose last message the tests know, and a thread whose
+/// answers drip in after it opens.
+@Test func scrollFixtureStreams() async throws {
+    let url = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        .deletingLastPathComponent().appendingPathComponent("ios/Terminatr/Demo/demo.json")
+    let rec = try ScrollFixture.recording(from: Data(contentsOf: url))
+    let b = Bridge(transport: try DemoTransport(recording: rec))
+    _ = try await b.start()
+    let sub = try await b.subscribe(AppAPI.Methods.transcriptWatch, AppAPI.TranscriptParams(session: ScrollFixture.coordinator))
+    var t = Transcript()
+    for try await e in sub.events {
+        t.apply(e.name, e.data)
+        break
+    }
+    #expect(t.entries.count > 150)
+    #expect(t.entries.last?.text.hasPrefix(ScrollFixture.words(ScrollFixture.long - 1)) == true)
+    // The thread: its opening at once, then one answer after another.
+    let start = Date()
+    let s2 = try await b.subscribe(AppAPI.Methods.transcriptWatch, AppAPI.TranscriptParams(session: ScrollFixture.streaming))
+    var n = 0
+    var first: Date?
+    for try await e in s2.events {
+        n += 1
+        if n == 1 { first = Date() }
+        _ = e
+        if n == 3 { break }
+    }
+    #expect(first.map { $0.timeIntervalSince(start) < ScrollFixture.drip } == true)
+    #expect(Date().timeIntervalSince(start) >= 2 * ScrollFixture.drip * 0.9)
+}

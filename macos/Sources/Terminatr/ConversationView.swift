@@ -131,11 +131,15 @@ struct ConversationTab: View {
                                                         "entries": "\(model.transcript.entries.count)"] }) {
                     proxy.scrollTo(Self.end, anchor: .bottom)
                 })
-                // New output, or a growing last entry: the follower stays
-                // at the end by the bottom anchor; one scrolled up stays,
-                // and counts it.
+                // New output, or a growing last entry: the follower goes
+                // to the end (SwiftUI's scroll, the bottom anchor under
+                // it); one scrolled up stays, and counts it.
                 .onChange(of: Self.tail(model.transcript)) {
-                    follow.arrived(model.transcript.entries.map(\.id))
+                    if follow.arrived(model.transcript.entries.map(\.id)) { proxy.scrollTo(Self.end, anchor: .bottom) }
+                }
+                // The Working bar or a card coming or going.
+                .onChange(of: Busy.of(session) != nil) {
+                    if follow.following { proxy.scrollTo(Self.end, anchor: .bottom) }
                 }
                 // A prompt sent: back to the end.
                 .onChange(of: model.sent) { jumpToLatest(proxy) }

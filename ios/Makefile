@@ -55,6 +55,10 @@
 #                terminatr's; TEAM overrides it). scripts/release/ios.sh, which
 #                the release workflow runs, exports and uploads it
 #                (README.md, TestFlight)
+#   make ui-test the conversation scroll tests (T976, TerminatrUITests)
+#                on DEVICE, each ITERATIONS times (20); ONLY picks one
+#                test (testStreaming); an iPhone Duo opened in Xcode's
+#                Device Hub runs them on its inner display
 #   make store-text  check the App Store text in AppStore/ against App
 #                Store Connect's field limits (README.md, App Store)
 #
@@ -75,13 +79,14 @@ DEV          ?= build/dev
 ARCHIVE      ?= build/Terminatr.xcarchive
 SHOTS        ?= build/store-shots
 VERSION      ?= 0.0.0
+ITERATIONS   ?= 20
 BUILD        ?= 1
 # The Release config's team, passed to every target when signing: the
 # packages' resource bundles are signed too, and don't read the app's.
 TEAM         ?= $(shell sed -n 's/^[[:space:]]*DEVELOPMENT_TEAM = \([A-Z0-9]*\);$$/\1/p' Terminatr.xcodeproj/project.pbxproj)
 unexport TERMINATR_WERROR
 
-.PHONY: build run dev-server run-paired store-shots review-video archive store-text clean
+.PHONY: build ui-test run dev-server run-paired store-shots review-video archive store-text clean
 
 # The scheme is Terminatr-iOS (xcshareddata): a scheme named Terminatr
 # can resolve to the package's Mac executable of that name, which then
@@ -94,6 +99,12 @@ PLUGINS      := -skipPackagePluginValidation
 build:
 	xcodebuild -project Terminatr.xcodeproj -scheme Terminatr-iOS -configuration $(CONFIG) $(PLUGINS) \
 		-destination 'generic/platform=iOS Simulator' -derivedDataPath $(DERIVED) $(if $(ARCHS),ARCHS="$(ARCHS)") build
+
+ui-test:
+	xcodebuild -project Terminatr.xcodeproj -scheme Terminatr-iOS -configuration Debug $(PLUGINS) \
+		-destination 'platform=iOS Simulator,$(if $(shell echo '$(DEVICE)' | grep -E '^[0-9A-F-]{36}$$'),id,name)=$(DEVICE)' -derivedDataPath $(DERIVED) \
+		$(if $(filter-out 1,$(ITERATIONS)),-test-iterations $(ITERATIONS)) $(if $(ONLY),-only-testing:TerminatrUITests/ConversationScrollTests/$(ONLY)) \
+		$(if $(RESULT),-resultBundlePath $(RESULT)) test
 
 run: build
 	xcrun simctl boot "$(DEVICE)" 2>/dev/null || true

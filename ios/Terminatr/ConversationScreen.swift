@@ -94,6 +94,8 @@ struct ConversationScreen: View {
                             if row.id == moment, let need { MomentMark(colour: theme.colour(need.kind)) }
                         }
                         .id(row.id)
+                        // What the scroll tests look for (T976).
+                        .accessibilityIdentifier(row.id == rows.last?.id ? "conversation.last" : "")
                     }
                     // Never a blank conversation (T930): until the stream
                     // answers, while the agent names its transcript, or
@@ -110,6 +112,7 @@ struct ConversationScreen: View {
                 .padding([.horizontal, .top], 16)
                 .scrollTargetLayout()
             }
+            .accessibilityIdentifier("conversation")
             // A drag down the conversation folds the keyboard (T857).
             .scrollDismissesKeyboard(.interactively)
             .modifier(ConversationScroll(follow: follow, newest: transcript.entries.last?.id, screen: "iphone conversation",
@@ -117,9 +120,10 @@ struct ConversationScreen: View {
                                          top: { top in
                                              if restoring == nil { model.places.keep("top \(ref)", follow.following ? nil : top) }
                                          }, toEnd: { toEnd(scroll) }))
-            // New output: the follower stays at the end by the scroll's
-            // bottom anchor; scrolled up, the screen stays and Jump to
-            // latest counts it. Laid out afresh, it goes back to the row
+            // New output: the follower goes to the end (SwiftUI's scroll,
+            // with the bottom anchor under it: the first rows coming into
+            // an empty view don't move an anchored offset); scrolled up,
+            // the screen stays and Jump to latest counts it. Laid out afresh, it goes back to the row
             // the user had at the top.
             .onChange(of: Self.tail(transcript)) {
                 if seeking, restoring == nil, self.moment(Transcript.rows(transcript.tail(drawn)), session) != nil {
@@ -137,7 +141,15 @@ struct ConversationScreen: View {
                         return
                     }
                 }
-                follow.arrived(transcript.entries.map(\.id))
+                if follow.arrived(transcript.entries.map(\.id)) { toEnd(scroll) }
+            }
+            // The agent's turn starting or ending, a queued prompt sent:
+            // the follower stays at the end.
+            .onChange(of: Busy.of(session) != nil) {
+                if follow.following { toEnd(scroll) }
+            }
+            .onChange(of: model.queuedSent[ref]?.count ?? 0) {
+                if follow.following { toEnd(scroll) }
             }
             .onAppear {
                 if let top: Int = model.places.value("top \(ref)") { restoring = top }
