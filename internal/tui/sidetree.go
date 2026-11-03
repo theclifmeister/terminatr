@@ -82,7 +82,10 @@ type treeRow struct {
 	title   string // a thread's title
 	// state is the coordinator's (on a project or coordinator row) or the
 	// thread's state word; "" when no coordinator runs.
-	state   string
+	state string
+	// asleep: a project or coordinator row whose coordinator the ticker
+	// put to sleep after a long idle (state ""): enter wakes it.
+	asleep  bool
 	pct     int  // a thread's percent, -1 for none
 	last    bool // a coordinator or thread: the last row under its parent
 	current bool // a project: the current one
@@ -305,6 +308,9 @@ type treeIn struct {
 	// programs are the programs (Data.Programs): their members hang
 	// under them (sideprograms.go). None while programs are off.
 	programs []ProgramData
+	// asleep are the projects whose coordinator sleeps
+	// (SessionListResult.Asleep).
+	asleep map[string]bool
 	// prog is the program whose member projectRows lays out: a member
 	// starts folded (view.Tree.MemberFolded). "" for a standalone one.
 	prog string
@@ -402,6 +408,7 @@ func projectRows(p ProjectData, sessions []proto.SessionInfo, byID map[string]pr
 			break
 		}
 	}
+	pr.asleep = pr.session == "" && in.asleep[p.Slug]
 	threads := orderedThreads(p.Threads, byID)
 	var kids []treeRow
 	for i := range threads {
@@ -416,7 +423,7 @@ func projectRows(p ProjectData, sessions []proto.SessionInfo, byID map[string]pr
 	}
 	// The threads hang under the coordinator, the project's only child.
 	coord := treeRow{kind: treeCoordinator, slug: p.Slug, session: pr.session, state: pr.state, remote: remote, pct: -1, last: true,
-		hint: p.Questions > 0, asks: p.Questions, ctx: ctx, ctxHint: ctx >= 0 && in.ctxHint > 0 && ctx >= in.ctxHint}
+		hint: p.Questions > 0, asks: p.Questions, ctx: ctx, ctxHint: ctx >= 0 && in.ctxHint > 0 && ctx >= in.ctxHint, asleep: pr.asleep}
 	if len(kids) > 0 {
 		kids[len(kids)-1].last = true
 	}
@@ -868,6 +875,8 @@ func gridCell(r treeRow, c sideCol) cellRun {
 		case proj && (!r.folded() || r.inactive):
 		case r.dormant, r.stale:
 			g, st = i.none, th().Faint
+		case r.asleep:
+			g, st = i.asleep, th().Faint
 		case thread:
 			if g, st = stateLook(r.state); g == "" {
 				g, st = i.none, th().Faint
@@ -980,6 +989,9 @@ func dividerCells(r treeRow, cw int, slim bool, sel lipgloss.Style) string {
 func slimCells(r treeRow, cw int, sel lipgloss.Style) string {
 	i := ic()
 	g, st := coordLook(r.state)
+	if r.asleep {
+		g = i.asleep
+	}
 	word, _, _ := strings.Cut(r.state, " ")
 	switch {
 	case r.stale:

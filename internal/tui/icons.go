@@ -52,8 +52,9 @@ type iconSet struct {
 	// project's name, inactive an inactive one's.
 	hint, current, remote, paused, inactive string
 	// The states (stateLook): none is a coordinator that doesn't run,
-	// other a stopped, exited or resolved one.
-	working, blocked, idle, starting, running, review, done, other, none string
+	// other a stopped, exited or resolved one, asleep a coordinator the
+	// ticker put to sleep after a long idle.
+	working, blocked, idle, starting, running, review, done, other, none, asleep string
 	// A thread's pull request checks: passing, failing, running.
 	ciPass, ciFail, ciRun string
 	// The inactive divider's mark: folded, unfolded.

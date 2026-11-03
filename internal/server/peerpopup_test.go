@@ -84,7 +84,7 @@ func zeroFields(v reflect.Value) []string {
 func TestPeerPopupAllowlist(t *testing.T) {
 	var s config.Safety
 	fillAll(reflect.ValueOf(&s).Elem())
-	homeSettings := []string{"Archived", "BranchName", "GlobalParallelThreads", "GuardAllow", "GuardOff", "Pinned"}
+	homeSettings := []string{"Archived", "BranchName", "CoordinatorSleepAfter", "GlobalParallelThreads", "GuardAllow", "GuardOff", "Pinned"}
 	// Every field of the settings is either copied, by its name, or home.
 	copied := fieldNames(reflect.TypeFor[proto.PeerSettings]())
 	all := slices.Sorted(slices.Values(append(slices.Clone(copied), homeSettings...)))

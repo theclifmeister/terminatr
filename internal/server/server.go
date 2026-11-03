@@ -143,9 +143,15 @@ type Server struct {
 	// deactivated: their records go to dormant, to resume at its
 	// activation (active.go).
 	sleeping map[string]bool
-	dormant  map[string]SessionRecord
-	blocked  map[string]bool            // sessions whose agent is blocked, for alerts
-	told     map[string]map[string]bool // the consoles, by session, that raised its takeover (consoleTakeover)
+	// asleep marks the sleeping ones the ticker stopped after a long
+	// idle (coordsleep.go): their dormant records are Asleep.
+	asleep  map[string]bool
+	dormant map[string]SessionRecord
+	// wakeMu serializes the wakes of sleeping coordinators, so two
+	// don't resume one twice or start a second beside it.
+	wakeMu  sync.Mutex
+	blocked map[string]bool            // sessions whose agent is blocked, for alerts
+	told    map[string]map[string]bool // the consoles, by session, that raised its takeover (consoleTakeover)
 	// adoptAsks are the human's go-aheads to adopt a session (by id)
 	// into a project (session.adopt.ask), kept until it is adopted.
 	adoptAsks map[string]adoptAsk
@@ -347,6 +353,7 @@ func Run(ctx context.Context, opts Options) error {
 		records:   map[string]SessionRecord{},
 		relaunch:  map[string]bool{},
 		sleeping:  map[string]bool{},
+		asleep:    map[string]bool{},
 		dormant:   map[string]SessionRecord{},
 		blocked:   map[string]bool{},
 		adoptAsks: map[string]adoptAsk{},
@@ -563,6 +570,9 @@ func (s *Server) loadPrevious() (resume []SessionRecord, lost []restartOutcome) 
 		switch why := dormantGone(r); {
 		case why != "":
 			s.log.Printf("session %s: dormant %s dropped: %s", r.ID, restartLabel(r), why)
+		case r.Asleep && boots(r):
+			// Asleep stays asleep: a wake resumes it.
+			s.dormant[r.ID] = r
 		case boots(r):
 			resume = append(resume, wakeRecord(r))
 		default:
@@ -1079,6 +1089,7 @@ func (s *Server) list() proto.SessionListResult {
 		res.Sessions = append(res.Sessions, s.info(sess))
 	}
 	sort.Slice(res.Sessions, func(i, j int) bool { return res.Sessions[i].Created.Before(res.Sessions[j].Created) })
+	res.Asleep = s.asleepList()
 	return res
 }
 

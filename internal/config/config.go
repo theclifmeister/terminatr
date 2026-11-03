@@ -168,6 +168,13 @@ type Safety struct {
 	// its context reaches [ui] context_hint, only while nothing waits on
 	// it (§7.5): the project's state lives in files, so nothing is lost.
 	AutoClear bool `json:"auto_clear"`
+	// CoordinatorSleepAfter is how long the coordinator may sit idle,
+	// with nothing waiting on it and nobody watching, before the ticker
+	// stops its session and keeps its conversation to resume (§7.5,
+	// Sleep): a duration ("4h"), or SleepOff ("off", "0") for never. ""
+	// when no table sets it: 4h for a program's member, never for a
+	// standalone project (SleepAfter).
+	CoordinatorSleepAfter string `json:"coordinator_sleep_after,omitempty"`
 	// CoordinatorMerges adds a permission allow rule for tm thread merge
 	// (which makes the PR merge itself, on GitHub and Azure DevOps) to the
 	// coordinator's launch settings only, so an auto-mode classifier that
@@ -309,6 +316,7 @@ type rawSafety struct {
 	CompleteTasks *string `toml:"complete_tasks"`
 	CoordinatorRC *bool   `toml:"coordinator_remote_control"`
 	AutoClear     *bool   `toml:"auto_clear"`
+	CoordSleep    *string `toml:"coordinator_sleep_after"`
 	CoordMerges   *bool   `toml:"coordinator_merges"`
 	FastForward   *bool   `toml:"fast_forward_checkout"`
 	MergeMethod   *string `toml:"merge_method"`

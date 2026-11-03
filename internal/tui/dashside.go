@@ -74,7 +74,7 @@ func (m *dash) tree() []treeRow {
 
 // buildSideTree builds tree's rows afresh.
 func (m *dash) buildSideTree() []treeRow {
-	rows := buildTree(m.data.Projects, m.data.Sessions, treeIn{current: m.treeCurrent(), ctxHint: m.data.ContextHint,
+	rows := buildTree(m.data.Projects, m.data.Sessions, treeIn{current: m.treeCurrent(), ctxHint: m.data.ContextHint, asleep: m.data.Asleep,
 		tree: sideTree(m.data.Projects, m.data.Programs, m.folds), cols: m.sideCols, cells: m.data.Cells, peers: m.data.Peers, programs: m.data.Programs})
 	rows = sideRows(rows, m.data.NeedsFirst)
 	if bandFits(m.sideW(), m.h, m.sideFoot()) {
@@ -89,7 +89,7 @@ func (m *dash) buildSideTree() []treeRow {
 
 // fullTree is the sidebar's whole tree: nothing folded, no filter (W).
 func (m *dash) fullTree() []treeRow {
-	rows := buildTree(m.data.Projects, m.data.Sessions, treeIn{current: m.treeCurrent(), ctxHint: m.data.ContextHint, tree: unfoldedTree(m.data.Projects, m.data.Programs), cols: m.sideCols, cells: m.data.Cells, peers: m.data.Peers, programs: m.data.Programs})
+	rows := buildTree(m.data.Projects, m.data.Sessions, treeIn{current: m.treeCurrent(), ctxHint: m.data.ContextHint, asleep: m.data.Asleep, tree: unfoldedTree(m.data.Projects, m.data.Programs), cols: m.sideCols, cells: m.data.Cells, peers: m.data.Peers, programs: m.data.Programs})
 	if m.data.NeedsFirst {
 		rows = needsFirstOrder(rows)
 	}

@@ -39,6 +39,11 @@ type fakeHost struct {
 	asked    []string              // "<session> <text>" of AskSave
 	still    func() bool           // the last clear's
 	clearErr error                 // what Clear answers
+	slept    []string              // sessions Sleep stopped
+	asleep   []proto.SessionInfo   // the sleeping ones, for Wake
+	woke     []string              // sessions Wake resumed
+	// attachAtSleep: a console attaches just as Sleep is asked.
+	attachAtSleep bool
 }
 
 func (h *fakeHost) Sessions() []proto.SessionInfo {
@@ -1166,4 +1171,35 @@ func TestPromptWaitingItem(t *testing.T) {
 	if s := r.summaries(); !strings.Contains(s, "2 prompts have waited") {
 		t.Fatalf("the next prompt: %s", s)
 	}
+}
+
+func (h *fakeHost) Sleep(id string, still func(proto.SessionInfo) bool) error {
+	for i, s := range h.sessions {
+		if s.ID == id {
+			if h.attachAtSleep {
+				s.Clients = 1
+			}
+			if still != nil && !still(s) {
+				return errors.New("no longer idle")
+			}
+			h.slept = append(h.slept, id)
+			h.asleep = append(h.asleep, s)
+			h.sessions = slices.Delete(h.sessions, i, i+1)
+			return nil
+		}
+	}
+	return errors.New("no session " + id)
+}
+
+func (h *fakeHost) Wake(slug string) (string, bool) {
+	for i, s := range h.asleep {
+		if s.Project == slug {
+			h.woke = append(h.woke, s.ID)
+			h.asleep = slices.Delete(h.asleep, i, i+1)
+			s.State = "idle"
+			h.sessions = append(h.sessions, s)
+			return s.ID, true
+		}
+	}
+	return "", false
 }

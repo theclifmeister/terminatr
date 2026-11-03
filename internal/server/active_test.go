@@ -53,6 +53,8 @@ func TestLoadPreviousDormant(t *testing.T) {
 			rec("s-6", "thread", "on", stopped.ID),
 			rec("s-7", "coordinator", "gone", ""),
 			rec("s-8", "coordinator", "off", ""),
+			// Asleep in an active project: a start keeps it asleep.
+			func() SessionRecord { r := rec("s-9", "coordinator", "on", ""); r.Asleep = true; return r }(),
 		},
 	}); err != nil {
 		t.Fatal(err)
@@ -73,7 +75,7 @@ func TestLoadPreviousDormant(t *testing.T) {
 		dormant = append(dormant, id)
 	}
 	slices.Sort(dormant)
-	if want := []string{"s-2", "s-3", "s-8"}; !slices.Equal(dormant, want) {
+	if want := []string{"s-2", "s-3", "s-8", "s-9"}; !slices.Equal(dormant, want) {
 		t.Errorf("dormant %v, want %v", dormant, want)
 	}
 	// Every save keeps the dormant records.
@@ -84,8 +86,8 @@ func TestLoadPreviousDormant(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(st.Dormant) != 3 || len(st.Sessions) != 0 {
-		t.Errorf("saved %d dormant, %d sessions; want 3, 0", len(st.Dormant), len(st.Sessions))
+	if len(st.Dormant) != 4 || len(st.Sessions) != 0 {
+		t.Errorf("saved %d dormant, %d sessions; want 4, 0", len(st.Dormant), len(st.Sessions))
 	}
 }
 

@@ -336,10 +336,12 @@ type sidebar struct {
 	uiFile   string
 	projects []ProjectData
 	sessions []proto.SessionInfo
-	ctxHint  int        // [ui] context_hint
-	server   ServerInfo // the running server
-	drag     bool       // the mouse is moving its border
-	drawn    []string   // the lines on screen; nil repaints them all
+	// asleep are the projects whose coordinator sleeps (Data.Asleep).
+	asleep  map[string]bool
+	ctxHint int        // [ui] context_hint
+	server  ServerInfo // the running server
+	drag    bool       // the mouse is moving its border
+	drawn   []string   // the lines on screen; nil repaints them all
 
 	// needsFirst is [ui] needs_first: the projects that need you first.
 	needsFirst bool
@@ -401,8 +403,11 @@ func pinLabel(r treeRow) string {
 // coordLabel is a coordinator row's menu item that opens it: starting a
 // dormant one activates its project.
 func coordLabel(r treeRow) string {
-	if r.dormant {
+	switch {
+	case r.dormant:
 		return "start the coordinator"
+	case r.asleep:
+		return "wake the coordinator"
 	}
 	return "open the coordinator"
 }

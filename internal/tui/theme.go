@@ -236,6 +236,8 @@ func stateLook(state string) (string, lipgloss.Style) {
 		return i.review, th().Warn
 	case "done":
 		return i.done, th().Good
+	case "asleep":
+		return i.asleep, th().Faint
 	case "—", "":
 		return "", th().Faint
 	}

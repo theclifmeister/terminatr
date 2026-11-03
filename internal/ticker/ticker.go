@@ -115,6 +115,13 @@ type Host interface {
 	// right before delivery and drops it when false. An error when the
 	// agent has no clear prompt.
 	AskSave(session, text string, still func() bool) error
+	// Sleep stops a coordinator's session with its conversation kept to
+	// resume (sleep.go); still is asked with its info right before the
+	// stop and keeps it running when false.
+	Sleep(session string, still func(proto.SessionInfo) bool) error
+	// Wake resumes project slug's sleeping coordinator under its id: the
+	// id, or false when it has none asleep or it couldn't be resumed.
+	Wake(slug string) (string, bool)
 }
 
 // Options configure a Ticker. Zero durations take the defaults.
@@ -283,6 +290,9 @@ type projectMemo struct {
 	idleSince time.Time
 	// Remote is what keepRemote saw of the coordinator (remote.go).
 	Remote *remoteMemo `json:"remote,omitempty"`
+	// sleep is what sleepIdle saw of the coordinator (sleep.go): not
+	// kept across server starts, so a rest starts again.
+	sleep *sleepMemo
 	// Clear is what autoClear saw of the coordinator (clear.go).
 	Clear *clearMemo `json:"clear,omitempty"`
 	// Upkeep is the clear an upkeep prompt may follow (clear.go).
@@ -576,6 +586,9 @@ func (t *Ticker) sweepProject(slug string, cfg *config.Config, sessions []proto.
 		t.nudge(coordinatorSeat(p), sessions, now)
 	}
 	t.keepSeat(coordinatorSeat(p), sessions, safety, cfg.ContextHint, now)
+	if !safety.Paused {
+		t.sleepIdle(coordinatorSeat(p), cfg, safety, sessions, now)
+	}
 	if prune {
 		t.upkeep(p, safety, now)
 	}
@@ -1249,7 +1262,12 @@ func (t *Ticker) nudge(p seat, sessions []proto.SessionInfo, now time.Time) {
 		return
 	}
 	pm.heldSince, pm.heldLogged, pm.idleQueued, pm.unstuck = time.Time{}, false, time.Time{}, false
-	if coord == nil || now.Sub(pm.LastNudge) < t.o.Nudge {
+	if coord == nil {
+		// A sleeping coordinator wakes for them (sleep.go).
+		t.wakeFor(p, len(fresh))
+		return
+	}
+	if now.Sub(pm.LastNudge) < t.o.Nudge {
 		return
 	}
 	if err := t.tell(p, coord, fresh, NudgeText); err != nil {

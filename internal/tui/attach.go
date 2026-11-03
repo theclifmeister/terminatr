@@ -2624,6 +2624,9 @@ func (c *client) applyPoll(pl *polled, now time.Time) bool {
 		if !reflect.DeepEqual(c.side.sessions, res.Sessions) {
 			c.side.sessions, changed = res.Sessions, true
 		}
+		if a := asleepSet(res.Asleep); !reflect.DeepEqual(c.side.asleep, a) {
+			c.side.asleep, changed = a, true
+		}
 		if !reflect.DeepEqual(c.side.peers, pl.peers) {
 			c.side.peers, changed = pl.peers, true
 		}
