@@ -189,7 +189,9 @@ struct ProgramPage: View {
     @ViewBuilder
     private var children: some View {
         let shown = Dictionary(needs?.members.map { (ProgramFacts.place($0.project, server: $0.server), $0) } ?? [], uniquingKeysWith: { a, _ in a })
-        ForEach(program.members, id: \.self) { m in
+        // program.get's members carry their invite state and words; the
+        // sidebar's, until it reads.
+        ForEach(detail?.members ?? program.members, id: \.self) { m in
             let place = ProgramFacts.place(m.project, server: m.server)
             Button {
                 app.select(.project(m.project, server: m.server))
