@@ -67,6 +67,17 @@ public enum Compatibility: Equatable, Sendable {
         hello.appApi >= uploadAPI && hello.methods.contains(AppAPI.Methods.sessionUpload.name)
     }
 
+    /// The app API whose tm keeps a director's files in its program's
+    /// uploads/ (T973): an older one would make a projects/<program>
+    /// folder, which leaves the program out.
+    public static let directorFilesAPI = 46
+
+    /// Whether hello's tm takes files for a prompt to ref's session: a
+    /// director's only from directorFilesAPI.
+    public static func takesFiles(_ hello: AppAPI.Hello, for ref: SessionRef) -> Bool {
+        takesFiles(hello) && (!ref.director || hello.appApi >= directorFilesAPI)
+    }
+
     /// The app API that has guard.refusals and guard.decide: the
     /// refusals' cards under Needs you need it.
     public static let guardAPI = 18

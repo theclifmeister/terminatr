@@ -3,23 +3,24 @@ import TerminatrKit
 import TerminatrUI
 
 extension View {
-    /// Save & Clear for project's coordinator (T868), as the Mac's: asked
-    /// first in the TUI's words (ProjectAsk), then coordinator.clear,
-    /// followed in the model's clears.
-    func asksSaveClear(_ project: String, isPresented: Binding<Bool>) -> some View {
-        modifier(SaveClearAsk(project: project, asking: isPresented))
+    /// Save & Clear for ref's coordinator (T868), or its program's
+    /// director (T973), as the Mac's: asked first in the TUI's words
+    /// (ProjectAsk), then coordinator.clear, followed in the model's
+    /// clears.
+    func asksSaveClear(_ ref: SessionRef, isPresented: Binding<Bool>) -> some View {
+        modifier(SaveClearAsk(ref: ref, asking: isPresented))
     }
 }
 
 private struct SaveClearAsk: ViewModifier {
     @Environment(PhoneModel.self) private var model
-    let project: String
+    let ref: SessionRef
     @Binding var asking: Bool
 
     func body(content: Content) -> some View {
-        let ask = ProjectAsk.saveClear(project: project)
+        let ask = ref.director ? ProjectAsk.saveClearDirector(program: ref.project) : ProjectAsk.saveClear(project: ref.project)
         content.confirmationDialog(ask.title, isPresented: $asking, titleVisibility: .visible) {
-            Button(ask.verb) { Task { await model.saveClear(project) } }
+            Button(ask.verb) { Task { await model.saveClear(ref) } }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text(ask.message)
@@ -28,19 +29,19 @@ private struct SaveClearAsk: ViewModifier {
 }
 
 /// The menu's Save & Clear…: at the write level, for a running
-/// coordinator of this server's, while none is on its way.
+/// coordinator or director of this server's, while none is on its way.
 struct SaveClearButton: View {
     @Environment(PhoneModel.self) private var model
-    let project: String
+    let ref: SessionRef
     @Binding var asking: Bool
 
     var body: some View {
-        if model.clearsCoordinators, model.coordinatorSession(project) != nil {
+        if model.clearsCoordinators, model.leadSession(ref) != nil {
             Button { asking = true } label: {
                 Label("Save & Clear…", systemImage: "eraser")
             }
-            .disabled(model.clears[project]?.running == true)
-            .accessibilityHint("The coordinator saves what it learned, then its conversation is cleared, as tm clear does")
+            .disabled(model.clears[PhoneModel.clearKey(ref)]?.running == true)
+            .accessibilityHint("\(ref.director ? "The director" : "The coordinator") saves what it learned, then its conversation is cleared, as tm clear does")
         }
     }
 }

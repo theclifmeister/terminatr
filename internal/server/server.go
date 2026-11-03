@@ -927,7 +927,7 @@ func (s *Server) keysBy(p proto.SessionKeysParams, cc callCtx) (any, *proto.Erro
 	if err := sess.HumanInput([]byte(p.Data), s.consoleTakeover(info, cc.console(), cc.who)); err != nil {
 		return nil, sessionError(p.ID, err)
 	}
-	s.journalIn(info.Project, cc.who(), "session.keys", sessionRef(info), textsafe.Line(strconv.Quote(p.Data), 60))
+	s.journalSession(info, cc.who(), "session.keys", sessionRef(info), textsafe.Line(strconv.Quote(p.Data), 60))
 	return struct{}{}, nil
 }
 
@@ -946,7 +946,11 @@ func (s *Server) promptBy(p proto.SessionPromptParams, cc callCtx) (any, *proto.
 		if perr != nil {
 			return nil, perr
 		}
-		if p.Text, perr = promptFiles(sess.Info().Project, p.Text, p.Files); perr != nil {
+		dir, err := sessionDir(sess.Info())
+		if err != nil {
+			return nil, proto.Errorf(proto.ErrRefused, "session %s: %v", p.ID, err)
+		}
+		if p.Text, perr = promptFiles(dir, p.Text, p.Files); perr != nil {
 			return nil, perr
 		}
 		p.Files = nil
@@ -969,7 +973,7 @@ func (s *Server) promptBy(p proto.SessionPromptParams, cc callCtx) (any, *proto.
 		} else if p.Mode != "" {
 			detail = p.Mode + ": " + detail
 		}
-		s.journalIn(info.Project, cc.who(), "session.prompt", sessionRef(info), detail)
+		s.journalSession(info, cc.who(), "session.prompt", sessionRef(info), detail)
 	}
 	return res, nil
 }

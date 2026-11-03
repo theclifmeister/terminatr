@@ -22,7 +22,7 @@ extension Attention {
 extension PhoneModel {
     /// Program g's director's session, while one runs.
     func directorSession(_ g: AppAPI.Program) -> AppAPI.Session? {
-        sessions.first { $0.role == "director" && $0.project == g.slug && $0.server.isEmpty }
+        directorSession(g.slug)
     }
 
     /// The threads of program g's members, local and paired, as their
@@ -136,7 +136,7 @@ struct ProgramCard: View {
 /// A program's screen (B19): its name and goal, then its rolled-up
 /// Needs you first, its director's and its members' (the same list
 /// Needs you and the badge count, so each need shows once), each card
-/// answerable at the phone's level as on Needs you; then its director,
+/// answerable at the phone's level as on Needs you; then its director (a tap opens its session, T973),
 /// its projects (this server's, and a paired server's as that server's
 /// mirror lists it, opening the same screen as under that server), and
 /// its open umbrella tasks with their parts (program.get), which the
@@ -154,6 +154,7 @@ struct ProgramScreen: View {
     @State private var failure: String?
     /// The program's own questions, as program.needs sends them.
     @State private var questions: [AppAPI.ProgramNeed] = []
+    @State private var clearing = false
 
     var body: some View {
         ScrollView {
@@ -178,10 +179,22 @@ struct ProgramScreen: View {
                             NeedTile(need: n, route: NeedsScreen.route(n, in: model), lead: false)
                         }
                     }
+                    // Its director opens as a coordinator does (T973): its
+                    // conversation, the composer at the write level, its
+                    // questions; starting it stays the Mac's (Q209).
+                    let director = model.directorSession(g)
+                    let route = Route.session(.director(slug))
                     TileGroup {
-                        SessionTile("Director", state: .of(director: model.directorSession(g), questions: g.questions),
-                                    busy: Busy.of(model.directorSession(g)))
+                        PlainRouteLink(value: route) {
+                            SessionTile("Director", state: .of(director: director, questions: g.questions), busy: Busy.of(director),
+                                        context: model.context(.director(slug)), selected: navigate.opens(route, on: model))
+                        }
+                        .buttonStyle(.plain)
+                        .contextMenu { SaveClearButton(ref: .director(slug), asking: $clearing) }
                     }
+                    .asksSaveClear(.director(slug), isPresented: $clearing)
+                    if let clear = model.clears[PhoneModel.clearKey(.director(slug))] { SaveClearStatus(clear: clear) }
+                    if director == nil { DirectorStart() }
                     SectionHeading("Projects", detail: "\(g.members.count)")
                     if g.members.isEmpty { quiet("No projects yet") }
                     ForEach(g.members, id: \.self) { m in
@@ -250,6 +263,22 @@ struct ProgramScreen: View {
             .padding(Spacing.card)
             .frame(maxWidth: .infinity, alignment: .leading)
             .surface(.card, in: RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
+    }
+}
+
+/// How to start a program's director, while none runs: on the Mac or
+/// in tm's console, never from the phone (Q209).
+struct DirectorStart: View {
+    @Environment(\.theme) private var theme
+
+    static let words = "Start it on your Mac: Start the Director in its pane, or enter on its row in tm's console. Its conversation shows here once it runs."
+
+    var body: some View {
+        Label(Self.words, systemImage: "desktopcomputer")
+            .font(theme.body(.footnote))
+            .foregroundStyle(theme.muted)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, Spacing.card)
     }
 }
 

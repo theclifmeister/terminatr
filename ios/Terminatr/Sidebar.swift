@@ -36,9 +36,9 @@ struct SidebarRow: Identifiable {
             return SidebarRow(id: id, route: Route.program(rest).on(model.key), title: rest, tone: n > 0 ? .attention : .idle,
                               badge: n > 0 ? "\(n)" : nil)
         case ("r", 1):
-            // Its director: the program's screen, which shows it.
+            // Its director: its session, as a coordinator's row (T973).
             guard let g = model.program(rest) else { return nil }
-            return row(.program(rest), "Director", .of(director: model.directorSession(g), questions: g.questions))
+            return row(.session(.director(rest)), "Director", .of(director: model.directorSession(g), questions: g.questions))
         case ("p", 1):
             return SidebarRow(id: id, route: Route.project(rest).on(model.key), title: rest, tone: .idle, badge: nil)
         case ("c", 1):

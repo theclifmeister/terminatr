@@ -127,7 +127,7 @@ extension Route {
              .library(let s), .task(let s, _), .mods(let s), .mod(let s, _), .design(let s, _),
              .search(let s), .searchHit(let s, _):
             s
-        case .session(let ref), .need(let ref): ref.isRemote ? nil : ref.project
+        case .session(let ref), .need(let ref): ref.isRemote || ref.director ? nil : ref.project
         case .on, .peerProject, .program, .peerPage, .peerDesign: nil
         }
     }
@@ -174,7 +174,8 @@ indirect enum Route: Hashable {
     case peerDesign(alias: String, project: String, name: String)
 
     /// A launch argument's route: "project:SLUG", "session:SLUG" (its
-    /// coordinator) or "session:SLUG/THREAD", "need:SLUG/THREAD" (its
+    /// coordinator) or "session:SLUG/THREAD", "director:SLUG" (a
+    /// program's director), "need:SLUG/THREAD" (its
     /// question or approval); "overview:SLUG",
     /// "board:SLUG", "memory:SLUG", "memory:SLUG/PATH", "library:SLUG",
     /// "mods:SLUG", "mods:SLUG/ID",
@@ -190,6 +191,7 @@ indirect enum Route: Hashable {
         switch parts[0] {
         case "project": return .project(parts[1])
         case "program": return .program(parts[1])
+        case "director": return .session(.director(parts[1]))
         case "session": return .session(SessionRef(project: slug, thread: rest))
         case "need": return .need(SessionRef(project: slug, thread: rest))
         case "overview": return .overview(slug)
@@ -223,7 +225,7 @@ indirect enum Route: Hashable {
         case .on(let key, let r): r.path.map { $0.on(key) }
         case .project, .peerProject, .program: [self]
         case .session(let ref), .need(let ref):
-            [ref.isRemote ? .peerProject(alias: ref.server, project: ref.project) : .project(ref.project), self]
+            [ref.isRemote ? .peerProject(alias: ref.server, project: ref.project) : ref.director ? .program(ref.project) : .project(ref.project), self]
         case .overview(let s), .board(let s), .memory(let s), .library(let s), .design(let s, _), .mods(let s), .search(let s): [.project(s), self]
         case .searchHit(let s, _): [.project(s), .search(s), self]
         case .mod(let s, _): [.project(s), .mods(s), self]

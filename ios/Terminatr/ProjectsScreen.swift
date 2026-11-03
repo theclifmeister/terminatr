@@ -226,9 +226,9 @@ struct ProjectScreen: View {
                                         selected: navigate.opens(route, on: model))
                         }
                         .buttonStyle(.plain)
-                        .contextMenu { SaveClearButton(project: slug, asking: $clearing) }
+                        .contextMenu { SaveClearButton(ref: SessionRef(project: slug), asking: $clearing) }
                     }
-                    .asksSaveClear(slug, isPresented: $clearing)
+                    .asksSaveClear(SessionRef(project: slug), isPresented: $clearing)
                     if let clear = model.clears[slug] { SaveClearStatus(clear: clear) }
                     if p.active, model.coordinatorSession(slug) == nil, model.can(AppAPI.Methods.projectOpen.name) {
                         StartCoordinatorButton(project: slug)

@@ -70,6 +70,7 @@ func TestPromptFiles(t *testing.T) {
 	testPaths(t)
 	p := newWatchProject(t)
 	up := p.Path("uploads")
+	demoDir := p.Dir
 	if err := os.WriteFile(filepath.Join(up, "1-a.png"), pngBytes, 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -79,7 +80,7 @@ func TestPromptFiles(t *testing.T) {
 	if err := os.Symlink(filepath.Join(up, "2-b.md"), filepath.Join(up, "3-c.md")); err != nil {
 		t.Fatal(err)
 	}
-	got, perr := promptFiles("demo", "look at these\n", []string{"1-a.png", "2-b.md"})
+	got, perr := promptFiles(demoDir, "look at these\n", []string{"1-a.png", "2-b.md"})
 	if perr != nil {
 		t.Fatal(perr)
 	}
@@ -87,12 +88,12 @@ func TestPromptFiles(t *testing.T) {
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
-	if got, _ := promptFiles("demo", "", []string{"1-a.png"}); got != "Attached: "+filepath.Join(up, "1-a.png") {
+	if got, _ := promptFiles(demoDir, "", []string{"1-a.png"}); got != "Attached: "+filepath.Join(up, "1-a.png") {
 		t.Errorf("files alone: %q", got)
 	}
 	for ref, code := range map[string]string{"../PROJECT.md": proto.ErrBadParams, "x/1-a.png": proto.ErrBadParams,
 		".1-a.png": proto.ErrBadParams, "PROJECT": proto.ErrBadParams, "3-c.md": proto.ErrFileGone, "9-none.png": proto.ErrFileGone} {
-		if _, perr := promptFiles("demo", "t", []string{ref}); perr == nil || perr.Code != code {
+		if _, perr := promptFiles(demoDir, "t", []string{ref}); perr == nil || perr.Code != code {
 			t.Errorf("ref %q: %v, want %s", ref, perr, code)
 		}
 	}
@@ -100,7 +101,7 @@ func TestPromptFiles(t *testing.T) {
 		t.Errorf("no project: %v", perr)
 	}
 	many := make([]string, proto.MaxPromptFiles+1)
-	if _, perr := promptFiles("demo", "t", many); perr == nil || perr.Code != proto.ErrBadParams {
+	if _, perr := promptFiles(demoDir, "t", many); perr == nil || perr.Code != proto.ErrBadParams {
 		t.Errorf("too many: %v", perr)
 	}
 }

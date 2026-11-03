@@ -25,7 +25,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
-	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
@@ -108,10 +107,12 @@ type uploads struct {
 // upload is a file being taken: for session of project, stored as
 // name, of size bytes, data those in so far.
 type upload struct {
-	session, project, name, typ string
-	size                        int64
-	data                        []byte
-	at                          time.Time
+	// dir is the session's project's folder (its program's for a
+	// director), where uploads/ is.
+	session, dir, name, typ string
+	size                    int64
+	data                    []byte
+	at                      time.Time
 }
 
 // sweep drops the uploads idle past uploadIdle; under u.mu.
@@ -202,7 +203,11 @@ func (s *Server) upload(p proto.SessionUploadParams, cc callCtx) (any, *proto.Er
 		if p.Size <= 0 || p.Size > proto.MaxUpload {
 			return nil, proto.Errorf(proto.ErrBadParams, "%s: a file is 1 byte to %d MB", name, proto.MaxUpload>>20)
 		}
-		id, perr = s.uploads.begin(&upload{session: p.Session, project: info.Project, name: name, typ: typ, size: p.Size, at: now})
+		dir, err := sessionDir(info)
+		if err != nil {
+			return nil, proto.Errorf(proto.ErrRefused, "session %s: %v", p.Session, err)
+		}
+		id, perr = s.uploads.begin(&upload{session: p.Session, dir: dir, name: name, typ: typ, size: p.Size, at: now})
 		if perr != nil {
 			return nil, perr
 		}
@@ -218,16 +223,12 @@ func (s *Server) upload(p proto.SessionUploadParams, cc callCtx) (any, *proto.Er
 	if !sniffs(up.typ, up.data) {
 		return nil, proto.Errorf(proto.ErrBadParams, "%s isn't a %s file", up.name, up.typ)
 	}
-	dir, err := project.Dir(up.project)
-	if err != nil {
-		return nil, proto.Errorf(proto.ErrRefused, "project %s: %v", up.project, err)
-	}
-	ref, err := storeUpload(filepath.Join(dir, "uploads"), up.name, up.data, now)
+	ref, err := storeUpload(filepath.Join(up.dir, "uploads"), up.name, up.data, now)
 	if err != nil {
 		s.log.Printf("session.upload %s: %v", p.Session, err)
 		return nil, proto.Errorf(proto.ErrInternal, "storing %s: %v", up.name, err)
 	}
-	s.journalIn(up.project, cc.who(), "session.upload", sessionRef(info), ref+" ("+strconv.FormatInt(up.size, 10)+" bytes)")
+	s.journalSession(info, cc.who(), "session.upload", sessionRef(info), ref+" ("+strconv.FormatInt(up.size, 10)+" bytes)")
 	res.Ref, res.Name, res.Type, res.Size = ref, ref, up.typ, up.size
 	return res, nil
 }
@@ -274,22 +275,18 @@ func storeUpload(dir, name string, data []byte, now time.Time) (string, error) {
 	return "", fmt.Errorf("no free name for %s", name)
 }
 
-// promptFiles is text with the uploads refs name in project's
-// uploads/, each on an "Attached: <path>" line after it: what an agent
+// promptFiles is text with the uploads refs name in folder's uploads/
+// (the session's project's, sessionDir), each on an "Attached: <path>" line after it: what an agent
 // reads them by. A ref is a file's name there, as session.upload
 // answered it: no folder, no link, a type it takes.
-func promptFiles(slug, text string, refs []string) (string, *proto.Error) {
+func promptFiles(folder, text string, refs []string) (string, *proto.Error) {
 	if len(refs) > proto.MaxPromptFiles {
 		return "", proto.Errorf(proto.ErrBadParams, "a prompt takes at most %d files", proto.MaxPromptFiles)
 	}
-	if slug == "" {
+	if folder == "" {
 		return "", proto.Errorf(proto.ErrRefused, "the session is in no project: it takes no files")
 	}
-	dir, err := project.Dir(slug)
-	if err != nil {
-		return "", proto.Errorf(proto.ErrRefused, "project %s: %v", slug, err)
-	}
-	dir = filepath.Join(dir, "uploads")
+	dir := filepath.Join(folder, "uploads")
 	lines := make([]string, 0, len(refs))
 	for _, ref := range refs {
 		if ref == "" || ref != filepath.Base(ref) || strings.ContainsAny(ref, `/\`) || uploadName(ref) != ref || uploadType(ref) == "" {

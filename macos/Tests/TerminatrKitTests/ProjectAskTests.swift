@@ -36,6 +36,12 @@ private func session(_ id: String, role: String, project: String = "demo", threa
     #expect(a.message.contains("save what it learned"))
 }
 
+@Test func saveClearDirectorAsks() {
+    let a = ProjectAsk.saveClearDirector(program: "acme")
+    #expect(a.asks && a.verb == "Save & Clear" && a.project == "acme" && a.id != ProjectAsk.saveClear(project: "acme").id)
+    #expect(a.title == "Save and clear acme's director?" && a.message.contains("The program's files"))
+}
+
 @Test func activeResultWords() {
     #expect(ProjectAsk.words(AppAPI.ProjectActive(changed: true, resumed: ["coordinator"]), project: "demo") == nil)
     #expect(ProjectAsk.words(AppAPI.ProjectActive(changed: true, lost: ["t-1", "t-2"]), project: "demo")

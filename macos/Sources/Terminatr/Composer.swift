@@ -161,7 +161,7 @@ struct Composer: View {
 
     /// Whether the composer takes files: this server's sessions, a tm
     /// with session.upload.
-    private var attaches: Bool { app.canAttach && !model.ref.isRemote }
+    private var attaches: Bool { app.attaches(model.ref) }
 
     private var running: Bool { session?.state == "working" }
 

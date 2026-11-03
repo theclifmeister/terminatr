@@ -357,3 +357,72 @@ func TestProgramNeedsOpen(t *testing.T) {
 		t.Errorf("open: %+v, stamped %v", res, stamp())
 	}
 }
+
+// TestDirectorFromDevice (T973): a paired phone talks to a director as
+// to a coordinator: session.list has its session, and the phone's
+// prompt, keys and files reach it, journaled in the program's journal,
+// the files stored in the program's uploads/ (never a projects/<slug>
+// folder, which would leave the program out).
+func TestDirectorFromDevice(t *testing.T) {
+	p := testPaths(t)
+	newWatchProject(t)
+	g, err := program.New(program.Options{Slug: "acme"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeConfig(t, "[features]\nprograms = true\n[programs.acme]\nprojects = [\"demo\"]\n")
+	if err := os.MkdirAll(p.AgentsDir(), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	manifest := "manifest_version = 1\nname = \"waits\"\n[launch]\ncommand = " + strconv.Quote(testSh(t)) + "\nargs = [\"-c\", \"cat >/dev/null\"]\n"
+	if err := os.WriteFile(filepath.Join(p.AgentsDir(), "waits.toml"), []byte(manifest), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got := make(chan *Server, 1)
+	onRun = func(s *Server) { got <- s }
+	t.Cleanup(func() { onRun = nil })
+	startServer(t, p)
+	s := <-got
+	c, err := client.Dial(p, proto.KindControl)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	var started proto.SessionStartResult
+	call(t, c, proto.MethodSessionStart, proto.SessionStartParams{Agent: "waits", Role: proto.RoleDirector, Project: "acme"}, &started)
+	id := started.Session.ID
+
+	phone, err := s.deviceConn("Sam's iPhone")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer phone.Close()
+	var list proto.SessionListResult
+	call(t, phone, proto.MethodSessionList, nil, &list)
+	if !slices.ContainsFunc(list.Sessions, func(i proto.SessionInfo) bool {
+		return i.ID == id && i.Role == proto.RoleDirector && i.Project == "acme"
+	}) {
+		t.Fatalf("the phone's session.list lacks the director: %+v", list.Sessions)
+	}
+	call(t, phone, proto.MethodSessionKeys, proto.SessionKeysParams{ID: id, Data: "x"}, nil)
+	var up proto.SessionUploadResult
+	call(t, phone, proto.MethodSessionUpload, proto.SessionUploadParams{Session: id, Name: "plan.md", Size: 4, Data: []byte("plan")}, &up)
+	if up.Ref == "" {
+		t.Fatalf("upload: %+v", up)
+	}
+	if _, err := os.Stat(g.Path("uploads", up.Ref)); err != nil {
+		t.Errorf("not in the program's uploads: %v", err)
+	}
+	projects := filepath.Dir(filepath.Dir(g.Dir))
+	if _, err := os.Stat(filepath.Join(projects, "acme")); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("a projects/acme folder: %v", err)
+	}
+	call(t, phone, proto.MethodSessionPrompt, proto.SessionPromptParams{ID: id, Text: "what's next?", Files: []string{up.Ref}}, nil)
+	journal, _ := os.ReadFile(g.Path("JOURNAL.md"))
+	for _, want := range []string{"human (iphone: Sam's iPhone) session.keys " + id, "human (iphone: Sam's iPhone) session.upload " + id,
+		"human (iphone: Sam's iPhone) session.prompt " + id + " what's next?"} {
+		if !strings.Contains(string(journal), want) {
+			t.Errorf("program journal lacks %q:\n%s", want, journal)
+		}
+	}
+}

@@ -13,6 +13,9 @@ import Foundation
 /// (session.adopt.request), each asked first.
 public enum ProjectAsk: Identifiable, Hashable, Sendable {
     case saveClear(project: String)
+    /// A program's director saved and cleared (coordinator.clear's
+    /// program, app API 44), as the TUI's prefix+C in its pane (T973).
+    case saveClearDirector(program: String)
     case activate(project: String)
     /// running names what the deactivation stops: "its coordinator", a
     /// thread's task or id.
@@ -27,6 +30,7 @@ public enum ProjectAsk: Identifiable, Hashable, Sendable {
     public var id: String {
         switch self {
         case .saveClear(let p): "saveclear:\(p)"
+        case .saveClearDirector(let g): "saveclear-director:\(g)"
         case .activate(let p): "activate:\(p)"
         case .deactivate(let p, _): "deactivate:\(p)"
         case .pin(let p, let on): "pin:\(p):\(on)"
@@ -38,7 +42,7 @@ public enum ProjectAsk: Identifiable, Hashable, Sendable {
 
     public var project: String {
         switch self {
-        case .saveClear(let p), .activate(let p), .deactivate(let p, _), .pin(let p, _), .remote(let p, _, _),
+        case .saveClear(let p), .saveClearDirector(let p), .activate(let p), .deactivate(let p, _), .pin(let p, _), .remote(let p, _, _),
              .adopt(let p, _, _), .withdrawAdopt(let p, _): p
         }
     }
@@ -83,7 +87,7 @@ public enum ProjectAsk: Identifiable, Hashable, Sendable {
     /// Whether the window asks before it acts.
     public var asks: Bool {
         switch self {
-        case .saveClear, .remote, .adopt, .withdrawAdopt: true
+        case .saveClear, .saveClearDirector, .remote, .adopt, .withdrawAdopt: true
         case .activate, .pin: false
         case .deactivate(_, let running): !running.isEmpty
         }
@@ -100,7 +104,7 @@ public enum ProjectAsk: Identifiable, Hashable, Sendable {
     /// The menu's and the confirmation's button.
     public var verb: String {
         switch self {
-        case .saveClear: "Save & Clear"
+        case .saveClear, .saveClearDirector: "Save & Clear"
         case .activate: "Activate"
         case .deactivate: "Deactivate"
         case .pin(_, let on): on ? "Pin to Top" : "Unpin"
@@ -114,6 +118,7 @@ public enum ProjectAsk: Identifiable, Hashable, Sendable {
     public var title: String {
         switch self {
         case .saveClear(let p): "Save and clear \(p)'s coordinator?"
+        case .saveClearDirector(let g): "Save and clear \(g)'s director?"
         case .activate(let p): "Activate \(p)?"
         case .deactivate(let p, _): "Deactivate \(p)?"
         case .pin(let p, let on): on ? "Pin \(p) to the top?" : "Unpin \(p)?"
@@ -128,6 +133,8 @@ public enum ProjectAsk: Identifiable, Hashable, Sendable {
         switch self {
         case .saveClear:
             "The coordinator is asked to save what it learned, then its conversation is cleared at its next idle moment, as tm clear does. The project's files keep its state."
+        case .saveClearDirector:
+            "The director is asked to save what it learned, then its conversation is cleared at its next idle moment, as tm clear does. The program's files keep its state."
         case .activate:
             "Its coordinator starts, and its threads resume."
         case .deactivate(_, let running) where running.isEmpty:
