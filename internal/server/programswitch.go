@@ -24,6 +24,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/session"
+	"github.com/theclifmeister/terminatr/internal/thread"
 )
 
 // programsNow reads the switch now (a broken config.toml still gives
@@ -193,13 +194,14 @@ func onOffWord(on bool) string {
 var programsMu sync.Mutex
 
 // applyPrograms makes the sessions and the links match the switch: off
-// stops the running directors into dormant records, pauses the program
-// outbox and leaves the link hello cap "program" out; on lists the cap
-// again, lets the outbox go on, resumes the dormant directors, each with
-// the back-on nudge, and asks the ticker for a sweep, which recomputes
-// the cross-project dependency states and raises the dep-ready items
-// owed since the switch-off (sweepDeps). Held director slots (a later
-// build step) hang off here too.
+// stops the running directors into dormant records, releases the
+// thread slots held for them (the waiters they held go back to the
+// plain line), pauses the program outbox and leaves the link hello cap
+// "program" out; on lists the cap again, lets the outbox go on, resumes
+// the dormant directors, each with the back-on nudge, and asks the
+// ticker for a sweep, which recomputes the cross-project dependency
+// states and raises the dep-ready items owed since the switch-off
+// (sweepDeps).
 func (s *Server) applyPrograms(on bool) (stopped, resumed, lost []string) {
 	programsMu.Lock()
 	defer programsMu.Unlock()
@@ -211,7 +213,11 @@ func (s *Server) applyProgramsLocked(on bool) (stopped, resumed, lost []string) 
 	link.SetPrograms(on)
 	s.peers.SetPrograms(on)
 	if !on {
-		return s.sleepDirectors(), nil, nil
+		stopped = s.sleepDirectors()
+		if names, err := thread.ReleaseDirectors(); err != nil || len(names) > 0 {
+			s.log.Printf("programs off: released the slots held for %v (%v)", names, err)
+		}
+		return stopped, nil, nil
 	}
 	link.Kick() // what waited goes now, or shows as expired
 	resumed, lost = s.wakeDirectors()

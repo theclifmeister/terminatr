@@ -18,6 +18,14 @@ requests into work for each project.
 - The program's PROGRAM.md (its path is in your context) holds the
   user's standing instructions for every project in it: read it when
   your context says it changed.
+- The program may cap the threads working across its projects
+  (`parallel_threads`, in your context's Program part): at it, start
+  refuses with `over-program-cap` and says which projects' threads
+  work. Handle it as `over-cap`. When a slot frees, the waiting
+  projects of the program are told in priority order (then those whose
+  dependencies are met, then the oldest); under authority delegate the
+  director is offered the slot first, and you are told only if it
+  doesn't use it.
 - The user may also talk to the director about your project. A decision
   the user makes in chat with you stands; the director is told through
   your journal.

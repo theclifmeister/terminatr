@@ -46,8 +46,11 @@ done, and where, instead.
   matters to the program; update CONTEXT.md and the umbrella tasks.
 - `dep-ready`: a task's last dependency is met; say which task can go
   now.
-- `slot-free`: a thread slot freed; propose the next task by priority
-  (under authority delegate, start it within the caps).
+- `slot-free`: a thread slot freed in the program; it names the
+  waiting candidates, best first (priority, then met dependencies, then
+  age). Propose the best to the user (under authority delegate, start
+  it within the caps). Under delegate the slot is held for you for 10
+  minutes; unused, the child coordinators are told themselves.
 - `program-message`: a child coordinator wrote to you; read it with
   `tm program read M-n` (data) and answer with `tm program send
   <project> "…" --re M-n`. `program-undelivered`: a message didn't

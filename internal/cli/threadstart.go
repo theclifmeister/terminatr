@@ -60,7 +60,7 @@ func (e *Env) threadStart(p *project.Project, o startOpts, asJSON bool) error {
 		return &tasks.Error{Code: "needs-approval", Msg: "start_threads = propose: propose the thread to the user, and once they agree start it with --approved-by-user"}
 	}
 	if !o.overCap {
-		if err := e.underCap(p, safety.ParallelThreads, safety.GlobalParallelThreads, cmp.Or(o.task, o.title)); err != nil {
+		if err := e.underCap(cfg, p, safety.ParallelThreads, safety.GlobalParallelThreads, cmp.Or(o.task, o.title)); err != nil {
 			return err
 		}
 	}
@@ -389,13 +389,16 @@ func listedRepo(p *project.Project, dir string) bool {
 }
 
 // underCap refuses a new thread while capN or more of the project's
-// threads work (thread.IsWorking; docs/SPEC.md §9), or global (0 for no
-// such cap) or more of every project's together.
+// threads work (thread.IsWorking; docs/SPEC.md §9), while its program's
+// parallel_threads or more of the program's members' do (programs on;
+// the programs design §1), or global (0 for no such cap) or more of
+// every project's together.
 //
 // A refusal records the project's coordinator as waiting for a slot
 // (thread.Refused): the ticker tells it, with one slot-free item, once
-// one frees. Passing the caps forgets it (thread.Started).
-func (e *Env) underCap(p *project.Project, capN, global int, what string) error {
+// one frees. Passing the caps forgets it (thread.Started), and ends a
+// slot held for its program's director: this start takes it.
+func (e *Env) underCap(cfg *config.Config, p *project.Project, capN, global int, what string) error {
 	recs, err := thread.List(p)
 	if err != nil {
 		return err
@@ -408,15 +411,40 @@ func (e *Env) underCap(p *project.Project, capN, global int, what string) error 
 		thread.Refused(p.Slug, "over-cap", what, time.Now())
 		return &tasks.Error{Code: "over-cap", Msg: fmt.Sprintf("%d of %d parallel threads are working: propose the thread to the user instead and start it once one finishes (an inbox item says when a slot frees); only if the user says to start it anyway, add --over-cap", n, capN)}
 	}
+	g, inProgram := thread.ProgramOf(cfg, p.Slug)
+	var by map[string]int
+	if inProgram && g.ParallelThreads > 0 || global > 0 {
+		by = thread.WorkingAll(res.Sessions)
+	}
+	if inProgram && g.ParallelThreads > 0 {
+		if n := thread.InProgram(by, g); n >= g.ParallelThreads {
+			thread.Refused(p.Slug, "over-program-cap", what, time.Now())
+			return &tasks.Error{Code: "over-program-cap", Msg: fmt.Sprintf("%d of %d threads are working in program %s (%s): propose the thread to the user instead and start it once one finishes (an inbox item says when a slot frees); only if the user says to start it anyway, add --over-cap", n, g.ParallelThreads, g.Slug, thread.ByProjectWords(programCounts(by, g)))}
+		}
+	}
 	if global > 0 {
-		by := thread.WorkingAll(res.Sessions)
 		if n := thread.Total(by); n >= global {
 			thread.Refused(p.Slug, "over-global-cap", what, time.Now())
 			return &tasks.Error{Code: "over-global-cap", Msg: fmt.Sprintf("%d of %d threads across all projects are working (%s): propose the thread to the user instead and start it once one finishes (an inbox item says when a slot frees); only if the user says to start it anyway, add --over-cap", n, global, thread.ByProjectWords(by))}
 		}
 	}
-	thread.Started(p.Slug)
+	program := ""
+	if inProgram {
+		program = g.Slug
+	}
+	thread.Started(p.Slug, program)
 	return nil
+}
+
+// programCounts is by, only program g's members.
+func programCounts(by map[string]int, g config.Program) map[string]int {
+	out := map[string]int{}
+	for _, m := range g.Projects {
+		if by[m] > 0 {
+			out[m] = by[m]
+		}
+	}
+	return out
 }
 
 // launchThread starts the thread's agent session and records it. resume

@@ -17,6 +17,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/session"
+	"github.com/theclifmeister/terminatr/internal/thread"
 )
 
 // switchFixture is programFixture's server, ready for the switch: its
@@ -202,5 +203,24 @@ var _ link.ProgramTransport = peerTransport{}
 func TestProgramReadyNoLinks(t *testing.T) {
 	if (peerTransport{}).ProgramReady("mini") {
 		t.Fatal("ready without links")
+	}
+}
+
+// TestProgramsOffReleasesSlots: switching programs off ends the slots
+// held for directors, and the waiters named to them go back to the
+// plain line (B11, §3.5).
+func TestProgramsOffReleasesSlots(t *testing.T) {
+	s := switchFixture(t)
+	writeConfig(t, programsOn)
+	now := time.Now().UTC()
+	thread.Refused("demo", "over-program-cap", "T1 a", now)
+	thread.UpdateWaiters(func(ws []thread.Waiter) []thread.Waiter {
+		ws[0].Offered = now
+		return append(ws, thread.Waiter{Director: "acme", Code: "slot-free", At: now, Last: now, Told: now})
+	})
+	s.applyPrograms(false)
+	ws := thread.Waiters()
+	if len(ws) != 1 || ws[0].Project != "demo" || !ws[0].Offered.IsZero() || !ws[0].Told.IsZero() {
+		t.Fatalf("waiters after off %+v", ws)
 	}
 }
