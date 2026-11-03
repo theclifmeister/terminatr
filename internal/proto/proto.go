@@ -51,8 +51,10 @@ import (
 // and hang reports (CapAppReports). 34: programs.switch, and the hello's
 // CapPrograms while programs are on. 35: program.needs, a program's
 // rolled-up Needs you. 36: program.needs.open, and SessionInfo's
-// NeedsOpen (an added field).
-const Protocol = 36
+// NeedsOpen (an added field). 37: program.get, .route, .task.edit,
+// .send, .read, .answer, .umbrella.accept and .send-back, and
+// .delete (proto/programapp.go), and task.get's After.
+const Protocol = 37
 
 // Kind is what a connection is for.
 type Kind string

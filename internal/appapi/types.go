@@ -254,6 +254,11 @@ type Session struct {
 	ContextWindow  int64     `json:"context_window,omitempty"`
 	Server         string    `json:"server,omitempty"`
 	ViewOnly       bool      `json:"view_only,omitempty"`
+	// NeedsOpen (app API 44) is when a program's director last asked
+	// the consoles to open its program's needs dialog for the user: an
+	// app showing its pane opens the program's Needs you once, while it
+	// is recent.
+	NeedsOpen time.Time `json:"needs_open,omitzero"`
 }
 
 // Question is a question menu open on a session; Escape: only the user
@@ -266,6 +271,10 @@ type Question struct {
 	Since     time.Time      `json:"since,omitzero"`
 	Escape    bool           `json:"escape,omitempty"`
 	Screen    bool           `json:"screen,omitempty"`
+	// HumanOnly (app API 44): only the user answers it, at this
+	// computer: a program's questions in its director's pane. The Mac
+	// app's session.answer is the user's; a device's is refused.
+	HumanOnly bool `json:"human_only,omitempty"`
 }
 
 // QuestionItem is one question of a menu, Answered once it has Answer.
@@ -349,6 +358,10 @@ type WatchTask struct {
 // project, in slug order, the archived ones left out.
 type Projects struct {
 	Projects []Project `json:"projects"`
+	// Programs (app API 44) are the programs on this server, in slug
+	// order, while programs are on (the hello's capability programs):
+	// none otherwise.
+	Programs []Program `json:"programs,omitempty"`
 }
 
 // Project is one project: what the sidebar shows (its tasks that need
@@ -384,6 +397,9 @@ type Project struct {
 	Checkouts   map[string]string `json:"checkouts,omitempty"`
 	Links       []Link            `json:"links,omitempty"`
 	LinkNeeds   []LinkNeed        `json:"link_needs,omitempty"`
+	// Program (app API 44) is the program on this server it is in
+	// (Projects.Programs), while programs are on.
+	Program string `json:"program,omitempty"`
 }
 
 // Task is a task on the board; Ref is its id as the user reads it
@@ -402,6 +418,10 @@ type Task struct {
 	Owner    string `json:"owner,omitempty"`
 	Created  string `json:"created,omitempty"`
 	Updated  string `json:"updated,omitempty"`
+	// After (app API 44; task.get only) are the tasks it comes after,
+	// this board's and other projects', with another program member's
+	// dependency state while programs are on.
+	After []TaskDep `json:"after,omitempty"`
 }
 
 // Step is one step of a task.
@@ -696,6 +716,10 @@ type PeerProject struct {
 	// board, overview and library read through peer.pages-read and
 	// peer.library-list.
 	Pages bool `json:"pages,omitempty"`
+	// Program (app API 44) is the program on this server the project is
+	// a member of, while programs are on: the "· acme" tag. It is listed
+	// both under its program and under this server.
+	Program string `json:"program,omitempty"`
 }
 
 // PeerNeed is one need of a paired server's project, in full (app API
@@ -806,14 +830,14 @@ func sessionOf(s proto.SessionInfo) Session {
 		Reason: s.Reason, Escape: s.Escape, TodosDone: s.TodosDone, TodosTotal: s.TodosTotal, Current: s.Current,
 		Queued: s.Queued, QueuedSince: s.QueuedSince, QueueHeld: s.QueueHeld, QueueHeldSince: s.QueueHeldSince,
 		TurnSince: s.TurnSince, RemoteControl: s.RemoteControl, Model: s.Model, Question: questionOf(s.Question), Context: s.Context,
-		ContextWindow: s.ContextWindow, Server: s.Server, ViewOnly: s.ViewOnly}
+		ContextWindow: s.ContextWindow, Server: s.Server, ViewOnly: s.ViewOnly, NeedsOpen: s.NeedsOpen}
 }
 
 func questionOf(q *proto.Question) *Question {
 	if q == nil {
 		return nil
 	}
-	out := &Question{Tool: q.Tool, Since: q.Since, Escape: q.Escape, Screen: q.Screen, Questions: make([]QuestionItem, 0, len(q.Questions))}
+	out := &Question{Tool: q.Tool, Since: q.Since, Escape: q.Escape, Screen: q.Screen, HumanOnly: q.HumanOnly, Questions: make([]QuestionItem, 0, len(q.Questions))}
 	for _, it := range q.Questions {
 		qi := QuestionItem{Question: it.Question, Header: it.Header, MultiSelect: it.MultiSelect,
 			Answered: it.Answered, Answer: it.Answer, Options: make([]QuestionOption, 0, len(it.Options))}
@@ -851,6 +875,9 @@ func projectsOf(w server.ProjectsWatch) Projects {
 	for _, p := range w.Projects {
 		out.Projects = append(out.Projects, projectOf(p))
 	}
+	for _, g := range w.Programs {
+		out.Programs = append(out.Programs, programOf(g))
+	}
 	return out
 }
 
@@ -861,7 +888,7 @@ func projectsOf(w server.ProjectsWatch) Projects {
 func projectOf(p server.SideProject) Project {
 	out := Project{Slug: p.Slug, Active: true, NeedsYou: make([]Task, 0, len(p.NeedsYou)), Questions: p.Questions,
 		Threads: make([]Thread, 0, len(p.Threads)), PRHostFails: p.PRHostFails, Goal: p.Goal, Repos: p.Repos,
-		Counts: p.Counts, Error: p.Error, Usage: usageOf(p.Usage), Checkouts: p.Checkouts}
+		Counts: p.Counts, Error: p.Error, Usage: usageOf(p.Usage), Checkouts: p.Checkouts, Program: p.Program}
 	if s := p.Safety; s != nil {
 		out.Active, out.Paused, out.Pinned, out.Shared = s.Active, s.Paused, s.Pinned, s.Share
 	}
@@ -900,6 +927,9 @@ func taskOf(t server.SideTask) Task {
 		Thread: t.Thread, Owner: t.Owner, Created: t.Created, Updated: t.Updated}
 	for _, s := range t.Steps {
 		out.Steps = append(out.Steps, Step{N: s.N, Text: s.Text, Done: s.Done})
+	}
+	for _, a := range t.After {
+		out.After = append(out.After, taskAfterOf(a))
 	}
 	return out
 }
@@ -971,6 +1001,7 @@ func linkOf(r link.Row) Link {
 // conversation open (remotes.find).
 func peerListOf(l proto.PeerList) PeerList {
 	out := PeerList{Gen: l.Gen, Peers: make([]Peer, 0, len(l.Peers))}
+	progs := peerPrograms()
 	for _, p := range l.Peers {
 		peer := Peer{Alias: p.Alias, Name: p.Name, ID: p.ID, State: p.State, Reason: p.Reason, Since: p.Since,
 			Projects: make([]PeerProject, 0, len(p.Projects)), ShareWaits: proto.ShareWaits([]proto.PeerMirror{p}),
@@ -984,7 +1015,7 @@ func peerListOf(l proto.PeerList) PeerList {
 		for _, pp := range p.Projects {
 			pr := PeerProject{Project: pp.Project, Goal: pp.Goal, Paused: pp.Paused, NeedsYou: pp.NeedsYou,
 				Threads: pp.Threads, Ready: pp.Ready, Stale: pp.Stale, Synced: pp.Synced, Sessions: []PeerSession{}, Pages: pp.Pages,
-				Watched: []PeerThread{}, Needs: []PeerNeed{}}
+				Watched: []PeerThread{}, Needs: []PeerNeed{}, Program: progs[p.Alias+"/"+pp.Project]}
 			if pp.Watch != nil {
 				for _, w := range pp.Watch.Threads {
 					pr.Watched = append(pr.Watched, peerThreadOf(p.Alias, w))

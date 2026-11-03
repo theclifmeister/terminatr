@@ -928,7 +928,7 @@ final class AppModel {
             do {
                 switch a {
                 case .saveClear(let p):
-                    _ = try await connected().call(AppAPI.Methods.coordinatorClear, AppAPI.ProjectParams(project: p))
+                    _ = try await connected().call(AppAPI.Methods.coordinatorClear, AppAPI.CoordinatorClearParams(project: p))
                 case .activate(let p), .deactivate(let p, _):
                     let on: Bool
                     if case .activate = a { on = true } else { on = false }

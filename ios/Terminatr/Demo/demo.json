@@ -2304,6 +2304,99 @@
      ]
     }
    }
+  ],
+  "program.get": [
+   {
+    "params": {
+     "program": "acme"
+    },
+    "result": {
+     "slug": "acme",
+     "members": [
+      {
+       "project": "acme-web"
+      },
+      {
+       "project": "acme-api",
+       "server": "studio",
+       "state": "member",
+       "words": "member: tasks, messages, status"
+      }
+     ],
+     "authority": "propose",
+     "parallel_threads": 4,
+     "goal": "Ship the new shop: web storefront and its API together",
+     "umbrellas": [
+      {
+       "task": {
+        "id": 3,
+        "ref": "T3",
+        "title": "Gift cards end to end",
+        "status": "started",
+        "priority": "must",
+        "updated": "2026-10-26"
+       },
+       "parts": [
+        {
+         "ref": "acme-web/T18",
+         "state": "open",
+         "word": "ready",
+         "status": "ready",
+         "title": "Gift cards at checkout"
+        },
+        {
+         "ref": "studio/acme-api/T12",
+         "state": "open",
+         "word": "started",
+         "status": "started",
+         "title": "Rate limits per API key"
+        }
+       ]
+      }
+     ],
+     "deps": {
+      "studio/acme-api/T12": {
+       "ref": "studio/acme-api/T12",
+       "state": "open",
+       "word": "started",
+       "status": "started",
+       "title": "Rate limits per API key"
+      }
+     },
+     "waits": [
+      {
+       "task": "acme-web/T18",
+       "title": "Gift cards at checkout",
+       "status": "ready",
+       "after": "studio/acme-api/T12"
+      }
+     ],
+     "working": 1
+    }
+   }
+  ],
+  "program.needs": [
+   {
+    "params": {
+     "program": "acme"
+    },
+    "result": {
+     "program": "acme",
+     "needs": [],
+     "members": [
+      {
+       "project": "acme-web",
+       "needs": 0
+      },
+      {
+       "project": "acme-api",
+       "server": "studio",
+       "needs": 0
+      }
+     ],
+     "quiet": 2
+    }
+   }
   ]
  },
  "calls": {
@@ -2388,7 +2481,8 @@
          "pr_checks": "",
          "done": false
         }
-       ]
+       ],
+       "program": "acme"
       },
       {
        "goal": "Developer docs for the API",
@@ -2610,7 +2704,7 @@
   }
  },
  "hello": {
-  "app_api": 43,
+  "app_api": 44,
   "build": "demo",
   "capabilities": [
    "read",
@@ -2654,7 +2748,10 @@
    "search.query",
    "search.timeline",
    "search.show",
-   "pane.vt"
+   "pane.vt",
+   "program.get",
+   "program.needs",
+   "program.search"
   ],
   "server": {
    "caps": [
@@ -2668,7 +2765,8 @@
     "project-mods",
     "answer-picks",
     "search",
-    "task-priority"
+    "task-priority",
+    "programs"
    ],
    "protocol": 1,
    "version": "0.56.1"
@@ -2996,7 +3094,8 @@
        "input": 0,
        "output": 0,
        "turns": 0
-      }
+      },
+      "program": "acme"
      },
      {
       "active": true,
@@ -3187,6 +3286,23 @@
        "output": 0,
        "turns": 0
       }
+     }
+    ],
+    "programs": [
+     {
+      "slug": "acme",
+      "members": [
+       {
+        "project": "acme-web"
+       },
+       {
+        "project": "acme-api",
+        "server": "studio"
+       }
+      ],
+      "authority": "propose",
+      "parallel_threads": 4,
+      "goal": "Ship the new shop: web storefront and its API together"
      }
     ]
    }

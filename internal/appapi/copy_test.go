@@ -12,6 +12,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/server"
 )
 
 // fill sets every field under v to a value that isn't zero: strings
@@ -222,10 +223,6 @@ func TestCopies(t *testing.T) {
 		".Sessions[].AgentSID", ".Sessions[].Identified",
 		// The settings' side of remote control and the model.
 		".Sessions[].RemoteHeld", ".Sessions[].ModelNext", ".Sessions[].ModelPending",
-		// A director's program questions and its request to open the
-		// program's needs dialog: the apps learn of them with the
-		// program types (the programs design B17).
-		".Sessions[].Question.HumanOnly", ".Sessions[].NeedsOpen",
 	})
 	check("session.watch", homeOf(watchOf), nil)
 	check("projects.watch", homeOf(projectsOf), append(settingsHome(".Projects[].Safety"),
@@ -257,9 +254,8 @@ func TestCopies(t *testing.T) {
 		".Projects[].Links[].Asks.Project", ".Projects[].Links[].Asks.State",
 		// An offered file's message: link.act takes the file's id.
 		".Projects[].LinkNeeds[].Message",
-		// The programs and each project's: the app API gets them with
-		// the programs' own types (the programs design §12, B17).
-		".Programs", ".Projects[].Program",
+		// A program's members, split into (server, project) (Members).
+		".Programs[].Projects",
 	))
 	// A paired server's pages: everything that crossed crosses on, the
 	// far server's clock but.
@@ -278,8 +274,8 @@ func TestCopies(t *testing.T) {
 		".Peers[].Watch", ".Peers[].Popup",
 		".Peers[].Version", ".Peers[].RTT", ".Peers[].Listed", ".Peers[].Shares",
 		// Whether the paired server takes program messages: the TUI's
-		// program members popup's; the apps get programs with their own
-		// types (the programs design §12, B17).
+		// program members popup's; program.get says a member there is
+		// dormant.
 		".Peers[].Program",
 		// Whether its peer.act answers a coordinator's question: a
 		// program's answer fanned out there (§7.2), the server's own.
@@ -306,7 +302,7 @@ func TestCopies(t *testing.T) {
 	check("peer.list needs", homeOf(func(n proto.PeerNeed) PeerNeed {
 		n.Escape = false
 		return peerNeedOf("mini", time.Second, n)
-	}), []string{".Escape", ".Question.HumanOnly"})
+	}), []string{".Escape"})
 	// Of a request that waits, what answers it: its state, the project
 	// it shared, its end are none yet.
 	check("peer.list shares", homeOf(shareRequestOf), []string{".Out", ".Peer", ".State", ".Project", ".Answered", ".Code",
@@ -331,6 +327,30 @@ func TestCopies(t *testing.T) {
 		".Code", ".Summary"})
 	check("task.get", homeOf(taskOf), []string{".Archived"})
 	check("task.done", homeOf(doneTasksOf), []string{".Tasks[].Archived"})
+	// Programs (app API 44): the members' read splits them into
+	// (server, project); a task's archive flag and after refs, and the
+	// paths of a renamed or deleted program's folder, stay home.
+	check("program.get", homeOf(programDetailOf), []string{".Umbrellas[].Task.Archived", ".Tasks{}.Archived", ".SideProgram.Projects"})
+	// An escape's menu and dialog never cross (as on peer.list's needs,
+	// checked without Escape); a paired member's mirror time is the
+	// TUI's.
+	check("program.needs", homeOf(func(r proto.ProgramNeedsResult) ProgramNeeds {
+		for i := range r.Needs {
+			r.Needs[i].Escape = false
+			for j := range r.Needs[i].Also {
+				r.Needs[i].Also[j].Escape = false
+			}
+		}
+		return programNeedsOf(r)
+	}), []string{".Members[].Synced", ".Needs[].PeerNeed.Escape", ".Needs[].Also[].Escape"})
+	check("program.route", homeOf(programRoutedOf), nil)
+	check("program.task.edit", homeOf(programTaskEditedOf), nil)
+	check("program.send", homeOf(programSentOf), nil)
+	check("program.read", homeOf(programMessageOf), nil)
+	check("program.answer", homeOf(programAnsweredOf), nil)
+	check("program.umbrella", homeOf(programUmbrellaOf), nil)
+	check("program.rename", homeOf(programRenamedOf), []string{".Dir"})
+	check("program.delete", homeOf(programDeletedOf), nil)
 	check("task.templates", homeOf(templatesOf), nil)
 	check("questions.open", homeOf(questionsOpenOf), nil)
 	check("notify", homeOf(noticeResultOf), nil)
@@ -364,12 +384,10 @@ func TestCopies(t *testing.T) {
 }
 
 // sessionHome is what of a SessionInfo at path stays home (session.list's
-// list). Question.HumanOnly is a director's program questions', and
-// NeedsOpen its request to open the program's needs dialog, which the
-// apps learn with the program types (the programs design B17).
+// list).
 func sessionHome(path string) []string {
 	var out []string
-	for _, f := range []string{"Cells", "Argv", "Cwd", "PID", "StateSources", "AgentSID", "Identified", "RemoteHeld", "ModelNext", "ModelPending", "Question.HumanOnly", "NeedsOpen"} {
+	for _, f := range []string{"Cells", "Argv", "Cwd", "PID", "StateSources", "AgentSID", "Identified", "RemoteHeld", "ModelNext", "ModelPending"} {
 		out = append(out, path+"."+f)
 	}
 	return out
@@ -498,6 +516,27 @@ func TestParamsCopies(t *testing.T) {
 	if want := (proto.CoordinatorClearParams{Project: "web"}); err != nil || p != want {
 		t.Errorf("coordinator.clear params %+v %v", p, err)
 	}
+	// A program's director in the project's place (app API 44).
+	p, err = m.toServer(json.RawMessage(`{"program":"acme"}`))
+	if want := (proto.CoordinatorClearParams{Program: "acme"}); err != nil || p != want {
+		t.Errorf("coordinator.clear program params %+v %v", p, err)
+	}
+	// A route crosses whole, and nothing the app may not name (a
+	// director's own fields) does.
+	m, _ = Lookup(proto.MethodProgramRoute)
+	rp, err := m.toServer(json.RawMessage(`{"program":"acme","umbrella":"T4","tasks":[{"key":"api","project":"acme-api","title":"OIDC","after":["acme-web/T40"]}]}`))
+	if r, ok := rp.(server.ProgramRouteParams); err != nil || !ok || r.Program != "acme" || r.Route.Umbrella != "T4" || len(r.Route.Tasks) != 1 ||
+		r.Route.Tasks[0].Key != "api" || r.Route.Tasks[0].After[0] != "acme-web/T40" {
+		t.Errorf("program.route params %+v %v", rp, err)
+	}
+	if _, err := m.toServer(json.RawMessage(`{"program":"acme","tasks":[],"caller":"director"}`)); err == nil {
+		t.Error("program.route took a caller")
+	}
+	m, _ = Lookup(proto.MethodProgramDelete)
+	p, err = m.toServer(json.RawMessage(`{"program":"acme","confirm":"acme"}`))
+	if want := (proto.ProgramDeleteParams{Program: "acme", Confirm: "acme"}); err != nil || p != want {
+		t.Errorf("program.delete params %+v %v", p, err)
+	}
 	if _, err := m.toServer(json.RawMessage(`{"project":"web","session":"s-1"}`)); err == nil {
 		t.Error("coordinator.clear took a session")
 	}
@@ -567,7 +606,10 @@ func TestAllowlist(t *testing.T) {
 		proto.MethodMemoryList, proto.MethodMemoryRead, proto.MethodLibraryList, proto.MethodLibraryRead, proto.MethodDesignList, proto.MethodSearchQuery, proto.MethodSearchTimeline, proto.MethodSearchShow, proto.MethodAppReportAdd,
 		proto.MethodPeerPagesRead, proto.MethodPeerLibraryList, proto.MethodPeerLibraryRead, proto.MethodPeerDesignList,
 		MethodDeviceNonce, MethodDeviceBye, MethodDeviceList, MethodDevicePair, MethodDevicePairWait, MethodDevicePairAnswer, MethodDeviceAccess,
-		MethodDeviceName, MethodDeviceRemove, proto.MethodModsList, proto.MethodModsSet, proto.MethodModsSetting}
+		MethodDeviceName, MethodDeviceRemove, proto.MethodModsList, proto.MethodModsSet, proto.MethodModsSetting,
+		proto.MethodProgramGet, proto.MethodProgramNeeds, proto.MethodProgramRead, proto.MethodProgramSearch, proto.MethodProgramSearchTimeline,
+		proto.MethodProgramSearchShow, proto.MethodProgramRoute, proto.MethodProgramTaskEdit, proto.MethodProgramSend, proto.MethodProgramAnswer,
+		proto.MethodProgramUmbrellaAccept, proto.MethodProgramUmbrellaSendBack, proto.MethodProgramRename, proto.MethodProgramDelete}
 	slices.Sort(want)
 	if got := MethodNames(); !slices.Equal(got, want) {
 		t.Errorf("methods %v, want %v", got, want)
@@ -589,7 +631,10 @@ func TestAllowlist(t *testing.T) {
 		proto.MethodMemoryList: false, proto.MethodMemoryRead: false, proto.MethodLibraryList: false, proto.MethodLibraryRead: false,
 		MethodDeviceList: false, MethodDevicePair: true, MethodDevicePairWait: true, MethodDevicePairAnswer: true,
 		MethodDeviceAccess: true, MethodDeviceName: true, MethodDeviceRemove: true,
-		proto.MethodModsList: false, proto.MethodModsSet: true, proto.MethodModsSetting: true} {
+		proto.MethodModsList: false, proto.MethodModsSet: true, proto.MethodModsSetting: true,
+		proto.MethodProgramGet: false, proto.MethodProgramNeeds: false, proto.MethodProgramRead: false, proto.MethodProgramSearch: false,
+		proto.MethodProgramRoute: true, proto.MethodProgramTaskEdit: true, proto.MethodProgramSend: true, proto.MethodProgramAnswer: true,
+		proto.MethodProgramUmbrellaAccept: true, proto.MethodProgramUmbrellaSendBack: true, proto.MethodProgramRename: true, proto.MethodProgramDelete: true} {
 		if m, _ := Lookup(name); m.Write != write {
 			t.Errorf("%s: write %v", name, m.Write)
 		}
