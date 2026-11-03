@@ -8,6 +8,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/features"
+	"github.com/theclifmeister/terminatr/internal/link"
 	"github.com/theclifmeister/terminatr/internal/program"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/tasks"
@@ -91,6 +92,7 @@ func (t *Ticker) sweepDeps(cfg *config.Config) {
 			}
 		}
 		t.sweepUmbrellas(g, deps, states)
+		askPushes(g.Slug, states)
 		slices.SortStableFunc(waits, func(a, b program.Wait) int { return strings.Compare(a.Task, b.Task) })
 		if err := program.WriteDeps(g.Slug, program.Snapshot{States: states, Waits: waits}); err != nil {
 			t.o.Log.Printf("ticker: program %s: %v", g.Slug, err)
@@ -103,6 +105,22 @@ func (t *Ticker) sweepDeps(cfg *config.Config) {
 		}
 	}
 	t.mu.Unlock()
+}
+
+// askPushes asks the paired members of program prog for the state of
+// each of their tasks in states that none pushed yet (an umbrella's
+// part, a task a member's task comes after: link.AskWatch, once per
+// ref); a member that didn't accept or grant status pushes stays
+// unknown.
+func askPushes(prog string, states map[string]program.Dep) {
+	for ref, d := range states {
+		if alias, _, _, ok := tasks.CrossRef(ref); !ok || alias == "" || d.State != program.DepUnknown {
+			continue
+		}
+		if _, pushed := link.RemoteTaskOf(ref); !pushed {
+			_ = link.AskWatch(prog, ref)
+		}
+	}
 }
 
 // sweepUmbrellas looks at program g's umbrella tasks (§5.3): each
