@@ -583,7 +583,10 @@ func liveWaits(slug string, sessions []proto.SessionInfo) (queues []project.Held
 
 const inboxUsage = `usage: tm inbox list [--project <slug>] [--json]
        tm inbox read <id> [--project <slug>]
-       tm inbox done <id>... [--project <slug>]`
+       tm inbox done <id>... [--project <slug>]
+
+A director's inbox is its program's; the human names a program with
+--project <program> (programs on).`
 
 func runInbox(e *Env, args []string) error {
 	if len(args) == 0 {
@@ -598,7 +601,7 @@ func runInbox(e *Env, args []string) error {
 	if e.Caller.Kind == caller.Thread {
 		return &project.Error{Code: "coordinator-only", Msg: "the inbox is the coordinator's"}
 	}
-	p, err := e.openProject(*slug)
+	p, err := e.openFolder(*slug)
 	if err != nil {
 		return err
 	}
@@ -647,7 +650,7 @@ func runInbox(e *Env, args []string) error {
 		if len(pos) == 0 {
 			return usagef("%s", inboxUsage)
 		}
-		if err := e.coordinatorOnly(p, "tm inbox done"); err != nil {
+		if err := e.folderWriter(p, "tm inbox done"); err != nil {
 			return err
 		}
 		var failed error

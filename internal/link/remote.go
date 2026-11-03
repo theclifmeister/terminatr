@@ -105,7 +105,7 @@ func (r remote) deliver(s *store, c caller.Caller, from *project.Project, m *Mes
 		}
 	}
 	from.Journal(c, "link.send", m.Peer, fmt.Sprintf("%s (%s, queued)", m.ID, KB(m.Bytes)))
-	s.account(c.IsAgent(), from.Slug, m.Peer, l, now(), side{from, m.Peer})
+	s.account(c.IsAgent(), from.Slug, m.Peer, l, now(), side{&from.Folder, m.Peer})
 	Kick()
 	return nil
 }
@@ -492,7 +492,7 @@ func (s *store) receive(alias, fp string, m proto.PeerMessage) proto.PeerMessage
 	}
 	to.AddMessageItem(KindMessage, key, Summary(Shown(key), in), false, in.ID)
 	to.Journal(caller.ForPeer(alias), "link.receive", key, fmt.Sprintf("%s (%s)", in.ID, KB(in.Bytes)))
-	s.account(m.By == "coordinator", key, to.Slug, l, t, side{to, key})
+	s.account(m.By == "coordinator", key, to.Slug, l, t, side{&to.Folder, key})
 	return proto.PeerMessageResult{Status: proto.PeerDelivered}
 }
 

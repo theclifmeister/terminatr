@@ -116,11 +116,13 @@ func (r Row) Arrow() string {
 }
 
 // Rows are p's links: every project either side's entry names, and any
-// project p has messages with, sorted by slug.
+// project p has messages with (not its program's channel), sorted by
+// slug.
 func Rows(cfg *config.Config, p *project.Project) []Row {
 	peers := cfg.LinkPeers(p.Slug)
 	for _, o := range Peers(p) {
-		if !slices.Contains(peers, o) {
+		// The program channel (program.go) is membership, not a link.
+		if !slices.Contains(peers, o) && programFolder(o) == nil {
 			peers = append(peers, o)
 		}
 	}

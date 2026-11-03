@@ -56,14 +56,14 @@ func (e *Env) memoryChangeRun(sub string, args []string) error {
 		*yes && sub != "rm":
 		return usagef("%s", memoryUsage)
 	}
-	p, err := e.openProject(*slug)
-	if err != nil {
-		return err
-	}
 	if e.Caller.Kind == caller.Thread {
 		return &tasks.Error{Code: "coordinator-only", Msg: "a thread reads memory; put lessons under ## Remember in your report"}
 	}
-	if err := e.coordinatorOnly(p, "tm memory "+sub); err != nil {
+	p, err := e.openFolder(*slug)
+	if err != nil {
+		return err
+	}
+	if err := e.folderWriter(p, "tm memory "+sub); err != nil {
 		return err
 	}
 	var text *string
@@ -100,7 +100,7 @@ func (e *Env) memoryChangeRun(sub string, args []string) error {
 // memoryNew writes a new note: from --file, else on a terminal the
 // template as the human edits it (nothing when they leave it as it
 // was), else the template.
-func (e *Env) memoryNew(p *project.Project, pos []string, text *string) error {
+func (e *Env) memoryNew(p *project.Folder, pos []string, text *string) error {
 	tty := stdinTTY(e) && !e.Caller.IsAgent()
 	name := ""
 	if len(pos) == 1 {
@@ -148,7 +148,7 @@ func (e *Env) memoryNew(p *project.Project, pos []string, text *string) error {
 
 // memoryEdit replaces note arg with --file, or on a terminal opens it
 // in the editor, with the overwrite guard.
-func (e *Env) memoryEdit(p *project.Project, arg string, text *string) error {
+func (e *Env) memoryEdit(p *project.Folder, arg string, text *string) error {
 	rel, err := p.NotePath(arg)
 	if err != nil {
 		return err
@@ -178,7 +178,7 @@ func (e *Env) memoryEdit(p *project.Project, arg string, text *string) error {
 		fmt.Fprintf(e.Stdout, "%s unchanged\n", rel)
 		return nil
 	}
-	changed, err := stamp.Changed(&p.Folder, rel)
+	changed, err := stamp.Changed(p, rel)
 	if err != nil {
 		return err
 	}
@@ -213,7 +213,7 @@ func (e *Env) memoryEdit(p *project.Project, arg string, text *string) error {
 }
 
 // memoryRm removes note arg, after a y on a terminal, else with --yes.
-func (e *Env) memoryRm(p *project.Project, arg string, yes bool) error {
+func (e *Env) memoryRm(p *project.Folder, arg string, yes bool) error {
 	rel, err := p.NotePath(arg)
 	if err != nil {
 		return err

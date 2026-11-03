@@ -184,3 +184,25 @@ func TestDirectorContext(t *testing.T) {
 		t.Errorf("off: %s", b)
 	}
 }
+
+// TestDirectorSessionActs: the programs design §10's session rows: a
+// director prompts no session, approves no dialog and answers no
+// thread's question menu, in its children or anywhere, whatever socket
+// it reaches.
+func TestDirectorSessionActs(t *testing.T) {
+	dir := caller.Caller{Kind: caller.Director, Project: "acme", Session: "s-9"}
+	who := func() caller.Caller { return dir }
+	for _, m := range []string{proto.MethodSessionPrompt, proto.MethodSessionApprove} {
+		for _, human := range []bool{false, true} {
+			if perr := mayCall(m, methods[m].gate, human, who); perr == nil {
+				t.Errorf("%s (human socket %v) let a director through", m, human)
+			}
+		}
+	}
+	child := proto.SessionInfo{ID: "s-2", Role: proto.RoleThread, Project: "demo"}
+	for _, human := range []bool{false, true} {
+		if perr := (&Server{}).mayAnswer(child, dir, human); perr == nil || perr.Code != "human-only" {
+			t.Errorf("session.answer (human socket %v): %v", human, perr)
+		}
+	}
+}

@@ -16,6 +16,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/codehost"
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/features"
 	"github.com/theclifmeister/terminatr/internal/home"
 	"github.com/theclifmeister/terminatr/internal/mdfile"
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
@@ -243,7 +244,15 @@ func legacyRepos(data []byte) []string {
 // Tasks returns the task store for this project, journaling into it and
 // raising confirmations in its inbox.
 func (p *Project) Tasks() *tasks.Store {
-	return &tasks.Store{Dir: p.Dir, Slug: p.Slug, Now: func() time.Time { return now() }, Events: events{&p.Folder}, Repos: p.Repos}
+	return &tasks.Store{Dir: p.Dir, Slug: p.Slug, Now: func() time.Time { return now() }, Events: events{&p.Folder}, Repos: p.Repos, Directs: p.DirectedBy}
+}
+
+// DirectedBy reports whether program directs this project (the
+// programs design §5.2, tasks.Store.Directs): programs on, the project
+// a member of program in config.toml, and the program not left out.
+func (p *Project) DirectedBy(program string) bool {
+	cfg, _ := config.Load() // a safety error still gives the tables
+	return features.Programs(cfg) && program != "" && cfg.ProgramOf(p.Slug) == program && !ProgramLeftOut(program)
 }
 
 // Options for New.

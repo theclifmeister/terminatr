@@ -111,7 +111,7 @@ func Open(slug string, cfg *config.Config) (*Program, error) {
 // Tasks is the program's board: umbrella and sweep tasks only (§5.3),
 // journaled into the program's journal. It has no repos.
 func (p *Program) Tasks() *tasks.Store {
-	return &tasks.Store{Dir: p.Dir, Slug: p.Slug, LinkSlug: p.LinkSlug(), Now: func() time.Time { return now() }, Events: events{&p.Folder}}
+	return &tasks.Store{Dir: p.Dir, Slug: p.Slug, LinkSlug: p.LinkSlug(), Now: func() time.Time { return now() }, Events: events{&p.Folder}, Program: true}
 }
 
 type events struct{ f *project.Folder }

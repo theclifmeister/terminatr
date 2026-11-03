@@ -41,6 +41,14 @@ type Store struct {
 	Now      func() time.Time // nil means time.Now
 	Events   Events           // nil means no journal
 	Repos    []string         // the project's repos, which a task's repo names (checkRepo)
+	// Directs, when set, reports whether program's director may make
+	// program writes here (opProgram, the programs design §5.2): this
+	// project is a member of program and programs are on. The store
+	// reads no config: the caller injects it. Nil: no director writes.
+	Directs func(program string) bool
+	// Program marks a program's own board (umbrella tasks, §5.3): its
+	// director writes it as a coordinator writes its project's.
+	Program bool
 }
 
 // linkSlug is what the links in TASKS.md lead with (LinkSlug, else Slug).
@@ -127,12 +135,19 @@ type op int
 const (
 	opWrite   op = iota // coordinator or human
 	opOwnStep           // also the thread that runs the task
+	// opProgram is a program write (§5.2): also the director of a
+	// program this project is a member of (Store.Directs), for the
+	// fields ProgramAdd and ProgramEdit take.
+	opProgram
 )
 
 // allow applies the caller rules. t may be nil for adds.
 func (s *Store) allow(c caller.Caller, t *Task, o op) error {
 	if !c.IsAgent() {
 		return nil
+	}
+	if c.Kind == caller.Director {
+		return s.allowDirector(c, o)
 	}
 	if c.Project != "" && s.Slug != "" && c.Project != s.Slug {
 		return refuse("other-project", fmt.Sprintf("agents of project %s can't change project %s", c.Project, s.Slug))
@@ -231,7 +246,11 @@ type AddResult struct {
 // is reported as existing instead, so a retried add is harmless. Valid
 // items are saved even when others fail.
 func (s *Store) Add(c caller.Caller, items []NewTask) ([]AddResult, error) {
-	if err := s.allow(c, nil, opWrite); err != nil {
+	return s.add(c, items, opWrite)
+}
+
+func (s *Store) add(c caller.Caller, items []NewTask, o op) ([]AddResult, error) {
+	if err := s.allow(c, nil, o); err != nil {
 		return nil, err
 	}
 	archive, err := s.LoadArchive()
@@ -344,6 +363,9 @@ func (s *Store) SetApproved(c caller.Caller, id int, st Status, note string) (Re
 	if !st.Closed() {
 		return Result{}, refuse("invalid-status", "only done and dropped take the user's word")
 	}
+	if c.Kind == caller.Director {
+		return Result{}, refuse("human-only", "only the user accepts or drops work, in the project's own console or the program's needs dialog")
+	}
 	if c.IsAgent() && c.Kind != caller.Coordinator {
 		return Result{}, refuse("coordinator-only", "threads report through tm done; the coordinator moves the task")
 	}
@@ -398,6 +420,9 @@ func (s *Store) setStatus(c caller.Caller, id int, st Status, note, approved str
 // refuseClosed answers an agent's plain request to set done or dropped:
 // refused, or already true.
 func (s *Store) refuseClosed(c caller.Caller, id int, st Status) (Result, error) {
+	if c.Kind == caller.Director {
+		return Result{}, refuse("human-only", "only the user accepts or drops work; tell them which key does it")
+	}
 	if c.Kind != caller.Coordinator {
 		return Result{}, refuse("coordinator-only", "threads report through tm done; the coordinator moves the task")
 	}

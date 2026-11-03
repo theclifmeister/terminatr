@@ -29,6 +29,9 @@ type Folder struct {
 	Kind Kind
 }
 
+// Name is the folder's slug: a project's, or a program's.
+func (p *Folder) Name() string { return p.Slug }
+
 // IsProgram reports whether the folder is a program's.
 func (p *Folder) IsProgram() bool { return p.Kind == KindProgram }
 
