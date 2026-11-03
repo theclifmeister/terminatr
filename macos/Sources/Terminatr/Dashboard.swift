@@ -314,6 +314,8 @@ struct CoordinatorRow: View {
                 }
                 Button("Open") { app.select(.session(ref)) }
                     .help("Show the coordinator")
+            } else if app.sleep(of: project.slug) != .awake {
+                WakeButton(project: project.slug, title: "Wake")
             } else {
                 StartButton(project: project)
             }

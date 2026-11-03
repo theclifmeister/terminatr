@@ -301,7 +301,7 @@ struct ProgramMemberCard: View {
             if let p = model.project(m.project) {
                 let route = Route.project(p.slug)
                 PlainRouteLink(value: route) {
-                    ProjectCard(name: p.slug, coordinator: .of(coordinator: model.coordinatorSession(p.slug), in: p),
+                    ProjectCard(name: p.slug, coordinator: model.coordinator(of: p),
                                 needs: Need.count(model.needs, project: p.slug),
                                 threads: p.active ? SidebarTree.threads(of: p) { model.session($0) }.map { model.attention($0).tone } : [],
                                 pinned: p.pinned, dim: !p.active, selected: navigate.opens(route, on: model),

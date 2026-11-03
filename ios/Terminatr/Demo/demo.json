@@ -2705,7 +2705,14 @@
      "title": ""
     }
    ],
-   "context_hint": 60
+   "context_hint": 60,
+   "asleep": [
+    {
+     "project": "billing-api",
+     "id": "s-c2",
+     "since": "2026-10-27T06:00:00Z"
+    }
+   ]
   },
   "task.done": {
    "tasks": []
@@ -2762,7 +2769,7 @@
   }
  },
  "hello": {
-  "app_api": 46,
+  "app_api": 47,
   "build": "demo",
   "capabilities": [
    "read",
@@ -3183,7 +3190,7 @@
         "title": "Rotate the Stripe webhook secret"
        }
       ],
-      "questions": 1,
+      "questions": 0,
       "repos": [
        "~/src/billing-api"
       ],

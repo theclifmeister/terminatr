@@ -6,7 +6,7 @@ import Foundation
 /// The terminatr app API (docs/SPEC.md §3.8): what tm app bridge answers.
 public enum AppAPI {
     /// The app API version this app was generated against.
-    public static let version = 46
+    public static let version = 47
 
     public struct AdoptRequestParams: Codable, Sendable, Hashable {
         public var id: String
@@ -173,6 +173,24 @@ public enum AppAPI {
             case scopes
             case escape
             case sent
+        }
+    }
+
+    public struct Asleep: Codable, Sendable, Hashable, Identifiable {
+        public var project: String
+        public var id: String
+        public var since: Date
+
+        public init(project: String, id: String, since: Date) {
+            self.project = project
+            self.id = id
+            self.since = since
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case project
+            case id
+            case since
         }
     }
 
@@ -3528,8 +3546,9 @@ public enum AppAPI {
         public var upgrade: String
         public var needsFirst: Bool
         public var contextHint: Int
+        public var asleep: [Asleep]
 
-        public init(sessions: [Session] = [], alerts: Int, notices: [Notice] = [], version: String = "", build: String = "", latest: String = "", upgrade: String = "", needsFirst: Bool = false, contextHint: Int = 0) {
+        public init(sessions: [Session] = [], alerts: Int, notices: [Notice] = [], version: String = "", build: String = "", latest: String = "", upgrade: String = "", needsFirst: Bool = false, contextHint: Int = 0, asleep: [Asleep] = []) {
             self.sessions = sessions
             self.alerts = alerts
             self.notices = notices
@@ -3539,6 +3558,7 @@ public enum AppAPI {
             self.upgrade = upgrade
             self.needsFirst = needsFirst
             self.contextHint = contextHint
+            self.asleep = asleep
         }
 
         enum CodingKeys: String, CodingKey {
@@ -3551,6 +3571,7 @@ public enum AppAPI {
             case upgrade
             case needsFirst = "needs_first"
             case contextHint = "context_hint"
+            case asleep
         }
     }
 
@@ -4613,6 +4634,15 @@ extension AppAPI.ApproveResult {
         self.scopes = try c.decodeIfPresent([String].self, forKey: .scopes) ?? []
         self.escape = try c.decodeIfPresent(Bool.self, forKey: .escape) ?? false
         self.sent = try c.decodeIfPresent(Bool.self, forKey: .sent) ?? false
+    }
+}
+
+extension AppAPI.Asleep {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.project = try c.decode(String.self, forKey: .project)
+        self.id = try c.decode(String.self, forKey: .id)
+        self.since = try c.decode(Date.self, forKey: .since)
     }
 }
 
@@ -6169,6 +6199,7 @@ extension AppAPI.SessionList {
         self.upgrade = try c.decodeIfPresent(String.self, forKey: .upgrade) ?? ""
         self.needsFirst = try c.decodeIfPresent(Bool.self, forKey: .needsFirst) ?? false
         self.contextHint = try c.decodeIfPresent(Int.self, forKey: .contextHint) ?? 0
+        self.asleep = try c.decodeIfPresent([AppAPI.Asleep].self, forKey: .asleep) ?? []
     }
 }
 

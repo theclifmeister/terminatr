@@ -195,9 +195,16 @@ extension Attention {
     /// What a project's coordinator says of itself, its project's dot
     /// and its row's: with s its session as session.list has it (nil
     /// when none runs). Its open questions (tm ask) wait even while none
-    /// runs.
-    public static func of(coordinator s: AppAPI.Session?, in p: AppAPI.Project, now: Date = Date()) -> Attention {
-        of(lead: s, questions: p.questions, none: "no coordinator runs", now: now)
+    /// runs. One that sleeps (sleep, app API 47) says so, as the TUI's
+    /// row: "asleep", its conversation kept; while it wakes, "waking".
+    public static func of(coordinator s: AppAPI.Session?, in p: AppAPI.Project, sleep: Sleep = .awake, now: Date = Date()) -> Attention {
+        let a = of(lead: s, questions: p.questions, none: "no coordinator runs", now: now)
+        guard s == nil, !a.waits else { return a }
+        switch sleep {
+        case .awake: return a
+        case .asleep: return Attention(word: "asleep", tone: .asleep, why: Sleep.words, waits: false)
+        case .waking: return Attention(word: "waking", tone: .working, why: Sleep.wakingWords, waits: false)
+        }
     }
 
     /// What a program's director says of itself, as a coordinator: with

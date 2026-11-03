@@ -284,3 +284,50 @@ private extension Array where Element == String {
     p.name = "Work laptop"
     #expect(PeerTag.label(p).hasPrefix("Work laptop, "))
 }
+
+// A sleeping coordinator (T980, app API 47): the apps show it as the
+/// TUI's sidebar does and opening it wakes it.
+@Test func sleepingCoordinatorAttention() {
+    let p = project("p")
+    // Asleep: its own glyph and the TUI's words, waiting on no one.
+    let asleep = Attention.of(coordinator: nil, in: p, sleep: .asleep)
+    #expect(asleep.word == "asleep" && asleep.tone == .asleep && !asleep.waits)
+    #expect(asleep.why == "asleep · its conversation kept: opening wakes it")
+    #expect(asleep.spoken == "asleep")
+    // While project.open wakes it: working, so it spins.
+    let waking = Attention.of(coordinator: nil, in: p, sleep: .waking)
+    #expect(waking.word == "waking" && waking.tone == .working && !waking.waits)
+    // Its open questions still come first.
+    #expect(Attention.of(coordinator: nil, in: project("p", questions: 1), sleep: .asleep).word == "asks")
+    // A running one is never asleep.
+    #expect(Attention.of(coordinator: coordinator(), in: p, sleep: .asleep).tone == .working)
+    // No coordinator asleep: as before.
+    #expect(Attention.of(coordinator: nil, in: p, sleep: .awake) == Attention.of(coordinator: nil, in: p))
+    #expect(Attention.Tone.asleep.spoken == "asleep" && Attention.Tone.asleep.counted(2) == "2 asleep")
+}
+
+@Test func sleepState() {
+    let asleep: Set<String> = ["a", "b"]
+    #expect(Sleep.of("a", running: false, asleep: asleep, waking: []) == .asleep)
+    #expect(Sleep.of("a", running: false, asleep: asleep, waking: ["a"]) == .waking)
+    // Running wins over a stale list; a project not named is awake.
+    #expect(Sleep.of("a", running: true, asleep: asleep, waking: ["a"]) == .awake)
+    #expect(Sleep.of("c", running: false, asleep: asleep, waking: []) == .awake)
+    // Waking ends once session.list has its coordinator, this server's.
+    let s = AppAPI.Session(id: "s1", role: "coordinator", project: "a", cols: 80, rows: 24, created: t0, clients: 0)
+    var peer = s
+    peer.project = "b"
+    peer.server = "studio"
+    #expect(Sleep.settle(["a", "b"], sessions: [s, peer]) == ["b"])
+}
+
+@Test func sessionListCarriesAsleep() throws {
+    let json = #"{"sessions":[],"alerts":0,"notices":[],"asleep":[{"project":"billing","id":"s-9","since":"2026-11-03T08:00:00Z"}]}"#
+    let d = AppAPI.decoder()
+    let l = try d.decode(AppAPI.SessionList.self, from: Data(json.utf8))
+    #expect(Sleep.projects(l) == ["billing"])
+    #expect(l.asleep.first?.id == "s-9")
+    // An older tm sends none: no coordinator sleeps.
+    let old = try d.decode(AppAPI.SessionList.self, from: Data(#"{"sessions":[],"alerts":0,"notices":[]}"#.utf8))
+    #expect(Sleep.projects(old).isEmpty)
+}

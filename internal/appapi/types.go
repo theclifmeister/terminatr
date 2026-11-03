@@ -208,7 +208,9 @@ type Empty struct{}
 // context_hint (app API 13; absent for never): the percent of its
 // context window from which a coordinator's sidebar row warns and offers
 // its save and clear. They are the only settings of the config the app
-// API has, read only.
+// API has, read only. Asleep (app API 47) are the coordinators the
+// server put to sleep after a long idle, their conversation kept:
+// project.open wakes one.
 type SessionList struct {
 	Sessions    []Session `json:"sessions"`
 	Alerts      uint64    `json:"alerts"`
@@ -219,6 +221,15 @@ type SessionList struct {
 	Upgrade     string    `json:"upgrade,omitempty"`
 	NeedsFirst  bool      `json:"needs_first,omitempty"`
 	ContextHint int       `json:"context_hint,omitempty"`
+	Asleep      []Asleep  `json:"asleep,omitempty"`
+}
+
+// Asleep is a sleeping coordinator: its project, the session id it
+// resumes under and since when it sleeps.
+type Asleep struct {
+	Project string    `json:"project"`
+	ID      string    `json:"id"`
+	Since   time.Time `json:"since"`
 }
 
 // Session is one session: its role and place, its agent's state, its
@@ -820,6 +831,9 @@ func sessionListOf(r proto.SessionListResult) SessionList {
 	}
 	for _, n := range r.ModNotices {
 		out.Notices = append(out.Notices, noticeOf(n))
+	}
+	for _, a := range r.Asleep {
+		out.Asleep = append(out.Asleep, Asleep{Project: a.Project, ID: a.ID, Since: a.Since})
 	}
 	return out
 }

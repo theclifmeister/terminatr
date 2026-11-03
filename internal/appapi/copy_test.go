@@ -223,9 +223,6 @@ func TestCopies(t *testing.T) {
 		".Sessions[].AgentSID", ".Sessions[].Identified",
 		// The settings' side of remote control and the model.
 		".Sessions[].RemoteHeld", ".Sessions[].ModelNext", ".Sessions[].ModelPending",
-		// The sleeping coordinators: the TUI's sidebar for now; the apps
-		// get them with their own sidebar's asleep state (T979 follow-up).
-		".Asleep",
 	})
 	check("session.watch", homeOf(watchOf), nil)
 	check("projects.watch", homeOf(projectsOf), append(settingsHome(".Projects[].Safety"),
