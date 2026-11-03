@@ -49,6 +49,13 @@ type Store struct {
 	// Program marks a program's own board (umbrella tasks, §5.3): its
 	// director writes it as a coordinator writes its project's.
 	Program bool
+	// CrossRefs, when set, lets SetPlan write refs to other projects'
+	// tasks (AfterX, the programs design §6.1): it checks each one (a
+	// member of this project's program, a task that exists) and says
+	// why not. The caller sets it only while programs are on and the
+	// project is in a program. Nil: SetPlan writes this board's refs
+	// only and keeps AfterX.
+	CrossRefs func(refs []string) error
 }
 
 // linkSlug is what the links in TASKS.md lead with (LinkSlug, else Slug).
@@ -513,19 +520,31 @@ func (s *Store) SetPriority(c caller.Caller, id int, priority string) (Result, e
 
 // SetPlan sets the design a task builds and the tasks it comes after
 // (refs as "T12", split by commas or spaces); nil leaves one alone, and
-// "" or an empty list clears it. It writes this board's refs only, and
-// keeps the refs to other projects' tasks (AfterX) as they are.
+// "" or an empty list clears it. Without CrossRefs it writes this
+// board's refs only, and keeps the refs to other projects' tasks
+// (AfterX) as they are; with it, after is the whole list, this board's
+// refs and other projects' ("acme-api/T12"), and replaces both.
 func (s *Store) SetPlan(c caller.Caller, id int, design *string, after []string) (Result, error) {
 	var d string
 	var a []int
+	var x []string
 	var err error
 	if design != nil {
 		if d, err = checkDesign(*design); err != nil {
 			return Result{}, err
 		}
 	}
+	cross := after != nil && s.CrossRefs != nil
 	if after != nil {
-		if a, err = checkAfter(id, after); err != nil {
+		if cross {
+			a, x, err = s.readProgramAfter(id, after)
+			if err == nil && len(x) > 0 {
+				err = s.CrossRefs(x)
+			}
+		} else {
+			a, err = checkAfter(id, after)
+		}
+		if err != nil {
 			return Result{}, err
 		}
 	}
@@ -536,6 +555,9 @@ func (s *Store) SetPlan(c caller.Caller, id int, design *string, after []string)
 		}
 		if after != nil && !slices.Equal(t.After, a) {
 			t.After, changed = a, true
+		}
+		if cross && !slices.Equal(t.AfterX, x) {
+			t.AfterX, changed = x, true
 		}
 		return changed, nil
 	})

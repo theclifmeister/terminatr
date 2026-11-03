@@ -269,3 +269,51 @@ func TestProgramNeedsCLI(t *testing.T) {
 	writeTestConfig(t, h, "[programs.acme]\nprojects = [\"demo\", \"web\"]\n")
 	h.expect(1, "programs-off", directorAcme, "program", "needs")
 }
+
+// TestTaskEditCrossAfter (the programs design §6.1): while programs are
+// on, a member's coordinator writes refs to its program's tasks with tm
+// task edit --after, which then replaces the whole list; a non-member's
+// ref, or one from a project in no program, is refused; off,
+// programs-off.
+func TestTaskEditCrossAfter(t *testing.T) {
+	h, _ := programHarness(t)
+	coordWeb := caller.Caller{Kind: caller.Coordinator, Project: "web"}
+	h.ok(human, "task", "add", "OIDC", "--project", "demo")
+	h.ok(human, "task", "add", "Old", "--project", "demo")
+	h.ok(human, "task", "add", "Lone", "--project", "loner")
+	h.ok(human, "task", "add", "Prep", "--project", "web")
+	h.ok(human, "task", "add", "Login button", "--project", "web")
+	h.env[caller.EnvProject] = "web"
+	after := func() string {
+		t.Helper()
+		data, err := os.ReadFile(filepath.Join(h.root, "projects", "web", "TASKS.md"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, rest, _ := strings.Cut(string(data), "### T2 Login button\n")
+		line, _, _ := strings.Cut(rest, "\n")
+		_, a, _ := strings.Cut(line, "after: ")
+		a, _, _ = strings.Cut(a, " · ")
+		return a
+	}
+	h.ok(coordWeb, "task", "edit", "T2", "--after", "T1, demo/T1")
+	if a := after(); a != "T1, demo/T1" {
+		t.Fatalf("after %q", a)
+	}
+	h.expect(1, "not-member", coordWeb, "task", "edit", "T2", "--after", "loner/T1")
+	h.expect(1, "invalid-after", coordWeb, "task", "edit", "T2", "--after", "demo/T9")
+	h.ok(coordWeb, "task", "edit", "T2", "--after", "demo/T2")
+	if a := after(); a != "demo/T2" {
+		t.Fatalf("not replaced: %q", a)
+	}
+	h.env[caller.EnvProject] = "loner"
+	h.expect(1, "not-member", caller.Caller{Kind: caller.Coordinator, Project: "loner"}, "task", "edit", "T1", "--after", "demo/T1")
+	writeTestConfig(t, h, "[programs.acme]\nprojects = [\"demo\", \"web\"]\n")
+	h.env[caller.EnvProject] = "web"
+	h.expect(1, "programs-off", coordWeb, "task", "edit", "T2", "--after", "demo/T1")
+	// Off, a local plan edit keeps the cross ref.
+	h.ok(coordWeb, "task", "edit", "T2", "--after", "T1")
+	if a := after(); a != "T1, demo/T2" {
+		t.Fatalf("off: %q", a)
+	}
+}

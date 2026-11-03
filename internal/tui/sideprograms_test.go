@@ -9,8 +9,10 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/models/modelstest"
+	"github.com/theclifmeister/terminatr/internal/program"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/server"
+	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/thread"
 	"github.com/theclifmeister/terminatr/internal/view"
 )
@@ -229,5 +231,30 @@ func TestProgramDirectorParity(t *testing.T) {
 	drain(t, m, m.prefixCommand("C"))
 	if !slices.Equal(src.saveCleared, []string{"director:acme"}) || !strings.Contains(m.msg, "asked acme's director to save") {
 		t.Fatalf("prefix+C: %v %q", src.saveCleared, m.msg)
+	}
+}
+
+// TestAfterText (the programs design §6.3): a member's task shows the
+// refs to other projects' tasks with their state; a project in no
+// program shows its refs plain.
+func TestAfterText(t *testing.T) {
+	data := Data{
+		Projects: []ProjectData{{Slug: "web", Program: "acme"}, {Slug: "zoo"}},
+		Programs: []ProgramData{{SideProgram: server.SideProgram{Slug: "acme", Projects: []string{"web", "api"}},
+			Deps: map[string]program.Dep{"api/T12": {State: program.DepOpen, Status: "review"}}}},
+	}
+	m := newDash(DashOptions{Source: &fakeSource{data: data}, Width: 120 + sideDefault, Height: 40})
+	m.setData(data)
+	tk := &tasks.Task{ID: 40, Title: "Login", Status: tasks.Ready, After: []int{10}, AfterX: []string{"api/T12", "ios/T7"}}
+	if got := m.afterText("web", tk); got != "T10, api/T12 (review), ios/T7" {
+		t.Errorf("member: %q", got)
+	}
+	if got := m.afterText("zoo", tk); got != "T10, api/T12, ios/T7" {
+		t.Errorf("standalone: %q", got)
+	}
+	d := &panel{w: 60}
+	taskPanelWith(d, tk, nil, m.afterText("web", tk), "", thread.Usage{}, nil)
+	if out := ansi.Strip(strings.Join(d.lines, "\n")); !strings.Contains(out, "api/T12 (review)") {
+		t.Errorf("panel:\n%s", out)
 	}
 }
