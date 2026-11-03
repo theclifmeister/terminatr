@@ -20,7 +20,11 @@ import (
 // calls run (m.Run, or whatever wraps it) and removes the dir. Tests
 // that care still set their own with t.Setenv. It first moves the temp
 // folder out of the threads' (OutOfThreadTemps).
+//
+// On Unix it also sets the umask to 022, as on Linux CI, whatever the
+// developer's is (CIUmask).
 func Run(run func() int) int {
+	CIUmask()
 	restore, err := OutOfThreadTemps()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -95,4 +99,17 @@ func RemoveThreadTemps(dir string) {
 			os.RemoveAll(tmp)
 		}
 	}
+}
+
+// PrivateDir is a fresh folder of mode 0700 (fsx.EnsurePrivateDir) for a
+// test to hand to one of tm's private stores, which refuse a folder open
+// to group or others. Use it rather than a bare t.TempDir(): that is 0755
+// under umask 022, as on Linux CI (and under Run's CIUmask).
+func PrivateDir(t testing.TB) string {
+	t.Helper()
+	dir := filepath.Join(t.TempDir(), "private")
+	if err := fsx.EnsurePrivateDir(dir); err != nil {
+		t.Fatal(err)
+	}
+	return dir
 }
