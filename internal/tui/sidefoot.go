@@ -28,6 +28,7 @@ func sideFooter(all []treeRow, w int, head sideHeadIn, s ServerInfo, session, co
 	focused := false
 	if head.cursor || head.here {
 		hr := headRow(head.here)
+		hr.newProg = head.programs
 		r, focused = &hr, head.cursor
 	}
 	for i := range all {
@@ -200,6 +201,9 @@ func sideKeyBar(r *treeRow, focused, session bool, cw int) string {
 	case r == nil:
 	case r.kind == treeHead:
 		keys = []string{enter + " show all"}
+		if r.newProg {
+			keys = append(keys, barKey("side.pin", "P")+" new program")
+		}
 	case r.kind == treeSection:
 		keys = sectionKeys(r.sec)
 	case r.kind == treeServer, r.isPeer():

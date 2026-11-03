@@ -102,7 +102,7 @@ func (m *dash) fullTree() []treeRow {
 func (m *dash) sideHeadIn() sideHeadIn {
 	_, _, remote := m.remote()
 	return sideHeadIn{needs: m.needsCount(), cursor: m.focus == areaSide && m.sideSel == headKey,
-		here: m.over == nil && !remote && m.allShown()}
+		here: m.over == nil && !remote && m.allShown(), programs: m.data.ProgramsOn}
 }
 
 // band is what the sidebar's band of mod sections is built from.
@@ -137,6 +137,14 @@ func (m *dash) sectionCmd(st sideStep) tea.Cmd {
 // A move previews the row the cursor rests on (previewSoon); enter or →
 // goes into it, and the keyboard follows.
 func (m *dash) sideKeyboard(key string) (tea.Cmd, bool) {
+	if m.data.ProgramsOn && m.sideSel == headKey {
+		// P on the PROJECTS header, while programs are on: a new program
+		// (the programs design §11.1); pinning is for a project's row.
+		if op, ok := sideOp(key); ok && op == sidePin {
+			m.newProgram()
+			return nil, true
+		}
+	}
 	st, ok := sideKeyFor(m.sideKeysIn(), key)
 	if !ok {
 		return nil, false

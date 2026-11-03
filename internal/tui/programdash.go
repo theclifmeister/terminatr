@@ -604,7 +604,7 @@ func isChildRow(r row) bool { return strings.HasPrefix(r.key, "pc:") }
 // none), and makes it as tm program new does, its clash checks with
 // it (a project, a program or a paired server of that name refuses
 // it); then it shows the program's dashboard and opens its settings,
-// where its members are picked. The PROJECTS header's new item, while
+// where its members are picked. P on the PROJECTS header, while
 // programs are on (the programs design §11.1).
 func (m *dash) newProgram() {
 	m.promptNo("New program", "Its name (a lower-case slug no project or paired server has):", "acme", "no program made", 0, func(slug string) tea.Cmd {
