@@ -19,6 +19,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/features"
+	"github.com/theclifmeister/terminatr/internal/link"
 	"github.com/theclifmeister/terminatr/internal/program"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
@@ -191,10 +192,12 @@ func onOffWord(on bool) string {
 // and the sweep's check may meet.
 var programsMu sync.Mutex
 
-// applyPrograms makes the sessions match the switch: off stops the
-// running directors into dormant records; on resumes the dormant ones,
-// each with the back-on nudge. Held director slots, the paused program
-// outbox and dependency states (later build steps) hang off here too.
+// applyPrograms makes the sessions and the links match the switch: off
+// stops the running directors into dormant records, pauses the program
+// outbox and leaves the link hello cap "program" out; on lists the cap
+// again, lets the outbox go on and resumes the dormant directors, each
+// with the back-on nudge. Held director slots and dependency states
+// (later build steps) hang off here too.
 func (s *Server) applyPrograms(on bool) (stopped, resumed, lost []string) {
 	programsMu.Lock()
 	defer programsMu.Unlock()
@@ -203,9 +206,12 @@ func (s *Server) applyPrograms(on bool) (stopped, resumed, lost []string) {
 
 // applyProgramsLocked is applyPrograms, programsMu held.
 func (s *Server) applyProgramsLocked(on bool) (stopped, resumed, lost []string) {
+	link.SetPrograms(on)
+	s.peers.SetPrograms(on)
 	if !on {
 		return s.sleepDirectors(), nil, nil
 	}
+	link.Kick() // what waited goes now, or shows as expired
 	resumed, lost = s.wakeDirectors()
 	return nil, resumed, lost
 }
@@ -217,7 +223,7 @@ func (s *Server) applyProgramsLocked(on bool) (stopped, resumed, lost []string) 
 func (s *Server) checkPrograms() {
 	on := programsNow()
 	s.mu.Lock()
-	differs := false
+	differs := link.ProgramsOn() != on || s.peers != nil && s.peers.Programs() != on
 	for id, sess := range s.sessions {
 		if r := s.records[id]; r.Role == proto.RoleDirector && !on && sess.ExitStatus() == "" && !s.sleeping[id] {
 			differs = true

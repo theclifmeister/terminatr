@@ -51,6 +51,8 @@ var RefusalWords = map[string]string{
 	"too-long":     "{to}'s server takes shorter messages: split it into parts",
 	"expired":      "{to}'s server didn't take it within 72 hours",
 	"refused":      "{to}'s server refused it",
+	// A program kind's (program.go).
+	config.ProgramsOff: "{to}'s server has programs off",
 }
 
 // remote is a project on a paired server: its alias and slug, and this
@@ -110,7 +112,8 @@ func (r remote) deliver(s *store, c caller.Caller, from *project.Project, m *Mes
 	return nil
 }
 
-// entry is one outbox file: state/link/outbox/<alias>/<seq>.json.
+// entry is one outbox file: state/link/outbox/<alias>/<seq>.json, or
+// <alias>/program/<seq>.json for a program kind (program.go).
 type entry struct {
 	Queued time.Time         `json:"queued"`
 	Msg    proto.PeerMessage `json:"msg"`
@@ -124,8 +127,8 @@ func outboxDir() (string, error) {
 	return filepath.Join(d, "state", "link", "outbox"), nil
 }
 
-// queue numbers m in alias's sequence and writes it to the outbox; the
-// store is locked.
+// queue numbers m in alias's sequence (its program sequence for a
+// program kind) and writes it to the outbox; the store is locked.
 func (s *store) queue(alias string, m proto.PeerMessage) error {
 	root, err := outboxDir()
 	if err != nil {
@@ -136,9 +139,10 @@ func (s *store) queue(alias string, m proto.PeerMessage) error {
 		rand.Read(b)
 		s.Epoch = hex.EncodeToString(b)
 	}
-	s.Out[alias]++
-	m.Epoch, m.Seq = s.Epoch, s.Out[alias]
-	d := filepath.Join(root, alias)
+	key := streamKey(alias, m.Kind)
+	s.Out[key]++
+	m.Epoch, m.Seq = s.Epoch, s.Out[key]
+	d := streamDir(root, alias, m.Kind)
 	if err := fsx.EnsurePrivateDir(d); err != nil {
 		return err
 	}
@@ -231,7 +235,9 @@ func holdOff(alias string, secs int) {
 // Flush sends what waits over the rate (Drain), expires the outbox's old
 // entries, answers the offers a link's files setting no longer leaves to
 // the user (a hand edit of the config, too), then delivers each ready peer's in sequence order, stopping
-// at a peer's first entry that isn't taken now.
+// at a peer's first entry that isn't taken now. A peer's program stream
+// goes the same way, on its own, while programs are on (program.go);
+// off, it is left as it is.
 func Flush(ctx context.Context, t Transport) {
 	Drain()
 	ExpireRequests()
@@ -248,61 +254,77 @@ func Flush(ctx context.Context, t Transport) {
 			continue
 		}
 		alias := pd.Name()
-		files, _ := os.ReadDir(filepath.Join(root, alias))
-		names := []string{}
-		for _, f := range files {
-			if strings.HasSuffix(f.Name(), ".json") && !f.IsDir() {
-				names = append(names, f.Name())
-			}
-		}
-		sort.Strings(names)
 		ready := t != nil && t.Ready(alias) && !holding(alias)
-		for _, name := range names {
-			file := filepath.Join(root, alias, name)
-			var e entry
-			b, err := os.ReadFile(file)
-			if err != nil || json.Unmarshal(b, &e) != nil {
-				os.Remove(file)
-				continue
-			}
-			if now().Sub(e.Queued) > Expiry {
-				os.Remove(file)
-				undelivered(alias, e.Msg, "expired")
-				requestUndelivered(alias, e.Msg, "expired")
-				shareUndelivered(alias, e.Msg, "expired")
-				fileUnsent(alias, e.Msg, "expired")
-				continue
-			}
-			if !ready || ctx.Err() != nil {
-				continue
-			}
-			var res proto.PeerMessageResult
-			cctx, cancel := context.WithTimeout(ctx, callTimeout)
-			err = t.Call(cctx, alias, proto.MethodPeerMessage, e.Msg, &res)
-			cancel()
-			switch {
-			case err != nil, res.Status == proto.PeerRetry:
-				ready = false // the rest wait, in order; expiry still runs
-				if err == nil {
-					holdOff(alias, res.RetryAfter)
-				}
-			case res.Status == proto.PeerDelivered, res.Status == proto.PeerDuplicate:
-				os.Remove(file)
-				delivered(alias, e.Msg)
-				requestDelivered(alias, e.Msg)
-				shareDelivered(alias, e.Msg)
-				fileSent(alias, e.Msg)
-			case res.Status == proto.PeerRefused:
-				os.Remove(file)
-				undelivered(alias, e.Msg, res.Code)
-				requestUndelivered(alias, e.Msg, res.Code)
-				shareUndelivered(alias, e.Msg, res.Code)
-				fileUnsent(alias, e.Msg, res.Code)
-			default:
-				ready = false
-			}
+		flushStream(ctx, t, alias, filepath.Join(root, alias), ready)
+		if ProgramsOn() {
+			flushStream(ctx, t, alias, filepath.Join(root, alias, programStream), ready && programReady(t, alias))
 		}
 	}
+}
+
+// flushStream expires and, when ready, delivers the entries in dir, one
+// stream to the paired server alias, in sequence order.
+func flushStream(ctx context.Context, t Transport, alias, dir string, ready bool) {
+	files, _ := os.ReadDir(dir)
+	names := []string{}
+	for _, f := range files {
+		if strings.HasSuffix(f.Name(), ".json") && !f.IsDir() {
+			names = append(names, f.Name())
+		}
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		file := filepath.Join(dir, name)
+		var e entry
+		b, err := os.ReadFile(file)
+		if err != nil || json.Unmarshal(b, &e) != nil {
+			os.Remove(file)
+			continue
+		}
+		if now().Sub(e.Queued) > Expiry {
+			os.Remove(file)
+			settled(alias, e.Msg, "expired")
+			continue
+		}
+		if !ready || ctx.Err() != nil {
+			continue
+		}
+		var res proto.PeerMessageResult
+		cctx, cancel := context.WithTimeout(ctx, callTimeout)
+		err = t.Call(cctx, alias, proto.MethodPeerMessage, e.Msg, &res)
+		cancel()
+		switch {
+		case err != nil, res.Status == proto.PeerRetry:
+			ready = false // the rest wait, in order; expiry still runs
+			if err == nil {
+				holdOff(alias, res.RetryAfter)
+			}
+		case res.Status == proto.PeerDelivered, res.Status == proto.PeerDuplicate:
+			os.Remove(file)
+			settled(alias, e.Msg, "")
+		case res.Status == proto.PeerRefused:
+			os.Remove(file)
+			settled(alias, e.Msg, res.Code)
+		default:
+			ready = false
+		}
+	}
+}
+
+// settled tells the sending side what became of outbox entry m to
+// alias: delivered for code "", else undelivered for code.
+func settled(alias string, m proto.PeerMessage, code string) {
+	if code == "" {
+		delivered(alias, m)
+		requestDelivered(alias, m)
+		shareDelivered(alias, m)
+		fileSent(alias, m)
+		return
+	}
+	undelivered(alias, m, code)
+	requestUndelivered(alias, m, code)
+	shareUndelivered(alias, m, code)
+	fileUnsent(alias, m, code)
 }
 
 // sender finds the sending project's copy of an outgoing message m to
@@ -371,6 +393,11 @@ const clockSkew = 5 * time.Minute
 // reason, a project that doesn't take the message answers not-linked,
 // so the answer tells nothing of the projects here.
 func Receive(alias string, id peer.ID, m proto.PeerMessage) proto.PeerMessageResult {
+	if proto.IsProgramKind(m.Kind) && !ProgramsOn() {
+		// Whatever it says: this server takes no program message while
+		// its programs are off (program.go).
+		return proto.PeerMessageResult{Status: proto.PeerRefused, Code: config.ProgramsOff}
+	}
 	res := proto.PeerMessageResult{Status: proto.PeerRefused, Code: "bad-message"}
 	idOK := ValidID(m.ID)
 	// A share request is the server's: no project on either side.
@@ -388,8 +415,9 @@ func Receive(alias string, id peer.ID, m proto.PeerMessage) proto.PeerMessageRes
 	if m.Epoch == "" || m.Seq < 1 || !slugsOK || !idOK {
 		return res
 	}
+	key := streamKey(alias, m.Kind)
 	err := withStore(func(s *store) error {
-		if in := s.In[alias]; in != nil && in.Epoch == m.Epoch && m.Seq <= in.Seq {
+		if in := s.In[key]; in != nil && in.Epoch == m.Epoch && m.Seq <= in.Seq {
 			res = proto.PeerMessageResult{Status: proto.PeerDuplicate}
 			return nil
 		}
@@ -418,7 +446,7 @@ func Receive(alias string, id peer.ID, m proto.PeerMessage) proto.PeerMessageRes
 			res = proto.PeerMessageResult{Status: proto.PeerRefused, Code: "bad-message"}
 		}
 		if res.Status != proto.PeerRetry {
-			s.In[alias] = &inSeq{Epoch: m.Epoch, Seq: m.Seq}
+			s.In[key] = &inSeq{Epoch: m.Epoch, Seq: m.Seq}
 		}
 		return nil
 	})
@@ -553,12 +581,14 @@ func Backlogs() map[string]Backlog {
 			if !pd.IsDir() {
 				continue
 			}
-			files, _ := os.ReadDir(filepath.Join(root, pd.Name()))
-			for _, f := range files {
-				if strings.HasSuffix(f.Name(), ".json") && !f.IsDir() {
-					b := out[pd.Name()]
-					b.Queued++
-					out[pd.Name()] = b
+			for _, d := range []string{filepath.Join(root, pd.Name()), filepath.Join(root, pd.Name(), programStream)} {
+				files, _ := os.ReadDir(d)
+				for _, f := range files {
+					if strings.HasSuffix(f.Name(), ".json") && !f.IsDir() {
+						b := out[pd.Name()]
+						b.Queued++
+						out[pd.Name()] = b
+					}
 				}
 			}
 		}

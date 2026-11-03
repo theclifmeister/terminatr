@@ -1,6 +1,9 @@
 package proto
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 // Coordinator links across servers (docs/SPEC.md §16.11): a message,
 // or a receipt, from a project on a paired server to one here. Each
@@ -45,6 +48,16 @@ const (
 	PeerFileDone   = "file-done"
 	PeerFileCancel = "file-cancel"
 )
+
+// PeerProgramPrefix starts every program kind (the programs design
+// §9.2: program-invite, program-answer, program-task, …). They go only
+// to a server whose link hello lists the capability "program", in their
+// own outbox stream, which is paused while this server's programs are
+// off.
+const PeerProgramPrefix = "program-"
+
+// IsProgramKind says whether kind is a program kind.
+func IsProgramKind(kind string) bool { return strings.HasPrefix(kind, PeerProgramPrefix) }
 
 // The words of a share-answer's Allow.
 const (
