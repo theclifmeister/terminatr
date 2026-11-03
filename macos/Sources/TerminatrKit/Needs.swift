@@ -249,13 +249,21 @@ extension Need {
     /// the tasks in review. A paired server's panes (sessions with a
     /// server) are its user's there, not here.
     public static func of(projects: [AppAPI.Project], sessions: [AppAPI.Session], peers: [AppAPI.Peer] = [],
-                          refusals: [AppAPI.GuardRefusal] = [], now: Date = Date()) -> [Need] {
+                          refusals: [AppAPI.GuardRefusal] = [], programs: [AppAPI.Program] = [], now: Date = Date()) -> [Need] {
         var out: [Need] = []
         for s in sessions where s.server.isEmpty {
             out += of(session: s, in: projects, now: now)
         }
         for p in projects {
             out += of(project: p)
+        }
+        // A program's open questions, as a coordinator's: once, however
+        // many places list the program's members (the programs design
+        // §11.1: the badge counts a need once).
+        for g in programs where g.questions > 0 {
+            out.append(Need(id: "program-questions:\(g.slug)", kind: .question, project: g.slug,
+                            what: g.questions == 1 ? "director has a question" : "director has \(g.questions) questions",
+                            detail: "director"))
         }
         for r in refusals where r.actionable {
             out.append(of(refusal: r, sessions: sessions))
@@ -468,6 +476,7 @@ extension Need {
         if !s.task.isEmpty { return s.task }
         if !s.thread.isEmpty { return s.thread }
         if s.role == "coordinator" { return s.project.isEmpty ? "The coordinator" : "coordinator" }
+        if s.role == "director" { return "director" }
         return s.id
     }
 
@@ -475,6 +484,7 @@ extension Need {
     /// thread's), "coordinator", or for a plain session its title.
     static func taskTitle(_ s: AppAPI.Session, _ projects: [AppAPI.Project]) -> String {
         if s.role == "coordinator" { return "coordinator" }
+        if s.role == "director" { return "director" }
         if !s.thread.isEmpty {
             let t = projects.first { $0.slug == s.project }?.threads.first { $0.record.id == s.thread }
             return t?.task?.title ?? t?.record.title ?? ""

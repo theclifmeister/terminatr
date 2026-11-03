@@ -130,9 +130,21 @@ func (g *schemaGen) of(t reflect.Type) JSONSchema {
 // omitempty or omitzero.
 func (g *schemaGen) object(t reflect.Type) JSONSchema {
 	s := JSONSchema{Type: "object", Properties: map[string]JSONSchema{}}
+	g.fields(t, &s)
+	return s
+}
+
+// fields adds struct t's JSON fields to s: an embedded struct without a
+// JSON name's fields as its own, as encoding/json flattens them
+// (ProgramDetail's Program).
+func (g *schemaGen) fields(t reflect.Type, s *JSONSchema) {
 	for i := range t.NumField() {
 		f := t.Field(i)
 		name, opts, _ := strings.Cut(f.Tag.Get("json"), ",")
+		if f.Anonymous && name == "" && f.Type.Kind() == reflect.Struct {
+			g.fields(f.Type, s)
+			continue
+		}
 		if !f.IsExported() || name == "-" {
 			continue
 		}
@@ -145,5 +157,4 @@ func (g *schemaGen) object(t reflect.Type) JSONSchema {
 			s.Required = append(s.Required, name)
 		}
 	}
-	return s
 }

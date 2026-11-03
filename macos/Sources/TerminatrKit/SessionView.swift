@@ -9,11 +9,34 @@ public struct SessionRef: Codable, Hashable, Sendable, CustomStringConvertible {
     public var project: String
     public var thread: String
     public var server: String
+    /// A program's director (the programs design §11.1): project is the
+    /// program's slug, thread empty. This server's only.
+    public var director: Bool
 
     public init(project: String, thread: String = "", server: String = "") {
         self.project = project
         self.thread = thread
         self.server = server
+        self.director = false
+    }
+
+    /// Program slug's director's window.
+    public static func director(_ slug: String) -> SessionRef {
+        var r = SessionRef(project: slug)
+        r.director = true
+        return r
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case project, thread, server, director
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(project, forKey: .project)
+        try c.encode(thread, forKey: .thread)
+        try c.encode(server, forKey: .server)
+        if director { try c.encode(true, forKey: .director) }
     }
 
     /// A window restored from before paired servers had windows is
@@ -23,16 +46,22 @@ public struct SessionRef: Codable, Hashable, Sendable, CustomStringConvertible {
         project = try c.decode(String.self, forKey: .project)
         thread = try c.decodeIfPresent(String.self, forKey: .thread) ?? ""
         server = try c.decodeIfPresent(String.self, forKey: .server) ?? ""
+        director = try c.decodeIfPresent(Bool.self, forKey: .director) ?? false
     }
 
-    public var isCoordinator: Bool { thread.isEmpty }
+    /// A project's coordinator: not a thread, nor a program's director.
+    public var isCoordinator: Bool { thread.isEmpty && !director }
+
+    /// What its rows and titles call it: "coordinator", "director", or
+    /// its thread's id.
+    public var who: String { director ? "director" : thread.isEmpty ? "coordinator" : thread }
 
     /// Its place as text, for keys ("prompt \(ref)"): "project",
     /// "project/thread", and a paired server's "server:project/thread".
     /// Written out: without it "\(ref)" walks the struct by reflection
     /// (a Mirror) on every view update that builds such a key (T956).
     public var description: String {
-        (server.isEmpty ? "" : server + ":") + project + (thread.isEmpty ? "" : "/" + thread)
+        (server.isEmpty ? "" : server + ":") + project + (director ? "#director" : thread.isEmpty ? "" : "/" + thread)
     }
 
     /// A paired server's session: its conversation crosses the link
@@ -66,14 +95,18 @@ public struct SessionRef: Codable, Hashable, Sendable, CustomStringConvertible {
         switch s.role {
         case "coordinator": self.init(project: s.project)
         case "thread" where !s.thread.isEmpty: self.init(project: s.project, thread: s.thread)
+        case "director" where s.server.isEmpty: self = .director(s.project)
         default: return nil
         }
     }
 
     /// The session running it now, or nil: a thread's from its record,
-    /// a coordinator's from the session list.
+    /// a coordinator's or a director's from the session list.
     public func session(in projects: [AppAPI.Project], sessions: [AppAPI.Session]) -> String? {
         if isRemote { return nil }
+        if director {
+            return sessions.first { $0.role == "director" && $0.project == project && $0.server.isEmpty }?.id
+        }
         if isCoordinator {
             return sessions.first { $0.role == "coordinator" && $0.project == project }?.id
         }

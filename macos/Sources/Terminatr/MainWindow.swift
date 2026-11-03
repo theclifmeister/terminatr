@@ -158,6 +158,13 @@ struct MainWindow: View {
             } else {
                 Placeholder(phase: app.phase, empty: app.projects.isEmpty)
             }
+        case .program(let slug):
+            if let g = app.program(slug) {
+                ProgramPage(program: g)
+                    .id("program:" + slug)
+            } else {
+                Placeholder(phase: app.phase, empty: app.projects.isEmpty)
+            }
         case nil:
             Placeholder(phase: app.phase, empty: app.projects.isEmpty)
         }
