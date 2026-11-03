@@ -454,3 +454,41 @@ func pairedMemberWords(peers []proto.PeerMirror, inv link.Invite, alias, slug st
 // isChildRow says r is a CHILDREN row of the program dashboard: enter
 // shows that member's dashboard.
 func isChildRow(r row) bool { return strings.HasPrefix(r.key, "pc:") }
+
+// newProgram asks for a new program's name, then its goal (empty for
+// none), and makes it as tm program new does, its clash checks with
+// it (a project, a program or a paired server of that name refuses
+// it); then it shows the program's dashboard and opens its settings,
+// where its members are picked. The PROJECTS header's new item, while
+// programs are on (the programs design §11.1).
+func (m *dash) newProgram() {
+	m.promptNo("New program", "Its name (a lower-case slug no project or paired server has):", "acme", "no program made", 0, func(slug string) tea.Cmd {
+		in := &inputView{title: "New program: " + slug, label: "Its goal, one line (enter with none leaves it empty):", keep: true,
+			submit: func(goal string) tea.Cmd {
+				src := m.src
+				return whenLoaded(func() func(m *dash) tea.Cmd {
+					made, err := src.NewProgram(slug, strings.TrimSpace(goal))
+					var d Data
+					if err == nil {
+						d = src.Load() // with the program in it
+					}
+					return func(m *dash) tea.Cmd {
+						if err != nil {
+							m.fail(err)
+							return nil
+						}
+						// The program in the data now, for its settings;
+						// the polls go on as they were (setData's tick
+						// is theirs).
+						_ = m.setData(d)
+						m.msg = "created program " + made + "; pick its members in its settings"
+						show := m.showProject(programKey(made))
+						m.openProgramSettings(made)
+						return show
+					}
+				})
+			}}
+		m.push(in)
+		return nil
+	})
+}

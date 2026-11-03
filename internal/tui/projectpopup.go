@@ -100,6 +100,11 @@ func (m *dash) projectPopup(string) tea.Cmd {
 			return nil
 		}
 	}
+	if g, ok := m.programShown(); ok && m.projectHere() == "" {
+		// A program's dashboard, on no member's row: its settings.
+		m.openProgramSettings(g.Slug)
+		return nil
+	}
 	slug := m.needProject()
 	if slug == "" {
 		return nil

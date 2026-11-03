@@ -126,7 +126,7 @@ func init() {
 				return "fold"
 			},
 			run: (*dash).foldCard},
-		{id: "project.new", keys: []string{"+"}, label: "+", help: "new project (n too while there is none)", menu: "new project",
+		{id: "project.new", keys: []string{"+"}, label: "+", help: "new project (n too while there is none); on the sidebar's PROJECTS header while programs are on, a new project or a new program", menu: "new project",
 			foot: func(m *dash, _ row, _ bool) string {
 				if len(m.data.Projects) == 0 {
 					return "new project"
@@ -269,6 +269,20 @@ func (m *dash) enter(string) tea.Cmd {
 }
 
 func (m *dash) newProject(string) tea.Cmd {
+	if m.data.ProgramsOn && m.focus == areaSide && m.sideSel == headKey {
+		// On the PROJECTS header while programs are on: a project or a
+		// program (the programs design §11.1).
+		m.openMenu("new", []menuItem{
+			{label: "new project", run: func(m *dash) tea.Cmd { return m.askNewProject() }},
+			{label: "new program", run: func(m *dash) tea.Cmd { m.newProgram(); return nil }},
+		}, 0, 0)
+		return nil
+	}
+	return m.askNewProject()
+}
+
+// askNewProject asks for the new project's name, then makes it.
+func (m *dash) askNewProject() tea.Cmd {
 	m.promptNo("New project", "Its name (becomes a lower-case slug):", "demo-app", "", 0, func(slug string) tea.Cmd {
 		src := m.src
 		return m.act(func() actionMsg {

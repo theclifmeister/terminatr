@@ -26,6 +26,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/program"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/server"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/thread"
 	"github.com/theclifmeister/terminatr/internal/version"
@@ -1839,5 +1840,6 @@ func (f *fakeSource) AnswerProgram(slug, ref string, choices []string, other str
 
 func (f *fakeSource) NewProgram(slug, goal string) (string, error) {
 	f.newPrograms = append(f.newPrograms, slug+":"+goal)
+	f.data.Programs = append(f.data.Programs, ProgramData{SideProgram: server.SideProgram{Slug: slug, Authority: "propose"}})
 	return slug, nil
 }

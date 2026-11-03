@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/link"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/server"
@@ -151,5 +152,70 @@ func TestProgramNeedsDialog(t *testing.T) {
 	drain(t, m, press(m, "right"))
 	if !strings.Contains(screen(m), "open its pane to answer its question") {
 		t.Errorf("menu page:\n%s", screen(m))
+	}
+}
+
+// TestNewProgram: + on the PROJECTS header, while programs are on,
+// offers a new project or a new program; the program's name and goal
+// asked, it is made (NewProgram), its dashboard shows and its settings
+// open for its members. Elsewhere, or with programs off, + is the new
+// project's prompt as ever.
+func TestNewProgram(t *testing.T) {
+	data := Data{Projects: []ProjectData{{Slug: "api"}}, ProgramsOn: true}
+	src := &fakeSource{data: data}
+	m := newDash(DashOptions{Source: src, Width: 120 + sideDefault, Height: 40})
+	m.setData(data)
+	m.focus, m.sideSel = areaSide, headKey
+	drain(t, m, press(m, "+"))
+	mv, ok := m.top().(*menuView)
+	if !ok || len(mv.items) != 2 || mv.items[1].label != "new program" {
+		t.Fatalf("menu %T %+v", m.top(), m.top())
+	}
+	m.pop()
+	drain(t, m, mv.items[1].run(m))
+	drain(t, m, typeLine(m, "acme"))
+	if in, ok := m.top().(*inputView); !ok || !strings.Contains(in.title, "acme") {
+		t.Fatalf("goal prompt %T", m.top())
+	}
+	drain(t, m, typeLine(m, "one login for every app"))
+	if !slices.Equal(src.newPrograms, []string{"acme:one login for every app"}) {
+		t.Fatalf("made %v", src.newPrograms)
+	}
+	if _, ok := m.top().(*programView); !ok || m.current != "g:acme" {
+		t.Errorf("after: top %T, current %q", m.top(), m.current)
+	}
+	// Programs off: the new project's prompt.
+	m.stack, m.data.ProgramsOn = nil, false
+	drain(t, m, press(m, "+"))
+	if in, ok := m.top().(*inputView); !ok || in.title != "New project" {
+		t.Errorf("programs off: %T", m.top())
+	}
+}
+
+// TestServerNewProgram: the source makes the program folder as tm
+// program new does, and lists it in config.toml with no members, so
+// the sidebar shows it; a name taken refuses it.
+func TestServerNewProgram(t *testing.T) {
+	writeConfig(t, "[features]\nprograms = true\n")
+	s := &ServerSource{}
+	if slug, err := s.NewProgram("acme", "one login"); err != nil || slug != "acme" {
+		t.Fatalf("new: %q %v", slug, err)
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := cfg.Program("acme"); !ok {
+		t.Error("not listed in config.toml")
+	}
+	if len(server.SidePrograms(cfg)) != 1 {
+		t.Error("the sidebar doesn't list it")
+	}
+	if _, err := s.NewProgram("acme", ""); err == nil || !strings.Contains(err.Error(), "already exists") {
+		t.Errorf("again: %v", err)
+	}
+	writeConfig(t, "")
+	if _, err := s.NewProgram("beta", ""); err == nil {
+		t.Error("made one while programs are off")
 	}
 }
