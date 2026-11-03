@@ -207,12 +207,12 @@ struct Sidebar: View {
     /// threads, and whether they are dormant (an inactive project's,
     /// expanded: nothing of it runs). While filtering, what the filter
     /// finds, every project unfolded, as the TUI's.
-    private func listing(_ p: AppAPI.Project) -> (open: Bool, coordinator: Bool, threads: [AppAPI.Thread], dormant: Bool) {
+    private func listing(_ p: AppAPI.Project, member: Bool = false) -> (open: Bool, coordinator: Bool, threads: [AppAPI.Thread], dormant: Bool) {
         if filtering {
             let found = SidebarTree.threads(of: p, matching: app.filter)
             return (!found.isEmpty || findsCoordinator, findsCoordinator, found, !p.active)
         }
-        guard SidebarTree.opens(p, nav: app.nav) else { return (false, false, [], false) }
+        guard SidebarTree.opens(p, nav: app.nav, member: member) else { return (false, false, [], false) }
         let threads = SidebarTree.threads(of: p) { t in
             t.record.session.isEmpty ? nil : app.sessions.first { $0.id == t.record.session }
         }
@@ -225,10 +225,10 @@ struct Sidebar: View {
     /// typed matches: what type-to-select moves through.
     private var rows: [(Selection, String)] {
         var out: [(Selection, String)] = []
-        func add(_ projects: [AppAPI.Project]) {
+        func add(_ projects: [AppAPI.Project], member: Bool = false) {
             for p in projects {
                 out.append((.project(p.slug), p.slug))
-                let l = listing(p)
+                let l = listing(p, member: member)
                 if l.coordinator { out.append((.session(SessionRef(project: p.slug)), "Coordinator")) }
                 out += l.threads.map { (.session(SessionRef(project: p.slug, thread: $0.record.id)), $0.record.title) }
             }
@@ -243,7 +243,7 @@ struct Sidebar: View {
                     out.append((.session(.director(g.slug)), "Director"))
                     for m in shownMembers(g) {
                         switch m {
-                        case .local(let p): add([p])
+                        case .local(let p): add([p], member: true)
                         case .paired(let alias, let slug, let peer, let p, _):
                             out.append((.project(slug, server: alias), slug))
                             if let peer, let p, SidebarTree.opens(member: alias, slug, of: g, nav: app.nav) {
@@ -341,11 +341,11 @@ struct Sidebar: View {
     /// TUI's tree; while filtering, the rows the filter finds. An
     /// inactive project's are dormant: nothing of it runs.
     @ViewBuilder
-    private func project(_ p: AppAPI.Project, indent: CGFloat = 0) -> some View {
+    private func project(_ p: AppAPI.Project, indent: CGFloat = 0, member: Bool = false) -> some View {
         let sel = Selection.project(p.slug)
         let needs = app.needs(of: p.slug).count
         let state = Attention.of(coordinator: app.coordinatorSession(p.slug), in: p)
-        let l = listing(p)
+        let l = listing(p, member: member)
         let coordinator = app.coordinatorSession(p.slug)
         ProjectRow(name: p.slug, dot: theme.colour(state.tone), state: state.word, needs: needs, selected: app.nav.selection == sel)
             .padding(.leading, indent)
@@ -487,7 +487,7 @@ struct Sidebar: View {
                 if let g {
                     Button(open ? "Fold" : "Unfold") {
                         let key = Navigation.memberKey(program: g.slug, server: peer.alias, project: p.project)
-                        if open { app.nav.collapsed.insert(key) } else { app.nav.collapsed.remove(key) }
+                        if open { app.nav.fold(key) } else { app.nav.unfold(key) }
                     }
                 }
             }
@@ -529,7 +529,7 @@ struct Sidebar: View {
             ForEach(shownMembers(g), id: \.self) { m in
                 switch m {
                 case .local(let p):
-                    project(p, indent: 12)
+                    project(p, indent: 12, member: true)
                 case .paired(let alias, let slug, let peer, let p, let mstate):
                     if let peer, let p {
                         remote(peer, p, under: g)

@@ -99,3 +99,29 @@ func TestTreeRenameOntoKnownSlug(t *testing.T) {
 		t.Fatalf("old slug kept: %+v", tr)
 	}
 }
+
+// TestTreeMembers: a program's member starts folded; unfolding it keeps
+// it in Unfolded, folding it again is the user's fold (Folded too), and
+// a rename follows it.
+func TestTreeMembers(t *testing.T) {
+	var tr Tree
+	if !tr.MemberFolded("api") {
+		t.Fatal("a member starts unfolded")
+	}
+	if !tr.FoldMember("api", false) || tr.MemberFolded("api") || tr.IsFolded("api") {
+		t.Fatalf("unfolded %+v", tr)
+	}
+	if !tr.Rename("api", "core") || tr.MemberFolded("core") || !tr.MemberFolded("api") {
+		t.Fatalf("renamed %+v", tr)
+	}
+	if !tr.FoldMember("core", true) || !tr.MemberFolded("core") || !tr.IsFolded("core") {
+		t.Fatalf("folded %+v", tr)
+	}
+	if tr.FoldMember("core", true) {
+		t.Error("folding it twice changed something")
+	}
+	bad := Tree{Unfolded: []string{""}}
+	if bad.Valid() == nil {
+		t.Error("an empty member passed")
+	}
+}
