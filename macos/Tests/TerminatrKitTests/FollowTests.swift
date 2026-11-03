@@ -9,14 +9,6 @@ private func at(_ f: inout Follow, _ offset: Double, content: Double, newest: In
     f.scrolled(offset: offset, visible: 500, content: content, newest: newest)
 }
 
-/// The user's scroll to offset: held (a drag, a wheel), then let go at
-/// rest. Only a scroll of the user's stops the follow (T976).
-private func user(_ f: inout Follow, _ offset: Double, content: Double, newest: Int?) {
-    f.moved(by: true, resting: false)
-    at(&f, offset, content: content, newest: newest)
-    f.moved(by: false, resting: true)
-}
-
 @Test func followsAtTheEnd() {
     var f = Follow()
     #expect(f.following)
@@ -37,7 +29,7 @@ private func user(_ f: inout Follow, _ offset: Double, content: Double, newest: 
     _ = f.arrived([0, 1, 2])
     at(&f, 500, content: 1000, newest: 2)
     // The user scrolls up: it stops following.
-    user(&f, 200, content: 1000, newest: 2)
+    at(&f, 200, content: 1000, newest: 2)
     #expect(!f.following)
     #expect(f.label == "Jump to latest")
     // Output comes: no scroll, and what came is counted.
@@ -72,7 +64,7 @@ private func user(_ f: inout Follow, _ offset: Double, content: Double, newest: 
     var f = Follow()
     _ = f.arrived([0, 1])
     at(&f, 500, content: 1000, newest: 1)
-    user(&f, 100, content: 1000, newest: 1)
+    at(&f, 100, content: 1000, newest: 1)
     _ = f.arrived([0, 1, 2, 3])
     #expect(f.unseen == 2)
     f.jump(newest: 3)
@@ -82,8 +74,8 @@ private func user(_ f: inout Follow, _ offset: Double, content: Double, newest: 
     at(&f, 1100, content: 1600, newest: 3)
     f.moved(by: false, resting: true)
     #expect(!f.jumping)
-    user(&f, 100, content: 1600, newest: 3)
-    user(&f, 50, content: 1600, newest: 3)
+    at(&f, 100, content: 1600, newest: 3)
+    at(&f, 50, content: 1600, newest: 3)
     #expect(!f.following)
     let s7 = f.arrived([0, 1, 2, 3, 4])
     #expect(!s7)
@@ -101,9 +93,7 @@ private func user(_ f: inout Follow, _ offset: Double, content: Double, newest: 
     #expect(f.following)
     // Scrolled up by more than the slack, though the bars' height
     // would cover it: no longer at the end.
-    f.moved(by: true, resting: false)
     f.scrolled(offset: 1735, visible: 600, content: 2269, inset: 166, newest: 1)
-    f.moved(by: false, resting: true)
     #expect(!f.following)
     // Back down by hand: at the end, and following again.
     f.scrolled(offset: 1835, visible: 600, content: 2269, inset: 166, newest: 1)
@@ -140,7 +130,7 @@ private func user(_ f: inout Follow, _ offset: Double, content: Double, newest: 
     f.moved(by: false, resting: true)
     #expect(!f.jumping && f.following)
     // The user's own scroll up after it stops following.
-    user(&f, 9000, content: 10000, newest: 1)
+    at(&f, 9000, content: 10000, newest: 1)
     #expect(!f.following)
 }
 
@@ -160,15 +150,14 @@ private func user(_ f: inout Follow, _ offset: Double, content: Double, newest: 
 
 /// A prompt sent at the end, at rest: no scroll comes of it, so no
 /// phase ends the jump; it ends at once, and the user's next scroll up
-/// (a mouse wheel's too: SwiftUI gives it the interacting phase) stops
-/// the follow.
+/// (a mouse wheel's, which may show no phase) stops the follow.
 @Test func jumpAtRestAtTheEnd() {
     var f = Follow()
     _ = f.arrived([0, 1])
     at(&f, 1500, content: 2000, newest: 1)
     f.jump(newest: 1)
     #expect(!f.jumping)
-    user(&f, 1300, content: 2000, newest: 1)
+    at(&f, 1300, content: 2000, newest: 1)
     #expect(!f.following)
     // Mid-flick at the end, though, a jump holds until the scroll rests.
     f.moved(by: false, resting: false)
@@ -280,11 +269,7 @@ private func back(_ f: inout Follow, offset: Double, visible: Double, content: D
     })
     #expect(f.following)
     // The user scrolls up: that is told, once it stops following.
-    #expect(tells(f) {
-        f.moved(by: true, resting: false)
-        f.scrolled(offset: 200, visible: 500, content: 1120, newest: 2)
-    })
-    f.moved(by: false, resting: true)
+    #expect(tells(f) { f.scrolled(offset: 200, visible: 500, content: 1120, newest: 2) })
     #expect(!f.following)
     // Output while scrolled up: counted, and told.
     #expect(tells(f) { _ = f.arrived([0, 1, 2, 3]) })
@@ -305,21 +290,4 @@ private func back(_ f: inout Follow, offset: Double, visible: Double, content: D
     #expect("\(SessionRef(project: "acme"))" == "acme")
     #expect("\(SessionRef(project: "acme", thread: "t-1"))" == "acme/t-1")
     #expect("\(SessionRef(project: "acme", thread: "t-1", server: "studio"))" == "studio:acme/t-1")
-}
-
-/// A scroll of SwiftUI's that lands a little up at rest (one asked
-/// before the last rows were laid out, T976: 12 points under load) is
-/// no scroll of the user's: the follow holds and says to go to the end.
-@Test func aScrollAtRestUpIsNotTheUsers() {
-    var f = Follow()
-    _ = f.arrived([0, 1])
-    at(&f, 51519, content: 52165, newest: 1)
-    #expect(f.following)
-    // Content grows, and the offset lands 12 points up, nothing held.
-    let back = f.scrolled(offset: 51507, visible: 500, content: 52997, newest: 2)
-    #expect(f.following)
-    #expect(back)
-    // The user's own scroll up, held, still stops it.
-    user(&f, 50000, content: 52997, newest: 2)
-    #expect(!f.following)
 }

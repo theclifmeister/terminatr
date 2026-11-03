@@ -97,17 +97,10 @@ public struct Follow: Equatable, Sendable {
     @discardableResult
     public mutating func scrolled(offset: Double, visible: Double, content: Double, inset: Double = 0, top: Double = 0, newest: Int?) -> Bool {
         let g = Geometry(offset: offset, visible: visible, content: content, inset: inset, top: top)
-        // Up by the user: the offset went up by more than the end did,
-        // the scroll under the user's hand or still moving from it (a
-        // flick's momentum, a jump's animation). A content or view that
-        // shrank pulls the offset up with its end (the scroll view's
-        // clamp), and a scroll of SwiftUI's at rest can land a little up
-        // (one asked before the last rows were laid out, landing after:
-        // 12 points, which stopped a streaming follow under load, T976):
-        // neither is the user's. A wheel or a drag is a phase of its own
-        // (interacting) on the iPhone and the Mac alike.
-        let user = held || !resting
-        let up = user && self.offset.map { was in
+        // Up by the user: the offset went up by more than the end did. A
+        // content or view that shrank pulls the offset up with its end
+        // (the scroll view's clamp): that is no scroll of the user's.
+        let up = self.offset.map { was in
             let endUp = max(0, geometry.end - g.end)
             return offset < was - 1 - (atEnd || past > 0 ? endUp : 0)
         } ?? false
