@@ -148,7 +148,9 @@ struct ConversationScreen: View {
                         return
                     }
                 }
-                if follow.arrived(transcript.entries.map(\.id)) { toEnd(scroll) }
+                let follows = follow.arrived(transcript.entries.map(\.id))
+                ScrollGuard.trace("arrived \(transcript.entries.count) toEnd=\(follows) \(follow.trace)")
+                if follows { toEnd(scroll) }
             }
             // The agent's turn starting or ending, a queued prompt sent:
             // the follower stays at the end.

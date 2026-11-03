@@ -57,11 +57,18 @@ public struct ConversationScroll: ViewModifier {
                 .onScrollGeometryChange(for: [Double].self) { g in
                     [g.contentOffset.y, g.visibleRect.height, g.contentSize.height, g.contentInsets.bottom, g.contentInsets.top]
                 } action: { _, g in
-                    if follow.scrolled(offset: g[0], visible: g[1], content: g[2], inset: g[3], top: g[4], newest: newest) { fix() }
+                    let f = follow.scrolled(offset: g[0], visible: g[1], content: g[2], inset: g[3], top: g[4], newest: newest)
+                    ScrollGuard.trace("geometry fix=\(f) \(follow.trace)")
+                    if f { fix() }
                 }
                 .onScrollPhaseChange { _, p in
-                    if follow.moved(by: p == .tracking || p == .interacting, resting: p == .idle) { fix() }
+                    let f = follow.moved(by: p == .tracking || p == .interacting, resting: p == .idle)
+                    ScrollGuard.trace("phase \(p) fix=\(f) \(follow.trace)")
+                    if f { fix() }
                 }
+                // New entries under a follower: the end again, later, by
+                // the follow alone (see settle).
+                .onChange(of: newest) { settle() }
                 .modifier(TopRow(top: top))
         } else {
             content.defaultScrollAnchor(.bottom)
@@ -82,18 +89,44 @@ public struct ConversationScroll: ViewModifier {
         // inside the geometry's own update (a resize's layout) is
         // dropped.
         let toEnd = self.toEnd
+        let follow = self.follow
         CFRunLoopPerformBlock(CFRunLoopGetMain(), CFRunLoopMode.commonModes.rawValue) {
-            MainActor.assumeIsolated { toEnd() }
+            MainActor.assumeIsolated {
+                ScrollGuard.trace("toEnd \(follow.trace)")
+                toEnd()
+            }
         }
         CFRunLoopWakeUp(CFRunLoopGetMain())
         // And again if it didn't land: a loaded device drops a scroll
         // asked mid-layout, and a content that then holds still gives no
         // geometry change to ask again (2 runs in 20 on a busy
         // simulator rested a screen short of the end).
+        later("check") { $0.behind }
+    }
+
+    /// A follower stays at the end as entries come, without a geometry
+    /// change to say it fell short: under load, a part that came while
+    /// a scroll to the end was landing left the view a part short, with
+    /// no geometry change after it and so nothing to ask again (3 runs
+    /// in 20 on a busy simulator: the conversation's last answers below
+    /// the screen). So after new entries, while the follow keeps to the
+    /// end (not held, no jump), the view scrolls to its end again, as
+    /// the last geometry has it or not; at the end, that moves nothing.
+    private func settle() {
+        later("settle") { $0.keeping }
+    }
+
+    /// toEnd at each of checks, when the follow then says to.
+    private func later(_ what: String, _ when: @escaping @MainActor (Follower) -> Bool) {
+        let toEnd = self.toEnd
         let follow = self.follow
         for delay in Self.checks {
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-                MainActor.assumeIsolated { if follow.behind { toEnd() } }
+                MainActor.assumeIsolated {
+                    let go = when(follow)
+                    ScrollGuard.trace("\(what) \(delay) go=\(go) \(follow.trace)")
+                    if go { toEnd() }
+                }
             }
         }
     }
@@ -119,6 +152,15 @@ private struct TopRow: ViewModifier {
 /// The scroll guard's report (T976): this app's build, OS and device.
 public enum ScrollGuard {
     static let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "dev.terminatr", category: "scroll")
+
+    /// A debug build's trace of the scroll (log stream --predicate
+    /// 'category == "scroll"'); nothing in a release build.
+    public static func trace(_ s: @autoclosure () -> String) {
+        #if DEBUG
+        let line = s()
+        log.notice("\(line, privacy: .public)")
+        #endif
+    }
 
     @MainActor
     static func report(_ f: Follower, screen: String, detail: [String: String]) -> AppAPI.AppReportAddParams {

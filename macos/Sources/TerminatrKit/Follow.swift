@@ -131,7 +131,13 @@ public struct Follow: Equatable, Sendable {
     /// geometry change after to ask again).
     public var behind: Bool {
         guard offset != nil else { return false }
-        return (following && !held && !jumping && geometry.offset < geometry.end - 1) || breach
+        return (keeping && geometry.offset < geometry.end - 1) || breach
+    }
+
+    /// Whether the view keeps to the end now: following, the scroll
+    /// neither held by the user nor running a jump.
+    public var keeping: Bool {
+        following && !held && !jumping
     }
 
     /// The transcript's entries now (their ids; appended ones have
@@ -185,6 +191,13 @@ public struct Follow: Equatable, Sendable {
         resting && past > Self.beyond
     }
 
+    /// The state in a line, for a debug build's trace.
+    public var trace: String {
+        let g = geometry
+        return "following=\(following) jumping=\(jumping) held=\(held) resting=\(resting) atEnd=\(atEnd) "
+            + "offset=\(Int(g.offset)) end=\(Int(g.end)) content=\(Int(g.content)) visible=\(Int(g.visible)) inset=\(Int(g.inset))"
+    }
+
     /// Jump to latest's words: with what came meanwhile, "Jump to
     /// latest · 3 new messages".
     public var label: String { Self.label(unseen: unseen) }
@@ -230,6 +243,12 @@ public final class Follower {
 
     /// Follow.behind.
     public var behind: Bool { state.behind }
+
+    /// Follow.keeping.
+    public var keeping: Bool { state.keeping }
+
+    /// Follow.trace.
+    public var trace: String { state.trace }
 
     @discardableResult
     public func scrolled(offset: Double, visible: Double, content: Double, inset: Double = 0, top: Double = 0, newest: Int?) -> Bool {

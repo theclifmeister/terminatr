@@ -316,3 +316,24 @@ private func back(_ f: inout Follow, offset: Double, visible: Double, content: D
     #expect(!f.following)
     #expect(!f.behind)
 }
+
+@Test func keepingIsAFollowerNotHeldNorJumping() {
+    var f = Follow()
+    #expect(f.keeping)
+    at(&f, 500, content: 1000, newest: 2)
+    #expect(f.keeping)
+    // Held by the user.
+    f.moved(by: true, resting: false)
+    #expect(!f.keeping)
+    f.moved(by: false, resting: true)
+    #expect(f.keeping)
+    // Scrolled up: the user's place.
+    at(&f, 100, content: 1000, newest: 2)
+    #expect(!f.keeping)
+    // A jump under way, until it rests.
+    f.jump(newest: 2)
+    #expect(f.following)
+    #expect(!f.keeping)
+    f.moved(by: false, resting: true)
+    #expect(f.keeping)
+}
