@@ -163,7 +163,11 @@ func TestProgramNeedsMethod(t *testing.T) {
 	if _, err := g.Tasks().Add(human, []tasks.NewTask{{Title: "SSO everywhere", Status: "ready"}, {Title: "Not in review", Status: "ready"}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := g.Tasks().SetParts(human, 1, []string{"demo/T1"}, false); err != nil {
+	// The part is done (met), so the ticker's derive keeps the umbrella in review.
+	if _, err := p.Tasks().Add(human, []tasks.NewTask{{Title: "Shipped", Status: "done"}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := g.Tasks().SetParts(human, 1, []string{"demo/T3"}, false); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := g.Tasks().SetDerived(caller.Caller{Kind: caller.Ticker}, 1, tasks.Review); err != nil {
@@ -193,7 +197,7 @@ func TestProgramNeedsMethod(t *testing.T) {
 	if r := res.Needs[0]; len(r.Also) != 1 || r.Also[0].ID != "ask:Q1" || r.Priority != "must" || !slices.Contains(r.Acts, proto.ActQuestions) {
 		t.Errorf("review row: %+v", r)
 	}
-	if u := res.Needs[1]; !u.Program || u.Task != "T1" || !slices.Equal(u.Acts, []string{proto.ActAccept, proto.ActSendBack}) || !strings.Contains(u.Text, "demo/T1") {
+	if u := res.Needs[1]; !u.Program || u.Task != "T1" || !slices.Equal(u.Acts, []string{proto.ActAccept, proto.ActSendBack}) || !strings.Contains(u.Text, "demo/T3") {
 		t.Errorf("umbrella row: %+v", u)
 	}
 	if res.Quiet != 1 || len(res.Members) != 3 || res.Members[2].Server != "mini" || res.Members[2].Error == "" {
