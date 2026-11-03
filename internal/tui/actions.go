@@ -293,7 +293,9 @@ func (m *dash) newProject(string) tea.Cmd {
 // footer when there is none.
 func (m *dash) needProject() string {
 	slug := m.projectHere()
-	if alias, peerSlug, ok := m.remote(); ok && slug == "" {
+	if m.over != nil && m.over.Program != "" && slug == "" {
+		m.msg = "a director's session has no project of its own; " + keyShown(boundKey("A")) + " opens the program's settings"
+	} else if alias, peerSlug, ok := m.remote(); ok && slug == "" {
 		m.msg = remoteNothing(peerShown(m.data.Peers, alias), peerSlug)
 	} else if slug == "" {
 		m.msg = "no project; " + keyShown(boundKey("+")) + " creates one"

@@ -100,6 +100,11 @@ func (m *dash) projectPopup(string) tea.Cmd {
 			return nil
 		}
 	}
+	if m.over != nil && m.over.Program != "" && m.projectHere() == "" {
+		// Over a director's session: its program's settings.
+		m.openProgramSettings(m.over.Program)
+		return nil
+	}
 	if g, ok := m.programShown(); ok && m.projectHere() == "" {
 		// A program's dashboard, on no member's row: its settings.
 		m.openProgramSettings(g.Slug)

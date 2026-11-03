@@ -96,3 +96,24 @@ func TestOfferNeeds(t *testing.T) {
 		t.Error("an old request, or a coordinator's pane, opened it")
 	}
 }
+
+// TestProgramPopupOverDirector: prefix+A in a director's pane opens the
+// program's settings, not a project popup for its slug; the project
+// keys say a director has no project.
+func TestProgramPopupOverDirector(t *testing.T) {
+	m, _ := progDash(t)
+	m.over, m.then, m.loaded = &Over{Key: "A", Project: "acme", Program: "acme", Session: "s-d", Screen: []string{"", "row"}}, "A", false
+	feed(m, m.setData(m.data))
+	if m.projectPopupView() != nil {
+		t.Fatalf("project popup opened: %T", m.top())
+	}
+	if _, ok := m.top().(*programView); !ok {
+		t.Fatalf("top %T", m.top())
+	}
+	if m.projectHere() != "" {
+		t.Errorf("project here %q", m.projectHere())
+	}
+	if m.needProject() != "" || !strings.Contains(m.msg, "director") {
+		t.Errorf("msg %q", m.msg)
+	}
+}

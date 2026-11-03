@@ -1089,6 +1089,9 @@ func (m *dash) openProject(slug string) tea.Cmd {
 // over a session, the popup's; none on a paired server's dashboard,
 // whose list rows are this server's first project's.
 func (m *dash) projectHere() string {
+	if m.over != nil && m.over.Program != "" && m.over.Project == m.over.Program {
+		return "" // a director's session: its program isn't a project
+	}
 	if m.over != nil && m.over.Project != "" {
 		return m.over.Project
 	}
