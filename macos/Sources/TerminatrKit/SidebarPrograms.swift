@@ -162,6 +162,14 @@ extension SidebarTree {
         nav.unfolded.contains(Navigation.memberKey(program: g.slug, server: alias, project: slug))
     }
 
+    /// The key of a program member's fold (Navigation.unfolded): a local
+    /// member's is its project's own (sectionKey, as view.Tree.Unfolded
+    /// keys it), a paired one's (alias not empty) is apart from its
+    /// server's group's (memberKey).
+    public static func foldKey(member slug: String, alias: String = "", of g: AppAPI.Program) -> String {
+        alias.isEmpty ? Navigation.sectionKey(server: "", project: slug) : Navigation.memberKey(program: g.slug, server: alias, project: slug)
+    }
+
     /// The needs of program g, its badge: its own (its director's, its
     /// questions) and its members', each once.
     public static func needs(of g: AppAPI.Program, in needs: [Need]) -> [Need] {

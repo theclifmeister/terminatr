@@ -11,6 +11,12 @@ public struct SidebarSection: Equatable, Sendable, Identifiable {
     public let title: String
     /// Its rows' keys, as SidebarTree.rows keys them.
     public let rows: [String]
+
+    public init(id: String, title: String, rows: [String]) {
+        self.id = id
+        self.title = title
+        self.rows = rows
+    }
 }
 
 extension SidebarTree {
@@ -49,6 +55,54 @@ extension SidebarTree {
             }
         }
         close()
+        return out
+    }
+
+    /// sections(rows) with programs (T978): a program is a section of its
+    /// own, id and title its slug, its rows the program's ("g:<slug>"),
+    /// its director's ("r:<slug>") and then each member's row, a local
+    /// member's "p:<slug>" and a paired one's "g:<slug>/r:<alias>/<slug>",
+    /// each with its coordinator and threads while unfolded. A folded
+    /// member keeps its row, which the plain sections would drop with
+    /// its header.
+    public static func sections(_ rows: [String], programs: [AppAPI.Program]) -> [SidebarSection] {
+        let known = Dictionary(programs.map { ($0.slug, $0) }, uniquingKeysWith: { a, _ in a })
+        var out: [SidebarSection] = []
+        var run: [String] = []
+        func flush() {
+            out += sections(run)
+            run = []
+        }
+        var i = 0
+        while i < rows.count {
+            let (kind, rest) = split(rows[i])
+            guard kind == "g", let g = known[rest] else {
+                run.append(rows[i])
+                i += 1
+                continue
+            }
+            flush()
+            let local = Set(g.members.filter { $0.server.isEmpty }.map(\.project))
+            var block = [rows[i]]
+            i += 1
+            while i < rows.count {
+                let (k, r) = split(rows[i])
+                let inside: Bool
+                switch k {
+                case "r": inside = r == g.slug
+                case "g": inside = r.hasPrefix(g.slug + "/")
+                case "p": inside = local.contains(r)
+                case "c": inside = local.contains(r)
+                case "t": inside = local.contains(String(r.split(separator: "/").first ?? ""))
+                default: inside = false
+                }
+                if !inside { break }
+                block.append(rows[i])
+                i += 1
+            }
+            out.append(SidebarSection(id: block[0], title: g.slug, rows: block))
+        }
+        flush()
         return out
     }
 

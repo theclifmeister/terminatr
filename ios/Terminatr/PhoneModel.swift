@@ -33,6 +33,7 @@ final class PhoneModel {
     init(key: String = "", places: Places = Places()) {
         self.key = key
         self.places = places
+        if !key.isEmpty { nav = Navigation.restore(UserDefaults.standard.data(forKey: "sidebar.navigation." + key)) }
         log = key == "demo" || key.isEmpty ? LinkLog() : LinkLog.load(pairing: key)
     }
 
@@ -89,6 +90,13 @@ final class PhoneModel {
     /// hello says programs (ProgramList.cap), so no program UI shows.
     private(set) var programs: [AppAPI.Program] = []
     private(set) var needsFirst = false
+    /// The iPad sidebar's folds (T978), the Mac's Navigation.unfolded:
+    /// a program's members start folded. Kept per server, restored at
+    /// launch.
+    var nav = Navigation() {
+        didSet { if nav != oldValue { UserDefaults.standard.set(nav.encoded(), forKey: navKey) } }
+    }
+    private var navKey: String { "sidebar.navigation." + key }
     /// [ui] context_hint, as the last session list said (app API 13; 0
     /// never warns): from it the coordinator's context gauge warns.
     private(set) var contextHint = 0
