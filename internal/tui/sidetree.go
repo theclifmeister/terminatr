@@ -350,7 +350,7 @@ func buildTree(ps []ProjectData, sessions []proto.SessionInfo, in treeIn) []tree
 			here = i
 			break
 		}
-		if here < 0 && r.kind == treeProject && r.current {
+		if here < 0 && (r.kind == treeProject || r.kind == treeProgram) && r.current {
 			here = i
 		}
 	}
@@ -1052,9 +1052,12 @@ func (r treeRow) target() (t Target, ok bool, why string) {
 	if r.kind == treeServer || r.isPeer() {
 		return peerTarget(r)
 	}
-	if r.kind == treeProgram || r.kind == treeDirector {
-		// Its director, started when none runs (the program's dashboard
-		// comes with B8).
+	if r.kind == treeProgram {
+		// Its dashboard (programdash.go).
+		return Target{Project: programKey(r.slug)}, true, ""
+	}
+	if r.kind == treeDirector {
+		// Its director, started when none runs.
 		return Target{Program: r.slug}, true, ""
 	}
 	t.Project = r.slug
@@ -1098,7 +1101,11 @@ func (r treeRow) preview() (t Target, ok bool) {
 	if r.here || r.kind == treeDivider || r.kind == treeSection || r.kind == treeServer || r.isPeer() {
 		return t, false
 	}
-	if r.kind == treeProgram || r.kind == treeDirector {
+	if r.kind == treeProgram {
+		// Its dashboard.
+		return Target{Project: programKey(r.slug)}, true
+	}
+	if r.kind == treeDirector {
 		// Its director's session while one runs; a preview never starts
 		// one.
 		return Target{Session: r.session}, r.session != ""

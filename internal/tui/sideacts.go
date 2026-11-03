@@ -80,6 +80,7 @@ const (
 	menuOpen               // go where the row points (its target)
 	menuAttach             // attach the thread's session
 	menuProgram            // the program's settings popup (programsettings.go)
+	menuDirector           // the program's director, started when none runs
 )
 
 // sideMenuItem is an item of a sidebar row's menu.
@@ -125,7 +126,8 @@ func sideMenuItems(r treeRow, popups bool) []sideMenuItem {
 		add(sideMenuItem{label: activeLabel(r), key: "S", act: menuActive})
 		add(sideMenuItem{label: pinLabel(r), key: "P", act: menuPin})
 	case treeProgram:
-		add(sideMenuItem{label: "open its director", enter: true, act: menuOpen})
+		add(sideMenuItem{label: "show its dashboard", enter: true, act: menuOpen})
+		add(sideMenuItem{label: "open its director", act: menuDirector})
 		label, key := foldLabel(r)
 		fold(label, key, foldProgram(r.slug, !r.fold))
 		if popups {

@@ -202,6 +202,7 @@ type Source interface {
 	LogSource
 	SearchSource
 	ProgramPeerSource
+	ProgramSource
 }
 
 // LogSource reads the logs on the server's host (the , popup's Logs

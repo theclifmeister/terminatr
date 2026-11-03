@@ -78,7 +78,9 @@ func init() {
 					return ""
 				case r.peerNeed != nil && r.peerNeed.answer && len(proto.ActsOf(r.peerNeed.need)) > 0:
 					return "answer"
-				case r.task != nil, r.remote != "":
+				case r.pneed != nil:
+					return "answer"
+				case r.task != nil, r.remote != "", isChildRow(r) && r.project != "":
 					return "show"
 				case r.card:
 					return "open"
@@ -243,8 +245,12 @@ func (m *dash) enter(string) tea.Cmd {
 		return m.openCard(r.key)
 	case r.peerNeed != nil:
 		return m.openPeerNeed(*r.peerNeed)
+	case r.pneed != nil:
+		return m.openProgramNeeds(r.pneed.program, r.pneed.need.ID)
 	case r.remote != "":
 		return m.showProject(r.remote)
+	case isChildRow(r) && r.project != "":
+		return m.showProject(r.project)
 	case r.questions > 0:
 		return m.answerQuestions(r.project)
 	case r.links > 0:

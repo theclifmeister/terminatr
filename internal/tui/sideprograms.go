@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/link"
 	"github.com/theclifmeister/terminatr/internal/program"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/server"
@@ -37,6 +38,9 @@ type ProgramData struct {
 	// Deps are its members' cross-project dependency states, as the
 	// ticker last computed them (program.ReadDeps), by ref.
 	Deps map[string]program.Dep
+	// Invites are its invites to paired projects, by member
+	// ("mini/acme-ios"): the newest of each (link.Invites).
+	Invites map[string]link.Invite
 }
 
 // programsOf are cfg's programs as the sidebar shows them; none while
@@ -46,7 +50,16 @@ func programsOf(cfg *config.Config) []ProgramData {
 	for _, sp := range server.SidePrograms(cfg) {
 		t, _ := cfg.Program(sp.Slug)
 		deps, _ := program.ReadDeps(sp.Slug)
-		out = append(out, ProgramData{SideProgram: sp, Settings: t, Deps: deps})
+		g := ProgramData{SideProgram: sp, Settings: t, Deps: deps}
+		for _, r := range link.Invites(sp.Slug) {
+			if r.Out {
+				if g.Invites == nil {
+					g.Invites = map[string]link.Invite{}
+				}
+				g.Invites[r.Peer] = r
+			}
+		}
+		out = append(out, g)
 	}
 	return out
 }
@@ -79,7 +92,8 @@ func programMembers(progs []ProgramData, ps []ProjectData) map[string]string {
 // is folded its director's and its members', in its table's order, each
 // member's as projectRows has them, one level in.
 func programRows(g ProgramData, ps []ProjectData, sessions []proto.SessionInfo, byID map[string]proto.SessionInfo, in treeIn) []treeRow {
-	pr := treeRow{kind: treeProgram, slug: g.Slug, prog: g.Slug, pct: -1, paused: g.Paused, hint: g.Questions > 0}
+	pr := treeRow{kind: treeProgram, slug: g.Slug, prog: g.Slug, pct: -1, paused: g.Paused, hint: g.Questions > 0,
+		current: in.current == programKey(g.Slug)}
 	dir := treeRow{kind: treeDirector, slug: g.Slug, prog: g.Slug, pct: -1, ctx: -1, last: true, hint: g.Questions > 0, asks: g.Questions}
 	for _, s := range sessions {
 		if s.Role == proto.RoleDirector && s.Project == g.Slug {
