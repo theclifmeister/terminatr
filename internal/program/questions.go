@@ -10,6 +10,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/project"
+	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
 // Program questions (the programs design §7.1, §7.2): the server
@@ -134,12 +135,16 @@ func Similar(a, b project.Question) bool {
 }
 
 // MemberQuestionRef reads a member's question as tm program ask takes
-// it: Q3@acme-api, or acme-api/Q3.
+// it: Q3@acme-api, or acme-api/Q3; a paired member's Q3@mini/acme-ios,
+// or mini/acme-ios/Q3 (slug is then mini/acme-ios).
 func MemberQuestionRef(ref string) (slug, id string, err error) {
 	ref = strings.TrimSpace(ref)
 	q, slug, ok := strings.Cut(ref, "@")
 	if !ok {
-		slug, q, ok = strings.Cut(ref, "/")
+		var i int
+		if i = strings.LastIndex(ref, "/"); i >= 0 {
+			slug, q, ok = ref[:i], ref[i+1:], true
+		}
 	}
 	q, slug = strings.TrimSpace(q), strings.TrimSpace(slug)
 	if strings.HasPrefix(q, "q") {
@@ -148,10 +153,37 @@ func MemberQuestionRef(ref string) (slug, id string, err error) {
 	if !ok || !project.IsQuestionID(q) {
 		return "", "", refuse("invalid-question", "%q is not a member's question like Q3@acme-api", ref)
 	}
-	if _, _, remote := config.Remote(slug); remote || strings.Contains(slug, "/") {
-		return "", "", refuse("remote-member", "%s is on a paired server: its questions are answered there", ref)
+	if strings.Contains(slug, "/") && !IsRemote(slug) {
+		return "", "", refuse("invalid-question", "%q is not a member's question like Q3@acme-api or Q3@mini/acme-ios", ref)
 	}
 	return slug, q, nil
+}
+
+// Paired reaches the coordinators' questions of a program's members on
+// paired servers (the programs design §7.2), through tm's server: what
+// their servers show it at needs view or answer, and peer.act at
+// answer. A Program without it (nil) refuses such questions
+// (remote-member).
+type Paired interface {
+	// Question is paired member key's ("mini/acme-ios") open
+	// coordinator question id as its server last showed it; an
+	// unknown-question refusal once it isn't open there.
+	Question(key, id string) (project.Question, error)
+	// Answer sends the user's answer to one of them (proto.AnswersAsk):
+	// asked is false when an earlier answer waits on its coordinator.
+	Answer(key string, act proto.PeerAct) (asked bool, err error)
+}
+
+// pairedQuestion is paired member key's open question id, for a merge:
+// key is p's member, and p reaches paired servers.
+func (p *Program) pairedQuestion(cfg *config.Config, key, id string) (project.Question, error) {
+	if cfg.ProgramOf(key) != p.Slug {
+		return project.Question{}, refuse("not-member", "%s is not a member of program %s (tm program show %s)", key, p.Slug, p.Slug)
+	}
+	if p.Paired == nil {
+		return project.Question{}, refuse("remote-member", "%s is on a paired server: its questions are read through tm's server, which isn't reached here", key)
+	}
+	return p.Paired.Question(key, id)
 }
 
 // MergeRequest is tm program ask merge's: the member questions, and
@@ -182,8 +214,21 @@ func (p *Program) Merge(c caller.Caller, cfg *config.Config, req MergeRequest) (
 	if n := len(req.Questions); n < 2 || n > MaxMerge {
 		return project.Question{}, refuse("invalid-merge", "a merge takes 2 to %d member questions, not %d", MaxMerge, n)
 	}
+	// A paired member's question can't be marked covered on its
+	// server: the program's open questions say what they cover.
+	open, err := p.Questions()
+	if err != nil {
+		return project.Question{}, err
+	}
+	coveredBy := map[string]string{}
+	for _, o := range open {
+		for _, cv := range o.Covers {
+			coveredBy[cv.Ref()] = p.Slug + "/" + o.ID
+		}
+	}
 	type member struct {
-		child *project.Project
+		key   string           // the member as the program lists it
+		child *project.Project // nil on a paired server
 		q     project.Question
 	}
 	var ms []member
@@ -197,6 +242,17 @@ func (p *Program) Merge(c caller.Caller, cfg *config.Config, req MergeRequest) (
 			return project.Question{}, refuse("invalid-merge", "%s/%s is named twice", slug, id)
 		}
 		seen[slug+"/"+id] = true
+		if IsRemote(slug) {
+			q, err := p.pairedQuestion(cfg, slug, id)
+			if err != nil {
+				return project.Question{}, err
+			}
+			if by := coveredBy[slug+"/"+id]; by != "" {
+				return project.Question{}, refuse("covered", "%s/%s is covered by %s already", slug, id, by)
+			}
+			ms = append(ms, member{key: slug, q: q})
+			continue
+		}
 		child, err := p.Member(cfg, slug)
 		if err != nil {
 			return project.Question{}, err
@@ -215,7 +271,7 @@ func (p *Program) Merge(c caller.Caller, cfg *config.Config, req MergeRequest) (
 		if project.QuestionAnswered(items, id) {
 			return project.Question{}, refuse("answered", "the user answered %s/%s already; it waits on its coordinator", slug, id)
 		}
-		ms = append(ms, member{child, q})
+		ms = append(ms, member{key: slug, child: child, q: q})
 	}
 	first := ms[0].q
 	pq := project.Question{
@@ -235,33 +291,29 @@ func (p *Program) Merge(c caller.Caller, cfg *config.Config, req MergeRequest) (
 		}
 	}
 	for _, m := range ms {
-		ref := m.child.Slug + "/" + m.q.ID
+		ref := m.key + "/" + m.q.ID
 		mapping, ok := OptionMap(first, m.q)
-		if spec, given := mapFor(req.Map, m.child.Slug, m.q.ID); given {
+		if spec, given := mapFor(req.Map, m.key, m.q.ID); given {
 			var err error
 			if mapping, err = parseMap(spec, ref, first, m.q); err != nil {
 				return project.Question{}, err
 			}
 		} else if !ok {
 			return project.Question{}, refuse("incompatible", "%s's options don't match %s/%s's (%s): give a map for it, --map %s=%s",
-				ref, ms[0].child.Slug, first.ID, optionWords(first), ref, identity(len(first.Options)))
+				ref, ms[0].key, first.ID, optionWords(first), ref, identity(len(first.Options)))
 		}
-		pq.Covers = append(pq.Covers, project.Cover{Project: m.child.Slug, Question: m.q.ID, Map: mapping})
+		pq.Covers = append(pq.Covers, project.Cover{Project: m.key, Question: m.q.ID, Map: mapping})
 	}
 	if pq.Recommended != "" {
 		// Kept only when every member recommends the same option.
 		for _, m := range ms {
 			i := slices.IndexFunc(first.Options, func(o project.QuestionOption) bool { return o.Label == pq.Recommended })
-			cv := pq.Covers[slices.IndexFunc(pq.Covers, func(cv project.Cover) bool { return cv.Project == m.child.Slug && cv.Question == m.q.ID })]
+			cv := pq.Covers[slices.IndexFunc(pq.Covers, func(cv project.Cover) bool { return cv.Project == m.key && cv.Question == m.q.ID })]
 			if i < 0 || cv.Map[i] != m.q.Recommended {
 				pq.Recommended = ""
 				break
 			}
 		}
-	}
-	open, err := p.Questions()
-	if err != nil {
-		return project.Question{}, err
 	}
 	if i := slices.IndexFunc(open, func(o project.Question) bool { return o.Question == pq.Question && o.Task == "" }); i >= 0 {
 		return project.Question{}, refuse("merged", "%s/%s asks that already: give it other words (--text)", p.Slug, open[i].ID)
@@ -271,17 +323,20 @@ func (p *Program) Merge(c caller.Caller, cfg *config.Config, req MergeRequest) (
 		return project.Question{}, err
 	}
 	by := p.Slug + "/" + got.ID
-	var marked []project.Cover
-	for i, m := range ms {
+	var marked []member
+	for _, m := range ms {
+		if m.child == nil {
+			continue // a paired member's: the program question covers it
+		}
 		if err := m.child.SetCoveredBy(m.q.ID, by, ""); err != nil {
 			// Another merge took it meanwhile: undo this one.
-			for j, done := range marked {
-				_ = ms[j].child.SetCoveredBy(done.Question, "", by)
+			for _, done := range marked {
+				_ = done.child.SetCoveredBy(done.q.ID, "", by)
 			}
 			_, _ = p.DoneQuestion(got.ID)
 			return project.Question{}, err
 		}
-		marked = append(marked, pq.Covers[i])
+		marked = append(marked, m)
 		if err := m.child.Journal(c, "program.ask.merge", m.q.ID, "covered by "+by); err != nil {
 			return got, err
 		}
@@ -396,7 +451,9 @@ func (p *Program) Answer(c caller.Caller, cfg *config.Config, ref string, choice
 	for _, cv := range q.Covers {
 		f := Fanned{Project: cv.Project, Question: cv.Question}
 		labels, err := mapped(q, cv, a.Labels)
-		if err == nil {
+		if err == nil && IsRemote(cv.Project) {
+			f.Result, f.Answer, err = p.fanOutPaired(cfg, cv, labels, a.Other)
+		} else if err == nil {
 			var child *project.Project
 			if child, err = p.Member(cfg, cv.Project); err == nil {
 				f.Result, f.Answer, err = fanOut(child, hc, cv.Question, labels, a.Other)
@@ -459,6 +516,42 @@ func fanOut(child *project.Project, c caller.Caller, id string, labels []string,
 	return "answered", a.Words(), nil
 }
 
+// fanOutPaired sends the user's answer, labels and other, to covered
+// question cv of a paired member over peer.act, as fanOut does a local
+// one's: its result and the answer's words there. The question is read
+// again first, so the act names it as its server shows it now.
+func (p *Program) fanOutPaired(cfg *config.Config, cv project.Cover, labels []string, other string) (string, string, error) {
+	q, err := p.pairedQuestion(cfg, cv.Project, cv.Question)
+	if err != nil {
+		if e, ok := err.(*project.Error); ok && e.Code == "unknown-question" {
+			return "closed", "", nil
+		}
+		return "", "", err
+	}
+	a, err := q.Pick(labels, other)
+	if err != nil {
+		return "", "", err
+	}
+	_, slug, _ := config.Remote(cv.Project)
+	act := proto.PeerAct{Project: slug, Need: "ask:" + q.ID, Act: proto.ActAnswer, Question: q.Question, Other: a.Other}
+	if q.MultiSelect {
+		for _, l := range a.Labels {
+			act.Picks = append(act.Picks, slices.IndexFunc(q.Options, func(o project.QuestionOption) bool { return o.Label == l }))
+		}
+		act.Answer = strings.Join(a.Labels, ", ")
+	} else if len(a.Labels) > 0 {
+		act.Answer = a.Labels[0]
+	}
+	asked, err := p.Paired.Answer(cv.Project, act)
+	if err != nil {
+		return "", "", err
+	}
+	if !asked {
+		return "waiting", a.Words(), nil
+	}
+	return "answered", a.Words(), nil
+}
+
 // Withdraw closes the program's open question ref unanswered as c, the
 // director or the human: no longer asked. The member questions it
 // covered are their own again (their mark cleared), still open there.
@@ -472,6 +565,9 @@ func (p *Program) Withdraw(c caller.Caller, cfg *config.Config, ref string) (pro
 	}
 	by := p.Slug + "/" + q.ID
 	for _, cv := range q.Covers {
+		if IsRemote(cv.Project) {
+			continue // marked nowhere but here
+		}
 		if child, err := p.Member(cfg, cv.Project); err == nil {
 			if child.SetCoveredBy(cv.Question, "", by) == nil {
 				_ = child.Journal(c, "program.ask.done", cv.Question, "no longer covered by "+by)

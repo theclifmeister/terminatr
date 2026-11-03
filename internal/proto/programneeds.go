@@ -47,7 +47,8 @@ type ProgramNeed struct {
 	// Acts are the human acts the consoles offer on the row: the need's
 	// own (ActsOf: answer, approve, accept, send-back, questions; a link
 	// need's link.act actions), then those of the needs folded into it
-	// (Also), each once.
+	// (Also), each once. A paired member's rows offer them only while
+	// its server takes this one's acts (needs answer), through peer.act.
 	Acts []string `json:"acts,omitempty"`
 	// Also are the member's other needs that are this one too, folded
 	// into the row (need-level dedupe): a coordinator's open question
@@ -102,8 +103,10 @@ type ProgramNeedsResult struct {
 
 // NeedMember is one member of a program as its Needs you counts it, in
 // the program's order: Needs its rows in the queue. A paired member's
-// needs aren't in the queue yet: Count is what that server's mirror
-// says waits there ("3 waiting on mini"), Synced when it said so. Error
+// needs are in the queue while its server shows them to this one (needs
+// view or answer; at view its rows offer no acts: they are answered
+// there); else Count is what that server's mirror says waits there ("3
+// waiting on mini"). Synced is when the mirror last read it. Error
 // says why a member's needs don't read (a project that doesn't open).
 type NeedMember struct {
 	Project string    `json:"project"`

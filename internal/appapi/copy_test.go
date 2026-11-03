@@ -281,6 +281,9 @@ func TestCopies(t *testing.T) {
 		// program members popup's; the apps get programs with their own
 		// types (the programs design §12, B17).
 		".Peers[].Program",
+		// Whether its peer.act answers a coordinator's question: a
+		// program's answer fanned out there (§7.2), the server's own.
+		".Peers[].NeedAsk",
 		// A shared project's snapshot stays the TUI's remote
 		// dashboard's, but for what the sidebar lists of its threads
 		// (Watched). Its sessions cross as their panes, but only a

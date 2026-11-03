@@ -4,9 +4,10 @@ package server
 // member's needs as needsOf builds them for a paired server (menus,
 // permission dialogs, the coordinator's questions, NEEDS YOU tasks and
 // their PRs), plus its link needs and a failing PR host from its
-// snapshot, ranked across the members into one queue; a paired member
-// by the count its server's mirror has (its needs in full come over
-// peer.needs, B16).
+// snapshot, ranked across the members into one queue; a paired member's
+// needs in full as its server shows them on peer.watch while its needs
+// switch for this server is view or answer (the mirror keeps them), its
+// acts only at answer (peer.act), else the count its mirror has.
 
 import (
 	"cmp"
@@ -134,12 +135,17 @@ func (s *Server) directorNeeds(slug string) *proto.ProgramNeedsResult {
 
 // memberNeeds is what one member gives the queue: a local member's
 // needs (needsOf), its tasks' priorities by ref, its link needs and its
-// PR host's failed polls; a paired member's mirror count.
+// PR host's failed polls; a paired member's needs as its server shows
+// them (view or answer), else its mirror count.
 type memberNeeds struct {
 	project, server string
 	needs           []proto.PeerNeed
-	priority        map[string]tasks.Priority
-	links           []link.Need
+	// view: a paired member's server shows its needs but takes no
+	// acts on them from here (its needs switch is view), so its rows
+	// offer none: they are answered there.
+	view     bool
+	priority map[string]tasks.Priority
+	links    []link.Need
 	// questions are its coordinator's open questions by id, which the
 	// similarity hints and the program's merged questions read.
 	questions map[string]project.Question
@@ -180,8 +186,10 @@ func (s *Server) localMember(slug string, sessions []proto.SessionInfo) memberNe
 	return m
 }
 
-// pairedMember is paired member alias/slug as the mirror has it: what
-// waits there, counted.
+// pairedMember is paired member alias/slug as the mirror has it: its
+// needs in full while its server shows them to this one (needs view or
+// answer), its coordinator's open questions among them for the
+// similarity hints and merges; else what waits there, counted.
 func pairedMember(alias, slug string, peers []proto.PeerMirror) memberNeeds {
 	m := memberNeeds{project: slug, server: alias}
 	i := slices.IndexFunc(peers, func(p proto.PeerMirror) bool { return p.Alias == alias })
@@ -195,7 +203,20 @@ func pairedMember(alias, slug string, peers []proto.PeerMirror) memberNeeds {
 		return m
 	}
 	mp := peers[i].Projects[j]
-	m.count, m.synced = max(mp.NeedsYou, len(mp.Needs)), mp.Synced
+	m.synced = mp.Synced
+	if !peers[i].NeedsCap || !proto.NeedsShown(peers[i].Needs) {
+		m.count = max(mp.NeedsYou, len(mp.Needs))
+		return m
+	}
+	m.needs, m.view = mp.Needs, peers[i].Needs != proto.NeedsAnswer
+	for _, n := range mp.Needs {
+		if q, ok := program.AskQuestion(n); ok {
+			if m.questions == nil {
+				m.questions = map[string]project.Question{}
+			}
+			m.questions[q.ID] = q
+		}
+	}
 	return m
 }
 
@@ -218,7 +239,7 @@ func rollUp(slug string, members []memberNeeds, asks []project.Question) proto.P
 		order[m.server+"/"+m.project] = i
 		rows := foldNeeds(m)
 		rows = slices.DeleteFunc(rows, func(n proto.ProgramNeed) bool {
-			return n.Server == "" && n.Kind == proto.NeedAsk && covered[n.Project+"/"+strings.TrimPrefix(n.ID, "ask:")]
+			return n.Kind == proto.NeedAsk && covered[memberKey(n.Server, n.Project)+"/"+strings.TrimPrefix(n.ID, "ask:")]
 		})
 		nm := proto.NeedMember{Project: m.project, Server: m.server, Needs: len(rows), Count: m.count, Synced: m.synced, Error: m.err}
 		if nm.Needs == 0 && nm.Count == 0 && nm.Error == "" {
@@ -257,21 +278,20 @@ func questionItem(q project.Question) proto.QuestionItem {
 	return item
 }
 
-// flagSimilar sets Similar on each local member's coordinator question
-// row that asks what another member's does (program.Similar): the
-// server suggests, the director merges.
+// flagSimilar sets Similar on each member's coordinator question row
+// that asks what another member's does (program.Similar), a paired
+// member's as Q7@mini/acme-ios: the server suggests, the director
+// merges.
 func flagSimilar(ns []proto.ProgramNeed, members []memberNeeds) {
 	qs := map[string]map[string]project.Question{}
 	for _, m := range members {
-		if m.server == "" {
-			qs[m.project] = m.questions
-		}
+		qs[memberKey(m.server, m.project)] = m.questions
 	}
 	question := func(n proto.ProgramNeed) (project.Question, bool) {
-		if n.Program || n.Server != "" || n.Kind != proto.NeedAsk {
+		if n.Program || n.Kind != proto.NeedAsk {
 			return project.Question{}, false
 		}
-		q, ok := qs[n.Project][strings.TrimPrefix(n.ID, "ask:")]
+		q, ok := qs[memberKey(n.Server, n.Project)][strings.TrimPrefix(n.ID, "ask:")]
 		return q, ok && q.CoveredBy == ""
 	}
 	for i := range ns {
@@ -279,15 +299,26 @@ func flagSimilar(ns []proto.ProgramNeed, members []memberNeeds) {
 		if !ok {
 			continue
 		}
+		key := memberKey(ns[i].Server, ns[i].Project)
 		for j := range ns {
-			if j == i || ns[j].Project == ns[i].Project {
+			other := memberKey(ns[j].Server, ns[j].Project)
+			if j == i || other == key {
 				continue
 			}
 			if b, ok := question(ns[j]); ok && program.Similar(a, b) {
-				ns[i].Similar = append(ns[i].Similar, b.ID+"@"+ns[j].Project)
+				ns[i].Similar = append(ns[i].Similar, b.ID+"@"+other)
 			}
 		}
 	}
+}
+
+// memberKey names a program member as its program lists it: its slug,
+// or alias/slug on a paired server.
+func memberKey(server, slug string) string {
+	if server == "" {
+		return slug
+	}
+	return server + "/" + slug
 }
 
 // foldNeeds are member m's rows: its needs, a task's coordinator
@@ -329,7 +360,9 @@ func foldNeeds(m memberNeeds) []proto.ProgramNeed {
 		row.Also = append(row.Also, n)
 	}
 	for i := range out {
-		out[i].Acts = rowActs(out[i])
+		if !m.view {
+			out[i].Acts = rowActs(out[i])
+		}
 	}
 	for _, l := range m.links {
 		out = append(out, linkNeed(m, l))

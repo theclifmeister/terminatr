@@ -85,6 +85,7 @@ func (s *Server) recordProgramAnswers(slug string, qs []project.Question, ans ma
 		s.log.Printf("program %s: answers: %v", slug, err)
 		return
 	}
+	g.Paired = serverPaired{s}
 	for _, pq := range qs {
 		a, ok := ans[pq.Question]
 		if !ok {
@@ -95,6 +96,27 @@ func (s *Server) recordProgramAnswers(slug string, qs []project.Question, ans ma
 			s.log.Printf("program %s: answer %s: %v", slug, pq.ID, err)
 		}
 	}
+}
+
+// serverPaired is program.Paired inside tm's server, for the human: a
+// paired member's questions as the mirror has them, an answer over
+// peer.need-act.
+type serverPaired struct{ s *Server }
+
+func (p serverPaired) Question(key, id string) (project.Question, error) {
+	alias, member, _ := config.Remote(key)
+	return program.PairedQuestion(key, id, program.MirrorNeeds(p.s.mirror.List().Peers, alias, member))
+}
+
+func (p serverPaired) Answer(key string, act proto.PeerAct) (bool, error) {
+	alias, _, _ := config.Remote(key)
+	c := caller.Caller{Kind: caller.Human}
+	cc := callCtx{method: proto.MethodPeerNeedAct, human: true, who: func() caller.Caller { return c }}
+	res, perr := p.s.needAct(proto.PeerNeedActParams{Peer: alias, PeerAct: act}, cc)
+	if perr != nil {
+		return false, perr
+	}
+	return res.(proto.PeerActResult).Asked, nil
 }
 
 // choicesOf reads a dialog's answer to q: an option's label, a

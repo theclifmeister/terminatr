@@ -329,7 +329,7 @@ func TestNeedPicksCap(t *testing.T) {
 		t.Errorf("needs only: caps %v", caps)
 	}
 	acts := &actExport{needsExport: shows}
-	if caps := (&Manager{opts: Options{Export: acts}}).caps(); !slices.Contains(caps, CapNeedPicks) {
+	if caps := (&Manager{opts: Options{Export: acts}}).caps(); !slices.Contains(caps, CapNeedPicks) || !slices.Contains(caps, CapNeedAsk) {
 		t.Errorf("acts: caps %v, want %s", caps, CapNeedPicks)
 	}
 }

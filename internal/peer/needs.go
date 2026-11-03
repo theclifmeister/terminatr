@@ -29,6 +29,12 @@ const CapNeeds = "needs"
 // question to the pane there (T904).
 const CapNeedPicks = "need-picks"
 
+// CapNeedAsk says peer.act answers a coordinator's open question
+// (proto.AnswersAsk), with the user's own words (PeerAct.Other) too: a
+// program's answer fanned out to a paired member (the programs design
+// §7.2). A paired server without it refuses such an act.
+const CapNeedAsk = "need-ask"
+
 // NeedsExporter is an Exporter that shows a shared project's needs in
 // full (CapNeeds).
 type NeedsExporter interface {
