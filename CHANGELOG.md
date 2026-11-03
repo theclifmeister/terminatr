@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.76.0](https://github.com/theclifmeister/terminatr/compare/v0.75.0...v0.76.0) (2026-11-03)
+
+
+### Features
+
+* **programs:** a director wakes a member's coordinator that isn't running ([#1066](https://github.com/theclifmeister/terminatr/issues/1066)) ([415ae28](https://github.com/theclifmeister/terminatr/commit/415ae28204d768746d70240714a0ce5a31793309))
+* **programs:** open and talk to a program's director from the iPhone and iPad ([#1068](https://github.com/theclifmeister/terminatr/issues/1068)) ([40958d9](https://github.com/theclifmeister/terminatr/commit/40958d9430b7c41496d17916b1b5c2c16fd6a8f7))
+* **sidebar:** a program's members start folded ([#1064](https://github.com/theclifmeister/terminatr/issues/1064)) ([3833d61](https://github.com/theclifmeister/terminatr/commit/3833d610a7b5a1c31f1b5540c9175b68c2ea1ffb))
+* **tui:** new program gets its own key, G ([#1065](https://github.com/theclifmeister/terminatr/issues/1065)) ([8c2a578](https://github.com/theclifmeister/terminatr/commit/8c2a578e11181c5ab1b0e25361dc582ce639f0a9))
+* **tui:** programs switch moves to Settings → General ([#1060](https://github.com/theclifmeister/terminatr/issues/1060)) ([eaf87a2](https://github.com/theclifmeister/terminatr/commit/eaf87a2a235efdd7bce658a53b3e243f1eed41bc))
+
+
+### Bug Fixes
+
+* **cli:** tm program new writes the program's settings table and takes --projects ([#1067](https://github.com/theclifmeister/terminatr/issues/1067)) ([46696c0](https://github.com/theclifmeister/terminatr/commit/46696c02c570b3f763a6a1dc2587fc72ef0caac0))
+* **tui:** cursor on the PROJECTS header no longer highlights the row under it ([#1061](https://github.com/theclifmeister/terminatr/issues/1061)) ([2bf3ae2](https://github.com/theclifmeister/terminatr/commit/2bf3ae2cfdd17448c3e87c67a04af75992b4b3c7))
+
 ## [0.75.0](https://github.com/theclifmeister/terminatr/compare/v0.74.0...v0.75.0) (2026-11-03)
 
 
