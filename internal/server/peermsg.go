@@ -42,6 +42,22 @@ func (t peerTransport) Ready(alias string) bool {
 	return false
 }
 
+// ProgramReady says the link to alias is up and its server takes
+// program messages: its hello lists program, only while its programs
+// are on (link.ProgramTransport).
+func (t peerTransport) ProgramReady(alias string) bool {
+	st := t.m.Status()
+	if st == nil {
+		return false
+	}
+	for _, l := range st.Peers {
+		if l.Alias == alias {
+			return l.State == proto.LinkUp && slices.Contains(l.Caps, peer.CapProgram)
+		}
+	}
+	return false
+}
+
 // FileReady says the link to alias is up and its tm takes files.
 func (t peerTransport) FileReady(alias string) bool {
 	up, files := t.files(alias)

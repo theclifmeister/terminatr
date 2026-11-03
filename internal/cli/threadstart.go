@@ -14,8 +14,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/models"
+	"github.com/theclifmeister/terminatr/internal/program"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/tasks"
@@ -28,11 +30,19 @@ type startOpts struct {
 	title, task, agent, model string
 	repo, base                string
 	approved, overCap         bool
+	// program is set by tm program start (programStart), which ran the
+	// program's checks: the program whose director starts the thread.
+	program string
 }
 
 func (e *Env) threadStart(p *project.Project, o startOpts, asJSON bool) error {
-	if err := e.coordinatorOnly(p, "starting threads"); err != nil {
-		return err
+	director := o.program != "" && e.Caller.Kind == caller.Director && e.Caller.Project == o.program
+	if !director {
+		if err := e.coordinatorOnly(p, "starting threads"); err != nil {
+			return err
+		}
+	} else if o.overCap {
+		return &tasks.Error{Code: "human-only", Msg: "--over-cap is the user's word alone"}
 	}
 	cfg, err := config.Load()
 	if err != nil {
@@ -54,6 +64,11 @@ func (e *Env) threadStart(p *project.Project, o startOpts, asJSON bool) error {
 	if err := parkedErr(p, safety); err != nil {
 		return err
 	}
+	// A director's start meets the member's own start_threads too (the
+	// program's delegate doesn't lift it).
+	if safety.StartThreads == config.StartPropose && director && !o.approved {
+		return &tasks.Error{Code: "needs-approval", Msg: fmt.Sprintf("%s's start_threads = propose: its own setting holds under delegate too; propose the start to the user, and once they agree run tm program start %s/%s --approved-by-user (or leave it to %s's coordinator)", p.Slug, p.Slug, o.task, p.Slug)}
+	}
 	// --over-cap is the user's word on the cap, not on the thread: under
 	// propose it still needs --approved-by-user.
 	if safety.StartThreads == config.StartPropose && e.Caller.IsAgent() && !o.approved {
@@ -67,6 +82,9 @@ func (e *Env) threadStart(p *project.Project, o startOpts, asJSON bool) error {
 	task, err := threadTask(p, o.task)
 	if err != nil {
 		return err
+	}
+	if !director {
+		e.warnWaiting(cfg, p, task)
 	}
 	if task != nil && o.title == "" {
 		o.title = task.Title
@@ -138,6 +156,11 @@ func (e *Env) threadStart(p *project.Project, o startOpts, asJSON bool) error {
 	}
 	if err := p.Journal(e.Caller, "thread.start", r.ID, detail); err != nil {
 		return fail(err)
+	}
+	if director {
+		if g, err := program.Open(o.program, cfg); err == nil {
+			g.JournalStart(e.Caller, p.Slug+"/"+r.Task, r.ID, strings.TrimSpace(strings.TrimPrefix(detail, r.Task)))
+		}
 	}
 	info, err := e.launchThread(p, r, brief, "")
 	if err != nil {
@@ -283,7 +306,15 @@ func threadTask(p *project.Project, taskRef string) (*tasks.Task, error) {
 // brief's path. The journal counts the memory notes the brief carries
 // (thread.memory), so how often a thread gets a matched one shows.
 func (e *Env) threadFiles(p *project.Project, r *thread.Record, task *tasks.Task) (string, error) {
-	if task != nil {
+	if task != nil && e.Caller.Kind == caller.Director {
+		// A director's start (tm program start): the task store lets it
+		// link the thread and start the task, nothing more.
+		s := p.Tasks()
+		if _, err := s.ProgramStarted(e.Caller, task.ID, r.ID); err != nil {
+			return "", err
+		}
+		task, _ = s.Get(task.ID)
+	} else if task != nil {
 		s := p.Tasks()
 		if _, err := s.SetThread(e.Caller, task.ID, r.ID); err != nil {
 			return "", err
@@ -409,7 +440,7 @@ func (e *Env) underCap(cfg *config.Config, p *project.Project, capN, global int,
 	}
 	if n := thread.Working(recs, res.Sessions); n >= capN {
 		thread.Refused(p.Slug, "over-cap", what, time.Now())
-		return &tasks.Error{Code: "over-cap", Msg: fmt.Sprintf("%d of %d parallel threads are working: propose the thread to the user instead and start it once one finishes (an inbox item says when a slot frees); only if the user says to start it anyway, add --over-cap", n, capN)}
+		return &tasks.Error{Code: "over-cap", Msg: fmt.Sprintf("%d of %d parallel threads are working: %s", n, capN, e.capAdvice())}
 	}
 	g, inProgram := thread.ProgramOf(cfg, p.Slug)
 	var by map[string]int
@@ -419,13 +450,13 @@ func (e *Env) underCap(cfg *config.Config, p *project.Project, capN, global int,
 	if inProgram && g.ParallelThreads > 0 {
 		if n := thread.InProgram(by, g); n >= g.ParallelThreads {
 			thread.Refused(p.Slug, "over-program-cap", what, time.Now())
-			return &tasks.Error{Code: "over-program-cap", Msg: fmt.Sprintf("%d of %d threads are working in program %s (%s): propose the thread to the user instead and start it once one finishes (an inbox item says when a slot frees); only if the user says to start it anyway, add --over-cap", n, g.ParallelThreads, g.Slug, thread.ByProjectWords(programCounts(by, g)))}
+			return &tasks.Error{Code: "over-program-cap", Msg: fmt.Sprintf("%d of %d threads are working in program %s (%s): %s", n, g.ParallelThreads, g.Slug, thread.ByProjectWords(programCounts(by, g)), e.capAdvice())}
 		}
 	}
 	if global > 0 {
 		if n := thread.Total(by); n >= global {
 			thread.Refused(p.Slug, "over-global-cap", what, time.Now())
-			return &tasks.Error{Code: "over-global-cap", Msg: fmt.Sprintf("%d of %d threads across all projects are working (%s): propose the thread to the user instead and start it once one finishes (an inbox item says when a slot frees); only if the user says to start it anyway, add --over-cap", n, global, thread.ByProjectWords(by))}
+			return &tasks.Error{Code: "over-global-cap", Msg: fmt.Sprintf("%d of %d threads across all projects are working (%s): %s", n, global, thread.ByProjectWords(by), e.capAdvice())}
 		}
 	}
 	program := ""
@@ -434,6 +465,16 @@ func (e *Env) underCap(cfg *config.Config, p *project.Project, capN, global int,
 	}
 	thread.Started(p.Slug, program)
 	return nil
+}
+
+// capAdvice is a cap refusal's last words, for the caller: a
+// coordinator proposes and may pass the user's --over-cap; a director
+// never does (the programs design §10), it waits for a slot-free item.
+func (e *Env) capAdvice() string {
+	if e.Caller.Kind == caller.Director {
+		return "wait for a slot (a slot-free item says when one frees) and start it then, or propose it to the user; never pass --over-cap: only the user starts a thread over a cap, in the project's console"
+	}
+	return "propose the thread to the user instead and start it once one finishes (an inbox item says when a slot frees); only if the user says to start it anyway, add --over-cap"
 }
 
 // programCounts is by, only program g's members.

@@ -266,7 +266,7 @@ func TestMessagesGolden(t *testing.T) {
 	m.openTab("alpha", tabMessages, 0)
 	pv := m.projectPopupView()
 	needs, es := pv.messages(m)
-	lines, _, _ := msgLines(nil, src.data.Projects[0].Links, es, len(needs), 110)
+	lines, _, _ := msgLines(nil, src.data.Projects[0].Links, nil, es, len(needs), 110)
 	var b strings.Builder
 	write := func(lines []string) {
 		for _, l := range lines {

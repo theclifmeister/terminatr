@@ -247,7 +247,7 @@ func (t *Ticker) offer(cfg *config.Config, g config.Program, rest []thread.Waite
 	if global > 0 {
 		s += fmt.Sprintf(", %d of %d across projects", total, global)
 	}
-	s += fmt.Sprintf("; it is held for you for %d minutes. Candidates, best first: %s. Start the best within the caps if it should go now; if none starts, the coordinators are told themselves when the hold ends",
+	s += fmt.Sprintf("; it is held for you for %d minutes. Candidates, best first: %s. Start the best within the caps (tm program start <project>/T<n>) if it should go now; if none starts, the coordinators are told themselves when the hold ends",
 		int(thread.SlotHold/time.Minute), strings.Join(lines, "; "))
 	if _, err := gp.AddItem(KindSlotFree, "threads", s, false); err != nil {
 		t.o.Log.Printf("ticker: program %s: inbox: %v", g.Slug, err)

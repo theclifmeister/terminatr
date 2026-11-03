@@ -41,7 +41,9 @@ func statusLine(s proto.SessionInfo, ts *thread.Status, pending bool, cols int, 
 // settings file under the test's TERMINATR_HOME, and Load reads them
 // back once one was set.
 type fakeSource struct {
-	agentCalls int // Agents() calls (perf_render_test.go)
+	invites     map[string][]link.Invite
+	programActs []string
+	agentCalls  int // Agents() calls (perf_render_test.go)
 	// programs is what Programs reads; switched, the SetPrograms calls.
 	programs ProgramsState
 	switched []bool
@@ -1805,4 +1807,14 @@ func rolePrefix(role string) string {
 		return "director:"
 	}
 	return ""
+}
+
+func (f *fakeSource) ProgramInvites(slug string) ([]link.Invite, error) { return f.invites[slug], nil }
+func (f *fakeSource) ProgramAct(slug, verb, arg string, o link.AnswerOpts) (string, error) {
+	f.programActs = append(f.programActs, fmt.Sprintf("%s %s %s %+v", slug, verb, arg, o))
+	return verb + " done", nil
+}
+func (f *fakeSource) SetProgramLinkKey(slug, key string, value any) error {
+	f.programActs = append(f.programActs, fmt.Sprintf("%s set %s %v", slug, key, value))
+	return nil
 }

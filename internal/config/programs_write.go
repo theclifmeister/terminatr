@@ -95,3 +95,77 @@ func editPrograms(fn func(data []byte) ([]byte, error)) error {
 		return out, nil
 	})
 }
+
+// The child side's program keys (the programs design §9.1): a project's
+// membership of a paired server's program, in its own [projects.<slug>]
+// table. Only accepting that program's invite sets program (the
+// TUI's Messages tab or tm program accept, the human's), and leaving
+// unsets them all; the TUI's project settings change the other three,
+// each with its own confirm. They aren't settings tm access or the
+// generic setting writers reach (CheckSetting doesn't know them), so no
+// agent sets them.
+
+// ProgramLinkKeys are a project's program keys, program first.
+var ProgramLinkKeys = []string{"program", "program_tasks", "program_starts", "program_status"}
+
+// SetProgramLink writes project slug's membership l: all four keys.
+func SetProgramLink(slug string, l ProgramLink) error {
+	if alias, ps, ok := SplitMember(l.Program); !ok || alias == "" || !ValidProgramSlug(ps) {
+		return fmt.Errorf("program %q: a paired server's program, <server>/<program>", l.Program)
+	}
+	return editPrograms(func(data []byte) ([]byte, error) {
+		out := data
+		for _, kv := range []struct {
+			k string
+			v any
+		}{{"program", l.Program}, {"program_tasks", l.Tasks}, {"program_starts", l.Starts}, {"program_status", l.Status}} {
+			var err error
+			if out, err = Edit(out, "projects."+slug, kv.k, kv.v); err != nil {
+				return nil, err
+			}
+		}
+		return out, nil
+	})
+}
+
+// SetProgramLinkKey changes one of program_tasks (a string),
+// program_starts or program_status (bools) of project slug, which must
+// be a member of a paired server's program.
+func SetProgramLinkKey(slug, key string, value any) error {
+	ok := false
+	switch value.(type) {
+	case string:
+		ok = key == "program_tasks"
+	case bool:
+		ok = key == "program_starts" || key == "program_status"
+	}
+	if !ok {
+		return fmt.Errorf("%s isn't a program key that takes %T", key, value)
+	}
+	return editPrograms(func(data []byte) ([]byte, error) {
+		path, _ := Path()
+		if c, _ := parse(path, data); c == nil {
+			return nil, fmt.Errorf("the settings file doesn't read")
+		} else if _, member := c.ProgramLink(slug); !member {
+			return nil, fmt.Errorf("%s isn't in a paired server's program", slug)
+		}
+		return Edit(data, "projects."+slug, key, value)
+	})
+}
+
+// UnsetProgramLink removes project slug's program keys: it leaves the
+// program. ErrForm when the file sets one in a form the line editor
+// doesn't change.
+func UnsetProgramLink(slug string) error {
+	return editPrograms(func(data []byte) ([]byte, error) {
+		out := data
+		for _, k := range ProgramLinkKeys {
+			next := Remove(out, "projects."+slug, k)
+			if slices.Equal(next, out) && sets(out, "projects."+slug, k) {
+				return nil, ErrForm
+			}
+			out = next
+		}
+		return out, nil
+	})
+}

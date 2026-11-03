@@ -50,6 +50,10 @@ type store struct {
 	ShareRev int                    `json:"share_rev,omitempty"`
 	ShareOut map[string][]time.Time `json:"share_out,omitempty"`
 	ShareIn  map[string][]time.Time `json:"share_in,omitempty"`
+	// Invites are the program invites to and from paired servers
+	// (programinvite.go), the newest per folder, peer and direction;
+	// they count in ReqOut and ReqIn.
+	Invites []*Invite `json:"invites,omitempty"`
 }
 
 // bucket is one direction's token bucket (limits).

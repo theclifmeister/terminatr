@@ -100,6 +100,10 @@ type Data struct {
 	// Programs are the programs while [features] programs is on (the
 	// programs design §11.1), in slug order; none while it is off.
 	Programs []ProgramData
+	// ProgramLinks are, by project slug, the projects' memberships of
+	// paired servers' programs (their program keys) while programs are
+	// on; none while off.
+	ProgramLinks map[string]config.ProgramLink
 }
 
 // ServerInfo is the running server's identity, from session.list.
@@ -197,6 +201,7 @@ type Source interface {
 	SessionSource
 	LogSource
 	SearchSource
+	ProgramPeerSource
 }
 
 // LogSource reads the logs on the server's host (the , popup's Logs
@@ -793,6 +798,16 @@ func (s *ServerSource) Load() Data {
 			d.Sandbox[slug] = cfg.SandboxOf(slug)
 		}
 		d.Programs = programsOf(cfg)
+		if programsOnIn(cfg) {
+			for _, slug := range cfg.ProjectSlugs() {
+				if l, in := cfg.ProgramLink(slug); in {
+					if d.ProgramLinks == nil {
+						d.ProgramLinks = map[string]config.ProgramLink{}
+					}
+					d.ProgramLinks[slug] = l
+				}
+			}
+		}
 	}
 	d.NoAgent = sc.noAgent
 	if ps, ok := s.watched(); ok {

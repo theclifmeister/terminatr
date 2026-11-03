@@ -145,3 +145,16 @@ func (s State) Project(slug string) (map[string]PR, Timing) {
 	}
 	return prs, t
 }
+
+// Merged reports whether thread id of project slug has a merged PR, as
+// the ticker last saw it: a live thread's last poll, or a merge kept for
+// a task that still names it (mergedThreads, from the file).
+func (s State) Merged(slug, id string) bool {
+	if m := s.st.Threads[slug+"/"+id]; m != nil && m.PR.State == "MERGED" {
+		return true
+	}
+	if pm := s.st.Projects[slug]; pm != nil && pm.Merges[id] != nil {
+		return true
+	}
+	return false
+}

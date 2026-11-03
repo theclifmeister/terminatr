@@ -276,6 +276,10 @@ func TestCopies(t *testing.T) {
 		// offset as the sessions' times.
 		".Peers[].Watch", ".Peers[].Popup",
 		".Peers[].Version", ".Peers[].RTT", ".Peers[].Listed", ".Peers[].Shares",
+		// Whether the paired server takes program messages: the TUI's
+		// program members popup's; the apps get programs with their own
+		// types (the programs design §12, B17).
+		".Peers[].Program",
 		// A shared project's snapshot stays the TUI's remote
 		// dashboard's, but for what the sidebar lists of its threads
 		// (Watched). Its sessions cross as their panes, but only a

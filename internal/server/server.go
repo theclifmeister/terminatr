@@ -399,7 +399,7 @@ func Run(ctx context.Context, opts Options) error {
 	// local call waits on (docs/SPEC.md §16.7). They read the shared
 	// projects through peerExport (§16.9), nothing else.
 	s.peers = peer.Start(peer.Options{Dir: peer.DirIn(p.Home), Version: version.Version, Logf: logger.Printf, Export: s.peerExport(), Messages: peerMessages{}, Panes: peerPanes{s}, Files: link.Files(), Transcripts: peerTranscripts{s},
-		Name: peer.OwnName, Taken: func(n string) string { return project.PeerNameTaken(n, peer.SelfName()) }})
+		Name: peer.OwnName, Taken: func(n string) string { return project.PeerNameTaken(n, peer.SelfName()) }, Programs: programsNow()})
 	defer s.peers.Close()
 	// What they share, for the consoles (§16.10); a peer's pane switch
 	// reaches the remote panes open here at once (§16.12).
@@ -415,6 +415,8 @@ func Run(ctx context.Context, opts Options) error {
 	defer s.remotes.closeAll()
 	// Messages to linked projects on paired servers wait in the outbox
 	// until their link is up (§16.11).
+	// The program stream waits while programs are off (applyPrograms).
+	link.SetPrograms(s.peers.Programs())
 	outboxCtx, stopOutbox := context.WithCancel(context.Background())
 	defer stopOutbox()
 	go link.RunOutbox(outboxCtx, peerTransport{s.peers})
