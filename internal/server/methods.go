@@ -225,6 +225,8 @@ func init() {
 		// A program's rolled-up Needs you: the human any program's, a
 		// director its own's (checked in programNeeds).
 		proto.MethodProgramNeeds: {gate: gateAgentOrHuman, call: typed((*Server).programNeeds)},
+		// A director its own program's members, checked in its handler.
+		proto.MethodProgramWake: {gate: gateAgentOrHuman, call: typed((*Server).programWake)},
 		// Its needs dialog opened over the director's pane, for the
 		// user: the human, or the director for its own program.
 		proto.MethodProgramNeedsOpen: {gate: gateAgentOrHuman, call: typed((*Server).programNeedsOpen)},

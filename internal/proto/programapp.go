@@ -159,3 +159,25 @@ type ProgramDeleteParams struct {
 type ProgramDeleteResult struct {
 	Trash string `json:"trash,omitempty"`
 }
+
+// MethodProgramWake starts a member project's coordinator that isn't
+// running, as enter on its coordinator row does, so what the director
+// filed or sent isn't stuck until the user opens the project (T972):
+// tm program wake. The program's own director's (under propose and
+// delegate: waking starts no threads) and the human's. Refused while
+// programs are off, for a project that isn't a local member (a paired
+// member's is its user's), for an inactive or paused one, and for every
+// member while the program is paused: those stay the user's. A start is journaled in the member and the program
+// as the caller (coordinator.wake). The result is ProgramOpenResult's:
+// the coordinator's session, and whether this call started it.
+const MethodProgramWake = "program.wake"
+
+// ProgramWakeParams are program.wake's: member Project of Program (a
+// director's own when empty), and the size of the pane a started
+// coordinator gets (80x24 when unset).
+type ProgramWakeParams struct {
+	Program string `json:"program,omitempty"`
+	Project string `json:"project"`
+	Cols    uint16 `json:"cols,omitempty"`
+	Rows    uint16 `json:"rows,omitempty"`
+}

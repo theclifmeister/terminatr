@@ -379,7 +379,8 @@ var coordinatorRules = []struct {
 // coordinatorRules: tm checks each call itself, and the server refuses
 // a director what its authority doesn't allow whatever the prompt says
 // (§10). Read-only commands always; the program's own acts that both
-// authorities allow (route, task edit, send, ask) always; tm program
+// authorities allow (route, task edit, send, ask, wake: waking a
+// member's coordinator starts no threads) always; tm program
 // start only under authority = "delegate" (under propose it prompts,
 // and the server still wants --approved-by-user). Nothing of the
 // user's word is here: accept, drop, a thread's menu answer, access,
@@ -390,7 +391,7 @@ var directorRules = []struct {
 }{
 	{[]string{"tm program context", "tm program list", "tm program show", "tm program needs", "tm program search", "tm program task show",
 		"tm context", "tm task list", "tm task show", "tm thread list", "tm thread show", "tm search", "tm skill"}, nil},
-	{[]string{"tm program route", "tm program task edit", "tm program send", "tm program ask"}, nil},
+	{[]string{"tm program route", "tm program task edit", "tm program send", "tm program ask", "tm program wake"}, nil},
 	{[]string{"tm program start"}, func(p config.Program) bool { return p.Authority == config.AuthorityDelegate }},
 }
 

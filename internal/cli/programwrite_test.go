@@ -276,6 +276,28 @@ func TestProgramNeedsCLI(t *testing.T) {
 	h.expect(1, "programs-off", directorAcme, "program", "needs")
 }
 
+// TestProgramWakeCLI: tm program wake is a director's own program's and
+// the human's (whose program is the member's own); without a server it
+// says it can't start one. The server's checks are its own tests.
+func TestProgramWakeCLI(t *testing.T) {
+	h, _ := programHarness(t)
+	h.env[caller.EnvProject] = "acme"
+	h.expect(1, "other-program", directorAcme, "program", "wake", "web", "--program", "beta")
+	h.expect(1, "director-only", caller.Caller{Kind: caller.Coordinator, Project: "demo"}, "program", "wake", "web")
+	h.expect(1, "not-member", human, "program", "wake", "loner")
+	h.expect(2, "", human, "program", "wake")
+	for _, c := range []caller.Caller{directorAcme, human} {
+		if code, _, errs := h.run(c, "", "program", "wake", "web"); code != 3 || !strings.Contains(errs, "not running") {
+			t.Errorf("%v, no server: %d %s", c, code, errs)
+		}
+	}
+	if out := h.ok(human, "program", "wake", "--help"); !strings.Contains(out, "paused") {
+		t.Errorf("help:\n%s", out)
+	}
+	writeTestConfig(t, h, "[programs.acme]\nprojects = [\"demo\", \"web\"]\n")
+	h.expect(1, "programs-off", directorAcme, "program", "wake", "web")
+}
+
 // TestTaskEditCrossAfter (the programs design §6.1): while programs are
 // on, a member's coordinator writes refs to its program's tasks with tm
 // task edit --after, which then replaces the whole list; a non-member's

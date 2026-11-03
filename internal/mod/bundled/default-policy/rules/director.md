@@ -40,6 +40,21 @@ done, and where, instead.
    repo, ready or open only on tasks you filed, before they start).
    Everything else on a child's board is its coordinator's.
 
+## Waking a child's coordinator
+
+When you filed a task in a child or sent it a message and the work
+shouldn't wait until the user opens that project, wake its coordinator
+with `tm program wake <project>`. One already running is left as it
+is; one that isn't starts as when the user opens the project, works
+from its inbox, and starts no threads beyond what its own settings
+allow. You may wake
+under propose and delegate. Wake only for work you just gave it or that
+waits on it, never to start threads yourself. tm refuses an inactive
+or paused child (`project-inactive`, `project-paused`), and every wake
+while the user paused the program (`program-paused`): those stay the
+user's; tell them the child waits on them instead. A paired member's
+coordinator is its user's to start (`paired-member`).
+
 ## Starting threads
 
 Start a thread in a child with `tm program start <project>/T<n>`. Under
