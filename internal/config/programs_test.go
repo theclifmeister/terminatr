@@ -1,9 +1,13 @@
 package config
 
 import (
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/theclifmeister/terminatr/internal/home"
 )
 
 // TestPrograms: [features] programs, the [programs.*] tables and a
@@ -11,7 +15,7 @@ import (
 // switch says (programs design §3.3, §3.5).
 func TestPrograms(t *testing.T) {
 	write(t, "")
-	if c, _ := Load(); c.ProgramsOn() || len(c.ProgramSlugs()) != 0 {
+	if c, _ := Load(); c.Features.Programs || len(c.ProgramSlugs()) != 0 {
 		t.Fatalf("no file: %+v", c)
 	}
 	write(t, `
@@ -38,8 +42,8 @@ program_starts = true
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !c.ProgramsOn() || !reflect.DeepEqual(c.ProgramSlugs(), []string{"acme", "side"}) {
-		t.Fatalf("on %v programs %v", c.ProgramsOn(), c.ProgramSlugs())
+	if !c.Features.Programs || !reflect.DeepEqual(c.ProgramSlugs(), []string{"acme", "side"}) {
+		t.Fatalf("on %v programs %v", c.Features.Programs, c.ProgramSlugs())
 	}
 	if !reflect.DeepEqual(c.Unknown, []string{"features.experimnt"}) {
 		t.Fatalf("unknown %v", c.Unknown)
@@ -115,5 +119,23 @@ func TestSplitMember(t *testing.T) {
 		if a != want[0] || s != want[1] || (ok != (want[2] == "true")) {
 			t.Errorf("SplitMember(%q) = %q %q %v", in, a, s, ok)
 		}
+	}
+}
+
+// TestRemoveProgram: tm program delete drops the program's table, and
+// only it: comments, the switch and other tables stay as they were.
+func TestRemoveProgram(t *testing.T) {
+	write(t, "# mine\n[features]\nprograms = false\n\n[programs.acme]\nprojects = [\n  \"acme-api\",\n  \"acme-web\",\n]\nauthority = \"propose\"\n\n[programs.side]\nprojects = [\"side-a\"]\n\n[projects.acme-api]\nyolo = false\n")
+	path := filepath.Join(os.Getenv(home.Env), "config.toml")
+	read := func() string { b, _ := os.ReadFile(path); return string(b) }
+	if err := RemoveProgram("acme"); err != nil {
+		t.Fatal(err)
+	}
+	got := read()
+	if want := "# mine\n[features]\nprograms = false\n\n[programs.side]\nprojects = [\"side-a\"]\n\n[projects.acme-api]\nyolo = false\n"; got != want {
+		t.Fatalf("after RemoveProgram:\n%s\nwant:\n%s", got, want)
+	}
+	if err := RemoveProgram("nope"); err != nil || read() != got {
+		t.Fatalf("removing a program with no table changed the file: %v", err)
 	}
 }

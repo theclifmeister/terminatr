@@ -294,3 +294,44 @@ func TestLinks(t *testing.T) {
 		}
 	}
 }
+
+// TestDelete: tm program delete moves the folder to the trash, its
+// journal line with it, and drops its table from config.toml, whatever
+// the switch says; the members' folders stay.
+func TestDelete(t *testing.T) {
+	dir := setup(t)
+	if _, err := project.New(project.Options{Slug: "acme-api"}); err != nil {
+		t.Fatal(err)
+	}
+	cfgPath := filepath.Join(dir, "config.toml")
+	os.WriteFile(cfgPath, []byte("[programs.acme]\nprojects = [\"acme-api\"]\n[programs.bare]\n"), 0o600)
+	if _, err := New(Options{Slug: "acme"}); err != nil {
+		t.Fatal(err)
+	}
+	dst, err := Delete(caller.Caller{Kind: caller.Human}, "acme", time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := filepath.Join(dir, ".trash", "_programs-acme-20261103T120000Z"); dst != want {
+		t.Fatalf("moved to %s, want %s", dst, want)
+	}
+	if b, _ := os.ReadFile(filepath.Join(dst, "JOURNAL.md")); !strings.Contains(string(b), "human program.delete acme moved to "+dst) {
+		t.Fatalf("journal:\n%s", b)
+	}
+	if _, err := Open("acme", nil); code(err) != "unknown-program" {
+		t.Fatalf("open after delete: %v", err)
+	}
+	if b, _ := os.ReadFile(cfgPath); string(b) != "[programs.bare]\n" {
+		t.Fatalf("config.toml after delete:\n%s", b)
+	}
+	if _, err := project.Open("acme-api"); err != nil {
+		t.Fatalf("the member went: %v", err)
+	}
+	// A table with no folder: only the table goes.
+	if dst, err := Delete(caller.Caller{Kind: caller.Human}, "bare", time.Now()); err != nil || dst != "" {
+		t.Fatalf("delete bare: %q %v", dst, err)
+	}
+	if _, err := Delete(caller.Caller{Kind: caller.Human}, "bare", time.Now()); code(err) != "unknown-program" {
+		t.Fatalf("delete twice: %v", err)
+	}
+}

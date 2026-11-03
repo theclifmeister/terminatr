@@ -2,6 +2,7 @@ package server
 
 import (
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/features"
 	"github.com/theclifmeister/terminatr/internal/program"
 	"github.com/theclifmeister/terminatr/internal/project"
 )
@@ -39,7 +40,7 @@ type SideProgram struct {
 // has too is left out (the project wins, §3.4), and its members are
 // drawn as standalone projects.
 func SidePrograms(cfg *config.Config) []SideProgram {
-	if !cfg.ProgramsOn() {
+	if !features.Programs(cfg) {
 		return nil
 	}
 	var out []SideProgram

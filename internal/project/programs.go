@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/features"
 	"github.com/theclifmeister/terminatr/internal/home"
 	"github.com/theclifmeister/terminatr/internal/mdfile"
 	"github.com/theclifmeister/terminatr/internal/textsafe"
@@ -110,7 +111,7 @@ func projectExists(slug string) bool {
 // only for a member of a program that isn't left out (ok false
 // otherwise): off, a coordinator's context is today's exactly.
 func programSection(cfg *config.Config, slug string) (Section, bool) {
-	if !cfg.ProgramsOn() {
+	if !features.Programs(cfg) {
 		return Section{}, false
 	}
 	g := cfg.ProgramOf(slug)

@@ -48,8 +48,9 @@ import (
 // Design.Working and DesignTask.Working, added fields only. 32:
 // task.priority, and a task's priority on the tasks the server sends.
 // 33: appreport.add, appreport.list and appreport.show, the apps' crash
-// and hang reports (CapAppReports).
-const Protocol = 33
+// and hang reports (CapAppReports). 34: programs.switch, and the hello's
+// CapPrograms while programs are on.
+const Protocol = 34
 
 // Kind is what a connection is for.
 type Kind string

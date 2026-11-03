@@ -17,6 +17,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/features"
 	"github.com/theclifmeister/terminatr/internal/link"
 	"github.com/theclifmeister/terminatr/internal/models"
 	"github.com/theclifmeister/terminatr/internal/project"
@@ -698,7 +699,7 @@ func runSkill(e *Env, args []string) error {
 	if pos[0] == "director" {
 		// No director runs while programs are off, so its rules aren't
 		// shown either (the programs design §4.3).
-		if cfg, _ := config.Load(); !cfg.ProgramsOn() {
+		if cfg, _ := config.Load(); !features.Programs(cfg) {
 			return programsOff()
 		}
 	}

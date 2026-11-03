@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/features"
 	"github.com/theclifmeister/terminatr/internal/mod"
 )
 
@@ -121,7 +122,7 @@ func withMods(role, version string, policy Addendum, addenda []Addendum, program
 func ForProject(role, version, slug string) (string, bool) {
 	cfg, _ := config.Load()
 	var programs *Programs
-	if role == "coordinator" && cfg.ProgramsOn() {
+	if role == "coordinator" && features.Programs(cfg) {
 		programs = &Programs{}
 	}
 	r, err := mod.Load(cfg)

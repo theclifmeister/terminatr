@@ -42,12 +42,15 @@ func statusLine(s proto.SessionInfo, ts *thread.Status, pending bool, cols int, 
 // back once one was set.
 type fakeSource struct {
 	agentCalls int // Agents() calls (perf_render_test.go)
-	data       Data
-	board      *tasks.Board
-	opened     []string
-	started    []string
-	settings   []string // table.key=value
-	repos      []string // +path or -path
+	// programs is what Programs reads; switched, the SetPrograms calls.
+	programs ProgramsState
+	switched []bool
+	data     Data
+	board    *tasks.Board
+	opened   []string
+	started  []string
+	settings []string // table.key=value
+	repos    []string // +path or -path
 	// delegated are the tasks asked to be delegated: "slug T12"; asked
 	// the other asks: "accept slug T12", "send-back slug T12 note".
 	delegated   []string
@@ -210,6 +213,12 @@ func (f *fakeSource) Board(string) (*tasks.Board, error) {
 		return f.board, nil
 	}
 	return &tasks.Board{}, nil
+}
+func (f *fakeSource) Programs() ProgramsState { return f.programs }
+func (f *fakeSource) SetPrograms(on bool) (string, error) {
+	f.switched = append(f.switched, on)
+	f.programs.On = on
+	return "programs " + onOff(on), nil
 }
 func (f *fakeSource) SetSetting(table, key string, value any) error {
 	f.settings = append(f.settings, fmt.Sprintf("%s.%s=%v", table, key, value))

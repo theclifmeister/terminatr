@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/config"
@@ -73,6 +74,9 @@ func dormantRole(r SessionRecord) bool {
 // project is gone (deleted, renamed outside the server), or its thread
 // was stopped, resolved or restarted meanwhile; "" when it still is.
 func dormantGone(r SessionRecord) string {
+	if r.Role == proto.RoleDirector {
+		return directorGone(r)
+	}
 	p, err := project.Open(r.Project)
 	if err != nil {
 		return "its project is gone"
@@ -95,7 +99,7 @@ func (s *Server) sleepLocked(id string) {
 	os.RemoveAll(s.runtimeDir(id))
 	delete(s.records, id)
 	if r.Agent != "" && r.AgentSessionID != "" {
-		r.CleanExit = true
+		r.CleanExit, r.Dormant = true, time.Now().UTC()
 		s.dormant[id] = r
 	}
 	if err := s.saveLocked(""); err != nil {
@@ -138,7 +142,7 @@ func (s *Server) sleep(slug string) (names []string) {
 	var stop []func()
 	for id, sess := range s.sessions {
 		r := s.records[id]
-		if r.Project != slug || !dormantRole(r) || sess.ExitStatus() != "" {
+		if r.Project != slug || !dormantRole(r) || sess.ExitStatus() != "" || s.sleeping[id] {
 			continue
 		}
 		s.sleeping[id] = true

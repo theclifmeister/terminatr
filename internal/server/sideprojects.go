@@ -21,6 +21,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/features"
 	"github.com/theclifmeister/terminatr/internal/home"
 	"github.com/theclifmeister/terminatr/internal/link"
 	"github.com/theclifmeister/terminatr/internal/mod"
@@ -634,7 +635,7 @@ func (s *ProjectsWatchStream) Close() error { return s.c.Close() }
 // program on this server while programs are on, unless a project has
 // the program's name too (it is left out then); "" for none.
 func programOfSide(cfg *config.Config, slug string) string {
-	if !cfg.ProgramsOn() {
+	if !features.Programs(cfg) {
 		return ""
 	}
 	g := cfg.ProgramOf(slug)

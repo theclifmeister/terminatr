@@ -130,9 +130,6 @@ func SplitMember(m string) (alias, slug string, ok bool) {
 	return alias, slug, true
 }
 
-// ProgramsOn reports whether [features] programs is on.
-func (c *Config) ProgramsOn() bool { return c != nil && c.Features.Programs }
-
 // ProgramSlugs lists, sorted, the programs the file has a table for,
 // whatever the switch says.
 func (c *Config) ProgramSlugs() []string {
@@ -297,4 +294,18 @@ func (c *Config) checkPrograms() error {
 		}
 	}
 	return nil
+}
+
+// RemoveProgram drops program slug's [programs.<slug>] table from the
+// settings file, its members' membership with it: tm program delete,
+// the human's. Comments and the other tables stay as they were. ErrForm
+// when the file sets it in a form the line editor doesn't change (a
+// dotted key, an inline table).
+func RemoveProgram(slug string) error {
+	return edit(func(data []byte) ([]byte, error) {
+		if data == nil {
+			return nil, nil
+		}
+		return DropTable(data, "programs."+slug)
+	})
 }

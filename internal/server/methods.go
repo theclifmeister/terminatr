@@ -330,6 +330,11 @@ func init() {
 			s.kick()
 			return res, perr
 		})},
+		proto.MethodProgramsSwitch: {gate: gateHuman, call: typed(func(s *Server, p proto.ProgramsSwitchParams, c callCtx) (any, *proto.Error) {
+			res, perr := s.setPrograms(p, c.who())
+			s.kick()
+			return res, perr
+		})},
 		proto.MethodProjectsWatch: {gate: gateHuman, stream: stream((*Server).serveProjectsWatch)},
 		proto.MethodSessionsWatch: {gate: gateHuman, stream: stream((*Server).serveSessionsWatch)},
 		proto.MethodAgentReload: {gate: gateHuman, call: plain(func(s *Server, _ callCtx) any {

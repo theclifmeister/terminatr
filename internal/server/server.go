@@ -553,13 +553,13 @@ func (s *Server) loadPrevious() (resume []SessionRecord, lost []restartOutcome) 
 		s.prevShut = "crash"
 		s.log.Printf("previous server (pid %d) did not shut down cleanly", prev.ServerPID)
 	}
-	boots := projectBoots()
+	boots := recordBoots()
 	for _, r := range prev.Dormant {
 		switch why := dormantGone(r); {
 		case why != "":
 			s.log.Printf("session %s: dormant %s dropped: %s", r.ID, restartLabel(r), why)
-		case boots(r.Project):
-			resume = append(resume, r)
+		case boots(r):
+			resume = append(resume, wakeRecord(r))
 		default:
 			s.dormant[r.ID] = r
 		}
@@ -569,7 +569,7 @@ func (s *Server) loadPrevious() (resume []SessionRecord, lost []restartOutcome) 
 			s.prevProject[r.ID] = r.Project
 		}
 		if r.Agent != "" && r.AgentSessionID != "" {
-			if dormantRole(r) && !boots(r.Project) {
+			if !boots(r) {
 				s.dormant[r.ID] = r
 				continue
 			}
@@ -728,7 +728,7 @@ func (s *Server) handle(c net.Conn, human bool) {
 
 // hello is the server's side of the handshake.
 func (s *Server) hello() proto.Hello {
-	return proto.Hello{
+	h := proto.Hello{
 		Protocol: s.protocol,
 		Version:  version.Version,
 		Build:    s.build,
@@ -736,6 +736,12 @@ func (s *Server) hello() proto.Hello {
 		PID:      os.Getpid(),
 		Caps:     []string{proto.CapPaneVT, proto.CapTranscript, proto.CapPaneVTRemote, proto.CapSessionFile, proto.CapTranscriptRemote, proto.CapLinkAct, proto.CapTranscriptTail, proto.CapSideActs, proto.CapProjectFiles, proto.CapNeedAct, proto.CapDesigns, proto.CapSessionsWatch, proto.CapPeerPages, proto.CapPeerDesigns, proto.CapProjectMods, proto.CapAnswerPicks, proto.CapSearch, proto.CapTaskPriority, proto.CapAppReports},
 	}
+	if programsNow() {
+		// Only while the switch is on: the apps draw programs by it
+		// (the programs design §3.5).
+		h.Caps = append(h.Caps, proto.CapPrograms)
+	}
+	return h
 }
 
 // serveControl serves a control connection's requests; app is the Mac
