@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"cmp"
 	"fmt"
 	"slices"
 	"sort"
@@ -139,8 +140,14 @@ type treeRow struct {
 	gap bool
 	// prog is the program of a program's or a director's row, and of a
 	// member project's rows, which are one level in (sideprograms.go);
-	// "" outside programs.
+	// "" outside programs. A paired member's rows under its program
+	// have it too: the same mirror entry as under its server group, with
+	// keys and folds of their own (sideprograms.go).
 	prog string
+	// label is a project row's name in place of its slug: a paired
+	// member under its program, alias/slug. tag is a dim word after the
+	// name: the program of a paired project under its server's group.
+	label, tag string
 }
 
 // folded says a project row hides its coordinator and threads, or the
@@ -646,12 +653,16 @@ func prMark() string {
 // name is cut before the mark, and a row too narrow for both keeps the
 // name alone.
 func projectName(r treeRow, lw int, look lipgloss.Style) []cellRun {
+	name := cmp.Or(r.label, r.slug)
+	if tag := " · " + r.tag; r.tag != "" && lw >= ansi.StringWidth(name)+ansi.StringWidth(tag) {
+		// The tag when the whole name and it fit; else the name alone.
+		return []cellRun{{name, look}, {fit(tag, lw-ansi.StringWidth(name)), th().Faint}}
+	}
 	mark := prMark()
 	mw := ansi.StringWidth(mark)
 	if r.prFails == 0 || lw < mw+2 {
-		return []cellRun{{fitLabel(r.slug, lw), look}}
+		return []cellRun{{fitLabel(name, lw), look}}
 	}
-	name := r.slug
 	if ansi.StringWidth(name) > lw-mw {
 		name = fitLabel(name, lw-mw)
 	}

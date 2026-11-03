@@ -1740,6 +1740,267 @@
         "p:i-none",
         "p:i-t"
       ]
+    },
+    {
+      "name": "program, paired member",
+      "projects": [
+        {
+          "slug": "gamma",
+          "active": true,
+          "pinned": true
+        }
+      ],
+      "sessions": [
+        {
+          "id": "s-d",
+          "role": "director",
+          "project": "acme",
+          "state": "idle"
+        }
+      ],
+      "peers": [
+        {
+          "alias": "mini",
+          "projects": [
+            {
+              "project": "demo",
+              "sessions": [
+                {
+                  "id": "s-1",
+                  "role": "coordinator",
+                  "project": "demo",
+                  "state": "working"
+                },
+                {
+                  "id": "s-2",
+                  "role": "thread",
+                  "project": "demo",
+                  "thread": "t-2",
+                  "state": "blocked"
+                },
+                {
+                  "id": "s-9",
+                  "role": "thread",
+                  "project": "demo",
+                  "thread": "t-9"
+                }
+              ],
+              "threads": [
+                {
+                  "id": "t-1"
+                },
+                {
+                  "id": "t-2",
+                  "session": "s-2"
+                },
+                {
+                  "id": "t-3",
+                  "done": true
+                }
+              ]
+            },
+            {
+              "project": "old",
+              "stale": true,
+              "threads": [
+                {
+                  "id": "t-1"
+                }
+              ]
+            },
+            {
+              "project": "new",
+              "sessions": [
+                {
+                  "id": "s-3",
+                  "role": "thread",
+                  "project": "new",
+                  "thread": "t-1"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "alias": "far",
+          "projects": [
+            {
+              "project": "x",
+              "threads": [
+                {
+                  "id": "t-1"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "programs": [
+        {
+          "slug": "acme",
+          "projects": [
+            "gamma",
+            "mini/demo",
+            "mini/gone"
+          ]
+        }
+      ],
+      "rows": [
+        "g:",
+        "g:acme",
+        "r:acme",
+        "p:gamma",
+        "c:gamma",
+        "g:acme/r:mini/demo",
+        "g:acme/rc:mini/demo",
+        "g:acme/rt:mini/demo/t-1",
+        "g:acme/rt:mini/demo/t-2",
+        "g:acme/rt:mini/demo/t-3",
+        "g:acme/r:mini/gone",
+        "g:mini",
+        "r:mini/demo",
+        "rc:mini/demo",
+        "rt:mini/demo/t-1",
+        "rt:mini/demo/t-2",
+        "rt:mini/demo/t-3",
+        "r:mini/old",
+        "r:mini/new",
+        "rc:mini/new",
+        "g:far",
+        "r:far/x",
+        "rc:far/x",
+        "rt:far/x/t-1"
+      ]
+    },
+    {
+      "name": "program, paired member folded under its program",
+      "projects": [
+        {
+          "slug": "gamma",
+          "active": true,
+          "pinned": true
+        }
+      ],
+      "sessions": [
+        {
+          "id": "s-d",
+          "role": "director",
+          "project": "acme",
+          "state": "idle"
+        }
+      ],
+      "peers": [
+        {
+          "alias": "mini",
+          "projects": [
+            {
+              "project": "demo",
+              "sessions": [
+                {
+                  "id": "s-1",
+                  "role": "coordinator",
+                  "project": "demo",
+                  "state": "working"
+                },
+                {
+                  "id": "s-2",
+                  "role": "thread",
+                  "project": "demo",
+                  "thread": "t-2",
+                  "state": "blocked"
+                },
+                {
+                  "id": "s-9",
+                  "role": "thread",
+                  "project": "demo",
+                  "thread": "t-9"
+                }
+              ],
+              "threads": [
+                {
+                  "id": "t-1"
+                },
+                {
+                  "id": "t-2",
+                  "session": "s-2"
+                },
+                {
+                  "id": "t-3",
+                  "done": true
+                }
+              ]
+            },
+            {
+              "project": "old",
+              "stale": true,
+              "threads": [
+                {
+                  "id": "t-1"
+                }
+              ]
+            },
+            {
+              "project": "new",
+              "sessions": [
+                {
+                  "id": "s-3",
+                  "role": "thread",
+                  "project": "new",
+                  "thread": "t-1"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "alias": "far",
+          "projects": [
+            {
+              "project": "x",
+              "threads": [
+                {
+                  "id": "t-1"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "programs": [
+        {
+          "slug": "acme",
+          "projects": [
+            "gamma",
+            "mini/demo",
+            "mini/gone"
+          ]
+        }
+      ],
+      "folded": [
+        "g:acme/@mini/demo"
+      ],
+      "rows": [
+        "g:",
+        "g:acme",
+        "r:acme",
+        "p:gamma",
+        "c:gamma",
+        "g:acme/r:mini/demo",
+        "g:acme/r:mini/gone",
+        "g:mini",
+        "r:mini/demo",
+        "rc:mini/demo",
+        "rt:mini/demo/t-1",
+        "rt:mini/demo/t-2",
+        "rt:mini/demo/t-3",
+        "r:mini/old",
+        "r:mini/new",
+        "rc:mini/new",
+        "g:far",
+        "r:far/x",
+        "rc:far/x",
+        "rt:far/x/t-1"
+      ]
     }
   ]
 }
