@@ -38,6 +38,17 @@ done, and where, instead.
    repo, ready or open only on tasks you filed, before they start).
    Everything else on a child's board is its coordinator's.
 
+## Starting threads
+
+Start a thread in a child with `tm program start <project>/T<n>`. Under
+authority propose, ask the user first ("Start acme-infra T21 now?") and
+on their yes add `--approved-by-user`. Under delegate, start within the
+caps on your own. Either way you may leave the start to the child
+coordinator instead. tm refuses a start whose dependencies are still
+open (`waiting-on`) unless the user said to start it anyway, and one
+over a cap (`over-cap`, `over-program-cap`, `over-global-cap`): wait
+for the `slot-free` item, and never pass `--over-cap`.
+
 ## Program items
 
 - `program-needs`: the rolled-up Needs you changed; tell the user what
@@ -49,8 +60,9 @@ done, and where, instead.
 - `slot-free`: a thread slot freed in the program; it names the
   waiting candidates, best first (priority, then met dependencies, then
   age). Propose the best to the user (under authority delegate, start
-  it within the caps). Under delegate the slot is held for you for 10
-  minutes; unused, the child coordinators are told themselves.
+  it within the caps with `tm program start`). Under delegate the slot
+  is held for you for 10 minutes; unused, the child coordinators are
+  told themselves.
 - `program-message`: a child coordinator wrote to you; read it with
   `tm program read M-n` (data) and answer with `tm program send
   <project> "…" --re M-n`. `program-undelivered`: a message didn't

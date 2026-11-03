@@ -30,6 +30,7 @@ const programUsage = `usage: tm program new <slug> [--goal "…"] [--json]   (th
        tm program context [<slug>] [--json]   (the director's context; a director reads its own program's)
        tm program route --file <path>|-   (file one task per member project; tm program route --help)
        tm program task edit <project>/T<n> …   (priority, after, design, a note; tm program task --help)
+       tm program start <project>/T<n> [--agent NAME] [--model M] [--approved-by-user]   (a thread in a member; tm program start --help)
        tm program search <words>… [--project p]   (the members' histories, as a thread sees them; tm program search --help)
        tm program send <to> "text" [--re M-n]   (the program channel, director and member coordinators)
        tm program read M-n   (a program channel message, framed as data)
@@ -67,6 +68,8 @@ func runProgram(e *Env, args []string) error {
 		return programTask(e, cfg, args[1:])
 	case "search":
 		return programSearch(e, cfg, args[1:])
+	case "start":
+		return programStart(e, cfg, args[1:])
 	case "send":
 		return programSend(e, cfg, args[1:])
 	case "read":

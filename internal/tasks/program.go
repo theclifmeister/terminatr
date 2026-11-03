@@ -343,3 +343,34 @@ func (s *Store) CheckProgramTask(it ProgramTask) error {
 	_, err := checkDesign(it.Design)
 	return err
 }
+
+// ProgramStarted links thread to task id of a member project for
+// program's director (c), whose tm program start launched it (§10), and
+// moves the task to started if it was open or ready: what tm thread
+// start does to the task, through opProgram. Any other status change
+// stays SetStatus's, which refuses a director.
+func (s *Store) ProgramStarted(c caller.Caller, id int, thread string) (Result, error) {
+	th, err := checkLabel("thread", thread)
+	if err != nil {
+		return Result{}, err
+	}
+	moved := false
+	res, err := s.edit(c, id, opProgram, func(t *Task) (bool, error) {
+		changed := t.Thread != th
+		t.Thread = th
+		if t.Status == Open || t.Status == Ready {
+			t.Status, moved, changed = Started, true, true
+		}
+		return changed, nil
+	})
+	if err != nil || !res.Changed {
+		return res, err
+	}
+	if err := s.journal(c, "task.thread", res.Task, th); err != nil {
+		return res, err
+	}
+	if moved {
+		return res, s.journal(c, "task.status", res.Task, string(Started))
+	}
+	return res, nil
+}

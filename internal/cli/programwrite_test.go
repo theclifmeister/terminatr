@@ -195,7 +195,7 @@ func TestProgramRouteCLI(t *testing.T) {
 // the rest of tm program runs where it is.
 func TestForwardedProgram(t *testing.T) {
 	for args, want := range map[string]bool{
-		"program route --file -": true, "program task edit demo/T1": true, "program send web hi": true, "program read M-1": true,
+		"program route --file -": true, "program task edit demo/T1": true, "program send web hi": true, "program read M-1": true, "program start demo/T1": true,
 		"program context": false, "program open acme": false, "program": false, "task route": false,
 	} {
 		if got := forwardedProgram(strings.Fields(args)); got != want {
