@@ -1,17 +1,20 @@
 import Foundation
 
 /// What the app's one window shows (design T746): a project's
-/// dashboard, or a coordinator's or thread's session. A paired server's
-/// project has server set to its alias.
+/// dashboard, a program's (the programs design §12), or a coordinator's,
+/// director's or thread's session. A paired server's project has server
+/// set to its alias.
 public enum Selection: Codable, Hashable, Sendable {
     case project(String, server: String = "")
     case session(SessionRef)
+    case program(String)
 
-    /// The project it is in, and its server.
+    /// The project it is in, and its server; a program's slug.
     public var project: String {
         switch self {
         case .project(let slug, _): slug
         case .session(let ref): ref.project
+        case .program(let slug): slug
         }
     }
 
@@ -19,11 +22,21 @@ public enum Selection: Codable, Hashable, Sendable {
         switch self {
         case .project(_, let server): server
         case .session(let ref): ref.server
+        case .program: ""
         }
     }
 
-    /// The project's dashboard it is in.
-    public var dashboard: Selection { .project(project, server: server) }
+    /// Whether it is a program's: its screen or its director's session.
+    public var isProgram: Bool {
+        switch self {
+        case .program: true
+        case .session(let ref): ref.director
+        case .project: false
+        }
+    }
+
+    /// The dashboard it is in: its project's, or its program's.
+    public var dashboard: Selection { isProgram ? .program(project) : .project(project, server: server) }
 
     /// A thread's card on its project's dashboard.
     public static func card(_ t: AppAPI.Thread, in project: String) -> Selection {
@@ -44,13 +57,16 @@ public enum Selection: Codable, Hashable, Sendable {
     /// for a paired server's) when it is listed; nil leaves the window
     /// as it was.
     public static func route(project: String?, session: String = "", projects: [AppAPI.Project],
-                             sessions: [AppAPI.Session], peers: [AppAPI.Peer]) -> Selection? {
+                             sessions: [AppAPI.Session], peers: [AppAPI.Peer], programs: [AppAPI.Program] = []) -> Selection? {
         if !session.isEmpty, let s = sessions.first(where: { $0.id == session }), let ref = SessionRef(s) {
             return .session(ref)
         }
         guard let project, !project.isEmpty else { return nil }
         if projects.contains(where: { $0.slug == project }) {
             return .project(project)
+        }
+        if programs.contains(where: { $0.slug == project }) {
+            return .program(project)
         }
         if let slash = project.firstIndex(of: "/") {
             let alias = String(project[..<slash]), slug = String(project[project.index(after: slash)...])
@@ -67,11 +83,12 @@ public enum Selection: Codable, Hashable, Sendable {
     /// The inactive project of this server it shows: what a lean
     /// projects.watch sends whole (shown); "" for any other.
     public func shownInactive(_ projects: [AppAPI.Project]) -> String {
-        guard server.isEmpty, let p = projects.first(where: { $0.slug == project }), !p.active else { return "" }
+        guard server.isEmpty, !isProgram, let p = projects.first(where: { $0.slug == project }), !p.active else { return "" }
         return p.slug
     }
 
-    public func exists(projects: [AppAPI.Project], peers: [AppAPI.Peer]) -> Bool {
+    public func exists(projects: [AppAPI.Project], peers: [AppAPI.Peer], programs: [AppAPI.Program] = []) -> Bool {
+        if isProgram { return programs.contains { $0.slug == project } }
         if !server.isEmpty {
             guard let p = peers.first(where: { $0.alias == server })?.projects.first(where: { $0.project == project }) else { return false }
             if case .session(let ref) = self, !ref.isCoordinator {
@@ -181,6 +198,17 @@ public struct Navigation: Codable, Equatable, Sendable {
     /// The sidebar's sections: a server, a project, the needs.
     public static func sectionKey(server: String, project: String = "") -> String {
         project.isEmpty ? "server:\(server)" : "project:\(server)/\(project)"
+    }
+
+    /// A program's row in the sidebar: folded, its row alone (the
+    /// TUI's "g:<slug>").
+    public static func programKey(_ slug: String) -> String { "program:\(slug)" }
+
+    /// A program's paired member's row under it: it folds apart from the
+    /// same project's row under its server (the TUI's
+    /// "g:<program>/@<alias>/<slug>").
+    public static func memberKey(program: String, server: String, project: String) -> String {
+        programKey(program) + "/" + sectionKey(server: server, project: project)
     }
 
     public static let needsSection = "needs"
