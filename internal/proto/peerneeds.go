@@ -165,7 +165,7 @@ func ActsOf(n PeerNeed) []string {
 		if n.Approval != nil {
 			return []string{ActApprove}
 		}
-	case NeedReview:
+	case NeedReview, NeedUmbrella:
 		return []string{ActAccept, ActSendBack}
 	case NeedAsk:
 		return []string{ActQuestions}

@@ -9,6 +9,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/client"
+	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/link"
 	"github.com/theclifmeister/terminatr/internal/program"
 	"github.com/theclifmeister/terminatr/internal/project"
@@ -154,6 +155,24 @@ func TestProgramNeedsMethod(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeConfig(t, "[features]\nprograms = true\n[programs.acme]\nprojects = [\"demo\", \"docs\", \"mini/ios\"]\n[programs.beta]\nprojects = [\"web\"]\n")
+	cfg, _ := config.Load()
+	g, err := program.Open("acme", cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := g.Tasks().Add(human, []tasks.NewTask{{Title: "SSO everywhere", Status: "ready"}, {Title: "Not in review", Status: "ready"}}); err != nil {
+		t.Fatal(err)
+	}
+	// The part is done (met), so the ticker's derive keeps the umbrella in review.
+	if _, err := p.Tasks().Add(human, []tasks.NewTask{{Title: "Shipped", Status: "done"}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := g.Tasks().SetParts(human, 1, []string{"demo/T3"}, false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := g.Tasks().SetDerived(caller.Caller{Kind: caller.Ticker}, 1, tasks.Review); err != nil {
+		t.Fatal(err)
+	}
 	paths, err := client.ResolvePaths()
 	if err != nil {
 		t.Fatal(err)
@@ -172,11 +191,14 @@ func TestProgramNeedsMethod(t *testing.T) {
 	for _, n := range res.Needs {
 		got = append(got, n.Project+" "+n.Kind+" "+needRefOf(n))
 	}
-	if !slices.Equal(got, []string{"demo review T1", "demo ask Q2", "demo blocked T2"}) {
+	if !slices.Equal(got, []string{"demo review T1", "acme umbrella-review T1", "demo ask Q2", "demo blocked T2"}) {
 		t.Errorf("needs: %v", got)
 	}
 	if r := res.Needs[0]; len(r.Also) != 1 || r.Also[0].ID != "ask:Q1" || r.Priority != "must" || !slices.Contains(r.Acts, proto.ActQuestions) {
 		t.Errorf("review row: %+v", r)
+	}
+	if u := res.Needs[1]; !u.Program || u.Task != "T1" || !slices.Equal(u.Acts, []string{proto.ActAccept, proto.ActSendBack}) || !strings.Contains(u.Text, "demo/T3") {
+		t.Errorf("umbrella row: %+v", u)
 	}
 	if res.Quiet != 1 || len(res.Members) != 3 || res.Members[2].Server != "mini" || res.Members[2].Error == "" {
 		t.Errorf("members: %+v quiet %d", res.Members, res.Quiet)

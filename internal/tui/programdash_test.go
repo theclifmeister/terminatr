@@ -316,3 +316,30 @@ func TestProgramUmbrellas(t *testing.T) {
 		t.Fatalf("acts %v", src.programActs)
 	}
 }
+
+// TestProgramNeedsUmbrella: an umbrella in review is a row of the
+// program's needs; its dialog page offers accept (asks first) and
+// send-back (asks for a note).
+func TestProgramNeedsUmbrella(t *testing.T) {
+	n := proto.ProgramNeed{PeerNeed: proto.PeerNeed{ID: "umbrella:T5", Kind: proto.NeedUmbrella, Task: "T5", Title: "Bump axios"}, Project: "acme", Program: true}
+	n.Acts = []string{proto.ActAccept, proto.ActSendBack}
+	src := &fakeSource{}
+	m := newDash(DashOptions{Source: src, Width: 120 + sideDefault, Height: 40})
+	items := needActs(m, "acme", n)
+	if len(items) != 2 || !strings.HasPrefix(items[0].label, "accept") || !strings.HasPrefix(items[1].label, "send back") {
+		t.Fatalf("items %+v", items)
+	}
+	drain(t, m, items[0].run(m))
+	if _, ok := m.top().(*confirmView); !ok {
+		t.Fatal("no confirm")
+	}
+	drain(t, m, press(m, "Y"))
+	drain(t, m, items[1].run(m))
+	for _, r := range "add web" {
+		keyPress(m, string(r))
+	}
+	drain(t, m, keyPress(m, "enter"))
+	if !slices.Equal(src.programActs, []string{"acme accept T5", "acme send-back T5 add web"}) {
+		t.Fatalf("acts %v", src.programActs)
+	}
+}
