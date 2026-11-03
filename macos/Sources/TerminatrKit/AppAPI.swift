@@ -2040,7 +2040,15 @@ public enum AppAPI {
     }
 
     public struct ProgramDetail: Codable, Sendable, Hashable {
-        public var Program: Program
+        public var slug: String
+        public var members: [ProgramMember]
+        public var authority: String
+        public var parallelThreads: Int
+        public var paused: Bool
+        public var goal: String
+        public var questions: Int
+        public var unread: Int
+        public var error: String
         public var director: String
         public var umbrellas: [ProgramUmbrella]
         public var deps: [String: TaskDep]
@@ -2048,8 +2056,16 @@ public enum AppAPI {
         public var tasks: [String: Task]
         public var working: Int
 
-        public init(Program: Program, director: String = "", umbrellas: [ProgramUmbrella] = [], deps: [String: TaskDep] = [:], waits: [ProgramWait] = [], tasks: [String: Task] = [:], working: Int = 0) {
-            self.Program = Program
+        public init(slug: String, members: [ProgramMember] = [], authority: String, parallelThreads: Int = 0, paused: Bool = false, goal: String = "", questions: Int = 0, unread: Int = 0, error: String = "", director: String = "", umbrellas: [ProgramUmbrella] = [], deps: [String: TaskDep] = [:], waits: [ProgramWait] = [], tasks: [String: Task] = [:], working: Int = 0) {
+            self.slug = slug
+            self.members = members
+            self.authority = authority
+            self.parallelThreads = parallelThreads
+            self.paused = paused
+            self.goal = goal
+            self.questions = questions
+            self.unread = unread
+            self.error = error
             self.director = director
             self.umbrellas = umbrellas
             self.deps = deps
@@ -2059,7 +2075,15 @@ public enum AppAPI {
         }
 
         enum CodingKeys: String, CodingKey {
-            case Program
+            case slug
+            case members
+            case authority
+            case parallelThreads = "parallel_threads"
+            case paused
+            case goal
+            case questions
+            case unread
+            case error
             case director
             case umbrellas
             case deps
@@ -5420,7 +5444,15 @@ extension AppAPI.ProgramDeleted {
 extension AppAPI.ProgramDetail {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        self.Program = try c.decode(AppAPI.Program.self, forKey: .Program)
+        self.slug = try c.decode(String.self, forKey: .slug)
+        self.members = try c.decodeIfPresent([AppAPI.ProgramMember].self, forKey: .members) ?? []
+        self.authority = try c.decode(String.self, forKey: .authority)
+        self.parallelThreads = try c.decodeIfPresent(Int.self, forKey: .parallelThreads) ?? 0
+        self.paused = try c.decodeIfPresent(Bool.self, forKey: .paused) ?? false
+        self.goal = try c.decodeIfPresent(String.self, forKey: .goal) ?? ""
+        self.questions = try c.decodeIfPresent(Int.self, forKey: .questions) ?? 0
+        self.unread = try c.decodeIfPresent(Int.self, forKey: .unread) ?? 0
+        self.error = try c.decodeIfPresent(String.self, forKey: .error) ?? ""
         self.director = try c.decodeIfPresent(String.self, forKey: .director) ?? ""
         self.umbrellas = try c.decodeIfPresent([AppAPI.ProgramUmbrella].self, forKey: .umbrellas) ?? []
         self.deps = try c.decodeIfPresent([String: AppAPI.TaskDep].self, forKey: .deps) ?? [:]

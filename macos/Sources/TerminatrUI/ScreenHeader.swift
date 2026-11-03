@@ -201,7 +201,10 @@ struct Flow: Layout {
         for i in subviews.indices {
             let s = subviews[i].sizeThatFits(.unspecified)
             let gap = rows[rows.count - 1].items.isEmpty ? 0 : spacing
-            if rows[rows.count - 1].width + gap + s.width > width, !rows[rows.count - 1].items.isEmpty {
+            // A point of slack: placed, its bounds can come out a hair
+            // under the width it measured itself at, and the last item
+            // would wrap onto a line its height never counted.
+            if rows[rows.count - 1].width + gap + s.width > width + 1, !rows[rows.count - 1].items.isEmpty {
                 rows.append(Row())
             }
             let g = rows[rows.count - 1].items.isEmpty ? 0 : spacing

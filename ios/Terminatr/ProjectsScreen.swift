@@ -83,7 +83,8 @@ private struct ServerProjects: View {
     @Binding var showInactive: Bool
 
     var body: some View {
-        let gone = model.inactiveProjects
+        let gone = model.standaloneInactive
+        let tagged = model.caps.contains(ProgramList.cap)
         let peers = model.shownPeers
         if several {
             SectionHeading(model.serverName, detail: model.link == .up ? "" : model.linkWords.1)
@@ -91,7 +92,12 @@ private struct ServerProjects: View {
         }
         if let f = model.failure { Failure(text: f) }
         if !several, !peers.isEmpty { SectionHeading("This server") }
-        ForEach(model.activeProjects, id: \.slug) { card($0) }
+        ForEach(model.projectEntries, id: \.slug) { e in
+            switch e {
+            case .project(let p): card(p)
+            case .program(let g): programCard(g)
+            }
+        }
         ForEach(peers, id: \.alias) { peer in
             SectionHeading(peer.name.isEmpty ? peer.alias : peer.name, detail: PeerTag.of(peer).word)
             ForEach(peer.projects, id: \.project) { p in
@@ -101,7 +107,10 @@ private struct ServerProjects: View {
                 PlainRouteLink(value: route) {
                     ProjectCard(name: p.project, coordinator: .of(peer: coordinator), needs: p.stale ? 0 : p.needsYou,
                                 threads: sessions.filter { !$0.ref.isCoordinator }.map { Attention.of(peer: $0.session).tone },
-                                dim: peer.state != "up" || p.stale, selected: navigate.opens(route, on: model))
+                                dim: peer.state != "up" || p.stale, selected: navigate.opens(route, on: model),
+                                // Its program on this server, which lists it
+                                // under the program too (B19).
+                                tag: tagged ? p.program : "")
                 }
                 .buttonStyle(.plain)
             }
@@ -112,6 +121,17 @@ private struct ServerProjects: View {
                 ForEach(gone, id: \.slug) { card($0, dim: true) }
             }
         }
+    }
+
+    /// A program: one row, one count of what needs the user in it.
+    private func programCard(_ g: AppAPI.Program) -> some View {
+        let route = Route.program(g.slug)
+        return PlainRouteLink(value: route) {
+            ProgramCard(program: g, director: .of(director: model.directorSession(g), questions: g.questions),
+                        needs: model.programNeeds(g).count, threads: model.programThreads(g),
+                        selected: navigate.opens(route, on: model))
+        }
+        .buttonStyle(.plain)
     }
 
     private func card(_ p: AppAPI.Project, dim: Bool = false) -> some View {
