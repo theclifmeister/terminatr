@@ -1,6 +1,7 @@
 package config
 
 import (
+	"cmp"
 	"fmt"
 	"regexp"
 	"slices"
@@ -308,4 +309,25 @@ func RemoveProgram(slug string) error {
 		}
 		return DropTable(data, "programs."+slug)
 	})
+}
+
+// DirectorSafety is the settings a director of program slug runs with
+// (the programs design §4.1): all projects' ([defaults]), with the
+// program's director_agent and director_model in the coordinator's
+// place, which they default to (decision 15), and its remote_control,
+// auto_clear and paused in the coordinator's. A nil c is the defaults.
+func (c *Config) DirectorSafety(slug string) Safety {
+	safety := Defaults
+	if s, err := c.AllProjects(); err == nil {
+		safety = s
+	}
+	if t, ok := c.Program(slug); ok {
+		safety.CoordinatorAgent = cmp.Or(t.DirectorAgent, safety.CoordinatorAgent)
+		if t.DirectorAgent != "" || t.DirectorModel != "" {
+			safety.CoordinatorModel = t.DirectorModel
+		}
+		safety.CoordinatorRemoteControl = t.RemoteControl
+		safety.AutoClear, safety.Paused = t.AutoClear, t.Paused
+	}
+	return safety
 }

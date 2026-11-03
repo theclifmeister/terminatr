@@ -52,7 +52,7 @@ func (s *Server) setContext(id, model string, tokens, window int64) {
 	now := ctxUse{tokens, window}
 	was, had := s.ctxOf.Swap(id, now)
 	s.mu.Lock()
-	coord := s.records[id].Role == proto.RoleCoordinator
+	coord := s.records[id].Role == proto.RoleCoordinator || s.records[id].Role == proto.RoleDirector
 	s.mu.Unlock()
 	if coord && crossedContext(was, had, now) {
 		s.alerts.Add(1) // the consoles ring their bell

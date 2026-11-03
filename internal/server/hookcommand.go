@@ -13,12 +13,23 @@ import (
 // with what came of it.
 
 // hookCommandOf is session id's runner of the commands its hooks stand
-// for, only for a coordinator.
+// for, only for a coordinator, and a director's /saveclear (its
+// questions aren't a coordinator's menu: /answer tells it so).
 func (s *Server) hookCommandOf(id string) func(*session.Session, string) string {
 	return func(_ *session.Session, name string) string {
 		s.mu.Lock()
 		r := s.records[id]
 		s.mu.Unlock()
+		if r.Role == proto.RoleDirector && r.Project != "" {
+			switch name {
+			case agent.CommandSaveClear:
+				_, perr := s.saveClear(proto.CoordinatorClearParams{Program: r.Project})
+				return clearedTextFor(proto.RoleDirector, perr)
+			case agent.CommandAnswer:
+				return "Not asked: a director has no questions dialog yet; the program's questions are in its context"
+			}
+			return ""
+		}
 		if r.Role != proto.RoleCoordinator || r.Project == "" {
 			return ""
 		}
@@ -36,10 +47,16 @@ func (s *Server) hookCommandOf(id string) func(*session.Session, string) string 
 
 // clearedText is what /saveclear says, in the mod's words (view.ts).
 func clearedText(perr *proto.Error) string {
+	return clearedTextFor(proto.RoleCoordinator, perr)
+}
+
+// clearedTextFor is clearedText for a session of role (a coordinator or
+// a director).
+func clearedTextFor(role string, perr *proto.Error) string {
 	if perr != nil {
 		return "Not cleared: " + perr.Message
 	}
-	return "Asked: the coordinator saves what it learned, then its conversation is cleared once it is idle"
+	return "Asked: the " + role + " saves what it learned, then its conversation is cleared once it is idle"
 }
 
 // answeredText is what /answer says, in the mod's words (view.ts).

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/caller"
+	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/session"
@@ -58,26 +59,41 @@ func (s *Server) clearSession(id string, c caller.Caller) (any, *proto.Error) {
 // for it (ticker.RequestClear), journaled as auto-clear's: the save ask,
 // then the clear. A coordinator whose agent has no clear prompt is
 // refused here, so the user hears so at once.
+//
+// With Program in Project's place it is the same for the program's
+// director (the programs design §4.1), only while programs are on.
 func (s *Server) saveClear(p proto.CoordinatorClearParams) (any, *proto.Error) {
-	if _, err := project.Open(p.Project); err != nil {
-		return nil, proto.Errorf(proto.ErrBadParams, "%v", err)
+	slug, role, what := p.Project, proto.RoleCoordinator, "project"
+	switch {
+	case p.Program != "" && p.Project != "":
+		return nil, proto.Errorf(proto.ErrBadParams, "name a project or a program, not both")
+	case p.Program != "":
+		cfg, _ := config.Load()
+		if _, perr := directorReady(cfg, p.Program); perr != nil {
+			return nil, perr
+		}
+		slug, role, what = p.Program, proto.RoleDirector, "program"
+	default:
+		if _, err := project.Open(p.Project); err != nil {
+			return nil, proto.Errorf(proto.ErrBadParams, "%v", err)
+		}
 	}
 	var coord *proto.SessionInfo
 	for _, info := range s.list().Sessions {
-		if info.Project == p.Project && info.Role == proto.RoleCoordinator && info.State != string(agent.StateExited) {
+		if info.Project == slug && info.Role == role && info.State != string(agent.StateExited) {
 			coord = &info
 			break
 		}
 	}
 	if coord == nil {
-		return nil, proto.Errorf(proto.ErrRefused, "project %s has no coordinator running", p.Project)
+		return nil, proto.Errorf(proto.ErrRefused, "%s %s has no %s running", what, slug, role)
 	}
 	sess, perr := s.session(coord.ID)
 	if perr != nil {
 		return nil, perr
 	}
 	if agent.ClearTextOf(sess.Agent()) == "" {
-		return nil, proto.Errorf(proto.ErrRefused, "the coordinator's agent (%s) has no clear prompt ([inject] clear): tm can't clear it; ask it to save what it learned, then clear it by hand", coord.Agent)
+		return nil, proto.Errorf(proto.ErrRefused, "the %s's agent (%s) has no clear prompt ([inject] clear): tm can't clear it; ask it to save what it learned, then clear it by hand", role, coord.Agent)
 	}
 	s.mu.Lock()
 	t := s.tick
@@ -85,7 +101,7 @@ func (s *Server) saveClear(p proto.CoordinatorClearParams) (any, *proto.Error) {
 	if t == nil {
 		return nil, proto.Errorf(proto.ErrRefused, "this server runs no ticker")
 	}
-	t.RequestClear(p.Project, *coord)
+	t.RequestClear(slug, *coord)
 	return proto.CoordinatorClearResult{Session: coord.ID}, nil
 }
 

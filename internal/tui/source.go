@@ -285,12 +285,14 @@ type ProjectSource interface {
 	// OpenQuestions has the project's coordinator put its open questions
 	// (tm ask) to the user in its question dialog (questions.open).
 	OpenQuestions(slug string) (proto.QuestionsOpenResult, error)
-	// SaveClear has the project's coordinator save what it learned, then
-	// clears its conversation, as auto_clear does (coordinator.clear).
-	SaveClear(slug string) (proto.CoordinatorClearResult, error)
+	// SaveClear has the project's coordinator (role director: the
+	// program's director) save what it learned, then clears its
+	// conversation, as auto_clear does (coordinator.clear).
+	SaveClear(role, slug string) (proto.CoordinatorClearResult, error)
 	// SetRemote turns remote control of the project's running
-	// coordinator on or off (prefix+r), saying what it did.
-	SetRemote(slug string, on bool) (string, error)
+	// coordinator (role director: the program's director) on or off
+	// (prefix+r), saying what it did.
+	SetRemote(role, slug string, on bool) (string, error)
 }
 
 // SettingsSource changes settings and models, on the human's keypress
