@@ -101,3 +101,19 @@ func TestSleepCoordinatorRefusals(t *testing.T) {
 		t.Errorf("no session: %v", err)
 	}
 }
+
+// TestAsleepListScoped: the human's session.list names a sleeping
+// coordinator (the TUI's and the apps' ☾, T980); an agent's scoped list
+// names none.
+func TestAsleepListScoped(t *testing.T) {
+	s := sleepFixture(t)
+	s.dormant["s-2"] = SessionRecord{ID: "s-2", Role: proto.RoleCoordinator, Project: "demo", Agent: "claude", Asleep: true}
+	human := s.listFor(caller.Caller{Kind: caller.Human}, true)
+	if len(human.Asleep) != 1 || human.Asleep[0].Project != "demo" || human.Asleep[0].ID != "s-2" {
+		t.Errorf("human list asleep %v", human.Asleep)
+	}
+	agent := s.listFor(caller.Caller{Kind: caller.Thread, Project: "demo", Session: "s-9"}, false)
+	if !agent.Scoped || agent.Asleep != nil {
+		t.Errorf("scoped list asleep %v (scoped %v)", agent.Asleep, agent.Scoped)
+	}
+}

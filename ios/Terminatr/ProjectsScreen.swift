@@ -137,7 +137,7 @@ private struct ServerProjects: View {
     private func card(_ p: AppAPI.Project, dim: Bool = false) -> some View {
         let route = Route.project(p.slug)
         return PlainRouteLink(value: route) {
-            ProjectCard(name: p.slug, coordinator: .of(coordinator: model.coordinatorSession(p.slug), in: p),
+            ProjectCard(name: p.slug, coordinator: model.coordinator(of: p),
                         needs: Need.count(model.needs, project: p.slug),
                         threads: SidebarTree.threads(of: p) { model.session($0) }.map { model.attention($0).tone },
                         pinned: p.pinned, dim: dim, selected: navigate.opens(route, on: model))
@@ -210,7 +210,7 @@ struct ProjectScreen: View {
                         let c = model.coordinatorSession(slug)
                         let route = Route.session(SessionRef(project: slug))
                         PlainRouteLink(value: route) {
-                            SessionTile("Coordinator", state: .of(coordinator: c, in: p), busy: Busy.of(coordinator: c, in: p),
+                            SessionTile("Coordinator", state: model.coordinator(of: p), busy: Busy.of(coordinator: c, in: p),
                                         context: model.context(SessionRef(project: slug)), dormant: dormant,
                                         selected: navigate.opens(route, on: model))
                         }

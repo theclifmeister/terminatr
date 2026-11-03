@@ -229,7 +229,7 @@ extension Theme {
         case .attention: attention
         case .review, .done: good
         case .working: action
-        case .idle: idle
+        case .idle, .asleep: idle
         }
     }
 
@@ -241,7 +241,7 @@ extension Theme {
         case .attention: onAttention
         case .review, .done: onGood
         case .working: onAction
-        case .idle: ink
+        case .idle, .asleep: ink
         }
     }
 }

@@ -59,7 +59,7 @@ struct SidebarRow: Identifiable {
             return SidebarRow(id: id, route: Route.project(rest).on(model.key), title: rest, tone: .idle, badge: nil)
         case ("c", 1):
             guard let p = model.project(rest) else { return nil }
-            return row(.session(SessionRef(project: rest)), "Coordinator", .of(coordinator: model.coordinatorSession(rest), in: p))
+            return row(.session(SessionRef(project: rest)), "Coordinator", model.coordinator(of: p))
         case ("t", 2):
             guard let t = model.project(parts[0])?.threads.first(where: { $0.record.id == parts[1] }) else { return nil }
             let title = [t.task?.ref, t.record.title].compactMap { $0 }.joined(separator: " ")

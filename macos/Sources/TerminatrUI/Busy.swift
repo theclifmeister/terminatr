@@ -67,6 +67,13 @@ public struct StateDot: View {
             // stays where it was.
             BusyMark(size: size)
                 .frame(width: size, height: size)
+        } else if tone == .asleep {
+            // A sleeping coordinator: the TUI's ☾ (T980).
+            Image(systemName: "moon.zzz.fill")
+                .font(.system(size: size * 1.4, weight: .semibold))
+                .foregroundStyle(theme.muted)
+                .frame(width: size, height: size)
+                .accessibilityHidden(true)
         } else {
             Circle()
                 .fill(theme.colour(tone))

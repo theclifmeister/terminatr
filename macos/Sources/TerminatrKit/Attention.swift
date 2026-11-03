@@ -7,6 +7,9 @@ import Foundation
 public struct Attention: Hashable, Sendable {
     public enum Tone: Sendable {
         case approval, question, attention, review, working, idle, done
+        /// A coordinator asleep after a long idle, its conversation kept
+        /// (Sleep): the TUI's ☾.
+        case asleep
     }
 
     /// The tag: "allow?", "asks", "held", "review", "blocked", "CI
@@ -108,7 +111,7 @@ extension Attention.Tone {
     public var waits: Bool {
         switch self {
         case .approval, .question, .attention, .review: true
-        case .working, .idle, .done: false
+        case .working, .idle, .done, .asleep: false
         }
     }
 
@@ -122,6 +125,7 @@ extension Attention.Tone {
         case .working: "working"
         case .idle: "idle"
         case .done: "done"
+        case .asleep: "asleep"
         }
     }
 }

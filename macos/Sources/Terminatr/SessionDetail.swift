@@ -155,7 +155,10 @@ struct NotRunning: View {
                 .foregroundStyle(theme.muted)
                 .multilineTextAlignment(.center)
             if ref.isCoordinator, !ref.isRemote, app.bridge != nil, let p = app.project(ref.project) {
-                if !p.active, app.controlsProjects {
+                if p.active, app.sleep(of: p.slug) != .awake {
+                    WakeButton(project: p.slug)
+                        .padding(.top, 4)
+                } else if !p.active, app.controlsProjects {
                     Button("Activate \(p.slug)") { app.ask(.activate(project: p.slug)) }
                         .buttonStyle(.borderedProminent)
                         .tint(theme.action)
@@ -182,7 +185,14 @@ struct NotRunning: View {
             return ref.isCoordinator ? "The coordinator isn't running on \(ref.server)" : "This thread has no session on \(ref.server)"
         }
         if ref.director { return "The director isn't running" }
-        return ref.isCoordinator ? "The coordinator isn't running" : "This thread has no session"
+        if ref.isCoordinator {
+            switch app.sleep(of: ref.project) {
+            case .asleep: return "The coordinator is asleep"
+            case .waking: return "Waking the coordinator"
+            case .awake: return "The coordinator isn't running"
+            }
+        }
+        return "This thread has no session"
     }
 
     private var detail: String {
@@ -197,6 +207,9 @@ struct NotRunning: View {
             }
             return "Open it in tm's console: enter on its row under \(ref.project). The window shows it once it runs."
         }
+        if ref.isCoordinator, app.sleep(of: ref.project) != .awake {
+            return "It slept after a long idle, its conversation kept: opening it wakes it, as enter on its row in tm's console does."
+        }
         if ref.isCoordinator {
             return app.project(ref.project)?.active == false
                 ? app.controlsProjects ? "The project is inactive: activate it to start its coordinator and resume its threads."
@@ -208,6 +221,52 @@ struct NotRunning: View {
     }
 }
 
+
+/// A sleeping coordinator's Wake (T980): project.open resumes it under
+/// its session id, its conversation kept; it spins while it wakes, as
+/// opening it from the sidebar does (AppModel.opened).
+struct WakeButton: View {
+    @Environment(AppModel.self) private var app
+    @Environment(\.theme) private var theme
+    let project: String
+    var title = "Wake the Coordinator"
+    @State private var error: String?
+
+    var body: some View {
+        VStack(spacing: 4) {
+            Button {
+                wake()
+            } label: {
+                if app.sleep(of: project) == .waking {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Label(title, systemImage: "sun.max")
+                }
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(theme.action)
+            .disabled(app.sleep(of: project) == .waking)
+            .help("Resumes it with its conversation, as tm project open does")
+            if let error {
+                Text(error)
+                    .font(theme.body(.footnote))
+                    .foregroundStyle(theme.attention)
+                    .multilineTextAlignment(.center)
+            }
+        }
+    }
+
+    private func wake() {
+        error = nil
+        Task {
+            do {
+                try await app.wake(project)
+            } catch {
+                self.error = Dashboard.words(error)
+            }
+        }
+    }
+}
 
 /// The director pane's Start: starts program's director (program.open),
 /// as enter on its row in tm's console does; a refusal (programs off, a

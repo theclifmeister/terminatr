@@ -73,6 +73,7 @@ extension Attention.Tone {
         case .working: "circle.dotted"
         case .idle: "moon.fill"
         case .done: "checkmark"
+        case .asleep: "moon.zzz.fill"
         }
     }
 }

@@ -3,7 +3,7 @@ import Foundation
 extension Attention.Tone {
     /// The tones in a ThreadMeter's order (T846): what waits on the
     /// user first, then working, idle and done.
-    public static let order: [Attention.Tone] = [.approval, .question, .attention, .review, .working, .idle, .done]
+    public static let order: [Attention.Tone] = [.approval, .question, .attention, .review, .working, .idle, .asleep, .done]
 
     /// A legend's words for n threads in this tone: "1 allow?", "2
     /// asks", "1 needs you".
@@ -16,6 +16,7 @@ extension Attention.Tone {
         case .working: "\(n) working"
         case .idle: "\(n) idle"
         case .done: "\(n) done"
+        case .asleep: "\(n) asleep"
         }
     }
 

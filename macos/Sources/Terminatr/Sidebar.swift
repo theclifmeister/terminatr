@@ -344,7 +344,8 @@ struct Sidebar: View {
     private func project(_ p: AppAPI.Project, indent: CGFloat = 0, member: Bool = false) -> some View {
         let sel = Selection.project(p.slug)
         let needs = app.needs(of: p.slug).count
-        let state = Attention.of(coordinator: app.coordinatorSession(p.slug), in: p)
+        let state = app.coordinator(of: p)
+        let sleep = app.sleep(of: p.slug)
         let l = listing(p, member: member)
         let coordinator = app.coordinatorSession(p.slug)
         ProjectRow(name: p.slug, dot: theme.colour(state.tone), state: state.word, needs: needs, selected: app.nav.selection == sel)
@@ -356,10 +357,16 @@ struct Sidebar: View {
                 // Its context use, as the TUI's row: warn from [ui]
                 // context_hint, high from 80% (with app API 13's hint).
                 let ctx = l.dormant ? nil : ContextUse.of(coordinator, hint: app.contextHint)
+                // Asleep (T980): the TUI's ☾ for its dot and its word;
+                // waking, a spinner until it runs.
+                let sleeps = !l.dormant && sleep != .awake
                 row(.session(SessionRef(project: p.slug)), label: "Coordinator", ref: nil,
-                    tag: state.waits && !l.dormant ? (state.word, state.tone) : nil, dot: theme.colour(l.dormant ? .idle : state.tone),
-                    spoken: l.dormant ? "inactive" : state.spoken, dormant: l.dormant, context: ctx,
-                    busy: l.dormant ? nil : app.busy(coordinator: p), menu: coordinator == nil ? nil : p, indent: indent)
+                    tag: state.waits && !l.dormant ? (state.word, state.tone) : sleeps ? (state.word, nil) : nil,
+                    dot: theme.colour(l.dormant ? .idle : state.tone),
+                    spoken: l.dormant ? "inactive" : sleeps ? state.why.replacingOccurrences(of: " · ", with: ", ") : state.spoken,
+                    dormant: l.dormant, context: ctx,
+                    busy: l.dormant ? nil : app.busy(coordinator: p), menu: coordinator == nil ? nil : p,
+                    sleep: l.dormant ? .awake : sleep, indent: indent)
             }
             // Keyed with the project: thread ids repeat across projects,
             // and the List flattens every project's rows into one.
@@ -380,10 +387,21 @@ struct Sidebar: View {
     /// activity mark for its dot and how long its turn has run.
     private func row(_ sel: Selection, label: String, ref: String?, tag: (String, Attention.Tone?)?, dot: Color, spoken: String,
                      dormant: Bool = false, context: ContextUse? = nil, busy: Busy? = nil, menu: AppAPI.Project? = nil,
-                     indent: CGFloat = 0) -> some View {
+                     sleep: Sleep = .awake, indent: CGFloat = 0) -> some View {
         let on = app.nav.selection == sel
         return HStack(spacing: 6) {
-            if busy != nil {
+            if sleep == .waking {
+                ProgressView()
+                    .controlSize(.mini)
+                    .frame(width: 6, height: 6)
+                    .accessibilityHidden(true)
+            } else if sleep == .asleep {
+                Image(systemName: "moon.zzz.fill")
+                    .font(.system(size: 8, weight: .semibold))
+                    .foregroundStyle(on ? theme.onAction : theme.muted)
+                    .frame(width: 6, height: 6)
+                    .accessibilityHidden(true)
+            } else if busy != nil {
                 BusyMark(size: 6, colour: on ? theme.onAction : nil)
                     .frame(width: 6, height: 6)
             } else {
@@ -428,6 +446,7 @@ struct Sidebar: View {
         }
         .padding(.leading, 14 + indent)
         .foregroundStyle(on ? theme.onAction : dormant ? theme.muted : theme.ink)
+        .help(sleep == .asleep ? Sleep.words : "")
         // One element that says the row and its state: "T6 Network popup
         // polish, needs approval".
         .accessibilityElement(children: .ignore)
