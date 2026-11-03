@@ -7,6 +7,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/features"
 	"github.com/theclifmeister/terminatr/internal/models"
 	"github.com/theclifmeister/terminatr/internal/program"
 	"github.com/theclifmeister/terminatr/internal/proto"
@@ -39,8 +40,8 @@ func directorProfile(role string) string {
 // a project has too (program-left-out: the project wins, §3.4). It
 // returns the program's folder.
 func directorReady(cfg *config.Config, slug string) (string, *proto.Error) {
-	if !cfg.ProgramsOn() {
-		return "", proto.Errorf(config.ProgramsOff, "programs are off on this server; the user turns them on in Settings → all projects → Features")
+	if !features.Programs(cfg) {
+		return "", proto.Errorf(features.OffCode, "%s", features.OffMsg)
 	}
 	g, err := program.Open(slug, cfg)
 	if err != nil {
@@ -160,7 +161,7 @@ func directorContext(r SessionRecord) ([]byte, error) {
 		head = strings.TrimRight(promptHeader(r.Role, r.Prompt, rules, ""), "\n")
 	}
 	cfg, _ := config.Load()
-	if !cfg.ProgramsOn() {
+	if !features.Programs(cfg) {
 		return []byte(head + "\n\nPrograms are off on this server: the user turned them off, and this session is to stop."), nil
 	}
 	g, err := program.Open(r.Project, cfg)

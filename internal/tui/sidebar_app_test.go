@@ -230,3 +230,36 @@ func TestSidebarAppFixture(t *testing.T) {
 		t.Fatalf("rows %v", rows)
 	}
 }
+
+// TestSidebarAppFixtureProgramsOff: with programs off, programs on disk
+// and in config.toml (each case's first project a
+// member) change no row: every case gives
+// testdata/sidebar-app.json's rows exactly (the programs design §3.5).
+func TestSidebarAppFixtureProgramsOff(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("TERMINATR_HOME", home)
+	b, err := os.ReadFile(filepath.Join("testdata", "sidebar-app.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var file struct{ Cases []appCase }
+	if err := json.Unmarshal(b, &file); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range file.Cases {
+		cfg := "[features]\nprograms = false\n"
+		if len(c.Projects) > 0 {
+			cfg += "[programs.zz-prog]\nprojects = [\"" + c.Projects[0].Slug + "\"]\n"
+		}
+		if err := os.WriteFile(filepath.Join(home, "config.toml"), []byte(cfg), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.MkdirAll(filepath.Join(home, "projects", config.ProgramsDirName, "zz-prog"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		want := c.Rows
+		if got := appTree(c); !slices.Equal(got, want) {
+			t.Fatalf("case %s with programs off: rows %v, want the fixture's %v", c.Name, got, want)
+		}
+	}
+}

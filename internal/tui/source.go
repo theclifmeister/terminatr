@@ -293,6 +293,13 @@ type SettingsSource interface {
 	// a project's own value, so it follows all projects again. It is
 	// refused when tm runs inside an agent.
 	SetSetting(table, key string, value any) error
+	// Programs reads the programs switch ([features] programs) and the
+	// programs here, whatever it says (settings_features.go).
+	Programs() ProgramsState
+	// SetPrograms turns programs on or off (programs.switch), on the
+	// human's keypress after its confirm, saying what it did. Refused
+	// when tm runs inside an agent.
+	SetPrograms(on bool) (string, error)
 	// ResetAccess puts table's Access switches back to what it follows
 	// (config.ResetAccess), on the human's keypress; reset are the keys
 	// it removed. Refused inside an agent.

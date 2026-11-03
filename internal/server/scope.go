@@ -3,6 +3,7 @@ package server
 import (
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/features"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 )
@@ -123,5 +124,5 @@ func directsMember(c caller.Caller, slug string, cfg *config.Config) bool {
 	if cfg == nil {
 		cfg, _ = config.Load()
 	}
-	return cfg.ProgramsOn() && cfg.ProgramOf(slug) == c.Project && !project.ProgramLeftOut(c.Project)
+	return features.Programs(cfg) && cfg.ProgramOf(slug) == c.Project && !project.ProgramLeftOut(c.Project)
 }

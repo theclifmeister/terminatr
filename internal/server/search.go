@@ -13,6 +13,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/features"
 	"github.com/theclifmeister/terminatr/internal/home"
 	"github.com/theclifmeister/terminatr/internal/program"
 	"github.com/theclifmeister/terminatr/internal/project"
@@ -99,8 +100,8 @@ func (si *SearchService) index(slug string) (*search.Index, string, *proto.Error
 // program a project's slug clashes with (the project wins), or for one
 // with no folder.
 func (si *SearchService) programIndex(cfg *config.Config, slug string) (*search.Index, string, *proto.Error) {
-	if !cfg.ProgramsOn() {
-		return nil, "", proto.Errorf(config.ProgramsOff, "programs are off on this server; the user turns them on in Settings → all projects → Features")
+	if !features.Programs(cfg) {
+		return nil, "", proto.Errorf(features.OffCode, "%s", features.OffMsg)
 	}
 	dir, err := program.Dir(slug)
 	if err != nil {

@@ -23,6 +23,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/features"
 	"github.com/theclifmeister/terminatr/internal/guard"
 	"github.com/theclifmeister/terminatr/internal/guardlog"
 	"github.com/theclifmeister/terminatr/internal/mod"
@@ -132,7 +133,7 @@ func (s *Server) guardRulesFor(r SessionRecord) GuardRules {
 		return GuardRules{}
 	}
 	lc := loadLaunchConfig()
-	if r.Role == proto.RoleDirector && !lc.cfg.ProgramsOn() {
+	if r.Role == proto.RoleDirector && !features.Programs(lc.cfg) {
 		return GuardRules{}
 	}
 	set := lc.safety(r.Project)

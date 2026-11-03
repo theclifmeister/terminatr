@@ -266,3 +266,55 @@ func List(cfg *config.Config) ([]Summary, error) {
 	}
 	return out, nil
 }
+
+// Delete is tm program delete, the human's (§3.4): the program's folder
+// moves to <home>/.trash/_programs-<slug>-<UTC time>, and its
+// [programs.<slug>] table leaves config.toml, its members' membership
+// with it. The children are left alone. It returns where the folder
+// went ("" when there was none: only a table). It works whatever
+// [features] programs says, so dormant programs can be cleared.
+func Delete(c caller.Caller, slug string, at time.Time) (string, error) {
+	dir, err := Dir(slug)
+	if err != nil {
+		return "", err
+	}
+	cfg, _ := config.Load()
+	_, table := cfg.Program(slug)
+	_, statErr := os.Stat(dir)
+	if !table && statErr != nil {
+		return "", refuse("unknown-program", "no program %q", slug)
+	}
+	dst := ""
+	if statErr == nil {
+		trash, err := home.TrashDir()
+		if err != nil {
+			return "", err
+		}
+		if err := os.MkdirAll(trash, 0o700); err != nil {
+			return "", err
+		}
+		base := filepath.Join(trash, config.ProgramsDirName+"-"+slug+"-"+at.UTC().Format("20060102T150405Z"))
+		dst = base
+		for i := 2; ; i++ {
+			if _, err := os.Lstat(dst); os.IsNotExist(err) {
+				break
+			}
+			dst = fmt.Sprintf("%s-%d", base, i)
+		}
+		// The journal line goes in first, so it travels with the folder.
+		f := project.Folder{Slug: slug, Dir: dir, Kind: project.KindProgram}
+		_ = f.Journal(c, "program.delete", slug, "moved to "+dst)
+		if err := os.Rename(dir, dst); err != nil {
+			return "", err
+		}
+	}
+	if table {
+		if err := config.RemoveProgram(slug); err != nil {
+			if dst != "" {
+				return dst, fmt.Errorf("moved to %s, but its [programs.%s] table stays: %w", dst, slug, err)
+			}
+			return "", err
+		}
+	}
+	return dst, nil
+}

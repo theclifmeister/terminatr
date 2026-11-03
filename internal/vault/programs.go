@@ -2,6 +2,7 @@ package vault
 
 import (
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/features"
 	"github.com/theclifmeister/terminatr/internal/program"
 	"github.com/theclifmeister/terminatr/internal/project"
 )
@@ -21,7 +22,7 @@ func Programs(cfg *config.Config) []*program.Program {
 	if cfg == nil {
 		cfg, _ = config.Load() // a safety error still gives the tables
 	}
-	if !cfg.ProgramsOn() {
+	if !features.Programs(cfg) {
 		return nil
 	}
 	var out []*program.Program

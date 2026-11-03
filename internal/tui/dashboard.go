@@ -214,6 +214,7 @@ type dash struct {
 	acts      int                     // actions started, so a poll knows whether one began since it did
 	queued    []func(m *dash) tea.Cmd // settings keys pressed while it runs, in order
 	catalogs  []Catalog               // the agents' models, read when the , popup opens (catalog.go)
+	programs  ProgramsState           // the programs switch and programs, read when the , popup opens (settings_features.go)
 	agents    []string                // the installed agents, read by agentList; nil until then or after a poll
 	agentsOK  bool                    // agents is read
 	stack     []overlay               // views open on top of the list, topmost last

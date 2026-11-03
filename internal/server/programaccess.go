@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/features"
 	"github.com/theclifmeister/terminatr/internal/home"
 	"github.com/theclifmeister/terminatr/internal/program"
 	"github.com/theclifmeister/terminatr/internal/project"
@@ -32,7 +33,7 @@ import (
 // folders it reads, and folders and files it never writes. Each path
 // has its symlinks resolved.
 func programAccess(role, slug string, cfg *config.Config) (read, noWrite, noWriteFiles []string, err error) {
-	if !cfg.ProgramsOn() || slug == "" {
+	if !features.Programs(cfg) || slug == "" {
 		return nil, nil, nil, nil
 	}
 	root, err := home.ProgramsDir()

@@ -21,6 +21,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/emu"
+	"github.com/theclifmeister/terminatr/internal/features"
 	"github.com/theclifmeister/terminatr/internal/gitx"
 	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/plat/caps"
@@ -183,8 +184,8 @@ func (s *Server) accessFor(role, slug string, tree *gitx.Tree, lc launchConfig) 
 		// Its program's folder, but for what tm alone writes there; no
 		// project's folder, no other program's (programAccess). Never
 		// while programs are off: no director runs then.
-		if !lc.cfg.ProgramsOn() {
-			return agent.Access{}, &proto.Error{Code: config.ProgramsOff, Message: "programs are off on this server"}
+		if !features.Programs(lc.cfg) {
+			return agent.Access{}, &proto.Error{Code: features.OffCode, Message: features.OffMsg}
 		}
 		// The folders are made first, so that each sandbox has a real
 		// path to close.
