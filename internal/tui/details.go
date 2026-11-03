@@ -28,7 +28,7 @@ func (m *dash) detailsLay(r row, w, h int) panelLay {
 	d := &panel{w: w}
 	switch {
 	case r.task != nil:
-		taskPanelWith(d, r.task, nil, m.asked(r.project, r.task), m.taskUsage(r.project, r.task.ID), m.badges(r.project, modstore.Task(r.task.Ref())))
+		taskPanelWith(d, r.task, nil, m.afterText(r.project, r.task), m.asked(r.project, r.task), m.taskUsage(r.project, r.task.ID), m.badges(r.project, modstore.Task(r.task.Ref())))
 	case r.thread != nil:
 		m.threadPanel(d, r)
 	case strings.HasPrefix(r.key, "p:"):
@@ -286,16 +286,17 @@ func (m *dash) taskUsage(slug string, id int) thread.Usage {
 
 // taskPanelWith shows a task with what the user needs to act on it:
 // what it is blocked on; for a task in review, how to check it and
-// whether its change shipped (rv, when known); and what the coordinator
-// was asked about it (asked, an item kind, "" for nothing).
-func taskPanelWith(d *panel, t *tasks.Task, rv *Review, asked string, usage thread.Usage, badges []modstore.Badge) {
+// whether its change shipped (rv, when known); what it comes after
+// (after, afterText); and what the coordinator was asked about it
+// (asked, an item kind, "" for nothing).
+func taskPanelWith(d *panel, t *tasks.Task, rv *Review, after, asked string, usage thread.Usage, badges []modstore.Badge) {
 	d.title(t.Ref()+" "+t.Title, string(t.Status))
 	d.badges(badges)
 	d.field("priority", string(t.Priority))
 	d.field("thread", t.Thread)
 	d.field("usage", usage.String())
 	d.field("design", t.Design)
-	d.field("after", strings.Join(t.AfterRefs(), ", "))
+	d.field("after", after)
 	if asked != "" {
 		d.gap()
 		d.wrap(th().Warn.Render(waitingFor(asked)))

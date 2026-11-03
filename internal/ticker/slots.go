@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -82,7 +83,7 @@ func (t *Ticker) slotFree(cfg *config.Config, sessions []proto.SessionInfo, now 
 		}
 		total++
 	}
-	waiters = t.rankWaiters(waiters, progs.get)
+	waiters = t.rankWaiters(cfg, waiters, progs.get)
 	told := map[string]bool{}
 	drop := map[string]bool{}
 	offered := map[string]bool{}
@@ -288,7 +289,7 @@ func (t *Ticker) waiterTask(w thread.Waiter) *tasks.Task {
 // the waiters inside one program trade places among themselves by
 // priority, then dependencies met, then age (decision 12). progOf says
 // a project's program, if any.
-func (t *Ticker) rankWaiters(ws []thread.Waiter, progOf func(string) (config.Program, bool)) []thread.Waiter {
+func (t *Ticker) rankWaiters(cfg *config.Config, ws []thread.Waiter, progOf func(string) (config.Program, bool)) []thread.Waiter {
 	groups := map[string][]int{} // program slug → positions in ws
 	for i, w := range ws {
 		if g, ok := progOf(w.Project); ok {
@@ -299,22 +300,20 @@ func (t *Ticker) rankWaiters(ws []thread.Waiter, progOf func(string) (config.Pro
 		return ws
 	}
 	out := slices.Clone(ws)
-	var st State
-	if t.st != nil {
-		st.st = *t.st
-	}
-	deps := depReader{st: st, boards: map[string]*tasks.Board{}, archives: map[string]*tasks.Board{}, recs: map[string][]*thread.Record{}}
+	merged := t.mergedThreads()
+	isMerged := func(slug, id string) bool { return merged[slug+"/"+id] }
 	for _, pos := range groups {
 		if len(pos) < 2 {
 			continue
 		}
 		g, _ := progOf(ws[pos[0]].Project)
+		deps := program.NewDeps(cfg, g.Slug, isMerged)
 		members := make([]thread.Waiter, len(pos))
 		ranks := map[string]waiterRank{}
 		for k, i := range pos {
 			members[k] = ws[i]
 			task := t.waiterTask(ws[i])
-			ranks[ws[i].Project] = waiterRank{task: task, ready: task == nil || deps.ready(ws[i].Project, task, g)}
+			ranks[ws[i].Project] = waiterRank{task: task, ready: task == nil || depsMet(deps, ws[i].Project, task)}
 		}
 		slices.SortStableFunc(members, func(a, b thread.Waiter) int {
 			ra, rb := ranks[a.Project], ranks[b.Project]
@@ -343,88 +342,21 @@ func priorityRank(t *tasks.Task) int {
 	return t.Priority.Rank()
 }
 
-// depReader answers whether a task's dependencies are met (the programs
-// design §6.2) from this server's boards: a task it comes after is met
-// when done, or, under dependency_met = merged, when a thread of it has
-// its PR merged. A paired server's task, a dropped one or one not found
-// is not met.
-type depReader struct {
-	st       State
-	boards   map[string]*tasks.Board
-	archives map[string]*tasks.Board
-	recs     map[string][]*thread.Record
-}
-
-func (d depReader) ready(slug string, t *tasks.Task, g config.Program) bool {
+// depsMet says whether every task t (of project slug) comes after is
+// met, by program.Deps (the programs design §6.2): its own board's refs
+// and other members' alike; open, unknown and gone are not met.
+func depsMet(deps *program.Deps, slug string, t *tasks.Task) bool {
 	for _, n := range t.After {
-		if !d.met(slug, n, g) {
+		if deps.State(slug+"/T"+strconv.Itoa(n)).State != program.DepMet {
 			return false
 		}
 	}
 	for _, ref := range t.AfterX {
-		other, tref, ok := strings.Cut(ref, "/")
-		if !ok || strings.Contains(tref, "/") {
-			return false // a paired server's: unknown here
-		}
-		n, ok := tasks.ParseRef(tref)
-		if !ok || !d.met(other, n, g) {
+		if deps.State(ref).State != program.DepMet {
 			return false
 		}
 	}
 	return true
-}
-
-func (d depReader) met(slug string, id int, g config.Program) bool {
-	t := d.task(slug, id)
-	switch {
-	case t == nil || t.Status == tasks.Dropped:
-		return false
-	case t.Status == tasks.Done:
-		return true
-	case g.DependencyMet == config.DependencyDone:
-		return false
-	}
-	prs := d.st.PRs(slug)
-	for _, r := range d.records(slug) {
-		if r.TaskID() == id && strings.EqualFold(prs[r.ID].State, "merged") {
-			return true
-		}
-	}
-	return false
-}
-
-func (d depReader) task(slug string, id int) *tasks.Task {
-	p, err := project.Open(slug)
-	if err != nil {
-		return nil
-	}
-	if _, ok := d.boards[slug]; !ok {
-		d.boards[slug], _ = p.Tasks().Load()
-	}
-	if b := d.boards[slug]; b != nil {
-		if t := b.Find(id); t != nil {
-			return t
-		}
-	}
-	if _, ok := d.archives[slug]; !ok {
-		d.archives[slug], _ = p.Tasks().LoadArchive()
-	}
-	if b := d.archives[slug]; b != nil {
-		return b.Find(id)
-	}
-	return nil
-}
-
-func (d depReader) records(slug string) []*thread.Record {
-	if recs, ok := d.recs[slug]; ok {
-		return recs
-	}
-	var recs []*thread.Record
-	if p, err := project.Open(slug); err == nil {
-		recs, _ = thread.List(p)
-	}
-	d.recs[slug] = recs
-	return recs
 }
 
 // candidateWords is one candidate in a director's slot-free item: the

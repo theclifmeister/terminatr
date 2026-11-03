@@ -130,12 +130,12 @@ func TestSlotRankWithinProgram(t *testing.T) {
 
 	// Off: oldest first, solo and web.
 	cfg := writeConfig(t, table)
-	ranked := r.tk.rankWaiters(thread.Waiters(), slotPrograms{cfg: cfg, of: map[string]config.Program{}, in: map[string]bool{}}.get)
+	ranked := r.tk.rankWaiters(cfg, thread.Waiters(), slotPrograms{cfg: cfg, of: map[string]config.Program{}, in: map[string]bool{}}.get)
 	if got := projectsOf(ranked); got != "solo web api demo" {
 		t.Fatalf("off: %s", got)
 	}
 	cfg = writeConfig(t, programsOnCfg+table)
-	ranked = r.tk.rankWaiters(thread.Waiters(), slotPrograms{cfg: cfg, of: map[string]config.Program{}, in: map[string]bool{}}.get)
+	ranked = r.tk.rankWaiters(cfg, thread.Waiters(), slotPrograms{cfg: cfg, of: map[string]config.Program{}, in: map[string]bool{}}.get)
 	// demo's must is ready; api's must waits on an open task; web's could.
 	if got := projectsOf(ranked); got != "solo demo api web" {
 		t.Fatalf("on: %s", got)
@@ -153,38 +153,40 @@ func TestSlotRankWithinProgram(t *testing.T) {
 		t.Fatal(err)
 	}
 	thread.Started("demo", "acme")
-	ranked = r.tk.rankWaiters(thread.Waiters(), slotPrograms{cfg: cfg, of: map[string]config.Program{}, in: map[string]bool{}}.get)
+	ranked = r.tk.rankWaiters(cfg, thread.Waiters(), slotPrograms{cfg: cfg, of: map[string]config.Program{}, in: map[string]bool{}}.get)
 	if got := projectsOf(ranked); got != "solo api web" {
 		t.Fatalf("after the dependency: %s", got)
 	}
 }
 
-// TestDepsReady: a dependency is met when done, or under merged when a
-// thread of it has its PR merged; one on a paired server never is
-// here, nor a dropped one.
-func TestDepsReady(t *testing.T) {
-	r := newRig(t)
+// TestDepsMet: a waiter's task is ready when everything it comes after
+// is met by program.Deps: done, or under merged its thread's PR merged;
+// a paired server's never is here.
+func TestDepsMet(t *testing.T) {
+	newRig(t)
 	newProjects(t, "api")
+	cfg := writeConfig(t, programsOnCfg+"[programs.acme]\nprojects = [\"demo\", \"api\", \"mini/ios\"]\n")
+	if _, err := program.New(program.Options{Slug: "acme"}); err != nil {
+		t.Fatal(err)
+	}
 	base := addTask(t, "api", "Base", "")
-	d := depReader{boards: map[string]*tasks.Board{}, archives: map[string]*tasks.Board{}, recs: map[string][]*thread.Record{}}
-	merged := config.Program{DependencyMet: "merged"}
-	if d.ready("demo", &tasks.Task{AfterX: []string{"api/" + base}}, merged) {
+	one := addTask(t, "demo", "One", "")
+	merged := func(slug, id string) bool { return slug == "api" && id == "t-0009" }
+	deps := program.NewDeps(cfg, "acme", merged)
+	if depsMet(deps, "demo", &tasks.Task{AfterX: []string{"api/" + base}}) {
 		t.Fatal("an open dependency is met")
 	}
-	if d.ready("demo", &tasks.Task{AfterX: []string{"mini/api/T1"}}, merged) {
+	if depsMet(deps, "demo", &tasks.Task{AfterX: []string{"mini/ios/T1"}}) {
 		t.Fatal("a paired server's dependency is met")
 	}
-	// demo's thread t-0001 works on T1; its PR merged.
-	addTask(t, "demo", "One", "")
-	st := state{Threads: map[string]*threadMemo{"demo/t-0001": {PR: PR{Number: 4, State: "MERGED"}}}}
-	d.st = State{st: st}
-	if !d.ready("api", &tasks.Task{AfterX: []string{"demo/T1"}}, merged) {
-		t.Fatal("a merged PR's task isn't met under merged")
+	id, _ := tasks.ParseRef(one)
+	p, _ := project.Open("demo")
+	if _, err := p.Tasks().SetStatus(caller.Caller{Kind: caller.Human}, id, tasks.Done, ""); err != nil {
+		t.Fatal(err)
 	}
-	if d.ready("api", &tasks.Task{AfterX: []string{"demo/T1"}}, config.Program{DependencyMet: "done"}) {
-		t.Fatal("a merged PR's task is met under done")
+	if !depsMet(program.NewDeps(cfg, "acme", merged), "demo", &tasks.Task{After: []int{id}}) {
+		t.Fatal("a done task on the same board isn't met")
 	}
-	_ = r
 }
 
 // TestSlotDirectorHold: in a delegate program with its director
