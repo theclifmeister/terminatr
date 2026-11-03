@@ -274,3 +274,40 @@ func renderDays(t *testing.T, now time.Time) (string, error) {
 	}
 	return string(notes[0].Data), nil
 }
+
+// TestProgramsInBasesAndHome: the Bases get a view per program and
+// Home.md a Programs section only while programs are on; off, neither
+// mentions _programs. The ignore filters hide a program's inbox/done and
+// JOURNAL.md as a project's.
+func TestProgramsInBasesAndHome(t *testing.T) {
+	vaultOn(t, "web")
+	programOn(t, "acme", false)
+	text := func() string {
+		var all strings.Builder
+		for _, f := range wholeFiles() {
+			if strings.HasPrefix(f.Rel, tmDir+"/") {
+				all.Write(f.data)
+			}
+		}
+		return all.String()
+	}
+	if s := text(); strings.Contains(s, "_programs") {
+		t.Fatal("programs off, but the Bases or Home.md name one")
+	}
+	d, _ := home.Dir()
+	os.WriteFile(filepath.Join(d, "config.toml"), []byte("[features]\nprograms = true\n"), 0o600)
+	s := text()
+	for _, want := range []string{"name: _programs/acme", `file.inFolder("_programs/acme/tasks")`, "## Programs", "[[_programs/acme/PROGRAM|acme]]"} {
+		if !strings.Contains(s, want) {
+			t.Errorf("missing %q", want)
+		}
+	}
+	for _, rel := range []string{"_programs/acme/inbox/done/x.md", "_programs/acme/JOURNAL.md", "web/JOURNAL.md"} {
+		if !Ignored(rel) {
+			t.Errorf("%s not ignored", rel)
+		}
+	}
+	if Ignored("_programs/acme/PROGRAM.md") {
+		t.Error("PROGRAM.md ignored")
+	}
+}

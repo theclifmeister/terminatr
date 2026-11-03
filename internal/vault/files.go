@@ -19,15 +19,21 @@ type wholeFile struct {
 }
 
 func wholeFiles() []wholeFile {
-	var slugs []string
+	var slugs, progs []string
 	for _, p := range projects() {
 		slugs = append(slugs, p.Slug)
 	}
+	// Programs only while they are on ([features] programs): off, the
+	// Bases and Home.md are as they were.
+	for _, p := range Programs(nil) {
+		progs = append(progs, p.LinkSlug())
+	}
+	slugs = append(slugs, progs...)
 	files := []wholeFile{{obsidianDir + "/snippets/tm.css", []byte(tmCSS)}}
 	for _, b := range bases(slugs) {
 		files = append(files, wholeFile{tmDir + "/bases/" + b.name + ".base", []byte(b.text)})
 	}
-	return append(files, wholeFile{tmDir + "/Home.md", []byte(homeNote(slugs))})
+	return append(files, wholeFile{tmDir + "/Home.md", []byte(homeNote(slugs, progs))})
 }
 
 const baseHeader = "# Written by tm (tm vault init, tm vault render): a change here is kept,\n# and tm stops updating this file. Save your own Base in _human/.\n"
@@ -249,7 +255,10 @@ views:
 
 // homeNote is _tm/Home.md: what needs you, the recent days, then each
 // project's board, context and memory, as links and embedded Base views.
-func homeNote(slugs []string) string {
+//
+// slugs are the vault folders of the projects and then the programs
+// (_programs/<slug>); programs, the latter alone.
+func homeNote(slugs, programs []string) string {
 	var b strings.Builder
 	b.WriteString("---\ntm: \"owned\"\ncssclasses:\n  - \"tm-owned\"\n---\n# Home\n\n")
 	b.WriteString("## Needs you\n\n![[_tm/bases/Needs you.base]]\n\n")
@@ -258,8 +267,14 @@ func homeNote(slugs []string) string {
 	if len(slugs) == 0 {
 		b.WriteString("No project yet: `tm project new`.\n")
 	}
-	for _, s := range slugs {
+	for _, s := range slugs[:len(slugs)-len(programs)] {
 		fmt.Fprintf(&b, "- [[%s/PROJECT|%s]] · [[%s/%s|board]] · [[%s/CONTEXT|context]] · [[%s/MEMORY|memory]]\n", s, s, s, tasks.BoardNote(), s, s)
+	}
+	if len(programs) > 0 {
+		b.WriteString("\n## Programs\n\n")
+		for _, s := range programs {
+			fmt.Fprintf(&b, "- [[%s/PROGRAM|%s]] · [[%s/CONTEXT|context]] · [[%s/MEMORY|memory]]\n", s, strings.TrimPrefix(s, programsDir+"/"), s, s)
+		}
 	}
 	b.WriteString("\n## Bases\n\n")
 	for _, n := range []string{"Tasks", "Threads", "Memory", "Inbox", "Messages"} {
