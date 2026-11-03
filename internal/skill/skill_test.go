@@ -13,7 +13,8 @@ func roles() []string {
 	entries, _ := rules.ReadDir("rules")
 	var out []string
 	for _, e := range entries {
-		if r, ok := strings.CutSuffix(e.Name(), ".safety.md"); ok {
+		// coordinator.programs.safety.md is a part of the coordinator's.
+		if r, ok := strings.CutSuffix(e.Name(), ".safety.md"); ok && !strings.Contains(r, ".") {
 			out = append(out, r)
 		}
 	}
@@ -22,7 +23,7 @@ func roles() []string {
 }
 
 func TestText(t *testing.T) {
-	if got := strings.Join(roles(), ","); got != "coordinator,thread" {
+	if got := strings.Join(roles(), ","); got != "coordinator,director,thread" {
 		t.Fatalf("roles %s", got)
 	}
 	for _, role := range roles() {

@@ -197,7 +197,8 @@ func (s *Server) accessFor(role, slug string, tree *gitx.Tree, lc launchConfig) 
 				return agent.Access{}, err
 			}
 		}
-		return agent.Access{Read: pRead, NoWrite: pNoWrite, NoWriteFiles: append([]string{cfgFile}, pNoWriteFiles...)}, nil
+		return agent.Access{Read: pRead, NoWrite: pNoWrite, NoWriteFiles: append([]string{cfgFile}, pNoWriteFiles...),
+			Commands: directorCommands(lc.cfg, slug)}, nil
 	}
 	dir, err := project.Dir(slug)
 	if err != nil {
@@ -372,6 +373,39 @@ var coordinatorRules = []struct {
 	{[]string{"tm thread merge"}, "coordinator_merges", func(s config.Safety) bool { return s.CoordinatorMerges && s.Merge == config.MergeCoordinator }},
 }
 
+// directorRules are the tm commands a program's director runs without
+// a prompt (the programs design §4.4), the counterpart of
+// coordinatorRules: tm checks each call itself, and the server refuses
+// a director what its authority doesn't allow whatever the prompt says
+// (§10). Read-only commands always; the program's own acts that both
+// authorities allow (route, task edit, send, ask) always; tm program
+// start only under authority = "delegate" (under propose it prompts,
+// and the server still wants --approved-by-user). Nothing of the
+// user's word is here: accept, drop, a thread's menu answer, access,
+// safety, pause, archive and delete are never a director's at all.
+var directorRules = []struct {
+	commands []string
+	on       func(config.Program) bool
+}{
+	{[]string{"tm program context", "tm program list", "tm program show", "tm program needs", "tm program search", "tm program task show",
+		"tm context", "tm task list", "tm task show", "tm thread list", "tm thread show", "tm search", "tm skill"}, nil},
+	{[]string{"tm program route", "tm program task edit", "tm program send", "tm program ask"}, nil},
+	{[]string{"tm program start"}, func(p config.Program) bool { return p.Authority == config.AuthorityDelegate }},
+}
+
+// directorCommands is the commands program slug's director may run
+// unprompted under cfg (directorRules).
+func directorCommands(cfg *config.Config, slug string) []string {
+	t, _ := cfg.Program(slug)
+	var out []string
+	for _, r := range directorRules {
+		if r.on == nil || r.on(t) {
+			out = append(out, r.commands...)
+		}
+	}
+	return out
+}
+
 // coordinatorCommands is the commands a coordinator may run unprompted
 // under the project's settings set (coordinatorRules). Threads never get
 // them.
@@ -398,7 +432,8 @@ func commandSetting(c string) string {
 
 // contextFor renders the context a role gets back after a clear or a
 // compaction (docs/SPEC.md §7.8): the role's rules plus `tm context`
-// for a coordinator, the rules plus the brief, task, PR
+// for a coordinator, the director rules plus `tm program context` for a
+// program's director, the rules plus the brief, task, PR
 // and latest follow-up for a thread, nothing for a session outside a
 // project. Each stays within its size budget, the rules aside. A
 // session whose rules are in its system prompt (r.Prompt) gets a header
@@ -430,6 +465,8 @@ func contextFor(r SessionRecord, tickerState string) func() ([]byte, error) {
 				return []byte(project.Startup(head, secs)), nil
 			}
 			return []byte(head + "\n\n" + coordinatorEssentials(secs, coordinatorBudget)), nil
+		case proto.RoleDirector:
+			return directorContext(r)
 		case proto.RoleThread:
 			rules, _ := roleRules("thread", slug)
 			head := rules
@@ -810,7 +847,7 @@ func (s *Server) prepareLaunch(l agentLaunch, v launchView) (*preparedLaunch, *p
 		r.Model, r.ModelNext, r.ModelPending = r.ModelNext, "", false
 	}
 	spec := agent.LaunchSpec{
-		Role: agent.Role(r.Role), SessionID: r.ID, AgentSID: r.AgentSessionID,
+		Role: agent.Role(directorProfile(r.Role)), SessionID: r.ID, AgentSID: r.AgentSessionID,
 		Cwd: r.Cwd, RepoRoot: repo.RepoRoot, GitDir: repo.GitDir, RuntimeDir: p.rt, BriefPath: r.Brief, Kickoff: l.kick, Resume: l.resume,
 		Yolo: yolo, NoSandbox: noSandbox, NoSandboxEscapes: noEscapes, Model: r.Model, TMBin: s.opts.Bin, Socket: s.opts.Paths.Socket, Access: launchAccess(acc),
 		RemoteControl: r.RemoteControl, RemoteName: remoteName(r),
@@ -854,7 +891,11 @@ func (s *Server) prepareLaunch(l agentLaunch, v launchView) (*preparedLaunch, *p
 		spec.EnvHide = envHide(s.baseEnv(), spec.SecretEnv)
 	}
 	if spec.Model == "" {
-		spec.Model = launchModel(a, r.Project, r.Role == proto.RoleCoordinator, lc.cfg)
+		if r.Role == proto.RoleDirector {
+			spec.Model = directorModel(a, r.Project, lc.cfg)
+		} else {
+			spec.Model = launchModel(a, r.Project, r.Role == proto.RoleCoordinator, lc.cfg)
+		}
 	}
 	spec.Theme = s.launchThemeOf(spec.PaneScheme, lc.cfg)
 	spec.LiveTheme = s.writeThemeFile(a, spec.Theme, v.schemeName, lc.cfg != nil && followsTerminal(lc.cfg))

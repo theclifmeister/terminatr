@@ -31,6 +31,8 @@ func restartLabel(r SessionRecord) string {
 		return r.Thread
 	case r.Role == proto.RoleCoordinator:
 		return "coordinator"
+	case r.Role == proto.RoleDirector:
+		return directorLabel(r.Project)
 	case r.Agent != "" && (r.Role == proto.RoleShell || r.Role == ""):
 		return r.Agent + " " + r.ID
 	case r.Role == "":

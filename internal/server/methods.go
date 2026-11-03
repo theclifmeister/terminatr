@@ -211,7 +211,8 @@ func init() {
 		proto.MethodSessionWatch: {scope: scopeSees, name: scoped(sessionID), stream: stream((*Server).serveWatch)},
 		proto.MethodAgentExplain: {scope: scopeSees, name: scoped(sessionID),
 			call: typed(func(s *Server, p proto.SessionIDParams, _ callCtx) (any, *proto.Error) { return s.explain(p.ID) })},
-		proto.MethodProjectWatch: {scope: scopeProject, name: scoped(func(p proto.ProjectWatchParams) string { return p.Project }),
+		// A project's state: its agents, and its program's director (read).
+		proto.MethodProjectWatch: {scope: scopeProgram, name: scoped(func(p proto.ProjectWatchParams) string { return p.Project }),
 			stream: stream((*Server).serveProjectWatch)},
 		// tm search (CapSearch): the human any project, an agent its own;
 		// a thread without the coordinator's chunks (seesAll).

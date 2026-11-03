@@ -79,7 +79,8 @@ type Provides struct {
 	Layout string `toml:"layout"`
 	// Rules are rules addenda by role (coordinator, thread) and policies
 	// that replace a role's built-in policy part (coordinator_policy,
-	// thread_policy), .md files.
+	// thread_policy, director_policy, coordinator_programs_policy), .md
+	// files.
 	Rules map[string]string `toml:"rules"`
 	// Templates and Agents are folders: task templates, agent manifests.
 	Templates string `toml:"templates"`
@@ -713,7 +714,7 @@ func (m *Manifest) checkFiles(dir string) []error {
 	}
 	for _, role := range sortedKeys(p.Rules) {
 		if !slices.Contains(rulesKeys, role) {
-			ps.add("provides.rules.%s: rules are coordinator or thread (addenda), coordinator_policy or thread_policy", role)
+			ps.add("provides.rules.%s: rules are coordinator or thread (addenda), coordinator_policy, thread_policy, director_policy or coordinator_programs_policy", role)
 		}
 		ps = append(ps, inside(dir, "provides.rules."+role, p.Rules[role], false))
 	}

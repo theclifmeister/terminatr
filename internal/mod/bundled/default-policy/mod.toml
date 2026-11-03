@@ -1,5 +1,6 @@
-# Built into tm (mods design §11): the policy part of the coordinator's
-# and the threads' rules (tm skill coordinator, tm skill thread). The
+# Built into tm (mods design §11): the policy part of the coordinator's,
+# the threads' and a program director's rules (tm skill coordinator, tm
+# skill thread, tm skill director). The
 # safety part is tm's own, always first, and no mod replaces it. Copy
 # this folder, change its id and name, edit the rules and tm mod
 # install it: an enabled policy mod comes before this one.
@@ -13,3 +14,7 @@ authors     = ["terminatr"]
 [provides.rules]
 coordinator_policy = "rules/coordinator.md"
 thread_policy      = "rules/thread.md"
+director_policy    = "rules/director.md"
+# Appended to the coordinator's policy only while [features] programs
+# is on (the programs design §4.3).
+coordinator_programs_policy = "rules/coordinator.programs.md"

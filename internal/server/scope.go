@@ -2,6 +2,8 @@ package server
 
 import (
 	"github.com/theclifmeister/terminatr/internal/caller"
+	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
@@ -12,6 +14,10 @@ const (
 	scopeOwn            // the caller's own session only
 	scopeSees           // its own session, or for a coordinator its project's
 	scopeProject        // the caller's own project
+	// scopeProgram is scopeProject, or for a program's director a
+	// project of its program (the programs design §10): read methods
+	// only. Never while programs are off.
+	scopeProgram
 )
 
 // mayAddress is the gate of a method that names a session or a project,
@@ -38,10 +44,17 @@ func (s *Server) mayAddress(req proto.Request, m method, human bool, who func() 
 	}
 	switch scope {
 	case scopeProject:
-		if c.IsAgent() && c.Project != "" && c.Project == name {
+		// A director's Project is its program's slug, which no project
+		// has (§3.4): it names no project as its own.
+		if c.IsAgent() && c.Project != "" && c.Project == name && c.Kind != caller.Director {
 			return params, nil
 		}
 		return nil, proto.Errorf(proto.ErrRefused, "%s: project %s isn't the caller's", req.Method, name)
+	case scopeProgram:
+		if c.IsAgent() && c.Project != "" && c.Project == name && c.Kind != caller.Director || directsMember(c, name, nil) {
+			return params, nil
+		}
+		return nil, proto.Errorf(proto.ErrRefused, "%s: project %s isn't the caller's or its program's", req.Method, name)
 	case scopeSees:
 		if s.sees(c, name) {
 			return params, nil
@@ -98,4 +111,17 @@ func (s *Server) projectOf(id string) string {
 		return ""
 	}
 	return s.records[id].Project
+}
+
+// directsMember reports whether c is the director of the program that
+// project slug is a member of (scopeProgram), under cfg (nil reads
+// config.toml): programs on, the program not left out.
+func directsMember(c caller.Caller, slug string, cfg *config.Config) bool {
+	if c.Kind != caller.Director || c.Project == "" || slug == "" {
+		return false
+	}
+	if cfg == nil {
+		cfg, _ = config.Load()
+	}
+	return cfg.ProgramsOn() && cfg.ProgramOf(slug) == c.Project && !project.ProgramLeftOut(c.Project)
 }

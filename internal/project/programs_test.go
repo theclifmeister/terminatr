@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/home"
 )
 
 // TestProgramNamespace: programs and projects share one namespace
@@ -62,5 +63,51 @@ func TestProgramNamespace(t *testing.T) {
 				t.Fatalf("List has %s", p.Slug)
 			}
 		}
+	}
+}
+
+// TestProgramSection: a member's tm context has the Program part only
+// while programs are on, and only for a member of a program that isn't
+// left out.
+func TestProgramSection(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv(home.Env, dir)
+	p, err := New(Options{Slug: "api"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := New(Options{Slug: "web"}); err != nil {
+		t.Fatal(err)
+	}
+	has := func(slug, cfg string) string {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(dir, "config.toml"), []byte(cfg), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		q, err := Open(slug)
+		if err != nil {
+			t.Fatal(err)
+		}
+		secs, err := q.Context(Ticked{}, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, s := range secs {
+			if s.Title == "Program" {
+				return strings.Join(s.Lines, "\n")
+			}
+		}
+		return ""
+	}
+	const member = "[programs.studio]\nprojects = [\"api\"]\n"
+	if got := has(p.Slug, member); got != "" {
+		t.Errorf("off: %s", got)
+	}
+	on := has(p.Slug, "[features]\nprograms = true\n"+member)
+	if !strings.HasPrefix(on, "Program: studio") || !strings.Contains(on, filepath.Join(dir, "projects", "_programs", "studio", "PROGRAM.md")) || !strings.Contains(on, "not the user's word") {
+		t.Errorf("on: %s", on)
+	}
+	if got := has("web", "[features]\nprograms = true\n"+member); got != "" {
+		t.Errorf("a project outside the program: %s", got)
 	}
 }

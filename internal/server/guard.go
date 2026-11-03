@@ -118,17 +118,23 @@ func (s *Server) guardOwn() []string {
 	return withReal(out)
 }
 
-// guardRulesFor is session record r's rules. Only a project's agents are
-// guarded; a coordinator neither merges under a thread's rule nor keeps
-// to a worktree. Under yolo the guard keeps its floor only (T574 case 4):
+// guardRulesFor is session record r's rules. Only a project's agents,
+// and a program's director, are guarded; a coordinator or a director
+// neither merges under a thread's rule nor keeps to a worktree. A
+// director gets a coordinator's rules, its floor its own (guardNoWrite:
+// every project's folder, the other programs' and tm's files in its
+// own), and none while programs are off (no director runs then). Under yolo the guard keeps its floor only (T574 case 4):
 // no rule, allowance or mod rule, nothing asked. So it does below
 // protection guarded, read live; a thread without its sandbox has no
 // escapes or excluded commands to ask about.
 func (s *Server) guardRulesFor(r SessionRecord) GuardRules {
-	if r.Project == "" || (r.Role != proto.RoleThread && r.Role != proto.RoleCoordinator) {
+	if r.Project == "" || (r.Role != proto.RoleThread && r.Role != proto.RoleCoordinator && r.Role != proto.RoleDirector) {
 		return GuardRules{}
 	}
 	lc := loadLaunchConfig()
+	if r.Role == proto.RoleDirector && !lc.cfg.ProgramsOn() {
+		return GuardRules{}
+	}
 	set := lc.safety(r.Project)
 	// A thread's escapes, which its sandbox lets it ask for, are the
 	// user's to answer, the guard on or off (T574 case 6).
@@ -222,6 +228,9 @@ func (s *Server) guardRulesFor(r SessionRecord) GuardRules {
 	}
 	g.Protected = []string{"main", "master"}
 	repos := []string{r.Cwd}
+	if r.Role == proto.RoleDirector {
+		repos = nil // a program has no repo
+	}
 	if r.Role == proto.RoleCoordinator {
 		if p, err := project.Open(r.Project); err == nil {
 			repos = p.Repos
@@ -508,7 +517,13 @@ func (s *Server) guardMods(r SessionRecord, home string) []guard.ModRule {
 		return withReal(out)
 	}
 	var out []guard.ModRule
-	for _, g := range reg.GuardRules(r.Role, r.Project) {
+	role := r.Role
+	if role == proto.RoleDirector {
+		// A director runs with the coordinator's profile: the mods'
+		// coordinator rules hold for it too (they only refuse).
+		role = proto.RoleCoordinator
+	}
+	for _, g := range reg.GuardRules(role, r.Project) {
 		m := guard.ModRule{Mod: g.Mod, ID: g.ID, Writes: abs(g.Writes), Reads: abs(g.Reads), Message: strings.TrimSpace(mod.Clean(g.Message, false))}
 		for _, c := range g.Commands {
 			m.Commands = append(m.Commands, strings.Fields(c))

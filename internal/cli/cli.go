@@ -91,6 +91,7 @@ var commands = map[string]command{
 	"done":    runDone,
 	"mcp":     runMCPCmd,
 	"search":  runSearch,
+	"program": runProgram,
 }
 
 // Commands returns the names of this package's commands, sorted, for
@@ -108,7 +109,7 @@ func Commands() []string {
 // the server's view of the caller is combined with the environment's.
 // Every forwarded command is checked too, so one run here, its session's
 // variables unset, is still narrowed to the agent the server sees.
-var checked = map[string]bool{"mod": true, "skill": true, "access": true, "search": true}
+var checked = map[string]bool{"mod": true, "skill": true, "access": true, "search": true, "program": true}
 
 // Run dispatches args (without the program name).
 func (e *Env) Run(args []string) (code int, handled bool) {
@@ -188,6 +189,8 @@ func commandUsage(name string) string {
 		return needsUsage
 	case "peer":
 		return peerUsage
+	case "program":
+		return programUsage
 	case "project":
 		return projectUsage
 	case "relay":

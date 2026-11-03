@@ -16,6 +16,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/client"
+	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/link"
 	"github.com/theclifmeister/terminatr/internal/models"
 	"github.com/theclifmeister/terminatr/internal/project"
@@ -668,10 +669,11 @@ func runInbox(e *Env, args []string) error {
 	return usagef("unknown subcommand %q\n%s", args[0], inboxUsage)
 }
 
-const skillUsage = `usage: tm skill coordinator|thread [--section <heading>] [--project <slug>]
+const skillUsage = `usage: tm skill coordinator|thread|director [--section <heading>] [--project <slug>]
 
 Prints the role's standing rules, with the rules of the mods that run
-for the project. --section prints only the sections under that "## "
+for the project (a director's: for its program; only while programs
+are on). --section prints only the sections under that "## "
 heading (ignoring case; else the headings that start with it, such as
 "house rules"), after the rules' version line.`
 
@@ -691,6 +693,13 @@ func runSkill(e *Env, args []string) error {
 	if *slug != "" {
 		if err := e.ownProject(*slug); err != nil {
 			return err
+		}
+	}
+	if pos[0] == "director" {
+		// No director runs while programs are off, so its rules aren't
+		// shown either (the programs design §4.3).
+		if cfg, _ := config.Load(); !cfg.ProgramsOn() {
+			return programsOff()
 		}
 	}
 	text, ok := skill.ForProject(pos[0], version.Version, cmp.Or(*slug, e.Caller.Project))

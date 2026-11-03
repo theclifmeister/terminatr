@@ -57,7 +57,7 @@ var roleRules = func(role, slug string) (string, bool) {
 // thread's brief file (the sandbox guidance already in it). A role
 // other than coordinator and thread has none: "", nil.
 func writeSystemPrompt(rt, role, slug, brief string) (string, *PromptStamp, error) {
-	if slug == "" || (role != proto.RoleCoordinator && role != proto.RoleThread) {
+	if slug == "" || (role != proto.RoleCoordinator && role != proto.RoleThread && role != proto.RoleDirector) {
 		return "", nil, nil
 	}
 	rules, ok := roleRules(role, slug)
@@ -74,6 +74,9 @@ func writeSystemPrompt(rt, role, slug, brief string) (string, *PromptStamp, erro
 		}
 		b.WriteString(strings.TrimRight(text, "\n"))
 		b.WriteString("\n\n# Your rules\n\n" + rules)
+	case proto.RoleDirector:
+		// The rules alone: PROGRAM.md is in its context block.
+		b.WriteString(rules)
 	case proto.RoleCoordinator:
 		p, err := project.Open(slug)
 		if err != nil {
@@ -130,6 +133,9 @@ func promptHeader(role string, stamp *PromptStamp, rules, projectFile string) st
 	case proto.RoleCoordinator:
 		b.WriteString("Your rules (`tm skill coordinator`) and PROJECT.md are in your system prompt; this block is the project's state. " +
 			"One rules section again: `tm skill coordinator --section <heading>`.\n")
+	case proto.RoleDirector:
+		b.WriteString("Your rules (`tm skill director`) are in your system prompt; this block is the program's state. " +
+			"One rules section again: `tm skill director --section <heading>`.\n")
 	default:
 		b.WriteString("Your brief and your rules (`tm skill thread`) are in your system prompt; this block is your thread's state. " +
 			"One rules section again: `tm skill thread --section <heading>`.\n")
