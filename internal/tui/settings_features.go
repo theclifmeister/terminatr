@@ -13,8 +13,8 @@ import (
 	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
-// Settings → all projects → Features (the programs design §3.5): the
-// server-wide opt-ins of config.toml's [features] table. Programs is
+// Settings → General → Programs (the programs design §3.5): the
+// server-wide opt-in of config.toml's [features] table. Programs is
 // off by default; turning it on gains reach (a new agent role that
 // works across projects) and turning it off stops directors, so each
 // way has its own confirm.
@@ -26,9 +26,9 @@ type ProgramsState struct {
 	Programs []program.Summary
 }
 
-// featureSettings are the Features rows, under all projects' settings.
+// featureSettings are the server-wide feature rows, in General.
 func featureSettings() []setting {
-	return []setting{{section: "Features", label: "Programs",
+	return []setting{{label: "Programs",
 		help:  "Group projects into programs, each with a director: an agent that works across its projects, reads their boards and files tasks into them, as far as each program's authority lets it. Off by default; while off, nothing of programs shows or runs, and programs already made are kept, dormant.",
 		value: func(m *dash) string { return onOff(m.programs.On) },
 		note: func(m *dash) []string {

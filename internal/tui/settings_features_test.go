@@ -11,7 +11,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
-// TestFeaturesPrograms: Settings → all projects → Features: Programs is
+// TestFeaturesPrograms: Settings → General: Programs is
 // off by default and asks each way. On says what a director does; off
 // names the programs going dormant and the directors it stops. N keeps
 // it as it was, Y switches it through the server.
@@ -20,11 +20,14 @@ func TestFeaturesPrograms(t *testing.T) {
 	src.programs = ProgramsState{Programs: []program.Summary{{Slug: "acme", Members: []string{"alpha", "beta"}}}}
 	m.Update(tea.WindowSizeMsg{Width: 120, Height: 60})
 	keyPress(m, ",")
-	keyPress(m, "2")
+	keyPress(m, "1")
 	sv := m.top().(*settingsView)
-	at := slices.IndexFunc(sv.tabs[1].rows, func(r setting) bool { return r.label == "Programs" })
-	if at < 0 || sv.tabs[1].rows[at].section != "Features" {
-		t.Fatal("no Features: Programs row in all projects")
+	at := slices.IndexFunc(sv.tabs[0].rows, func(r setting) bool { return r.label == "Programs" })
+	if at < 0 {
+		t.Fatal("no Programs row in General")
+	}
+	if slices.IndexFunc(sv.tabs[1].rows, func(r setting) bool { return r.label == "Programs" }) >= 0 {
+		t.Fatal("Programs row still in all projects")
 	}
 	for range at {
 		keyPress(m, "down")

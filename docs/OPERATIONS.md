@@ -747,7 +747,7 @@ A program groups projects that belong together (an API, a web app and an iOS app
 
 ### Turning programs on and off
 
-Settings → all projects → **Features → Programs** (`,` opens Settings). Turning it on asks first, because a director writes into other projects' boards. Turning it off asks too, and lists the programs, their projects and the directors that will stop. Only you can change it: no agent can, and `tm access` can't either. It is the `[features] programs` key in `config.toml`.
+Settings → **General → Programs** (`,` opens Settings). Turning it on asks first, because a director writes into other projects' boards. Turning it off asks too, and lists the programs, their projects and the directors that will stop. Only you can change it: no agent can, and `tm access` can't either. It is the `[features] programs` key in `config.toml`.
 
 **With programs off, tm looks and behaves as it did before programs.** Every `tm program` command refuses with `programs-off` (two exceptions for you: `tm program status` lists dormant programs, and `tm program delete <slug>` removes one after a confirm), no director starts, coordinators' instructions carry nothing about programs, and the sidebar, settings and apps draw no program rows. Paired servers neither send nor accept program messages.
 

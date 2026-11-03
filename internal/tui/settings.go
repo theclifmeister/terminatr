@@ -309,7 +309,7 @@ func (m *dash) openSettings() {
 	m.agentsOK = false
 	m.catalogs = m.src.Catalogs()
 	m.programs = m.src.Programs()
-	rows := globalSettings()
+	rows := append(globalSettings(), featureSettings()...)
 	if safeMode() {
 		rows = append([]setting{safeModeRow()}, rows...)
 	}
@@ -752,7 +752,7 @@ func projectSettings(slug string) []setting {
 
 // allProjectsSettings are the settings every project follows unless it
 // sets its own (§11.2 All projects), for the , popup.
-func allProjectsSettings() []setting { return append(safetySettings(""), featureSettings()...) }
+func allProjectsSettings() []setting { return safetySettings("") }
 
 // ownsModel reports whether project slug sets its own coordinator_model.
 func ownsModel(m *dash, slug string) bool {

@@ -156,7 +156,7 @@ func wakeRecord(r SessionRecord) SessionRecord {
 // Doing it again does what is left.
 func (s *Server) setPrograms(p proto.ProgramsSwitchParams, c caller.Caller) (any, *proto.Error) {
 	if c.IsAgent() {
-		return nil, proto.Errorf("human-only", "the user turns programs on and off, in Settings → all projects → Features")
+		return nil, proto.Errorf("human-only", "the user turns programs on and off, in Settings → General → Programs")
 	}
 	cfg, _ := config.Load()
 	res := proto.ProgramsSwitchResult{Changed: features.Programs(cfg) != p.On}
