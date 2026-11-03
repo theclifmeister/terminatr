@@ -66,3 +66,15 @@ private let acme = program("acme", [("", "acme-web"), ("mini", "acme-ios"), ("",
     #expect(ProgramList.peerProject(acme.members[0], in: peers) == nil)
     #expect(ProgramList.peerProject(AppAPI.ProgramMember(project: "acme-ios", server: "far"), in: peers) == nil)
 }
+
+@Test func programPairedMemberHiddenFromItsServer() {
+    let peer = AppAPI.Peer(alias: "mini", state: "up", projects: [
+        AppAPI.PeerProject(project: "acme-ios", needsYou: 2, threads: 1, ready: 0, program: "acme"),
+        AppAPI.PeerProject(project: "other", needsYou: 0, threads: 0, ready: 0),
+        AppAPI.PeerProject(project: "listed", needsYou: 0, threads: 0, ready: 0),
+    ])
+    #expect(ProgramList.standalone(peer, programs: [acme]).map(\.project) == ["other", "listed"])
+    let both = program("p", [("mini", "listed")])
+    #expect(ProgramList.standalone(peer, programs: [acme, both]).map(\.project) == ["other"])
+    #expect(ProgramList.standalone(peer, programs: []).map(\.project) == ["other", "listed"])
+}
