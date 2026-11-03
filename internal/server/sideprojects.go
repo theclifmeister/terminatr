@@ -37,6 +37,9 @@ import (
 // sidebar shows them, in slug order, the archived ones left out.
 type ProjectsWatch struct {
 	Projects []SideProject `json:"projects"`
+	// Programs are the programs (sideprograms.go), sent only while
+	// [features] programs is on.
+	Programs []SideProgram `json:"programs,omitempty"`
 }
 
 // ProjectsWatchEvent is a projects.changed line: the projects' new
@@ -44,6 +47,7 @@ type ProjectsWatch struct {
 type ProjectsWatchEvent struct {
 	Event    string        `json:"event"`
 	Projects []SideProject `json:"projects"`
+	Programs []SideProgram `json:"programs,omitempty"`
 }
 
 // SideProject is one project as the sidebar shows it. A project that
@@ -63,6 +67,9 @@ type SideProject struct {
 	// host failed, as the ticker last saw them; 0 while they work, or
 	// when it has no PR host.
 	PRHostFails int `json:"pr_host_fails,omitempty"`
+	// Program is the program on this server the project is in, while
+	// programs are on (SidePrograms lists it); "" for none.
+	Program string `json:"program,omitempty"`
 
 	// The rest is the dashboard's, sent with detail (since protocol 18).
 
@@ -178,7 +185,8 @@ type sideLook struct {
 	gen    uint64    // the watchers' generation it looked at
 	looked bool
 	b      json.RawMessage // the projects, marshalled
-	ver    uint64          // counts the changes of b
+	progs  json.RawMessage // the programs, marshalled; nil for none
+	ver    uint64          // counts the changes of b and progs
 	// parts are b's projects, each marshalled whole and, for an
 	// inactive one, as its slug and settings alone (lean): what a lean
 	// watch sends. A new look replaces the slice, never its items.
@@ -223,8 +231,12 @@ func (s *Server) sideLook(gen uint64, poll time.Duration, detail bool) sideLook 
 	}
 	l.looked, l.gen, l.at = true, gen, time.Now()
 	parts := sideParts(s.lookSideProjects(gen, detail))
-	if b := joinParts(parts, false, ""); !slices.Equal(b, l.b) {
-		l.b, l.ver, l.parts = b, l.ver+1, parts
+	var progs json.RawMessage
+	if ps := SidePrograms(h.cfg); len(ps) > 0 {
+		progs, _ = json.Marshal(ps)
+	}
+	if b := joinParts(parts, false, ""); !slices.Equal(b, l.b) || !slices.Equal(progs, l.progs) {
+		l.b, l.progs, l.ver, l.parts = b, progs, l.ver+1, parts
 	}
 	return *l
 }
@@ -317,7 +329,7 @@ func sideProject(cfg *config.Config, slug string, snap func() (*projectSnap, err
 	if serr == nil && safety.Archived {
 		return SideProject{}, false // hidden: tm project unarchive brings it back
 	}
-	sp := SideProject{Slug: slug}
+	sp := SideProject{Slug: slug, Program: programOfSide(cfg, slug)}
 	sn, err := snap()
 	if err != nil {
 		if badges != nil {
@@ -562,10 +574,11 @@ func (s *Server) serveProjectsWatch(c net.Conn, br *bufio.Reader, req proto.Requ
 	defer s.watch.remove(wake)
 	poll := watchPollEvery()
 	l := s.sideLook(s.watch.generation(), poll, p.Detail)
-	last, sent := l.ver, leanOf(l, p)
+	last, sent, progs := l.ver, leanOf(l, p), l.progs
 	if !answer(c, req, struct {
 		Projects json.RawMessage `json:"projects"`
-	}{sent}) {
+		Programs json.RawMessage `json:"programs,omitempty"`
+	}{sent, l.progs}) {
 		return
 	}
 	pollStream(c, clientGone(br), wake, poll, func() (any, bool) {
@@ -578,14 +591,15 @@ func (s *Server) serveProjectsWatch(c net.Conn, br *bufio.Reader, req proto.Requ
 		}
 		last = l.ver
 		b := leanOf(l, p)
-		if p.Lean && bytes.Equal(b, sent) {
+		if p.Lean && bytes.Equal(b, sent) && bytes.Equal(l.progs, progs) {
 			return nil, false // a change in a lean project alone
 		}
-		sent = b
+		sent, progs = b, l.progs
 		return struct {
 			Event    string          `json:"event"`
 			Projects json.RawMessage `json:"projects"`
-		}{proto.EventProjectsChanged, b}, false
+			Programs json.RawMessage `json:"programs,omitempty"`
+		}{proto.EventProjectsChanged, b, progs}, false
 	})
 }
 
@@ -615,3 +629,17 @@ func (s *ProjectsWatchStream) Next() ([]SideProject, error) {
 
 // Close ends the watch.
 func (s *ProjectsWatchStream) Close() error { return s.c.Close() }
+
+// programOfSide is the program the sidebar draws project slug under: its
+// program on this server while programs are on, unless a project has
+// the program's name too (it is left out then); "" for none.
+func programOfSide(cfg *config.Config, slug string) string {
+	if !cfg.ProgramsOn() {
+		return ""
+	}
+	g := cfg.ProgramOf(slug)
+	if g == "" || project.ProgramLeftOut(g) {
+		return ""
+	}
+	return g
+}

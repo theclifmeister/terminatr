@@ -10,6 +10,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/server"
 	"github.com/theclifmeister/terminatr/internal/thread"
 	"github.com/theclifmeister/terminatr/internal/view"
 )
@@ -24,12 +25,15 @@ import (
 
 // A case's Folded names this server's projects by slug, a paired
 // server's group as "@<alias>" and its project as "@<alias>/<slug>"
-// (peerFold). NeedsFirst is [ui] needs_first.
+// (peerFold), a program as "g:<slug>" (programKey). NeedsFirst is [ui]
+// needs_first. Programs are the programs while programs are on: their
+// members hang under them, the director a session of role director.
 type appCase struct {
 	Name         string       `json:"name"`
 	Projects     []appProject `json:"projects"`
 	Sessions     []appSession `json:"sessions"`
 	Peers        []appPeer    `json:"peers,omitempty"`
+	Programs     []appProgram `json:"programs,omitempty"`
 	Folded       []string     `json:"folded,omitempty"`
 	Expanded     []string     `json:"expanded,omitempty"`
 	InactiveOpen bool         `json:"inactive_open,omitempty"`
@@ -45,6 +49,13 @@ type appProject struct {
 	NeedsYou  int         `json:"needs_you,omitempty"`
 	Questions int         `json:"questions,omitempty"`
 	Threads   []appThread `json:"threads,omitempty"`
+}
+
+// appProgram is a program: its members in order, its open questions.
+type appProgram struct {
+	Slug      string   `json:"slug"`
+	Projects  []string `json:"projects"`
+	Questions int      `json:"questions,omitempty"`
 }
 
 // appPeer is a paired server; its projects' Threads are the watched
@@ -105,6 +116,7 @@ func appCases() []appCase {
 		{ID: "s-7", Role: proto.RoleThread, Project: "alpha", State: "blocked"},
 		{ID: "s-8", Role: proto.RoleThread, Project: "alpha", State: "working"},
 	}
+	progSessions := append([]appSession{{ID: "s-d", Role: proto.RoleDirector, Project: "acme", State: "idle"}}, sessions...)
 	return []appCase{
 		{Name: "unfolded", Projects: projects, Sessions: sessions},
 		{Name: "inactive open", Projects: projects, Sessions: sessions, InactiveOpen: true},
@@ -117,6 +129,10 @@ func appCases() []appCase {
 		{Name: "paired", Projects: projects[2:3], Peers: peers},
 		{Name: "paired, folded", Projects: projects[2:3], Peers: peers, Folded: []string{"@mini/demo", "@far"}},
 		{Name: "paired, needs first", Projects: needs, Sessions: needsSessions, Peers: peers, NeedsFirst: true},
+		{Name: "program", Projects: projects, Sessions: progSessions, Programs: progs, InactiveOpen: true},
+		{Name: "program, folded", Projects: projects, Sessions: progSessions, Programs: progs, Folded: []string{"g:acme"}},
+		{Name: "program, member folded", Projects: projects, Sessions: progSessions, Programs: progs, Folded: []string{"alpha"}, Expanded: []string{"delta"}},
+		{Name: "program, needs first", Projects: needs, Sessions: needsSessions, Programs: needsProgs, NeedsFirst: true, InactiveOpen: true},
 	}
 }
 
@@ -135,6 +151,14 @@ var (
 		{Slug: "i-q", Active: false, Pinned: true, Questions: 1},
 	}
 	needsSessions = []appSession{{ID: "s-b", Role: proto.RoleThread, Project: "n-blocked", State: "blocked"}}
+	// progs: a program of an active, an inactive and a missing project,
+	// sorting between the projects by slug, and one with none; its
+	// director runs. needsProgs: one whose member needs you.
+	progs = []appProgram{
+		{Slug: "acme", Projects: []string{"eps", "delta", "gone", "alpha"}},
+		{Slug: "zed", Projects: nil, Questions: 1},
+	}
+	needsProgs = []appProgram{{Slug: "m-prog", Projects: []string{"n-none", "n-task"}}}
 	// peers: a project read, one stale, one not watched yet, and a
 	// server whose group folds.
 	peers = []appPeer{
@@ -193,7 +217,11 @@ func appTree(c appCase) []string {
 		mirrors = append(mirrors, pm)
 	}
 	tree := view.Tree{Folded: c.Folded, Expanded: c.Expanded, InactiveOpen: c.InactiveOpen}
-	rows := buildTree(ps, sessions, treeIn{tree: tree, peers: mirrors, host: "here"})
+	var programs []ProgramData
+	for _, g := range c.Programs {
+		programs = append(programs, ProgramData{SideProgram: server.SideProgram{Slug: g.Slug, Projects: g.Projects, Questions: g.Questions}})
+	}
+	rows := buildTree(ps, sessions, treeIn{tree: tree, peers: mirrors, host: "here", programs: programs})
 	if c.NeedsFirst {
 		rows = needsFirstOrder(rows)
 	}

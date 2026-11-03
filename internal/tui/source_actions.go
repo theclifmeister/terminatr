@@ -59,6 +59,31 @@ func OpenCoordinator(call func(method string, params, result any) error, slug, a
 	return id, err
 }
 
+// OpenDirector returns program slug's director session, started first
+// if none runs.
+func (s *ServerSource) OpenDirector(slug string, cols, rows int) (string, error) {
+	return OpenDirector(s.call, slug, cols, rows)
+}
+
+// OpenDirector returns the id of program slug's director session by
+// call, starting one if none runs (server.OpenDirector), cols by rows.
+func OpenDirector(call func(method string, params, result any) error, slug string, cols, rows int) (string, error) {
+	list := func() ([]proto.SessionInfo, error) {
+		var res proto.SessionListResult
+		err := call(proto.MethodSessionList, nil, &res)
+		return res.Sessions, err
+	}
+	start := func(p proto.SessionStartParams) (string, error) {
+		var started proto.SessionStartResult
+		if err := call(proto.MethodSessionStart, p, &started); err != nil {
+			return "", err
+		}
+		return started.Session.ID, nil
+	}
+	id, _, err := server.OpenDirector(list, start, slug, "", uint16(cols), uint16(rows))
+	return id, err
+}
+
 func (s *ServerSource) Lifecycle(slug, verb string) (string, error) {
 	defer s.touch()
 	switch verb {
