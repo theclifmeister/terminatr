@@ -2790,7 +2790,8 @@
    "pane.vt",
    "program.get",
    "program.needs",
-   "program.search"
+   "program.search",
+   "program.answer"
   ],
   "server": {
    "caps": [

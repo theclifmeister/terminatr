@@ -129,7 +129,7 @@ func demoBridge() async throws -> Bridge {
     let hello = try #require(await b.hello)
     #expect(hello.level == "write" && !hello.sign)
     for m in [AppAPI.Methods.sessionPrompt.name, AppAPI.Methods.sessionKeys.name, AppAPI.Methods.taskAdd.name,
-              AppAPI.Methods.taskDelegate.name, AppAPI.Methods.projectOpen.name] {
+              AppAPI.Methods.taskDelegate.name, AppAPI.Methods.projectOpen.name, AppAPI.Methods.programAnswer.name] {
         #expect(hello.methods.contains(m), "\(m)")
     }
     #expect(Compatibility.offersTemplates(hello))
@@ -139,6 +139,14 @@ func demoBridge() async throws -> Bridge {
     do {
         _ = try await b.call(AppAPI.Methods.taskDelegate, AppAPI.TaskParams(project: "acme-web", task: "T17"))
         Issue.record("the demo delegated")
+    } catch let e as AppAPI.Error {
+        #expect(e.code == DemoTransport.refused)
+    }
+    // A program's question shows its answer buttons (Q208) and the
+    // answer is refused as the demo's.
+    do {
+        _ = try await b.call(AppAPI.Methods.programAnswer, AppAPI.ProgramAnswerParams(program: "acme", ref: "Q1", choices: ["API ledger"]))
+        Issue.record("the demo answered a program question")
     } catch let e as AppAPI.Error {
         #expect(e.code == DemoTransport.refused)
     }
