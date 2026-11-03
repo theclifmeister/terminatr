@@ -123,6 +123,12 @@ func foldStep(rows []treeRow, i, op int, slim bool) (st sideStep, ok bool) {
 	switch {
 	case r.kind == treeDivider && (op == sideIn && r.fold || op == sideOut && !r.fold || op == sideEnter):
 		return sideStep{refold: foldDivider(r)}, true
+	case r.kind == treeProgram && !slim && (op == sideIn && r.fold || op == sideOut && !r.fold):
+		return sideStep{refold: foldProgram(r.slug, !r.fold)}, true
+	case r.kind == treeProgram:
+	case op == sideOut && r.prog != "" && (r.kind == treeDirector || r.kind == treeProject && (r.fold || slim)):
+		// Up to its program.
+		return sideStep{sel: programKey(r.prog)}, true
 	case r.kind != treeProject || slim:
 	case op == sideIn && r.fold, op == sideOut && !r.fold:
 		return sideStep{refold: foldProject(r, !r.fold)}, true
@@ -130,6 +136,12 @@ func foldStep(rows []treeRow, i, op int, slim bool) (st sideStep, ok bool) {
 		return sideStep{sel: dividerKey}, true
 	}
 	return sideStep{}, false
+}
+
+// foldProgram folds (fold) or unfolds program slug: its director's and
+// its members' rows hide under its own (sideprograms.go).
+func foldProgram(slug string, fold bool) func(*view.Tree) {
+	return func(t *view.Tree) { t.Fold(programKey(slug), fold) }
 }
 
 // foldProject folds (fold) or unfolds project row r: an active project
@@ -153,7 +165,7 @@ func anyOpen(all []treeRow) bool {
 			if r.inactive && r.expanded || !r.inactive && !r.fold {
 				return true
 			}
-		case treeDivider, treeServer, treePeerProject:
+		case treeDivider, treeServer, treePeerProject, treeProgram:
 			if !r.fold {
 				return true
 			}
@@ -176,6 +188,8 @@ func foldAll(all []treeRow, fold bool) func(*view.Tree) {
 		switch {
 		case r.kind == treeProject && !r.inactive:
 			active = append(active, r.slug)
+		case r.kind == treeProgram:
+			active = append(active, programKey(r.slug))
 		case r.kind == treeDivider:
 			inactive = r.slugs
 		}
@@ -291,9 +305,11 @@ func sideKeyStep(all []treeRow, w int, sel string, op int) sideStep {
 		case r.kind == treeSection && r.sec.proj:
 			st.sel = "p:" + r.slug
 		case r.kind == treeSection:
+		case r.prog != "" && r.kind != treeProgram:
+			st.sel = programKey(r.prog) // its program folds too
 		case r.inactive || r.dormant:
 			st.sel = dividerKey
-		case r.kind != treeProject && r.kind != treeDivider:
+		case r.kind != treeProject && r.kind != treeDivider && r.kind != treeProgram:
 			st.sel = "p:" + r.slug
 		}
 		return st

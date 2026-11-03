@@ -192,7 +192,7 @@ func (f *sideFeed) take() ([]ProjectData, bool) {
 func sideProjects(ps []server.SideProject) []ProjectData {
 	out := make([]ProjectData, 0, len(ps))
 	for _, sp := range ps {
-		pd := ProjectData{Slug: sp.Slug, Safety: sp.Safety, Questions: sp.Questions, PRHostFails: sp.PRHostFails,
+		pd := ProjectData{Slug: sp.Slug, Safety: sp.Safety, Questions: sp.Questions, PRHostFails: sp.PRHostFails, Program: sp.Program,
 			Goal: sp.Goal, Repos: sp.Repos, Own: sp.Own, Counts: sp.Counts, Err: sp.Error,
 			Unread: len(sp.Items), Items: sp.Items, Usage: sp.Usage, TaskUsage: sp.TaskUsage,
 			Checkouts: sp.Checkouts, Badges: sp.Badges, Links: sp.Links}

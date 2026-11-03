@@ -93,6 +93,13 @@ type projectView struct {
 }
 
 func (m *dash) projectPopup(string) tea.Cmd {
+	if m.focus == areaSide {
+		// On a program's row, or its director's: its settings popup.
+		if r, ok := sideRowOf(m.tree(), m.sideSel, false); ok && (r.kind == treeProgram || r.kind == treeDirector) {
+			m.openProgramSettings(r.slug)
+			return nil
+		}
+	}
 	slug := m.needProject()
 	if slug == "" {
 		return nil
