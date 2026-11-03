@@ -531,6 +531,22 @@ final class AppModel {
         return r
     }
 
+    /// Whether this tm starts a program's director (program.open, app
+    /// API 45): the director pane's Start.
+    var opensDirector: Bool {
+        if case .connected(let h) = phase { return Compatibility.opensDirector(h) }
+        return false
+    }
+
+    /// Starts program slug's director unless it runs (program.open, as
+    /// the TUI's enter on its row), and shows it once session.list has
+    /// it.
+    func startDirector(_ slug: String) async throws {
+        _ = try await connected().call(AppAPI.Methods.programOpen, AppAPI.ProgramOpenParams(program: slug, cols: 120, rows: 36))
+        listSessions()
+        select(.session(.director(slug)))
+    }
+
     /// Deletes program slug, confirm its name typed again; the window
     /// goes to the first project.
     func programDelete(_ slug: String, confirm: String) async throws -> AppAPI.ProgramDeleted {

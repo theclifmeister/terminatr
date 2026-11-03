@@ -212,6 +212,10 @@ func init() {
 		unary(proto.MethodProgramUmbrellaSendBack, true, programUmbrellaParams, programUmbrellaOf),
 		unary(proto.MethodProgramRename, true, programRenameParams, programRenamedOf),
 		unary(proto.MethodProgramDelete, true, programDeleteParams, programDeletedOf),
+		// A program's director opened, started first when none runs, as
+		// the sidebar's director row does (app API 45): the Mac app's
+		// alone (macOnly).
+		unary(proto.MethodProgramOpen, true, programOpenParams, programOpenOf),
 
 		// The guard's refusals, read and answered one at a time (app
 		// API 18): the bridge's own, from the human's log (guard.go).

@@ -19,7 +19,8 @@ import (
 // programs-off, so the apps draw no program rows, screens or badges.
 // Program settings stay the TUI's, as safety settings do; renaming and
 // deleting a program, and answering its question, are the Mac app's
-// alone (macOnly).
+// alone (macOnly), as is starting its director (program.open, app API
+// 45).
 
 // Program is a program on this server as the sidebar shows it: its
 // Members in its table's order, a paired one by (Server, Project),
@@ -248,6 +249,13 @@ type (
 	ProgramDeleteParams struct {
 		Program string `json:"program"`
 		Confirm string `json:"confirm"`
+	}
+	// ProgramOpenParams are program.open's (app API 45): the program,
+	// and the size a director it starts gets (80x24 when unset).
+	ProgramOpenParams struct {
+		Program string `json:"program"`
+		Cols    uint16 `json:"cols,omitempty"`
+		Rows    uint16 `json:"rows,omitempty"`
 	}
 	// ProgramSearchParams are program.search's: search.query's over
 	// Program and its local members (as a thread reads them), or only
@@ -489,6 +497,17 @@ func programDeletedOf(r proto.ProgramDeleteResult) ProgramDeleted {
 	return ProgramDeleted{Trashed: r.Trash != ""}
 }
 
+// ProgramOpen is program.open's result (app API 45): the program's
+// director session, and Started when this call started it.
+type ProgramOpen struct {
+	Session string `json:"session"`
+	Started bool   `json:"started,omitempty"`
+}
+
+func programOpenOf(r proto.ProgramOpenResult) ProgramOpen {
+	return ProgramOpen{Session: r.Session, Started: r.Started}
+}
+
 // The params' copies.
 
 func coordinatorClearParams(p CoordinatorClearParams) proto.CoordinatorClearParams {
@@ -538,6 +557,10 @@ func programRenameParams(p ProgramRenameParams) proto.ProgramRenameParams {
 	return proto.ProgramRenameParams{From: p.From, To: p.To}
 }
 
+func programOpenParams(p ProgramOpenParams) proto.ProgramOpenParams {
+	return proto.ProgramOpenParams{Program: p.Program, Cols: p.Cols, Rows: p.Rows}
+}
+
 func programDeleteParams(p ProgramDeleteParams) proto.ProgramDeleteParams {
 	return proto.ProgramDeleteParams{Program: p.Program, Confirm: p.Confirm}
 }
@@ -557,11 +580,11 @@ func programShowParams(p ProgramShowParams) proto.ProgramShowParams {
 
 // macOnly are the methods only the Mac app has, at no device level:
 // renaming and deleting a program, which the user does at this computer
-// (as program settings, which stay the TUI's), and answering a
-// program's question, which only the user answers there (as its menu in
-// the director's pane, Question.HumanOnly: the server refuses a
-// device's either way).
-var macOnly = []string{proto.MethodProgramRename, proto.MethodProgramDelete, proto.MethodProgramAnswer}
+// (as program settings, which stay the TUI's), answering a program's
+// question, which only the user answers there (as its menu in the
+// director's pane, Question.HumanOnly: the server refuses a device's
+// either way), and starting its director (app API 45).
+var macOnly = []string{proto.MethodProgramRename, proto.MethodProgramDelete, proto.MethodProgramAnswer, proto.MethodProgramOpen}
 
 // MacOnly says m is the Mac app's alone, at no device level (macOnly).
 func (m Method) MacOnly() bool { return slices.Contains(macOnly, m.Name) }

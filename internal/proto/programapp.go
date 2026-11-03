@@ -39,7 +39,28 @@ const (
 	// (ProgramDeleteParams, ProgramDeleteResult): refused while its
 	// director runs; programs on or off.
 	MethodProgramDelete = "program.delete"
+	// MethodProgramOpen opens a program's director, as tm program open
+	// and the sidebar's director row do (since protocol 38): the running
+	// one, else one started as server.OpenDirector starts it
+	// (ProgramOpenParams, ProgramOpenResult). The human's; a start is
+	// journaled in the program as the caller (director.start).
+	MethodProgramOpen = "program.open"
 )
+
+// ProgramOpenParams are program.open's: the program, and the size of
+// the pane a started director gets (80x24 when unset).
+type ProgramOpenParams struct {
+	Program string `json:"program"`
+	Cols    uint16 `json:"cols,omitempty"`
+	Rows    uint16 `json:"rows,omitempty"`
+}
+
+// ProgramOpenResult is the director's session, and whether this call
+// started it.
+type ProgramOpenResult struct {
+	Session string `json:"session"`
+	Started bool   `json:"started,omitempty"`
+}
 
 // ProgramParams name a program.
 type ProgramParams struct {

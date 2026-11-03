@@ -33,6 +33,10 @@ public enum Compatibility: Equatable, Sendable {
     /// board's priority tags and the task view's Priority menu need it.
     public static let priorityAPI = 42
 
+    /// The app API that has program.open: the director pane's Start
+    /// needs it.
+    public static let directorOpenAPI = 45
+
     /// The app API that has design.list: the project's Designs need it.
     public static let designsAPI = 31
 
@@ -179,6 +183,12 @@ public enum Compatibility: Equatable, Sendable {
     public static func offersTemplates(_ hello: AppAPI.Hello) -> Bool {
         hello.appApi >= boardAPI && hello.methods.contains(AppAPI.Methods.taskTemplates.name)
             && hello.methods.contains(AppAPI.Methods.taskAdd.name)
+    }
+
+    /// Whether hello's tm starts a program's director (program.open,
+    /// the Mac app's alone): the director pane's Start.
+    public static func opensDirector(_ hello: AppAPI.Hello) -> Bool {
+        hello.appApi >= directorOpenAPI && hello.methods.contains(AppAPI.Methods.programOpen.name)
     }
 
     /// Compares hello with this app, of release appVersion (its

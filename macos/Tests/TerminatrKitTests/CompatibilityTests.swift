@@ -39,6 +39,17 @@ private func hello(_ api: Int, _ tm: String) -> AppAPI.Hello {
     #expect(!Compatibility.listsDone(h) && !Compatibility.offersTemplates(h))
 }
 
+/// The director pane's Start needs app API 45 and program.open, which a
+/// device's bridge never lists (the Mac app's alone).
+@Test func directorStartNeedsAPI45() {
+    var h = hello(45, "v0.75.0")
+    #expect(!Compatibility.opensDirector(h))
+    h.methods = [AppAPI.Methods.programOpen.name]
+    #expect(Compatibility.opensDirector(h))
+    h.appApi = 44
+    #expect(!Compatibility.opensDirector(h))
+}
+
 @Test func compatibilityByRelease() {
     let api = AppAPI.version
     #expect(Compatibility.check(hello(api, "v0.54.0"), appVersion: "0.54.0") == .ok)
