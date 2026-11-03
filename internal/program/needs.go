@@ -94,6 +94,12 @@ func NeedLine(n proto.ProgramNeed) string {
 		}
 		b.WriteString(" (also " + strings.Join(also, ", ") + ")")
 	}
+	if len(n.Merged) > 0 {
+		b.WriteString(" (covers " + strings.Join(n.Merged, ", ") + ")")
+	}
+	if len(n.Similar) > 0 {
+		b.WriteString(" (similar: " + strings.Join(n.Similar, ", ") + "; tm program ask merge)")
+	}
 	if len(n.Acts) > 0 {
 		b.WriteString(" · acts: " + strings.Join(n.Acts, ", "))
 	}
@@ -130,6 +136,9 @@ func needWords(n proto.ProgramNeed) string {
 	case proto.NeedReview:
 		return "review"
 	case proto.NeedAsk:
+		if n.Program {
+			return "program question"
+		}
 		return "coordinator question"
 	case proto.NeedCI:
 		return "PR red"

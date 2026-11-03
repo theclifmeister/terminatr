@@ -34,6 +34,7 @@ const programUsage = `usage: tm program new <slug> [--goal "…"] [--json]   (th
        tm program search <words>… [--project p]   (the members' histories, as a thread sees them; tm program search --help)
        tm program send <to> "text" [--re M-n]   (the program channel, director and member coordinators)
        tm program read M-n   (a program channel message, framed as data)
+       tm program ask merge|list|done|answer …   (the program's questions, merged from members'; tm program ask --help)
        tm program status [--json]   (the human's: on or off, and the programs, dormant while off)
        tm program delete <slug> [--yes]   (the human's: its folder to the trash, its table out of config.toml; asks first)`
 
@@ -74,6 +75,8 @@ func runProgram(e *Env, args []string) error {
 		return programSend(e, cfg, args[1:])
 	case "read":
 		return programRead(e, cfg, args[1:])
+	case "ask":
+		return programAsk(e, cfg, args[1:])
 	}
 	return usagef("unknown subcommand %q\n%s", args[0], programUsage)
 }

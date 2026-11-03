@@ -13,8 +13,8 @@ import (
 // with what came of it.
 
 // hookCommandOf is session id's runner of the commands its hooks stand
-// for, only for a coordinator, and a director's /saveclear (its
-// questions aren't a coordinator's menu: /answer tells it so).
+// for, only for a coordinator or a director: a director's /answer
+// opens the program's questions for the user (openProgramQuestions).
 func (s *Server) hookCommandOf(id string) func(*session.Session, string) string {
 	return func(_ *session.Session, name string) string {
 		s.mu.Lock()
@@ -26,7 +26,7 @@ func (s *Server) hookCommandOf(id string) func(*session.Session, string) string 
 				_, perr := s.saveClear(proto.CoordinatorClearParams{Program: r.Project})
 				return clearedTextFor(proto.RoleDirector, perr)
 			case agent.CommandAnswer:
-				return "Not asked: a director has no questions dialog yet; the program's questions are in its context"
+				return programQuestionsText(s.openProgramQuestions(r.Project, id))
 			}
 			return ""
 		}

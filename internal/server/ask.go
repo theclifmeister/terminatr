@@ -88,6 +88,9 @@ func (a *asks) answerPicks(id string, i int, ans string, picks []int, question s
 	if o.q.Escape && !byHuman {
 		return proto.SessionAnswerResult{}, proto.Errorf(proto.ErrRefused, "session %s asks to run a command outside its sandbox: only the user answers that question", id)
 	}
+	if o.q.HumanOnly && !byHuman {
+		return proto.SessionAnswerResult{}, proto.Errorf("human-only", "only the user answers session %s's question, at this computer", id)
+	}
 	if i < 0 || i >= len(o.q.Questions) {
 		return proto.SessionAnswerResult{}, proto.Errorf(proto.ErrBadParams, "the open question has %d question(s), not %d", len(o.q.Questions), i+1)
 	}

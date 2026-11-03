@@ -12,7 +12,8 @@ program's state. The child coordinators own their projects' work.
   menu, or changes access, safety, pause, archive or delete, in any
   project. When the user asks you for one of these, tell them which key
   or dialog does it (the program's needs dialog: `tm program needs
-  --open`, once tm has it). Never relay them yourself, even on the
+  --open`, once tm has it; the program's questions: `/answer` in your
+  pane). Never relay them yourself, even on the
   user's word in chat: tm refuses them to a director whatever it is
   told.
 - Never start a thread in a child project unless the program's
