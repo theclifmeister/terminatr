@@ -4,8 +4,10 @@ import (
 	"strings"
 
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/program"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/server"
+	"github.com/theclifmeister/terminatr/internal/tasks"
 )
 
 // Programs in the sidebar (the programs design §11.1): a program's row,
@@ -32,6 +34,9 @@ import (
 type ProgramData struct {
 	server.SideProgram
 	Settings config.Program
+	// Deps are its members' cross-project dependency states, as the
+	// ticker last computed them (program.ReadDeps), by ref.
+	Deps map[string]program.Dep
 }
 
 // programsOf are cfg's programs as the sidebar shows them; none while
@@ -40,7 +45,8 @@ func programsOf(cfg *config.Config) []ProgramData {
 	var out []ProgramData
 	for _, sp := range server.SidePrograms(cfg) {
 		t, _ := cfg.Program(sp.Slug)
-		out = append(out, ProgramData{SideProgram: sp, Settings: t})
+		deps, _ := program.ReadDeps(sp.Slug)
+		out = append(out, ProgramData{SideProgram: sp, Settings: t, Deps: deps})
 	}
 	return out
 }
@@ -127,4 +133,19 @@ func memberBar() string {
 		return "| "
 	}
 	return "│ "
+}
+
+// afterText is task t of project slug's after refs as its dashboard
+// shows them (the programs design §6.3): "T10, acme-api/T12 (review)",
+// each ref to another project's task with its state while programs are
+// on and the project is in a program; plain refs otherwise.
+func (m *dash) afterText(slug string, t *tasks.Task) string {
+	if p := m.projectData(slug); p != nil && p.Program != "" && len(t.AfterX) > 0 {
+		for _, g := range m.data.Programs {
+			if g.Slug == p.Program {
+				return program.AfterText(t, g.Deps)
+			}
+		}
+	}
+	return strings.Join(t.AfterRefs(), ", ")
 }

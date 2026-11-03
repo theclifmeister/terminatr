@@ -19,6 +19,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/codehost"
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
+	"github.com/theclifmeister/terminatr/internal/program"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/tasks"
@@ -207,6 +208,9 @@ type state struct {
 	Threads  map[string]*threadMemo  `json:"threads"`  // "<slug>/<id>"
 	Projects map[string]*projectMemo `json:"projects"` // slug
 	Pruned   time.Time               `json:"pruned"`
+	// Deps are the programs' tasks with cross-project dependencies, by
+	// "<slug>/T<n>" (sweepDeps).
+	Deps map[string]*depMemo `json:"deps,omitempty"`
 }
 
 type threadMemo struct {
@@ -512,6 +516,7 @@ func (t *Ticker) sweep() {
 	t.renderPeers(cfg, list)
 	t.renderPrograms(cfg)
 	t.sweepDirectors(cfg, sessions, now)
+	t.sweepDeps(cfg)
 	t.slotFree(cfg, sessions, now)
 	t.renderDaily(now)
 	t.scanHuman(now)
@@ -1120,7 +1125,8 @@ var verbs = map[string]string{
 	"link-message": "wrote to you (tm link read)", "link-held": "a message of yours waits for the user's OK",
 	"link-paused": "link paused (ask the user)", "link-undelivered": "a message of yours wasn't delivered",
 	"link-request": "asks to link (the user answers it)", "link-answer": "answered a link request",
-	"link-file":  "a file over a link (tm link files)",
+	"link-file":          "a file over a link (tm link files)",
+	program.KindDepReady: "can start: its dependencies are met", program.KindDepGone: "a dependency is gone",
 	KindSlotFree: "a thread slot is free", KindRemember: "has lessons to file", KindPromptWaiting: "a prompt waits in its queue",
 }
 

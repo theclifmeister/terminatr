@@ -195,9 +195,11 @@ var programsMu sync.Mutex
 // applyPrograms makes the sessions and the links match the switch: off
 // stops the running directors into dormant records, pauses the program
 // outbox and leaves the link hello cap "program" out; on lists the cap
-// again, lets the outbox go on and resumes the dormant directors, each
-// with the back-on nudge. Held director slots and dependency states
-// (later build steps) hang off here too.
+// again, lets the outbox go on, resumes the dormant directors, each with
+// the back-on nudge, and asks the ticker for a sweep, which recomputes
+// the cross-project dependency states and raises the dep-ready items
+// owed since the switch-off (sweepDeps). Held director slots (a later
+// build step) hang off here too.
 func (s *Server) applyPrograms(on bool) (stopped, resumed, lost []string) {
 	programsMu.Lock()
 	defer programsMu.Unlock()
@@ -213,6 +215,9 @@ func (s *Server) applyProgramsLocked(on bool) (stopped, resumed, lost []string) 
 	}
 	link.Kick() // what waited goes now, or shows as expired
 	resumed, lost = s.wakeDirectors()
+	if s.tick != nil {
+		s.tick.Kick()
+	}
 	return nil, resumed, lost
 }
 

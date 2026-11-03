@@ -19,6 +19,8 @@ const (
 	// project of its program (the programs design §10): read methods
 	// only. Never while programs are off.
 	scopeProgram
+	// scopeDirects names a program: the program's own director.
+	scopeDirects
 )
 
 // mayAddress is the gate of a method that names a session or a project,
@@ -56,6 +58,11 @@ func (s *Server) mayAddress(req proto.Request, m method, human bool, who func() 
 			return params, nil
 		}
 		return nil, proto.Errorf(proto.ErrRefused, "%s: project %s isn't the caller's or its program's", req.Method, name)
+	case scopeDirects:
+		if c.Kind == caller.Director && c.Project != "" && c.Project == name {
+			return params, nil
+		}
+		return nil, proto.Errorf(proto.ErrRefused, "%s: program %s isn't the caller's", req.Method, name)
 	case scopeSees:
 		if s.sees(c, name) {
 			return params, nil

@@ -374,7 +374,7 @@ func (tv *taskView) render(m *dash) string {
 	if r, ok := tv.pv.reviews[t.ID]; ok {
 		rv = &r
 	}
-	taskPanelWith(d, t, rv, m.asked(tv.pv.slug, t), m.taskUsage(tv.pv.slug, t.ID), m.badges(tv.pv.slug, modstore.Task(t.Ref())))
+	taskPanelWith(d, t, rv, m.afterText(tv.pv.slug, t), m.asked(tv.pv.slug, t), m.taskUsage(tv.pv.slug, t.ID), m.badges(tv.pv.slug, modstore.Task(t.Ref())))
 	for i, l := range d.lines {
 		// The box has its own gutters.
 		d.lines[i] = strings.TrimRight(strings.TrimSuffix(strings.TrimPrefix(l, " "), reset), " ") + reset
@@ -866,6 +866,8 @@ var kindWords = map[string]string{
 	"program-left":        "left the program",
 	"program-undelivered": "invite not delivered",
 	"slot-free":           "slot free",
+	"dep-ready":           "can start",
+	"dep-gone":            "dependency gone",
 	"guard":               "guard refused",
 	"model-refused":       "model refused",
 }
