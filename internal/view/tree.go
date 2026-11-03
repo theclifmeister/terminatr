@@ -8,7 +8,8 @@ import (
 )
 
 // Tree is what the sidebar's tree folds (docs/SPEC.md §4): the active
-// projects the user folded, the inactive ones the user unfolded, and the
+// projects the user folded, the inactive ones the user unfolded, the
+// program members the user unfolded (they start folded), and the
 // "inactive (n)" divider, folded by default, that the inactive projects
 // hang under. Part of the view, and kept in ui.json as the tree new views
 // start with.
@@ -21,6 +22,11 @@ type Tree struct {
 	// Folded are the active projects the user folded, by slug: their row
 	// alone shows, with their coordinator's state.
 	Folded []string `json:"folded,omitempty"`
+	// Unfolded are the program members the user unfolded, by fold key
+	// (a local member's slug, a paired one's g:<program>/@<alias>/<slug>):
+	// a member starts folded under its program, a standalone project
+	// unfolded (MemberFolded).
+	Unfolded []string `json:"unfolded,omitempty"`
 	// InactiveOpen unfolds the divider: the inactive projects show under
 	// it.
 	InactiveOpen bool `json:"inactive_open,omitempty"`
@@ -88,6 +94,19 @@ func (t *Tree) IsExpanded(slug string) bool { return slices.Contains(t.Expanded,
 // IsFolded says whether the user folded active project slug.
 func (t *Tree) IsFolded(slug string) bool { return slices.Contains(t.Folded, slug) }
 
+// MemberFolded says whether program member key is folded: unless the
+// user unfolded it, it is.
+func (t *Tree) MemberFolded(key string) bool { return !slices.Contains(t.Unfolded, key) }
+
+// FoldMember folds or unfolds program member key; it says whether that
+// changed anything. The fold goes in Folded too: the user folded it, so
+// it stays folded if it leaves its program.
+func (t *Tree) FoldMember(key string, on bool) bool {
+	a := setIn(&t.Unfolded, key, !on)
+	b := setIn(&t.Folded, key, on)
+	return a || b
+}
+
 // Expand expands or collapses inactive project slug in the sidebar's
 // tree; it says whether that changed anything.
 func (t *Tree) Expand(slug string, on bool) bool { return setIn(&t.Expanded, slug, on) }
@@ -106,6 +125,10 @@ func (t *Tree) Rename(from, to string) bool {
 	}
 	if t.IsFolded(from) {
 		a, b := t.Fold(from, false), t.Fold(to, true)
+		moved = moved || a || b
+	}
+	if slices.Contains(t.Unfolded, from) {
+		a, b := setIn(&t.Unfolded, from, false), setIn(&t.Unfolded, to, true)
 		moved = moved || a || b
 	}
 	return moved
@@ -152,7 +175,10 @@ func (t *Tree) Valid() error {
 	if len(t.Folded) > MaxExpanded {
 		return fmt.Errorf("too many folded projects")
 	}
-	for _, s := range append(slices.Clone(t.Expanded), t.Folded...) {
+	if len(t.Unfolded) > MaxExpanded {
+		return fmt.Errorf("too many unfolded members")
+	}
+	for _, s := range slices.Concat(t.Expanded, t.Folded, t.Unfolded) {
 		if s == "" || len(s) > MaxKey {
 			return fmt.Errorf("a project %q in the tree", s)
 		}

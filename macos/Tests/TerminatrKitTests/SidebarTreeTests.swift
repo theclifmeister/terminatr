@@ -82,6 +82,7 @@ private struct TreeCase: Decodable {
     let programs: [G]?
     let folded: [String]?
     let expanded: [String]?
+    let unfolded: [String]?
     let inactive_open: Bool?
     let needs_first: Bool?
     let rows: [String]
@@ -156,6 +157,17 @@ private struct TreeCase: Decodable {
             }
         }
         for slug in c.expanded ?? [] { nav.unfold(Navigation.sectionKey(server: "", project: slug)) }
+        // A program's members the user unfolded: a local one by slug, a
+        // paired one "g:<program>/@<alias>/<slug>".
+        for f in c.unfolded ?? [] {
+            if f.hasPrefix("g:") {
+                let (slug, member) = f.dropFirst(2).split(separator: "/", maxSplits: 1).map(String.init).pair
+                let parts = (member ?? "").dropFirst().split(separator: "/", maxSplits: 1).map(String.init)
+                nav.unfold(Navigation.memberKey(program: slug, server: parts[0], project: parts[1]))
+            } else {
+                nav.unfold(Navigation.sectionKey(server: "", project: f))
+            }
+        }
         nav.showInactive = c.inactive_open ?? false
         #expect(SidebarTree.rows(ps, sessions: ss, peers: peers, programs: programs, nav: nav, needsFirst: c.needs_first ?? false) == c.rows,
                 "\(c.name)")

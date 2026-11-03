@@ -112,7 +112,8 @@ type treeRow struct {
 	dormant bool // a coordinator or thread row of an inactive project
 	// threads: a project's open threads; the divider's inactive projects.
 	threads int
-	// slugs: the divider's inactive projects, shown or not.
+	// slugs: the divider's inactive projects, shown or not; a program's
+	// active members' fold keys (view.Tree.Unfolded), shown or not.
 	slugs []string
 	here  bool // the row you are on
 	// cursor is the keyboard's row, set while the sidebar has this
@@ -304,6 +305,9 @@ type treeIn struct {
 	// programs are the programs (Data.Programs): their members hang
 	// under them (sideprograms.go). None while programs are off.
 	programs []ProgramData
+	// prog is the program whose member projectRows lays out: a member
+	// starts folded (view.Tree.MemberFolded). "" for a standalone one.
+	prog string
 }
 
 // buildTree lays out the tree: the active projects, pinned ones first,
@@ -423,7 +427,11 @@ func projectRows(p ProjectData, sessions []proto.SessionInfo, byID map[string]pr
 			kids[i].dormant, kids[i].session, kids[i].state, kids[i].hint = true, "", "", false
 		}
 	}
-	if !pr.inactive && in.tree.IsFolded(p.Slug) {
+	folded := in.tree.IsFolded(p.Slug)
+	if in.prog != "" {
+		folded = in.tree.MemberFolded(p.Slug)
+	}
+	if !pr.inactive && folded {
 		// Folded: its row alone, with its coordinator's state and
 		// whatever under it needs you.
 		pr.fold = true

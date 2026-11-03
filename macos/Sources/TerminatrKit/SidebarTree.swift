@@ -72,13 +72,14 @@ public enum SidebarTree {
 
     /// Whether this server's project p lists its coordinator and threads,
     /// as the TUI's tree folds (view.Tree): an active project unless ←
-    /// folded it, an inactive one only once → expanded it; and, the
-    /// app's own, always while one of its sessions is shown, so the
-    /// List's selection has its row.
-    public static func opens(_ p: AppAPI.Project, nav: Navigation) -> Bool {
+    /// folded it, an inactive one only once → expanded it, a program's
+    /// member (member) only once → unfolded it (view.Tree.Unfolded);
+    /// and, the app's own, always while one of its sessions is shown,
+    /// so the List's selection has its row.
+    public static func opens(_ p: AppAPI.Project, nav: Navigation, member: Bool = false) -> Bool {
         if case .session(let ref) = nav.selection, ref.server.isEmpty, ref.project == p.slug { return true }
         let key = Navigation.sectionKey(server: "", project: p.slug)
-        return p.active ? !nav.collapsed.contains(key) : nav.unfolded.contains(key)
+        return p.active && !member ? !nav.collapsed.contains(key) : nav.unfolded.contains(key)
     }
 
     /// The tree as the TUI keys its rows (treeRow.key): "p:" a project,
@@ -97,8 +98,8 @@ public enum SidebarTree {
     /// buildTree.
     public static func rows(_ projects: [AppAPI.Project], sessions: [AppAPI.Session], peers: [AppAPI.Peer] = [],
                             programs: [AppAPI.Program] = [], nav: Navigation, needsFirst: Bool = false, watched: Bool = true) -> [String] {
-        func add(_ p: AppAPI.Project) -> [String] {
-            guard opens(p, nav: nav) else { return ["p:\(p.slug)"] }
+        func add(_ p: AppAPI.Project, member: Bool) -> [String] {
+            guard opens(p, nav: nav, member: member) else { return ["p:\(p.slug)"] }
             return ["p:\(p.slug)", "c:\(p.slug)"] + threads(of: p) { session($0, in: sessions) }.map { "t:\(p.slug)/\($0.record.id)" }
         }
         func remote(_ alias: String, _ p: AppAPI.PeerProject, folded: Bool) -> [String] {
@@ -113,7 +114,7 @@ public enum SidebarTree {
             for m in memberRows(g, projects: projects, peers: peers) {
                 switch m {
                 case .local(let p):
-                    out += add(p)
+                    out += add(p, member: true)
                 case .paired(let alias, let slug, _, let p, _):
                     out.append("g:\(g.slug)/r:\(alias)/\(slug)")
                     if let p {
@@ -135,12 +136,12 @@ public enum SidebarTree {
         let gone = inactive(projects, needsFirst: needsFirst, sessions: sessions, nav: nav, programs: programs)
         let here = entries(projects, programs: programs, needsFirst: needsFirst, sessions: sessions, peers: peers, nav: nav).flatMap { e in
             switch e {
-            case .project(let p): add(p)
+            case .project(let p): add(p, member: false)
             case .program(let g): add(g)
             }
         }
         return (peers.isEmpty ? [] : ["g:"]) + here + others
-            + (gone.isEmpty ? [] : ["d:inactive"]) + (nav.showInactive ? gone.flatMap(add) : [])
+            + (gone.isEmpty ? [] : ["d:inactive"]) + (nav.showInactive ? gone.flatMap { add($0, member: false) } : [])
     }
 
     /// What a paired server's shared project lists under it, as the

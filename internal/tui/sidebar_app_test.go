@@ -26,7 +26,10 @@ import (
 
 // A case's Folded names this server's projects by slug, a paired
 // server's group as "@<alias>" and its project as "@<alias>/<slug>"
-// (peerFold), a program as "g:<slug>" (programKey). NeedsFirst is [ui]
+// (peerFold), a program as "g:<slug>" (programKey). A program's
+// members start folded: Unfolded names those the user unfolded, a local
+// member by slug, a paired one as "g:<program>/@<alias>/<slug>"
+// (view.Tree.Unfolded). NeedsFirst is [ui]
 // needs_first. Programs are the programs while programs are on: their
 // members hang under them, the director a session of role director.
 type appCase struct {
@@ -37,6 +40,7 @@ type appCase struct {
 	Programs     []appProgram `json:"programs,omitempty"`
 	Folded       []string     `json:"folded,omitempty"`
 	Expanded     []string     `json:"expanded,omitempty"`
+	Unfolded     []string     `json:"unfolded,omitempty"`
 	InactiveOpen bool         `json:"inactive_open,omitempty"`
 	NeedsFirst   bool         `json:"needs_first,omitempty"`
 	Rows         []string     `json:"rows"`
@@ -132,14 +136,16 @@ func appCases() []appCase {
 		{Name: "paired, needs first", Projects: needs, Sessions: needsSessions, Peers: peers, NeedsFirst: true},
 		{Name: "program", Projects: projects, Sessions: progSessions, Programs: progs, InactiveOpen: true},
 		{Name: "program, folded", Projects: projects, Sessions: progSessions, Programs: progs, Folded: []string{"g:acme"}},
-		{Name: "program, member folded", Projects: projects, Sessions: progSessions, Programs: progs, Folded: []string{"alpha"}, Expanded: []string{"delta"}},
+		{Name: "program, members unfolded", Projects: projects, Sessions: progSessions, Programs: progs, Unfolded: []string{"eps", "alpha"}, InactiveOpen: true},
+		// Folded is a standalone project's fold, not a member's.
+		{Name: "program, member unfolded", Projects: projects, Sessions: progSessions, Programs: progs, Folded: []string{"eps"}, Unfolded: []string{"alpha"}, Expanded: []string{"delta"}},
 		{Name: "program, needs first", Projects: needs, Sessions: needsSessions, Programs: needsProgs, NeedsFirst: true, InactiveOpen: true},
 		// A paired member shows under its program and under its
 		// server's group, each with its own keys and fold; one the
 		// mirror doesn't have shows under its program alone.
 		{Name: "program, paired member", Projects: projects[2:3], Sessions: progSessions[:1], Peers: peers, Programs: pairedProgs},
-		{Name: "program, paired member folded under its program", Projects: projects[2:3], Sessions: progSessions[:1], Peers: peers, Programs: pairedProgs,
-			Folded: []string{"g:acme/@mini/demo"}},
+		{Name: "program, paired member unfolded under its program", Projects: projects[2:3], Sessions: progSessions[:1], Peers: peers, Programs: pairedProgs,
+			Unfolded: []string{"g:acme/@mini/demo", "gamma"}},
 	}
 }
 
@@ -224,7 +230,7 @@ func appTree(c appCase) []string {
 		}
 		mirrors = append(mirrors, pm)
 	}
-	tree := view.Tree{Folded: c.Folded, Expanded: c.Expanded, InactiveOpen: c.InactiveOpen}
+	tree := view.Tree{Folded: c.Folded, Expanded: c.Expanded, Unfolded: c.Unfolded, InactiveOpen: c.InactiveOpen}
 	var programs []ProgramData
 	for _, g := range c.Programs {
 		programs = append(programs, ProgramData{SideProgram: server.SideProgram{Slug: g.Slug, Projects: g.Projects, Questions: g.Questions}})

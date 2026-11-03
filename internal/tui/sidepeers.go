@@ -352,7 +352,12 @@ func peerProjectRows(alias string, p proto.PeerMirrorProject, link *peerLink, t 
 		}
 	}
 	pr.prog = prog
-	if pr.stale || t.IsFolded(peerFoldOf(pr)) {
+	folded := t.IsFolded(peerFoldOf(pr))
+	if prog != "" {
+		// A member under its program starts folded.
+		folded = t.MemberFolded(peerFoldOf(pr))
+	}
+	if pr.stale || folded {
 		pr.fold = true
 		return []treeRow{pr}
 	}
@@ -629,6 +634,9 @@ func foldPeer(r treeRow, fold bool) func(*view.Tree) {
 	id := peerFold(r.peer, "")
 	if r.kind == treePeerProject {
 		id = peerFoldOf(r)
+	}
+	if r.kind == treePeerProject && r.prog != "" {
+		return func(t *view.Tree) { t.FoldMember(id, fold) }
 	}
 	return func(t *view.Tree) { t.Fold(id, fold) }
 }
