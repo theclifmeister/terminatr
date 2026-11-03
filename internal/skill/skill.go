@@ -7,9 +7,11 @@ package skill
 import (
 	"embed"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/features"
 	"github.com/theclifmeister/terminatr/internal/mod"
 )
 
@@ -32,6 +34,21 @@ func Text(role, version string) (string, bool) {
 // TextWithPolicy is Text with the role's policy part replaced by policy,
 // when it is not empty. The safety part is always the built-in one, first.
 func TextWithPolicy(role, version, policy string) (string, bool) {
+	return compose(role, version, policy, nil)
+}
+
+// Programs is the coordinator's program part (the programs design §4.3,
+// §3.5), which goes in only while [features] programs is on: its locked
+// safety line, right after the coordinator's safety part, and its
+// policy, after the coordinator's policy. Policy "" is the built-in one.
+type Programs struct {
+	Policy string
+}
+
+// compose is a role's rules: its safety part, then policy (the built-in
+// one when ""). programs, for a coordinator, adds the program part
+// (Programs) while programs are on; nil leaves it out, as off does.
+func compose(role, version, policy string, programs *Programs) (string, bool) {
 	if role == "" || strings.ContainsAny(role, "/.") {
 		return "", false
 	}
@@ -46,7 +63,25 @@ func TextWithPolicy(role, version, policy string) (string, bool) {
 		}
 		policy = body
 	}
-	return fmt.Sprintf("tm skill %s v%s\n\n%s\n%s\n", role, strings.TrimPrefix(version, "v"), safety, strings.TrimRight(policy, "\n")), true
+	policy = strings.TrimRight(policy, "\n")
+	if programs != nil && role == "coordinator" {
+		line, err := rules.ReadFile("rules/coordinator.programs.safety.md")
+		if err != nil {
+			return "", false
+		}
+		// One more bullet of the Safety list, which ends the file.
+		safety = append(slices.Clip(safety), line...)
+		add := programs.Policy
+		if add == "" {
+			body, ok := mod.BundledPolicyText("coordinator_programs")
+			if !ok {
+				return "", false
+			}
+			add = body
+		}
+		policy += "\n\n" + strings.TrimRight(add, "\n")
+	}
+	return fmt.Sprintf("tm skill %s v%s\n\n%s\n%s\n", role, strings.TrimPrefix(version, "v"), safety, policy), true
 }
 
 // Addendum is a mod's rules text for a role: a policy that replaces the
@@ -61,11 +96,15 @@ type Addendum struct {
 // text under "## House rules (mod: <id>)". Neither can remove a safety
 // rule: the safety part comes first, always the built-in one.
 func WithMods(role, version string, policy Addendum, addenda []Addendum) (string, bool) {
+	return withMods(role, version, policy, addenda, nil)
+}
+
+func withMods(role, version string, policy Addendum, addenda []Addendum, programs *Programs) (string, bool) {
 	text := ""
 	if policy.Mod != "" {
 		text = fmt.Sprintf("## Policy (mod: %s)\n\n%s", policy.Mod, strings.TrimSpace(policy.Text))
 	}
-	out, ok := TextWithPolicy(role, version, text)
+	out, ok := compose(role, version, text, programs)
 	if !ok {
 		return "", false
 	}
@@ -77,23 +116,34 @@ func WithMods(role, version string, policy Addendum, addenda []Addendum) (string
 
 // ForProject is the role's rules with the mods' that run for project
 // slug ("" for every enabled mod): Text when no mod adds any, or the
-// mods can't be read.
+// mods can't be read. For a director, slug is its program's. A
+// coordinator's have the program part (Programs) while programs are on,
+// and only then: off, they are today's text exactly (§3.5).
 func ForProject(role, version, slug string) (string, bool) {
 	cfg, _ := config.Load()
+	var programs *Programs
+	if role == "coordinator" && features.Programs(cfg) {
+		programs = &Programs{}
+	}
 	r, err := mod.Load(cfg)
 	if err != nil {
-		return Text(role, version)
+		return compose(role, version, "", programs)
 	}
 	var policy Addendum
 	p, add, _ := r.Rules(role, slug)
 	if p != nil && !p.Builtin {
 		policy = Addendum{Mod: p.Mod, Text: p.Text}
 	}
+	if programs != nil {
+		if pp, _, _ := r.Rules("coordinator_programs", slug); pp != nil && !pp.Builtin {
+			programs.Policy = fmt.Sprintf("## Program (mod: %s)\n\n%s", pp.Mod, strings.TrimSpace(pp.Text))
+		}
+	}
 	addenda := make([]Addendum, len(add))
 	for i, a := range add {
 		addenda[i] = Addendum{Mod: a.Mod, Text: a.Text}
 	}
-	return WithMods(role, version, policy, addenda)
+	return withMods(role, version, policy, addenda, programs)
 }
 
 // Headings are the "## " headings of rules text, in order.

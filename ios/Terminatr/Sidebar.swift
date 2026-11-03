@@ -16,6 +16,12 @@ struct SidebarRow: Identifiable {
     /// "rc:"), a thread ("t:", "rt:") or an inactive project ("p:"),
     /// its route on model's server.
     @MainActor static func of(_ key: String, model: PhoneModel) -> SidebarRow? {
+        // A program's member's row, "g:<program>/<its key>" (B19): the
+        // row its key has outside the program, kept apart by its id.
+        if key.hasPrefix("g:"), let slash = key.firstIndex(of: "/") {
+            guard let r = of(String(key[key.index(after: slash)...]), model: model) else { return nil }
+            return SidebarRow(id: model.key + " " + key, route: r.route, title: r.title, tone: r.tone, badge: r.badge)
+        }
         let (kind, rest) = SidebarTree.split(key)
         let parts = rest.split(separator: "/").map(String.init)
         let id = model.key + " " + key
@@ -23,6 +29,16 @@ struct SidebarRow: Identifiable {
             SidebarRow(id: id, route: route.on(model.key), title: title, tone: a.tone, badge: a.waits ? a.word : nil)
         }
         switch (kind, parts.count) {
+        case ("g", 1):
+            // A program: its screen, what waits in it as the badge.
+            guard let g = model.program(rest) else { return nil }
+            let n = model.programNeeds(g).count
+            return SidebarRow(id: id, route: Route.program(rest).on(model.key), title: rest, tone: n > 0 ? .attention : .idle,
+                              badge: n > 0 ? "\(n)" : nil)
+        case ("r", 1):
+            // Its director: the program's screen, which shows it.
+            guard let g = model.program(rest) else { return nil }
+            return row(.program(rest), "Director", .of(director: model.directorSession(g), questions: g.questions))
         case ("p", 1):
             return SidebarRow(id: id, route: Route.project(rest).on(model.key), title: rest, tone: .idle, badge: nil)
         case ("c", 1):

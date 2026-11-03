@@ -12,6 +12,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/models"
+	"github.com/theclifmeister/terminatr/internal/program"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 )
@@ -35,6 +36,9 @@ func (s *ServerSource) SetSetting(table, key string, value any) error {
 		}
 		journalAll(s.Caller, key, journalValue(key, value), "all projects")
 		return nil
+	}
+	if slug, ok := strings.CutPrefix(table, "programs."); ok {
+		return setProgram(s.Caller, slug, key, value)
 	}
 	slug, isProject := strings.CutPrefix(table, "projects.")
 	if !isProject {
@@ -356,4 +360,49 @@ func (s *ServerSource) Unrefuse(agentName, model string) error {
 		return errHumanOnly
 	}
 	return models.Unrefuse(agentName, model)
+}
+
+// setProgram changes program slug's setting key as the human, from its
+// settings popup (programsettings.go): a nil value takes its default
+// again. The program's journal records it.
+func setProgram(c caller.Caller, slug, key string, value any) error {
+	var before []string
+	if cfg, _ := config.Load(); cfg != nil {
+		if t, ok := cfg.Program(slug); ok {
+			before = t.Projects
+		}
+	}
+	if err := setProgramTable(c, slug, key, value); err != nil {
+		return err
+	}
+	if key != "projects" {
+		return nil
+	}
+	// Paired members get their invites, ones taken off hear they left
+	// (the programs design §9.1).
+	after, _ := value.([]string)
+	if _, err := inviteMembers(c, slug, before, after); err != nil {
+		return fmt.Errorf("members saved, but: %w", err)
+	}
+	return nil
+}
+
+// setProgramTable writes the program's setting and journals it.
+func setProgramTable(c caller.Caller, slug, key string, value any) error {
+	var err error
+	detail := fmt.Sprint(value)
+	if value == nil {
+		err, detail = config.UnsetProgram(slug, key), "(default)"
+	} else {
+		err = config.SetProgram(slug, key, value)
+	}
+	if err != nil {
+		return err
+	}
+	if cfg, _ := config.Load(); cfg != nil {
+		if g, err := program.Open(slug, cfg); err == nil {
+			g.Journal(c, "settings."+key, slug, detail)
+		}
+	}
+	return nil
 }

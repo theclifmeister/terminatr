@@ -1180,6 +1180,827 @@
         "rt:far/x/t-1",
         "d:inactive"
       ]
+    },
+    {
+      "name": "program",
+      "projects": [
+        {
+          "slug": "alpha",
+          "active": true,
+          "threads": [
+            {
+              "id": "t-1"
+            },
+            {
+              "id": "t-2",
+              "session": "s-2"
+            },
+            {
+              "id": "t-3",
+              "needs_you": "which one?"
+            },
+            {
+              "id": "t-4",
+              "done": true
+            },
+            {
+              "id": "t-5",
+              "reports": 2,
+              "report_acked": 1
+            },
+            {
+              "id": "t-6",
+              "session": "s-6"
+            },
+            {
+              "id": "t-7",
+              "session": "s-7"
+            },
+            {
+              "id": "t-8",
+              "session": "s-8",
+              "done": true
+            }
+          ]
+        },
+        {
+          "slug": "beta",
+          "active": false,
+          "pinned": true,
+          "threads": [
+            {
+              "id": "t-1"
+            },
+            {
+              "id": "t-2",
+              "done": true
+            }
+          ]
+        },
+        {
+          "slug": "gamma",
+          "active": true,
+          "pinned": true
+        },
+        {
+          "slug": "delta",
+          "active": false
+        },
+        {
+          "slug": "eps",
+          "active": true,
+          "threads": [
+            {
+              "id": "t-9",
+              "done": true
+            }
+          ]
+        }
+      ],
+      "sessions": [
+        {
+          "id": "s-d",
+          "role": "director",
+          "project": "acme",
+          "state": "idle"
+        },
+        {
+          "id": "s-c",
+          "role": "coordinator",
+          "project": "alpha",
+          "state": "working"
+        },
+        {
+          "id": "s-2",
+          "role": "thread",
+          "project": "alpha",
+          "state": "working"
+        },
+        {
+          "id": "s-6",
+          "role": "thread",
+          "project": "alpha",
+          "state": "idle"
+        },
+        {
+          "id": "s-7",
+          "role": "thread",
+          "project": "alpha",
+          "state": "blocked"
+        },
+        {
+          "id": "s-8",
+          "role": "thread",
+          "project": "alpha",
+          "state": "working"
+        }
+      ],
+      "programs": [
+        {
+          "slug": "acme",
+          "projects": [
+            "eps",
+            "delta",
+            "gone",
+            "alpha"
+          ]
+        },
+        {
+          "slug": "zed",
+          "projects": null,
+          "questions": 1
+        }
+      ],
+      "inactive_open": true,
+      "rows": [
+        "p:gamma",
+        "c:gamma",
+        "g:acme",
+        "r:acme",
+        "p:eps",
+        "c:eps",
+        "t:eps/t-9",
+        "p:delta",
+        "p:alpha",
+        "c:alpha",
+        "t:alpha/t-3",
+        "t:alpha/t-7",
+        "t:alpha/t-5",
+        "t:alpha/t-2",
+        "t:alpha/t-8",
+        "t:alpha/t-6",
+        "t:alpha/t-1",
+        "t:alpha/t-4",
+        "g:zed",
+        "r:zed",
+        "d:inactive",
+        "p:beta"
+      ]
+    },
+    {
+      "name": "program, folded",
+      "projects": [
+        {
+          "slug": "alpha",
+          "active": true,
+          "threads": [
+            {
+              "id": "t-1"
+            },
+            {
+              "id": "t-2",
+              "session": "s-2"
+            },
+            {
+              "id": "t-3",
+              "needs_you": "which one?"
+            },
+            {
+              "id": "t-4",
+              "done": true
+            },
+            {
+              "id": "t-5",
+              "reports": 2,
+              "report_acked": 1
+            },
+            {
+              "id": "t-6",
+              "session": "s-6"
+            },
+            {
+              "id": "t-7",
+              "session": "s-7"
+            },
+            {
+              "id": "t-8",
+              "session": "s-8",
+              "done": true
+            }
+          ]
+        },
+        {
+          "slug": "beta",
+          "active": false,
+          "pinned": true,
+          "threads": [
+            {
+              "id": "t-1"
+            },
+            {
+              "id": "t-2",
+              "done": true
+            }
+          ]
+        },
+        {
+          "slug": "gamma",
+          "active": true,
+          "pinned": true
+        },
+        {
+          "slug": "delta",
+          "active": false
+        },
+        {
+          "slug": "eps",
+          "active": true,
+          "threads": [
+            {
+              "id": "t-9",
+              "done": true
+            }
+          ]
+        }
+      ],
+      "sessions": [
+        {
+          "id": "s-d",
+          "role": "director",
+          "project": "acme",
+          "state": "idle"
+        },
+        {
+          "id": "s-c",
+          "role": "coordinator",
+          "project": "alpha",
+          "state": "working"
+        },
+        {
+          "id": "s-2",
+          "role": "thread",
+          "project": "alpha",
+          "state": "working"
+        },
+        {
+          "id": "s-6",
+          "role": "thread",
+          "project": "alpha",
+          "state": "idle"
+        },
+        {
+          "id": "s-7",
+          "role": "thread",
+          "project": "alpha",
+          "state": "blocked"
+        },
+        {
+          "id": "s-8",
+          "role": "thread",
+          "project": "alpha",
+          "state": "working"
+        }
+      ],
+      "programs": [
+        {
+          "slug": "acme",
+          "projects": [
+            "eps",
+            "delta",
+            "gone",
+            "alpha"
+          ]
+        },
+        {
+          "slug": "zed",
+          "projects": null,
+          "questions": 1
+        }
+      ],
+      "folded": [
+        "g:acme"
+      ],
+      "rows": [
+        "p:gamma",
+        "c:gamma",
+        "g:acme",
+        "g:zed",
+        "r:zed",
+        "d:inactive"
+      ]
+    },
+    {
+      "name": "program, member folded",
+      "projects": [
+        {
+          "slug": "alpha",
+          "active": true,
+          "threads": [
+            {
+              "id": "t-1"
+            },
+            {
+              "id": "t-2",
+              "session": "s-2"
+            },
+            {
+              "id": "t-3",
+              "needs_you": "which one?"
+            },
+            {
+              "id": "t-4",
+              "done": true
+            },
+            {
+              "id": "t-5",
+              "reports": 2,
+              "report_acked": 1
+            },
+            {
+              "id": "t-6",
+              "session": "s-6"
+            },
+            {
+              "id": "t-7",
+              "session": "s-7"
+            },
+            {
+              "id": "t-8",
+              "session": "s-8",
+              "done": true
+            }
+          ]
+        },
+        {
+          "slug": "beta",
+          "active": false,
+          "pinned": true,
+          "threads": [
+            {
+              "id": "t-1"
+            },
+            {
+              "id": "t-2",
+              "done": true
+            }
+          ]
+        },
+        {
+          "slug": "gamma",
+          "active": true,
+          "pinned": true
+        },
+        {
+          "slug": "delta",
+          "active": false
+        },
+        {
+          "slug": "eps",
+          "active": true,
+          "threads": [
+            {
+              "id": "t-9",
+              "done": true
+            }
+          ]
+        }
+      ],
+      "sessions": [
+        {
+          "id": "s-d",
+          "role": "director",
+          "project": "acme",
+          "state": "idle"
+        },
+        {
+          "id": "s-c",
+          "role": "coordinator",
+          "project": "alpha",
+          "state": "working"
+        },
+        {
+          "id": "s-2",
+          "role": "thread",
+          "project": "alpha",
+          "state": "working"
+        },
+        {
+          "id": "s-6",
+          "role": "thread",
+          "project": "alpha",
+          "state": "idle"
+        },
+        {
+          "id": "s-7",
+          "role": "thread",
+          "project": "alpha",
+          "state": "blocked"
+        },
+        {
+          "id": "s-8",
+          "role": "thread",
+          "project": "alpha",
+          "state": "working"
+        }
+      ],
+      "programs": [
+        {
+          "slug": "acme",
+          "projects": [
+            "eps",
+            "delta",
+            "gone",
+            "alpha"
+          ]
+        },
+        {
+          "slug": "zed",
+          "projects": null,
+          "questions": 1
+        }
+      ],
+      "folded": [
+        "alpha"
+      ],
+      "expanded": [
+        "delta"
+      ],
+      "rows": [
+        "p:gamma",
+        "c:gamma",
+        "g:acme",
+        "r:acme",
+        "p:eps",
+        "c:eps",
+        "t:eps/t-9",
+        "p:delta",
+        "c:delta",
+        "p:alpha",
+        "g:zed",
+        "r:zed",
+        "d:inactive"
+      ]
+    },
+    {
+      "name": "program, needs first",
+      "projects": [
+        {
+          "slug": "n-none",
+          "active": true
+        },
+        {
+          "slug": "n-pin",
+          "active": true,
+          "pinned": true
+        },
+        {
+          "slug": "n-q",
+          "active": true,
+          "questions": 1
+        },
+        {
+          "slug": "n-task",
+          "active": true,
+          "needs_you": 2
+        },
+        {
+          "slug": "n-blocked",
+          "active": true,
+          "threads": [
+            {
+              "id": "t-1",
+              "session": "s-b"
+            },
+            {
+              "id": "t-2"
+            }
+          ]
+        },
+        {
+          "slug": "n-pin-asks",
+          "active": true,
+          "pinned": true,
+          "threads": [
+            {
+              "id": "t-1",
+              "needs_you": "go?"
+            }
+          ]
+        },
+        {
+          "slug": "i-none",
+          "active": false
+        },
+        {
+          "slug": "i-t",
+          "active": false,
+          "threads": [
+            {
+              "id": "t-1",
+              "needs_you": "go?"
+            }
+          ]
+        },
+        {
+          "slug": "i-q",
+          "active": false,
+          "pinned": true,
+          "questions": 1
+        }
+      ],
+      "sessions": [
+        {
+          "id": "s-b",
+          "role": "thread",
+          "project": "n-blocked",
+          "state": "blocked"
+        }
+      ],
+      "programs": [
+        {
+          "slug": "m-prog",
+          "projects": [
+            "n-none",
+            "n-task"
+          ]
+        }
+      ],
+      "inactive_open": true,
+      "needs_first": true,
+      "rows": [
+        "p:n-pin-asks",
+        "c:n-pin-asks",
+        "t:n-pin-asks/t-1",
+        "p:n-pin",
+        "c:n-pin",
+        "g:m-prog",
+        "r:m-prog",
+        "p:n-none",
+        "c:n-none",
+        "p:n-task",
+        "c:n-task",
+        "p:n-q",
+        "c:n-q",
+        "p:n-blocked",
+        "c:n-blocked",
+        "t:n-blocked/t-1",
+        "t:n-blocked/t-2",
+        "d:inactive",
+        "p:i-q",
+        "p:i-none",
+        "p:i-t"
+      ]
+    },
+    {
+      "name": "program, paired member",
+      "projects": [
+        {
+          "slug": "gamma",
+          "active": true,
+          "pinned": true
+        }
+      ],
+      "sessions": [
+        {
+          "id": "s-d",
+          "role": "director",
+          "project": "acme",
+          "state": "idle"
+        }
+      ],
+      "peers": [
+        {
+          "alias": "mini",
+          "projects": [
+            {
+              "project": "demo",
+              "sessions": [
+                {
+                  "id": "s-1",
+                  "role": "coordinator",
+                  "project": "demo",
+                  "state": "working"
+                },
+                {
+                  "id": "s-2",
+                  "role": "thread",
+                  "project": "demo",
+                  "thread": "t-2",
+                  "state": "blocked"
+                },
+                {
+                  "id": "s-9",
+                  "role": "thread",
+                  "project": "demo",
+                  "thread": "t-9"
+                }
+              ],
+              "threads": [
+                {
+                  "id": "t-1"
+                },
+                {
+                  "id": "t-2",
+                  "session": "s-2"
+                },
+                {
+                  "id": "t-3",
+                  "done": true
+                }
+              ]
+            },
+            {
+              "project": "old",
+              "stale": true,
+              "threads": [
+                {
+                  "id": "t-1"
+                }
+              ]
+            },
+            {
+              "project": "new",
+              "sessions": [
+                {
+                  "id": "s-3",
+                  "role": "thread",
+                  "project": "new",
+                  "thread": "t-1"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "alias": "far",
+          "projects": [
+            {
+              "project": "x",
+              "threads": [
+                {
+                  "id": "t-1"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "programs": [
+        {
+          "slug": "acme",
+          "projects": [
+            "gamma",
+            "mini/demo",
+            "mini/gone"
+          ]
+        }
+      ],
+      "rows": [
+        "g:",
+        "g:acme",
+        "r:acme",
+        "p:gamma",
+        "c:gamma",
+        "g:acme/r:mini/demo",
+        "g:acme/rc:mini/demo",
+        "g:acme/rt:mini/demo/t-1",
+        "g:acme/rt:mini/demo/t-2",
+        "g:acme/rt:mini/demo/t-3",
+        "g:acme/r:mini/gone",
+        "g:mini",
+        "r:mini/demo",
+        "rc:mini/demo",
+        "rt:mini/demo/t-1",
+        "rt:mini/demo/t-2",
+        "rt:mini/demo/t-3",
+        "r:mini/old",
+        "r:mini/new",
+        "rc:mini/new",
+        "g:far",
+        "r:far/x",
+        "rc:far/x",
+        "rt:far/x/t-1"
+      ]
+    },
+    {
+      "name": "program, paired member folded under its program",
+      "projects": [
+        {
+          "slug": "gamma",
+          "active": true,
+          "pinned": true
+        }
+      ],
+      "sessions": [
+        {
+          "id": "s-d",
+          "role": "director",
+          "project": "acme",
+          "state": "idle"
+        }
+      ],
+      "peers": [
+        {
+          "alias": "mini",
+          "projects": [
+            {
+              "project": "demo",
+              "sessions": [
+                {
+                  "id": "s-1",
+                  "role": "coordinator",
+                  "project": "demo",
+                  "state": "working"
+                },
+                {
+                  "id": "s-2",
+                  "role": "thread",
+                  "project": "demo",
+                  "thread": "t-2",
+                  "state": "blocked"
+                },
+                {
+                  "id": "s-9",
+                  "role": "thread",
+                  "project": "demo",
+                  "thread": "t-9"
+                }
+              ],
+              "threads": [
+                {
+                  "id": "t-1"
+                },
+                {
+                  "id": "t-2",
+                  "session": "s-2"
+                },
+                {
+                  "id": "t-3",
+                  "done": true
+                }
+              ]
+            },
+            {
+              "project": "old",
+              "stale": true,
+              "threads": [
+                {
+                  "id": "t-1"
+                }
+              ]
+            },
+            {
+              "project": "new",
+              "sessions": [
+                {
+                  "id": "s-3",
+                  "role": "thread",
+                  "project": "new",
+                  "thread": "t-1"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "alias": "far",
+          "projects": [
+            {
+              "project": "x",
+              "threads": [
+                {
+                  "id": "t-1"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "programs": [
+        {
+          "slug": "acme",
+          "projects": [
+            "gamma",
+            "mini/demo",
+            "mini/gone"
+          ]
+        }
+      ],
+      "folded": [
+        "g:acme/@mini/demo"
+      ],
+      "rows": [
+        "g:",
+        "g:acme",
+        "r:acme",
+        "p:gamma",
+        "c:gamma",
+        "g:acme/r:mini/demo",
+        "g:acme/r:mini/gone",
+        "g:mini",
+        "r:mini/demo",
+        "rc:mini/demo",
+        "rt:mini/demo/t-1",
+        "rt:mini/demo/t-2",
+        "rt:mini/demo/t-3",
+        "r:mini/old",
+        "r:mini/new",
+        "rc:mini/new",
+        "g:far",
+        "r:far/x",
+        "rc:far/x",
+        "rt:far/x/t-1"
+      ]
     }
   ]
 }

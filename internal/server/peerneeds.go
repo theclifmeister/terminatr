@@ -28,11 +28,13 @@ func (e peerExport) Needs(c caller.Caller, slug string) ([]proto.PeerNeed, error
 	if c.Kind != caller.Peer {
 		return nil, proto.Errorf(proto.ErrRefused, "peer.watch is a paired server's")
 	}
-	return e.needsOf(slug)
+	return e.sharedNeeds(slug)
 }
 
-// needsOf are shared project slug's needs now.
-func (e peerExport) needsOf(slug string) ([]proto.PeerNeed, error) {
+// sharedNeeds are shared project slug's needs now (needsOf), for a
+// paired server: a project not shared, or one that doesn't read, is
+// refused as one that isn't there.
+func (e peerExport) sharedNeeds(slug string) ([]proto.PeerNeed, error) {
 	if !slices.Contains(sharedProjects(), slug) {
 		return nil, errNotShared(slug)
 	}
@@ -45,12 +47,22 @@ func (e peerExport) needsOf(slug string) ([]proto.PeerNeed, error) {
 	if err != nil {
 		return nil, errNotShared(slug)
 	}
+	return needsOf(p, w, sessions, e.approval), nil
+}
+
+// needsOf are project p's needs now, in full (peerNeeds), from its
+// watch w and the server's sessions: what a paired server at needs view
+// or answer reads of a shared project (sharedNeeds), and what a
+// program's rolled-up Needs you is built from for its local members
+// (programNeeds, the programs design §7.1). approval reads a session's
+// permission dialog (nil reads none). It checks no share: its callers
+// do.
+func needsOf(p *project.Project, w proto.ProjectWatch, sessions []proto.SessionInfo, approval func(id string) *proto.PeerApproval) []proto.PeerNeed {
 	asks, _ := p.Questions()
-	approval := e.approval
 	if approval == nil {
 		approval = func(string) *proto.PeerApproval { return nil }
 	}
-	return peerNeeds(slug, w, sessions, asks, approval), nil
+	return peerNeeds(p.Slug, w, sessions, asks, approval)
 }
 
 // Act is peer.act's, for c, the paired server's user (caller.ForPeerHuman):
@@ -62,7 +74,7 @@ func (e peerExport) Act(c caller.Caller, p proto.PeerAct) (proto.PeerActResult, 
 	if c.Kind != caller.Human || c.Peer == "" {
 		return proto.PeerActResult{}, proto.Errorf(proto.ErrRefused, "peer.act is a paired server's user's")
 	}
-	ns, err := e.needsOf(p.Project)
+	ns, err := e.sharedNeeds(p.Project)
 	if err != nil {
 		return proto.PeerActResult{}, err
 	}
@@ -74,7 +86,7 @@ func (e peerExport) Act(c caller.Caller, p proto.PeerAct) (proto.PeerActResult, 
 	if n.Escape {
 		return proto.PeerActResult{}, errEscapeHere
 	}
-	if !slices.Contains(proto.ActsOf(n), p.Act) {
+	if !slices.Contains(proto.ActsOf(n), p.Act) && !proto.AnswersAsk(n, p) {
 		return proto.PeerActResult{}, proto.Errorf(proto.ErrBadParams, "a %s need takes no %s", n.Kind, p.Act)
 	}
 	p, perr := actGuard(n, p)
@@ -114,6 +126,15 @@ func actGuard(n proto.PeerNeed, p proto.PeerAct) (proto.PeerAct, *proto.Error) {
 		it := qs[p.Index]
 		if p.Question == "" || !sameWords(p.Question, it.Question) {
 			return p, errNeedChanged
+		}
+		if p.Other != "" {
+			if n.Kind != proto.NeedAsk {
+				return p, proto.Errorf(proto.ErrBadParams, "a menu's question takes one of its options, not words of the user's own")
+			}
+			if p.Answer == "" && len(p.Picks) == 0 {
+				p.Question = it.Question
+				break
+			}
 		}
 		if len(p.Picks) > 0 {
 			ans, perr := pickedAnswer(it, p.Picks)
@@ -164,6 +185,9 @@ func sameWords(theirs, ours string) bool {
 func (s *Server) peerAct(c caller.Caller, n proto.PeerNeed, p proto.PeerAct) (proto.PeerActResult, *proto.Error) {
 	cc := callCtx{method: proto.MethodPeerAct, human: true, who: func() caller.Caller { return c }}
 	var none proto.PeerActResult
+	if proto.AnswersAsk(n, p) {
+		return s.peerAskAnswer(c, n, p)
+	}
 	if p.Act == proto.ActAnswer || p.Act == proto.ActApprove {
 		sess, perr := s.session(n.Session)
 		if perr != nil {
@@ -215,6 +239,39 @@ func (s *Server) peerAct(c caller.Caller, n proto.PeerNeed, p proto.PeerAct) (pr
 		return proto.PeerActResult{Open: r.Open}, nil
 	}
 	return none, proto.Errorf(proto.ErrBadParams, "%q is no act", p.Act)
+}
+
+// peerAskAnswer answers need n, one of the coordinator's open
+// questions, for c, the paired server's user, as tm ask answer does
+// here: the user's answer item for the coordinator, journaled with c
+// (a program's answer fanned out to this member, the programs design
+// §7.2). p went through actGuard: its Answer is one option's label,
+// or its Picks a multi-select's options; Other the user's own words.
+func (s *Server) peerAskAnswer(c caller.Caller, n proto.PeerNeed, p proto.PeerAct) (proto.PeerActResult, *proto.Error) {
+	pr, err := project.Open(p.Project)
+	if err != nil {
+		return proto.PeerActResult{}, errNeedChanged
+	}
+	it := n.Question.Questions[0]
+	var labels []string
+	switch {
+	case len(p.Picks) > 0:
+		for _, j := range p.Picks {
+			labels = append(labels, it.Options[j].Label)
+		}
+	case p.Answer != "":
+		labels = []string{p.Answer}
+	}
+	_, _, asked, err := pr.AnswerQuestion(c, strings.TrimPrefix(n.ID, "ask:"), labels, p.Other)
+	if err != nil {
+		var e *project.Error
+		if errors.As(err, &e) && e.Code == "unknown-question" {
+			return proto.PeerActResult{}, errNeedChanged
+		}
+		return proto.PeerActResult{}, codeErr(err)
+	}
+	s.watch.wake()
+	return proto.PeerActResult{Asked: asked}, nil
 }
 
 // peerApproval is the permission dialog on session id's screen, as
@@ -371,6 +428,11 @@ func (s *Server) needAct(p proto.PeerNeedActParams, cc callCtx) (any, *proto.Err
 			return nil, proto.Errorf(proto.ErrBadParams, "%v", err)
 		}
 	}
+	if p.Act == proto.ActAnswer && strings.HasPrefix(p.Need, "ask:") || p.Other != "" {
+		if perr := s.needAskCap(p.Peer); perr != nil {
+			return nil, perr
+		}
+	}
 	who := cc.who()
 	res, err := s.peers.Act(context.Background(), p.Peer, p.PeerAct, who.Device)
 	if err != nil {
@@ -379,6 +441,17 @@ func (s *Server) needAct(p proto.PeerNeedActParams, cc callCtx) (any, *proto.Err
 	s.log.Printf("peer %s: %s %s on %s, by %s", p.Peer, p.Act, textsafe.Line(p.Need, 80), p.Project, who)
 	s.watch.wake()
 	return res, nil
+}
+
+// needAskCap refuses an answer to a coordinator's question on paired
+// server alias while its hello doesn't say it takes one (need-ask).
+func (s *Server) needAskCap(alias string) *proto.Error {
+	for _, m := range s.mirror.List().Peers {
+		if m.Alias == alias && m.State == proto.LinkUp && !m.NeedAsk {
+			return proto.Errorf(proto.ErrUnknownMethod, "%s's tm takes no answers to its coordinators' questions from here; update it to answer there", alias)
+		}
+	}
+	return nil
 }
 
 // needActError is a failed peer.act in this server's words, its code

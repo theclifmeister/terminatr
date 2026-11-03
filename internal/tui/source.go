@@ -97,6 +97,16 @@ type Data struct {
 	// without any, or from a server that doesn't say. With any the
 	// sidebar shows server groups (sidepeers.go).
 	Peers []proto.PeerMirror
+	// Programs are the programs while [features] programs is on (the
+	// programs design §11.1), in slug order; none while it is off.
+	// ProgramsOn is that switch: the PROJECTS header offers a new
+	// program while it is on.
+	Programs   []ProgramData
+	ProgramsOn bool
+	// ProgramLinks are, by project slug, the projects' memberships of
+	// paired servers' programs (their program keys) while programs are
+	// on; none while off.
+	ProgramLinks map[string]config.ProgramLink
 }
 
 // ServerInfo is the running server's identity, from session.list.
@@ -146,6 +156,9 @@ type ProjectData struct {
 	// host failed, as the ticker last saw them; 0 while they work, or
 	// when it has no PR host. The sidebar marks its name red (▲).
 	PRHostFails int
+	// Program is the program the project is in, while programs are on;
+	// "" for none.
+	Program string
 	// Links are the project's links to other projects' coordinators
 	// (link.Rows); LinkWaits counts its messages waiting for the user's
 	// OK, its links the breaker paused and the paired servers' link
@@ -191,6 +204,8 @@ type Source interface {
 	SessionSource
 	LogSource
 	SearchSource
+	ProgramPeerSource
+	ProgramSource
 }
 
 // LogSource reads the logs on the server's host (the , popup's Logs
@@ -246,6 +261,16 @@ type ProjectSource interface {
 	// OpenProject returns the project's coordinator session, started
 	// first if none runs.
 	OpenProject(slug string, cols, rows int) (string, error)
+	// OpenDirector returns program slug's director session, started
+	// first if none runs.
+	OpenDirector(slug string, cols, rows int) (string, error)
+	// RenameProgram renames program from to to (program.rename: its
+	// director is stopped and started again), saying what it did.
+	RenameProgram(from, to string) (string, error)
+	// DeleteProgram moves program slug's folder to the trash and its
+	// table out of the settings file (tm program delete), after the
+	// caller's confirmation; refused while its director runs.
+	DeleteProgram(slug string) (string, error)
 	// Lifecycle activates, deactivates, pauses, resumes, archives,
 	// deletes, pins or unpins a project (verb "activate", "deactivate",
 	// "pause", "resume", "archive", "delete", "pin", "unpin"), saying
@@ -276,12 +301,14 @@ type ProjectSource interface {
 	// OpenQuestions has the project's coordinator put its open questions
 	// (tm ask) to the user in its question dialog (questions.open).
 	OpenQuestions(slug string) (proto.QuestionsOpenResult, error)
-	// SaveClear has the project's coordinator save what it learned, then
-	// clears its conversation, as auto_clear does (coordinator.clear).
-	SaveClear(slug string) (proto.CoordinatorClearResult, error)
+	// SaveClear has the project's coordinator (role director: the
+	// program's director) save what it learned, then clears its
+	// conversation, as auto_clear does (coordinator.clear).
+	SaveClear(role, slug string) (proto.CoordinatorClearResult, error)
 	// SetRemote turns remote control of the project's running
-	// coordinator on or off (prefix+r), saying what it did.
-	SetRemote(slug string, on bool) (string, error)
+	// coordinator (role director: the program's director) on or off
+	// (prefix+r), saying what it did.
+	SetRemote(role, slug string, on bool) (string, error)
 }
 
 // SettingsSource changes settings and models, on the human's keypress
@@ -293,6 +320,13 @@ type SettingsSource interface {
 	// a project's own value, so it follows all projects again. It is
 	// refused when tm runs inside an agent.
 	SetSetting(table, key string, value any) error
+	// Programs reads the programs switch ([features] programs) and the
+	// programs here, whatever it says (settings_features.go).
+	Programs() ProgramsState
+	// SetPrograms turns programs on or off (programs.switch), on the
+	// human's keypress after its confirm, saying what it did. Refused
+	// when tm runs inside an agent.
+	SetPrograms(on bool) (string, error)
 	// ResetAccess puts table's Access switches back to what it follows
 	// (config.ResetAccess), on the human's keypress; reset are the keys
 	// it removed. Refused inside an agent.
@@ -773,6 +807,18 @@ func (s *ServerSource) Load() Data {
 		for _, slug := range cfg.ProjectSlugs() {
 			d.Env[slug] = cfg.EnvOf(slug)
 			d.Sandbox[slug] = cfg.SandboxOf(slug)
+		}
+		d.Programs = programsOf(cfg)
+		d.ProgramsOn = programsOnIn(cfg)
+		if d.ProgramsOn {
+			for _, slug := range cfg.ProjectSlugs() {
+				if l, in := cfg.ProgramLink(slug); in {
+					if d.ProgramLinks == nil {
+						d.ProgramLinks = map[string]config.ProgramLink{}
+					}
+					d.ProgramLinks[slug] = l
+				}
+			}
 		}
 	}
 	d.NoAgent = sc.noAgent

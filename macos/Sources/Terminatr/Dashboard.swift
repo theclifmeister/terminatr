@@ -761,17 +761,38 @@ struct ProjectRow: View {
     let state: String
     let needs: Int
     let selected: Bool
+    /// A program's row (the programs design §11.1): its mark before its
+    /// name, and its director's state in place of a coordinator's.
+    var program = false
+    /// A dim word after its name: a paired member's program ("· acme"),
+    /// or why a member has no listing ("invited").
+    var tag = ""
 
     var body: some View {
         HStack(spacing: 8) {
-            Circle()
-                .fill(dot)
-                .overlay(Circle().strokeBorder(selected ? theme.onAction.opacity(0.8) : .clear, lineWidth: 1))
-                .frame(width: 8, height: 8)
-                .accessibilityHidden(true)
+            if program {
+                Image(systemName: "diamond.fill")
+                    .font(.system(size: 8))
+                    .foregroundStyle(selected ? theme.onAction : dot)
+                    .frame(width: 8, height: 8)
+                    .accessibilityHidden(true)
+            } else {
+                Circle()
+                    .fill(dot)
+                    .overlay(Circle().strokeBorder(selected ? theme.onAction.opacity(0.8) : .clear, lineWidth: 1))
+                    .frame(width: 8, height: 8)
+                    .accessibilityHidden(true)
+            }
             Text(name)
                 .font(theme.body(.body, .semibold))
                 .lineLimit(1)
+            if !tag.isEmpty {
+                Text(tag)
+                    .font(theme.mono(.caption2))
+                    .foregroundStyle(selected ? theme.onAction : theme.muted)
+                    .lineLimit(1)
+                    .layoutPriority(-1)
+            }
             Spacer(minLength: 4)
             if needs > 0 {
                 Text("\(needs)")
@@ -785,9 +806,9 @@ struct ProjectRow: View {
         }
         .padding(.vertical, 2)
         .foregroundStyle(selected ? theme.onAction : theme.ink)
-        .help("Coordinator: \(state)")
+        .help("\(program ? "Director" : "Coordinator"): \(state)")
         .accessibilityElement(children: .combine)
-        .accessibilityValue("coordinator \(state)")
+        .accessibilityValue("\(program ? "director" : "coordinator") \(state)")
     }
 }
 

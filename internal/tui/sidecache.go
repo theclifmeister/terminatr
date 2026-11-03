@@ -192,7 +192,7 @@ func (f *sideFeed) take() ([]ProjectData, bool) {
 func sideProjects(ps []server.SideProject) []ProjectData {
 	out := make([]ProjectData, 0, len(ps))
 	for _, sp := range ps {
-		pd := ProjectData{Slug: sp.Slug, Safety: sp.Safety, Questions: sp.Questions, PRHostFails: sp.PRHostFails,
+		pd := ProjectData{Slug: sp.Slug, Safety: sp.Safety, Questions: sp.Questions, PRHostFails: sp.PRHostFails, Program: sp.Program,
 			Goal: sp.Goal, Repos: sp.Repos, Own: sp.Own, Counts: sp.Counts, Err: sp.Error,
 			Unread: len(sp.Items), Items: sp.Items, Usage: sp.Usage, TaskUsage: sp.TaskUsage,
 			Checkouts: sp.Checkouts, Badges: sp.Badges, Links: sp.Links}
@@ -245,7 +245,7 @@ func (sc statusCache) statuses(sessions []proto.SessionInfo) map[string]*thread.
 		if err != nil {
 			continue
 		}
-		p := &project.Project{Slug: s.Project, Dir: dir}
+		p := &project.Project{Folder: project.Folder{Slug: s.Project, Dir: dir}}
 		path := thread.Path(p, s.Thread, "STATUS.md")
 		stamp := fsx.StatStamp(path)
 		e, ok := sc[path]
@@ -297,6 +297,18 @@ func (ic *infoCache) load(paths tmclient.Paths, s proto.SessionInfo, sessions []
 		d.watch = &w
 		return d
 	}
+	if s.Role == proto.RoleDirector && s.Project != "" {
+		// The program's needs come from tm's server: read again every
+		// programNeedsEvery, not every poll.
+		key := "g:" + s.Project
+		if ic.d == nil || ic.key != key || time.Since(ic.at) >= programNeedsEvery {
+			ic.key, ic.stamp, ic.at = key, 0, time.Now()
+			ic.d = loadProgramInfo(paths, s, sessions)
+		}
+		d := *ic.d
+		d.session = s
+		return &d
+	}
 	if s.Role != proto.RoleThread || s.Project == "" || !thread.ValidID(s.Thread) {
 		return nil
 	}
@@ -304,7 +316,7 @@ func (ic *infoCache) load(paths tmclient.Paths, s proto.SessionInfo, sessions []
 	if err != nil {
 		return &infoData{slug: s.Project, session: s}
 	}
-	p := &project.Project{Slug: s.Project, Dir: dir}
+	p := &project.Project{Folder: project.Folder{Slug: s.Project, Dir: dir}}
 	key := s.Project + "/" + s.Thread
 	files := append(tasks.BoardPaths(p.Dir), p.Path("PROJECT.md"), p.Path("JOURNAL.md"), ts,
 		thread.Dir(p, s.Thread), thread.Path(p, s.Thread, "library"))

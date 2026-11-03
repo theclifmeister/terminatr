@@ -63,7 +63,10 @@ tm writes MEMORY.md's list of the notes again (index does only that;
 tm context does it too when the list is out of date): one line per
 note, its title, description (a line's own is kept, a new note's is its
 first line) and touches. The human's
-change is an inbox item for the coordinator. Threads only read memory.`
+change is an inbox item for the coordinator. Threads only read memory.
+
+A director's memory is its program's (all but check); the human names
+a program with --project <program> (programs on).`
 
 // runMemory searches the project's memory notes (docs/SPEC.md §7.6).
 func runMemory(e *Env, args []string) error {
@@ -134,7 +137,7 @@ func runMemory(e *Env, args []string) error {
 		if f.anySet("limit", "path") || args[0] == "show" && len(pos) == 0 || args[0] == "list" && len(pos) > 0 {
 			return usagef("%s", memoryUsage)
 		}
-		p, err := e.openProject(*slug)
+		p, err := e.openFolder(*slug)
 		if err != nil {
 			return err
 		}
@@ -153,7 +156,7 @@ func runMemory(e *Env, args []string) error {
 		if len(project.Terms(query)) == 0 && len(*paths) == 0 {
 			return usagef("tm memory find needs words to look for or a --path\n%s", memoryUsage)
 		}
-		p, err := e.openProject(*slug)
+		p, err := e.openFolder(*slug)
 		if err != nil {
 			return err
 		}
@@ -201,7 +204,7 @@ func runMemory(e *Env, args []string) error {
 // memoryShow prints the notes args name, in full; a thread is never
 // shown a note for the coordinator (ForThreads), which it is told the
 // project hasn't.
-func (e *Env) memoryShow(p *project.Project, args []string, asJSON bool) error {
+func (e *Env) memoryShow(p *project.Folder, args []string, asJSON bool) error {
 	type shownNote struct {
 		project.Note
 		Text string `json:"text"`
@@ -246,7 +249,7 @@ func (e *Env) memoryShow(p *project.Project, args []string, asJSON bool) error {
 
 // memoryList prints MEMORY.md's line for each note (MemoryIndex), only
 // those a thread may see when a thread asks.
-func (e *Env) memoryList(p *project.Project, asJSON bool) error {
+func (e *Env) memoryList(p *project.Folder, asJSON bool) error {
 	entries, err := p.MemoryIndex(e.Caller.Kind == caller.Thread)
 	if err != nil {
 		return err

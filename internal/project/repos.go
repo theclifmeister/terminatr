@@ -99,7 +99,7 @@ func MoveRepos(now time.Time) ([]string, error) {
 // moveRepos moves project slug's list, reporting whether it had one to
 // move.
 func moveRepos(slug string) (bool, error) {
-	p := &Project{Slug: slug}
+	p := &Project{Folder: Folder{Slug: slug, Kind: KindProject}}
 	p.Dir, _ = Dir(slug)
 	path := p.Path("PROJECT.md")
 	data, err := os.ReadFile(path)

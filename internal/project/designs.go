@@ -60,7 +60,7 @@ type designStore struct {
 }
 
 // Designs are the recorded designs, by name.
-func (p *Project) Designs() ([]Design, error) {
+func (p *Folder) Designs() ([]Design, error) {
 	data, err := os.ReadFile(p.Path(designsFile))
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, nil
@@ -85,7 +85,7 @@ func decodeDesigns(data []byte) (designStore, error) {
 
 // SetDesign changes design name, adding it when it is new, and returns
 // it and whether anything changed.
-func (p *Project) SetDesign(name string, e DesignEdit) (Design, bool, error) {
+func (p *Folder) SetDesign(name string, e DesignEdit) (Design, bool, error) {
 	name = strings.TrimSpace(name)
 	if name == "" || !tasks.ValidDesign(name) {
 		return Design{}, false, refuse("invalid-design", "design %q must be a name of letters, digits, '.', '_' and '-' (as designs/<name>.md)", name)
@@ -212,7 +212,7 @@ type DesignBuild struct {
 
 // DesignBuilds are every design that designs.json records or a task of
 // boards names, by name.
-func (p *Project) DesignBuilds(boards ...*tasks.Board) ([]DesignBuild, error) {
+func (p *Folder) DesignBuilds(boards ...*tasks.Board) ([]DesignBuild, error) {
 	recs, err := p.Designs()
 	if err != nil {
 		return nil, err

@@ -23,8 +23,10 @@ import (
 	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/models"
 	"github.com/theclifmeister/terminatr/internal/modview"
+	"github.com/theclifmeister/terminatr/internal/program"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/server"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/thread"
 	"github.com/theclifmeister/terminatr/internal/version"
@@ -41,13 +43,23 @@ func statusLine(s proto.SessionInfo, ts *thread.Status, pending bool, cols int, 
 // settings file under the test's TERMINATR_HOME, and Load reads them
 // back once one was set.
 type fakeSource struct {
-	agentCalls int // Agents() calls (perf_render_test.go)
-	data       Data
-	board      *tasks.Board
-	opened     []string
-	started    []string
-	settings   []string // table.key=value
-	repos      []string // +path or -path
+	// pneeds are program.needs' answers by program; panswers the
+	// AnswerProgram calls (slug/Q2=labels); newPrograms NewProgram's.
+	pneeds      map[string]proto.ProgramNeedsResult
+	panswers    []string
+	newPrograms []string
+	invites     map[string][]link.Invite
+	programActs []string
+	agentCalls  int // Agents() calls (perf_render_test.go)
+	// programs is what Programs reads; switched, the SetPrograms calls.
+	programs ProgramsState
+	switched []bool
+	data     Data
+	board    *tasks.Board
+	opened   []string
+	started  []string
+	settings []string // table.key=value
+	repos    []string // +path or -path
 	// delegated are the tasks asked to be delegated: "slug T12"; asked
 	// the other asks: "accept slug T12", "send-back slug T12 note".
 	delegated   []string
@@ -170,9 +182,9 @@ func (f *fakeSource) SetPriority(slug string, id int, p tasks.Priority) (bool, e
 	return false, fmt.Errorf("unknown-task: T%d does not exist", id)
 }
 
-func (f *fakeSource) SetRemote(slug string, on bool) (string, error) {
+func (f *fakeSource) SetRemote(role, slug string, on bool) (string, error) {
 	state := map[bool]string{true: "on", false: "off"}[on]
-	f.remote = append(f.remote, slug+" "+state)
+	f.remote = append(f.remote, rolePrefix(role)+slug+" "+state)
 	return "remote control " + state + " for " + slug, nil
 }
 
@@ -211,6 +223,12 @@ func (f *fakeSource) Board(string) (*tasks.Board, error) {
 	}
 	return &tasks.Board{}, nil
 }
+func (f *fakeSource) Programs() ProgramsState { return f.programs }
+func (f *fakeSource) SetPrograms(on bool) (string, error) {
+	f.switched = append(f.switched, on)
+	f.programs.On = on
+	return "programs " + onOff(on), nil
+}
 func (f *fakeSource) SetSetting(table, key string, value any) error {
 	f.settings = append(f.settings, fmt.Sprintf("%s.%s=%v", table, key, value))
 	if table == config.DefaultsTable {
@@ -218,6 +236,12 @@ func (f *fakeSource) SetSetting(table, key string, value any) error {
 			return config.UnsetDefaults(key)
 		}
 		return config.SetDefaults(key, value)
+	}
+	if slug, ok := strings.CutPrefix(table, "programs."); ok {
+		if value == nil {
+			return config.UnsetProgram(slug, key)
+		}
+		return config.SetProgram(slug, key, value)
 	}
 	if slug, ok := strings.CutPrefix(table, "projects."); ok {
 		if value == nil {
@@ -283,8 +307,8 @@ func (f *fakeSource) OpenQuestions(slug string) (proto.QuestionsOpenResult, erro
 	f.answered = append(f.answered, slug)
 	return proto.QuestionsOpenResult{Session: "s-1", Via: "queued", Open: 2}, nil
 }
-func (f *fakeSource) SaveClear(slug string) (proto.CoordinatorClearResult, error) {
-	f.saveCleared = append(f.saveCleared, slug)
+func (f *fakeSource) SaveClear(role, slug string) (proto.CoordinatorClearResult, error) {
+	f.saveCleared = append(f.saveCleared, rolePrefix(role)+slug)
 	return proto.CoordinatorClearResult{Session: "s-1"}, nil
 }
 func (f *fakeSource) AskAdopt(slug string, s proto.SessionInfo) (bool, error) {
@@ -367,6 +391,20 @@ func (f *fakeSource) NewProject(name string) (string, error) { return name, nil 
 func (f *fakeSource) OpenProject(slug string, c, r int) (string, error) {
 	f.opened = append(f.opened, slug)
 	return "s-" + slug, nil
+}
+func (f *fakeSource) RenameProgram(from, to string) (string, error) {
+	f.programActs = append(f.programActs, "rename "+from+" "+to)
+	return "renamed program " + from + " to " + to, nil
+}
+
+func (f *fakeSource) DeleteProgram(slug string) (string, error) {
+	f.programActs = append(f.programActs, "delete "+slug)
+	return "deleted program " + slug, nil
+}
+
+func (f *fakeSource) OpenDirector(slug string, c, r int) (string, error) {
+	f.opened = append(f.opened, "g:"+slug)
+	return "s-g-" + slug, nil
 }
 
 func (f *fakeSource) Peers() (PeerList, error) { return f.peers, f.peerErr }
@@ -1777,4 +1815,51 @@ func TestDashboardPeerNeedAct(t *testing.T) {
 	if len(m.stack) != 0 || m.current != "@mini/acme-api" {
 		t.Errorf("at view: stack %v, current %q", m.stack, m.current)
 	}
+}
+
+// rolePrefix marks a director's slug in what fakeSource records:
+// "director:acme"; a coordinator's is the slug alone.
+func rolePrefix(role string) string {
+	if role == proto.RoleDirector {
+		return "director:"
+	}
+	return ""
+}
+
+func (f *fakeSource) ProgramInvites(slug string) ([]link.Invite, error) { return f.invites[slug], nil }
+func (f *fakeSource) ProgramAct(slug, verb, arg string, o link.AnswerOpts) (string, error) {
+	f.programActs = append(f.programActs, fmt.Sprintf("%s %s %s %+v", slug, verb, arg, o))
+	return verb + " done", nil
+}
+func (f *fakeSource) SetProgramLinkKey(slug, key string, value any) error {
+	f.programActs = append(f.programActs, fmt.Sprintf("%s set %s %v", slug, key, value))
+	return nil
+}
+
+func (f *fakeSource) ProgramNeeds(slug string) (proto.ProgramNeedsResult, error) {
+	if res, ok := f.pneeds[slug]; ok {
+		return res, nil
+	}
+	return proto.ProgramNeedsResult{Program: slug}, nil
+}
+
+func (f *fakeSource) AnswerProgram(slug, ref string, choices []string, other string) (program.AnswerResult, error) {
+	f.panswers = append(f.panswers, slug+"/"+ref+"="+strings.Join(choices, ",")+other)
+	return program.AnswerResult{Question: ref, Fanned: []program.Fanned{{Project: "api", Question: "Q1", Result: "answered"}}}, nil
+}
+
+func (f *fakeSource) AcceptUmbrella(slug string, id int) error {
+	f.programActs = append(f.programActs, fmt.Sprintf("%s accept T%d", slug, id))
+	return nil
+}
+
+func (f *fakeSource) SendBackUmbrella(slug string, id int, note string) error {
+	f.programActs = append(f.programActs, fmt.Sprintf("%s send-back T%d %s", slug, id, note))
+	return nil
+}
+
+func (f *fakeSource) NewProgram(slug, goal string) (string, error) {
+	f.newPrograms = append(f.newPrograms, slug+":"+goal)
+	f.data.Programs = append(f.data.Programs, ProgramData{SideProgram: server.SideProgram{Slug: slug, Authority: "propose"}})
+	return slug, nil
 }

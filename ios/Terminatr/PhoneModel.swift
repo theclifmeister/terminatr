@@ -85,6 +85,9 @@ final class PhoneModel {
     private(set) var projects: [AppAPI.Project] = []
     private(set) var sessions: [AppAPI.Session] = []
     private(set) var peers: [AppAPI.Peer] = []
+    /// The programs (B19), from projects.watch: none unless the server's
+    /// hello says programs (ProgramList.cap), so no program UI shows.
+    private(set) var programs: [AppAPI.Program] = []
     private(set) var needsFirst = false
     /// [ui] context_hint, as the last session list said (app API 13; 0
     /// never warns): from it the coordinator's context gauge warns.
@@ -117,7 +120,20 @@ final class PhoneModel {
 
     /// Every need, as the Mac app's Needs you lists them; a paired
     /// server's only when the phone isn't paired with it directly too.
-    var needs: [Need] { Need.of(projects: projects, sessions: sessions, peers: shownPeers) }
+    var needs: [Need] { Need.of(projects: projects, sessions: sessions, peers: shownPeers) + programQuestions }
+
+    /// Each program's open questions (its director's tm ask) as one need
+    /// under the program's slug, as a coordinator's are under its
+    /// project's (B19): its row, Needs you and the badge count them.
+    private var programQuestions: [Need] {
+        programs.filter { $0.questions > 0 }.map { g in
+            Need(id: Self.programQuestionsPrefix + g.slug, kind: .question, project: g.slug,
+                 what: g.questions == 1 ? "director has a question" : "director has \(g.questions) questions",
+                 detail: "program")
+        }
+    }
+
+    static let programQuestionsPrefix = "program-questions:"
 
     /// The paired servers the screens list: those the phone pairs with
     /// directly show as servers of their own, so not here again (T852).
@@ -153,6 +169,7 @@ final class PhoneModel {
         await drop()
         source = .none
         projects = []
+        programs = []
         sessions = []
         peers = []
         clears = [:]
@@ -443,10 +460,12 @@ final class PhoneModel {
             watching?.cancel()
             let sub = try await b.subscribe(AppAPI.Methods.projectsWatch, AppAPI.ProjectsWatchParams(detail: true, lean: true))
             projects = sub.result.projects
+            programs = Self.programs(sub.result, hello: hello)
             watching = Task { [weak self] in
                 do {
                     for try await e in sub.events {
                         self?.projects = e.data.projects
+                        self?.programs = Self.programs(e.data, hello: self?.hello)
                     }
                     self?.dropped?(LinkError.closed)
                 } catch let e as AppAPI.Error where e.code == AppAPI.tooBig {
@@ -531,6 +550,87 @@ final class PhoneModel {
     func openQuestions(_ project: String) async throws {
         _ = try await connected().call(AppAPI.Methods.questionsOpen, AppAPI.ProjectParams(project: project))
         await reread()
+    }
+
+    // MARK: Programs (B19, programs design §12)
+
+    /// programs as projects.watch sends them, while hello's server says
+    /// programs; none otherwise (programs off, or a tm before them).
+    static func programs(_ r: AppAPI.Projects, hello: AppAPI.Hello?) -> [AppAPI.Program] {
+        (hello?.server?.caps ?? []).contains(ProgramList.cap) ? r.programs : []
+    }
+
+    func program(_ slug: String) -> AppAPI.Program? {
+        programs.first { $0.slug == slug }
+    }
+
+    /// The program that holds this server's project slug, if one does.
+    func programOf(_ slug: String) -> AppAPI.Program? {
+        ProgramList.members(programs)[slug].flatMap(program)
+    }
+
+    /// The active projects the Projects screen lists on their own: the
+    /// programs' members are listed under their program.
+    var standaloneProjects: [AppAPI.Project] { ProgramList.standalone(activeProjects, programs: programs) }
+
+    var standaloneInactive: [AppAPI.Project] { ProgramList.standalone(inactiveProjects, programs: programs) }
+
+    /// The Projects screen's rows of this server: the programs among its
+    /// standalone projects, as the TUI orders them.
+    var projectEntries: [ProgramList.Entry] {
+        let all = needs
+        return ProgramList.entries(standaloneProjects, programs: programs, needsFirst: needsFirst) { e in
+            switch e {
+            case .program(let g): !ProgramList.needs(of: g, in: all).isEmpty
+            case .project(let p): Need.count(all, project: p.slug) > 0
+            }
+        }
+    }
+
+    /// Program g's rolled-up Needs you: its director's and its members'
+    /// needs from the one list (needs), each once, so its row, the
+    /// badge and Needs you agree; by their tasks' priority.
+    func programNeeds(_ g: AppAPI.Program) -> [Need] {
+        ProgramList.ranked(ProgramList.needs(of: g, in: needs)) { n in
+            guard !n.task.isEmpty, let p = project(n.project) else { return "" }
+            return (p.needsYou + p.board).first { $0.ref == n.task }?.priority ?? ""
+        }
+    }
+
+    /// The program's dashboard (program.get): its members' invite
+    /// states, umbrellas and dependencies.
+    func programDetail(_ slug: String) async throws -> AppAPI.ProgramDetail {
+        try await connected().call(AppAPI.Methods.programGet, AppAPI.ProgramParams(program: slug))
+    }
+
+    /// The program's rolled-up Needs you as its server ranks them
+    /// (program.needs): the program's own questions come from here.
+    func programNeedsList(_ slug: String) async throws -> AppAPI.ProgramNeeds {
+        try await connected().call(AppAPI.Methods.programNeeds, AppAPI.ProgramParams(program: slug))
+    }
+
+    /// Whether this phone answers a program's question: only while its
+    /// bridge lists program.answer, which the Mac app's alone has for
+    /// now (appapi macOnly; the user's call, Q208).
+    var answersPrograms: Bool { can(AppAPI.Methods.programAnswer.name) }
+
+    /// Answers program question ref with the options picked, or other:
+    /// the server hands the answer to every member question it covers.
+    func answerProgram(_ slug: String, ref: String, choices: [String], other: String = "") async throws -> AppAPI.ProgramAnswered {
+        let r = try await connected().call(AppAPI.Methods.programAnswer,
+                                           AppAPI.ProgramAnswerParams(program: slug, ref: ref, choices: choices, other: other))
+        await reread()
+        return r
+    }
+
+    /// Accepts the program's umbrella task in review (the write level).
+    func acceptUmbrella(program: String, task: String) async throws -> String {
+        try await connected().call(AppAPI.Methods.programUmbrellaAccept, AppAPI.ProgramUmbrellaParams(program: program, task: task)).status
+    }
+
+    func sendBackUmbrella(program: String, task: String, note: String) async throws -> String {
+        try await connected().call(AppAPI.Methods.programUmbrellaSendBack,
+                                   AppAPI.ProgramUmbrellaParams(program: program, task: task, note: note)).status
     }
 
     // MARK: Writes (the write level, T821), as the Mac app's
@@ -695,7 +795,7 @@ final class PhoneModel {
         var c = SaveClear(coordinator: coordinatorSession(project), at: .now)
         clears[project] = c
         do {
-            _ = try await connected().call(AppAPI.Methods.coordinatorClear, AppAPI.ProjectParams(project: project))
+            _ = try await connected().call(AppAPI.Methods.coordinatorClear, AppAPI.CoordinatorClearParams(project: project))
             c.asked()
         } catch {
             c.fail(NeedActs.words(error) ?? error.localizedDescription, at: .now)

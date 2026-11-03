@@ -109,6 +109,24 @@ func (r treeRow) details() (string, string) {
 			return r.slug + ": PR host failing", prHostWords(r.prFails)
 		}
 		return strings.Join(bits, " · "), fmt.Sprintf("%s · coordinator %s", counted(r.threads, "thread"), running(r.state))
+	case treeProgram:
+		bits := []string{"program " + r.slug}
+		if r.paused {
+			bits = append(bits, "paused")
+		}
+		return strings.Join(bits, " · "), fmt.Sprintf("%s in its projects · director %s", counted(r.threads, "thread"), running(r.state))
+	case treeDirector:
+		var bits []string
+		if r.ctx >= 0 {
+			bits = append(bits, fmt.Sprintf("context %d%%", r.ctx))
+		}
+		if r.asks > 0 {
+			bits = append(bits, counted(r.asks, "question")+" waiting")
+		}
+		if r.state == "" {
+			bits = append(bits, "enter starts it")
+		}
+		return r.slug + " director · " + running(r.state), strings.Join(bits, " · ")
 	case treeCoordinator:
 		if r.dormant {
 			return r.slug + " coordinator · dormant", "enter starts it and activates " + r.slug
@@ -186,6 +204,8 @@ func sideKeyBar(r *treeRow, focused, session bool, cw int) string {
 		keys = sectionKeys(r.sec)
 	case r.kind == treeServer, r.isPeer():
 		keys = peerKeyBar(r)
+	case r.kind == treeProgram, r.kind == treeDirector:
+		keys = programKeyBar(r, enter, left, session)
 	case r.kind == treeDivider && r.fold:
 		keys = []string{enter + " unfold"}
 	case r.kind == treeDivider:
@@ -251,4 +271,27 @@ func ciVerb(ci string) string {
 		return "running"
 	}
 	return ""
+}
+
+// programKeyBar is the key bar on a program's row or its director's:
+// on the dashboard A opens the program's settings (projectPopup); in a
+// session its menu does.
+func programKeyBar(r *treeRow, enter, left string, session bool) []string {
+	var keys []string
+	switch {
+	case r.kind == treeProgram:
+		fold := barKey("side.fold", "←") + " fold"
+		if r.fold {
+			fold = barKey("side.unfold", "→") + " unfold"
+		}
+		keys = []string{enter + " director", fold}
+	case r.state == "":
+		keys = []string{enter + " start", left + " program"}
+	default:
+		keys = []string{enter + " attach", left + " program"}
+	}
+	if !session {
+		keys = append(keys, barKey("project.popup", "A")+" settings")
+	}
+	return keys
 }

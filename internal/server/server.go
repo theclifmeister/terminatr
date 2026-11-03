@@ -113,6 +113,9 @@ type Server struct {
 	taskOf sync.Map
 	// ctxOf is each session's latest context use (setContext), by id.
 	ctxOf sync.Map
+	// needsOpen is when each director asked to open its program's
+	// needs dialog (program.needs.open), by session id.
+	needsOpen sync.Map
 
 	// latest is the newer release's tag and upgrade its install hint
 	// ("" for none), from the daily update check (updatecheck.go).
@@ -399,7 +402,7 @@ func Run(ctx context.Context, opts Options) error {
 	// local call waits on (docs/SPEC.md §16.7). They read the shared
 	// projects through peerExport (§16.9), nothing else.
 	s.peers = peer.Start(peer.Options{Dir: peer.DirIn(p.Home), Version: version.Version, Logf: logger.Printf, Export: s.peerExport(), Messages: peerMessages{}, Panes: peerPanes{s}, Files: link.Files(), Transcripts: peerTranscripts{s},
-		Name: peer.OwnName, Taken: func(n string) string { return project.PeerNameTaken(n, peer.SelfName()) }})
+		Name: peer.OwnName, Taken: func(n string) string { return project.PeerNameTaken(n, peer.SelfName()) }, Programs: programsNow()})
 	defer s.peers.Close()
 	// What they share, for the consoles (§16.10); a peer's pane switch
 	// reaches the remote panes open here at once (§16.12).
@@ -415,6 +418,8 @@ func Run(ctx context.Context, opts Options) error {
 	defer s.remotes.closeAll()
 	// Messages to linked projects on paired servers wait in the outbox
 	// until their link is up (§16.11).
+	// The program stream waits while programs are off (applyPrograms).
+	link.SetPrograms(s.peers.Programs())
 	outboxCtx, stopOutbox := context.WithCancel(context.Background())
 	defer stopOutbox()
 	go link.RunOutbox(outboxCtx, peerTransport{s.peers})
@@ -553,13 +558,13 @@ func (s *Server) loadPrevious() (resume []SessionRecord, lost []restartOutcome) 
 		s.prevShut = "crash"
 		s.log.Printf("previous server (pid %d) did not shut down cleanly", prev.ServerPID)
 	}
-	boots := projectBoots()
+	boots := recordBoots()
 	for _, r := range prev.Dormant {
 		switch why := dormantGone(r); {
 		case why != "":
 			s.log.Printf("session %s: dormant %s dropped: %s", r.ID, restartLabel(r), why)
-		case boots(r.Project):
-			resume = append(resume, r)
+		case boots(r):
+			resume = append(resume, wakeRecord(r))
 		default:
 			s.dormant[r.ID] = r
 		}
@@ -569,7 +574,7 @@ func (s *Server) loadPrevious() (resume []SessionRecord, lost []restartOutcome) 
 			s.prevProject[r.ID] = r.Project
 		}
 		if r.Agent != "" && r.AgentSessionID != "" {
-			if dormantRole(r) && !boots(r.Project) {
+			if !boots(r) {
 				s.dormant[r.ID] = r
 				continue
 			}
@@ -728,7 +733,7 @@ func (s *Server) handle(c net.Conn, human bool) {
 
 // hello is the server's side of the handshake.
 func (s *Server) hello() proto.Hello {
-	return proto.Hello{
+	h := proto.Hello{
 		Protocol: s.protocol,
 		Version:  version.Version,
 		Build:    s.build,
@@ -736,6 +741,12 @@ func (s *Server) hello() proto.Hello {
 		PID:      os.Getpid(),
 		Caps:     []string{proto.CapPaneVT, proto.CapTranscript, proto.CapPaneVTRemote, proto.CapSessionFile, proto.CapTranscriptRemote, proto.CapLinkAct, proto.CapTranscriptTail, proto.CapSideActs, proto.CapProjectFiles, proto.CapNeedAct, proto.CapDesigns, proto.CapSessionsWatch, proto.CapPeerPages, proto.CapPeerDesigns, proto.CapProjectMods, proto.CapAnswerPicks, proto.CapSearch, proto.CapTaskPriority, proto.CapAppReports},
 	}
+	if programsNow() {
+		// Only while the switch is on: the apps draw programs by it
+		// (the programs design §3.5).
+		h.Caps = append(h.Caps, proto.CapPrograms)
+	}
+	return h
 }
 
 // serveControl serves a control connection's requests; app is the Mac
@@ -1083,6 +1094,9 @@ func (s *Server) info(sess *session.Session) proto.SessionInfo {
 	if q := s.asks.of(info.ID); q != nil {
 		info.Question = q
 	}
+	if v, ok := s.needsOpen.Load(info.ID); ok {
+		info.NeedsOpen = v.(time.Time)
+	}
 	if v, ok := s.ctxOf.Load(info.ID); ok {
 		c := v.(ctxUse)
 		info.Context, info.ContextWindow = c.tokens, c.window
@@ -1140,6 +1154,15 @@ func (s *Server) startSession(p proto.SessionStartParams) (any, *proto.Error) {
 		return nil, proto.Errorf(proto.ErrBadParams, "pass an agent or a command, not both")
 	}
 	cwd := p.Cwd
+	if p.Role == proto.RoleDirector {
+		// A program's director: programs on, its program there, its
+		// folder the cwd (director.go).
+		dir, perr := directorStart(p)
+		if perr != nil {
+			return nil, perr
+		}
+		cwd = dir
+	}
 	if cwd == "" {
 		cwd, _ = os.UserHomeDir()
 	}
@@ -1153,7 +1176,7 @@ func (s *Server) startSession(p proto.SessionStartParams) (any, *proto.Error) {
 	switch role {
 	case "":
 		role = proto.RoleShell
-	case proto.RoleShell:
+	case proto.RoleShell, proto.RoleDirector:
 	case proto.RoleCoordinator, proto.RoleThread:
 		if p.Agent == "" || p.Project == "" {
 			return nil, proto.Errorf(proto.ErrBadParams, "role %s needs an agent and a project", role)
@@ -1196,7 +1219,7 @@ func (s *Server) startSession(p proto.SessionStartParams) (any, *proto.Error) {
 			rec.Protection = p.Protection
 			rec.NoSandbox, rec.NoSandboxEscapes = protectFlags(p.Protection, p.Agent)
 		}
-		if p.RemoteControl && role != proto.RoleCoordinator {
+		if p.RemoteControl && role != proto.RoleCoordinator && role != proto.RoleDirector {
 			s.mu.Unlock()
 			return nil, proto.Errorf(proto.ErrRefused, "remote control is for coordinators; threads are reached through theirs")
 		}

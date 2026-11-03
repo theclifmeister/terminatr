@@ -33,11 +33,37 @@ type Events interface {
 
 // Store applies task commands to one project folder.
 type Store struct {
-	Dir    string           // the project folder
-	Slug   string           // the project's slug, for the caller check and the links in TASKS.md
-	Now    func() time.Time // nil means time.Now
-	Events Events           // nil means no journal
-	Repos  []string         // the project's repos, which a task's repo names (checkRepo)
+	Dir  string // the project folder
+	Slug string // the project's slug, for the caller check and the links in TASKS.md
+	// LinkSlug, when set, is what the links in TASKS.md lead with instead
+	// of Slug: a program's vault folder, _programs/<slug>.
+	LinkSlug string
+	Now      func() time.Time // nil means time.Now
+	Events   Events           // nil means no journal
+	Repos    []string         // the project's repos, which a task's repo names (checkRepo)
+	// Directs, when set, reports whether program's director may make
+	// program writes here (opProgram, the programs design §5.2): this
+	// project is a member of program and programs are on. The store
+	// reads no config: the caller injects it. Nil: no director writes.
+	Directs func(program string) bool
+	// Program marks a program's own board (umbrella tasks, §5.3): its
+	// director writes it as a coordinator writes its project's.
+	Program bool
+	// CrossRefs, when set, lets SetPlan write refs to other projects'
+	// tasks (AfterX, the programs design §6.1): it checks each one (a
+	// member of this project's program, a task that exists) and says
+	// why not. The caller sets it only while programs are on and the
+	// project is in a program. Nil: SetPlan writes this board's refs
+	// only and keeps AfterX.
+	CrossRefs func(refs []string) error
+}
+
+// linkSlug is what the links in TASKS.md lead with (LinkSlug, else Slug).
+func (s *Store) linkSlug() string {
+	if s.LinkSlug != "" {
+		return s.LinkSlug
+	}
+	return s.Slug
 }
 
 // TasksPath is <project>/TASKS.md.
@@ -116,12 +142,20 @@ type op int
 const (
 	opWrite   op = iota // coordinator or human
 	opOwnStep           // also the thread that runs the task
+	// opProgram is a program write (§5.2): also the director of a
+	// program this project is a member of (Store.Directs), for the
+	// fields ProgramAdd and ProgramEdit take.
+	opProgram
 )
 
 // allow applies the caller rules. t may be nil for adds.
 func (s *Store) allow(c caller.Caller, t *Task, o op) error {
 	if !c.IsAgent() {
 		return nil
+	}
+	if c.DirectorOf() != "" {
+		// A director here, or a paired server's over the link.
+		return s.allowDirector(c, o)
 	}
 	if c.Project != "" && s.Slug != "" && c.Project != s.Slug {
 		return refuse("other-project", fmt.Sprintf("agents of project %s can't change project %s", c.Project, s.Slug))
@@ -148,7 +182,7 @@ func (s *Store) mutate(fn func(b *Board) error) error {
 		if err := fn(b); err != nil {
 			return nil, err
 		}
-		b.Slug = s.Slug
+		b.Slug = s.linkSlug()
 		return b.Render(), nil
 	})
 }
@@ -220,7 +254,11 @@ type AddResult struct {
 // is reported as existing instead, so a retried add is harmless. Valid
 // items are saved even when others fail.
 func (s *Store) Add(c caller.Caller, items []NewTask) ([]AddResult, error) {
-	if err := s.allow(c, nil, opWrite); err != nil {
+	return s.add(c, items, opWrite)
+}
+
+func (s *Store) add(c caller.Caller, items []NewTask, o op) ([]AddResult, error) {
+	if err := s.allow(c, nil, o); err != nil {
 		return nil, err
 	}
 	archive, err := s.LoadArchive()
@@ -323,6 +361,9 @@ func (s *Store) SetStatus(c caller.Caller, id int, st Status, note string) (Resu
 	if st.Closed() && c.IsAgent() {
 		return s.refuseClosed(c, id, st)
 	}
+	if err := s.refuseDerived(id, st); err != nil {
+		return Result{}, err
+	}
 	return s.setStatus(c, id, st, note, "")
 }
 
@@ -332,6 +373,9 @@ func (s *Store) SetStatus(c caller.Caller, id int, st Status, note string) (Resu
 func (s *Store) SetApproved(c caller.Caller, id int, st Status, note string) (Result, error) {
 	if !st.Closed() {
 		return Result{}, refuse("invalid-status", "only done and dropped take the user's word")
+	}
+	if c.Kind == caller.Director {
+		return Result{}, refuse("human-only", "only the user accepts or drops work, in the project's own console or the program's needs dialog")
 	}
 	if c.IsAgent() && c.Kind != caller.Coordinator {
 		return Result{}, refuse("coordinator-only", "threads report through tm done; the coordinator moves the task")
@@ -387,6 +431,9 @@ func (s *Store) setStatus(c caller.Caller, id int, st Status, note, approved str
 // refuseClosed answers an agent's plain request to set done or dropped:
 // refused, or already true.
 func (s *Store) refuseClosed(c caller.Caller, id int, st Status) (Result, error) {
+	if c.Kind == caller.Director {
+		return Result{}, refuse("human-only", "only the user accepts or drops work; tell them which key does it")
+	}
 	if c.Kind != caller.Coordinator {
 		return Result{}, refuse("coordinator-only", "threads report through tm done; the coordinator moves the task")
 	}
@@ -477,19 +524,31 @@ func (s *Store) SetPriority(c caller.Caller, id int, priority string) (Result, e
 
 // SetPlan sets the design a task builds and the tasks it comes after
 // (refs as "T12", split by commas or spaces); nil leaves one alone, and
-// "" or an empty list clears it. It writes this board's refs only, and
-// keeps the refs to other projects' tasks (AfterX) as they are.
+// "" or an empty list clears it. Without CrossRefs it writes this
+// board's refs only, and keeps the refs to other projects' tasks
+// (AfterX) as they are; with it, after is the whole list, this board's
+// refs and other projects' ("acme-api/T12"), and replaces both.
 func (s *Store) SetPlan(c caller.Caller, id int, design *string, after []string) (Result, error) {
 	var d string
 	var a []int
+	var x []string
 	var err error
 	if design != nil {
 		if d, err = checkDesign(*design); err != nil {
 			return Result{}, err
 		}
 	}
+	cross := after != nil && s.CrossRefs != nil
 	if after != nil {
-		if a, err = checkAfter(id, after); err != nil {
+		if cross {
+			a, x, err = s.readProgramAfter(id, after)
+			if err == nil && len(x) > 0 {
+				err = s.CrossRefs(x)
+			}
+		} else {
+			a, err = checkAfter(id, after)
+		}
+		if err != nil {
 			return Result{}, err
 		}
 	}
@@ -500,6 +559,9 @@ func (s *Store) SetPlan(c caller.Caller, id int, design *string, after []string)
 		}
 		if after != nil && !slices.Equal(t.After, a) {
 			t.After, changed = a, true
+		}
+		if cross && !slices.Equal(t.AfterX, x) {
+			t.AfterX, changed = x, true
 		}
 		return changed, nil
 	})
@@ -658,7 +720,7 @@ func (s *Store) move(c caller.Caller, id int, archive bool) (Result, error) {
 			to.Tasks = append(to.Tasks, t)
 			t.Archived = archive
 			res = Result{Task: t, Changed: true}
-			a.Slug = s.Slug
+			a.Slug = s.linkSlug()
 			return a.RenderArchive(), nil
 		})
 	})

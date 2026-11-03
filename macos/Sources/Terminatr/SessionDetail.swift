@@ -172,6 +172,7 @@ struct NotRunning: View {
             if case .closed = app.remotePane(ref) { return "\(ref.server)'s pane can't open" }
             return ref.isCoordinator ? "The coordinator isn't running on \(ref.server)" : "This thread has no session on \(ref.server)"
         }
+        if ref.director { return "The director isn't running" }
         return ref.isCoordinator ? "The coordinator isn't running" : "This thread has no session"
     }
 
@@ -180,6 +181,9 @@ struct NotRunning: View {
         if ref.isRemote {
             if case .closed(let why) = app.remotePane(ref) { return why }
             return "The window shows it once \(ref.server) lists it again."
+        }
+        if ref.director {
+            return "Open it in tm's console: enter on its row under \(ref.project). The window shows it once it runs."
         }
         if ref.isCoordinator {
             return app.project(ref.project)?.active == false

@@ -12,6 +12,7 @@ package vaultlink
 
 import (
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/theclifmeister/terminatr/internal/mdfile"
@@ -42,7 +43,19 @@ const (
 	Message
 	// Design is a design's note, <slug>/designs/<name>.
 	Design
+	// Program is _programs/<slug>/PROGRAM, id as the program's slug.
+	Program
 )
+
+// ProgramsDir is the vault's folder of the programs (config.ProgramsDirName,
+// home.ProgramsDir), which no project slug can name.
+const ProgramsDir = "_programs"
+
+// ProgramFolder is the folder of program slug in the vault, which a link
+// into the program takes as its slug: [[_programs/acme/tasks/T4|T4]]
+// (the programs design §3.4). Every function here that takes a project's
+// slug takes it too.
+func ProgramFolder(slug string) string { return ProgramsDir + "/" + slug }
 
 // Target is the vault path a link of kind k with id points at, without
 // .md; "" when id can't be one (empty, a part that is "." or "..", or a
@@ -56,10 +69,12 @@ func Target(slug string, k Kind, id string) string {
 }
 
 func target(slug string, k Kind, id string) string {
-	if k != Project && !validPart(slug) || !validID(id) {
+	if k != Project && k != Program && !validSlug(slug) || !validID(id) {
 		return ""
 	}
 	switch k {
+	case Program:
+		return ProgramFolder(one(id)) + "/PROGRAM"
 	case Project:
 		if alias, other, ok := strings.Cut(id, "/"); ok {
 			if strings.Contains(other, "/") {
@@ -93,6 +108,15 @@ func target(slug string, k Kind, id string) string {
 	return ""
 }
 
+// validSlug reports whether slug can lead a link's target: a project's
+// folder, or a program's (ProgramFolder).
+func validSlug(slug string) bool {
+	if rest, ok := strings.CutPrefix(slug, ProgramsDir+"/"); ok {
+		return validPart(rest)
+	}
+	return validPart(slug)
+}
+
 // one is s when it is one part of a path, else "" (which Target turns
 // into no link).
 func one(s string) string {
@@ -118,6 +142,16 @@ func Link(slug string, k Kind, id, alias string) string {
 		return alias
 	}
 	return "[[" + t + "|" + alias + "]]"
+}
+
+// Owner is the link to the note of the folder slug leads (as Link takes
+// it): a project's PROJECT, or a program's PROGRAM for its folder
+// (ProgramFolder).
+func Owner(slug string) string {
+	if name, ok := strings.CutPrefix(slug, ProgramsDir+"/"); ok {
+		return Link(slug, Program, name, "")
+	}
+	return Link(slug, Project, slug, "")
 }
 
 // File is the wikilink to the file at path in the vault (a note
@@ -198,27 +232,41 @@ func Each(s string, fn func(target, alias string)) {
 // after tm project rename: a target in from's folder, or in another
 // project's messages with from (<x>/messages/from/…). The link to from's
 // PROJECT that shows from shows to. Text outside links is unchanged.
+//
+// from and to may be program folders (ProgramFolder), after a program's
+// rename: a target in _programs/<from>/ then points into _programs/<to>/,
+// one in a member's messages/<from>/ into its messages/<to>/, and the
+// link to its PROGRAM that shows the old slug shows the new.
 func Rename(s, from, to string) string {
 	if !strings.Contains(s, "[[") || from == "" || to == "" {
 		return s
 	}
+	fromParts, toParts := strings.Split(from, "/"), strings.Split(to, "/")
+	oldName, newName := fromParts[len(fromParts)-1], toParts[len(toParts)-1]
 	return linkRE.ReplaceAllStringFunc(s, func(l string) string {
 		m := linkRE.FindStringSubmatch(l)
 		parts := strings.Split(m[1], "/")
 		changed := false
-		if parts[0] == from {
-			parts[0], changed = to, true
+		if len(parts) > len(fromParts) && slices.Equal(parts[:len(fromParts)], fromParts) {
+			parts, changed = append(slices.Clone(toParts), parts[len(fromParts):]...), true
 		}
-		if len(parts) > 3 && parts[1] == "messages" && parts[2] == from {
-			parts[2], changed = to, true
+		// Messages with from, in another folder: <x>/messages/<from>/…,
+		// or a program's _programs/<x>/messages/<from>/… (a program and a
+		// project share one namespace, so the name is either's).
+		at := 1
+		if parts[0] == ProgramsDir {
+			at = 2
+		}
+		if len(parts) > at+2 && parts[at] == "messages" && parts[at+1] == oldName {
+			parts[at+1], changed = newName, true
 		}
 		if !changed {
 			return l
 		}
 		t := strings.Join(parts, "/")
 		alias := m[2]
-		if t == to+"/PROJECT" && alias == from {
-			alias = to
+		if (t == to+"/PROJECT" || t == to+"/PROGRAM") && alias == oldName {
+			alias = newName
 		}
 		if alias == "" && !strings.HasSuffix(l, "|]]") {
 			return "[[" + t + "]]"

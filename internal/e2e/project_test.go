@@ -34,7 +34,7 @@ func TestSmokeProjectOpenAndSwitch(t *testing.T) {
 	info, _ := env.Info(coord)
 	coord.PID = info.PID
 	env.track(info.PID, "coordinator "+id)
-	if info.Role != "coordinator" || info.Project != alpha || info.Cwd != alphaDir {
+	if info.Role != "coordinator" || info.Project != alpha || !sameDir(info.Cwd, alphaDir) {
 		t.Fatalf("coordinator session %+v", info)
 	}
 	env.WaitState(coord, "idle", agentWait)

@@ -62,11 +62,14 @@ struct Sidebar: View {
                     .accessibilityElement(children: .combine)
                 }
             }
-            let active = shown(app.activeProjects)
+            let active = shown(app.entries)
             if !filtering || !active.isEmpty {
                 Section(isExpanded: expanded(Navigation.sectionKey(server: ""))) {
-                    ForEach(active, id: \.slug) { p in
-                        project(p)
+                    ForEach(active, id: \.slug) { e in
+                        switch e {
+                        case .project(let p): project(p)
+                        case .program(let g): program(g)
+                        }
                     }
                 } header: {
                     // "This server" only tells it from paired ones.
@@ -155,6 +158,32 @@ struct Sidebar: View {
         }
     }
 
+    /// This server's entries the filter keeps: a project as shown(_:)
+    /// keeps it, a program by its name, its director, or a member kept.
+    private func shown(_ entries: [SidebarEntry]) -> [SidebarEntry] {
+        guard filtering else { return entries }
+        return entries.filter { e in
+            switch e {
+            case .project(let p): !shown([p]).isEmpty
+            case .program(let g): SidebarTree.matches(app.filter, g.slug, "director") || !shownMembers(g).isEmpty
+            }
+        }
+    }
+
+    /// Program g's members as its rows list them, those the filter keeps
+    /// while filtering.
+    private func shownMembers(_ g: AppAPI.Program) -> [ProgramMemberRow] {
+        let all = SidebarTree.memberRows(g, projects: app.projects, peers: app.peers)
+        guard filtering, !SidebarTree.matches(app.filter, g.slug) else { return all }
+        return all.filter { m in
+            switch m {
+            case .local(let p): !shown([p]).isEmpty
+            case .paired(let alias, let slug, let peer, let p, _):
+                SidebarTree.matches(app.filter, slug, alias) || (peer.flatMap { pe in p.map { !sessions(pe, $0).isEmpty } } ?? false)
+            }
+        }
+    }
+
     /// A paired server's projects the filter keeps: by name or server,
     /// or by a session it finds.
     private func shown(_ peer: AppAPI.Peer) -> [AppAPI.PeerProject] {
@@ -204,7 +233,27 @@ struct Sidebar: View {
                 out += l.threads.map { (.session(SessionRef(project: p.slug, thread: $0.record.id)), $0.record.title) }
             }
         }
-        if !app.nav.collapsed.contains(Navigation.sectionKey(server: "")) { add(shown(app.activeProjects)) }
+        if !app.nav.collapsed.contains(Navigation.sectionKey(server: "")) {
+            for e in shown(app.entries) {
+                switch e {
+                case .project(let p): add([p])
+                case .program(let g):
+                    out.append((.program(g.slug), g.slug))
+                    guard filtering || SidebarTree.opens(g, nav: app.nav) else { continue }
+                    out.append((.session(.director(g.slug)), "Director"))
+                    for m in shownMembers(g) {
+                        switch m {
+                        case .local(let p): add([p])
+                        case .paired(let alias, let slug, let peer, let p, _):
+                            out.append((.project(slug, server: alias), slug))
+                            if let peer, let p, SidebarTree.opens(member: alias, slug, of: g, nav: app.nav) {
+                                out += sessions(peer, p).map { (.session($0.ref), $0.ref.isCoordinator ? "Coordinator" : $0.title.isEmpty ? $0.ref.thread : $0.title) }
+                            }
+                        }
+                    }
+                }
+            }
+        }
         for peer in app.peers where !app.nav.collapsed.contains(Navigation.sectionKey(server: peer.alias)) {
             for p in shown(peer) {
                 out.append((.project(p.project, server: peer.alias), p.project))
@@ -221,6 +270,13 @@ struct Sidebar: View {
     /// sessions goes up to it.
     private func fold(open: Bool) -> Bool {
         switch app.nav.selection {
+        case .program(let slug):
+            if open {
+                app.nav.collapsed.remove(Navigation.programKey(slug))
+            } else {
+                app.nav.collapsed.insert(Navigation.programKey(slug))
+            }
+            return true
         case .project(let slug, let server):
             let key = Navigation.sectionKey(server: server, project: slug)
             if open {
@@ -230,7 +286,7 @@ struct Sidebar: View {
             }
             return true
         case .session(let ref) where !open:
-            app.select(.project(ref.project, server: ref.server))
+            app.select(ref.director ? .program(ref.project) : .project(ref.project, server: ref.server))
             return true
         default:
             return false
@@ -285,13 +341,14 @@ struct Sidebar: View {
     /// TUI's tree; while filtering, the rows the filter finds. An
     /// inactive project's are dormant: nothing of it runs.
     @ViewBuilder
-    private func project(_ p: AppAPI.Project) -> some View {
+    private func project(_ p: AppAPI.Project, indent: CGFloat = 0) -> some View {
         let sel = Selection.project(p.slug)
         let needs = app.needs(of: p.slug).count
         let state = Attention.of(coordinator: app.coordinatorSession(p.slug), in: p)
         let l = listing(p)
         let coordinator = app.coordinatorSession(p.slug)
         ProjectRow(name: p.slug, dot: theme.colour(state.tone), state: state.word, needs: needs, selected: app.nav.selection == sel)
+            .padding(.leading, indent)
             .selectable(sel)
             .contextMenu { ProjectMenu(project: p, coordinator: coordinator != nil, divided: false) }
         if l.open {
@@ -302,14 +359,14 @@ struct Sidebar: View {
                 row(.session(SessionRef(project: p.slug)), label: "Coordinator", ref: nil,
                     tag: state.waits && !l.dormant ? (state.word, state.tone) : nil, dot: theme.colour(l.dormant ? .idle : state.tone),
                     spoken: l.dormant ? "inactive" : state.spoken, dormant: l.dormant, context: ctx,
-                    busy: l.dormant ? nil : app.busy(coordinator: p), menu: coordinator == nil ? nil : p)
+                    busy: l.dormant ? nil : app.busy(coordinator: p), menu: coordinator == nil ? nil : p, indent: indent)
             }
             // Keyed with the project: thread ids repeat across projects,
             // and the List flattens every project's rows into one.
             ForEach(l.threads, id: \.record.id) { t in
                 row(.session(SessionRef(project: p.slug, thread: t.record.id)), label: t.record.title, ref: t.task?.ref,
                     tag: l.dormant ? nil : tag(t), dot: theme.colour(l.dormant ? .idle : app.attention(t).tone),
-                    spoken: l.dormant ? "inactive" : spoken(t), dormant: l.dormant, busy: l.dormant ? nil : app.busy(t))
+                    spoken: l.dormant ? "inactive" : spoken(t), dormant: l.dormant, busy: l.dormant ? nil : app.busy(t), indent: indent)
                     .id("\(p.slug)/\(t.record.id)")
             }
         }
@@ -322,7 +379,8 @@ struct Sidebar: View {
     /// in its menu (menu, its project). A working one (busy) has the
     /// activity mark for its dot and how long its turn has run.
     private func row(_ sel: Selection, label: String, ref: String?, tag: (String, Attention.Tone?)?, dot: Color, spoken: String,
-                     dormant: Bool = false, context: ContextUse? = nil, busy: Busy? = nil, menu: AppAPI.Project? = nil) -> some View {
+                     dormant: Bool = false, context: ContextUse? = nil, busy: Busy? = nil, menu: AppAPI.Project? = nil,
+                     indent: CGFloat = 0) -> some View {
         let on = app.nav.selection == sel
         return HStack(spacing: 6) {
             if busy != nil {
@@ -368,7 +426,7 @@ struct Sidebar: View {
                 }
             }
         }
-        .padding(.leading, 14)
+        .padding(.leading, 14 + indent)
         .foregroundStyle(on ? theme.onAction : dormant ? theme.muted : theme.ink)
         // One element that says the row and its state: "T6 Network popup
         // polish, needs approval".
@@ -404,22 +462,88 @@ struct Sidebar: View {
     /// (ProjectRow), and under it, unless ← folded it, its coordinator,
     /// running there or not, and its threads, as the TUI's. Dimmed while
     /// its server is offline or its listing stale.
+    /// Under its program (under, the program), it is named
+    /// "alias/slug" and folds apart; under its server's group it is
+    /// tagged with its program, if it is in one. Both rows come from the
+    /// one peer.list entry and show the same project.
     @ViewBuilder
-    private func remote(_ peer: AppAPI.Peer, _ p: AppAPI.PeerProject) -> some View {
+    private func remote(_ peer: AppAPI.Peer, _ p: AppAPI.PeerProject, under g: AppAPI.Program? = nil) -> some View {
         let sel = Selection.project(p.project, server: peer.alias)
         let dim = peer.state == "up" && !p.stale ? 1.0 : 0.55
         // The coordinator's state, as this server's projects have it.
         let coordinator = p.sessions.first { SessionRef($0, of: peer.alias)?.isCoordinator == true }
-        ProjectRow(name: p.project, dot: coordinator.map { theme.colour(tone($0)) } ?? theme.idle,
+        let indent: CGFloat = g == nil ? 0 : 12
+        let open = g.map { SidebarTree.opens(member: peer.alias, p.project, of: $0, nav: app.nav) }
+            ?? !app.nav.collapsed.contains(Navigation.sectionKey(server: peer.alias, project: p.project))
+        let progTag = g == nil ? app.pairedMembers["\(peer.alias)/\(p.project)"].map { "· \($0)" } ?? "" : ""
+        ProjectRow(name: g == nil ? p.project : ProgramMemberRow.paired(alias: peer.alias, slug: p.project, peer: peer, project: p, state: "").name,
+                   dot: coordinator.map { theme.colour(tone($0)) } ?? theme.idle,
                    state: coordinator.map(spoken) ?? "not running", needs: p.stale ? 0 : p.needsYou,
-                   selected: app.nav.selection == sel)
+                   selected: app.nav.selection == sel, tag: progTag)
+            .padding(.leading, indent)
             .selectable(sel)
             .opacity(dim)
-        if !app.nav.collapsed.contains(Navigation.sectionKey(server: peer.alias, project: p.project)) {
+            .contextMenu {
+                if let g {
+                    Button(open ? "Fold" : "Unfold") {
+                        let key = Navigation.memberKey(program: g.slug, server: peer.alias, project: p.project)
+                        if open { app.nav.collapsed.insert(key) } else { app.nav.collapsed.remove(key) }
+                    }
+                }
+            }
+        if open || filtering {
             ForEach(sessions(peer, p), id: \.ref) { s, r, task, title in
                 row(.session(r), label: r.isCoordinator ? "Coordinator" : title.isEmpty ? r.thread : title, ref: task.isEmpty ? nil : task,
-                    tag: s.flatMap(tag), dot: theme.colour(s.map(tone) ?? .idle), spoken: s.map(spoken) ?? "not running")
+                    tag: s.flatMap(tag), dot: theme.colour(s.map(tone) ?? .idle), spoken: s.map(spoken) ?? "not running", indent: indent)
                     .opacity(dim)
+            }
+        }
+    }
+
+    // MARK: a program's
+
+    /// A program's line (the programs design §11.1): its mark, its
+    /// director's state as the dot, and its needs and its members',
+    /// each counted once, as the badge; and under it, unless ← folded
+    /// it, its director and its members in its order, one level in, a
+    /// paired one as its server's group lists it. A click shows the
+    /// program's screen.
+    @ViewBuilder
+    private func program(_ g: AppAPI.Program) -> some View {
+        let sel = Selection.program(g.slug)
+        let director = app.directorSession(g.slug)
+        let state = Attention.of(director: director, in: g)
+        ProjectRow(name: g.slug, dot: theme.colour(state.tone), state: state.word, needs: app.needs(of: g).count,
+                   selected: app.nav.selection == sel, program: true, tag: g.paused ? "paused" : "")
+            .selectable(sel)
+            .contextMenu {
+                Button("Show the Program") { app.select(sel) }
+                Button("Open the Director") { app.select(.session(.director(g.slug))) }
+            }
+        if filtering || SidebarTree.opens(g, nav: app.nav) {
+            let dref = SessionRef.director(g.slug)
+            if !filtering || SidebarTree.matches(app.filter, g.slug, "director") {
+                row(.session(dref), label: "Director", ref: nil, tag: state.waits ? (state.word, state.tone) : nil,
+                    dot: theme.colour(state.tone), spoken: state.spoken, context: ContextUse.of(director, hint: app.contextHint))
+            }
+            ForEach(shownMembers(g), id: \.self) { m in
+                switch m {
+                case .local(let p):
+                    project(p, indent: 12)
+                case .paired(let alias, let slug, let peer, let p, let mstate):
+                    if let peer, let p {
+                        remote(peer, p, under: g)
+                    } else {
+                        // Not in the mirror: its invite waits, or it isn't
+                        // shared with this server. Its row alone, dim.
+                        ProjectRow(name: m.name, dot: theme.idle, state: "not shared", needs: 0, selected: false,
+                                   tag: mstate == "invited" || mstate == "pending" ? "invited" : mstate == "declined" ? "declined" : "not shared")
+                            .padding(.leading, 12)
+                            .padding(.vertical, density.rowPadding)
+                            .opacity(0.55)
+                            .help("\(slug) on \(alias) isn't shared with this server")
+                    }
+                }
             }
         }
     }

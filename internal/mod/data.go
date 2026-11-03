@@ -288,9 +288,14 @@ const (
 	RulesThread            = "thread"
 	RulesCoordinatorPolicy = "coordinator_policy"
 	RulesThreadPolicy      = "thread_policy"
+	// A program director's policy (the programs design §4.3), and the
+	// coordinator's program part, which tm appends to the coordinator's
+	// policy only while [features] programs is on.
+	RulesDirectorPolicy           = "director_policy"
+	RulesCoordinatorProgramPolicy = "coordinator_programs_policy"
 )
 
-var rulesKeys = []string{RulesCoordinator, RulesThread, RulesCoordinatorPolicy, RulesThreadPolicy}
+var rulesKeys = []string{RulesCoordinator, RulesThread, RulesCoordinatorPolicy, RulesThreadPolicy, RulesDirectorPolicy, RulesCoordinatorProgramPolicy}
 
 // Addendum is one mod's rules text for a role.
 type Addendum struct {

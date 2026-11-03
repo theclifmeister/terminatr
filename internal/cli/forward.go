@@ -117,7 +117,7 @@ func RunInServer(p proto.CLIRunParams, c caller.Caller) proto.CLIRunResult {
 		},
 	}
 	res := proto.CLIRunResult{}
-	if !forwarded[p.Args[0]] && !(c.Kind == caller.Coordinator && accessWrite(p.Args)) {
+	if !forwarded[p.Args[0]] && !(c.Kind == caller.Coordinator && accessWrite(p.Args)) && !forwardedProgram(p.Args) {
 		res.Code = e.report("tm", usagef("%s is not a project command", p.Args[0]))
 	} else {
 		res.Code, _ = e.Run(p.Args)

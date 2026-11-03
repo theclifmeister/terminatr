@@ -1,9 +1,11 @@
 // Package rename renames a project's slug (tm project rename,
 // docs/SPEC.md §5.1): its folder, its threads' worktrees folder, its
-// settings in config.toml and the paths in its thread records. The
-// journal, inbox, tasks and memory move with the folder, and the links
-// tm wrote into the project, in every project's files, name the new slug
-// (relink).
+// settings in config.toml, its place in a program's projects and the
+// paths in its thread records. The journal, inbox, tasks and memory move
+// with the folder, and the links tm wrote into the project, in every
+// project's and program's files, name the new slug (relink), as do the
+// cross refs on their boards (the programs design §3.4). It renames a
+// program too (Program, program.go).
 // Branches keep their names: tm/<slug>/ names only new threads' branches.
 //
 // The caller makes sure no agent of the project runs: the server, or
@@ -93,11 +95,11 @@ func Check(o Options) error {
 		return err
 	}
 	if data != nil {
-		switch _, err := config.RenameTable(data, o.From, o.To); {
+		switch _, err := config.RenameProjectIn(data, o.From, o.To); {
 		case errors.Is(err, config.ErrProjectSet):
 			return refuse("project-exists", "%s already has settings for %s ([projects.%s]); remove them first", path, o.To, o.To)
 		case errors.Is(err, config.ErrForm):
-			return refuse("settings-form", "%s sets %s's settings in a form tm can't rename (dotted keys or an inline table): rename them to [projects.%s] by hand, or make them a [projects.%s] table first", path, o.From, o.To, o.From)
+			return refuse("settings-form", "%s sets %s's settings, or a program's projects naming it, in a form tm can't rename (dotted keys or an inline table): rename them to [projects.%s] by hand, or make them a [projects.%s] table first", path, o.From, o.To, o.From)
 		case err != nil:
 			return err
 		}
@@ -140,23 +142,7 @@ func Project(o Options) (*Result, error) {
 	if err := config.RenameProject(o.From, o.To); err != nil {
 		note("config.toml still has [projects.%s]: %v (rename it to [projects.%s] by hand)", o.From, err, o.To)
 	}
-	// Linked projects keep their messages with it in messages/<slug>/
-	// (docs/SPEC.md §7.9).
-	if list, err := project.List(); err == nil {
-		for _, sum := range list {
-			other, err := project.Open(sum.Slug)
-			if err != nil || sum.Slug == o.To {
-				continue
-			}
-			from, to := other.Path("messages", o.From), other.Path("messages", o.To)
-			if _, err := os.Lstat(from); err != nil {
-				continue
-			}
-			if err := os.Rename(from, to); err != nil {
-				note("%s: messages with %s not moved to messages/%s: %v", sum.Slug, o.From, o.To, err)
-			}
-		}
-	}
+	moveMessages(o.From, o.To, newDir, note)
 	p, err := project.Open(o.To)
 	if err != nil {
 		return res, err
@@ -203,7 +189,7 @@ func Project(o Options) (*Result, error) {
 			}
 		}
 	}
-	if n, err := relink(o.From, o.To); err != nil {
+	if n, err := relink(o.From, o.To, o.From, o.To); err != nil {
 		note("links to %s not all renamed (%d files done): %v", o.From, n, err)
 	}
 	detail := o.From + " → " + o.To
@@ -214,41 +200,54 @@ func Project(o Options) (*Result, error) {
 }
 
 // linkFiles are the files tm writes links in (vaultlink), as patterns
-// below a project's folder (messages/ is walked whole), and the part of
+// below a project's or a program's folder (messages/ is walked whole), and the part of
 // each that is tm's: the rest is someone's words, which tm doesn't
 // rewrite.
 var linkFiles = append(boardLinkFiles(), []linkFile{
-	{"MEMORY.md", indexLine},
-	{"memory/*.md", nil}, {"inbox/*.md", nil}, {"inbox/done/*.md", nil},
-	{"threads/*/STATUS.md", nil}, {"threads/*/brief.md", func(string) bool { return true }},
+	{"MEMORY.md", indexLine, false},
+	{"memory/*.md", nil, false}, {"inbox/*.md", nil, false}, {"inbox/done/*.md", nil, false},
+	{"threads/*/STATUS.md", nil, false}, {"threads/*/brief.md", func(string) bool { return true }, false},
 }...)
+
+// boardLinkFiles are the board's files (the tasks package says where it
+// is kept), whose tm lines are the tasks' metadata and a director's note
+// lines (tasks.RenameLine), where cross refs and director:<program> name
+// a slug too (refs).
+func boardLinkFiles() []linkFile {
+	var lfs []linkFile
+	for _, rel := range tasks.Rels() {
+		lfs = append(lfs, linkFile{rel, tasks.RenameLine, true})
+	}
+	return lfs
+}
 
 type linkFile struct {
 	pat  string
 	part func(line string) bool // the lines that are tm's; nil: the front matter
-}
-
-// boardLinkFiles are the board's files (the tasks package says where it
-// is kept), whose tm lines are the tasks' metadata (tasks.LinkLine).
-func boardLinkFiles() []linkFile {
-	var lfs []linkFile
-	for _, rel := range tasks.Rels() {
-		lfs = append(lfs, linkFile{rel, tasks.LinkLine})
-	}
-	return lfs
+	// refs: the part names slugs as tasks.RenameRefs reads them too.
+	refs bool
 }
 
 // indexLine is a note's line in MEMORY.md.
 func indexLine(l string) bool { return strings.HasPrefix(l, "- [[") }
 
+// renaming is one rename's names: links point at the vault folders
+// (a project's slug, a program's vaultlink.ProgramFolder), refs name
+// the bare slugs.
+type renaming struct{ linkFrom, linkTo, from, to string }
+
 // relinked is text with the links into from pointed at to in the part
-// that is tm's (linkFiles).
-func relinked(text, from, to string, part func(string) bool) string {
-	if part != nil {
+// that is tm's (linkFiles), and with refs, its refs named for to.
+func (r renaming) relinked(text string, lf linkFile) string {
+	if lf.part != nil {
 		lines := strings.SplitAfter(text, "\n")
 		for i, l := range lines {
-			if part(l) {
-				lines[i] = vaultlink.Rename(l, from, to)
+			if lf.part(l) {
+				l = vaultlink.Rename(l, r.linkFrom, r.linkTo)
+				if lf.refs {
+					l = tasks.RenameRefs(l, r.from, r.to)
+				}
+				lines[i] = l
 			}
 		}
 		return strings.Join(lines, "")
@@ -258,39 +257,87 @@ func relinked(text, from, to string, part func(string) bool) string {
 		return text
 	}
 	start := strings.IndexByte(text, '\n') + 1
-	return text[:start] + vaultlink.Rename(string(front), from, to) + text[start+len(front):]
+	return text[:start] + vaultlink.Rename(string(front), r.linkFrom, r.linkTo) + text[start+len(front):]
 }
 
-// relink points the links into project from at project to
-// (vaultlink.Rename) in every project's linkFiles and messages, each
-// file that changes under its lock. A link, or anything but a regular
-// file, is left alone. It says how many files it rewrote.
-func relink(from, to string) (int, error) {
+// folders are the folders tm writes links in: every project's and every
+// program's (whatever [features] programs says: a dormant program's
+// links stay right too).
+func folders() ([]string, error) {
 	list, err := project.List()
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, sum := range list {
+		if p, err := project.Open(sum.Slug); err == nil {
+			out = append(out, p.Dir)
+		}
+	}
+	if root, err := home.ProgramsDir(); err == nil {
+		cfg, _ := config.Load() // a safety error still gives the tables
+		for _, slug := range project.ProgramSlugs(cfg) {
+			dir := filepath.Join(root, slug)
+			if fi, err := os.Stat(dir); err == nil && fi.IsDir() {
+				out = append(out, dir)
+			}
+		}
+	}
+	return out, nil
+}
+
+// moveMessages moves each other folder's messages with from (a project
+// or a program: one namespace) to messages/<to>/: linked projects and
+// a program's channel keep them in messages/<slug>/ (docs/SPEC.md §7.9;
+// the programs design §8). self is the renamed folder, whose own
+// messages stay where they are.
+func moveMessages(from, to, self string, note func(string, ...any)) {
+	dirs, err := folders()
+	if err != nil {
+		return
+	}
+	for _, dir := range dirs {
+		if dir == self {
+			continue
+		}
+		src, dst := filepath.Join(dir, "messages", from), filepath.Join(dir, "messages", to)
+		if _, err := os.Lstat(src); err != nil {
+			continue
+		}
+		if err := os.Rename(src, dst); err != nil {
+			note("%s: messages with %s not moved to messages/%s: %v", filepath.Base(dir), from, to, err)
+		}
+	}
+}
+
+// relink points the links into linkFrom at linkTo (vaultlink.Rename),
+// and names to for from in the boards' refs (tasks.RenameRefs), in every
+// folder's linkFiles and messages, each file that changes under its
+// lock. A link, or anything but a regular file, is left alone. It says
+// how many files it rewrote.
+func relink(linkFrom, linkTo, from, to string) (int, error) {
+	dirs, err := folders()
 	if err != nil {
 		return 0, err
 	}
+	r := renaming{linkFrom, linkTo, from, to}
 	type file struct {
 		path string
-		part func(string) bool
+		lf   linkFile
 	}
 	n := 0
 	var errs []error
-	for _, sum := range list {
-		p, err := project.Open(sum.Slug)
-		if err != nil {
-			continue
-		}
+	for _, dir := range dirs {
 		var files []file
 		for _, lf := range linkFiles {
-			m, _ := filepath.Glob(p.Path(filepath.FromSlash(lf.pat)))
+			m, _ := filepath.Glob(filepath.Join(dir, filepath.FromSlash(lf.pat)))
 			for _, f := range m {
-				files = append(files, file{f, lf.part})
+				files = append(files, file{f, lf})
 			}
 		}
-		filepath.WalkDir(p.Path("messages"), func(path string, d fs.DirEntry, err error) error {
+		filepath.WalkDir(filepath.Join(dir, "messages"), func(path string, d fs.DirEntry, err error) error {
 			if err == nil && d.Type().IsRegular() && filepath.Ext(path) == ".md" {
-				files = append(files, file{path, nil})
+				files = append(files, file{path, linkFile{}})
 			}
 			return nil
 		})
@@ -299,11 +346,11 @@ func relink(from, to string) (int, error) {
 				continue
 			}
 			data, err := os.ReadFile(f.path)
-			if err != nil || relinked(string(data), from, to, f.part) == string(data) {
+			if err != nil || r.relinked(string(data), f.lf) == string(data) {
 				continue
 			}
-			rewrite := func(old []byte) ([]byte, error) { return []byte(relinked(string(old), from, to, f.part)), nil }
-			if filepath.Dir(f.path) == p.Path("inbox", "done") {
+			rewrite := func(old []byte) ([]byte, error) { return []byte(r.relinked(string(old), f.lf)), nil }
+			if filepath.Dir(f.path) == filepath.Join(dir, "inbox", "done") {
 				// A handled item has no writer: no lock file for it.
 				out, _ := rewrite(data)
 				err = fsx.WriteAtomic(f.path, out, 0o644)

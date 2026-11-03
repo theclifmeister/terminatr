@@ -144,17 +144,27 @@ var idRE = regexp.MustCompile(`^M-[0-9A-Za-z][0-9A-Za-z-]{0,39}$`)
 // ValidID reports whether s can be a message id.
 func ValidID(s string) bool { return idRE.MatchString(s) }
 
+// Box is a folder that keeps messages: a project's, or a program's,
+// whose channel with its members uses the same files (program.go).
+// *project.Project and *project.Folder are both one.
+type Box interface {
+	Path(elem ...string) string
+	Name() string
+	LinkSlug() string
+	IsProgram() bool
+}
+
 // dir is a project's folder of messages with other: messages/<slug>, or
 // messages/@<alias>/<slug> for a paired server's project (no slug has
 // an @, so none clashes with a project here).
-func dir(p *project.Project, other string) string {
+func dir(p Box, other string) string {
 	if alias, slug, ok := config.Remote(other); ok {
 		return p.Path("messages", "@"+alias, slug)
 	}
 	return p.Path("messages", other)
 }
 
-func path(p *project.Project, other, id string) string {
+func path(p Box, other, id string) string {
 	return filepath.Join(dir(p, other), id+".md")
 }
 
@@ -172,7 +182,7 @@ func Clean(text string) string {
 	return strings.TrimSpace(textsafe.Text(strings.ReplaceAll(strings.ToValidUTF8(text, ""), "\r\n", "\n")))
 }
 
-func write(p *project.Project, m *Message) error {
+func write(p Box, m *Message) error {
 	if err := os.MkdirAll(dir(p, m.Peer), 0o755); err != nil {
 		return err
 	}
@@ -185,12 +195,12 @@ func write(p *project.Project, m *Message) error {
 // §7.9), so a conversation threads in the vault's backlinks, and marked
 // as data, its text fenced (fileBody). Both only once front matter is
 // YAML, which a tm that reads them reads.
-func linked(p *project.Project, m *Message) *Message {
+func linked(p Box, m *Message) *Message {
 	f := *m
 	if ValidID(m.Re) {
-		f.Re = vaultlink.Link(p.Slug, vaultlink.Message, m.Peer+"/"+m.Re, m.Re)
+		f.Re = vaultlink.Link(p.LinkSlug(), vaultlink.Message, m.Peer+"/"+m.Re, m.Re)
 	}
-	f.Sender = vaultlink.Link(p.Slug, vaultlink.Project, m.From(p.Slug), "")
+	f.Sender = vaultlink.Link(p.LinkSlug(), senderKind(p, m), m.From(p.Name()), "")
 	f.Vault, f.Tags, f.CSSClasses = "", nil, nil
 	if mdfile.WritesYAML() {
 		f.Vault, f.CSSClasses = "data", []string{"tm-data"}
@@ -262,7 +272,7 @@ func readFile(file, peer string) (*Message, error) {
 }
 
 // update rewrites message id in p's folder with other under its lock.
-func update(p *project.Project, other, id string, fn func(m *Message)) error {
+func update(p Box, other, id string, fn func(m *Message)) error {
 	file := path(p, other, id)
 	return mdfile.Update(file, func(old []byte) ([]byte, error) {
 		if old == nil {
@@ -283,7 +293,7 @@ func update(p *project.Project, other, id string, fn func(m *Message)) error {
 }
 
 // Read finds message id in p's folders.
-func Read(p *project.Project, id string) (*Message, error) {
+func Read(p Box, id string) (*Message, error) {
 	if !ValidID(id) {
 		return nil, refuse("unknown-message", "%q is not a message id", id)
 	}
@@ -294,11 +304,11 @@ func Read(p *project.Project, id string) (*Message, error) {
 		}
 		return readFile(file, other)
 	}
-	return nil, refuse("unknown-message", "no message %s in %s", id, p.Slug)
+	return nil, refuse("unknown-message", "no message %s in %s", id, p.Name())
 }
 
 // Log lists p's messages with other, oldest first.
-func Log(p *project.Project, other string) ([]*Message, error) {
+func Log(p Box, other string) ([]*Message, error) {
 	other = Canon(other)
 	ents, err := os.ReadDir(dir(p, other))
 	if errors.Is(err, fs.ErrNotExist) {
@@ -356,7 +366,7 @@ func Shown(key string) string { return peer.HomeNames().ShowKey(key) }
 
 // Peers lists the projects p has messages with, sorted: slugs here,
 // then "<alias>/<slug>" on paired servers.
-func Peers(p *project.Project) []string {
+func Peers(p Box) []string {
 	ents, _ := os.ReadDir(p.Path("messages"))
 	var out, remote []string
 	for _, e := range ents {
@@ -607,7 +617,7 @@ func by(c caller.Caller) string {
 }
 
 // copyAttach copies the attachments into p's folder of m.
-func copyAttach(p *project.Project, m *Message, att []attachment) error {
+func copyAttach(p Box, m *Message, att []attachment) error {
 	if len(att) == 0 {
 		return nil
 	}
@@ -672,7 +682,7 @@ func (s *store) deliver(c caller.Caller, from, to *project.Project, m *Message, 
 	detail := fmt.Sprintf("%s (%s)", m.ID, KB(m.Bytes))
 	from.Journal(c, "link.send", to.Slug, detail)
 	to.Journal(c, "link.receive", from.Slug, detail)
-	s.account(c.IsAgent(), from.Slug, to.Slug, l, now(), side{from, to.Slug}, side{to, from.Slug})
+	s.account(c.IsAgent(), from.Slug, to.Slug, l, now(), side{&from.Folder, to.Slug}, side{&to.Folder, from.Slug})
 	s.offerLocal(c, from, to, m)
 	return nil
 }
@@ -680,7 +690,7 @@ func (s *store) deliver(c caller.Caller, from, to *project.Project, m *Message, 
 // side is a project here that a link's breaker tells, and its other
 // side.
 type side struct {
-	p     *project.Project
+	p     *project.Folder
 	other string
 }
 
@@ -918,13 +928,20 @@ func Resume(c caller.Caller, p *project.Project, other string, approved bool) er
 	if o, err := project.Open(other); err == nil {
 		o.Journal(c, "link.resume", p.Slug, approvedWords(c, ""))
 		o.DoneItems(KindPaused, p.Slug)
+	} else if g := programFolder(other); g != nil {
+		g.Journal(c, "link.resume", p.Slug, approvedWords(c, ""))
+		g.DoneItems(KindPaused, p.Slug)
 	}
 	return nil
 }
 
 // Handled marks the message of a handled link-message item read, in
 // both projects' copies: the receipt the sender's conversation shows.
-func Handled(p *project.Project, it project.Item) {
+func Handled(p Box, it project.Item) {
+	if it.Kind == KindProgramMessage {
+		programHandled(p, it)
+		return
+	}
 	if it.Kind != KindMessage || !ValidID(it.Message) || !config.ValidLinkKey(it.Subject) {
 		return
 	}
@@ -939,12 +956,12 @@ func Handled(p *project.Project, it project.Item) {
 	if alias, slug, ok := config.Remote(it.Subject); ok {
 		// The sending server hears of it through the outbox.
 		if was == StateSent {
-			queueRead(alias, p.Slug, slug, it.Message)
+			queueRead(alias, p.Name(), slug, it.Message)
 		}
 		return
 	}
 	if from, err := project.Open(it.Subject); err == nil {
-		update(from, p.Slug, it.Message, read)
+		update(from, p.Name(), it.Message, read)
 	}
 }
 
@@ -1203,6 +1220,9 @@ func Frame(self string, m *Message) string {
 		who = "the user, for " + from
 	}
 	where := "another project on this server"
+	if m.By == "director" {
+		who, where = "the director of "+from, "the program this project is in"
+	}
 	if alias, slug, ok := config.Remote(from); ok {
 		who = slug + "'s coordinator"
 		if m.By == "human" {

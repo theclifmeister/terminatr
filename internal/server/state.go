@@ -90,6 +90,10 @@ type SessionRecord struct {
 	// CleanExit is true when the session was stopped by a clean server
 	// stop rather than lost in a crash.
 	CleanExit bool `json:"clean_exit"`
+	// Dormant is when a dormant record's session was stopped (its
+	// project deactivated, programs switched off); zero on a running
+	// one's and on records of tm 0.73 or older.
+	Dormant time.Time `json:"dormant,omitzero"`
 }
 
 const stateVersion = 1

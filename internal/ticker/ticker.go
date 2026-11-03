@@ -18,7 +18,9 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/codehost"
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/link"
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
+	"github.com/theclifmeister/terminatr/internal/program"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/tasks"
@@ -194,6 +196,9 @@ type Ticker struct {
 	// dailyStamp is what the daily notes were last rendered from
 	// (vault.DailyStamp); the sweep alone uses it.
 	dailyStamp string
+	// programStamps are what each program's derived notes were last
+	// rendered from (vault.ProgramStamp), by slug.
+	programStamps map[string]string
 	// peersStamp is what the paired servers' stubs were last rendered
 	// from (renderPeers); the sweep alone uses it.
 	peersStamp string
@@ -204,6 +209,9 @@ type state struct {
 	Threads  map[string]*threadMemo  `json:"threads"`  // "<slug>/<id>"
 	Projects map[string]*projectMemo `json:"projects"` // slug
 	Pruned   time.Time               `json:"pruned"`
+	// Deps are the programs' tasks with cross-project dependencies, by
+	// "<slug>/T<n>" (sweepDeps).
+	Deps map[string]*depMemo `json:"deps,omitempty"`
 }
 
 type threadMemo struct {
@@ -507,6 +515,9 @@ func (t *Ticker) sweep() {
 		t.sweepProject(sum.Slug, cfg, sessions, now, prune, seen)
 	}
 	t.renderPeers(cfg, list)
+	t.renderPrograms(cfg)
+	t.sweepDirectors(cfg, sessions, now)
+	t.sweepDeps(cfg)
 	t.slotFree(cfg, sessions, now)
 	t.renderDaily(now)
 	t.scanHuman(now)
@@ -562,12 +573,9 @@ func (t *Ticker) sweepProject(slug string, cfg *config.Config, sessions []proto.
 	}
 	t.ghHealth(p)
 	if !safety.Paused {
-		t.nudge(p, sessions, now)
+		t.nudge(coordinatorSeat(p), sessions, now)
 	}
-	t.keepRemote(p, sessions, safety, now)
-	t.keepModel(p, sessions)
-	t.autoClear(p, sessions, safety, cfg.ContextHint, now)
-	t.upkeepAfterClear(p, sessions, safety, now)
+	t.keepSeat(coordinatorSeat(p), sessions, safety, cfg.ContextHint, now)
 	if prune {
 		t.upkeep(p, safety, now)
 	}
@@ -591,6 +599,26 @@ func (t *Ticker) renderVault(p *project.Project) {
 		return // tried again next sweep
 	}
 	pm.vaultStamp = stamp
+}
+
+// renderPrograms renders the programs' derived notes, as renderVault a
+// project's, when the vault is on and programs are (vault.Programs).
+func (t *Ticker) renderPrograms(cfg *config.Config) {
+	if !vault.On() {
+		return
+	}
+	seen := map[string]string{}
+	for _, p := range vault.Programs(cfg) {
+		stamp := vault.ProgramStamp(p)
+		if stamp != t.programStamps[p.Slug] {
+			if _, _, err := vault.RenderProgram(p); err != nil {
+				t.o.Log.Printf("ticker: vault program %s: %v", p.Slug, err)
+				continue // tried again next sweep
+			}
+		}
+		seen[p.Slug] = stamp
+	}
+	t.programStamps = seen
 }
 
 // renderDaily renders the daily notes of today and yesterday, in the
@@ -1098,14 +1126,28 @@ var verbs = map[string]string{
 	"link-message": "wrote to you (tm link read)", "link-held": "a message of yours waits for the user's OK",
 	"link-paused": "link paused (ask the user)", "link-undelivered": "a message of yours wasn't delivered",
 	"link-request": "asks to link (the user answers it)", "link-answer": "answered a link request",
-	"link-file":  "a file over a link (tm link files)",
-	KindSlotFree: "a thread slot is free", KindRemember: "has lessons to file", KindPromptWaiting: "a prompt waits in its queue",
+	"link-file":          "a file over a link (tm link files)",
+	program.KindDepReady: "can start: its dependencies are met", program.KindDepGone: "a dependency is gone",
+	program.KindUmbrellaReview: "every part is in (the user decides whether it is done)",
+	link.KindProgramMessage:    "wrote to you (tm program read)", program.KindTask: "filed by the program's director",
+	program.KindAnswer: "answered by the user (its answer in tm inbox list)",
+	KindSlotFree:       "a thread slot is free", KindRemember: "has lessons to file", KindPromptWaiting: "a prompt waits in its queue",
 }
 
 // linkKinds name a linked project in their subject: the nudge says its
 // slug (or "<server>/<slug>" on a paired server), which only the user
 // and tm write.
-var linkKinds = map[string]bool{"link-message": true, "link-held": true, "link-paused": true, "link-undelivered": true, "link-request": true, "link-answer": true, "link-file": true}
+var linkKinds = map[string]bool{link.KindProgramMessage: true, "link-message": true, "link-held": true, "link-paused": true, "link-undelivered": true, "link-request": true, "link-answer": true, "link-file": true}
+
+// depKinds name a member's task in their subject, "<slug>/T<n>", which
+// only tm writes: a program's dependency items.
+var depKinds = map[string]bool{program.KindDepReady: true, program.KindDepGone: true}
+
+// crossRef reports whether s is a member's task, "<slug>/T<n>".
+func crossRef(s string) bool {
+	slug, ref, ok := strings.Cut(s, "/")
+	return ok && project.ValidSlug(slug) && tasks.ValidRef(ref)
+}
 
 // NudgeText is the one line an idle coordinator gets (§7.5). It holds
 // only fixed words, ids and what label makes of an id (thread.Label: the
@@ -1144,7 +1186,9 @@ func nudgeParts(items []project.Item, label func(id string) string) []string {
 		if !ok {
 			verb = "new item"
 		}
-		if linkKinds[it.Kind] && config.ValidLinkKey(it.Subject) || it.Kind == project.KindAnswer && project.IsQuestionID(it.Subject) {
+		if linkKinds[it.Kind] && config.ValidLinkKey(it.Subject) || (it.Kind == project.KindAnswer || it.Kind == program.KindAnswer) && project.IsQuestionID(it.Subject) {
+			parts = append(parts, it.Subject+" "+verb)
+		} else if depKinds[it.Kind] && crossRef(it.Subject) {
 			parts = append(parts, it.Subject+" "+verb)
 		} else if subjectRE.MatchString(it.Subject) {
 			name := it.Subject
@@ -1164,17 +1208,18 @@ func nudgeParts(items []project.Item, label func(id string) string) []string {
 // one that leaves an item open on purpose isn't nagged for good.
 const RemindCap = 3
 
-// nudge tells an idle coordinator about items it hasn't been told about,
-// at most once per Nudge interval, never while it works or is blocked.
-// Items it was told about and left open are reminded of (remind); a new
-// conversation (told) hasn't been told about any.
-func (t *Ticker) nudge(p *project.Project, sessions []proto.SessionInfo, now time.Time) {
+// nudge tells seat p's idle agent (a project's coordinator, a program's
+// director) about items it hasn't been told about, at most once per
+// Nudge interval, never while it works or is blocked. Items it was told
+// about and left open are reminded of (remind); a new conversation
+// (told) hasn't been told about any.
+func (t *Ticker) nudge(p seat, sessions []proto.SessionInfo, now time.Time) {
 	items, err := p.Inbox()
 	if err != nil {
 		return
 	}
-	pm := t.projectMemo(p.Slug)
-	coord := proto.CoordinatorOf(sessions, p.Slug)
+	pm := t.projectMemo(p.key())
+	coord := p.of(sessions)
 	if coord != nil {
 		t.told(p, pm, coord)
 	}
@@ -1222,13 +1267,8 @@ func (t *Ticker) nudge(p *project.Project, sessions []proto.SessionInfo, now tim
 // tell sends coord the line text makes of items. It can wait in the
 // queue (a busy coordinator, a held prompt box): at delivery it names
 // only the items still unhandled, and goes unsent once none is.
-func (t *Ticker) tell(p *project.Project, coord *proto.SessionInfo, items []project.Item, text func([]project.Item, func(string) string) string) error {
-	label := func(id string) string {
-		if thread.ValidID(id) {
-			return thread.Label(p, id)
-		}
-		return thread.TaskLabel(p, id)
-	}
+func (t *Ticker) tell(p seat, coord *proto.SessionInfo, items []project.Item, text func([]project.Item, func(string) string) string) error {
+	label := p.label
 	ids := map[string]bool{}
 	for _, it := range items {
 		ids[it.ID] = true
@@ -1258,7 +1298,7 @@ func (t *Ticker) tell(p *project.Project, coord *proto.SessionInfo, items []proj
 // agent a new session id; the ticker's own clear forgets them itself.
 // With the session id unknown on both sides the process decides; one
 // known before and not yet now leaves it undecided.
-func (t *Ticker) told(p *project.Project, pm *projectMemo, coord *proto.SessionInfo) {
+func (t *Ticker) told(p seat, pm *projectMemo, coord *proto.SessionInfo) {
 	proc, sid := process(coord), coord.AgentSID
 	var other bool
 	switch {
@@ -1288,7 +1328,7 @@ func forget(pm *projectMemo) {
 // left open, once it idled Remind with nothing queued, then after twice
 // as long each time, RemindCap times at most (T669: one handled a report
 // and left its remember item open for good).
-func (t *Ticker) remind(p *project.Project, pm *projectMemo, coord *proto.SessionInfo, open []project.Item, now time.Time) {
+func (t *Ticker) remind(p seat, pm *projectMemo, coord *proto.SessionInfo, open []project.Item, now time.Time) {
 	if len(open) == 0 || coord == nil || coord.State != "idle" || coord.Queued > 0 {
 		pm.idleSince = time.Time{}
 		return
@@ -1320,7 +1360,7 @@ const nudgeStall = time.Minute
 // nudgeStall logs, once per stall, a nudge held for nudgeStall by a
 // coordinator that isn't idle, with the sources of its state; tm agent
 // explain shows the rest. The state is re-checked every sweep.
-func (t *Ticker) nudgeStall(p *project.Project, pm *projectMemo, coord *proto.SessionInfo, n int, now time.Time) {
+func (t *Ticker) nudgeStall(p seat, pm *projectMemo, coord *proto.SessionInfo, n int, now time.Time) {
 	if pm.heldSince.IsZero() {
 		pm.heldSince = now
 	}
@@ -1347,7 +1387,7 @@ const nudgeUnstick = 2 * time.Minute
 // once, so something holds it: a box with text in it or a dialog,
 // bounded by the server's prompt hold. It alerts: the user is the one
 // who can clear a box, and nobody else hears of it.
-func (t *Ticker) unstick(p *project.Project, pm *projectMemo, coord *proto.SessionInfo, n int, now time.Time) {
+func (t *Ticker) unstick(p seat, pm *projectMemo, coord *proto.SessionInfo, n int, now time.Time) {
 	if coord.State != "idle" || coord.Queued == 0 {
 		pm.idleQueued, pm.unstuck = time.Time{}, false
 		return

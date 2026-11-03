@@ -57,7 +57,7 @@ var roleRules = func(role, slug string) (string, bool) {
 // thread's brief file (the sandbox guidance already in it). A role
 // other than coordinator and thread has none: "", nil.
 func writeSystemPrompt(rt, role, slug, brief string) (string, *PromptStamp, error) {
-	if slug == "" || (role != proto.RoleCoordinator && role != proto.RoleThread) {
+	if slug == "" || (role != proto.RoleCoordinator && role != proto.RoleThread && role != proto.RoleDirector) {
 		return "", nil, nil
 	}
 	rules, ok := roleRules(role, slug)
@@ -74,6 +74,9 @@ func writeSystemPrompt(rt, role, slug, brief string) (string, *PromptStamp, erro
 		}
 		b.WriteString(strings.TrimRight(text, "\n"))
 		b.WriteString("\n\n# Your rules\n\n" + rules)
+	case proto.RoleDirector:
+		// The rules alone: PROGRAM.md is in its context block.
+		b.WriteString(rules)
 	case proto.RoleCoordinator:
 		p, err := project.Open(slug)
 		if err != nil {
@@ -130,6 +133,9 @@ func promptHeader(role string, stamp *PromptStamp, rules, projectFile string) st
 	case proto.RoleCoordinator:
 		b.WriteString("Your rules (`tm skill coordinator`) and PROJECT.md are in your system prompt; this block is the project's state. " +
 			"One rules section again: `tm skill coordinator --section <heading>`.\n")
+	case proto.RoleDirector:
+		b.WriteString("Your rules (`tm skill director`) are in your system prompt; this block is the program's state. " +
+			"One rules section again: `tm skill director --section <heading>`.\n")
 	default:
 		b.WriteString("Your brief and your rules (`tm skill thread`) are in your system prompt; this block is your thread's state. " +
 			"One rules section again: `tm skill thread --section <heading>`.\n")
@@ -174,7 +180,10 @@ func argvTooLong(goos string, argv []string) bool {
 // in its system prompt: what `tm context --startup` prints. threadID is
 // the thread's; tickerState the ticker's state file. cut says the block
 // passed its budget and the hook would clip it (as returned).
-func StartupBlock(role, slug, threadID, tickerState string) (text string, cut bool, err error) {
+//
+// needs reads a director's program's rolled-up Needs you (nil leaves
+// the part out).
+func StartupBlock(role, slug, threadID, tickerState string, needs NeedsFunc) (text string, cut bool, err error) {
 	rules, ok := roleRules(role, slug)
 	if !ok {
 		return "", false, fmt.Errorf("no rules for role %s", role)
@@ -189,7 +198,7 @@ func StartupBlock(role, slug, threadID, tickerState string) (text string, cut bo
 			stamp.Project = textHash(text)
 		}
 	}
-	b, err := contextFor(SessionRecord{Role: role, Project: slug, Thread: threadID, Prompt: stamp}, tickerState)()
+	b, err := contextWith(SessionRecord{Role: role, Project: slug, Thread: threadID, Prompt: stamp}, tickerState, needs)()
 	if err != nil {
 		return "", false, err
 	}

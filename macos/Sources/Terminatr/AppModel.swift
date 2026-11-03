@@ -28,6 +28,10 @@ final class AppModel {
     /// releases); the toolbar and the menu bar say which is behind.
     private(set) var compatibility = Compatibility.ok
     private(set) var projects: [AppAPI.Project] = []
+    /// The programs (projects.watch, app API 44), while the server's
+    /// caps say programs (the programs design §12): none while
+    /// programs are off, and the sidebar is the one without.
+    private(set) var programs: [AppAPI.Program] = []
     private(set) var sessions: [AppAPI.Session] = []
     private(set) var notices: [AppAPI.Notice] = []
     private(set) var peers: [AppAPI.Peer] = []
@@ -170,6 +174,10 @@ final class AppModel {
     /// bridge's while it is down, so the views stay as they were.
     var caps: [String] { hello?.server?.caps ?? [] }
 
+    /// Whether the server has programs on (its caps say programs): the
+    /// app draws no program row, screen or badge without.
+    var showsPrograms: Bool { caps.contains("programs") }
+
     /// What came since the bridge started: needs wait for all of it, so
     /// the first set is whole.
     private struct Loaded {
@@ -268,9 +276,9 @@ final class AppModel {
         lean = (await b.hello?.appApi ?? 0) >= AppAPI.leanAPI
         guard lean else {
             let sub = try await b.subscribe(AppAPI.projectsWatchDetail, AppAPI.DetailParams(detail: true))
-            took(sub.result.projects)
+            took(sub.result)
             for try await e in sub.events {
-                took(e.data.projects)
+                took(e.data)
             }
             throw BridgeError.closed("The server stopped sending the projects.")
         }
@@ -278,10 +286,10 @@ final class AppModel {
             let shown = nav.selection?.shownInactive(projects) ?? ""
             watchedShown = shown
             let sub = try await b.subscribe(AppAPI.Methods.projectsWatch, AppAPI.ProjectsWatchParams(detail: true, lean: true, shown: shown))
-            took(sub.result.projects)
+            took(sub.result)
             let events = Task { @MainActor in
                 for try await e in sub.events {
-                    self.took(e.data.projects)
+                    self.took(e.data)
                 }
             }
             projectEvents = events
@@ -299,8 +307,9 @@ final class AppModel {
         }
     }
 
-    private func took(_ ps: [AppAPI.Project]) {
-        projects = ps
+    private func took(_ ps: AppAPI.Projects) {
+        projects = ps.projects
+        programs = showsPrograms ? ps.programs : []
         loaded.projects = true
         changed()
         reshow()
@@ -401,7 +410,7 @@ final class AppModel {
 
     private func changed() {
         guard loaded.all else { return }
-        needs = Need.of(projects: projects, sessions: sessions, peers: peers, refusals: refusals)
+        needs = Need.of(projects: projects, sessions: sessions, peers: peers, refusals: refusals, programs: programs)
         settleSelection()
         onNeeds?(self)
     }
@@ -411,8 +420,8 @@ final class AppModel {
     /// the first active one, and so does none.
     private func settleSelection() {
         var n = nav
-        n.prune(fallback: activeProjects.first.map { .project($0.slug) }) { [projects, peers] in
-            $0.exists(projects: projects, peers: peers) || self.leftOut($0)
+        n.prune(fallback: activeProjects.first.map { .project($0.slug) }) { [projects, peers, programs] in
+            $0.exists(projects: projects, peers: peers, programs: programs) || self.leftOut($0)
         }
         if n != nav { nav = n }
     }
@@ -471,7 +480,75 @@ final class AppModel {
 
     /// The inactive ones, folded at the sidebar's bottom.
     var inactiveProjects: [AppAPI.Project] {
-        SidebarTree.inactive(projects, needsFirst: needsFirst, sessions: sessions, nav: nav)
+        SidebarTree.inactive(projects, needsFirst: needsFirst, sessions: sessions, nav: nav, programs: programs)
+    }
+
+    /// This server's part of the sidebar: its active projects and its
+    /// programs, in the TUI's order (SidebarTree.entries).
+    var entries: [SidebarEntry] {
+        SidebarTree.entries(projects, programs: programs, needsFirst: needsFirst, sessions: sessions, peers: peers, nav: nav)
+    }
+
+    /// The program each paired member ("alias/slug") is in: its tag
+    /// under its server's group.
+    var pairedMembers: [String: String] { SidebarTree.pairedMembers(programs) }
+
+    func program(_ slug: String) -> AppAPI.Program? {
+        programs.first { $0.slug == slug }
+    }
+
+    /// Program slug's director's session, when one runs.
+    func directorSession(_ slug: String) -> AppAPI.Session? {
+        sessions.first { $0.role == "director" && $0.project == slug && $0.server.isEmpty }
+    }
+
+    /// The needs of a program, its badge: its own and its members',
+    /// each once (SidebarTree.needs(of:in:)).
+    func needs(of g: AppAPI.Program) -> [Need] {
+        SidebarTree.needs(of: g, in: needs)
+    }
+
+    /// The human acts of the program screen (the programs design §7.2,
+    /// app API 44): each the user's own, never the director's.
+    func programAnswer(_ slug: String, ref: String, choices: [String], other: String) async throws -> AppAPI.ProgramAnswered {
+        guard let b = bridge else { throw BridgeError.closed("") }
+        return try await b.call(AppAPI.Methods.programAnswer, AppAPI.ProgramAnswerParams(program: slug, ref: ref, choices: choices, other: other))
+    }
+
+    /// Accepts umbrella task of program slug (accept), or sends it back
+    /// with the user's note.
+    func programUmbrella(_ slug: String, task: String, accept: Bool, note: String = "") async throws -> AppAPI.ProgramUmbrellaDone {
+        guard let b = bridge else { throw BridgeError.closed("") }
+        let p = AppAPI.ProgramUmbrellaParams(program: slug, task: task, note: note)
+        return try await b.call(accept ? AppAPI.Methods.programUmbrellaAccept : AppAPI.Methods.programUmbrellaSendBack, p)
+    }
+
+    /// Renames program from to to; the window follows it.
+    func programRename(_ from: String, to: String) async throws -> AppAPI.ProgramRenamed {
+        guard let b = bridge else { throw BridgeError.closed("") }
+        let r = try await b.call(AppAPI.Methods.programRename, AppAPI.ProgramRenameParams(from: from, to: to))
+        if nav.selection?.isProgram == true, nav.selection?.project == from { nav.select(.program(to)) }
+        return r
+    }
+
+    /// Deletes program slug, confirm its name typed again; the window
+    /// goes to the first project.
+    func programDelete(_ slug: String, confirm: String) async throws -> AppAPI.ProgramDeleted {
+        guard let b = bridge else { throw BridgeError.closed("") }
+        let r = try await b.call(AppAPI.Methods.programDelete, AppAPI.ProgramDeleteParams(program: slug, confirm: confirm))
+        if nav.selection?.isProgram == true, nav.selection?.project == slug, let first = activeProjects.first {
+            nav.select(.project(first.slug))
+        }
+        return r
+    }
+
+    /// The program screen's detail (program.get) and its Needs you
+    /// (program.needs), as the server reads them now.
+    func programDetail(_ slug: String) async throws -> (AppAPI.ProgramDetail, AppAPI.ProgramNeeds?) {
+        guard let b = bridge else { throw BridgeError.closed("") }
+        let d = try await b.call(AppAPI.Methods.programGet, AppAPI.ProgramParams(program: slug))
+        let n = try? await b.call(AppAPI.Methods.programNeeds, AppAPI.ProgramParams(program: slug))
+        return (d, n)
     }
 
     /// The project's coordinator's session, when one runs.
@@ -548,7 +625,7 @@ final class AppModel {
     /// Shows what a need, a notification or a menu bar row names (see
     /// Selection.route): nothing listed leaves the selection as it was.
     func open(project: String? = nil, session: String = "") {
-        if let s = Selection.route(project: project, session: session, projects: projects, sessions: sessions, peers: peers) {
+        if let s = Selection.route(project: project, session: session, projects: projects, sessions: sessions, peers: peers, programs: programs) {
             nav.select(s)
         }
         showWindow?()
@@ -556,7 +633,7 @@ final class AppModel {
 
     /// Where a need takes the window (Selection.route).
     func route(_ n: Need) -> Selection? {
-        Selection.route(project: n.project, session: n.session, projects: projects, sessions: sessions, peers: peers)
+        Selection.route(project: n.project, session: n.session, projects: projects, sessions: sessions, peers: peers, programs: programs)
     }
 
     /// ⌥⌘↓ (by 1) and ⌥⌘↑ (by -1): shows the next or the previous need.
@@ -662,6 +739,7 @@ final class AppModel {
         case nil: "terminatr"
         case .project(let slug, let server): server.isEmpty ? slug : "\(server) › \(slug)"
         case .session(let ref): title(ref)
+        case .program(let slug): "\(slug) · program"
         }
     }
 
@@ -672,7 +750,7 @@ final class AppModel {
     }
 
     func subtitle(_ ref: SessionRef) -> String {
-        ref.isRemote || ref.isCoordinator ? "" : "\(ref.thread) · \(ref.project)"
+        ref.isRemote || ref.thread.isEmpty ? "" : "\(ref.thread) · \(ref.project)"
     }
 
     func title(_ ref: SessionRef) -> String {
@@ -681,6 +759,7 @@ final class AppModel {
             return "\(ref.server) › \(ref.project) · " + (ref.isCoordinator ? "coordinator" : [task, ref.thread].filter { !$0.isEmpty }.joined(separator: " "))
         }
         if ref.isCoordinator { return "\(ref.project) · coordinator" }
+        if ref.director { return "\(ref.project) · director" }
         let t = thread(ref)
         return [t?.task?.ref, t?.record.title ?? ref.thread].compactMap { $0 }.joined(separator: " ")
     }
@@ -928,7 +1007,7 @@ final class AppModel {
             do {
                 switch a {
                 case .saveClear(let p):
-                    _ = try await connected().call(AppAPI.Methods.coordinatorClear, AppAPI.ProjectParams(project: p))
+                    _ = try await connected().call(AppAPI.Methods.coordinatorClear, AppAPI.CoordinatorClearParams(project: p))
                 case .activate(let p), .deactivate(let p, _):
                     let on: Bool
                     if case .activate = a { on = true } else { on = false }
@@ -1005,7 +1084,7 @@ final class AppModel {
     var boardProject: String? {
         switch nav.selection {
         case .project(let slug, let server) where server.isEmpty: slug
-        case .session(let ref) where !ref.isRemote: ref.project
+        case .session(let ref) where !ref.isRemote && !ref.director: ref.project
         default: nil
         }
     }

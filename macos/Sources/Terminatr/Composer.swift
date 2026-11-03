@@ -171,6 +171,7 @@ struct Composer: View {
             return "Message \(who) on \(model.ref.server)"
         }
         if model.ref.isCoordinator { return "Message the coordinator" }
+        if model.ref.director { return "Message the director" }
         let who = model.ref.thread
         return "Message \(who) · sending takes the thread over"
     }

@@ -20,7 +20,9 @@ import (
 
 // humanOnlyMethods are the methods whose gate is gateHuman.
 var humanOnlyMethods = []string{
-	proto.MethodProjectRename, proto.MethodProjectActive,
+	proto.MethodProjectRename, proto.MethodProjectActive, proto.MethodProgramsSwitch, proto.MethodProgramRename,
+	proto.MethodProgramGet, proto.MethodProgramRoute, proto.MethodProgramTaskEdit, proto.MethodProgramSend, proto.MethodProgramRead,
+	proto.MethodProgramAnswer, proto.MethodProgramUmbrellaAccept, proto.MethodProgramUmbrellaSendBack, proto.MethodProgramDelete,
 	proto.MethodModViews, proto.MethodModViewInput, proto.MethodModCommand, proto.MethodModRestart,
 	proto.MethodLogList, proto.MethodLogRead, proto.MethodPaneVT, proto.MethodTranscriptWatch, proto.MethodTranscriptPage, proto.MethodSessionFile,
 	proto.MethodNotifyClaim, proto.MethodNotifyDismiss,
@@ -57,11 +59,17 @@ var notHumanOnly = map[string]gate{
 	proto.MethodCommandRun: gateAgentOrHuman,
 	proto.MethodViewDigest: gateNotAgent,
 	// tm search: an agent its own project (scopeProject), the human any.
-	proto.MethodSearchQuery:    gateAgentOrHuman,
-	proto.MethodAppReportList:  gateAgentOrHuman,
-	proto.MethodAppReportShow:  gateAgentOrHuman,
-	proto.MethodSearchTimeline: gateAgentOrHuman,
-	proto.MethodSearchShow:     gateAgentOrHuman,
+	proto.MethodSearchQuery:           gateAgentOrHuman,
+	proto.MethodProgramSearch:         gateAgentOrHuman,
+	proto.MethodProgramSearchTimeline: gateAgentOrHuman,
+	proto.MethodProgramSearchShow:     gateAgentOrHuman,
+	proto.MethodAppReportList:         gateAgentOrHuman,
+	proto.MethodAppReportShow:         gateAgentOrHuman,
+	proto.MethodSearchTimeline:        gateAgentOrHuman,
+	proto.MethodSearchShow:            gateAgentOrHuman,
+	// A director its own program's, checked in its handler.
+	proto.MethodProgramNeeds:     gateAgentOrHuman,
+	proto.MethodProgramNeedsOpen: gateAgentOrHuman,
 }
 
 // notControl are proto's methods of the peer link (internal/peer), not

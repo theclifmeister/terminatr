@@ -223,6 +223,15 @@ func vaultRender(e *Env, args []string) error {
 			errs = append(errs, fmt.Errorf("%s: %w", s, err))
 		}
 	}
+	if *slug == "" {
+		for _, p := range vault.Programs(nil) { // none while programs are off
+			w, r, err := vault.RenderProgram(p)
+			written, removed = written+w, removed+r
+			if err != nil {
+				errs = append(errs, fmt.Errorf("program %s: %w", p.Slug, err))
+			}
+		}
+	}
 	daily, err := vault.RenderDaily(time.Now(), n)
 	if err != nil {
 		errs = append(errs, err)

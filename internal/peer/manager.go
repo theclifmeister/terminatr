@@ -51,6 +51,9 @@ type Options struct {
 	// Taken says why a name a paired server gives itself can't show
 	// here though no other peer has it (a project here); nil for none.
 	Taken NameTaken
+	// Programs lists CapProgram in the hellos: the server's [features]
+	// programs at start; SetPrograms changes it.
+	Programs bool
 	// noPaneLevel plays tm v0.27.0 (tests): no CapPaneLevel, no
 	// peer.panes.
 	noPaneLevel bool
@@ -231,7 +234,7 @@ func (m *Manager) caps() []string {
 			caps = append(caps, CapNeeds)
 		}
 		if _, ok := m.opts.Export.(ActExporter); ok {
-			caps = append(caps, CapNeedPicks)
+			caps = append(caps, CapNeedPicks, CapNeedAsk)
 		}
 		if _, ok := m.opts.Export.(PagesExporter); ok {
 			caps = append(caps, CapPages)
@@ -242,6 +245,9 @@ func (m *Manager) caps() []string {
 	}
 	if m.opts.Messages != nil {
 		caps = append(caps, CapMsg, CapShare)
+		if m.opts.Programs {
+			caps = append(caps, CapProgram)
+		}
 	}
 	if m.opts.Panes != nil {
 		caps = append(caps, CapPane)

@@ -141,6 +141,9 @@ func (c *client) infoHintNow() string {
 	if d := c.info.data; d != nil && d.watch != nil && d.watch.Questions > 0 {
 		return strings.Replace(hint, " · esc", " · A answers questions · esc", 1)
 	}
+	if d := c.info.data; d != nil && d.prog != nil && d.prog.waiting() > 0 {
+		return strings.Replace(hint, " · esc", " · A answers · esc", 1)
+	}
 	return hint
 }
 
@@ -310,6 +313,10 @@ func (c *client) infoQuestions() {
 	}
 	d, paths := c.info.data, c.paths
 	c.mu.Unlock()
+	if d != nil && d.prog != nil {
+		c.programNeedsOver(d.slug)
+		return
+	}
 	slug, n := "", 0
 	if d != nil && d.watch != nil {
 		slug, n = d.slug, d.watch.Questions
@@ -326,31 +333,45 @@ func (c *client) infoQuestions() {
 	}
 }
 
-// coordinatorClear has project slug's coordinator save and clear
-// (coordinator.clear); a variable for tests.
-var coordinatorClear = func(paths tmclient.Paths, slug string) (proto.CoordinatorClearResult, error) {
+// coordinatorClear has project slug's coordinator, or with role
+// director program slug's director, save and clear (coordinator.clear);
+// a variable for tests.
+var coordinatorClear = func(paths tmclient.Paths, role, slug string) (proto.CoordinatorClearResult, error) {
 	var res proto.CoordinatorClearResult
 	cl, err := tmclient.Connect(paths, false)
 	if err != nil {
 		return res, err
 	}
 	defer cl.Close()
-	err = cl.Call(proto.MethodCoordinatorClear, proto.CoordinatorClearParams{Project: slug}, &res)
+	err = cl.Call(proto.MethodCoordinatorClear, clearParams(role, slug), &res)
 	return res, err
+}
+
+// clearParams are coordinator.clear's params for the session of role
+// in slug: a director's names its program.
+func clearParams(role, slug string) proto.CoordinatorClearParams {
+	if role == proto.RoleDirector {
+		return proto.CoordinatorClearParams{Program: slug}
+	}
+	return proto.CoordinatorClearParams{Project: slug}
 }
 
 // saveClear has project slug's coordinator save what it learned, then
 // clears it (the context hint's key, in the panel or the sidebar), and
 // says so in the status bar. Not with c.mu held: it calls the server.
-func (c *client) saveClear(slug string) {
+func (c *client) saveClear(slug string) { c.saveClearOf(proto.RoleCoordinator, slug) }
+
+// saveClearOf is saveClear for the session of role (a coordinator, or a
+// director with slug its program).
+func (c *client) saveClearOf(role, slug string) {
 	if !c.lock() {
 		return
 	}
 	paths := c.paths
 	c.mu.Unlock()
-	res, err := coordinatorClear(paths, slug)
+	res, err := coordinatorClear(paths, role, slug)
 	if c.lock() {
-		c.flash = saveClearWords(slug, res, err)
+		c.flash = saveClearWordsFor(role, slug, res, err)
 		c.status()
 		c.mu.Unlock()
 		c.poke()
@@ -364,8 +385,12 @@ func (c *client) saveClearFocus() {
 		return
 	}
 	var slug string
+	role := proto.RoleCoordinator
 	if c.focus != nil && c.focus.info.Server == "" {
 		slug = c.focus.info.Project
+		if c.focus.info.Role == proto.RoleDirector {
+			role = proto.RoleDirector
+		}
 	}
 	if slug == "" {
 		c.flash = "prefix+C saves and clears a project's coordinator; this session has none here"
@@ -375,12 +400,18 @@ func (c *client) saveClearFocus() {
 		return
 	}
 	c.mu.Unlock()
-	c.saveClear(slug)
+	c.saveClearOf(role, slug)
 }
 
 // saveClearWords says what came of a save and clear of slug's
 // coordinator.
 func saveClearWords(slug string, res proto.CoordinatorClearResult, err error) string {
+	return saveClearWordsFor(proto.RoleCoordinator, slug, res, err)
+}
+
+// saveClearWordsFor is saveClearWords for the session of role in slug
+// (a coordinator, or a director of program slug).
+func saveClearWordsFor(role, slug string, res proto.CoordinatorClearResult, err error) string {
 	if err != nil {
 		var perr *proto.Error
 		if errors.As(err, &perr) {
@@ -388,7 +419,7 @@ func saveClearWords(slug string, res proto.CoordinatorClearResult, err error) st
 		}
 		return "not cleared: " + err.Error()
 	}
-	return fmt.Sprintf("asked %s's coordinator to save what it learned; it is cleared at its next idle moment after that", slug)
+	return fmt.Sprintf("asked %s's %s to save what it learned; it is cleared at its next idle moment after that", slug, role)
 }
 
 // questionsFlash says what came of asking the coordinator to open its
@@ -523,6 +554,8 @@ func (c *client) infoMouse(m emu.Mouse) {
 		c.sideGo(Target{Project: slug, Session: h.session})
 	case hitQuestions:
 		c.infoQuestions()
+	case hitProgramNeeds:
+		c.programNeedsOver(slug)
 	case hitSaveClear:
 		c.saveClear(slug)
 	case hitPR:
@@ -580,6 +613,9 @@ func (c *client) pollInfo(ic *infoCache, sessions []proto.SessionInfo, peers []p
 // infoTarget is what the mods' sections in d's panel show for: a
 // coordinator's project, or a thread.
 func infoTarget(d *infoData) panelTarget {
+	if d.prog != nil {
+		return programTarget(d)
+	}
 	if d.watch != nil {
 		return panelTarget{slot: mod.SlotCoordinatorSection, project: d.slug}
 	}

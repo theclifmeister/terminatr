@@ -58,7 +58,7 @@ func TestItemLinks(t *testing.T) {
 // other text, and a source already linked or not an id, stays.
 func TestLinkSource(t *testing.T) {
 	linksOn(t)
-	p := &Project{Slug: "demo"}
+	p := &Project{Folder: Folder{Slug: "demo"}}
 	for in, want := range map[string]string{
 		"---\ntitle: \"x\"\nsource: \"T481\"\n---\n## Decided\nsource: T1\n": "---\ntitle: \"x\"\nsource: \"[[demo/tasks/T481|T481]]\"\n---\n## Decided\nsource: T1\n",
 		"---\r\nsource: t-0001\r\n---\r\nbody\r\n":                           "---\r\nsource: \"[[demo/threads/t-0001/t-0001|t-0001]]\"\r\n---\r\nbody\r\n",

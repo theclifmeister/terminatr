@@ -71,7 +71,19 @@ func links(inside bool) ([]Broken, error) {
 			dirs = append(dirs, e.Name())
 		}
 	}
-	c := &checker{root: root, projects: projects, on: On(), inside: inside}
+	// The programs' folders are checked whether programs are on or not:
+	// their files are tm's either way, and their links are written.
+	programs := map[string]bool{}
+	pents, _ := os.ReadDir(filepath.Join(root, programsDir))
+	for _, e := range pents {
+		if e.IsDir() && project.ValidSlug(e.Name()) {
+			if _, err := os.Stat(filepath.Join(root, programsDir, e.Name(), "PROGRAM.md")); err == nil {
+				programs[e.Name()] = true
+				dirs = append(dirs, programsDir+"/"+e.Name())
+			}
+		}
+	}
+	c := &checker{root: root, projects: projects, programs: programs, on: On(), programsOn: On() && len(Programs(nil)) > 0, inside: inside}
 	var out []Broken
 	for _, dir := range dirs {
 		filepath.WalkDir(filepath.Join(root, dir), func(p string, d fs.DirEntry, err error) error {
@@ -101,9 +113,12 @@ func links(inside bool) ([]Broken, error) {
 type checker struct {
 	root     string
 	projects map[string]bool
+	// programs are the program folders, by slug.
+	programs map[string]bool
 	// on: the derived notes are rendered, so a link to a task's or a
-	// thread's note has a file to find.
-	on bool
+	// thread's note has a file to find; programsOn: a program's too
+	// (programs are on).
+	on, programsOn bool
 	// inside: links into the note's own project are checked too.
 	inside bool
 }
@@ -123,8 +138,8 @@ func (c *checker) file(rel, p, own string) []Broken {
 	for i, l := range linkLines(string(b)) {
 		vaultlink.Each(l, func(target, _ string) {
 			target, _, _ = strings.Cut(strings.TrimSpace(target), "#")
-			first, _, ok := strings.Cut(target, "/")
-			if !ok || first == own && !c.inside {
+			first := folderOf(target)
+			if first == "" || first == own && !c.inside {
 				return // a link in its own folder, or not vault-absolute
 			}
 			if why := c.why(first, target); why != "" {
@@ -135,9 +150,35 @@ func (c *checker) file(rel, p, own string) []Broken {
 	return out
 }
 
-// why says what target, a vault path starting with first, misses; ""
-// when it resolves or isn't another project's or a stub.
+// folderOf is the folder target, a vault path, is in: a project's slug,
+// a program's _programs/<slug>, or its first part; "" for a target with
+// no folder (not vault-absolute).
+func folderOf(target string) string {
+	first, rest, ok := strings.Cut(target, "/")
+	if !ok {
+		return ""
+	}
+	if first == programsDir {
+		if name, _, ok := strings.Cut(rest, "/"); ok {
+			return first + "/" + name
+		}
+	}
+	return first
+}
+
+// why says what target, a vault path in folder first (folderOf),
+// misses; "" when it resolves or isn't another project's or program's,
+// or a stub.
 func (c *checker) why(first, target string) string {
+	if name, ok := strings.CutPrefix(first, programsDir+"/"); ok {
+		switch {
+		case !c.programs[name]:
+			return "no program " + name + " (renamed or deleted?)"
+		case c.exists(target) || !c.programsOn && derivedTarget(first, target):
+			return ""
+		}
+		return "no such note in program " + name
+	}
 	if first == PeersDir {
 		key := strings.TrimSuffix(strings.TrimPrefix(target, PeersDir+"/"), ".md")
 		alias, _, ok := config.Remote(key)
@@ -157,7 +198,7 @@ func (c *checker) why(first, target string) string {
 	if !c.projects[first] {
 		return "no project " + first + " (renamed or deleted?)"
 	}
-	if c.exists(target) || !c.on && derivedTarget(target) {
+	if c.exists(target) || !c.on && derivedTarget(first, target) {
 		return ""
 	}
 	if dir, ref := path.Split(target); dir == first+"/tasks/archive/" && c.exists(first+"/tasks/"+ref) {
@@ -179,10 +220,11 @@ func (c *checker) exists(target string) bool {
 	return err == nil
 }
 
-// derivedTarget reports whether target, <slug>/…, is a derived note's,
-// which is there only while the vault is on.
-func derivedTarget(target string) bool {
-	_, rel, _ := strings.Cut(target, "/")
+// derivedTarget reports whether target, <folder>/…, is a derived note's,
+// which is there only while the vault is on (and, in a program's folder,
+// programs are).
+func derivedTarget(folder, target string) bool {
+	rel := strings.TrimPrefix(target, folder+"/")
 	if path.Ext(rel) != ".md" {
 		rel += ".md"
 	}

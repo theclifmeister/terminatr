@@ -22,7 +22,8 @@ const askUsage = `usage: tm ask <command> [--project <slug>] [--json]
   open                          have the coordinator put them to the user in its question dialog
   answer Q3 --choice N|LABEL... [--other "…"]
                                 the user's: answer a question (N counts its options from 1; --choice
-                                again for a multi-select one; --other in your own words)
+                                again for a multi-select one; --other in your own words); a
+                                program's question as <program>/Q2, which answers every question it covers
 
 Questions take 2 to 4 options (the dialog adds Other) and a header of at most 12 characters (default: the task).
 Exit codes: 0 done, 1 refused, 2 usage, 3 I/O.`
@@ -197,6 +198,12 @@ func askAnswer(e *Env, slug string, pos, choices []string, other string, asJSON 
 	}
 	if e.Caller.Kind != caller.Human {
 		return &project.Error{Code: "human-only", Msg: "only the user answers a question (the coordinator's question dialog, or tm ask answer in their own terminal); ask them in chat"}
+	}
+	if strings.Contains(pos[0], "/") {
+		if done, err := askProgramAnswer(e, pos[0], choices, other, asJSON); done {
+			return err
+		}
+		return &project.Error{Code: "unknown-program", Msg: fmt.Sprintf("%q: no program by that name (tm program list)", pos[0])}
 	}
 	p, err := e.openProject(slug)
 	if err != nil {

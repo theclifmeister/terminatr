@@ -177,7 +177,55 @@ func (p *Project) Context(seen Ticked, threads func(prs map[string]string) (Sect
 		proj.Index = index
 	}
 	out = append(out, proj)
-	ins := capLines("Standing instructions (PROJECT.md)", splitLines(p.Instructions), capInstructions, "PROJECT.md")
+	if g, ok := programSection(cfg, p.Slug); ok {
+		out = append(out, g)
+	}
+	state, err := p.Folder.StateSections("Standing instructions (PROJECT.md)", p.Instructions, "PROJECT.md")
+	if err != nil {
+		return nil, err
+	}
+	out = append(out, state...)
+
+	ts, err := p.taskSection()
+	if err != nil {
+		return nil, err
+	}
+	out = append(out, ts)
+
+	if threads != nil {
+		th, err := threads(prs)
+		if err != nil {
+			return nil, err
+		}
+		th.Part = PartThreads
+		out = append(out, th)
+	}
+
+	inbox, err := p.Folder.InboxSection()
+	if err != nil {
+		return nil, err
+	}
+	out = append(out, inbox)
+	if len(seen.Links) > 0 {
+		out = append(out, Section{Title: "Links (tm link)", Lines: seen.Links, Part: PartLinks})
+	}
+
+	j, err := p.Folder.JournalSection()
+	if err != nil {
+		return nil, err
+	}
+	out = append(out, j)
+	return out, nil
+}
+
+// StateSections are the parts of tm context a project and a program
+// share, from the folder's files: the standing instructions (a
+// project's PROJECT.md body, a program's PROGRAM.md one, under
+// insTitle, from insFile), CONTEXT.md, the memory index, the open
+// questions and the files over their size budget.
+func (p *Folder) StateSections(insTitle, instructions, insFile string) ([]Section, error) {
+	var out []Section
+	ins := capLines(insTitle, splitLines(instructions), capInstructions, insFile)
 	ins.Part = PartInstructions
 	out = append(out, ins)
 
@@ -234,25 +282,15 @@ func (p *Project) Context(seen Ticked, threads func(prs map[string]string) (Sect
 		}
 		out = append(out, up)
 	}
+	return out, nil
+}
 
-	ts, err := p.taskSection()
-	if err != nil {
-		return nil, err
-	}
-	out = append(out, ts)
-
-	if threads != nil {
-		th, err := threads(prs)
-		if err != nil {
-			return nil, err
-		}
-		th.Part = PartThreads
-		out = append(out, th)
-	}
-
+// InboxSection is tm context's Inbox: the folder's open items, the
+// first of them in the start-up block's index.
+func (p *Folder) InboxSection() (Section, error) {
 	items, err := p.Inbox()
 	if err != nil {
-		return nil, err
+		return Section{}, err
 	}
 	inbox := Section{Title: "Inbox", Part: PartInbox}
 	for i, it := range items {
@@ -272,14 +310,14 @@ func (p *Project) Context(seen Ticked, threads func(prs map[string]string) (Sect
 			inbox.Index = append(inbox.Index, textsafe.Clip(l, capIndexItem))
 		}
 	}
-	out = append(out, inbox)
-	if len(seen.Links) > 0 {
-		out = append(out, Section{Title: "Links (tm link)", Lines: seen.Links, Part: PartLinks})
-	}
+	return inbox, nil
+}
 
+// JournalSection is tm context's Journal: the folder's last lines.
+func (p *Folder) JournalSection() (Section, error) {
 	lines, total, err := p.JournalTail(capJournal)
 	if err != nil {
-		return nil, err
+		return Section{}, err
 	}
 	for i, l := range lines {
 		lines[i] = textsafe.Clip(l, capJournalLine)
@@ -299,8 +337,7 @@ func (p *Project) Context(seen Ticked, threads func(prs map[string]string) (Sect
 	if total > len(lines) {
 		j.Omitted = fmt.Sprintf("%d earlier lines in JOURNAL.md", total-len(lines))
 	}
-	out = append(out, j)
-	return out, nil
+	return j, nil
 }
 
 // agentModelLines name the agents the coordinator may start threads
@@ -418,12 +455,19 @@ func launchDefault(c models.Catalog, scope []string) string {
 }
 
 func (p *Project) taskSection() (Section, error) {
-	b, err := p.Tasks().Load()
+	return TaskSection(p.Tasks(), "Tasks", "tm task list")
+}
+
+// TaskSection is tm context's Tasks for board store: by group, the
+// index listing what is moving or waiting on the user; what it leaves
+// out is one listCmd away.
+func TaskSection(store *tasks.Store, title, listCmd string) (Section, error) {
+	b, err := store.Load()
 	if err != nil {
 		return Section{}, err
 	}
 	b.Sort()
-	s := Section{Title: "Tasks", Part: PartTasks}
+	s := Section{Title: title, Part: PartTasks}
 	var omitted []string
 	for _, g := range tasks.Groups {
 		var ts []*tasks.Task
@@ -468,7 +512,7 @@ func (p *Project) taskSection() (Section, error) {
 		s.Index = nil
 	}
 	if len(omitted) > 0 {
-		s.Omitted = strings.Join(omitted, ", ") + " tasks not shown (tm task list)"
+		s.Omitted = strings.Join(omitted, ", ") + " tasks not shown (" + listCmd + ")"
 	}
 	return s, nil
 }

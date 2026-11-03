@@ -16,6 +16,8 @@ import (
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/client"
+	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/features"
 	"github.com/theclifmeister/terminatr/internal/link"
 	"github.com/theclifmeister/terminatr/internal/models"
 	"github.com/theclifmeister/terminatr/internal/project"
@@ -37,7 +39,7 @@ const projectUsage = `usage: tm project new <slug> [--goal "…"] [--repo PATH].
        tm project remote on|off [<slug>]   (remote control of its running coordinator)
        tm project activate|deactivate <slug> [--yes]  (only an active project's agents run)
        tm project pause|resume [<slug>]    (no nudges, PR follow-up or new threads while paused)
-       tm project archive|unarchive <slug> (hidden from the sidebar; the ticker leaves it alone)
+       tm project archive|unarchive <slug> [--yes] (hidden from the sidebar; the ticker leaves it alone; a program's member leaves it, asked first)
        tm project delete <slug> [--yes]    (moves it to the trash; asks first)
        tm project rename <slug> <new-slug> [--json]   (no thread may run; restarts its coordinator)
        tm project link <a> <b>|<server>/<b> [both|send|receive|off] [--ask|--no-ask] [--request]   (links both sides at once; only this side for a paired server's, --request asking its user to link back)`
@@ -116,7 +118,7 @@ func projectLifecycle(e *Env, verb string, args []string) error {
 		return err
 	}
 	pause := verb == "pause" || verb == "resume"
-	if len(pos) > 1 || (len(pos) == 0 && !pause) || (*yes && verb != "delete" && verb != "deactivate") {
+	if len(pos) > 1 || (len(pos) == 0 && !pause) || (*yes && verb != "delete" && verb != "deactivate" && verb != "archive") {
 		return usagef("%s", projectUsage)
 	}
 	if e.Caller.IsAgent() {
@@ -156,6 +158,11 @@ func projectLifecycle(e *Env, verb string, args []string) error {
 	case "pause", "resume":
 		msg, err = tui.PauseProject(e.Caller, p.Slug, verb == "pause")
 	case "archive", "unarchive":
+		if verb == "archive" && !*yes {
+			if err := e.confirmArchive(p.Slug); err != nil {
+				return err
+			}
+		}
 		msg, err = tui.ArchiveProject(call, e.Caller, p.Slug, verb == "archive")
 	case "delete":
 		if !*yes {
@@ -259,10 +266,27 @@ func (e *Env) confirmDelete(p *project.Project) error {
 	if !ok || !isTTY(in) {
 		return usagef("tm project delete %s moves the project to the trash: confirm with --yes", p.Slug)
 	}
-	fmt.Fprintf(e.Stdout, "Delete project %s (%s)? Its folder moves to the trash; its worktrees and branches stay. Type %s to confirm: ", p.Slug, p.Dir, p.Slug)
+	fmt.Fprintf(e.Stdout, "Delete project %s (%s)? Its folder moves to the trash; its worktrees and branches stay.%s Type %s to confirm: ", p.Slug, p.Dir, tui.LeavesProgram(p.Slug), p.Slug)
 	line, _ := bufio.NewReader(in).ReadString('\n')
 	if strings.TrimSpace(line) != p.Slug {
 		return &project.Error{Code: "not-confirmed", Msg: "nothing deleted"}
+	}
+	return nil
+}
+
+// confirmArchive asks before archiving a program's member takes it
+// out of its program (the programs design §3.4): y on a terminal, else
+// --yes. Archiving any other project asks nothing.
+func (e *Env) confirmArchive(slug string) error {
+	leaves := tui.LeavesProgram(slug)
+	if leaves == "" {
+		return nil
+	}
+	if !stdinTTY(e) {
+		return usagef("tm project archive %s takes it out of program %s: confirm with --yes", slug, tui.ProgramOfMember(slug))
+	}
+	if !ask(e, "Archive "+slug+"?"+leaves+" [y/N] ") {
+		return &project.Error{Code: "not-confirmed", Msg: slug + " not archived"}
 	}
 	return nil
 }
@@ -472,7 +496,7 @@ func (e *Env) printStartup(p *project.Project, of string, asJSON bool) error {
 		}
 		role = proto.RoleThread
 	}
-	text, cut, err := server.StartupBlock(role, p.Slug, of, tickerState())
+	text, cut, err := server.StartupBlock(role, p.Slug, of, tickerState(), nil)
 	if err != nil {
 		return err
 	}
@@ -581,7 +605,10 @@ func liveWaits(slug string, sessions []proto.SessionInfo) (queues []project.Held
 
 const inboxUsage = `usage: tm inbox list [--project <slug>] [--json]
        tm inbox read <id> [--project <slug>]
-       tm inbox done <id>... [--project <slug>]`
+       tm inbox done <id>... [--project <slug>]
+
+A director's inbox is its program's; the human names a program with
+--project <program> (programs on).`
 
 func runInbox(e *Env, args []string) error {
 	if len(args) == 0 {
@@ -596,7 +623,7 @@ func runInbox(e *Env, args []string) error {
 	if e.Caller.Kind == caller.Thread {
 		return &project.Error{Code: "coordinator-only", Msg: "the inbox is the coordinator's"}
 	}
-	p, err := e.openProject(*slug)
+	p, err := e.openFolder(*slug)
 	if err != nil {
 		return err
 	}
@@ -645,7 +672,7 @@ func runInbox(e *Env, args []string) error {
 		if len(pos) == 0 {
 			return usagef("%s", inboxUsage)
 		}
-		if err := e.coordinatorOnly(p, "tm inbox done"); err != nil {
+		if err := e.folderWriter(p, "tm inbox done"); err != nil {
 			return err
 		}
 		var failed error
@@ -668,10 +695,11 @@ func runInbox(e *Env, args []string) error {
 	return usagef("unknown subcommand %q\n%s", args[0], inboxUsage)
 }
 
-const skillUsage = `usage: tm skill coordinator|thread [--section <heading>] [--project <slug>]
+const skillUsage = `usage: tm skill coordinator|thread|director [--section <heading>] [--project <slug>]
 
 Prints the role's standing rules, with the rules of the mods that run
-for the project. --section prints only the sections under that "## "
+for the project (a director's: for its program; only while programs
+are on). --section prints only the sections under that "## "
 heading (ignoring case; else the headings that start with it, such as
 "house rules"), after the rules' version line.`
 
@@ -691,6 +719,13 @@ func runSkill(e *Env, args []string) error {
 	if *slug != "" {
 		if err := e.ownProject(*slug); err != nil {
 			return err
+		}
+	}
+	if pos[0] == "director" {
+		// No director runs while programs are off, so its rules aren't
+		// shown either (the programs design §4.3).
+		if cfg, _ := config.Load(); !features.Programs(cfg) {
+			return programsOff()
 		}
 	}
 	text, ok := skill.ForProject(pos[0], version.Version, cmp.Or(*slug, e.Caller.Project))

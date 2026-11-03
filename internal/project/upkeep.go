@@ -85,7 +85,7 @@ func kb(n int64) string {
 
 // Oversized lists the context files over their budgets, in a stable
 // order: CONTEXT.md, MEMORY.md, memory/ in all, then each note by path.
-func (p *Project) Oversized() ([]Oversize, error) {
+func (p *Folder) Oversized() ([]Oversize, error) {
 	var out []Oversize
 	check := func(rel string, budget int64) (int64, error) {
 		fi, err := os.Stat(p.Path(rel))
@@ -178,7 +178,7 @@ func month(t time.Time) string { return t.UTC().Format("2006-01") }
 // modification time, which DoneItem's rename keeps from the item's
 // creation) into inbox/done/<yyyy-mm>.tar.gz by the month they were
 // created, and removes the loose files; it returns how many it bundled.
-func (p *Project) ArchiveInbox(now time.Time, age time.Duration) (int, error) {
+func (p *Folder) ArchiveInbox(now time.Time, age time.Duration) (int, error) {
 	dir := p.Path("inbox", "done")
 	entries, err := os.ReadDir(dir)
 	if errors.Is(err, fs.ErrNotExist) {
@@ -300,7 +300,7 @@ func addToTar(path, dir string, names []string) error {
 // ArchiveJournal moves the JOURNAL.md lines older than age (by their
 // timestamp) to journal/<yyyy-mm>.md.gz, by month; the heading and
 // newer lines stay. It returns how many lines moved.
-func (p *Project) ArchiveJournal(now time.Time, age time.Duration) (int, error) {
+func (p *Folder) ArchiveJournal(now time.Time, age time.Duration) (int, error) {
 	path := p.Path("JOURNAL.md")
 	unlock, err := mdfile.Lock(path)
 	if err != nil {

@@ -63,6 +63,12 @@ private struct TreeCase: Decodable {
         let alias: String
         let projects: [PP]
     }
+    /// A program (the programs design §11.1): its members hang under it.
+    struct G: Decodable {
+        let slug: String
+        let projects: [String]?
+        let questions: Int?
+    }
     struct PP: Decodable {
         let project: String
         let stale: Bool?
@@ -73,6 +79,7 @@ private struct TreeCase: Decodable {
     let projects: [P]
     let sessions: [S]?
     let peers: [Peer]?
+    let programs: [G]?
     let folded: [String]?
     let expanded: [String]?
     let inactive_open: Bool?
@@ -87,7 +94,10 @@ private struct TreeCase: Decodable {
         .appendingPathComponent("../../../internal/tui/testdata/sidebar-app.json").standardized
     struct File: Decodable { let cases: [TreeCase] }
     let cases = try JSONDecoder().decode(File.self, from: Data(contentsOf: url)).cases
-    #expect(cases.count >= 10)
+    #expect(cases.count >= 14)
+    // Programs too (the programs design §11.1, §12): a paired member
+    // under its program and under its server.
+    #expect(cases.contains { !($0.programs ?? []).isEmpty })
     for c in cases {
         let ps = c.projects.map { p in
             project(p.slug, active: p.active, pinned: p.pinned ?? false, needsYou: p.needs_you ?? 0, questions: p.questions ?? 0,
@@ -119,9 +129,25 @@ private struct TreeCase: Decodable {
                                    })
             })
         }
+        // A member "alias/slug" is a paired server's (config.Remote).
+        let programs = (c.programs ?? []).map { g in
+            AppAPI.Program(slug: g.slug, members: (g.projects ?? []).map { m in
+                let parts = m.split(separator: "/", maxSplits: 1).map(String.init)
+                return parts.count == 2 ? AppAPI.ProgramMember(project: parts[1], server: parts[0]) : AppAPI.ProgramMember(project: m)
+            }, authority: "propose", questions: g.questions ?? 0)
+        }
         var nav = Navigation()
         for f in c.folded ?? [] {
-            if f.hasPrefix("@") {
+            if f.hasPrefix("g:") {
+                // A program, or its paired member: "g:<slug>[/@<alias>/<slug>]".
+                let (slug, member) = f.dropFirst(2).split(separator: "/", maxSplits: 1).map(String.init).pair
+                if let member, member.hasPrefix("@") {
+                    let parts = member.dropFirst().split(separator: "/", maxSplits: 1).map(String.init)
+                    nav.collapsed.insert(Navigation.memberKey(program: slug, server: parts[0], project: parts[1]))
+                } else {
+                    nav.collapsed.insert(Navigation.programKey(slug))
+                }
+            } else if f.hasPrefix("@") {
                 // A paired server's group, or its project: "@<alias>[/<slug>]".
                 let parts = f.dropFirst().split(separator: "/", maxSplits: 1).map(String.init)
                 nav.collapsed.insert(Navigation.sectionKey(server: parts[0], project: parts.count > 1 ? parts[1] : ""))
@@ -131,8 +157,14 @@ private struct TreeCase: Decodable {
         }
         for slug in c.expanded ?? [] { nav.unfold(Navigation.sectionKey(server: "", project: slug)) }
         nav.showInactive = c.inactive_open ?? false
-        #expect(SidebarTree.rows(ps, sessions: ss, peers: peers, nav: nav, needsFirst: c.needs_first ?? false) == c.rows, "\(c.name)")
+        #expect(SidebarTree.rows(ps, sessions: ss, peers: peers, programs: programs, nav: nav, needsFirst: c.needs_first ?? false) == c.rows,
+                "\(c.name)")
     }
+}
+
+private extension Array where Element == String {
+    /// Its first two, the second nil when it has one.
+    var pair: (String, String?) { (self[0], count > 1 ? self[1] : nil) }
 }
 
 @Test func projectOpens() {

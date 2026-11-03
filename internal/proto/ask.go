@@ -29,6 +29,11 @@ type Question struct {
 	// agent (tm's own question before an approved command that asks
 	// first runs outside the sandbox).
 	Escape bool `json:"escape,omitempty"`
+	// HumanOnly: only the user answers it, at this computer, never an
+	// agent or a paired device or server; unlike Escape it runs no
+	// command (a program's questions, opened by its director's
+	// /answer: Tool "tm program").
+	HumanOnly bool `json:"human_only,omitempty"`
 	// Screen: the agent's own menu (its [answer] tool's call, Claude's
 	// AskUserQuestion), open on its screen: session.answer types the
 	// answer there, one question at a time in order, a single option or
@@ -135,6 +140,11 @@ type SessionApproveParams struct {
 	// it runs outside the sandbox: an escape's prompt is refused
 	// without it.
 	Escape bool `json:"escape,omitempty"`
+	// HumanOnly: only the user answers it, at this computer, never an
+	// agent or a paired device or server; unlike Escape it runs no
+	// command (a program's questions, opened by its director's
+	// /answer: Tool "tm program").
+	HumanOnly bool `json:"human_only,omitempty"`
 	// Session says the user confirmed, in words naming the tool or
 	// command, that the agent may run it for the rest of its session
 	// without asking: an option that allows for the session is refused

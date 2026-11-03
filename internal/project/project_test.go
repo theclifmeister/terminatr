@@ -804,7 +804,7 @@ func TestOriginReposLeavesOutCheckoutThreads(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	p := &Project{Dir: dir, Repos: []string{"/r/a", "/r/b", "/r/c", "/r/d"}, Meta: Meta{AzureURL: "https://x.example"}}
+	p := &Project{Folder: Folder{Dir: dir}, Repos: []string{"/r/a", "/r/b", "/r/c", "/r/d"}, Meta: Meta{AzureURL: "https://x.example"}}
 	if got := p.CodeHost().OriginRepos; !slices.Equal(got, []string{"/r/c", "/r/d"}) {
 		t.Fatalf("OriginRepos %v", got)
 	}

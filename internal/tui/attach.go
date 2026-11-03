@@ -386,6 +386,13 @@ type client struct {
 	// dialog is the yes/no dialog drawn over the panes while one asks
 	// (confirm), nil otherwise.
 	dialog *amenu
+	// askedKey names the program question the menu last opened for
+	// (offerQuestion): its session, its time and the question's place,
+	// so closing it doesn't open it again.
+	askedKey string
+	// needsKey names the program needs dialog last opened for a
+	// director's pane (offerNeeds): its session and the time it asked.
+	needsKey string
 
 	// The mouse (attachmouse.go): the open menu and the status bar's
 	// buttons, by column from its start.
@@ -2488,6 +2495,7 @@ type polled struct {
 	osc        []byte
 	projects   []ProjectData // nil: unchanged since the last tick
 	peers      []proto.PeerMirror
+	programs   []ProgramData
 	ctxHint    int
 	needsFirst bool
 	statuses   map[string]*thread.Status
@@ -2556,6 +2564,9 @@ func (c *client) pollState(ctx context.Context) {
 				pl.projects = projects
 			}
 			pl.ctxHint, pl.needsFirst = conf.uiHints()
+			if cfg, err := conf.get(); err == nil {
+				pl.programs = programsOf(cfg)
+			}
 			if ctl != nil {
 				pl.peers = loadPeers(ctl.Call)
 			}
@@ -2616,6 +2627,9 @@ func (c *client) applyPoll(pl *polled, now time.Time) bool {
 		if !reflect.DeepEqual(c.side.peers, pl.peers) {
 			c.side.peers, changed = pl.peers, true
 		}
+		if !reflect.DeepEqual(c.side.programs, pl.programs) {
+			c.side.programs, changed = pl.programs, true
+		}
 		if c.side.ctxHint != pl.ctxHint || c.side.needsFirst != pl.needsFirst {
 			c.side.ctxHint, c.side.needsFirst, changed = pl.ctxHint, pl.needsFirst, true
 		}
@@ -2643,6 +2657,10 @@ func (c *client) applyPoll(pl *polled, now time.Time) bool {
 			}
 		}
 	}
+	if c.offerQuestion() {
+		changed = true
+	}
+	needs := c.offerNeeds()
 	if cells := newModCells(res.Mods, res.Sessions); !reflect.DeepEqual(cells, c.cells) {
 		c.cells, changed = cells, true
 	}
@@ -2670,6 +2688,9 @@ func (c *client) applyPoll(pl *polled, now time.Time) bool {
 	c.mu.Unlock()
 	if draw {
 		c.poke()
+	}
+	if needs != "" {
+		c.programNeedsOver(needs)
 	}
 	return draw
 }

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
+	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/home"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
@@ -203,24 +204,60 @@ func sessionNames(p *project.Project, labels []string) []string {
 	return out
 }
 
+// ProgramOfMember is the program on this server whose projects list
+// project slug, "" for none, whatever [features] programs says: a
+// dormant program's membership is left as right as an active one's.
+func ProgramOfMember(slug string) string {
+	cfg, _ := config.Load() // a safety error still gives the tables
+	return cfg.ProgramOf(slug)
+}
+
+// LeavesProgram is the sentence archiving's and deleting's confirms add
+// for a member of a program (the programs design §3.4), "" for none.
+func LeavesProgram(slug string) string {
+	if g := ProgramOfMember(slug); g != "" {
+		return " It also leaves program " + g + "; you can add it back in the program's settings."
+	}
+	return ""
+}
+
+// leaveProgram takes project slug out of its program, archived or
+// deleted: msg with what it did, or what didn't go through.
+func leaveProgram(slug, msg string) string {
+	g, err := config.RemoveMember(slug)
+	switch {
+	case err != nil:
+		return msg + "; it is still in a program's projects: " + err.Error() + " (take it out in the program's settings)"
+	case g != "":
+		return msg + "; it left program " + g
+	}
+	return msg
+}
+
 // ArchiveProject archives or unarchives a project. An archived project
 // is hidden from the sidebar, and the ticker leaves it
-// alone; archiving is refused while its agents run.
+// alone; archiving is refused while its agents run. An archived member
+// of a program leaves it: the caller asks first (LeavesProgram).
 func ArchiveProject(call callFn, c caller.Caller, slug string, on bool) (string, error) {
 	var guard func() error
 	if on {
 		guard = func() error { return idle(call, slug, "archive") }
 	}
-	return setProjectFlag(c, slug, "archived", on, flagWords{
+	msg, err := setProjectFlag(c, slug, "archived", on, flagWords{
 		what:    "archives projects",
 		already: [2]string{"not archived", "archived"},
 		onMsg:   "archived {slug}: hidden from the sidebar, and the ticker leaves it alone (tm project unarchive {slug})",
 		offMsg:  "unarchived {slug}",
 	}, guard)
+	if err != nil || !on {
+		return msg, err
+	}
+	return leaveProgram(slug, msg), nil
 }
 
 // DeleteProject moves a project's folder to the trash, after the
-// caller's confirmation; refused while its agents run.
+// caller's confirmation; refused while its agents run. A member of a
+// program leaves it (the confirm says so: LeavesProgram).
 func DeleteProject(call callFn, c caller.Caller, slug string) (string, error) {
 	if err := humanOnly(c, "deletes projects"); err != nil {
 		return "", err
@@ -236,7 +273,7 @@ func DeleteProject(call callFn, c caller.Caller, slug string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	msg := "deleted " + slug + ": moved to " + dst
+	msg := leaveProgram(slug, "deleted "+slug+": moved to "+dst)
 	if wt, err := home.WorktreesDir(); err == nil {
 		dir := filepath.Join(wt, slug)
 		if ents, err := os.ReadDir(dir); err == nil && len(ents) > 0 {

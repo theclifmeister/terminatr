@@ -6,10 +6,12 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/server"
 	"github.com/theclifmeister/terminatr/internal/thread"
 	"github.com/theclifmeister/terminatr/internal/view"
 )
@@ -24,12 +26,15 @@ import (
 
 // A case's Folded names this server's projects by slug, a paired
 // server's group as "@<alias>" and its project as "@<alias>/<slug>"
-// (peerFold). NeedsFirst is [ui] needs_first.
+// (peerFold), a program as "g:<slug>" (programKey). NeedsFirst is [ui]
+// needs_first. Programs are the programs while programs are on: their
+// members hang under them, the director a session of role director.
 type appCase struct {
 	Name         string       `json:"name"`
 	Projects     []appProject `json:"projects"`
 	Sessions     []appSession `json:"sessions"`
 	Peers        []appPeer    `json:"peers,omitempty"`
+	Programs     []appProgram `json:"programs,omitempty"`
 	Folded       []string     `json:"folded,omitempty"`
 	Expanded     []string     `json:"expanded,omitempty"`
 	InactiveOpen bool         `json:"inactive_open,omitempty"`
@@ -45,6 +50,13 @@ type appProject struct {
 	NeedsYou  int         `json:"needs_you,omitempty"`
 	Questions int         `json:"questions,omitempty"`
 	Threads   []appThread `json:"threads,omitempty"`
+}
+
+// appProgram is a program: its members in order, its open questions.
+type appProgram struct {
+	Slug      string   `json:"slug"`
+	Projects  []string `json:"projects"`
+	Questions int      `json:"questions,omitempty"`
 }
 
 // appPeer is a paired server; its projects' Threads are the watched
@@ -105,6 +117,7 @@ func appCases() []appCase {
 		{ID: "s-7", Role: proto.RoleThread, Project: "alpha", State: "blocked"},
 		{ID: "s-8", Role: proto.RoleThread, Project: "alpha", State: "working"},
 	}
+	progSessions := append([]appSession{{ID: "s-d", Role: proto.RoleDirector, Project: "acme", State: "idle"}}, sessions...)
 	return []appCase{
 		{Name: "unfolded", Projects: projects, Sessions: sessions},
 		{Name: "inactive open", Projects: projects, Sessions: sessions, InactiveOpen: true},
@@ -117,6 +130,16 @@ func appCases() []appCase {
 		{Name: "paired", Projects: projects[2:3], Peers: peers},
 		{Name: "paired, folded", Projects: projects[2:3], Peers: peers, Folded: []string{"@mini/demo", "@far"}},
 		{Name: "paired, needs first", Projects: needs, Sessions: needsSessions, Peers: peers, NeedsFirst: true},
+		{Name: "program", Projects: projects, Sessions: progSessions, Programs: progs, InactiveOpen: true},
+		{Name: "program, folded", Projects: projects, Sessions: progSessions, Programs: progs, Folded: []string{"g:acme"}},
+		{Name: "program, member folded", Projects: projects, Sessions: progSessions, Programs: progs, Folded: []string{"alpha"}, Expanded: []string{"delta"}},
+		{Name: "program, needs first", Projects: needs, Sessions: needsSessions, Programs: needsProgs, NeedsFirst: true, InactiveOpen: true},
+		// A paired member shows under its program and under its
+		// server's group, each with its own keys and fold; one the
+		// mirror doesn't have shows under its program alone.
+		{Name: "program, paired member", Projects: projects[2:3], Sessions: progSessions[:1], Peers: peers, Programs: pairedProgs},
+		{Name: "program, paired member folded under its program", Projects: projects[2:3], Sessions: progSessions[:1], Peers: peers, Programs: pairedProgs,
+			Folded: []string{"g:acme/@mini/demo"}},
 	}
 }
 
@@ -135,6 +158,15 @@ var (
 		{Slug: "i-q", Active: false, Pinned: true, Questions: 1},
 	}
 	needsSessions = []appSession{{ID: "s-b", Role: proto.RoleThread, Project: "n-blocked", State: "blocked"}}
+	// progs: a program of an active, an inactive and a missing project,
+	// sorting between the projects by slug, and one with none; its
+	// director runs. needsProgs: one whose member needs you.
+	progs = []appProgram{
+		{Slug: "acme", Projects: []string{"eps", "delta", "gone", "alpha"}},
+		{Slug: "zed", Projects: nil, Questions: 1},
+	}
+	needsProgs  = []appProgram{{Slug: "m-prog", Projects: []string{"n-none", "n-task"}}}
+	pairedProgs = []appProgram{{Slug: "acme", Projects: []string{"gamma", "mini/demo", "mini/gone"}}}
 	// peers: a project read, one stale, one not watched yet, and a
 	// server whose group folds.
 	peers = []appPeer{
@@ -193,7 +225,11 @@ func appTree(c appCase) []string {
 		mirrors = append(mirrors, pm)
 	}
 	tree := view.Tree{Folded: c.Folded, Expanded: c.Expanded, InactiveOpen: c.InactiveOpen}
-	rows := buildTree(ps, sessions, treeIn{tree: tree, peers: mirrors, host: "here"})
+	var programs []ProgramData
+	for _, g := range c.Programs {
+		programs = append(programs, ProgramData{SideProgram: server.SideProgram{Slug: g.Slug, Projects: g.Projects, Questions: g.Questions}})
+	}
+	rows := buildTree(ps, sessions, treeIn{tree: tree, peers: mirrors, host: "here", programs: programs})
 	if c.NeedsFirst {
 		rows = needsFirstOrder(rows)
 	}
@@ -228,5 +264,76 @@ func TestSidebarAppFixture(t *testing.T) {
 	if rows := cases[0].Rows; !slices.Equal(rows[:12], []string{"p:gamma", "c:gamma", "p:alpha", "c:alpha",
 		"t:alpha/t-3", "t:alpha/t-7", "t:alpha/t-5", "t:alpha/t-2", "t:alpha/t-8", "t:alpha/t-6", "t:alpha/t-1", "t:alpha/t-4"}) {
 		t.Fatalf("rows %v", rows)
+	}
+}
+
+// TestSidebarAppFixtureProgramsOff: with programs switched off, a
+// case's programs in config.toml and on disk change no row. Its
+// programs come from server.SidePrograms, as the console's do: none
+// while off, so each case gives the rows it gives with no programs at
+// all, and a case without programs gives testdata/sidebar-app.json's
+// rows exactly (the programs design §3.5). On, the same file gives the
+// programs back, so the check isn't empty.
+func TestSidebarAppFixtureProgramsOff(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("TERMINATR_HOME", home)
+	b, err := os.ReadFile(filepath.Join("testdata", "sidebar-app.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var file struct{ Cases []appCase }
+	if err := json.Unmarshal(b, &file); err != nil {
+		t.Fatal(err)
+	}
+	withPrograms := 0
+	for _, c := range file.Cases {
+		tables := ""
+		for _, g := range c.Programs {
+			members := make([]string, len(g.Projects))
+			for i, m := range g.Projects {
+				members[i] = `"` + m + `"`
+			}
+			tables += "[programs." + g.Slug + "]\nprojects = [" + strings.Join(members, ", ") + "]\n"
+			if err := os.MkdirAll(filepath.Join(home, "projects", config.ProgramsDirName, g.Slug), 0o755); err != nil {
+				t.Fatal(err)
+			}
+		}
+		write := func(body string) *config.Config {
+			t.Helper()
+			if err := os.WriteFile(filepath.Join(home, "config.toml"), []byte(body), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			cfg, err := config.Load()
+			if err != nil {
+				t.Fatal(err)
+			}
+			return cfg
+		}
+		none := c
+		none.Programs = nil
+		want := appTree(none)
+		if len(c.Programs) == 0 && !slices.Equal(want, c.Rows) {
+			t.Fatalf("case %s: rows %v, want the fixture's %v", c.Name, want, c.Rows)
+		}
+		off := c
+		off.Programs = nil
+		for _, sp := range server.SidePrograms(write("[features]\nprograms = false\n" + tables)) {
+			off.Programs = append(off.Programs, appProgram{Slug: sp.Slug, Projects: sp.Projects})
+		}
+		if got := appTree(off); !slices.Equal(got, want) {
+			t.Fatalf("case %s with programs off: rows %v, want %v", c.Name, got, want)
+		}
+		if len(c.Programs) > 0 {
+			withPrograms++
+			if n := len(server.SidePrograms(write("[features]\nprograms = true\n" + tables))); n != len(c.Programs) {
+				t.Fatalf("case %s with programs on: %d programs, want %d", c.Name, n, len(c.Programs))
+			}
+		}
+		for _, g := range c.Programs {
+			os.RemoveAll(filepath.Join(home, "projects", config.ProgramsDirName, g.Slug))
+		}
+	}
+	if withPrograms == 0 {
+		t.Fatal("the fixture has no program case")
 	}
 }

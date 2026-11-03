@@ -277,7 +277,7 @@ func TestJournalReadOn(t *testing.T) {
 
 	// Retention moves the old lines to journal/2026-10.md.gz: the file
 	// is read again whole, the archive once, the ids kept.
-	p := &project.Project{Slug: "demo", Dir: dir}
+	p := &project.Project{Folder: project.Folder{Slug: "demo", Dir: dir}}
 	n, err := p.ArchiveJournal(time.Date(2026, 10, 31, 0, 0, 0, 0, time.UTC), 0)
 	if err != nil || n != 2 {
 		t.Fatalf("ArchiveJournal = %d, %v", n, err)
@@ -354,7 +354,7 @@ func TestArchives(t *testing.T) {
 	// The handled inbox item goes to inbox/done/2026-10.tar.gz.
 	old := time.Date(2026, 10, 30, 9, 0, 0, 0, time.UTC)
 	os.Chtimes(filepath.Join(dir, "inbox/done/20261030T090000Z-blocked-t-0007.md"), old, old)
-	p := &project.Project{Slug: "demo", Dir: dir}
+	p := &project.Project{Folder: project.Folder{Slug: "demo", Dir: dir}}
 	if n, err := p.ArchiveInbox(time.Date(2026, 11, 30, 0, 0, 0, 0, time.UTC), time.Hour); err != nil || n != 1 {
 		t.Fatalf("ArchiveInbox = %d, %v", n, err)
 	}

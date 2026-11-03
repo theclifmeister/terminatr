@@ -21,6 +21,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/emu"
+	"github.com/theclifmeister/terminatr/internal/features"
 	"github.com/theclifmeister/terminatr/internal/gitx"
 	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/plat/caps"
@@ -174,13 +175,39 @@ func (s *Server) accessFor(role, slug string, tree *gitx.Tree, lc launchConfig) 
 	if slug == "" || role == proto.RoleShell {
 		return agent.Access{}, nil
 	}
+	cfgFile := filepath.Join(realPath(s.opts.Paths.Home), "config.toml")
+	pRead, pNoWrite, pNoWriteFiles, err := programAccess(role, slug, lc.cfg)
+	if err != nil {
+		return agent.Access{}, err
+	}
+	if role == proto.RoleDirector {
+		// Its program's folder, but for what tm alone writes there; no
+		// project's folder, no other program's (programAccess). Never
+		// while programs are off: no director runs then.
+		if !features.Programs(lc.cfg) {
+			return agent.Access{}, &proto.Error{Code: features.OffCode, Message: features.OffMsg}
+		}
+		// The folders are made first, so that each sandbox has a real
+		// path to close.
+		owned, _, err := programOwned(slug)
+		if err != nil {
+			return agent.Access{}, err
+		}
+		for _, d := range owned {
+			if err := os.MkdirAll(d, 0o755); err != nil {
+				return agent.Access{}, err
+			}
+		}
+		return agent.Access{Read: pRead, NoWrite: pNoWrite, NoWriteFiles: append([]string{cfgFile}, pNoWriteFiles...),
+			Commands: directorCommands(lc.cfg, slug)}, nil
+	}
 	dir, err := project.Dir(slug)
 	if err != nil {
 		return agent.Access{}, err
 	}
 	dir = realPath(dir)
 	// The human's safety settings (docs/SPEC.md §11.2).
-	cfg := filepath.Join(realPath(s.opts.Paths.Home), "config.toml")
+	cfg := cfgFile
 	switch role {
 	case proto.RoleCoordinator:
 		wt := realPath(filepath.Join(s.opts.Paths.Home, "worktrees", slug))
@@ -188,7 +215,7 @@ func (s *Server) accessFor(role, slug string, tree *gitx.Tree, lc launchConfig) 
 		// Its folder, but for what tm alone writes there (§5.2).
 		// The folders are made first, so that each sandbox has a real
 		// path to close.
-		owned, ownedFiles := (&project.Project{Slug: slug, Dir: dir}).Owned()
+		owned, ownedFiles := (&project.Project{Folder: project.Folder{Slug: slug, Dir: dir}}).Owned()
 		for _, d := range owned {
 			if err := os.MkdirAll(d, 0o755); err != nil {
 				return agent.Access{}, err
@@ -196,6 +223,9 @@ func (s *Server) accessFor(role, slug string, tree *gitx.Tree, lc launchConfig) 
 		}
 		a.NoWrite = owned
 		a.NoWriteFiles = append(a.NoWriteFiles, ownedFiles...)
+		// Its program's folder, read only; no program's written.
+		a.Read = append(a.Read, pRead...)
+		a.NoWrite = append(a.NoWrite, pNoWrite...)
 		a.Commands = coordinatorCommands(lc.safety(slug))
 		return a, nil
 	case proto.RoleThread:
@@ -205,7 +235,7 @@ func (s *Server) accessFor(role, slug string, tree *gitx.Tree, lc launchConfig) 
 		if err := os.MkdirAll(runs, 0o700); err != nil {
 			return agent.Access{}, err
 		}
-		a := agent.Access{Read: []string{dir}, NoWrite: []string{dir, runs}, NoWriteFiles: []string{cfg}}
+		a := agent.Access{Read: []string{dir}, NoWrite: append([]string{dir, runs}, pNoWrite...), NoWriteFiles: []string{cfg}}
 		// No tree: a thread to come (access.show), whose git dirs aren't
 		// known yet, or one whose folder isn't its recorded checkout.
 		if tree != nil {
@@ -344,6 +374,39 @@ var coordinatorRules = []struct {
 	{[]string{"tm thread merge"}, "coordinator_merges", func(s config.Safety) bool { return s.CoordinatorMerges && s.Merge == config.MergeCoordinator }},
 }
 
+// directorRules are the tm commands a program's director runs without
+// a prompt (the programs design §4.4), the counterpart of
+// coordinatorRules: tm checks each call itself, and the server refuses
+// a director what its authority doesn't allow whatever the prompt says
+// (§10). Read-only commands always; the program's own acts that both
+// authorities allow (route, task edit, send, ask) always; tm program
+// start only under authority = "delegate" (under propose it prompts,
+// and the server still wants --approved-by-user). Nothing of the
+// user's word is here: accept, drop, a thread's menu answer, access,
+// safety, pause, archive and delete are never a director's at all.
+var directorRules = []struct {
+	commands []string
+	on       func(config.Program) bool
+}{
+	{[]string{"tm program context", "tm program list", "tm program show", "tm program needs", "tm program search", "tm program task show",
+		"tm context", "tm task list", "tm task show", "tm thread list", "tm thread show", "tm search", "tm skill"}, nil},
+	{[]string{"tm program route", "tm program task edit", "tm program send", "tm program ask"}, nil},
+	{[]string{"tm program start"}, func(p config.Program) bool { return p.Authority == config.AuthorityDelegate }},
+}
+
+// directorCommands is the commands program slug's director may run
+// unprompted under cfg (directorRules).
+func directorCommands(cfg *config.Config, slug string) []string {
+	t, _ := cfg.Program(slug)
+	var out []string
+	for _, r := range directorRules {
+		if r.on == nil || r.on(t) {
+			out = append(out, r.commands...)
+		}
+	}
+	return out
+}
+
 // coordinatorCommands is the commands a coordinator may run unprompted
 // under the project's settings set (coordinatorRules). Threads never get
 // them.
@@ -370,13 +433,24 @@ func commandSetting(c string) string {
 
 // contextFor renders the context a role gets back after a clear or a
 // compaction (docs/SPEC.md §7.8): the role's rules plus `tm context`
-// for a coordinator, the rules plus the brief, task, PR
+// for a coordinator, the director rules plus `tm program context` for a
+// program's director, the rules plus the brief, task, PR
 // and latest follow-up for a thread, nothing for a session outside a
 // project. Each stays within its size budget, the rules aside. A
 // session whose rules are in its system prompt (r.Prompt) gets a header
 // saying so in their place, with a line to re-read what changed since
 // it started.
 func contextFor(r SessionRecord, tickerState string) func() ([]byte, error) {
+	return contextWith(r, tickerState, nil)
+}
+
+// NeedsFunc reads a program's rolled-up Needs you for its director's
+// context: nil when it isn't known now (the server didn't answer).
+type NeedsFunc func(slug string) *proto.ProgramNeedsResult
+
+// contextWith is contextFor with needs, which a director's context reads
+// its program's Needs you part from; nil leaves the part out.
+func contextWith(r SessionRecord, tickerState string, needs NeedsFunc) func() ([]byte, error) {
 	role, slug, threadID, brief := r.Role, r.Project, r.Thread, r.Brief
 	return func() ([]byte, error) {
 		switch role {
@@ -402,6 +476,8 @@ func contextFor(r SessionRecord, tickerState string) func() ([]byte, error) {
 				return []byte(project.Startup(head, secs)), nil
 			}
 			return []byte(head + "\n\n" + coordinatorEssentials(secs, coordinatorBudget)), nil
+		case proto.RoleDirector:
+			return directorContext(r, needs)
 		case proto.RoleThread:
 			rules, _ := roleRules("thread", slug)
 			head := rules
@@ -457,7 +533,7 @@ func (s *Server) contextOf(id string) func() ([]byte, error) {
 		s.mu.Lock()
 		r := s.records[id]
 		s.mu.Unlock()
-		b, err := blockFor(r, ticker.StatePath(s.opts.Paths.Sessions))()
+		b, err := blockFor(r, ticker.StatePath(s.opts.Paths.Sessions), s.directorNeeds)()
 		if err != nil || r.Prompt == nil {
 			return b, err
 		}
@@ -476,8 +552,8 @@ func (s *Server) contextOf(id string) func() ([]byte, error) {
 	}
 }
 
-// blockFor is contextFor; a test makes a block past the budget with it.
-var blockFor = contextFor
+// blockFor is contextWith; a test makes a block past the budget with it.
+var blockFor = contextWith
 
 // clipStartup is a start-up block within project.StartupCut bytes, and
 // whether it had to be cut; a cut one ends saying to run `tm context`.
@@ -782,7 +858,7 @@ func (s *Server) prepareLaunch(l agentLaunch, v launchView) (*preparedLaunch, *p
 		r.Model, r.ModelNext, r.ModelPending = r.ModelNext, "", false
 	}
 	spec := agent.LaunchSpec{
-		Role: agent.Role(r.Role), SessionID: r.ID, AgentSID: r.AgentSessionID,
+		Role: agent.Role(directorProfile(r.Role)), SessionID: r.ID, AgentSID: r.AgentSessionID,
 		Cwd: r.Cwd, RepoRoot: repo.RepoRoot, GitDir: repo.GitDir, RuntimeDir: p.rt, BriefPath: r.Brief, Kickoff: l.kick, Resume: l.resume,
 		Yolo: yolo, NoSandbox: noSandbox, NoSandboxEscapes: noEscapes, Model: r.Model, TMBin: s.opts.Bin, Socket: s.opts.Paths.Socket, Access: launchAccess(acc),
 		RemoteControl: r.RemoteControl, RemoteName: remoteName(r),
@@ -826,7 +902,11 @@ func (s *Server) prepareLaunch(l agentLaunch, v launchView) (*preparedLaunch, *p
 		spec.EnvHide = envHide(s.baseEnv(), spec.SecretEnv)
 	}
 	if spec.Model == "" {
-		spec.Model = launchModel(a, r.Project, r.Role == proto.RoleCoordinator, lc.cfg)
+		if r.Role == proto.RoleDirector {
+			spec.Model = directorModel(a, r.Project, lc.cfg)
+		} else {
+			spec.Model = launchModel(a, r.Project, r.Role == proto.RoleCoordinator, lc.cfg)
+		}
 	}
 	spec.Theme = s.launchThemeOf(spec.PaneScheme, lc.cfg)
 	spec.LiveTheme = s.writeThemeFile(a, spec.Theme, v.schemeName, lc.cfg != nil && followsTerminal(lc.cfg))

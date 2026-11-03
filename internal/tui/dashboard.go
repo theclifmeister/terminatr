@@ -195,6 +195,8 @@ type dash struct {
 	current string // the current project: the one listed (listProject), or a paired server's shown (peerdash.go)
 	// remoteTop is the remote dashboard's first line shown.
 	remoteTop int
+	// pneeds are the shown program's rolled-up needs (programdash.go).
+	pneeds programNeeds
 	// focus is the area with this console's keyboard: the list, the
 	// sidebar or the details panel (tab). sideSel is the sidebar's
 	// keyboard row, the view's (viewSync.sideSent).
@@ -214,6 +216,7 @@ type dash struct {
 	acts      int                     // actions started, so a poll knows whether one began since it did
 	queued    []func(m *dash) tea.Cmd // settings keys pressed while it runs, in order
 	catalogs  []Catalog               // the agents' models, read when the , popup opens (catalog.go)
+	programs  ProgramsState           // the programs switch and programs, read when the , popup opens (settings_features.go)
 	agents    []string                // the installed agents, read by agentList; nil until then or after a poll
 	agentsOK  bool                    // agents is read
 	stack     []overlay               // views open on top of the list, topmost last
@@ -543,7 +546,10 @@ func (m *dash) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, m.setData(msg.data)
 	case tickMsg:
-		return m, tea.Batch(m.load(), m.reloadBoards(), m.pollModViews(), m.logsTick(), m.pollDevices())
+		return m, tea.Batch(m.load(), m.reloadBoards(), m.pollModViews(), m.logsTick(), m.pollDevices(), m.loadProgramNeeds(false))
+	case programNeedsMsg:
+		m.tookProgramNeeds(msg)
+		return m, nil
 	case logMsg:
 		m.logsTook(msg)
 		return m, nil
@@ -705,13 +711,27 @@ func (m *dash) openTarget(t Target) tea.Cmd {
 		})
 	case t.Coordinator:
 		return m.openProject(t.Project)
+	case t.Program != "":
+		return m.openDirector(t.Program)
 	}
 	return m.showProject(t.Project)
 }
 
 // targetActs reports whether openTarget runs t as an action (m.act): a
-// session or a coordinator; a project's dashboard only moves the view.
-func targetActs(t Target) bool { return t.Session != "" || t.Coordinator }
+// session, a coordinator or a director; a project's dashboard only moves
+// the view.
+func targetActs(t Target) bool { return t.Session != "" || t.Coordinator || t.Program != "" }
+
+// openDirector attaches program slug's director, started first when
+// none runs (sideprograms.go).
+func (m *dash) openDirector(slug string) tea.Cmd {
+	cols, rows := m.paneSize()
+	src := m.src
+	return m.act(func() actionMsg {
+		id, err := src.OpenDirector(slug, cols, rows)
+		return actionMsg{attach: id, sel: "r:" + slug, err: err}
+	})
+}
 
 // showProject shows project's dashboard: it becomes current, with its
 // coordinator's row selected, on every console of the view.
@@ -721,19 +741,20 @@ func (m *dash) showProject(slug string) tea.Cmd {
 		m.rebuild()
 	}
 	m.sel = "p:" + slug
-	if slug == allProjects {
+	if _, isProgram := programPlace(slug); slug == allProjects || isProgram {
 		m.sel = ""
 		m.rebuild() // NEEDS YOU's first row
 	}
+	needs := m.loadProgramNeeds(true)
 	if m.view == nil {
-		return nil
+		return needs
 	}
 	m.selPending++ // the view's selection follows with the answer
 	vc := m.view
-	return m.inTurn(func() tea.Msg {
+	return tea.Batch(needs, m.inTurn(func() tea.Msg {
 		_, err := vc.Do(proto.MethodViewProject, proto.ViewParams{Project: slug})
 		return viewDoneMsg{sel: true, err: err}
-	})
+	}))
 }
 
 // agentList is the installed agents (Source.Agents), read once per poll:
@@ -829,6 +850,13 @@ func (m *dash) setData(d Data) tea.Cmd {
 		// A server's header clicked in a session's sidebar.
 		m.openNetwork(m.over.Server)
 		m.then = ""
+	case first && m.then == thenProgramNeeds && m.over != nil:
+		// The director panel's band: the program needs dialog.
+		cmds = append(cmds, m.openProgramNeeds(m.over.Project, ""))
+		m.then = ""
+	case first && m.then == thenProgram && m.over != nil:
+		m.openProgramSettings(m.over.Project)
+		m.then = ""
 	case first && m.then == thenNeeds:
 		// The needs-you badge clicked in a session.
 		cmds = append(cmds, m.goNeeds())
@@ -851,7 +879,11 @@ func (m *dash) setData(d Data) tea.Cmd {
 // rebuild lays the rows out again from the last poll, for the listed
 // project; a selection that went away moves to the first row.
 func (m *dash) rebuild() {
-	m.rows = buildRows(m.data, shownProject(m.data, m.current), m.layout.order(), m.cardRows())
+	if g, ok := m.programShown(); ok {
+		m.rows = programDashRows(m.data, g, m.pneeds)
+	} else {
+		m.rows = buildRows(m.data, shownProject(m.data, m.current), m.layout.order(), m.cardRows())
+	}
 	if m.layout.compact() {
 		m.rows = compactRows(m.rows)
 	}
@@ -876,6 +908,11 @@ func (m *dash) needsCount() int {
 // thenNeeds is the then (DashState.Then) of the needs-you badge clicked
 // in a session: NEEDS YOU's first row selected.
 const thenNeeds = "needs-you"
+
+// thenProgram is the then of a program row's settings item picked in a
+// session's sidebar: the program's settings popup, Over.Project its
+// program.
+const thenProgram = "program-settings"
 
 // goNeeds shows every project's NEEDS YOU and selects its first row: a
 // click on the needs-you badge, which counts them all.
@@ -1060,6 +1097,9 @@ func (m *dash) projectHere() string {
 	}
 	if r, ok := m.selected(); ok && r.project != "" {
 		return r.project
+	}
+	if _, ok := m.programShown(); ok {
+		return "" // a program's dashboard: no project of its own
 	}
 	if m.allShown() {
 		return "" // every project's NEEDS YOU: none of its own

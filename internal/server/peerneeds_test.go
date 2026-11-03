@@ -2,6 +2,7 @@ package server
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -131,7 +132,7 @@ func TestPeerActChecks(t *testing.T) {
 			return proto.PeerActResult{Asked: true}, nil
 		},
 	}
-	ns, err := ex.needsOf("web")
+	ns, err := ex.sharedNeeds("web")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -180,5 +181,76 @@ func TestPeerActChecks(t *testing.T) {
 	}
 	if ran[0].Question != "Which\tcache?" || ran[0].Answer != label {
 		t.Errorf("the answer went in the paired server's words: %+v", ran[0])
+	}
+}
+
+// TestPeerAskAnswer: the paired server's user answers one of the
+// coordinator's open questions (a program's answer fanned out): an
+// option's label, a multi-select's picks or their own words, journaled
+// as theirs; an answer already waiting is not asked again; the act
+// must name the question as shown, and a menu takes no own words.
+func TestPeerAskAnswer(t *testing.T) {
+	testPaths(t)
+	p, err := project.New(project.Options{Slug: "web"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := config.SetProject("web", "share", true); err != nil {
+		t.Fatal(err)
+	}
+	opts := []project.QuestionOption{{Label: "EU"}, {Label: "US"}, {Label: "Asia"}}
+	q1, _ := p.AddQuestion(project.Question{Question: "Which region?", Options: opts})
+	q2, _ := p.AddQuestion(project.Question{Question: "Which regions?", Options: opts, MultiSelect: true})
+	q3, _ := p.AddQuestion(project.Question{Question: "Which name?", Options: opts})
+	s := &Server{}
+	ex := peerExport{
+		sessions: func() []proto.SessionInfo { return nil },
+		state:    func(string, []proto.SessionInfo) (proto.ProjectWatch, error) { return proto.ProjectWatch{}, nil },
+		act:      s.peerAct,
+	}
+	user := caller.ForPeerHuman("studio", "")
+	act := func(id, question string, f func(*proto.PeerAct)) (proto.PeerActResult, error) {
+		a := proto.PeerAct{Project: "web", Need: "ask:" + id, Act: proto.ActAnswer, Question: question}
+		f(&a)
+		return ex.Act(user, a)
+	}
+	code := func(err error) string {
+		var pe *proto.Error
+		if errors.As(err, &pe) {
+			return pe.Code
+		}
+		return fmt.Sprint(err)
+	}
+	if _, err := act(q1.ID, "Which db?", func(a *proto.PeerAct) { a.Answer = "EU" }); code(err) != proto.ErrNeedChanged {
+		t.Errorf("another question: %v", err)
+	}
+	if _, err := act(q1.ID, "Which region?", func(a *proto.PeerAct) { a.Answer = "Mars" }); code(err) != proto.ErrBadParams {
+		t.Errorf("not an option: %v", err)
+	}
+	if res, err := act(q1.ID, "Which region?", func(a *proto.PeerAct) { a.Answer = "US" }); err != nil || !res.Asked || res.Act != proto.ActAnswer {
+		t.Fatalf("answer: %+v %v", res, err)
+	}
+	if res, err := act(q1.ID, "Which region?", func(a *proto.PeerAct) { a.Answer = "EU" }); err != nil || res.Asked {
+		t.Errorf("again: %+v %v", res, err)
+	}
+	if _, err := act(q2.ID, "Which regions?", func(a *proto.PeerAct) { a.Picks, a.Answer = []int{0, 2}, "EU, Asia" }); err != nil {
+		t.Errorf("picks: %v", err)
+	}
+	if _, err := act(q3.ID, "Which name?", func(a *proto.PeerAct) { a.Other = "Acme Cloud" }); err != nil {
+		t.Errorf("own words: %v", err)
+	}
+	items, _ := p.Inbox()
+	var got []string
+	for _, it := range items {
+		if it.Kind == project.KindAnswer {
+			got = append(got, it.Summary)
+		}
+	}
+	if len(got) != 3 || !strings.Contains(got[0], "US") || !strings.Contains(got[1], "EU") || !strings.Contains(got[1], "Asia") || !strings.Contains(got[2], "Acme Cloud") {
+		t.Errorf("answers: %q", got)
+	}
+	lines, _, _ := p.JournalTail(10)
+	if j := strings.Join(lines, "\n"); !strings.Contains(j, "peer: studio") || !strings.Contains(j, "ask.answer Q1") {
+		t.Errorf("journal: %s", j)
 	}
 }

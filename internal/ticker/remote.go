@@ -12,7 +12,6 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/config"
-	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
@@ -38,18 +37,18 @@ type remoteMemo struct {
 	Tried   time.Time `json:"tried,omitzero"`
 }
 
-// keepRemote turns the project's coordinator's remote control on when
+// keepRemote turns the seat's coordinator's (or director's) remote control on when
 // the setting says so and it reads off: only while the coordinator is
 // idle with no prompt queued, after it read off for RemoteGrace, at most
 // once per RemoteEvery, and never while the user's own off holds
 // (SessionInfo.RemoteHeld). Each try is journaled as ticker remote.on.
-func (t *Ticker) keepRemote(p *project.Project, sessions []proto.SessionInfo, safety config.Safety, now time.Time) {
-	pm := t.projectMemo(p.Slug)
+func (t *Ticker) keepRemote(p seat, sessions []proto.SessionInfo, safety config.Safety, now time.Time) {
+	pm := t.projectMemo(p.key())
 	if !safety.CoordinatorRemoteControl {
 		pm.Remote = nil
 		return
 	}
-	coord := proto.CoordinatorOf(sessions, p.Slug)
+	coord := p.of(sessions)
 	rm := pm.Remote
 	if rm == nil {
 		rm = &remoteMemo{}
@@ -88,17 +87,17 @@ func (t *Ticker) keepRemote(p *project.Project, sessions []proto.SessionInfo, sa
 // outside the settings popup (a hand edit, all projects' value) reaches
 // it too: the host switches it live once it is idle, or keeps the
 // change for its next start. A no-op while it already runs the model.
-func (t *Ticker) keepModel(p *project.Project, sessions []proto.SessionInfo) {
+func (t *Ticker) keepModel(p seat, sessions []proto.SessionInfo) {
 	for _, s := range sessions {
-		if s.Role != proto.RoleCoordinator || s.Project != p.Slug || s.Agent == "" {
+		if s.Role != p.role || s.Project != p.Slug || s.Agent == "" {
 			continue
 		}
 		res, err := t.o.Host.SyncModel(s.ID)
 		switch {
 		case err != nil:
-			t.o.Log.Printf("ticker: %s: coordinator model: %v", p.Slug, err)
+			t.o.Log.Printf("ticker: %s: %s model: %v", p.Slug, p.role, err)
 		case res.How == proto.ModelSwitched:
-			t.o.Log.Printf("ticker: %s: coordinator %s switches to model %s when idle", p.Slug, s.ID, cmpOrDefault(res.Model))
+			t.o.Log.Printf("ticker: %s: %s %s switches to model %s when idle", p.Slug, p.role, s.ID, cmpOrDefault(res.Model))
 		}
 	}
 }

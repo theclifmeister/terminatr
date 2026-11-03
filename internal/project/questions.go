@@ -60,7 +60,26 @@ type Question struct {
 	// the dialog lists it first, marked "(Recommended)".
 	Recommended string    `json:"recommended,omitempty"`
 	Asked       time.Time `json:"asked"`
+	// Covers are the member projects' questions a program's question
+	// was merged from (the programs design §7.2, tm program ask merge):
+	// the user's answer to it goes to each of them. A program's only.
+	Covers []Cover `json:"covers,omitempty"`
+	// CoveredBy names the program question that covers this one, as
+	// <program>/Q2: the user answers it at program level, once.
+	CoveredBy string `json:"covered_by,omitempty"`
 }
+
+// Cover is one member question a program question covers: project's
+// question ID, and Map, the member question's option label for each of
+// the program question's options, in their order.
+type Cover struct {
+	Project  string   `json:"project"`
+	Question string   `json:"question"`
+	Map      []string `json:"map"`
+}
+
+// Ref is the cover as tm names it: acme-api/Q3.
+func (c Cover) Ref() string { return c.Project + "/" + c.Question }
 
 // questionStore is questions.json.
 type questionStore struct {
@@ -74,7 +93,7 @@ var questionRefRE = regexp.MustCompile(`^[Qq]([1-9][0-9]*)$`)
 func IsQuestionID(s string) bool { return questionRefRE.MatchString(s) && s[0] == 'Q' }
 
 // Questions are the open questions, oldest first.
-func (p *Project) Questions() ([]Question, error) {
+func (p *Folder) Questions() ([]Question, error) {
 	data, err := os.ReadFile(p.Path(questionsFile))
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, nil
@@ -101,7 +120,7 @@ func decodeQuestions(data []byte) (questionStore, error) {
 }
 
 // updateQuestions is a locked read-modify-write of the store.
-func (p *Project) updateQuestions(fn func(st *questionStore) error) error {
+func (p *Folder) updateQuestions(fn func(st *questionStore) error) error {
 	return mdfile.Update(p.Path(questionsFile), func(old []byte) ([]byte, error) {
 		st, err := decodeQuestions(old)
 		if err != nil {
@@ -170,14 +189,20 @@ func (q *Question) Check() error {
 // AddQuestion checks q and stores it under the next id, which it
 // returns. Asking the same question again (same task and text) gives the
 // open one back, updated.
-func (p *Project) AddQuestion(q Question) (Question, error) {
+func (p *Folder) AddQuestion(q Question) (Question, error) {
 	if err := q.Check(); err != nil {
 		return Question{}, err
+	}
+	// Only tm's program merge sets what covers what: never a
+	// coordinator's question JSON.
+	q.CoveredBy = ""
+	if !p.IsProgram() {
+		q.Covers = nil
 	}
 	err := p.updateQuestions(func(st *questionStore) error {
 		for i, o := range st.Open {
 			if o.Task == q.Task && o.Question == q.Question {
-				q.ID, q.Asked = o.ID, o.Asked
+				q.ID, q.Asked, q.CoveredBy = o.ID, o.Asked, o.CoveredBy
 				st.Open[i] = q
 				return nil
 			}
@@ -198,7 +223,7 @@ func (p *Project) AddQuestion(q Question) (Question, error) {
 // DoneQuestion closes the open question ref (Q3 or q3): answered, or no
 // longer asked; an answer item to it is done with it. Closing one that
 // isn't open refuses with unknown-question.
-func (p *Project) DoneQuestion(ref string) (Question, error) {
+func (p *Folder) DoneQuestion(ref string) (Question, error) {
 	m := questionRefRE.FindStringSubmatch(strings.TrimSpace(ref))
 	if m == nil {
 		return Question{}, refuse("invalid-question", "%q is not a question id like Q3", ref)
@@ -220,6 +245,56 @@ func (p *Project) DoneQuestion(ref string) (Question, error) {
 	}
 	// The user's answer to it is handled with it.
 	return done, p.DoneItems(KindAnswer, id)
+}
+
+// questionID is ref (Q3 or q3) as stored, or why it is no question id.
+func questionID(ref string) (string, error) {
+	m := questionRefRE.FindStringSubmatch(strings.TrimSpace(ref))
+	if m == nil {
+		return "", refuse("invalid-question", "%q is not a question id like Q3", ref)
+	}
+	return "Q" + m[1], nil
+}
+
+// Question is open question ref, or unknown-question.
+func (p *Folder) Question(ref string) (Question, error) {
+	id, err := questionID(ref)
+	if err != nil {
+		return Question{}, err
+	}
+	qs, err := p.Questions()
+	if err != nil {
+		return Question{}, err
+	}
+	i := slices.IndexFunc(qs, func(q Question) bool { return q.ID == id })
+	if i < 0 {
+		return Question{}, refuse("unknown-question", "no open question %s in %s", id, p.Slug)
+	}
+	return qs[i], nil
+}
+
+// SetCoveredBy marks open question ref as covered by program question
+// by (<program>/Q2), "" to clear the mark, while its mark is was: a
+// question covered by another program question refuses covered. Gone,
+// it refuses unknown-question.
+func (p *Folder) SetCoveredBy(ref, by, was string) error {
+	id, err := questionID(ref)
+	if err != nil {
+		return err
+	}
+	return p.updateQuestions(func(st *questionStore) error {
+		for i, o := range st.Open {
+			if o.ID != id {
+				continue
+			}
+			if o.CoveredBy != was {
+				return refuse("covered", "%s/%s is covered by %s", p.Slug, id, o.CoveredBy)
+			}
+			st.Open[i].CoveredBy = by
+			return nil
+		}
+		return refuse("unknown-question", "no open question %s in %s", id, p.Slug)
+	})
 }
 
 // QuestionsWaiting is "2 questions waiting", or "" for none.
@@ -244,6 +319,16 @@ func QuestionLine(q Question) string {
 	fmt.Fprintf(&b, " [%s] %s", q.Header, strings.Join(strings.Fields(q.Question), " "))
 	if q.MultiSelect {
 		b.WriteString(" (multi-select)")
+	}
+	if q.CoveredBy != "" {
+		b.WriteString(" (covered by " + q.CoveredBy + ": the user answers it at program level)")
+	}
+	if len(q.Covers) > 0 {
+		refs := make([]string, len(q.Covers))
+		for i, c := range q.Covers {
+			refs[i] = c.Ref()
+		}
+		b.WriteString(" (covers " + strings.Join(refs, ", ") + ")")
 	}
 	b.WriteString(" Options:")
 	for i, o := range q.Options {
@@ -337,7 +422,7 @@ func (q Question) Pick(choices []string, other string) (Answer, error) {
 // AnswerQuestion records the user's answer to open question ref: an
 // answer item for the coordinator and a journal line. It reports false,
 // recording nothing, while an earlier answer to it waits in the inbox.
-func (p *Project) AnswerQuestion(c caller.Caller, ref string, choices []string, other string) (Question, Answer, bool, error) {
+func (p *Folder) AnswerQuestion(c caller.Caller, ref string, choices []string, other string) (Question, Answer, bool, error) {
 	m := questionRefRE.FindStringSubmatch(strings.TrimSpace(ref))
 	if m == nil {
 		return Question{}, Answer{}, false, refuse("invalid-question", "%q is not a question id like Q3", ref)

@@ -211,7 +211,8 @@ func init() {
 		proto.MethodSessionWatch: {scope: scopeSees, name: scoped(sessionID), stream: stream((*Server).serveWatch)},
 		proto.MethodAgentExplain: {scope: scopeSees, name: scoped(sessionID),
 			call: typed(func(s *Server, p proto.SessionIDParams, _ callCtx) (any, *proto.Error) { return s.explain(p.ID) })},
-		proto.MethodProjectWatch: {scope: scopeProject, name: scoped(func(p proto.ProjectWatchParams) string { return p.Project }),
+		// A project's state: its agents, and its program's director (read).
+		proto.MethodProjectWatch: {scope: scopeProgram, name: scoped(func(p proto.ProjectWatchParams) string { return p.Project }),
 			stream: stream((*Server).serveProjectWatch)},
 		// tm search (CapSearch): the human any project, an agent its own;
 		// a thread without the coordinator's chunks (seesAll).
@@ -221,6 +222,27 @@ func init() {
 			call: typed((*Server).searchTimeline)},
 		proto.MethodSearchShow: {gate: gateAgentOrHuman, scope: scopeProject, name: scoped(func(p proto.SearchShowParams) string { return p.Project }),
 			call: typed((*Server).searchShow)},
+		// A program's rolled-up Needs you: the human any program's, a
+		// director its own's (checked in programNeeds).
+		proto.MethodProgramNeeds: {gate: gateAgentOrHuman, call: typed((*Server).programNeeds)},
+		// Its needs dialog opened over the director's pane, for the
+		// user: the human, or the director for its own program.
+		proto.MethodProgramNeedsOpen: {gate: gateAgentOrHuman, call: typed((*Server).programNeedsOpen)},
+
+		// program.search (CapProgramSearch): the human, or the program's
+		// own director, over the program and its members (thread view).
+		proto.MethodProgramSearch: {gate: gateAgentOrHuman, scope: scopeDirects, name: scoped(func(p proto.ProgramSearchParams) string { return p.Program }),
+			call: typed(func(s *Server, p proto.ProgramSearchParams, c callCtx) (any, *proto.Error) {
+				return s.searchIdx.ProgramQuery(s.cfgNow(), p, c.who().Kind == caller.Director)
+			})},
+		proto.MethodProgramSearchTimeline: {gate: gateAgentOrHuman, scope: scopeDirects, name: scoped(func(p proto.ProgramTimelineParams) string { return p.Program }),
+			call: typed(func(s *Server, p proto.ProgramTimelineParams, c callCtx) (any, *proto.Error) {
+				return s.searchIdx.ProgramTimeline(s.cfgNow(), p, c.who().Kind == caller.Director)
+			})},
+		proto.MethodProgramSearchShow: {gate: gateAgentOrHuman, scope: scopeDirects, name: scoped(func(p proto.ProgramShowParams) string { return p.Program }),
+			call: typed(func(s *Server, p proto.ProgramShowParams, c callCtx) (any, *proto.Error) {
+				return s.searchIdx.ProgramShow(s.cfgNow(), p, c.who().Kind == caller.Director)
+			})},
 
 		// The human's.
 		proto.MethodPaneVT:          {gate: gateHuman, stream: (*Server).servePaneVT},
@@ -326,6 +348,33 @@ func init() {
 		})},
 		proto.MethodProjectActive: {gate: gateHuman, call: typed(func(s *Server, p proto.ProjectActiveParams, c callCtx) (any, *proto.Error) {
 			res, perr := s.setActive(p, c.who())
+			s.kick()
+			return res, perr
+		})},
+		// A program for the apps (proto/programapp.go): its dashboard,
+		// and the human's acts on it, which the TUI does in-process.
+		proto.MethodProgramGet: {gate: gateHuman, call: typed(func(s *Server, p proto.ProgramParams, _ callCtx) (any, *proto.Error) {
+			return s.programGet(p)
+		})},
+		proto.MethodProgramRoute:    {gate: gateHuman, call: typed((*Server).programRoute)},
+		proto.MethodProgramTaskEdit: {gate: gateHuman, call: typed((*Server).programTaskEdit)},
+		proto.MethodProgramSend:     {gate: gateHuman, call: typed((*Server).programSend)},
+		proto.MethodProgramRead: {gate: gateHuman, call: typed(func(s *Server, p proto.ProgramReadParams, _ callCtx) (any, *proto.Error) {
+			return s.programRead(p)
+		})},
+		proto.MethodProgramAnswer: {gate: gateHuman, call: typed((*Server).programAnswer)},
+		proto.MethodProgramUmbrellaAccept: {gate: gateHuman, call: typed(func(s *Server, p proto.ProgramUmbrellaParams, c callCtx) (any, *proto.Error) {
+			return s.programUmbrella(p, c, true)
+		})},
+		proto.MethodProgramUmbrellaSendBack: {gate: gateHuman, call: typed(func(s *Server, p proto.ProgramUmbrellaParams, c callCtx) (any, *proto.Error) {
+			return s.programUmbrella(p, c, false)
+		})},
+		proto.MethodProgramDelete: {gate: gateHuman, call: typed((*Server).programDelete)},
+		proto.MethodProgramRename: {gate: gateHuman, call: typed(func(s *Server, p proto.ProgramRenameParams, c callCtx) (any, *proto.Error) {
+			return s.renameProgram(p, c.who())
+		})},
+		proto.MethodProgramsSwitch: {gate: gateHuman, call: typed(func(s *Server, p proto.ProgramsSwitchParams, c callCtx) (any, *proto.Error) {
+			res, perr := s.setPrograms(p, c.who())
 			s.kick()
 			return res, perr
 		})},

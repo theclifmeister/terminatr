@@ -127,6 +127,7 @@ func TestRename(t *testing.T) {
 		{"[[other/messages/old/M-1|M-1]]", "[[other/messages/new/M-1|M-1]]"},
 		{"[[old/messages/old/M-1|M-1]]", "[[new/messages/new/M-1|M-1]]"},
 		{"[[old/tasks/T1]]", "[[new/tasks/T1]]"},
+		{"[[_programs/acme/messages/old/M-1|M-1]]", "[[_programs/acme/messages/new/M-1|M-1]]"},
 		{"[[old/tasks/T1|]]", "[[new/tasks/T1|]]"},
 		// Not old's: another project, a prefix, plain text.
 		{"[[older/tasks/T1|T1]]", "[[older/tasks/T1|T1]]"},
@@ -164,5 +165,57 @@ func TestText(t *testing.T) {
 	mdfile.WriteYAML(false)
 	if got := Text("d", "T1"); got != "T1" {
 		t.Errorf("without links: %q", got)
+	}
+}
+
+// TestProgramLink: a program's links lead with its vault folder,
+// _programs/<slug>/ (the programs design §3.4), and a link to a
+// program's own note is Program.
+func TestProgramLink(t *testing.T) {
+	on(t)
+	acme := ProgramFolder("acme")
+	for _, c := range []struct {
+		k         Kind
+		id, alias string
+		want      string
+	}{
+		{Task, "T4", "acme/T4", "[[_programs/acme/tasks/T4|acme/T4]]"},
+		{Memory, "plan", "", "[[_programs/acme/memory/plan|plan]]"},
+		{Design, "rollout", "", "[[_programs/acme/designs/rollout|rollout]]"},
+		{Program, "acme", "", "[[_programs/acme/PROGRAM|acme]]"},
+		{Program, "a/b", "", "a/b"},
+	} {
+		if got := Link(acme, c.k, c.id, c.alias); got != c.want {
+			t.Errorf("Link(%v, %q, %q) = %q, want %q", c.k, c.id, c.alias, got, c.want)
+		}
+	}
+	if got := Ref(acme, "T4"); got != "[[_programs/acme/tasks/T4|T4]]" {
+		t.Errorf("Ref: %q", got)
+	}
+	if got := Text(acme, "after T4"); got != "after [[_programs/acme/tasks/T4|T4]]" {
+		t.Errorf("Text: %q", got)
+	}
+	for _, bad := range []string{"_programs/", "_programs/a/b", "_programs/.."} {
+		if got := Link(bad, Task, "T4", ""); got != "T4" {
+			t.Errorf("Link(%q) = %q, want no link", bad, got)
+		}
+	}
+}
+
+// TestRenameProgram: a program's rename moves the links into its folder
+// and nothing else: not a project of the same name, not another program.
+func TestRenameProgram(t *testing.T) {
+	in := "[[_programs/acme/tasks/T4|T4]] [[_programs/acme/PROGRAM|acme]] [[acme/tasks/T1|T1]] [[_programs/acme-two/tasks/T1|T1]] [[_programs/acme/memory/x]]"
+	want := "[[_programs/studio/tasks/T4|T4]] [[_programs/studio/PROGRAM|studio]] [[acme/tasks/T1|T1]] [[_programs/acme-two/tasks/T1|T1]] [[_programs/studio/memory/x]]"
+	if got := Rename(in, ProgramFolder("acme"), ProgramFolder("studio")); got != want {
+		t.Errorf("got  %s\nwant %s", got, want)
+	}
+	// A member's channel with the program moves with it.
+	if got := Rename("[[api/messages/acme/M-2|M-2]] [[api/messages/acme-two/M-2|M-2]]", ProgramFolder("acme"), ProgramFolder("studio")); got != "[[api/messages/studio/M-2|M-2]] [[api/messages/acme-two/M-2|M-2]]" {
+		t.Errorf("member's messages: %s", got)
+	}
+	// A project's rename leaves a program's links alone.
+	if got := Rename("[[_programs/acme/tasks/T4|T4]]", "acme", "web"); got != "[[_programs/acme/tasks/T4|T4]]" {
+		t.Errorf("project rename changed a program link: %s", got)
 	}
 }

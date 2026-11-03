@@ -9,6 +9,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/tasks"
 )
 
 // Actions: the list's keys. One table drives the key handling, the help
@@ -70,7 +71,7 @@ func init() {
 		{id: "focus.prev", keys: []string{"shift+tab"}, fixed: true, mouse: "a click on the area", run: (*dash).cycleFocus},
 		{id: "place.last", keys: []string{";"}, label: ";", help: "back to the last place: the area, sidebar row or session the keyboard was in before (prefix+; anywhere)",
 			menu: "back to the last place", run: (*dash).goLastPlace},
-		{id: "row.open", keys: []string{"enter"}, label: "enter", help: "attach to the selected session; on a project, open its coordinator; a task in NEEDS YOU shows in the project popup; questions waiting there open in the coordinator's question dialog; a held message or a file offered opens its dialog, a link request, a paused link or a paired server's share request the Network popup at its row; a paired server's need in the all-projects NEEDS YOU opens its dialog to answer it there while that server takes answers from this one (tm peer needs … answer, on it), else shows its read-only dashboard",
+		{id: "row.open", keys: []string{"enter"}, label: "enter", help: "attach to the selected session; on a project, open its coordinator; a task in NEEDS YOU shows in the project popup; questions waiting there open in the coordinator's question dialog; a held message or a file offered opens its dialog, a link request, a paused link or a paired server's share request the Network popup at its row; a paired server's need in the all-projects NEEDS YOU opens its dialog to answer it there while that server takes answers from this one (tm peer needs … answer, on it), else shows its read-only dashboard; on the program dashboard, an umbrella in review is accepted (asks first) and a part or a waiting task shows in its project",
 			menu: "open the selected row",
 			foot: func(_ *dash, r row, ok bool) string {
 				switch {
@@ -78,7 +79,11 @@ func init() {
 					return ""
 				case r.peerNeed != nil && r.peerNeed.answer && len(proto.ActsOf(r.peerNeed.need)) > 0:
 					return "answer"
-				case r.task != nil, r.remote != "":
+				case r.pneed != nil:
+					return "answer"
+				case r.umbrella != nil && r.umbrella.status == tasks.Review:
+					return "accept"
+				case r.task != nil, r.remote != "", isChildRow(r) && r.project != "":
 					return "show"
 				case r.card:
 					return "open"
@@ -124,7 +129,7 @@ func init() {
 				return "fold"
 			},
 			run: (*dash).foldCard},
-		{id: "project.new", keys: []string{"+"}, label: "+", help: "new project (n too while there is none)", menu: "new project",
+		{id: "project.new", keys: []string{"+"}, label: "+", help: "new project (n too while there is none); on the sidebar's PROJECTS header while programs are on, a new project or a new program", menu: "new project",
 			foot: func(m *dash, _ row, _ bool) string {
 				if len(m.data.Projects) == 0 {
 					return "new project"
@@ -243,8 +248,14 @@ func (m *dash) enter(string) tea.Cmd {
 		return m.openCard(r.key)
 	case r.peerNeed != nil:
 		return m.openPeerNeed(*r.peerNeed)
+	case r.pneed != nil:
+		return m.openProgramNeeds(r.pneed.program, r.pneed.need.ID)
+	case r.umbrella != nil:
+		return m.openUmbrella(*r.umbrella)
 	case r.remote != "":
 		return m.showProject(r.remote)
+	case isChildRow(r) && r.project != "":
+		return m.showProject(r.project)
 	case r.questions > 0:
 		return m.answerQuestions(r.project)
 	case r.links > 0:
@@ -263,6 +274,20 @@ func (m *dash) enter(string) tea.Cmd {
 }
 
 func (m *dash) newProject(string) tea.Cmd {
+	if m.data.ProgramsOn && m.focus == areaSide && m.sideSel == headKey {
+		// On the PROJECTS header while programs are on: a project or a
+		// program (the programs design §11.1).
+		m.openMenu("new", []menuItem{
+			{label: "new project", run: func(m *dash) tea.Cmd { return m.askNewProject() }},
+			{label: "new program", run: func(m *dash) tea.Cmd { m.newProgram(); return nil }},
+		}, 0, 0)
+		return nil
+	}
+	return m.askNewProject()
+}
+
+// askNewProject asks for the new project's name, then makes it.
+func (m *dash) askNewProject() tea.Cmd {
 	m.promptNo("New project", "Its name (becomes a lower-case slug):", "demo-app", "", 0, func(slug string) tea.Cmd {
 		src := m.src
 		return m.act(func() actionMsg {
@@ -388,12 +413,29 @@ func (m *dash) answerQuestions(slug string) tea.Cmd {
 
 // saveClear has slug's coordinator save what it learned, then clears its
 // conversation (the context hint's key); the footer says what came of it.
-func (m *dash) saveClear(slug string) tea.Cmd {
+func (m *dash) saveClear(slug string) tea.Cmd { return m.saveClearOf(proto.RoleCoordinator, slug) }
+
+// saveClearOf is saveClear for the session of role (a director: slug is
+// its program).
+func (m *dash) saveClearOf(role, slug string) tea.Cmd {
 	src := m.src
 	return m.act(func() actionMsg {
-		res, err := src.SaveClear(slug)
-		return actionMsg{msg: saveClearWords(slug, res, err)}
+		res, err := src.SaveClear(role, slug)
+		return actionMsg{msg: saveClearWordsFor(role, slug, res, err)}
 	})
+}
+
+// directorHere is the program whose director the sidebar's cursor is
+// on (its program's row or its director's), "" elsewhere: prefix+r and
+// prefix+C then act on that director.
+func (m *dash) directorHere() string {
+	if m.focus != areaSide {
+		return ""
+	}
+	if r, ok := sideRowOf(m.tree(), m.sideSel, false); ok && (r.kind == treeProgram || r.kind == treeDirector) {
+		return r.slug
+	}
+	return ""
 }
 
 // activeWord is what space does to a project that is on (active) or not.

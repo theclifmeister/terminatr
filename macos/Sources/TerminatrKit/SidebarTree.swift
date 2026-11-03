@@ -21,9 +21,11 @@ public enum SidebarTree {
 
     /// The inactive projects, folded under "Inactive (n)" at the bottom,
     /// pinned or not; with needs_first, those that need the user first.
+    /// A program's members are listed under it (programs), never here.
     public static func inactive(_ projects: [AppAPI.Project], needsFirst: Bool = false, sessions: [AppAPI.Session] = [],
-                                nav: Navigation = Navigation()) -> [AppAPI.Project] {
-        let gone = projects.filter { !$0.active }
+                                nav: Navigation = Navigation(), programs: [AppAPI.Program] = []) -> [AppAPI.Project] {
+        let held = members(programs, projects: projects)
+        let gone = projects.filter { !$0.active && held[$0.slug] == nil }
         return needsFirst ? needing(gone, sessions: sessions, nav: nav) : gone
     }
 
@@ -86,30 +88,58 @@ public enum SidebarTree {
     /// first, then each paired one's, "g:<alias>", with its projects,
     /// "r:<alias>/<slug>", their coordinators, "rc:", and threads,
     /// "rt:<alias>/<slug>/<id>" (sessions(of:)), above the divider.
+    /// With programs (the programs design §11.1), "g:<slug>" a program,
+    /// "r:<slug>" its director, then its members' rows, a paired one's
+    /// under "g:<slug>/" as well as under its server's group.
     /// watched is the bridge's PeerProject.watched (app API 10). The
     /// sidebar draws these rows; the shared fixture
     /// (internal/tui/testdata/sidebar-app.json) pins them to the TUI's
     /// buildTree.
     public static func rows(_ projects: [AppAPI.Project], sessions: [AppAPI.Session], peers: [AppAPI.Peer] = [],
-                            nav: Navigation, needsFirst: Bool = false, watched: Bool = true) -> [String] {
+                            programs: [AppAPI.Program] = [], nav: Navigation, needsFirst: Bool = false, watched: Bool = true) -> [String] {
         func add(_ p: AppAPI.Project) -> [String] {
             guard opens(p, nav: nav) else { return ["p:\(p.slug)"] }
             return ["p:\(p.slug)", "c:\(p.slug)"] + threads(of: p) { session($0, in: sessions) }.map { "t:\(p.slug)/\($0.record.id)" }
         }
-        var remote: [String] = []
-        for peer in peers {
-            remote.append("g:\(peer.alias)")
-            guard !nav.collapsed.contains(Navigation.sectionKey(server: peer.alias)) else { continue }
-            for p in peer.projects {
-                remote.append("r:\(peer.alias)/\(p.project)")
-                guard !nav.collapsed.contains(Navigation.sectionKey(server: peer.alias, project: p.project)) else { continue }
-                remote += SidebarTree.sessions(of: p, alias: peer.alias, watched: watched).map { s in
-                    s.ref.isCoordinator ? "rc:\(peer.alias)/\(p.project)" : "rt:\(peer.alias)/\(p.project)/\(s.ref.thread)"
-                }
+        func remote(_ alias: String, _ p: AppAPI.PeerProject, folded: Bool) -> [String] {
+            guard !folded else { return [] }
+            return SidebarTree.sessions(of: p, alias: alias, watched: watched).map { s in
+                s.ref.isCoordinator ? "rc:\(alias)/\(p.project)" : "rt:\(alias)/\(p.project)/\(s.ref.thread)"
             }
         }
-        let gone = inactive(projects, needsFirst: needsFirst, sessions: sessions, nav: nav)
-        return (peers.isEmpty ? [] : ["g:"]) + active(projects, needsFirst: needsFirst, sessions: sessions).flatMap(add) + remote
+        func add(_ g: AppAPI.Program) -> [String] {
+            guard opens(g, nav: nav) else { return ["g:\(g.slug)"] }
+            var out = ["g:\(g.slug)", "r:\(g.slug)"]
+            for m in memberRows(g, projects: projects, peers: peers) {
+                switch m {
+                case .local(let p):
+                    out += add(p)
+                case .paired(let alias, let slug, _, let p, _):
+                    out.append("g:\(g.slug)/r:\(alias)/\(slug)")
+                    if let p {
+                        out += remote(alias, p, folded: !opens(member: alias, slug, of: g, nav: nav)).map { "g:\(g.slug)/\($0)" }
+                    }
+                }
+            }
+            return out
+        }
+        var others: [String] = []
+        for peer in peers {
+            others.append("g:\(peer.alias)")
+            guard !nav.collapsed.contains(Navigation.sectionKey(server: peer.alias)) else { continue }
+            for p in peer.projects {
+                others.append("r:\(peer.alias)/\(p.project)")
+                others += remote(peer.alias, p, folded: nav.collapsed.contains(Navigation.sectionKey(server: peer.alias, project: p.project)))
+            }
+        }
+        let gone = inactive(projects, needsFirst: needsFirst, sessions: sessions, nav: nav, programs: programs)
+        let here = entries(projects, programs: programs, needsFirst: needsFirst, sessions: sessions, peers: peers, nav: nav).flatMap { e in
+            switch e {
+            case .project(let p): add(p)
+            case .program(let g): add(g)
+            }
+        }
+        return (peers.isEmpty ? [] : ["g:"]) + here + others
             + (gone.isEmpty ? [] : ["d:inactive"]) + (nav.showInactive ? gone.flatMap(add) : [])
     }
 
@@ -166,6 +196,16 @@ extension Attention {
     /// when none runs). Its open questions (tm ask) wait even while none
     /// runs.
     public static func of(coordinator s: AppAPI.Session?, in p: AppAPI.Project, now: Date = Date()) -> Attention {
+        of(lead: s, questions: p.questions, none: "no coordinator runs", now: now)
+    }
+
+    /// What a program's director says of itself, as a coordinator: with
+    /// s its session (nil when none runs) and its program's questions.
+    public static func of(director s: AppAPI.Session?, in g: AppAPI.Program, now: Date = Date()) -> Attention {
+        of(lead: s, questions: g.questions, none: "no director runs", now: now)
+    }
+
+    static func of(lead s: AppAPI.Session?, questions: Int, none: String, now: Date) -> Attention {
         if let s {
             let menu = s.question.map { q in q.questions.contains { !$0.answered } } ?? false
             if menu || (s.state == "blocked" && s.reason == "question") {
@@ -179,12 +219,12 @@ extension Attention {
                 return Attention(word: "held", tone: .attention, why: "prompt held: \(s.queueHeld)", waits: true)
             }
         }
-        if p.questions > 0 {
+        if questions > 0 {
             return Attention(word: "asks", tone: .question,
-                             why: p.questions == 1 ? "has a question" : "has \(p.questions) questions", waits: true)
+                             why: questions == 1 ? "has a question" : "has \(questions) questions", waits: true)
         }
         guard let s else {
-            return Attention(word: "not running", tone: .idle, why: "no coordinator runs", waits: false)
+            return Attention(word: "not running", tone: .idle, why: none, waits: false)
         }
         switch s.state {
         case "working":

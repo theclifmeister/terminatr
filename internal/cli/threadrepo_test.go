@@ -64,7 +64,7 @@ func TestThreadRepo(t *testing.T) {
 				c = coord
 			}
 			e := &Env{Caller: c, Cwd: base}
-			got, err := e.threadRepo(&project.Project{Slug: "demo", Repos: tc.repos}, tc.flag, tc.task)
+			got, err := e.threadRepo(&project.Project{Folder: project.Folder{Slug: "demo"}, Repos: tc.repos}, tc.flag, tc.task)
 			var te *tasks.Error
 			switch {
 			case tc.code != "" && (!errors.As(err, &te) || te.Code != tc.code || !strings.Contains(te.Msg, tc.hasText)):

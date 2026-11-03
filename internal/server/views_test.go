@@ -694,11 +694,11 @@ func FuzzViewActions(f *testing.F) {
 	})
 }
 
-// TestHasPanel: threads' and coordinators' panes have the info panel
-// (T90); a plain session's has none. A paired server's pane, only ever
+// TestHasPanel: threads', coordinators' and directors' panes have the
+// info panel (T90, programs B8); a plain session's has none. A paired server's pane, only ever
 // a coordinator or a thread, has it too, drawn from the mirror.
 func TestHasPanel(t *testing.T) {
-	for role, want := range map[string]bool{proto.RoleThread: true, proto.RoleCoordinator: true, proto.RoleShell: false, "": false} {
+	for role, want := range map[string]bool{proto.RoleThread: true, proto.RoleCoordinator: true, proto.RoleDirector: true, proto.RoleShell: false, "": false} {
 		if hasPanel(role) != want {
 			t.Errorf("hasPanel(%q) = %v", role, !want)
 		}

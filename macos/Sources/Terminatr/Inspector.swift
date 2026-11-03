@@ -19,6 +19,8 @@ struct Inspector: View {
                     remote
                 } else if model.ref.isCoordinator {
                     coordinator
+                } else if model.ref.director {
+                    director
                 } else {
                     thread
                 }
@@ -129,6 +131,32 @@ struct Inspector: View {
                 fact("Threads", "\(p.threads.filter { !$0.record.done }.count) open", mono: false)
                 if p.questions > 0 { fact("Questions", "\(p.questions) open", mono: false) }
                 if p.usage.costUsd > 0 { fact("Cost", String(format: "$%.2f", p.usage.costUsd), mono: false) }
+            }
+        }
+    }
+
+    // MARK: a program's director
+
+    /// A director's: its program, its goal and its needs, as a
+    /// coordinator's has its project's.
+    @ViewBuilder
+    private var director: some View {
+        let g = app.program(model.ref.project)
+        VStack(alignment: .leading, spacing: 6) {
+            Text("director").font(theme.mono(.subheadline)).foregroundStyle(theme.muted)
+            Text(model.ref.project).font(theme.title(.title3, .heavy))
+            if let goal = g?.goal, !goal.isEmpty {
+                Text(goal).font(theme.body(.subheadline)).foregroundStyle(theme.muted)
+            }
+            pill
+        }
+        if let g {
+            section("Program") {
+                fact("Authority", g.authority, mono: false)
+                fact("Projects", "\(g.members.count)", mono: false)
+                if g.questions > 0 { fact("Questions", "\(g.questions) open", mono: false) }
+                Button("Show the Program") { app.select(.program(g.slug)) }
+                    .buttonStyle(.link)
             }
         }
     }

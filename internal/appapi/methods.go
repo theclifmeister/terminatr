@@ -33,7 +33,7 @@ func init() {
 			}, nil),
 		stream(proto.MethodProjectsWatch, []string{proto.EventProjectsChanged}, projectsWatchParams, projectsOf,
 			func(ev server.ProjectsWatchEvent) (string, Projects, bool) {
-				return ev.Event, projectsOf(server.ProjectsWatch{Projects: ev.Projects}), ev.Event == proto.EventProjectsChanged
+				return ev.Event, projectsOf(server.ProjectsWatch{Projects: ev.Projects, Programs: ev.Programs}), ev.Event == proto.EventProjectsChanged
 			}, nil),
 		stream(proto.MethodSessionWatch, []string{proto.EventWatchChanged}, sessionIDParams, watchOf,
 			func(ev proto.WatchEvent) (string, Watch, bool) {
@@ -187,6 +187,31 @@ func init() {
 		unary(proto.MethodModsList, false, modsListParams, modsOf),
 		unary(proto.MethodModsSet, true, modsSetParams, modsActOf),
 		unary(proto.MethodModsSetting, true, modsSettingParams, modsActOf),
+
+		// Programs (app API 44; the server's caps say programs, and
+		// each answers programs-off without): a program's dashboard,
+		// its rolled-up Needs you and its members' history read; the
+		// director's writes made as the user (a route, a member's task
+		// changed, the program channel), the program's question
+		// answered for the member questions it covers, an umbrella in
+		// review accepted or sent back. Renaming and deleting a program,
+		// and answering its question, are the Mac app's alone (macOnly);
+		// its settings stay the TUI's. A member's own needs are acted on with their methods
+		// (session.answer, task.accept, peer.need-act, link.act …).
+		unary(proto.MethodProgramGet, false, programParams, programDetailOf),
+		unary(proto.MethodProgramNeeds, false, programNeedsParams, programNeedsOf),
+		unary(proto.MethodProgramRead, false, programReadParams, programMessageOf),
+		unary(proto.MethodProgramSearch, false, programSearchParams, searchResultOf),
+		unary(proto.MethodProgramSearchTimeline, false, programTimelineParams, searchTimelineOf),
+		unary(proto.MethodProgramSearchShow, false, programShowParams, searchShownOf),
+		unary(proto.MethodProgramRoute, true, programRouteParams, programRoutedOf),
+		unary(proto.MethodProgramTaskEdit, true, programTaskEditParams, programTaskEditedOf),
+		unary(proto.MethodProgramSend, true, programSendParams, programSentOf),
+		unary(proto.MethodProgramAnswer, true, programAnswerParams, programAnsweredOf),
+		unary(proto.MethodProgramUmbrellaAccept, true, programUmbrellaParams, programUmbrellaOf),
+		unary(proto.MethodProgramUmbrellaSendBack, true, programUmbrellaParams, programUmbrellaOf),
+		unary(proto.MethodProgramRename, true, programRenameParams, programRenamedOf),
+		unary(proto.MethodProgramDelete, true, programDeleteParams, programDeletedOf),
 
 		// The guard's refusals, read and answered one at a time (app
 		// API 18): the bridge's own, from the human's log (guard.go).
@@ -481,10 +506,6 @@ func taskAddParams(p TaskAddParams) proto.TaskAddParams {
 
 func taskDoneParams(p ProjectParams) proto.TaskDoneParams {
 	return proto.TaskDoneParams{Project: p.Project}
-}
-
-func coordinatorClearParams(p ProjectParams) proto.CoordinatorClearParams {
-	return proto.CoordinatorClearParams{Project: p.Project}
 }
 
 func projectActiveParams(p ProjectActiveParams) proto.ProjectActiveParams {

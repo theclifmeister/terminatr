@@ -3,9 +3,13 @@ package tui
 import (
 	"errors"
 	"fmt"
+	"strings"
+	"time"
 
+	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/mod"
+	"github.com/theclifmeister/terminatr/internal/program"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/server"
@@ -56,6 +60,86 @@ func OpenCoordinator(call func(method string, params, result any) error, slug, a
 		return started.Session.ID, nil
 	}
 	id, _, err := server.OpenCoordinator(list, start, slug, agentName, uint16(cols), uint16(rows))
+	return id, err
+}
+
+// OpenDirector returns program slug's director session, started first
+// if none runs.
+func (s *ServerSource) OpenDirector(slug string, cols, rows int) (string, error) {
+	return OpenDirector(s.call, slug, cols, rows)
+}
+
+func (s *ServerSource) RenameProgram(from, to string) (string, error) {
+	defer s.touch()
+	if s.Caller.IsAgent() {
+		return "", errHumanOnly
+	}
+	var res proto.ProgramRenameResult
+	if err := s.call(proto.MethodProgramRename, proto.ProgramRenameParams{From: from, To: to}, &res); err != nil {
+		return "", err
+	}
+	msg := "renamed program " + from + " to " + to
+	if res.Director != "" {
+		msg += "; its director started again"
+	}
+	if len(res.Notes) > 0 {
+		msg += "; note: " + strings.Join(res.Notes, "; ")
+	}
+	return msg, nil
+}
+
+func (s *ServerSource) DeleteProgram(slug string) (string, error) {
+	defer s.touch()
+	return DeleteProgram(s.call, s.Caller, slug)
+}
+
+// DeleteProgram deletes program slug (program.Delete), the human's:
+// refused while its director runs (call lists the sessions; nil when no
+// server runs).
+func DeleteProgram(call callFn, c caller.Caller, slug string) (string, error) {
+	if err := humanOnly(c, "deletes programs"); err != nil {
+		return "", err
+	}
+	if _, err := program.Dir(slug); err != nil {
+		return "", err
+	}
+	if call != nil {
+		var list proto.SessionListResult
+		if err := call(proto.MethodSessionList, nil, &list); err != nil {
+			return "", err
+		}
+		for _, s := range list.Sessions {
+			if s.Role == proto.RoleDirector && s.Project == slug {
+				return "", &project.Error{Code: "director-running", Msg: fmt.Sprintf("program %s's director is running (%s): stop it first", slug, s.ID)}
+			}
+		}
+	}
+	dst, err := program.Delete(c, slug, time.Now())
+	if err != nil {
+		return "", err
+	}
+	if dst == "" {
+		return "deleted program " + slug + ": its settings are gone (it had no folder)", nil
+	}
+	return "deleted program " + slug + ": moved to " + dst + "; its projects stay as they are", nil
+}
+
+// OpenDirector returns the id of program slug's director session by
+// call, starting one if none runs (server.OpenDirector), cols by rows.
+func OpenDirector(call func(method string, params, result any) error, slug string, cols, rows int) (string, error) {
+	list := func() ([]proto.SessionInfo, error) {
+		var res proto.SessionListResult
+		err := call(proto.MethodSessionList, nil, &res)
+		return res.Sessions, err
+	}
+	start := func(p proto.SessionStartParams) (string, error) {
+		var started proto.SessionStartResult
+		if err := call(proto.MethodSessionStart, p, &started); err != nil {
+			return "", err
+		}
+		return started.Session.ID, nil
+	}
+	id, _, err := server.OpenDirector(list, start, slug, "", uint16(cols), uint16(rows))
 	return id, err
 }
 
@@ -205,9 +289,9 @@ func (s *ServerSource) OpenQuestions(slug string) (proto.QuestionsOpenResult, er
 	return res, err
 }
 
-func (s *ServerSource) SaveClear(slug string) (proto.CoordinatorClearResult, error) {
+func (s *ServerSource) SaveClear(role, slug string) (proto.CoordinatorClearResult, error) {
 	var res proto.CoordinatorClearResult
-	err := s.call(proto.MethodCoordinatorClear, proto.CoordinatorClearParams{Project: slug}, &res)
+	err := s.call(proto.MethodCoordinatorClear, clearParams(role, slug), &res)
 	return res, err
 }
 
@@ -256,12 +340,12 @@ func shipped(repo string, n int, pr ticker.PR) string {
 	return ""
 }
 
-func (s *ServerSource) SetRemote(slug string, on bool) (string, error) {
-	res, err := SetRemote(s.call, slug, on)
+func (s *ServerSource) SetRemote(role, slug string, on bool) (string, error) {
+	res, err := SetRemoteOf(s.call, role, slug, on)
 	if err != nil {
 		return "", err
 	}
-	return RemoteMessage(slug, res), nil
+	return RemoteMessageFor(role, slug, res), nil
 }
 
 func (s *ServerSource) ClearSession(id string) error {

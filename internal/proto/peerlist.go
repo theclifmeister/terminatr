@@ -58,6 +58,15 @@ type PeerMirror struct {
 	// NeedPicks: the peer's peer.act takes a multi-select's picks (its
 	// hello lists need-picks, T904).
 	NeedPicks bool `json:"need_picks,omitempty"`
+	// NeedAsk: the peer's peer.act answers its coordinators' open
+	// questions (its hello lists need-ask): a program's answer reaches
+	// a paired member's question (the programs design §7.2).
+	NeedAsk bool `json:"need_ask,omitempty"`
+	// Program: the peer takes program messages (its hello lists
+	// program, only while its programs are on): one of its shared
+	// projects can be invited into a program here (the programs design
+	// §9.1).
+	Program bool `json:"program,omitempty"`
 	// Offset is the peer's clock minus this server's, in milliseconds,
 	// as last measured; the peer's times (a session's created, the
 	// ticker's) less Offset are this server's. Unset (and 0) until a

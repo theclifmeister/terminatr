@@ -251,27 +251,27 @@ func TestNoteStamp(t *testing.T) {
 	if err != nil || string(text) != "one\n" {
 		t.Fatal(text, err)
 	}
-	if ch, _ := s.Changed(p, "memory/a.md"); ch {
+	if ch, _ := s.Changed(&p.Folder, "memory/a.md"); ch {
 		t.Error("unchanged note changed")
 	}
 	p.WriteNote("memory/a.md", []byte("one\n"))
-	if ch, _ := s.Changed(p, "memory/a.md"); ch {
+	if ch, _ := s.Changed(&p.Folder, "memory/a.md"); ch {
 		t.Error("same text rewritten counts as changed")
 	}
 	p.WriteNote("memory/a.md", []byte("two\n"))
-	if ch, _ := s.Changed(p, "memory/a.md"); !ch {
+	if ch, _ := s.Changed(&p.Folder, "memory/a.md"); !ch {
 		t.Error("changed note unchanged")
 	}
 	p.RemoveNote("memory/a.md")
-	if ch, _ := s.Changed(p, "memory/a.md"); !ch {
+	if ch, _ := s.Changed(&p.Folder, "memory/a.md"); !ch {
 		t.Error("removed note unchanged")
 	}
 	gone, _, _ := p.StampNote("memory/a.md")
-	if ch, _ := gone.Changed(p, "memory/a.md"); ch || !gone.Gone {
+	if ch, _ := gone.Changed(&p.Folder, "memory/a.md"); ch || !gone.Gone {
 		t.Error("a missing note changed")
 	}
 	p.CreateNote("memory/a.md", []byte("new\n"))
-	if ch, _ := gone.Changed(p, "memory/a.md"); !ch {
+	if ch, _ := gone.Changed(&p.Folder, "memory/a.md"); !ch {
 		t.Error("a note made meanwhile unchanged")
 	}
 	if err := p.WriteConflict("memory/a.md", []byte("mine\n")); err != nil {

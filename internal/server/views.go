@@ -325,6 +325,29 @@ func (vs *views) collapse(slug string) {
 	}
 }
 
+// renameProgram follows a renamed program in every view's selected
+// rows and folds (tm program rename): its rows are keyed g:<slug>.
+func (vs *views) renameProgram(from, to string) {
+	oldKey, newKey := "g:"+from, "g:"+to
+	key := func(k string) string {
+		if rest, ok := strings.CutPrefix(k, oldKey); ok && (rest == "" || rest[0] == '/') {
+			return newKey + rest
+		}
+		return k
+	}
+	vs.mu.Lock()
+	defer vs.mu.Unlock()
+	for _, lv := range vs.byName {
+		v := &lv.v
+		sel, side := key(v.Selected), key(v.SideSel)
+		moved := v.Tree.Rename(oldKey, newKey)
+		if moved || sel != v.Selected || side != v.SideSel {
+			v.Selected, v.SideSel = sel, side
+			vs.changedLocked(lv)
+		}
+	}
+}
+
 // renameProject follows a renamed project in every view's current
 // project and selected rows (tm project rename).
 func (vs *views) renameProject(from, to string) {
@@ -612,5 +635,8 @@ func (s *Server) serveViewStream(c net.Conn, br *bufio.Reader, req proto.Request
 }
 
 // hasPanel says a session of role has the info panel beside its pane: a
-// thread's (its task and PR) or a coordinator's (its project, T90).
-func hasPanel(role string) bool { return role == proto.RoleThread || role == proto.RoleCoordinator }
+// thread's (its task and PR), a coordinator's (its project, T90) or a
+// director's (its program: the programs design §7.3).
+func hasPanel(role string) bool {
+	return role == proto.RoleThread || role == proto.RoleCoordinator || role == proto.RoleDirector
+}

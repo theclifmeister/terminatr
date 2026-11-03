@@ -52,6 +52,9 @@ func (e msgEntry) needsYou() bool {
 type msgNeed struct {
 	row link.Row
 	ask bool
+	// inv is a paired program's invite or membership row instead
+	// (programinvite.go).
+	inv *link.Invite
 }
 
 func msgNeeds(links []link.Row) []msgNeed {
@@ -71,6 +74,9 @@ func msgNeeds(links []link.Row) []msgNeed {
 type msgList struct {
 	slug    string
 	entries []msgEntry
+	// invites are the project's program invites (none while programs
+	// are off).
+	invites []link.Invite
 	err     error
 	loaded  time.Time
 }
@@ -104,6 +110,7 @@ func (l *msgList) load(m *dash, slug string, links []link.Row) {
 		}
 	}
 	sortMsgs(es)
+	l.invites, _ = m.src.ProgramInvites(slug)
 	l.slug, l.entries, l.loaded = slug, es, time.Now()
 }
 
@@ -142,7 +149,10 @@ func needsLine(links []link.Row) string { return needsLineShares(links, 0) }
 
 // needsLineShares is needsLine with the paired servers' share requests
 // that wait (the Network popup's).
-func needsLineShares(links []link.Row, shares int) string {
+func needsLineShares(links []link.Row, shares int) string { return needsLineAll(links, shares, 0) }
+
+// needsLineAll is needsLineShares with the program invites that wait.
+func needsLineAll(links []link.Row, shares, invites int) string {
 	var held, files, paused, asks int
 	for _, r := range links {
 		held += r.Held
@@ -170,10 +180,13 @@ func needsLineShares(links []link.Row, shares int) string {
 	if shares > 0 {
 		words = append(words, countedAs(shares, "share request", "share requests"))
 	}
+	if invites > 0 {
+		words = append(words, countedAs(invites, "program invite", "program invites"))
+	}
 	if len(words) == 0 {
 		return ""
 	}
-	return th().Warn.Render(fmt.Sprintf("⚑ NEEDS YOU %d", held+files+paused+asks+shares)) + th().Faint.Render(" · "+strings.Join(words, " · "))
+	return th().Warn.Render(fmt.Sprintf("⚑ NEEDS YOU %d", held+files+paused+asks+shares+invites)) + th().Faint.Render(" · "+strings.Join(words, " · "))
 }
 
 // msgTitle is a message's first line of text, or for one without (a
@@ -191,25 +204,29 @@ func msgTitle(msg *link.Message) string {
 func msgDate(t time.Time) string { return t.Local().Format("Jan 2 15:04") }
 
 // msgLines are the list's lines in width w: the NEEDS YOU line and the
-// rows of links (whose needs these are; nil in a paired server's popup),
-// then the newest msgShown of es, a paired server by its display name
-// in peers (nil names none). sel indexes the link rows, then the
-// messages. It returns the lines, the selected one's and what each
-// picks.
-func msgLines(peers []proto.PeerMirror, links []link.Row, es []msgEntry, sel, w int) ([]string, int, []int) {
+// rows of links (whose needs these are; nil in a paired server's popup)
+// and of program invites progs (inviteRows), then the newest msgShown
+// of es, a paired server by its display name in peers (nil names none).
+// sel indexes the link rows, the program rows, then the messages. It
+// returns the lines, the selected one's and what each picks.
+func msgLines(peers []proto.PeerMirror, links []link.Row, progs []msgNeed, es []msgEntry, sel, w int) ([]string, int, []int) {
 	var lines []string
 	var hits []int
 	at := -1
 	add := func(l string, hit int) {
 		lines, hits = append(lines, l), append(hits, hit)
 	}
-	needs := msgNeeds(links)
+	needs := append(msgNeeds(links), progs...)
 	shown := es[:min(len(es), msgShown)]
 	// The project column fits the longest name, a paired server's
 	// "<server>/<slug>" whole, up to a third of the width; the id
 	// column the longest id.
 	pc, ic := len("project"), len("id")
 	for _, n := range needs {
+		if n.inv != nil {
+			pc = max(pc, ansi.StringWidth(peerShownKey(peers, n.inv.Peer)))
+			continue
+		}
 		pc = max(pc, ansi.StringWidth(peerShownKey(peers, n.row.Peer)))
 	}
 	for _, e := range shown {
@@ -234,10 +251,19 @@ func msgLines(peers []proto.PeerMirror, links []link.Row, es []msgEntry, sel, w 
 		}
 		add(fit(mark+text, w)+reset, i)
 	}
-	if l := needsLine(links); l != "" {
+	if l := needsLineAll(links, 0, pendingInvites(progs)); l != "" {
 		add(fit(l, w)+reset, noHit)
 	}
 	for i, n := range needs {
+		if n.inv != nil {
+			mark, words, keys := programRowText(peers, n)
+			text := fit(peerShownKey(peers, n.inv.Peer), pc) + "  " + words
+			if mark != "  " {
+				text = th().Warn.Render(text)
+			}
+			row(i, mark, text+th().Faint.Render(keys))
+			continue
+		}
 		words, keys := "link paused: too many messages without you", " · R resumes it"
 		if n.ask {
 			words, keys = "asks to link ("+oneLine(n.row.Asks.ID)+")", " · A accept · X decline"

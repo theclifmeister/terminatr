@@ -541,6 +541,10 @@ func (m *dash) sideMenu(mo tea.Mouse) tea.Cmd {
 		title = "inactive projects"
 	case treeCoordinator:
 		title += " coordinator"
+	case treeProgram:
+		title = "program " + r.slug
+	case treeDirector:
+		title = r.slug + " director"
 	case treePeerProject:
 		title = r.server() + " / " + r.slug
 	default:
@@ -565,6 +569,10 @@ func (m *dash) sideMenu(mo tea.Mouse) tea.Cmd {
 			key := it.popup
 			mi.key = key
 			mi.run = func(m *dash) tea.Cmd { return tea.Batch(m.showProject(r.slug), m.key(keyMsg(key))) }
+		case menuProgram:
+			mi.run = func(m *dash) tea.Cmd { m.openProgramSettings(r.slug); return nil }
+		case menuDirector:
+			mi.run = func(m *dash) tea.Cmd { return m.openDirector(r.slug) }
 		case menuActive:
 			mi.run = func(m *dash) tea.Cmd { return m.toggleActive(r.slug, r.inactive) }
 		case menuPin:

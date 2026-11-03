@@ -12,7 +12,10 @@ import (
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
+	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/features"
 	"github.com/theclifmeister/terminatr/internal/home"
+	"github.com/theclifmeister/terminatr/internal/program"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/search"
@@ -50,9 +53,13 @@ type SearchService struct {
 
 type searchEnt struct {
 	x    *search.Index
-	dir  string // the project's folder
+	dir  string // the project's folder, or the program's
 	used time.Time
 }
+
+// programKey is a program's key in SearchService.m: the kind in the key,
+// as the sidebar's g:<slug>, so it never meets a project's.
+func programKey(slug string) string { return "g:" + slug }
 
 // index is project slug's index and folder, opened on first use.
 func (si *SearchService) index(slug string) (*search.Index, string, *proto.Error) {
@@ -81,6 +88,48 @@ func (si *SearchService) index(slug string) (*search.Index, string, *proto.Error
 		x.SetFresh(SearchFresh)
 		e = &searchEnt{x: x, dir: dir}
 		si.m[slug] = e
+	}
+	e.used = time.Now()
+	return e.x, dir, nil
+}
+
+// programIndex is program slug's index and folder, opened on first use
+// and kept at <home>/state/search-programs/<slug>, apart from the
+// projects' (the programs design §3.4). It is never opened while
+// programs are off (cfg, the server's config; programs-off), for a
+// program a project's slug clashes with (the project wins), or for one
+// with no folder.
+func (si *SearchService) programIndex(cfg *config.Config, slug string) (*search.Index, string, *proto.Error) {
+	if !features.Programs(cfg) {
+		return nil, "", proto.Errorf(features.OffCode, "%s", features.OffMsg)
+	}
+	dir, err := program.Dir(slug)
+	if err != nil {
+		return nil, "", proto.Errorf(proto.ErrBadParams, "%v", err)
+	}
+	if fi, err := os.Stat(filepath.Join(dir, program.File)); err != nil || !fi.Mode().IsRegular() {
+		return nil, "", proto.Errorf(proto.ErrBadParams, "no program %q", slug)
+	}
+	if project.ProgramLeftOut(slug) {
+		return nil, "", proto.Errorf(proto.ErrRefused, "program %s is left out: a project has its name (tm doctor)", slug)
+	}
+	root, err := home.ProgramSearchDir()
+	if err != nil {
+		return nil, "", proto.Errorf(proto.ErrInternal, "%v", err)
+	}
+	si.mu.Lock()
+	defer si.mu.Unlock()
+	if si.m == nil {
+		si.m = map[string]*searchEnt{}
+	}
+	key := programKey(slug)
+	e := si.m[key]
+	if e == nil || e.dir != dir {
+		f := project.Folder{Slug: slug, Dir: dir, Kind: project.KindProgram}
+		x := search.OpenFolder(&f, filepath.Join(root, slug))
+		x.SetFresh(SearchFresh)
+		e = &searchEnt{x: x, dir: dir}
+		si.m[key] = e
 	}
 	e.used = time.Now()
 	return e.x, dir, nil
@@ -154,39 +203,54 @@ func (s *Server) searchShow(p proto.SearchShowParams, c callCtx) (any, *proto.Er
 // or not.
 func (si *SearchService) Query(p proto.SearchQueryParams, all bool) (proto.SearchQueryResult, *proto.Error) {
 	var none proto.SearchQueryResult
-	q := search.Query{Words: p.Words, Task: p.Task, Thread: p.Thread, Coordinator: all, Limit: p.Limit}
-	if strings.TrimSpace(p.Words) == "" {
-		return none, proto.Errorf(proto.ErrBadParams, "search: no words")
-	}
-	switch {
-	case q.Limit == 0:
-		q.Limit = searchLimit
-	case q.Limit < 0 || q.Limit > searchMax:
-		return none, proto.Errorf(proto.ErrBadParams, "search: limit takes 1 to %d", searchMax)
-	}
-	for _, k := range p.In {
-		if !slices.Contains(search.Kinds, k) {
-			return none, proto.Errorf(proto.ErrBadParams, "search: %q is not one of %s", k, strings.Join(search.Kinds, ", "))
-		}
-		if k == search.KindInbox && !all {
-			return none, proto.Errorf(proto.ErrRefused, "search: the inbox is the coordinator's")
-		}
-	}
-	q.Kinds = p.In
-	var err error
-	if q.Since, err = searchDay(p.Since, false); err != nil {
-		return none, proto.Errorf(proto.ErrBadParams, "search: since: %v", err)
-	}
-	if q.Until, err = searchDay(p.Until, true); err != nil {
-		return none, proto.Errorf(proto.ErrBadParams, "search: until: %v", err)
-	}
-	if p.Reindex && !all {
-		return none, proto.Errorf(proto.ErrRefused, "search: a thread doesn't rebuild the index")
+	q, perr := prepQuery(p, all)
+	if perr != nil {
+		return none, perr
 	}
 	x, dir, perr := si.index(p.Project)
 	if perr != nil {
 		return none, perr
 	}
+	return runQuery(x, dir, p.Project, p, q)
+}
+
+// prepQuery checks search.query's params and is the search they ask.
+func prepQuery(p proto.SearchQueryParams, all bool) (search.Query, *proto.Error) {
+	q := search.Query{Words: p.Words, Task: p.Task, Thread: p.Thread, Coordinator: all, Limit: p.Limit}
+	if strings.TrimSpace(p.Words) == "" {
+		return q, proto.Errorf(proto.ErrBadParams, "search: no words")
+	}
+	switch {
+	case q.Limit == 0:
+		q.Limit = searchLimit
+	case q.Limit < 0 || q.Limit > searchMax:
+		return q, proto.Errorf(proto.ErrBadParams, "search: limit takes 1 to %d", searchMax)
+	}
+	for _, k := range p.In {
+		if !slices.Contains(search.Kinds, k) {
+			return q, proto.Errorf(proto.ErrBadParams, "search: %q is not one of %s", k, strings.Join(search.Kinds, ", "))
+		}
+		if k == search.KindInbox && !all {
+			return q, proto.Errorf(proto.ErrRefused, "search: the inbox is the coordinator's")
+		}
+	}
+	q.Kinds = p.In
+	var err error
+	if q.Since, err = searchDay(p.Since, false); err != nil {
+		return q, proto.Errorf(proto.ErrBadParams, "search: since: %v", err)
+	}
+	if q.Until, err = searchDay(p.Until, true); err != nil {
+		return q, proto.Errorf(proto.ErrBadParams, "search: until: %v", err)
+	}
+	if p.Reindex && !all {
+		return q, proto.Errorf(proto.ErrRefused, "search: a thread doesn't rebuild the index")
+	}
+	return q, nil
+}
+
+// runQuery runs q (prepQuery's) on index x of folder dir, named name.
+func runQuery(x *search.Index, dir, name string, p proto.SearchQueryParams, q search.Query) (proto.SearchQueryResult, *proto.Error) {
+	var none proto.SearchQueryResult
 	if p.Reindex {
 		if _, err := x.Reindex(); err != nil {
 			return none, proto.Errorf(proto.ErrInternal, "search: %v", err)
@@ -196,7 +260,7 @@ func (si *SearchService) Query(p proto.SearchQueryParams, all bool) (proto.Searc
 	if err != nil {
 		return none, proto.Errorf(proto.ErrInternal, "search: %v", err)
 	}
-	out := proto.SearchQueryResult{Project: p.Project, Dir: dir, Hits: make([]proto.SearchHit, 0, len(r.Hits)), Total: r.Total,
+	out := proto.SearchQueryResult{Project: name, Dir: dir, Hits: make([]proto.SearchHit, 0, len(r.Hits)), Total: r.Total,
 		Terms: r.Terms, Read: r.Stats.Read, Errors: r.Stats.Errors}
 	if out.Terms == nil {
 		out.Terms = []string{}
@@ -285,9 +349,15 @@ func (si *SearchService) Show(p proto.SearchShowParams, all bool) (proto.SearchS
 	if perr != nil {
 		return none, perr
 	}
-	out := proto.SearchShowResult{Project: p.Project, Dir: dir, Items: []proto.SearchText{}}
+	return showFrom(x, dir, p.Project, p.IDs, all)
+}
+
+// showFrom is search.show's answer for ids of index x, of folder dir.
+func showFrom(x *search.Index, dir, name string, ids []string, all bool) (proto.SearchShowResult, *proto.Error) {
+	var none proto.SearchShowResult
+	out := proto.SearchShowResult{Project: name, Dir: dir, Items: []proto.SearchText{}}
 	left := proto.SearchShowAll
-	for _, id := range p.IDs {
+	for _, id := range ids {
 		it := proto.SearchText{SearchHit: proto.SearchHit{ID: id}}
 		ch, text, err := x.Text(id, all)
 		object := tasks.ValidThreadID(id) || tasks.ValidRef(id)

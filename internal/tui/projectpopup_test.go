@@ -312,10 +312,16 @@ func TestProjectLifecycleRows(t *testing.T) {
 		t.Fatal("still paused")
 	}
 
+	// A program's member is told it leaves the program (§3.4).
+	path, _ := config.Path()
+	data, _ := os.ReadFile(path)
+	if err := os.WriteFile(path, append(data, []byte("\n[programs.acme]\nprojects = [\"alpha\"]\n")...), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	pick("Archive")
 	act(t, m, src, "enter")
-	if _, ok := m.top().(*confirmView); !ok {
-		t.Fatalf("archive didn't ask: %T", m.top())
+	if cv, ok := m.top().(*confirmView); !ok || !strings.Contains(cv.question, "It also leaves program acme") {
+		t.Fatalf("archive didn't ask, or not of acme: %T %+v", m.top(), m.top())
 	}
 	act(t, m, src, "N")
 	if len(src.lifecycle) != 2 || m.projectPopupView() == nil {

@@ -165,7 +165,7 @@ func ActsOf(n PeerNeed) []string {
 		if n.Approval != nil {
 			return []string{ActApprove}
 		}
-	case NeedReview:
+	case NeedReview, NeedUmbrella:
 		return []string{ActAccept, ActSendBack}
 	case NeedAsk:
 		return []string{ActQuestions}
@@ -217,6 +217,18 @@ type PeerAct struct {
 	// saw it, the guard; Note is send-back's why.
 	Status string `json:"status,omitempty"`
 	Note   string `json:"note,omitempty"`
+	// Other is the user's own words answering a coordinator's question
+	// (ActAnswer on a NeedAsk, behind the need-ask capability), with or
+	// in place of Answer or Picks. A menu's question takes none.
+	Other string `json:"other,omitempty"`
+}
+
+// AnswersAsk says whether p answers need n as one of the coordinator's
+// open questions: ActAnswer on a NeedAsk with its question (a program's
+// answer fanned out to a paired member, the programs design §7.2),
+// which a server listing the need-ask capability takes beside ActsOf.
+func AnswersAsk(n PeerNeed, p PeerAct) bool {
+	return p.Act == ActAnswer && n.Kind == NeedAsk && !n.Escape && n.Question != nil && len(n.Question.Questions) == 1
 }
 
 // PeerActParams are peer.act's params: the act and a nonce peer.nonce
@@ -229,7 +241,9 @@ type PeerActParams struct {
 }
 
 // PeerActResult is what an act did: Asked, for accept and send-back,
-// false when an item already asked the coordinator the same;
+// false when an item already asked the coordinator the same (for an
+// answer to a coordinator's question, false when an earlier answer
+// waits on it);
 // Remaining, for answer, the menu's questions still open; Option, for
 // approve, the option sent; Open, for questions, how many the
 // coordinator puts to the user.

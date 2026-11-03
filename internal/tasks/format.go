@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"fmt"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -27,6 +28,12 @@ var (
 	// doesn't know, reads it as the notes' first line and writes it back.
 	priorityLine = regexp.MustCompile(`^priority: (must|should|could)\s*$`)
 )
+
+// partsKey starts an umbrella task's parts line (programs, §5.3), on
+// its own line after the metadata and priority lines: "parts:
+// acme-api/T12, mini/acme-ios/T7", each a vault link where the board
+// writes links. A line that doesn't read as refs only is the notes'.
+const partsKey = "parts: "
 
 const sep = " · "
 
@@ -91,6 +98,7 @@ func Parse(data []byte) (*Board, error) {
 		if cur != nil {
 			cur.Notes, cur.Steps = splitBody(curBody)
 			cur.Priority, cur.Notes = splitPriority(cur.Notes)
+			cur.Parts, cur.Notes = splitParts(cur.Notes)
 			b.Tasks = append(b.Tasks, cur)
 		}
 		cur, curBody = nil, nil
@@ -195,6 +203,37 @@ func splitPriority(notes string) (Priority, string) {
 	return Priority(m[1]), trimBlankLines(rest)
 }
 
+// splitParts takes the parts line off the top of a task's notes.
+func splitParts(notes string) ([]string, string) {
+	first, rest, _ := strings.Cut(notes, "\n")
+	parts, ok := readPartsLine(first)
+	if !ok {
+		return nil, notes
+	}
+	return parts, trimBlankLines(rest)
+}
+
+// readPartsLine reads line as a parts line: "parts: " and refs to other
+// projects' tasks (CrossRef) split by commas, each maybe a vault link;
+// false for any other line.
+func readPartsLine(line string) ([]string, bool) {
+	v, ok := strings.CutPrefix(strings.TrimRight(line, " \t"), partsKey)
+	if !ok {
+		return nil, false
+	}
+	var out []string
+	for _, f := range strings.Split(v, ",") {
+		f = strings.TrimSpace(vaultlink.Plain(strings.TrimSpace(f)))
+		if _, _, _, ok := CrossRef(f); !ok {
+			return nil, false
+		}
+		if !slices.Contains(out, f) {
+			out = append(out, f)
+		}
+	}
+	return out, len(out) > 0
+}
+
 // splitBody separates notes from the trailing run of checklist items.
 func splitBody(lines []string) (string, []Step) {
 	end := len(lines)
@@ -258,6 +297,19 @@ func (b *Board) RenderArchive() []byte {
 	return w.Bytes()
 }
 
+// crossLink is ref x to another project's task as the metadata line
+// of a board of project slug holds it (programs, §6.1): a local
+// project's task linked in the vault, [[acme-api/tasks/T12|acme-api/T12]];
+// a paired server's ("mini/acme-ios/T7") as text, as are all of them
+// on a board that writes no links (slug "").
+func crossLink(slug, x string) string {
+	alias, other, n, ok := CrossRef(x)
+	if slug == "" || !ok || alias != "" {
+		return x
+	}
+	return vaultlink.Link(other, vaultlink.Task, "T"+strconv.Itoa(n), x)
+}
+
 // writeTask writes one task; the metadata line links its thread in
 // project slug's vault (vaultlink).
 func writeTask(w *bytes.Buffer, t *Task, slug string) {
@@ -279,7 +331,9 @@ func writeTask(w *bytes.Buffer, t *Task, slug string) {
 			after[i] = vaultlink.Link(slug, vaultlink.Task, r, "")
 		}
 	}
-	after = append(after, t.AfterX...) // kept as text (programs, §6.1)
+	for _, x := range t.AfterX {
+		after = append(after, crossLink(slug, x))
+	}
 	for _, kv := range [][2]string{{"owner", t.Owner}, {"repo", t.Repo}, {"thread", thread}, {"design", design}, {"after", strings.Join(after, ", ")}, {"created", t.Created}, {"updated", t.Updated}} {
 		if kv[1] != "" {
 			meta = append(meta, kv[0]+": "+kv[1])
@@ -288,6 +342,13 @@ func writeTask(w *bytes.Buffer, t *Task, slug string) {
 	w.WriteString(strings.Join(meta, sep) + "\n")
 	if t.Priority != NoPriority {
 		w.WriteString("priority: " + string(t.Priority) + "\n")
+	}
+	if len(t.Parts) > 0 {
+		parts := make([]string, len(t.Parts))
+		for i, x := range t.Parts {
+			parts[i] = crossLink(slug, x)
+		}
+		w.WriteString(partsKey + strings.Join(parts, ", ") + "\n")
 	}
 	if t.Notes != "" {
 		w.WriteString("\n" + t.Notes + "\n")

@@ -23,6 +23,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/features"
 	"github.com/theclifmeister/terminatr/internal/guard"
 	"github.com/theclifmeister/terminatr/internal/guardlog"
 	"github.com/theclifmeister/terminatr/internal/mod"
@@ -118,17 +119,23 @@ func (s *Server) guardOwn() []string {
 	return withReal(out)
 }
 
-// guardRulesFor is session record r's rules. Only a project's agents are
-// guarded; a coordinator neither merges under a thread's rule nor keeps
-// to a worktree. Under yolo the guard keeps its floor only (T574 case 4):
+// guardRulesFor is session record r's rules. Only a project's agents,
+// and a program's director, are guarded; a coordinator or a director
+// neither merges under a thread's rule nor keeps to a worktree. A
+// director gets a coordinator's rules, its floor its own (guardNoWrite:
+// every project's folder, the other programs' and tm's files in its
+// own), and none while programs are off (no director runs then). Under yolo the guard keeps its floor only (T574 case 4):
 // no rule, allowance or mod rule, nothing asked. So it does below
 // protection guarded, read live; a thread without its sandbox has no
 // escapes or excluded commands to ask about.
 func (s *Server) guardRulesFor(r SessionRecord) GuardRules {
-	if r.Project == "" || (r.Role != proto.RoleThread && r.Role != proto.RoleCoordinator) {
+	if r.Project == "" || (r.Role != proto.RoleThread && r.Role != proto.RoleCoordinator && r.Role != proto.RoleDirector) {
 		return GuardRules{}
 	}
 	lc := loadLaunchConfig()
+	if r.Role == proto.RoleDirector && !features.Programs(lc.cfg) {
+		return GuardRules{}
+	}
 	set := lc.safety(r.Project)
 	// A thread's escapes, which its sandbox lets it ask for, are the
 	// user's to answer, the guard on or off (T574 case 6).
@@ -167,7 +174,7 @@ func (s *Server) guardRulesFor(r SessionRecord) GuardRules {
 	if r.Role == proto.RoleThread && set.Merge == config.MergeCoordinator {
 		g.Floor = append(g.Floor, "merge")
 	}
-	g.NoWrite = s.guardNoWrite(r)
+	g.NoWrite = s.guardNoWrite(r, lc)
 	g.CdPath = s.sessionCdPath(lc.cfg.SecretEnvNames(r.Project), home)
 	if home != "" {
 		g.NoWriteNames = withLanding(agent.ShellPatterns(home, os.Getenv))
@@ -222,6 +229,9 @@ func (s *Server) guardRulesFor(r SessionRecord) GuardRules {
 	}
 	g.Protected = []string{"main", "master"}
 	repos := []string{r.Cwd}
+	if r.Role == proto.RoleDirector {
+		repos = nil // a program has no repo
+	}
 	if r.Role == proto.RoleCoordinator {
 		if p, err := project.Open(r.Project); err == nil {
 			repos = p.Repos
@@ -329,8 +339,11 @@ func ownExcluded(reg *agent.Registry, r SessionRecord, home string, lc launchCon
 // see), and a thread's project folder, or the
 // parts of it only tm writes for the coordinator, whose folder it is. The sandbox and the
 // agent's deny rules hold them too, where there are those (not under
-// yolo).
-func (s *Server) guardNoWrite(r SessionRecord) []string {
+// yolo). While programs are on (lc), a thread's and a coordinator's
+// floor has the programs' folder, and a director's every project's
+// folder, the other programs' and what tm alone writes in its own
+// (programAccess).
+func (s *Server) guardNoWrite(r SessionRecord, lc launchConfig) []string {
 	var out []string
 	if h := s.opts.Paths.Home; h != "" {
 		out = append(out, homeFloor(h)...)
@@ -347,6 +360,12 @@ func (s *Server) guardNoWrite(r SessionRecord) []string {
 		s.mu.Unlock()
 		out = append(out, withLanding(agent.ShellState(reg, home, os.Getenv))...)
 	}
+	if _, noWrite, noWriteFiles, err := programAccess(r.Role, r.Project, lc.cfg); err == nil {
+		out = append(append(out, noWrite...), noWriteFiles...)
+	}
+	if r.Role == proto.RoleDirector {
+		return withReal(out)
+	}
 	dir, err := project.Dir(r.Project)
 	if err != nil {
 		return withReal(out)
@@ -355,7 +374,7 @@ func (s *Server) guardNoWrite(r SessionRecord) []string {
 	case proto.RoleThread:
 		out = append(out, dir)
 	case proto.RoleCoordinator:
-		dirs, files := (&project.Project{Slug: r.Project, Dir: dir}).Owned()
+		dirs, files := (&project.Project{Folder: project.Folder{Slug: r.Project, Dir: dir}}).Owned()
 		out = append(append(out, dirs...), files...)
 	}
 	return withReal(out)
@@ -499,7 +518,13 @@ func (s *Server) guardMods(r SessionRecord, home string) []guard.ModRule {
 		return withReal(out)
 	}
 	var out []guard.ModRule
-	for _, g := range reg.GuardRules(r.Role, r.Project) {
+	role := r.Role
+	if role == proto.RoleDirector {
+		// A director runs with the coordinator's profile: the mods'
+		// coordinator rules hold for it too (they only refuse).
+		role = proto.RoleCoordinator
+	}
+	for _, g := range reg.GuardRules(role, r.Project) {
 		m := guard.ModRule{Mod: g.Mod, ID: g.ID, Writes: abs(g.Writes), Reads: abs(g.Reads), Message: strings.TrimSpace(mod.Clean(g.Message, false))}
 		for _, c := range g.Commands {
 			m.Commands = append(m.Commands, strings.Fields(c))

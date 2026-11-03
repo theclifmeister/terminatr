@@ -50,6 +50,23 @@ type store struct {
 	ShareRev int                    `json:"share_rev,omitempty"`
 	ShareOut map[string][]time.Time `json:"share_out,omitempty"`
 	ShareIn  map[string][]time.Time `json:"share_in,omitempty"`
+	// Invites are the program invites to and from paired servers
+	// (programinvite.go), the newest per folder, peer and direction;
+	// they count in ReqOut and ReqIn.
+	Invites []*Invite `json:"invites,omitempty"`
+	// The program's work with paired members (programwork.go): on a
+	// director's server what it sent and awaits answers to, and the
+	// members' tasks as last pushed, by "<alias>/<slug>/T<n>"; on a
+	// member's, the tasks of each project here its paired director
+	// referenced, and what was last pushed of each, by "<slug>/T<n>".
+	ProgramSent []*ProgramSent         `json:"program_sent,omitempty"`
+	RemoteTasks map[string]*RemoteTask `json:"remote_tasks,omitempty"`
+	Watch       map[string][]int       `json:"program_watch,omitempty"`
+	Pushed      map[string]string      `json:"program_pushed,omitempty"`
+	// WatchAsked are the paired members' tasks a program here asked to
+	// have pushed (program-watch), by "<program> <alias>/<slug>/T<n>":
+	// each is asked once.
+	WatchAsked map[string]bool `json:"program_watch_asked,omitempty"`
 }
 
 // bucket is one direction's token bucket (limits).

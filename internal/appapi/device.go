@@ -31,7 +31,8 @@ var answerMethods = []string{proto.MethodSessionAnswer, proto.MethodSessionAppro
 // method the bridge answers in its own process (Local: the guard's
 // refusals, whose log and answers are the human's on a computer, and
 // change the access rules): on a device's link that process is the
-// server. Otherwise view reads (every method that isn't Write, the
+// server, nor one the Mac app alone has (MacOnly: a program renamed or
+// deleted). Otherwise view reads (every method that isn't Write, the
 // notice tray's too), answer adds answerMethods, write everything; an
 // unknown level is view's.
 func Allowed(m Method, level string) bool {
@@ -42,7 +43,7 @@ func Allowed(m Method, level string) bool {
 		return signs(level)
 	case level == "":
 		return true
-	case m.Local():
+	case m.Local(), m.MacOnly():
 		return false
 	case level == device.LevelWrite || !m.Write:
 		return true
