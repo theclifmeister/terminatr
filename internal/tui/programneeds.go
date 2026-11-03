@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -89,7 +90,7 @@ func programPages(res *proto.ProgramNeedsResult) []pnPage {
 	var pages []pnPage
 	var qs []proto.ProgramNeed
 	for _, n := range res.Needs {
-		if n.Program && n.Question != nil && len(n.Question.Questions) > 0 {
+		if programQuestion(n) {
 			qs = append(qs, n)
 		}
 	}
@@ -99,11 +100,19 @@ func programPages(res *proto.ProgramNeedsResult) []pnPage {
 		qs = qs[k:]
 	}
 	for i := range res.Needs {
-		if n := res.Needs[i]; !n.Program {
+		if n := res.Needs[i]; !programQuestion(n) {
 			pages = append(pages, pnPage{need: &n})
 		}
 	}
 	return pages
+}
+
+// programQuestion says need n is one of the program's own questions as
+// program.needs sends it: program, with its question, and the answer
+// act; the user answers it here once for the member questions it
+// covers (merged).
+func programQuestion(n proto.ProgramNeed) bool {
+	return n.Program && n.Question != nil && len(n.Question.Questions) > 0 && slices.Contains(n.Acts, proto.ActAnswer)
 }
 
 // pageHas says page p shows need id.
@@ -184,6 +193,9 @@ func needActs(m *dash, slug string, n proto.ProgramNeed) []pnItem {
 		where := peerShown(m.data.Peers, n.Server)
 		add("show its dashboard on "+where+" (answered there)", func(m *dash) tea.Cmd { return m.showProject(peerFold(n.Server, n.Project)) })
 		return out
+	}
+	if n.Program {
+		return out // a program question the answer act doesn't offer: nothing here
 	}
 	if n.Escape {
 		if n.Session != "" {
@@ -418,6 +430,9 @@ func (v *programNeedsView) render(m *dash) string {
 				line(th().Head.Render(fit(head, w)), noHit)
 				for _, l := range wrapLines(it.Question, w) {
 					line(l, noHit)
+				}
+				if len(n.Merged) > 0 {
+					line(th().Faint.Render(fit("covers "+strings.Join(n.Merged, ", "), w)), noHit)
 				}
 				for oi, o := range it.Options {
 					mark := optionMark(it.MultiSelect, v.picks[questionID(n)][oi])

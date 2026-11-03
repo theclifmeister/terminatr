@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -111,7 +112,7 @@ func TestProgramNeedsDialog(t *testing.T) {
 		t.Fatalf("top %T", m.top())
 	}
 	out := screen(m)
-	for _, want := range []string{"acme · needs you (1 of 3)", "[api+web] Q2 Session", "( ) 1 hour", "submit the answers picked"} {
+	for _, want := range []string{"acme · needs you (1 of 3)", "[api+web] Q2 Session", "covers api/Q3, web/Q7", "( ) 1 hour", "submit the answers picked"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("no %q:\n%s", want, out)
 		}
@@ -217,5 +218,37 @@ func TestServerNewProgram(t *testing.T) {
 	writeConfig(t, "")
 	if _, err := s.NewProgram("beta", ""); err == nil {
 		t.Error("made one while programs are off")
+	}
+}
+
+// TestProgramPages: the dialog's pages are program.needs' rows: the
+// program's questions (program, with the answer act) four to a page
+// first, then each other need; a program row without the act is a
+// page of its own, never answered here.
+func TestProgramPages(t *testing.T) {
+	q := &proto.Question{Questions: []proto.QuestionItem{{Question: "?", Options: []proto.QuestionOption{{Label: "a"}}}}}
+	var needs []proto.ProgramNeed
+	for i := 1; i <= 5; i++ {
+		needs = append(needs, proto.ProgramNeed{PeerNeed: proto.PeerNeed{ID: fmt.Sprintf("ask:Q%d", i), Kind: proto.NeedAsk, Question: q},
+			Project: "acme", Program: true, Acts: []string{proto.ActAnswer}})
+	}
+	needs = append(needs,
+		proto.ProgramNeed{PeerNeed: proto.PeerNeed{ID: "ask:Q9", Kind: proto.NeedAsk, Question: q}, Project: "acme", Program: true},
+		proto.ProgramNeed{PeerNeed: proto.PeerNeed{ID: "rv:T1", Kind: proto.NeedReview, Task: "T1"}, Project: "api"})
+	pages := programPages(&proto.ProgramNeedsResult{Needs: needs})
+	var got []string
+	for _, p := range pages {
+		if p.need != nil {
+			got = append(got, p.need.ID)
+			continue
+		}
+		var ids []string
+		for _, n := range p.questions {
+			ids = append(ids, questionID(n))
+		}
+		got = append(got, strings.Join(ids, "+"))
+	}
+	if want := []string{"Q1+Q2+Q3+Q4", "Q5", "ask:Q9", "rv:T1"}; !slices.Equal(got, want) {
+		t.Errorf("pages %v, want %v", got, want)
 	}
 }
