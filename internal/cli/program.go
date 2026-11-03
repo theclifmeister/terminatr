@@ -315,7 +315,7 @@ func programStatus(e *Env, cfg *config.Config, args []string) error {
 		return err
 	}
 	if !on && len(list) > 0 {
-		fmt.Fprintln(e.Stdout, "Their data is kept; the user turns programs back on in Settings → all projects → Features, or clears one with tm program delete <slug>.")
+		fmt.Fprintln(e.Stdout, "Their data is kept; the user turns programs back on in Settings → General → Programs, or clears one with tm program delete <slug>.")
 	}
 	return nil
 }
