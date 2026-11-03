@@ -28,6 +28,10 @@ const programUsage = `usage: tm program new <slug> [--goal "…"] [--json]   (th
        tm program show <slug> [--json]
        tm program open <slug> [--agent NAME]   (start or attach its director)
        tm program context [<slug>] [--json]   (the director's context; a director reads its own program's)
+       tm program route --file <path>|-   (file one task per member project; tm program route --help)
+       tm program task edit <project>/T<n> …   (priority, after, design, a note; tm program task --help)
+       tm program send <to> "text" [--re M-n]   (the program channel, director and member coordinators)
+       tm program read M-n   (a program channel message, framed as data)
        tm program status [--json]   (the human's: on or off, and the programs, dormant while off)
        tm program delete <slug> [--yes]   (the human's: its folder to the trash, its table out of config.toml; asks first)`
 
@@ -56,6 +60,14 @@ func runProgram(e *Env, args []string) error {
 		return programOpen(e, args[1:])
 	case "context":
 		return programContext(e, cfg, args[1:])
+	case "route":
+		return programRoute(e, cfg, args[1:])
+	case "task":
+		return programTask(e, cfg, args[1:])
+	case "send":
+		return programSend(e, cfg, args[1:])
+	case "read":
+		return programRead(e, cfg, args[1:])
 	}
 	return usagef("unknown subcommand %q\n%s", args[0], programUsage)
 }

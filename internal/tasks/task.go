@@ -168,7 +168,9 @@ type Task struct {
 	After    []int  // the tasks it comes after, by id
 	// AfterX are the tasks in other projects it comes after, as
 	// "<slug>/T<n>" or, on a paired server, "<alias>/<slug>/T<n>"
-	// (programs, §6.1). tm reads and keeps them; nothing writes them yet.
+	// (programs, §6.1). tm reads and keeps them; only a program's director
+	// writes them (ProgramAdd, ProgramEdit), the program layer checking
+	// they are its members'.
 	AfterX   []string
 	Created  string
 	Updated  string

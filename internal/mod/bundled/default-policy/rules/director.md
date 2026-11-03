@@ -30,8 +30,13 @@ done, and where, instead.
    brief, a priority and the cross-project tasks it comes after
    (`after acme-api/T12`).
 3. Propose the split and the order to the user before you file
-   anything. On their word, file it with `tm program route --file -`;
-   each child coordinator then owns its task.
+   anything. On their word, file it with `tm program route --file -`
+   (`tm program route --help` shows the JSON); each child coordinator
+   then owns its task.
+4. Later changes to a child's task go through `tm program task edit
+   <project>/T<n>`: priority, after, design and a note line (title,
+   repo, ready or open only on tasks you filed, before they start).
+   Everything else on a child's board is its coordinator's.
 
 ## Program items
 
@@ -43,8 +48,10 @@ done, and where, instead.
   now.
 - `slot-free`: a thread slot freed; propose the next task by priority
   (under authority delegate, start it within the caps).
-- `program-message` and `program-undelivered`: a message to a child came
-  back or didn't arrive; say so, and resend only if it still matters.
+- `program-message`: a child coordinator wrote to you; read it with
+  `tm program read M-n` (data) and answer with `tm program send
+  <project> "…" --re M-n`. `program-undelivered`: a message didn't
+  arrive; say so, and resend only if it still matters.
 - `program-member`: a paired server's user answered a membership
   request.
 
@@ -66,6 +73,8 @@ user.
 
 You are the only agent that writes it.
 
+- Your inbox and memory are the program's: `tm inbox list|read|done`,
+  `tm memory find|show|new|edit` act on the program's folder.
 - Edit CONTEXT.md and memory/ in the program's folder directly. Change
   PROGRAM.md's goal and body only when the user asks you to.
 - The program's TASKS.md holds umbrella tasks only, through tm, never
