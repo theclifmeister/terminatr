@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/models/modelstest"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/server"
 	"github.com/theclifmeister/terminatr/internal/thread"
@@ -169,5 +170,64 @@ func TestProgramSettings(t *testing.T) {
 	mv.key(m, keyMsg("space"))
 	if got := mv.members(); !slices.Equal(got, []string{"web", "api"}) {
 		t.Errorf("members %v", got)
+	}
+}
+
+// TestProgramDirectorParity: the program popup has a Director model row
+// (its agent's models; a change syncs the running director) and a
+// Remote control row with the coordinator's note; prefix+r and prefix+C
+// on a program's row act on its director (T962).
+func TestProgramDirectorParity(t *testing.T) {
+	writeConfig(t, "[features]\nprograms = true\n[programs.acme]\nprojects = [\"web\"]\nremote_control = true\n")
+	modelstest.Answer(t, "claude", "alpha", "beta")
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	g, _ := cfg.Program("acme")
+	data := Data{Projects: []ProjectData{{Slug: "web"}},
+		Programs: []ProgramData{{SideProgram: server.SideProgram{Slug: "acme", Projects: g.Projects}, Settings: g}},
+		Sessions: []proto.SessionInfo{{ID: "s-d", Role: proto.RoleDirector, Project: "acme", Agent: "claude", State: "idle"}}}
+	src := &fakeSource{data: data}
+	m := newDash(DashOptions{Source: src, Width: 120 + sideDefault, Height: 40})
+	m.setData(data)
+	m.focus, m.sideSel = areaSide, "g:acme"
+	drain(t, m, press(m, "A"))
+	pv, ok := m.top().(*programView)
+	if !ok {
+		t.Fatalf("popup %T", m.top())
+	}
+	row := func(label string) setting {
+		i := slices.IndexFunc(pv.list.rows, func(r setting) bool { return r.label == label })
+		if i < 0 {
+			t.Fatalf("no %s row", label)
+		}
+		pv.list.sel = i
+		return pv.list.rows[i]
+	}
+	if r := row("Director model"); r.value(m) != "the coordinator's" {
+		t.Errorf("model default %q", r.value(m))
+	}
+	drain(t, m, press(m, "enter"))
+	if !slices.Equal(src.settings, []string{"programs.acme.director_model=alpha", "sync s-d"}) {
+		t.Fatalf("model change: %v", src.settings)
+	}
+	r := row("Remote control")
+	if r.value(m) != "on" {
+		t.Errorf("remote %q", r.value(m))
+	}
+	if note := ansi.Strip(strings.Join(r.note(m), " ")); !strings.Contains(note, "the running director has it off; tm turns it on once the director is idle") {
+		t.Errorf("remote note %q", note)
+	}
+	m.pop()
+	// prefix+r on the program's row asks about its director.
+	m.askRemote()
+	drain(t, m, press(m, "Y"))
+	if !slices.Equal(src.remote, []string{"director:acme on"}) {
+		t.Fatalf("prefix+r: %v", src.remote)
+	}
+	drain(t, m, m.prefixCommand("C"))
+	if !slices.Equal(src.saveCleared, []string{"director:acme"}) || !strings.Contains(m.msg, "asked acme's director to save") {
+		t.Fatalf("prefix+C: %v %q", src.saveCleared, m.msg)
 	}
 }

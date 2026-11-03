@@ -150,8 +150,12 @@ func (m *dash) prefixCommand(key string) tea.Cmd {
 		m.stack, m.result.Command = nil, key
 		return nil
 	case key == "C":
-		// The selected (or current) project's coordinator, no question.
+		// The selected (or current) project's coordinator, no question;
+		// on a program's row, its director.
 		m.stack = nil
+		if g := m.directorHere(); g != "" {
+			return m.saveClearOf(proto.RoleDirector, g)
+		}
 		slug := m.needProject()
 		if slug == "" {
 			return nil
@@ -212,24 +216,31 @@ func (m *dash) toDashboard() tea.Cmd {
 
 // askRemote asks whether to turn the selected project's coordinator's
 // remote control on or off (prefix+r on the dashboard; in a session it
-// is the focused coordinator's).
+// is the focused coordinator's). With the sidebar's cursor on a program's
+// row, or its director's, it is that director's.
 func (m *dash) askRemote() tea.Cmd {
-	slug := m.needProject()
-	if slug == "" {
+	role, slug := proto.RoleCoordinator, m.directorHere()
+	if slug != "" {
+		role = proto.RoleDirector
+	} else if slug = m.needProject(); slug == "" {
 		return nil
 	}
 	for _, s := range m.data.Sessions {
-		if s.Role != proto.RoleCoordinator || s.Project != slug {
+		if s.Role != role || s.Project != slug {
 			continue
 		}
 		on := !s.RemoteControl
 		m.confirmNo("Remote control", remoteQuestion(s), "remote control unchanged", func() tea.Cmd {
 			src := m.src
 			return m.act(func() actionMsg {
-				msg, err := src.SetRemote(slug, on)
+				msg, err := src.SetRemote(role, slug, on)
 				return actionMsg{msg: msg, err: err}
 			})
 		})
+		return nil
+	}
+	if role == proto.RoleDirector {
+		m.msg = "no director runs for " + slug + "; enter on the program starts it"
 		return nil
 	}
 	m.msg = "no coordinator runs for " + slug + "; enter on the project starts it"

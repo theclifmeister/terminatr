@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"cmp"
 	"fmt"
 	"slices"
 	"strings"
@@ -8,6 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
 // A program's settings popup (the programs design §3.3, §11.1): its
@@ -103,6 +105,10 @@ func programSettings(slug string) []setting {
 			},
 			unset: unset(key)}
 	}
+	remoteRow := toggle("Remote control", "remote_control", "The director keeps remote control on, so you can continue it from another device: a new one starts with it, and tm turns it back on when it drops. prefix+r changes the running one; your off holds until it is started anew.", func(p config.Program) bool { return p.RemoteControl })
+	remoteRow.note = func(m *dash) []string {
+		return remoteNoteOf(proto.RoleDirector, get(m).RemoteControl, m.data.Sessions, slug)
+	}
 	return []setting{
 		{label: "Members", help: "The projects in the program, in the order its dashboard lists them. A project is in one program at most. Enter picks them.",
 			value:  func(m *dash) string { return membersWords(get(m).Projects) },
@@ -153,11 +159,110 @@ func programSettings(slug string) []setting {
 				return set("director_agent", next, "director agent: "+next)(m)
 			},
 			unset: unset("director_agent")},
+		directorModelRow(slug, get, set, unset),
+		remoteRow,
 		toggle("Auto clear", "auto_clear", "The director saves what it learned and starts a fresh conversation when its context fills, as a coordinator does.", func(p config.Program) bool { return p.AutoClear }),
 		toggle("Answer facts", "answer_facts", "The director passes settled facts (merged, released, decided by you) from one project to another without asking, citing where they come from. Decisions always come to you.", func(p config.Program) bool { return p.AnswerFacts }),
 		toggle("Search projects", "search_children", "The director may search its projects' histories, as a thread sees them: never their inbox or coordinator notes.", func(p config.Program) bool { return p.SearchChildren }),
 		toggle("Paused", "paused", "The director keeps running, but routing tasks and starting threads are refused until you resume.", func(p config.Program) bool { return p.Paused }),
 	}
+}
+
+// directorModels are the models program slug's director may run: its
+// agent's (director_agent, else all projects' coordinator agent), in
+// all projects' Thread models, as config.DirectorSafety reads them.
+func directorModels(m *dash, p config.Program) (string, []string, string) {
+	all := config.Defaults
+	if m.data.Defaults != nil {
+		all = *m.data.Defaults
+	}
+	name, why := resolvedAgent(cmp.Or(p.DirectorAgent, all.CoordinatorAgent), m.agentList())
+	if name == "" {
+		return "", nil, why
+	}
+	for _, c := range m.catalogList() {
+		if c.Agent != name {
+			continue
+		}
+		if !c.Known {
+			return name, nil, name + "'s models are unknown (" + c.Reason + ")"
+		}
+		var out []string
+		for _, x := range c.InScope(all.Models) {
+			out = append(out, x.Name)
+		}
+		return name, out, ""
+	}
+	return name, nil, name + " isn't installed"
+}
+
+// directorModelWords is a program's director_model as its row shows
+// it: unset, the coordinators' model while the director's agent is
+// theirs too, else its agent's default (config.DirectorSafety).
+func directorModelWords(p config.Program) string {
+	switch {
+	case p.DirectorModel != "":
+		return p.DirectorModel
+	case p.DirectorAgent == "":
+		return "the coordinator's"
+	}
+	return "agent's default"
+}
+
+// directorModelRow is the program's Director model row: enter steps
+// through its agent's models, X goes back to the default, and a running
+// director switches at once where its agent can (session.model); the
+// ticker catches what this misses.
+func directorModelRow(slug string, get func(*dash) config.Program, set func(string, any, string) func(*dash) tea.Cmd, unset func(string) func(*dash) tea.Cmd) setting {
+	running := func(m *dash) *proto.SessionInfo {
+		for i, s := range m.data.Sessions {
+			if s.Role == proto.RoleDirector && s.Project == slug && s.Agent != "" {
+				return &m.data.Sessions[i]
+			}
+		}
+		return nil
+	}
+	sync := func(m *dash, save tea.Cmd) tea.Cmd {
+		s := running(m)
+		if s == nil {
+			return save
+		}
+		id, src := s.ID, m.src
+		return tea.Sequence(save, func() tea.Msg { src.SyncModel(id); return nil })
+	}
+	return setting{label: "Director model", help: "The model the director runs, from its agent's models in all projects' Thread models; the coordinator's model while it runs the coordinator's agent. A running director switches at once where its agent can, else on its next start. Enter picks the next one; X goes back to the default.",
+		value: func(m *dash) string { return directorModelWords(get(m)) },
+		change: func(m *dash) tea.Cmd {
+			name, list, why := directorModels(m, get(m))
+			if len(list) == 0 {
+				m.msg = cmp.Or(why, "the director's agent offers no models here") + ": the director runs its agent's default"
+				return nil
+			}
+			choices := append([]string{""}, list...)
+			next := choices[(slices.Index(choices, get(m).DirectorModel)+1)%len(choices)]
+			if next == "" {
+				return sync(m, unset("director_model")(m))
+			}
+			return sync(m, set("director_model", next, "the director runs "+next+" ("+name+")")(m))
+		},
+		unset: func(m *dash) tea.Cmd { return sync(m, unset("director_model")(m)) },
+		note: func(m *dash) []string {
+			if s := running(m); s != nil && s.ModelPending {
+				return []string{th().Warn.Render("the running director runs " + modelWord(s.Model) + "; " + modelWord(s.ModelNext) + " on its next start (" + s.Agent + " can't switch models live)")}
+			}
+			cur := get(m).DirectorModel
+			if cur == "" {
+				return nil
+			}
+			name, list, why := directorModels(m, get(m))
+			switch {
+			case why != "":
+				return []string{th().Warn.Render(why + ": the director runs its agent's default")}
+			case !slices.Contains(list, cur):
+				return []string{th().Warn.Render(name + " doesn't offer " + cur + " in all projects' models now: the director runs " + name + "'s default")}
+			}
+			return nil
+		}}
 }
 
 // membersWords is a program's members as its settings row shows them.

@@ -514,6 +514,9 @@ const MethodCoordinatorClear = "coordinator.clear"
 // CoordinatorClearParams are the params of coordinator.clear.
 type CoordinatorClearParams struct {
 	Project string `json:"project"`
+	// Program, in Project's place, asks for program's director (the
+	// programs design §4.1), only while programs are on.
+	Program string `json:"program,omitempty"`
 }
 
 // CoordinatorClearResult names the coordinator session asked to save and

@@ -1,7 +1,6 @@
 package server
 
 import (
-	"cmp"
 	"fmt"
 	"strings"
 
@@ -53,25 +52,10 @@ func directorReady(cfg *config.Config, slug string) (string, *proto.Error) {
 	return realPath(g.Dir), nil
 }
 
-// directorSafety is the settings a director of program slug launches
-// with: all projects' ([defaults]), with the program's director_agent
-// and director_model in the coordinator's place, which they default to
-// (decision 15), and its remote_control.
+// directorSafety is the settings a director of program slug runs with
+// (config.DirectorSafety).
 func directorSafety(cfg *config.Config, slug string) config.Safety {
-	safety := config.Defaults
-	if cfg != nil {
-		if s, err := cfg.AllProjects(); err == nil {
-			safety = s
-		}
-	}
-	if t, ok := cfg.Program(slug); ok {
-		safety.CoordinatorAgent = cmp.Or(t.DirectorAgent, safety.CoordinatorAgent)
-		if t.DirectorAgent != "" || t.DirectorModel != "" {
-			safety.CoordinatorModel = t.DirectorModel
-		}
-		safety.CoordinatorRemoteControl = t.RemoteControl
-	}
-	return safety
+	return cfg.DirectorSafety(slug)
 }
 
 // OpenDirector returns the id of program slug's director session,
@@ -105,7 +89,7 @@ func OpenDirector(list func() ([]proto.SessionInfo, error), start func(proto.Ses
 	}
 	id, err := start(proto.SessionStartParams{
 		Agent: name, Model: model, Role: proto.RoleDirector, Project: slug, Cwd: dir,
-		Cols: cols, Rows: rows, Kickoff: DirectorKickoff})
+		Cols: cols, Rows: rows, Kickoff: DirectorKickoff, RemoteControl: safety.CoordinatorRemoteControl})
 	if err != nil {
 		return "", false, err
 	}
@@ -118,9 +102,6 @@ func OpenDirector(list func() ([]proto.SessionInfo, error), start func(proto.Ses
 func directorStart(p proto.SessionStartParams) (string, *proto.Error) {
 	if p.Agent == "" || p.Project == "" {
 		return "", proto.Errorf(proto.ErrBadParams, "role director needs an agent and a program")
-	}
-	if p.RemoteControl {
-		return "", proto.Errorf(proto.ErrRefused, "remote control isn't offered for a director yet")
 	}
 	cfg, _ := config.Load() // a safety error still gives the tables
 	dir, perr := directorReady(cfg, p.Project)

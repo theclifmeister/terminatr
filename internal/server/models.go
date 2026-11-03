@@ -7,7 +7,9 @@ import (
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/features"
 	"github.com/theclifmeister/terminatr/internal/models"
+	"github.com/theclifmeister/terminatr/internal/program"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/session"
@@ -143,11 +145,23 @@ func (s *Server) modelRefused(sess *session.Session, msg string) {
 	if r.Project == "" {
 		return
 	}
-	p, err := project.Open(r.Project)
-	if err != nil {
-		return
-	}
+	var p *project.Folder
 	who := caller.Caller{Kind: caller.Coordinator, Project: r.Project}
+	what, setting := "its coordinator", "the Coordinator model setting"
+	if r.Role == proto.RoleDirector {
+		g, err := program.Open(r.Project, nil)
+		if err != nil {
+			return
+		}
+		p, who = &g.Folder, caller.Caller{Kind: caller.Director, Project: r.Project}
+		what, setting = "its director", "the program's Director model setting"
+	} else {
+		pr, err := project.Open(r.Project)
+		if err != nil {
+			return
+		}
+		p = &pr.Folder
+	}
 	ref := r.ID
 	if r.Role == proto.RoleThread && r.Thread != "" {
 		who = caller.Caller{Kind: caller.Thread, Project: r.Project, Thread: r.Thread}
@@ -156,11 +170,10 @@ func (s *Server) modelRefused(sess *session.Session, msg string) {
 	if err := p.Journal(who, "model.refused", ref, fmt.Sprintf("%s %s: %s", r.Agent, model, msg)); err != nil {
 		s.log.Printf("session %s: journal: %v", r.ID, err)
 	}
-	what := "its coordinator"
 	if r.Role == proto.RoleThread {
 		what = "the thread"
 	}
-	summary := fmt.Sprintf("%s: %s refused model %s for the user's account (%s). tm won't offer it again for this login; restart %s with another model or none (tm thread restart, or the Coordinator model setting)", ref, r.Agent, model, msg, what)
+	summary := fmt.Sprintf("%s: %s refused model %s for the user's account (%s). tm won't offer it again for this login; restart %s with another model or none (tm thread restart, or %s)", ref, r.Agent, model, msg, what, setting)
 	if _, err := p.AddItem("model-refused", ref, summary, false); err != nil {
 		s.log.Printf("session %s: inbox: %v", r.ID, err)
 	}
@@ -183,8 +196,8 @@ func (s *Server) syncModel(id string) (any, *proto.Error) {
 	if !ok {
 		return nil, proto.Errorf(proto.ErrUnknownSession, "no session %s", id)
 	}
-	if r.Role != proto.RoleCoordinator || r.Project == "" {
-		return nil, proto.Errorf(proto.ErrRefused, "the model setting is for coordinators; a thread keeps the model it was launched with")
+	if r.Role != proto.RoleCoordinator && r.Role != proto.RoleDirector || r.Project == "" {
+		return nil, proto.Errorf(proto.ErrRefused, "the model setting is for coordinators and directors; a thread keeps the model it was launched with")
 	}
 	a := sess.Agent()
 	if a == nil {
@@ -198,8 +211,13 @@ func (s *Server) syncModel(id string) (any, *proto.Error) {
 	if err != nil {
 		return nil, proto.Errorf(proto.ErrRefused, "%v", err)
 	}
-	safety, err := cfg.Safety(r.Project)
-	if err != nil {
+	var safety config.Safety
+	if r.Role == proto.RoleDirector {
+		if !features.Programs(cfg) {
+			return nil, proto.Errorf(features.OffCode, "%s", features.OffMsg)
+		}
+		safety = cfg.DirectorSafety(r.Project)
+	} else if safety, err = cfg.Safety(r.Project); err != nil {
 		return nil, proto.Errorf(proto.ErrRefused, "%v", err)
 	}
 	cat := models.Get(m, cfg, true)
@@ -235,7 +253,7 @@ func (s *Server) syncModel(id string) (any, *proto.Error) {
 	text := m.SwitchText(want)
 	if text == "" {
 		if !r.ModelPending || r.ModelNext != want {
-			s.log.Printf("session %s: coordinator model %s on its next start (%s can't switch live)", id, cmpOr(want, "default"), r.Agent)
+			s.log.Printf("session %s: %s model %s on its next start (%s can't switch live)", id, r.Role, cmpOr(want, "default"), r.Agent)
 		}
 		set(running, want, true)
 		return proto.SessionModelResult{Model: want, How: proto.ModelNextStart}, nil
@@ -244,7 +262,7 @@ func (s *Server) syncModel(id string) (any, *proto.Error) {
 		return nil, sessionError(id, err)
 	}
 	set(want, "", false)
-	s.log.Printf("session %s: coordinator model %s -> %s (%q, queued until idle)", id, cmpOr(running, "default"), cmpOr(want, "default"), text)
+	s.log.Printf("session %s: %s model %s -> %s (%q, queued until idle)", id, r.Role, cmpOr(running, "default"), cmpOr(want, "default"), text)
 	return proto.SessionModelResult{Model: want, How: proto.ModelSwitched}, nil
 }
 

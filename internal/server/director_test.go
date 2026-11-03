@@ -2,14 +2,18 @@ package server
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
+	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/program"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 )
@@ -78,8 +82,9 @@ func TestDirectorCommands(t *testing.T) {
 }
 
 // TestDirectorStart: session.start refuses a director while programs
-// are off, for a program that isn't there or is left out, with remote
-// control, and in another folder; else it runs in its program's folder.
+// are off, for a program that isn't there or is left out, and in
+// another folder; else it runs in its program's folder, with remote
+// control too (a coordinator's parity, T962).
 func TestDirectorStart(t *testing.T) {
 	_, root := programFixture(t)
 	p := proto.SessionStartParams{Agent: "claude", Role: proto.RoleDirector, Project: "acme"}
@@ -104,7 +109,7 @@ func TestDirectorStart(t *testing.T) {
 	}{
 		"no agent":       {proto.SessionStartParams{Role: proto.RoleDirector, Project: "acme"}, proto.ErrBadParams},
 		"no program":     {proto.SessionStartParams{Agent: "claude", Role: proto.RoleDirector, Project: "gone"}, "unknown-program"},
-		"remote control": {proto.SessionStartParams{Agent: "claude", Role: proto.RoleDirector, Project: "acme", RemoteControl: true}, proto.ErrRefused},
+		"remote control": {proto.SessionStartParams{Agent: "claude", Role: proto.RoleDirector, Project: "acme", RemoteControl: true}, ""},
 		"elsewhere":      {proto.SessionStartParams{Agent: "claude", Role: proto.RoleDirector, Project: "acme", Cwd: t.TempDir()}, proto.ErrBadParams},
 	} {
 		if got := code(c.p); got != c.code {
@@ -182,5 +187,73 @@ func TestDirectorContext(t *testing.T) {
 	b, _ = contextFor(r, "")()
 	if !strings.Contains(string(b), "Programs are off") || strings.Contains(string(b), "## Children") {
 		t.Errorf("off: %s", b)
+	}
+}
+
+// TestDirectorParity: a director's save and clear, remote control and
+// model setting go as a coordinator's (the programs design §4.1):
+// coordinator.clear takes the program, session.remote and session.model
+// take the director's session, and all refuse programs-off once the
+// switch is off.
+func TestDirectorParity(t *testing.T) {
+	p := testPaths(t)
+	newWatchProject(t)
+	if _, err := program.New(program.Options{Slug: "acme"}); err != nil {
+		t.Fatal(err)
+	}
+	writeConfig(t, "[features]\nprograms = true\n[programs.acme]\nprojects = [\"demo\"]\n")
+	if err := os.MkdirAll(p.AgentsDir(), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	manifest := "manifest_version = 1\nname = \"clears\"\n[launch]\ncommand = " + strconv.Quote(testSh(t)) + "\nargs = [\"-c\", \"sleep 30\"]\n[inject]\nclear = \"/clear\"\n"
+	if err := os.WriteFile(filepath.Join(p.AgentsDir(), "clears.toml"), []byte(manifest), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	startServer(t, p)
+	c, err := client.Dial(p, proto.KindControl)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	code := func(err error) string {
+		var perr *proto.Error
+		if errors.As(err, &perr) {
+			return perr.Code
+		}
+		return ""
+	}
+	if err := c.Call(proto.MethodCoordinatorClear, proto.CoordinatorClearParams{Program: "nope"}, nil); code(err) != "unknown-program" {
+		t.Errorf("unknown program: %v", err)
+	}
+	if err := c.Call(proto.MethodCoordinatorClear, proto.CoordinatorClearParams{Project: "demo", Program: "acme"}, nil); code(err) != proto.ErrBadParams {
+		t.Errorf("both: %v", err)
+	}
+	if err := c.Call(proto.MethodCoordinatorClear, proto.CoordinatorClearParams{Program: "acme"}, nil); code(err) != proto.ErrRefused || !strings.Contains(err.Error(), "no director running") {
+		t.Errorf("no director: %v", err)
+	}
+	var started proto.SessionStartResult
+	call(t, c, proto.MethodSessionStart, proto.SessionStartParams{Agent: "clears", Role: proto.RoleDirector, Project: "acme"}, &started)
+	id := started.Session.ID
+	var res proto.CoordinatorClearResult
+	call(t, c, proto.MethodCoordinatorClear, proto.CoordinatorClearParams{Program: "acme"}, &res)
+	if res.Session != id {
+		t.Errorf("asked %q, want %s", res.Session, id)
+	}
+	// The test agent has no remote control: refused for that, not for
+	// being a director.
+	if err := c.Call(proto.MethodSessionRemote, proto.SessionRemoteParams{ID: id, On: true}, nil); err == nil || !strings.Contains(err.Error(), "clears has no remote control") {
+		t.Errorf("remote: %v", err)
+	}
+	var mres proto.SessionModelResult
+	call(t, c, proto.MethodSessionModel, proto.SessionModelParams{ID: id}, &mres)
+	writeConfig(t, "[programs.acme]\nprojects = [\"demo\"]\n")
+	if err := c.Call(proto.MethodCoordinatorClear, proto.CoordinatorClearParams{Program: "acme"}, nil); code(err) != config.ProgramsOff {
+		t.Errorf("off: clear: %v", err)
+	}
+	if err := c.Call(proto.MethodSessionRemote, proto.SessionRemoteParams{ID: id, On: true}, nil); code(err) != config.ProgramsOff {
+		t.Errorf("off: remote: %v", err)
+	}
+	if err := c.Call(proto.MethodSessionModel, proto.SessionModelParams{ID: id}, nil); code(err) != config.ProgramsOff {
+		t.Errorf("off: model: %v", err)
 	}
 }
