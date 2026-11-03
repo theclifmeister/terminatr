@@ -1,0 +1,6 @@
+{"kind":"prompt","text":"fix the bug","at":"2026-11-03T10:00:00Z"}
+{"kind":"text","text":"Fixed.","at":"2026-11-03T10:00:05Z"}
+{"kind":"note","text":"Conversation compacted","at":"2026-11-03T10:01:00Z"}
+{"kind":"prompt","text":"now add a test","at":"2026-11-03T10:02:00Z"}
+{"kind":"tool","text":"go test ./...","tool":"Bash","call":"toolu_1","at":"2026-11-03T10:02:05Z"}
+{"kind":"result","text":"ok","call":"toolu_1","lines":1,"at":"2026-11-03T10:02:09Z"}
