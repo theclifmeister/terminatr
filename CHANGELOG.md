@@ -1,5 +1,42 @@
 # Changelog
 
+## [0.74.0](https://github.com/theclifmeister/terminatr/compare/v0.73.1...v0.74.0) (2026-11-03)
+
+
+### Features
+
+* **apps:** send crash and hang reports to your own tm server ([#1025](https://github.com/theclifmeister/terminatr/issues/1025)) ([041b5c4](https://github.com/theclifmeister/terminatr/commit/041b5c4e035940300abcb55bf46e4c8aa8c0c924))
+* **programs:** dependencies between projects in a program (off by default) ([#1037](https://github.com/theclifmeister/terminatr/issues/1037)) ([92d2711](https://github.com/theclifmeister/terminatr/commit/92d2711982eef14aa14d00c7bded9f9efb4d8240))
+* **programs:** director remote control, model switching, auto-clear and save-and-clear (off by default) ([#1034](https://github.com/theclifmeister/terminatr/issues/1034)) ([20d4280](https://github.com/theclifmeister/terminatr/commit/20d42807cc4f0c2977d82e93bdabe3ac0a604d2c))
+* **programs:** director routes tasks to member projects, edits them and messages them (off by default) ([#1035](https://github.com/theclifmeister/terminatr/issues/1035)) ([7194b09](https://github.com/theclifmeister/terminatr/commit/7194b09bbc680f7bdb1ec0d3e39fc0ec7aa1c8fd))
+* **programs:** director search across member projects (off by default) ([#1036](https://github.com/theclifmeister/terminatr/issues/1036)) ([318eca3](https://github.com/theclifmeister/terminatr/commit/318eca3c97b4ee1ae13dc06a0e95e988d690b63e))
+* **programs:** director session, rules and context (off by default) ([#1031](https://github.com/theclifmeister/terminatr/issues/1031)) ([728436e](https://github.com/theclifmeister/terminatr/commit/728436e8393c6e55e1635224e0bd6fbe2934d366))
+* **programs:** director starts threads in member projects (off by default) ([#1041](https://github.com/theclifmeister/terminatr/issues/1041)) ([f628262](https://github.com/theclifmeister/terminatr/commit/f6282626fc81e7184c6283bd7bf09f7b6e3e24c0))
+* **programs:** invite projects on paired servers into a program (off by default) ([#1039](https://github.com/theclifmeister/terminatr/issues/1039)) ([7178fda](https://github.com/theclifmeister/terminatr/commit/7178fda2b62265d64fb20e52cd2551e8d5ac40ff))
+* **programs:** merge alike questions from member projects and fan out the user's answer (off by default) ([#1042](https://github.com/theclifmeister/terminatr/issues/1042)) ([c172a09](https://github.com/theclifmeister/terminatr/commit/c172a095878a42b425149139422c52b8a674b775))
+* **programs:** one rolled-up Needs you per program, and director inbox nudges (off by default) ([#1040](https://github.com/theclifmeister/terminatr/issues/1040)) ([7035bb9](https://github.com/theclifmeister/terminatr/commit/7035bb966caa8d09882aa461bc4ac3f0509314b7))
+* **programs:** paired members in the program's Needs you, question merges, rename, umbrella parts and sidebar (off by default) ([#1048](https://github.com/theclifmeister/terminatr/issues/1048)) ([a665edb](https://github.com/theclifmeister/terminatr/commit/a665edb128a2293602d644bcedcc9a1977c93bb4))
+* **programs:** program dashboard, needs dialog and director panel in the TUI (off by default) ([#1045](https://github.com/theclifmeister/terminatr/issues/1045)) ([97e097f](https://github.com/theclifmeister/terminatr/commit/97e097f062af2074f074871fd85ee74f8347eca5))
+* **programs:** program folders under projects/_programs (off by default) ([#1027](https://github.com/theclifmeister/terminatr/issues/1027)) ([94aac1c](https://github.com/theclifmeister/terminatr/commit/94aac1c913eb3ad97da44374639c3479e05edf71))
+* **programs:** program thread cap and priority ranking of free slots (off by default) ([#1038](https://github.com/theclifmeister/terminatr/issues/1038)) ([511ae8e](https://github.com/theclifmeister/terminatr/commit/511ae8e0cdf77f699d5958697d27304ba54aae85))
+* **programs:** programs in the app API (off by default) ([#1050](https://github.com/theclifmeister/terminatr/issues/1050)) ([5ecdb10](https://github.com/theclifmeister/terminatr/commit/5ecdb101356d11f0c11d5f49df7b53d9b82c9913))
+* **programs:** programs in the Mac app (off by default) ([#1052](https://github.com/theclifmeister/terminatr/issues/1052)) ([b9b763c](https://github.com/theclifmeister/terminatr/commit/b9b763cc1f75b60ba84fe499c9e7b16270edba70))
+* **programs:** programs on the iPhone (off by default) ([#1051](https://github.com/theclifmeister/terminatr/issues/1051)) ([5e586df](https://github.com/theclifmeister/terminatr/commit/5e586df0be8ecec139014abe30ee159fb89c907c))
+* **programs:** programs switch in Settings, dormancy and resume (off by default) ([#1033](https://github.com/theclifmeister/terminatr/issues/1033)) ([9d0830f](https://github.com/theclifmeister/terminatr/commit/9d0830f5f526d2cc9eae465236eda1b65633ca4b))
+* **programs:** read program settings and cross-project task references (no writers yet) ([#1024](https://github.com/theclifmeister/terminatr/issues/1024)) ([7d66acb](https://github.com/theclifmeister/terminatr/commit/7d66acb6eaf25e04e6a758367f9332aae946d005))
+* **programs:** rename, archive and delete keep programs consistent; tm program rename (off by default) ([#1043](https://github.com/theclifmeister/terminatr/issues/1043)) ([64ffcc4](https://github.com/theclifmeister/terminatr/commit/64ffcc447f5f10545df8e83ab8681b04a7ee6760))
+* **programs:** route, edit, message and start member projects on paired servers (off by default) ([#1044](https://github.com/theclifmeister/terminatr/issues/1044)) ([c29ef25](https://github.com/theclifmeister/terminatr/commit/c29ef2555515f977c875023c19661e4fe797c68e))
+* **programs:** sidebar program and director rows, program settings popup (off by default) ([#1032](https://github.com/theclifmeister/terminatr/issues/1032)) ([c8e1bfb](https://github.com/theclifmeister/terminatr/commit/c8e1bfb0ff8f26cd882be4758be7a66e13921e39))
+* **programs:** umbrella tasks track their parts across member projects (off by default) ([#1046](https://github.com/theclifmeister/terminatr/issues/1046)) ([07988cd](https://github.com/theclifmeister/terminatr/commit/07988cd569ccbcf999db1cdb720ddd5576c2e97c))
+* **programs:** umbrellas in review join the program's Needs you, with accept and send-back (off by default) ([#1047](https://github.com/theclifmeister/terminatr/issues/1047)) ([6a52961](https://github.com/theclifmeister/terminatr/commit/6a52961685b84bbdc35fa7925da247f1a0653bb9))
+* **vault:** program task notes in the Bases and Home.md while programs are on ([#1030](https://github.com/theclifmeister/terminatr/issues/1030)) ([cff883d](https://github.com/theclifmeister/terminatr/commit/cff883d1e2bffcd949b90dadde34071d0433b5fb))
+* **vault:** programs in the vault: links, derived notes, inbox routing, doctor and daily notes ([#1029](https://github.com/theclifmeister/terminatr/issues/1029)) ([bc7d2c6](https://github.com/theclifmeister/terminatr/commit/bc7d2c69c8dd68d20d2132aa16f31124bd372433))
+
+
+### Bug Fixes
+
+* **ios:** stop conversation freezes that got the app killed by iOS ([#1023](https://github.com/theclifmeister/terminatr/issues/1023)) ([cbe84a1](https://github.com/theclifmeister/terminatr/commit/cbe84a1cc3c6c67effb7cc87c750d51634dd0e1c))
+
 ## [0.73.1](https://github.com/theclifmeister/terminatr/compare/v0.73.0...v0.73.1) (2026-11-02)
 
 
