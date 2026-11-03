@@ -388,12 +388,29 @@ func (m *dash) answerQuestions(slug string) tea.Cmd {
 
 // saveClear has slug's coordinator save what it learned, then clears its
 // conversation (the context hint's key); the footer says what came of it.
-func (m *dash) saveClear(slug string) tea.Cmd {
+func (m *dash) saveClear(slug string) tea.Cmd { return m.saveClearOf(proto.RoleCoordinator, slug) }
+
+// saveClearOf is saveClear for the session of role (a director: slug is
+// its program).
+func (m *dash) saveClearOf(role, slug string) tea.Cmd {
 	src := m.src
 	return m.act(func() actionMsg {
-		res, err := src.SaveClear(slug)
-		return actionMsg{msg: saveClearWords(slug, res, err)}
+		res, err := src.SaveClear(role, slug)
+		return actionMsg{msg: saveClearWordsFor(role, slug, res, err)}
 	})
+}
+
+// directorHere is the program whose director the sidebar's cursor is
+// on (its program's row or its director's), "" elsewhere: prefix+r and
+// prefix+C then act on that director.
+func (m *dash) directorHere() string {
+	if m.focus != areaSide {
+		return ""
+	}
+	if r, ok := sideRowOf(m.tree(), m.sideSel, false); ok && (r.kind == treeProgram || r.kind == treeDirector) {
+		return r.slug
+	}
+	return ""
 }
 
 // activeWord is what space does to a project that is on (active) or not.

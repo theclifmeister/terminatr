@@ -19,3 +19,15 @@ func TestClearIsCoordinators(t *testing.T) {
 		t.Error("no help")
 	}
 }
+
+// TestClearProgram: tm clear --program is the human's and the program's
+// director's; a director's plain tm clear names its own program, another
+// program is refused, as are a coordinator and both flags at once.
+func TestClearProgram(t *testing.T) {
+	h := newHarness(t)
+	h.ok(human, "project", "new", "demo")
+	dir := caller.Caller{Kind: caller.Director, Project: "acme"}
+	h.expect(1, "other-program", dir, "clear", "--program", "beta")
+	h.expect(1, "director-only", coord, "clear", "--program", "acme")
+	h.expect(2, "usage: tm clear", human, "clear", "--project", "demo", "--program", "acme")
+}

@@ -9,6 +9,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/features"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/session"
 )
@@ -35,9 +36,15 @@ func (s *Server) remote(p proto.SessionRemoteParams) (any, *proto.Error) {
 		s.mu.Unlock()
 		return nil, proto.Errorf(proto.ErrUnknownSession, "no session %s", p.ID)
 	}
-	if r.Role != proto.RoleCoordinator {
+	if r.Role != proto.RoleCoordinator && r.Role != proto.RoleDirector {
 		s.mu.Unlock()
-		return nil, proto.Errorf(proto.ErrRefused, "remote control is for coordinators; threads are reached through theirs")
+		return nil, proto.Errorf(proto.ErrRefused, "remote control is for coordinators and directors; threads are reached through theirs")
+	}
+	if r.Role == proto.RoleDirector {
+		if cfg, _ := config.Load(); !features.Programs(cfg) {
+			s.mu.Unlock()
+			return nil, proto.Errorf(features.OffCode, "%s", features.OffMsg)
+		}
 	}
 	rc := agent.RemoteControlOf(sess.Agent())
 	if rc == nil {
@@ -49,7 +56,7 @@ func (s *Server) remote(p proto.SessionRemoteParams) (any, *proto.Error) {
 	}
 	// A manual off holds against the setting until the coordinator is
 	// started anew (the ticker's enforcement, §11.2); an on lifts it.
-	held := !p.On && remoteSetting(r.Project)
+	held := !p.On && remoteSetting(r)
 	if r.RemoteHeld != !p.On {
 		r.RemoteHeld = !p.On
 		s.records[p.ID] = r
@@ -62,7 +69,7 @@ func (s *Server) remote(p proto.SessionRemoteParams) (any, *proto.Error) {
 		s.mu.Unlock()
 		return proto.SessionRemoteResult{RemoteControl: p.On, How: proto.RemoteUnchanged, Held: held}, nil
 	}
-	text, err := rc.Text(p.On, agent.LaunchSpec{Role: agent.Role(r.Role), SessionID: r.ID, AgentSID: r.AgentSessionID,
+	text, err := rc.Text(p.On, agent.LaunchSpec{Role: agent.Role(directorProfile(r.Role)), SessionID: r.ID, AgentSID: r.AgentSessionID,
 		Cwd: r.Cwd, RemoteControl: p.On, RemoteName: remoteName(r)})
 	if err != nil {
 		s.mu.Unlock()
@@ -72,7 +79,7 @@ func (s *Server) remote(p proto.SessionRemoteParams) (any, *proto.Error) {
 		// A restart ends the agent's turn or open dialog: only when idle.
 		if st, _ := sess.AgentState(); st.State != agent.StateIdle {
 			s.mu.Unlock()
-			return nil, proto.Errorf(proto.ErrRefused, "the coordinator is %s; try again once it is idle", st.State)
+			return nil, proto.Errorf(proto.ErrRefused, "the %s is %s; try again once it is idle", r.Role, st.State)
 		}
 	}
 	r.RemoteControl = p.On
@@ -105,13 +112,18 @@ func (s *Server) remote(p proto.SessionRemoteParams) (any, *proto.Error) {
 	return proto.SessionRemoteResult{RemoteControl: p.On, How: proto.RemoteRestarted, Held: held}, nil
 }
 
-// remoteSetting is the project's coordinator_remote_control setting.
-func remoteSetting(slug string) bool {
+// remoteSetting is the remote control setting of r's session: its
+// project's coordinator_remote_control, or a director's program's
+// remote_control.
+func remoteSetting(r SessionRecord) bool {
 	cfg, err := config.Load()
 	if err != nil {
 		return false
 	}
-	safety, err := cfg.Safety(slug)
+	if r.Role == proto.RoleDirector {
+		return directorSafety(cfg, r.Project).CoordinatorRemoteControl
+	}
+	safety, err := cfg.Safety(r.Project)
 	return err == nil && safety.CoordinatorRemoteControl
 }
 

@@ -173,9 +173,9 @@ func (f *fakeSource) SetPriority(slug string, id int, p tasks.Priority) (bool, e
 	return false, fmt.Errorf("unknown-task: T%d does not exist", id)
 }
 
-func (f *fakeSource) SetRemote(slug string, on bool) (string, error) {
+func (f *fakeSource) SetRemote(role, slug string, on bool) (string, error) {
 	state := map[bool]string{true: "on", false: "off"}[on]
-	f.remote = append(f.remote, slug+" "+state)
+	f.remote = append(f.remote, rolePrefix(role)+slug+" "+state)
 	return "remote control " + state + " for " + slug, nil
 }
 
@@ -298,8 +298,8 @@ func (f *fakeSource) OpenQuestions(slug string) (proto.QuestionsOpenResult, erro
 	f.answered = append(f.answered, slug)
 	return proto.QuestionsOpenResult{Session: "s-1", Via: "queued", Open: 2}, nil
 }
-func (f *fakeSource) SaveClear(slug string) (proto.CoordinatorClearResult, error) {
-	f.saveCleared = append(f.saveCleared, slug)
+func (f *fakeSource) SaveClear(role, slug string) (proto.CoordinatorClearResult, error) {
+	f.saveCleared = append(f.saveCleared, rolePrefix(role)+slug)
 	return proto.CoordinatorClearResult{Session: "s-1"}, nil
 }
 func (f *fakeSource) AskAdopt(slug string, s proto.SessionInfo) (bool, error) {
@@ -1796,4 +1796,13 @@ func TestDashboardPeerNeedAct(t *testing.T) {
 	if len(m.stack) != 0 || m.current != "@mini/acme-api" {
 		t.Errorf("at view: stack %v, current %q", m.stack, m.current)
 	}
+}
+
+// rolePrefix marks a director's slug in what fakeSource records:
+// "director:acme"; a coordinator's is the slug alone.
+func rolePrefix(role string) string {
+	if role == proto.RoleDirector {
+		return "director:"
+	}
+	return ""
 }

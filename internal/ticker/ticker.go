@@ -511,6 +511,7 @@ func (t *Ticker) sweep() {
 	}
 	t.renderPeers(cfg, list)
 	t.renderPrograms(cfg)
+	t.sweepDirectors(cfg, sessions, now)
 	t.slotFree(cfg, sessions, now)
 	t.renderDaily(now)
 	t.scanHuman(now)
@@ -568,10 +569,7 @@ func (t *Ticker) sweepProject(slug string, cfg *config.Config, sessions []proto.
 	if !safety.Paused {
 		t.nudge(p, sessions, now)
 	}
-	t.keepRemote(p, sessions, safety, now)
-	t.keepModel(p, sessions)
-	t.autoClear(p, sessions, safety, cfg.ContextHint, now)
-	t.upkeepAfterClear(p, sessions, safety, now)
+	t.keepSeat(coordinatorSeat(p), sessions, safety, cfg.ContextHint, now)
 	if prune {
 		t.upkeep(p, safety, now)
 	}

@@ -1150,12 +1150,18 @@ func (m *dash) workingAll() int {
 // from the setting: prefix+r changed it since it started, or it dropped
 // and the ticker turns it back on once the coordinator is idle.
 func remoteNote(setting bool, sessions []proto.SessionInfo, slug string) []string {
+	return remoteNoteOf(proto.RoleCoordinator, setting, sessions, slug)
+}
+
+// remoteNoteOf is remoteNote for the running session of role in slug (a
+// coordinator, or a director of program slug).
+func remoteNoteOf(role string, setting bool, sessions []proto.SessionInfo, slug string) []string {
 	for _, s := range sessions {
-		if s.Role == proto.RoleCoordinator && s.Project == slug && s.RemoteControl != setting {
+		if s.Role == role && s.Project == slug && s.RemoteControl != setting {
 			if setting && !s.RemoteHeld {
-				return []string{th().Warn.Render("the running coordinator has it off; tm turns it on once the coordinator is idle")}
+				return []string{th().Warn.Render("the running " + role + " has it off; tm turns it on once the " + role + " is idle")}
 			}
-			return []string{th().Warn.Render("the running coordinator has it " + onOff(s.RemoteControl) + " (prefix+r), until it is started anew")}
+			return []string{th().Warn.Render("the running " + role + " has it " + onOff(s.RemoteControl) + " (prefix+r), until it is started anew")}
 		}
 	}
 	return nil

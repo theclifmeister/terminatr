@@ -1211,7 +1211,7 @@ func (s *Server) startSession(p proto.SessionStartParams) (any, *proto.Error) {
 			rec.Protection = p.Protection
 			rec.NoSandbox, rec.NoSandboxEscapes = protectFlags(p.Protection, p.Agent)
 		}
-		if p.RemoteControl && role != proto.RoleCoordinator {
+		if p.RemoteControl && role != proto.RoleCoordinator && role != proto.RoleDirector {
 			s.mu.Unlock()
 			return nil, proto.Errorf(proto.ErrRefused, "remote control is for coordinators; threads are reached through theirs")
 		}

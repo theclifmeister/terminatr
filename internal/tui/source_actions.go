@@ -230,9 +230,9 @@ func (s *ServerSource) OpenQuestions(slug string) (proto.QuestionsOpenResult, er
 	return res, err
 }
 
-func (s *ServerSource) SaveClear(slug string) (proto.CoordinatorClearResult, error) {
+func (s *ServerSource) SaveClear(role, slug string) (proto.CoordinatorClearResult, error) {
 	var res proto.CoordinatorClearResult
-	err := s.call(proto.MethodCoordinatorClear, proto.CoordinatorClearParams{Project: slug}, &res)
+	err := s.call(proto.MethodCoordinatorClear, clearParams(role, slug), &res)
 	return res, err
 }
 
@@ -281,12 +281,12 @@ func shipped(repo string, n int, pr ticker.PR) string {
 	return ""
 }
 
-func (s *ServerSource) SetRemote(slug string, on bool) (string, error) {
-	res, err := SetRemote(s.call, slug, on)
+func (s *ServerSource) SetRemote(role, slug string, on bool) (string, error) {
+	res, err := SetRemoteOf(s.call, role, slug, on)
 	if err != nil {
 		return "", err
 	}
-	return RemoteMessage(slug, res), nil
+	return RemoteMessageFor(role, slug, res), nil
 }
 
 func (s *ServerSource) ClearSession(id string) error {
