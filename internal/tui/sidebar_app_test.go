@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/theclifmeister/terminatr/internal/config"
@@ -259,10 +260,13 @@ func TestSidebarAppFixture(t *testing.T) {
 	}
 }
 
-// TestSidebarAppFixtureProgramsOff: with programs off, programs on disk
-// and in config.toml (each case's first project a
-// member) change no row: every case gives
-// testdata/sidebar-app.json's rows exactly (the programs design §3.5).
+// TestSidebarAppFixtureProgramsOff: with programs switched off, a
+// case's programs in config.toml and on disk change no row. Its
+// programs come from server.SidePrograms, as the console's do: none
+// while off, so each case gives the rows it gives with no programs at
+// all, and a case without programs gives testdata/sidebar-app.json's
+// rows exactly (the programs design §3.5). On, the same file gives the
+// programs back, so the check isn't empty.
 func TestSidebarAppFixtureProgramsOff(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("TERMINATR_HOME", home)
@@ -274,20 +278,55 @@ func TestSidebarAppFixtureProgramsOff(t *testing.T) {
 	if err := json.Unmarshal(b, &file); err != nil {
 		t.Fatal(err)
 	}
+	withPrograms := 0
 	for _, c := range file.Cases {
-		cfg := "[features]\nprograms = false\n"
-		if len(c.Projects) > 0 {
-			cfg += "[programs.zz-prog]\nprojects = [\"" + c.Projects[0].Slug + "\"]\n"
+		tables := ""
+		for _, g := range c.Programs {
+			members := make([]string, len(g.Projects))
+			for i, m := range g.Projects {
+				members[i] = `"` + m + `"`
+			}
+			tables += "[programs." + g.Slug + "]\nprojects = [" + strings.Join(members, ", ") + "]\n"
+			if err := os.MkdirAll(filepath.Join(home, "projects", config.ProgramsDirName, g.Slug), 0o755); err != nil {
+				t.Fatal(err)
+			}
 		}
-		if err := os.WriteFile(filepath.Join(home, "config.toml"), []byte(cfg), 0o600); err != nil {
-			t.Fatal(err)
+		write := func(body string) *config.Config {
+			t.Helper()
+			if err := os.WriteFile(filepath.Join(home, "config.toml"), []byte(body), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			cfg, err := config.Load()
+			if err != nil {
+				t.Fatal(err)
+			}
+			return cfg
 		}
-		if err := os.MkdirAll(filepath.Join(home, "projects", config.ProgramsDirName, "zz-prog"), 0o755); err != nil {
-			t.Fatal(err)
+		none := c
+		none.Programs = nil
+		want := appTree(none)
+		if len(c.Programs) == 0 && !slices.Equal(want, c.Rows) {
+			t.Fatalf("case %s: rows %v, want the fixture's %v", c.Name, want, c.Rows)
 		}
-		want := c.Rows
-		if got := appTree(c); !slices.Equal(got, want) {
-			t.Fatalf("case %s with programs off: rows %v, want the fixture's %v", c.Name, got, want)
+		off := c
+		off.Programs = nil
+		for _, sp := range server.SidePrograms(write("[features]\nprograms = false\n" + tables)) {
+			off.Programs = append(off.Programs, appProgram{Slug: sp.Slug, Projects: sp.Projects})
 		}
+		if got := appTree(off); !slices.Equal(got, want) {
+			t.Fatalf("case %s with programs off: rows %v, want %v", c.Name, got, want)
+		}
+		if len(c.Programs) > 0 {
+			withPrograms++
+			if n := len(server.SidePrograms(write("[features]\nprograms = true\n" + tables))); n != len(c.Programs) {
+				t.Fatalf("case %s with programs on: %d programs, want %d", c.Name, n, len(c.Programs))
+			}
+		}
+		for _, g := range c.Programs {
+			os.RemoveAll(filepath.Join(home, "projects", config.ProgramsDirName, g.Slug))
+		}
+	}
+	if withPrograms == 0 {
+		t.Fatal("the fixture has no program case")
 	}
 }
