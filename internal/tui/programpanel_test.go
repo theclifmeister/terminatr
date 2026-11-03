@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	tmclient "github.com/theclifmeister/terminatr/internal/client"
@@ -115,5 +116,12 @@ func TestProgramPopupOverDirector(t *testing.T) {
 	}
 	if m.needProject() != "" || !strings.Contains(m.msg, "director") {
 		t.Errorf("msg %q", m.msg)
+	}
+	// prefix+C still goes back to the director's pane, which save-clears
+	// the director (saveClearFocus), not a refusal.
+	m.msg = ""
+	m.Update(tea.KeyPressMsg{Code: 'b', Mod: tea.ModCtrl})
+	if !quits(keyPress(m, "C")) || m.result.Command != "C" || m.result.Attach != "s-d" || m.msg != "" {
+		t.Errorf("C: command %q attach %q msg %q", m.result.Command, m.result.Attach, m.msg)
 	}
 }
