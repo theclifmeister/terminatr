@@ -368,6 +368,7 @@ func init() {
 			return s.programRead(p)
 		})},
 		proto.MethodProgramAnswer: {gate: gateHuman, call: typed((*Server).programAnswer)},
+		proto.MethodProgramRecommendAccept: {gate: gateHuman, call: typed((*Server).programRecommendAccept)},
 		proto.MethodProgramUmbrellaAccept: {gate: gateHuman, call: typed(func(s *Server, p proto.ProgramUmbrellaParams, c callCtx) (any, *proto.Error) {
 			return s.programUmbrella(p, c, true)
 		})},

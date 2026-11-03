@@ -357,6 +357,35 @@ func (s *Server) programAnswer(p proto.ProgramAnswerParams, cc callCtx) (any, *p
 	return res, nil
 }
 
+// programRecommendAccept is program.recommend.accept's: the user takes
+// the director's recommended answer to a question of the program's
+// Needs you (T982), with one key or tap: it is answered as the user's
+// own (program.Accept), as program.answer's callers may (the human, or
+// their paired device at write level); never an agent, the director
+// included, nor a paired server's user.
+func (s *Server) programRecommendAccept(p proto.ProgramRecommendAcceptParams, cc callCtx) (any, *proto.Error) {
+	cfg, g, perr := programFor(p.Program)
+	if perr != nil {
+		return nil, perr
+	}
+	c := cc.who()
+	if c.IsAgent() || c.Peer != "" {
+		return nil, proto.Errorf("human-only", "only the user accepts the director's recommendation: it answers as theirs")
+	}
+	if c.Device != "" {
+		if d, ok := s.deviceNamed(c.Device); !ok || d.Effective() != device.LevelWrite {
+			return nil, proto.Errorf("human-only", "device %s accepts a recommendation only at write level (tm device access %q write)", c.Device, c.Device)
+		}
+	}
+	g.Paired = serverPaired{s}
+	res, err := g.Accept(c, cfg, p.Question)
+	if err != nil {
+		return nil, openError(err)
+	}
+	s.watch.wake()
+	return res, nil
+}
+
 // programUmbrella is program.umbrella.accept's (accept) and
 // program.umbrella.send-back's.
 func (s *Server) programUmbrella(p proto.ProgramUmbrellaParams, cc callCtx, accept bool) (any, *proto.Error) {
