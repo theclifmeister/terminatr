@@ -132,6 +132,33 @@ func TestGlobalThreadCap(t *testing.T) {
 	env.MustCLI("thread", "start", "Fourth", "--project", "demo")
 }
 
+// TestProgramThreadCap (B11): two members of a program with
+// parallel_threads = 1, each under its own cap: a working thread in one
+// refuses a start in the other with over-program-cap naming the
+// program; with programs off the program's cap doesn't apply.
+func TestProgramThreadCap(t *testing.T) {
+	env, projDir, _ := tickerEnv(t)
+	other, otherDir := newProject(env, "other")
+	table := "[programs.acme]\nprojects = [\"demo\", \"other\"]\nparallel_threads = 1\n"
+	writeConfig(t, env, "[features]\nprograms = true\n\n"+table)
+	env.MustCLI("thread", "start", "Elsewhere", "--project", other)
+	var rec struct{ Session string }
+	readTOML(t, filepath.Join(otherDir, "threads", "t-0001", "thread.toml"), &rec)
+	elsewhere := &Session{ID: rec.Session}
+	env.WaitState(elsewhere, "idle", agentWait)
+	env.MustCLI("thread", "prompt", "t-0001", "run thread-block", "--project", other)
+	env.WaitState(elsewhere, "blocked", agentWait)
+	r := env.CLI("thread", "start", "Here", "--project", "demo")
+	if r.Code != 1 || !strings.Contains(r.Stderr, "over-program-cap") || !strings.Contains(r.Stderr, "1 of 1 threads are working in program acme (1 in other)") {
+		t.Fatalf("at the program cap: exit %d\n%s%s", r.Code, r.Stdout, r.Stderr)
+	}
+	if _, err := os.Stat(filepath.Join(projDir, "threads", "t-0001")); !os.IsNotExist(err) {
+		t.Fatalf("a refused start left a thread: %v", err)
+	}
+	writeConfig(t, env, table)
+	env.MustCLI("thread", "start", "Here", "--project", "demo")
+}
+
 // TestSmokeTickerAutoCloseKeepsUnsavedWork: the PR merged and the agent
 // is idle, but the worktree has uncommitted changes: the thread stays
 // open and the coordinator gets one item; once the work is gone, it

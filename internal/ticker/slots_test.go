@@ -64,7 +64,7 @@ func TestSlotFree(t *testing.T) {
 		t.Fatalf("told twice: %+v", got)
 	}
 	// Its start forgets it.
-	thread.Started("demo")
+	thread.Started("demo", "")
 	if ws := thread.Waiters(); len(ws) != 0 {
 		t.Fatalf("after the start: %+v", ws)
 	}
