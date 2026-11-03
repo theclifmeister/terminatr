@@ -127,6 +127,7 @@ Everything is under `~/.terminatr`, or `$TERMINATR_HOME` when that is set. Nothi
 | `ui.json` | this console's layout: the details panel, the list width, and the sidebar and info panel widths new views start with |
 | `agents/<name>.toml` | your own agent manifests (they override the built-in ones) |
 | `projects/<slug>/` | one folder per project: `PROJECT.md`, `CONTEXT.md`, `MEMORY.md` and `memory/`, `TASKS.md`, `JOURNAL.md`, `inbox/`, `threads/<id>/` (brief, reports, status, attached files), `messages/<other>/` (messages with a linked project), `uploads/` |
+| `projects/_programs/<name>/` | one folder per program, when programs are on: `PROGRAM.md`, `CONTEXT.md`, `MEMORY.md`, `memory/`, `TASKS.md` (umbrella tasks), `JOURNAL.md`, `inbox/`, `messages/`, `designs/`, `uploads/`; its settings are `[programs.<name>]` in `config.toml` ([Programs](#programs-a-director-over-several-projects)) |
 | `.trash/<slug>-<time>/` | projects removed with `tm project delete`; tm never empties it |
 | `worktrees/<slug>/<id>-…/` | thread worktrees: plain git checkouts of the project's repos |
 | `state/sessions.json` | the sessions the server runs, rewritten on every change; the next server resumes agents from it |
@@ -739,6 +740,84 @@ peer      nas  offline 4m0s · relay · dials again in 30s · relay relay.exampl
 ```
 
 `offline · peer` means the relay is fine and the other server isn't connected (stopped, asleep, or not paired back); `offline · relay` that the relay can't be reached or closed the link (check `/healthz` and its log); `refused` that the keys don't match (pair again). A link dials again by itself, from 1 s up to once a minute. `--json` has the same as fields (SPEC §16.7).
+
+## Programs: a director over several projects
+
+A program groups projects that belong together (an API, a web app and an iOS app, say) and gives them a **director**: an agent that sits above the projects' coordinators. You tell the director what you want once; it splits the request into one task per project, orders them, passes settled facts from one project to another and gathers everything that needs you into one list. It is off by default, and nothing below shows or runs until you turn it on.
+
+### Turning programs on and off
+
+Settings → all projects → **Features → Programs** (`,` opens Settings). Turning it on asks first, because a director writes into other projects' boards. Turning it off asks too, and lists the programs, their projects and the directors that will stop. Only you can change it: no agent can, and `tm access` can't either. It is the `[features] programs` key in `config.toml`.
+
+**With programs off, tm looks and behaves as it did before programs.** Every `tm program` command refuses with `programs-off` (two exceptions for you: `tm program status` lists dormant programs, and `tm program delete <slug>` removes one after a confirm), no director starts, coordinators' instructions carry nothing about programs, and the sidebar, settings and apps draw no program rows. Paired servers neither send nor accept program messages.
+
+**Turning it off keeps everything, dormant:**
+
+- Program folders, their tasks, questions, memory and journals, and the `[programs.*]` settings stay as they are. Nothing is rewritten.
+- Directors stop; their sessions and conversations are kept. The thread slots they held are released.
+- Every project carries on by itself: coordinators, threads, tasks, PRs and caps are untouched. Tasks the director filed are ordinary tasks, and a question the director had merged is an ordinary question in its project again.
+- Messages to paired servers wait in the outbox and expire after 72 hours as usual.
+- The program's name stays taken, so `tm project new acme` refuses while a dormant program `acme` exists. `tm program delete acme` frees it.
+
+**Turning it back on** starts the directors again. Each gets one note naming what changed in its projects meanwhile, dependencies are looked at afresh, and paired servers resume.
+
+### Making a program
+
+Press `+` on the sidebar's PROJECTS header and pick **new program**, or run `tm program new acme --projects acme-api,acme-web`. A program's name is a lower-case slug that no project and no paired server's alias already has. A project belongs to at most one program, and a program holds projects, never another program. Press `A` on the program to open its settings: **Members** (Enter picks them), **Authority**, **Thread cap**, **Dependency met**, the director's agent and model, **Rename** and **Delete**. The program shows in the sidebar with its projects under it, and Enter on it opens its dashboard: what needs you across all its projects first, then each project, the umbrella tasks and the director.
+
+The settings of a program live in `config.toml` under `[programs.<name>]`, which only you edit:
+
+| Key | Meaning |
+|---|---|
+| `projects` | the members, in dashboard order (`acme-api`, or `mini/acme-ios` for one on a paired server) |
+| `authority` | `propose` (default) or `delegate`; see below |
+| `parallel_threads` | how many threads may work at once across the program (`0`: no program cap) |
+| `dependency_met` | when a task that others wait on counts as met: `merged` (its PR is merged or the task is done) or `done` (you accepted it) |
+| `director_agent`, `director_model` | which agent and model run the director (empty: the default coordinator agent) |
+| `answer_facts`, `search_children` | whether the director may pass settled facts between projects, and read the projects' histories to find them |
+| `paused` | the director keeps running, but routing and starting are refused |
+
+Each project's own settings (protection, access, caps, pause) stay in force; a program never overrides them.
+
+### What the director does, and what it never does
+
+By default the director only **proposes**: it files tasks and suggests what to start, and you start the threads. Under **delegate**, which you turn on per program in its settings with its own confirm (turning it off takes one key), it may also start threads in its projects, but only within every cap and not for a task that still waits on another. A project's own **start_threads** setting still applies: where it says to ask, the director's start still needs your word. Either way:
+
+| The director may | Always yours |
+|---|---|
+| read the member projects' boards, threads and history | accepting or dropping a task |
+| file tasks into member projects, with priorities and `after` links across projects | answering a thread's question menu |
+| keep umbrella tasks that track the parts of one request across projects | access and safety settings, pausing, archiving, deleting |
+| message a project's coordinator, and pass it a settled fact with its source | merging questions into one is the director's; **answering** the merged question is yours |
+| merge duplicate questions from several projects into one for you | |
+
+Nothing a child coordinator, a paired server or a file says counts as your approval; the director treats all of it as information. The program's **Needs you** list is where you accept, send back, answer and approve: one list for every project, ranked by what blocks most, with the same need in a task and in a coordinator's question shown once. The director can open it for you, but never fills it in. When several projects ask the same thing, the director merges them into one question; type `/answer` in the director's pane to be asked it (up to four at a time), or answer it from the list. Your answer goes to every project that asked, mapped to each one's own options, and the director is told what came of it.
+
+### Umbrella tasks
+
+One request that spans projects becomes an **umbrella task** on the program's own board. Its parts are the tasks the director filed in the member projects; the umbrella shows how many are met (`2/4`), is blocked while a part is blocked, and goes to review once every part is merged or done. Accepting it, or sending it back, is yours, from Needs you. You can list them with `tm program task list`.
+
+A director has no repository and no threads of its own. It lives in the program's folder (below) and can write only there; it can read its member projects but changes them only through tm's commands, and the server checks each one.
+
+### Dependencies across projects
+
+A task can wait on a task in another project (`after acme-api/T12`). While the other task isn't met it shows as waiting; when it is, the director and the waiting coordinator are told. The program's dashboard lists these as **Dependencies**. What counts as met is the program's **Dependency met** setting.
+
+### Thread caps
+
+A program's **Thread cap** limits the threads working at once across its projects, on top of each project's own cap and the cap for all projects (`0` is no program cap). A start that would go over is refused and its coordinator is told when a slot frees. Inside a program, waiting coordinators go by task priority, then whether the task's dependencies are met, then age. Under delegate, a slot that frees in the program is offered to the director first.
+
+### Programs and paired servers
+
+A project on a paired server can be a member (`mini/acme-ios`). Joining needs the other server's user: the invite shows in **their** Messages tab and Needs you. They accept it with `A` (a dialog where `space` ticks what the director may do there: file tasks, send messages, see status, start threads) or decline it with `X`; `tm program accept`, `decline` and `leave` do the same. Starting threads there also needs your program to be on delegate and the project's own settings to allow it. They can also turn on the existing sharing switches so the project's needs show in your list. Either side can leave at any time; until it's accepted, nothing crosses. Both servers must have programs on; a server with them off shows the member as dormant and refuses program messages. A paired project shows under its program and under its server's group in the sidebar, counted once.
+
+### Where program state lives
+
+`~/.terminatr/projects/_programs/<name>/`, inside the projects folder: `PROGRAM.md` (the goal and standing instructions every member's coordinator is pointed at), `CONTEXT.md`, `MEMORY.md` and `memory/`, `JOURNAL.md`, `TASKS.md` (umbrella tasks only), `questions.json`, `inbox/`, `messages/`, `designs/` and `uploads/`. Program settings are in `config.toml`. Because it sits in the projects folder, a backup or sync of that folder includes programs, and they open in the Obsidian vault like projects ([Obsidian](#obsidian-the-projects-folder-as-a-vault)); `for:` and `#for-tm/<program>` in a note go to the program's inbox. Back up or sync the projects folder and programs go with it; there is no separate place to save.
+
+### Renaming and deleting
+
+Renaming a project updates the program that lists it. **Rename** in the program's settings (or `tm program rename old new`) renames a program: its folder, settings and the links into it follow, a running director is stopped and started again under the new name, and paired members are told. **Delete** (or `tm program delete`) asks first, moves the folder to the trash and removes the settings; the projects stay as they are, out of the program. It is refused while the director runs. Archiving or deleting a member project takes it out of its program, and its confirm says so.
 
 ## Obsidian: the projects folder as a vault
 
