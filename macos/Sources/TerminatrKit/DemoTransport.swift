@@ -18,6 +18,12 @@ import Foundation
 ///      "panes": {"<session id>": {"result": {...}, "events": [...]}},
 ///      "now": "2026-10-27T10:00:00Z"}
 ///
+/// A stream may have "drip": seconds: its first event comes at once,
+/// each after it that much later, as a live stream's would (the scroll
+/// tests' streaming conversation, ScrollFixture), until the stream is
+/// cancelled or the transport closed; and "delay": seconds before its
+/// first event, as a relay's round trip.
+///
 /// answers are a method's results by its params: the first whose params
 /// the request's has, each the same, answers it, before calls'.
 /// transcripts are transcript.watch's, by its params' session, and panes
@@ -36,6 +42,8 @@ public final class DemoTransport: BridgeTransport, @unchecked Sendable {
     private let panes: [String: Stream]
     private let lock = NSLock()
     private var closed = false
+    /// The dripping streams cancelled, by request id.
+    private var cancelled: Set<Int> = []
 
     private struct Answer {
         var params: [String: Any]
@@ -52,6 +60,10 @@ public final class DemoTransport: BridgeTransport, @unchecked Sendable {
         var result: Data
         /// Each event line's body: its event and data, without its id.
         var events: [Data]
+        /// Seconds between events after the first; 0 sends them at once.
+        var drip: Double = 0
+        /// Seconds before the first event.
+        var delay: Double = 0
     }
 
     /// The error code of what the recording has no answer for.
@@ -75,7 +87,8 @@ public final class DemoTransport: BridgeTransport, @unchecked Sendable {
             let events = try (s["events"] as? [[String: Any]] ?? []).map { e in
                 try json(["event": e["event"] ?? "", "data": e["data"] ?? [String: Any]()])
             }
-            return Stream(result: try json(result), events: events)
+            return Stream(result: try json(result), events: events, drip: (s["drip"] as? NSNumber)?.doubleValue ?? 0,
+                          delay: (s["delay"] as? NSNumber)?.doubleValue ?? 0)
         }
         calls = try (r["calls"] as? [String: Any] ?? [:]).mapValues(json)
         answers = try (r["answers"] as? [String: [[String: Any]]] ?? [:]).mapValues { list in
@@ -101,7 +114,10 @@ public final class DemoTransport: BridgeTransport, @unchecked Sendable {
         let params = req["params"] as? [String: Any] ?? [:]
         if method == "cancel" {
             reply(id, result: Data("{}".utf8))
-            if let stream = params["id"] as? Int { yield("{\"id\":\(stream),\"end\":true}") }
+            if let stream = params["id"] as? Int {
+                lock.withLock { _ = cancelled.insert(stream) }
+                yield("{\"id\":\(stream),\"end\":true}")
+            }
             return
         }
         let session = params["session"] as? String
@@ -112,11 +128,25 @@ public final class DemoTransport: BridgeTransport, @unchecked Sendable {
         }
         if let s {
             reply(id, result: s.result)
-            for e in s.events {
+            func line(_ e: Data) -> Data {
                 // {"event":…,"data":…} with the stream's id put first.
                 var l = Data("{\"id\":\(id),".utf8)
                 l.append(e.dropFirst())
-                yield(l)
+                return l
+            }
+            if s.drip > 0 || s.delay > 0 {
+                let lines = s.events.map(line)
+                let gap = UInt64(s.drip * 1e9), delay = UInt64(s.delay * 1e9)
+                Task.detached { [weak self] in
+                    for (i, l) in lines.enumerated() {
+                        let wait = i == 0 ? delay : gap
+                        if wait > 0 { try? await Task.sleep(nanoseconds: wait) }
+                        guard let self, !self.lock.withLock({ self.cancelled.contains(id) }) else { return }
+                        self.yield(l)
+                    }
+                }
+            } else {
+                for e in s.events { yield(line(e)) }
             }
         } else if let a = answers[method]?.first(where: { $0.fits(params) }) {
             if let error = a.error {

@@ -168,7 +168,14 @@ final class PhoneModel {
             return
         }
         do {
-            await connect(try DemoTransport(recording: Data(contentsOf: url)))
+            var recording = try Data(contentsOf: url)
+            #if DEBUG
+            // The conversation scroll tests' demo (T976): -scroll-fixture YES.
+            if UserDefaults.standard.bool(forKey: "scroll-fixture") {
+                recording = try ScrollFixture.recording(from: recording)
+            }
+            #endif
+            await connect(try DemoTransport(recording: recording))
             source = .demo
             log = .demo
         } catch {

@@ -1,40 +1,29 @@
 import Foundation
 import Observation
 
-/// Whether a conversation follows its end (T803): at the bottom it keeps
-/// following what the agent writes; once the user scrolls up it stays
-/// where they are and counts what arrived since, for Jump to latest.
-/// Scrolling back to the bottom, a jump or a prompt sent follows again.
-/// The views feed it their scroll geometry, its phases and the
-/// transcript's entry ids, and scroll to the end only when it says so.
+/// Whether a conversation is at its end (T803, T976): a signal read from
+/// the scroll geometry, never a driver of it. At the bottom the view
+/// keeps to the end (its scroll anchor is the bottom); once the user
+/// scrolls up it stays where they are, and counts what arrived since,
+/// for Jump to latest. Scrolling back to the bottom, a jump or a prompt
+/// sent follows again.
 ///
-/// A jump wins over a scroll still running (T829): tapped while a flick
-/// decelerates, the momentum carries on up and SwiftUI's scroll to the
-/// end loses to it. Until the scroll comes to rest, or the user takes
-/// hold of it, a jump keeps following through scrolls up and has the
-/// view pull back to the end.
+/// Nothing here moves the scroll. The views lay their rows out exactly
+/// (no lazy stack, whose estimated heights made every computed end
+/// wrong) and only SwiftUI scrolls them: its scroll anchor while
+/// following, its scrollTo for a jump. SwiftUI clamps every offset it
+/// sets to the content as laid out, so the view can't come to rest past
+/// the end. T803 to T930 drove the offset by hand (the Glider) and kept
+/// landing it there: the blank conversation over the composer.
 ///
-/// On the iPhone a jump is a glide (T889, Glide): the view drives the
-/// scroll to the end itself, frame by frame, and says when it landed.
-/// Until then nothing else scrolls it: output that comes doesn't scroll
-/// to the end (the glide reads the end each frame), and the layout
-/// moving the offset while rows pass doesn't stop the follow or pull
-/// back. The user taking hold of the scroll ends it.
-///
-/// The follower's moves to the end (new output, T901) are glides too,
-/// instant ones (Glide's instant): scrollTo aimed at the end a
-/// LazyVStack estimates and stopped short of it while output streamed.
-/// The view marks them with glide(newest:) as well, so the same holds
-/// while one keeps to the end.
-///
-/// An offset past the end is pulled back to it (T930): set straight on
-/// the scroll view (a glide's frames) at an end that was taller than the
-/// content laid out a moment on, it stays there, over the empty
-/// background, and nothing scrolls it back: the conversation shows
-/// blank, only the composer under it, and as it is "at the end" no Jump
-/// to latest either. Once the scroll rests there, the view goes to the
-/// end again (scrolled(…) or moved(…) says so). A bounce past the end
-/// under the user's finger or its momentum is left to UIKit.
+/// Two things it still says to do, both a scrollTo of SwiftUI's:
+/// - A jump wins over a flick still decelerating (T829): until the
+///   scroll rests or the user takes hold, a scroll up doesn't stop the
+///   follow but scrolls to the end again, and so does coming to rest
+///   short of it.
+/// - The guard (T976): at rest with the visible rect past the content's
+///   end, which can't happen, the view scrolls to the end and reports it
+///   (breach), so a device that still gets there leaves evidence.
 public struct Follow: Equatable, Sendable {
     /// Whether the view keeps to the end as entries come.
     public private(set) var following = true
@@ -43,25 +32,49 @@ public struct Follow: Equatable, Sendable {
     /// A jump under way: from it until the scroll comes to rest or the
     /// user takes hold of it.
     public private(set) var jumping = false
-    /// A glide under way (glide(newest:)): from it until it lands or the
-    /// user takes hold of the scroll.
-    public private(set) var gliding = false
     /// The newest entry id the user saw at the end.
     private var seen: Int?
     /// The scroll offset at the last geometry, to tell the user's
     /// scroll up from the content growing under a follower.
     private var offset: Double?
     /// Whether the last geometry was at the end.
-    private var atEnd = true
+    public private(set) var atEnd = true
     /// Whether the scroll is at rest (its phase idle).
     private var resting = true
-    /// Whether the last geometry had the offset past the end.
-    private var past = false
+    /// Whether the user holds the scroll (a drag, a trackpad touch).
+    private var held = false
+    /// How far the last geometry had the visible rect's foot past the
+    /// content's end, in points (0 when it wasn't).
+    public private(set) var past = 0.0
+    /// The last geometry, for a breach's report.
+    public private(set) var geometry = Geometry()
+
+    /// A scroll geometry as the views read it.
+    public struct Geometry: Equatable, Sendable, Codable {
+        public var offset = 0.0
+        public var visible = 0.0
+        public var content = 0.0
+        public var inset = 0.0
+        public var top = 0.0
+
+        public init(offset: Double = 0, visible: Double = 0, content: Double = 0, inset: Double = 0, top: Double = 0) {
+            self.offset = offset
+            self.visible = visible
+            self.content = content
+            self.inset = inset
+            self.top = top
+        }
+
+        /// The offset at the end: the content's foot at the view's, past
+        /// the bars over it; content shorter than the view ends at its
+        /// top, -top.
+        public var end: Double { max(-top, content + inset - visible) }
+    }
 
     /// How near the end counts as at it, in points.
     public static let slack = 80.0
-    /// How far past the end an offset at rest may be before it is
-    /// pulled back, in points: a rounding's worth.
+    /// How far past the end an offset at rest may be before it is a
+    /// breach, in points: a rounding's worth.
     public static let beyond = 2.0
 
     public init() {}
@@ -69,50 +82,58 @@ public struct Follow: Equatable, Sendable {
     /// The scroll view moved or resized: at the end (within slack), it
     /// follows again; scrolled up from where it was, it stops. Content
     /// that grows while the offset stays (new output, a taller bar)
-    /// changes nothing: the follower is scrolled down to it. During a
-    /// jump a scroll up (the momentum it cut into) doesn't stop it: the
-    /// result says to scroll to the end again.
+    /// leaves a follower behind the end: the result says to scroll there
+    /// (the view's anchor for size changes is the top, so what a user
+    /// scrolled up reads stays put). During a jump a scroll up (the
+    /// momentum it cut into) doesn't stop it: the result says to scroll
+    /// to the end again.
     ///
     /// visible is the scroll view's whole height, the bars over its foot
     /// included (ScrollGeometry's visibleRect), and inset those bars'
     /// (contentInsets.bottom): scrolled fully down, offset + visible is
-    /// content + inset. Not containerSize: it leaves the insets out
-    /// already, and less the inset again a view at its end read as the
-    /// bars' height short of it (T807). top is the bars' inset over its
-    /// head (contentInsets.top): content shorter than the view ends at
-    /// its top, -top. Past the end at rest it says to scroll to the end
-    /// too (T930).
+    /// content + inset (T807). top is the bars' inset over its head.
+    /// True when the view must scroll to the end: a follower behind it,
+    /// a jump's momentum, or at rest past it (a breach).
     @discardableResult
     public mutating func scrolled(offset: Double, visible: Double, content: Double, inset: Double = 0, top: Double = 0, newest: Int?) -> Bool {
+        let g = Geometry(offset: offset, visible: visible, content: content, inset: inset, top: top)
+        // Up by the user: the offset went up by more than the end did. A
+        // content or view that shrank pulls the offset up with its end
+        // (the scroll view's clamp): that is no scroll of the user's.
+        let up = self.offset.map { was in
+            let endUp = max(0, geometry.end - g.end)
+            return offset < was - 1 - (atEnd || past > 0 ? endUp : 0)
+        } ?? false
         defer { self.offset = offset }
+        geometry = g
         atEnd = offset + visible >= content + inset - Self.slack
-        past = offset > max(-top, content + inset - visible) + Self.beyond
+        past = max(0, offset - g.end)
         if atEnd {
-            // At rest there: no momentum left to fight.
             if resting { jumping = false }
             following = true
             unseen = 0
             if let newest { seen = newest }
-        } else if gliding {
-            // The glide's own frames, and rows laying out as it passes.
-        } else if let was = self.offset, offset < was - 1 {
+        } else if up {
+            // A jump's momentum: back to the end, by SwiftUI's scroll.
             if jumping { return true }
             following = false
         }
-        return pullsBack
+        // The content or the view changed size under a follower (new
+        // output, a fold, a rotation, the keyboard): back to the end.
+        // Not while the user holds the scroll, or a jump's scroll runs.
+        if following, !held, !jumping, !up, offset < g.end - 1 { return true }
+        return breach
     }
 
     /// The transcript's entries now (their ids; appended ones have
-    /// higher ids than the rest). Whether the view scrolls to its end:
-    /// when following; otherwise it counts the entries newer than the
-    /// ones seen.
-    /// While a glide runs it says no: the glide goes to the end as it
-    /// is at each frame, and a scroll of the view's own would cut it.
+    /// higher ids than the rest). Following, they are seen; scrolled up,
+    /// it counts the ones newer than those seen. True when following.
+    @discardableResult
     public mutating func arrived(_ ids: some Collection<Int>) -> Bool {
         if following {
             seen = ids.max() ?? seen
             unseen = 0
-            return !gliding
+            return true
         }
         let seen = self.seen ?? Int.min
         unseen = ids.reduce(0) { $0 + ($1 > seen ? 1 : 0) }
@@ -120,9 +141,9 @@ public struct Follow: Equatable, Sendable {
     }
 
     /// Follow again: the user sent a prompt or pressed Jump to latest.
-    /// The view scrolls to the end, and keeps to it until the scroll
-    /// comes to rest (moved(by:)); at rest at the end already, there is
-    /// nothing to keep to.
+    /// The view scrolls to the end, and until the scroll comes to rest
+    /// the follow holds through the momentum it cut into; at rest at the
+    /// end already, there is nothing to hold.
     public mutating func jump(newest: Int?) {
         following = true
         jumping = !(atEnd && resting)
@@ -130,40 +151,36 @@ public struct Follow: Equatable, Sendable {
         if let newest { seen = newest }
     }
 
-    /// Jump to latest on the iPhone: follow again, by a glide the view
-    /// drives to the end (Glide) and ends with landed(); it stopped any
-    /// momentum first, so there is none to fight (no jumping).
-    public mutating func glide(newest: Int?) {
-        following = true
-        jumping = false
-        gliding = true
-        unseen = 0
-        if let newest { seen = newest }
-    }
-
-    /// The glide is over: it landed at the end, or the user took hold of
-    /// the scroll (they keep what they scroll to from there).
-    public mutating func landed() {
-        gliding = false
-    }
-
     /// The scroll's phase changed: the user's finger on it (a drag, a
     /// trackpad touch) or the scroll at rest ends a jump; a scroll that
-    /// decelerates or animates doesn't. The finger ends a glide too.
-    /// True when the scroll came to rest past the end: the view scrolls
-    /// to the end (T930).
+    /// decelerates or animates doesn't. True when the view must scroll
+    /// to the end: a jump that came to rest short of it (momentum
+    /// carried it up, T829), or a breach.
     @discardableResult
     public mutating func moved(by user: Bool, resting: Bool) -> Bool {
         self.resting = resting
-        if user || resting { jumping = false }
-        if user { gliding = false }
-        return !user && pullsBack
+        held = user
+        if user {
+            jumping = false
+            return false
+        }
+        guard resting else { return false }
+        let short = jumping && !atEnd
+        jumping = false
+        return short || breach
     }
 
-    /// Past the end, at rest, no glide on it: what nothing else scrolls
-    /// back (T930).
-    private var pullsBack: Bool {
-        past && resting && !gliding
+    /// At rest with the visible rect past the content's end: what the
+    /// layout never makes, and the guard undoes and reports.
+    public var breach: Bool {
+        resting && past > Self.beyond
+    }
+
+    /// The state in a line, for a debug build's trace.
+    public var trace: String {
+        let g = geometry
+        return "following=\(following) jumping=\(jumping) held=\(held) resting=\(resting) atEnd=\(atEnd) "
+            + "offset=\(Int(g.offset)) end=\(Int(g.end)) content=\(Int(g.content)) visible=\(Int(g.visible)) inset=\(Int(g.inset))"
     }
 
     /// Jump to latest's words: with what came meanwhile, "Jump to
@@ -180,29 +197,37 @@ public struct Follow: Equatable, Sendable {
 }
 
 /// A conversation's Follow as the views hold it (T956): the scroll's
-/// bookkeeping (its offset, at the end, at rest, past the end) changes
-/// on every frame of a scroll or a glide and is kept out of observation;
-/// only what the views show or act on (following, unseen, gliding) is
+/// bookkeeping changes on every frame of a scroll and is kept out of
+/// observation; only what the views show (following, unseen) is
 /// observed, and changes only when it does. Held as a value in @State,
-/// each geometry change was a change of the screen's state: the whole
-/// conversation's body ran again on every frame, its rows rebuilt from
-/// every entry, and a long conversation spent the frame on it (the
-/// iPhone's watchdog kill and hangs).
+/// each geometry change re-ran the whole conversation's body.
 @MainActor
 @Observable
 public final class Follower {
     @ObservationIgnored private var state = Follow()
+    /// Breaches reported on this screen: one is evidence enough.
+    @ObservationIgnored public private(set) var breaches = 0
     /// Follow.following, observed.
     public private(set) var following = true
     /// Follow.unseen, observed.
     public private(set) var unseen = 0
-    /// Follow.gliding, observed.
-    public private(set) var gliding = false
 
     public init() {}
 
     /// Jump to latest's words (Follow.label).
     public var label: String { Follow.label(unseen: unseen) }
+
+    /// The last geometry (Follow.geometry).
+    public var geometry: Follow.Geometry { state.geometry }
+
+    /// Follow.past.
+    public var past: Double { state.past }
+
+    /// Follow.breach.
+    public var breach: Bool { state.breach }
+
+    /// Follow.trace.
+    public var trace: String { state.trace }
 
     @discardableResult
     public func scrolled(offset: Double, visible: Double, content: Double, inset: Double = 0, top: Double = 0, newest: Int?) -> Bool {
@@ -214,24 +239,25 @@ public final class Follower {
         change { $0.moved(by: user, resting: resting) }
     }
 
+    @discardableResult
     public func arrived(_ ids: some Collection<Int>) -> Bool {
         change { $0.arrived(ids) }
     }
 
     public func jump(newest: Int?) { change { $0.jump(newest: newest) } }
 
-    public func glide(newest: Int?) { change { $0.glide(newest: newest) } }
-
-    public func landed() { change { $0.landed() } }
+    /// Whether a breach now is the screen's first: the one to report.
+    public func firstBreach() -> Bool {
+        breaches += 1
+        return breaches == 1
+    }
 
     /// Applies a change to the Follow, then publishes what the views
-    /// observe, each only when it differs (an observed property's set
-    /// tells its views even when the value is the same).
+    /// observe, each only when it differs.
     private func change<R>(_ f: (inout Follow) -> R) -> R {
         let r = f(&state)
         if following != state.following { following = state.following }
         if unseen != state.unseen { unseen = state.unseen }
-        if gliding != state.gliding { gliding = state.gliding }
         return r
     }
 }

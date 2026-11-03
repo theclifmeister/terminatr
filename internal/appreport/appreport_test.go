@@ -106,3 +106,14 @@ func TestListNoDir(t *testing.T) {
 		t.Fatalf("%v %v", ms, err)
 	}
 }
+
+// A conversation's scroll guard reports as kind scroll (T976), its
+// payload the geometry it found.
+func TestAddScroll(t *testing.T) {
+	now := time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)
+	s := &Store{Dir: hometest.PrivateDir(t), Now: func() time.Time { return now }}
+	m, added, err := s.Add(report(DeviceSource("ab12"), KindScroll, now, `{"offset":2000,"content":1000,"visible":500}`))
+	if err != nil || !added || !strings.Contains(m.ID, "-scroll-") {
+		t.Fatalf("Add scroll: %+v %v %v", m, added, err)
+	}
+}

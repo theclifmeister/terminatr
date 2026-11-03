@@ -14,7 +14,18 @@
 		7E0000000000000000000103 /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 7E0000000000000000000302 /* AppIcon.icon */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		7E0000000000000000000D01 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 7E0000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 7E0000000000000000000701;
+			remoteInfo = TerminatrApp;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
+		7E0000000000000000000303 /* TerminatrUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TerminatrUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		7E0000000000000000000301 /* Terminatr.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Terminatr.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		7E0000000000000000000302 /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; name = AppIcon.icon; path = ../macos/Icon/AppIcon.icon; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
@@ -22,6 +33,7 @@
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		7E0000000000000000000401 /* Terminatr */ = {isa = PBXFileSystemSynchronizedRootGroup; path = Terminatr; sourceTree = "<group>"; };
 		7E0000000000000000000402 /* Fonts */ = {isa = PBXFileSystemSynchronizedRootGroup; name = Fonts; path = ../macos/Sources/Terminatr/Resources/Fonts; sourceTree = SOURCE_ROOT; };
+		7E0000000000000000000403 /* TerminatrUITests */ = {isa = PBXFileSystemSynchronizedRootGroup; path = TerminatrUITests; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -36,6 +48,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		7E0000000000000000000503 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -43,6 +62,7 @@
 			isa = PBXGroup;
 			children = (
 				7E0000000000000000000401 /* Terminatr */,
+				7E0000000000000000000403 /* TerminatrUITests */,
 				7E0000000000000000000402 /* Fonts */,
 				7E0000000000000000000302 /* AppIcon.icon */,
 				7E0000000000000000000602 /* Products */,
@@ -53,6 +73,7 @@
 			isa = PBXGroup;
 			children = (
 				7E0000000000000000000301 /* Terminatr.app */,
+				7E0000000000000000000303 /* TerminatrUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -76,7 +97,7 @@
 				7E0000000000000000000401 /* Terminatr */,
 				7E0000000000000000000402 /* Fonts */,
 			);
-			name = Terminatr;
+			name = TerminatrApp;
 			packageProductDependencies = (
 				7E0000000000000000000201 /* TerminatrKit */,
 				7E0000000000000000000202 /* TerminatrUI */,
@@ -87,6 +108,26 @@
 			productReference = 7E0000000000000000000301 /* Terminatr.app */;
 			productType = "com.apple.product-type.application";
 		};
+		7E0000000000000000000702 /* TerminatrUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 7E0000000000000000000A03 /* Build configuration list for PBXNativeTarget "TerminatrUITests" */;
+			buildPhases = (
+				7E0000000000000000000803 /* Sources */,
+				7E0000000000000000000503 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				7E0000000000000000000D02 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				7E0000000000000000000403 /* TerminatrUITests */,
+			);
+			name = TerminatrUITests;
+			productName = TerminatrUITests;
+			productReference = 7E0000000000000000000303 /* TerminatrUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -96,6 +137,11 @@
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 2700;
 				LastUpgradeCheck = 2700;
+				TargetAttributes = {
+					7E0000000000000000000702 = {
+						TestTargetID = 7E0000000000000000000701;
+					};
+				};
 			};
 			buildConfigurationList = 7E0000000000000000000A01 /* Build configuration list for PBXProject "Terminatr" */;
 			developmentRegion = en;
@@ -116,6 +162,7 @@
 			projectRoot = "";
 			targets = (
 				7E0000000000000000000701 /* Terminatr */,
+				7E0000000000000000000702 /* TerminatrUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -139,7 +186,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		7E0000000000000000000803 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		7E0000000000000000000D02 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 7E0000000000000000000701 /* Terminatr */;
+			targetProxy = 7E0000000000000000000D01 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		7E0000000000000000000B01 /* Debug */ = {
@@ -244,6 +306,46 @@
 			};
 			name = Release;
 		};
+		7E0000000000000000000C03 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				"CODE_SIGN_IDENTITY[sdk=iphonesimulator*]" = "-";
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 0.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.terminatr.ios.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = TerminatrApp;
+			};
+			name = Debug;
+		};
+		7E0000000000000000000C04 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				"CODE_SIGN_IDENTITY[sdk=iphonesimulator*]" = "-";
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 0.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.terminatr.ios.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = TerminatrApp;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -261,6 +363,15 @@
 			buildConfigurations = (
 				7E0000000000000000000C01 /* Debug */,
 				7E0000000000000000000C02 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		7E0000000000000000000A03 /* Build configuration list for PBXNativeTarget "TerminatrUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				7E0000000000000000000C03 /* Debug */,
+				7E0000000000000000000C04 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

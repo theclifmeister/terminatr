@@ -30,15 +30,17 @@ struct ConversationTab: View {
     @State private var query = ""
     @State private var at = 0
     @FocusState private var findFocused: Bool
-    /// Whether the transcript follows its end, or the user scrolled up
-    /// (macOS 15, from the scroll geometry; 14 always follows).
+    /// Whether the transcript is at its end, or the user scrolled up
+    /// (macOS 15, from the scroll geometry; 14 always follows): a signal
+    /// only, the scroll is SwiftUI's (ConversationScroll, T976).
     @State private var follow = Follower()
-    /// Jump to latest's glide to the end, and the follower's (T895).
-    @State private var glider = Glider()
     /// Bumped by Jump to the open card: the cards flash.
     @State private var flash = 0
     /// How many of the last entries the transcript draws.
     @State private var drawn = Self.page
+    /// The first entry drawn, kept as output comes, so the content only
+    /// grows at its foot (the iPhone's ConversationScreen.head, T976).
+    @State private var head: Int?
 
     /// The entries drawn at first, and added by each Show earlier.
     static let page = 60
@@ -52,7 +54,7 @@ struct ConversationTab: View {
         let peerSession = model.ref.session(in: app.peers)
         let review = coordinator || remote != nil ? nil : app.thread(model.ref).flatMap { t in t.task?.status == "review" ? t : nil }
         let open = AppModel.waitsOnCard(session) || review != nil || peerSession?.asking == true
-        let entries = model.transcript.tail(drawn, keeping: current)
+        let entries = model.transcript.tail(drawn, keeping: [current, head].compactMap { $0 }.min())
         // The AskUserQuestion call the open question card answers.
         let asking = session?.question != nil && AppModel.waitsOnCard(session)
         let pending = model.transcript.pendingTool?.id
@@ -68,7 +70,10 @@ struct ConversationTab: View {
             }
             ScrollViewReader { proxy in
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 12) {
+                    // Laid out exactly, the last drawn entries only: no
+                    // lazy stack's estimated heights under the scroll
+                    // (T976).
+                    VStack(alignment: .leading, spacing: 12) {
                         if earlier > 0 {
                             Button("Show \(min(earlier, Self.page)) earlier of \(earlier)") { drawn += Self.page }
                                 .buttonStyle(.borderless)
@@ -121,38 +126,31 @@ struct ConversationTab: View {
                     }
                     .padding(.horizontal, Page.edge)
                     .padding(.top, 14)
-                    .background { ScrollViewHook(glider: glider) }
                 }
-                .modifier(FollowAnchor())
                 // Streamed text lands in place: no implicit animation.
                 .transaction { if reduceMotion { $0.animation = nil } }
-                .modifier(FollowGeometry(follow: follow, newest: model.transcript.entries.last?.id) {
+                .modifier(ConversationScroll(follow: follow, newest: model.transcript.entries.last?.id, screen: "mac conversation",
+                                             detail: { ["role": coordinator ? "coordinator" : "thread", "rows": "\(rows.count)",
+                                                        "entries": "\(model.transcript.entries.count)"] }) {
                     proxy.scrollTo(Self.end, anchor: .bottom)
                 })
                 // New output, or a growing last entry: the follower goes
-                // to the end; one scrolled up stays, and counts it. A
-                // glide under way stays on the end it moves.
+                // to the end (SwiftUI's scroll, the bottom anchor under
+                // it); one scrolled up stays, and counts it.
                 .onChange(of: Self.tail(model.transcript)) {
-                    if follow.arrived(model.transcript.entries.map(\.id)) {
-                        toEnd(proxy)
-                    } else if follow.gliding {
-                        glider.renew()
-                    }
+                    head = model.transcript.tail(drawn, keeping: head).first?.id
+                    if follow.arrived(model.transcript.entries.map(\.id)) { proxy.scrollTo(Self.end, anchor: .bottom) }
                 }
                 // The Working bar or a card coming or going.
                 .onChange(of: Busy.of(session) != nil) {
-                    if follow.following { toEnd(proxy) }
+                    if follow.following { proxy.scrollTo(Self.end, anchor: .bottom) }
                 }
                 // A prompt sent: back to the end.
                 .onChange(of: model.sent) { jumpToLatest(proxy) }
-                // The user took hold of the scroll: the glide ends there.
-                .onChange(of: follow.gliding) { _, g in if !g { glider.stop() } }
-                .onDisappear { glider.leave() }
                 .onChange(of: current) { _, c in
                     guard let c, let row = Transcript.row(of: c, in: rows) else { return }
                     // A match in a folded group unfolds it, and it stays so.
                     if row != c { model.unfoldedRuns.insert(row) }
-                    glider.stop()
                     withAnimation(motion) { proxy.scrollTo(row, anchor: .center) }
                 }
                 .scrollEdges()
@@ -244,32 +242,12 @@ struct ConversationTab: View {
         .help("Scrolls to the end, where the card waits")
     }
 
-    /// Jump to latest, or a prompt sent: a glide to the end that lands
-    /// on it as the rows on the way lay out (T895); without the scroll
-    /// view to drive, the scroll SwiftUI animates (T829's pull back on
-    /// top).
+    /// Jump to latest, or a prompt sent: follow again, and SwiftUI's
+    /// animated scroll to the end row, exact as the rows are laid out
+    /// exactly (T976). Follow holds it through trackpad momentum (T829).
     private func jumpToLatest(_ proxy: ScrollViewProxy) {
-        glider.stop()
-        follow.glide(newest: model.transcript.entries.last?.id)
-        if glider.start(instant: reduceMotion, done: { follow.landed() }) { return }
-        follow.landed()
         follow.jump(newest: model.transcript.entries.last?.id)
         withAnimation(motion) { proxy.scrollTo(Self.end, anchor: .bottom) }
-    }
-
-    /// The follower to the end (T895, the iPhone's T901): new output, the
-    /// agent's turn starting or ending. An instant glide that stays on
-    /// the end as each frame has it until that holds: scrollTo aims once
-    /// at the end a LazyVStack estimates. A glide already running stays
-    /// on the end for the new output too. Without the scroll view to
-    /// drive, SwiftUI's scroll.
-    private func toEnd(_ proxy: ScrollViewProxy) {
-        if glider.running { return glider.renew() }
-        if glider.start(instant: true, done: { follow.landed() }) {
-            follow.glide(newest: nil)
-            return
-        }
-        proxy.scrollTo(Self.end, anchor: .bottom)
     }
 
     private func step(_ by: Int, of n: Int) {
@@ -354,46 +332,6 @@ struct ViewOnlyLine: View {
             .padding(.top, 10)
             .padding(.bottom, 14)
             .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
-
-/// The scroll geometry and phases into Follow: on macOS 15; 14 has none
-/// to read, and its conversation always follows. Jump to latest glides
-/// (Glider, T895); without one, a jump that trackpad momentum carries up
-/// is pulled back to the end (toEnd, T829).
-struct FollowGeometry: ViewModifier {
-    let follow: Follower
-    let newest: Int?
-    let toEnd: () -> Void
-
-    func body(content: Content) -> some View {
-        if #available(macOS 15, *) {
-            content.onScrollGeometryChange(for: [Double].self) { g in
-                [g.contentOffset.y, g.visibleRect.height, g.contentSize.height, g.contentInsets.bottom, g.contentInsets.top]
-            } action: { _, g in
-                if follow.scrolled(offset: g[0], visible: g[1], content: g[2], inset: g[3], top: g[4], newest: newest) { toEnd() }
-            }
-            .onScrollPhaseChange { _, p in
-                if follow.moved(by: p == .tracking || p == .interacting, resting: p == .idle) { toEnd() }
-            }
-        } else {
-            content
-        }
-    }
-}
-
-/// Opens at the end; on macOS 15 content that grows keeps its place
-/// (Follow scrolls a follower down), so a user scrolled up never jumps.
-/// 14 keeps to the bottom as it grows.
-struct FollowAnchor: ViewModifier {
-    func body(content: Content) -> some View {
-        if #available(macOS 15, *) {
-            content
-                .defaultScrollAnchor(.bottom, for: .initialOffset)
-                .defaultScrollAnchor(.top, for: .sizeChanges)
-        } else {
-            content.defaultScrollAnchor(.bottom)
-        }
     }
 }
 
