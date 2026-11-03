@@ -189,7 +189,7 @@ func TestManifestCheckSections(t *testing.T) {
 			"provides.columns[0]: a column needs provides.main, the code that fills it",
 			"provides.columns[1]: a column needs provides.main, the code that fills it",
 			"provides.commands[0]: a command needs provides.main, the code that runs it",
-			"provides.rules.human: rules are coordinator or thread (addenda), coordinator_policy or thread_policy",
+			"provides.rules.human: rules are coordinator or thread (addenda), coordinator_policy, thread_policy, director_policy or coordinator_programs_policy",
 			"provides.tools needs permissions.tools",
 			"provides.tools[0]: a tool needs provides.main, the code that answers it",
 			"provides.views needs permissions.views",

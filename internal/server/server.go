@@ -1140,6 +1140,15 @@ func (s *Server) startSession(p proto.SessionStartParams) (any, *proto.Error) {
 		return nil, proto.Errorf(proto.ErrBadParams, "pass an agent or a command, not both")
 	}
 	cwd := p.Cwd
+	if p.Role == proto.RoleDirector {
+		// A program's director: programs on, its program there, its
+		// folder the cwd (director.go).
+		dir, perr := directorStart(p)
+		if perr != nil {
+			return nil, perr
+		}
+		cwd = dir
+	}
 	if cwd == "" {
 		cwd, _ = os.UserHomeDir()
 	}
@@ -1153,7 +1162,7 @@ func (s *Server) startSession(p proto.SessionStartParams) (any, *proto.Error) {
 	switch role {
 	case "":
 		role = proto.RoleShell
-	case proto.RoleShell:
+	case proto.RoleShell, proto.RoleDirector:
 	case proto.RoleCoordinator, proto.RoleThread:
 		if p.Agent == "" || p.Project == "" {
 			return nil, proto.Errorf(proto.ErrBadParams, "role %s needs an agent and a project", role)

@@ -137,13 +137,18 @@ type Options struct {
 	Slug string
 	Goal string
 	Now  time.Time
+	// Taken says why a name can't be a program's beyond this package's
+	// checks ("" when it can): a paired server's alias or name here, or
+	// this server's own, which only the caller knows (§3.4).
+	Taken func(slug string) string
 }
 
 // New makes a program folder. It refuses a slug that isn't one
 // (invalid-program), that a project has (slug-taken: the one namespace,
 // §3.4) and that a program already has (program-exists). It writes
 // nothing to config.toml: membership is the user's, set in the TUI.
-// A paired server's name is checked by the caller, which knows them.
+// A paired server's name is checked through o.Taken, which the caller
+// gives: it knows them.
 func New(o Options) (*Program, error) {
 	slug := strings.TrimSpace(o.Slug)
 	dir, err := Dir(slug)
@@ -156,6 +161,11 @@ func New(o Options) (*Program, error) {
 	if pd, err := project.Dir(slug); err == nil {
 		if _, err := os.Stat(pd); err == nil {
 			return nil, refuse("slug-taken", "%s is a project", slug)
+		}
+	}
+	if o.Taken != nil {
+		if why := o.Taken(slug); why != "" {
+			return nil, refuse("slug-taken", "%s: %s", slug, why)
 		}
 	}
 	if err := os.MkdirAll(filepath.Dir(dir), 0o700); err != nil {

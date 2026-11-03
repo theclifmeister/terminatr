@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
@@ -173,6 +174,20 @@ func (e *Env) openCmd(slug, agentName string) error {
 	if _, err := project.Open(slug); err != nil {
 		return err
 	}
+	args := []string{"project", "open", slug}
+	if agentName != "" {
+		args = append(args, "--agent", agentName)
+	}
+	return e.openSession(args, agentName, func(call func(string, any, any) error, cols, rows int) (string, error) {
+		return tui.OpenCoordinator(call, slug, agentName, cols, rows)
+	})
+}
+
+// openSession starts or finds a session with open (a coordinator, a
+// director), sized to the pane the console gives it, and attaches to
+// it; args are the command line to come back to. Without a terminal it
+// prints the session's id.
+func (e *Env) openSession(args []string, agentName string, open func(call func(string, any, any) error, cols, rows int) (string, error)) error {
 	c, p, err := connect(true)
 	if err != nil {
 		return err
@@ -180,7 +195,7 @@ func (e *Env) openCmd(slug, agentName string) error {
 	// The pane gets the window less the sidebar and the status bar.
 	con := newConsole()
 	cols, rows := con.cols, con.rows
-	id, err := tui.OpenCoordinator(c.Call, slug, agentName, max(int(cols)-con.lay.Sidebar.Cols(int(cols)), 1), int(max(rows, 2)-1))
+	id, err := open(c.Call, max(int(cols)-con.lay.Sidebar.Cols(int(cols)), 1), int(max(rows, 2)-1))
 	c.Close()
 	if err != nil {
 		return err
@@ -193,8 +208,7 @@ func (e *Env) openCmd(slug, agentName string) error {
 	if err != nil {
 		return err
 	}
-	args := []string{"project", "open", slug}
-	if agentName != "" {
+	if agentName != "" && !slices.Contains(args, "--agent") {
 		args = append(args, "--agent", agentName)
 	}
 	res, err := e.attach(p, vc, tui.Options{Sidebar: &tui.SidebarOptions{UIFile: con.uiFile}}, args)
