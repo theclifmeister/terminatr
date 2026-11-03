@@ -508,6 +508,40 @@ final class AppModel {
         SidebarTree.needs(of: g, in: needs)
     }
 
+    /// The human acts of the program screen (the programs design §7.2,
+    /// app API 44): each the user's own, never the director's.
+    func programAnswer(_ slug: String, ref: String, choices: [String], other: String) async throws -> AppAPI.ProgramAnswered {
+        guard let b = bridge else { throw BridgeError.closed("") }
+        return try await b.call(AppAPI.Methods.programAnswer, AppAPI.ProgramAnswerParams(program: slug, ref: ref, choices: choices, other: other))
+    }
+
+    /// Accepts umbrella task of program slug (accept), or sends it back
+    /// with the user's note.
+    func programUmbrella(_ slug: String, task: String, accept: Bool, note: String = "") async throws -> AppAPI.ProgramUmbrellaDone {
+        guard let b = bridge else { throw BridgeError.closed("") }
+        let p = AppAPI.ProgramUmbrellaParams(program: slug, task: task, note: note)
+        return try await b.call(accept ? AppAPI.Methods.programUmbrellaAccept : AppAPI.Methods.programUmbrellaSendBack, p)
+    }
+
+    /// Renames program from to to; the window follows it.
+    func programRename(_ from: String, to: String) async throws -> AppAPI.ProgramRenamed {
+        guard let b = bridge else { throw BridgeError.closed("") }
+        let r = try await b.call(AppAPI.Methods.programRename, AppAPI.ProgramRenameParams(from: from, to: to))
+        if nav.selection?.isProgram == true, nav.selection?.project == from { nav.select(.program(to)) }
+        return r
+    }
+
+    /// Deletes program slug, confirm its name typed again; the window
+    /// goes to the first project.
+    func programDelete(_ slug: String, confirm: String) async throws -> AppAPI.ProgramDeleted {
+        guard let b = bridge else { throw BridgeError.closed("") }
+        let r = try await b.call(AppAPI.Methods.programDelete, AppAPI.ProgramDeleteParams(program: slug, confirm: confirm))
+        if nav.selection?.isProgram == true, nav.selection?.project == slug, let first = activeProjects.first {
+            nav.select(.project(first.slug))
+        }
+        return r
+    }
+
     /// The program screen's detail (program.get) and its Needs you
     /// (program.needs), as the server reads them now.
     func programDetail(_ slug: String) async throws -> (AppAPI.ProgramDetail, AppAPI.ProgramNeeds?) {

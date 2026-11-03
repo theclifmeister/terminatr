@@ -17,6 +17,9 @@ struct ProgramPage: View {
     @State private var detail: AppAPI.ProgramDetail?
     @State private var needs: AppAPI.ProgramNeeds?
     @State private var failed: String?
+    @State private var asking: ProgramAsk?
+    /// Bumped after an act: the screen reads the program again.
+    @State private var acted = 0
 
     var body: some View {
         ScrollView {
@@ -44,13 +47,44 @@ struct ProgramPage: View {
         }
         .scrollEdges()
         // Read again as the program or what of it needs the user changes.
-        .task(id: Reload(program: program, needs: app.needs(of: program).map(\.id), connected: app.bridge != nil)) { await read() }
+        .task(id: Reload(program: program, needs: app.needs(of: program).map(\.id), connected: app.bridge != nil, acted: acted)) { await read() }
+        .sheet(item: $asking) { a in
+            ProgramAskSheet(program: program.slug, ask: a) { acted += 1 }
+        }
+        .toolbar {
+            if app.controlsProjects {
+                ToolbarItem(placement: .primaryAction) {
+                    Menu {
+                        Button("Rename Program…") { asking = .rename }
+                        Button("Delete Program…", role: .destructive) { asking = .delete }
+                            .disabled(app.directorSession(program.slug) != nil)
+                    } label: {
+                        Label("Program", systemImage: "ellipsis.circle")
+                    }
+                    .help("Rename or delete \(program.slug); its members, authority and caps are set in tm's console")
+                }
+            }
+        }
     }
 
     private struct Reload: Equatable {
         let program: AppAPI.Program
         let needs: [String]
         let connected: Bool
+        let acted: Int
+    }
+
+    /// A need's click: a program question or umbrella asks here, a
+    /// member's shows its project, whose cards answer it.
+    private func act(_ n: AppAPI.ProgramNeed) {
+        switch ProgramFacts.act(n) {
+        case .answer(let ref, let q):
+            asking = .answer(ref: ref, question: q, text: n.need.text)
+        case .umbrella(let task):
+            asking = .umbrella(task: task, title: n.need.title, text: n.need.text)
+        case .open(let project, let session):
+            app.open(project: project, session: session)
+        }
     }
 
     private func read() async {
@@ -138,7 +172,7 @@ struct ProgramPage: View {
                 note("Nothing waits on you in \(program.slug).")
             }
             ForEach(Array(needs.needs.enumerated()), id: \.offset) { _, n in
-                Button { app.open(project: n.program ? program.slug : ProgramFacts.place(n.project, server: n.server), session: n.server.isEmpty ? n.need.session : "") } label: {
+                Button { act(n) } label: {
                     line(lead: n.priority, place: n.program ? "program" : ProgramFacts.place(n.project, server: n.server),
                          text: ProgramFacts.need(n), tail: n.merged.isEmpty ? n.need.kind : "merged \(n.merged.count + 1)")
                 }

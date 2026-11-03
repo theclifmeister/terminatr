@@ -224,3 +224,35 @@ public enum ProgramFacts {
         return ([words.isEmpty ? nil : words, link, shared, need].compactMap { $0 }).joined(separator: " · ")
     }
 }
+
+extension ProgramFacts {
+    /// What a click on a program need does on the program screen.
+    public enum Act: Equatable, Sendable {
+        /// One of the program's own questions ("Q2"): answered once here
+        /// for the member questions it covers (program.answer).
+        case answer(ref: String, question: AppAPI.QuestionItem?)
+        /// An umbrella of the program's board in review ("T4"): accept,
+        /// or send back with a note (program.umbrella.*).
+        case umbrella(task: String)
+        /// A member's need: its project, where its own cards answer it.
+        case open(project: String, session: String)
+    }
+
+    public static func act(_ n: AppAPI.ProgramNeed) -> Act {
+        if n.program, n.need.kind == "umbrella-review" { return .umbrella(task: n.need.task) }
+        if n.program, n.need.id.hasPrefix("ask:") {
+            return .answer(ref: String(n.need.id.dropFirst(4)), question: n.need.question?.questions.first)
+        }
+        return .open(project: n.program ? n.project : place(n.project, server: n.server), session: n.server.isEmpty ? n.need.session : "")
+    }
+
+    /// A program answer's outcome, in words: where it went and what
+    /// came of each.
+    public static func answered(_ a: AppAPI.ProgramAnswered) -> String {
+        guard !a.fanned.isEmpty else { return "Answered." }
+        return a.fanned.map { f in
+            let what = f.result == "failed" && !f.error.isEmpty ? "failed: \(f.error)" : f.result
+            return "\(f.project) \(f.question): \(what)"
+        }.joined(separator: "\n")
+    }
+}
