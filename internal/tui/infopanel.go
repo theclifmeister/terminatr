@@ -60,6 +60,9 @@ type infoData struct {
 	// (remotepanel.go); none of the above but slug ("@alias/slug") and
 	// session then.
 	remote *remoteData
+	// prog is a director's program (programpanel.go); none of the
+	// above but slug and session then.
+	prog *programInfo
 }
 
 // loadInfo reads the panel's data for session s, one of sessions: a
@@ -68,6 +71,9 @@ type infoData struct {
 func loadInfo(paths tmclient.Paths, s proto.SessionInfo, sessions []proto.SessionInfo) *infoData {
 	if s.Role == proto.RoleCoordinator && s.Project != "" {
 		return loadCoordInfo(paths, s, sessions)
+	}
+	if s.Role == proto.RoleDirector && s.Project != "" {
+		return loadProgramInfo(paths, s, sessions)
 	}
 	if s.Role != proto.RoleThread || s.Project == "" || !thread.ValidID(s.Thread) {
 		return nil
@@ -114,13 +120,14 @@ func padHits(hits []infoHit, n int, h infoHit) []infoHit {
 type hitKind int
 
 const (
-	hitNone      hitKind = iota
-	hitTask              // the task view over the session
-	hitPR                // the PR in the browser
-	hitSession           // that session in the pane (a coordinator's thread row)
-	hitQuestions         // the coordinator opens its questions (tm ask open)
-	hitSaveClear         // the coordinator saves and clears (tm clear)
-	hitSection           // a mod section's header or body (panelsections.go)
+	hitNone         hitKind = iota
+	hitTask                 // the task view over the session
+	hitPR                   // the PR in the browser
+	hitSession              // that session in the pane (a coordinator's thread row)
+	hitQuestions            // the coordinator opens its questions (tm ask open)
+	hitSaveClear            // the coordinator saves and clears (tm clear)
+	hitSection              // a mod section's header or body (panelsections.go)
+	hitProgramNeeds         // the program needs dialog over the pane (programneeds.go)
 )
 
 // prURL is the thread's PR's address: the ticker's, else its report's.
@@ -170,6 +177,9 @@ func infoLay(d *infoData, w int, now time.Time, o panelOpts) panelLay {
 		// No mod sections: mods are per server.
 		pl, hits := remotePanel(d, w, now)
 		return layPanel(pl, hits, nil, infoTarget(d), o)
+	}
+	if d.prog != nil {
+		return programPanelLay(d, w, now, o)
 	}
 	if d.watch != nil {
 		pl, hits := coordPanel(d.watch, w, now)

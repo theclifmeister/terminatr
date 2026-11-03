@@ -612,5 +612,8 @@ func (s *Server) serveViewStream(c net.Conn, br *bufio.Reader, req proto.Request
 }
 
 // hasPanel says a session of role has the info panel beside its pane: a
-// thread's (its task and PR) or a coordinator's (its project, T90).
-func hasPanel(role string) bool { return role == proto.RoleThread || role == proto.RoleCoordinator }
+// thread's (its task and PR), a coordinator's (its project, T90) or a
+// director's (its program: the programs design §7.3).
+func hasPanel(role string) bool {
+	return role == proto.RoleThread || role == proto.RoleCoordinator || role == proto.RoleDirector
+}

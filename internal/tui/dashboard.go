@@ -850,6 +850,10 @@ func (m *dash) setData(d Data) tea.Cmd {
 		// A server's header clicked in a session's sidebar.
 		m.openNetwork(m.over.Server)
 		m.then = ""
+	case first && m.then == thenProgramNeeds && m.over != nil:
+		// The director panel's band: the program needs dialog.
+		cmds = append(cmds, m.openProgramNeeds(m.over.Project, ""))
+		m.then = ""
 	case first && m.then == thenProgram && m.over != nil:
 		m.openProgramSettings(m.over.Project)
 		m.then = ""
