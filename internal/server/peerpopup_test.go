@@ -117,8 +117,9 @@ func TestPeerPopupAllowlist(t *testing.T) {
 	// Priority (T927) stays home: a paired server's board lists in its
 	// own order, without one. AfterX (programs B1) stays home too: refs
 	// to other projects, which may name this server's other projects or
-	// its paired servers' aliases.
-	if want := []string{"After", "AfterX", "Archived", "Created", "Design", "ID", "Notes", "Owner", "Priority", "Repo", "Status", "Steps", "Thread", "Title", "Updated"}; !slices.Equal(fieldNames(reflect.TypeFor[tasks.Task]()), want) {
+	// its paired servers' aliases. Parts (programs B10) stay home: only a
+	// program's umbrella tasks have them, and programs aren't shared.
+	if want := []string{"After", "AfterX", "Archived", "Created", "Design", "ID", "Notes", "Owner", "Parts", "Priority", "Repo", "Status", "Steps", "Thread", "Title", "Updated"}; !slices.Equal(fieldNames(reflect.TypeFor[tasks.Task]()), want) {
 		t.Errorf("tasks.Task has %v: decide what of a new field a paired server sees (peerTaskOf)", fieldNames(reflect.TypeFor[tasks.Task]()))
 	}
 

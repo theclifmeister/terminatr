@@ -361,6 +361,9 @@ func (s *Store) SetStatus(c caller.Caller, id int, st Status, note string) (Resu
 	if st.Closed() && c.IsAgent() {
 		return s.refuseClosed(c, id, st)
 	}
+	if err := s.refuseDerived(id, st); err != nil {
+		return Result{}, err
+	}
 	return s.setStatus(c, id, st, note, "")
 }
 

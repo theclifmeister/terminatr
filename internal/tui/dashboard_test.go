@@ -1848,6 +1848,11 @@ func (f *fakeSource) AnswerProgram(slug, ref string, choices []string, other str
 	return program.AnswerResult{Question: ref, Fanned: []program.Fanned{{Project: "api", Question: "Q1", Result: "answered"}}}, nil
 }
 
+func (f *fakeSource) AcceptUmbrella(slug string, id int) error {
+	f.programActs = append(f.programActs, fmt.Sprintf("%s accept T%d", slug, id))
+	return nil
+}
+
 func (f *fakeSource) NewProgram(slug, goal string) (string, error) {
 	f.newPrograms = append(f.newPrograms, slug+":"+goal)
 	f.data.Programs = append(f.data.Programs, ProgramData{SideProgram: server.SideProgram{Slug: slug, Authority: "propose"}})

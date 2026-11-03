@@ -85,6 +85,9 @@ func Detail(t *Task) string {
 		meta = append(meta, "archived")
 	}
 	b.WriteString(strings.Join(meta, sep) + "\n")
+	if len(t.Parts) > 0 {
+		b.WriteString("parts: " + one(strings.Join(t.Parts, ", ")) + "\n")
+	}
 	if t.Notes != "" {
 		b.WriteString("\n" + textsafe.Clean(t.Notes, true) + "\n")
 	}
@@ -117,6 +120,8 @@ type JSON struct {
 	Created  string   `json:"created"`
 	Updated  string   `json:"updated"`
 	Archived bool     `json:"archived,omitempty"`
+	// Parts are an umbrella task's parts (programs, §5.3).
+	Parts []string `json:"parts,omitempty"`
 }
 
 // ToJSON converts a task to its --json shape.
@@ -128,6 +133,6 @@ func ToJSON(t *Task) JSON {
 	return JSON{
 		ID: t.Ref(), Title: t.Title, Status: t.Status, Priority: t.Priority, Group: string(GroupOf(t.Status)),
 		Notes: t.Notes, Steps: steps, Thread: t.Thread, Owner: t.Owner, Repo: t.Repo,
-		Created: t.Created, Updated: t.Updated, Archived: t.Archived,
+		Created: t.Created, Updated: t.Updated, Archived: t.Archived, Parts: t.Parts,
 	}
 }

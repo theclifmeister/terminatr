@@ -322,3 +322,36 @@ func TestTaskEditCrossAfter(t *testing.T) {
 		t.Fatalf("off: %q", a)
 	}
 }
+
+// TestUmbrellaPartsCLI: a route's tasks are its umbrella's parts; tm
+// program task add and edit set or add parts (members' tasks only), list
+// and show say how far they are, and an umbrella's derived statuses
+// aren't set by hand.
+func TestUmbrellaPartsCLI(t *testing.T) {
+	h, _ := programHarness(t)
+	route := `{"umbrella": "SSO", "tasks": [{"project": "demo", "title": "OIDC login"}, {"project": "web", "title": "Login button"}]}`
+	if code, out, errs := h.run(directorAcme, route, "program", "route", "--file", "-"); code != 0 {
+		t.Fatalf("route: %d %s%s", code, out, errs)
+	}
+	if out := h.ok(directorAcme, "program", "task", "list"); !strings.Contains(out, "T1 parts 0/2: demo/T1 not known yet, web/T1 not known yet") {
+		t.Fatalf("list:\n%s", out)
+	}
+	h.ok(directorAcme, "program", "task", "add", "Bump axios", "--parts", "demo/T1,web/T1")
+	if out := h.ok(directorAcme, "program", "task", "show", "T2"); !strings.Contains(out, "parts: demo/T1, web/T1") || !strings.Contains(out, "Parts 0/2") {
+		t.Fatalf("show:\n%s", out)
+	}
+	h.ok(human, "task", "add", "Logout", "--project", "web")
+	h.ok(directorAcme, "program", "task", "edit", "T2", "--add-parts", "web/T2")
+	var j struct {
+		Parts []string `json:"parts"`
+	}
+	if err := json.Unmarshal([]byte(h.ok(directorAcme, "program", "task", "show", "T2", "--json")), &j); err != nil || strings.Join(j.Parts, " ") != "demo/T1 web/T1 web/T2" {
+		t.Fatalf("json %+v %v", j, err)
+	}
+	h.ok(directorAcme, "program", "task", "edit", "T2", "--parts", "web/T2")
+	h.expect(1, "not-member", directorAcme, "program", "task", "edit", "T2", "--add-parts", "loner/T1")
+	h.expect(1, "invalid-parts", directorAcme, "program", "task", "edit", "T2", "--add-parts", "web/T9")
+	h.expect(1, "not-member", directorAcme, "program", "task", "add", "Nope", "--parts", "loner/T1")
+	h.expect(2, "", directorAcme, "program", "task", "edit", "T2", "--parts", "web/T1", "--add-parts", "web/T2")
+	h.expect(2, "", directorAcme, "program", "task", "edit", "web/T1", "--parts", "web/T2")
+}

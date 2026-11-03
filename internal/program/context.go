@@ -55,7 +55,7 @@ func (p *Program) Context(cfg *config.Config) ([]project.Section, error) {
 	if err != nil {
 		return nil, err
 	}
-	out = append(out, um)
+	out = append(out, p.withParts(um))
 	out = append(out, p.childrenSection(cfg))
 	inbox, err := p.InboxSection()
 	if err != nil {
@@ -67,6 +67,23 @@ func (p *Program) Context(cfg *config.Config) ([]project.Section, error) {
 		return nil, err
 	}
 	return append(out, j), nil
+}
+
+// withParts adds to the umbrella tasks' section a line per open
+// umbrella with parts: how far its parts are, with their states as the
+// ticker last computed them (§5.3).
+func (p *Program) withParts(s project.Section) project.Section {
+	b, err := p.Tasks().Load()
+	if err != nil {
+		return s
+	}
+	deps, _ := ReadDeps(p.Slug)
+	for _, t := range b.Tasks {
+		if t.IsUmbrella() && !t.Status.Closed() {
+			s.Lines = append(s.Lines, fmt.Sprintf("%s parts %s", t.Ref(), textsafe.Clip(PartsText(Parts(t, deps)), 400)))
+		}
+	}
+	return s
 }
 
 // childrenSection is one line per member: a local project's goal and

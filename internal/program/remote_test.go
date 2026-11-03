@@ -62,7 +62,7 @@ func TestRoutePaired(t *testing.T) {
 		t.Fatalf("sent %+v", sent)
 	}
 	u, _ := g.Tasks().Get(1)
-	if !strings.Contains(u.Notes, "mini/acme-ios (pending "+sent[0].ID+")") {
+	if !strings.Contains(u.Notes, "mini/acme-ios (pending "+sent[0].ID+")") || strings.Join(u.Parts, ",") != "acme-api/T1" {
 		t.Fatalf("umbrella notes %q", u.Notes)
 	}
 	if b, _ := os.ReadDir(filepath.Join(os.Getenv(home.Env), "state", "link", "outbox", "mini", "program")); len(b) != 1 {

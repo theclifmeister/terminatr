@@ -85,6 +85,12 @@ func TestProgramTaskFiled(t *testing.T) {
 			t.Fatal(err)
 		}
 	})
+	board := &tasks.Store{Dir: apps.Dir, Slug: apps.Slug, Program: true}
+	sv.in(sv.studio, func() {
+		if _, err := board.Add(userHere, []tasks.NewTask{{Title: "Other"}, {Title: "SSO"}}); err != nil {
+			t.Fatal(err)
+		}
+	})
 	sv.in(sv.studio, func() {
 		var err error
 		sent, err = SendProgramTask(appsDirector, apps, "mini/api", proto.ProgramTask{Key: "ios", Title: "OIDC \x1b[31mlogin\u202e", Notes: "why", Priority: "must", After: []string{"T1", "web/T4"}, Umbrella: "apps/T2"})
@@ -121,6 +127,10 @@ func TestProgramTaskFiled(t *testing.T) {
 		its := items(t, appsBox(apps), KindProgramTaskFiled)
 		if len(its) != 1 || !strings.Contains(its[0].Summary, "filed mini/api/T2") {
 			t.Fatalf("program items %+v", its)
+		}
+		// The filed task is its umbrella's part now (§5.3).
+		if u, err := board.Get(2); err != nil || !slices.Equal(u.Parts, []string{"mini/api/T2"}) {
+			t.Fatalf("umbrella %+v %v", u, err)
 		}
 		prio := "should"
 		if _, err := SendProgramEdit(appsDirector, apps, "mini/api", "T2", proto.ProgramTaskEdit{Priority: &prio, Note: "sooner"}); err != nil {

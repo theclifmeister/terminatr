@@ -60,6 +60,12 @@ func Scaffold(dir string) error {
 }
 
 // LinkLine reports whether line of a board file is tm's: a task's
-// metadata line, where tm writes links. The rest is someone's words,
-// which a rename doesn't rewrite.
-func LinkLine(line string) bool { return strings.HasPrefix(line, "status:") }
+// metadata line or an umbrella's parts line, where tm writes links. The
+// rest is someone's words, which a rename doesn't rewrite.
+func LinkLine(line string) bool {
+	if strings.HasPrefix(line, "status:") {
+		return true
+	}
+	_, ok := readPartsLine(line)
+	return ok
+}

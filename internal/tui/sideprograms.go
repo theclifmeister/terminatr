@@ -6,6 +6,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/link"
 	"github.com/theclifmeister/terminatr/internal/program"
+	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/server"
 	"github.com/theclifmeister/terminatr/internal/tasks"
@@ -35,9 +36,19 @@ import (
 type ProgramData struct {
 	server.SideProgram
 	Settings config.Program
-	// Deps are its members' cross-project dependency states, as the
-	// ticker last computed them (program.ReadDeps), by ref.
+	// Deps are its members' cross-project dependency states and its
+	// umbrellas' parts', as the ticker last computed them
+	// (program.ReadSnapshot), by ref.
 	Deps map[string]program.Dep
+	// Waits are its members' open tasks that come after other members'
+	// tasks, as the ticker last saw them: the dashboard's DEPENDENCIES.
+	Waits []program.Wait
+	// Umbrellas are its board's open umbrella and sweep tasks, in board
+	// order: the dashboard's UMBRELLAS.
+	Umbrellas []*tasks.Task
+	// Tasks are the local members' tasks the umbrellas' parts and the
+	// waits name, by ref ("acme-api/T12"), for the details panel.
+	Tasks map[string]*tasks.Task
 	// Invites are its invites to paired projects, by member
 	// ("mini/acme-ios"): the newest of each (link.Invites).
 	Invites map[string]link.Invite
@@ -49,8 +60,9 @@ func programsOf(cfg *config.Config) []ProgramData {
 	var out []ProgramData
 	for _, sp := range server.SidePrograms(cfg) {
 		t, _ := cfg.Program(sp.Slug)
-		deps, _ := program.ReadDeps(sp.Slug)
-		g := ProgramData{SideProgram: sp, Settings: t, Deps: deps}
+		snap, _ := program.ReadSnapshot(sp.Slug)
+		g := ProgramData{SideProgram: sp, Settings: t, Deps: snap.States, Waits: snap.Waits}
+		g.Umbrellas, g.Tasks = umbrellasOf(cfg, sp.Slug, snap.Waits)
 		for _, r := range link.Invites(sp.Slug) {
 			if r.Out {
 				if g.Invites == nil {
@@ -62,6 +74,51 @@ func programsOf(cfg *config.Config) []ProgramData {
 		out = append(out, g)
 	}
 	return out
+}
+
+// umbrellasOf reads program slug's open umbrella tasks, and the local
+// members' tasks their parts and waits name, each board once.
+func umbrellasOf(cfg *config.Config, slug string, waits []program.Wait) ([]*tasks.Task, map[string]*tasks.Task) {
+	g, err := program.Open(slug, cfg)
+	if err != nil {
+		return nil, nil
+	}
+	b, err := g.Tasks().Load()
+	if err != nil {
+		return nil, nil
+	}
+	var out []*tasks.Task
+	var refs []string
+	for _, t := range b.Tasks {
+		if !t.Status.Closed() {
+			out = append(out, t)
+			refs = append(refs, t.Parts...)
+		}
+	}
+	for _, w := range waits {
+		refs = append(refs, w.Task)
+	}
+	boards := map[string]*tasks.Board{}
+	found := map[string]*tasks.Task{}
+	for _, ref := range refs {
+		alias, member, n, ok := tasks.CrossRef(ref)
+		if !ok || alias != "" || found[ref] != nil {
+			continue
+		}
+		mb, seen := boards[member]
+		if !seen {
+			if p, err := project.OpenWith(member, cfg); err == nil {
+				mb, _ = p.Tasks().Load()
+			}
+			boards[member] = mb
+		}
+		if mb != nil {
+			if t := mb.Find(n); t != nil {
+				found[ref] = t
+			}
+		}
+	}
+	return out, found
 }
 
 // programKey is program slug's row key, and its fold's in view.Tree.

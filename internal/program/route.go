@@ -222,16 +222,26 @@ func (p *Program) Route(c caller.Caller, cfg *config.Config, req RouteRequest) (
 		res.Tasks = append(res.Tasks, r)
 	}
 	if umbrella != "" {
-		var parts []string
+		// The filed tasks are the umbrella's parts (§5.3); a paired
+		// member's joins once its server answers program-task-filed
+		// (link.AddFiledPart), and until then a note line says it waits.
+		var filedRefs, pending []string
 		for _, r := range res.Tasks {
 			if r.Ref == "" {
-				parts = append(parts, r.Project+" (pending "+r.Message+")")
+				pending = append(pending, r.Project+" (pending "+r.Message+")")
 				continue
 			}
-			parts = append(parts, r.Project+"/"+r.Ref)
+			filedRefs = append(filedRefs, r.Project+"/"+r.Ref)
 		}
-		if _, err := p.Tasks().ProgramEdit(c, p.Slug, refID(umbrella), tasks.ProgramChange{Note: "routed " + strings.Join(parts, ", ")}); err != nil {
-			return res, err
+		if len(filedRefs) > 0 {
+			if _, err := p.Tasks().SetParts(c, refID(umbrella), filedRefs, true); err != nil {
+				return res, err
+			}
+		}
+		if len(pending) > 0 {
+			if _, err := p.Tasks().ProgramEdit(c, p.Slug, refID(umbrella), tasks.ProgramChange{Note: "routed " + strings.Join(pending, ", ")}); err != nil {
+				return res, err
+			}
 		}
 	}
 	return res, nil

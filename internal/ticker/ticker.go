@@ -1128,7 +1128,8 @@ var verbs = map[string]string{
 	"link-request": "asks to link (the user answers it)", "link-answer": "answered a link request",
 	"link-file":          "a file over a link (tm link files)",
 	program.KindDepReady: "can start: its dependencies are met", program.KindDepGone: "a dependency is gone",
-	link.KindProgramMessage: "wrote to you (tm program read)", program.KindTask: "filed by the program's director",
+	program.KindUmbrellaReview: "every part is in (the user decides whether it is done)",
+	link.KindProgramMessage:    "wrote to you (tm program read)", program.KindTask: "filed by the program's director",
 	program.KindAnswer: "answered by the user (its answer in tm inbox list)",
 	KindSlotFree:       "a thread slot is free", KindRemember: "has lessons to file", KindPromptWaiting: "a prompt waits in its queue",
 }

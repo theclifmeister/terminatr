@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/features"
 	"github.com/theclifmeister/terminatr/internal/program"
@@ -58,6 +59,7 @@ func (t *Ticker) sweepDeps(cfg *config.Config) {
 		}
 		deps := program.NewDeps(cfg, g.Slug, isMerged)
 		states := map[string]program.Dep{}
+		var waits []program.Wait
 		for _, m := range g.Members {
 			if strings.Contains(m, "/") {
 				continue // a paired server's board isn't here
@@ -83,9 +85,14 @@ func (t *Ticker) sweepDeps(cfg *config.Config) {
 				key := m + "/" + tk.Ref()
 				seen[key] = true
 				t.checkDeps(g, p, tk, key, deps, states, memos)
+				for _, x := range tk.AfterX {
+					waits = append(waits, program.Wait{Task: key, Title: tk.Title, Status: string(tk.Status), After: x})
+				}
 			}
 		}
-		if err := program.WriteDeps(g.Slug, states); err != nil {
+		t.sweepUmbrellas(g, deps, states)
+		slices.SortStableFunc(waits, func(a, b program.Wait) int { return strings.Compare(a.Task, b.Task) })
+		if err := program.WriteDeps(g.Slug, program.Snapshot{States: states, Waits: waits}); err != nil {
 			t.o.Log.Printf("ticker: program %s: %v", g.Slug, err)
 		}
 	}
@@ -96,6 +103,63 @@ func (t *Ticker) sweepDeps(cfg *config.Config) {
 		}
 	}
 	t.mu.Unlock()
+}
+
+// sweepUmbrellas looks at program g's umbrella tasks (§5.3): each
+// open one's parts' states into states, and its status, derived from
+// them (program.Derive), written to its board when it changed. One
+// that reaches review raises an umbrella-review item in the program's
+// inbox: the user decides whether it is done.
+func (t *Ticker) sweepUmbrellas(g *program.Program, deps *program.Deps, states map[string]program.Dep) {
+	s := g.Tasks()
+	board, err := s.Load()
+	if err != nil {
+		t.o.Log.Printf("ticker: program %s: %v", g.Slug, err)
+		return
+	}
+	for _, tk := range board.Tasks {
+		if tk.Status.Closed() {
+			continue
+		}
+		if !tk.IsUmbrella() {
+			// An umbrella an older route noted its parts on: adopt them.
+			noted := tasks.NotedParts(tk.Notes)
+			if len(noted) == 0 {
+				continue
+			}
+			res, err := s.SetParts(caller.Caller{Kind: caller.Ticker}, tk.ID, noted, true)
+			if err != nil {
+				t.o.Log.Printf("ticker: program %s: %s: parts: %v", g.Slug, tk.Ref(), err)
+				continue
+			}
+			tk = res.Task
+		}
+		for _, x := range tk.Parts {
+			if _, ok := states[x]; !ok {
+				states[x] = deps.State(x)
+			}
+		}
+		st, ok := program.Derive(tk, program.Parts(tk, states))
+		if !ok || st == tk.Status {
+			continue
+		}
+		res, err := s.SetDerived(caller.Caller{Kind: caller.Ticker}, tk.ID, st)
+		if err != nil {
+			t.o.Log.Printf("ticker: program %s: %s: %v", g.Slug, tk.Ref(), err)
+			continue
+		}
+		if !res.Changed {
+			continue
+		}
+		t.o.Log.Printf("ticker: program %s: %s %s (from its parts)", g.Slug, tk.Ref(), st)
+		if st != tasks.Review {
+			continue
+		}
+		summary := fmt.Sprintf("every part of %s/%s is in (%s): the user decides whether it is done", g.Slug, tk.Ref(), strings.Join(tk.Parts, ", "))
+		if _, err := g.AddItem(program.KindUmbrellaReview, tk.Ref(), summary, true); err != nil {
+			t.o.Log.Printf("ticker: program %s: inbox: %v", g.Slug, err)
+		}
+	}
 }
 
 // checkDeps is sweepDeps' look at task tk of member p (key
