@@ -3,6 +3,7 @@ package server
 import (
 	"errors"
 
+	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/modaction"
 	"github.com/theclifmeister/terminatr/internal/project"
@@ -93,11 +94,19 @@ func (s *Server) taskGet(p proto.TaskGetParams) (any, *proto.Error) {
 	if err != nil {
 		return nil, proto.Errorf(proto.ErrBadParams, "%v", err)
 	}
-	t, err := pr.Tasks().Get(id)
+	b, err := pr.Tasks().Load()
 	if err != nil {
 		return nil, taskError(err)
 	}
-	return sideTask(t), nil
+	t := b.Find(id)
+	if t == nil {
+		_, err := pr.Tasks().Get(id) // its refusal (unknown-task)
+		return nil, taskError(err)
+	}
+	cfg, _ := config.Load()
+	out := sideTask(t)
+	out.After = taskAfter(cfg, pr.Slug, b, t)
+	return out, nil
 }
 
 // TaskDone is task.done's result: the board's done tasks, in board

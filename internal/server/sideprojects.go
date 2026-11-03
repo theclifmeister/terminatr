@@ -143,6 +143,9 @@ type SideTask struct {
 	Created  string         `json:"created,omitempty"`
 	Updated  string         `json:"updated,omitempty"`
 	Archived bool           `json:"archived,omitempty"`
+	// After are the tasks it comes after, with their states (task.get
+	// only; programs design §6.3).
+	After []SideAfter `json:"after,omitempty"`
 }
 
 // sideTask is t on the wire.

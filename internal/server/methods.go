@@ -351,6 +351,25 @@ func init() {
 			s.kick()
 			return res, perr
 		})},
+		// A program for the apps (proto/programapp.go): its dashboard,
+		// and the human's acts on it, which the TUI does in-process.
+		proto.MethodProgramGet: {gate: gateHuman, call: typed(func(s *Server, p proto.ProgramParams, _ callCtx) (any, *proto.Error) {
+			return s.programGet(p)
+		})},
+		proto.MethodProgramRoute:    {gate: gateHuman, call: typed((*Server).programRoute)},
+		proto.MethodProgramTaskEdit: {gate: gateHuman, call: typed((*Server).programTaskEdit)},
+		proto.MethodProgramSend:     {gate: gateHuman, call: typed((*Server).programSend)},
+		proto.MethodProgramRead: {gate: gateHuman, call: typed(func(s *Server, p proto.ProgramReadParams, _ callCtx) (any, *proto.Error) {
+			return s.programRead(p)
+		})},
+		proto.MethodProgramAnswer: {gate: gateHuman, call: typed((*Server).programAnswer)},
+		proto.MethodProgramUmbrellaAccept: {gate: gateHuman, call: typed(func(s *Server, p proto.ProgramUmbrellaParams, c callCtx) (any, *proto.Error) {
+			return s.programUmbrella(p, c, true)
+		})},
+		proto.MethodProgramUmbrellaSendBack: {gate: gateHuman, call: typed(func(s *Server, p proto.ProgramUmbrellaParams, c callCtx) (any, *proto.Error) {
+			return s.programUmbrella(p, c, false)
+		})},
+		proto.MethodProgramDelete: {gate: gateHuman, call: typed((*Server).programDelete)},
 		proto.MethodProgramRename: {gate: gateHuman, call: typed(func(s *Server, p proto.ProgramRenameParams, c callCtx) (any, *proto.Error) {
 			return s.renameProgram(p, c.who())
 		})},

@@ -24,6 +24,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/home/hometest"
 	"github.com/theclifmeister/terminatr/internal/link"
 	"github.com/theclifmeister/terminatr/internal/plat/ipc/ipctest"
+	"github.com/theclifmeister/terminatr/internal/program"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/server"
@@ -895,6 +896,83 @@ func TestBridgeSideActs(t *testing.T) {
 	if pr, _ := project.Open("demo-app"); pr != nil {
 		if j, _ := os.ReadFile(pr.Path("JOURNAL.md")); !strings.Contains(string(j), " human (app) project.new demo-app") {
 			t.Errorf("demo-app's journal:\n%s", j)
+		}
+	}
+}
+
+// TestBridgePrograms: with programs on, the hello's server lists
+// programs, projects.watch carries the programs (members split into
+// server and project) and each member's program, program.get reads the
+// dashboard and coordinator.clear takes a program; with them off,
+// nothing about programs crosses and the program methods answer
+// programs-off.
+func TestBridgePrograms(t *testing.T) {
+	p := testPaths(t)
+	cfgPath := filepath.Join(os.Getenv("TERMINATR_HOME"), "config.toml")
+	if err := os.WriteFile(cfgPath, []byte("[features]\nprograms = true\n[programs.acme]\nprojects = [\"web\", \"mini/acme-ios\"]\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := project.New(project.Options{Slug: "web"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := program.New(program.Options{Slug: "acme", Goal: "Ship it"}); err != nil {
+		t.Fatal(err)
+	}
+	startServer(t, p)
+	c, err := bridge(t, p, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(c.Hello.Server.Caps, proto.CapPrograms) {
+		t.Errorf("caps %v", c.Hello.Server.Caps)
+	}
+	var ps appapi.Projects
+	st, err := c.Stream(proto.MethodProjectsWatch, appapi.ProjectsWatchParams{}, &ps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	st.Cancel()
+	want := []appapi.ProgramMember{{Project: "web"}, {Project: "acme-ios", Server: "mini"}}
+	if len(ps.Programs) != 1 || ps.Programs[0].Slug != "acme" || ps.Programs[0].Goal != "Ship it" || !slices.Equal(ps.Programs[0].Members, want) {
+		t.Errorf("programs %+v", ps.Programs)
+	}
+	if len(ps.Projects) != 1 || ps.Projects[0].Program != "acme" {
+		t.Errorf("projects %+v", ps.Projects)
+	}
+	var d appapi.ProgramDetail
+	if err := c.Call(proto.MethodProgramGet, appapi.ProgramParams{Program: "acme"}, &d); err != nil || d.Slug != "acme" || len(d.Members) != 2 || d.Members[1].Server != "mini" {
+		t.Fatalf("program.get %+v %v", d, err)
+	}
+	var needs appapi.ProgramNeeds
+	if err := c.Call(proto.MethodProgramNeeds, appapi.ProgramParams{Program: "acme"}, &needs); err != nil || needs.Program != "acme" {
+		t.Fatalf("program.needs %+v %v", needs, err)
+	}
+	if err := c.Call(proto.MethodCoordinatorClear, appapi.CoordinatorClearParams{Program: "acme"}, nil); code(err) != proto.ErrRefused {
+		t.Errorf("clear without a director: %v", err)
+	}
+
+	if err := os.WriteFile(cfgPath, []byte("[programs.acme]\nprojects = [\"web\", \"mini/acme-ios\"]\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Call(proto.MethodProgramGet, appapi.ProgramParams{Program: "acme"}, nil); code(err) != config.ProgramsOff {
+		t.Errorf("off: program.get: %v", err)
+	}
+	if err := c.Call(proto.MethodCoordinatorClear, appapi.CoordinatorClearParams{Program: "acme"}, nil); code(err) != config.ProgramsOff {
+		t.Errorf("off: clear: %v", err)
+	}
+	// The server looks at the config again within moments.
+	for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(100 * time.Millisecond) {
+		ps = appapi.Projects{}
+		st, err = c.Stream(proto.MethodProjectsWatch, appapi.ProjectsWatchParams{}, &ps)
+		if err != nil {
+			t.Fatal(err)
+		}
+		st.Cancel()
+		if len(ps.Programs) == 0 && len(ps.Projects) == 1 && ps.Projects[0].Program == "" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("off: projects.watch %+v", ps)
 		}
 	}
 }

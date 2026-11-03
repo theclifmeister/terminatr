@@ -21,6 +21,8 @@ import (
 // humanOnlyMethods are the methods whose gate is gateHuman.
 var humanOnlyMethods = []string{
 	proto.MethodProjectRename, proto.MethodProjectActive, proto.MethodProgramsSwitch, proto.MethodProgramRename,
+	proto.MethodProgramGet, proto.MethodProgramRoute, proto.MethodProgramTaskEdit, proto.MethodProgramSend, proto.MethodProgramRead,
+	proto.MethodProgramAnswer, proto.MethodProgramUmbrellaAccept, proto.MethodProgramUmbrellaSendBack, proto.MethodProgramDelete,
 	proto.MethodModViews, proto.MethodModViewInput, proto.MethodModCommand, proto.MethodModRestart,
 	proto.MethodLogList, proto.MethodLogRead, proto.MethodPaneVT, proto.MethodTranscriptWatch, proto.MethodTranscriptPage, proto.MethodSessionFile,
 	proto.MethodNotifyClaim, proto.MethodNotifyDismiss,

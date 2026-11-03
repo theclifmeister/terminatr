@@ -695,7 +695,7 @@ final class PhoneModel {
         var c = SaveClear(coordinator: coordinatorSession(project), at: .now)
         clears[project] = c
         do {
-            _ = try await connected().call(AppAPI.Methods.coordinatorClear, AppAPI.ProjectParams(project: project))
+            _ = try await connected().call(AppAPI.Methods.coordinatorClear, AppAPI.CoordinatorClearParams(project: project))
             c.asked()
         } catch {
             c.fail(NeedActs.words(error) ?? error.localizedDescription, at: .now)

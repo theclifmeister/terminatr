@@ -49,10 +49,10 @@ func TestAllowed(t *testing.T) {
 		if !appapi.Allowed(m, "") {
 			t.Errorf("%s: not the Mac app's", m.Name)
 		}
-		if m.Local() {
+		if m.Local() || m.MacOnly() {
 			for _, l := range append(slices.Clone(device.Levels), "bogus") {
 				if appapi.Allowed(m, l) {
-					t.Errorf("%s answers in the bridge's process, and level %s has it", m.Name, l)
+					t.Errorf("%s is the Mac app's alone, and level %s has it", m.Name, l)
 				}
 			}
 			continue
@@ -201,7 +201,7 @@ func TestDeviceLink(t *testing.T) {
 		t.Fatalf("hello %+v", h)
 	}
 	for _, m := range appapi.Methods() {
-		if want := m.DeviceOnly() || !m.Local(); slices.Contains(c.Hello.Methods, m.Name) != want {
+		if want := m.DeviceOnly() || !m.Local() && !m.MacOnly(); slices.Contains(c.Hello.Methods, m.Name) != want {
 			t.Errorf("the write device's hello has %s: %v, want %v", m.Name, !want, want)
 		}
 	}
