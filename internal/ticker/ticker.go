@@ -194,6 +194,9 @@ type Ticker struct {
 	// dailyStamp is what the daily notes were last rendered from
 	// (vault.DailyStamp); the sweep alone uses it.
 	dailyStamp string
+	// programStamps are what each program's derived notes were last
+	// rendered from (vault.ProgramStamp), by slug.
+	programStamps map[string]string
 	// peersStamp is what the paired servers' stubs were last rendered
 	// from (renderPeers); the sweep alone uses it.
 	peersStamp string
@@ -507,6 +510,7 @@ func (t *Ticker) sweep() {
 		t.sweepProject(sum.Slug, cfg, sessions, now, prune, seen)
 	}
 	t.renderPeers(cfg, list)
+	t.renderPrograms(cfg)
 	t.slotFree(cfg, sessions, now)
 	t.renderDaily(now)
 	t.scanHuman(now)
@@ -591,6 +595,26 @@ func (t *Ticker) renderVault(p *project.Project) {
 		return // tried again next sweep
 	}
 	pm.vaultStamp = stamp
+}
+
+// renderPrograms renders the programs' derived notes, as renderVault a
+// project's, when the vault is on and programs are (vault.Programs).
+func (t *Ticker) renderPrograms(cfg *config.Config) {
+	if !vault.On() {
+		return
+	}
+	seen := map[string]string{}
+	for _, p := range vault.Programs(cfg) {
+		stamp := vault.ProgramStamp(p)
+		if stamp != t.programStamps[p.Slug] {
+			if _, _, err := vault.RenderProgram(p); err != nil {
+				t.o.Log.Printf("ticker: vault program %s: %v", p.Slug, err)
+				continue // tried again next sweep
+			}
+		}
+		seen[p.Slug] = stamp
+	}
+	t.programStamps = seen
 }
 
 // renderDaily renders the daily notes of today and yesterday, in the

@@ -35,7 +35,9 @@ import (
 //     one item each.
 //
 // #for-tm/<slug> names the project; without it, the note's for: or
-// folder does, or the vault's only project. tm never writes the human's
+// folder does, or the vault's only project. While programs are on, the
+// name may be a program's (one namespace): its item goes to the
+// program's inbox, for its director (the programs design §3.4). tm never writes the human's
 // note to mark it handled: the item's source links it, so the item
 // shows as a backlink there.
 //
@@ -77,7 +79,13 @@ func ScanHuman(now time.Time) (raised int, err error) {
 		return 0, err
 	}
 	slugs := vaultProjects(root)
-	parts, keepKeys := scanVault(root, slugs, now)
+	progs := map[string]*project.Folder{}
+	var names []string
+	for _, p := range Programs(nil) { // none while programs are off
+		progs[p.Slug] = &p.Folder
+		names = append(names, p.Slug)
+	}
+	parts, keepKeys := scanVault(root, slugs, names, now)
 	err = updateLedger(func(l *ledger) error {
 		seen := map[string]string{}
 		for key, h := range l.Seen {
@@ -92,7 +100,7 @@ func ScanHuman(now time.Time) (raised int, err error) {
 				seen[pt.key] = h
 				continue
 			}
-			if err := raise(pt, h); err != nil {
+			if err := raise(pt, h, progs[pt.slug]); err != nil {
 				errs = append(errs, err)
 				if old, ok := l.Seen[pt.key]; ok {
 					seen[pt.key] = old
@@ -108,16 +116,21 @@ func ScanHuman(now time.Time) (raised int, err error) {
 	return raised, err
 }
 
-// raise writes pt's item in its project and marks the older open items
-// about the same note or card handled: the new one has its text now.
-func raise(pt part, h string) error {
-	p, err := project.Open(pt.slug)
-	if err != nil {
-		return err
+// raise writes pt's item in its project, or in prog when it is for a
+// program (nil when not), and marks the older open items about the same
+// note or card handled: the new one has its text now.
+func raise(pt part, h string, prog *project.Folder) error {
+	p := prog
+	if p == nil {
+		pr, err := project.Open(pt.slug)
+		if err != nil {
+			return err
+		}
+		p = &pr.Folder
 	}
 	old, _ := p.Inbox()
 	shown := textsafe.Line(pt.path, 160)
-	_, err = p.AddVaultItem(pt.path, h, pt.part, func(id string) string {
+	_, err := p.AddVaultItem(pt.path, h, pt.part, func(id string) string {
 		switch {
 		case pt.part == project.PartLine:
 			return fmt.Sprintf("a line tagged #for-tm in the vault's %s · read it with tm inbox read %s", shown, id)
@@ -163,10 +176,11 @@ func vaultProjects(root string) []string {
 
 // scanVault finds the parts for tm in the human's files: _human/ and
 // everything outside tm's folders (_tm/, _peers/, _programs/ and the
-// projects'), and the projects' design canvases.
+// projects'), and the design canvases of the projects and of programs,
+// the programs the vault serves (Programs: none while they are off).
 // keep reports whether a ledger key is of a file the scan didn't read
 // to the end (not settled, too big, unreadable), whose old hashes stay.
-func scanVault(root string, slugs []string, now time.Time) (parts []part, keep func(key string) bool) {
+func scanVault(root string, slugs, programs []string, now time.Time) (parts []part, keep func(key string) bool) {
 	unread, seenFiles := map[string]bool{}, map[string]bool{}
 	files := 0
 	look := func(rel string, fi fs.FileInfo, slug string) {
@@ -180,7 +194,7 @@ func scanVault(root string, slugs []string, now time.Time) (parts []part, keep f
 			unread[rel] = true
 			return
 		}
-		stamp := fmt.Sprintf("%d.%d.%s.%s", fi.Size(), fi.ModTime().UnixNano(), slug, strings.Join(slugs, ","))
+		stamp := fmt.Sprintf("%d.%d.%s.%s.%s", fi.Size(), fi.ModTime().UnixNano(), slug, strings.Join(slugs, ","), strings.Join(programs, ","))
 		ck := root + "\x00" + rel
 		if c, ok := scanned.get(ck, stamp); ok {
 			parts = append(parts, c...)
@@ -191,9 +205,22 @@ func scanVault(root string, slugs []string, now time.Time) (parts []part, keep f
 			unread[rel] = true
 			return
 		}
-		found := fileParts(rel, data, slug, slugs)
+		found := fileParts(rel, data, slug, slugs, programs)
 		scanned.put(ck, stamp, found)
 		parts = append(parts, found...)
+	}
+	// A project's or a program's folder is tm's; only its design
+	// canvases have the human's cards.
+	canvases := func(dir, slug string) {
+		ents, _ := os.ReadDir(filepath.Join(root, filepath.FromSlash(dir), "designs"))
+		for _, c := range ents {
+			if fi, err := c.Info(); err == nil && fi.Mode().IsRegular() && strings.HasSuffix(c.Name(), ".canvas") && !strings.HasPrefix(c.Name(), ".") {
+				look(dir+"/designs/"+c.Name(), fi, slug)
+			}
+		}
+	}
+	for _, slug := range programs {
+		canvases(programsDir+"/"+slug, slug)
 	}
 	ents, _ := os.ReadDir(root)
 	for _, e := range ents {
@@ -202,14 +229,7 @@ func scanVault(root string, slugs []string, now time.Time) (parts []part, keep f
 		case strings.HasPrefix(name, ".") || name == tmDir || name == PeersDir || name == programsDir:
 			continue
 		case slices.Contains(slugs, name):
-			// A project's folder is tm's; only its design canvases have
-			// the human's cards.
-			canvases, _ := os.ReadDir(filepath.Join(root, name, "designs"))
-			for _, c := range canvases {
-				if fi, err := c.Info(); err == nil && fi.Mode().IsRegular() && strings.HasSuffix(c.Name(), ".canvas") && !strings.HasPrefix(c.Name(), ".") {
-					look(name+"/designs/"+c.Name(), fi, name)
-				}
-			}
+			canvases(name, name)
 			continue
 		}
 		filepath.WalkDir(filepath.Join(root, name), func(p string, d fs.DirEntry, err error) error {
@@ -287,22 +307,26 @@ func (c *scanCache) keep(found func(rel string) bool) {
 }
 
 // fileParts are the parts for tm in file rel: the whole note, or its
-// tagged lines, or a canvas's tagged cards. slug is the project whose
-// design canvas it is, "" for the human's own files.
-func fileParts(rel string, data []byte, slug string, slugs []string) []part {
+// tagged lines, or a canvas's tagged cards. slug is the project or
+// program whose design canvas it is, "" for the human's own files. A
+// name may be one of slugs, the projects, or of programs (one namespace,
+// the programs design §3.4); a note that names neither is nobody's, and
+// one that names none goes to the vault's only project.
+func fileParts(rel string, data []byte, slug string, slugs, programs []string) []part {
+	known := func(s string) bool { return slices.Contains(slugs, s) || slices.Contains(programs, s) }
 	folder := ""
 	if rest, ok := strings.CutPrefix(rel, humanDir+"/"); ok {
-		if dir, _, ok := strings.Cut(rest, "/"); ok && slices.Contains(slugs, dir) {
+		if dir, _, ok := strings.Cut(rest, "/"); ok && known(dir) {
 			folder = dir
 		}
 	}
 	pick := func(names ...string) string {
 		for _, s := range names {
 			if s != "" {
-				if slices.Contains(slugs, s) {
+				if known(s) {
 					return s
 				}
-				return "" // a project that isn't there: nobody's
+				return "" // a project or program that isn't there: nobody's
 			}
 		}
 		if len(slugs) == 1 {

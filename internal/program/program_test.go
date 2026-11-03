@@ -12,6 +12,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/home"
+	"github.com/theclifmeister/terminatr/internal/mdfile"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 )
@@ -240,5 +241,56 @@ func TestListAndClash(t *testing.T) {
 	}
 	if !reflect.DeepEqual(got, []string{"acme", "beta", "web"}) {
 		t.Fatalf("list %v", got)
+	}
+}
+
+// TestLinks: once links are written, a program's ids link into its own
+// vault folder, _programs/<slug>/ (the programs design §3.4): its board,
+// its inbox and MEMORY.md. None leads at a project of the same name.
+func TestLinks(t *testing.T) {
+	setup(t)
+	was := mdfile.WritesYAML()
+	mdfile.WriteYAML(true)
+	t.Cleanup(func() { mdfile.WriteYAML(was) })
+	p, err := New(Options{Slug: "acme"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	st := p.Tasks()
+	if _, err := st.Add(caller.Caller{Kind: caller.Human}, []tasks.NewTask{{Title: "one"}, {Title: "two"}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.SetPlan(caller.Caller{Kind: caller.Human}, 2, nil, []string{"T1"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.AddItem("program-needs", "T2", "waits on T1", true); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.CreateNote("memory/sso.md", []byte("# SSO\n\nOkta.\n")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.RebuildIndex(); err != nil {
+		t.Fatal(err)
+	}
+	board, _ := os.ReadFile(st.TasksPath())
+	idx, _ := os.ReadFile(p.Path("MEMORY.md"))
+	items, _ := os.ReadDir(p.Path("inbox"))
+	var item []byte
+	for _, e := range items {
+		if strings.HasSuffix(e.Name(), ".md") {
+			item, _ = os.ReadFile(p.Path("inbox", e.Name()))
+		}
+	}
+	for name, c := range map[string]struct {
+		data []byte
+		want string
+	}{
+		"TASKS.md":   {board, "after: [[_programs/acme/tasks/T1|T1]]"},
+		"MEMORY.md":  {idx, "[[_programs/acme/memory/sso|"},
+		"inbox item": {item, "[[_programs/acme/tasks/T2|T2]]"},
+	} {
+		if !strings.Contains(string(c.data), c.want) || strings.Contains(string(c.data), "[[acme/") {
+			t.Errorf("%s has no %s:\n%s", name, c.want, c.data)
+		}
 	}
 }

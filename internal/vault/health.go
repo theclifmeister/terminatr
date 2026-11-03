@@ -9,8 +9,11 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/home"
 	"github.com/theclifmeister/terminatr/internal/mdfile"
+	"github.com/theclifmeister/terminatr/internal/program"
+	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/thread"
 )
@@ -251,20 +254,13 @@ func foreign(root string) Finding {
 // the live files the move to YAML covers, whatever their format now.
 func frontMatter() Finding {
 	f := Finding{Name: "front matter", Status: "ok", Detail: "every file tm reads parses"}
-	for _, p := range projects() {
-		rels := append([]string{"PROJECT.md", "CONTEXT.md", "MEMORY.md"}, tasks.Rels()...)
+	check := func(p *project.Folder, rels []string) {
 		for _, d := range []string{"memory", "inbox"} {
 			ents, _ := os.ReadDir(p.Path(d))
 			for _, e := range ents {
 				if strings.HasSuffix(e.Name(), ".md") {
 					rels = append(rels, d+"/"+e.Name())
 				}
-			}
-		}
-		recs, _ := thread.List(p)
-		for _, r := range recs {
-			if r.State != thread.Resolved {
-				rels = append(rels, "threads/"+r.ID+"/STATUS.md")
 			}
 		}
 		for _, rel := range rels {
@@ -279,8 +275,27 @@ func frontMatter() Finding {
 			}
 			var m map[string]any
 			if _, err := mdfile.Decode(data, &m); err != nil {
-				f.Files = append(f.Files, p.Slug+"/"+rel)
+				f.Files = append(f.Files, p.LinkSlug()+"/"+rel)
 			}
+		}
+	}
+	for _, p := range projects() {
+		rels := append([]string{"PROJECT.md", "CONTEXT.md", "MEMORY.md"}, tasks.Rels()...)
+		recs, _ := thread.List(p)
+		for _, r := range recs {
+			if r.State != thread.Resolved {
+				rels = append(rels, "threads/"+r.ID+"/STATUS.md")
+			}
+		}
+		check(&p.Folder, rels)
+	}
+	// The programs' folders, whether programs are on or not: tm reads
+	// them either way, and one whose PROGRAM.md doesn't parse can't be
+	// opened.
+	cfg, _ := config.Load()
+	for _, slug := range project.ProgramSlugs(cfg) {
+		if dir, err := program.Dir(slug); err == nil {
+			check(&project.Folder{Slug: slug, Dir: dir, Kind: project.KindProgram}, append([]string{program.File, "CONTEXT.md", "MEMORY.md"}, tasks.Rels()...))
 		}
 	}
 	if len(f.Files) > 0 {

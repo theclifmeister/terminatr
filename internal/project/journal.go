@@ -138,12 +138,12 @@ func (p *Folder) addItem(it *Item, summary func(id string) string) error {
 // vault's properties (vaultlink.Owned).
 func (p *Folder) linkedItem(it *Item) *Item {
 	f := *it
-	f.Subject = vaultlink.Ref(p.linkSlug(), it.Subject)
-	f.Thread = vaultlink.Ref(p.linkSlug(), it.Thread)
+	f.Subject = vaultlink.Ref(p.LinkSlug(), it.Subject)
+	f.Thread = vaultlink.Ref(p.LinkSlug(), it.Thread)
 	if it.Message != "" {
 		f.Subject = vaultlink.Link(p.Slug, vaultlink.Project, it.Subject, "")
 		if strings.HasPrefix(it.Message, "M-") { // a message, not a request (R-) or a file (X-)
-			f.Message = vaultlink.Link(p.linkSlug(), vaultlink.Message, it.Subject+"/"+it.Message, it.Message)
+			f.Message = vaultlink.Link(p.LinkSlug(), vaultlink.Message, it.Subject+"/"+it.Message, it.Message)
 		}
 	}
 	if it.Path != "" && it.Part != PartSaved {

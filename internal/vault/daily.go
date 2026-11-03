@@ -82,7 +82,7 @@ const maxJournal = 256 << 20
 // readJournal is p's journal, oldest first: the archives
 // (journal/<yyyy-mm>.md.gz) and JOURNAL.md. A line the archive repeats
 // (a crash between archiving and rewriting JOURNAL.md) counts once.
-func readJournal(p *project.Project) ([]entry, error) {
+func readJournal(p *project.Folder) ([]entry, error) {
 	var paths []string
 	ents, err := os.ReadDir(p.Path("journal"))
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
@@ -487,21 +487,23 @@ type dayFront struct {
 	CSSClasses []string `toml:"cssclasses" yaml:"cssclasses"`
 }
 
-// dayProject is a project as a daily note shows it: its slug, its
-// board's titles and its journal.
+// dayProject is a project, or a program, as a daily note shows it: what
+// its links lead with (project.Folder.LinkSlug: a program's is its vault
+// folder), its board's titles and its journal.
 type dayProject struct {
 	slug    string
 	titles  map[string]string // task → title
 	journal []entry
 }
 
-func loadDayProject(p *project.Project) (*dayProject, error) {
+// loadDayProject reads folder p's journal and the titles of s, its
+// board.
+func loadDayProject(p *project.Folder, s *tasks.Store) (*dayProject, error) {
 	j, err := readJournal(p)
 	if err != nil {
 		return nil, err
 	}
-	dp := &dayProject{slug: p.Slug, titles: map[string]string{}, journal: j}
-	s := p.Tasks()
+	dp := &dayProject{slug: p.LinkSlug(), titles: map[string]string{}, journal: j}
 	board, err := s.Load()
 	if err != nil {
 		return nil, err
@@ -548,7 +550,7 @@ func dailyNotes(ps []*dayProject, now time.Time, n int) ([]Note, error) {
 			if d == nil || d.lines == 0 {
 				continue
 			}
-			f.Projects = append(f.Projects, vaultlink.Link(p.slug, vaultlink.Project, p.slug, ""))
+			f.Projects = append(f.Projects, vaultlink.Owner(p.slug))
 			f.Shipped += len(d.shipped)
 			f.Started += len(d.started)
 			f.NeedsYou += len(d.review) + len(d.asks) + len(d.held) + len(d.requests)
@@ -611,7 +613,7 @@ func (p *dayProject) message(id, other string) string {
 // user now. It reports whether anything the day's Needs you lists still
 // does.
 func (p *dayProject) writeDay(b *strings.Builder, d, now *projectDay) (still bool) {
-	fmt.Fprintf(b, "\n## %s\n", vaultlink.Link(p.slug, vaultlink.Project, p.slug, ""))
+	fmt.Fprintf(b, "\n## %s\n", vaultlink.Owner(p.slug))
 	section := func(name string, items []string) {
 		if len(items) == 0 {
 			return
@@ -831,8 +833,9 @@ func RenderDaily(now time.Time, days int) (int, error) {
 	return written, errors.Join(err, lerr)
 }
 
-// dayProjects are the projects whose journals the daily notes read; a
-// project that can't be read is left out, with its error.
+// dayProjects are the projects whose journals the daily notes read, then
+// the programs' while programs are on (Programs), each under its own
+// name; a project that can't be read is left out, with its error.
 func dayProjects() ([]*dayProject, error) {
 	list, err := project.List()
 	if err != nil {
@@ -844,19 +847,28 @@ func dayProjects() ([]*dayProject, error) {
 		p, err := project.Open(s.Slug)
 		if err == nil {
 			var dp *dayProject
-			if dp, err = loadDayProject(p); err == nil {
+			if dp, err = loadDayProject(&p.Folder, p.Tasks()); err == nil {
 				out = append(out, dp)
 				continue
 			}
 		}
 		errs = append(errs, fmt.Errorf("%s: %w", s.Slug, err))
 	}
+	for _, p := range Programs(nil) {
+		dp, err := loadDayProject(&p.Folder, p.Tasks())
+		if err != nil {
+			errs = append(errs, fmt.Errorf("program %s: %w", p.Slug, err))
+			continue
+		}
+		out = append(out, dp)
+	}
 	return out, errors.Join(errs...)
 }
 
 // DailyStamp is a cheap mark of what the ticker's daily notes come from:
 // now's date, and the size and time of each project's journal and its
-// archives' folder. RenderDaily changes only when it does.
+// archives' folder, and of each program's while programs are on.
+// RenderDaily changes only when it does.
 func DailyStamp(now time.Time) string {
 	var b strings.Builder
 	b.WriteString(now.Format(time.DateOnly) + ";")
@@ -864,14 +876,20 @@ func DailyStamp(now time.Time) string {
 	if err != nil {
 		return b.String()
 	}
+	var dirs []string
 	ents, _ := os.ReadDir(root)
 	for _, e := range ents {
-		if !e.IsDir() || !project.ValidSlug(e.Name()) {
-			continue
+		if e.IsDir() && project.ValidSlug(e.Name()) {
+			dirs = append(dirs, e.Name())
 		}
-		b.WriteString(e.Name() + ":")
+	}
+	for _, p := range Programs(nil) {
+		dirs = append(dirs, p.LinkSlug())
+	}
+	for _, dir := range dirs {
+		b.WriteString(dir + ":")
 		for _, name := range append([]string{"JOURNAL.md", "journal"}, tasks.Rels()...) {
-			if fi, err := os.Stat(filepath.Join(root, e.Name(), filepath.FromSlash(name))); err == nil {
+			if fi, err := os.Stat(filepath.Join(root, filepath.FromSlash(dir), filepath.FromSlash(name))); err == nil {
 				fmt.Fprintf(&b, "%d.%d;", fi.Size(), fi.ModTime().UnixNano())
 			} else {
 				b.WriteString("-;")

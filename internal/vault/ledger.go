@@ -16,6 +16,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/home"
 	"github.com/theclifmeister/terminatr/internal/mdfile"
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
+	"github.com/theclifmeister/terminatr/internal/program"
 	"github.com/theclifmeister/terminatr/internal/project"
 )
 
@@ -83,6 +84,23 @@ func Render(p *project.Project) (written, removed int, err error) {
 	if err != nil {
 		return 0, 0, err
 	}
+	return render(&p.Folder, notes)
+}
+
+// RenderProgram is Render for program p's derived notes (ProgramNotes),
+// kept in the ledger under _programs/<slug>/. The caller checks that
+// programs are on (vaultPrograms).
+func RenderProgram(p *program.Program) (written, removed int, err error) {
+	notes, err := ProgramNotes(p)
+	if err != nil {
+		return 0, 0, err
+	}
+	return render(&p.Folder, notes)
+}
+
+// render writes notes, the derived notes of folder p, under the ledger's
+// lock: a note's key is its path in the vault (p.LinkSlug()/<rel>).
+func render(p *project.Folder, notes []Note) (written, removed int, err error) {
 	file, err := ledgerPath()
 	if err != nil {
 		return 0, 0, err
@@ -102,7 +120,7 @@ func Render(p *project.Project) (written, removed int, err error) {
 		}
 		l.Off = false
 	}
-	prefix := p.Slug + "/"
+	prefix := p.LinkSlug() + "/"
 	keep := map[string]bool{}
 	var errs []error
 	for _, n := range notes {

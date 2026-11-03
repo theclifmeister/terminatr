@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/mdfile"
+	"github.com/theclifmeister/terminatr/internal/program"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/textsafe"
@@ -105,15 +106,9 @@ func Notes(p *project.Project) ([]Note, error) {
 			prs[r.ID] = all[len(all)-1]
 		}
 	}
-	var notes []Note
-	for _, b := range []*tasks.Board{board, archive} {
-		for _, t := range b.Tasks {
-			n, err := taskNote(p.Slug, t, byID[t.Thread], prs[t.Thread], b == archive)
-			if err != nil {
-				return nil, fmt.Errorf("%s: %w", t.Ref(), err)
-			}
-			notes = append(notes, n)
-		}
+	notes, err := taskNotes(p.LinkSlug(), board, archive, byID, prs)
+	if err != nil {
+		return nil, err
 	}
 	for _, r := range recs {
 		n, err := threadNote(p, r, prs[r.ID])
@@ -122,8 +117,46 @@ func Notes(p *project.Project) ([]Note, error) {
 		}
 		notes = append(notes, n)
 	}
-	ds, err := designNotes(p, prs, board, archive)
+	ds, err := designNotes(&p.Folder, prs, board, archive)
 	return append(notes, ds...), err
+}
+
+// ProgramNotes renders every derived note of program p (the programs
+// design §3.4): a note per task of its umbrella board, live or archived,
+// and the note and canvas of each design, as a project's. A program has
+// no threads. Its links lead with its vault folder, _programs/<slug>.
+func ProgramNotes(p *program.Program) ([]Note, error) {
+	s := p.Tasks()
+	board, err := s.Load()
+	if err != nil {
+		return nil, err
+	}
+	archive, err := s.LoadArchive()
+	if err != nil {
+		return nil, err
+	}
+	notes, err := taskNotes(p.LinkSlug(), board, archive, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	ds, err := designNotes(&p.Folder, nil, board, archive)
+	return append(notes, ds...), err
+}
+
+// taskNotes renders the note of each task on board and archive; slug is
+// what their links lead with (project.Folder.LinkSlug).
+func taskNotes(slug string, board, archive *tasks.Board, byID map[string]*thread.Record, prs map[string]string) ([]Note, error) {
+	var notes []Note
+	for _, b := range []*tasks.Board{board, archive} {
+		for _, t := range b.Tasks {
+			n, err := taskNote(slug, t, byID[t.Thread], prs[t.Thread], b == archive)
+			if err != nil {
+				return nil, fmt.Errorf("%s: %w", t.Ref(), err)
+			}
+			notes = append(notes, n)
+		}
+	}
+	return notes, nil
 }
 
 // TaskNote is the path of task ref's note, live or archived: one path,
@@ -160,7 +193,7 @@ func taskNote(slug string, t *tasks.Task, r *thread.Record, pr string, archived 
 	}
 	f := taskFront{
 		ID: t.Ref(), Title: t.Title, Status: string(t.Status), Group: group, Priority: string(t.Priority),
-		Project: vaultlink.Link(slug, vaultlink.Project, slug, ""),
+		Project: vaultlink.Owner(slug),
 		Owner:   t.Owner, Steps: len(t.Steps), StepsDone: t.StepsDone(),
 		Created: t.Created, Updated: t.Updated, Archived: archived,
 		Tags: []string{"task"}, TM: "owned", CSSClasses: []string{"tm-owned"},
@@ -272,9 +305,14 @@ func body(slug, s string) string {
 // file in designs/ and each thread's record, STATUS, latest report and
 // folders of reports and library. Notes changes only
 // when it does, so a caller renders on change by comparing stamps.
-func Stamp(p *project.Project) string {
+func Stamp(p *project.Project) string { return stamp(&p.Folder) }
+
+// ProgramStamp is Stamp for program p's derived notes (ProgramNotes).
+func ProgramStamp(p *program.Program) string { return stamp(&p.Folder) }
+
+func stamp(p *project.Folder) string {
 	var b strings.Builder
-	stamp := func(path string) {
+	mark := func(path string) {
 		if fi, err := os.Stat(path); err == nil {
 			fmt.Fprintf(&b, "%d.%d;", fi.Size(), fi.ModTime().UnixNano())
 		} else {
@@ -282,17 +320,17 @@ func Stamp(p *project.Project) string {
 		}
 	}
 	for _, path := range tasks.Paths(p.Dir) {
-		stamp(path)
+		mark(path)
 	}
-	stamp(p.Path("designs.json"))
-	stamp(p.Path("questions.json"))
+	mark(p.Path("designs.json"))
+	mark(p.Path("questions.json"))
 	files, _ := os.ReadDir(p.Path("designs"))
 	for _, e := range files {
 		if strings.HasPrefix(e.Name(), ".") {
 			continue
 		}
 		b.WriteString(e.Name() + ":")
-		stamp(p.Path("designs", e.Name()))
+		mark(p.Path("designs", e.Name()))
 	}
 	ents, _ := os.ReadDir(p.Path("threads"))
 	for _, e := range ents {
@@ -301,7 +339,7 @@ func Stamp(p *project.Project) string {
 		}
 		b.WriteString(e.Name() + ":")
 		for _, name := range []string{"thread.toml", "STATUS.md", "REPORT.md", "reports", "library", "brief.md", "task.md"} {
-			stamp(thread.Path(p, e.Name(), name))
+			mark(p.Path("threads", e.Name(), name))
 		}
 	}
 	return b.String()
