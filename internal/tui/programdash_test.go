@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -390,5 +391,52 @@ func TestProgramNeedsUmbrella(t *testing.T) {
 	drain(t, m, keyPress(m, "enter"))
 	if !slices.Equal(src.programActs, []string{"acme accept T5", "acme send-back T5 add web"}) {
 		t.Fatalf("acts %v", src.programActs)
+	}
+}
+
+// TestRecommendAccept (T982): a question the director recommends an
+// answer to says so on its row; K accepts it at once, the user's own
+// answer (AcceptRecommendation), and K on a row without one does
+// nothing. The needs dialog lists the recommended option marked, and
+// its accept item answers with it.
+func TestRecommendAccept(t *testing.T) {
+	m, src := progDash(t)
+	res := src.pneeds["acme"]
+	ask := proto.ProgramNeed{PeerNeed: proto.PeerNeed{ID: "ask:Q5", Kind: proto.NeedAsk, Role: proto.RoleCoordinator,
+		Question: &proto.Question{Questions: []proto.QuestionItem{{Question: "Which region?", Options: []proto.QuestionOption{{Label: "EU"}, {Label: "US"}}}}}},
+		Project: "web", Acts: []string{proto.ActQuestions}, Recommend: &proto.Recommendation{Labels: []string{"EU"}, Why: "api runs in the EU (api/T4)"}}
+	res.Needs = append(res.Needs, ask)
+	res.Needs[0].Recommend = &proto.Recommendation{Labels: []string{"8 hours"}, Why: "a workday (PROGRAM.md)"}
+	src.pneeds["acme"] = res
+	drain(t, m, m.showProject("g:acme"))
+	if out := screen(m); !strings.Contains(out, `director recommends: "EU" — api runs in the EU (api/T4)`) || !strings.Contains(out, `director recommends: "8 hours"`) {
+		t.Fatalf("row:\n%s", out)
+	}
+	m.focus, m.sel = areaMain, "pn:/api:rv:T12"
+	drain(t, m, press(m, "K"))
+	if len(src.programActs) != 0 {
+		t.Fatalf("K without a recommendation: %v", src.programActs)
+	}
+	m.sel = "pn:/web:ask:Q5"
+	drain(t, m, press(m, "K"))
+	if !slices.Equal(src.programActs, []string{"acme accept-recommendation web/Q5"}) || !strings.Contains(m.msg, `answered web/Q5: "EU" (answered)`) {
+		t.Fatalf("accepted %v, footer %q", src.programActs, m.msg)
+	}
+	// The dialog: the program question's option marked, and its
+	// accept item after submit.
+	m.sel = "pn:/acme:ask:Q2"
+	drain(t, m, press(m, "enter"))
+	v := m.top().(*programNeedsView)
+	v.sel = len(v.items(m)) - 1 // in view: the dialog scrolls to it
+	out := screen(m)
+	for _, want := range []string{"8 hours (Recommended)", `accept the director's recommendation on Q2: "8 hours"`} {
+		if !strings.Contains(out, want) {
+			t.Errorf("no %q:\n%s", want, out)
+		}
+	}
+	items := v.items(m)
+	drain(t, m, press(m, strconv.Itoa(len(items))))
+	if !slices.Contains(src.programActs, "acme accept-recommendation acme/Q2") {
+		t.Errorf("dialog accept: %v", src.programActs)
 	}
 }

@@ -8,8 +8,9 @@ import TerminatrUI
 /// by the server), CHILDREN (its members in its order, a paired one's
 /// from peer.list), UMBRELLAS and DEPENDENCIES (program.get). A need or
 /// a child shows its project, where its cards answer it; the director's
-/// card shows its pane. Nothing here writes: the program's settings stay
-/// the TUI's.
+/// card shows its pane. The director's recommendation on a question
+/// shows under it with Accept (T982). The program's settings stay the
+/// TUI's.
 struct ProgramPage: View {
     @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
@@ -18,6 +19,8 @@ struct ProgramPage: View {
     @State private var needs: AppAPI.ProgramNeeds?
     @State private var failed: String?
     @State private var asking: ProgramAsk?
+    /// The question whose recommendation is being accepted.
+    @State private var accepting: String?
     /// Bumped after an act: the screen reads the program again.
     @State private var acted = 0
 
@@ -177,12 +180,50 @@ struct ProgramPage: View {
                          text: ProgramFacts.need(n), tail: n.merged.isEmpty ? n.need.kind : "merged \(n.merged.count + 1)")
                 }
                 .buttonStyle(.plain)
+                if let r = n.recommend {
+                    recommendation(r)
+                }
             }
             if needs.quiet > 0 {
                 note(needs.quiet == 1 ? "1 child needs nothing" : "\(needs.quiet) children need nothing")
             }
         } else {
             ProgressView().controlSize(.small)
+        }
+    }
+
+    /// The director's recommended answer under its need (T982), with
+    /// Accept: the user's own answer, as program.recommend.accept gives
+    /// it. Clicking the need picks another, as before.
+    private func recommendation(_ r: AppAPI.Recommendation) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(ProgramFacts.recommends(r))
+                .font(theme.body(.callout))
+                .foregroundStyle(theme.muted)
+                .lineLimit(2)
+            Spacer(minLength: 8)
+            if app.acceptsRecommendations {
+                Button("Accept") { accept(r) }
+                    .controlSize(.small)
+                    .disabled(accepting == r.question)
+                    .help("Answer \(r.question) with \(ProgramFacts.answer(r)), as yours")
+            }
+        }
+        .padding(.leading, 64)
+        .padding(.trailing, 12)
+    }
+
+    private func accept(_ r: AppAPI.Recommendation) {
+        accepting = r.question
+        Task {
+            defer { accepting = nil }
+            do {
+                _ = try await app.programRecommendAccept(program.slug, question: r.question)
+                failed = nil
+            } catch {
+                failed = "Not answered: \(error.localizedDescription)"
+            }
+            acted += 1
         }
     }
 

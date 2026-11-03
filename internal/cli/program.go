@@ -47,6 +47,7 @@ const programUsage = `usage: tm program new <slug> [--goal "…"] [--projects a,
        tm program send <to> "text" [--re M-n]   (the program channel, director and member coordinators)
        tm program read M-n   (a program channel message, framed as data)
        tm program ask merge|list|done|answer …   (the program's questions, merged from members'; tm program ask --help)
+       tm program recommend <question> --option N|--text "…" --why "…"   (the director's recommended answer; the user accepts it; --help)
        tm program accept|decline P-… [--project <slug>]   (the human's: a paired server's program invite; tm program accept --help)
        tm program leave [--project <slug>]   (the human's: out of a paired server's program)
        tm program status [--json]   (the human's: on or off, and the programs, dormant while off)
@@ -96,6 +97,8 @@ func runProgram(e *Env, args []string) error {
 		return programRead(e, cfg, args[1:])
 	case "ask":
 		return programAsk(e, cfg, args[1:])
+	case "recommend":
+		return programRecommend(e, cfg, args[1:])
 	case "accept", "decline", "leave":
 		return programMember(e, args[0], args[1:])
 	case "rename":

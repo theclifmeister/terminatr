@@ -99,6 +99,22 @@ func init() {
 				return ""
 			},
 			run: (*dash).enter},
+		{id: "recommend.accept", keys: []string{"K"}, label: "K", help: "on a question in a program's NEEDS YOU that its director recommends an answer to (director recommends: …): accept it, your own answer; enter opens the question to pick another",
+			menu: "accept the director's recommendation",
+			foot: func(_ *dash, r row, ok bool) string {
+				if ok && r.pneed != nil && r.pneed.need.Recommend != nil {
+					return "accept recommendation"
+				}
+				return ""
+			},
+			run: func(m *dash, _ string) tea.Cmd {
+				r, ok := m.selected()
+				if !ok || r.pneed == nil || r.pneed.need.Recommend == nil {
+					m.msg = "no recommendation here: the director recommends answers on its program's questions"
+					return nil
+				}
+				return m.acceptRecommendation(r.pneed.program, r.pneed.need)
+			}},
 		{id: "session.adopt", keys: []string{"O"}, label: "O", help: "on an agent session outside the projects (one you started yourself): ask the current project's coordinator to adopt it as a thread (asks first)",
 			menu: "adopt as a thread",
 			foot: func(m *dash, r row, ok bool) string {

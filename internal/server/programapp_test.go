@@ -124,6 +124,7 @@ func TestProgramAppMethods(t *testing.T) {
 		{proto.MethodProgramSend, proto.ProgramSendParams{Program: "acme", To: "web", Text: "x"}},
 		{proto.MethodProgramRead, proto.ProgramReadParams{Program: "acme", ID: sent.ID}},
 		{proto.MethodProgramAnswer, proto.ProgramAnswerParams{Program: "acme", Ref: "Q1", Other: "x"}},
+		{proto.MethodProgramRecommendAccept, proto.ProgramRecommendAcceptParams{Program: "acme", Question: "web/Q1"}},
 		{proto.MethodProgramUmbrellaSendBack, proto.ProgramUmbrellaParams{Program: "acme", Task: "T1", Note: "x"}},
 	} {
 		if err := c.Call(m.name, m.params, nil); code(err) != config.ProgramsOff {

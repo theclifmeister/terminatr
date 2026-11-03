@@ -638,6 +638,20 @@ final class PhoneModel {
         return r
     }
 
+    /// Whether this phone accepts the director's recommendation on a
+    /// program's question: while its bridge lists
+    /// program.recommend.accept, at the write level (app API 48).
+    var acceptsRecommendations: Bool { can(AppAPI.Methods.programRecommendAccept.name) }
+
+    /// Answers question (acme-api/Q3, acme/Q2) of program slug with its
+    /// director's recommendation, as the user's own answer.
+    func acceptRecommendation(_ slug: String, question: String) async throws -> AppAPI.RecommendAccepted {
+        let r = try await connected().call(AppAPI.Methods.programRecommendAccept,
+                                           AppAPI.ProgramRecommendAcceptParams(program: slug, question: question))
+        await reread()
+        return r
+    }
+
     /// Accepts the program's umbrella task in review (the write level).
     func acceptUmbrella(program: String, task: String) async throws -> String {
         try await connected().call(AppAPI.Methods.programUmbrellaAccept, AppAPI.ProgramUmbrellaParams(program: program, task: task)).status

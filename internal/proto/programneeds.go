@@ -1,6 +1,9 @@
 package proto
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 // A program's rolled-up Needs you (the programs design §7.1): what waits
 // on the user in each of its member projects, built as a paired server's
@@ -69,6 +72,54 @@ type ProgramNeed struct {
 	// those have no rows of their own while it is open.
 	Program bool     `json:"program,omitempty"`
 	Merged  []string `json:"merged,omitempty"`
+	// Recommend is the director's recommended answer to the row's
+	// question (a NeedAsk: a member coordinator's, or the program's
+	// own), shown while that question is open as it was then; the user
+	// accepts it (program.recommend.accept) or picks another. Never an
+	// answer by itself.
+	Recommend *Recommendation `json:"recommend,omitempty"`
+}
+
+// Recommendation is the director's recommended answer to a question
+// (tm program recommend): Labels, the options (one, or a
+// multi-select's), or Text in words; Why its one-line reason; At when.
+type Recommendation struct {
+	Labels []string  `json:"labels,omitempty"`
+	Text   string    `json:"text,omitempty"`
+	Why    string    `json:"why"`
+	At     time.Time `json:"at"`
+}
+
+// MethodProgramRecommendAccept answers a question of a program's Needs
+// you with its director's recommendation, as the user's own answer
+// (ProgramRecommendAcceptParams; the result is program.AcceptResult):
+// the human's, or their paired device's at write level; refused to
+// every agent, the director too.
+const MethodProgramRecommendAccept = "program.recommend.accept"
+
+// ProgramRecommendAcceptParams name the question: Question as tm
+// names it (acme-api/Q3, mini/acme-ios/Q3, or Q2 for the program's
+// own).
+type ProgramRecommendAcceptParams struct {
+	Program  string `json:"program"`
+	Question string `json:"question"`
+}
+
+// RecommendKey is the question of need n of program slug as a
+// recommendation names it: acme-api/Q3, mini/acme-ios/Q3 or
+// <program>/Q2; "" for a need that is no stored question.
+func RecommendKey(slug string, n ProgramNeed) string {
+	id, ok := strings.CutPrefix(n.ID, "ask:")
+	if n.Kind != NeedAsk || !ok {
+		return ""
+	}
+	switch {
+	case n.Program:
+		return slug + "/" + id
+	case n.Server != "":
+		return n.Server + "/" + n.Project + "/" + id
+	}
+	return n.Project + "/" + id
 }
 
 // MethodProgramNeedsOpen asks the consoles to open a program's needs

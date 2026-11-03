@@ -100,6 +100,9 @@ func NeedLine(n proto.ProgramNeed) string {
 	if len(n.Similar) > 0 {
 		b.WriteString(" (similar: " + strings.Join(n.Similar, ", ") + "; tm program ask merge)")
 	}
+	if r := n.Recommend; r != nil {
+		b.WriteString(" · director recommends: " + textsafe.Line(RecommendWords(*r), capNeedTitle) + " — " + textsafe.Line(r.Why, MaxWhy))
+	}
 	if len(n.Acts) > 0 {
 		b.WriteString(" · acts: " + strings.Join(n.Acts, ", "))
 	}
@@ -187,4 +190,10 @@ func WithNeeds(secs []project.Section, needs project.Section) []project.Section 
 	out := make([]project.Section, 0, len(secs)+1)
 	out = append(out, secs[0], needs)
 	return append(out, secs[1:]...)
+}
+
+// RecommendWords are recommendation r's answer in words: "Main", "Yes,
+// No", "Other: …".
+func RecommendWords(r proto.Recommendation) string {
+	return project.Answer{Labels: r.Labels, Other: r.Text}.Words()
 }

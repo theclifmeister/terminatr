@@ -6,7 +6,7 @@ import Foundation
 /// The terminatr app API (docs/SPEC.md §3.8): what tm app bridge answers.
 public enum AppAPI {
     /// The app API version this app was generated against.
-    public static let version = 47
+    public static let version = 48
 
     public struct AdoptRequestParams: Codable, Sendable, Hashable {
         public var id: String
@@ -2189,8 +2189,9 @@ public enum AppAPI {
         public var similar: [String]
         public var program: Bool
         public var merged: [String]
+        public var recommend: Recommendation?
 
-        public init(need: PeerNeed, project: String, server: String = "", priority: String = "", peer: String = "", link: String = "", acts: [String] = [], also: [PeerNeed] = [], similar: [String] = [], program: Bool = false, merged: [String] = []) {
+        public init(need: PeerNeed, project: String, server: String = "", priority: String = "", peer: String = "", link: String = "", acts: [String] = [], also: [PeerNeed] = [], similar: [String] = [], program: Bool = false, merged: [String] = [], recommend: Recommendation? = nil) {
             self.need = need
             self.project = project
             self.server = server
@@ -2202,6 +2203,7 @@ public enum AppAPI {
             self.similar = similar
             self.program = program
             self.merged = merged
+            self.recommend = recommend
         }
 
         enum CodingKeys: String, CodingKey {
@@ -2216,6 +2218,7 @@ public enum AppAPI {
             case similar
             case program
             case merged
+            case recommend
         }
     }
 
@@ -2321,6 +2324,21 @@ public enum AppAPI {
         enum CodingKeys: String, CodingKey {
             case program
             case id
+        }
+    }
+
+    public struct ProgramRecommendAcceptParams: Codable, Sendable, Hashable {
+        public var program: String
+        public var question: String
+
+        public init(program: String, question: String) {
+            self.program = program
+            self.question = question
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case program
+            case question
         }
     }
 
@@ -3035,6 +3053,51 @@ public enum AppAPI {
             case session
             case via
             case open
+        }
+    }
+
+    public struct RecommendAccepted: Codable, Sendable, Hashable {
+        public var question: String
+        public var answer: String
+        public var result: String
+        public var fanned: [ProgramFanned]
+
+        public init(question: String, answer: String, result: String = "", fanned: [ProgramFanned] = []) {
+            self.question = question
+            self.answer = answer
+            self.result = result
+            self.fanned = fanned
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case question
+            case answer
+            case result
+            case fanned
+        }
+    }
+
+    public struct Recommendation: Codable, Sendable, Hashable {
+        public var question: String
+        public var choices: [String]
+        public var other: String
+        public var why: String
+        public var at: Date
+
+        public init(question: String, choices: [String] = [], other: String = "", why: String, at: Date) {
+            self.question = question
+            self.choices = choices
+            self.other = other
+            self.why = why
+            self.at = at
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case question
+            case choices
+            case other
+            case why
+            case at
         }
     }
 
@@ -4514,6 +4577,7 @@ public enum AppAPI {
         public static let programNeeds = Call<ProgramParams, ProgramNeeds>("program.needs", write: false)
         public static let programOpen = Call<ProgramOpenParams, ProgramOpen>("program.open", write: true)
         public static let programRead = Call<ProgramReadParams, ProgramMessage>("program.read", write: false)
+        public static let programRecommendAccept = Call<ProgramRecommendAcceptParams, RecommendAccepted>("program.recommend.accept", write: true)
         public static let programRename = Call<ProgramRenameParams, ProgramRenamed>("program.rename", write: true)
         public static let programRoute = Call<ProgramRouteParams, ProgramRouted>("program.route", write: true)
         public static let programSearch = Call<ProgramSearchParams, SearchResult>("program.search", write: false)
@@ -5571,6 +5635,7 @@ extension AppAPI.ProgramNeed {
         self.similar = try c.decodeIfPresent([String].self, forKey: .similar) ?? []
         self.program = try c.decodeIfPresent(Bool.self, forKey: .program) ?? false
         self.merged = try c.decodeIfPresent([String].self, forKey: .merged) ?? []
+        self.recommend = try c.decodeIfPresent(AppAPI.Recommendation.self, forKey: .recommend)
     }
 }
 
@@ -5624,6 +5689,14 @@ extension AppAPI.ProgramReadParams {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.program = try c.decode(String.self, forKey: .program)
         self.id = try c.decode(String.self, forKey: .id)
+    }
+}
+
+extension AppAPI.ProgramRecommendAcceptParams {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.program = try c.decode(String.self, forKey: .program)
+        self.question = try c.decode(String.self, forKey: .question)
     }
 }
 
@@ -5964,6 +6037,27 @@ extension AppAPI.QuestionsOpen {
         self.session = try c.decode(String.self, forKey: .session)
         self.via = try c.decode(String.self, forKey: .via)
         self.open = try c.decode(Int.self, forKey: .open)
+    }
+}
+
+extension AppAPI.RecommendAccepted {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.question = try c.decode(String.self, forKey: .question)
+        self.answer = try c.decode(String.self, forKey: .answer)
+        self.result = try c.decodeIfPresent(String.self, forKey: .result) ?? ""
+        self.fanned = try c.decodeIfPresent([AppAPI.ProgramFanned].self, forKey: .fanned) ?? []
+    }
+}
+
+extension AppAPI.Recommendation {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.question = try c.decode(String.self, forKey: .question)
+        self.choices = try c.decodeIfPresent([String].self, forKey: .choices) ?? []
+        self.other = try c.decodeIfPresent(String.self, forKey: .other) ?? ""
+        self.why = try c.decode(String.self, forKey: .why)
+        self.at = try c.decode(Date.self, forKey: .at)
     }
 }
 

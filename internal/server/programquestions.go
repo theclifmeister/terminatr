@@ -10,6 +10,7 @@ package server
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -49,9 +50,21 @@ func (s *Server) openProgramQuestions(slug, id string) (int, *proto.Error) {
 		return 0, perr
 	}
 	qs = qs[:min(len(qs), project.MaxDialogQuestions)]
+	recs, _ := g.Recommendations()
 	q := proto.Question{Tool: ProgramQuestionsTool, HumanOnly: true, Since: time.Now().UTC()}
-	for _, pq := range qs {
+	for i, pq := range qs {
+		// The director's recommended options first, marked as the
+		// dialog marks an agent's own (T982).
+		stored, has := recs[slug+"/"+pq.ID]
+		r, _ := program.Current(stored, has, pq)
+		qs[i] = recommendedFirst(pq, r.Labels)
+		pq = qs[i]
 		item := questionItem(pq)
+		for j := range item.Options {
+			if slices.Contains(r.Labels, item.Options[j].Label) {
+				item.Options[j].Label += RecommendedMark
+			}
+		}
 		item.Header = pq.ID
 		if pq.Header != "" {
 			item.Header = textClip(pq.ID+" "+pq.Header, project.MaxQuestionHeader)
@@ -91,11 +104,39 @@ func (s *Server) recordProgramAnswers(slug string, qs []project.Question, ans ma
 		if !ok {
 			continue
 		}
+		for _, o := range pq.Options {
+			a = strings.ReplaceAll(a, o.Label+RecommendedMark, o.Label)
+		}
 		choices, other := choicesOf(pq, a)
 		if _, err := g.Answer(caller.Caller{Kind: caller.Human}, cfg, pq.ID, choices, other); err != nil {
 			s.log.Printf("program %s: answer %s: %v", slug, pq.ID, err)
 		}
 	}
+}
+
+// RecommendedMark follows a recommended option's label in the question
+// dialog, as Claude Code's own dialogs mark one.
+const RecommendedMark = " (Recommended)"
+
+// recommendedFirst is q with its options labels first, in their order,
+// then the rest.
+func recommendedFirst(q project.Question, labels []string) project.Question {
+	if len(labels) == 0 {
+		return q
+	}
+	opts := make([]project.QuestionOption, 0, len(q.Options))
+	for _, o := range q.Options {
+		if slices.Contains(labels, o.Label) {
+			opts = append(opts, o)
+		}
+	}
+	for _, o := range q.Options {
+		if !slices.Contains(labels, o.Label) {
+			opts = append(opts, o)
+		}
+	}
+	q.Options = opts
+	return q
 }
 
 // serverPaired is program.Paired inside tm's server, for the human: a

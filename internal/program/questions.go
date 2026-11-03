@@ -472,6 +472,7 @@ func (p *Program) Answer(c caller.Caller, cfg *config.Config, ref string, choice
 	if _, err := p.DoneQuestion(q.ID); err != nil {
 		return res, err
 	}
+	p.drop("the user answered it", by)
 	var where []string
 	for _, f := range res.Fanned {
 		where = append(where, f.Project+"/"+f.Question+" "+f.Result)
@@ -564,6 +565,7 @@ func (p *Program) Withdraw(c caller.Caller, cfg *config.Config, ref string) (pro
 		return q, err
 	}
 	by := p.Slug + "/" + q.ID
+	p.drop("the program question was closed", by)
 	for _, cv := range q.Covers {
 		if IsRemote(cv.Project) {
 			continue // marked nowhere but here

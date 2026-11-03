@@ -20,6 +20,11 @@ type ProgramSource interface {
 	// to every member question it covers (program.Answer). Refused
 	// inside an agent: only the user answers.
 	AnswerProgram(slug, ref string, choices []string, other string) (program.AnswerResult, error)
+	// AcceptRecommendation answers question (acme-api/Q3, acme/Q2) of
+	// program slug's Needs you with its director's recommendation, as
+	// the user's own answer (program.recommend.accept). Refused inside
+	// an agent.
+	AcceptRecommendation(slug, question string) (program.AcceptResult, error)
 	// NewProgram makes program slug, with its goal, as tm program new
 	// does (program.New and its clash checks), and lists it in
 	// config.toml with no members yet, so the sidebar shows it; it
@@ -58,6 +63,16 @@ func (s *ServerSource) AnswerProgram(slug, ref string, choices []string, other s
 	}
 	g.Paired = program.PairedVia(s.Caller, g.Slug, s.call)
 	res, err := g.Answer(s.Caller, cfg, ref, choices, other)
+	s.touch()
+	return res, err
+}
+
+func (s *ServerSource) AcceptRecommendation(slug, question string) (program.AcceptResult, error) {
+	if s.Caller.IsAgent() {
+		return program.AcceptResult{}, errHumanOnly
+	}
+	var res program.AcceptResult
+	err := s.call(proto.MethodProgramRecommendAccept, proto.ProgramRecommendAcceptParams{Program: slug, Question: question}, &res)
 	s.touch()
 	return res, err
 }

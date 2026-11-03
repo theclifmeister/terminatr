@@ -2419,7 +2419,15 @@
        "merged": [
         "acme-web/Q4",
         "studio/acme-api/Q2"
-       ]
+       ],
+       "recommend": {
+        "question": "acme/Q1",
+        "choices": [
+         "API ledger"
+        ],
+        "why": "refunds already post to the API's ledger (acme-api/T31, merged PR #212)",
+        "at": "2026-11-03T09:12:00Z"
+       }
       }
      ],
      "members": [
@@ -2769,7 +2777,7 @@
   }
  },
  "hello": {
-  "app_api": 47,
+  "app_api": 48,
   "build": "demo",
   "capabilities": [
    "read",
@@ -2817,7 +2825,8 @@
    "program.get",
    "program.needs",
    "program.search",
-   "program.answer"
+   "program.answer",
+   "program.recommend.accept"
   ],
   "server": {
    "caps": [

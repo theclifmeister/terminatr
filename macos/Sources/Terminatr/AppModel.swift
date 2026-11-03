@@ -525,6 +525,13 @@ final class AppModel {
         return try await b.call(AppAPI.Methods.programAnswer, AppAPI.ProgramAnswerParams(program: slug, ref: ref, choices: choices, other: other))
     }
 
+    /// Accepts the director's recommendation on a question of program
+    /// slug's Needs you (app API 48): answered as the user's own.
+    func programRecommendAccept(_ slug: String, question: String) async throws -> AppAPI.RecommendAccepted {
+        guard let b = bridge else { throw BridgeError.closed("") }
+        return try await b.call(AppAPI.Methods.programRecommendAccept, AppAPI.ProgramRecommendAcceptParams(program: slug, question: question))
+    }
+
     /// Accepts umbrella task of program slug (accept), or sends it back
     /// with the user's note.
     func programUmbrella(_ slug: String, task: String, accept: Bool, note: String = "") async throws -> AppAPI.ProgramUmbrellaDone {
@@ -545,6 +552,12 @@ final class AppModel {
     /// API 45): the director pane's Start.
     var opensDirector: Bool {
         if case .connected(let h) = phase { return Compatibility.opensDirector(h) }
+        return false
+    }
+
+    /// Whether this tm takes Accept on the director's recommendation.
+    var acceptsRecommendations: Bool {
+        if case .connected(let h) = phase { return Compatibility.acceptsRecommendations(h) }
         return false
     }
 
