@@ -151,8 +151,12 @@ func foldProgram(slug string, fold bool) func(*view.Tree) {
 // activates or deactivates it (§5.1).
 func foldProject(r treeRow, fold bool) func(*view.Tree) {
 	slug := r.slug
-	if r.inactive {
+	switch {
+	case r.inactive:
 		return func(t *view.Tree) { t.Expand(slug, !fold) }
+	case r.prog != "":
+		// A program's member: it starts folded (view.Tree.MemberFolded).
+		return func(t *view.Tree) { t.FoldMember(slug, fold) }
 	}
 	return func(t *view.Tree) { t.Fold(slug, fold) }
 }
@@ -182,28 +186,30 @@ func anyOpen(all []treeRow) bool {
 
 // foldAll is Z's fold (fold) and unfold: the fold folds every active
 // project and the divider, and collapses the inactive projects; the
-// unfold opens them all,
+// unfold opens them all, the programs' members unfolded and
 // the inactive projects expanded under the open divider.
 func foldAll(all []treeRow, fold bool) func(*view.Tree) {
-	var active, inactive []string
+	var active, inactive, members []string
 	for _, r := range all {
 		switch {
 		case r.kind == treeProject && !r.inactive:
 			active = append(active, r.slug)
 		case r.kind == treeProgram:
 			active = append(active, programKey(r.slug))
+			members = append(members, r.slugs...)
 		case r.kind == treeDivider:
 			inactive = r.slugs
 		}
 	}
 	active = append(active, peerFolds(all)...)
 	active, inactive = active[:min(len(active), view.MaxExpanded)], inactive[:min(len(inactive), view.MaxExpanded)]
+	members = members[:min(len(members), view.MaxExpanded)]
 	// The sections' folds are view.sections' (foldSections).
 	if fold {
 		return func(t *view.Tree) { *t = view.Tree{Folded: active, SectionsFolded: t.SectionsFolded} }
 	}
 	return func(t *view.Tree) {
-		*t = view.Tree{Expanded: inactive, InactiveOpen: true, SectionsFolded: t.SectionsFolded}
+		*t = view.Tree{Expanded: inactive, Unfolded: members, InactiveOpen: true, SectionsFolded: t.SectionsFolded}
 	}
 }
 

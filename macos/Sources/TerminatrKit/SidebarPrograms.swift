@@ -155,10 +155,11 @@ extension SidebarTree {
     }
 
     /// Whether program g's paired member alias/slug lists its rows under
-    /// the program: unless it is stale or not shared, or ← folded it
-    /// there (its own fold, apart from its server's group's).
+    /// the program: only once → unfolded it there, as a member starts
+    /// folded (its own fold, apart from its server's group's), and never
+    /// while it is stale or not shared.
     public static func opens(member alias: String, _ slug: String, of g: AppAPI.Program, nav: Navigation) -> Bool {
-        !nav.collapsed.contains(Navigation.memberKey(program: g.slug, server: alias, project: slug))
+        nav.unfolded.contains(Navigation.memberKey(program: g.slug, server: alias, project: slug))
     }
 
     /// The needs of program g, its badge: its own (its director's, its

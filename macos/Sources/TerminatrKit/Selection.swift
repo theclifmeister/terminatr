@@ -116,8 +116,9 @@ public struct Navigation: Codable, Equatable, Sendable {
     /// Whether the sidebar unfolds its inactive projects (⇧⌘H).
     public var showInactive = false
     /// What → unfolded in the sidebar: the needs' "+N more" (moreKey),
-    /// and the inactive projects expanded (sectionKey), as the TUI's
-    /// view.Tree has them.
+    /// the inactive projects expanded (sectionKey) and the programs'
+    /// members unfolded (sectionKey, memberKey: they start folded), as
+    /// the TUI's view.Tree has them.
     public var unfolded: Set<String> = []
 
     /// How many steps back are kept.

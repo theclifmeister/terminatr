@@ -32,11 +32,14 @@ func progTree(tree view.Tree) []treeRow {
 	return buildTree(ps, sessions, treeIn{tree: tree, programs: progs})
 }
 
+// openMembers unfolds acme's members web and api: they start folded.
+var openMembers = view.Tree{Unfolded: []string{"web", "api"}}
+
 // TestProgramRows: a program's row, its director's, then its members in
 // its order, one level in under a │; the program counts its members'
 // threads and needs you when one does.
 func TestProgramRows(t *testing.T) {
-	rows := progTree(view.Tree{})
+	rows := progTree(openMembers)
 	if keys := rowKeys(rows); !slices.Equal(keys, []string{"g:acme", "r:acme", "p:web", "c:web", "p:api", "c:api", "t:api/t-1", "t:api/t-2", "p:zoo", "c:zoo"}) {
 		t.Fatalf("rows %v", keys)
 	}
@@ -58,6 +61,12 @@ func TestProgramRows(t *testing.T) {
 	}
 	if l := line(rows[8]); strings.Contains(l, "│") {
 		t.Errorf("a standalone project under the program: %q", l)
+	}
+	// Its members start folded, the standalone project unfolded; folded,
+	// a member's row still says it needs you.
+	def := progTree(view.Tree{})
+	if keys := rowKeys(def); !slices.Equal(keys, []string{"g:acme", "r:acme", "p:web", "p:api", "p:zoo", "c:zoo"}) || !def[2].fold || !def[2].hint {
+		t.Errorf("by default %v %+v", keys, def[2])
 	}
 	// Folded: its row alone, with its director's state.
 	folded := progTree(view.Tree{Folded: []string{"g:acme"}})
@@ -88,7 +97,7 @@ func TestProgramRows(t *testing.T) {
 // TestProgramKeys: ← and → fold a program (g:<slug>), ← on its director
 // or a folded member goes up to it, Z folds it with the rest.
 func TestProgramKeys(t *testing.T) {
-	rows := progTree(view.Tree{})
+	rows := progTree(openMembers)
 	st := sideKeyStep(rows, 40, "g:acme", sideOut)
 	tr := view.Tree{}
 	if st.refold == nil {
@@ -101,17 +110,49 @@ func TestProgramKeys(t *testing.T) {
 	if st := sideKeyStep(rows, 40, "r:acme", sideOut); st.sel != "g:acme" {
 		t.Errorf("← on the director: %+v", st)
 	}
-	folded := progTree(view.Tree{Folded: []string{"web"}})
+	folded := progTree(view.Tree{Unfolded: []string{"api"}})
 	if st := sideKeyStep(folded, 40, "p:web", sideOut); st.sel != "g:acme" {
 		t.Errorf("← on a folded member: %+v", st)
+	}
+	// → unfolds a member, ← folds it again: a fold of the user's, kept
+	// if it leaves the program.
+	if st := sideKeyStep(folded, 40, "p:web", sideIn); st.refold == nil {
+		t.Errorf("→ on a folded member: %+v", st)
+	} else {
+		v := view.Tree{Unfolded: []string{"api"}}
+		st.refold(&v)
+		if v.MemberFolded("web") || v.IsFolded("web") {
+			t.Errorf("→ unfolded %+v", v)
+		}
+		st = sideKeyStep(progTree(v), 40, "p:web", sideOut)
+		st.refold(&v)
+		if !v.MemberFolded("web") || !v.IsFolded("web") {
+			t.Errorf("← folded %+v", v)
+		}
+	}
+	// A project that leaves the program goes back to unfolded, unless
+	// the user folded it.
+	solo := buildTree([]ProjectData{{Slug: "web", Safety: &config.Defaults}}, nil, treeIn{tree: view.Tree{}})
+	if keys := rowKeys(solo); !slices.Equal(keys, []string{"p:web", "c:web"}) {
+		t.Errorf("left the program %v", keys)
 	}
 	if st := sideKeyStep(rows, 40, "c:web", sideFoldAll); st.sel != "g:acme" || st.refold == nil {
 		t.Errorf("Z on a member's row: %+v", st)
 	} else {
 		var all view.Tree
 		st.refold(&all)
-		if !all.IsFolded("g:acme") || !all.IsFolded("zoo") {
+		if !all.IsFolded("g:acme") || !all.IsFolded("zoo") || !all.MemberFolded("web") {
 			t.Errorf("Z folded %+v", all)
+		}
+	}
+	// Z from all folded unfolds the members too.
+	if st := sideKeyStep(progTree(view.Tree{Folded: []string{"g:acme", "zoo"}}), 40, "g:acme", sideFoldToggle); st.refold == nil {
+		t.Errorf("Z to unfold: %+v", st)
+	} else {
+		var all view.Tree
+		st.refold(&all)
+		if all.IsFolded("g:acme") || all.MemberFolded("web") || all.MemberFolded("api") {
+			t.Errorf("Z unfolded %+v", all)
 		}
 	}
 	// needs first keeps a program's rows together.
@@ -343,7 +384,10 @@ func TestProgramPairedMember(t *testing.T) {
 	build := func(tr view.Tree) []treeRow {
 		return buildTree(nil, nil, treeIn{tree: tr, peers: peers, host: "here", programs: progs})
 	}
-	rows := build(view.Tree{})
+	if keys := rowKeys(build(view.Tree{})); slices.Contains(keys, "g:acme/rc:mini/ios") || !slices.Contains(keys, "rc:mini/ios") {
+		t.Errorf("by default: folded under its program alone %v", keys)
+	}
+	rows := build(view.Tree{Unfolded: []string{"g:acme/@mini/ios"}})
 	want := []string{"g:", "g:acme", "r:acme", "g:acme/r:mini/ios", "g:acme/rc:mini/ios", "g:acme/r:mini/mac", "g:mini", "r:mini/ios", "rc:mini/ios"}
 	if keys := rowKeys(rows); !slices.Equal(keys, want) {
 		t.Fatalf("rows %v", keys)
@@ -371,7 +415,7 @@ func TestProgramPairedMember(t *testing.T) {
 		t.Fatalf("← under the program: %+v", st)
 	}
 	st.refold(&tr)
-	if !tr.IsFolded("g:acme/@mini/ios") || tr.IsFolded("@mini/ios") {
+	if !tr.MemberFolded("g:acme/@mini/ios") || tr.IsFolded("@mini/ios") {
 		t.Fatalf("tree %+v", tr)
 	}
 	rows = build(tr)

@@ -926,3 +926,27 @@ func TestDetailsHereDropsTitle(t *testing.T) {
 		t.Errorf("row on screen: lines %q, %q; want the state alone", l1, l2)
 	}
 }
+
+// With the cursor on the PROJECTS header, only the header is drawn in the
+// cursor's look: the row under it is not (T969).
+func TestHeadCursorHighlightsOnlyHeader(t *testing.T) {
+	src := &fakeSource{data: testData()}
+	m := newDash(DashOptions{Source: src, Width: 120 + sideDefault, Height: 30, State: DashState{Current: "beta"}})
+	m.setData(src.data)
+	m.focus, m.sideSel = areaSide, "p:alpha"
+	keyPress(m, "up")
+	if m.sideSel != headKey {
+		t.Fatalf("↑ from alpha: %q", m.sideSel)
+	}
+	open, _, _ := strings.Cut(th().SelFocus.Bold(true).Render("x"), "x")
+	lines := sideLines(m.tree(), m.sideW(), m.h, m.sideHeadIn(), nil, false)
+	var lit []int
+	for i, l := range lines {
+		if strings.Contains(l, open) {
+			lit = append(lit, i)
+		}
+	}
+	if len(lit) != 1 || lit[0] != 0 {
+		t.Errorf("rows in the cursor's look: %v; want only the header (row 0)\n%s", lit, strings.Join(lines, "\n"))
+	}
+}

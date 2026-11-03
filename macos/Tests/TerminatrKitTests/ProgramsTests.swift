@@ -57,10 +57,25 @@ private let acme = AppAPI.Program(slug: "acme", members: [AppAPI.ProgramMember(p
     // Its director's pane shown keeps it open, so the List has the row.
     nav.select(.session(.director("acme")))
     #expect(SidebarTree.opens(acme, nav: nav))
-    // A paired member folds under its program apart from its server.
-    nav.collapsed.insert(Navigation.memberKey(program: "acme", server: "mini", project: "api"))
+    // A paired member starts folded under its program, and folds there
+    // apart from its server.
+    let key = Navigation.memberKey(program: "acme", server: "mini", project: "api")
+    #expect(!SidebarTree.opens(member: "mini", "api", of: acme, nav: nav))
+    nav.unfold(key)
+    #expect(SidebarTree.opens(member: "mini", "api", of: acme, nav: nav))
+    nav.fold(key)
     #expect(!SidebarTree.opens(member: "mini", "api", of: acme, nav: nav))
     #expect(!nav.collapsed.contains(Navigation.sectionKey(server: "mini", project: "api")))
+    // A local member starts folded too; a standalone project unfolded.
+    let web = AppAPI.Project(slug: "web", active: true, pinned: false, usage: noUsage)
+    #expect(SidebarTree.opens(web, nav: Navigation()))
+    #expect(!SidebarTree.opens(web, nav: Navigation(), member: true))
+    var open = Navigation()
+    open.unfold(Navigation.sectionKey(server: "", project: "web"))
+    #expect(SidebarTree.opens(web, nav: open, member: true))
+    // Folded again by the user, it stays folded once it leaves.
+    open.fold(Navigation.sectionKey(server: "", project: "web"))
+    #expect(!SidebarTree.opens(web, nav: open))
 }
 
 @Test func programActs() {

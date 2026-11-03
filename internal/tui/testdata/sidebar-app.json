@@ -1318,19 +1318,8 @@
         "g:acme",
         "r:acme",
         "p:eps",
-        "c:eps",
-        "t:eps/t-9",
         "p:delta",
         "p:alpha",
-        "c:alpha",
-        "t:alpha/t-3",
-        "t:alpha/t-7",
-        "t:alpha/t-5",
-        "t:alpha/t-2",
-        "t:alpha/t-8",
-        "t:alpha/t-6",
-        "t:alpha/t-1",
-        "t:alpha/t-4",
         "g:zed",
         "r:zed",
         "d:inactive",
@@ -1480,7 +1469,167 @@
       ]
     },
     {
-      "name": "program, member folded",
+      "name": "program, members unfolded",
+      "projects": [
+        {
+          "slug": "alpha",
+          "active": true,
+          "threads": [
+            {
+              "id": "t-1"
+            },
+            {
+              "id": "t-2",
+              "session": "s-2"
+            },
+            {
+              "id": "t-3",
+              "needs_you": "which one?"
+            },
+            {
+              "id": "t-4",
+              "done": true
+            },
+            {
+              "id": "t-5",
+              "reports": 2,
+              "report_acked": 1
+            },
+            {
+              "id": "t-6",
+              "session": "s-6"
+            },
+            {
+              "id": "t-7",
+              "session": "s-7"
+            },
+            {
+              "id": "t-8",
+              "session": "s-8",
+              "done": true
+            }
+          ]
+        },
+        {
+          "slug": "beta",
+          "active": false,
+          "pinned": true,
+          "threads": [
+            {
+              "id": "t-1"
+            },
+            {
+              "id": "t-2",
+              "done": true
+            }
+          ]
+        },
+        {
+          "slug": "gamma",
+          "active": true,
+          "pinned": true
+        },
+        {
+          "slug": "delta",
+          "active": false
+        },
+        {
+          "slug": "eps",
+          "active": true,
+          "threads": [
+            {
+              "id": "t-9",
+              "done": true
+            }
+          ]
+        }
+      ],
+      "sessions": [
+        {
+          "id": "s-d",
+          "role": "director",
+          "project": "acme",
+          "state": "idle"
+        },
+        {
+          "id": "s-c",
+          "role": "coordinator",
+          "project": "alpha",
+          "state": "working"
+        },
+        {
+          "id": "s-2",
+          "role": "thread",
+          "project": "alpha",
+          "state": "working"
+        },
+        {
+          "id": "s-6",
+          "role": "thread",
+          "project": "alpha",
+          "state": "idle"
+        },
+        {
+          "id": "s-7",
+          "role": "thread",
+          "project": "alpha",
+          "state": "blocked"
+        },
+        {
+          "id": "s-8",
+          "role": "thread",
+          "project": "alpha",
+          "state": "working"
+        }
+      ],
+      "programs": [
+        {
+          "slug": "acme",
+          "projects": [
+            "eps",
+            "delta",
+            "gone",
+            "alpha"
+          ]
+        },
+        {
+          "slug": "zed",
+          "projects": null,
+          "questions": 1
+        }
+      ],
+      "unfolded": [
+        "eps",
+        "alpha"
+      ],
+      "inactive_open": true,
+      "rows": [
+        "p:gamma",
+        "c:gamma",
+        "g:acme",
+        "r:acme",
+        "p:eps",
+        "c:eps",
+        "t:eps/t-9",
+        "p:delta",
+        "p:alpha",
+        "c:alpha",
+        "t:alpha/t-3",
+        "t:alpha/t-7",
+        "t:alpha/t-5",
+        "t:alpha/t-2",
+        "t:alpha/t-8",
+        "t:alpha/t-6",
+        "t:alpha/t-1",
+        "t:alpha/t-4",
+        "g:zed",
+        "r:zed",
+        "d:inactive",
+        "p:beta"
+      ]
+    },
+    {
+      "name": "program, member unfolded",
       "projects": [
         {
           "slug": "alpha",
@@ -1610,10 +1759,13 @@
         }
       ],
       "folded": [
-        "alpha"
+        "eps"
       ],
       "expanded": [
         "delta"
+      ],
+      "unfolded": [
+        "alpha"
       ],
       "rows": [
         "p:gamma",
@@ -1621,11 +1773,18 @@
         "g:acme",
         "r:acme",
         "p:eps",
-        "c:eps",
-        "t:eps/t-9",
         "p:delta",
         "c:delta",
         "p:alpha",
+        "c:alpha",
+        "t:alpha/t-3",
+        "t:alpha/t-7",
+        "t:alpha/t-5",
+        "t:alpha/t-2",
+        "t:alpha/t-8",
+        "t:alpha/t-6",
+        "t:alpha/t-1",
+        "t:alpha/t-4",
         "g:zed",
         "r:zed",
         "d:inactive"
@@ -1726,9 +1885,7 @@
         "g:m-prog",
         "r:m-prog",
         "p:n-none",
-        "c:n-none",
         "p:n-task",
-        "c:n-task",
         "p:n-q",
         "c:n-q",
         "p:n-blocked",
@@ -1850,12 +2007,7 @@
         "g:acme",
         "r:acme",
         "p:gamma",
-        "c:gamma",
         "g:acme/r:mini/demo",
-        "g:acme/rc:mini/demo",
-        "g:acme/rt:mini/demo/t-1",
-        "g:acme/rt:mini/demo/t-2",
-        "g:acme/rt:mini/demo/t-3",
         "g:acme/r:mini/gone",
         "g:mini",
         "r:mini/demo",
@@ -1873,7 +2025,7 @@
       ]
     },
     {
-      "name": "program, paired member folded under its program",
+      "name": "program, paired member unfolded under its program",
       "projects": [
         {
           "slug": "gamma",
@@ -1976,8 +2128,9 @@
           ]
         }
       ],
-      "folded": [
-        "g:acme/@mini/demo"
+      "unfolded": [
+        "g:acme/@mini/demo",
+        "gamma"
       ],
       "rows": [
         "g:",
@@ -1986,6 +2139,10 @@
         "p:gamma",
         "c:gamma",
         "g:acme/r:mini/demo",
+        "g:acme/rc:mini/demo",
+        "g:acme/rt:mini/demo/t-1",
+        "g:acme/rt:mini/demo/t-2",
+        "g:acme/rt:mini/demo/t-3",
         "g:acme/r:mini/gone",
         "g:mini",
         "r:mini/demo",

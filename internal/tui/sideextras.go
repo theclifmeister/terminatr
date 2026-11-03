@@ -2,6 +2,7 @@ package tui
 
 import (
 	"cmp"
+	"github.com/theclifmeister/terminatr/internal/config"
 	"slices"
 	"strings"
 	"sync"
@@ -112,19 +113,27 @@ func sideFilterLine(cw int) (string, bool) {
 // sideTree is what the tree folds: while a filter narrows the tree
 // nothing, every project unfolded and the inactive ones expanded, so
 // what matches anywhere shows; else what the user folded (t).
-func sideTree(ps []ProjectData, t view.Tree) view.Tree {
+func sideTree(ps []ProjectData, progs []ProgramData, t view.Tree) view.Tree {
 	if sideFilterNow().text == "" {
 		return t
 	}
-	return unfoldedTree(ps)
+	return unfoldedTree(ps, progs)
 }
 
 // unfoldedTree folds nothing: the divider open, every inactive project
-// expanded.
-func unfoldedTree(ps []ProjectData) view.Tree {
+// expanded, every program member unfolded.
+func unfoldedTree(ps []ProjectData, progs []ProgramData) view.Tree {
 	t := view.Tree{InactiveOpen: true}
 	for _, p := range ps {
 		t.Expanded = append(t.Expanded, p.Slug)
+		t.Unfolded = append(t.Unfolded, p.Slug)
+	}
+	for _, g := range progs {
+		for _, m := range g.Projects {
+			if alias, slug, remote := config.Remote(m); remote {
+				t.Unfolded = append(t.Unfolded, programKey(g.Slug)+"/"+peerFold(alias, slug))
+			}
+		}
 	}
 	return t
 }
@@ -442,12 +451,18 @@ func sideNeedStep(in sideKeysIn, at treeRow, back bool) sideStep {
 		setSideFilter(sideFilterState{})
 	}
 	if !shown() {
-		slug, inactive := to.slug, to.inactive || to.dormant
+		slug, inactive, prog := to.slug, to.inactive || to.dormant, to.prog
 		st.refold = func(t *view.Tree) {
-			if inactive {
+			if prog != "" {
+				t.Fold(programKey(prog), false)
+			}
+			switch {
+			case inactive:
 				t.InactiveOpen = true
 				t.Expand(slug, true)
-			} else {
+			case prog != "":
+				t.FoldMember(slug, false)
+			default:
 				t.Fold(slug, false)
 			}
 		}

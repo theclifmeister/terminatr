@@ -35,7 +35,7 @@ func (c *client) sideTree() []treeRow {
 		focus = c.focus.info.ID
 	}
 	rows := buildTree(c.side.projects, c.sideSessions(), treeIn{current: c.sideCurrent(), focus: focus, ctxHint: c.side.ctxHint,
-		tree: sideTree(c.side.projects, c.v.Tree), cols: c.v.Columns, cells: c.cells, peers: c.side.peers, programs: c.side.programs})
+		tree: sideTree(c.side.projects, c.side.programs, c.v.Tree), cols: c.v.Columns, cells: c.cells, peers: c.side.peers, programs: c.side.programs})
 	rows = sideRows(rows, c.side.needsFirst)
 	if c.bandShows() {
 		rows = withSections(rows, c.band())
@@ -92,7 +92,7 @@ func (c *client) band() bandIn {
 // sideFullTree is the attach view's whole tree, nothing folded and no
 // filter (W). c.mu held.
 func (c *client) sideFullTree() []treeRow {
-	rows := buildTree(c.side.projects, c.sideSessions(), treeIn{current: c.sideCurrent(), ctxHint: c.side.ctxHint, tree: unfoldedTree(c.side.projects), cols: c.v.Columns, cells: c.cells, peers: c.side.peers, programs: c.side.programs})
+	rows := buildTree(c.side.projects, c.sideSessions(), treeIn{current: c.sideCurrent(), ctxHint: c.side.ctxHint, tree: unfoldedTree(c.side.projects, c.side.programs), cols: c.v.Columns, cells: c.cells, peers: c.side.peers, programs: c.side.programs})
 	if c.side.needsFirst {
 		rows = needsFirstOrder(rows)
 	}

@@ -177,6 +177,7 @@ func programRows(g ProgramData, ps []ProjectData, sessions []proto.SessionInfo, 
 	var kids []treeRow
 	for _, m := range g.Projects {
 		if alias, slug, remote := config.Remote(m); remote {
+			pr.slugs = append(pr.slugs, programKey(g.Slug)+"/"+peerFold(alias, slug))
 			rows := pairedMemberRows(g, alias, slug, in)
 			if rows[0].kind == treePeerProject && !rows[0].stale {
 				pr.threads += rows[0].threads
@@ -189,12 +190,15 @@ func programRows(g ProgramData, ps []ProjectData, sessions []proto.SessionInfo, 
 		if !ok {
 			continue
 		}
-		rows := projectRows(p, sessions, byID, in)
+		mi := in
+		mi.prog = g.Slug
+		rows := projectRows(p, sessions, byID, mi)
 		for i := range rows {
 			rows[i].prog = g.Slug
 		}
 		if !p.inactive() {
 			pr.threads += len(p.Threads)
+			pr.slugs = append(pr.slugs, p.Slug)
 		}
 		pr.hint = pr.hint || rows[0].hint
 		kids = append(kids, rows...)
