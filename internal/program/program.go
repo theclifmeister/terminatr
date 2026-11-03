@@ -127,7 +127,7 @@ func (e events) Journal(c caller.Caller, action, ref, detail string) error {
 // to tm.
 func (p *Program) Owned() (dirs, files []string) {
 	dirs, files = p.SharedOwned()
-	files = append(files, mdfile.LockPath(p.Path(File)))
+	files = append(files, mdfile.LockPath(p.Path(File)), p.Path(DepsFile))
 	td, tf := tasks.Owned(p.Dir)
 	return append(dirs, td...), append(files, tf...)
 }

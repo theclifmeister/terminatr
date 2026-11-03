@@ -258,6 +258,19 @@ func (b *Board) RenderArchive() []byte {
 	return w.Bytes()
 }
 
+// crossLink is ref x to another project's task as the metadata line
+// of a board of project slug holds it (programs, §6.1): a local
+// project's task linked in the vault, [[acme-api/tasks/T12|acme-api/T12]];
+// a paired server's ("mini/acme-ios/T7") as text, as are all of them
+// on a board that writes no links (slug "").
+func crossLink(slug, x string) string {
+	alias, other, n, ok := CrossRef(x)
+	if slug == "" || !ok || alias != "" {
+		return x
+	}
+	return vaultlink.Link(other, vaultlink.Task, "T"+strconv.Itoa(n), x)
+}
+
 // writeTask writes one task; the metadata line links its thread in
 // project slug's vault (vaultlink).
 func writeTask(w *bytes.Buffer, t *Task, slug string) {
@@ -279,7 +292,9 @@ func writeTask(w *bytes.Buffer, t *Task, slug string) {
 			after[i] = vaultlink.Link(slug, vaultlink.Task, r, "")
 		}
 	}
-	after = append(after, t.AfterX...) // kept as text (programs, §6.1)
+	for _, x := range t.AfterX {
+		after = append(after, crossLink(slug, x))
+	}
 	for _, kv := range [][2]string{{"owner", t.Owner}, {"repo", t.Repo}, {"thread", thread}, {"design", design}, {"after", strings.Join(after, ", ")}, {"created", t.Created}, {"updated", t.Updated}} {
 		if kv[1] != "" {
 			meta = append(meta, kv[0]+": "+kv[1])
