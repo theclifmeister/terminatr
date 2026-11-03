@@ -474,7 +474,7 @@ func (e *Env) printStartup(p *project.Project, of string, asJSON bool) error {
 		}
 		role = proto.RoleThread
 	}
-	text, cut, err := server.StartupBlock(role, p.Slug, of, tickerState())
+	text, cut, err := server.StartupBlock(role, p.Slug, of, tickerState(), nil)
 	if err != nil {
 		return err
 	}

@@ -131,7 +131,7 @@ func TestPeerActChecks(t *testing.T) {
 			return proto.PeerActResult{Asked: true}, nil
 		},
 	}
-	ns, err := ex.needsOf("web")
+	ns, err := ex.sharedNeeds("web")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -222,6 +222,9 @@ func init() {
 			call: typed((*Server).searchTimeline)},
 		proto.MethodSearchShow: {gate: gateAgentOrHuman, scope: scopeProject, name: scoped(func(p proto.SearchShowParams) string { return p.Project }),
 			call: typed((*Server).searchShow)},
+		// A program's rolled-up Needs you: the human any program's, a
+		// director its own's (checked in programNeeds).
+		proto.MethodProgramNeeds: {gate: gateAgentOrHuman, call: typed((*Server).programNeeds)},
 
 		// The human's.
 		proto.MethodPaneVT:          {gate: gateHuman, stream: (*Server).servePaneVT},

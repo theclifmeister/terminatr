@@ -338,7 +338,7 @@ func TestStartupCutJournaled(t *testing.T) {
 	p := newWatchProject(t)
 	long := strings.Repeat(fill(1, 99)+"\n", 200)
 	old := blockFor
-	blockFor = func(SessionRecord, string) func() ([]byte, error) {
+	blockFor = func(SessionRecord, string, NeedsFunc) func() ([]byte, error) {
 		return func() ([]byte, error) { return []byte(long), nil }
 	}
 	t.Cleanup(func() { blockFor = old })

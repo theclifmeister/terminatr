@@ -441,6 +441,16 @@ func commandSetting(c string) string {
 // saying so in their place, with a line to re-read what changed since
 // it started.
 func contextFor(r SessionRecord, tickerState string) func() ([]byte, error) {
+	return contextWith(r, tickerState, nil)
+}
+
+// NeedsFunc reads a program's rolled-up Needs you for its director's
+// context: nil when it isn't known now (the server didn't answer).
+type NeedsFunc func(slug string) *proto.ProgramNeedsResult
+
+// contextWith is contextFor with needs, which a director's context reads
+// its program's Needs you part from; nil leaves the part out.
+func contextWith(r SessionRecord, tickerState string, needs NeedsFunc) func() ([]byte, error) {
 	role, slug, threadID, brief := r.Role, r.Project, r.Thread, r.Brief
 	return func() ([]byte, error) {
 		switch role {
@@ -467,7 +477,7 @@ func contextFor(r SessionRecord, tickerState string) func() ([]byte, error) {
 			}
 			return []byte(head + "\n\n" + coordinatorEssentials(secs, coordinatorBudget)), nil
 		case proto.RoleDirector:
-			return directorContext(r)
+			return directorContext(r, needs)
 		case proto.RoleThread:
 			rules, _ := roleRules("thread", slug)
 			head := rules
@@ -523,7 +533,7 @@ func (s *Server) contextOf(id string) func() ([]byte, error) {
 		s.mu.Lock()
 		r := s.records[id]
 		s.mu.Unlock()
-		b, err := blockFor(r, ticker.StatePath(s.opts.Paths.Sessions))()
+		b, err := blockFor(r, ticker.StatePath(s.opts.Paths.Sessions), s.directorNeeds)()
 		if err != nil || r.Prompt == nil {
 			return b, err
 		}
@@ -542,8 +552,8 @@ func (s *Server) contextOf(id string) func() ([]byte, error) {
 	}
 }
 
-// blockFor is contextFor; a test makes a block past the budget with it.
-var blockFor = contextFor
+// blockFor is contextWith; a test makes a block past the budget with it.
+var blockFor = contextWith
 
 // clipStartup is a start-up block within project.StartupCut bytes, and
 // whether it had to be cut; a cut one ends saying to run `tm context`.

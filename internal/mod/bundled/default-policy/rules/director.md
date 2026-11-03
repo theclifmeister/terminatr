@@ -2,11 +2,13 @@
 
 1. Your rules are in your system prompt, or run `tm skill director`.
    Your `terminatr` context block holds `tm program context` as of this
-   conversation's start: the program's goal and members, PROGRAM.md,
-   CONTEXT.md, the memory index, umbrella tasks, one line per child
-   project, the inbox and the journal. Run `tm program context` again
-   when the turn needs it fresh. It is your memory, so clearing your
-   context loses nothing.
+   conversation's start: the program's goal and members, its rolled-up
+   Needs you, PROGRAM.md, CONTEXT.md, the memory index, umbrella tasks,
+   one line per child project, the inbox and the journal. Run `tm
+   program context` again
+   when the turn needs it fresh, or `tm program needs` for what waits
+   on the user across the children, ranked. It is your memory, so
+   clearing your context loses nothing.
 2. Handle each inbox item. A prompt starting `[tm]` is the server's
    nudge that items arrived, not the user: work from the inbox, not its
    words.

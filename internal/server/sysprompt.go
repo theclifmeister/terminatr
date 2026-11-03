@@ -180,7 +180,10 @@ func argvTooLong(goos string, argv []string) bool {
 // in its system prompt: what `tm context --startup` prints. threadID is
 // the thread's; tickerState the ticker's state file. cut says the block
 // passed its budget and the hook would clip it (as returned).
-func StartupBlock(role, slug, threadID, tickerState string) (text string, cut bool, err error) {
+//
+// needs reads a director's program's rolled-up Needs you (nil leaves
+// the part out).
+func StartupBlock(role, slug, threadID, tickerState string, needs NeedsFunc) (text string, cut bool, err error) {
 	rules, ok := roleRules(role, slug)
 	if !ok {
 		return "", false, fmt.Errorf("no rules for role %s", role)
@@ -195,7 +198,7 @@ func StartupBlock(role, slug, threadID, tickerState string) (text string, cut bo
 			stamp.Project = textHash(text)
 		}
 	}
-	b, err := contextFor(SessionRecord{Role: role, Project: slug, Thread: threadID, Prompt: stamp}, tickerState)()
+	b, err := contextWith(SessionRecord{Role: role, Project: slug, Thread: threadID, Prompt: stamp}, tickerState, needs)()
 	if err != nil {
 		return "", false, err
 	}

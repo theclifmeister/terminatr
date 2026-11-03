@@ -134,8 +134,10 @@ func directorModel(a agent.Agent, slug string, cfg *config.Config) string {
 // directorContext is a director's session-start block (contextFor): its
 // rules, or with them in its system prompt the header saying so, then
 // tm program context within the start-up budget. With programs off, or
-// its program gone, only the rules and a line saying why.
-func directorContext(r SessionRecord) ([]byte, error) {
+// its program gone, only the rules and a line saying why. needs reads
+// the program's rolled-up Needs you, placed after the Program part
+// (nil leaves it out).
+func directorContext(r SessionRecord, needs NeedsFunc) ([]byte, error) {
 	rules, _ := roleRules("director", r.Project)
 	head := rules
 	if r.Prompt != nil {
@@ -152,6 +154,9 @@ func directorContext(r SessionRecord) ([]byte, error) {
 	secs, err := g.Context(cfg)
 	if err != nil {
 		return []byte(head + "\n\nProgram " + r.Project + "'s context can't be read: " + err.Error()), nil
+	}
+	if needs != nil {
+		secs = program.WithNeeds(secs, program.NeedsSection(needs(r.Project)))
 	}
 	if r.Prompt != nil {
 		return []byte(program.Startup(head, secs)), nil
