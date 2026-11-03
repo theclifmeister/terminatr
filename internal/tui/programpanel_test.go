@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	tmclient "github.com/theclifmeister/terminatr/internal/client"
@@ -94,5 +95,33 @@ func TestOfferNeeds(t *testing.T) {
 	coord := &client{focus: &pane{info: proto.SessionInfo{ID: "s-c", Role: proto.RoleCoordinator, Project: "api", NeedsOpen: now}}}
 	if old.offerNeeds() != "" || coord.offerNeeds() != "" {
 		t.Error("an old request, or a coordinator's pane, opened it")
+	}
+}
+
+// TestProgramPopupOverDirector: prefix+A in a director's pane opens the
+// program's settings, not a project popup for its slug; the project
+// keys say a director has no project.
+func TestProgramPopupOverDirector(t *testing.T) {
+	m, _ := progDash(t)
+	m.over, m.then, m.loaded = &Over{Key: "A", Project: "acme", Program: "acme", Session: "s-d", Screen: []string{"", "row"}}, "A", false
+	feed(m, m.setData(m.data))
+	if m.projectPopupView() != nil {
+		t.Fatalf("project popup opened: %T", m.top())
+	}
+	if _, ok := m.top().(*programView); !ok {
+		t.Fatalf("top %T", m.top())
+	}
+	if m.projectHere() != "" {
+		t.Errorf("project here %q", m.projectHere())
+	}
+	if m.needProject() != "" || !strings.Contains(m.msg, "director") {
+		t.Errorf("msg %q", m.msg)
+	}
+	// prefix+C still goes back to the director's pane, which save-clears
+	// the director (saveClearFocus), not a refusal.
+	m.msg = ""
+	m.Update(tea.KeyPressMsg{Code: 'b', Mod: tea.ModCtrl})
+	if !quits(keyPress(m, "C")) || m.result.Command != "C" || m.result.Attach != "s-d" || m.msg != "" {
+		t.Errorf("C: command %q attach %q msg %q", m.result.Command, m.result.Attach, m.msg)
 	}
 }

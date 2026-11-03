@@ -1672,6 +1672,9 @@ func (c *client) goOver(o *Over) {
 		if o.Project == "" {
 			o.Project = p.info.Project
 		}
+		if p.info.Role == proto.RoleDirector && p.info.Server == "" && o.Project == p.info.Project {
+			o.Program = p.info.Project
+		}
 	}
 	ps := c.leaves()
 	c.mu.Unlock()

@@ -89,6 +89,7 @@ type Over struct {
 	Task    int      // with Key t: the task the Tasks tab shows (opened), 0 for none
 	Server  string   // with Key N: the server the Network popup opens on (peerKey), "" for the first
 	Project string   // the project it is about: the session's, or a sidebar row's
+	Program string   // the session is a director's: its program (Project is that slug, not a project)
 	Session string   // the session it is drawn over
 	Title   string   // how the header names the session
 	Screen  []string // the session's area as shown, plain, a line per row
