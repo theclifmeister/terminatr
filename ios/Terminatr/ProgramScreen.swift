@@ -184,7 +184,9 @@ struct ProgramScreen: View {
                     }
                     SectionHeading("Projects", detail: "\(g.members.count)")
                     if g.members.isEmpty { quiet("No projects yet") }
-                    ForEach(g.members, id: \.self) { m in member(m) }
+                    ForEach(g.members, id: \.self) { m in
+                        ProgramMemberCard(member: m, words: detail?.members.first { $0.project == m.project && $0.server == m.server })
+                    }
                     umbrellas
                 }
                 .padding(.horizontal, Spacing.gutter)
@@ -231,12 +233,41 @@ struct ProgramScreen: View {
         .accessibilityHint(g.authority == "delegate" ? "The director starts work itself" : "The director proposes, you start")
     }
 
-    /// Member m's card: this server's project, or the paired server's as
-    /// its mirror lists it, named with its server ("mini/acme-ios", the
-    /// program mixes servers), else what its invite says.
     @ViewBuilder
-    private func member(_ m: AppAPI.ProgramMember) -> some View {
-        let words = detail?.members.first { $0.project == m.project && $0.server == m.server }
+    private var umbrellas: some View {
+        if let us = detail?.umbrellas, !us.isEmpty {
+            SectionHeading("Umbrellas", detail: "\(us.count)")
+            ForEach(us, id: \.task.ref) { u in
+                UmbrellaTile(program: slug, umbrella: u) { await load() }
+            }
+        }
+    }
+
+    private func quiet(_ text: String) -> some View {
+        Text(text)
+            .font(theme.body(.subheadline))
+            .foregroundStyle(theme.muted)
+            .padding(Spacing.card)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .surface(.card, in: RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
+    }
+}
+
+/// A program member's card (B19): this server's project, or a paired
+/// server's as its mirror (peer.list) lists it, named with its server
+/// ("mini/acme-ios": a program mixes servers) and opening the same
+/// screen as its row under that server; else, dim, what its invite
+/// says (words: program.get's member, when read). On the program's
+/// screen, and under its row on the Projects screen.
+struct ProgramMemberCard: View {
+    @Environment(PhoneModel.self) private var model
+    @Environment(\.navigate) private var navigate
+    let member: AppAPI.ProgramMember
+    var words: AppAPI.ProgramMember?
+
+    private var m: AppAPI.ProgramMember { member }
+
+    var body: some View {
         if m.server.isEmpty {
             if let p = model.project(m.project) {
                 let route = Route.project(p.slug)
@@ -274,25 +305,6 @@ struct ProgramScreen: View {
         ProjectCard(name: name, coordinator: Attention(word: words, tone: .idle, why: words, waits: false),
                     needs: 0, threads: [], dim: true)
             .accessibilityHint(words)
-    }
-
-    @ViewBuilder
-    private var umbrellas: some View {
-        if let us = detail?.umbrellas, !us.isEmpty {
-            SectionHeading("Umbrellas", detail: "\(us.count)")
-            ForEach(us, id: \.task.ref) { u in
-                UmbrellaTile(program: slug, umbrella: u) { await load() }
-            }
-        }
-    }
-
-    private func quiet(_ text: String) -> some View {
-        Text(text)
-            .font(theme.body(.subheadline))
-            .foregroundStyle(theme.muted)
-            .padding(Spacing.card)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .surface(.card, in: RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
     }
 }
 

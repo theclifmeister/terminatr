@@ -123,15 +123,26 @@ private struct ServerProjects: View {
         }
     }
 
-    /// A program: one row, one count of what needs the user in it.
+    /// A program: its row, with one count of what needs the user in it,
+    /// then its projects under it, indented, as the TUI's tree has them.
+    /// A paired one is named with its server ("mini/acme-ios") and is
+    /// also in its server's section, tagged with the program: the user's
+    /// decision (programs design §11.1). The badge counts its needs once
+    /// either way: it counts the one need list, not the rows.
     private func programCard(_ g: AppAPI.Program) -> some View {
         let route = Route.program(g.slug)
-        return PlainRouteLink(value: route) {
-            ProgramCard(program: g, director: .of(director: model.directorSession(g), questions: g.questions),
-                        needs: model.programNeeds(g).count, threads: model.programThreads(g),
-                        selected: navigate.opens(route, on: model))
+        return VStack(alignment: .leading, spacing: Spacing.item) {
+            PlainRouteLink(value: route) {
+                ProgramCard(program: g, director: .of(director: model.directorSession(g), questions: g.questions),
+                            needs: model.programNeeds(g).count, threads: model.programThreads(g),
+                            selected: navigate.opens(route, on: model))
+            }
+            .buttonStyle(.plain)
+            ForEach(g.members, id: \.self) { m in
+                ProgramMemberCard(member: m)
+                    .padding(.leading, Spacing.card)
+            }
         }
-        .buttonStyle(.plain)
     }
 
     private func card(_ p: AppAPI.Project, dim: Bool = false) -> some View {
