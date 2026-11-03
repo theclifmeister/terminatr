@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.77.0](https://github.com/theclifmeister/terminatr/compare/v0.76.0...v0.77.0) (2026-11-03)
+
+
+### Features
+
+* **apps:** show a sleeping coordinator and wake it on open ([#1074](https://github.com/theclifmeister/terminatr/issues/1074)) ([3bbad99](https://github.com/theclifmeister/terminatr/commit/3bbad99c59357f8c6c2983307fbf4e9bfc3344ac))
+* **ios:** a program is one row on the Projects screen ([#1070](https://github.com/theclifmeister/terminatr/issues/1070)) ([e518fc7](https://github.com/theclifmeister/terminatr/commit/e518fc79fb7ff6cf02f7a54b733f46fae98c4d77))
+* **ios:** unfold a program's project in the iPad sidebar ([#1072](https://github.com/theclifmeister/terminatr/issues/1072)) ([9f5bb46](https://github.com/theclifmeister/terminatr/commit/9f5bb46201672ebaadbc74f5fb151e45c24dc26a))
+* **programs:** the director recommends an answer; you accept it with one key or tap ([#1076](https://github.com/theclifmeister/terminatr/issues/1076)) ([2ebd8a3](https://github.com/theclifmeister/terminatr/commit/2ebd8a3821853d0cd1aa18165e091d4040258a8a))
+* **ticker:** coordinators sleep after a long idle and wake on demand ([#1073](https://github.com/theclifmeister/terminatr/issues/1073)) ([a4feb46](https://github.com/theclifmeister/terminatr/commit/a4feb465a2fda30a55499acf676249a807f0d55f))
+
+
+### Bug Fixes
+
+* **tui:** prefix+A in a director's pane opens the program's settings ([#1075](https://github.com/theclifmeister/terminatr/issues/1075)) ([a9e261f](https://github.com/theclifmeister/terminatr/commit/a9e261f00bdccde1cb20fb5d0e5f5a590c0c16b9))
+
 ## [0.76.0](https://github.com/theclifmeister/terminatr/compare/v0.75.0...v0.76.0) (2026-11-03)
 
 
