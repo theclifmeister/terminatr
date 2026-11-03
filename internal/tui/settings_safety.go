@@ -181,6 +181,7 @@ func (sr safetyRows) sharedRows() []setting {
 		sr.toggle("pr_followup"),
 		rc,
 		sr.toggle("auto_clear"),
+		sr.sleepRow(),
 		sr.toggle("coordinator_merges"),
 		sr.mergeMethodRow(),
 		sr.toggle("fast_forward_checkout"),
@@ -716,4 +717,64 @@ func (sr safetyRows) projectOnlyRows() []setting {
 				return nil
 			}},
 	}
+}
+
+// sleepSteps are what enter steps coordinator sleep through: "" (unset,
+// the default) only on a project, where X sets it back.
+var sleepSteps = []string{config.SleepOff, "1h", "2h", "4h", "8h", "24h"}
+
+// inProgram says whether slug is a member of a program while programs
+// are on: its coordinator then sleeps after 4h by default.
+func (m *dash) inProgram(slug string) bool {
+	if !m.data.ProgramsOn {
+		return false
+	}
+	for _, g := range m.data.Programs {
+		if slices.Contains(g.Projects, slug) {
+			return true
+		}
+	}
+	return false
+}
+
+// sleepWords are coordinator sleep's value: the duration or off, and
+// what the default is when no table sets it.
+func sleepWords(s config.Safety) string {
+	switch v := s.CoordinatorSleepAfter; v {
+	case "":
+		return "default (4h in a program, else off)"
+	case config.SleepOff, "0":
+		return "off"
+	default:
+		return "after " + v + " idle"
+	}
+}
+
+func (sr safetyRows) sleepRow() setting {
+	return setting{label: "Coordinator sleep", help: "Stop the coordinator's session once it has been idle this long with nothing waiting on it: no turn running, no working thread, no unread inbox item, no open question or permission prompt, and no console or app showing it. Its conversation is kept: enter on its row, opening it in an app, tm program wake or a new inbox item resumes it. By default 4h for a program's members, off for standalone projects; directors never sleep. Enter picks the next one; each sleep and wake is journaled.",
+		keys: []string{"coordinator_sleep_after"}, word: sleepWords,
+		value: func(m *dash) string {
+			s := sr.safety(m)
+			out := sleepWords(s)
+			if !sr.all && s.CoordinatorSleepAfter == "" {
+				if d := config.SleepAfter(s, m.inProgram(sr.slug)); d > 0 {
+					out = "after 4h idle (in a program)"
+				} else {
+					out = "off (standalone)"
+				}
+			}
+			return out
+		},
+		change: func(m *dash) tea.Cmd {
+			cur := sr.safety(m).CoordinatorSleepAfter
+			if cur == "0" {
+				cur = config.SleepOff
+			}
+			next := sleepSteps[(slices.Index(sleepSteps, cur)+1)%len(sleepSteps)]
+			msg := "coordinators " + sr.ofWho + " sleep after " + next + " idle"
+			if next == config.SleepOff {
+				msg = "coordinators " + sr.ofWho + " never sleep"
+			}
+			return sr.set(m, "coordinator_sleep_after", next, msg)
+		}}
 }

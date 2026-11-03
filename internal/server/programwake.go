@@ -63,16 +63,24 @@ func (s *Server) programWake(p proto.ProgramWakeParams, cc callCtx) (any, *proto
 	s.openMu.Lock()
 	defer s.openMu.Unlock()
 	kickoff := fmt.Sprintf(WakeKickoff, slug)
-	id, started, err := openCoordinator(s.listSessions, s.startForOpen, member, "", p.Cols, p.Rows, kickoff)
-	if err != nil {
-		return nil, openError(err)
-	}
-	if started {
-		if pr, err := project.Open(member); err == nil {
-			if err := pr.Journal(c, "coordinator.wake", id, "program "+slug); err != nil {
-				s.log.Printf("program.wake %s/%s: member journal: %v", slug, member, err)
+	// A sleeping coordinator resumes its conversation (coordsleep.go),
+	// journaled in the member there.
+	id, started := s.wakeCoordinator(member, c, "program "+slug)
+	if !started {
+		var err error
+		id, started, err = openCoordinator(s.listSessions, s.startForOpen, member, "", p.Cols, p.Rows, kickoff)
+		if err != nil {
+			return nil, openError(err)
+		}
+		if started {
+			if pr, err := project.Open(member); err == nil {
+				if err := pr.Journal(c, "coordinator.wake", id, "program "+slug); err != nil {
+					s.log.Printf("program.wake %s/%s: member journal: %v", slug, member, err)
+				}
 			}
 		}
+	}
+	if started {
 		if g, err := program.Open(slug, cfg); err == nil {
 			if err := g.Journal(c, "coordinator.wake", member, id); err != nil {
 				s.log.Printf("program.wake %s/%s: program journal: %v", slug, member, err)

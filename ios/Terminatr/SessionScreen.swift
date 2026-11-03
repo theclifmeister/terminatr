@@ -79,6 +79,14 @@ struct SessionScreen: View {
         .toolbar(width == .compact ? .hidden : .automatic, for: .tabBar)
         .asksSaveClear(ref, isPresented: $clearing)
         .kept($tab, "tab \(ref)")
+        // Opening a sleeping coordinator wakes it, as enter on its row in
+        // the TUI (T980): it spins until it runs. Only on opening: one
+        // that falls asleep while shown stays asleep.
+        .task(id: ref) {
+            if ref.isCoordinator, !ref.isRemote, model.wakes(ref.project) {
+                try? await model.wake(ref.project)
+            }
+        }
         .environment(\.showTerminal, ShowTerminal { tab = .terminal })
     }
 }

@@ -60,6 +60,8 @@ struct MainWindow: View {
                 }
             }
         }
+        // Opening a sleeping coordinator wakes it (T980).
+        .onChange(of: app.nav.selection) { _, s in app.opened(s) }
         .navigationTitle(app.title(app.nav.selection))
         .navigationSubtitle(app.subtitle(app.nav.selection))
         // The detail's glass shows through: no opaque band (T752);

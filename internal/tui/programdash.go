@@ -380,6 +380,10 @@ func programNeedRows(d Data, slug string, res *proto.ProgramNeedsResult) []row {
 		if len(n.Similar) > 0 {
 			rest = append(rest, "alike: "+strings.Join(n.Similar, ", "))
 		}
+		if rec := n.Recommend; rec != nil {
+			// First, so the answer shows however narrow the row.
+			rest = append([]string{recommendsWords(*rec)}, rest...)
+		}
 		r.rest = strings.Join(rest, " · ")
 		out = append(out, r)
 	}

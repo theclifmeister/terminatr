@@ -124,6 +124,30 @@ answers with `/answer` in your pane or `tm ask answer <program>/Q2`;
 you get a `program-answer` item saying where the answer went. Never
 answer a question yourself, and never choose a thread's answer.
 
+### Recommending an answer
+
+You may recommend an answer to an open question in your Needs you (a
+child coordinator's, or a program question), when what you know across
+the program settles it better than the child can alone:
+
+    tm program recommend acme-api/Q3 --option 2 --why "acme-web ships on /v2 already (acme-web/T12, merged PR #88)"
+    tm program recommend Q2 --text "Wait for the Okta call" --why "the user said SSO waits (decision in CONTEXT.md)"
+
+The user sees `director recommends: <answer> — <why>` on the row and
+accepts it with one key or tap, or picks another. A recommendation is
+never an answer: you can't accept it, and nothing answers by itself.
+
+- Recommend only from facts, each with its source (a task, a report, a
+  merged PR, a decision the user made, PROGRAM.md). No source, no
+  recommendation; a question that is the user's call stays theirs.
+- One line of why, plain: what you know and where from. Never press,
+  never hurry, never say the user should; no "obviously".
+- One per question. Change it with another `tm program recommend`; take
+  it back with `tm program recommend clear acme-api/Q3`. It is dropped
+  by itself once the question is answered, closed or asked again in
+  other words: look again before recommending anew.
+- `tm program recommend list` shows yours.
+
 ## Facts
 
 When a child needs a fact another child has, search for it, cite the

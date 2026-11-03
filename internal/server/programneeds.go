@@ -101,9 +101,15 @@ func (s *Server) rolledUpNeeds(slug string) (proto.ProgramNeedsResult, *proto.Er
 	t, _ := cfg.Program(slug)
 	var asks []project.Question
 	var umbrellas []proto.ProgramNeed
+	var recs map[string]program.Recommendation
 	if g, err := program.Open(slug, cfg); err == nil {
 		asks, _ = g.Questions()
 		umbrellas = umbrellaNeeds(g)
+		if recs, _ = g.Recommendations(); len(recs) > 0 {
+			if dropped, _ := g.Prune(cfg); len(dropped) > 0 {
+				recs, _ = g.Recommendations()
+			}
+		}
 	}
 	sessions := s.list().Sessions
 	var mirror []proto.PeerMirror
@@ -123,6 +129,7 @@ func (s *Server) rolledUpNeeds(slug string) (proto.ProgramNeedsResult, *proto.Er
 		members = append(members, s.localMember(member, sessions))
 	}
 	res := rollUp(slug, members, asks)
+	recommend(slug, res.Needs, members, asks, recs)
 	if len(umbrellas) > 0 {
 		res.Needs = append(res.Needs, umbrellas...)
 		order := map[string]int{"/" + slug: -1}
@@ -132,6 +139,41 @@ func (s *Server) rolledUpNeeds(slug string) (proto.ProgramNeedsResult, *proto.Er
 		rankNeeds(res.Needs, func(n proto.ProgramNeed) int { return order[n.Server+"/"+n.Project] })
 	}
 	return res, nil
+}
+
+// recommend sets the director's recommendation on each question row of
+// ns it has one for, while that question is still the one it read
+// (program.Current): a program question's from asks, a member's from
+// its questions. A stale one is shown nowhere.
+func recommend(slug string, ns []proto.ProgramNeed, members []memberNeeds, asks []project.Question, recs map[string]program.Recommendation) {
+	if len(recs) == 0 {
+		return
+	}
+	qs := map[string]map[string]project.Question{slug: {}}
+	for _, q := range asks {
+		qs[slug][q.ID] = q
+	}
+	for _, m := range members {
+		qs[memberKey(m.server, m.project)] = m.questions
+	}
+	for i := range ns {
+		key := proto.RecommendKey(slug, ns[i])
+		if key == "" {
+			continue
+		}
+		member := slug
+		if !ns[i].Program {
+			member = memberKey(ns[i].Server, ns[i].Project)
+		}
+		q, ok := qs[member][strings.TrimPrefix(ns[i].ID, "ask:")]
+		if !ok {
+			continue
+		}
+		stored, has := recs[key]
+		if r, ok := program.Current(stored, has, q); ok {
+			ns[i].Recommend = &proto.Recommendation{Labels: r.Labels, Text: r.Text, Why: r.Why, At: r.At}
+		}
+	}
 }
 
 // umbrellaNeeds are program g's umbrella tasks in review as rows: every

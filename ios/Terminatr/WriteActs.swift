@@ -154,7 +154,9 @@ struct DelegateButton: View {
 
 /// Start Coordinator for an active project whose coordinator isn't
 /// running (T821), as the Mac dashboard's: project.open, with the
-/// project's agent and model.
+/// project's agent and model. A sleeping one's is Wake Coordinator
+/// (T980): the same call resumes it, its conversation kept, and it spins
+/// until the coordinator runs.
 struct StartCoordinatorButton: View {
     @Environment(PhoneModel.self) private var model
     @Environment(\.theme) private var theme
@@ -163,18 +165,24 @@ struct StartCoordinatorButton: View {
     @State private var error: String?
 
     var body: some View {
+        let sleep = model.sleep(of: project)
         VStack(alignment: .leading, spacing: 6) {
             Button {
                 start()
             } label: {
                 HStack {
-                    Label("Start Coordinator", systemImage: "play.fill")
-                    if busy { ProgressView().controlSize(.small) }
+                    if sleep == .awake {
+                        Label("Start Coordinator", systemImage: "play.fill")
+                    } else {
+                        Label("Wake Coordinator", systemImage: "sun.max.fill")
+                    }
+                    if busy || sleep == .waking { ProgressView().controlSize(.small) }
                 }
                 .font(theme.body(.body, .medium))
             }
-            .disabled(busy)
-            .accessibilityHint("Starts it with the project's agent and model, as tm project open does")
+            .disabled(busy || sleep == .waking)
+            .accessibilityHint(sleep == .awake ? "Starts it with the project's agent and model, as tm project open does"
+                                               : "Resumes it with its conversation, as tm project open does")
             if let error {
                 Failure(text: error)
             }
@@ -186,7 +194,11 @@ struct StartCoordinatorButton: View {
         error = nil
         Task {
             do {
-                try await model.startCoordinator(project)
+                if model.sleep(of: project) == .asleep {
+                    try await model.wake(project)
+                } else {
+                    try await model.startCoordinator(project)
+                }
             } catch {
                 self.error = NeedActs.words(error)
             }

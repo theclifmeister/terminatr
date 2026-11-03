@@ -379,7 +379,8 @@ var coordinatorRules = []struct {
 // coordinatorRules: tm checks each call itself, and the server refuses
 // a director what its authority doesn't allow whatever the prompt says
 // (§10). Read-only commands always; the program's own acts that both
-// authorities allow (route, task edit, send, ask, wake: waking a
+// authorities allow (route, task edit, send, ask, recommend: it never
+// answers, wake: waking a
 // member's coordinator starts no threads) always; tm program
 // start only under authority = "delegate" (under propose it prompts,
 // and the server still wants --approved-by-user). Nothing of the
@@ -391,7 +392,7 @@ var directorRules = []struct {
 }{
 	{[]string{"tm program context", "tm program list", "tm program show", "tm program needs", "tm program search", "tm program task show",
 		"tm context", "tm task list", "tm task show", "tm thread list", "tm thread show", "tm search", "tm skill"}, nil},
-	{[]string{"tm program route", "tm program task edit", "tm program send", "tm program ask", "tm program wake"}, nil},
+	{[]string{"tm program route", "tm program task edit", "tm program send", "tm program ask", "tm program recommend", "tm program wake"}, nil},
 	{[]string{"tm program start"}, func(p config.Program) bool { return p.Authority == config.AuthorityDelegate }},
 }
 
@@ -1246,7 +1247,7 @@ func (s *Server) resume(recs []SessionRecord) (outs []restartOutcome) {
 // lost when its cwd is gone or the launch fails. s.mu not held.
 func (s *Server) resumeOne(r SessionRecord) restartOutcome {
 	kept := r
-	r.CleanExit, r.Interrupted, r.Queued = false, false, nil
+	r.CleanExit, r.Interrupted, r.Queued, r.Asleep = false, false, nil, false
 	if _, err := os.Stat(r.Cwd); err != nil {
 		s.log.Printf("session %s: not resumed: %v", r.ID, err)
 		return restartOutcome{rec: r, how: "lost"}

@@ -96,6 +96,8 @@ func dormantGone(r SessionRecord) string {
 func (s *Server) sleepLocked(id string) {
 	delete(s.sleeping, id)
 	r := s.records[id]
+	r.Asleep = s.asleep[id]
+	delete(s.asleep, id)
 	os.RemoveAll(s.runtimeDir(id))
 	delete(s.records, id)
 	if r.Agent != "" && r.AgentSessionID != "" {

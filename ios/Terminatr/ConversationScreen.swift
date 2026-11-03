@@ -79,6 +79,9 @@ struct ConversationScreen: View {
                             ContentUnavailableView("The director isn't running", systemImage: "moon.zzz",
                                                    description: Text(DirectorStart.words))
                                 .padding(.top, 60)
+                        } else if ref.isCoordinator, !ref.isRemote, model.sleep(of: ref.project) != .awake {
+                            SleepingCoordinator(project: ref.project)
+                                .padding(.top, 60)
                         } else {
                             ContentUnavailableView("No session runs", systemImage: "moon.zzz",
                                                    description: Text("Its conversation shows while a session runs it."))
@@ -505,11 +508,17 @@ struct EntryLine: View {
                     .padding(.leading, 12)
             }
         case .note:
-            Text(entry.text)
-                .font(theme.body(.subheadline, .medium))
-                .foregroundStyle(theme.muted)
-                .onGlass()
-                .frame(maxWidth: .infinity)
+            // A centred divider: "Conversation compacted", "Interrupted".
+            HStack(spacing: 10) {
+                Rectangle().fill(theme.edge).frame(height: 1)
+                Text(entry.text)
+                    .font(theme.body(.footnote, .medium))
+                    .foregroundStyle(theme.muted)
+                    .fixedSize()
+                Rectangle().fill(theme.edge).frame(height: 1)
+            }
+            .padding(.vertical, 6)
+            .accessibilityElement(children: .combine)
         }
     }
 
@@ -527,5 +536,43 @@ extension View {
         padding(.horizontal, Spacing.item)
             .padding(.vertical, 2)
             .surface(.glass, in: Capsule())
+    }
+}
+
+/// A sleeping coordinator's screen while it doesn't run (T980): it
+/// slept after a long idle, its conversation kept; opening it wakes it
+/// (SessionScreen), and while it wakes it spins. Below the write level
+/// the phone can't wake it: the Mac or the console does.
+private struct SleepingCoordinator: View {
+    @Environment(PhoneModel.self) private var model
+    @Environment(\.theme) private var theme
+    let project: String
+
+    var body: some View {
+        if model.sleep(of: project) == .waking {
+            VStack(spacing: Spacing.row) {
+                ProgressView()
+                Text("Waking the coordinator")
+                    .font(theme.title(.headline, .bold))
+                Text("Its conversation is kept: it shows once the coordinator runs.")
+                    .font(theme.body(.subheadline))
+                    .foregroundStyle(theme.muted)
+                    .multilineTextAlignment(.center)
+            }
+            .frame(maxWidth: .infinity)
+            .accessibilityElement(children: .combine)
+        } else {
+            ContentUnavailableView {
+                Label("The coordinator is asleep", systemImage: "moon.zzz.fill")
+            } description: {
+                Text(model.can(AppAPI.Methods.projectOpen.name)
+                     ? "It slept after a long idle, its conversation kept: opening it wakes it."
+                     : "It slept after a long idle, its conversation kept: opening it on the Mac or in tm's console wakes it.")
+            } actions: {
+                if model.can(AppAPI.Methods.projectOpen.name), model.project(project)?.active == true {
+                    StartCoordinatorButton(project: project)
+                }
+            }
+        }
     }
 }

@@ -84,7 +84,6 @@ private struct ServerProjects: View {
 
     var body: some View {
         let gone = model.standaloneInactive
-        let tagged = model.caps.contains(ProgramList.cap)
         let peers = model.shownPeers
         if several {
             SectionHeading(model.serverName, detail: model.link == .up ? "" : model.linkWords.1)
@@ -100,17 +99,14 @@ private struct ServerProjects: View {
         }
         ForEach(peers, id: \.alias) { peer in
             SectionHeading(peer.name.isEmpty ? peer.alias : peer.name, detail: PeerTag.of(peer).word)
-            ForEach(peer.projects, id: \.project) { p in
+            ForEach(ProgramList.standalone(peer, programs: model.programs), id: \.project) { p in
                 let sessions = SidebarTree.sessions(of: p, alias: peer.alias)
                 let coordinator = sessions.first { $0.ref.isCoordinator }?.session ?? nil
                 let route = Route.peerProject(alias: peer.alias, project: p.project)
                 PlainRouteLink(value: route) {
                     ProjectCard(name: p.project, coordinator: .of(peer: coordinator), needs: p.stale ? 0 : p.needsYou,
                                 threads: sessions.filter { !$0.ref.isCoordinator }.map { Attention.of(peer: $0.session).tone },
-                                dim: peer.state != "up" || p.stale, selected: navigate.opens(route, on: model),
-                                // Its program on this server, which lists it
-                                // under the program too (B19).
-                                tag: tagged ? p.program : "")
+                                dim: peer.state != "up" || p.stale, selected: navigate.opens(route, on: model))
                 }
                 .buttonStyle(.plain)
             }
@@ -123,32 +119,25 @@ private struct ServerProjects: View {
         }
     }
 
-    /// A program: its row, with one count of what needs the user in it,
-    /// then its projects under it, indented, as the TUI's tree has them.
-    /// A paired one is named with its server ("mini/acme-ios") and is
-    /// also in its server's section, tagged with the program: the user's
-    /// decision (programs design §11.1). The badge counts its needs once
-    /// either way: it counts the one need list, not the rows.
+    /// A program: one row, with one count of what needs the user in it.
+    /// Its projects, a paired one too, are listed only on the program's
+    /// page (the user's decision, T977), not here and not in a server's
+    /// section. The badge counts the program's needs once: it counts the
+    /// one need list, not the rows.
     private func programCard(_ g: AppAPI.Program) -> some View {
         let route = Route.program(g.slug)
-        return VStack(alignment: .leading, spacing: Spacing.item) {
-            PlainRouteLink(value: route) {
-                ProgramCard(program: g, director: .of(director: model.directorSession(g), questions: g.questions),
-                            needs: model.programNeeds(g).count, threads: model.programThreads(g),
-                            selected: navigate.opens(route, on: model))
-            }
-            .buttonStyle(.plain)
-            ForEach(g.members, id: \.self) { m in
-                ProgramMemberCard(member: m)
-                    .padding(.leading, Spacing.card)
-            }
+        return PlainRouteLink(value: route) {
+            ProgramCard(program: g, director: .of(director: model.directorSession(g), questions: g.questions),
+                        needs: model.programNeeds(g).count, threads: model.programThreads(g),
+                        selected: navigate.opens(route, on: model))
         }
+        .buttonStyle(.plain)
     }
 
     private func card(_ p: AppAPI.Project, dim: Bool = false) -> some View {
         let route = Route.project(p.slug)
         return PlainRouteLink(value: route) {
-            ProjectCard(name: p.slug, coordinator: .of(coordinator: model.coordinatorSession(p.slug), in: p),
+            ProjectCard(name: p.slug, coordinator: model.coordinator(of: p),
                         needs: Need.count(model.needs, project: p.slug),
                         threads: SidebarTree.threads(of: p) { model.session($0) }.map { model.attention($0).tone },
                         pinned: p.pinned, dim: dim, selected: navigate.opens(route, on: model))
@@ -221,7 +210,7 @@ struct ProjectScreen: View {
                         let c = model.coordinatorSession(slug)
                         let route = Route.session(SessionRef(project: slug))
                         PlainRouteLink(value: route) {
-                            SessionTile("Coordinator", state: .of(coordinator: c, in: p), busy: Busy.of(coordinator: c, in: p),
+                            SessionTile("Coordinator", state: model.coordinator(of: p), busy: Busy.of(coordinator: c, in: p),
                                         context: model.context(SessionRef(project: slug)), dormant: dormant,
                                         selected: navigate.opens(route, on: model))
                         }

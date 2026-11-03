@@ -37,6 +37,9 @@ import (
 type Data struct {
 	ServerOK bool
 	Sessions []proto.SessionInfo
+	// Asleep are the projects whose coordinator sleeps after a long
+	// idle (SessionListResult.Asleep), by slug.
+	Asleep map[string]bool
 	// ModNotices are the notifications of user mods in the server's tray
 	// (modnotice.go).
 	ModNotices []modnotify.Notice
@@ -772,6 +775,7 @@ func (s *ServerSource) Load() Data {
 		d.Err = err.Error()
 	} else {
 		d.ServerOK, d.Sessions, d.Alerts, d.ModNotices = true, res.Sessions, res.Alerts, res.ModNotices
+		d.Asleep = asleepSet(res.Asleep)
 		d.Cells = newModCells(res.Mods, res.Sessions)
 		if res.Mods != nil {
 			d.Toasts = res.Mods.Toasts
@@ -984,6 +988,19 @@ func modData(mods []mod.Mod) map[string]string {
 			}
 			out[md.ID] = strings.Join(lines, "\n")
 		}
+	}
+	return out
+}
+
+// asleepSet is the projects of the sleeping coordinators a session.list
+// named, nil for none.
+func asleepSet(list []proto.AsleepCoordinator) map[string]bool {
+	if len(list) == 0 {
+		return nil
+	}
+	out := map[string]bool{}
+	for _, a := range list {
+		out[a.Project] = true
 	}
 	return out
 }

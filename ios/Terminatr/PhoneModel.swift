@@ -33,6 +33,7 @@ final class PhoneModel {
     init(key: String = "", places: Places = Places()) {
         self.key = key
         self.places = places
+        if !key.isEmpty { nav = Navigation.restore(UserDefaults.standard.data(forKey: "sidebar.navigation." + key)) }
         log = key == "demo" || key.isEmpty ? LinkLog() : LinkLog.load(pairing: key)
     }
 
@@ -89,9 +90,22 @@ final class PhoneModel {
     /// hello says programs (ProgramList.cap), so no program UI shows.
     private(set) var programs: [AppAPI.Program] = []
     private(set) var needsFirst = false
+    /// The iPad sidebar's folds (T978), the Mac's Navigation.unfolded:
+    /// a program's members start folded. Kept per server, restored at
+    /// launch.
+    var nav = Navigation() {
+        didSet { if nav != oldValue { UserDefaults.standard.set(nav.encoded(), forKey: navKey) } }
+    }
+    private var navKey: String { "sidebar.navigation." + key }
     /// [ui] context_hint, as the last session list said (app API 13; 0
     /// never warns): from it the coordinator's context gauge warns.
     private(set) var contextHint = 0
+    /// The projects whose coordinator sleeps (app API 47's asleep), as
+    /// the last session list said: opening one wakes it (Sleep, T980).
+    private(set) var sleeping: Set<String> = []
+    /// The projects whose coordinator the phone is waking
+    /// (project.open): its tile and screen spin until it runs.
+    private(set) var waking: Set<String> = []
     /// Each project's Save & Clear on its way or just done (T868).
     private(set) var clears: [String: SaveClear] = [:]
     /// Reads session.list while the bridge is up: the context gauges
@@ -178,6 +192,8 @@ final class PhoneModel {
         projects = []
         programs = []
         sessions = []
+        sleeping = []
+        waking = []
         peers = []
         clears = [:]
         for t in trays.values { t.clear() }
@@ -629,6 +645,20 @@ final class PhoneModel {
         return r
     }
 
+    /// Whether this phone accepts the director's recommendation on a
+    /// program's question: while its bridge lists
+    /// program.recommend.accept, at the write level (app API 48).
+    var acceptsRecommendations: Bool { can(AppAPI.Methods.programRecommendAccept.name) }
+
+    /// Answers question (acme-api/Q3, acme/Q2) of program slug with its
+    /// director's recommendation, as the user's own answer.
+    func acceptRecommendation(_ slug: String, question: String) async throws -> AppAPI.RecommendAccepted {
+        let r = try await connected().call(AppAPI.Methods.programRecommendAccept,
+                                           AppAPI.ProgramRecommendAcceptParams(program: slug, question: question))
+        await reread()
+        return r
+    }
+
     /// Accepts the program's umbrella task in review (the write level).
     func acceptUmbrella(program: String, task: String) async throws -> String {
         try await connected().call(AppAPI.Methods.programUmbrellaAccept, AppAPI.ProgramUmbrellaParams(program: program, task: task)).status
@@ -733,6 +763,37 @@ final class PhoneModel {
         await reread()
     }
 
+    /// Whether project's coordinator sleeps, wakes or neither (Sleep).
+    func sleep(of project: String) -> Sleep {
+        Sleep.of(project, running: coordinatorSession(project) != nil, asleep: sleeping, waking: waking)
+    }
+
+    /// Whether the phone wakes project's sleeping coordinator: it sleeps
+    /// and project.open is the phone's here (the write level).
+    func wakes(_ project: String) -> Bool {
+        sleep(of: project) == .asleep && can(AppAPI.Methods.projectOpen.name)
+    }
+
+    /// Wakes project's sleeping coordinator (T980): project.open resumes
+    /// it under its session id, its conversation kept, as enter on its
+    /// row in the TUI. Its tile and screen spin until session.list has
+    /// it, or 30 seconds have gone.
+    func wake(_ project: String) async throws {
+        guard wakes(project) else { return }
+        waking.insert(project)
+        do {
+            _ = try await connected().call(AppAPI.Methods.projectOpen, AppAPI.ProjectOpenParams(project: project, cols: 120, rows: 36))
+        } catch {
+            waking.remove(project)
+            throw error
+        }
+        await reread()
+        Task {
+            try? await Task.sleep(for: .seconds(30))
+            waking.remove(project)
+        }
+    }
+
     /// The sessions again, after an act: their needs change at once.
     private func reread() async {
         guard let b = bridge, let l = try? await b.call(AppAPI.Methods.sessionList) else { return }
@@ -772,6 +833,8 @@ final class PhoneModel {
     private func listed(_ l: AppAPI.SessionList) {
         sessions = l.sessions
         contextHint = l.contextHint
+        sleeping = Sleep.projects(l)
+        waking = Sleep.settle(waking, sessions: sessions)
         let now = Date.now
         for (k, var c) in clears {
             c.follow(clearedSession(k), at: now)
@@ -836,6 +899,12 @@ final class PhoneModel {
         let name = s.name.isEmpty ? "your server" : s.name
         let same = direct().filter { $0.name.caseInsensitiveCompare(s.name) == .orderedSame }.count
         return same > 1 ? "\(name) \(key.prefix(4).uppercased())" : name
+    }
+
+    /// What p's coordinator says of itself: asleep, waking (T980), or its
+    /// session's state.
+    func coordinator(of p: AppAPI.Project) -> Attention {
+        Attention.of(coordinator: coordinatorSession(p.slug), in: p, sleep: sleep(of: p.slug))
     }
 
     func coordinatorSession(_ project: String) -> AppAPI.Session? {
@@ -909,7 +978,7 @@ final class PhoneModel {
             return Attention.of(director: directorSession(ref.project), questions: program(ref.project)?.questions ?? 0)
         }
         guard let p = project(ref.project) else { return nil }
-        if ref.isCoordinator { return Attention.of(coordinator: coordinatorSession(ref.project), in: p) }
+        if ref.isCoordinator { return coordinator(of: p) }
         return p.threads.first { $0.record.id == ref.thread }.map(attention)
     }
 

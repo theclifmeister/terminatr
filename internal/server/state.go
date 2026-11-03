@@ -94,6 +94,10 @@ type SessionRecord struct {
 	// project deactivated, programs switched off); zero on a running
 	// one's and on records of tm 0.73 or older.
 	Dormant time.Time `json:"dormant,omitzero"`
+	// Asleep: a dormant coordinator the ticker put to sleep while its
+	// project is active (coordsleep.go): a server start keeps it dormant,
+	// and a wake (or its project's activation) resumes it.
+	Asleep bool `json:"asleep,omitempty"`
 }
 
 const stateVersion = 1

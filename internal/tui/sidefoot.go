@@ -82,6 +82,9 @@ func sideFooter(all []treeRow, w int, head sideHeadIn, s ServerInfo, session, co
 // progress, its PR's number and checks).
 func (r treeRow) details() (string, string) {
 	running := func(state string) string { return cmp.Or(state, "not running") }
+	if r.asleep {
+		running = func(string) string { return "asleep" }
+	}
 	if r.kind == treeServer || r.isPeer() {
 		return peerDetails(r)
 	}
@@ -142,7 +145,10 @@ func (r treeRow) details() (string, string) {
 		if r.asks > 0 {
 			bits = append(bits, counted(r.asks, "question")+" waiting")
 		}
-		if r.state == "" {
+		switch {
+		case r.asleep:
+			bits = append(bits, "its conversation kept: enter wakes it")
+		case r.state == "":
 			bits = append(bits, "enter starts it")
 		}
 		return r.slug + " coordinator · " + running(r.state), strings.Join(bits, " · ")
@@ -236,6 +242,8 @@ func sideKeyBar(r *treeRow, focused, session bool, cw int) string {
 		}
 	case r.kind == treeCoordinator && r.dormant:
 		keys = []string{enter + " start", left + " project"}
+	case r.kind == treeCoordinator && r.asleep:
+		keys = []string{enter + " wake", left + " project"}
 	case r.kind == treeCoordinator && r.state == "":
 		keys = []string{enter + " start", left + " project"}
 	case r.kind == treeCoordinator && r.peer == "":

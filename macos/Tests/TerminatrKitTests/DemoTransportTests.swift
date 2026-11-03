@@ -17,7 +17,10 @@ func demoBridge() async throws -> Bridge {
 @Test func demoRecordingDecodes() async throws {
     let b = try await demoBridge()
     #expect(await b.hello?.appApi == AppAPI.version)
-    let sessions = try await b.call(AppAPI.Methods.sessionList).sessions
+    let list = try await b.call(AppAPI.Methods.sessionList)
+    let sessions = list.sessions
+    // billing-api's coordinator sleeps (T980): its tile shows ☾.
+    #expect(Sleep.projects(list) == ["billing-api"])
     let projects = try await b.subscribe(AppAPI.Methods.projectsWatch, AppAPI.ProjectsWatchParams(detail: true, lean: true)).result.projects
     let peers = try await b.call(AppAPI.Methods.peerList).peers
     #expect(SidebarTree.active(projects).map(\.slug) == ["acme-web", "billing-api"])

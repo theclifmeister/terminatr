@@ -2419,7 +2419,15 @@
        "merged": [
         "acme-web/Q4",
         "studio/acme-api/Q2"
-       ]
+       ],
+       "recommend": {
+        "question": "acme/Q1",
+        "choices": [
+         "API ledger"
+        ],
+        "why": "refunds already post to the API's ledger (acme-api/T31, merged PR #212)",
+        "at": "2026-11-03T09:12:00Z"
+       }
       }
      ],
      "members": [
@@ -2705,7 +2713,14 @@
      "title": ""
     }
    ],
-   "context_hint": 60
+   "context_hint": 60,
+   "asleep": [
+    {
+     "project": "billing-api",
+     "id": "s-c2",
+     "since": "2026-10-27T06:00:00Z"
+    }
+   ]
   },
   "task.done": {
    "tasks": []
@@ -2762,7 +2777,7 @@
   }
  },
  "hello": {
-  "app_api": 46,
+  "app_api": 48,
   "build": "demo",
   "capabilities": [
    "read",
@@ -2810,7 +2825,8 @@
    "program.get",
    "program.needs",
    "program.search",
-   "program.answer"
+   "program.answer",
+   "program.recommend.accept"
   ],
   "server": {
    "caps": [
@@ -3183,7 +3199,7 @@
         "title": "Rotate the Stripe webhook secret"
        }
       ],
-      "questions": 1,
+      "questions": 0,
       "repos": [
        "~/src/billing-api"
       ],

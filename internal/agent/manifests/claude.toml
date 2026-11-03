@@ -559,6 +559,15 @@ block_kind = "type"
 string_block = "text"
 ignore = ["thinking", "redacted_thinking", "image", "tool_reference", "document"]
 
+# Compaction (manual, auto or idle): a type=system compact_boundary line,
+# then the summary as a user line with isCompactSummary. The summary is
+# Claude's own text, not the user's: one quiet marker stands for it.
+[[transcript.items]]
+kind = "note"
+match = { type = "user", isSidechain = "!true", isCompactSummary = "true" }
+block = "text"
+note = "Conversation compacted"
+
 [[transcript.items]]
 kind = "note"
 match = { type = "user", isSidechain = "!true", isMeta = "!true" }

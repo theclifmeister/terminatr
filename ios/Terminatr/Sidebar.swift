@@ -11,6 +11,16 @@ struct SidebarRow: Identifiable {
     let title: String
     let tone: Attention.Tone
     let badge: String?
+    /// A program member's fold, which its chevron and Fold/Unfold write.
+    var fold: Fold?
+
+    /// A member project's fold key (Navigation.unfolded) and whether its
+    /// coordinator and threads show under it now.
+    struct Fold: Equatable {
+        let server: String
+        let key: String
+        let open: Bool
+    }
 
     /// The row SidebarTree.rows keys as key: a coordinator ("c:",
     /// "rc:"), a thread ("t:", "rt:") or an inactive project ("p:"),
@@ -21,6 +31,12 @@ struct SidebarRow: Identifiable {
         if key.hasPrefix("g:"), let slash = key.firstIndex(of: "/") {
             guard let r = of(String(key[key.index(after: slash)...]), model: model) else { return nil }
             return SidebarRow(id: model.key + " " + key, route: r.route, title: r.title, tone: r.tone, badge: r.badge)
+        }
+        if key.hasPrefix("r:"), key.dropFirst(2).split(separator: "/").count == 2 {
+            // A paired server's project a program lists (as "g:<program>/r:...").
+            let parts = key.dropFirst(2).split(separator: "/").map(String.init)
+            return SidebarRow(id: model.key + " " + key, route: Route.peerProject(alias: parts[0], project: parts[1]).on(model.key),
+                              title: parts[0] + "/" + parts[1], tone: .idle, badge: nil)
         }
         let (kind, rest) = SidebarTree.split(key)
         let parts = rest.split(separator: "/").map(String.init)
@@ -43,7 +59,7 @@ struct SidebarRow: Identifiable {
             return SidebarRow(id: id, route: Route.project(rest).on(model.key), title: rest, tone: .idle, badge: nil)
         case ("c", 1):
             guard let p = model.project(rest) else { return nil }
-            return row(.session(SessionRef(project: rest)), "Coordinator", .of(coordinator: model.coordinatorSession(rest), in: p))
+            return row(.session(SessionRef(project: rest)), "Coordinator", model.coordinator(of: p))
         case ("t", 2):
             guard let t = model.project(parts[0])?.threads.first(where: { $0.record.id == parts[1] }) else { return nil }
             let title = [t.task?.ref, t.record.title].compactMap { $0 }.joined(separator: " ")
@@ -60,6 +76,29 @@ struct SidebarRow: Identifiable {
     }
 }
 
+/// A section's rows in runs (T978): a program member's row with the
+/// rows of its coordinator and threads after it, which fold with it;
+/// the rows before the first member, and any other row, run alone.
+struct SidebarChunk: Identifiable {
+    let head: SidebarRow?
+    var rows: [SidebarRow]
+    var id: String { rows.first?.id ?? "" }
+
+    static func of(_ rows: [SidebarRow]) -> [SidebarChunk] {
+        var out: [SidebarChunk] = []
+        for r in rows {
+            if r.fold != nil {
+                out.append(SidebarChunk(head: r, rows: [r]))
+            } else if let last = out.last, last.head != nil {
+                out[out.count - 1].rows.append(r)
+            } else {
+                out.append(SidebarChunk(head: nil, rows: [r]))
+            }
+        }
+        return out
+    }
+}
+
 /// A section of the iPad's sidebar, of one server's.
 struct SidebarGroup: Identifiable {
     let id: String
@@ -73,10 +112,37 @@ extension PhoneModel {
     /// not their threads; a server the phone pairs with directly not
     /// again under this one (shownPeers).
     var sidebar: [(section: SidebarSection, rows: [SidebarRow])] {
-        var nav = Navigation()
-        nav.showInactive = true
-        let keys = SidebarTree.rows(projects, sessions: sessions, peers: shownPeers, nav: nav, needsFirst: needsFirst)
-        return SidebarTree.sections(keys).map { s in (s, s.rows.compactMap { SidebarRow.of($0, model: self) }) }
+        var shown = nav
+        shown.showInactive = true
+        let keys = SidebarTree.rows(projects, sessions: sessions, peers: shownPeers, programs: programs, nav: shown, needsFirst: needsFirst)
+        return SidebarTree.sections(keys, programs: programs).map { s in
+            (s, s.rows.compactMap { key in SidebarRow.of(key, model: self).map { r in var r = r; r.fold = fold(of: key); return r } })
+        }
+    }
+
+    /// The fold of a program member's row (T978): a local member's "p:"
+    /// row, a paired one's "g:<program>/r:<alias>/<slug>"; nil for the
+    /// rest (a standalone project, the inactive divider keep theirs).
+    func fold(of key: String) -> SidebarRow.Fold? {
+        let (kind, rest) = SidebarTree.split(key)
+        let k: String
+        if kind == "p", let g = programOf(rest), projects.first(where: { $0.slug == rest })?.active == true {
+            k = SidebarTree.foldKey(member: rest, of: g)
+        } else if kind == "g", let slash = rest.firstIndex(of: "/"), let g = program(String(rest[..<slash])) {
+            let m = rest[rest.index(after: slash)...]
+            guard m.hasPrefix("r:") else { return nil }
+            let parts = m.dropFirst(2).split(separator: "/").map(String.init)
+            guard parts.count == 2 else { return nil }
+            k = SidebarTree.foldKey(member: parts[1], alias: parts[0], of: g)
+        } else {
+            return nil
+        }
+        return SidebarRow.Fold(server: self.key, key: k, open: nav.unfolded.contains(k))
+    }
+
+    /// Folds or unfolds a program member's rows, kept across launches.
+    func toggle(_ fold: SidebarRow.Fold) {
+        nav.toggle(fold.key, open: fold.open)
     }
 }
 

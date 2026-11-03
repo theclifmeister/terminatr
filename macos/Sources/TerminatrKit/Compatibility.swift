@@ -202,6 +202,13 @@ public enum Compatibility: Equatable, Sendable {
         hello.appApi >= directorOpenAPI && hello.methods.contains(AppAPI.Methods.programOpen.name)
     }
 
+    /// Whether hello's tm accepts the director's recommendation on a
+    /// program's question as the user's answer (app API 48,
+    /// program.recommend.accept): the program page's Accept.
+    public static func acceptsRecommendations(_ hello: AppAPI.Hello) -> Bool {
+        hello.methods.contains(AppAPI.Methods.programRecommendAccept.name)
+    }
+
     /// Compares hello with this app, of release appVersion (its
     /// CFBundleShortVersionString, "0.54.0"; nil or 0.0.0 for a build
     /// from source, which compares by the app API only).

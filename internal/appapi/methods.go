@@ -208,6 +208,10 @@ func init() {
 		unary(proto.MethodProgramTaskEdit, true, programTaskEditParams, programTaskEditedOf),
 		unary(proto.MethodProgramSend, true, programSendParams, programSentOf),
 		unary(proto.MethodProgramAnswer, true, programAnswerParams, programAnsweredOf),
+		// The director's recommended answer to a question of the
+		// program's Needs you, accepted as the user's own (app API 48):
+		// a write, at a device's write level too.
+		unary(proto.MethodProgramRecommendAccept, true, programRecommendAcceptParams, recommendAcceptedOf),
 		unary(proto.MethodProgramUmbrellaAccept, true, programUmbrellaParams, programUmbrellaOf),
 		unary(proto.MethodProgramUmbrellaSendBack, true, programUmbrellaParams, programUmbrellaOf),
 		unary(proto.MethodProgramRename, true, programRenameParams, programRenamedOf),

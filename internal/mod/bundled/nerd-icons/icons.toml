@@ -28,6 +28,7 @@ review     = "\uf06e"  # nf-fa-eye
 done       = "\uf00c"  # nf-fa-check
 other      = "\uf28d"  # nf-fa-stop_circle
 none       = "·"
+asleep     = "\uf186"  # nf-fa-moon_o
 ciPass     = "\uf058"  # nf-fa-check_circle
 ciFail     = "\uf057"  # nf-fa-times_circle
 ciRun      = "\uf1ce"  # nf-fa-circle_o_notch

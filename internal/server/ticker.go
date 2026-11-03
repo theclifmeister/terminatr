@@ -110,6 +110,21 @@ func (h tickerHost) AskSave(id, text string, still func() bool) error {
 	return nil
 }
 
+// Sleep stops coordinator id with its conversation kept, once still
+// says yes to its info right before (coordsleep.go).
+func (h tickerHost) Sleep(id string, still func(proto.SessionInfo) bool) error {
+	return h.s.sleepCoordinator(id, still)
+}
+
+// Wake resumes project slug's sleeping coordinator for a new inbox
+// item: its id, or false when none sleeps.
+func (h tickerHost) Wake(slug string) (string, bool) {
+	if h.ctx.Err() != nil {
+		return "", false
+	}
+	return h.s.wakeCoordinator(slug, caller.Caller{Kind: caller.Ticker}, "new inbox item")
+}
+
 func (h tickerHost) Remote(id string, on bool) (proto.SessionRemoteResult, error) {
 	res, perr := h.s.remote(proto.SessionRemoteParams{ID: id, On: on})
 	if perr != nil {

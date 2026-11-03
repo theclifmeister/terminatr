@@ -487,10 +487,17 @@ struct EntryView: View {
                     .padding(.leading, 12)
             }
         case .note:
-            Text(entry.text)
-                .font(theme.body(.subheadline, .medium))
-                .foregroundStyle(theme.muted)
-                .frame(maxWidth: .infinity)
+            // A centred divider: "Conversation compacted", "Interrupted".
+            HStack(spacing: 10) {
+                Rectangle().fill(theme.edge).frame(height: 1)
+                Text(entry.text)
+                    .font(theme.body(.footnote, .medium))
+                    .foregroundStyle(theme.muted)
+                    .fixedSize()
+                Rectangle().fill(theme.edge).frame(height: 1)
+            }
+            .padding(.vertical, 6)
+            .accessibilityElement(children: .combine)
         }
     }
 

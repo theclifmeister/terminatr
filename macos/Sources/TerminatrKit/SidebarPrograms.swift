@@ -162,6 +162,14 @@ extension SidebarTree {
         nav.unfolded.contains(Navigation.memberKey(program: g.slug, server: alias, project: slug))
     }
 
+    /// The key of a program member's fold (Navigation.unfolded): a local
+    /// member's is its project's own (sectionKey, as view.Tree.Unfolded
+    /// keys it), a paired one's (alias not empty) is apart from its
+    /// server's group's (memberKey).
+    public static func foldKey(member slug: String, alias: String = "", of g: AppAPI.Program) -> String {
+        alias.isEmpty ? Navigation.sectionKey(server: "", project: slug) : Navigation.memberKey(program: g.slug, server: alias, project: slug)
+    }
+
     /// The needs of program g, its badge: its own (its director's, its
     /// questions) and its members', each once.
     public static func needs(of g: AppAPI.Program, in needs: [Need]) -> [Need] {
@@ -198,6 +206,22 @@ public enum ProgramFacts {
     /// needs and routes name it.
     public static func place(_ project: String, server: String) -> String {
         server.isEmpty ? project : "\(server)/\(project)"
+    }
+
+    /// The director's recommendation on a need, as the TUI says it
+    /// (T982): "director recommends: EU — acme-web runs in the EU
+    /// (acme-web/T4)". A recommendation is never an answer: the user
+    /// accepts it, or picks another.
+    public static func recommends(_ r: AppAPI.Recommendation) -> String {
+        "director recommends: \(answer(r)) — \(r.why)"
+    }
+
+    /// A recommendation's answer in words: its options' labels, or
+    /// its own words in quotes.
+    public static func answer(_ r: AppAPI.Recommendation) -> String {
+        var bits = r.choices
+        if !r.other.isEmpty { bits.append("“\(r.other)”") }
+        return bits.joined(separator: ", ")
     }
 
     /// A program need's words: its task and what it is.

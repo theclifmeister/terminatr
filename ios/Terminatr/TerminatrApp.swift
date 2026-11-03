@@ -243,6 +243,9 @@ enum RootTab: Hashable {
     /// A row of the iPad's sidebar (T849): a session or an inactive
     /// project, opened in the Projects tab's columns.
     case place(Route)
+    /// A program member's disclosure row (T978): chosen, it folds or
+    /// unfolds the member and leaves the columns as they are.
+    case fold(server: String, key: String)
 }
 
 struct Root: View {
@@ -386,7 +389,7 @@ extension Root {
         switch t {
         case .needs: needsPath
         case .search: searchPath
-        case .projects, .place: projectsPath
+        case .projects, .place, .fold: projectsPath
         }
     }
 
@@ -409,6 +412,10 @@ extension Root {
     /// chosen; a new project starts its search afresh. A row picked in
     /// the sidebar opens its route in the columns.
     private func choose(_ t: RootTab) {
+        if case .fold(let server, let key) = t {
+            if let m = phone.model(server) { m.nav.toggle(key, open: m.nav.unfolded.contains(key)) }
+            return
+        }
         if t == .search, tab != .search, let s = scope(from: tab), s != searchScope {
             searchScope = s
             searchPath = []
@@ -436,20 +443,7 @@ extension Root {
             searchTab
             ForEach(phone.sidebar) { s in
                 TabSection(s.title) {
-                    ForEach(s.rows) { r in
-                        Tab(value: RootTab.place(r.route)) {
-                            opening(projectsStack)
-                        } label: {
-                            Label {
-                                Text(r.title)
-                            } icon: {
-                                Image(systemName: r.tone.symbol)
-                                    .foregroundStyle(theme.colour(r.tone))
-                            }
-                        }
-                        .badge(r.badge.map { Text($0) })
-                        .defaultVisibility(.hidden, for: .tabBar)
-                    }
+                    ForEach(SidebarChunk.of(s.rows)) { c in sidebarChunk(c) }
                 }
                 .defaultVisibility(.hidden, for: .tabBar)
             }
@@ -460,6 +454,54 @@ extension Root {
         .tabViewSidebarHeader { SidebarHead().environment(phone).environment(phone.primary) }
         .onGeometryChange(for: CGSize.self) { $0.size } action: { size = $0 }
         .onChange(of: folding) { if $1 != nil { Self.setSidebar(hidden: true) } }
+    }
+
+    /// A run of rows: a program member's row, its disclosure row (T978,
+    /// the Mac's Fold/Unfold) and, while unfolded, its coordinator and
+    /// threads; any other row alone.
+    @available(iOS 18, *)
+    @TabContentBuilder<RootTab>
+    private func sidebarChunk(_ c: SidebarChunk) -> some TabContent<RootTab> {
+        ForEach(c.rows) { r in
+            sidebarTab(r)
+            if let f = r.fold { foldTab(f, of: r) }
+        }
+    }
+
+    @available(iOS 18, *)
+    private func foldTab(_ f: SidebarRow.Fold, of r: SidebarRow) -> some TabContent<RootTab> {
+        Tab(value: RootTab.fold(server: f.server, key: f.key)) {
+            EmptyView()
+        } label: {
+            Label(f.open ? "Hide threads" : "Show threads", systemImage: f.open ? "chevron.down" : "chevron.right")
+                .foregroundStyle(theme.muted)
+        }
+        .defaultVisibility(.hidden, for: .tabBar)
+    }
+
+    /// A row of the sidebar. A program member's own row has the Mac's
+    /// Fold/Unfold in its menu.
+    @available(iOS 18, *)
+    private func sidebarTab(_ r: SidebarRow) -> some TabContent<RootTab> {
+        Tab(value: RootTab.place(r.route)) {
+            opening(projectsStack)
+        } label: {
+            Label {
+                Text(r.title)
+            } icon: {
+                Image(systemName: r.tone.symbol)
+                    .foregroundStyle(theme.colour(r.tone))
+            }
+        }
+        .badge(r.badge.map { Text($0) })
+        .contextMenu {
+            if let f = r.fold { Button(f.open ? "Fold" : "Unfold", systemImage: f.open ? "chevron.up" : "chevron.down") { toggle(f) } }
+        }
+        .defaultVisibility(.hidden, for: .tabBar)
+    }
+
+    private func toggle(_ f: SidebarRow.Fold) {
+        phone.model(f.server)?.toggle(f)
     }
 
     /// A tab's content, which opens the sidebar as the app starts (T858):

@@ -23,7 +23,7 @@ func keymap(t *testing.T, km map[string][]string) error {
 // and the action binding name them): renaming one breaks every keymap
 // that binds it, so a rename keeps the old id as an alias.
 var wantIDs = []string{
-	"list.up", "list.down", "list.page-up", "list.page-down", "focus.next", "focus.prev", "place.last", "row.open",
+	"list.up", "list.down", "list.page-up", "list.page-down", "focus.next", "focus.prev", "place.last", "row.open", "recommend.accept",
 	"session.adopt", "project.activate", "card.fold", "project.new", "project.popup", "project.tasks", "project.search", "project.inbox", "access.show",
 	"project.next", "project.prev", "list.narrower", "list.wider", "sidebar.narrower", "sidebar.wider",
 	"sidebar.slim", "details.toggle", "settings.open", "network.open", "pane.repaint", "notices.open", "help.open", "console.quit",

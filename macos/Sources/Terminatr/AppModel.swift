@@ -44,6 +44,12 @@ final class AppModel {
     /// [ui] context_hint, as the last session list said (app API 13; 0
     /// for never): a coordinator's row warns from it.
     private(set) var contextHint = 0
+    /// The projects whose coordinator sleeps (app API 47's asleep), as
+    /// the last session list said: opening one wakes it (Sleep).
+    private(set) var asleep: Set<String> = []
+    /// The projects whose coordinator the app is waking (project.open):
+    /// its row and pane spin until session.list has it.
+    private(set) var waking: Set<String> = []
     /// The bridge sends a paired project's watched threads (app API 10):
     /// the sidebar lists them, not only the ones a session runs.
     var watched: Bool { (hello?.appApi ?? 0) >= AppAPI.watchedAPI }
@@ -359,6 +365,8 @@ final class AppModel {
         notices = l.notices
         needsFirst = l.needsFirst
         contextHint = l.contextHint
+        asleep = Sleep.projects(l)
+        waking = Sleep.settle(waking, sessions: sessions)
         loaded.sessions = true
         changed()
     }
@@ -443,6 +451,8 @@ final class AppModel {
                     notices = l.notices
                     needsFirst = l.needsFirst
                     contextHint = l.contextHint
+                    asleep = Sleep.projects(l)
+                    waking = Sleep.settle(waking, sessions: sessions)
                     changed()
                 }
             } while listAgain && !Task.isCancelled
@@ -515,6 +525,13 @@ final class AppModel {
         return try await b.call(AppAPI.Methods.programAnswer, AppAPI.ProgramAnswerParams(program: slug, ref: ref, choices: choices, other: other))
     }
 
+    /// Accepts the director's recommendation on a question of program
+    /// slug's Needs you (app API 48): answered as the user's own.
+    func programRecommendAccept(_ slug: String, question: String) async throws -> AppAPI.RecommendAccepted {
+        guard let b = bridge else { throw BridgeError.closed("") }
+        return try await b.call(AppAPI.Methods.programRecommendAccept, AppAPI.ProgramRecommendAcceptParams(program: slug, question: question))
+    }
+
     /// Accepts umbrella task of program slug (accept), or sends it back
     /// with the user's note.
     func programUmbrella(_ slug: String, task: String, accept: Bool, note: String = "") async throws -> AppAPI.ProgramUmbrellaDone {
@@ -535,6 +552,12 @@ final class AppModel {
     /// API 45): the director pane's Start.
     var opensDirector: Bool {
         if case .connected(let h) = phase { return Compatibility.opensDirector(h) }
+        return false
+    }
+
+    /// Whether this tm takes Accept on the director's recommendation.
+    var acceptsRecommendations: Bool {
+        if case .connected(let h) = phase { return Compatibility.acceptsRecommendations(h) }
         return false
     }
 
@@ -574,7 +597,41 @@ final class AppModel {
 
     /// What p's coordinator says of itself: its dot, its card.
     func coordinator(of p: AppAPI.Project) -> Attention {
-        Attention.of(coordinator: coordinatorSession(p.slug), in: p)
+        Attention.of(coordinator: coordinatorSession(p.slug), in: p, sleep: sleep(of: p.slug))
+    }
+
+    /// Whether project's coordinator sleeps, wakes or neither (Sleep).
+    func sleep(of project: String) -> Sleep {
+        Sleep.of(project, running: coordinatorSession(project) != nil, asleep: asleep, waking: waking)
+    }
+
+    /// Wakes project's sleeping coordinator (project.open resumes it
+    /// under its session id, its conversation kept), as enter on its row
+    /// in the TUI: its row and pane spin until it runs. Opening it (the
+    /// sidebar's selection) does this; a refusal is the pane's to say.
+    func wake(_ project: String) async throws {
+        guard sleep(of: project) == .asleep else { return }
+        waking.insert(project)
+        do {
+            _ = try await connected().call(AppAPI.Methods.projectOpen, AppAPI.ProjectOpenParams(project: project, cols: 120, rows: 36))
+        } catch {
+            waking.remove(project)
+            throw error
+        }
+        listSessions()
+        // Never a spinner for good: a coordinator not listed by then is
+        // asleep again, or failed, and its pane says so.
+        Task {
+            try? await Task.sleep(for: .seconds(30))
+            waking.remove(project)
+        }
+    }
+
+    /// Opening a sleeping coordinator wakes it, as enter on its row in
+    /// the TUI (T980): sel is the window's new selection.
+    func opened(_ sel: Selection?) {
+        guard case .session(let r) = sel, r.isCoordinator, !r.isRemote, sleep(of: r.project) == .asleep else { return }
+        Task { try? await wake(r.project) }
     }
 
     func project(_ slug: String) -> AppAPI.Project? {

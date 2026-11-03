@@ -233,6 +233,18 @@ func TestProjectSettingsToggle(t *testing.T) {
 		t.Fatal("auto-clear not saved")
 	}
 
+	// Coordinator sleep: off for a standalone project by default; enter
+	// steps to off, then 1h.
+	keyPress(m, "down")
+	if out := screen(m); !strings.Contains(out, "Coordinator sleep            off (standalone)") {
+		t.Fatalf("coordinator sleep row:\n%s", out)
+	}
+	act(t, m, src, "enter")
+	act(t, m, src, "enter")
+	if cfg, _ := config.Load(); must(cfg.Safety("alpha")).CoordinatorSleepAfter != "1h" {
+		t.Fatalf("coordinator sleep saved %q", must(cfg.Safety("alpha")).CoordinatorSleepAfter)
+	}
+
 	// Coordinator may merge: off by default, enter turns it on.
 	keyPress(m, "down")
 	if out := screen(m); !strings.Contains(out, "Coordinator may merge        off") {

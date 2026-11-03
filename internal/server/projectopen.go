@@ -112,6 +112,10 @@ func coordinatorAgent(cfg *config.Config, flag string, safety config.Safety) (na
 func (s *Server) projectOpen(p proto.ProjectOpenParams, cc callCtx) (any, *proto.Error) {
 	s.openMu.Lock()
 	defer s.openMu.Unlock()
+	// A sleeping coordinator resumes its conversation (coordsleep.go).
+	if id, ok := s.wakeCoordinator(p.Project, cc.who(), "opened"); ok {
+		return proto.ProjectOpenResult{Session: id, Started: true}, nil
+	}
 	id, started, err := OpenCoordinator(s.listSessions, s.startForOpen, p.Project, "", p.Cols, p.Rows)
 	if err != nil {
 		return nil, openError(err)

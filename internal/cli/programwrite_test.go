@@ -196,7 +196,7 @@ func TestProgramRouteCLI(t *testing.T) {
 // the rest of tm program runs where it is.
 func TestForwardedProgram(t *testing.T) {
 	for args, want := range map[string]bool{
-		"program route --file -": true, "program task edit demo/T1": true, "program send web hi": true, "program read M-1": true, "program start demo/T1": true,
+		"program route --file -": true, "program task edit demo/T1": true, "program send web hi": true, "program read M-1": true, "program start demo/T1": true, "program recommend demo/Q1": true,
 		"program context": false, "program open acme": false, "program": false, "task route": false,
 	} {
 		if got := forwardedProgram(strings.Fields(args)); got != want {
@@ -405,4 +405,30 @@ func TestUmbrellaAcceptCLI(t *testing.T) {
 	if u, _ := g.Tasks().Get(1); u.Status != tasks.Done {
 		t.Fatalf("status %s", u.Status)
 	}
+}
+
+// TestProgramRecommendCLI: the director recommends (forwarded for an
+// agent), never answers; the human doesn't recommend but accepts, which
+// answers as the user.
+func TestProgramRecommendCLI(t *testing.T) {
+	h, _ := programHarness(t)
+	coordDemo := caller.Caller{Kind: caller.Coordinator, Project: "demo"}
+	h.ok(coordDemo, "ask", "add", "Which region?", "--option", "EU", "--option", "US", "--project", "demo")
+	h.expect(1, "director-only", human, "program", "recommend", "demo/Q1", "--option", "EU", "--why", "x", "--program", "acme")
+	h.expect(1, "director-only", coordDemo, "program", "recommend", "demo/Q1", "--option", "EU", "--why", "x")
+	out := h.ok(directorAcme, "program", "recommend", "demo/Q1", "--option", "2", "--why", "web runs in the US (web/T3)")
+	if !strings.Contains(out, `recommended on demo/Q1: "US" — web runs in the US (web/T3)`) {
+		t.Fatalf("recommend: %s", out)
+	}
+	if out := h.ok(directorAcme, "program", "recommend", "list"); !strings.Contains(out, `demo/Q1: "US"`) {
+		t.Fatalf("list: %s", out)
+	}
+	if out := h.ok(human, "ask", "list", "--project", "demo"); strings.Contains(out, "answer") && strings.Contains(out, "waits") {
+		t.Fatalf("answered by recommending: %s", out)
+	}
+	h.expect(1, "human-only", directorAcme, "program", "recommend", "accept", "demo/Q1")
+	if out := h.ok(human, "program", "recommend", "accept", "demo/Q1", "--program", "acme"); !strings.Contains(out, `answered demo/Q1: "US" (answered)`) {
+		t.Fatalf("accept: %s", out)
+	}
+	h.expect(1, "no-recommendation", human, "program", "recommend", "accept", "demo/Q1", "--program", "acme")
 }
