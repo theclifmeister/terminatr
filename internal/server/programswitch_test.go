@@ -11,6 +11,8 @@ import (
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/features"
+	"github.com/theclifmeister/terminatr/internal/link"
+	"github.com/theclifmeister/terminatr/internal/peer"
 	"github.com/theclifmeister/terminatr/internal/program"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
@@ -157,6 +159,50 @@ func TestBackOnPrompt(t *testing.T) {
 	}
 	if r := wakeRecord(SessionRecord{Role: proto.RoleCoordinator, Project: "demo"}); len(r.Queued) != 0 {
 		t.Fatalf("a coordinator got the nudge: %+v", r.Queued)
+	}
+}
+
+// TestApplyProgramsLinks: the switch reaches the links: off pauses the
+// program outbox and leaves the hello cap "program" out, on lists it
+// and lets the outbox go; a config.toml edited by hand is caught by the
+// sweep with no director to stop or resume.
+func TestApplyProgramsLinks(t *testing.T) {
+	s := switchFixture(t)
+	s.peers = peer.Start(peer.Options{Dir: peer.DirIn(t.TempDir()), Version: "test", Messages: peerMessages{}})
+	t.Cleanup(s.peers.Close)
+	t.Cleanup(func() { link.SetPrograms(false) })
+	s.applyPrograms(true)
+	if !link.ProgramsOn() || !s.peers.Programs() {
+		t.Fatalf("on: outbox %v, hello %v", link.ProgramsOn(), s.peers.Programs())
+	}
+	s.applyPrograms(false)
+	if link.ProgramsOn() || s.peers.Programs() {
+		t.Fatalf("off: outbox %v, hello %v", link.ProgramsOn(), s.peers.Programs())
+	}
+	writeConfig(t, programsOn)
+	s.checkPrograms()
+	deadline := time.Now().Add(5 * time.Second)
+	for !(link.ProgramsOn() && s.peers.Programs()) {
+		if time.Now().After(deadline) {
+			t.Fatalf("the sweep after a hand edit: outbox %v, hello %v", link.ProgramsOn(), s.peers.Programs())
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	// The sweep's apply is done once it lets go of programsMu.
+	programsMu.Lock()
+	defer programsMu.Unlock()
+	if !link.ProgramsOn() {
+		t.Fatal("off after the sweep")
+	}
+}
+
+// The flusher's transport says a paired server takes program messages
+// (link.ProgramTransport); with no links, none does.
+var _ link.ProgramTransport = peerTransport{}
+
+func TestProgramReadyNoLinks(t *testing.T) {
+	if (peerTransport{}).ProgramReady("mini") {
+		t.Fatal("ready without links")
 	}
 }
 

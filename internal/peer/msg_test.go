@@ -2,6 +2,7 @@ package peer
 
 import (
 	"context"
+	"reflect"
 	"slices"
 	"testing"
 	"time"
@@ -44,7 +45,7 @@ func TestDispatcherMessage(t *testing.T) {
 	if err := sa.call(ctx, proto.MethodPeerMessage, m, &res); err != nil || res.Status != proto.PeerDelivered {
 		t.Fatalf("peer.message: %+v %v", res, err)
 	}
-	if len(fm.got) != 1 || fm.got[0] != m || fm.c.Kind != caller.Peer || fm.c.Alias != "studio" || fm.id != pid {
+	if len(fm.got) != 1 || !reflect.DeepEqual(fm.got[0], m) || fm.c.Kind != caller.Peer || fm.c.Alias != "studio" || fm.id != pid {
 		t.Fatalf("handed %+v as %+v %v", fm.got, fm.c, fm.id)
 	}
 	if err := sa.call(ctx, proto.MethodPeerWatch, map[string]string{"project": "web"}, nil); code(err) != proto.ErrUnknownMethod {

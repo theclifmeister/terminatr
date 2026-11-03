@@ -564,7 +564,7 @@ func allKeys(keys []string) bool {
 func (v *remotePopupView) messageLines(w int) ([]string, int, []int) {
 	es := v.messages()
 	v.msgSel = min(v.msgSel, max(min(len(es), msgShown)-1, 0))
-	lines, sel, hits := msgLines(nil, nil, es, v.msgSel, w)
+	lines, sel, hits := msgLines(nil, nil, nil, es, v.msgSel, w)
 	if len(v.pp.Links) == 0 {
 		lines, sel, hits = []string{th().Faint.Render("no links with this server's projects")}, -1, []int{noHit}
 	}

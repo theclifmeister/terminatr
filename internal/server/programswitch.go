@@ -19,6 +19,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/features"
+	"github.com/theclifmeister/terminatr/internal/link"
 	"github.com/theclifmeister/terminatr/internal/program"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
@@ -192,14 +193,15 @@ func onOffWord(on bool) string {
 // and the sweep's check may meet.
 var programsMu sync.Mutex
 
-// applyPrograms makes the sessions match the switch: off stops the
-// running directors into dormant records and releases the thread slots
-// held for them (the waiters they held go back to the plain line); on
-// resumes the dormant ones, each with the back-on nudge, and asks the
+// applyPrograms makes the sessions and the links match the switch: off
+// stops the running directors into dormant records, releases the
+// thread slots held for them (the waiters they held go back to the
+// plain line), pauses the program outbox and leaves the link hello cap
+// "program" out; on lists the cap again, lets the outbox go on, resumes
+// the dormant directors, each with the back-on nudge, and asks the
 // ticker for a sweep, which recomputes the cross-project dependency
 // states and raises the dep-ready items owed since the switch-off
-// (sweepDeps). The paused program outbox (a later build step) hangs off
-// here too.
+// (sweepDeps).
 func (s *Server) applyPrograms(on bool) (stopped, resumed, lost []string) {
 	programsMu.Lock()
 	defer programsMu.Unlock()
@@ -208,6 +210,8 @@ func (s *Server) applyPrograms(on bool) (stopped, resumed, lost []string) {
 
 // applyProgramsLocked is applyPrograms, programsMu held.
 func (s *Server) applyProgramsLocked(on bool) (stopped, resumed, lost []string) {
+	link.SetPrograms(on)
+	s.peers.SetPrograms(on)
 	if !on {
 		stopped = s.sleepDirectors()
 		if names, err := thread.ReleaseDirectors(); err != nil || len(names) > 0 {
@@ -215,6 +219,7 @@ func (s *Server) applyProgramsLocked(on bool) (stopped, resumed, lost []string) 
 		}
 		return stopped, nil, nil
 	}
+	link.Kick() // what waited goes now, or shows as expired
 	resumed, lost = s.wakeDirectors()
 	if s.tick != nil {
 		s.tick.Kick()
@@ -229,7 +234,7 @@ func (s *Server) applyProgramsLocked(on bool) (stopped, resumed, lost []string) 
 func (s *Server) checkPrograms() {
 	on := programsNow()
 	s.mu.Lock()
-	differs := false
+	differs := link.ProgramsOn() != on || s.peers != nil && s.peers.Programs() != on
 	for id, sess := range s.sessions {
 		if r := s.records[id]; r.Role == proto.RoleDirector && !on && sess.ExitStatus() == "" && !s.sleeping[id] {
 			differs = true
