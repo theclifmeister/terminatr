@@ -86,7 +86,20 @@ public struct ConversationScroll: ViewModifier {
             MainActor.assumeIsolated { toEnd() }
         }
         CFRunLoopWakeUp(CFRunLoopGetMain())
+        // And again if it didn't land: a loaded device drops a scroll
+        // asked mid-layout, and a content that then holds still gives no
+        // geometry change to ask again (2 runs in 20 on a busy
+        // simulator rested a screen short of the end).
+        let follow = self.follow
+        for delay in Self.checks {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                MainActor.assumeIsolated { if follow.behind { toEnd() } }
+            }
+        }
     }
+
+    /// When a scroll to the end is checked for having landed, in seconds.
+    static let checks = [0.25, 0.75]
 }
 
 /// The row at the top, as the user scrolls (iOS 18, macOS 15).

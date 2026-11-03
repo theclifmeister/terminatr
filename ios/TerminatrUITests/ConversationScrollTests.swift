@@ -123,6 +123,7 @@ final class ConversationScrollTests: XCTestCase {
         lastOnScreen(app, "opened")
         let conv = app.scrollViews["conversation"]
         conv.swipeDown(velocity: .fast)
+        if !jumpButton(app).waitForExistence(timeout: 2) { conv.swipeDown(velocity: .fast) }
         XCTAssertTrue(jumpButton(app).waitForExistence(timeout: 5), "Jump to latest")
         sleep(2)
         jumpButton(app).tap()
@@ -151,9 +152,12 @@ final class ConversationScrollTests: XCTestCase {
         let b = app.buttons["BackButton"].firstMatch
         if b.waitForExistence(timeout: 5), b.isHittable {
             b.tap()
-        } else {
-            // A column layout (the iPad, the opened Duo) has the list beside it.
+            return
         }
+        // A column layout (the iPad, the opened Duo) has the list beside
+        // it, or behind Show the list (the iPad upright).
+        let list = app.buttons["Show the list"].firstMatch
+        if list.exists, list.isHittable { list.tap() }
     }
 
     /// Opens the session whose row says words, from the project screen.
@@ -171,12 +175,18 @@ final class ConversationScrollTests: XCTestCase {
         let kb = app.keyboards.firstMatch
         let hide = kb.buttons["Hide keyboard"]
         if hide.exists {
-            hide.tap()
+            // By its place: the iPad's keyboard refuses the scroll to it
+            // that a plain tap asks first.
+            hide.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         } else {
-            // A drag down the conversation folds it (interactively, T857).
-            let conv = app.scrollViews["conversation"]
-            let from = conv.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3))
-            from.press(forDuration: 0.05, thenDragTo: from.withOffset(CGVector(dx: 0, dy: 600)))
+            // A drag down the conversation, from what shows of it above
+            // the composer into the keyboard, folds it (interactively,
+            // T857); on the Duo's outer screen that is a sliver.
+            let area = seen(app)
+            let window = app.windows.firstMatch.frame
+            let origin = app.coordinate(withNormalizedOffset: .zero)
+            let from = origin.withOffset(CGVector(dx: area.midX, dy: area.minY + min(20, area.height / 2)))
+            from.press(forDuration: 0.05, thenDragTo: origin.withOffset(CGVector(dx: area.midX, dy: window.maxY - 4)))
         }
         let gone = expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: kb)
         wait(for: [gone], timeout: 10)

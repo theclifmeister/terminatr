@@ -36,6 +36,12 @@ struct ConversationScreen: View {
     /// exactly, not lazily (T976), so a long one draws its last turns,
     /// and Earlier messages more.
     @State private var drawn = Self.page
+    /// The first entry drawn, kept as output comes (T976): a window that
+    /// slid would drop a row from its head as each one came at its foot,
+    /// and a taller row gone than come shrinks the content under an
+    /// offset that stays (the anchor for size changes is the top): the
+    /// view past its end for a frame. Kept, the content only grows.
+    @State private var head: Int?
     /// The row the user had at the top, scrolled up, before the layout
     /// changed (an iPhone Duo opened or closed): scrolled back to once
     /// the transcript has it (Places, T825).
@@ -60,7 +66,7 @@ struct ConversationScreen: View {
     var body: some View {
         let id = model.sessionID(ref)
         let session = id.flatMap { id in model.sessions.first { $0.id == id } }
-        let entries = transcript.tail(drawn)
+        let entries = transcript.tail(drawn, keeping: head)
         let earlier = transcript.entries.count - entries.count
         let rows = Transcript.rows(entries)
         let moment = moment(rows, session)
@@ -126,14 +132,15 @@ struct ConversationScreen: View {
             // the screen stays and Jump to latest counts it. Laid out afresh, it goes back to the row
             // the user had at the top.
             .onChange(of: Self.tail(transcript)) {
-                if seeking, restoring == nil, self.moment(Transcript.rows(transcript.tail(drawn)), session) != nil {
+                head = transcript.tail(drawn, keeping: head).first?.id
+                if seeking, restoring == nil, self.moment(Transcript.rows(transcript.tail(drawn, keeping: head)), session) != nil {
                     // The hero is after the moment: the end shows both.
                     seeking = false
                     toEnd(scroll)
                     return
                 }
                 if let r = restoring {
-                    let rows = Transcript.rows(transcript.tail(drawn)).map(\.id)
+                    let rows = Transcript.rows(transcript.tail(drawn, keeping: head)).map(\.id)
                     guard let first = rows.first, rows.last ?? Int.min >= r else { return }
                     restoring = nil
                     if r >= first {

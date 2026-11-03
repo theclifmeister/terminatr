@@ -291,3 +291,28 @@ private func back(_ f: inout Follow, offset: Double, visible: Double, content: D
     #expect("\(SessionRef(project: "acme", thread: "t-1"))" == "acme/t-1")
     #expect("\(SessionRef(project: "acme", thread: "t-1", server: "studio"))" == "studio:acme/t-1")
 }
+
+// A scroll to the end that didn't land leaves the follower behind, and
+// the view checks for that after (T976); scrolled up, held or jumping,
+// it isn't.
+@Test func behindIsAFollowerShortOfTheEnd() {
+    var f = Follow()
+    #expect(!f.behind)
+    at(&f, 500, content: 1000, newest: 2)
+    #expect(!f.behind)
+    // The content grew and the scroll didn't follow.
+    at(&f, 500, content: 1800, newest: 3)
+    #expect(f.behind)
+    at(&f, 1300, content: 1800, newest: 3)
+    #expect(!f.behind)
+    // Held by the user: not behind, whatever the geometry.
+    f.moved(by: true, resting: false)
+    at(&f, 1300, content: 2400, newest: 4)
+    #expect(!f.behind)
+    f.moved(by: false, resting: true)
+    #expect(f.behind)
+    // Scrolled up: the user's place, not behind.
+    at(&f, 600, content: 2400, newest: 4)
+    #expect(!f.following)
+    #expect(!f.behind)
+}

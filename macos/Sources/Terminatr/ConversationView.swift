@@ -38,6 +38,9 @@ struct ConversationTab: View {
     @State private var flash = 0
     /// How many of the last entries the transcript draws.
     @State private var drawn = Self.page
+    /// The first entry drawn, kept as output comes, so the content only
+    /// grows at its foot (the iPhone's ConversationScreen.head, T976).
+    @State private var head: Int?
 
     /// The entries drawn at first, and added by each Show earlier.
     static let page = 60
@@ -51,7 +54,7 @@ struct ConversationTab: View {
         let peerSession = model.ref.session(in: app.peers)
         let review = coordinator || remote != nil ? nil : app.thread(model.ref).flatMap { t in t.task?.status == "review" ? t : nil }
         let open = AppModel.waitsOnCard(session) || review != nil || peerSession?.asking == true
-        let entries = model.transcript.tail(drawn, keeping: current)
+        let entries = model.transcript.tail(drawn, keeping: [current, head].compactMap { $0 }.min())
         // The AskUserQuestion call the open question card answers.
         let asking = session?.question != nil && AppModel.waitsOnCard(session)
         let pending = model.transcript.pendingTool?.id
@@ -135,6 +138,7 @@ struct ConversationTab: View {
                 // to the end (SwiftUI's scroll, the bottom anchor under
                 // it); one scrolled up stays, and counts it.
                 .onChange(of: Self.tail(model.transcript)) {
+                    head = model.transcript.tail(drawn, keeping: head).first?.id
                     if follow.arrived(model.transcript.entries.map(\.id)) { proxy.scrollTo(Self.end, anchor: .bottom) }
                 }
                 // The Working bar or a card coming or going.
