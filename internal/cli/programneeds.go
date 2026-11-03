@@ -3,6 +3,8 @@ package cli
 import (
 	"fmt"
 
+	"github.com/theclifmeister/terminatr/internal/config"
+
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/program"
 	"github.com/theclifmeister/terminatr/internal/project"
@@ -95,4 +97,67 @@ func liveProgramNeeds(slug string) *proto.ProgramNeedsResult {
 		return nil
 	}
 	return &res
+}
+
+const programWakeUsage = `usage: tm program wake <project> [--program <slug>] [--json]
+
+Starts a member project's coordinator when it isn't running, as enter on
+its coordinator row does, so the tasks you filed and the messages you sent
+there don't wait until the user opens the project. It starts no threads, so
+a director may under propose and delegate. A coordinator already running is
+left as it is. Refused for a project that isn't a local member of your
+program (a paired member's coordinator is its user's), and for an inactive
+or paused one: those stay the user's.`
+
+// programWake runs tm program wake: the server's program.wake, which
+// checks the caller (the program's own director, or the human) and the
+// member; the human's program defaults to the member's own.
+func programWake(e *Env, cfg *config.Config, args []string) error {
+	if done, err := helpOr(e, args, programWakeUsage); done {
+		return err
+	}
+	f := newFlags()
+	slug, asJSON := f.String("program"), f.Bool("json")
+	pos, err := f.Parse(args)
+	if err != nil {
+		return err
+	}
+	if len(pos) != 1 {
+		return usagef("%s", programWakeUsage)
+	}
+	member := pos[0]
+	switch e.Caller.Kind {
+	case caller.Director:
+		if *slug != "" && *slug != e.Caller.Project {
+			return &project.Error{Code: "other-program", Msg: "a director wakes only its own program's members"}
+		}
+		*slug = e.Caller.Project
+	case caller.Human:
+		if *slug == "" {
+			*slug = cfg.ProgramOf(member)
+		}
+		if *slug == "" {
+			return &project.Error{Code: "not-member", Msg: member + " is not a member of a program here (tm program list)"}
+		}
+	default:
+		return &project.Error{Code: "director-only", Msg: "tm program wake is the director's (and the human's)"}
+	}
+	c, _, err := connect(false) // the coordinator is the server's to start
+	if err != nil {
+		return err
+	}
+	defer c.Close()
+	var res proto.ProgramOpenResult
+	if err := c.Call(proto.MethodProgramWake, proto.ProgramWakeParams{Program: *slug, Project: member}, &res); err != nil {
+		return err
+	}
+	if *asJSON {
+		return e.printJSON(map[string]any{"project": member, "session": res.Session, "started": res.Started})
+	}
+	if res.Started {
+		_, err = fmt.Fprintf(e.Stdout, "woke %s's coordinator (%s): it works from its inbox\n", member, res.Session)
+	} else {
+		_, err = fmt.Fprintf(e.Stdout, "%s's coordinator is already running (%s)\n", member, res.Session)
+	}
+	return err
 }

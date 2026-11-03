@@ -32,6 +32,13 @@ func InactiveError(slug string) error {
 // setting (§11.2).
 func OpenCoordinator(list func() ([]proto.SessionInfo, error), start func(proto.SessionStartParams) (string, error),
 	slug, agentName string, cols, rows uint16) (string, bool, error) {
+	return openCoordinator(list, start, slug, agentName, cols, rows, CoordinatorKickoff)
+}
+
+// openCoordinator is OpenCoordinator whose started coordinator gets
+// kickoff as its first prompt.
+func openCoordinator(list func() ([]proto.SessionInfo, error), start func(proto.SessionStartParams) (string, error),
+	slug, agentName string, cols, rows uint16, kickoff string) (string, bool, error) {
 	p, err := project.Open(slug)
 	if err != nil {
 		return "", false, err
@@ -62,7 +69,7 @@ func OpenCoordinator(list func() ([]proto.SessionInfo, error), start func(proto.
 	}
 	id, err := start(proto.SessionStartParams{
 		Agent: name, Model: model, Role: proto.RoleCoordinator, Project: slug, Cwd: p.Dir,
-		Cols: cols, Rows: rows, Kickoff: CoordinatorKickoff,
+		Cols: cols, Rows: rows, Kickoff: kickoff,
 		RemoteControl: safety.CoordinatorRemoteControl})
 	if err != nil {
 		return "", false, err
@@ -105,19 +112,7 @@ func coordinatorAgent(cfg *config.Config, flag string, safety config.Safety) (na
 func (s *Server) projectOpen(p proto.ProjectOpenParams, cc callCtx) (any, *proto.Error) {
 	s.openMu.Lock()
 	defer s.openMu.Unlock()
-	list := func() ([]proto.SessionInfo, error) { return s.list().Sessions, nil }
-	start := func(sp proto.SessionStartParams) (string, error) {
-		res, perr := s.startSession(sp)
-		if perr != nil {
-			return "", perr
-		}
-		started, ok := res.(proto.SessionStartResult)
-		if !ok {
-			return "", fmt.Errorf("unexpected result %T", res)
-		}
-		return started.Session.ID, nil
-	}
-	id, started, err := OpenCoordinator(list, start, p.Project, "", p.Cols, p.Rows)
+	id, started, err := OpenCoordinator(s.listSessions, s.startForOpen, p.Project, "", p.Cols, p.Rows)
 	if err != nil {
 		return nil, openError(err)
 	}
@@ -130,6 +125,22 @@ func (s *Server) projectOpen(p proto.ProjectOpenParams, cc callCtx) (any, *proto
 		s.watch.wake()
 	}
 	return proto.ProjectOpenResult{Session: id, Started: started}, nil
+}
+
+// listSessions and startForOpen are OpenCoordinator's and
+// OpenDirector's list and start, in the server.
+func (s *Server) listSessions() ([]proto.SessionInfo, error) { return s.list().Sessions, nil }
+
+func (s *Server) startForOpen(sp proto.SessionStartParams) (string, error) {
+	res, perr := s.startSession(sp)
+	if perr != nil {
+		return "", perr
+	}
+	started, ok := res.(proto.SessionStartResult)
+	if !ok {
+		return "", fmt.Errorf("unexpected result %T", res)
+	}
+	return started.Session.ID, nil
 }
 
 // openError is err as project.open answers it: a refusal keeps its code

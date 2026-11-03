@@ -64,7 +64,7 @@ func TestDirectorCommands(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"tm program context", "tm program route", "tm program send", "tm task list", "tm skill"} {
+	for _, want := range []string{"tm program context", "tm program route", "tm program send", "tm program wake", "tm task list", "tm skill"} {
 		if !slices.Contains(a.Commands, want) {
 			t.Errorf("propose: %s isn't unprompted: %v", want, a.Commands)
 		}
@@ -75,8 +75,8 @@ func TestDirectorCommands(t *testing.T) {
 		}
 	}
 	writeConfig(t, strings.Replace(programsOn, "projects = [\"demo\"]\n", "projects = [\"demo\"]\nauthority = \"delegate\"\n", 1))
-	if cmds := directorCommands(loadLaunchConfig().cfg, "acme"); !slices.Contains(cmds, "tm program start") {
-		t.Errorf("delegate: tm program start prompts: %v", cmds)
+	if cmds := directorCommands(loadLaunchConfig().cfg, "acme"); !slices.Contains(cmds, "tm program start") || !slices.Contains(cmds, "tm program wake") {
+		t.Errorf("delegate: tm program start or wake prompts: %v", cmds)
 	}
 	if cmds := directorCommands(loadLaunchConfig().cfg, "beta"); slices.Contains(cmds, "tm program start") {
 		t.Errorf("another program's delegate reached beta: %v", cmds)

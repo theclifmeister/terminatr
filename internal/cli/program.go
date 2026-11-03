@@ -38,6 +38,7 @@ const programUsage = `usage: tm program new <slug> [--goal "…"] [--json]   (th
        tm program context [<slug>] [--json]   (the director's context; a director reads its own program's)
        tm program needs [<slug>] [--open] [--json]   (the rolled-up Needs you, ranked; a director reads its own program's;
                                                       --open opens the needs dialog for the user over the director's pane)
+       tm program wake <project> [--program <slug>]   (start a member's coordinator that isn't running; tm program wake --help)
        tm program route --file <path>|-   (file one task per member project; tm program route --help)
        tm program task edit <project>/T<n> …   (priority, after, design, a note; tm program task --help)
        tm program start <project>/T<n> [--agent NAME] [--model M] [--approved-by-user]   (a thread in a member; tm program start --help)
@@ -78,6 +79,8 @@ func runProgram(e *Env, args []string) error {
 		return programContext(e, cfg, args[1:])
 	case "needs":
 		return programNeeds(e, args[1:])
+	case "wake":
+		return programWake(e, cfg, args[1:])
 	case "route":
 		return programRoute(e, cfg, args[1:])
 	case "task":
