@@ -250,9 +250,20 @@ func (p *Project) Tasks() *tasks.Store {
 // DirectedBy reports whether program directs this project (the
 // programs design §5.2, tasks.Store.Directs): programs on, the project
 // a member of program in config.toml, and the program not left out.
+//
+// program may be a paired server's, "<alias>/<program>" (§9.3): then the
+// project's own program keys name it (config.ProgramLink), which only
+// this server's user set, by accepting its invite.
 func (p *Project) DirectedBy(program string) bool {
 	cfg, _ := config.Load() // a safety error still gives the tables
-	return features.Programs(cfg) && program != "" && cfg.ProgramOf(p.Slug) == program && !ProgramLeftOut(program)
+	if !features.Programs(cfg) || program == "" {
+		return false
+	}
+	if _, _, remote := config.Remote(program); remote {
+		l, in := cfg.ProgramLink(p.Slug)
+		return in && l.Program == program
+	}
+	return cfg.ProgramOf(p.Slug) == program && !ProgramLeftOut(program)
 }
 
 // Options for New.

@@ -18,10 +18,12 @@ import (
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/device"
+	"github.com/theclifmeister/terminatr/internal/link"
 	"github.com/theclifmeister/terminatr/internal/plat/proc"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/server"
 	"github.com/theclifmeister/terminatr/internal/service"
+	"github.com/theclifmeister/terminatr/internal/ticker"
 	"github.com/theclifmeister/terminatr/internal/version"
 )
 
@@ -140,6 +142,14 @@ func serverRun(e *Env, args []string) error {
 	}
 	bin, _ := os.Executable()
 	opts := server.Options{Paths: p, Log: logger, Bin: bin, Source: source, RunCLI: RunInServer, DeviceAPI: appapi.ServeDevice}
+	// A paired server's director starts threads here, and member tasks'
+	// PRs go into their status pushes (the programs design §9.2).
+	link.ProgramStarter = StartForPeer
+	link.ThreadPR = func(slug, id string) (int, string, bool) {
+		st := ticker.Load(ticker.StatePath(p.Sessions))
+		pr := st.PRs(slug)[id]
+		return pr.Number, pr.URL, st.Merged(slug, id)
+	}
 	if len(os.Args) > 2 && os.Args[1] == "server" && os.Args[2] == "run" {
 		// This process is `tm server run` (not a test calling in): the
 		// server runs from its pin (docs/SPEC.md §3.6).

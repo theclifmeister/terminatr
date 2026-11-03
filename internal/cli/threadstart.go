@@ -306,9 +306,10 @@ func threadTask(p *project.Project, taskRef string) (*tasks.Task, error) {
 // brief's path. The journal counts the memory notes the brief carries
 // (thread.memory), so how often a thread gets a matched one shows.
 func (e *Env) threadFiles(p *project.Project, r *thread.Record, task *tasks.Task) (string, error) {
-	if task != nil && e.Caller.Kind == caller.Director {
-		// A director's start (tm program start): the task store lets it
-		// link the thread and start the task, nothing more.
+	if task != nil && e.Caller.DirectorOf() != "" {
+		// A director's start (tm program start, or a paired server's
+		// program-start): the task store lets it link the thread and
+		// start the task, nothing more.
 		s := p.Tasks()
 		if _, err := s.ProgramStarted(e.Caller, task.ID, r.ID); err != nil {
 			return "", err

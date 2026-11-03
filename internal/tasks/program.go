@@ -25,12 +25,13 @@ func (s *Store) allowDirector(c caller.Caller, o op) error {
 	}
 	if o != opProgram {
 		if s.Program {
-			return refuse("other-program", fmt.Sprintf("the director of %s can't change program %s", c.Project, s.Slug))
+			return refuse("other-program", fmt.Sprintf("the director of %s can't change program %s", c.DirectorOf(), s.Slug))
 		}
 		return refuse("coordinator-only", fmt.Sprintf("a director changes %s's tasks only through tm program route and tm program task edit; the rest is %s's coordinator's", s.Slug, s.Slug))
 	}
-	if s.Directs == nil || c.Project == "" || !s.Directs(c.Project) {
-		return refuse("not-member", fmt.Sprintf("%s is not a member of program %s", s.Slug, c.Project))
+	prog := c.DirectorOf()
+	if s.Directs == nil || prog == "" || !s.Directs(prog) {
+		return refuse("not-member", fmt.Sprintf("%s is not a member of program %s", s.Slug, prog))
 	}
 	return nil
 }
@@ -239,7 +240,7 @@ func (s *Store) ProgramEdit(c caller.Caller, program string, id int, ch ProgramC
 	}
 	var what []string
 	res, err := s.edit(c, id, opProgram, func(t *Task) (bool, error) {
-		own := c.Kind != caller.Director || t.Owner == DirectorOwner(program)
+		own := c.DirectorOf() == "" || t.Owner == DirectorOwner(program)
 		unstarted := t.Thread == "" && (t.Status == Open || t.Status == Ready)
 		if (ch.Title != nil || ch.Repo != nil || ch.Status != nil) && !(own && unstarted) {
 			return false, refuse("not-its-filing", fmt.Sprintf("a director changes the title, repo and status only of tasks it filed, before they start; %s is %s's coordinator's now", t.Ref(), s.Slug))

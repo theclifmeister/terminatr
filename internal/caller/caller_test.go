@@ -116,3 +116,16 @@ func TestDirector(t *testing.T) {
 		t.Errorf("FromLookup = %v", got)
 	}
 }
+
+func TestPeerDirector(t *testing.T) {
+	c := ForPeerDirector("studio", "acme")
+	if !c.IsAgent() || c.String() != "peer:studio (director acme)" || c.DirectorOf() != "studio/acme" {
+		t.Fatalf("%v %q %q", c.IsAgent(), c.String(), c.DirectorOf())
+	}
+	if ForPeer("studio").DirectorOf() != "" || (Caller{Kind: Coordinator, Project: "x"}).DirectorOf() != "" {
+		t.Fatal("only directors direct")
+	}
+	if (Caller{Kind: Director, Project: "acme"}).DirectorOf() != "acme" {
+		t.Fatal("a local director")
+	}
+}

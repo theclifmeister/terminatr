@@ -68,6 +68,12 @@ type Caller struct {
 	// phone of that server's acted through it. It reaches only the five
 	// answer acts, which peer.act calls itself, and never an escape.
 	Peer string
+	// Program is, for Kind == Peer, the program on that server whose
+	// director acts here over the link (the programs design §9.3):
+	// journaled "peer:<alias> (director <program>)". It has a director's
+	// program rights on a project that accepted that program, nothing
+	// more.
+	Program string
 }
 
 // ViaApp is Via for the Mac app's calls, journaled as "human (app)".
@@ -99,6 +105,25 @@ func ForMod(id string) Caller { return Caller{Kind: Mod, Mod: id} }
 // ForPeer is the caller for the paired server alias's link requests.
 func ForPeer(alias string) Caller { return Caller{Kind: Peer, Alias: alias} }
 
+// ForPeerDirector is program's director on the paired server alias,
+// acting here over the link (the programs design §9.3).
+func ForPeerDirector(alias, program string) Caller {
+	return Caller{Kind: Peer, Alias: alias, Program: program}
+}
+
+// DirectorOf is the program c directs as a key of this server's config:
+// a director's program slug, or "<alias>/<program>" for a paired
+// server's director; "" for any other caller.
+func (c Caller) DirectorOf() string {
+	switch {
+	case c.Kind == Director:
+		return c.Project
+	case c.Kind == Peer && c.Program != "":
+		return c.Alias + "/" + c.Program
+	}
+	return ""
+}
+
 // IsAgent reports whether the caller is not the human: a coordinator,
 // director or thread agent, a mod or a paired server. Every human-only check refuses
 // them all.
@@ -116,6 +141,8 @@ func (c Caller) String() string {
 		return c.Thread
 	case c.Kind == Mod:
 		return "mod:" + c.Mod
+	case c.Kind == Peer && c.Program != "":
+		return "peer:" + c.Alias + " (director " + c.Program + ")"
 	case c.Kind == Peer:
 		return "peer:" + c.Alias
 	case c.Kind == Director && c.Project != "":

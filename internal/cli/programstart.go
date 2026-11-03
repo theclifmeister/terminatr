@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -30,7 +32,10 @@ there would. Under authority = "delegate" the director starts within the
 caps; under "propose" only with --approved-by-user, once the user said so in
 chat. Without it, a task whose dependencies are still open or unknown is
 refused (waiting-on). The member's own start_threads setting holds too.
---over-cap is never the director's: a cap refusal waits for a slot-free item.`
+--over-cap is never the director's: a cap refusal waits for a slot-free item.
+A paired member's task (<server>/<project>/T<n>) goes over the link: that
+server's program_starts, start rules and caps decide, and a
+program-start-result item says how it went.`
 
 func programStart(e *Env, cfg *config.Config, args []string) error {
 	if done, err := helpOr(e, args, programStartUsage); done {
@@ -50,6 +55,13 @@ func programStart(e *Env, cfg *config.Config, args []string) error {
 	g, err := e.ownProgram(cfg, *slug)
 	if err != nil {
 		return err
+	}
+	if program.IsRemoteRef(pos[0]) {
+		sent, err := g.StartRemote(e.Caller, cfg, program.StartRequest{Ref: pos[0], Approved: *approved, OverCap: *overCap}, *agentName, *model)
+		if err != nil {
+			return err
+		}
+		return e.printSent(sent, *asJSON)
 	}
 	child, id, err := g.StartCheck(e.Caller, cfg, program.StartRequest{Ref: pos[0], Approved: *approved, OverCap: *overCap}, mergedThreads())
 	if err != nil {
@@ -87,4 +99,31 @@ func (e *Env) warnWaiting(cfg *config.Config, p *project.Project, t *tasks.Task)
 	if open := program.Waiting(cfg, prog, p.Slug, t, mergedThreads()); len(open) > 0 {
 		fmt.Fprintf(e.Stderr, "warning: %s comes after %s, not met yet: starting anyway\n", t.Ref(), strings.Join(open, ", "))
 	}
+}
+
+// StartForPeer is link.ProgramStarter: a paired server's director (c,
+// caller.ForPeerDirector) starts a thread for task id of member p here,
+// on its program-start (the programs design §9.3). The link checked the
+// member's program_starts; this is tm thread start's own checks, as for
+// any agent: p's start_threads (propose refuses: that user's word can't
+// come over the link), pause and caps, never --over-cap. It returns the
+// thread's id.
+func StartForPeer(c caller.Caller, p *project.Project, id int, agentName, model string) (string, error) {
+	if c.Kind != caller.Peer || c.Program == "" {
+		return "", &tasks.Error{Code: "director-only", Msg: "a paired server's director only"}
+	}
+	var out, errb bytes.Buffer
+	e := &Env{Stdin: bytes.NewReader(nil), Stdout: &out, Stderr: &errb, Cwd: p.Dir, Caller: c, InServer: true,
+		Getenv: func(string) string { return "" }}
+	o := startOpts{task: "T" + strconv.Itoa(id), agent: agentName, model: model}
+	if err := e.threadStart(p, o, true); err != nil {
+		return "", err
+	}
+	var res struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &res); err != nil || res.ID == "" {
+		return "", fmt.Errorf("thread start said %q", strings.TrimSpace(out.String()))
+	}
+	return res.ID, nil
 }

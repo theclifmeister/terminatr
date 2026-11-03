@@ -54,6 +54,15 @@ type store struct {
 	// (programinvite.go), the newest per folder, peer and direction;
 	// they count in ReqOut and ReqIn.
 	Invites []*Invite `json:"invites,omitempty"`
+	// The program's work with paired members (programwork.go): on a
+	// director's server what it sent and awaits answers to, and the
+	// members' tasks as last pushed, by "<alias>/<slug>/T<n>"; on a
+	// member's, the tasks of each project here its paired director
+	// referenced, and what was last pushed of each, by "<slug>/T<n>".
+	ProgramSent []*ProgramSent         `json:"program_sent,omitempty"`
+	RemoteTasks map[string]*RemoteTask `json:"remote_tasks,omitempty"`
+	Watch       map[string][]int       `json:"program_watch,omitempty"`
+	Pushed      map[string]string      `json:"program_pushed,omitempty"`
 }
 
 // bucket is one direction's token bucket (limits).

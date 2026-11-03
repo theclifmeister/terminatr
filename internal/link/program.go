@@ -130,13 +130,19 @@ func ProgramSummary(from *project.Folder, m *Message) string {
 // programHandled marks a program channel message read on both sides,
 // once p handled its item.
 func programHandled(p Box, it project.Item) {
-	if !ValidID(it.Message) || !project.ValidSlug(it.Subject) {
-		return
-	}
 	read := func(x *Message) {
 		if x.State == StateSent {
 			x.State = StateRead
 		}
+	}
+	if _, _, remote := config.Remote(it.Subject); remote && ValidID(it.Message) {
+		// From a paired server: read here; no receipt crosses for the
+		// program channel.
+		update(p, it.Subject, it.Message, read)
+		return
+	}
+	if !ValidID(it.Message) || !project.ValidSlug(it.Subject) {
+		return
 	}
 	update(p, it.Subject, it.Message, read)
 	var other Box

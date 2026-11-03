@@ -8,18 +8,20 @@ import (
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/link"
 	"github.com/theclifmeister/terminatr/internal/project"
+	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 )
 
 // ChildRef reads "<project>/T<n>", a member's task as tm program task
-// takes it.
-func ChildRef(ref string) (slug string, id int, err error) {
+// takes it: the member is its slug, or "<alias>/<slug>" for a paired
+// server's ("mini/acme-ios/T7").
+func ChildRef(ref string) (member string, id int, err error) {
 	alias, slug, id, ok := tasks.CrossRef(strings.TrimSpace(ref))
 	if !ok {
 		return "", 0, refuse("invalid-ref", "%q is not <project>/T12", ref)
 	}
 	if alias != "" {
-		return "", 0, refuse("remote-member", "%s is on a paired server: program writes there come with paired members", ref)
+		slug = alias + "/" + slug
 	}
 	return slug, id, nil
 }
@@ -42,6 +44,9 @@ func (p *Program) EditTask(c caller.Caller, cfg *config.Config, ref string, ch t
 	slug, id, err := ChildRef(ref)
 	if err != nil {
 		return tasks.Result{}, err
+	}
+	if IsRemote(slug) {
+		return tasks.Result{}, refuse("remote-member", "%s is on a paired server: its change goes over the link (EditRemote)", ref)
 	}
 	child, err := p.Member(cfg, slug)
 	if err != nil {
@@ -106,6 +111,15 @@ func (p *Program) Send(c caller.Caller, cfg *config.Config, from, to string, o l
 	case c.Kind == caller.Director || !c.IsAgent() && (from == "" || from == p.Slug):
 		if err := p.mayDirect(c, "the program channel"); err != nil {
 			return nil, err
+		}
+		if IsRemote(to) {
+			if p.LeftOut {
+				return nil, refuse("program-left-out", "a project is called %s too: nothing goes through the program until one is renamed (tm doctor)", p.Slug)
+			}
+			if err := p.remoteMember(cfg, to, proto.ProgramFeatureMessages); err != nil {
+				return nil, err
+			}
+			return link.SendProgramRemote(c, &p.Folder, to, o)
 		}
 		child, err := p.Member(cfg, to)
 		if err != nil {
