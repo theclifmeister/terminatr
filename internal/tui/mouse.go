@@ -571,6 +571,8 @@ func (m *dash) sideMenu(mo tea.Mouse) tea.Cmd {
 			mi.run = func(m *dash) tea.Cmd { return tea.Batch(m.showProject(r.slug), m.key(keyMsg(key))) }
 		case menuProgram:
 			mi.run = func(m *dash) tea.Cmd { m.openProgramSettings(r.slug); return nil }
+		case menuDirector:
+			mi.run = func(m *dash) tea.Cmd { return m.openDirector(r.slug) }
 		case menuActive:
 			mi.run = func(m *dash) tea.Cmd { return m.toggleActive(r.slug, r.inactive) }
 		case menuPin:

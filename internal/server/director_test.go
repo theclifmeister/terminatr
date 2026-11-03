@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/client"
@@ -16,6 +17,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/program"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/tasks"
 )
 
 // TestDirectorGuardRules: a director is guarded as a coordinator is
@@ -293,5 +295,65 @@ func TestDirectorParity(t *testing.T) {
 	}
 	if err := c.Call(proto.MethodSessionModel, proto.SessionModelParams{ID: id}, nil); code(err) != config.ProgramsOff {
 		t.Errorf("off: model: %v", err)
+	}
+}
+
+// TestProgramNeedsOpen: tm program needs --open stamps the director's
+// session (needs_open), which a console showing its pane opens the needs
+// dialog on; refused not-running without a director, and nothing
+// waiting stamps nothing.
+func TestProgramNeedsOpen(t *testing.T) {
+	p := testPaths(t)
+	demo := newWatchProject(t)
+	if _, err := program.New(program.Options{Slug: "acme"}); err != nil {
+		t.Fatal(err)
+	}
+	writeConfig(t, "[features]\nprograms = true\n[programs.acme]\nprojects = [\"demo\"]\n")
+	if err := os.MkdirAll(p.AgentsDir(), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	manifest := "manifest_version = 1\nname = \"waits\"\n[launch]\ncommand = " + strconv.Quote(testSh(t)) + "\nargs = [\"-c\", \"sleep 30\"]\n"
+	if err := os.WriteFile(filepath.Join(p.AgentsDir(), "waits.toml"), []byte(manifest), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	startServer(t, p)
+	c, err := client.Dial(p, proto.KindControl)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	var perr *proto.Error
+	if err := c.Call(proto.MethodProgramNeedsOpen, proto.ProgramNeedsParams{Program: "acme"}, nil); !errors.As(err, &perr) || perr.Code != "not-running" {
+		t.Errorf("no director: %v", err)
+	}
+	var started proto.SessionStartResult
+	call(t, c, proto.MethodSessionStart, proto.SessionStartParams{Agent: "waits", Role: proto.RoleDirector, Project: "acme"}, &started)
+	id := started.Session.ID
+	stamp := func() time.Time {
+		var list proto.SessionListResult
+		call(t, c, proto.MethodSessionList, nil, &list)
+		for _, s := range list.Sessions {
+			if s.ID == id {
+				return s.NeedsOpen
+			}
+		}
+		t.Fatalf("no director in the list")
+		return time.Time{}
+	}
+	var res proto.ProgramNeedsOpenResult
+	var needs proto.ProgramNeedsResult
+	call(t, c, proto.MethodProgramNeeds, proto.ProgramNeedsParams{Program: "acme"}, &needs)
+	if len(needs.Needs) == 0 {
+		call(t, c, proto.MethodProgramNeedsOpen, proto.ProgramNeedsParams{Program: "acme"}, &res)
+		if res.Waiting != 0 || !stamp().IsZero() {
+			t.Errorf("nothing waiting: %+v, stamped %v", res, stamp())
+		}
+		if _, err := demo.Tasks().Add(caller.Caller{Kind: caller.Human}, []tasks.NewTask{{Title: "OIDC login", Status: "review"}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	call(t, c, proto.MethodProgramNeedsOpen, proto.ProgramNeedsParams{Program: "acme"}, &res)
+	if res.Session != id || res.Waiting == 0 || stamp().IsZero() {
+		t.Errorf("open: %+v, stamped %v", res, stamp())
 	}
 }

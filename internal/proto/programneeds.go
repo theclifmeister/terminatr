@@ -66,6 +66,21 @@ type ProgramNeed struct {
 	Merged  []string `json:"merged,omitempty"`
 }
 
+// MethodProgramNeedsOpen asks the consoles to open a program's needs
+// dialog for the user over its director's pane (tm program needs
+// --open): the director opens it, never fills it (§7.3). Its params are
+// ProgramNeedsParams, the answer ProgramNeedsOpenResult; refused
+// not-running without a director session, and as program.needs is.
+const MethodProgramNeedsOpen = "program.needs.open"
+
+// ProgramNeedsOpenResult says what program.needs.open did: the
+// director's session stamped (SessionInfo.NeedsOpen) and how many
+// needs wait; with none it stamps nothing.
+type ProgramNeedsOpenResult struct {
+	Session string `json:"session,omitempty"`
+	Waiting int    `json:"waiting"`
+}
+
 // ProgramNeedsParams are program.needs' params.
 type ProgramNeedsParams struct {
 	Program string `json:"program"`

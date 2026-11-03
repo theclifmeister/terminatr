@@ -23,8 +23,10 @@ import (
 	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/models"
 	"github.com/theclifmeister/terminatr/internal/modview"
+	"github.com/theclifmeister/terminatr/internal/program"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/server"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/thread"
 	"github.com/theclifmeister/terminatr/internal/version"
@@ -41,6 +43,11 @@ func statusLine(s proto.SessionInfo, ts *thread.Status, pending bool, cols int, 
 // settings file under the test's TERMINATR_HOME, and Load reads them
 // back once one was set.
 type fakeSource struct {
+	// pneeds are program.needs' answers by program; panswers the
+	// AnswerProgram calls (slug/Q2=labels); newPrograms NewProgram's.
+	pneeds      map[string]proto.ProgramNeedsResult
+	panswers    []string
+	newPrograms []string
 	invites     map[string][]link.Invite
 	programActs []string
 	agentCalls  int // Agents() calls (perf_render_test.go)
@@ -1827,4 +1834,22 @@ func (f *fakeSource) ProgramAct(slug, verb, arg string, o link.AnswerOpts) (stri
 func (f *fakeSource) SetProgramLinkKey(slug, key string, value any) error {
 	f.programActs = append(f.programActs, fmt.Sprintf("%s set %s %v", slug, key, value))
 	return nil
+}
+
+func (f *fakeSource) ProgramNeeds(slug string) (proto.ProgramNeedsResult, error) {
+	if res, ok := f.pneeds[slug]; ok {
+		return res, nil
+	}
+	return proto.ProgramNeedsResult{Program: slug}, nil
+}
+
+func (f *fakeSource) AnswerProgram(slug, ref string, choices []string, other string) (program.AnswerResult, error) {
+	f.panswers = append(f.panswers, slug+"/"+ref+"="+strings.Join(choices, ",")+other)
+	return program.AnswerResult{Question: ref, Fanned: []program.Fanned{{Project: "api", Question: "Q1", Result: "answered"}}}, nil
+}
+
+func (f *fakeSource) NewProgram(slug, goal string) (string, error) {
+	f.newPrograms = append(f.newPrograms, slug+":"+goal)
+	f.data.Programs = append(f.data.Programs, ProgramData{SideProgram: server.SideProgram{Slug: slug, Authority: "propose"}})
+	return slug, nil
 }

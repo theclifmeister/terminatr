@@ -55,6 +55,9 @@ func (m *dash) treeCurrent() string {
 	if _, _, ok := m.remote(); ok {
 		return m.current
 	}
+	if _, ok := m.programShown(); ok {
+		return m.current
+	}
 	return shownProject(m.data, m.current)
 }
 
@@ -286,6 +289,9 @@ func (m *dash) remoteHere() bool {
 func (m *dash) shownCrumb() string {
 	if alias, slug, ok := m.remote(); ok {
 		return remoteCrumb(peerShown(m.data.Peers, alias), slug)
+	}
+	if g, ok := m.programShown(); ok {
+		return programCrumb(g)
 	}
 	if m.allShown() {
 		return "all projects"

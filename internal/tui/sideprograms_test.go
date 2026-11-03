@@ -63,12 +63,17 @@ func TestProgramRows(t *testing.T) {
 	if keys := rowKeys(folded); !slices.Equal(keys, []string{"g:acme", "p:zoo", "c:zoo"}) || folded[0].state == "" {
 		t.Errorf("folded %v %+v", keys, folded[0])
 	}
-	// Enter on either row opens the director; a preview shows its
-	// session only while it runs.
-	for _, r := range rows[:2] {
-		if tg, ok, _ := r.target(); !ok || tg.Program != "acme" || tg.Project != "" {
-			t.Errorf("%s target %+v", r.key(), tg)
-		}
+	// Enter on the program's row shows its dashboard (B8), on its
+	// director's opens the director; a preview shows the dashboard, or
+	// the director's session only while it runs.
+	if tg, ok, _ := g.target(); !ok || tg.Project != "g:acme" || tg.Program != "" {
+		t.Errorf("program target %+v", tg)
+	}
+	if tg, ok := g.preview(); !ok || tg.Project != "g:acme" {
+		t.Errorf("program preview %+v %v", tg, ok)
+	}
+	if tg, ok, _ := d.target(); !ok || tg.Program != "acme" || tg.Project != "" {
+		t.Errorf("director target %+v", tg)
 	}
 	if tg, ok := rows[1].preview(); !ok || tg.Session != "s-d" {
 		t.Errorf("director preview %+v %v", tg, ok)

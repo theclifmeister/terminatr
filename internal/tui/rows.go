@@ -78,6 +78,10 @@ type row struct {
 	// (§16.16): enter opens the dialog to answer it while that server
 	// takes answers from this one (peerneedact.go).
 	peerNeed *peerNeedRef
+	// pneed is a need in a program's rolled-up NEEDS YOU on the
+	// program dashboard: enter opens the program needs dialog at it
+	// (programneeds.go).
+	pneed *programNeedRef
 	// card: the row is a mod's dashboard card's header (modviews.go),
 	// its key the card's.
 	card bool

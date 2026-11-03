@@ -222,9 +222,10 @@ func TestCopies(t *testing.T) {
 		".Sessions[].AgentSID", ".Sessions[].Identified",
 		// The settings' side of remote control and the model.
 		".Sessions[].RemoteHeld", ".Sessions[].ModelNext", ".Sessions[].ModelPending",
-		// A director's program questions: the apps learn of them with
-		// the program types (the programs design B17).
-		".Sessions[].Question.HumanOnly",
+		// A director's program questions and its request to open the
+		// program's needs dialog: the apps learn of them with the
+		// program types (the programs design B17).
+		".Sessions[].Question.HumanOnly", ".Sessions[].NeedsOpen",
 	})
 	check("session.watch", homeOf(watchOf), nil)
 	check("projects.watch", homeOf(projectsOf), append(settingsHome(".Projects[].Safety"),
@@ -360,11 +361,12 @@ func TestCopies(t *testing.T) {
 }
 
 // sessionHome is what of a SessionInfo at path stays home (session.list's
-// list). Question.HumanOnly is a director's program questions', which
-// the apps learn with the program types (the programs design B17).
+// list). Question.HumanOnly is a director's program questions', and
+// NeedsOpen its request to open the program's needs dialog, which the
+// apps learn with the program types (the programs design B17).
 func sessionHome(path string) []string {
 	var out []string
-	for _, f := range []string{"Cells", "Argv", "Cwd", "PID", "StateSources", "AgentSID", "Identified", "RemoteHeld", "ModelNext", "ModelPending", "Question.HumanOnly"} {
+	for _, f := range []string{"Cells", "Argv", "Cwd", "PID", "StateSources", "AgentSID", "Identified", "RemoteHeld", "ModelNext", "ModelPending", "Question.HumanOnly", "NeedsOpen"} {
 		out = append(out, path+"."+f)
 	}
 	return out

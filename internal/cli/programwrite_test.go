@@ -262,6 +262,11 @@ func TestProgramNeedsCLI(t *testing.T) {
 	if code, _, errs := h.run(directorAcme, "", "program", "needs"); code != 3 || !strings.Contains(errs, "not running") {
 		t.Errorf("no server: %d %s", code, errs)
 	}
+	// --open: the same callers; it needs the server too.
+	h.expect(1, "other-program", directorAcme, "program", "needs", "beta", "--open")
+	if code, _, errs := h.run(directorAcme, "", "program", "needs", "--open"); code != 3 || !strings.Contains(errs, "not running") {
+		t.Errorf("--open, no server: %d %s", code, errs)
+	}
 	out := h.ok(directorAcme, "program", "context")
 	if !strings.Contains(out, "## Needs you (rolled up)\n(not known now") || strings.Index(out, "## Needs you") > strings.Index(out, "## Children") {
 		t.Errorf("context:\n%s", out)

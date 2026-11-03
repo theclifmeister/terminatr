@@ -50,8 +50,9 @@ import (
 // 33: appreport.add, appreport.list and appreport.show, the apps' crash
 // and hang reports (CapAppReports). 34: programs.switch, and the hello's
 // CapPrograms while programs are on. 35: program.needs, a program's
-// rolled-up Needs you.
-const Protocol = 35
+// rolled-up Needs you. 36: program.needs.open, and SessionInfo's
+// NeedsOpen (an added field).
+const Protocol = 36
 
 // Kind is what a connection is for.
 type Kind string

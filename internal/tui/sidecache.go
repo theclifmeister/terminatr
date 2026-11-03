@@ -297,6 +297,18 @@ func (ic *infoCache) load(paths tmclient.Paths, s proto.SessionInfo, sessions []
 		d.watch = &w
 		return d
 	}
+	if s.Role == proto.RoleDirector && s.Project != "" {
+		// The program's needs come from tm's server: read again every
+		// programNeedsEvery, not every poll.
+		key := "g:" + s.Project
+		if ic.d == nil || ic.key != key || time.Since(ic.at) >= programNeedsEvery {
+			ic.key, ic.stamp, ic.at = key, 0, time.Now()
+			ic.d = loadProgramInfo(paths, s, sessions)
+		}
+		d := *ic.d
+		d.session = s
+		return &d
+	}
 	if s.Role != proto.RoleThread || s.Project == "" || !thread.ValidID(s.Thread) {
 		return nil
 	}

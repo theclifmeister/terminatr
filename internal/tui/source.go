@@ -99,7 +99,10 @@ type Data struct {
 	Peers []proto.PeerMirror
 	// Programs are the programs while [features] programs is on (the
 	// programs design §11.1), in slug order; none while it is off.
-	Programs []ProgramData
+	// ProgramsOn is that switch: the PROJECTS header offers a new
+	// program while it is on.
+	Programs   []ProgramData
+	ProgramsOn bool
 	// ProgramLinks are, by project slug, the projects' memberships of
 	// paired servers' programs (their program keys) while programs are
 	// on; none while off.
@@ -202,6 +205,7 @@ type Source interface {
 	LogSource
 	SearchSource
 	ProgramPeerSource
+	ProgramSource
 }
 
 // LogSource reads the logs on the server's host (the , popup's Logs
@@ -805,7 +809,8 @@ func (s *ServerSource) Load() Data {
 			d.Sandbox[slug] = cfg.SandboxOf(slug)
 		}
 		d.Programs = programsOf(cfg)
-		if programsOnIn(cfg) {
+		d.ProgramsOn = programsOnIn(cfg)
+		if d.ProgramsOn {
 			for _, slug := range cfg.ProjectSlugs() {
 				if l, in := cfg.ProgramLink(slug); in {
 					if d.ProgramLinks == nil {

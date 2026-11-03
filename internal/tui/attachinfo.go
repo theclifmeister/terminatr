@@ -141,6 +141,9 @@ func (c *client) infoHintNow() string {
 	if d := c.info.data; d != nil && d.watch != nil && d.watch.Questions > 0 {
 		return strings.Replace(hint, " · esc", " · A answers questions · esc", 1)
 	}
+	if d := c.info.data; d != nil && d.prog != nil && d.prog.waiting() > 0 {
+		return strings.Replace(hint, " · esc", " · A answers · esc", 1)
+	}
 	return hint
 }
 
@@ -310,6 +313,10 @@ func (c *client) infoQuestions() {
 	}
 	d, paths := c.info.data, c.paths
 	c.mu.Unlock()
+	if d != nil && d.prog != nil {
+		c.programNeedsOver(d.slug)
+		return
+	}
 	slug, n := "", 0
 	if d != nil && d.watch != nil {
 		slug, n = d.slug, d.watch.Questions
@@ -547,6 +554,8 @@ func (c *client) infoMouse(m emu.Mouse) {
 		c.sideGo(Target{Project: slug, Session: h.session})
 	case hitQuestions:
 		c.infoQuestions()
+	case hitProgramNeeds:
+		c.programNeedsOver(slug)
 	case hitSaveClear:
 		c.saveClear(slug)
 	case hitPR:
@@ -604,6 +613,9 @@ func (c *client) pollInfo(ic *infoCache, sessions []proto.SessionInfo, peers []p
 // infoTarget is what the mods' sections in d's panel show for: a
 // coordinator's project, or a thread.
 func infoTarget(d *infoData) panelTarget {
+	if d.prog != nil {
+		return programTarget(d)
+	}
 	if d.watch != nil {
 		return panelTarget{slot: mod.SlotCoordinatorSection, project: d.slug}
 	}

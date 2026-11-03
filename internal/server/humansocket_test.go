@@ -66,7 +66,8 @@ var notHumanOnly = map[string]gate{
 	proto.MethodSearchTimeline:        gateAgentOrHuman,
 	proto.MethodSearchShow:            gateAgentOrHuman,
 	// A director its own program's, checked in its handler.
-	proto.MethodProgramNeeds: gateAgentOrHuman,
+	proto.MethodProgramNeeds:     gateAgentOrHuman,
+	proto.MethodProgramNeedsOpen: gateAgentOrHuman,
 }
 
 // notControl are proto's methods of the peer link (internal/peer), not

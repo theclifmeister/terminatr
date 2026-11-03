@@ -20,6 +20,7 @@ var drainFed = []reflect.Type{
 	reflect.TypeOf(searchMsg{}),
 	reflect.TypeOf(searchTimelineMsg{}),
 	reflect.TypeOf(searchShowMsg{}),
+	reflect.TypeOf(programNeedsMsg{}),
 }
 
 // drainDropped are results a test feeds itself (setData, the mod tabs) or

@@ -113,6 +113,9 @@ type Server struct {
 	taskOf sync.Map
 	// ctxOf is each session's latest context use (setContext), by id.
 	ctxOf sync.Map
+	// needsOpen is when each director asked to open its program's
+	// needs dialog (program.needs.open), by session id.
+	needsOpen sync.Map
 
 	// latest is the newer release's tag and upgrade its install hint
 	// ("" for none), from the daily update check (updatecheck.go).
@@ -1090,6 +1093,9 @@ func (s *Server) info(sess *session.Session) proto.SessionInfo {
 	info := sess.Info()
 	if q := s.asks.of(info.ID); q != nil {
 		info.Question = q
+	}
+	if v, ok := s.needsOpen.Load(info.ID); ok {
+		info.NeedsOpen = v.(time.Time)
 	}
 	if v, ok := s.ctxOf.Load(info.ID); ok {
 		c := v.(ctxUse)

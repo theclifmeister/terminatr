@@ -395,6 +395,8 @@ func (c *client) sideItems(r treeRow, t Target) []aitem {
 			ai.run = func() { c.popupOver(r.slug, key) }
 		case menuProgram:
 			ai.run = func() { c.popupOver(r.slug, thenProgram) }
+		case menuDirector:
+			ai.run = func() { c.sideGo(Target{Program: r.slug}) }
 		case menuActive:
 			ai.run = func() { c.askActive(r.slug, r.inactive) }
 		case menuPin:
