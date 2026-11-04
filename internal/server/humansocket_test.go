@@ -27,6 +27,7 @@ var humanOnlyMethods = []string{
 	proto.MethodLogList, proto.MethodLogRead, proto.MethodPaneVT, proto.MethodTranscriptWatch, proto.MethodTranscriptPage, proto.MethodSessionFile,
 	proto.MethodNotifyClaim, proto.MethodNotifyDismiss,
 	proto.MethodModActionCheck, proto.MethodModActionDone, proto.MethodSessionClear, proto.MethodSecretTest,
+	proto.MethodSearchRelated,
 	proto.MethodSessionStart, proto.MethodSessionStop, proto.MethodSessionKeys, proto.MethodSessionPrompt, proto.MethodSessionUpload, proto.MethodSessionApprove, proto.MethodTaskAsk,
 	proto.MethodTaskAccept, proto.MethodTaskSendBack, proto.MethodTaskDelegate, proto.MethodTaskAdd, proto.MethodTaskPriority, proto.MethodTaskGet, proto.MethodTaskDone, proto.MethodTaskTemplates, proto.MethodDesignList, proto.MethodProjectOpen,
 	proto.MethodMemoryList, proto.MethodMemoryRead, proto.MethodLibraryList, proto.MethodLibraryRead,
