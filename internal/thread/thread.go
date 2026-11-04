@@ -70,6 +70,10 @@ type Record struct {
 	// resolve never removes, nor deletes its branch.
 	Adopted  bool `toml:"adopted,omitempty" json:"adopted,omitempty"`
 	Checkout bool `toml:"checkout,omitempty" json:"checkout,omitempty"`
+	// Related are the past tasks its brief listed, RelatedOpened those of
+	// them it has opened with search.show (journaled as thread.related).
+	Related       []string `toml:"related,omitempty" json:"related,omitempty"`
+	RelatedOpened []string `toml:"related_opened,omitempty" json:"related_opened,omitempty"`
 	// Usage is what the thread's turns used, summed (usage.go).
 	Usage Usage `toml:"usage" json:"usage"`
 }

@@ -160,6 +160,9 @@ func (s *Server) runSearchTool(rec SessionRecord, name string, b []byte) (int, M
 			return failed(perr)
 		}
 		search.WriteShow(&out, res)
+		if rec.Role == proto.RoleThread {
+			noteRelatedOpened(rec.Project, rec.Thread, res)
+		}
 	default:
 		return http.StatusNotFound, ModToolResult{Error: "no tool " + name}
 	}

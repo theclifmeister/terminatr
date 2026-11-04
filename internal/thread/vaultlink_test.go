@@ -50,7 +50,7 @@ func TestBriefLinks(t *testing.T) {
 	}
 	writeNote(t, p, "standing.md", "---\ntitle: \"Never touch prod\"\nstanding: true\n---\n## Decided\nStaging only.\n")
 	r, _ := Create(p, Record{Title: "x", Task: "T4", Worktree: "/wt/t-0001"})
-	brief, _, err := WriteBrief(p, r, false)
+	brief, _, err := WriteBrief(p, r, false, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,7 +60,7 @@ func TestBriefLinks(t *testing.T) {
 		t.Errorf("brief without links:\n%s", b)
 	}
 	linksOn(t)
-	if brief, _, err = WriteBrief(p, r, false); err != nil {
+	if brief, _, err = WriteBrief(p, r, false, ""); err != nil {
 		t.Fatal(err)
 	}
 	b, _ = os.ReadFile(brief)

@@ -20,6 +20,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/search"
 	"github.com/theclifmeister/terminatr/internal/tasks"
+	"github.com/theclifmeister/terminatr/internal/thread"
 )
 
 // tm search's server side (design agent-recall, T921): one index per
@@ -196,7 +197,98 @@ func (s *Server) searchTimeline(p proto.SearchTimelineParams, c callCtx) (any, *
 }
 
 func (s *Server) searchShow(p proto.SearchShowParams, c callCtx) (any, *proto.Error) {
-	return s.searchIdx.Show(p, SeesAll(c.who()))
+	res, perr := s.searchIdx.Show(p, SeesAll(c.who()))
+	if who := c.who(); perr == nil && who.Kind == caller.Thread {
+		noteRelatedOpened(p.Project, who.Thread, res)
+	}
+	return res, perr
+}
+
+func (s *Server) searchRelated(p proto.SearchRelatedParams, _ callCtx) (any, *proto.Error) {
+	return s.searchIdx.Related(p)
+}
+
+// Related is search.related's answer: the task's related past work, as
+// a thread may see it, whoever asks.
+func (si *SearchService) Related(p proto.SearchRelatedParams) (proto.SearchRelatedResult, *proto.Error) {
+	none := proto.SearchRelatedResult{Rows: []proto.SearchRelatedRow{}}
+	id, ok := tasks.ParseRef(p.Task)
+	if !ok {
+		return none, proto.Errorf(proto.ErrBadParams, "search.related: %q is not a task", p.Task)
+	}
+	x, _, perr := si.index(p.Project)
+	if perr != nil {
+		return none, perr
+	}
+	pr, err := project.Open(p.Project)
+	if err != nil {
+		return none, proto.Errorf(proto.ErrBadParams, "search.related: %v", err)
+	}
+	t, err := pr.Tasks().Get(id)
+	if err != nil {
+		return none, proto.Errorf(proto.ErrBadParams, "search.related: %v", err)
+	}
+	rows, err := x.Related(search.RelatedTask{Ref: t.Ref(), Title: t.Title, Notes: t.Notes, Created: t.Created}, thread.RelatedMax)
+	if err != nil {
+		return none, proto.Errorf(proto.ErrInternal, "search.related: %v", err)
+	}
+	for _, r := range rows {
+		none.Rows = append(none.Rows, proto.SearchRelatedRow{ID: r.ID, Title: r.Title})
+	}
+	return none, nil
+}
+
+// openedTasks are the tasks a search.show answer opened: an id's own, or
+// a bare thread id's by its chunks.
+func openedTasks(res proto.SearchShowResult) []string {
+	var out []string
+	for _, it := range res.Items {
+		if it.Error != "" {
+			continue
+		}
+		task := it.Task
+		for i := 0; task == "" && i < len(it.Chunks); i++ {
+			task = it.Chunks[i].Task
+		}
+		if task != "" && !slices.Contains(out, task) {
+			out = append(out, task)
+		}
+	}
+	return out
+}
+
+// noteRelatedOpened journals, once each, the tasks a thread's show opened
+// that its brief listed. It only keeps a count: nothing here fails the
+// show.
+func noteRelatedOpened(slug, id string, res proto.SearchShowResult) {
+	opened := openedTasks(res)
+	if len(opened) == 0 || !thread.ValidID(id) {
+		return
+	}
+	p, err := project.Open(slug)
+	if err != nil {
+		return
+	}
+	// Those not yet noted; most shows have none, and write nothing.
+	unnoted := func(r *thread.Record) []string {
+		return slices.DeleteFunc(slices.Clone(opened), func(t string) bool {
+			return !slices.Contains(r.Related, t) || slices.Contains(r.RelatedOpened, t)
+		})
+	}
+	r, err := thread.Load(p, id)
+	if err != nil || len(unnoted(r)) == 0 {
+		return
+	}
+	var fresh []string
+	if _, err := thread.Update(p, id, func(x *thread.Record) error {
+		fresh = unnoted(x)
+		x.RelatedOpened = append(x.RelatedOpened, fresh...)
+		return nil
+	}); err != nil || len(fresh) == 0 {
+		return
+	}
+	who := caller.Caller{Kind: caller.Thread, Project: slug, Thread: id}
+	_ = p.Journal(who, thread.RelatedAction, id, thread.RelatedOpenedDetail(r.Task, fresh))
 }
 
 // Query is search.query's answer, for a caller who sees all (SeesAll)

@@ -94,7 +94,7 @@ func TestPlainBrief(t *testing.T) {
 	if err := OwnFolder("demo", plain, []*Record{plain, {ID: "t-0009", Worktree: wt}}); err == nil || !strings.Contains(err.Error(), "t-0009") {
 		t.Fatalf("a folder another record names: %v", err)
 	}
-	brief, _, err := WriteBrief(p, plain, false)
+	brief, _, err := WriteBrief(p, plain, false, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,7 +108,7 @@ func TestPlainBrief(t *testing.T) {
 		t.Errorf("reset context:\n%s", s)
 	}
 	withRepo, _ := Create(p, Record{Title: "Fix", Repo: "/src/web", Branch: "tm/demo/t-0002-fix"})
-	brief, _, _ = WriteBrief(p, withRepo, false)
+	brief, _, _ = WriteBrief(p, withRepo, false, "")
 	if b, _ := os.ReadFile(brief); strings.Contains(string(b), "No git") {
 		t.Errorf("a repo thread's brief says no git:\n%s", b)
 	}

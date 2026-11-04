@@ -22,6 +22,10 @@ const (
 	// MethodSearchShow is chunks' text by id (SearchShowParams): a
 	// SearchShowResult. A bare thread or task id answers its chunks.
 	MethodSearchShow = "search.show"
+	// MethodSearchRelated is what a starting thread's brief lists: the
+	// past tasks a task's text finds (SearchRelatedParams): a
+	// SearchRelatedResult. An older server doesn't know it.
+	MethodSearchRelated = "search.related"
 )
 
 // CapSearch says the server answers search.query, search.timeline and
@@ -96,6 +100,23 @@ type SearchTimelineParams struct {
 	Before  int    `json:"before,omitempty"`
 	After   int    `json:"after,omitempty"`
 	All     bool   `json:"all,omitempty"`
+}
+
+// SearchRelatedParams name the task a thread starts on.
+type SearchRelatedParams struct {
+	Project string `json:"project"`
+	Task    string `json:"task"`
+}
+
+// SearchRelatedRow is one past task, by its id and title.
+type SearchRelatedRow struct {
+	ID    string `json:"id"`
+	Title string `json:"title"`
+}
+
+// SearchRelatedResult is search.related's answer, best first.
+type SearchRelatedResult struct {
+	Rows []SearchRelatedRow `json:"rows"`
 }
 
 // SearchTimelineResult is the chunk At and those Before and After it,

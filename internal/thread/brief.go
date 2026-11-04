@@ -84,8 +84,9 @@ func AppendFollowUp(p *project.Project, id, text string, at time.Time) error {
 // WriteBrief (re)generates brief.md (docs/SPEC.md §7.1). It is written
 // at start and restart only: the agent snapshots it as a system prompt.
 // It answers the memory notes the brief carries (BriefMemory). It links
-// the task, the notes and the follow-ups (vaultlink).
-func WriteBrief(p *project.Project, r *Record, restart bool) (string, Memory, error) {
+// the task, the notes and the follow-ups (vaultlink). related is its
+// section of related past work (RenderRelated), "" for none.
+func WriteBrief(p *project.Project, r *Record, restart bool, related string) (string, Memory, error) {
 	path := Path(p, r.ID, "brief.md")
 	var b strings.Builder
 	fmt.Fprintf(&b, "# Thread %s of project %s\n\n", r.ID, p.Slug)
@@ -122,6 +123,9 @@ func WriteBrief(p *project.Project, r *Record, restart bool) (string, Memory, er
 	mem := BriefMemory(p, r)
 	if s := mem.Render(p.Dir, p.Slug); s != "" {
 		b.WriteString(s + "\n")
+	}
+	if related != "" {
+		b.WriteString(related + "\n")
 	}
 	if restart {
 		b.WriteString("## Restart\n\nA previous attempt exists on this branch. Read your last report first: `tm report --show`.\n" +

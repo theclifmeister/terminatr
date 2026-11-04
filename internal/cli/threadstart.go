@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"slices"
@@ -20,7 +21,9 @@ import (
 	"github.com/theclifmeister/terminatr/internal/program"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/search"
 	"github.com/theclifmeister/terminatr/internal/tasks"
+	"github.com/theclifmeister/terminatr/internal/textsafe"
 	"github.com/theclifmeister/terminatr/internal/thread"
 	"github.com/theclifmeister/terminatr/internal/worktree"
 )
@@ -330,7 +333,7 @@ func (e *Env) threadFiles(p *project.Project, r *thread.Record, task *tasks.Task
 	if err := thread.WriteTaskText(p, r.ID, thread.TaskText(r, task)); err != nil {
 		return "", err
 	}
-	brief, mem, err := thread.WriteBrief(p, r, false)
+	brief, mem, err := thread.WriteBrief(p, r, false, e.relatedSection(p, r))
 	if err != nil {
 		return "", err
 	}
@@ -341,6 +344,83 @@ func (e *Env) threadFiles(p *project.Project, r *thread.Record, task *tasks.Task
 		return "", err
 	}
 	return brief, nil
+}
+
+// relatedLimit is how long a thread's start waits for its related past
+// work: far over a query (tens of ms) and loading an index (half a
+// second for a project of thousands of tasks), under building one, which
+// goes on in the server for the next start.
+const relatedLimit = 2 * time.Second
+
+// relatedAsk asks the server for a task's related past work, within
+// limit (a variable for tests).
+var relatedAsk = func(slug, task string, limit time.Duration) ([]proto.SearchRelatedRow, error) {
+	type answer struct {
+		rows []proto.SearchRelatedRow
+		err  error
+	}
+	got := make(chan answer, 1)
+	go func() {
+		c, _, err := connect(false)
+		if err != nil {
+			got <- answer{err: err}
+			return
+		}
+		defer c.Close()
+		var res proto.SearchRelatedResult
+		err = c.CallWithin(limit, proto.MethodSearchRelated, proto.SearchRelatedParams{Project: slug, Task: task}, &res)
+		got <- answer{res.Rows, err}
+	}()
+	select {
+	case a := <-got:
+		return a.rows, a.err
+	case <-time.After(limit):
+		return nil, os.ErrDeadlineExceeded
+	}
+}
+
+// relatedSection is the brief's section of related past work for thread
+// r, "" when there is none. It never stops a start: what goes wrong
+// leaves the section out, and the journal says so. It records what it
+// lists, so what the thread opens of it can be told (noteRelatedOpened).
+func (e *Env) relatedSection(p *project.Project, r *thread.Record) string {
+	if r.Task == "" {
+		return ""
+	}
+	journal := func(detail string) { _ = p.Journal(e.Caller, thread.RelatedAction, r.ID, r.Task+" "+detail) }
+	rows, err := relatedAsk(p.Slug, r.Task, relatedLimit)
+	if err != nil {
+		journal("left out: " + relatedWhy(err))
+		return ""
+	}
+	in := make([]search.RelatedRow, len(rows))
+	for i, row := range rows {
+		in[i] = search.RelatedRow{ID: row.ID, Title: row.Title}
+	}
+	section, ids := thread.RenderRelated(p.Slug, in)
+	if _, err := thread.Update(p, r.ID, func(x *thread.Record) error { x.Related = ids; return nil }); err != nil {
+		journal("left out: " + relatedWhy(err))
+		return ""
+	}
+	if len(ids) == 0 {
+		journal("no related past work")
+		return ""
+	}
+	_ = p.Journal(e.Caller, thread.RelatedAction, r.ID, thread.RelatedListedDetail(r.Task, ids))
+	return section
+}
+
+// relatedWhy says in a few words why a start has no related past work.
+func relatedWhy(err error) string {
+	var perr *proto.Error
+	var ne net.Error
+	switch {
+	case errors.Is(err, os.ErrDeadlineExceeded), errors.As(err, &ne) && ne.Timeout():
+		return "time limit"
+	case errors.As(err, &perr) && perr.Code == proto.ErrUnknownMethod:
+		return "the server is older"
+	}
+	return textsafe.Line(err.Error(), 120)
 }
 
 // memoryDetail is a thread.memory journal line's detail:

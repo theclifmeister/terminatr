@@ -879,7 +879,7 @@ func (e *Env) threadRestart(p *project.Project, id string) error {
 			return err
 		}
 	}
-	brief, _, err := thread.WriteBrief(p, r, true)
+	brief, _, err := thread.WriteBrief(p, r, true, e.relatedSection(p, r))
 	if err != nil {
 		return err
 	}
