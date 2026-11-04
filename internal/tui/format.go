@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/seat"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/textsafe"
 	"github.com/theclifmeister/terminatr/internal/thread"
@@ -323,7 +324,7 @@ func statusBar(s proto.SessionInfo, ts *thread.Status, title string, pending boo
 	var rest []string
 	if pr.Percent >= 0 {
 		pct = fmt.Sprintf("%d%%", pr.Percent)
-	} else if c := s.ContextPercent(); s.Role == proto.RoleCoordinator && c >= 0 {
+	} else if c := s.ContextPercent(); seat.Is(s.Role) && c >= 0 {
 		pct = fmt.Sprintf("context %d%%", c)
 	}
 	if pr.Total > 0 {

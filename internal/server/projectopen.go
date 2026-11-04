@@ -10,6 +10,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/models"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/seat"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 )
 
@@ -47,10 +48,8 @@ func openCoordinator(list func() ([]proto.SessionInfo, error), start func(proto.
 	if err != nil {
 		return "", false, err
 	}
-	for _, s := range sessions {
-		if s.Role == proto.RoleCoordinator && s.Project == slug {
-			return s.ID, false, nil
-		}
+	if s := seat.Find(sessions, proto.RoleCoordinator, slug); s != nil {
+		return s.ID, false, nil
 	}
 	// The project's agent, model and remote control settings; a broken
 	// config.toml shows in the settings popup, it doesn't keep the

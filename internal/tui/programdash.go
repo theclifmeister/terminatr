@@ -12,6 +12,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/link"
 	"github.com/theclifmeister/terminatr/internal/program"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/seat"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 )
 
@@ -500,11 +501,8 @@ func childRows(d Data, g ProgramData, res *proto.ProgramNeedsResult) []row {
 			continue
 		}
 		r.what, r.state = "coordinator", "—"
-		for _, s := range d.Sessions {
-			if s.Role == proto.RoleCoordinator && s.Project == slug {
-				r.session, r.state = s.ID, stateWord(s)
-				break
-			}
+		if s := seat.Find(d.Sessions, proto.RoleCoordinator, slug); s != nil {
+			r.session, r.state = s.ID, stateWord(*s)
 		}
 		working, red := 0, 0
 		for i := range p.Threads {

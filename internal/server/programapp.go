@@ -12,6 +12,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/program"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/seat"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 )
 
@@ -433,10 +434,8 @@ func (s *Server) programDelete(p proto.ProgramDeleteParams, cc callCtx) (any, *p
 	if p.Confirm != p.Program {
 		return nil, proto.Errorf("not-confirmed", "confirm deleting program %s with its name: nothing deleted", p.Program)
 	}
-	for _, si := range s.list().Sessions {
-		if si.Role == proto.RoleDirector && si.Project == p.Program {
-			return nil, proto.Errorf("director-running", "program %s's director is running (%s): stop it first", p.Program, si.ID)
-		}
+	if si := seat.Find(s.list().Sessions, proto.RoleDirector, p.Program); si != nil {
+		return nil, proto.Errorf("director-running", "program %s's director is running (%s): stop it first", p.Program, si.ID)
 	}
 	dst, err := program.Delete(c, p.Program, time.Now())
 	if err != nil {

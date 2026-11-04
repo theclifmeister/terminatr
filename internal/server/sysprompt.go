@@ -11,6 +11,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/seat"
 	"github.com/theclifmeister/terminatr/internal/skill"
 	"github.com/theclifmeister/terminatr/internal/version"
 )
@@ -57,7 +58,7 @@ var roleRules = func(role, slug string) (string, bool) {
 // thread's brief file (the sandbox guidance already in it). A role
 // other than coordinator and thread has none: "", nil.
 func writeSystemPrompt(rt, role, slug, brief string) (string, *PromptStamp, error) {
-	if slug == "" || (role != proto.RoleCoordinator && role != proto.RoleThread && role != proto.RoleDirector) {
+	if slug == "" || (role != proto.RoleThread && !seat.Is(role)) {
 		return "", nil, nil
 	}
 	rules, ok := roleRules(role, slug)

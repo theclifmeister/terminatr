@@ -15,6 +15,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/seat"
 	"github.com/theclifmeister/terminatr/internal/session"
 	"github.com/theclifmeister/terminatr/internal/view"
 )
@@ -638,5 +639,5 @@ func (s *Server) serveViewStream(c net.Conn, br *bufio.Reader, req proto.Request
 // thread's (its task and PR), a coordinator's (its project, T90) or a
 // director's (its program: the programs design §7.3).
 func hasPanel(role string) bool {
-	return role == proto.RoleThread || role == proto.RoleCoordinator || role == proto.RoleDirector
+	return role == proto.RoleThread || seat.Is(role)
 }

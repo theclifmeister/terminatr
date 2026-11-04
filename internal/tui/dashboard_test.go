@@ -1041,6 +1041,14 @@ func TestStatusLine(t *testing.T) {
 	if got := ansi.Strip(line); !strings.Contains(got, " alpha › coordinator  remote control off") || ansi.StringWidth(line) != 120 {
 		t.Errorf("long note: %q", got)
 	}
+	// A director's context shows as a coordinator's does (T990).
+	for _, role := range []string{proto.RoleCoordinator, proto.RoleDirector} {
+		seat := proto.SessionInfo{ID: "s-1", Role: role, Project: "alpha", Agent: "claude", State: "idle", Context: 40, ContextWindow: 100}
+		line, _ = statusBar(seat, nil, "", false, 120, "", nil)
+		if got := ansi.Strip(line); !strings.Contains(got, "context 40%") {
+			t.Errorf("%s: no context use: %q", role, got)
+		}
+	}
 	// After the prefix: the commands.
 	got = ansi.Strip(statusLine(info, nil, true, 160, ""))
 	if !strings.Contains(got, ` prefix ▸ d dashboard · ] [ projects · + new · ; last place · ? all keys `) || !strings.HasSuffix(got, `prefix again sends it `) {

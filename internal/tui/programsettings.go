@@ -11,6 +11,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/link"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/seat"
 )
 
 // A program's settings popup (the programs design §3.3, §11.1): its
@@ -259,10 +260,8 @@ func directorModelWords(p config.Program) string {
 // ticker catches what this misses.
 func directorModelRow(slug string, get func(*dash) config.Program, set func(string, any, string) func(*dash) tea.Cmd, unset func(string) func(*dash) tea.Cmd) setting {
 	running := func(m *dash) *proto.SessionInfo {
-		for i, s := range m.data.Sessions {
-			if s.Role == proto.RoleDirector && s.Project == slug && s.Agent != "" {
-				return &m.data.Sessions[i]
-			}
+		if s := seat.Find(m.data.Sessions, proto.RoleDirector, slug); s != nil && s.Agent != "" {
+			return s
 		}
 		return nil
 	}

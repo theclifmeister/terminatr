@@ -12,6 +12,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/program"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/seat"
 	"github.com/theclifmeister/terminatr/internal/server"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/thread"
@@ -108,10 +109,8 @@ func DeleteProgram(call callFn, c caller.Caller, slug string) (string, error) {
 		if err := call(proto.MethodSessionList, nil, &list); err != nil {
 			return "", err
 		}
-		for _, s := range list.Sessions {
-			if s.Role == proto.RoleDirector && s.Project == slug {
-				return "", &project.Error{Code: "director-running", Msg: fmt.Sprintf("program %s's director is running (%s): stop it first", slug, s.ID)}
-			}
+		if s := seat.Find(list.Sessions, proto.RoleDirector, slug); s != nil {
+			return "", &project.Error{Code: "director-running", Msg: fmt.Sprintf("program %s's director is running (%s): stop it first", slug, s.ID)}
 		}
 	}
 	dst, err := program.Delete(c, slug, time.Now())

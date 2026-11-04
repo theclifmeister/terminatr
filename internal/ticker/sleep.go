@@ -18,6 +18,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/features"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/seat"
 )
 
 // sleepMemo is what sleepIdle saw of a coordinator: process Seen has
@@ -32,7 +33,7 @@ type sleepMemo struct {
 // permission prompt open, a console or app shows its pane, one of its
 // project's threads works or waits on a question, or its inbox has an
 // item it hasn't been told about (unread).
-func (t *Ticker) sleepBlocked(p seat, coord *proto.SessionInfo, sessions []proto.SessionInfo) string {
+func (t *Ticker) sleepBlocked(p seat.Seat, coord *proto.SessionInfo, sessions []proto.SessionInfo) string {
 	switch {
 	case coord.State != "idle":
 		return "not idle"
@@ -53,7 +54,7 @@ func (t *Ticker) sleepBlocked(p seat, coord *proto.SessionInfo, sessions []proto
 		return "inbox: " + err.Error()
 	}
 	told := map[string]bool{}
-	for _, id := range t.projectMemo(p.key()).Nudged {
+	for _, id := range t.projectMemo(p.Key()).Nudged {
 		told[id] = true
 	}
 	for _, it := range items {
@@ -69,12 +70,12 @@ func (t *Ticker) sleepBlocked(p seat, coord *proto.SessionInfo, sessions []proto
 // while paused (the caller's), never for a setting of off. The rest
 // starts again with any activity and with a new process; a server start
 // starts it again too.
-func (t *Ticker) sleepIdle(p seat, cfg *config.Config, safety config.Safety, sessions []proto.SessionInfo, now time.Time) {
-	pm := t.projectMemo(p.key())
+func (t *Ticker) sleepIdle(p seat.Seat, cfg *config.Config, safety config.Safety, sessions []proto.SessionInfo, now time.Time) {
+	pm := t.projectMemo(p.Key())
 	inProgram := features.Programs(cfg) && cfg.ProgramOf(p.Slug) != ""
 	after := config.SleepAfter(safety, inProgram)
-	coord := p.of(sessions)
-	if after <= 0 || coord == nil || p.role != proto.RoleCoordinator {
+	coord := p.Of(sessions)
+	if after <= 0 || coord == nil || p.Role != proto.RoleCoordinator {
 		pm.sleep = nil
 		return
 	}
@@ -118,8 +119,8 @@ func shortDuration(d time.Duration) string {
 // wakeFor wakes project seat p's sleeping coordinator for fresh, the
 // inbox items it hasn't been told about: none runs, so they would wait.
 // The next sweep nudges the woken one.
-func (t *Ticker) wakeFor(p seat, fresh int) {
-	if p.role != proto.RoleCoordinator || fresh == 0 {
+func (t *Ticker) wakeFor(p seat.Seat, fresh int) {
+	if p.Role != proto.RoleCoordinator || fresh == 0 {
 		return
 	}
 	if id, ok := t.o.Host.Wake(p.Slug); ok {

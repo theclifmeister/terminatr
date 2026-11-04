@@ -292,7 +292,7 @@ func (e *Env) report(prefix string, err error) int {
 // the session and the process tree, not from who typed it, so a command
 // the user types with ! in an agent's pane is the agent's.
 func (e *Env) paneHint(err error) {
-	if e.Caller.Kind != caller.Coordinator && e.Caller.Kind != caller.Thread {
+	if e.Caller.Kind != caller.Coordinator && e.Caller.Kind != caller.Director && e.Caller.Kind != caller.Thread {
 		return
 	}
 	var r *tasks.Error

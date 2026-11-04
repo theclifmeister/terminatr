@@ -9,6 +9,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/program"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/seat"
 	"github.com/theclifmeister/terminatr/internal/server"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 )
@@ -163,12 +164,9 @@ func programRows(g ProgramData, ps []ProjectData, sessions []proto.SessionInfo, 
 	pr := treeRow{kind: treeProgram, slug: g.Slug, prog: g.Slug, pct: -1, paused: g.Paused, hint: g.Questions > 0,
 		current: in.current == programKey(g.Slug)}
 	dir := treeRow{kind: treeDirector, slug: g.Slug, prog: g.Slug, pct: -1, ctx: -1, last: true, hint: g.Questions > 0, asks: g.Questions}
-	for _, s := range sessions {
-		if s.Role == proto.RoleDirector && s.Project == g.Slug {
-			dir.session, dir.state, dir.remote, dir.ctx = s.ID, stateWord(s), s.RemoteControl, s.ContextPercent()
-			dir.ctxHint = dir.ctx >= 0 && in.ctxHint > 0 && dir.ctx >= in.ctxHint
-			break
-		}
+	if s := seat.Find(sessions, proto.RoleDirector, g.Slug); s != nil {
+		dir.session, dir.state, dir.remote, dir.ctx = s.ID, stateWord(*s), s.RemoteControl, s.ContextPercent()
+		dir.ctxHint = dir.ctx >= 0 && in.ctxHint > 0 && dir.ctx >= in.ctxHint
 	}
 	pr.session, pr.state = dir.session, dir.state
 	pr.busy = stateBusy(dir.state)

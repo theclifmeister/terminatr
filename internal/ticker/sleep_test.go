@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/seat"
 )
 
 // restRig is newRig whose coordinator s-1 and thread s-2 rest, with
@@ -94,8 +95,8 @@ func TestSleepUnread(t *testing.T) {
 		t.Fatal(err)
 	}
 	r.sweep(2 * time.Minute) // nudged: told
-	s := coordinatorSeat(r.p)
-	coord := s.of(r.host.Sessions())
+	s := seat.Coordinator(r.p)
+	coord := s.Of(r.host.Sessions())
 	if len(r.items()) == 0 || len(r.tk.projectMemo("demo").Nudged) == 0 {
 		t.Fatal("no told item to test with")
 	}

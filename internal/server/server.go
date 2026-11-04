@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/theclifmeister/terminatr/internal/appreport"
+	"github.com/theclifmeister/terminatr/internal/seat"
 	"log"
 	"net"
 	"os"
@@ -1234,7 +1235,7 @@ func (s *Server) startSession(p proto.SessionStartParams) (any, *proto.Error) {
 			rec.Protection = p.Protection
 			rec.NoSandbox, rec.NoSandboxEscapes = protectFlags(p.Protection, p.Agent)
 		}
-		if p.RemoteControl && role != proto.RoleCoordinator && role != proto.RoleDirector {
+		if p.RemoteControl && !seat.Is(role) {
 			s.mu.Unlock()
 			return nil, proto.Errorf(proto.ErrRefused, "remote control is for coordinators; threads are reached through theirs")
 		}

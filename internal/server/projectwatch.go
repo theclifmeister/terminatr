@@ -11,6 +11,7 @@ import (
 	"cmp"
 	"fmt"
 	"github.com/theclifmeister/terminatr/internal/codehost"
+	"github.com/theclifmeister/terminatr/internal/seat"
 	"net"
 	"slices"
 	"time"
@@ -359,7 +360,7 @@ func (s *Server) serveProjectWatch(c net.Conn, br *bufio.Reader, req proto.Reque
 // contextOf is the context use of project slug's coordinator, nil when
 // none runs or none reported a turn; hint is the config's ContextHint.
 func contextOf(slug string, sessions []proto.SessionInfo, hint int) *proto.WatchContext {
-	info := proto.CoordinatorOf(sessions, slug)
+	info := seat.Find(sessions, proto.RoleCoordinator, slug)
 	if info == nil {
 		return nil
 	}

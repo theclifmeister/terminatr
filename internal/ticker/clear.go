@@ -25,6 +25,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/seat"
 	"github.com/theclifmeister/terminatr/internal/thread"
 )
 
@@ -79,7 +80,7 @@ func process(s *proto.SessionInfo) string {
 // sweep, which it asks for. The request holds for that process only, and
 // for ClearEvery at most.
 func (t *Ticker) RequestClear(slug string, coord proto.SessionInfo) {
-	key := seatKey(coord.Role, slug)
+	key := seat.Key(coord.Role, slug)
 	unlock := t.lockProjects(key)
 	pm := t.projectMemo(key)
 	t.mu.Lock()
@@ -135,15 +136,15 @@ func UpkeepText(over []project.Oversize) string {
 // the same steps, setting or pause aside: its gate is the coordinator's
 // own (idle, nothing queued, no question), the ask goes out at once, and
 // the clear follows once the coordinator rested ClearGrace after it.
-func (t *Ticker) autoClear(p seat, sessions []proto.SessionInfo, safety config.Safety, hint int, now time.Time) {
-	pm := t.projectMemo(p.key())
+func (t *Ticker) autoClear(p seat.Seat, sessions []proto.SessionInfo, safety config.Safety, hint int, now time.Time) {
+	pm := t.projectMemo(p.Key())
 	cm := pm.Clear
 	user := false
 	if cm != nil && cm.RequestedID != "" {
-		coord := p.of(sessions)
+		coord := p.Of(sessions)
 		user = coord != nil && process(coord) == cm.RequestedID && now.Sub(cm.Requested) < t.o.ClearEvery
 		if !user {
-			t.o.Log.Printf("ticker: %s: save and clear of %s dropped: not done before the %s ended or ClearEvery went by", p.Slug, cm.RequestedID, p.role)
+			t.o.Log.Printf("ticker: %s: save and clear of %s dropped: not done before the %s ended or ClearEvery went by", p.Slug, cm.RequestedID, p.Role)
 			cm.RequestedID, cm.Requested = "", time.Time{}
 		}
 	}
@@ -204,7 +205,7 @@ func (t *Ticker) autoClear(p seat, sessions []proto.SessionInfo, safety config.S
 		}
 		cm.AskedID, cm.Asked = seen, now
 		detail := fmt.Sprintf("%s %s: asked to save what it learned before the clear", coord.ID, at)
-		if err := p.Journal(caller.Caller{Kind: caller.Ticker}, p.role+".clear.ask", p.Slug, detail); err != nil {
+		if err := p.Journal(caller.Caller{Kind: caller.Ticker}, p.Role+".clear.ask", p.Slug, detail); err != nil {
 			t.o.Log.Printf("ticker: %s: journal: %v", p.Slug, err)
 		}
 		t.o.Log.Printf("ticker: %s: auto-clear: %s", p.Slug, detail)
@@ -234,7 +235,7 @@ func (t *Ticker) autoClear(p seat, sessions []proto.SessionInfo, safety config.S
 	if w := waiting(p, sessions); user && len(w) > 0 {
 		detail = fmt.Sprintf("%s %s, still waiting: %s", coord.ID, at, strings.Join(w, "; "))
 	}
-	if err := p.Journal(caller.Caller{Kind: caller.Ticker}, p.role+".clear", p.Slug, detail); err != nil {
+	if err := p.Journal(caller.Caller{Kind: caller.Ticker}, p.Role+".clear", p.Slug, detail); err != nil {
 		t.o.Log.Printf("ticker: %s: journal: %v", p.Slug, err)
 	}
 	t.o.Log.Printf("ticker: %s: auto-clear: %s", p.Slug, detail)
@@ -247,8 +248,8 @@ func (t *Ticker) autoClear(p seat, sessions []proto.SessionInfo, safety config.S
 // their budgets; journaled as ticker coordinator.upkeep. The prompt is
 // dropped when nothing is over, while paused, for another process, and
 // once ClearEvery went by since the clear.
-func (t *Ticker) upkeepAfterClear(p seat, sessions []proto.SessionInfo, safety config.Safety, now time.Time) {
-	pm := t.projectMemo(p.key())
+func (t *Ticker) upkeepAfterClear(p seat.Seat, sessions []proto.SessionInfo, safety config.Safety, now time.Time) {
+	pm := t.projectMemo(p.Key())
 	um := pm.Upkeep
 	if um == nil {
 		return
@@ -291,7 +292,7 @@ func (t *Ticker) upkeepAfterClear(p seat, sessions []proto.SessionInfo, safety c
 		files = append(files, o.File)
 	}
 	detail := fmt.Sprintf("%s after its clear: asked to consolidate %s", coord.ID, strings.Join(files, ", "))
-	if err := p.Journal(caller.Caller{Kind: caller.Ticker}, p.role+".upkeep", p.Slug, detail); err != nil {
+	if err := p.Journal(caller.Caller{Kind: caller.Ticker}, p.Role+".upkeep", p.Slug, detail); err != nil {
 		t.o.Log.Printf("ticker: %s: journal: %v", p.Slug, err)
 	}
 	t.o.Log.Printf("ticker: %s: upkeep: %s", p.Slug, detail)
@@ -303,11 +304,11 @@ func (t *Ticker) upkeepAfterClear(p seat, sessions []proto.SessionInfo, safety c
 // in the fresh conversation: the queue isn't looked at then. own looks
 // at the coordinator alone (the user's request), not at what waits in
 // the project.
-func clearBlocked(p seat, sessions []proto.SessionInfo, hint int, delivery, own bool) (*proto.SessionInfo, string) {
-	coord := p.of(sessions)
+func clearBlocked(p seat.Seat, sessions []proto.SessionInfo, hint int, delivery, own bool) (*proto.SessionInfo, string) {
+	coord := p.Of(sessions)
 	switch {
 	case coord == nil:
-		return nil, "no " + p.role
+		return nil, "no " + p.Role
 	case coord.State != "idle":
 		return coord, "not idle"
 	case coord.Queued > 0 && !delivery:
@@ -328,7 +329,7 @@ func clearBlocked(p seat, sessions []proto.SessionInfo, hint int, delivery, own 
 // waiting says what waits in the seat's folder, in clearBlocked's words:
 // a thread waiting on a question, the inbox's open items, a thread that
 // needs the user. A program has no threads: only its inbox counts.
-func waiting(p seat, sessions []proto.SessionInfo) []string {
+func waiting(p seat.Seat, sessions []proto.SessionInfo) []string {
 	var w []string
 	for _, s := range sessions {
 		if s.Project == p.Slug && s.Role == proto.RoleThread && (s.Question != nil || s.State == "blocked") {
@@ -348,10 +349,10 @@ func waiting(p seat, sessions []proto.SessionInfo) []string {
 		}
 		w = append(w, fmt.Sprintf("inbox not empty: %d %s open (%s)", len(items), noun(items), strings.Join(what, ", ")))
 	}
-	if p.p == nil {
+	if p.Project == nil {
 		return w
 	}
-	recs, err := thread.List(p.p)
+	recs, err := thread.List(p.Project)
 	if err != nil {
 		return append(w, "threads: "+err.Error())
 	}
@@ -359,7 +360,7 @@ func waiting(p seat, sessions []proto.SessionInfo) []string {
 		if r.State == thread.Resolved {
 			continue
 		}
-		if st, err := thread.ReadStatus(p.p, r.ID); err == nil && st.NeedsYou != "" {
+		if st, err := thread.ReadStatus(p.Project, r.ID); err == nil && st.NeedsYou != "" {
 			w = append(w, "thread "+r.ID+" needs the user")
 		}
 	}
