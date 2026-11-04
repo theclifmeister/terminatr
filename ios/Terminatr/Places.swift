@@ -78,16 +78,45 @@ struct Navigate {
     /// The route open beside the list: its row shows selected.
     let open: Route?
     let go: (Route) -> Void
+
+    /// Whether route's screen is the one open beside the list: a need's
+    /// conversation is its session's, so a project's row for that session
+    /// shows selected beside it too.
+    func shows(_ route: Route) -> Bool {
+        open?.sessionForm == route.sessionForm
+    }
+}
+
+extension Route {
+    /// The route with a need's conversation as its session's.
+    fileprivate var sessionForm: Route {
+        switch self {
+        case .on(let key, let r): .on(key, r.sessionForm)
+        case .need(let ref): .session(ref)
+        default: self
+        }
+    }
+
+    /// The screen above this one, on the path a tap would have taken
+    /// (Route.path): a session's project or program.
+    var parent: Route? { path.dropLast().last }
+}
+
+/// Puts a session's project or program in the list column beside it,
+/// when the columns' path doesn't hold it (Columns.showParent).
+struct ShowParent {
+    let go: () -> Void
 }
 
 extension EnvironmentValues {
     @Entry var navigate: Navigate?
+    @Entry var showParent: ShowParent?
 }
 
 extension Optional where Wrapped == Navigate {
     /// Whether route, on model's server, is the one open beside the list.
     @MainActor func opens(_ route: Route, on model: PhoneModel) -> Bool {
-        self?.open == route.on(model.key)
+        self?.shows(route.on(model.key)) ?? false
     }
 }
 
@@ -112,7 +141,7 @@ struct RouteLink<Label: View>: View {
 
     var body: some View {
         if let navigate {
-            let on = navigate.open == route
+            let on = navigate.shows(route)
             Button {
                 navigate.go(route)
             } label: {
@@ -157,7 +186,7 @@ struct PlainRouteLink<Label: View>: View {
         if let navigate {
             Button { navigate.go(route) } label: { label }
                 .hoverEffect()
-                .accessibilityAddTraits(navigate.open == route ? .isSelected : [])
+                .accessibilityAddTraits(navigate.shows(route) ? .isSelected : [])
                 .id(route)
         } else {
             NavigationLink(value: route) { label }
