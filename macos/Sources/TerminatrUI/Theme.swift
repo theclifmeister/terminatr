@@ -44,6 +44,9 @@ public struct Theme: Sendable {
     public var bar: Color
     public var cardTint: Color
     public var edge: Color
+    /// The theme's base over the phone's backdrop, so plain small text
+    /// reads on it (T996, ThemeColours.veil).
+    public var veil: Color
     /// The redesign's deeper glass (T845): a deck card on the frost.
     public var deck: Color
     public var meter: [Color]
@@ -103,6 +106,7 @@ public struct Theme: Sendable {
         bar = k(c.bar)
         cardTint = k(c.cardTint)
         edge = k(c.edge)
+        veil = k(c.veil)
         deck = k(c.deck)
         meter = c.meter.map(k)
         prompt = c.prompt.map(k)

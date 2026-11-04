@@ -78,3 +78,13 @@ func themeDotsApart(_ name: ThemeName) {
     #expect(Palette.search(rows, "dusk").map(\.command) == [.theme(.dusk)])
     #expect(Palette.search(rows, "theme").count == min(rows.count, Palette.perGroup))
 }
+
+/// The phone's veil (T996) is as light as its text lets it be: none where
+/// the text already reads on the backdrop, some on the loudest gradients.
+@Test func veilOnlyWhereTextNeedsIt() {
+    #expect(ThemeName.graphite.colours.veil.alpha == 0)
+    #expect(ThemeName.graphite.colours.veil.darkAlpha == 0)
+    #expect(ThemeName.bloom.colours.veil.alpha > 0)
+    #expect(ThemeName.bloom.colours.veil.darkAlpha > 0)
+    #expect(ThemeName.bloom.colours.veil.alpha < 1)
+}

@@ -50,9 +50,9 @@ struct ProgramCard: View {
     let needs: Int
     let threads: [Attention.Tone]
     var selected = false
+    var rule = false
 
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: Radius.tile, style: .continuous)
         let stacked = typeSize.isAccessibilitySize
         VStack(alignment: .leading, spacing: Spacing.item) {
             HStack(alignment: stacked ? .top : .center, spacing: Spacing.row) {
@@ -73,14 +73,7 @@ struct ProgramCard: View {
             if stacked { title }
             if !threads.isEmpty { ThreadMeter(threads) }
         }
-        .padding(.horizontal, Spacing.card)
-        .padding(.vertical, Spacing.row)
-        .frame(maxWidth: .infinity, minHeight: tapTarget, alignment: .leading)
-        .surface(.card, in: shape)
-        .overlay {
-            if selected { shape.strokeBorder(theme.action, lineWidth: 2.5) }
-        }
-        .contentShape(shape)
+        .projectRow(selected: selected, rule: rule)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(program.slug), program")
         .accessibilityValue(spoken)
@@ -111,12 +104,20 @@ struct ProgramCard: View {
                     Image(systemName: director.tone.symbol)
                         .foregroundStyle(director.tone == .idle ? theme.muted : theme.colour(director.tone))
                 }
-                HStack(spacing: 0) {
-                    Text("Director · " + (director.why.isEmpty ? director.word : director.why))
-                        .lines(1)
-                    Text(" · " + Self.projects(program.members.count))
-                        .lineLimit(1)
-                        .fixedSize()
+                let line = "Director · " + (director.why.isEmpty ? director.word : director.why)
+                Group {
+                    if typeSize.isAccessibilitySize {
+                        Text(line + " · " + Self.projects(program.members.count))
+                            .lines(1)
+                    } else {
+                        HStack(spacing: 0) {
+                            Text(line)
+                                .lines(1)
+                            Text(" · " + Self.projects(program.members.count))
+                                .lineLimit(1)
+                                .fixedSize()
+                        }
+                    }
                 }
                 .foregroundStyle(theme.muted)
             }
@@ -202,8 +203,12 @@ struct ProgramScreen: View {
                     if director == nil { DirectorStart() }
                     SectionHeading("Projects", detail: "\(g.members.count)")
                     if g.members.isEmpty { quiet("No projects yet") }
-                    ForEach(g.members, id: \.self) { m in
-                        ProgramMemberCard(member: m, words: detail?.members.first { $0.project == m.project && $0.server == m.server })
+                    if !g.members.isEmpty {
+                        ProjectPanel {
+                            ForEach(Array(g.members.enumerated()), id: \.element) { i, m in
+                                ProgramMemberCard(member: m, words: detail?.members.first { $0.project == m.project && $0.server == m.server }, rule: i > 0)
+                            }
+                        }
                     }
                     umbrellas
                 }
@@ -270,7 +275,7 @@ struct ProgramScreen: View {
             .foregroundStyle(theme.muted)
             .padding(Spacing.card)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .surface(.card, in: RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
+            .surface(.panel, in: RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
     }
 }
 
@@ -301,6 +306,7 @@ struct ProgramMemberCard: View {
     @Environment(\.navigate) private var navigate
     let member: AppAPI.ProgramMember
     var words: AppAPI.ProgramMember?
+    var rule = false
 
     private var m: AppAPI.ProgramMember { member }
 
@@ -312,7 +318,7 @@ struct ProgramMemberCard: View {
                     ProjectCard(name: p.slug, coordinator: model.coordinator(of: p),
                                 needs: Need.count(model.needs, project: p.slug),
                                 threads: p.active ? SidebarTree.threads(of: p) { model.session($0) }.map { model.attention($0).tone } : [],
-                                pinned: p.pinned, dim: !p.active, selected: navigate.opens(route, on: model),
+                                pinned: p.pinned, dim: !p.active, selected: navigate.opens(route, on: model), rule: rule,
                                 tag: p.active ? "" : "inactive")
                 }
                 .buttonStyle(.plain)
@@ -328,7 +334,7 @@ struct ProgramMemberCard: View {
                 ProjectCard(name: ProgramList.key(m), coordinator: .of(peer: coordinator),
                             needs: p.stale ? 0 : Need.count(model.needs, project: ProgramList.key(m)),
                             threads: sessions.filter { !$0.ref.isCoordinator }.map { Attention.of(peer: $0.session).tone },
-                            dim: peer.state != "up" || p.stale, selected: navigate.opens(route, on: model),
+                            dim: peer.state != "up" || p.stale, selected: navigate.opens(route, on: model), rule: rule,
                             tag: words?.dormant == true ? "programs off there" : "")
             }
             .buttonStyle(.plain)
@@ -340,7 +346,7 @@ struct ProgramMemberCard: View {
     /// A member the phone can't open: its name and why, dim.
     private func absent(_ name: String, words: String) -> some View {
         ProjectCard(name: name, coordinator: Attention(word: words, tone: .idle, why: words, waits: false),
-                    needs: 0, threads: [], dim: true)
+                    needs: 0, threads: [], dim: true, rule: rule)
             .accessibilityHint(words)
     }
 }

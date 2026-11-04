@@ -677,7 +677,9 @@ private struct BackdropModifier: ViewModifier {
                     if reduceTransparency {
                         theme.base
                     } else {
+                        // Veiled, so plain small text reads on it (T996).
                         LinearGradient(colors: [theme.mesh[0], theme.base, theme.mesh[3]], startPoint: .topLeading, endPoint: .bottomTrailing)
+                            .overlay(theme.veil)
                     }
                 }
                 .ignoresSafeArea()

@@ -132,7 +132,7 @@ public struct SessionTile: View {
     }
 }
 
-/// A run of SessionTiles in one deck card (T846), clipped to its
+/// A run of SessionTiles in one soft panel (T846, T996), clipped to its
 /// corners.
 public struct TileGroup<Content: View>: View {
     let content: Content
@@ -145,12 +145,12 @@ public struct TileGroup<Content: View>: View {
         let shape = RoundedRectangle(cornerRadius: Radius.tile, style: .continuous)
         VStack(spacing: 0) { content }
             .clipShape(shape)
-            .surface(.card, in: shape)
+            .surface(.panel, in: shape)
     }
 }
 
 /// A count on a project's screen (T846): its numeral in the display
-/// face over its word, on glass: "2 on deck".
+/// face over its word, on a soft panel: "2 on deck".
 public struct StatTile: View {
     @Environment(\.theme) private var theme
     /// nil: a count not known here (a paired server's board it doesn't
@@ -184,56 +184,92 @@ public struct StatTile: View {
         .padding(.horizontal, Spacing.card - 2)
         .padding(.vertical, Spacing.row)
         .frame(maxWidth: .infinity, minHeight: tapTarget, alignment: .leading)
-        .surface(.glass, in: RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
+        .surface(.panel, in: RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
         .contentShape(RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(count.map { "\($0) \(label)" } ?? "\(label), not shared")
     }
 }
 
-/// One of a project's pages (T846): its symbol in the action colour
-/// over its name, on glass; at accessibility sizes beside it.
+/// One of a project's pages, a cell of a PageRow (T846, T996): its symbol
+/// in the ink over its name; at accessibility sizes beside it, a hairline
+/// over each after the first (rule). Open beside the list, ringed in the
+/// action colour.
 public struct PageTile: View {
     @Environment(\.theme) private var theme
     @Environment(\.dynamicTypeSize) private var typeSize
     let title: String
     let symbol: String
     let selected: Bool
+    let rule: Bool
 
-    public init(_ title: String, symbol: String, selected: Bool = false) {
+    public init(_ title: String, symbol: String, selected: Bool = false, rule: Bool = false) {
         self.title = title
         self.symbol = symbol
         self.selected = selected
+        self.rule = rule
     }
 
     public var body: some View {
         let shape = RoundedRectangle(cornerRadius: Radius.row, style: .continuous)
         let wide = typeSize.isAccessibilitySize
-        let layout = wide ? AnyLayout(HStackLayout(spacing: Spacing.row)) : AnyLayout(VStackLayout(spacing: Spacing.tight))
+        let layout = wide ? AnyLayout(HStackLayout(spacing: Spacing.row)) : AnyLayout(VStackLayout(spacing: 2))
         layout {
             Image(systemName: symbol)
-                .font(theme.body(.title3, .medium))
-                .foregroundStyle(theme.action)
+                .font(theme.body(.subheadline, .regular))
+                .foregroundStyle(theme.ink)
                 // One height for every symbol, so the names line up.
-                .frame(height: theme.size(.title3) * 1.5)
+                .frame(height: theme.size(.subheadline) * 1.25)
                 .accessibilityHidden(true)
             Text(title)
-                .font(theme.body(.footnote, .semibold))
-                .foregroundStyle(theme.ink)
+                .font(theme.body(.caption, .medium))
+                .foregroundStyle(theme.muted)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
         }
-        .padding(.horizontal, Spacing.tight)
-        .padding(.vertical, Spacing.row)
+        .padding(.horizontal, Spacing.hair)
+        .padding(.vertical, 3)
         .frame(maxWidth: .infinity, minHeight: tapTarget, alignment: wide ? .leading : .center)
-        .padding(.leading, wide ? Spacing.card - Spacing.tight : 0)
-        .surface(.glass, in: shape)
+        .padding(.leading, wide ? Spacing.card - Spacing.hair : 0)
         .overlay {
             if selected { shape.strokeBorder(theme.action, lineWidth: 2) }
+        }
+        .overlay(alignment: .top) {
+            if rule, wide { Hairline().padding(.leading, Spacing.card) }
         }
         .contentShape(shape)
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+}
+
+/// A project's pages in one soft panel (T996): equal cells side by side,
+/// or a list at accessibility sizes.
+public struct PageRow<Content: View>: View {
+    @Environment(\.dynamicTypeSize) private var typeSize
+    let content: Content
+
+    public init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
+
+    public var body: some View {
+        let layout = typeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(spacing: 0))
+            : AnyLayout(HStackLayout(alignment: .top, spacing: 0))
+        layout { content }
+            .surface(.panel, in: RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
+    }
+}
+
+/// The inset rule between a panel's rows.
+struct Hairline: View {
+    @Environment(\.theme) private var theme
+
+    var body: some View {
+        Rectangle()
+            .fill(theme.line)
+            .frame(height: theme.contrast ? 1 : 0.5)
     }
 }
 
@@ -254,10 +290,9 @@ public struct TileRow<Content: View>: View {
     }
 }
 
-/// A heading over a run of cards or tiles on the mesh (T846): its
-/// title in the display face, large enough for the mesh (ThemeColours
-/// .checks, "a header's title"), and a detail on glass: "Threads", "5
-/// · 3 wait on you".
+/// A heading over a run of cards or tiles (T846, T996): a small, quiet
+/// uppercase label on the phone's veil, and a detail plain beside it:
+/// "THREADS", "5 · 3 wait on you".
 public struct SectionHeading: View {
     @Environment(\.theme) private var theme
     let title: String
@@ -269,10 +304,12 @@ public struct SectionHeading: View {
     }
 
     public var body: some View {
-        HStack(alignment: .center, spacing: Spacing.item) {
+        HStack(alignment: .firstTextBaseline, spacing: Spacing.item) {
             Text(title)
-                .font(theme.title(.title, .bold))
-                .foregroundStyle(theme.ink)
+                .font(theme.body(.caption, .semibold))
+                .tracking(0.8)
+                .textCase(.uppercase)
+                .foregroundStyle(theme.muted)
                 .lines(1)
                 .accessibilityAddTraits(.isHeader)
             Spacer(minLength: 0)
@@ -281,11 +318,8 @@ public struct SectionHeading: View {
                     .font(theme.mono(.caption, .medium))
                     .foregroundStyle(theme.muted)
                     .lines(1)
-                    .padding(.horizontal, Spacing.item + 1)
-                    .padding(.vertical, Spacing.hair)
-                    .surface(.glass, in: Capsule())
             }
         }
-        .padding(.top, Spacing.item)
+        .padding(.top, Spacing.row)
     }
 }

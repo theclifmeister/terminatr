@@ -153,6 +153,30 @@ public struct ThemeColours: Hashable, Sendable {
     static let deckLight = 0.75
     static let deckDark = 0.9
 
+    /// The phone's backdrop's veil (T996): the theme's base over its
+    /// gradient, as little of it as lets plain small text sit there
+    /// (checks, "the veil"). Themes whose text already reads have none.
+    public var veil: Swatch {
+        Swatch(base.light, base.dark, alpha: veilShare(dark: false), darkAlpha: veilShare(dark: true))
+    }
+
+    /// The spots of the phone's backdrop: its gradient runs from the
+    /// mesh's first colour through the base to its fourth.
+    private func backdropSpots(dark: Bool) -> [RGB] {
+        [mesh[0], base, mesh[3]].map { RGB(hex: $0.hex(dark: dark)) }
+    }
+
+    private func veilShare(dark: Bool) -> Double {
+        let spots = backdropSpots(dark: dark), texts = [ink, muted].map { RGB(hex: $0.hex(dark: dark)) }
+        for step in 0...20 {
+            let share = Double(step) / 20
+            let veil = Swatch(base.light, base.dark, alpha: share)
+            let least = spots.flatMap { s in texts.map { $0.contrast(s.under(veil, dark: dark)) } }.min()!
+            if least >= 4.5 { return share }
+        }
+        return 1
+    }
+
     /// A tone's wash: a soft StateGlyph's and a picked chip's, and an
     /// option picked before it is sent.
     public static let toneWash = 0.16
@@ -284,8 +308,8 @@ extension ThemeColours {
 
     /// Every text colour against the surfaces it is drawn on, each over
     /// its worst spot: the mesh's five colours and its base, under the
-    /// surface's layers (Bloom's measure, T752). No text sits on the raw
-    /// mesh. With Increase Contrast the panels are opaque, so the mesh
+    /// surface's layers (Bloom's measure, T752). No small text sits on the
+    /// raw mesh. With Increase Contrast the panels are opaque, so the mesh
     /// no longer counts.
     public func checks(dark: Bool) -> [ContrastCheck] {
         let spots = (mesh + [base]).map { RGB(hex: $0.hex(dark: dark)) }
@@ -353,11 +377,17 @@ extension ThemeColours {
             let r = RGB(hex: text.hex(dark: dark)).contrast(RGB(hex: fill.hex(dark: dark)))
             out.append(ContrastCheck(text: name, surface: "its fill", ratio: r, least: 4.5))
         }
-        // A screen's header title (ScreenHeader) is the one text on the
-        // raw mesh: large text, so 3:1 (WCAG AA). Its other lines sit on
-        // glass.
+        // The Mac's and Welcome's large titles sit on the raw mesh: large
+        // text, so 3:1 (WCAG AA).
         let title = RGB(hex: ink.hex(dark: dark))
         out.append(ContrastCheck(text: "a header's title", surface: "the mesh", ratio: spots.map(title.contrast).min()!, least: 3))
+        // The phone's plain text (T996): a screen's status line, section
+        // labels and a project's goal sit on its backdrop under the veil.
+        let veiled = backdropSpots(dark: dark).map { $0.under(veil, dark: dark) }
+        for (name, colour) in [("ink", ink), ("muted", muted)] {
+            let c = RGB(hex: colour.hex(dark: dark))
+            out.append(ContrastCheck(text: name, surface: "the veil", ratio: veiled.map(c.contrast).min()!, least: 4.5))
+        }
         // A ThreadMeter's segments and a StateGlyph's fill (T846) are
         // graphics on a deck card: 3:1 (WCAG 1.4.11). Its legend's
         // words carry the states too.

@@ -44,40 +44,42 @@ struct DesignsTiles: View {
     }
 
     var body: some View {
-        // A stack, not a Group: its task runs while it shows nothing.
-        VStack(alignment: .leading, spacing: Spacing.row + 2) {
+        // A ZStack, not a Group: its task runs while it shows nothing.
+        ZStack(alignment: .topLeading) {
             Color.clear.frame(height: 0)
-            if notShared {
-                SectionHeading("Designs", detail: "")
-                quietCard(PeerPages.notShared(by: model.peers.first(where: { $0.alias == peer }).map(PeerPages.server) ?? peer ?? ""))
-            } else {
-                switch Designs.listing(designs, error: error) {
-                case .reading:
-                    EmptyView()
-                case .none:
+            VStack(alignment: .leading, spacing: Spacing.row + 2) {
+                if notShared {
                     SectionHeading("Designs", detail: "")
-                    quietCard(Designs.noneYet)
-                case .failed(let error):
-                    SectionHeading("Designs", detail: "")
-                    Failure(text: "The designs didn't load: \(error)")
-                case .designs(let designs):
-                    let shown = Designs.shown(designs, all: all)
-                    SectionHeading("Designs", detail: "\(shown.count)")
-                    if !shown.isEmpty {
-                        TileGroup {
-                            ForEach(Array(Designs.ordered(shown).enumerated()), id: \.element.name) { i, d in
-                                let route = peer.map { Route.peerDesign(alias: $0, project: slug, name: d.name) } ?? Route.design(slug, name: d.name)
-                                PlainRouteLink(value: route) {
-                                    DesignTile(d, rule: i > 0, selected: navigate.opens(route, on: model))
+                    quietCard(PeerPages.notShared(by: model.peers.first(where: { $0.alias == peer }).map(PeerPages.server) ?? peer ?? ""))
+                } else {
+                    switch Designs.listing(designs, error: error) {
+                    case .reading:
+                        EmptyView()
+                    case .none:
+                        SectionHeading("Designs", detail: "")
+                        quietCard(Designs.noneYet)
+                    case .failed(let error):
+                        SectionHeading("Designs", detail: "")
+                        Failure(text: "The designs didn't load: \(error)")
+                    case .designs(let designs):
+                        let shown = Designs.shown(designs, all: all)
+                        SectionHeading("Designs", detail: "\(shown.count)")
+                        if !shown.isEmpty {
+                            TileGroup {
+                                ForEach(Array(Designs.ordered(shown).enumerated()), id: \.element.name) { i, d in
+                                    let route = peer.map { Route.peerDesign(alias: $0, project: slug, name: d.name) } ?? Route.design(slug, name: d.name)
+                                    PlainRouteLink(value: route) {
+                                        DesignTile(d, rule: i > 0, selected: navigate.opens(route, on: model))
+                                    }
+                                    .buttonStyle(.plain)
                                 }
-                                .buttonStyle(.plain)
                             }
                         }
-                    }
-                    let words = Designs.toggle(designs, all: all)
-                    if !words.isEmpty {
-                        Button(words) { all.toggle() }
-                            .font(.subheadline)
+                        let words = Designs.toggle(designs, all: all)
+                        if !words.isEmpty {
+                            Button(words) { all.toggle() }
+                                .font(.subheadline)
+                        }
                     }
                 }
             }
@@ -112,7 +114,7 @@ struct DesignsTiles: View {
             .foregroundStyle(theme.muted)
             .padding(Spacing.card)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .surface(.card, in: RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
+            .surface(.panel, in: RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
     }
 }
 
@@ -388,7 +390,7 @@ struct DesignScreen: View {
             .foregroundStyle(theme.muted)
             .padding(Spacing.card)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .surface(.card, in: RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
+            .surface(.panel, in: RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
     }
 
     private func answer() {

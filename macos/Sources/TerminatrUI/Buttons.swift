@@ -14,6 +14,10 @@ public struct RoleButtonStyle: ButtonStyle {
         case ghost
         /// A header's button: a 44 pt glass circle round its symbol.
         case circle
+        /// A screen header's button beside its smaller title (T996): a
+        /// 32 pt glass circle, on its trailing edge in the same 44 pt to
+        /// tap.
+        case smallCircle
         /// The composer dock's send (T848): a 44 pt circle of the action
         /// colour round its symbol, in its ink.
         case send
@@ -37,6 +41,7 @@ extension ButtonStyle where Self == RoleButtonStyle {
     public static var secondary: RoleButtonStyle { RoleButtonStyle(role: .secondary) }
     public static var ghost: RoleButtonStyle { RoleButtonStyle(role: .ghost) }
     public static var circle: RoleButtonStyle { RoleButtonStyle(role: .circle) }
+    public static var smallCircle: RoleButtonStyle { RoleButtonStyle(role: .smallCircle) }
     public static var send: RoleButtonStyle { RoleButtonStyle(role: .send) }
 }
 
@@ -91,6 +96,14 @@ private struct RoleButton: View {
                 .foregroundStyle(theme.ink)
                 .frame(width: theme.circle, height: theme.circle)
                 .surface(.glass, in: Circle())
+        case .smallCircle:
+            configuration.label
+                .labelStyle(.iconOnly)
+                .font(.system(size: 14 * theme.scale, weight: .medium))
+                .foregroundStyle(theme.ink)
+                .frame(width: 32 * theme.scale, height: 32 * theme.scale)
+                .surface(.glass, in: Circle())
+                .frame(width: max(tapTarget, 32 * theme.scale), height: max(tapTarget, 32 * theme.scale), alignment: .trailing)
         case .send:
             configuration.label
                 .labelStyle(.iconOnly)

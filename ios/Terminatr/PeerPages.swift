@@ -6,7 +6,7 @@ import TerminatrUI
 /// A paired server's shared project (T846, T886), drawn as one of this
 /// server's (ProjectScreen): its header, its board's counts as
 /// StatTiles, its coordinator, running there or not, its pages as
-/// PageTiles, its designs, then its threads (SidebarTree.sessions). The
+/// one PageRow, its designs, then its threads (SidebarTree.sessions). The
 /// counts and the pages come from that server while its project pages
 /// switch for this one is on (peer.pages-read); otherwise the counts
 /// show – and each page "Not shared by <server>"; Memory always does.
@@ -83,12 +83,13 @@ struct PeerProjectScreen: View {
     /// Library as its tm reads those.
     private func pageTiles(server: String) -> some View {
         let tiles: [(PeerPages.Page, String)] = [
-            (.overview, "info.circle"), (.board, "list.bullet.rectangle"), (.memory, "brain"), (.library, "books.vertical"),
+            (.overview, "info.circle"), (.board, "list.bullet.rectangle"), (.memory, "bookmark"), (.library, "books.vertical"),
         ]
-        return TileRow {
-            ForEach(tiles, id: \.0) { page, symbol in
+        return PageRow {
+            ForEach(Array(tiles.enumerated()), id: \.element.0) { i, tile in
+                let (page, symbol) = tile
                 let route = Route.peerPage(alias: alias, project: project, page: page)
-                PlainRouteLink(value: route) { PageTile(page.rawValue, symbol: symbol, selected: navigate.opens(route, on: model)) }
+                PlainRouteLink(value: route) { PageTile(page.rawValue, symbol: symbol, selected: navigate.opens(route, on: model), rule: i > 0) }
                     .buttonStyle(.plain)
             }
         }
@@ -114,7 +115,7 @@ struct PeerProjectScreen: View {
             .foregroundStyle(theme.muted)
             .padding(Spacing.card)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .surface(.card, in: RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
+            .surface(.panel, in: RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
     }
 
     private struct PagesRead: Equatable {
