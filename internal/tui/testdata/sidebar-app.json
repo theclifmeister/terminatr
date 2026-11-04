@@ -385,6 +385,9 @@
         "t:beta/t-1",
         "t:beta/t-2",
         "p:delta"
+      ],
+      "busy": [
+        "p:alpha"
       ]
     },
     {
@@ -993,6 +996,113 @@
         "r:mini/new",
         "rc:mini/new",
         "g:far"
+      ],
+      "busy": [
+        "r:mini/demo"
+      ]
+    },
+    {
+      "name": "paired server folded",
+      "projects": [
+        {
+          "slug": "gamma",
+          "active": true,
+          "pinned": true
+        }
+      ],
+      "sessions": null,
+      "peers": [
+        {
+          "alias": "mini",
+          "projects": [
+            {
+              "project": "demo",
+              "sessions": [
+                {
+                  "id": "s-1",
+                  "role": "coordinator",
+                  "project": "demo",
+                  "state": "working"
+                },
+                {
+                  "id": "s-2",
+                  "role": "thread",
+                  "project": "demo",
+                  "thread": "t-2",
+                  "state": "blocked"
+                },
+                {
+                  "id": "s-9",
+                  "role": "thread",
+                  "project": "demo",
+                  "thread": "t-9"
+                }
+              ],
+              "threads": [
+                {
+                  "id": "t-1"
+                },
+                {
+                  "id": "t-2",
+                  "session": "s-2"
+                },
+                {
+                  "id": "t-3",
+                  "done": true
+                }
+              ]
+            },
+            {
+              "project": "old",
+              "stale": true,
+              "threads": [
+                {
+                  "id": "t-1"
+                }
+              ]
+            },
+            {
+              "project": "new",
+              "sessions": [
+                {
+                  "id": "s-3",
+                  "role": "thread",
+                  "project": "new",
+                  "thread": "t-1"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "alias": "far",
+          "projects": [
+            {
+              "project": "x",
+              "threads": [
+                {
+                  "id": "t-1"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "folded": [
+        "@mini"
+      ],
+      "rows": [
+        "g:",
+        "p:gamma",
+        "c:gamma",
+        "g:mini",
+        "g:far",
+        "r:far/x",
+        "rc:far/x",
+        "rt:far/x/t-1"
+      ],
+      "busy": [
+        "g:mini"
       ]
     },
     {
@@ -1324,6 +1434,9 @@
         "r:zed",
         "d:inactive",
         "p:beta"
+      ],
+      "busy": [
+        "p:alpha"
       ]
     },
     {
@@ -1466,6 +1579,9 @@
         "g:zed",
         "r:zed",
         "d:inactive"
+      ],
+      "busy": [
+        "g:acme"
       ]
     },
     {
@@ -2022,6 +2138,9 @@
         "r:far/x",
         "rc:far/x",
         "rt:far/x/t-1"
+      ],
+      "busy": [
+        "g:acme/r:mini/demo"
       ]
     },
     {

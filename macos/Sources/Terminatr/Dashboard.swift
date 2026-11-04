@@ -769,6 +769,9 @@ struct ProjectRow: View {
     /// A dim word after its name: a paired member's program ("· acme"),
     /// or why a member has no listing ("invited").
     var tag = ""
+    /// Folded over a session that works (T985): the activity mark on its
+    /// right; unfolded, the session's own row has it.
+    var busy = false
 
     var body: some View {
         HStack(spacing: 8) {
@@ -796,6 +799,12 @@ struct ProjectRow: View {
                     .layoutPriority(-1)
             }
             Spacer(minLength: 4)
+            // Its slot is always there, so the mark moves nothing.
+            Color.clear
+                .frame(width: 11, height: 11)
+                .overlay {
+                    if busy { BusyMark(size: 6, colour: selected ? theme.onAction : nil) }
+                }
             if needs > 0 {
                 Text("\(needs)")
                     .font(theme.mono(.caption, .medium))
@@ -808,9 +817,9 @@ struct ProjectRow: View {
         }
         .padding(.vertical, 2)
         .foregroundStyle(selected ? theme.onAction : theme.ink)
-        .help("\(program ? "Director" : "Coordinator"): \(state)")
+        .help("\(program ? "Director" : "Coordinator"): \(state)\(busy ? " · working under it" : "")")
         .accessibilityElement(children: .combine)
-        .accessibilityValue("\(program ? "director" : "coordinator") \(state)")
+        .accessibilityValue("\(program ? "director" : "coordinator") \(state)\(busy ? ", working under it" : "")")
     }
 }
 

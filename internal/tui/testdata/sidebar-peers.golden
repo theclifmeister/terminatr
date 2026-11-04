@@ -58,7 +58,7 @@ nerd, width 36, folded [@mini]
    web               0            │
  └╴󰚩  coordinator       ·          │
                                    │
-  mini · 38 ms · 2 projects      │
+  mini · 38 ms · 2 projects     │
                                    │
 
 nerd, width 24, folded [@mini]
@@ -70,7 +70,7 @@ nerd, width 24, folded [@mini]
    web                │
  └╴󰚩  coor… ·          │
                        │
-  mini · 38 ms · 2…  │
+  mini · 38 ms ·…   │
                        │
 
 nerd, width 11, folded [@mini]
@@ -79,7 +79,7 @@ nerd, width 11, folded [@mini]
   term…  │
  · web    │
           │
-  ────── │
+  ────  │
           │
   ────── │
  · media │
@@ -145,7 +145,7 @@ unicode, width 36, folded [@mini]
  ■ web                0            │
  └─ coordinator         ·          │
                                    │
- ◉ mini · 38 ms · 2 projects    ⚑  │
+ ◉ mini · 38 ms · 2 projects  ● ⚑  │
                                    │
 
 unicode, width 24, folded [@mini]
@@ -157,7 +157,7 @@ unicode, width 24, folded [@mini]
  ■ web                 │
  └─ coordi… ·          │
                        │
- ◉ mini · 38 ms · 2…⚑  │
+ ◉ mini · 38 ms ·…● ⚑  │
                        │
 
 unicode, width 11, folded [@mini]
@@ -166,7 +166,7 @@ unicode, width 11, folded [@mini]
  ● term…  │
  · web    │
           │
- ◉ ────── │
+ ◉ ──── ● │
           │
  ○ ────── │
  · media⚑ │
@@ -232,7 +232,7 @@ ascii, width 36, folded [@mini]
  + web                0            │
  `- coordinator         .          │
                                    │
- O mini · 38 ms · 2 projects    ?  │
+ O mini · 38 ms · 2 projects  * ?  │
                                    │
 
 ascii, width 24, folded [@mini]
@@ -244,7 +244,7 @@ ascii, width 24, folded [@mini]
  + web                 │
  `- coordi… .          │
                        │
- O mini · 38 ms · 2…?  │
+ O mini · 38 ms ·…* ?  │
                        │
 
 ascii, width 11, folded [@mini]
@@ -253,7 +253,7 @@ ascii, width 11, folded [@mini]
  * term…  │
  . web    │
           │
- O ────── │
+ O ──── * │
           │
  o ────── │
  . media? │

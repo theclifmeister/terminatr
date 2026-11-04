@@ -9,7 +9,10 @@ struct SidebarRow: Identifiable {
     let id: String
     let route: Route
     let title: String
-    let tone: Attention.Tone
+    /// Its state; working too on a row folded over a session that works
+    /// (T985): a Tab's label has its icon's place for a state, and its
+    /// badge's only for words.
+    var tone: Attention.Tone
     let badge: String?
     /// A program member's fold, which its chevron and Fold/Unfold write.
     var fold: Fold?
@@ -115,8 +118,16 @@ extension PhoneModel {
         var shown = nav
         shown.showInactive = true
         let keys = SidebarTree.rows(projects, sessions: sessions, peers: shownPeers, programs: programs, nav: shown, needsFirst: needsFirst)
+        let busy = SidebarTree.busyRows(projects, sessions: sessions, peers: shownPeers, programs: programs, nav: shown)
         return SidebarTree.sections(keys, programs: programs).map { s in
-            (s, s.rows.compactMap { key in SidebarRow.of(key, model: self).map { r in var r = r; r.fold = fold(of: key); return r } })
+            (s, s.rows.compactMap { key in
+                SidebarRow.of(key, model: self).map { r in
+                    var r = r
+                    r.fold = fold(of: key)
+                    if busy.contains(key) { r.tone = .working }
+                    return r
+                }
+            })
         }
     }
 

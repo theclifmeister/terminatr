@@ -2,6 +2,7 @@ package tui
 
 import (
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -162,20 +163,27 @@ func TestNeedsBadge(t *testing.T) {
 
 // TestSlimPaused: the slim strip's state column says paused for a
 // paused project whose coordinator is idle; blocked still wins, and
-// inactive.
+// inactive, and working: a session it hides works (slimBusy).
 func TestSlimPaused(t *testing.T) {
 	d := testData()
 	d.Projects[0].Safety = &config.Safety{Paused: true, Active: true} // alpha: its coordinator is blocked
 	d.Projects[1].Safety = &config.Safety{Paused: true, Active: true} // beta: none runs
-	rows := slimRows(buildTree(d.Projects, d.Sessions, treeIn{current: "beta"}))
-	got := map[string]string{}
-	for _, r := range rows {
-		got[r.slug] = ansi.Strip(slimCells(r, sideSlim-1, th().Plain))
+	strip := func(ss []proto.SessionInfo) map[string]string {
+		got := map[string]string{}
+		for _, r := range slimRows(buildTree(d.Projects, ss, treeIn{current: "beta"})) {
+			got[r.slug] = ansi.Strip(slimCells(r, sideSlim-1, th().Plain))
+		}
+		return got
 	}
+	quiet := slices.DeleteFunc(slices.Clone(d.Sessions), func(s proto.SessionInfo) bool { return s.ID == "s-5" })
+	got := strip(quiet)
 	if !strings.HasPrefix(got["beta"], " "+ic().paused+" beta") {
 		t.Errorf("paused beta in the strip: %q (%q)", got["beta"], got)
 	}
 	if strings.Contains(got["alpha"], ic().paused) {
 		t.Errorf("paused alpha's blocked coordinator gave way: %q", got["alpha"])
+	}
+	if got := strip(d.Sessions); !strings.HasPrefix(got["beta"], " "+ic().working+" beta") {
+		t.Errorf("paused beta, its thread working: %q", got["beta"])
 	}
 }

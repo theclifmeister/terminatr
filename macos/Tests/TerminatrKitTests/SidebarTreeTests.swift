@@ -86,6 +86,7 @@ private struct TreeCase: Decodable {
     let inactive_open: Bool?
     let needs_first: Bool?
     let rows: [String]
+    let busy: [String]?
 }
 
 @Test func rowsAsTheTUI() throws {
@@ -171,7 +172,75 @@ private struct TreeCase: Decodable {
         nav.showInactive = c.inactive_open ?? false
         #expect(SidebarTree.rows(ps, sessions: ss, peers: peers, programs: programs, nav: nav, needsFirst: c.needs_first ?? false) == c.rows,
                 "\(c.name)")
+        // The rows folded over a session that works (T985).
+        #expect(SidebarTree.busyRows(ps, sessions: ss, peers: peers, programs: programs, nav: nav) == Set(c.busy ?? []), "\(c.name)")
     }
+    #expect(cases.contains { !($0.busy ?? []).isEmpty })
+}
+
+/// A working session shows on the nearest row you can see, once (T985):
+/// the row folded over it, the program over that; never the others.
+@Test func busyOnTheNearestRow() {
+    let work = AppAPI.Session(id: "s-1", role: "thread", project: "web", thread: "t-1", cols: 80, rows: 24, created: t0, clients: 0, state: "working")
+    let web = project("web", threads: [thread("t-1", session: "s-1")]), zoo = project("zoo")
+    let acme = AppAPI.Program(slug: "acme", members: [AppAPI.ProgramMember(project: "web")], authority: "propose")
+    let busy = { (nav: Navigation, ss: [AppAPI.Session]) in SidebarTree.busyRows([web, zoo], sessions: ss, programs: [acme], nav: nav) }
+    // A member starts folded: its row.
+    #expect(busy(Navigation(), [work]) == ["p:web"])
+    // Unfolded: the thread's own row, so no folded row shows it.
+    var nav = Navigation()
+    nav.unfold(Navigation.sectionKey(server: "", project: "web"))
+    #expect(busy(nav, [work]).isEmpty)
+    // The program folded over it: its row alone, folded member or not.
+    nav.collapsed.insert(Navigation.programKey("acme"))
+    #expect(busy(nav, [work]) == ["g:acme"])
+    // It follows the session, with no re-fold.
+    var idle = work
+    idle.state = "idle"
+    #expect(busy(nav, [idle]).isEmpty)
+    #expect(busy(nav, []).isEmpty)
+    // Standalone: its row while folded, its threads' while not.
+    let standalone = { (nav: Navigation) in SidebarTree.busyRows([web], sessions: [work], nav: nav) }
+    #expect(standalone(Navigation()).isEmpty)
+    var folded = Navigation()
+    folded.fold(Navigation.sectionKey(server: "", project: "web"))
+    #expect(standalone(folded) == ["p:web"])
+    // Inactive: nothing of it runs.
+    #expect(SidebarTree.busyRows([project("old", active: false, threads: [thread("t-1", session: "s-1")])], sessions: [work], nav: Navigation()).isEmpty)
+    // A thread waiting on the user shows that, not the mark, as its row.
+    #expect(!SidebarTree.busy(project("web", questions: 0, threads: [needing("t-1", "s-1")]), sessions: [work]))
+}
+
+/// A paired server's, as this server's; an offline one's or a stale
+/// project's last values never count.
+@Test func busyOnAPairedServer() {
+    let s = AppAPI.PeerSession(id: "mini/s-1", role: "thread", project: "demo", thread: "t-1", created: t0, state: "working")
+    let p = AppAPI.PeerProject(project: "demo", needsYou: 0, threads: 1, ready: 0, stale: false, sessions: [s],
+                               watched: [AppAPI.PeerThread(id: "t-1", title: "t-1", session: "mini/s-1", needsYou: false, done: false)])
+    let peer = AppAPI.Peer(alias: "mini", state: "up", projects: [p])
+    #expect(SidebarTree.busy(peer))
+    var nav = Navigation()
+    #expect(SidebarTree.busyRows([], sessions: [], peers: [peer], nav: nav).isEmpty)
+    nav.collapsed.insert(Navigation.sectionKey(server: "mini", project: "demo"))
+    #expect(SidebarTree.busyRows([], sessions: [], peers: [peer], nav: nav) == ["r:mini/demo"])
+    nav.collapsed.insert(Navigation.sectionKey(server: "mini"))
+    #expect(SidebarTree.busyRows([], sessions: [], peers: [peer], nav: nav) == ["g:mini"])
+    var down = peer
+    down.state = "offline"
+    #expect(!SidebarTree.busy(down))
+    var old = p
+    old.stale = true
+    #expect(!SidebarTree.busy(AppAPI.Peer(alias: "mini", state: "up", projects: [old])))
+    var asks = s
+    asks.asking = true
+    #expect(Busy.of(peer: asks) == nil)
+}
+
+private func needing(_ id: String, _ session: String) -> AppAPI.Thread {
+    var t = thread(id, session: session)
+    t.status = AppAPI.ThreadStatus(percent: 0, stepsDone: 0, stepsTotal: 0, todosDone: 0, todosTotal: 0,
+                                   needsYou: "which one?", selfPercent: -1, updated: t0)
+    return t
 }
 
 private extension Array where Element == String {

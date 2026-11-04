@@ -288,6 +288,7 @@ func peerRows(pm proto.PeerMirror, t view.Tree, current string, progOf map[strin
 	}
 	for _, r := range rows {
 		head.hint = head.hint || r.kind == treePeerProject && r.hint
+		head.busy = head.busy || r.kind == treePeerProject && r.busy
 	}
 	if head.fold {
 		return []treeRow{head}
@@ -348,9 +349,11 @@ func peerProjectRows(alias string, p proto.PeerMirrorProject, link *peerLink, t 
 			}
 			tr.hint = tr.state == "blocked" || tr.state == "review" || w.NeedsYou != ""
 			pr.hint = pr.hint || tr.hint
+			pr.busy = pr.busy || !p.Stale && stateBusy(tr.state)
 			kids = append(kids, tr)
 		}
 	}
+	pr.busy = pr.busy || !p.Stale && stateBusy(pr.state)
 	pr.prog = prog
 	folded := t.IsFolded(peerFoldOf(pr))
 	if prog != "" {
@@ -458,21 +461,28 @@ func rttWords(ms float64) string {
 // serverCells is a server header's row cw cells wide: " ◉ mini ·
 // connected 38 ms", or " ◉ mini · 38 ms" when narrow; its glyph in the
 // link's colour, its name bold (faint while the link is down), the
-// words faint; folded, how many projects it hides. In the
+// words faint; folded, how many projects it hides, and on the right
+// the working glyph while a session in them works, in a cell the row
+// keeps folded, so nothing moves as it comes and goes. In the
 // slim strip, with no room for names, its glyph and a rule in the
-// link's colour mark where the group starts.
+// link's colour mark where the group starts, the rule ending in that
+// glyph.
 func serverCells(r treeRow, cw int, slim bool, sel lipgloss.Style) string {
 	g, gst := linkLook(r.link)
 	if r.link.local {
 		// This server isn't linked to itself: no glyph, same width.
 		g = strings.Repeat(" ", ansi.StringWidth(g))
 	}
+	working, wst := stateLook("working")
 	if slim {
-		line := g + " " + strings.Repeat("─", max(cw-4, 0))
-		if r.here {
-			return fit(" "+sel.Render(line), cw)
+		line, mark := g+" "+strings.Repeat("─", max(cw-4, 0)), ""
+		if r.foldBusy() {
+			line, mark = g+" "+strings.Repeat("─", max(cw-6, 0))+" ", working
 		}
-		return fit(" "+gst.Render(line), cw)
+		if r.here {
+			return fit(" "+sel.Render(line+mark), cw)
+		}
+		return fit(" "+gst.Render(line)+wst.Render(mark), cw)
 	}
 	name := r.server()
 	if r.link.local {
@@ -488,6 +498,9 @@ func serverCells(r treeRow, cw int, slim bool, sel lipgloss.Style) string {
 	}
 	// The margin, the glyph and its blank, and the needs-you column.
 	room := max(cw-1-ansi.StringWidth(g)-1-2, 0)
+	if r.fold {
+		room = max(room-2, 0) // the working cell
+	}
 	// This server's header keeps its words ("· this server"): a long host
 	// name is cut instead.
 	nameRoom := room
@@ -508,9 +521,16 @@ func serverCells(r treeRow, cw int, slim bool, sel lipgloss.Style) string {
 	if r.hint && r.fold {
 		hint = cellRun{ic().hint + " ", th().Warn}
 	}
+	ends := []cellRun{hint}
+	switch {
+	case r.foldBusy():
+		ends = []cellRun{{working + " ", wst}, hint}
+	case r.fold:
+		ends = []cellRun{{"  ", th().Plain}, hint}
+	}
 	rest := []cellRun{{g + " ", gst}, {name, look}, {words, th().Faint}}
-	pad := max(cw-1-runsWidth(rest)-runsWidth([]cellRun{hint}), 0)
-	rest = append(rest, cellRun{strings.Repeat(" ", pad), th().Plain}, hint)
+	pad := max(cw-1-runsWidth(rest)-runsWidth(ends), 0)
+	rest = append(append(rest, cellRun{strings.Repeat(" ", pad), th().Plain}), ends...)
 	if r.here {
 		return fit(" "+sel.Render(runsPlain(rest)), cw)
 	}
@@ -551,7 +571,7 @@ func peerDetails(r treeRow) (string, string) {
 		case r.threads == 0:
 			return l1, "shares no projects with this server"
 		}
-		return l1, joinTag(counted(r.threads, "shared project"), panesTag(l.panes))
+		return l1, joinTag(counted(r.threads, "shared project")+busyWords(r), panesTag(l.panes))
 	case treePeerProject:
 		bits := []string{where}
 		if t := panesTag(r.link.panes); t != "" {
@@ -563,7 +583,7 @@ func peerDetails(r treeRow) (string, string) {
 		if r.stale {
 			return strings.Join(bits, " · "), seen() + " · " + counted(r.threads, "thread")
 		}
-		return strings.Join(bits, " · "), fmt.Sprintf("%s · coordinator %s", counted(r.threads, "thread"), running(r.state))
+		return strings.Join(bits, " · "), fmt.Sprintf("%s · coordinator %s", counted(r.threads, "thread"), running(r.state)) + busyWords(r)
 	case treePeerCoord:
 		bits := []string{paneWords(r)}
 		if r.ctx >= 0 {
