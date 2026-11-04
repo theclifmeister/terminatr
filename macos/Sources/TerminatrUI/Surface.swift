@@ -15,6 +15,10 @@ public enum Surface: Sendable {
     /// A card lifted off the deck, the lead need: the deck card with a
     /// deeper shadow.
     case raised
+    /// A soft panel (T996), a group of rows or a project's tile: the deck
+    /// card's fill alone, spacing keeping it apart. Its edge only with
+    /// Increase Contrast.
+    case panel
 }
 
 /// Corner radii, by what they round.
@@ -46,7 +50,8 @@ public let tapTarget: CGFloat = 44
 
 extension View {
     /// The surface behind the content, in a shape: the frost, the
-    /// surface's tint, a hairline edge, and for a card its shadow. With
+    /// surface's tint, a hairline edge (not a panel's), and for a card its
+    /// shadow. With
     /// Increase Contrast the tint is opaque and the edge the muted ink.
     public func surface<S: InsettableShape>(_ s: Surface, in shape: S) -> some View {
         modifier(SurfaceModifier(surface: s, shape: shape))
@@ -62,7 +67,11 @@ private struct SurfaceModifier<S: InsettableShape>: ViewModifier {
         content
             .background(tint, in: shape)
             .frosted(shape)
-            .overlay(shape.strokeBorder(theme.edge, lineWidth: theme.contrast ? 1.5 : 1))
+            .overlay {
+                if surface != .panel || theme.contrast {
+                    shape.strokeBorder(theme.edge, lineWidth: theme.contrast ? 1.5 : 1)
+                }
+            }
             .shadow(color: .black.opacity(shadow), radius: surface == .raised ? 18 : 10, y: surface == .raised ? 10 : 5)
     }
 
@@ -72,7 +81,7 @@ private struct SurfaceModifier<S: InsettableShape>: ViewModifier {
 
     private var shadow: Double {
         switch surface {
-        case .glass: 0
+        case .glass, .panel: 0
         case .card: 0.10
         case .raised: 0.18
         }

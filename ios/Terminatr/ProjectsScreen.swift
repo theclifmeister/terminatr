@@ -5,8 +5,8 @@ import TerminatrUI
 /// The projects as the TUI's and the Mac's sidebar list them
 /// (SidebarTree): this server's active ones, pinned first; each paired
 /// server's shared ones; and the inactive ones folded under one quiet
-/// row. Each is a ProjectCard (T846) under the screen's header, and
-/// opens its coordinator and threads. With several servers (T852) each
+/// row. Each is a ProjectCard (T846), a group's in one ProjectPanel (T996),
+/// under the screen's header, and opens its coordinator and threads. With several servers (T852) each
 /// server's come under its name, in the order they were paired; one
 /// the phone pairs with directly isn't listed again under another that
 /// links to it (PhoneModel.shownPeers).
@@ -29,9 +29,9 @@ struct ProjectsScreen: View {
                             PlainRouteLink(value: Route.search(first.slug)) {
                                 Label("Search", systemImage: "magnifyingglass")
                             }
-                            .buttonStyle(.circle)
+                            .buttonStyle(.smallCircle)
                         }
-                        SettingsButton().buttonStyle(.circle)
+                        SettingsButton().buttonStyle(.smallCircle)
                     }
                 }
                 LazyVStack(alignment: .leading, spacing: Spacing.item) {
@@ -91,30 +91,42 @@ private struct ServerProjects: View {
         }
         if let f = model.failure { Failure(text: f) }
         if !several, !peers.isEmpty { SectionHeading("This server") }
-        ForEach(model.projectEntries, id: \.slug) { e in
-            switch e {
-            case .project(let p): card(p)
-            case .program(let g): programCard(g)
+        let entries = model.projectEntries
+        if !entries.isEmpty {
+            ProjectPanel {
+                ForEach(Array(entries.enumerated()), id: \.element.slug) { i, e in
+                    switch e {
+                    case .project(let p): card(p, rule: i > 0)
+                    case .program(let g): programCard(g, rule: i > 0)
+                    }
+                }
             }
         }
         ForEach(peers, id: \.alias) { peer in
             SectionHeading(peer.name.isEmpty ? peer.alias : peer.name, detail: PeerTag.of(peer).word)
-            ForEach(ProgramList.standalone(peer, programs: model.programs), id: \.project) { p in
-                let sessions = SidebarTree.sessions(of: p, alias: peer.alias)
-                let coordinator = sessions.first { $0.ref.isCoordinator }?.session ?? nil
-                let route = Route.peerProject(alias: peer.alias, project: p.project)
-                PlainRouteLink(value: route) {
-                    ProjectCard(name: p.project, coordinator: .of(peer: coordinator), needs: p.stale ? 0 : p.needsYou,
-                                threads: sessions.filter { !$0.ref.isCoordinator }.map { Attention.of(peer: $0.session).tone },
-                                dim: peer.state != "up" || p.stale, selected: navigate.opens(route, on: model))
+            let projects = ProgramList.standalone(peer, programs: model.programs)
+            if !projects.isEmpty {
+                ProjectPanel {
+                    ForEach(Array(projects.enumerated()), id: \.element.project) { i, p in
+                        let sessions = SidebarTree.sessions(of: p, alias: peer.alias)
+                        let coordinator = sessions.first { $0.ref.isCoordinator }?.session ?? nil
+                        let route = Route.peerProject(alias: peer.alias, project: p.project)
+                        PlainRouteLink(value: route) {
+                            ProjectCard(name: p.project, coordinator: .of(peer: coordinator), needs: p.stale ? 0 : p.needsYou,
+                                        threads: sessions.filter { !$0.ref.isCoordinator }.map { Attention.of(peer: $0.session).tone },
+                                        dim: peer.state != "up" || p.stale, selected: navigate.opens(route, on: model), rule: i > 0)
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
-                .buttonStyle(.plain)
             }
         }
         if !gone.isEmpty {
             InactiveFold(count: gone.count, names: gone.map(\.slug), open: $showInactive)
             if showInactive {
-                ForEach(gone, id: \.slug) { card($0, dim: true) }
+                ProjectPanel {
+                    ForEach(Array(gone.enumerated()), id: \.element.slug) { i, p in card(p, dim: true, rule: i > 0) }
+                }
             }
         }
     }
@@ -124,29 +136,29 @@ private struct ServerProjects: View {
     /// page (the user's decision, T977), not here and not in a server's
     /// section. The badge counts the program's needs once: it counts the
     /// one need list, not the rows.
-    private func programCard(_ g: AppAPI.Program) -> some View {
+    private func programCard(_ g: AppAPI.Program, rule: Bool) -> some View {
         let route = Route.program(g.slug)
         return PlainRouteLink(value: route) {
             ProgramCard(program: g, director: .of(director: model.directorSession(g), questions: g.questions),
                         needs: model.programNeeds(g).count, threads: model.programThreads(g),
-                        selected: navigate.opens(route, on: model))
+                        selected: navigate.opens(route, on: model), rule: rule)
         }
         .buttonStyle(.plain)
     }
 
-    private func card(_ p: AppAPI.Project, dim: Bool = false) -> some View {
+    private func card(_ p: AppAPI.Project, dim: Bool = false, rule: Bool) -> some View {
         let route = Route.project(p.slug)
         return PlainRouteLink(value: route) {
             ProjectCard(name: p.slug, coordinator: model.coordinator(of: p),
                         needs: Need.count(model.needs, project: p.slug),
                         threads: SidebarTree.threads(of: p) { model.session($0) }.map { model.attention($0).tone },
-                        pinned: p.pinned, dim: dim, selected: navigate.opens(route, on: model))
+                        pinned: p.pinned, dim: dim, selected: navigate.opens(route, on: model), rule: rule)
         }
         .buttonStyle(.plain)
     }
 }
 
-/// The inactive projects folded into one quiet row on glass: "Inactive
+/// The inactive projects folded into one quiet plain row: "Inactive
 /// · old-prototype" (or how many), its chevron turned while open.
 private struct InactiveFold: View {
     @Environment(\.theme) private var theme
@@ -170,9 +182,7 @@ private struct InactiveFold: View {
                     .foregroundStyle(theme.muted)
                     .rotationEffect(.degrees(open ? 90 : 0))
             }
-            .padding(.horizontal, Spacing.card + 2)
-            .frame(minHeight: tapTarget + 4)
-            .surface(.glass, in: RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
+            .frame(minHeight: tapTarget)
             .contentShape(RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
         }
         .buttonStyle(.plain)
@@ -186,7 +196,7 @@ private struct InactiveFold: View {
 /// One of this server's projects (T846): its monogram, name and goal,
 /// its board's counts as StatTiles, its coordinator, running or not,
 /// with its context use (at the write level Start Coordinator under it;
-/// held, Save & Clear, T868), its pages as PageTiles, its designs as
+/// held, Save & Clear, T868), its pages as one PageRow, its designs as
 /// DesignTiles (DesignsTiles), then every unresolved thread, done ones
 /// too, in the TUI's order (SidebarTree.threads), as SessionTiles, a
 /// thread's context use only when nearly full. An inactive project's
@@ -234,7 +244,7 @@ struct ProjectScreen: View {
                             .foregroundStyle(theme.muted)
                             .padding(Spacing.card)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .surface(.card, in: RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
+                            .surface(.panel, in: RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
                     } else {
                         TileGroup {
                             ForEach(Array(threads.enumerated()), id: \.element.record.id) { i, t in
@@ -294,12 +304,13 @@ struct ProjectScreen: View {
         let tiles: [(Route, String, String)] = [
             (.overview(slug), "Overview", "info.circle"),
             (.board(slug), "Board", "list.bullet.rectangle"),
-        ] + (pages.contains(.memory) ? [(.memory(slug), "Memory", "brain")] : [])
+        ] + (pages.contains(.memory) ? [(.memory(slug), "Memory", "bookmark")] : [])
             + (pages.contains(.library) ? [(.library(slug), "Library", "books.vertical")] : [])
             + (pages.contains(.mods) ? [(.mods(slug), "Mods", "puzzlepiece.extension")] : [])
-        return TileRow {
-            ForEach(tiles, id: \.1) { route, title, symbol in
-                PlainRouteLink(value: route) { PageTile(title, symbol: symbol, selected: navigate.opens(route, on: model)) }
+        return PageRow {
+            ForEach(Array(tiles.enumerated()), id: \.element.1) { i, tile in
+                let (route, title, symbol) = tile
+                PlainRouteLink(value: route) { PageTile(title, symbol: symbol, selected: navigate.opens(route, on: model), rule: i > 0) }
                     .buttonStyle(.plain)
             }
         }

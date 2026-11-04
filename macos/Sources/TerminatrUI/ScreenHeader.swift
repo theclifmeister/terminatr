@@ -3,10 +3,10 @@ import TerminatrKit
 
 /// A screen's header (T845), in place of the large-title bar: the title
 /// in the display face with a count of what waits, its trailing circle
-/// buttons centred on the title's line (T854), and a line on glass (the
-/// link's state). The title is the one text on the raw mesh, large
-/// enough for it (ThemeColours.checks, "a header's title"). At
-/// accessibility sizes the count goes under the title.
+/// buttons centred on the title's line (T854), and the link's state as a
+/// plain line under it (T996), on the phone's veil. A pane's title, below
+/// a project's name (ProjectHeader) in size. At accessibility sizes the
+/// count goes under the title.
 public struct ScreenHeader<Trailing: View>: View {
     @Environment(\.theme) private var theme
     @Environment(\.dynamicTypeSize) private var typeSize
@@ -25,15 +25,14 @@ public struct ScreenHeader<Trailing: View>: View {
     }
 
     public var body: some View {
-        VStack(alignment: .leading, spacing: Spacing.item) {
+        VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .titleLine, spacing: Spacing.item) {
                 let head = typeSize.isAccessibilitySize
                     ? AnyLayout(VStackLayout(alignment: .leading, spacing: Spacing.tight))
                     : AnyLayout(HStackLayout(alignment: .center, spacing: Spacing.row))
                 head {
                     Text(title)
-                        .font(theme.title(.hero, .heavy))
-                        .tracking(-0.5)
+                        .font(theme.title(.sheetTitle, .bold))
                         .foregroundStyle(theme.ink)
                         .lines(1)
                         .accessibilityAddTraits(.isHeader)
@@ -60,9 +59,6 @@ public struct ScreenHeader<Trailing: View>: View {
                 }
                 .font(theme.body(.subheadline, .medium))
                 .foregroundStyle(theme.muted)
-                .padding(.horizontal, Spacing.row)
-                .padding(.vertical, Spacing.tight)
-                .surface(.glass, in: Capsule())
             }
         }
         .padding(.horizontal, Spacing.gutter)

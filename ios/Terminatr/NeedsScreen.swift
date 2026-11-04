@@ -33,7 +33,7 @@ struct NeedsScreen: View {
             VStack(alignment: .leading, spacing: Spacing.row) {
                 ScreenHeader("Needs you", count: needs.count, subtitle: subtitle.text, symbol: subtitle.symbol) {
                     SettingsButton()
-                        .buttonStyle(.circle)
+                        .buttonStyle(.smallCircle)
                 }
                 if groups.count > 2 {
                     PulseChips(groups.map { PulseChip(id: $0.group, label: $0.group.label($0.count), tone: $0.group.tone) },

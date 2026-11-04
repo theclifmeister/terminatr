@@ -29,9 +29,9 @@ public struct ComponentGallery: View {
             VStack(alignment: .leading, spacing: Spacing.card) {
                 ScreenHeader("Needs you", count: 5, subtitle: "studio · linked, answers here", symbol: "wifi") {
                     Button {} label: { Label("Search", systemImage: "magnifyingglass") }
-                        .buttonStyle(.circle)
+                        .buttonStyle(.smallCircle)
                     Button {} label: { Label("Settings", systemImage: "gearshape") }
-                        .buttonStyle(.circle)
+                        .buttonStyle(.smallCircle)
                 }
                 PulseChips([
                     PulseChip(id: "all", label: "All 5"),

@@ -91,8 +91,6 @@ public enum TextSize {
 public enum TextStyle: CaseIterable, Sendable {
     /// The phone's Welcome wordmark (T850).
     case wordmark
-    /// A screen's header on the phone (T845's ScreenHeader).
-    case hero
     /// A project's name over its dashboard.
     case display
     /// A sheet's headline: the first-run sheet's.
@@ -110,7 +108,6 @@ public enum TextStyle: CaseIterable, Sendable {
     public var points: Double {
         switch self {
         case .wordmark: 52
-        case .hero: 36
         case .display: 30
         case .sheetTitle: 24
         case .largeTitle: 22
