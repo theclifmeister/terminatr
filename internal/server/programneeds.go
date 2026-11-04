@@ -21,6 +21,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/program"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/seat"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/ticker"
 )
@@ -56,11 +57,8 @@ func (s *Server) programNeedsOpen(p proto.ProgramNeedsParams, cc callCtx) (any, 
 	for _, m := range res.Members {
 		out.Waiting += m.Count
 	}
-	for _, si := range s.list().Sessions {
-		if si.Role == proto.RoleDirector && si.Project == p.Program {
-			out.Session = si.ID
-			break
-		}
+	if si := seat.Find(s.list().Sessions, proto.RoleDirector, p.Program); si != nil {
+		out.Session = si.ID
 	}
 	if out.Session == "" {
 		return nil, proto.Errorf("not-running", "program %s's director isn't running: the dialog opens over its pane (tm program open %s)", p.Program, p.Program)

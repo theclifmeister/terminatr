@@ -32,6 +32,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/modproto"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/seat"
 	"github.com/theclifmeister/terminatr/internal/thread"
 )
 
@@ -180,7 +181,7 @@ func (s *Server) sessionTools(rec SessionRecord) []proto.ToolDef {
 	if rec.Role == proto.RoleCoordinator && rec.Project != "" {
 		out = append(out, CoordinatorTools...)
 	}
-	if (rec.Role == proto.RoleThread && thread.ValidID(rec.Thread) || rec.Role == proto.RoleCoordinator || rec.Role == proto.RoleDirector) && rec.Project != "" {
+	if (rec.Role == proto.RoleThread && thread.ValidID(rec.Thread) || seat.Is(rec.Role)) && rec.Project != "" {
 		out = append(out, SearchTools...)
 	}
 	for _, t := range s.modToolsFor(rec) {

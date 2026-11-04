@@ -9,9 +9,8 @@ import (
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/features"
 	"github.com/theclifmeister/terminatr/internal/models"
-	"github.com/theclifmeister/terminatr/internal/program"
-	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/seat"
 	"github.com/theclifmeister/terminatr/internal/session"
 )
 
@@ -145,22 +144,14 @@ func (s *Server) modelRefused(sess *session.Session, msg string) {
 	if r.Project == "" {
 		return
 	}
-	var p *project.Folder
-	who := caller.Caller{Kind: caller.Coordinator, Project: r.Project}
+	p, err := seat.Open(r.Role, r.Project, nil)
+	if err != nil {
+		return
+	}
+	who := p.Caller()
 	what, setting := "its coordinator", "the Coordinator model setting"
 	if r.Role == proto.RoleDirector {
-		g, err := program.Open(r.Project, nil)
-		if err != nil {
-			return
-		}
-		p, who = &g.Folder, caller.Caller{Kind: caller.Director, Project: r.Project}
 		what, setting = "its director", "the program's Director model setting"
-	} else {
-		pr, err := project.Open(r.Project)
-		if err != nil {
-			return
-		}
-		p = &pr.Folder
 	}
 	ref := r.ID
 	if r.Role == proto.RoleThread && r.Thread != "" {
@@ -196,7 +187,7 @@ func (s *Server) syncModel(id string) (any, *proto.Error) {
 	if !ok {
 		return nil, proto.Errorf(proto.ErrUnknownSession, "no session %s", id)
 	}
-	if r.Role != proto.RoleCoordinator && r.Role != proto.RoleDirector || r.Project == "" {
+	if !seat.Is(r.Role) || r.Project == "" {
 		return nil, proto.Errorf(proto.ErrRefused, "the model setting is for coordinators and directors; a thread keeps the model it was launched with")
 	}
 	a := sess.Agent()
@@ -211,13 +202,11 @@ func (s *Server) syncModel(id string) (any, *proto.Error) {
 	if err != nil {
 		return nil, proto.Errorf(proto.ErrRefused, "%v", err)
 	}
-	var safety config.Safety
-	if r.Role == proto.RoleDirector {
-		if !features.Programs(cfg) {
-			return nil, proto.Errorf(features.OffCode, "%s", features.OffMsg)
-		}
-		safety = cfg.DirectorSafety(r.Project)
-	} else if safety, err = cfg.Safety(r.Project); err != nil {
+	if r.Role == proto.RoleDirector && !features.Programs(cfg) {
+		return nil, proto.Errorf(features.OffCode, "%s", features.OffMsg)
+	}
+	safety, err := seat.Settings(cfg, r.Role, r.Project)
+	if err != nil {
 		return nil, proto.Errorf(proto.ErrRefused, "%v", err)
 	}
 	cat := models.Get(m, cfg, true)

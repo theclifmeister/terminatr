@@ -5,7 +5,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/config"
-	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/seat"
 	"github.com/theclifmeister/terminatr/internal/session"
 	"github.com/theclifmeister/terminatr/internal/thread"
 )
@@ -52,7 +52,7 @@ func (s *Server) setContext(id, model string, tokens, window int64) {
 	now := ctxUse{tokens, window}
 	was, had := s.ctxOf.Swap(id, now)
 	s.mu.Lock()
-	coord := s.records[id].Role == proto.RoleCoordinator || s.records[id].Role == proto.RoleDirector
+	coord := seat.Is(s.records[id].Role)
 	s.mu.Unlock()
 	if coord && crossedContext(was, had, now) {
 		s.alerts.Add(1) // the consoles ring their bell

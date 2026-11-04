@@ -6,6 +6,7 @@ import (
 
 	tmclient "github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/seat"
 )
 
 // SetRemote turns remote control of a project's running coordinator on
@@ -23,16 +24,11 @@ func SetRemoteOf(call func(method string, params, result any) error, role, slug 
 	if err := call(proto.MethodSessionList, nil, &list); err != nil {
 		return res, err
 	}
-	for _, s := range list.Sessions {
-		if s.Role == role && s.Project == slug {
-			err := call(proto.MethodSessionRemote, proto.SessionRemoteParams{ID: s.ID, On: on}, &res)
-			return res, err
-		}
+	if s := seat.Find(list.Sessions, role, slug); s != nil {
+		err := call(proto.MethodSessionRemote, proto.SessionRemoteParams{ID: s.ID, On: on}, &res)
+		return res, err
 	}
-	if role == proto.RoleDirector {
-		return res, proto.Errorf(proto.ErrRefused, "no director runs for %s; open the program first", slug)
-	}
-	return res, proto.Errorf(proto.ErrRefused, "no coordinator runs for %s; open the project first", slug)
+	return res, proto.Errorf(proto.ErrRefused, "no %s runs for %s; open the %s first", role, slug, seat.FolderWord(role))
 }
 
 // RemoteMessage says what SetRemote did, in the user's words: no setting
@@ -44,10 +40,7 @@ func RemoteMessage(slug string, res proto.SessionRemoteResult) string {
 // RemoteMessageFor is RemoteMessage for the session of role in slug (a
 // coordinator, or a director of program slug).
 func RemoteMessageFor(role, slug string, res proto.SessionRemoteResult) string {
-	who, whose := "the coordinator", "the project's"
-	if role == proto.RoleDirector {
-		who, whose = "the director", "the program's"
-	}
+	who, whose := "the "+role, "the "+seat.FolderWord(role)+"'s"
 	state := map[bool]string{true: "on", false: "off"}[res.RemoteControl]
 	switch res.How {
 	case proto.RemoteUnchanged:
@@ -85,7 +78,7 @@ func (c *client) askRemote() {
 	if !c.lock() {
 		return
 	}
-	if r := c.focus.info.Role; r == proto.RoleCoordinator || r == proto.RoleDirector {
+	if seat.Is(c.focus.info.Role) {
 		p := c.focus
 		c.confirm = func(yes bool) { c.answerRemote(p, yes) }
 		c.openDialog("Remote control", remoteQuestion(c.focus.info))

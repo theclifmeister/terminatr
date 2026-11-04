@@ -10,6 +10,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/models"
 	"github.com/theclifmeister/terminatr/internal/program"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/seat"
 )
 
 // A program's director (the programs design §4.1): a session of role
@@ -52,12 +53,6 @@ func directorReady(cfg *config.Config, slug string) (string, *proto.Error) {
 	return realPath(g.Dir), nil
 }
 
-// directorSafety is the settings a director of program slug runs with
-// (config.DirectorSafety).
-func directorSafety(cfg *config.Config, slug string) config.Safety {
-	return cfg.DirectorSafety(slug)
-}
-
 // OpenDirector returns the id of program slug's director session,
 // starting one (agent, role director, cwd the program's folder) if none
 // runs, and whether it started one: tm program open. list lists the
@@ -77,12 +72,10 @@ func OpenDirector(list func() ([]proto.SessionInfo, error), start func(proto.Ses
 	if err != nil {
 		return "", false, err
 	}
-	for _, s := range sessions {
-		if s.Role == proto.RoleDirector && s.Project == slug {
-			return s.ID, false, nil
-		}
+	if s := seat.Find(sessions, proto.RoleDirector, slug); s != nil {
+		return s.ID, false, nil
 	}
-	safety := directorSafety(cfg, slug)
+	safety := cfg.DirectorSafety(slug)
 	name, model, err := coordinatorAgent(cfg, agentName, safety)
 	if err != nil {
 		return "", false, err
@@ -128,7 +121,7 @@ func directorModel(a agent.Agent, slug string, cfg *config.Config) string {
 	if m == nil {
 		return ""
 	}
-	return models.Get(m, cfg, true).CoordinatorModel(directorSafety(cfg, slug))
+	return models.Get(m, cfg, true).CoordinatorModel(cfg.DirectorSafety(slug))
 }
 
 // directorContext is a director's session-start block (contextFor): its

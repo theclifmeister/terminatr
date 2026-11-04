@@ -11,6 +11,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/seat"
 	"github.com/theclifmeister/terminatr/internal/view"
 	"github.com/theclifmeister/terminatr/internal/widget"
 )
@@ -435,11 +436,8 @@ func projectRows(p ProjectData, sessions []proto.SessionInfo, byID map[string]pr
 	}
 	pr.expanded = pr.inactive
 	remote, ctx := false, -1
-	for _, s := range sessions {
-		if s.Role == proto.RoleCoordinator && s.Project == p.Slug {
-			pr.session, pr.state, remote, ctx = s.ID, stateWord(s), s.RemoteControl, s.ContextPercent()
-			break
-		}
+	if s := seat.Find(sessions, proto.RoleCoordinator, p.Slug); s != nil {
+		pr.session, pr.state, remote, ctx = s.ID, stateWord(*s), s.RemoteControl, s.ContextPercent()
 	}
 	pr.asleep = pr.session == "" && in.asleep[p.Slug]
 	threads := orderedThreads(p.Threads, byID)

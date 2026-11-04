@@ -32,6 +32,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/seat"
 	"github.com/theclifmeister/terminatr/internal/textsafe"
 	"github.com/theclifmeister/terminatr/internal/thread"
 	"github.com/theclifmeister/terminatr/internal/worktree"
@@ -129,7 +130,7 @@ func (s *Server) guardOwn() []string {
 // protection guarded, read live; a thread without its sandbox has no
 // escapes or excluded commands to ask about.
 func (s *Server) guardRulesFor(r SessionRecord) GuardRules {
-	if r.Project == "" || (r.Role != proto.RoleThread && r.Role != proto.RoleCoordinator && r.Role != proto.RoleDirector) {
+	if r.Project == "" || (r.Role != proto.RoleThread && !seat.Is(r.Role)) {
 		return GuardRules{}
 	}
 	lc := loadLaunchConfig()
@@ -351,7 +352,7 @@ func (s *Server) guardNoWrite(r SessionRecord, lc launchConfig) []string {
 	if run := s.opts.Paths.RunDir; run != "" {
 		out = append(out, realPath(run), run)
 	}
-	if r.Cwd != "" && (r.Role == proto.RoleThread || r.Role == proto.RoleCoordinator) {
+	if r.Cwd != "" && (r.Role == proto.RoleThread || seat.Is(r.Role)) {
 		out = append(out, withLanding(hookSettings(r.Cwd))...)
 	}
 	if home, err := os.UserHomeDir(); err == nil {

@@ -23,6 +23,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/program"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/seat"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/thread"
 	"github.com/theclifmeister/terminatr/internal/vault"
@@ -583,11 +584,11 @@ func (t *Ticker) sweepProject(slug string, cfg *config.Config, sessions []proto.
 	}
 	t.ghHealth(p)
 	if !safety.Paused {
-		t.nudge(coordinatorSeat(p), sessions, now)
+		t.nudge(seat.Coordinator(p), sessions, now)
 	}
-	t.keepSeat(coordinatorSeat(p), sessions, safety, cfg.ContextHint, now)
+	t.keepSeat(seat.Coordinator(p), sessions, safety, cfg.ContextHint, now)
 	if !safety.Paused {
-		t.sleepIdle(coordinatorSeat(p), cfg, safety, sessions, now)
+		t.sleepIdle(seat.Coordinator(p), cfg, safety, sessions, now)
 	}
 	if prune {
 		t.upkeep(p, safety, now)
@@ -1226,13 +1227,13 @@ const RemindCap = 3
 // Nudge interval, never while it works or is blocked. Items it was told
 // about and left open are reminded of (remind); a new conversation
 // (told) hasn't been told about any.
-func (t *Ticker) nudge(p seat, sessions []proto.SessionInfo, now time.Time) {
+func (t *Ticker) nudge(p seat.Seat, sessions []proto.SessionInfo, now time.Time) {
 	items, err := p.Inbox()
 	if err != nil {
 		return
 	}
-	pm := t.projectMemo(p.key())
-	coord := p.of(sessions)
+	pm := t.projectMemo(p.Key())
+	coord := p.Of(sessions)
 	if coord != nil {
 		t.told(p, pm, coord)
 	}
@@ -1285,8 +1286,8 @@ func (t *Ticker) nudge(p seat, sessions []proto.SessionInfo, now time.Time) {
 // tell sends coord the line text makes of items. It can wait in the
 // queue (a busy coordinator, a held prompt box): at delivery it names
 // only the items still unhandled, and goes unsent once none is.
-func (t *Ticker) tell(p seat, coord *proto.SessionInfo, items []project.Item, text func([]project.Item, func(string) string) string) error {
-	label := p.label
+func (t *Ticker) tell(p seat.Seat, coord *proto.SessionInfo, items []project.Item, text func([]project.Item, func(string) string) string) error {
+	label := func(id string) string { return seatLabel(p, id) }
 	ids := map[string]bool{}
 	for _, it := range items {
 		ids[it.ID] = true
@@ -1316,7 +1317,7 @@ func (t *Ticker) tell(p seat, coord *proto.SessionInfo, items []project.Item, te
 // agent a new session id; the ticker's own clear forgets them itself.
 // With the session id unknown on both sides the process decides; one
 // known before and not yet now leaves it undecided.
-func (t *Ticker) told(p seat, pm *projectMemo, coord *proto.SessionInfo) {
+func (t *Ticker) told(p seat.Seat, pm *projectMemo, coord *proto.SessionInfo) {
 	proc, sid := process(coord), coord.AgentSID
 	var other bool
 	switch {
@@ -1346,7 +1347,7 @@ func forget(pm *projectMemo) {
 // left open, once it idled Remind with nothing queued, then after twice
 // as long each time, RemindCap times at most (T669: one handled a report
 // and left its remember item open for good).
-func (t *Ticker) remind(p seat, pm *projectMemo, coord *proto.SessionInfo, open []project.Item, now time.Time) {
+func (t *Ticker) remind(p seat.Seat, pm *projectMemo, coord *proto.SessionInfo, open []project.Item, now time.Time) {
 	if len(open) == 0 || coord == nil || coord.State != "idle" || coord.Queued > 0 {
 		pm.idleSince = time.Time{}
 		return
@@ -1378,7 +1379,7 @@ const nudgeStall = time.Minute
 // nudgeStall logs, once per stall, a nudge held for nudgeStall by a
 // coordinator that isn't idle, with the sources of its state; tm agent
 // explain shows the rest. The state is re-checked every sweep.
-func (t *Ticker) nudgeStall(p seat, pm *projectMemo, coord *proto.SessionInfo, n int, now time.Time) {
+func (t *Ticker) nudgeStall(p seat.Seat, pm *projectMemo, coord *proto.SessionInfo, n int, now time.Time) {
 	if pm.heldSince.IsZero() {
 		pm.heldSince = now
 	}
@@ -1405,7 +1406,7 @@ const nudgeUnstick = 2 * time.Minute
 // once, so something holds it: a box with text in it or a dialog,
 // bounded by the server's prompt hold. It alerts: the user is the one
 // who can clear a box, and nobody else hears of it.
-func (t *Ticker) unstick(p seat, pm *projectMemo, coord *proto.SessionInfo, n int, now time.Time) {
+func (t *Ticker) unstick(p seat.Seat, pm *projectMemo, coord *proto.SessionInfo, n int, now time.Time) {
 	if coord.State != "idle" || coord.Queued == 0 {
 		pm.idleQueued, pm.unstuck = time.Time{}, false
 		return

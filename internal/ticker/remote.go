@@ -13,6 +13,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/seat"
 )
 
 // Defaults of the remote control enforcement.
@@ -42,13 +43,13 @@ type remoteMemo struct {
 // idle with no prompt queued, after it read off for RemoteGrace, at most
 // once per RemoteEvery, and never while the user's own off holds
 // (SessionInfo.RemoteHeld). Each try is journaled as ticker remote.on.
-func (t *Ticker) keepRemote(p seat, sessions []proto.SessionInfo, safety config.Safety, now time.Time) {
-	pm := t.projectMemo(p.key())
+func (t *Ticker) keepRemote(p seat.Seat, sessions []proto.SessionInfo, safety config.Safety, now time.Time) {
+	pm := t.projectMemo(p.Key())
 	if !safety.CoordinatorRemoteControl {
 		pm.Remote = nil
 		return
 	}
-	coord := p.of(sessions)
+	coord := p.Of(sessions)
 	rm := pm.Remote
 	if rm == nil {
 		rm = &remoteMemo{}
@@ -87,17 +88,17 @@ func (t *Ticker) keepRemote(p seat, sessions []proto.SessionInfo, safety config.
 // outside the settings popup (a hand edit, all projects' value) reaches
 // it too: the host switches it live once it is idle, or keeps the
 // change for its next start. A no-op while it already runs the model.
-func (t *Ticker) keepModel(p seat, sessions []proto.SessionInfo) {
+func (t *Ticker) keepModel(p seat.Seat, sessions []proto.SessionInfo) {
 	for _, s := range sessions {
-		if s.Role != p.role || s.Project != p.Slug || s.Agent == "" {
+		if s.Role != p.Role || s.Project != p.Slug || s.Agent == "" {
 			continue
 		}
 		res, err := t.o.Host.SyncModel(s.ID)
 		switch {
 		case err != nil:
-			t.o.Log.Printf("ticker: %s: %s model: %v", p.Slug, p.role, err)
+			t.o.Log.Printf("ticker: %s: %s model: %v", p.Slug, p.Role, err)
 		case res.How == proto.ModelSwitched:
-			t.o.Log.Printf("ticker: %s: %s %s switches to model %s when idle", p.Slug, p.role, s.ID, cmpOrDefault(res.Model))
+			t.o.Log.Printf("ticker: %s: %s %s switches to model %s when idle", p.Slug, p.Role, s.ID, cmpOrDefault(res.Model))
 		}
 	}
 }

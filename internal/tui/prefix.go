@@ -7,6 +7,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/seat"
 )
 
 // The prefix commands on the dashboard (docs/SPEC.md §4, the key table).
@@ -239,10 +240,6 @@ func (m *dash) askRemote() tea.Cmd {
 		})
 		return nil
 	}
-	if role == proto.RoleDirector {
-		m.msg = "no director runs for " + slug + "; enter on the program starts it"
-		return nil
-	}
-	m.msg = "no coordinator runs for " + slug + "; enter on the project starts it"
+	m.msg = "no " + role + " runs for " + slug + "; enter on the " + seat.FolderWord(role) + " starts it"
 	return nil
 }

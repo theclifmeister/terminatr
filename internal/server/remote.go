@@ -11,6 +11,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/features"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/seat"
 	"github.com/theclifmeister/terminatr/internal/session"
 )
 
@@ -36,7 +37,7 @@ func (s *Server) remote(p proto.SessionRemoteParams) (any, *proto.Error) {
 		s.mu.Unlock()
 		return nil, proto.Errorf(proto.ErrUnknownSession, "no session %s", p.ID)
 	}
-	if r.Role != proto.RoleCoordinator && r.Role != proto.RoleDirector {
+	if !seat.Is(r.Role) {
 		s.mu.Unlock()
 		return nil, proto.Errorf(proto.ErrRefused, "remote control is for coordinators and directors; threads are reached through theirs")
 	}
@@ -120,10 +121,7 @@ func remoteSetting(r SessionRecord) bool {
 	if err != nil {
 		return false
 	}
-	if r.Role == proto.RoleDirector {
-		return directorSafety(cfg, r.Project).CoordinatorRemoteControl
-	}
-	safety, err := cfg.Safety(r.Project)
+	safety, err := seat.Settings(cfg, r.Role, r.Project)
 	return err == nil && safety.CoordinatorRemoteControl
 }
 

@@ -22,6 +22,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/rename"
+	"github.com/theclifmeister/terminatr/internal/seat"
 	"github.com/theclifmeister/terminatr/internal/server"
 	"github.com/theclifmeister/terminatr/internal/ticker"
 	"github.com/theclifmeister/terminatr/internal/vaultlink"
@@ -420,10 +421,8 @@ func programDelete(e *Env, args []string) error {
 		if err != nil {
 			return fromProto(err)
 		}
-		for _, s := range res.Sessions {
-			if s.Role == proto.RoleDirector && s.Project == slug {
-				return &project.Error{Code: "director-running", Msg: fmt.Sprintf("program %s's director is running (%s): stop it first", slug, s.ID)}
-			}
+		if s := seat.Find(res.Sessions, proto.RoleDirector, slug); s != nil {
+			return &project.Error{Code: "director-running", Msg: fmt.Sprintf("program %s's director is running (%s): stop it first", slug, s.ID)}
 		}
 	}
 	if !*yes {

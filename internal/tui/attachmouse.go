@@ -8,7 +8,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/theclifmeister/terminatr/internal/emu"
-	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/seat"
 )
 
 // The mouse in a session (docs/SPEC.md §4). Inside a pane the program
@@ -316,7 +316,7 @@ func (c *client) sessionItems() []aitem {
 		switch {
 		case prefixCommands[key] && !c.dashboard:
 			continue
-		case key == "r" && (c.focus == nil || c.focus.info.Role != proto.RoleCoordinator && c.focus.info.Role != proto.RoleDirector || c.focus.info.Server != ""):
+		case key == "r" && (c.focus == nil || !seat.Is(c.focus.info.Role) || c.focus.info.Server != ""):
 			continue
 		case key == "R" && (c.focus == nil || c.focus.info.Server == ""):
 			continue

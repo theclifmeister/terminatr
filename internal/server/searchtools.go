@@ -9,6 +9,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/search"
+	"github.com/theclifmeister/terminatr/internal/seat"
 	"github.com/theclifmeister/terminatr/internal/thread"
 )
 
@@ -64,7 +65,7 @@ func isSearchTool(name string) bool {
 // coordinator seeing all; it answers the text tm search prints.
 func (s *Server) runSearchTool(rec SessionRecord, name string, b []byte) (int, ModToolResult) {
 	director := rec.Role == proto.RoleDirector
-	if rec.Project == "" || !(rec.Role == proto.RoleThread && thread.ValidID(rec.Thread) || rec.Role == proto.RoleCoordinator || director) {
+	if rec.Project == "" || !(rec.Role == proto.RoleThread && thread.ValidID(rec.Thread) || seat.Is(rec.Role)) {
 		return http.StatusForbidden, ModToolResult{Error: "search tools are a project's thread's or coordinator's, or a program's director's"}
 	}
 	all := rec.Role == proto.RoleCoordinator

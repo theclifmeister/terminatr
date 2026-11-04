@@ -18,6 +18,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/modstore"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/seat"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/thread"
 	"github.com/theclifmeister/terminatr/internal/widget"
@@ -820,14 +821,12 @@ func lineHits(n int, at map[int]int) []int {
 // coordinatorLine is the coordinator's agent and state, or the agent a
 // new one runs.
 func (pv *projectView) coordinatorLine(m *dash, p ProjectData) string {
-	for _, s := range m.data.Sessions {
-		if s.Role == proto.RoleCoordinator && s.Project == p.Slug {
-			line := cmp.Or(s.Agent, config.LegacyAgent) + th().Faint.Render(" · "+s.ID+" "+stateWord(s))
-			if s.RemoteControl {
-				line += th().Faint.Render(" · remote control on")
-			}
-			return line
+	if s := seat.Find(m.data.Sessions, proto.RoleCoordinator, p.Slug); s != nil {
+		line := cmp.Or(s.Agent, config.LegacyAgent) + th().Faint.Render(" · "+s.ID+" "+stateWord(*s))
+		if s.RemoteControl {
+			line += th().Faint.Render(" · remote control on")
 		}
+		return line
 	}
 	s := config.Defaults
 	if p.Safety != nil {

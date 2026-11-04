@@ -140,17 +140,6 @@ const (
 	RoleDirector = "director"
 )
 
-// CoordinatorOf is project slug's coordinator among sessions, nil when
-// none is listed.
-func CoordinatorOf(sessions []SessionInfo, slug string) *SessionInfo {
-	for i, s := range sessions {
-		if s.Role == RoleCoordinator && s.Project == slug {
-			return &sessions[i]
-		}
-	}
-	return nil
-}
-
 // SessionInfo describes one hosted session.
 type SessionInfo struct {
 	ID      string `json:"id"`

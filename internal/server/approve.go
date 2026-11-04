@@ -10,9 +10,9 @@ import (
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/config"
-	"github.com/theclifmeister/terminatr/internal/program"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/seat"
 	"github.com/theclifmeister/terminatr/internal/textsafe"
 )
 
@@ -152,13 +152,10 @@ func coordinatorApproves(slug string) *proto.Error {
 // for a director (whose Project is the program's slug), "" for a
 // session in none.
 func sessionDir(info proto.SessionInfo) (string, error) {
-	switch {
-	case info.Project == "":
+	if info.Project == "" {
 		return "", nil
-	case info.Role == proto.RoleDirector:
-		return program.Dir(info.Project)
 	}
-	return project.Dir(info.Project)
+	return seat.Dir(info.Role, info.Project)
 }
 
 // journalSession journals action on session info in its project's
