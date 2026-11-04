@@ -279,6 +279,15 @@ func TestDirectorParity(t *testing.T) {
 	if res.Session != id {
 		t.Errorf("asked %q, want %s", res.Session, id)
 	}
+	// Clearing it by its session is journaled in its program's folder.
+	call(t, c, proto.MethodSessionClear, proto.SessionIDParams{ID: id}, nil)
+	g, err := program.Open("acme", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lines, _, _ := g.JournalTail(20); !strings.Contains(strings.Join(lines, "\n"), "session.clear "+id) {
+		t.Errorf("journal %q", lines)
+	}
 	// The test agent has no remote control: refused for that, not for
 	// being a director.
 	if err := c.Call(proto.MethodSessionRemote, proto.SessionRemoteParams{ID: id, On: true}, nil); err == nil || !strings.Contains(err.Error(), "clears has no remote control") {

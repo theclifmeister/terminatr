@@ -16,6 +16,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/seat"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/thread"
 )
@@ -118,11 +119,13 @@ func (s argSet) places() string {
 }
 
 // argRoots are the folders an agent caller's files may be in: a thread's
-// worktree, a coordinator's project folder and its threads' worktrees,
-// and the agent's own temp folder, where it writes what it hands in.
+// worktree, a coordinator's project folder and its threads' worktrees, a
+// director's program folder, and the agent's own temp folder, where it
+// writes what it hands in.
 // Where the agent's temp folder is shared by all its sessions (Claude
 // Code's), only the caller's own scratch folder of it, named after its
-// working folder (its worktree; its project folder for a coordinator),
+// working folder (its worktree; its project folder for a coordinator, its
+// program folder for a director),
 // and none for an adopted thread, whose worktree is the user's own
 // checkout, whose scratch folder the user's sessions share. Each root
 // comes also with its links resolved (/tmp is /private/tmp on macOS),
@@ -131,7 +134,12 @@ func (e *Env) argRoots() argSet {
 	var set argSet
 	var roots, own []string // own: working folders whose scratch folder is the caller's
 	adopted := false
-	if e.Caller.Project != "" {
+	if e.Caller.Kind == caller.Director {
+		if g, err := seat.Open(proto.RoleDirector, e.Caller.Project, nil); err == nil {
+			roots = append(roots, g.Dir)
+			own = append(own, g.Dir, realPath(g.Dir))
+		}
+	} else if e.Caller.Project != "" {
 		if p, err := project.Open(e.Caller.Project); err == nil {
 			switch e.Caller.Kind {
 			case caller.Thread:

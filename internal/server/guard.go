@@ -824,11 +824,11 @@ func (s *Server) guardDenied(r SessionRecord, d GuardDenial) {
 	if r.Project == "" {
 		return
 	}
-	p, err := project.Open(r.Project)
+	p, err := seat.Open(r.Role, r.Project, nil)
 	if err != nil {
 		return
 	}
-	who := caller.Caller{Kind: caller.Coordinator, Project: r.Project}
+	who := p.Caller()
 	ref := r.ID
 	if r.Role == proto.RoleThread && r.Thread != "" {
 		who = caller.Caller{Kind: caller.Thread, Project: r.Project, Thread: r.Thread}
@@ -849,8 +849,12 @@ func (s *Server) guardDenied(r SessionRecord, d GuardDenial) {
 		if err != nil {
 			s.log.Printf("session %s: guard log: %v", r.ID, err)
 		} else if listed && e.Actionable() && guardSettings(r.Project).GuardMode == config.GuardLearn {
-			msg := fmt.Sprintf("%s: the guard refused a %s call (%s: %s) and learns from your answer: allow it or keep refusing it in the project's Settings, Guard refusals",
-				ref, tool, d.Rule, summary)
+			where := "the project's Settings"
+			if r.Role == proto.RoleDirector {
+				where = "Settings, all projects" // a program's settings have no such row
+			}
+			msg := fmt.Sprintf("%s: the guard refused a %s call (%s: %s) and learns from your answer: allow it or keep refusing it in %s, Guard refusals",
+				ref, tool, d.Rule, summary, where)
 			if _, err := p.AddItem("guard", ref, msg, true); err != nil {
 				s.log.Printf("session %s: inbox: %v", r.ID, err)
 			}

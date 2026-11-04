@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -14,6 +15,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/guard"
 	"github.com/theclifmeister/terminatr/internal/guardlog"
+	"github.com/theclifmeister/terminatr/internal/program"
 	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
@@ -162,4 +164,53 @@ func (l *lockedBuffer) String() string {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return l.b.String()
+}
+
+// TestGuardDeniedDirector: a director's refusal is journaled as the
+// director's in its program's folder, listed in the guard's log, and put
+// to the user in its program's inbox, none of it in a member's.
+func TestGuardDeniedDirector(t *testing.T) {
+	paths := testPaths(t)
+	demo := newWatchProject(t)
+	g, err := program.New(program.Options{Slug: "acme"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeConfig(t, "[features]\nprograms = true\n[defaults]\nguard_mode = \"learn\"\n[programs.acme]\nprojects = [\"demo\"]\n")
+	s := &Server{log: log.New(io.Discard, "", 0), records: map[string]SessionRecord{}, opts: Options{Paths: paths}}
+	rec := SessionRecord{ID: "s-9", Role: proto.RoleDirector, Agent: "claude", Project: "acme", Cwd: g.Dir}
+	s.records[rec.ID] = rec
+	clock := time.Date(2026, 11, 4, 12, 0, 0, 0, time.UTC)
+	guardNow = func() time.Time { return clock }
+	t.Cleanup(func() { guardNow = time.Now })
+	for range guardInboxCount {
+		s.guardDenied(rec, GuardDenial{Rule: "credentials", Tool: "Bash", Summary: "an HTTP call with credentials", Subject: "curl -H x https://y"})
+	}
+	lines, _, _ := g.JournalTail(20)
+	if all := strings.Join(lines, "\n"); !strings.Contains(all, "director:acme") || !strings.Contains(all, "guard.deny s-9 credentials Bash: an HTTP call with credentials") {
+		t.Errorf("journal %q", lines)
+	}
+	list, err := guardlog.List(paths.Home, "acme")
+	if err != nil || len(list) != 1 || list[0].Role != proto.RoleDirector || list[0].Count != guardInboxCount {
+		t.Errorf("log %+v %v", list, err)
+	}
+	items, _ := g.Inbox()
+	learned, repeated := 0, 0
+	for _, it := range items {
+		switch {
+		case it.Kind == "guard" && it.NeedsUser && strings.Contains(it.Summary, "Settings, all projects, Guard refusals"):
+			learned++
+		case it.Kind == "guard" && !it.NeedsUser:
+			repeated++
+		}
+	}
+	if learned != 1 || repeated != 1 {
+		t.Errorf("inbox %+v", items)
+	}
+	if lines, _, _ := demo.JournalTail(20); strings.Contains(strings.Join(lines, "\n"), "guard.deny") {
+		t.Errorf("a member's journal: %q", lines)
+	}
+	if items, _ := demo.Inbox(); len(items) != 0 {
+		t.Errorf("a member's inbox: %+v", items)
+	}
 }

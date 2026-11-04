@@ -97,10 +97,7 @@ var coordinatorOnly = map[string]string{
 
 	// Gaps: pinned by the tests in internal/server and internal/cli where a
 	// test can reach them.
-	"cli/argfile.go argRoots":                "gap: a director's own folder and scratchpad aren't roots: its --file there is refused outside-roots",
 	"server/modtools.go callerSession":       "gap: tool.list and tool.run refuse a director, so its MCP search tools don't reach it",
-	"server/guard.go guardDenied":            "gap: opens the project, so a director's guard denials are never journaled",
-	"server/watch.go watchOf":                "gap: opens the project, so a director's session.watch is always empty",
 	"server/access_show.go mayExplainAccess": "gap (minor): a director can't ask what its own commands would do",
 	"cli/vault.go vaultRender":               "gap (minor): a program's notes are in the vault; its director can't render them",
 	"cli/vaultdoctor.go vaultDoctor":         "gap (minor): a read-only check open to a coordinator",
