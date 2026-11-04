@@ -9,9 +9,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/session"
+	"github.com/theclifmeister/terminatr/internal/tasks"
+	"github.com/theclifmeister/terminatr/internal/thread"
 )
 
 // TestSearchTools: a thread and a coordinator of a project get the
@@ -102,5 +105,116 @@ func TestSearchTools(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(tmHome, "state", "search", "proj")); err != nil {
 		t.Errorf("index folder: %v", err)
+	}
+}
+
+// relatedProject is a project whose T2 is about what T1 was, and a
+// thread on T2 whose brief listed T1.
+func relatedProject(t *testing.T) *project.Project {
+	t.Helper()
+	t.Setenv("TERMINATR_HOME", t.TempDir())
+	p, err := project.New(project.Options{Slug: "proj"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := p.Tasks()
+	who := caller.Caller{Kind: caller.Coordinator, Project: "proj"}
+	for _, title := range []string{"Wombat relay ports", "More wombat relay", "Unrelated quince"} {
+		if _, err := s.Add(who, []tasks.NewTask{{Title: title}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := thread.Create(p, thread.Record{ID: "t-0001", Title: "More", Task: "T2", Related: []string{"T1"}, Worktree: t.TempDir(), State: thread.Running}); err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+
+func journalLines(t *testing.T, p *project.Project, action string) []string {
+	t.Helper()
+	b, err := os.ReadFile(p.Path("JOURNAL.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out []string
+	for _, l := range strings.Split(string(b), "\n") {
+		if strings.Contains(l, " "+action+" ") {
+			out = append(out, l[strings.Index(l, " ")+1:])
+		}
+	}
+	return out
+}
+
+// TestSearchRelated: search.related answers the task's past work as a
+// thread sees it, one row a task.
+func TestSearchRelated(t *testing.T) {
+	relatedProject(t)
+	var si SearchService
+	defer si.CloseIdle(0)
+	res, perr := si.Related(proto.SearchRelatedParams{Project: "proj", Task: "T2"})
+	if perr != nil || len(res.Rows) != 1 || res.Rows[0].ID != "T1" || res.Rows[0].Title != "Wombat relay ports" {
+		t.Fatalf("related: %+v %v", res, perr)
+	}
+	for _, p := range []proto.SearchRelatedParams{{Project: "proj", Task: "x"}, {Project: "proj", Task: "T99"}, {Project: "none", Task: "T1"}} {
+		if _, perr := si.Related(p); perr == nil {
+			t.Errorf("%+v: no error", p)
+		}
+	}
+}
+
+// TestRelatedOpened: a thread's show of a listed task, by the MCP tool or
+// on the socket, is journaled once each, by whichever of the task's ids;
+// what wasn't listed isn't, nor another caller's show.
+func TestRelatedOpened(t *testing.T) {
+	p := relatedProject(t)
+	if err := thread.WriteTaskText(p, "t-0001", "# T2 More wombat relay\n"); err != nil {
+		t.Fatal(err)
+	}
+	s := &Server{log: log.New(&testWriter{t: t}, "server: ", 0), sessions: map[string]*session.Session{}, records: map[string]SessionRecord{}, modEv: newModEvents()}
+	defer s.searchIdx.CloseIdle(0)
+	thr := SessionRecord{ID: "s-1", Role: proto.RoleThread, Project: "proj", Thread: "t-0001"}
+	coord := SessionRecord{ID: "s-2", Role: proto.RoleCoordinator, Project: "proj"}
+	show := func(rec SessionRecord, ids string) {
+		t.Helper()
+		if code, res := s.runTool(rec, "search_show", []byte(`{"ids":[`+ids+`]}`)); code != http.StatusOK {
+			t.Fatalf("show: %d %+v", code, res)
+		}
+	}
+	const action = thread.RelatedAction
+	show(thr, `"T3"`) // not listed
+	show(coord, `"T1"`)
+	show(thr, `"T1#nope"`) // not there
+	if got := journalLines(t, p, action); len(got) != 0 {
+		t.Fatalf("journal: %q", got)
+	}
+	show(thr, `"T3","T1"`)
+	show(thr, `"T1"`)
+	cc := callCtx{who: func() caller.Caller { return caller.Caller{Kind: caller.Thread, Project: "proj", Thread: "t-0001"} }}
+	if _, perr := s.searchShow(proto.SearchShowParams{Project: "proj", IDs: []string{"T1"}}, cc); perr != nil {
+		t.Fatal(perr)
+	}
+	want := "t-0001 thread.related t-0001 T2 opened T1"
+	if got := journalLines(t, p, action); len(got) != 1 || got[0] != want {
+		t.Fatalf("journal: %q, want %q", got, want)
+	}
+	if r, err := thread.Load(p, "t-0001"); err != nil || len(r.RelatedOpened) != 1 {
+		t.Fatalf("record: %+v %v", r, err)
+	}
+}
+
+// TestRelatedOpenedOnSocket: the socket's search.show notes it too.
+func TestRelatedOpenedOnSocket(t *testing.T) {
+	p := relatedProject(t)
+	if _, err := thread.Update(p, "t-0001", func(r *thread.Record) error { r.Related = []string{"T3"}; return nil }); err != nil {
+		t.Fatal(err)
+	}
+	s := &Server{log: log.New(&testWriter{t: t}, "server: ", 0), sessions: map[string]*session.Session{}, records: map[string]SessionRecord{}, modEv: newModEvents()}
+	defer s.searchIdx.CloseIdle(0)
+	cc := callCtx{who: func() caller.Caller { return caller.Caller{Kind: caller.Thread, Project: "proj", Thread: "t-0001"} }}
+	if _, perr := s.searchShow(proto.SearchShowParams{Project: "proj", IDs: []string{"T3"}}, cc); perr != nil {
+		t.Fatal(perr)
+	}
+	if got := journalLines(t, p, thread.RelatedAction); len(got) != 1 || !strings.HasSuffix(got[0], "T2 opened T3") {
+		t.Fatalf("journal: %q", got)
 	}
 }

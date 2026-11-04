@@ -222,6 +222,8 @@ func init() {
 			call: typed((*Server).searchTimeline)},
 		proto.MethodSearchShow: {gate: gateAgentOrHuman, scope: scopeProject, name: scoped(func(p proto.SearchShowParams) string { return p.Project }),
 			call: typed((*Server).searchShow)},
+		// A thread's start asks, where it asks for session.start.
+		proto.MethodSearchRelated: {gate: gateHuman, call: typed((*Server).searchRelated)},
 		// A program's rolled-up Needs you: the human any program's, a
 		// director its own's (checked in programNeeds).
 		proto.MethodProgramNeeds: {gate: gateAgentOrHuman, call: typed((*Server).programNeeds)},

@@ -569,7 +569,10 @@ func threadPieces(file, id, rest, text string, meta threadMeta, reports []int, c
 	c.Kind = KindThread
 	switch file {
 	case fileBrief:
-		return markdown(text, 0, 3, id+"/brief", "Brief: "+title, c)
+		// Without its related past work (RelatedHeading): other tasks' titles.
+		return slices.DeleteFunc(markdown(text, 0, 3, id+"/brief", "Brief: "+title, c), func(p piece) bool {
+			return strings.HasPrefix(p.head, RelatedHeading)
+		})
 	case fileTaskMD:
 		return taskMD(text, id, title, c)
 	case fileReport:

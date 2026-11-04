@@ -726,6 +726,10 @@ type Query struct {
 	Coordinator bool
 	// Limit is the most hits answered; 0 or less is all.
 	Limit int
+	// NoFloor turns off the floor (Search): hits rank by score alone. For
+	// a long text as the query, where half its words is more than any
+	// chunk holds.
+	NoFloor bool
 }
 
 // Hit is a chunk a search found, with its score and the query's stems
@@ -834,7 +838,7 @@ func (x *Index) search(q Query) Result {
 	// least two) ranks above one holding fewer, whatever their scores;
 	// one common word alone would match most of the project.
 	need := 1
-	if len(terms) > 1 {
+	if len(terms) > 1 && !q.NoFloor {
 		need = max((len(terms)+1)/2, 2)
 	}
 	r.Hits = make([]Hit, 0, len(found))

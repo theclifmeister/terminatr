@@ -73,7 +73,7 @@ cmd = '` + tm + `program start other/T1 > "$OUT/second" 2>&1; echo "second""=$?"
 		t.Fatalf("demo's T1:\n%s", show)
 	}
 	j, _ := os.ReadFile(filepath.Join(projDir, "JOURNAL.md"))
-	for _, w := range []string{"director:studio thread.start t-0001 T1 Ship infra", "director:studio task.status T1 started"} {
+	for _, w := range []string{"director:studio thread.start t-0001 T1 Ship infra", "director:studio task.status T1 started", "director:studio thread.related t-0001 T1 no related past work"} {
 		if !strings.Contains(string(j), w) {
 			t.Errorf("demo's journal lacks %q:\n%s", w, j)
 		}

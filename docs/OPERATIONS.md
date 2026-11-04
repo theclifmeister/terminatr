@@ -965,6 +965,8 @@ Termilator was called Termalator up to v0.1.0 (`brew install termalator`, state 
 
 A fresh Claude Code coordinator or thread starts at roughly 45-47K tokens of context. terminatr's own share is ~5K for a coordinator (its rules and `tm context`, from its SessionStart hook) and ~2K for a thread (brief, rules, task state). The rest is Claude Code's, and comes with every Claude session: terminatr doesn't filter it, since agents keep the environment of any Claude session. You can trim it in your Claude Code settings. Rough token costs:
 
+**Related past work.** When a thread starts on a task, tm searches the project's history with the task's title and notes and adds up to 8 past tasks to its brief, one line each (about 1 KB in all): tasks whose reports, designs or text use the same words. Tasks the new one already names are left out. The list is by keywords, so most rows are leads rather than facts, and the thread opens only those that look useful (`tm search show <id>`). It needs no setting. When the search can't answer in 2 seconds, as during the first build of a project's index, the thread starts without the list. To see how it is used, look in the project's `JOURNAL.md`: `grep thread.related` shows what each brief listed (or why it listed nothing) and which of those tasks the thread then opened.
+
 | What | ~tokens | Setting |
 |---|---|---|
 | Artifact tool schema | 14.5K | `"permissions": {"deny": ["Artifact"]}` (a bare tool name removes the tool from the context) |

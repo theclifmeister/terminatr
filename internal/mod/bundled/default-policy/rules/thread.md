@@ -11,6 +11,8 @@
   `tm search <words>` looks through the project's whole history (tasks,
   threads' reports, journal, designs; not the coordinator's notes or
   inbox), read-only: hits first, then `tm search show <id>`.
+  Your brief's Related past work, if any, is such hits for your task:
+  open the rows that look like they bear on it, skip the rest.
   Files the user uploaded are in its uploads/ folder; your brief or
   the coordinator names yours.
 - Work through your task's steps in order, ticking each when done: `tm

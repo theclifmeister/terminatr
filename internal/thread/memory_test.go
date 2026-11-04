@@ -95,7 +95,7 @@ func TestBriefMemory(t *testing.T) {
 		}
 	}
 
-	brief, mem, err := WriteBrief(p, r, false)
+	brief, mem, err := WriteBrief(p, r, false, "")
 	if err != nil || len(mem.Notes) != 4 {
 		t.Fatalf("%v %+v", err, mem)
 	}
