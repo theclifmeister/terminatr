@@ -28,6 +28,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/seat"
 	"github.com/theclifmeister/terminatr/internal/session"
 	"github.com/theclifmeister/terminatr/internal/theme"
 	"github.com/theclifmeister/terminatr/internal/thread"
@@ -541,7 +542,7 @@ func (s *Server) contextOf(id string) func() ([]byte, error) {
 		}
 		text, cut := clipStartup(string(b))
 		if cut {
-			if p, err := project.Open(r.Project); err == nil {
+			if p, err := seat.Open(r.Role, r.Project, nil); err == nil {
 				ref := r.Role
 				if r.Thread != "" {
 					ref = r.Thread
@@ -1145,7 +1146,7 @@ func (s *Server) promptResolved(sess *session.Session, res session.PromptResolut
 	r, ok := s.records[sess.ID()]
 	s.mu.Unlock()
 	if ok && r.Project != "" {
-		if p, err := project.Open(r.Project); err == nil {
+		if p, err := seat.Open(r.Role, r.Project, nil); err == nil {
 			if err := p.Journal(caller.Caller{Kind: caller.Ticker}, "prompt."+res.Via, sess.ID(), fmt.Sprintf("held %s: %s", held, res.Why)); err != nil {
 				s.log.Printf("session %s: journal: %v", sess.ID(), err)
 			}

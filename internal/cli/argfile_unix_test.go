@@ -109,6 +109,36 @@ func TestAgentRootsNoHome(t *testing.T) {
 	}
 }
 
+// TestDirectorScratchpad: where the agent's temp folder is shared, a
+// director may name files in the scratch folder of its program's folder,
+// its working folder, but not in a member's coordinator's.
+func TestDirectorScratchpad(t *testing.T) {
+	h, g := programHarness(t)
+	tmp := t.TempDir()
+	prev := tempRoots
+	tempRoots = func(*Env) ([]string, []string, bool) { return []string{tmp}, nil, true }
+	t.Cleanup(func() { tempRoots = prev })
+	h.env[caller.EnvProject] = "acme"
+	member, err := project.Open("demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	note := func(dir string) string {
+		t.Helper()
+		pad := filepath.Join(tmp, scratchName(dir), "sess", "scratchpad")
+		if err := os.MkdirAll(pad, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		f := filepath.Join(pad, "note.md")
+		if err := os.WriteFile(f, []byte("# A note\n\nIts body.\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return f
+	}
+	h.ok(directorAcme, "memory", "new", "n", "--file", note(g.Dir))
+	h.expect(1, "outside-roots", directorAcme, "memory", "new", "m", "--file", note(member.Dir))
+}
+
 // TestAgentScratchpad: where the agent's temp folder is shared by all
 // its sessions (Claude Code's), a thread may name files only in its own
 // scratchpad (<temp>/<its worktree, every non-alphanumeric a "-">/

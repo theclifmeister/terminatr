@@ -10,6 +10,8 @@ import (
 	"testing"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
+	"github.com/theclifmeister/terminatr/internal/program"
+	"github.com/theclifmeister/terminatr/internal/project"
 )
 
 // parityCommands are the tm commands that act on a seat's folder: what a
@@ -228,9 +230,9 @@ func TestSeatParityCLI(t *testing.T) {
 	}
 }
 
-// TestDirectorFileRoots pins a gap: a coordinator's --file may be in its
-// folder; a director's in its own is refused (argRoots opens the slug as
-// a project). Fix argRoots and this flips.
+// TestDirectorFileRoots: a director's --file may be in its program's
+// folder, as a coordinator's in its project's; not in a member's, nor in
+// another program's.
 func TestDirectorFileRoots(t *testing.T) {
 	h, g := programHarness(t)
 	prev := tempRoots
@@ -241,7 +243,23 @@ func TestDirectorFileRoots(t *testing.T) {
 	if err := os.WriteFile(note, []byte("# A note\n\nIts body.\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	h.expect(1, "outside-roots", directorAcme, "memory", "new", "n", "--file", note)
+	h.ok(directorAcme, "memory", "new", "n", "--file", note)
+
+	other, err := program.New(program.Options{Slug: "other"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	member, err := project.Open("demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, dir := range []string{other.Dir, member.Dir} {
+		theirs := filepath.Join(dir, "note.md")
+		if err := os.WriteFile(theirs, []byte("# Theirs\n\nIts body.\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		h.expect(1, "outside-roots", directorAcme, "memory", "new", "m", "--file", theirs)
+	}
 }
 
 // TestDirectorPaneHint: a human-only refusal in a director's pane says

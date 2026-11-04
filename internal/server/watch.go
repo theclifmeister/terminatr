@@ -18,8 +18,8 @@ import (
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/agent"
-	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/seat"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/thread"
 	"github.com/theclifmeister/terminatr/internal/ticker"
@@ -101,11 +101,11 @@ func watchOf(info proto.SessionInfo, tickerState string) proto.Watch {
 	if info.Project == "" {
 		return w
 	}
-	p, err := project.Open(info.Project)
+	st, err := seat.Open(info.Role, info.Project, nil)
 	if err != nil {
 		return w
 	}
-	b, _ := p.Tasks().Load()
+	b, _ := st.Tasks().Load()
 	if b != nil {
 		for _, t := range b.Tasks {
 			if tasks.GroupOf(t.Status) == tasks.NeedsYou {
@@ -113,27 +113,28 @@ func watchOf(info proto.SessionInfo, tickerState string) proto.Watch {
 			}
 		}
 	}
-	if items, err := p.Inbox(); err == nil {
+	if items, err := st.Inbox(); err == nil {
 		w.Inbox = len(items)
 	}
-	if info.Role == proto.RoleCoordinator {
-		if qs, err := p.Questions(); err == nil {
+	if seat.Is(info.Role) {
+		if qs, err := st.Questions(); err == nil {
 			w.Questions = len(qs)
 		}
 	}
 	if info.Role != proto.RoleThread || !thread.ValidID(info.Thread) {
 		return w
 	}
-	st, _ := thread.ReadStatus(p, info.Thread)
-	if st != nil {
-		w.Session.NeedsYou = st.NeedsYou
+	p := st.Project
+	status, _ := thread.ReadStatus(p, info.Thread)
+	if status != nil {
+		w.Session.NeedsYou = status.NeedsYou
 	}
 	if rec, err := thread.Load(p, info.Thread); err == nil && b != nil && rec.TaskID() > 0 {
 		if t := b.Find(rec.TaskID()); t != nil {
 			w.Task = &proto.WatchTask{ID: t.Ref(), Title: t.Title, Status: string(t.Status),
 				StepsDone: t.StepsDone(), StepsTotal: len(t.Steps)}
-			if st != nil {
-				w.Task.Current = st.Current
+			if status != nil {
+				w.Task.Current = status.Current
 			}
 		}
 	}

@@ -7,7 +7,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/config"
-	"github.com/theclifmeister/terminatr/internal/project"
+	"github.com/theclifmeister/terminatr/internal/seat"
 )
 
 // How the human answers a refusal: the console's Guard refusals and the
@@ -25,7 +25,7 @@ const (
 // settings error comes back as config's.
 func Answer(who caller.Caller, home string, e Entry, how string, tell func(string)) (string, error) {
 	journal := func(kind, detail string) {
-		if p, err := project.Open(e.Project); err == nil {
+		if p, err := seat.Open(e.Role, e.Project, nil); err == nil {
 			p.Journal(who, kind, e.Label(), detail)
 		}
 	}
@@ -49,7 +49,7 @@ func Answer(who caller.Caller, home string, e Entry, how string, tell func(strin
 	if err != nil {
 		return "", err
 	}
-	scope, write := "this project", func(list []config.GuardAllow) error { return config.SetProject(e.Project, "guard_allow", list) }
+	scope, write := "this "+seat.FolderWord(e.Role), func(list []config.GuardAllow) error { return config.SetProject(e.Project, "guard_allow", list) }
 	var list []config.GuardAllow
 	if how == AllowAll {
 		scope, write = config.AllProjectsName, func(list []config.GuardAllow) error { return config.SetDefaults("guard_allow", list) }

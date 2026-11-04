@@ -43,12 +43,8 @@ func (s *Server) clearSession(id string, c caller.Caller) (any, *proto.Error) {
 	if perr != nil {
 		return nil, perr
 	}
-	if slug := sess.Info().Project; slug != "" {
-		if p, err := project.Open(slug); err == nil {
-			if err := p.Journal(c, "session.clear", id, ""); err != nil {
-				s.log.Printf("journal: %v", err)
-			}
-		}
+	if info := sess.Info(); info.Project != "" {
+		s.journalSession(info, c, "session.clear", id, "")
 	}
 	return res, nil
 }

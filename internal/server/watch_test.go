@@ -10,6 +10,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/client"
+	"github.com/theclifmeister/terminatr/internal/program"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/tasks"
@@ -84,6 +85,42 @@ func TestWatchOf(t *testing.T) {
 	info.Role, info.Thread = proto.RoleCoordinator, ""
 	if w := watchOf(info, ""); w.Task != nil || w.NeedsYou != 1 || w.Inbox != 1 {
 		t.Errorf("coordinator watch %+v", w)
+	}
+}
+
+// TestWatchOfDirector: a director's Watch counts its program's board,
+// inbox and questions, none of a member's.
+func TestWatchOfDirector(t *testing.T) {
+	testPaths(t)
+	demo := newWatchProject(t)
+	if _, err := demo.Tasks().Add(human, []tasks.NewTask{{Title: "A member's", Status: "review"}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := demo.AddItem("needs-you", "x", "a member's", true); err != nil {
+		t.Fatal(err)
+	}
+	g, err := program.New(program.Options{Slug: "acme"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeConfig(t, "[features]\nprograms = true\n[programs.acme]\nprojects = [\"demo\"]\n")
+	if _, err := g.Tasks().Add(human, []tasks.NewTask{{Title: "Ship", Status: "review"}, {Title: "Sweep", Status: "review"}, {Title: "Later", Status: "ready"}}); err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range []string{"one", "two", "three"} {
+		if _, err := g.AddItem("needs-you", s, "waiting", true); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, q := range []string{"Red?", "Blue?", "Green?", "Grey?"} {
+		if _, err := g.AddQuestion(project.Question{Question: q, Options: []project.QuestionOption{{Label: "a"}, {Label: "b"}}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	info := proto.SessionInfo{ID: "s-4", Role: proto.RoleDirector, Agent: "claude", Project: "acme", State: "idle"}
+	w := watchOf(info, filepath.Join(t.TempDir(), "none.json"))
+	if w.NeedsYou != 2 || w.Inbox != 3 || w.Questions != 4 || w.Task != nil {
+		t.Errorf("watch %+v", w)
 	}
 }
 

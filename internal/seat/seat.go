@@ -14,6 +14,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/program"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/vaultlink"
 )
 
@@ -23,6 +24,7 @@ type Seat struct {
 	Role string // proto.RoleCoordinator or proto.RoleDirector
 	// Project is the project, nil for a program (no threads, no repos).
 	Project *project.Project
+	program *program.Program // nil for a project
 }
 
 // Coordinator is project p's seat.
@@ -32,7 +34,7 @@ func Coordinator(p *project.Project) Seat {
 
 // Director is program g's seat.
 func Director(g *program.Program) Seat {
-	return Seat{Folder: &g.Folder, Role: proto.RoleDirector}
+	return Seat{Folder: &g.Folder, Role: proto.RoleDirector, program: g}
 }
 
 // Open is the seat of the folder a session of role in slug runs in: a
@@ -104,6 +106,14 @@ func FolderWord(role string) string {
 		return "program"
 	}
 	return "project"
+}
+
+// Tasks is the seat's board: its project's, or its program's.
+func (s Seat) Tasks() *tasks.Store {
+	if s.program != nil {
+		return s.program.Tasks()
+	}
+	return s.Project.Tasks()
 }
 
 // Key is the seat's memo and lock key.
