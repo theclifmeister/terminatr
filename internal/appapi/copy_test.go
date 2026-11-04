@@ -235,6 +235,8 @@ func TestCopies(t *testing.T) {
 		// For resume, and resolved threads aren't sent.
 		".Projects[].Threads[].Record.AgentSID", ".Projects[].Threads[].Record.Prompted",
 		".Projects[].Threads[].Record.ResolvedAt",
+		// What its brief listed and it opened: read in the journal.
+		".Projects[].Threads[].Record.Related", ".Projects[].Threads[].Record.RelatedOpened",
 		// The status's own copies of its thread and task, and the
 		// vault's properties (the file's only).
 		".Projects[].Threads[].Status.Thread", ".Projects[].Threads[].Status.Task",
