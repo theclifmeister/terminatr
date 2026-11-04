@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.79.1](https://github.com/theclifmeister/terminatr/compare/v0.79.0...v0.79.1) (2026-11-04)
+
+
+### Bug Fixes
+
+* **ios:** calmer project screen: one panel per group, clear title scale, goal as text, pages as one row ([#1092](https://github.com/theclifmeister/terminatr/issues/1092)) ([4ff0c01](https://github.com/theclifmeister/terminatr/commit/4ff0c015376a3ea3c36ea139e5a6c695c09f389c))
+
 ## [0.79.0](https://github.com/theclifmeister/terminatr/compare/v0.78.0...v0.79.0) (2026-11-04)
 
 
