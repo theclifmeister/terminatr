@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.79.0](https://github.com/theclifmeister/terminatr/compare/v0.78.0...v0.79.0) (2026-11-04)
+
+
+### Features
+
+* **thread:** briefs list related past work by keyword ([#1086](https://github.com/theclifmeister/terminatr/issues/1086)) ([4233214](https://github.com/theclifmeister/terminatr/commit/423321417ced6980709bd6d5dbe48bb9acc638b3))
+
+
+### Bug Fixes
+
+* **director:** stop opening a program's slug as a project ([#1089](https://github.com/theclifmeister/terminatr/issues/1089)) ([f10e593](https://github.com/theclifmeister/terminatr/commit/f10e59387bda7c7526d7a91dc16619c6f142d06d))
+* **ios:** a session opened from Needs you reaches its project in the columns ([#1090](https://github.com/theclifmeister/terminatr/issues/1090)) ([0a140f2](https://github.com/theclifmeister/terminatr/commit/0a140f26cbbe8f4070d1995e3b704b1660cff168))
+
 ## [0.78.0](https://github.com/theclifmeister/terminatr/compare/v0.77.1...v0.78.0) (2026-11-04)
 
 
