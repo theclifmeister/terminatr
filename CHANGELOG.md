@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.78.0](https://github.com/theclifmeister/terminatr/compare/v0.77.1...v0.78.0) (2026-11-04)
+
+
+### Features
+
+* **sidebar:** a folded row shows the work it hides, on the nearest row you can see ([#1084](https://github.com/theclifmeister/terminatr/issues/1084)) ([50b9edc](https://github.com/theclifmeister/terminatr/commit/50b9edce9b7f661911ce090a6562bc9b38311f98))
+
+
+### Bug Fixes
+
+* **ios:** remove the duplicate Wake Coordinator button from the project screen ([#1082](https://github.com/theclifmeister/terminatr/issues/1082)) ([c9f27a6](https://github.com/theclifmeister/terminatr/commit/c9f27a6237db80418896003b1968c5250d11d83b))
+
 ## [0.77.1](https://github.com/theclifmeister/terminatr/compare/v0.77.0...v0.77.1) (2026-11-03)
 
 
