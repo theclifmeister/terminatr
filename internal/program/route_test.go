@@ -210,7 +210,7 @@ func TestEditTask(t *testing.T) {
 		t.Fatalf("edit %v %v", res, err)
 	}
 	a1, _ := api.Tasks().Get(1)
-	if a1.Priority.String() != "must" || !slices.Equal(a1.AfterX, []string{"acme-web/T1"}) || a1.Design != "sso" || !strings.Contains(a1.Notes, "director:acme (2026-11-03): OIDC first") {
+	if a1.Priority.String() != "must" || !slices.Equal(a1.AfterX, []string{"acme-web/T1"}) || a1.Design != "sso" || !strings.Contains(a1.Notes, "director:acme ("+a1.Created+"): OIDC first") {
 		t.Fatalf("api T1 %+v", a1)
 	}
 	if items, _ := api.Inbox(); len(items) != 1 || !strings.HasPrefix(items[0].Summary, "the director of acme changed T1 (Its own): priority must") {
