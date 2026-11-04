@@ -219,7 +219,7 @@ struct ProjectScreen: View {
                     }
                     .asksSaveClear(SessionRef(project: slug), isPresented: $clearing)
                     if let clear = model.clears[slug] { SaveClearStatus(clear: clear) }
-                    if p.active, model.coordinatorSession(slug) == nil, model.can(AppAPI.Methods.projectOpen.name) {
+                    if p.active, model.coordinatorSession(slug) == nil, model.sleep(of: slug) == .awake, model.can(AppAPI.Methods.projectOpen.name) {
                         StartCoordinatorButton(project: slug)
                     }
                     pages
