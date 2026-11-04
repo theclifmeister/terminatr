@@ -19,8 +19,9 @@ import (
 //
 //	" ◆ acme                 3 ●        ⚑"  the program: its members' open
 //	                                         threads, its director's state
-//	                                         while folded, ⚑ when something
-//	                                         in it needs you
+//	                                         while folded (working while
+//	                                         anything it hides works), ⚑ when
+//	                                         something in it needs you
 //	" ├─ director          31% ●         "  its director, as a coordinator
 //	" │ ■ acme-api           2 ●        ⚑"  a member project, its rows as
 //	" │ └─ coordinator     22% ●         "  ever, under the program's │
@@ -170,6 +171,7 @@ func programRows(g ProgramData, ps []ProjectData, sessions []proto.SessionInfo, 
 		}
 	}
 	pr.session, pr.state = dir.session, dir.state
+	pr.busy = stateBusy(dir.state)
 	bySlug := map[string]ProjectData{}
 	for _, p := range ps {
 		bySlug[p.Slug] = p
@@ -183,6 +185,7 @@ func programRows(g ProgramData, ps []ProjectData, sessions []proto.SessionInfo, 
 				pr.threads += rows[0].threads
 			}
 			pr.hint = pr.hint || rows[0].hint
+			pr.busy = pr.busy || rows[0].busy
 			kids = append(kids, rows...)
 			continue
 		}
@@ -201,6 +204,7 @@ func programRows(g ProgramData, ps []ProjectData, sessions []proto.SessionInfo, 
 			pr.slugs = append(pr.slugs, p.Slug)
 		}
 		pr.hint = pr.hint || rows[0].hint
+		pr.busy = pr.busy || rows[0].busy
 		kids = append(kids, rows...)
 	}
 	if len(kids) > 0 {

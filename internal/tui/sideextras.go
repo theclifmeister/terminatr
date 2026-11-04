@@ -637,6 +637,8 @@ func gridTip(r treeRow, c sideCol) string {
 		switch {
 		case r.dormant:
 			return "dormant: its project is inactive"
+		case r.foldBusy():
+			return "working: a session folded under it has its turn"
 		case r.kind == treeProject:
 			return "its coordinator: " + stateMeaning(r.state)
 		case r.kind == treeProgram:

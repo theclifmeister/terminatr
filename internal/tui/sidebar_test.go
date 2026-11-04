@@ -106,7 +106,7 @@ func TestDashboardSidebar(t *testing.T) {
 	// A narrow window: the slim strip of projects, never nothing: the
 	// state, the name, the needs-you column.
 	m.Update(tea.WindowSizeMsg{Width: 70, Height: 30})
-	if out := whole(m); m.sideW() != sideSlim || !strings.Contains(out, " ▲ alpha⚑ │") || !strings.Contains(out, " · beta ⚑ │") || !strings.HasPrefix(strings.Split(out, "\n")[3], "          │") {
+	if out := whole(m); m.sideW() != sideSlim || !strings.Contains(out, " ▲ alpha⚑ │") || !strings.Contains(out, " ● beta ⚑ │") || !strings.HasPrefix(strings.Split(out, "\n")[3], "          │") {
 		t.Fatalf("narrow window, sidebar %d:\n%s", m.sideW(), out)
 	}
 	// A click on a project in the strip shows its dashboard.

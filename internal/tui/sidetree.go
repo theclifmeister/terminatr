@@ -111,7 +111,14 @@ type treeRow struct {
 	inactive bool
 	expanded bool // an inactive project: the user expanded it
 	// fold: a project or the divider hides the rows under it.
-	fold    bool
+	fold bool
+	// busy: a session under this row works, its coordinator's or
+	// director's too, seen or not: a project's, a program's (its members'
+	// too) or a paired server's header (its projects'). Live values only:
+	// never on a stale or inactive row. Only the rows that hide the
+	// session draw it (foldBusy, slimBusy): every working session shows
+	// once, on the nearest row you can see.
+	busy    bool
 	dormant bool // a coordinator or thread row of an inactive project
 	// threads: a project's open threads; the divider's inactive projects.
 	threads int
@@ -158,6 +165,32 @@ type treeRow struct {
 // folded says a project row hides its coordinator and threads, or the
 // divider the inactive projects.
 func (r treeRow) folded() bool { return r.fold }
+
+// stateBusy says state is a working session's, as its row's glyph says
+// (stateLook).
+func stateBusy(state string) bool {
+	word, _, _ := strings.Cut(state, " ")
+	return word == "working" || word == "started"
+}
+
+// foldBusy says the full sidebar draws r as working: it is folded over
+// a session that works.
+func (r treeRow) foldBusy() bool { return r.busy && r.fold }
+
+// slimBusy says the slim strip draws r as working: it lists no
+// coordinators or threads, so a project shows theirs folded or not; a
+// program's members have rows there until it folds.
+func (r treeRow) slimBusy() bool {
+	return r.busy && (r.fold || r.kind == treeProject || r.kind == treePeerProject)
+}
+
+// busyHidesBlocked says r's state column shows the work it hides over
+// its coordinator or director being blocked, so its needs-you column
+// says that instead.
+func (r treeRow) busyHidesBlocked(slim bool) bool {
+	word, _, _ := strings.Cut(r.state, " ")
+	return (word == "blocked" || word == "waiting") && (r.foldBusy() || slim && r.slimBusy())
+}
 
 // key names r as View.SideSel does: "p:<project>", "c:<project>",
 // "t:<project>/<thread>" or the divider's "d:inactive".
@@ -419,8 +452,10 @@ func projectRows(p ProjectData, sessions []proto.SessionInfo, byID map[string]pr
 		tr.ci, tr.pr, tr.task = t.Checks, t.PR, t.Task
 		tr.hint = tr.state == "blocked" || tr.state == "review" || t.Status != nil && t.Status.NeedsYou != ""
 		pr.hint = pr.hint || tr.hint
+		pr.busy = pr.busy || !pr.inactive && stateBusy(tr.state)
 		kids = append(kids, tr)
 	}
+	pr.busy = pr.busy || !pr.inactive && stateBusy(pr.state)
 	// The threads hang under the coordinator, the project's only child.
 	coord := treeRow{kind: treeCoordinator, slug: p.Slug, session: pr.session, state: pr.state, remote: remote, pct: -1, last: true,
 		hint: p.Questions > 0, asks: p.Questions, ctx: ctx, ctxHint: ctx >= 0 && in.ctxHint > 0 && ctx >= in.ctxHint, asleep: pr.asleep}
@@ -521,7 +556,9 @@ func treeSel(r treeRow, focused bool) (bool, lipgloss.Style) {
 // (view.Columns), where a mod's columns take their slots too (sideCols).
 // A project row's state column is its
 // coordinator's state, only while the project is folded: unfolded, the
-// coordinator's row shows it. The rows of an inactive project the user
+// coordinator's row shows it. Folded, it shows working while any session
+// it hides works, so every working session shows once, on the nearest
+// row you can see (foldBusy). The rows of an inactive project the user
 // unfolded are dormant: faint, "·" for their state and ⊘. The nerd set
 // opens the current project's folder and marks the coordinator and
 // threads with an icon of their own after the connector. A long name or
@@ -532,7 +569,8 @@ func treeSel(r treeRow, focused bool) (bool, lipgloss.Style) {
 // PR/CI one (rowCols).
 //
 // The slim strip (sideSlim) shows projects alone, "● term…⚑": its
-// coordinator's state (⊘ while inactive), its name cut to 5 cells, and
+// coordinator's state, working while any of its sessions works
+// (slimBusy; ⊘ while inactive), its name cut to 5 cells, and
 // the needs-you column; the current one's name in the accent colour, as
 // in the full sidebar.
 // The row you are on is in reverse video, so colour is never the only
@@ -875,6 +913,8 @@ func gridCell(r treeRow, c sideCol) cellRun {
 		case proj && (!r.folded() || r.inactive):
 		case r.dormant, r.stale:
 			g, st = i.none, th().Faint
+		case proj && r.foldBusy():
+			g, st = stateLook("working")
 		case r.asleep:
 			g, st = i.asleep, th().Faint
 		case thread:
@@ -892,7 +932,7 @@ func gridCell(r treeRow, c sideCol) cellRun {
 	case view.ColInactive:
 		return col(proj && r.inactive || r.dormant, i.inactive, th().Faint)
 	case view.ColNeeds:
-		return col(r.hint, i.hint, th().Warn)
+		return col(r.hint || r.busyHidesBlocked(false), i.hint, th().Warn)
 	}
 	return cellRun{strings.Repeat(" ", c.w), th().Plain}
 }
@@ -998,11 +1038,13 @@ func slimCells(r treeRow, cw int, sel lipgloss.Style) string {
 		g, st = i.none, th().Faint
 	case r.inactive:
 		g, st = i.inactive, th().Faint
+	case r.slimBusy():
+		g, st = stateLook("working")
 	case r.paused && word != "blocked" && word != "waiting":
 		g, st = i.paused, th().Warn
 	}
 	hint := cellRun{"  ", th().Plain}
-	if r.hint {
+	if r.hint || r.busyHidesBlocked(true) {
 		hint = cellRun{i.hint + " ", th().Warn}
 	}
 	look := th().Head

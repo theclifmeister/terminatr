@@ -73,8 +73,14 @@ struct Sidebar: View {
                     }
                 } header: {
                     // "This server" only tells it from paired ones.
-                    Text(app.peers.isEmpty ? "Projects" : "This server")
-                        .font(theme.body(.caption, .semibold))
+                    HStack(spacing: 6) {
+                        Text(app.peers.isEmpty ? "Projects" : "This server")
+                        // Folded over a session that works (T985).
+                        if !filtering, app.nav.collapsed.contains(Navigation.sectionKey(server: "")), localBusy {
+                            BusyMark(size: 6).frame(width: 6, height: 6)
+                        }
+                    }
+                    .font(theme.body(.caption, .semibold))
                 }
             }
             ForEach(app.peers, id: \.alias) { peer in
@@ -166,6 +172,17 @@ struct Sidebar: View {
             switch e {
             case .project(let p): !shown([p]).isEmpty
             case .program(let g): SidebarTree.matches(app.filter, g.slug, "director") || !shownMembers(g).isEmpty
+            }
+        }
+    }
+
+    /// Whether a session of this server's entries works: what its
+    /// section's header shows while it is folded.
+    private var localBusy: Bool {
+        app.entries.contains { e in
+            switch e {
+            case .project(let p): SidebarTree.busy(p, sessions: app.sessions)
+            case .program(let g): SidebarTree.busy(g, projects: app.projects, sessions: app.sessions, peers: app.peers, watched: app.watched)
             }
         }
     }
@@ -348,7 +365,11 @@ struct Sidebar: View {
         let sleep = app.sleep(of: p.slug)
         let l = listing(p, member: member)
         let coordinator = app.coordinatorSession(p.slug)
-        ProjectRow(name: p.slug, dot: theme.colour(state.tone), state: state.word, needs: needs, selected: app.nav.selection == sel)
+        // Its coordinator's work shows on the coordinator's row, or
+        // folded as what the row hides: never as the dot too (T985).
+        let dot = app.busy(coordinator: p) == nil ? state.tone : .idle
+        ProjectRow(name: p.slug, dot: theme.colour(dot), state: state.word, needs: needs, selected: app.nav.selection == sel,
+                   busy: !l.open && SidebarTree.busy(p, sessions: app.sessions))
             .padding(.leading, indent)
             .selectable(sel)
             .contextMenu { ProjectMenu(project: p, coordinator: coordinator != nil, divided: false) }
@@ -496,9 +517,10 @@ struct Sidebar: View {
             ?? !app.nav.collapsed.contains(Navigation.sectionKey(server: peer.alias, project: p.project))
         let progTag = g == nil ? app.pairedMembers["\(peer.alias)/\(p.project)"].map { "· \($0)" } ?? "" : ""
         ProjectRow(name: g == nil ? p.project : ProgramMemberRow.paired(alias: peer.alias, slug: p.project, peer: peer, project: p, state: "").name,
-                   dot: coordinator.map { theme.colour(tone($0)) } ?? theme.idle,
+                   dot: coordinator.map { theme.colour(Busy.of(peer: $0) == nil ? tone($0) : .idle) } ?? theme.idle,
                    state: coordinator.map(spoken) ?? "not running", needs: p.stale ? 0 : p.needsYou,
-                   selected: app.nav.selection == sel, tag: progTag)
+                   selected: app.nav.selection == sel, tag: progTag,
+                   busy: !open && !filtering && SidebarTree.busy(peer, p, watched: app.watched))
             .padding(.leading, indent)
             .selectable(sel)
             .opacity(dim)
@@ -513,7 +535,8 @@ struct Sidebar: View {
         if open || filtering {
             ForEach(sessions(peer, p), id: \.ref) { s, r, task, title in
                 row(.session(r), label: r.isCoordinator ? "Coordinator" : title.isEmpty ? r.thread : title, ref: task.isEmpty ? nil : task,
-                    tag: s.flatMap(tag), dot: theme.colour(s.map(tone) ?? .idle), spoken: s.map(spoken) ?? "not running", indent: indent)
+                    tag: s.flatMap(tag), dot: theme.colour(s.map(tone) ?? .idle), spoken: s.map(spoken) ?? "not running",
+                    busy: peer.state == "up" ? Busy.of(peer: s) : nil, indent: indent)
                     .opacity(dim)
             }
         }
@@ -532,18 +555,22 @@ struct Sidebar: View {
         let sel = Selection.program(g.slug)
         let director = app.directorSession(g.slug)
         let state = Attention.of(director: director, in: g)
-        ProjectRow(name: g.slug, dot: theme.colour(state.tone), state: state.word, needs: app.needs(of: g).count,
-                   selected: app.nav.selection == sel, program: true, tag: g.paused ? "paused" : "")
+        let working = Busy.of(director: director, in: g)
+        let open = filtering || SidebarTree.opens(g, nav: app.nav)
+        ProjectRow(name: g.slug, dot: theme.colour(working == nil ? state.tone : .idle), state: state.word, needs: app.needs(of: g).count,
+                   selected: app.nav.selection == sel, program: true, tag: g.paused ? "paused" : "",
+                   busy: !open && SidebarTree.busy(g, projects: app.projects, sessions: app.sessions, peers: app.peers, watched: app.watched))
             .selectable(sel)
             .contextMenu {
                 Button("Show the Program") { app.select(sel) }
                 Button("Open the Director") { app.select(.session(.director(g.slug))) }
             }
-        if filtering || SidebarTree.opens(g, nav: app.nav) {
+        if open {
             let dref = SessionRef.director(g.slug)
             if !filtering || SidebarTree.matches(app.filter, g.slug, "director") {
                 row(.session(dref), label: "Director", ref: nil, tag: state.waits ? (state.word, state.tone) : nil,
-                    dot: theme.colour(state.tone), spoken: state.spoken, context: ContextUse.of(director, hint: app.contextHint))
+                    dot: theme.colour(state.tone), spoken: state.spoken, context: ContextUse.of(director, hint: app.contextHint),
+                    busy: working)
             }
             ForEach(shownMembers(g), id: \.self) { m in
                 switch m {
@@ -580,6 +607,11 @@ struct Sidebar: View {
             PeerTagView(tag: PeerTag.of(peer))
                 .fixedSize()
                 .layoutPriority(1)
+            // Folded over a session that works (T985).
+            if !filtering, app.nav.collapsed.contains(Navigation.sectionKey(server: peer.alias)),
+               SidebarTree.busy(peer, watched: app.watched) {
+                BusyMark(size: 6).frame(width: 6, height: 6)
+            }
             Spacer(minLength: 0)
         }
         .help(remoteHelp(peer))

@@ -77,6 +77,15 @@ func sideFooter(all []treeRow, w int, head sideHeadIn, s ServerInfo, session, co
 	return out
 }
 
+// busyWords end a folded row's details when the work it shows isn't its
+// coordinator's or director's, which they name already.
+func busyWords(r treeRow) string {
+	if r.foldBusy() && !stateBusy(r.state) {
+		return " · working under it"
+	}
+	return ""
+}
+
 // details are the footer's two lines about r: its full name and state,
 // then what goes with it (the coordinator's context, a thread's
 // progress, its PR's number and checks).
@@ -112,13 +121,13 @@ func (r treeRow) details() (string, string) {
 		if r.prFails > 0 {
 			return r.slug + ": PR host failing", prHostWords(r.prFails)
 		}
-		return strings.Join(bits, " · "), fmt.Sprintf("%s · coordinator %s", counted(r.threads, "thread"), running(r.state))
+		return strings.Join(bits, " · "), fmt.Sprintf("%s · coordinator %s", counted(r.threads, "thread"), running(r.state)) + busyWords(r)
 	case treeProgram:
 		bits := []string{"program " + r.slug}
 		if r.paused {
 			bits = append(bits, "paused")
 		}
-		return strings.Join(bits, " · "), fmt.Sprintf("%s in its projects · director %s", counted(r.threads, "thread"), running(r.state))
+		return strings.Join(bits, " · "), fmt.Sprintf("%s in its projects · director %s", counted(r.threads, "thread"), running(r.state)) + busyWords(r)
 	case treeDirector:
 		var bits []string
 		if r.ctx >= 0 {

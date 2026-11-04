@@ -594,7 +594,7 @@ The tap has a cask, `terminatr-app`, beside the formula, and `tm update` install
 The app has one main window, a split view.
 Its sidebar lists **Needs you** (as the menu bar's, below: three rows, then `+N more: 2 review, 2 blocked`, which unfolds the rest), then the rows of the TUI's sidebar (§4, T762), in its order and folded as it folds them: this server's active projects, pinned first (§5.1), and with `[ui] needs_first` those that need the user first in each group, as the TUI's ⚑ (a task in the board's Needs you, an open question, a thread waiting on the user; an inactive project's threads only once expanded), then each paired server's shared projects, then at the bottom the inactive ones folded under **Inactive (n)**, which View › **Show Inactive Projects**, `⇧⌘H`, unfolds; each section folds, and the header **This server** shows only beside paired servers.
 **Needs you** is the app's own, not a row of the TUI's tree.
-A project is one line: its coordinator's state as the dot, its needs as the badge.
+A project is one line: its coordinator's state as the dot, its needs as the badge, and while folded over a session that works, the activity mark on its right (T985; `SidebarTree.busyRows`, pinned to the TUI by the fixture): a working session shows once, on the nearest row you can see. A program, a paired project and a folded server header do the same; on the iPad, whose rows have only an icon and a badge's words, a folded member shows it as its icon.
 Under an active project, until `←` folds it, its coordinator, running or not, and every unresolved thread, done ones too, in the dashboard's order (§7.4: waiting on the user, a report to read, working, running, then the rest); an inactive project lists them only once `→` expands it, dormant (muted, no state).
 A project folded still lists the session the window shows, so the selection has its row.
 One rule (`SidebarTree`) decides these rows, and a fixture both sides test against (`internal/tui/testdata/sidebar-app.json`, from `buildTree`) keeps it the TUI's.
@@ -768,7 +768,7 @@ Mods' notices are claimed with `notify.claim` and drawn as the TUI draws them (`
   |---|---|---|---|
   | count / % | its open threads (faint at 0; 0 while inactive) | its context use (§8.6), yellow from `[ui] context_hint`, red from 80% | its progress |
   | PR / CI | | | its pull request's checks: `☑` pass, `☒` fail, `☐` running; blank without a PR or checks |
-  | state | its coordinator's state, only while the project is folded | its state (`·` when none runs) | its state (`✓` once done) |
+  | state | its coordinator's state, only while the project is folded, or working while anything it hides works (T985: a working session shows once, on the nearest row you can see; a program's and a paired server's folded rows too) | its state (`·` when none runs) | its state (`✓` once done) |
   | remote | | `⌁` its remote control is on (§11.2) | |
   | paused | `∥` the user paused it (§11.2) | | |
   | inactive | `⊘` it is inactive (§5.1) | `⊘` dormant | `⊘` dormant |

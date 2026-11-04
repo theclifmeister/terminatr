@@ -44,6 +44,9 @@ type appCase struct {
 	InactiveOpen bool         `json:"inactive_open,omitempty"`
 	NeedsFirst   bool         `json:"needs_first,omitempty"`
 	Rows         []string     `json:"rows"`
+	// Busy are the rows the full sidebar draws as working because they
+	// are folded over a session that works (treeRow.foldBusy).
+	Busy []string `json:"busy,omitempty"`
 }
 
 // appProject's NeedsYou counts its board's Needs you tasks (Counts).
@@ -133,6 +136,7 @@ func appCases() []appCase {
 			Folded: []string{"n-q"}, Expanded: []string{"i-t"}},
 		{Name: "paired", Projects: projects[2:3], Peers: peers},
 		{Name: "paired, folded", Projects: projects[2:3], Peers: peers, Folded: []string{"@mini/demo", "@far"}},
+		{Name: "paired server folded", Projects: projects[2:3], Peers: peers, Folded: []string{"@mini"}},
 		{Name: "paired, needs first", Projects: needs, Sessions: needsSessions, Peers: peers, NeedsFirst: true},
 		{Name: "program", Projects: projects, Sessions: progSessions, Programs: progs, InactiveOpen: true},
 		{Name: "program, folded", Projects: projects, Sessions: progSessions, Programs: progs, Folded: []string{"g:acme"}},
@@ -190,8 +194,22 @@ var (
 	}
 )
 
-// appTree is the rows buildTree gives c.
-func appTree(c appCase) []string {
+// appTree is the keys of the rows buildTree gives c.
+func appTree(c appCase) []string { return rowKeys(appRows(c)) }
+
+// appBusy is the keys of those rows folded over a session that works.
+func appBusy(c appCase) []string {
+	var out []string
+	for _, r := range appRows(c) {
+		if r.foldBusy() {
+			out = append(out, r.key())
+		}
+	}
+	return out
+}
+
+// appRows is the rows buildTree gives c.
+func appRows(c appCase) []treeRow {
 	var ps []ProjectData
 	for _, p := range c.Projects {
 		s := config.Defaults
@@ -239,13 +257,14 @@ func appTree(c appCase) []string {
 	if c.NeedsFirst {
 		rows = needsFirstOrder(rows)
 	}
-	return rowKeys(rows)
+	return rows
 }
 
 func TestSidebarAppFixture(t *testing.T) {
 	cases := appCases()
 	for i := range cases {
 		cases[i].Rows = appTree(cases[i])
+		cases[i].Busy = appBusy(cases[i])
 	}
 	want, err := json.MarshalIndent(map[string]any{"cases": cases}, "", "  ")
 	if err != nil {
