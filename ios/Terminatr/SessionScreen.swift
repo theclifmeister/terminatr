@@ -18,6 +18,7 @@ struct SessionScreen: View {
     @Environment(PhoneModel.self) private var model
     @Environment(\.theme) private var theme
     @Environment(\.horizontalSizeClass) private var width
+    @Environment(\.showParent) private var showParent
     let ref: SessionRef
     /// Opened from a need: the conversation opens where it was asked.
     var need: Need?
@@ -31,6 +32,9 @@ struct SessionScreen: View {
             case .conversation: ConversationScreen(ref: ref, need: need)
             case .terminal: TerminalScreen(ref: ref, repaints: repaints)
             }
+        }
+        .safeAreaInset(edge: .top, spacing: 0) {
+            if let showParent { parentChip(showParent) }
         }
         .safeAreaInset(edge: .top) {
             if ref.isCoordinator || ref.director, !ref.isRemote, let clear = model.clears[PhoneModel.clearKey(ref)] {
@@ -88,6 +92,29 @@ struct SessionScreen: View {
             }
         }
         .environment(\.showTerminal, ShowTerminal { tab = .terminal })
+    }
+
+    /// The way to its project or program, beside a list that isn't
+    /// theirs (Columns.showParent). In the screen, with the name on it,
+    /// not the bar: an open iPhone Duo's bar is the rail, where an item
+    /// is a bare icon that can outlive its screen.
+    private func parentChip(_ parent: ShowParent) -> some View {
+        Button(action: parent.go) {
+            Label(ref.project, systemImage: ref.director ? "square.stack.3d.up" : "folder")
+                .font(theme.body(.footnote, .semibold))
+                .foregroundStyle(theme.ink)
+                .lineLimit(1)
+                .padding(.horizontal, Spacing.card)
+                .frame(minHeight: tapTarget)
+                .surface(.glass, in: Capsule())
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .hoverEffect()
+        .accessibilityLabel("Open \(ref.director ? "program" : "project") \(ref.project)")
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, Spacing.gutter)
+        .padding(.vertical, Spacing.tight)
     }
 }
 

@@ -50,6 +50,10 @@ struct TabStack<Content: View>: View {
 /// and in portrait or narrow (PhoneColumns.foldsList), takes the whole
 /// width instead, the list folded away (T855): the bar's list button,
 /// or a swipe in from the leading edge, slides it back over the session.
+/// A session opened from outside its project (Needs you, a program's
+/// Needs you) has neither project nor program on the path: its bar's
+/// button puts it there (showParent), in the list column beside the
+/// session, as if opened from it (T994).
 struct Columns<Content: View>: View {
     @Environment(\.theme) private var theme
     @Binding var path: [Route]
@@ -62,6 +66,9 @@ struct Columns<Content: View>: View {
     /// than wide then) doesn't swap the layout, which built the session
     /// afresh, dropping the keyboard, again and again (T893).
     @State private var whole: CGSize?
+    /// The path's next change is showParent's, folded: the list it
+    /// changed slides out, or the button would seem to do nothing.
+    @State private var revealing = false
 
     /// The list column's width when the layout leaves it to us.
     static var listWidth: CGFloat { PhoneColumns.listIdeal }
@@ -100,7 +107,21 @@ struct Columns<Content: View>: View {
             }
             .ignoresSafeArea(.keyboard)
         }
-        .onChange(of: path) { listShown = false }
+        .onChange(of: path) {
+            if revealing { show(true) } else { listShown = false }
+            revealing = false
+        }
+    }
+
+    /// The bar's way to the detail's project or program while the path
+    /// holds neither: it goes in just before the detail, which stays as
+    /// it is, so Back then leads from the project to the tab's list.
+    private func showParent(folded: Bool) -> ShowParent? {
+        guard let parent = path.last?.parent, !path.contains(parent) else { return nil }
+        return ShowParent {
+            revealing = folded
+            path.insert(parent, at: path.count - 1)
+        }
     }
 
     /// Whether the detail is a coordinator or thread that takes the
@@ -160,6 +181,7 @@ struct Columns<Content: View>: View {
             .destinations()
         }
         .environment(\.navigate, Navigate(open: nil) { path.append($0) })
+        .environment(\.showParent, showParent(folded: folded))
         .id(detail)
     }
 
