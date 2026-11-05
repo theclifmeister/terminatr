@@ -18,13 +18,14 @@ enum SessionPage: String, CaseIterable {
 /// on the conversation (-terminal YES opens it on the terminal, the
 /// Simulator's screenshots); the tab is kept for each session while the
 /// server is (Places), so going back to one shows what it showed. While the
-/// terminal shows, Repaint asks the pane afresh. On a phone's width the bar
-/// hides (Root.barHidden), so the composer has the bottom; beside a list (an iPad,
+/// terminal shows, Repaint asks the pane afresh. On a phone's width the tab
+/// bar hides here, so the composer has the bottom; beside a list (an iPad,
 /// an open Duo) the bar stays.
 struct SessionScreen: View {
     @Environment(PhoneModel.self) private var model
     @Environment(\.theme) private var theme
     @Environment(\.dynamicTypeSize) private var typeSize
+    @Environment(\.horizontalSizeClass) private var width
     @Environment(\.showParent) private var showParent
     @Environment(\.showList) private var showList
     @Environment(\.back) private var back
@@ -64,6 +65,7 @@ struct SessionScreen: View {
         .navigationTitle(model.title(ref))
         .toolbar(.hidden, for: .navigationBar)
         .swipesBack()
+        .toolbar(width == .compact ? .hidden : .automatic, for: .tabBar)
         .asksSaveClear(ref, isPresented: $clearing)
         .kept($tab, "tab \(ref)")
         // Opening a sleeping coordinator wakes it, as enter on its row in

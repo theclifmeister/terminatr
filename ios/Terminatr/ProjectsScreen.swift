@@ -22,7 +22,18 @@ struct ProjectsScreen: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 ScreenHeader("Projects", subtitle: subtitle, symbol: symbol, gutter: Flat.listGutter, top: ScreenTop.margin(above: above), bottom: 9) {
-                    SettingsButton().buttonStyle(.smallCircle)
+                    HStack(spacing: Spacing.tight) {
+                        // Search (T924): this server's history, from its
+                        // first active project; the screen picks another.
+                        // With the Search tab (T929), that instead.
+                        if model.searches, !Root.searchTab, let first = (model.activeProjects + model.inactiveProjects).first {
+                            PlainRouteLink(value: Route.search(first.slug)) {
+                                Label("Search", systemImage: "magnifyingglass")
+                            }
+                            .buttonStyle(.smallCircle)
+                        }
+                        SettingsButton().buttonStyle(.smallCircle)
+                    }
                 }
                 LazyVStack(alignment: .leading, spacing: 9) {
                     ForEach(phone.models, id: \.key) { m in
@@ -260,9 +271,15 @@ struct ProjectScreen: View {
         .refreshable { await model.refresh() }
         .keepsPlace(route: Route.project(slug))
         .navigationTitle(slug)
-        // Back on the screen's own bar, in line with the content's edges
-        // (T925).
-        .screenBar(bare: true) { EmptyView() }
+        // Back and Search on the screen's own bar, in line with the
+        // content's edges (T925).
+        .screenBar(bare: !model.searches || Root.searchTab) {
+            // Search (T924): the project's history; with the Search tab
+            // (T929), that instead, which searches the project in view.
+            if model.searches, !Root.searchTab {
+                PlainRouteLink(value: Route.search(slug)) { Label("Search", systemImage: "magnifyingglass") }
+            }
+        }
         .backdrop()
     }
 
