@@ -35,7 +35,8 @@ extension SessionRef {
 /// fill. A project's tile and a role's mark share a column, and the
 /// project's name, its role's word and its threads' text share the edge
 /// after it. A program's contents, its director's row and its members'
-/// whole trees, sit one step in. At the row's end, right to left: the
+/// whole trees, sit one step in; so do a project's coordinator and
+/// threads, under the project's own row, as the director does. At the row's end, right to left: the
 /// state's dot, the percent column (a role's context use, a project's
 /// count), then status words and chips, ending at one edge.
 public enum SidebarGrid {
@@ -45,10 +46,17 @@ public enum SidebarGrid {
     public static let slot: Double = 20
     /// From that column to the row's text.
     public static let gap: Double = 9
+    /// A thread's mark in the tile column, beside its role's: one speech
+    /// bubble, filled like theirs, for the one task an agent works on.
+    public static let threadSymbol = "bubble.left.fill"
     /// How far a program's contents sit in.
     public static let step: Double = 12
     /// The percent column at 100% text size: holds "99%", and "100%" runs left.
     public static let percent: Double = 28
+
+    /// Where the rows under a row indented `indent` sit: one step in,
+    /// for a program's director and a project's coordinator alike.
+    public static func contents(of indent: Double) -> Double { indent + step }
 
     /// Where a row's text starts, depth programs in.
     public static func textEdge(depth: Int) -> Double {
