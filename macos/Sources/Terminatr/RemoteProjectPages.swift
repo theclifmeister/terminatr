@@ -90,7 +90,7 @@ struct PeerBoard: View {
     @State private var unfolded: Set<String> = []
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 22) {
             group("On deck", PeerPages.onDeck(pages), folds: false)
             group("In motion", PeerPages.moving(pages), folds: false)
             group("Backlog", PeerPages.backlog(pages), folds: true)
@@ -107,20 +107,27 @@ struct PeerBoard: View {
     private func group(_ title: String, _ ts: [AppAPI.Task], folds: Bool) -> some View {
         if !ts.isEmpty {
             let open = !folds || unfolded.contains(title)
-            Button {
-                if unfolded.contains(title) { unfolded.remove(title) } else { unfolded.insert(title) }
-            } label: {
-                HStack(spacing: 6) {
-                    if folds { Image(systemName: open ? "chevron.down" : "chevron.right").font(.caption) }
-                    Text("\(title) · \(ts.count)").font(theme.body(.subheadline, .medium))
+            VStack(alignment: .leading, spacing: 7) {
+                Button {
+                    if unfolded.contains(title) { unfolded.remove(title) } else { unfolded.insert(title) }
+                } label: {
+                    HStack(spacing: 5) {
+                        if folds {
+                            Image(systemName: "chevron.right")
+                                .rotationEffect(.degrees(open ? 90 : 0))
+                                .font(theme.body(.glyph, .semibold))
+                        }
+                        Text("\(title) · \(ts.count)").font(theme.sized(Flat.label))
+                    }
+                    .foregroundStyle(theme.muted)
+                    .contentShape(Rectangle())
                 }
-                .foregroundStyle(theme.muted)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .disabled(!folds)
-            if open {
-                CardGrid { ForEach(ts) { PeerBoardRow(task: $0) } }
+                .buttonStyle(.plain)
+                .disabled(!folds)
+                .accessibilityValue(folds ? (open ? "open" : "folded") : "")
+                if open {
+                    HairlineList { ForEach(ts) { PeerBoardRow(task: $0) } }
+                }
             }
         }
     }
@@ -133,20 +140,19 @@ private struct PeerBoardRow: View {
     @State private var open = false
 
     var body: some View {
+      ListRow {
         VStack(alignment: .leading, spacing: 6) {
             Button { open.toggle() } label: {
-                HStack(alignment: .center, spacing: 8) {
+                HStack(alignment: .center, spacing: 10) {
                     Text(task.ref)
-                        .font(theme.mono(.subheadline, .medium))
-                        .foregroundStyle(theme.action)
-                        .frame(minWidth: 44, alignment: .leading)
+                        .font(theme.mono(.subheadline))
+                        .foregroundStyle(theme.muted)
                     Text(task.title)
-                        .font(theme.body(.body))
                         .lineLimit(1)
                     Spacer(minLength: 8)
                     if !task.steps.isEmpty {
                         Text("\(task.steps.filter(\.done).count)/\(task.steps.count)")
-                            .font(theme.mono(.caption))
+                            .font(theme.sized(Flat.label))
                             .foregroundStyle(theme.muted)
                     }
                 }
@@ -157,15 +163,12 @@ private struct PeerBoardRow: View {
             if open {
                 ForEach(task.steps, id: \.n) { s in
                     Label(s.text, systemImage: s.done ? "checkmark.circle.fill" : "circle")
-                        .font(theme.body(.callout))
+                        .font(theme.sized(Flat.label))
                         .foregroundStyle(s.done ? theme.muted : theme.ink)
                 }
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .background(theme.pane, in: RoundedRectangle(cornerRadius: 6))
-        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(theme.line, lineWidth: 1))
-        .accessibilityElement(children: .combine)
+      }
+      .accessibilityElement(children: .combine)
     }
 }

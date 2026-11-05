@@ -2,7 +2,10 @@ import SwiftUI
 import TerminatrKit
 import TerminatrUI
 
-/// A need on the dashboard that acts in place (T748 milestone C): an
+/// A need that acts in place (T748 milestone C), where answering it lives:
+/// stacked in the inspector's Needs you section (panel), its answers
+/// wrapping at the panel's width, or as a row of a hairline list over a
+/// coordinator's conversation. It answers: an
 /// approval's dialog as the server reads it (Allow, the last option,
 /// Open), a question tm read with its options, the coordinator's open
 /// questions (Answer now), a task in review (Accept, Send back…) or
@@ -16,6 +19,8 @@ struct NeedCard: View {
     @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
     let need: Need
+    /// The inspector's: stacked for its width, not one row.
+    var panel = false
     @State private var dialog: AppAPI.ApproveResult?
     @State private var busy = false
     @State private var said: (text: String, failed: Bool)?
@@ -25,41 +30,13 @@ struct NeedCard: View {
     @State private var ticked: Set<Int> = []
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .center, spacing: 8) {
-                if showsTask {
-                    // A button, so Full Keyboard Access reaches it.
-                    Button { app.showTask(project: need.project, task: need.task) } label: {
-                        NeedSummary(need: need, detail: detail).contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .help("Shows \(need.task) in full: how to check it, its PR, steps and notes")
-                    .accessibilityHint("Shows the task in full")
-                } else {
-                    NeedSummary(need: need, detail: detail)
-                }
-                Spacer(minLength: 8)
-                acts
-            }
-            if let said {
-                Text(said.text)
-                    .font(theme.body(.footnote))
-                    .foregroundStyle(said.failed ? theme.attention : theme.muted)
-                    .padding(.leading, 24)
-            }
-            if let o = app.linkOutcomes[need.id] {
-                LinkOutcomeRow(outcome: o)
-                    .padding(.leading, 24)
-            }
-            if !need.task.isEmpty, need.kind == .review || need.kind == .blocked {
-                TaskOutcome(project: need.project, task: need.task)
-                    .padding(.leading, 24)
+        Group {
+            if panel {
+                stacked
+            } else {
+                ListRow { row }
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 9)
-        .solid(RoundedRectangle(cornerRadius: 6))
-        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(theme.colour(need.kind).opacity(theme.contrast ? 1 : 0.35), lineWidth: 1))
         .accessibilityElement(children: .contain)
         .accessibilityLabel(need.title)
         .task(id: need.id) { await check() }
@@ -75,6 +52,85 @@ struct NeedCard: View {
         }
     }
 
+    /// In the panel: what it names, a click showing it, its answers under
+    /// that, then what came of them.
+    private var stacked: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Button {
+                if showsTask {
+                    app.showTask(project: need.project, task: need.task)
+                } else {
+                    app.open(project: need.project, session: need.session)
+                }
+            } label: {
+                HStack(alignment: .firstTextBaseline, spacing: 7) {
+                    Dot(colour: theme.colour(need.kind))
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(need.what).font(theme.sized(13)).lineLimit(2)
+                        if !detail.isEmpty {
+                            Text(detail).font(theme.sized(12.5)).foregroundStyle(theme.muted).lineLimit(2)
+                        }
+                    }
+                    Spacer(minLength: 0)
+                }
+                .multilineTextAlignment(.leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(showsTask ? "Shows \(need.task) in full: how to check it, its PR, steps and notes" : "Shows it in the window")
+            FlowRow(spacing: 6) { actButtons }
+                .buttonStyle(FlatButtonStyle(lines: 3))
+                .disabled(busy)
+                .padding(.leading, 14)
+            outcomes(indent: 14)
+        }
+    }
+
+    private var row: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(alignment: .center, spacing: 10) {
+                if showsTask {
+                    // A button, so Full Keyboard Access reaches it.
+                    Button { app.showTask(project: need.project, task: need.task) } label: {
+                        NeedSummary(need: need, detail: detail).contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .help("Shows \(need.task) in full: how to check it, its PR, steps and notes")
+                    .accessibilityHint("Shows the task in full")
+                } else {
+                    NeedSummary(need: need, detail: detail)
+                }
+                Spacer(minLength: 8)
+                HStack(spacing: 6) { actButtons }
+                    .fixedSize()
+                    .disabled(busy)
+            }
+            outcomes(indent: 17)
+        }
+    }
+
+    /// What the server said, and what came of a link's or a task's ask.
+    @ViewBuilder
+    private func outcomes(indent: CGFloat) -> some View {
+        if let said {
+            Text(said.text)
+                .font(theme.body(.footnote))
+                .foregroundStyle(said.failed ? theme.attention : theme.muted)
+                .padding(.leading, indent)
+        }
+        if let o = app.linkOutcomes[need.id] {
+            LinkOutcomeRow(outcome: o)
+                .padding(.leading, indent)
+        }
+        if !need.task.isEmpty, need.kind == .review || need.kind == .blocked {
+            TaskOutcome(project: need.project, task: need.task)
+                .padding(.leading, indent)
+        }
+    }
+
+    /// The primary answer's style, its words wrapping in the panel.
+    private var primary: FlatButtonStyle { FlatButtonStyle(primary: true, lines: panel ? 3 : 1) }
+
     /// Whether the card's words show its task in the task view (T780):
     /// a task in review's or a blocked one's.
     private var showsTask: Bool {
@@ -88,9 +144,9 @@ struct NeedCard: View {
         return [need.detail, q].filter { !$0.isEmpty }.joined(separator: " · ")
     }
 
+    /// Its answers, as many as it has: what lays them out is the caller's.
     @ViewBuilder
-    private var acts: some View {
-        HStack(spacing: 6) {
+    private var actButtons: some View {
             switch need.kind {
             case .approval:
                 // Options that allow once only: one for the session needs
@@ -98,8 +154,7 @@ struct NeedCard: View {
                 if let dialog, !dialog.escape, let first = dialog.options.first, once(dialog, 1) {
                     Button(first) { approve(1) }
                         .accessibilityLabel(named(first))
-                        .buttonStyle(.borderedProminent)
-                        .tint(theme.action)
+                        .buttonStyle(primary)
                     if dialog.options.count > 1, let last = dialog.options.last, once(dialog, dialog.options.count) {
                         Button(last) { approve(dialog.options.count) }
                             .accessibilityLabel(named(last))
@@ -109,8 +164,7 @@ struct NeedCard: View {
             case .question where need.id.hasPrefix("questions:"):
                 Button("Answer now") { answerQuestions() }
                     .accessibilityLabel(named("Answer now"))
-                    .buttonStyle(.borderedProminent)
-                    .tint(theme.action)
+                    .buttonStyle(primary)
                     .help("The coordinator puts its questions to you in its conversation")
             case .question:
                 if let a = need.answer {
@@ -127,7 +181,7 @@ struct NeedCard: View {
                 }
             case .review, .blocked:
                 if !need.task.isEmpty {
-                    TaskActs(project: need.project, task: need.task, status: need.kind == .review ? "review" : "blocked", compact: true)
+                    TaskActs(project: need.project, task: need.task, status: need.kind == .review ? "review" : "blocked")
                 }
                 if !need.session.isEmpty { open("Open") }
             case .link, .network:
@@ -160,9 +214,6 @@ struct NeedCard: View {
             case .checks, .held:
                 open("Open")
             }
-        }
-        .controlSize(.small)
-        .disabled(busy)
     }
 
     private func open(_ title: String) -> some View {

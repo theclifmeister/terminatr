@@ -29,8 +29,6 @@ public struct FoldedPrompt: View {
                 Spacer(minLength: 0)
             }
             .foregroundStyle(theme.muted)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

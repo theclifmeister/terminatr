@@ -22,11 +22,6 @@ struct TerminalTab: View {
     let session: AppAPI.Session?
     @State private var pane = MacPane()
 
-    /// The terminal box's corners, which the session's notice above it
-    /// shares; its edges, and the view-only note's sides, are the pages'
-    /// (Page.edge).
-    static let corner: CGFloat = 12
-
     var body: some View {
         let remote = model.ref.isRemote ? app.remotePane(model.ref) : nil
         VStack(spacing: 0) {
@@ -57,13 +52,9 @@ struct TerminalTab: View {
                             .padding(16)
                     }
                 }
+                // Edge to edge in the pane, as the page draws it: the room
+                // round its cells is PaneHost.inset's.
                 .background(theme.terminalBackground)
-                .clipShape(RoundedRectangle(cornerRadius: Self.corner))
-                // Below the title bar, the conversation's top margin
-                // (T800); the room it takes is claimed off the pane.
-                .padding(.horizontal, Page.edge)
-                .padding(.top, Page.edge)
-                .padding(.bottom, remote == .view ? 0 : Page.edge)
                 if remote == .view { viewOnly }
             }
         }
@@ -146,8 +137,8 @@ final class PaneHost: NSView {
 
     override var isFlipped: Bool { true }
 
-    /// Room between the cells and the tab's rounded edge.
-    static let inset = CGSize(width: 10, height: 8)
+    /// Room between the cells and the pane's edge: the page's 17 and 18.
+    static let inset = CGSize(width: 17, height: 18)
 
     /// Called when the view's size changed, not on every layout.
     var roomChanged: (() -> Void)?
@@ -283,6 +274,8 @@ struct PaneTerminal: NSViewRepresentable {
 
     func makeNSView(context: Context) -> PaneHost {
         host.terminal.optionAsMetaKey = false
+        // Dark in light too, its scroller with it.
+        host.terminal.appearance = NSAppearance(named: .darkAqua)
         paint(host, context.coordinator)
         return host
     }

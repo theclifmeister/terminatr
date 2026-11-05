@@ -21,7 +21,7 @@ extension View {
     }
 
     /// bar at this scroll view's foot: the content ends above it. Solid,
-    /// the pane's colour with a line along its top.
+    /// the pane's colour; what it holds draws its own line.
     func footBar<Bar: View>(_ bar: Bar) -> some View {
         safeAreaInset(edge: .bottom, spacing: 0) {
             FootBar(bar: bar)
@@ -37,7 +37,6 @@ private struct FootBar<Bar: View>: View {
         bar
             .frame(maxWidth: .infinity)
             .background(theme.pane)
-            .overlay(alignment: .top) { theme.line.frame(height: 1) }
     }
 }
 

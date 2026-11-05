@@ -320,7 +320,6 @@ struct ConversationScreen: View {
         if let q = s.question {
             ForEach(QuestionPlan.shown(q), id: \.self) { i in
                 let item = q.questions[i]
-                let waits = "question \(s.id) \(q.since?.timeIntervalSince1970 ?? 0) \(i)"
                 let word = "Asks · " + QuestionPlan.tag(q, index: i)
                 let line = Self.line("AskUserQuestion", since: q.since)
                 // Each card answers its own question (Need.answer), not
@@ -330,7 +329,7 @@ struct ConversationScreen: View {
                    model.can(AppAPI.Methods.sessionAnswer.name) {
                     NeedActs(need: need, answer: a) { parts in
                         HeroCard(tone: .question, symbol: Need.Kind.question.symbol, word: word, line: line, title: item.question,
-                                 note: parts.note, waiting: waits) {
+                                 note: parts.note) {
                             parts.buttons
                         }
                     }
@@ -340,8 +339,7 @@ struct ConversationScreen: View {
                     // card says so, its options only read.
                     let several = QuestionPlan(q, index: i, picks: Compatibility.answersPicks(model.hello)).paneOnly
                     HeroCard(tone: .question, symbol: Need.Kind.question.symbol, word: word, line: line, title: item.question,
-                             note: several ? ("It takes several options: pick them in the terminal view.", false) : nil,
-                             waiting: waits) {
+                             note: several ? ("It takes several options: pick them in the terminal view.", false) : nil) {
                         VStack(spacing: Spacing.item) {
                             ForEach(Array(item.options.enumerated()), id: \.offset) { n, o in
                                 AnswerOption(key: n + 1, option: o, action: nil)
@@ -356,19 +354,18 @@ struct ConversationScreen: View {
             let word = s.escape ? "Approval · outside the sandbox" : "Approval"
             let line = Self.line(tool?.tool ?? "", since: need?.since)
             let command = tool.map { "\($0.tool): \($0.text)" } ?? ""
-            let waits = "approval \(s.id) \(tool?.call ?? "")"
             if let need, need.kind == .approval, model.can(AppAPI.Methods.sessionApprove.name) {
                 NeedActs(need: need) { parts in
                     HeroCard(tone: .approval, symbol: Need.Kind.approval.symbol, word: word, line: line,
                              title: parts.command.isEmpty ? "The agent asks to go on." : parts.command,
-                             command: command, note: parts.note, waiting: waits) {
+                             command: command, note: parts.note) {
                         parts.buttons
                     }
                 }
             } else {
                 HeroCard(tone: .approval, symbol: Need.Kind.approval.symbol, word: word, line: line,
                          title: "The agent asks to go on.", command: command,
-                         note: ("Approve it on your Mac.", false), waiting: waits)
+                         note: ("Approve it on your Mac.", false))
             }
         }
     }

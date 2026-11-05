@@ -433,8 +433,9 @@ struct ProjectInspector: View {
     }
 }
 
-/// A project's title, goal and state, what needs the user of it, and its
-/// counts: a project's panel and its coordinator's.
+/// A project's title, goal and state, what needs the user of it with its
+/// answers (NeedCard, panel), and its counts: a project's panel and its
+/// coordinator's.
 struct ProjectFacts<State: View>: View {
     @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
@@ -453,9 +454,13 @@ struct ProjectFacts<State: View>: View {
             state.padding(.top, 3)
         }
         let needs = app.needs(of: project.slug)
-        if !needs.isEmpty {
+        let settled = app.settledLinks(project.slug)
+        if !needs.isEmpty || !settled.isEmpty {
             InspectorSection("Needs you · \(needs.count)") {
-                ForEach(needs) { PanelNeedRow(need: $0) }
+                VStack(alignment: .leading, spacing: 12) {
+                    ForEach(needs) { NeedCard(need: $0, panel: true) }
+                    ForEach(settled, id: \.id) { LinkOutcomeRow(outcome: $0.outcome, settled: true) }
+                }
             }
         }
         InspectorSection("Project") {
@@ -468,27 +473,6 @@ struct ProjectFacts<State: View>: View {
                 if project.usage.costUsd > 0 { FactRow("Cost", String(format: "$%.2f", project.usage.costUsd)) }
             }
         }
-    }
-}
-
-/// A need in the panel: a click shows what it names.
-private struct PanelNeedRow: View {
-    @Environment(AppModel.self) private var app
-    @Environment(\.theme) private var theme
-    let need: Need
-
-    var body: some View {
-        Button { app.open(project: need.project, session: need.session) } label: {
-            HStack(alignment: .firstTextBaseline, spacing: 7) {
-                Dot(colour: theme.colour(need.kind))
-                VStack(alignment: .leading, spacing: 0) {
-                    Text(need.what).font(theme.sized(13)).lineLimit(2)
-                    Text(need.detail).font(theme.sized(12.5)).foregroundStyle(theme.muted).lineLimit(1)
-                }
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
     }
 }
 

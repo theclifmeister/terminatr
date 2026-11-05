@@ -1,23 +1,18 @@
 import SwiftUI
 import TerminatrKit
 
-/// A card's frame: its tag, a wash and an edge in the card's colour.
-/// A card that waits on the user (a question, an approval, a review)
-/// names itself in `waiting`: its glow breathes, and the newest such
-/// card's edge runs (Glow).
+/// A card's frame, the page's: its tag and a thin still outline in the
+/// card's colour, orange for an approval and blue for a question, on the
+/// pane (T1002).
 public struct CardFrame<Content: View>: View {
     @Environment(\.theme) private var theme
     let tag: String
     let colour: Color
-    let tint: Color
-    let waiting: String?
     let content: Content
 
-    public init(tag: String, colour: Color, tint: Color, waiting: String? = nil, @ViewBuilder content: () -> Content) {
+    public init(tag: String, colour: Color, @ViewBuilder content: () -> Content) {
         self.tag = tag
         self.colour = colour
-        self.tint = tint
-        self.waiting = waiting
         self.content = content()
     }
 
@@ -28,12 +23,11 @@ public struct CardFrame<Content: View>: View {
                 .foregroundStyle(colour)
             content
         }
-        .padding(14)
+        .padding(.horizontal, 13)
+        .padding(.vertical, 11)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .solid(RoundedRectangle(cornerRadius: 8))
-        .background(tint, in: RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(colour.opacity(theme.contrast ? 1 : 0.4), lineWidth: 1))
-        .modifier(Glow(key: waiting, colour: colour, shape: RoundedRectangle(cornerRadius: 8)))
+        .solid(RoundedRectangle(cornerRadius: Radius.row))
+        .overlay(RoundedRectangle(cornerRadius: Radius.row).strokeBorder(colour, lineWidth: theme.contrast ? 1.5 : 1))
         // VoiceOver: a group named for the card, so its buttons are
         // heard as the approval's or the question's.
         .accessibilityElement(children: .contain)
@@ -69,20 +63,17 @@ public struct QuestionSummary: View {
     @Environment(\.theme) private var theme
     let menu: AppAPI.Question
     let index: Int
-    /// The card's name while it waits on the user (CardFrame).
-    let waiting: String?
 
-    public init(menu: AppAPI.Question, index: Int, waiting: String? = nil) {
+    public init(menu: AppAPI.Question, index: Int) {
         self.menu = menu
         self.index = index
-        self.waiting = waiting
     }
 
     public var body: some View {
         let item = menu.questions[index]
-        CardFrame(tag: QuestionPlan.tag(menu, index: index), colour: theme.question, tint: theme.questionTint, waiting: waiting) {
+        CardFrame(tag: QuestionPlan.tag(menu, index: index), colour: theme.question) {
             Text(item.question)
-                .font(theme.title(.headline, .bold))
+                .font(theme.body(.body, .medium))
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
             ForEach(Array(item.options.enumerated()), id: \.offset) { i, o in
@@ -139,8 +130,8 @@ extension Theme {
     }
 }
 
-/// A need's card's head: its symbol, what it is, and a second line
-/// (the task's title, an approval's question).
+/// A need's row: its dot in the need's colour, what it is, and beside it
+/// the task's title or an approval's question, on one line.
 public struct NeedSummary: View {
     @Environment(\.theme) private var theme
     let need: Need
@@ -152,21 +143,20 @@ public struct NeedSummary: View {
     }
 
     public var body: some View {
-        HStack(alignment: .center, spacing: 8) {
-            Image(systemName: need.kind.symbol)
-                .foregroundStyle(theme.colour(need.kind))
-                .frame(width: 16)
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Circle()
+                .fill(theme.colour(need.kind))
+                .frame(width: 7, height: 7)
                 .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(need.what)
-                    .font(theme.body(.body, .semibold))
+            Text(need.what)
+                .font(theme.body(.body))
+                .lines(1)
+                .layoutPriority(1)
+            if !detail.isEmpty {
+                Text(detail)
+                    .font(theme.body(.subheadline))
+                    .foregroundStyle(theme.muted)
                     .lines(1)
-                if !detail.isEmpty {
-                    Text(detail)
-                        .font(theme.body(.subheadline))
-                        .foregroundStyle(theme.muted)
-                        .lines(2)
-                }
             }
         }
     }

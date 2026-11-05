@@ -16,7 +16,6 @@ struct TaskActs: View {
     let project: String
     let task: String
     let status: String
-    var compact = false
     @State private var sendingBack = false
     @State private var delegating = false
 
@@ -26,8 +25,7 @@ struct TaskActs: View {
                 EmptyView()
             } else if status == "review" {
                 Button("Accept") { ask(.accept) }
-                    .buttonStyle(.borderedProminent)
-                    .tint(theme.action)
+                    .buttonStyle(.flatPrimary)
                     .help("Asks the coordinator to accept \(task): it merges and closes it")
                     .accessibilityLabel("Accept \(task)")
                 Button("Send back…") { sendingBack = true }
@@ -39,10 +37,12 @@ struct TaskActs: View {
                     .accessibilityLabel("Delegate \(task)…")
             }
         }
-        .controlSize(compact ? .small : .regular)
+        .buttonStyle(.flat)
+        .fixedSize()
         .onChange(of: status, initial: true) { app.settle(project: project, task: task, status: status) }
         .sheet(isPresented: $sendingBack) {
             SendBackSheet(task: task) { note in ask(.sendBack(note: note)) }
+                .buttonStyle(.automatic)
         }
         .confirmationDialog("Delegate \(task)?", isPresented: $delegating) {
             Button("Ask to Delegate") { ask(.delegate) }
@@ -100,7 +100,7 @@ struct TaskOutcome: View {
             Spacer(minLength: 0)
             if ask.tone == .attention {
                 Button("Retry") { app.ask(ask.kind, project: project, task: task, status: ask.status) }
-                    .controlSize(.small)
+                    .buttonStyle(.flat)
                     .help("Asks the coordinator again")
                     .accessibilityLabel(ask.retryLabel)
             }
@@ -108,8 +108,7 @@ struct TaskOutcome: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(colour.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(colour.opacity(theme.contrast ? 1 : 0.3), lineWidth: 1))
+        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(colour.opacity(theme.contrast ? 1 : 0.5), lineWidth: theme.contrast ? 1.5 : 1))
     }
 
     private func colour(_ tone: TaskAsk.Tone) -> Color {

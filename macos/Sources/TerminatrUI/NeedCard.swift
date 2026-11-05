@@ -109,7 +109,7 @@ public struct NeedCard<Link: View, Answers: View>: View {
         .surface(in: shape)
         .overlay {
             shape.strokeBorder(theme.colour(need.kind).opacity(ring || theme.contrast ? 1 : 0.35),
-                               lineWidth: ring ? (theme.contrast ? 2.5 : 2) : 1)
+                               lineWidth: theme.contrast ? 1.5 : 1)
         }
         .modifier(OneElement(on: voiceOver, label: spoken, value: note?.text ?? "", acts: acts,
                              at: UnitPoint(x: 0.5, y: cardHeight > 0 ? headY / cardHeight : 0.1)))

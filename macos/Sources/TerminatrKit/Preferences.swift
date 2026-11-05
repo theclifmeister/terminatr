@@ -115,14 +115,14 @@ public enum TextStyle: CaseIterable, Sendable {
         case .title2: 17
         case .title3: 16
         case .headline: 15
-        case .heading: 14.5
+        case .heading: 14
         case .body: 14
-        case .callout: 13.5
+        case .callout: 14
         case .subheadline: 13
-        case .footnote: 12.5
-        case .caption: 12
+        case .footnote: 13
+        case .caption: 13
         case .caption2: 11.5
-        case .label: 11
+        case .label: 11.5
         case .glyph: 9
         }
         #else

@@ -48,9 +48,6 @@ public struct Theme: Sendable {
     public var approval: Color
     public var onApproval: Color
 
-    /// The question and approval cards' wash, over a pane.
-    public var questionTint: Color
-    public var approvalTint: Color
     /// A command or a path set in mono.
     public var command: Color
     /// The terminal tab.
@@ -98,8 +95,6 @@ public struct Theme: Sendable {
         onQuestion = k(c.onQuestion)
         approval = k(c.approval)
         onApproval = k(c.onApproval)
-        questionTint = k(c.questionTint)
-        approvalTint = k(c.approvalTint)
         command = k(c.command)
         terminalBackground = k(c.terminal.background)
         terminalForeground = k(c.terminal.foreground)

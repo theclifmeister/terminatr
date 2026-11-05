@@ -9,6 +9,8 @@ public enum Radius {
     public static let glyph: CGFloat = 6
     /// A keycap at 24 pt.
     public static let key: CGFloat = 4
+    /// A chip: a state, a priority (T1002).
+    public static let chip: CGFloat = 4
     /// A list's group, a pane.
     public static let tile: CGFloat = 8
     /// A card.

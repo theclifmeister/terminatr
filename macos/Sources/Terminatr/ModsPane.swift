@@ -25,15 +25,16 @@ struct ModsPane: View {
     @State private var consenting: AppAPI.ProjectMod?
     /// The mod whose question shows (limit, off-all).
     @State private var asking: AppAPI.ProjectMod?
+    @AppStorage("modsListWidth") private var listWidth = 300.0
 
     var body: some View {
-        HSplitView {
-            List(selection: $picked) {
+        PickSplit(width: $listWidth, range: 240...420) {
+            PickList(selection: $picked, order: (mods ?? []).map(\.id), name: "Mods") {
                 ForEach(mods ?? []) { m in
-                    ModRow(mod: m).tag(m.id)
+                    PickRow(id: m.id, selection: $picked) { ModRow(mod: m) }
                 }
             }
-            .frame(minWidth: 240, idealWidth: 300, maxWidth: 420)
+        } detail: {
             ScrollView {
                 Group {
                     if let mods, let m = mods.first(where: { $0.id == picked }) {
@@ -47,11 +48,12 @@ struct ModsPane: View {
                         ProgressView().controlSize(.small)
                     }
                 }
-                .padding(24)
+                .font(theme.sized(Flat.text))
+                .padding(.horizontal, 24)
+                .padding(.vertical, 22)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .scrollEdges()
-            .frame(minWidth: 360)
         }
         .task(id: project) { await list() }
         .sheet(item: $consenting) { m in
@@ -62,6 +64,7 @@ struct ModsPane: View {
                 consenting = nil
                 said = "unchanged"
             }
+            .buttonStyle(.automatic)
         }
         .alert(asking?.toggle.title ?? "", isPresented: Binding(get: { asking != nil }, set: { if !$0 { asking = nil } }), presenting: asking) { m in
             Button("Turn off", role: .destructive) { Task { await set(m) } }
@@ -76,9 +79,9 @@ struct ModsPane: View {
         VStack(alignment: .leading, spacing: 14) {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(m.name).font(theme.title(.title2))
+                    Text(m.name).font(theme.title(.headline, .semibold))
                     if !m.version.isEmpty {
-                        Text(m.version).font(theme.mono(.subheadline)).foregroundStyle(theme.muted)
+                        Chip(m.version)
                     }
                 }
                 Text(m.kinds).font(theme.body(.subheadline)).foregroundStyle(theme.muted)
@@ -107,15 +110,15 @@ struct ModsPane: View {
             ForEach(m.bad, id: \.self) { b in
                 Text(b).font(theme.body(.footnote)).foregroundStyle(theme.question)
             }
-            Divider()
-            Text("Settings for \(project)").font(theme.body(.headline))
+            theme.lineSoft.frame(height: 1)
+            PaneLabel("Settings for \(project)")
             if ProjectMods.hasSettings(m) {
                 Text("Each one this project doesn't set follows all projects.")
                     .font(theme.body(.footnote))
                     .foregroundStyle(theme.muted)
                 ForEach(m.settings, id: \.key) { s in
                     ModSettingRow(s, change: app.changesMods ? { v in Task { await setting(m, s.key, v) } } : nil)
-                    Divider()
+                    theme.lineSoft.frame(height: 1)
                 }
             } else {
                 Text(m.settingsNote).font(theme.body(.subheadline)).foregroundStyle(theme.muted)
@@ -195,7 +198,7 @@ private struct ModRow: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Image(systemName: mod.runs ? "circle.fill" : "circle")
-                .font(.system(size: 8))
+                .font(.system(size: 7))
                 .foregroundStyle(mod.runs ? theme.good : theme.muted)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
