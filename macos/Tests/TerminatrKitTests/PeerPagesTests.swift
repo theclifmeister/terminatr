@@ -124,3 +124,19 @@ private func pages() -> AppAPI.PeerPages {
         #expect(PeerPages.state(error) == PeerPages.State<AppAPI.PeerPages>.notShared)
     }
 }
+
+@Test func aPeerSessionsAttentionSaysWhatWaitsOnTheUser() {
+    var s = AppAPI.PeerSession(id: "studio/s-1", role: "coordinator", project: "acme-api", created: Date(), state: "working")
+    s.current = "Planning"
+    #expect(Attention.of(peer: s).tone == .working)
+    #expect(Attention.of(peer: s).why == "Planning")
+    #expect(!Attention.of(peer: s).waits)
+    s.asking = true
+    #expect(Attention.of(peer: s).tone == .question)
+    #expect(Attention.of(peer: s).waits)
+    s.asking = false
+    s.state = "blocked"
+    s.reason = "permission"
+    #expect(Attention.of(peer: s).tone == .approval)
+    #expect(Attention.of(peer: nil).word == "not running")
+}

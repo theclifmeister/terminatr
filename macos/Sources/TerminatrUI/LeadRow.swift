@@ -37,6 +37,25 @@ public struct FlatDot: View {
     }
 }
 
+/// The main row's sizes: the phone's (T1001), the Mac's on its smaller type
+/// scale (T1006), so the row stays under the page's 21 pt title and over its
+/// 14 pt rows.
+private enum LeadSize {
+    #if os(macOS)
+    static let word: CGFloat = 16
+    static let end: CGFloat = 13
+    static let height: CGFloat = 56
+    static let tile: CGFloat = 34
+    static let symbol: CGFloat = 16
+    #else
+    static let word: CGFloat = 17
+    static let end: CGFloat = 12.5
+    static let height: CGFloat = 64
+    static let tile: CGFloat = 38
+    static let symbol: CGFloat = 18
+    #endif
+}
+
 /// The screen's main row (T1001): a project's coordinator, a program's
 /// director, the session the user talks to. It stands first under the
 /// header and apart from the rows around it by its size, its role's mark
@@ -44,8 +63,10 @@ public struct FlatDot: View {
 /// the focused pane): no accent colour of its own, as colour is for state.
 /// What the role does under its word, and at its end what waits on the
 /// user, else how long its turn has run, then its context use and a
-/// chevron. At accessibility sizes the end goes under the words.
-public struct LeadRow: View {
+/// chevron. At accessibility sizes the end goes under the words. With an
+/// accessory (the Mac's Open, Wake or Start) that stands for the chevron,
+/// its own element for VoiceOver, on one line at any size.
+public struct LeadRow<Accessory: View>: View {
     @Environment(\.theme) private var theme
     @Environment(\.dynamicTypeSize) private var typeSize
     let role: SessionRole
@@ -54,21 +75,38 @@ public struct LeadRow: View {
     let context: ContextUse?
     let dormant: Bool
     let selected: Bool
+    let accessory: Accessory?
 
-    public init(_ role: SessionRole, state: Attention, busy: Busy? = nil, context: ContextUse? = nil, dormant: Bool = false, selected: Bool = false) {
+    public init(_ role: SessionRole, state: Attention, busy: Busy? = nil, context: ContextUse? = nil, dormant: Bool = false, selected: Bool = false,
+                @ViewBuilder accessory: () -> Accessory) {
+        self.init(role, state, busy, context, dormant, selected, accessory())
+    }
+
+    fileprivate init(_ role: SessionRole, _ state: Attention, _ busy: Busy?, _ context: ContextUse?, _ dormant: Bool, _ selected: Bool, _ accessory: Accessory?) {
         self.role = role
         self.state = state
         self.busy = busy
         self.context = context
         self.dormant = dormant
         self.selected = selected
+        self.accessory = accessory
     }
 
     public var body: some View {
         let shape = RoundedRectangle(cornerRadius: Radius.tile)
         Group {
-            if typeSize.isAccessibilitySize {
-                VStack(alignment: .leading, spacing: Spacing.item) {
+            if let accessory {
+                HStack(spacing: Spacing.row + 2) {
+                    spoken(HStack(spacing: Spacing.row + 2) {
+                        mark
+                        words
+                        Spacer(minLength: Spacing.hair)
+                        end
+                    })
+                    accessory
+                }
+            } else if typeSize.isAccessibilitySize {
+                spoken(VStack(alignment: .leading, spacing: Spacing.item) {
                     HStack(spacing: Spacing.row + 2) {
                         mark
                         Spacer(minLength: 0)
@@ -76,33 +114,38 @@ public struct LeadRow: View {
                     }
                     words
                     end
-                }
+                })
             } else {
-                HStack(spacing: Spacing.row + 2) {
+                spoken(HStack(spacing: Spacing.row + 2) {
                     mark
                     words
                     Spacer(minLength: Spacing.hair)
                     end
                     chevron
-                }
+                })
             }
         }
         .padding(.horizontal, 13)
         .padding(.vertical, 11)
-        .frame(maxWidth: .infinity, minHeight: 64 * theme.scale, alignment: .leading)
+        .frame(maxWidth: .infinity, minHeight: LeadSize.height * theme.scale, alignment: .leading)
         .background(selected ? theme.selection : theme.pane, in: shape)
         .overlay { shape.strokeBorder(dormant ? theme.line : theme.focus, lineWidth: theme.contrast ? 2 : 1) }
         .contentShape(shape)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(role.word)
-        .accessibilityValue(dormant ? "inactive" : [busy.map { $0.spoken(now: Date()) } ?? state.spoken, context?.spoken]
-            .compactMap { $0 }.joined(separator: ", "))
-        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
+    /// The row's words as VoiceOver's one element.
+    private func spoken<Content: View>(_ content: Content) -> some View {
+        content
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(role.word)
+            .accessibilityValue(dormant ? "inactive" : [busy.map { $0.spoken(now: Date()) } ?? state.spoken, context?.spoken]
+                .compactMap { $0 }.joined(separator: ", "))
+            .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
     private var mark: some View {
-        let side = 38 * theme.scale
-        return RoleMark(role, points: 18, slot: side, colour: dormant ? theme.muted : theme.pane)
+        let side = LeadSize.tile * theme.scale
+        return RoleMark(role, points: LeadSize.symbol, slot: side, colour: dormant ? theme.muted : theme.pane)
             .frame(width: side, height: side)
             .background(dormant ? theme.tab : theme.ink, in: RoundedRectangle(cornerRadius: Radius.row))
     }
@@ -111,7 +154,7 @@ public struct LeadRow: View {
         let ink = selected ? theme.ink : theme.muted
         return VStack(alignment: .leading, spacing: 2) {
             Text(role.word)
-                .font(theme.sized(17, .semibold))
+                .font(theme.sized(LeadSize.word, .semibold))
                 .foregroundStyle(dormant ? theme.muted : theme.ink)
                 .lineLimit(1)
                 .fixedSize()
@@ -134,7 +177,7 @@ public struct LeadRow: View {
                     TimelineView(.periodic(from: .now, by: 1)) { tl in
                         if let t = busy.elapsed(now: tl.date) {
                             Text(t)
-                                .font(.system(size: 12.5 * theme.scale, design: .monospaced))
+                                .font(.system(size: LeadSize.end * theme.scale, design: .monospaced))
                                 .foregroundStyle(selected ? theme.ink : theme.muted)
                                 .monospacedDigit()
                                 .lineLimit(1)
@@ -157,11 +200,12 @@ public struct LeadRow: View {
 
     private func contextWords(_ words: String, _ context: ContextUse) -> some View {
         Text(words)
-            .font(theme.sized(12.5))
+            .font(theme.sized(LeadSize.end))
             .monospacedDigit()
             .foregroundStyle(context.tone.map { theme.colour($0) } ?? (selected ? theme.ink : theme.muted))
             .lineLimit(1)
             .fixedSize()
+            .help(context.spoken)
     }
 
     private var chevron: some View {
@@ -169,6 +213,13 @@ public struct LeadRow: View {
             .font(.system(size: 13 * theme.scale, weight: .semibold))
             .foregroundStyle(selected ? theme.ink : theme.muted)
             .accessibilityHidden(true)
+    }
+}
+
+extension LeadRow where Accessory == EmptyView {
+    /// The row with its chevron, the whole of it a link.
+    public init(_ role: SessionRole, state: Attention, busy: Busy? = nil, context: ContextUse? = nil, dormant: Bool = false, selected: Bool = false) {
+        self.init(role, state, busy, context, dormant, selected, nil)
     }
 }
 

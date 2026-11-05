@@ -4,7 +4,7 @@ import TerminatrUI
 
 /// A program's screen (the programs design §11.2, §12): its home, as a
 /// project's dashboard is a project's, mirroring the TUI's program
-/// dashboard. Its director first, then NEEDS YOU (program.needs, ranked
+/// dashboard. Its director first, as the main row, then NEEDS YOU (program.needs, ranked
 /// by the server), CHILDREN (its members in its order, a paired one's
 /// from peer.list), UMBRELLAS and DEPENDENCIES (program.get). A need or
 /// a child shows its project, where its cards answer it; the director's
@@ -28,7 +28,7 @@ struct ProgramPage: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
                 header
-                HairlineList { directorCard }
+                directorRow
                 section("Needs you", count: needs?.needs.count) { needsList }
                 section("Children", count: program.members.count) { children }
                 if let d = detail, !d.umbrellas.isEmpty {
@@ -129,33 +129,26 @@ struct ProgramPage: View {
         }
     }
 
-    /// Its director: its state, and a click shows its pane.
-    private var directorCard: some View {
+    /// Its director as the main row (T1006, the phone's LeadRow): its
+    /// state and context; Open, or a click on the row, shows its pane, which
+    /// starts it when it isn't running. Save & Clear is in its menu while it
+    /// runs, as a coordinator's.
+    private var directorRow: some View {
         let s = app.directorSession(program.slug)
-        let a = Attention.of(director: s, in: program)
-        return Button { app.select(.session(.director(program.slug))) } label: {
-            ListRow {
-                HStack(spacing: 10) {
-                    RoleLabel(.director, points: Flat.text)
-                    Dot(colour: theme.colour(a.tone))
-                    Text(a.why.isEmpty ? a.word : a.why)
-                        .font(theme.sized(Flat.label))
-                        .foregroundStyle(theme.muted)
-                        .lineLimit(1)
-                    Spacer(minLength: 8)
-                    if a.waits {
-                        Chip(a.word, colour: theme.on(a.tone), fill: theme.colour(a.tone))
-                    }
-                }
-            }
-            .contentShape(Rectangle())
+        let ref = SessionRef.director(program.slug)
+        return LeadRow(.director, state: Attention.of(director: s, in: program), busy: Busy.of(director: s, in: program),
+                       context: ContextUse.of(s, hint: app.contextHint)) {
+            Button("Open") { app.select(.session(ref)) }
+                .help("Show the director")
         }
-        .buttonStyle(.plain)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Director")
-        .accessibilityValue(a.why.isEmpty ? a.word : a.why)
-        .accessibilityAddTraits(.isButton)
-        .contextMenu { NewWindowButton(ref: .director(program.slug)) }
+        .onTapGesture { app.select(.session(ref)) }
+        .contextMenu {
+            NewWindowButton(ref: ref)
+            if s != nil, app.controlsProjects {
+                Divider()
+                Button("Save & Clear Director…") { app.ask(.saveClearDirector(program: program.slug)) }
+            }
+        }
     }
 
     @ViewBuilder
