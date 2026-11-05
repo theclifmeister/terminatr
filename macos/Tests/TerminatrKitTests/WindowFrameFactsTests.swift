@@ -44,13 +44,57 @@ private func session(_ id: String, state: String) -> AppAPI.Session {
     #expect(StatusFacts(servers: 1, working: 0, needs: 0).needsWord == "0 need you")
 }
 
-@Test func inspectorHeadOfAThread() {
-    let steps = [AppAPI.Step(n: 1, text: "a", done: true), AppAPI.Step(n: 2, text: "b", done: false)]
-    #expect(InspectorHead.thread(ref: "T1", id: "t-1", steps: steps) == InspectorHead(chip: "T1", count: "1 of 2"))
-    #expect(InspectorHead.thread(ref: nil, id: "t-1", steps: []) == InspectorHead(chip: "t-1", count: ""))
+@Test func inspectorHeadNamesWhatItShows() {
+    let idle = Attention(word: "idle", tone: .idle, why: "", waits: false)
+    #expect(InspectorHead.coordinator(project: "acme", state: idle).name == .role(.coordinator, "Coordinator"))
+    #expect(InspectorHead.coordinator(project: "acme", state: idle).spoken == "Coordinator of acme, idle")
+    #expect(InspectorHead.coordinator(project: "acme", server: "mini", state: nil).spoken == "Coordinator of mini › acme")
+    #expect(InspectorHead.director(program: "fleet", state: idle).name == .role(.director, "Director"))
+    #expect(InspectorHead.project("acme", state: idle).name == .role(.coordinator, "acme"))
+    #expect(InspectorHead.project("acme", state: idle).spoken == "Project acme, coordinator, idle")
+    #expect(InspectorHead.project("acme", state: nil).spoken == "Project acme")
+    #expect(InspectorHead.program("fleet", state: idle).name == .role(.director, "fleet"))
+    #expect(InspectorHead.thread(task: "T1", id: "t-1", state: idle).name == .ids(task: "T1", thread: "t-1"))
+    #expect(InspectorHead.thread(task: "T1", id: "t-1", state: idle).spoken == "T1 t-1, idle")
+    #expect(InspectorHead.thread(task: nil, id: "t-1", server: "mini", state: nil).spoken == "t-1 on mini")
+    #expect(InspectorHead.empty.spoken == "")
 }
 
-@Test func inspectorHeadOfAProject() {
-    #expect(InspectorHead.project(needs: 2, context: 65) == InspectorHead(chip: "2 need you", count: "65% context"))
-    #expect(InspectorHead.project(needs: 0, context: nil) == InspectorHead(chip: "0 need you", count: ""))
+@Test func aSessionsOwnState() {
+    #expect(Attention.session(state: "working", reason: "").tone == .working)
+    #expect(Attention.session(state: "idle", reason: "").word == "idle")
+    #expect(Attention.session(state: "blocked", reason: "permission").word == "needs approval")
+    #expect(Attention.session(state: "blocked", reason: "").word == "blocked")
+    #expect(Attention.session(state: "idle", reason: "", asking: true).word == "asks")
+}
+
+@Test func foldSummaries() {
+    #expect(InspectorSummary.project(threads: 2, onDeck: 5) == "2 threads · 5 on deck")
+    #expect(InspectorSummary.project(threads: 1, onDeck: 0) == "1 thread · 0 on deck")
+    #expect(InspectorSummary.peerProject(threads: 3, paused: true, stale: true) == "3 threads · paused · stale")
+    #expect(InspectorSummary.program(projects: 2, questions: 0) == "2 projects")
+    #expect(InspectorSummary.program(projects: 1, questions: 1) == "1 project · 1 question")
+    #expect(InspectorSummary.done(3, of: 4) == "3 of 4 done")
+    #expect(InspectorSummary.agent("claude", model: "opus") == "claude · opus")
+    #expect(InspectorSummary.agent("claude", model: "", queued: 2) == "claude · 2 queued prompts")
+    #expect(InspectorSummary.prompts(1) == "1 prompt")
+    #expect(InspectorSummary.prompts(2) == "2 prompts")
+    #expect(InspectorSummary.paired(server: "mini", link: "online", stale: true) == "mini · online · stale")
+}
+
+@Test func theNextNeedIsPicked() {
+    // The first starts picked.
+    #expect(NeedPick.next(picked: nil, was: [], now: ["a", "b"]) == "a")
+    // A click's pick stays while the list changes around it.
+    #expect(NeedPick.next(picked: "b", was: ["a", "b"], now: ["b", "c"]) == "b")
+    // Answered: the one after it, not the first.
+    #expect(NeedPick.next(picked: "b", was: ["a", "b", "c"], now: ["a", "c"]) == "c")
+    // The last answered: the one before it.
+    #expect(NeedPick.next(picked: "c", was: ["a", "b", "c"], now: ["a", "b"]) == "b")
+    // The next went as well: the next still there.
+    #expect(NeedPick.next(picked: "a", was: ["a", "b", "c"], now: ["c"]) == "c")
+    // Nothing left to pick.
+    #expect(NeedPick.next(picked: "a", was: ["a"], now: []) == nil)
+    // A new need after they all went.
+    #expect(NeedPick.next(picked: nil, was: [], now: ["z"]) == "z")
 }

@@ -80,25 +80,135 @@ public struct StatusFacts: Equatable, Sendable {
     public static func needsWord(_ n: Int) -> String { n == 1 ? "1 needs you" : "\(n) need you" }
 }
 
-/// What the inspector's header says beside its name (T1000): its chip and
-/// its count at the far end.
+/// What the inspector's header says (T1016): what the panel shows, not
+/// the panel's name, with its state at the far end. A role's mark and
+/// name, or a thread's task and thread ids.
 public struct InspectorHead: Equatable, Sendable {
-    public let chip: String
-    public let count: String
-
-    public init(chip: String, count: String) {
-        self.chip = chip
-        self.count = count
+    public enum Name: Equatable, Sendable {
+        case role(SessionRole, String)
+        case ids(task: String, thread: String)
     }
 
-    /// A thread's: its task, or its id without one, and its steps done.
-    public static func thread(ref: String?, id: String, steps: [AppAPI.Step]) -> InspectorHead {
-        InspectorHead(chip: ref ?? id, count: steps.isEmpty ? "" : "\(steps.filter(\.done).count) of \(steps.count)")
+    public let name: Name?
+    public let state: Attention?
+    /// Who it is in words, for VoiceOver and the tooltip, naming the
+    /// project the mark and its word leave out.
+    public let who: String
+
+    public init(name: Name?, state: Attention?, who: String) {
+        self.name = name
+        self.state = state
+        self.who = who
     }
 
-    /// A project's or a coordinator's: what needs the user, and how much
-    /// of its context the coordinator has used, while it runs.
-    public static func project(needs: Int, context: Int?) -> InspectorHead {
-        InspectorHead(chip: StatusFacts.needsWord(needs), count: context.map { "\($0)% context" } ?? "")
+    /// Nothing to name: a selection the server no longer lists.
+    public static let empty = InspectorHead(name: nil, state: nil, who: "")
+
+    /// What VoiceOver says of the header.
+    public var spoken: String {
+        [who, state?.spoken].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: ", ")
+    }
+
+    public static func coordinator(project: String, server: String = "", state: Attention?) -> InspectorHead {
+        InspectorHead(name: .role(.coordinator, SessionRole.coordinator.word), state: state,
+                      who: "Coordinator of \(place(project, server))")
+    }
+
+    public static func director(program: String, state: Attention?) -> InspectorHead {
+        InspectorHead(name: .role(.director, SessionRole.director.word), state: state, who: "Director of \(program)")
+    }
+
+    /// A project's page: its coordinator's mark and state, its own name.
+    public static func project(_ slug: String, server: String = "", state: Attention?) -> InspectorHead {
+        InspectorHead(name: .role(.coordinator, slug), state: state,
+                      who: "Project \(place(slug, server))" + (state == nil ? "" : ", coordinator"))
+    }
+
+    /// A program's page: its director's mark and state, its own name.
+    public static func program(_ slug: String, state: Attention?) -> InspectorHead {
+        InspectorHead(name: .role(.director, slug), state: state, who: "Program \(slug)" + (state == nil ? "" : ", director"))
+    }
+
+    public static func thread(task: String?, id: String, server: String = "", state: Attention?) -> InspectorHead {
+        let ids = [task ?? "", id].filter { !$0.isEmpty }.joined(separator: " ")
+        return InspectorHead(name: .ids(task: task ?? "", thread: id), state: state,
+                             who: server.isEmpty ? ids : "\(ids) on \(server)")
+    }
+
+    private static func place(_ project: String, _ server: String) -> String {
+        server.isEmpty ? project : "\(server) › \(project)"
+    }
+}
+
+extension Attention {
+    /// A session's own state, for a panel with nothing surer to say of it
+    /// (a paired server's session, a coordinator without its project).
+    public static func session(state: String, reason: String, asking: Bool = false) -> Attention {
+        if asking { return Attention(word: "asks", tone: .approval, why: "asks a question", waits: true) }
+        if state == "blocked" {
+            let word = reason == "permission" ? "needs approval" : reason.isEmpty ? "blocked" : reason
+            return Attention(word: word, tone: .approval, why: word, waits: true)
+        }
+        return Attention(word: state, tone: state == "working" ? .working : .idle, why: "", waits: false)
+    }
+}
+
+/// The one-line summaries of the inspector's folds (T1016).
+public enum InspectorSummary {
+    /// "2 threads · 5 on deck".
+    public static func project(threads: Int, onDeck: Int) -> String {
+        "\(count(threads, "thread")) · \(onDeck) on deck"
+    }
+
+    /// "3 threads", a paired project's, with what stands out of it.
+    public static func peerProject(threads: Int, paused: Bool, stale: Bool) -> String {
+        ([count(threads, "thread")] + (paused ? ["paused"] : []) + (stale ? ["stale"] : [])).joined(separator: " · ")
+    }
+
+    /// "3 projects", with the questions open.
+    public static func program(projects: Int, questions: Int) -> String {
+        ([count(projects, "project")] + (questions > 0 ? [count(questions, "question")] : [])).joined(separator: " · ")
+    }
+
+    /// "3 of 4 done".
+    public static func done(_ done: Int, of total: Int) -> String {
+        "\(done) of \(total) done"
+    }
+
+    /// "claude · opus", with what waits in its queue.
+    public static func agent(_ agent: String, model: String, queued: Int = 0) -> String {
+        ([agent, model] + (queued > 0 ? [count(queued, "queued prompt")] : []))
+            .filter { !$0.isEmpty }.joined(separator: " · ")
+    }
+
+    /// "1 prompt", "2 prompts": what waits in a session's queue.
+    public static func prompts(_ n: Int) -> String {
+        count(n, "prompt")
+    }
+
+    /// "mini · online", a paired server's, with a stale read.
+    public static func paired(server: String, link: String, stale: Bool = false) -> String {
+        ([server, link] + (stale ? ["stale"] : [])).filter { !$0.isEmpty }.joined(separator: " · ")
+    }
+
+    private static func count(_ n: Int, _ word: String) -> String {
+        "\(n) \(word)\(n == 1 ? "" : "s")"
+    }
+}
+
+/// Which need's answers show (T1016): the first starts picked, a click
+/// picks another, and when the picked one is answered or goes, the one
+/// after it is picked.
+public enum NeedPick {
+    /// What's picked once the needs that can be picked went from was to
+    /// now: picked while it stays, else the next of was still there,
+    /// else the nearest before it, else the first.
+    public static func next(picked: String?, was: [String], now: [String]) -> String? {
+        if let picked, now.contains(picked) { return picked }
+        if let picked, let i = was.firstIndex(of: picked) {
+            if let after = was[(i + 1)...].first(where: now.contains) { return after }
+            if let before = was[..<i].last(where: now.contains) { return before }
+        }
+        return now.first
     }
 }

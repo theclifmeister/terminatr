@@ -82,6 +82,55 @@ public struct Need: Identifiable, Hashable, Sendable {
         kind == .network || project.isEmpty ? what : "\(project) · \(what)"
     }
 
+    /// A need as a card says it (T1016): who it is about ("T812"), what
+    /// of it ("ready to review"), and a plain title from detail, the
+    /// need's own or with an approval's question once read. With no title
+    /// of its own (a coordinator's questions) what of it is its title.
+    public func card(detail: String) -> Card {
+        var said = what
+        if said.contains(" › "), let colon = said.range(of: ": ") { said = String(said[colon.upperBound...]) }
+        var who = "", state = said
+        let marks = [" is ", " asks", " has ", " needs", " need ", " offers", "'s ", " PR #", " to "]
+        let first = marks.compactMap { said.range(of: $0) }.min { $0.lowerBound < $1.lowerBound }
+        if let first, Int(said[..<first.lowerBound]) == nil {
+            who = String(said[..<first.lowerBound])
+            let from = said[first.lowerBound] == "'" ? first.upperBound : said.index(after: first.lowerBound)
+            state = String(said[from...])
+            if state.hasPrefix("is ") { state.removeFirst(3) }
+        }
+        let bare = detail.isEmpty || detail == "coordinator" || detail == "director"
+        func capital(_ s: String) -> String { s.prefix(1).uppercased() + s.dropFirst() }
+        if bare { return Card(id: who, state: "", title: capital(state)) }
+        // A paired server's may be only where it's answered: "for mini".
+        return Card(id: who, state: state, title: kind == .network ? capital(Self.plain(detail)) : Self.plain(detail))
+    }
+
+    public struct Card: Equatable, Sendable {
+        public let id: String
+        public let state: String
+        public let title: String
+
+        /// The card's line above its title: "T812 · ready to review".
+        public var line: String {
+            [id, state].filter { !$0.isEmpty }.joined(separator: " · ")
+        }
+    }
+
+    /// A task's title for reading: no commit prefix ("fix(app): ",
+    /// "Design: "), which is for the release notes, and a capital where
+    /// one went. Anything else stays as it is: a file's name, say.
+    public static func plain(_ title: String) -> String {
+        let prefix = "^(feat|fix|chore|docs|refactor|tests?|perf|style|build|ci|revert|design)(\\([^)]*\\))?!?:\\s+"
+        guard let r = title.range(of: prefix, options: [.regularExpression, .caseInsensitive]) else { return title }
+        let t = title[r.upperBound...]
+        return t.prefix(1).uppercased() + t.dropFirst()
+    }
+
+    /// The needs of a thread's panel: its session's, and its task's.
+    public static func of(session: String, task: String, in needs: [Need]) -> [Need] {
+        needs.filter { (!session.isEmpty && $0.session == session) || (!task.isEmpty && $0.task == task) }
+    }
+
     /// Whether it goes in the Review group under Needs you (B2): still
     /// counted with the rest (B1).
     public var isReview: Bool { kind == .review }
