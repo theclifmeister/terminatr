@@ -12,8 +12,8 @@ import (
 // The guard's refusals (app API 18): the one exception to settings and
 // access staying out of the app API (docs/SPEC.md §3.8). The guard's log
 // is the human's, so the bridge reads and answers it itself, in its own
-// process as the console does, never through the server, and only when
-// the caller is the human (bridge.human). An answer settles one refusal
+// process as the console does, never through the server, and only for
+// the human on the human socket (bridge.human). An answer settles one refusal
 // as the console's Guard refusals do (guardlog.Answer): allowed here,
 // for all projects, or kept refusing.
 const (
@@ -25,8 +25,9 @@ const (
 
 // The guard methods' error codes.
 const (
-	// ErrHumanOnly: the bridge's caller isn't the human, as the server
-	// told it.
+	// ErrHumanOnly: a method the bridge answers itself, and the bridge's
+	// caller isn't the human, or it isn't on the human socket
+	// (bridge.human).
 	ErrHumanOnly = "human-only"
 	// ErrGone: the refusal is no longer waiting (answered elsewhere).
 	ErrGone = "gone"
@@ -88,9 +89,6 @@ func guardRefusalOf(e guardlog.Entry) GuardRefusal {
 
 // guardRefusals answers guard.refusals from the log.
 func guardRefusals(b *bridge, _ struct{}) (GuardRefusals, error) {
-	if !b.human() {
-		return GuardRefusals{}, humanOnly()
-	}
 	list, err := guardlog.List(b.o.Paths.Home, "")
 	out := GuardRefusals{Refusals: []GuardRefusal{}}
 	for _, e := range list {
@@ -106,9 +104,6 @@ func guardRefusals(b *bridge, _ struct{}) (GuardRefusals, error) {
 // by id, never what the app says of it, and the thread's running session
 // is told when it is allowed.
 func guardDecide(b *bridge, p GuardDecideParams) (GuardDecided, error) {
-	if !b.human() {
-		return GuardDecided{}, humanOnly()
-	}
 	switch p.How {
 	case guardlog.AllowHere, guardlog.AllowAll, guardlog.Keep:
 	default:
@@ -161,8 +156,4 @@ func (b *bridge) guardSession(e guardlog.Entry) string {
 		}
 	}
 	return ""
-}
-
-func humanOnly() *Error {
-	return &Error{Code: ErrHumanOnly, Message: "the guard's refusals are the user's: only they answer them"}
 }

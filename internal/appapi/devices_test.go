@@ -8,6 +8,7 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"net/http/httptest"
+	"os"
 	"slices"
 	"strings"
 	"testing"
@@ -15,10 +16,76 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/appapi"
 	"github.com/theclifmeister/terminatr/internal/caller"
+	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/device"
 	"github.com/theclifmeister/terminatr/internal/peer"
+	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/relay"
 )
+
+// TestBridgeOwnMethodsHumanSocketOnly: a caller the server places as the
+// human, on the server socket, is refused every method the bridge answers
+// itself and keeps the server's other methods; the same bridge has them
+// once the human socket answers.
+func TestBridgeOwnMethodsHumanSocketOnly(t *testing.T) {
+	p := testPaths(t)
+	startServer(t, p)
+	aside := p.HumanSocket() + ".aside"
+	if err := os.Rename(p.HumanSocket(), aside); err != nil {
+		t.Fatal(err)
+	}
+	restored := false
+	restore := func() {
+		if !restored {
+			restored = true
+			if err := os.Rename(aside, p.HumanSocket()); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	defer restore()
+
+	c, err := client.Dial(p, proto.KindControl)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	var who proto.CallerInfo
+	if err := c.Call(proto.MethodCallerWho, nil, &who); err != nil || caller.Kind(who.Kind) != caller.Human || c.OnHumanSocket {
+		t.Fatalf("want a caller placed as the human, on the server socket: %+v, on the human socket %v, %v", who, c.OnHumanSocket, err)
+	}
+
+	b, err := bridgeWith(t, appapi.Options{Paths: p, Caller: caller.Caller{Kind: caller.Human}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := 0
+	for _, m := range appapi.Methods() {
+		if !m.Local() || m.DeviceOnly() {
+			continue
+		}
+		seen++
+		if err := b.Call(m.Name, nil, nil); code(err) != appapi.ErrHumanOnly {
+			t.Errorf("%s on the server socket: %v", m.Name, err)
+		}
+	}
+	if seen == 0 {
+		t.Fatal("no method the bridge answers itself")
+	}
+	if err := b.Call(proto.MethodSessionList, nil, nil); err != nil {
+		t.Errorf("session.list on the server socket: %v", err)
+	}
+
+	restore()
+	var devices appapi.Devices
+	if err := b.Call(appapi.MethodDeviceList, nil, &devices); err != nil {
+		t.Errorf("device.list on the human socket: %v", err)
+	}
+	var refusals appapi.GuardRefusals
+	if err := b.Call(appapi.MethodGuardRefusals, nil, &refusals); err != nil {
+		t.Errorf("guard.refusals on the human socket: %v", err)
+	}
+}
 
 // TestBridgeDevices: Settings › Devices (app API 26) is the human's: an
 // agent's bridge is refused; the human's lists the devices, pairs a

@@ -66,6 +66,10 @@ type Client struct {
 	Server proto.Hello
 	// Started is set by Connect when it started the server.
 	Started bool
+	// OnHumanSocket: Dial reached the human socket (ipc.HumanName), not
+	// the server socket it falls back on. Only a connection Dial made on
+	// that socket says so; one from DialAt or Over never does.
+	OnHumanSocket bool
 }
 
 // Dial connects to the socket and performs the handshake for kind.
@@ -89,10 +93,14 @@ func DialAs(p Paths, name string) (*Client, error) {
 func dial(p Paths, kind proto.Kind, protocol int, name string) (*Client, error) {
 	if (kind == proto.KindControl || kind == proto.KindAttach) && p.Socket != "" && !caller.FromEnv().IsAgent() {
 		c, err := dialAt(p.HumanSocket(), kind, protocol, name)
+		if err == nil {
+			c.OnHumanSocket = true
+			return c, nil
+		}
 		var ne net.Error
 		var me *proto.MismatchError
-		if err == nil || errors.As(err, &ne) && ne.Timeout() || errors.As(err, &me) {
-			return c, err
+		if errors.As(err, &ne) && ne.Timeout() || errors.As(err, &me) {
+			return nil, err
 		}
 	}
 	return dialAt(p.Socket, kind, protocol, name)
