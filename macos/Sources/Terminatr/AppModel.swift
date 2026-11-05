@@ -190,6 +190,9 @@ final class AppModel {
     /// app draws no program row, screen or badge without.
     var showsPrograms: Bool { caps.contains("programs") }
 
+    /// What Settings › Advanced says about tm's signature.
+    private(set) var tmCheck = TMCheckState.none
+
     /// What came since the bridge started: needs wait for all of it, so
     /// the first set is whole.
     private struct Loaded {
@@ -199,6 +202,8 @@ final class AppModel {
 
     /// The settings key of the configured tm path (TMLocator.configured).
     static let tmPathKey = "tmPath"
+    /// The settings key of the path the app last ran tm from (TMAsk).
+    static let tmLastPathKey = "tmLastPath"
     static let navKey = "navigation"
     static let inspectorKey = "inspector"
     static let sidebarKey = "sidebar"
@@ -228,6 +233,7 @@ final class AppModel {
         var started: Bridge?
         do {
             let tm = try TMLocator(configured: tmPath).locate()
+            try await checkSignature(tm)
             log.add("Starting \(tm.path) app bridge")
             let b = try await Bridge.launch(tm: tm)
             started = b
@@ -271,6 +277,34 @@ final class AppModel {
             bridge = nil
             files = nil
         }
+    }
+
+    /// Before a signed app runs tm: compares it with the app's own Team
+    /// ID and asks when it fails, or passes at another path than last
+    /// time (TMAsk). A development build has no Team ID to compare and
+    /// skips it, so throwaway copies can run any -tmPath. Throws to run
+    /// nothing.
+    private func checkSignature(_ tm: URL) async throws {
+        guard let team = TMSignature.ownTeam else {
+            tmCheck = .skipped
+            log.add("Not checking tm's signature: this build of the app isn't signed")
+            return
+        }
+        tmCheck = .none
+        let signature = await Task.detached { TMSignature.check(tm, team: team) }.value
+        try Task.checkCancellation()
+        var check = TMCheckState.passed
+        if let ask = TMAsk(path: tm.path, signature: signature, last: UserDefaults.standard.string(forKey: Self.tmLastPathKey)) {
+            log.add("Asking before running \(tm.path): \(ask.why)")
+            tmCheck = .asked
+            let yes = await TMAskPanel.ask(ask)
+            try Task.checkCancellation()
+            guard yes else { throw TMNotRun(path: tm.path) }
+            check = .ranAnyway
+            log.add("You chose to run \(tm.path)")
+        }
+        UserDefaults.standard.set(tm.path, forKey: Self.tmLastPathKey)
+        tmCheck = check
     }
 
     /// Watches the projects until the bridge ends. A lean watch (app
