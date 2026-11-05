@@ -2,25 +2,29 @@ import SwiftUI
 import TerminatrKit
 import TerminatrUI
 
-/// A need that acts in place (T748 milestone C), where answering it lives:
-/// stacked in the inspector's Needs you section (panel), its answers
-/// wrapping at the panel's width, or as a row of a hairline list over a
-/// coordinator's conversation. It answers: an
-/// approval's dialog as the server reads it (Allow, the last option,
-/// Open), a question tm read with its options, the coordinator's open
-/// questions (Answer now), a task in review (Accept, Send back…) or
-/// blocked (Delegate…), a link's held message, offered file or link
-/// request, or a share request (LinkActs). What the card can't answer
-/// safely (an escape's dialog or question, which needs the command named,
-/// a question tm couldn't read, several options) opens the session
-/// instead. The server checks every answer, as it checks the session's
-/// own cards.
+/// A need in the inspector (T748 milestone C, T1016), where answering it
+/// lives: a card with who it's about and a plain title, its answers
+/// showing only while it's picked (NeedCards), wrapping at the panel's
+/// width. It answers: an approval's dialog as the server reads it (Allow,
+/// the last option, Open), a question tm read with its options, the
+/// coordinator's open questions (Answer now), a task in review (Accept,
+/// Send back) or blocked (Delegate…), a link's held message, offered file
+/// or link request, or a share request (LinkActs). What the card can't
+/// answer safely (an escape's dialog or question, which needs the command
+/// named, a question tm couldn't read, several options) opens the session
+/// instead. The server checks every answer, as it checks the session's own
+/// cards. What came of an answer shows whether it's picked or not.
 struct NeedCard: View {
     @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
     let need: Need
-    /// The inspector's: stacked for its width, not one row.
-    var panel = false
+    var picked = true
+    /// Names its project: in a list of a program's, whose needs are
+    /// several projects'.
+    var named = false
+    var pick: () -> Void = {}
+    /// An answer went without a refusal.
+    var answered: () -> Void = {}
     @State private var dialog: AppAPI.ApproveResult?
     @State private var busy = false
     @State private var said: (text: String, failed: Bool)?
@@ -30,13 +34,19 @@ struct NeedCard: View {
     @State private var ticked: Set<Int> = []
 
     var body: some View {
-        Group {
-            if panel {
-                stacked
-            } else {
-                ListRow { row }
+        VStack(alignment: .leading, spacing: 8) {
+            head
+            if picked {
+                FlowRow(spacing: 6) { actButtons }
+                    .buttonStyle(FlatButtonStyle(lines: 3))
+                    .disabled(busy)
             }
+            outcomes
         }
+        .padding(.horizontal, 13)
+        .padding(.vertical, 11)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(theme.line, lineWidth: 1).allowsHitTesting(false))
         .accessibilityElement(children: .contain)
         .accessibilityLabel(need.title)
         .task(id: need.id) { await check() }
@@ -52,84 +62,62 @@ struct NeedCard: View {
         }
     }
 
-    /// In the panel: what it names, a click showing it, its answers under
-    /// that, then what came of them.
-    private var stacked: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            Button {
-                if showsTask {
-                    app.showTask(project: need.project, task: need.task)
-                } else {
-                    app.open(project: need.project, session: need.session)
-                }
-            } label: {
-                HStack(alignment: .firstTextBaseline, spacing: 7) {
+    /// Who and what: a click picks the card, and once it's picked shows
+    /// what it names.
+    private var head: some View {
+        let card = need.card(detail: detail)
+        let line = named && !need.project.isEmpty ? "\(need.project) · \(card.line)" : card.line
+        return Button {
+            if !picked {
+                pick()
+            } else if showsTask {
+                app.showTask(project: need.project, task: need.task)
+            } else {
+                app.open(project: need.project, session: need.session)
+            }
+        } label: {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 6) {
                     Dot(colour: theme.colour(need.kind))
-                    VStack(alignment: .leading, spacing: 0) {
-                        Text(need.what).font(theme.sized(13)).lineLimit(2)
-                        if !detail.isEmpty {
-                            Text(detail).font(theme.sized(12.5)).foregroundStyle(theme.muted).lineLimit(2)
-                        }
-                    }
-                    Spacer(minLength: 0)
+                    Text(line)
+                        .font(.system(size: 12 * theme.scale, design: .monospaced))
+                        .foregroundStyle(theme.muted)
+                        .lineLimit(2)
                 }
-                .multilineTextAlignment(.leading)
-                .contentShape(Rectangle())
+                Text(card.title)
+                    .font(theme.sized(14, .medium))
+                    .lineLimit(4)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .buttonStyle(.plain)
-            .help(showsTask ? "Shows \(need.task) in full: how to check it, its PR, steps and notes" : "Shows it in the window")
-            FlowRow(spacing: 6) { actButtons }
-                .buttonStyle(FlatButtonStyle(lines: 3))
-                .disabled(busy)
-                .padding(.leading, 14)
-            outcomes(indent: 14)
+            .multilineTextAlignment(.leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
         }
-    }
-
-    private var row: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            HStack(alignment: .center, spacing: 10) {
-                if showsTask {
-                    // A button, so Full Keyboard Access reaches it.
-                    Button { app.showTask(project: need.project, task: need.task) } label: {
-                        NeedSummary(need: need, detail: detail).contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .help("Shows \(need.task) in full: how to check it, its PR, steps and notes")
-                    .accessibilityHint("Shows the task in full")
-                } else {
-                    NeedSummary(need: need, detail: detail)
-                }
-                Spacer(minLength: 8)
-                HStack(spacing: 6) { actButtons }
-                    .fixedSize()
-                    .disabled(busy)
-            }
-            outcomes(indent: 17)
-        }
+        .buttonStyle(.plain)
+        .help(!picked ? "Shows its answers" : showsTask ? "Shows \(need.task) in full: how to check it, its PR, steps and notes" : "Shows it in the window")
+        .accessibilityLabel([line, card.title].filter { !$0.isEmpty }.joined(separator: ": ").replacingOccurrences(of: " · ", with: ", "))
+        .accessibilityAddTraits(picked ? .isSelected : [])
+        .accessibilityHint(!picked ? "Shows its answers" : showsTask ? "Shows the task in full" : "Shows it in the window")
     }
 
     /// What the server said, and what came of a link's or a task's ask.
     @ViewBuilder
-    private func outcomes(indent: CGFloat) -> some View {
+    private var outcomes: some View {
         if let said {
             Text(said.text)
                 .font(theme.body(.footnote))
                 .foregroundStyle(said.failed ? theme.attention : theme.muted)
-                .padding(.leading, indent)
         }
         if let o = app.linkOutcomes[need.id] {
             LinkOutcomeRow(outcome: o)
-                .padding(.leading, indent)
         }
         if !need.task.isEmpty, need.kind == .review || need.kind == .blocked {
             TaskOutcome(project: need.project, task: need.task)
-                .padding(.leading, indent)
         }
     }
 
     /// The primary answer's style, its words wrapping in the panel.
-    private var primary: FlatButtonStyle { FlatButtonStyle(primary: true, lines: panel ? 3 : 1) }
+    private var primary: FlatButtonStyle { FlatButtonStyle(primary: true, lines: 3) }
 
     /// Whether the card's words show its task in the task view (T780):
     /// a task in review's or a blocked one's.
@@ -181,7 +169,7 @@ struct NeedCard: View {
                 }
             case .review, .blocked:
                 if !need.task.isEmpty {
-                    TaskActs(project: need.project, task: need.task, status: need.kind == .review ? "review" : "blocked")
+                    TaskActs(project: need.project, task: need.task, status: need.kind == .review ? "review" : "blocked", sendBack: "Send back")
                 }
                 if !need.session.isEmpty { open("Open") }
             case .link, .network:
@@ -216,10 +204,18 @@ struct NeedCard: View {
             }
     }
 
+    /// Open is only words beside a need's answers; an Answer… or the
+    /// like is the answer.
+    @ViewBuilder
     private func open(_ title: String) -> some View {
-        Button(title) { app.open(project: need.project, session: need.session) }
+        let button = Button(title) { app.open(project: need.project, session: need.session) }
             .help("Shows it in the window")
             .accessibilityLabel(named(title))
+        if title == "Open" {
+            button.buttonStyle(.flatText)
+        } else {
+            button
+        }
     }
 
     /// A button's name for VoiceOver: its title and the need it acts on
@@ -294,6 +290,7 @@ struct NeedCard: View {
         Task {
             do {
                 if let s = try await f() { said = (s, false) }
+                answered()
             } catch is QuestionGone {
                 // Answered elsewhere: the card goes with the sessions read.
             } catch let e as AppAPI.Error where e.code == "need-changed" {
@@ -305,5 +302,50 @@ struct NeedCard: View {
             }
             busy = false
         }
+    }
+}
+
+/// What needs the user, under its count, one card each (T1016): the first
+/// starts picked, a click picks another, and once the picked one is
+/// answered the next is. One whose answer stands (an ask with its
+/// coordinator, a link's act) isn't picked again by itself.
+struct NeedCards: View {
+    @Environment(AppModel.self) private var app
+    @Environment(\.theme) private var theme
+    let needs: [Need]
+    /// The done acts whose needs went: their rows, for a moment.
+    var settled: [(id: String, outcome: LinkOutcome)] = []
+    var named = false
+    @State private var picked: String?
+    @State private var answered: Set<String> = []
+
+    var body: some View {
+        if !needs.isEmpty || !settled.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Needs you · \(needs.count)")
+                    .font(theme.sized(12))
+                    .foregroundStyle(theme.muted)
+                    .accessibilityAddTraits(.isHeader)
+                ForEach(needs) { n in
+                    NeedCard(need: n, picked: picked == n.id, named: named,
+                             pick: { picked = n.id }, answered: { answered.insert(n.id) })
+                }
+                ForEach(settled, id: \.id) { LinkOutcomeRow(outcome: $0.outcome, settled: true) }
+            }
+            .onChange(of: open, initial: true) { was, now in
+                picked = NeedPick.next(picked: picked, was: was, now: now)
+                answered.formIntersection(needs.map(\.id))
+            }
+        }
+    }
+
+    /// The ids that can be picked: those with no answer standing.
+    private var open: [String] {
+        needs.filter { n in
+            !answered.contains(n.id)
+                && app.linkOutcomes[n.id]?.holdsButtons != true
+                && !((n.kind == .review || n.kind == .blocked) && app.asks[TaskAsk.key(n.project, n.task)]?.holdsButtons == true)
+        }
+        .map(\.id)
     }
 }

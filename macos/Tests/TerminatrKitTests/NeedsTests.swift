@@ -357,3 +357,55 @@ func thread(_ id: String, task: AppAPI.Task? = nil, session: String = "", checks
     #expect(n?.since == t0)
     #expect(n?.answer?.descriptions == ["", ""])
 }
+
+@Test func aNeedsCardSaysItPlainly() {
+    func card(_ what: String, _ detail: String, kind: Need.Kind = .question) -> Need.Card {
+        Need(id: "x", kind: kind, project: "p", what: what, detail: detail).card(detail: detail)
+    }
+    let review = card("T1009 is ready to review", "fix(app): indent the Coordinator", kind: .review)
+    #expect(review.id == "T1009")
+    #expect(review.state == "ready to review")
+    #expect(review.title == "Indent the Coordinator")
+    #expect(review.line == "T1009 · ready to review")
+    #expect(card("T1 is blocked", "Cache layer").line == "T1 · blocked")
+    #expect(card("T1 asks a question", "Cache layer · answer in Terminal").title == "Cache layer · answer in Terminal")
+    #expect(card("T1 asks 2 questions", "Cache").line == "T1 · asks 2 questions")
+    #expect(card("T1 needs approval", "Cache").line == "T1 · needs approval")
+    #expect(card("T1 asks to run outside the sandbox", "Cache").line == "T1 · asks to run outside the sandbox")
+    #expect(card("T1 PR #5 checks fail", "Cache").line == "T1 · PR #5 checks fail")
+    #expect(card("T1's prompt is held", "Cache").line == "T1 · prompt is held")
+    #expect(card("t-9's 2 prompts are held", "Cache").line == "t-9 · 2 prompts are held")
+    #expect(card("m-3 to bob waits for your OK", "Message · 2 KB").line == "m-3 · to bob waits for your OK")
+    #expect(card("bob offers a file", "a.txt · 2 KB").line == "bob · offers a file")
+    #expect(card("bob asks to link", "It asks").line == "bob · asks to link")
+    #expect(card("Bob Smith asks you to share a project", "Bob Smith · paired server").id == "Bob Smith")
+    // A paired server's says who it is after that server and project.
+    #expect(card("mini › acme: T1 is ready to review", "Cache · for mini").line == "T1 · ready to review")
+    #expect(card("mini › acme: 2 need you", "mini · paired server").line == "2 need you")
+    // No title of its own: what of it is its title.
+    let asks = card("coordinator has a question", "coordinator")
+    #expect(asks.line == "coordinator")
+    #expect(asks.title == "Has a question")
+    #expect(card("director has 2 questions", "director").title == "Has 2 questions")
+    #expect(card("T1 needs approval", "").title == "Needs approval")
+}
+
+@Test func plainTitlesLoseTheCommitPrefix() {
+    #expect(Need.plain("fix(app): indent the row") == "Indent the row")
+    #expect(Need.plain("feat: a thing") == "A thing")
+    #expect(Need.plain("feat(ios)!: a thing") == "A thing")
+    #expect(Need.plain("Design: Files as a right panel") == "Files as a right panel")
+    #expect(Need.plain("chore: bump") == "Bump")
+    // Only a commit's words: a title's own colon stays.
+    #expect(Need.plain("Cache: the layer") == "Cache: the layer")
+    #expect(Need.plain("Fixes for the app") == "Fixes for the app")
+    #expect(Need.plain("") == "")
+}
+
+@Test func aThreadsNeedsAreItsSessionsAndItsTasks() {
+    let needs = [Need(id: "a", kind: .approval, project: "p", what: "", detail: "", session: "s1"),
+                 Need(id: "b", kind: .review, project: "p", what: "", detail: "", task: "T1"),
+                 Need(id: "c", kind: .review, project: "p", what: "", detail: "", task: "T2")]
+    #expect(Need.of(session: "s1", task: "T1", in: needs).map(\.id) == ["a", "b"])
+    #expect(Need.of(session: "", task: "", in: needs).isEmpty)
+}

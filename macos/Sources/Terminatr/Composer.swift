@@ -47,16 +47,16 @@ struct Composer: View {
             HStack(alignment: .top, spacing: 8) {
                 field
                 if running && !model.ref.isRemote {
-                    InspectorFootButton(title: "Interrupt", help: "Stops the agent's turn for this prompt") { interrupting = true }
+                    ComposerButton(title: "Interrupt", help: "Stops the agent's turn for this prompt") { interrupting = true }
                         .disabled(empty || busy)
-                    InspectorFootButton(title: "Steer", help: "Sends it into the running turn (⌥↩)") { send(mode: "now") }
+                    ComposerButton(title: "Steer", help: "Sends it into the running turn (⌥↩)") { send(mode: "now") }
                         .disabled(empty || busy)
                 }
-                InspectorFootButton(title: "Send", help: running ? "Queued: it goes once the turn ends (↩)" : "Sends it (↩)") { send(mode: "") }
+                ComposerButton(title: "Send", help: running ? "Queued: it goes once the turn ends (↩)" : "Sends it (↩)") { send(mode: "") }
                     .disabled(empty || busy)
             }
         }
-        // The inspector's footer's measure: 59 with its line at rest.
+        // 59 with its line at rest.
         .padding(.horizontal, 12)
         .padding(.top, 13)
         .padding(.bottom, 11)
@@ -375,5 +375,30 @@ struct NoWritingTools: ViewModifier {
         } else {
             content
         }
+    }
+}
+
+/// A composer's button: at least 79 wide with 14 of side padding, 34 high
+/// like the field beside it, 6 round.
+private struct ComposerButton: View {
+    @Environment(\.theme) private var theme
+    @Environment(\.isEnabled) private var enabled
+    let title: String
+    let help: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(theme.sized(title.count > 8 ? 12 : 13))
+                .foregroundStyle(enabled ? theme.ink : theme.muted)
+                .lineLimit(1)
+                .padding(.horizontal, 14)
+                .frame(minWidth: 79, minHeight: 34, maxHeight: 34)
+                .background(theme.tab, in: RoundedRectangle(cornerRadius: 6))
+                .contentShape(RoundedRectangle(cornerRadius: 6))
+        }
+        .buttonStyle(.plain)
+        .help(help)
     }
 }

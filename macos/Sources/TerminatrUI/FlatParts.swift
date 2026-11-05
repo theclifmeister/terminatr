@@ -103,6 +103,43 @@ private struct FlatButton: View {
     }
 }
 
+/// A plain button that's only its words (T1016): muted, ink under the
+/// pointer, no fill, for what shouldn't look like a main action.
+public struct FlatTextButtonStyle: ButtonStyle {
+    public init() {}
+
+    public func makeBody(configuration: Configuration) -> some View {
+        FlatTextButton(configuration: configuration)
+    }
+}
+
+extension ButtonStyle where Self == FlatTextButtonStyle {
+    public static var flatText: FlatTextButtonStyle { FlatTextButtonStyle() }
+}
+
+private struct FlatTextButton: View {
+    @Environment(\.theme) private var theme
+    @Environment(\.isEnabled) private var enabled
+    @Environment(\.isFocused) private var focused
+    @State private var hovering = false
+    let configuration: ButtonStyleConfiguration
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: Radius.row)
+        configuration.label
+            .font(theme.sized(12.5))
+            .lineLimit(1)
+            .foregroundStyle(!enabled ? theme.faint : hovering || configuration.isPressed ? theme.ink : theme.muted)
+            .padding(.horizontal, 4)
+            .padding(.vertical, 3)
+            .overlay {
+                if focused { shape.strokeBorder(theme.focus, lineWidth: 2) }
+            }
+            .contentShape(shape)
+            .onHover { hovering = $0 }
+    }
+}
+
 /// A group's label over its list: 13, muted, a header to VoiceOver.
 public struct PaneLabel: View {
     @Environment(\.theme) private var theme
