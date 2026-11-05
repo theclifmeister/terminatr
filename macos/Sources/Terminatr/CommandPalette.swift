@@ -234,8 +234,12 @@ struct CommandPalette: View {
                 out.append(PaletteItem(id: "cmd:find", group: .actions, title: "Find in the conversation", command: .find, keys: "⌘F"))
                 out.append(PaletteItem(id: "cmd:tab", group: .actions, title: "Conversation or Terminal", command: .tab, keys: "⇧⌘T"))
             }
-            out.append(PaletteItem(id: "cmd:inspector", group: .actions, title: app.inspector ? "Hide the inspector" : "Show the inspector",
+            out.append(PaletteItem(id: "cmd:inspector", group: .actions, title: app.panelShown(app.nav.selection) == .inspector ? "Hide the inspector" : "Show the inspector",
                                    command: .inspector, keys: "⌥⌘I"))
+        }
+        if app.filesPlace(app.nav.selection) != nil {
+            out.append(PaletteItem(id: "cmd:files", group: .actions, title: app.panelShown(app.nav.selection) == .files ? "Hide the files" : "Show the files",
+                                   command: .files, keys: "⌥⌘E", keywords: "worktree browse attached library"))
         }
         if app.controlsProjects, let p = app.shownProject {
             out += Palette.projectActions(p, coordinator: app.coordinatorSession(p.slug), sessions: app.sessions, hint: app.contextHint)
@@ -266,7 +270,8 @@ struct CommandPalette: View {
         case .previousNeed: app.stepNeed(-1)
         case .inactive: app.nav.showInactive.toggle()
         case .tab: app.switchTab()
-        case .inspector: app.inspector.toggle()
+        case .inspector: app.press(.inspector)
+        case .files: app.press(.files)
         case .find: app.findInConversation()
         case .filter: app.focusFilter()
         case .search: app.showSearch()

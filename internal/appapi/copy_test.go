@@ -427,6 +427,11 @@ func TestParamsCopies(t *testing.T) {
 	if want := (proto.SessionApproveParams{ID: "s-1", Choice: 2, Escape: true, Session: true}); err != nil || p != want {
 		t.Errorf("approve params %+v %v", p, err)
 	}
+	m, _ = Lookup(proto.MethodFilesRead)
+	p, err = m.toServer(json.RawMessage(`{"session":"s-1","path":"pic.png","offset":9,"ignored":true,"binary":true}`))
+	if want := (proto.FilesReadParams{Session: "s-1", Path: "pic.png", Offset: 9, Ignored: true, Binary: true}); err != nil || p != want {
+		t.Errorf("files.read params %+v %v", p, err)
+	}
 	// The console a pane's takeover counts is the server's to name.
 	m, _ = Lookup(proto.MethodPaneVT)
 	if _, err := m.toServer(json.RawMessage(`{"session":"s-1","console":"c-1"}`)); err == nil {

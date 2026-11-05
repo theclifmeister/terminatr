@@ -72,7 +72,8 @@ struct SessionWindow: View {
     @Environment(\.theme) private var theme
     let ref: SessionRef
     @State private var model: SessionModel
-    @State private var inspector = true
+    @State private var files = FilesModel()
+    @State private var panel: RightPanel? = .inspector
     @AppStorage("inspectorPanelWidth") private var panelWidth = InspectorColumn.ideal
 
     init(ref: SessionRef) {
@@ -82,8 +83,13 @@ struct SessionWindow: View {
 
     var body: some View {
         GeometryReader { g in
-            let f = WindowColumns.fit(window: g.size.width, sidebar: nil, inspector: inspector ? panelWidth : nil)
-            MainArea(selection: .session(ref), own: model, buttons: true, inspector: $inspector,
+            let shown = RightPanel.shown(panel, hasFiles: app.filesPlace(.session(ref)) != nil)
+            let f = WindowColumns.fit(window: g.size.width, sidebar: nil, inspector: shown != nil ? panelWidth : nil)
+            MainArea(selection: .session(ref), own: model, files: files, buttons: true, shownPanel: shown,
+                     press: { v in
+                         panel = RightPanel.pressed(v, now: shown)
+                         if panel == .files { files.askFocus() }
+                     },
                      panelWidth: f.inspector, panelWidthSaved: $panelWidth) {
                 VStack(spacing: 0) {
                     if app.lost { ConnectionBanner() }

@@ -5,10 +5,11 @@ import TerminatrUI
 /// The app's one window (design T746, framed as the flat look's reference
 /// since T1000): the sidebar of servers, projects and their coordinators
 /// and threads; beside it the title row, the main pane with a project's
-/// pages or a session, the inspector's panel (⌘⌥I) and the status bar;
+/// pages or a session, the right panel, Files (⌘⌥E) or the inspector
+/// (⌘⌥I), and the status bar;
 /// over them the command palette (⌘K). The menu bar, notifications and
 /// cards change what it shows, never open another window, unless the user
-/// asks for one (Open in New Window). The sidebar and the inspector keep
+/// asks for one (Open in New Window). The sidebar and the right panel keep
 /// the widths they were left at.
 struct MainWindow: View {
     @Environment(AppModel.self) private var app
@@ -21,7 +22,7 @@ struct MainWindow: View {
     var body: some View {
         @Bindable var app = app
         GeometryReader { g in
-            let shown = app.inspector && app.nav.selection != nil
+            let shown = app.panelShown(app.nav.selection) != nil
             let f = WindowColumns.fit(window: g.size.width, sidebar: app.sidebarShown ? sidebarWidth : nil, inspector: shown ? panelWidth : nil)
             HStack(spacing: 0) {
                 if let s = f.sidebar {
@@ -36,7 +37,8 @@ struct MainWindow: View {
                         }
                         .zIndex(1)
                 }
-                MainArea(selection: app.nav.selection, buttons: f.sidebar == nil, inspector: $app.inspector,
+                MainArea(selection: app.nav.selection, files: app.nav.selection.map { app.filesModel($0) }, buttons: f.sidebar == nil,
+                         shownPanel: app.panelShown(app.nav.selection), press: { app.press($0) },
                          panelWidth: f.inspector, panelWidthSaved: $panelWidth) {
                     VStack(spacing: 0) {
                         if app.lost { ConnectionBanner() }

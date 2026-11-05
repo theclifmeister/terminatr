@@ -136,8 +136,6 @@ struct LibraryPane: View {
     /// The paired server whose project it is (T886); nil for this
     /// server's.
     var peer: String?
-    /// One thread's files alone: the title row's Files, on a thread.
-    var thread: String?
     @State private var files: [AppAPI.LibraryFile]?
     @State private var picked: String?
     @State private var looking: URL?
@@ -217,8 +215,7 @@ struct LibraryPane: View {
             if let peer {
                 files = try await app.peerLibrary(peer, project)
             } else {
-                let all = try await app.library(project)
-                files = thread.map { t in all.filter { $0.thread == t } } ?? all
+                files = try await app.library(project)
             }
             failure = nil
         } catch {

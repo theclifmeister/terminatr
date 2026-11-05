@@ -53,7 +53,7 @@ public struct PaletteItem: Identifiable, Hashable, Sendable {
 
     /// The window's own commands, the Actions group.
     public enum Command: Hashable, Sendable {
-        case nextNeed, previousNeed, inactive, tab, inspector, find, filter, back, forward, shortcuts
+        case nextNeed, previousNeed, inactive, tab, inspector, files, find, filter, back, forward, shortcuts
         /// Search Project… (⇧⌘F, T924).
         case search
         /// Picks a theme (T770).

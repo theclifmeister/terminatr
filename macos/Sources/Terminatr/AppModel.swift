@@ -92,9 +92,11 @@ final class AppModel {
             reshow()
         }
     }
-    /// Whether the session view shows its inspector (⌘⌥I).
-    var inspector = UserDefaults.standard.object(forKey: AppModel.inspectorKey) as? Bool ?? true {
-        didSet { UserDefaults.standard.set(inspector, forKey: Self.inspectorKey) }
+    /// What the right panel was left showing, Files (⌘⌥E) or the Inspector
+    /// (⌘⌥I), nil hidden.
+    var panel = RightPanel.saved(UserDefaults.standard.string(forKey: AppModel.panelKey),
+                                 inspector: UserDefaults.standard.object(forKey: AppModel.inspectorKey) as? Bool) {
+        didSet { UserDefaults.standard.set(panel?.rawValue ?? "", forKey: Self.panelKey) }
     }
     /// Whether the window shows its sidebar (⌃⌘S).
     var sidebarShown = UserDefaults.standard.object(forKey: AppModel.sidebarKey) as? Bool ?? true {
@@ -150,7 +152,8 @@ final class AppModel {
     /// the next.
     struct ComposerDraft: Equatable {
         let n: Int
-        let project: String
+        /// The session whose composer takes it.
+        let ref: SessionRef
         let text: String
     }
 
@@ -201,6 +204,7 @@ final class AppModel {
     static let tmPathKey = "tmPath"
     static let navKey = "navigation"
     static let inspectorKey = "inspector"
+    static let panelKey = "rightPanel"
     static let sidebarKey = "sidebar"
 
     /// How often session.list and peer.list are read: neither streams.
@@ -751,6 +755,7 @@ final class AppModel {
     func focusComposer() {
         guard let m = selectedSession, !m.ref.isRemote || remoteConversation(m.ref).sends else { return }
         m.pick(.conversation)
+        filesModels[.session(m.ref)]?.pane.shown = nil
         composerFocus += 1
     }
 
@@ -810,6 +815,57 @@ final class AppModel {
     /// its conversation loaded.
     @ObservationIgnored private var models: [SessionRef: SessionModel] = [:]
     @ObservationIgnored private var warmth = WarmSet<SessionRef>(limit: 3)
+
+    /// The Files panels' models, the shown selection's and the few before
+    /// it, with the file tabs they opened.
+    @ObservationIgnored private var filesModels: [Selection: FilesModel] = [:]
+    @ObservationIgnored private var filesWarmth = WarmSet<Selection>(limit: 8)
+
+    /// selection's Files model, made when it has none.
+    func filesModel(_ selection: Selection) -> FilesModel {
+        for gone in filesWarmth.touch(selection) {
+            filesModels.removeValue(forKey: gone)
+        }
+        if let m = filesModels[selection] { return m }
+        let m = FilesModel()
+        filesModels[selection] = m
+        return m
+    }
+
+    /// What Files browses for selection; nil leaves its button off.
+    func filesPlace(_ selection: Selection?) -> FilesPlace? {
+        var session: String?
+        var done = false
+        var task: String?
+        switch selection {
+        case .project(let slug, let server):
+            session = server.isEmpty ? coordinatorSession(slug)?.id : nil
+        case .session(let ref):
+            session = sessionID(ref)
+            if ref.isRemote {
+                task = ref.session(in: peers)?.task
+            } else if !ref.isCoordinator {
+                let t = thread(ref)
+                done = t?.record.done ?? true
+                task = t?.task?.ref
+            }
+        case .program, nil:
+            break
+        }
+        return FilesPlace.of(selection, sessionID: session, threadDone: done, task: task,
+                             readsWorktree: caps.contains("worktree-files"), hasLibrary: projectTabs.contains(.library))
+    }
+
+    /// What the right panel shows for selection.
+    func panelShown(_ selection: Selection?) -> RightPanel? {
+        selection == nil ? nil : RightPanel.shown(panel, hasFiles: filesPlace(selection) != nil)
+    }
+
+    /// ⌘⌥E and ⌘⌥I, and their buttons: that view, or hidden when it shows.
+    func press(_ view: RightPanel) {
+        panel = RightPanel.pressed(view, now: panelShown(nav.selection))
+        if panel == .files, let s = nav.selection { filesModel(s).askFocus() }
+    }
 
     /// ref's model, made when it has none.
     func model(_ ref: SessionRef) -> SessionModel {
@@ -1283,16 +1339,34 @@ final class AppModel {
         if coordinatorSession(project) == nil {
             try await startCoordinator(project)
         }
-        draft = ComposerDraft(n: (draft?.n ?? 0) + 1, project: project, text: Dashboard.askAbout(task))
+        draft = ComposerDraft(n: (draft?.n ?? 0) + 1, ref: SessionRef(project: project), text: Dashboard.askAbout(task))
         select(.session(SessionRef(project: project)))
         focusComposer()
     }
 
     /// Takes the draft for ref's composer: its text, once.
     func takeDraft(for ref: SessionRef) -> String? {
-        guard let d = draft, ref.isCoordinator, !ref.isRemote, d.project == ref.project else { return nil }
+        guard let d = draft, d.ref == ref else { return nil }
         draft = nil
         return d.text
+    }
+
+    /// Files' Mention in the Message: text in ref's composer, shown and
+    /// focused. A coordinator is started when none runs, as Ask the
+    /// Coordinator does; a thread has a session or offers no Mention.
+    func mention(_ text: String, in ref: SessionRef, own: SessionModel?) async throws {
+        if ref.isCoordinator, coordinatorSession(ref.project) == nil {
+            try await startCoordinator(ref.project)
+        }
+        draft = ComposerDraft(n: (draft?.n ?? 0) + 1, ref: ref, text: text)
+        if let own {
+            own.pick(.conversation)
+            composerFocus += 1
+        } else {
+            select(.session(ref))
+            filesModels[.session(ref)]?.pane.shown = nil
+            focusComposer()
+        }
     }
 
     /// Adds a task to project's board as the user (task.add).

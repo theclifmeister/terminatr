@@ -12,6 +12,7 @@ struct ShortcutsSheet: View {
             ("⌘N", "New Task: add a task to the shown project's board"),
             ("⇧⌘O", "Open the shown session in a new window"),
             ("⌃⌘S", "Show or hide the sidebar"),
+            ("⌥⌘E", "Show or hide the files"),
             ("⌥⌘I", "Show or hide the inspector"),
             ("⌘+  ⌘-  ⌘0", "Make text bigger, smaller, or its actual size"),
         ]),
@@ -37,6 +38,12 @@ struct ShortcutsSheet: View {
             ("⌘F", "Find in the conversation; ⌘G and ⇧⌘G the next and previous match"),
             ("⇧⌘T", "Conversation or Terminal"),
             ("⌥⌘R", "Repaint the terminal from its server"),
+        ]),
+        ("Files", [
+            ("↑  ↓", "Move through the tree; the file previews under it"),
+            ("←  →", "Fold or unfold a folder; ← from a file goes up to its folder"),
+            ("↩", "Open the file in a tab of the main pane, or fold a folder"),
+            ("Space", "Quick Look"),
         ]),
         ("Palette", [
             ("↑  ↓", "Move through the rows"),

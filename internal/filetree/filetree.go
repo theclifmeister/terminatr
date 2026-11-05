@@ -218,6 +218,16 @@ func underIgnored(set map[string]bool, p string) bool {
 // Read is the chunk of file rel from offset: ignored allows a git-ignored
 // one. It answers name and size alone for a file that isn't text.
 func (s *Scope) Read(ctx context.Context, rel string, offset int64, ignored bool) (proto.FilesReadResult, error) {
+	return s.read(ctx, rel, offset, ignored, false)
+}
+
+// ReadBytes is Read with the Data of a file that isn't text too, for the
+// app that hands it to Quick Look or an app of the user's.
+func (s *Scope) ReadBytes(ctx context.Context, rel string, offset int64, ignored bool) (proto.FilesReadResult, error) {
+	return s.read(ctx, rel, offset, ignored, true)
+}
+
+func (s *Scope) read(ctx context.Context, rel string, offset int64, ignored, binary bool) (proto.FilesReadResult, error) {
 	var res proto.FilesReadResult
 	rel, err := CleanPath(rel)
 	if err != nil {
@@ -253,7 +263,9 @@ func (s *Scope) Read(ctx context.Context, rel string, offset int64, ignored bool
 	}
 	if IsBinary(head[:n]) {
 		res.Binary = true
-		return res, nil
+		if !binary {
+			return res, nil
+		}
 	}
 	want := min(fi.Size(), proto.MaxFilesRead) - offset
 	if want <= 0 {

@@ -1693,11 +1693,13 @@ type (
 		Changed bool   `json:"changed,omitempty"`
 	}
 	// FilesReadParams are files.read's: the chunk of file Path from Offset.
+	// Binary asks for the bytes of a file that isn't text too (app API 50).
 	FilesReadParams struct {
 		Session string `json:"session"`
 		Path    string `json:"path"`
 		Offset  int64  `json:"offset,omitempty"`
 		Ignored bool   `json:"ignored,omitempty"`
+		Binary  bool   `json:"binary,omitempty"`
 	}
 	// FilesStampParams are files.stamp's: the folders shown.
 	FilesStampParams struct {
@@ -1737,7 +1739,8 @@ type FilesList struct {
 }
 
 // FilesChunk is files.read's result: Data from Offset (at most 512 KiB)
-// of Size bytes. Binary: name and size only. Truncated: over the 25 MiB a
+// of Size bytes. Binary: not text, name and size only unless its bytes were
+// asked for. Truncated: over the 25 MiB a
 // read gives.
 type FilesChunk struct {
 	Name      string    `json:"name"`
