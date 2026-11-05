@@ -9,7 +9,7 @@ import TerminatrUI
 /// answers, questions and build (DesignsSection); the first of on deck,
 /// the Board tab having the rest; and the inbox items for the user. Under
 /// them its repositories. What needs the user, and answering it, is the
-/// inspector's (ProjectFacts). An empty project offers a next step. A
+/// inspector's (NeedCards). An empty project offers a next step. A
 /// thread's row shows its thread in the window.
 struct ProjectDashboard: View {
     @Environment(AppModel.self) private var app

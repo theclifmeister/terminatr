@@ -8,7 +8,7 @@ import TerminatrUI
 /// where it shows, open at login), Notifications, Appearance (theme,
 /// sidebar density, text size), Guard (the refused calls waiting on an
 /// answer, T998), Devices (the paired iPhones, T790) and Advanced (the
-/// bridge's log, Reconnect).
+/// bridge's log, tm's signature check, Reconnect).
 struct SettingsView: View {
     enum Tab: String {
         case general, notifications, appearance, guardRefusals = "guard", devices, advanced
@@ -191,7 +191,8 @@ private struct AppearanceSettings: View {
     }
 }
 
-/// The bridge's state and log, and Reconnect.
+/// The bridge's state and log, whether tm's signature was checked, and
+/// Reconnect.
 private struct AdvancedSettings: View {
     @Environment(AppModel.self) private var model
 
@@ -200,6 +201,11 @@ private struct AdvancedSettings: View {
             Section {
                 LabeledContent("Bridge") {
                     Text(state)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.trailing)
+                }
+                LabeledContent("tm's signature") {
+                    Text(model.tmCheck.text)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.trailing)
                 }

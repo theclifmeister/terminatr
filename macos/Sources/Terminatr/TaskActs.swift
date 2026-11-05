@@ -16,6 +16,8 @@ struct TaskActs: View {
     let project: String
     let task: String
     let status: String
+    /// Send back's words: a need card's say it without the dots.
+    var sendBack = "Send back…"
     @State private var sendingBack = false
     @State private var delegating = false
 
@@ -28,7 +30,7 @@ struct TaskActs: View {
                     .buttonStyle(.flatPrimary)
                     .help("Asks the coordinator to accept \(task): it merges and closes it")
                     .accessibilityLabel("Accept \(task)")
-                Button("Send back…") { sendingBack = true }
+                Button(sendBack) { sendingBack = true }
                     .help("Asks the coordinator to send \(task) back with your note")
                     .accessibilityLabel("Send \(task) back…")
             } else if Palette.delegable(status) {

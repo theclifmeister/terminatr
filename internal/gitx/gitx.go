@@ -8,7 +8,11 @@
 // where its repository is: Pin derives the git dirs from the repository
 // tm knows, checks the worktree's .git names them, and Run then passes
 // them to git explicitly, with nothing in the folder able to make git
-// run a program.
+// run a program. Nor does the repository's own configuration, in a pinned
+// read: a filter it names doesn't run (Tree.filters), a missing object
+// isn't fetched, and a submodule, whose folder and configuration are the
+// agent's to write, is never asked for its status (Opts.Checkout says
+// when a run may do the first two).
 //
 // Rules for callers: git runs only through this package (TestOneRunner
 // enforces it). In a thread's worktree, call Pin(repo, dir) and pass the
@@ -67,6 +71,11 @@ type Opts struct {
 	// worktree's run gets a git dir of tm's own in its state dir
 	// (privateGitDir), which it drops after.
 	Tree *Tree
+	// Checkout is a Tree run that writes the work tree from the repository
+	// for tm, when it makes a worktree: the repository's filters run and
+	// its missing objects are fetched, or the files would come out wrong.
+	// A read never sets it.
+	Checkout bool
 	// Untrusted is a run that must look its repository up from a folder
 	// an agent writes (to find out what it is): git starts no program on
 	// the folder's behalf. A Tree run is always so.
@@ -126,6 +135,7 @@ func Output(ctx context.Context, dir string, o Opts, args ...string) (string, bo
 	}
 	if o.Untrusted || o.Tree != nil {
 		cfg = append(cfg, untrusted...)
+		args = noPrograms(args)
 	}
 	if t := o.Tree; t != nil {
 		dir = t.Dir
@@ -140,6 +150,9 @@ func Output(ctx context.Context, dir string, o Opts, args ...string) (string, bo
 			env = append(env, "GIT_INDEX_FILE="+filepath.Join(t.GitDir, "index"))
 		}
 		env = append(env, "GIT_DIR="+gitDir, "GIT_COMMON_DIR="+t.CommonDir, "GIT_WORK_TREE="+t.Dir)
+		if !o.Checkout {
+			env = append(append(env, "GIT_NO_LAZY_FETCH=1"), filterEnv(t.filters)...)
+		}
 	}
 	argv := make([]string, 0, 2*len(cfg)+len(args))
 	for _, c := range cfg {
@@ -173,6 +186,27 @@ func Output(ctx context.Context, dir string, o Opts, args ...string) (string, bo
 // start on the folder's behalf. Git passes it on to the gits it runs.
 var untrusted = []string{"core.fsmonitor=false", "core.hooksPath=" + os.DevNull}
 
+// noPrograms is args with what a status or a diff in a folder an agent
+// writes must say, right after the verb. Without it a dirty-looking
+// submodule gets a git of its own, reading the configuration in the
+// submodule's folder, where filter names no -c can know are the agent's to
+// choose; "dirty" still shows a submodule moved to another commit, and
+// beats anything .gitmodules says. A diff also starts no diff driver.
+func noPrograms(args []string) []string {
+	i := verbAt(args)
+	if i < 0 {
+		return args
+	}
+	var add []string
+	switch args[i] {
+	case "status":
+		add = []string{"--ignore-submodules=dirty"}
+	case "diff":
+		add = []string{"--ignore-submodules=dirty", "--no-ext-diff", "--no-textconv"}
+	}
+	return slices.Insert(slices.Clone(args), i+1, add...)
+}
+
 // located are the variables that tell git where a repository is: none
 // comes from tm's own environment (a tm started from a git hook).
 var located = []string{"GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_INDEX_FILE",
@@ -191,15 +225,23 @@ func Env() []string {
 
 // verb is the git command of args, after any -c pairs.
 func verb(args []string) string {
+	if i := verbAt(args); i >= 0 {
+		return args[i]
+	}
+	return "run"
+}
+
+// verbAt is where args' git command is; -1 when it has none.
+func verbAt(args []string) int {
 	for i := 0; i < len(args); i++ {
 		switch a := args[i]; {
 		case a == "-c" || a == "-C":
 			i++
 		case !strings.HasPrefix(a, "-"):
-			return a
+			return i
 		}
 	}
-	return "run"
+	return -1
 }
 
 // lastLine is stderr's last non-empty line, cleaned for a terminal;
@@ -284,6 +326,9 @@ type Tree struct {
 	Dir       string // the worktree's top folder
 	GitDir    string // its own git dir: <common>/worktrees/<name>, or common for the main checkout
 	CommonDir string // the repository's git dir
+	// filters are the filters the repository's own configuration names
+	// (repoFilters), which a read turns off.
+	filters []string
 }
 
 // ErrNotPinned means a folder is not a worktree of the repository, by
@@ -320,7 +365,7 @@ func Pin(ctx context.Context, repo, dir string) (*Tree, error) {
 		if dotgit != common {
 			return nil, fmt.Errorf("%s: %w", dir, ErrNotPinned)
 		}
-		return &Tree{Dir: top, GitDir: common, CommonDir: common}, nil
+		return pinned(ctx, top, common, common)
 	case !fi.Mode().IsRegular():
 		return nil, fmt.Errorf("%s: %w", dir, ErrNotPinned)
 	}
@@ -334,7 +379,80 @@ func Pin(ctx context.Context, repo, dir string) (*Tree, error) {
 	if back, ok := gitfile(filepath.Join(own, "gitdir"), own); !ok || back != dotgit {
 		return nil, fmt.Errorf("%s: %w", dir, ErrNotPinned)
 	}
-	return &Tree{Dir: top, GitDir: own, CommonDir: common}, nil
+	return pinned(ctx, top, own, common)
+}
+
+// pinned is the Tree of a checked checkout. One that can't say what the
+// repository's filters are isn't pinned: a read would run them.
+func pinned(ctx context.Context, top, own, common string) (*Tree, error) {
+	filters, err := repoFilters(ctx, common)
+	if err != nil {
+		return nil, err
+	}
+	return &Tree{Dir: top, GitDir: own, CommonDir: common, filters: filters}, nil
+}
+
+// maxFilters caps the filters a repository's configuration may name.
+const maxFilters = 64
+
+// repoFilters are the filters git dir common's own configuration and what
+// it includes name. A filter's name is the configuration's choice, so no
+// fixed -c can turn them all off: git is asked. The user's global and
+// system filters aren't the repository's and stay (git-lfs, as usual).
+func repoFilters(ctx context.Context, common string) ([]string, error) {
+	out, _, err := Output(ctx, "", Opts{Timeout: 30 * time.Second, Untrusted: true, OK: []int{1}, Env: []string{"GIT_DIR=" + common}},
+		"config", "--show-scope", "--includes", "-z", "--name-only", "--get-regexp", `^filter\..*\.(clean|smudge|process|required)$`)
+	if err != nil {
+		return nil, err
+	}
+	var names []string
+	f := strings.Split(strings.TrimSuffix(out, "\x00"), "\x00")
+	for i := 0; i+1 < len(f); i += 2 {
+		if f[i] != "local" && f[i] != "worktree" {
+			continue
+		}
+		key := strings.TrimPrefix(f[i+1], "filter.")
+		if j := strings.LastIndexByte(key, '.'); j >= 0 && !slices.Contains(names, key[:j]) {
+			names = append(names, key[:j])
+		}
+	}
+	if len(names) > maxFilters {
+		return nil, fmt.Errorf("%s: over %d filters", common, maxFilters)
+	}
+	return names, nil
+}
+
+// NoRepoFilters is the environment that turns git dir common's own filters
+// off, for a git run that runs a status of its own in a worktree and can't
+// be pinned (git worktree remove).
+func NoRepoFilters(ctx context.Context, common string) ([]string, error) {
+	filters, err := repoFilters(ctx, common)
+	if err != nil {
+		return nil, err
+	}
+	return filterEnv(filters), nil
+}
+
+// filterEnv is the configuration that turns filters off, by the
+// environment as -c can't carry a name with an = in it. Each is emptied and
+// not required: git fails a required filter that doesn't run.
+func filterEnv(filters []string) []string {
+	if len(filters) == 0 {
+		return nil
+	}
+	var env []string
+	n := 0
+	set := func(key, value string) {
+		env = append(env, fmt.Sprintf("GIT_CONFIG_KEY_%d=%s", n, key), fmt.Sprintf("GIT_CONFIG_VALUE_%d=%s", n, value))
+		n++
+	}
+	for _, f := range filters {
+		for _, k := range []string{"clean", "smudge", "process"} {
+			set("filter."+f+"."+k, "")
+		}
+		set("filter."+f+".required", "false")
+	}
+	return append(env, fmt.Sprintf("GIT_CONFIG_COUNT=%d", n))
 }
 
 // RunsDir is the folder in tm's state dir home that the private git

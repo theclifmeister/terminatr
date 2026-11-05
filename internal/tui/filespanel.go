@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"path"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -839,5 +840,46 @@ func worktreeViewer(paths tmclient.Paths, session string, e proto.FileEntry, ign
 	}
 	tv.body, tv.note = libText(e.Name, data, truncated)
 	tv.body = textsafe.Text(tv.body)
+	if c := fileCaution(e); c != "" && tv.body != "" {
+		tv.title += " · " + c
+	}
 	return tv
+}
+
+// fileCaution is what the viewer's title says of a file that may hold a
+// secret: said, not asked, since it opens only for the human who picked it,
+// on this machine, and ignored files were asked for first. The title
+// stays in view while the text scrolls, which matters on a shared screen.
+func fileCaution(e proto.FileEntry) string {
+	switch {
+	case e.Ignored:
+		return "git-ignored: may hold secrets"
+	case secretName(e.Name):
+		return "its name says it may hold secrets"
+	}
+	return ""
+}
+
+// secretName says a file's name is one that usually holds a secret. It
+// is a hint for the eye, not a rule: nothing is refused by it.
+func secretName(name string) bool {
+	n := strings.ToLower(name)
+	if n == ".env" || strings.HasPrefix(n, ".env.") {
+		for _, safe := range []string{".example", ".sample", ".template", ".dist"} {
+			if strings.HasSuffix(n, safe) {
+				return false
+			}
+		}
+		return true
+	}
+	switch n {
+	case ".netrc", ".npmrc", ".pypirc", ".git-credentials", "credentials", "credentials.json",
+		"id_rsa", "id_dsa", "id_ecdsa", "id_ed25519":
+		return true
+	}
+	switch filepath.Ext(n) {
+	case ".pem", ".key", ".p12", ".pfx", ".keystore", ".jks", ".kdbx":
+		return true
+	}
+	return strings.HasPrefix(n, "secrets.") || strings.HasPrefix(n, "secret.")
 }

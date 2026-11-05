@@ -3008,19 +3008,23 @@ func inPlaceFiles(cmd string, args []string) []string {
 
 // tmAgentMod are the tm mod subcommands an agent may run; the others,
 // tm project's tmProjectWrites (and repo add), tm access's
-// tmAccessWrites and the dashboard write
-// tm's settings in the tm process itself, the human's alone: an agent
-// past its sandbox (yolo) that runs one with its session's variables
-// unset and out of its session's process tree would pass for the human
-// (internal/cli: Run, caller.Narrower), so the floor refuses them.
+// tmAccessWrites, tm peer's and tm device's but their reads, tm app
+// bridge and the dashboard write tm's settings in the tm process itself
+// or act for the human, theirs alone: an agent past its sandbox (yolo)
+// that runs one with its session's variables unset and out of its
+// session's process tree would pass for the human (internal/cli: Run,
+// caller.Narrower), so the floor refuses them. tm peer and tm device list
+// their reads, as tm mod does, so a new subcommand starts out refused.
 var (
 	tmAgentMod      = setOf("list show validate new test logs examples host")
 	tmProjectWrites = setOf("new remote activate deactivate pause resume archive unarchive delete rename mv link open")
 	tmAccessWrites  = setOf("add rm edit drop undrop set reset")
+	tmPeerReads     = setOf("list requests")
+	tmDeviceReads   = setOf("list reports report")
 )
 
 // tmWritesSettings is which of those tm with args (after its name) is
-// ("tm mod enable", "tm (the dashboard)"), or "".
+// ("tm mod enable", "tm app bridge", "tm (the dashboard)"), or "".
 func tmWritesSettings(args []string) string {
 	i := 0
 	for i < len(args) && strings.HasPrefix(args[i], "-") {
@@ -3040,7 +3044,9 @@ func tmWritesSettings(args []string) string {
 	}
 	switch {
 	case len(pos) == 0:
-	case args[i] == "mod" && !tmAgentMod[pos[0]], args[i] == "project" && tmProjectWrites[pos[0]]:
+	case args[i] == "mod" && !tmAgentMod[pos[0]], args[i] == "project" && tmProjectWrites[pos[0]],
+		args[i] == "peer" && !tmPeerReads[pos[0]], args[i] == "device" && !tmDeviceReads[pos[0]],
+		args[i] == "app" && pos[0] == "bridge":
 		return "tm " + args[i] + " " + safe(pos[0])
 	case args[i] == "project" && (pos[0] == "repo" || pos[0] == "repos") && len(pos) > 1 && pos[1] == "add":
 		return "tm project repo add"
@@ -4312,7 +4318,7 @@ func (r Rules) judgeNoWrite(cmd string, args, words []string) *Denial {
 	if cmd == "tm" || strings.Contains(cmd, "TERMINATR_BIN") {
 		if what := tmWritesSettings(args); what != "" && !(r.AccessWrites && accessOpen(args)) && !r.scratchTM(words, len(args)+1) {
 			d := r.deny(RuleTMFiles, what, "")
-			d.Message = "terminatr guard (" + RuleTMFiles + "): " + what + " changes tm's settings, which are the user's alone. Run tm's read-only commands instead (tm --version, tm --help, tm project list), or ask the user to run it in their own terminal (a ! command in an agent's pane runs as the agent). " +
+			d.Message = "terminatr guard (" + RuleTMFiles + "): " + what + " changes tm's settings or acts for the user, which is the user's alone. Run tm's read-only commands instead (tm --version, tm --help, tm project list), or ask the user to run it in their own terminal (a ! command in an agent's pane runs as the agent). " +
 				"On a scratch tm of your own, give this command its own home and socket in your worktree or temp folder: env -u TERMINATR_SESSION TERMINATR_HOME=$TMPDIR/tm TERMINATR_SOCKET=$TMPDIR/tm.sock tm … (any program named tm, a wrapper or a build, counts as tm)."
 			return floor(d)
 		}
