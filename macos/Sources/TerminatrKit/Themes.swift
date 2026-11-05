@@ -1,51 +1,68 @@
 import Foundation
 
-// The themes' colours (T770). Each is checked in ThemeTests: every text
-// colour 4.5:1 or more over its surfaces at their worst spot, in light
-// and dark, with and without Increase Contrast (ThemeColours.checks),
-// and the status dots apart for colour-blind eyes (dotDistance).
+// The themes' colours (T770; flat since T999, the design page's tokens()).
+// Each is checked in ThemeTests: every text colour 4.5:1 or more over its
+// surfaces, in light and dark, with and without Increase Contrast
+// (ThemeColours.checks), and the status dots apart for colour-blind eyes
+// (dotDistance).
 
 extension ThemeColours {
-    /// Bloom (design T744, concept 02): a vivid gradient mesh under
-    /// frosted panels, smoked glass in dark. No text sits on the raw
-    /// mesh: the sidebar and inspector have their frost, the detail its
-    /// glass, the cards theirs over it (the menu bar's panels as well,
-    /// since T770: over the bare material alone its dark action read
-    /// 2.6:1).
-    ///
-    /// Contrast (T752), each text pair over its worst spot (checks):
-    ///
-    ///                                light           dark
-    ///     ink on the sidebar         12.9 (violet)   11.1 (lime)
-    ///     muted on the sidebar        6.3 (violet)    7.1 (lime)
-    ///     action on the sidebar       4.6 (violet)    4.6 (lime)
-    ///     ink on the glass           14.0 (violet)   14.5 (lime)
-    ///     action on the glass         5.0 (violet)    6.1 (lime)
-    ///     attention on the glass      4.8 (violet)    7.0 (lime)
-    ///     ink on a card              17.1 (violet)   12.0 (lime)
-    ///     muted on a card             8.4 (violet)    7.7 (lime)
-    ///     approval on its card        4.7 (coral)     5.6 (coral)
-    ///     onPrompt on prompt          4.9             6.1
-    ///
-    /// So the tones' colours (approval, attention, good) are never text
-    /// on the sidebar (3.8–4.4:1 there in light): a tag there is a
-    /// filled pill. Against Bloom's page: light approval, attention and
-    /// good are darker (Bloom's e2541c, d83a22, 0e9f6e read 3.5–4.3:1 on
-    /// the cards), the light sidebar's tint 60% and the dark one smoked
-    /// glass, since here the sidebar has no window glass under it; dark
-    /// bubblegum, the mesh's centre, is calmer (8c1f6e).
+    /// Carbon (the flat look's reference window, the default): neutral
+    /// greys and one teal. Dark's surfaces, ink and tile are the colours
+    /// measured from that window, exactly; the rest of dark, and all of
+    /// light, start from the design page's. Tuned for the checks: light's
+    /// action (page 0f8a80, 4.2:1 on a pane), light's good and attention
+    /// and dark's good (the status dots, ΔE under 12 for colour-blind eyes
+    /// beside the teal), dark's idle (page 66686a; an idle pill sets ink on
+    /// it).
+    public static let carbon = ThemeColours(
+        chrome: Swatch(0xf3f4f5, 0x101213),
+        gutter: Swatch(0xeceef0, 0x121418),
+        pane: Swatch(0xffffff, 0x17181c),
+        line: Swatch(0xdcdee1, 0x292b2f),
+        lineSoft: Swatch(0xe6e7e9, 0x202224),
+        selection: Swatch(0xe3e4e7, 0x262628),
+        tab: Swatch(0xdfe1e4, 0x2c2d31),
+        focus: Swatch(0x5b6472, 0xa6aebe),
+        ink: Swatch(0x17181c, 0xdddfe0),
+        muted: Swatch(0x5e6268, 0x8a8c90),
+        faint: Swatch(0x8e9297, 0x66686a),
+        action: Swatch(0x0a7076, 0x22a89d),
+        onAction: Swatch(0xffffff, 0x04211e),
+        good: Swatch(0x5a7a00, 0x6fd08a),
+        onGood: Swatch(0xffffff, 0x082215),
+        idle: Swatch(0x8e9297, 0x5f6164),
+        attention: Swatch(0x9c1c1c, 0xe5484d),
+        onAttention: Swatch(0xffffff, 0x160302),
+        question: Swatch(0x2357c4, 0x76a5ff),
+        onQuestion: Swatch(0xffffff, 0x0b1730),
+        approval: Swatch(0xa84406, 0xf2a65e),
+        onApproval: Swatch(0xffffff, 0x2a1606),
+        questionTint: Swatch(0xedf2fc, 0x2357c4, alpha: 1, darkAlpha: 0.18),
+        approvalTint: Swatch(0xfcf1e8, 0xa84406, alpha: 1, darkAlpha: 0.18),
+        command: Swatch(0x17181c, 0x000000, alpha: 0.05, darkAlpha: 0.25),
+        terminal: TerminalColours(
+            background: Swatch(0x17181c), foreground: Swatch(0xdddfe0),
+            cursor: Swatch(0xdddfe0), selection: Swatch(0xa6aebe, alpha: 0.28),
+            ansi: ansi(0x2c2d31, 0xff6b6b, 0x55c88f, 0xe7c35a, 0x76a5ff, 0xc792ea, 0x4fc9be, 0xd6d8da,
+                       0x6e7075, 0xff8a8a, 0x7ee2a4, 0xf2d47a, 0x93b8ff, 0xd6aef2, 0x7ad6cf, 0xf5f6f7)
+        ),
+        increased: IncreasedColours(questionTint: Swatch(0xe8effc, 0x162540), approvalTint: Swatch(0xfdf0e4, 0x3a2412), muted: Swatch(0x3f4349, 0xb6b8bc))
+    )
+
+    /// Bloom: deep plum and violet, the first theme, now flat.
     public static let bloom = ThemeColours(
-        mesh: [
-            Swatch(0xff6b4a, 0xc2365a), // coral
-            Swatch(0x7b5cff, 0x4b2fb8), // violet
-            Swatch(0xc6f432, 0x5b7a10), // lime
-            Swatch(0x29d3c3, 0x0f6e6a), // lagoon
-            Swatch(0xff5fb7, 0x5a1d52), // bubblegum
-        ],
-        base: Swatch(0xf3d7ff, 0x160f2c),
+        chrome: Swatch(0xf7e5ff, 0x160f2c),
+        gutter: Swatch(0xf5dfff, 0x19122f),
+        pane: Swatch(0xfdf9ff, 0x1e1733),
+        line: Swatch(0xd3bbde, 0x302943),
+        lineSoft: Swatch(0xe0c6eb, 0x241d39),
+        selection: Swatch(0xe2c8ed, 0x2a233e),
+        tab: Swatch(0xdbc2e6, 0x322c45),
+        focus: Swatch(0x726285, 0xaea9bb),
         ink: Swatch(0x1c1433, 0xf6f2ff),
         muted: Swatch(0x4f4670, 0xc9c0ea),
-        line: Swatch(0x1c1433, 0xf6f2ff, alpha: 0.12),
+        faint: Swatch(0x8c85a2, 0x8d85aa),
         action: Swatch(0x5a3cf0, 0xa58fff),
         onAction: Swatch(0xffffff, 0x160f33),
         good: Swatch(0x0a7a54, 0x5fe0a8),
@@ -57,15 +74,6 @@ extension ThemeColours {
         onQuestion: Swatch(0xffffff, 0x160f33),
         approval: Swatch(0xc2410c, 0xff9a6b),
         onApproval: Swatch(0xffffff, 0x2a0c06),
-        sidebarTint: Swatch(0xffffff, 0x120e24, alpha: 0.60, darkAlpha: 0.40),
-        glass: Swatch(0xffffff, 0x120e24, alpha: 0.70, darkAlpha: 0.72),
-        bar: Swatch(0xffffff, 0xffffff, alpha: 0.35, darkAlpha: 0.04),
-        cardTint: Swatch(0xffffff, 0xffffff, alpha: 0.80, darkAlpha: 0.07),
-        edge: Swatch(0xffffff, 0xffffff, alpha: 0.85, darkAlpha: 0.14),
-        meter: [Swatch(0x5a3cf0, 0xa58fff), Swatch(0xff5fb7), Swatch(0xff6b4a)],
-        prompt: [Swatch(0x5a3cf0), Swatch(0x9b3cf0, 0x8a2fd6)],
-        onPrompt: Swatch(0xffffff),
-        agentCard: Swatch(0xffffff, 0xffffff, alpha: 0.80, darkAlpha: 0.07),
         questionTint: Swatch(0xefeaff, 0x5a3cf0, alpha: 0.95, darkAlpha: 0.28),
         approvalTint: Swatch(0xfff1ec, 0xff6a4a, alpha: 1, darkAlpha: 0.22),
         command: Swatch(0x1c1433, 0x000000, alpha: 0.06, darkAlpha: 0.3),
@@ -75,29 +83,23 @@ extension ThemeColours {
             ansi: ansi(0x2a2148, 0xff7b7b, 0x9be15d, 0xffd166, 0x8fa8ff, 0xff7ad9, 0x4fe0d0, 0xe6e0f5,
                        0x7a72a0, 0xff9a9a, 0xb8f27c, 0xffe08a, 0xadc0ff, 0xffa3e8, 0x84f0e4, 0xffffff)
         ),
-        opaque: OpaqueColours(
-            panel: Swatch(0xffffff, 0x120e24), bar: Swatch(0xf6f2ff, 0x1c1638), card: Swatch(0xffffff, 0x221a40),
-            questionTint: Swatch(0xefeaff, 0x2b2160), approvalTint: Swatch(0xfff1ec, 0x3a1a1c),
-            edge: Swatch(0x4f4670, 0xc9c0ea), muted: Swatch(0x3a3258, 0xddd6f5)
-        ),
-        titleFamily: "Bricolage Grotesque",
-        monoFamily: "DM Mono"
+        increased: IncreasedColours(questionTint: Swatch(0xefeaff, 0x2b2160), approvalTint: Swatch(0xfff1ec, 0x3a1a1c), muted: Swatch(0x3a3258, 0xddd6f5))
     )
 
     /// Calm, easy on the eye: warm paper and charcoal, never pure white
-    /// or black; sage, sand and clay in a soft mesh; a slate-teal action.
+    /// or black; a slate-teal action.
     public static let calm = ThemeColours(
-        mesh: [
-            Swatch(0xd3dcc4, 0x2c3529), // sage
-            Swatch(0xeadbc0, 0x382f24), // sand
-            Swatch(0xe8cfc2, 0x3a2925), // clay
-            Swatch(0xcfdcd6, 0x24302d), // mist
-            Swatch(0xefe2ca, 0x2c2820), // oat
-        ],
-        base: Swatch(0xf1ebe0, 0x1c1a17),
+        chrome: Swatch(0xf6f2eb, 0x1c1a17),
+        gutter: Swatch(0xf4efe6, 0x1f1d1a),
+        pane: Swatch(0xfdfcfb, 0x24221f),
+        line: Swatch(0xd2ccc3, 0x353331),
+        lineSoft: Swatch(0xded8ce, 0x2a2825),
+        selection: Swatch(0xe0dbd0, 0x2f2d2b),
+        tab: Swatch(0xd9d4ca, 0x373533),
+        focus: Swatch(0x7c776f, 0xa9a399),
         ink: Swatch(0x2e2924, 0xebe4d6),
         muted: Swatch(0x5c5449, 0xb9af9f),
-        line: Swatch(0x2e2924, 0xebe4d6, alpha: 0.12),
+        faint: Swatch(0x948f87, 0x857e72),
         action: Swatch(0x3d5f86, 0x9db8dc),
         onAction: Swatch(0xfbf7ef, 0x141b26),
         good: Swatch(0x52741c, 0xb8d48e),
@@ -109,15 +111,6 @@ extension ThemeColours {
         onQuestion: Swatch(0xfbf7ef, 0x141b26),
         approval: Swatch(0x8c4f0c, 0xe1b36e),
         onApproval: Swatch(0xfbf7ef, 0x2a1d08),
-        sidebarTint: Swatch(0xfbf7ef, 0x191714, alpha: 0.62, darkAlpha: 0.45),
-        glass: Swatch(0xfbf7ef, 0x191714, alpha: 0.74, darkAlpha: 0.74),
-        bar: Swatch(0xfffdf8, 0xffffff, alpha: 0.35, darkAlpha: 0.03),
-        cardTint: Swatch(0xfffdf8, 0xfff8ec, alpha: 0.82, darkAlpha: 0.06),
-        edge: Swatch(0xffffff, 0xffffff, alpha: 0.7, darkAlpha: 0.1),
-        meter: [Swatch(0x3d5f86, 0x9db8dc), Swatch(0xc9a25e, 0xd8b679), Swatch(0xc77c5c, 0xd99478)],
-        prompt: [Swatch(0x3f6b5c, 0x3c6656), Swatch(0x3d5f86, 0x3a5878)],
-        onPrompt: Swatch(0xfbf7ef),
-        agentCard: Swatch(0xfffdf8, 0xfff8ec, alpha: 0.82, darkAlpha: 0.06),
         questionTint: Swatch(0xe6ebf2, 0x3d5f86, alpha: 0.95, darkAlpha: 0.26),
         approvalTint: Swatch(0xf7ebda, 0x8c4f0c, alpha: 1, darkAlpha: 0.26),
         command: Swatch(0x2e2924, 0x000000, alpha: 0.06, darkAlpha: 0.25),
@@ -127,29 +120,22 @@ extension ThemeColours {
             ansi: ansi(0x34302a, 0xe28e72, 0xa9c784, 0xe3c07a, 0x93b6cc, 0xcca3c3, 0x8fc5b5, 0xddd5c6,
                        0x857c6f, 0xeca68e, 0xbdd6a0, 0xeed39a, 0xabc8da, 0xdab8d2, 0xa8d7c9, 0xf4ede0)
         ),
-        opaque: OpaqueColours(
-            panel: Swatch(0xfbf8f2, 0x1a1815), bar: Swatch(0xf2ece1, 0x24211c), card: Swatch(0xfffdf8, 0x27241f),
-            questionTint: Swatch(0xe3e9f1, 0x202c3c), approvalTint: Swatch(0xf6e9d7, 0x382916),
-            edge: Swatch(0x5c5449, 0xc9bfae), muted: Swatch(0x433d34, 0xd6cdbd)
-        ),
-        titleFamily: "Bricolage Grotesque",
-        monoFamily: "DM Mono"
+        increased: IncreasedColours(questionTint: Swatch(0xe3e9f1, 0x202c3c), approvalTint: Swatch(0xf6e9d7, 0x382916), muted: Swatch(0x433d34, 0xd6cdbd))
     )
 
-    /// Graphite, professional: neutral greys, one restrained blue, a
-    /// near-flat backdrop and crisp hairline edges; system type.
+    /// Graphite, professional: neutral greys and one restrained blue.
     public static let graphite = ThemeColours(
-        mesh: [
-            Swatch(0xe3e6ea, 0x1c1f24),
-            Swatch(0xdde2e9, 0x1a1e25),
-            Swatch(0xe7e9ec, 0x1e2126),
-            Swatch(0xdbe1e8, 0x181c22),
-            Swatch(0xe6e9ee, 0x20242b),
-        ],
-        base: Swatch(0xeceef1, 0x17191d),
+        chrome: Swatch(0xf3f4f6, 0x17191d),
+        gutter: Swatch(0xf0f1f4, 0x1a1c20),
+        pane: Swatch(0xfcfdfd, 0x1f2125),
+        line: Swatch(0xcdcfd2, 0x313236),
+        lineSoft: Swatch(0xd9dbde, 0x25272b),
+        selection: Swatch(0xdbdde0, 0x2b2d30),
+        tab: Swatch(0xd4d6d9, 0x333538),
+        focus: Swatch(0x6c6e72, 0xa5a7ab),
         ink: Swatch(0x16181d, 0xe8eaee),
         muted: Swatch(0x4a505a, 0xa3a9b3),
-        line: Swatch(0x16181d, 0xe8eaee, alpha: 0.1),
+        faint: Swatch(0x888d93, 0x757981),
         action: Swatch(0x2357c4, 0x76a5ff),
         onAction: Swatch(0xffffff, 0x0b1730),
         good: Swatch(0x1b7543, 0x55c88f),
@@ -161,15 +147,6 @@ extension ThemeColours {
         onQuestion: Swatch(0xffffff, 0x0b1730),
         approval: Swatch(0xa84406, 0xf2a65e),
         onApproval: Swatch(0xffffff, 0x2a1606),
-        sidebarTint: Swatch(0xf7f8fa, 0x15171b, alpha: 0.72, darkAlpha: 0.6),
-        glass: Swatch(0xffffff, 0x15171b, alpha: 0.8, darkAlpha: 0.78),
-        bar: Swatch(0xffffff, 0xffffff, alpha: 0.45, darkAlpha: 0.03),
-        cardTint: Swatch(0xffffff, 0xffffff, alpha: 0.92, darkAlpha: 0.05),
-        edge: Swatch(0x000000, 0xffffff, alpha: 0.09, darkAlpha: 0.1),
-        meter: [Swatch(0x2357c4, 0x76a5ff), Swatch(0x5b7fd6, 0x8fb4ff), Swatch(0x8aa6e6, 0xb3cbff)],
-        prompt: [Swatch(0x2357c4, 0x2a5bc4), Swatch(0x1d4ba8, 0x234ea8)],
-        onPrompt: Swatch(0xffffff),
-        agentCard: Swatch(0xffffff, 0xffffff, alpha: 0.92, darkAlpha: 0.05),
         questionTint: Swatch(0xedf2fc, 0x2357c4, alpha: 1, darkAlpha: 0.22),
         approvalTint: Swatch(0xfcf1e8, 0xa84406, alpha: 1, darkAlpha: 0.22),
         command: Swatch(0x16181d, 0x000000, alpha: 0.05, darkAlpha: 0.3),
@@ -179,30 +156,24 @@ extension ThemeColours {
             ansi: ansi(0x2a2e35, 0xff6b6b, 0x5fd38d, 0xe7c35a, 0x6ea0ff, 0xc792ea, 0x56c8d8, 0xd6dae0,
                        0x6b7280, 0xff8a8a, 0x7ee2a4, 0xf2d47a, 0x93b8ff, 0xd6aef2, 0x7ad6e3, 0xf5f7fa)
         ),
-        opaque: OpaqueColours(
-            panel: Swatch(0xffffff, 0x101215), bar: Swatch(0xf3f4f6, 0x1a1d22), card: Swatch(0xffffff, 0x1d2026),
-            questionTint: Swatch(0xe8effc, 0x162540), approvalTint: Swatch(0xfdf0e4, 0x3a2412),
-            edge: Swatch(0x3d434c, 0xb9bfc8), muted: Swatch(0x2f343c, 0xc9ced6)
-        ),
-        titleFamily: nil,
-        monoFamily: nil
+        increased: IncreasedColours(questionTint: Swatch(0xe8effc, 0x162540), approvalTint: Swatch(0xfdf0e4, 0x3a2412), muted: Swatch(0x2f343c, 0xc9ced6))
     )
 
     /// Dusk, dimmed for night work: very low light, muted violet and
     /// teal; its light is dimmed as well, lavender-grey with no pure
     /// white.
     public static let dusk = ThemeColours(
-        mesh: [
-            Swatch(0xcbc2de, 0x221a36), // violet
-            Swatch(0xc2d4d5, 0x0f272a), // teal
-            Swatch(0xd0c9da, 0x1a142d), // plum
-            Swatch(0xc6d1d6, 0x0e2024), // sea
-            Swatch(0xd4cddf, 0x191425), // haze
-        ],
-        base: Swatch(0xd8d4de, 0x0e0d13),
+        chrome: Swatch(0xe6e3ea, 0x0e0d13),
+        gutter: Swatch(0xe0dde5, 0x111016),
+        pane: Swatch(0xfaf9fa, 0x16151b),
+        line: Swatch(0xbcb8c1, 0x29282d),
+        lineSoft: Swatch(0xc7c3cc, 0x1c1c21),
+        selection: Swatch(0xc9c5ce, 0x222227),
+        tab: Swatch(0xc2bfc8, 0x2b2a2f),
+        focus: Swatch(0x6b6773, 0x93909e),
         ink: Swatch(0x221e2b, 0xd2cddf),
         muted: Swatch(0x48425a, 0x9a93ad),
-        line: Swatch(0x221e2b, 0xd2cddf, alpha: 0.12),
+        faint: Swatch(0x868292, 0x6c677a),
         action: Swatch(0x4f3f8c, 0xa596d6),
         onAction: Swatch(0xeceaf1, 0x15121f),
         good: Swatch(0x1d5e5a, 0x86cfc8),
@@ -214,15 +185,6 @@ extension ThemeColours {
         onQuestion: Swatch(0xeceaf1, 0x0d1d1f),
         approval: Swatch(0x7c4b14, 0xd5a36f),
         onApproval: Swatch(0xeceaf1, 0x241708),
-        sidebarTint: Swatch(0xe6e2ec, 0x0b0a10, alpha: 0.6, darkAlpha: 0.55),
-        glass: Swatch(0xe6e2ec, 0x0b0a10, alpha: 0.72, darkAlpha: 0.74),
-        bar: Swatch(0xe9e6ef, 0xffffff, alpha: 0.35, darkAlpha: 0.02),
-        cardTint: Swatch(0xebe8f0, 0xd2cddf, alpha: 0.82, darkAlpha: 0.05),
-        edge: Swatch(0xf0eef4, 0xffffff, alpha: 0.6, darkAlpha: 0.07),
-        meter: [Swatch(0x4f3f8c, 0xa596d6), Swatch(0x285e66, 0x8fc0c6), Swatch(0x8f3434, 0xdb8c8c)],
-        prompt: [Swatch(0x4f3f8c, 0x3f3370), Swatch(0x2f5a66, 0x284c56)],
-        onPrompt: Swatch(0xeceaf1, 0xddd8e8),
-        agentCard: Swatch(0xebe8f0, 0xd2cddf, alpha: 0.82, darkAlpha: 0.05),
         questionTint: Swatch(0xdde4e8, 0x285e66, alpha: 0.95, darkAlpha: 0.24),
         approvalTint: Swatch(0xebe0d6, 0x7c4b14, alpha: 1, darkAlpha: 0.24),
         command: Swatch(0x221e2b, 0x000000, alpha: 0.06, darkAlpha: 0.3),
@@ -232,29 +194,22 @@ extension ThemeColours {
             ansi: ansi(0x26232f, 0xd98a8a, 0x8cbfa6, 0xd6b47c, 0x93a6d8, 0xb39ad6, 0x84bdc3, 0xc9c4d6,
                        0x6e6884, 0xe6a3a3, 0xa3cfb9, 0xe0c496, 0xa9b9e2, 0xc4b0e0, 0x9ecbd0, 0xe0dcea)
         ),
-        opaque: OpaqueColours(
-            panel: Swatch(0xebe8f0, 0x0b0a10), bar: Swatch(0xe2dee9, 0x15131d), card: Swatch(0xefecf3, 0x1a1824),
-            questionTint: Swatch(0xdde5ea, 0x14262a), approvalTint: Swatch(0xeee3d8, 0x2c2116),
-            edge: Swatch(0x48425a, 0xa8a1ba), muted: Swatch(0x38334a, 0xbdb7cc)
-        ),
-        titleFamily: "Bricolage Grotesque",
-        monoFamily: "DM Mono"
+        increased: IncreasedColours(questionTint: Swatch(0xdde5ea, 0x14262a), approvalTint: Swatch(0xeee3d8, 0x2c2116), muted: Swatch(0x38334a, 0xbdb7cc))
     )
 
-    /// Aurora, vibrant: mint, cyan, violet and magenta lights on deep
-    /// navy; an icy mesh by day.
+    /// Aurora, vibrant: mint and violet on deep navy; icy by day.
     public static let aurora = ThemeColours(
-        mesh: [
-            Swatch(0x45f0c0, 0x0b8a6c), // mint
-            Swatch(0x3ec8ff, 0x0a6fa0), // cyan
-            Swatch(0xb47bff, 0x4a2aa8), // violet
-            Swatch(0xff63d0, 0x8a1f80), // magenta
-            Swatch(0x8fe8ff, 0x0c4a6a), // ice
-        ],
-        base: Swatch(0xe4f1ff, 0x071230),
+        chrome: Swatch(0xedf6ff, 0x071230),
+        gutter: Swatch(0xe9f4ff, 0x0a1532),
+        pane: Swatch(0xfbfdff, 0x101a37),
+        line: Swatch(0xc6d2de, 0x222c47),
+        lineSoft: Swatch(0xd2deeb, 0x16203c),
+        selection: Swatch(0xd4e0ed, 0x1c2642),
+        tab: Swatch(0xcdd9e6, 0x252e49),
+        focus: Swatch(0x627089, 0xa4adbd),
         ink: Swatch(0x0b1a3a, 0xeef6ff),
         muted: Swatch(0x34446a, 0xb8c8e2),
-        line: Swatch(0x0b1a3a, 0xeef6ff, alpha: 0.12),
+        faint: Swatch(0x7a859e, 0x7d8ba6),
         action: Swatch(0x005a7a, 0x5ee6d0),
         onAction: Swatch(0xffffff, 0x04201c),
         good: Swatch(0x467a0c, 0xc2f27c),
@@ -266,15 +221,6 @@ extension ThemeColours {
         onQuestion: Swatch(0xffffff, 0x0c1238),
         approval: Swatch(0xab4808, 0xffb36b),
         onApproval: Swatch(0xffffff, 0x2a1606),
-        sidebarTint: Swatch(0xffffff, 0x061026, alpha: 0.62, darkAlpha: 0.45),
-        glass: Swatch(0xffffff, 0x061026, alpha: 0.72, darkAlpha: 0.74),
-        bar: Swatch(0xffffff, 0xffffff, alpha: 0.35, darkAlpha: 0.04),
-        cardTint: Swatch(0xffffff, 0xd8ecff, alpha: 0.82, darkAlpha: 0.07),
-        edge: Swatch(0xffffff, 0x8fe8ff, alpha: 0.85, darkAlpha: 0.16),
-        meter: [Swatch(0x00a3a3, 0x5ee6d0), Swatch(0x3e8cff, 0x3ec8ff), Swatch(0xd23fd0, 0xff63d0)],
-        prompt: [Swatch(0x00607e, 0x0a6386), Swatch(0x5a32c8, 0x5a32c0)],
-        onPrompt: Swatch(0xffffff),
-        agentCard: Swatch(0xffffff, 0xd8ecff, alpha: 0.82, darkAlpha: 0.07),
         questionTint: Swatch(0xecebff, 0x4636c8, alpha: 0.95, darkAlpha: 0.3),
         approvalTint: Swatch(0xfff0e3, 0xff8a3a, alpha: 1, darkAlpha: 0.2),
         command: Swatch(0x0b1a3a, 0x000000, alpha: 0.06, darkAlpha: 0.3),
@@ -284,29 +230,22 @@ extension ThemeColours {
             ansi: ansi(0x1a2546, 0xff6b8f, 0x5ef2a0, 0xffd76b, 0x6fa8ff, 0xe07bff, 0x4fe6ff, 0xdce8ff,
                        0x63759f, 0xff8faa, 0x8affbd, 0xffe598, 0x94bfff, 0xea9dff, 0x85eeff, 0xffffff)
         ),
-        opaque: OpaqueColours(
-            panel: Swatch(0xffffff, 0x061026), bar: Swatch(0xeef6ff, 0x0c1a3a), card: Swatch(0xffffff, 0x0f1f44),
-            questionTint: Swatch(0xebe9ff, 0x1d1a55), approvalTint: Swatch(0xfff0e3, 0x3a2414),
-            edge: Swatch(0x34446a, 0xb8c8e2), muted: Swatch(0x2b3858, 0xcfdcf0)
-        ),
-        titleFamily: "Bricolage Grotesque",
-        monoFamily: "DM Mono"
+        increased: IncreasedColours(questionTint: Swatch(0xebe9ff, 0x1d1a55), approvalTint: Swatch(0xfff0e3, 0x3a2414), muted: Swatch(0x2b3858, 0xcfdcf0))
     )
 
-    /// Sunset, vibrant and warm: coral, amber and pink; raspberry
-    /// actions, glowing embers in dark.
+    /// Sunset, vibrant and warm: raspberry actions, embers in dark.
     public static let sunset = ThemeColours(
-        mesh: [
-            Swatch(0xff7a59, 0x8a2b26), // coral
-            Swatch(0xffb43b, 0x8a5410), // amber
-            Swatch(0xff6fa3, 0x7a1f4f), // pink
-            Swatch(0xffc59a, 0x5a2a1a), // peach
-            Swatch(0xff8fb5, 0x4a1430), // rose
-        ],
-        base: Swatch(0xffe6d6, 0x1e0f14),
+        chrome: Swatch(0xffefe4, 0x1e0f14),
+        gutter: Swatch(0xffebde, 0x211217),
+        pane: Swatch(0xfffcf9, 0x26171c),
+        line: Swatch(0xdec8ba, 0x37292e),
+        lineSoft: Swatch(0xebd4c5, 0x2c1d22),
+        selection: Swatch(0xedd6c7, 0x312328),
+        tab: Swatch(0xe6cfc1, 0x392c30),
+        focus: Swatch(0x806864, 0xb7a9a6),
         ink: Swatch(0x2b1418, 0xfff1ea),
         muted: Swatch(0x663b42, 0xe2c3ba),
-        line: Swatch(0x2b1418, 0xfff1ea, alpha: 0.12),
+        faint: Swatch(0x9c7f82, 0xa08783),
         action: Swatch(0x951d66, 0xe78ae0),
         onAction: Swatch(0xffffff, 0x2a0a1c),
         good: Swatch(0x2a7034, 0x7fe0b0),
@@ -318,15 +257,6 @@ extension ThemeColours {
         onQuestion: Swatch(0xffffff, 0x1e0a30),
         approval: Swatch(0x964600, 0xffc66e),
         onApproval: Swatch(0xffffff, 0x2a1a04),
-        sidebarTint: Swatch(0xfffaf6, 0x1a0b10, alpha: 0.62, darkAlpha: 0.45),
-        glass: Swatch(0xfffaf6, 0x1a0b10, alpha: 0.72, darkAlpha: 0.74),
-        bar: Swatch(0xffffff, 0xffffff, alpha: 0.35, darkAlpha: 0.04),
-        cardTint: Swatch(0xfffcfa, 0xffe6d6, alpha: 0.82, darkAlpha: 0.07),
-        edge: Swatch(0xffffff, 0xffc59a, alpha: 0.85, darkAlpha: 0.16),
-        meter: [Swatch(0x951d66, 0xe78ae0), Swatch(0xff6fa3), Swatch(0xffb43b)],
-        prompt: [Swatch(0xa8234f, 0xa8234f), Swatch(0xb8400c, 0xb03c0c)],
-        onPrompt: Swatch(0xffffff),
-        agentCard: Swatch(0xfffcfa, 0xffe6d6, alpha: 0.82, darkAlpha: 0.07),
         questionTint: Swatch(0xf4e9ff, 0x6f2aa6, alpha: 0.95, darkAlpha: 0.3),
         approvalTint: Swatch(0xfff0e2, 0xff8a3a, alpha: 1, darkAlpha: 0.2),
         command: Swatch(0x2b1418, 0x000000, alpha: 0.06, darkAlpha: 0.3),
@@ -336,30 +266,23 @@ extension ThemeColours {
             ansi: ansi(0x33202a, 0xff7a6b, 0xa6e07a, 0xffc861, 0x8fb0ff, 0xff8fc8, 0x6fd8d0, 0xf3e2dc,
                        0x86666e, 0xff9a8c, 0xbdeb98, 0xffd88a, 0xadc4ff, 0xffaad6, 0x94e4de, 0xfff6f2)
         ),
-        opaque: OpaqueColours(
-            panel: Swatch(0xfffaf7, 0x180b10), bar: Swatch(0xfff0e8, 0x26131a), card: Swatch(0xffffff, 0x2b161e),
-            questionTint: Swatch(0xf3e8ff, 0x2f1a40), approvalTint: Swatch(0xfff0e6, 0x3d2010),
-            edge: Swatch(0x663b42, 0xe2c3ba), muted: Swatch(0x4f2c31, 0xf0d6cd)
-        ),
-        titleFamily: "Bricolage Grotesque",
-        monoFamily: "DM Mono"
+        increased: IncreasedColours(questionTint: Swatch(0xf3e8ff, 0x2f1a40), approvalTint: Swatch(0xfff0e6, 0x3d2010), muted: Swatch(0x4f2c31, 0xf0d6cd))
     )
 
     /// Solar, high legibility: near-black ink on cream (white on black
-    /// in dark), firm edges, nearly opaque panels, a sun-gold mesh;
-    /// system type.
+    /// in dark), a sun-gold action in dark.
     public static let solar = ThemeColours(
-        mesh: [
-            Swatch(0xfbe3a0, 0x2a2000), // sun
-            Swatch(0xfdf0cc, 0x141414),
-            Swatch(0xf6dfae, 0x0f1a2a),
-            Swatch(0xfff2d0, 0x1f1010),
-            Swatch(0xfbe39a, 0x262000), // gold
-        ],
-        base: Swatch(0xfdf6e3, 0x0a0a0a),
+        chrome: Swatch(0xfef9ed, 0x0a0a0a),
+        gutter: Swatch(0xfdf8e9, 0x0d0d0d),
+        pane: Swatch(0xfffefb, 0x131313),
+        line: Swatch(0xdcd6c5, 0x252525),
+        lineSoft: Swatch(0xe9e2d1, 0x191919),
+        selection: Swatch(0xebe5d3, 0x1f1f1f),
+        tab: Swatch(0xe4ddcc, 0x272727),
+        focus: Swatch(0x6c6961, 0xb1b1b1),
         ink: Swatch(0x0b0b0b, 0xffffff),
         muted: Swatch(0x38332a, 0xd8d2c2),
-        line: Swatch(0x0b0b0b, 0xffffff, alpha: 0.2),
+        faint: Swatch(0x7e7a73, 0x938f85),
         action: Swatch(0x0045ad, 0xffd23f),
         onAction: Swatch(0xffffff, 0x0a0a0a),
         good: Swatch(0x00653a, 0x5ce8c8),
@@ -371,15 +294,6 @@ extension ThemeColours {
         onQuestion: Swatch(0xffffff, 0x06122a),
         approval: Swatch(0x854700, 0xffaa4d),
         onApproval: Swatch(0xffffff, 0x1a0e00),
-        sidebarTint: Swatch(0xfffaf0, 0x000000, alpha: 0.86, darkAlpha: 0.72),
-        glass: Swatch(0xfffdf6, 0x050505, alpha: 0.9, darkAlpha: 0.86),
-        bar: Swatch(0xffffff, 0xffffff, alpha: 0.5, darkAlpha: 0.05),
-        cardTint: Swatch(0xffffff, 0xffffff, alpha: 0.95, darkAlpha: 0.08),
-        edge: Swatch(0x000000, 0xffffff, alpha: 0.2, darkAlpha: 0.3),
-        meter: [Swatch(0x0045ad, 0xffd23f), Swatch(0x3a6fd0, 0xffe17a), Swatch(0x7a9fe6, 0xfff0b0)],
-        prompt: [Swatch(0x0045ad, 0x1a4fb0), Swatch(0x003a94, 0x123f94)],
-        onPrompt: Swatch(0xffffff),
-        agentCard: Swatch(0xffffff, 0xffffff, alpha: 0.95, darkAlpha: 0.08),
         questionTint: Swatch(0xf0eaff, 0x5428ad, alpha: 1, darkAlpha: 0.3),
         approvalTint: Swatch(0xfff1dc, 0xffaa4d, alpha: 1, darkAlpha: 0.16),
         command: Swatch(0x0b0b0b, 0x000000, alpha: 0.07, darkAlpha: 0.5),
@@ -389,13 +303,7 @@ extension ThemeColours {
             ansi: ansi(0x262626, 0xff5f5f, 0x5fe08a, 0xffd23f, 0x6aa8ff, 0xff7ae0, 0x3fe0e0, 0xe8e8e8,
                        0x8a8a8a, 0xff8a8a, 0x8af0a8, 0xffe17a, 0x9cc4ff, 0xff9eea, 0x7aeeee, 0xffffff)
         ),
-        opaque: OpaqueColours(
-            panel: Swatch(0xffffff, 0x000000), bar: Swatch(0xfdf6e3, 0x141414), card: Swatch(0xffffff, 0x161616),
-            questionTint: Swatch(0xefe8ff, 0x1f1a33), approvalTint: Swatch(0xfff0dc, 0x2e1d08),
-            edge: Swatch(0x000000, 0xffffff), muted: Swatch(0x1f1c14, 0xe8e3d6)
-        ),
-        titleFamily: nil,
-        monoFamily: nil
+        increased: IncreasedColours(questionTint: Swatch(0xefe8ff, 0x1f1a33), approvalTint: Swatch(0xfff0dc, 0x2e1d08), muted: Swatch(0x1f1c14, 0xe8e3d6))
     )
 
     private static func ansi(_ c: UInt32...) -> [Swatch] {

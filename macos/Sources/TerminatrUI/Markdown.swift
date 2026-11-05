@@ -51,7 +51,7 @@ public struct MarkdownView: View {
                     .padding(10)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(theme.command, in: RoundedRectangle(cornerRadius: 9))
+            .background(theme.command, in: RoundedRectangle(cornerRadius: 6))
         case .rule:
             theme.line.frame(height: 1)
         case .table(let t):

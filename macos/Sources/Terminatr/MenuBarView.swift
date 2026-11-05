@@ -58,7 +58,7 @@ struct MenuBarView: View {
         .padding(10)
         .frame(width: 360)
         .foregroundStyle(theme.ink)
-        .background { Backdrop() }
+        .background { theme.chrome.ignoresSafeArea() }
     }
 
     private func open(_ project: String?, session: String = "") {
@@ -293,9 +293,9 @@ enum MenuBarGlyph {
     }
 }
 
-/// A frosted block of the dropdown: a card over the theme's glass, as
+/// A block of the dropdown: a card on its ground, as
 /// in the window (over the material alone, dark text read under 3:1 on
-/// the mesh's brighter corners).
+/// the ground).
 private struct Panel<Content: View>: View {
     @Environment(\.theme) private var theme
     @ViewBuilder let content: Content
@@ -303,10 +303,8 @@ private struct Panel<Content: View>: View {
     var body: some View {
         content
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(theme.cardTint, in: RoundedRectangle(cornerRadius: 12))
-            .background(theme.glass, in: RoundedRectangle(cornerRadius: 12))
-            .frosted(RoundedRectangle(cornerRadius: 12))
-            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(theme.edge, lineWidth: 1))
+            .solid(RoundedRectangle(cornerRadius: 8))
+            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(theme.line, lineWidth: 1))
     }
 }
 

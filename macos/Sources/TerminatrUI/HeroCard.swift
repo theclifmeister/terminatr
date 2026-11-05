@@ -93,7 +93,7 @@ public struct HeroCard<Answers: View>: View {
         }
         .padding(Spacing.card + 2)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .surface(.raised, in: shape)
+        .surface(in: shape)
         .overlay { shape.strokeBorder(theme.colour(tone), lineWidth: theme.contrast ? 2.5 : 2) }
         .modifier(Glow(key: waiting, colour: theme.colour(tone), shape: RoundedRectangle(cornerRadius: Radius.card, style: .continuous)))
         // VoiceOver: a group named for what it is, so its answers are

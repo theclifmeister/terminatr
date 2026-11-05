@@ -244,7 +244,7 @@ struct ProjectScreen: View {
                             .foregroundStyle(theme.muted)
                             .padding(Spacing.card)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .surface(.panel, in: RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
+                            .surface(in: RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
                     } else {
                         TileGroup {
                             ForEach(Array(threads.enumerated()), id: \.element.record.id) { i, t in

@@ -2,9 +2,9 @@ import SwiftUI
 import TerminatrLink
 import TerminatrUI
 
-/// The first screen (T850): the theme's mesh, drifting, with two needs
+/// The first screen (T850): the theme's ground, with two needs
 /// floating over it to show what the app is for, and at the foot the
-/// wordmark on glass with the demo and pairing, and under them the
+/// wordmark on a card with the demo and pairing, and under them the
 /// privacy policy and support (T910). At accessibility text
 /// sizes the needs step aside and the panel scrolls. Launched with
 /// -open pair it opens pairing, with -open "pair CODE" that code's
@@ -35,7 +35,7 @@ struct Welcome: View {
             }
             .scrollBounceBehavior(.basedOnSize)
         }
-        .background { Backdrop(drifting: true) }
+        .background { theme.chrome.ignoresSafeArea() }
         .sheet(item: $pairing) { PairScreen(code: $0.code) }
         .onAppear(perform: openLaunched)
     }

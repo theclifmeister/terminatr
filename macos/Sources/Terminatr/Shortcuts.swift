@@ -46,14 +46,13 @@ struct ShortcutsSheet: View {
     ]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 12) {
             Text("Keyboard Shortcuts")
                 .font(theme.title(.title, .heavy))
             ForEach(Self.groups, id: \.0) { group, keys in
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(group.uppercased())
-                        .font(theme.mono(.caption2, .medium))
-                        .tracking(1)
+                    Text(group)
+                        .font(theme.body(.caption))
                         .foregroundStyle(theme.muted)
                     Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 5) {
                         ForEach(keys, id: \.0) { key, what in
@@ -76,7 +75,7 @@ struct ShortcutsSheet: View {
                     .tint(theme.action)
             }
         }
-        .padding(24)
+        .padding(18)
         .frame(width: 560)
     }
 }

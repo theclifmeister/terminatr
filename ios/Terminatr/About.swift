@@ -50,7 +50,7 @@ struct AboutSection: View {
             .frame(minHeight: tapTarget)
             .accessibilityElement(children: .combine)
         }
-        .surface(.card, in: RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
+        .surface(in: RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
         .padding(.horizontal, Spacing.gutter)
     }
 

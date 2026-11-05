@@ -1,4 +1,3 @@
-import CoreText
 import SwiftUI
 import TerminatrKit
 import TerminatrLink
@@ -22,11 +21,6 @@ struct TerminatrApp: App {
     @Environment(\.scenePhase) private var phase
 
     init() {
-        // The Mac app's fonts (Bricolage Grotesque, DM Mono; OFL), which
-        // Bloom's titles and mono are set in.
-        for f in Bundle.main.urls(forResourcesWithExtension: "ttf", subdirectory: nil) ?? [] {
-            CTFontManagerRegisterFontsForURL(f as CFURL, .process, nil)
-        }
         // MetricKit's crash and hang reports of earlier runs, for the
         // paired server only (T957, PhoneModel's link).
         CrashReporter.shared.start()
@@ -663,27 +657,14 @@ private struct BaseRouteScreen: View {
     }
 }
 
-/// The mesh's colours as a gradient; with Reduce Transparency the base
-/// alone, as Backdrop leaves it.
+/// A screen's solid ground: the window's colour (T999).
 private struct BackdropModifier: ViewModifier {
     @Environment(\.theme) private var theme
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     func body(content: Content) -> some View {
         content
             .scrollContentBackground(.hidden)
-            .background {
-                Group {
-                    if reduceTransparency {
-                        theme.base
-                    } else {
-                        // Veiled, so plain small text reads on it (T996).
-                        LinearGradient(colors: [theme.mesh[0], theme.base, theme.mesh[3]], startPoint: .topLeading, endPoint: .bottomTrailing)
-                            .overlay(theme.veil)
-                    }
-                }
-                .ignoresSafeArea()
-            }
+            .background { theme.chrome.ignoresSafeArea() }
     }
 }
 

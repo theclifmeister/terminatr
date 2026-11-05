@@ -98,7 +98,7 @@ public struct BusyLabel: View {
     public var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { tl in
             Text(busy.word(now: tl.date))
-                .font(theme.mono(.caption2, .medium))
+                .font(theme.body(.caption))
                 .foregroundStyle(colour ?? theme.muted)
                 .monospacedDigit()
                 .lineLimit(1)
@@ -145,10 +145,9 @@ public struct WorkingBar: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 7)
-            // A card's frost: it floats over the transcript's end.
-            .frosted(Capsule())
-            .background(theme.cardTint, in: Capsule())
-            .overlay(Capsule().strokeBorder(theme.edge, lineWidth: 1))
+            // A card's fill: it floats over the transcript's end.
+            .solid(Capsule())
+            .overlay(Capsule().strokeBorder(theme.line, lineWidth: 1))
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(busy.spoken(now: tl.date))
             .accessibilityValue(activity)

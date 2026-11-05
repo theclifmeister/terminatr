@@ -1,7 +1,7 @@
 import SwiftUI
 import TerminatrKit
 
-/// The themes as swatches, each a small window of its own: the mesh, a
+/// The themes as swatches, each a small window of its own: its ground, a
 /// card with a title and a muted line, a filled pill and the status
 /// dots, drawn in the appearance Settings is in. The Mac's Settings ›
 /// Appearance shows four in a row, the phone's Settings three.
@@ -43,10 +43,10 @@ public struct ThemeSwatch: View {
                 ThemePreview()
                     .environment(\.theme, theme)
                     .frame(height: 64)
-                    .clipShape(RoundedRectangle(cornerRadius: 9))
-                    .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(Color.primary.opacity(0.15), lineWidth: 1))
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                    .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color.primary.opacity(0.15), lineWidth: 1))
                     .padding(3)
-                    .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(selected ? AnyShapeStyle(.tint) : AnyShapeStyle(.clear), lineWidth: 2.5))
+                    .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(selected ? AnyShapeStyle(.tint) : AnyShapeStyle(.clear), lineWidth: 2.5))
                 Text(name.label)
                     .font(.callout.weight(selected ? .semibold : .regular))
                     .lineLimit(1)
@@ -61,7 +61,7 @@ public struct ThemeSwatch: View {
     }
 }
 
-/// A theme in little: its mesh, a frosted card with a title and a muted
+/// A theme in little: its ground, a card with a title and a muted
 /// line, a pill and the dots.
 public struct ThemePreview: View {
     @Environment(\.theme) private var theme
@@ -70,7 +70,7 @@ public struct ThemePreview: View {
 
     public var body: some View {
         ZStack {
-            Backdrop()
+            theme.chrome
             VStack(alignment: .leading, spacing: 3) {
                 Text("Aa")
                     .font(theme.title(.headline, .heavy))
@@ -90,9 +90,8 @@ public struct ThemePreview: View {
             }
             .padding(7)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(theme.cardTint, in: RoundedRectangle(cornerRadius: 7))
-            .background(theme.glass, in: RoundedRectangle(cornerRadius: 7))
-            .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(theme.edge, lineWidth: 1))
+            .background(theme.pane, in: RoundedRectangle(cornerRadius: 7))
+            .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(theme.line, lineWidth: 1))
             .padding(9)
         }
         .accessibilityHidden(true)

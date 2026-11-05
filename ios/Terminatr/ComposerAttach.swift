@@ -281,7 +281,7 @@ struct ComposerThumbs: View {
             picture(f)
                 .frame(width: side, height: side)
                 .clipShape(shape)
-                .overlay(shape.strokeBorder(f.failed ? theme.attention : theme.edge, lineWidth: f.failed ? 2 : 1))
+                .overlay(shape.strokeBorder(f.failed ? theme.attention : theme.line, lineWidth: f.failed ? 2 : 1))
             if f.uploading, case .uploading(let sent) = f.state {
                 shape.fill(.black.opacity(0.35)).frame(width: side, height: side)
                 ProgressView(value: f.size > 0 ? Double(sent) : 0, total: Double(max(f.size, 1)))
@@ -308,10 +308,10 @@ struct ComposerThumbs: View {
                 Label("Remove", systemImage: "xmark")
                     .labelStyle(.iconOnly)
                     .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(theme.base)
+                    .foregroundStyle(theme.pane)
                     .frame(width: 20, height: 20)
                     .background(theme.ink, in: Circle())
-                    .overlay(Circle().strokeBorder(theme.base, lineWidth: 1.5))
+                    .overlay(Circle().strokeBorder(theme.pane, lineWidth: 1.5))
                     .frame(width: tapTarget, height: tapTarget)
                     .contentShape(Rectangle())
             }

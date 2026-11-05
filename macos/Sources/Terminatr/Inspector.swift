@@ -33,8 +33,7 @@ struct Inspector: View {
                     }
                 }
             }
-            .padding(16)
-            .padding(.top, 22)
+            .padding(15)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .scrollEdges()
@@ -183,7 +182,7 @@ struct Inspector: View {
             if let s, !s.state.isEmpty {
                 let blocked = s.state == "blocked" || s.asking
                 Text(s.asking ? "asks" : blocked ? (s.reason.isEmpty ? "blocked" : s.reason) : s.state)
-                    .font(theme.mono(.caption, .medium))
+                    .font(theme.body(.caption, .medium))
                     .padding(.horizontal, 8)
                     .padding(.vertical, 2)
                     .background(blocked ? theme.approval : theme.line, in: Capsule())
@@ -261,7 +260,7 @@ struct Inspector: View {
             let blocked = s.state == "blocked"
             let word = blocked ? (s.reason == "permission" ? "needs approval" : s.reason.isEmpty ? "blocked" : s.reason) : s.state
             Text(word)
-                .font(theme.mono(.caption, .medium))
+                .font(theme.body(.caption, .medium))
                 .padding(.horizontal, 8)
                 .padding(.vertical, 2)
                 .background(blocked ? theme.approval : theme.line, in: Capsule())
@@ -271,9 +270,8 @@ struct Inspector: View {
 
     private func section<C: View>(_ title: String, @ViewBuilder _ content: () -> C) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(title.uppercased())
-                .font(theme.mono(.caption2, .medium))
-                .tracking(1)
+            Text(title)
+                .font(theme.body(.caption))
                 .foregroundStyle(theme.muted)
             content()
         }

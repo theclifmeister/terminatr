@@ -92,7 +92,7 @@ struct SearchScreen: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
-            .surface(.card, in: RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
+            .surface(in: RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
             .padding(.horizontal, Spacing.gutter)
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 6) {
@@ -116,8 +116,8 @@ struct SearchScreen: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
                 .foregroundStyle(on ? theme.onAction : theme.ink)
-                .background(on ? theme.action : theme.cardTint, in: Capsule())
-                .overlay(Capsule().strokeBorder(theme.edge, lineWidth: on ? 0 : 1))
+                .background(on ? theme.action : theme.pane, in: Capsule())
+                .overlay(Capsule().strokeBorder(theme.line, lineWidth: on ? 0 : 1))
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(on ? .isSelected : [])
@@ -243,7 +243,7 @@ struct SearchHitScreen: View {
                 ForEach(Search.rows(tl)) { row in
                     if row.at {
                         SearchHitRow(row.hit, at: true)
-                            .listRowBackground(theme.cardTint)
+                            .listRowBackground(theme.pane)
                     } else {
                         PlainRouteLink(value: Route.searchHit(slug, id: row.hit.id)) { SearchHitRow(row.hit) }
                             .buttonStyle(.plain)

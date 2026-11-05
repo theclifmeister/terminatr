@@ -89,7 +89,7 @@ public struct AnswerOption: View {
                 if !detail.isEmpty {
                     Text(detail)
                         .font(theme.body(.subheadline))
-                        .foregroundStyle(theme.muted)
+                        .foregroundStyle(picked ? theme.ink : theme.muted)
                         .lines(2)
                 }
             }

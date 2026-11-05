@@ -73,7 +73,7 @@ struct ConversationTab: View {
                     // Laid out exactly, the last drawn entries only: no
                     // lazy stack's estimated heights under the scroll
                     // (T976).
-                    VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 15) {
                         if earlier > 0 {
                             Button("Show \(min(earlier, Self.page)) earlier of \(earlier)") { drawn += Self.page }
                                 .buttonStyle(.borderless)
@@ -223,7 +223,7 @@ struct ConversationTab: View {
     }
 
     /// Jump to latest, or to the open card when one waits (its cards
-    /// flash): frosted, with a shadow, so it reads over whatever scrolls
+    /// flash): solid, so it reads over whatever scrolls
     /// behind it. Either follows the end again.
     private func jump(_ proxy: ScrollViewProxy, toCard: Bool) -> some View {
         Button {
@@ -234,9 +234,8 @@ struct ConversationTab: View {
                 .font(theme.body(.subheadline, .semibold))
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
-                .frosted(Capsule())
-                .overlay(Capsule().strokeBorder(theme.edge, lineWidth: 1))
-                .shadow(color: .black.opacity(0.18), radius: 8, y: 3)
+                .solid(Capsule())
+                .overlay(Capsule().strokeBorder(theme.line, lineWidth: 1))
         }
         .buttonStyle(.plain)
         .help("Scrolls to the end, where the card waits")
@@ -285,8 +284,8 @@ struct ConversationTab: View {
         .font(theme.body(.callout))
         .padding(.horizontal, 12)
         .padding(.vertical, 7)
-        .frosted(RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(theme.edge, lineWidth: 1))
+        .solid(RoundedRectangle(cornerRadius: 6))
+        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(theme.line, lineWidth: 1))
         .padding(.horizontal, Page.edge)
         .padding(.bottom, 4)
     }
@@ -344,7 +343,7 @@ struct FoundRing: ViewModifier {
     func body(content: Content) -> some View {
         content.overlay {
             if found {
-                RoundedRectangle(cornerRadius: 14)
+                RoundedRectangle(cornerRadius: 8)
                     .strokeBorder(theme.action.opacity(current ? 1 : 0.4), lineWidth: current ? 2 : 1)
                     .padding(-3)
             }
@@ -362,7 +361,7 @@ struct Flash: ViewModifier {
     func body(content: Content) -> some View {
         content
             .overlay {
-                RoundedRectangle(cornerRadius: 16)
+                RoundedRectangle(cornerRadius: 8)
                     .strokeBorder(theme.action, lineWidth: 2)
                     .padding(.horizontal, 16)
                     .opacity(on ? 1 : 0)
@@ -386,7 +385,7 @@ struct ReviewCard: View {
     let task: AppAPI.Task
 
     var body: some View {
-        CardFrame(tag: "Review", colour: theme.good, tint: theme.cardTint, waiting: "review \(project) \(task.ref)") {
+        CardFrame(tag: "Review", colour: theme.good, tint: theme.pane, waiting: "review \(project) \(task.ref)") {
             HStack(alignment: .center, spacing: 10) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("\(task.ref) is ready to review")
@@ -443,10 +442,10 @@ struct EntryView: View {
                     if !entry.text.isEmpty || entry.files.isEmpty {
                         Text(preview ?? entry.text)
                             .textSelection(.enabled)
-                            .foregroundStyle(theme.onPrompt)
-                            .padding(.horizontal, 13)
-                            .padding(.vertical, 9)
-                            .background(LinearGradient(colors: theme.prompt, startPoint: .topLeading, endPoint: .bottomTrailing), in: RoundedRectangle(cornerRadius: 14))
+                            .foregroundStyle(theme.ink)
+                            .padding(.horizontal, 11)
+                            .padding(.vertical, 7)
+                            .background(theme.selection, in: RoundedRectangle(cornerRadius: Radius.row))
                     }
                     if !entry.files.isEmpty {
                         Attachments(files: entry.attachments, session: session, alignment: .trailing)
@@ -466,11 +465,7 @@ struct EntryView: View {
                 MarkdownView(text: entry.text)
                 if entry.truncated { cut }
             }
-            .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .frosted(RoundedRectangle(cornerRadius: 14))
-            .background(theme.agentCard, in: RoundedRectangle(cornerRadius: 14))
-            .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(theme.edge, lineWidth: 1))
         case .tool:
             ToolLine(entry: entry, answer: answer)
         case .files:
@@ -489,12 +484,12 @@ struct EntryView: View {
         case .note:
             // A centred divider: "Conversation compacted", "Interrupted".
             HStack(spacing: 10) {
-                Rectangle().fill(theme.edge).frame(height: 1)
+                Rectangle().fill(theme.line).frame(height: 1)
                 Text(entry.text)
                     .font(theme.body(.footnote, .medium))
                     .foregroundStyle(theme.muted)
                     .fixedSize()
-                Rectangle().fill(theme.edge).frame(height: 1)
+                Rectangle().fill(theme.line).frame(height: 1)
             }
             .padding(.vertical, 6)
             .accessibilityElement(children: .combine)
@@ -504,7 +499,7 @@ struct EntryView: View {
     /// Who wrote the turn, and when: "you · 20:45".
     private var turn: some View {
         Text([entry.who(agent: agent), Self.clock(entry.at)].filter { !$0.isEmpty }.joined(separator: " · "))
-            .font(theme.mono(.caption, .medium))
+            .font(theme.body(.caption))
             .foregroundStyle(theme.muted)
     }
 

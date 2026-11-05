@@ -150,7 +150,7 @@ struct SourceBanner: View {
 }
 
 /// The demo says so on its start screen, and leads back out: a line on
-/// the glass and Leave, a ghost button; at accessibility sizes Leave
+/// the pane and Leave, a ghost button; at accessibility sizes Leave
 /// goes under the line.
 struct DemoBanner: View {
     @Environment(Phone.self) private var phone
@@ -179,13 +179,13 @@ struct DemoBanner: View {
         .padding(.leading, Spacing.card)
         .padding(.trailing, Spacing.item)
         .padding(.vertical, Spacing.hair)
-        .surface(.glass, in: RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
+        .surface(in: RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
     }
 }
 
 /// Why the screen's last read failed: the attention mark and the words
-/// in ink, on the glass (the attention colour falls short as text in
-/// some themes, and the mesh is no place for small text).
+/// in ink, on the pane (the attention colour falls short as text in
+/// some themes, and the ground is no place for small text).
 struct Failure: View {
     @Environment(\.theme) private var theme
     let text: String
@@ -203,6 +203,6 @@ struct Failure: View {
         .padding(.horizontal, Spacing.card)
         .padding(.vertical, Spacing.row)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .surface(.glass, in: RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
+        .surface(in: RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
     }
 }

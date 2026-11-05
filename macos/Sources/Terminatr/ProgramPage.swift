@@ -108,7 +108,7 @@ struct ProgramPage: View {
                     .font(theme.mono(.subheadline, .medium))
                     .padding(.horizontal, 7)
                     .padding(.vertical, 1)
-                    .background(theme.cardTint, in: Capsule())
+                    .background(theme.pane, in: Capsule())
                 Text(program.slug)
                     .font(theme.title(.display, .heavy))
             }
@@ -156,9 +156,9 @@ struct ProgramPage: View {
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
-            .background(theme.cardTint, in: RoundedRectangle(cornerRadius: 14))
-            .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(theme.edge, lineWidth: 1))
-            .contentShape(RoundedRectangle(cornerRadius: 14))
+            .background(theme.pane, in: RoundedRectangle(cornerRadius: 8))
+            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(theme.line, lineWidth: 1))
+            .contentShape(RoundedRectangle(cornerRadius: 8))
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .ignore)
@@ -283,9 +283,8 @@ struct ProgramPage: View {
 
     private func section<C: View>(_ title: String, count: Int?, @ViewBuilder content: () -> C) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(count.map { "\(title.uppercased()) \($0)" } ?? title.uppercased())
-                .font(theme.mono(.caption2, .medium))
-                .tracking(1)
+            Text(count.map { "\(title) \($0)" } ?? title)
+                .font(theme.body(.caption))
                 .foregroundStyle(theme.muted)
                 .padding(.top, 6)
             content()
@@ -314,9 +313,9 @@ struct ProgramPage: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
-        .background(theme.cardTint, in: RoundedRectangle(cornerRadius: 9))
-        .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(theme.edge, lineWidth: 1))
-        .contentShape(RoundedRectangle(cornerRadius: 9))
+        .background(theme.pane, in: RoundedRectangle(cornerRadius: 6))
+        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(theme.line, lineWidth: 1))
+        .contentShape(RoundedRectangle(cornerRadius: 6))
         .accessibilityElement(children: .combine)
     }
 

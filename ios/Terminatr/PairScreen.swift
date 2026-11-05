@@ -63,7 +63,7 @@ struct PairScreen: View {
             .padding(.bottom, 32)
         }
         .scrollDismissesKeyboard(.interactively)
-        .sheetGlass()
+        .sheetGround()
         .onAppear { if code == nil { code = initial } }
     }
 
@@ -106,7 +106,7 @@ struct PairScreen: View {
                 .autocorrectionDisabled()
                 .padding(.horizontal, Spacing.card)
                 .frame(minHeight: tapTarget)
-                .surface(.card, in: RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
+                .surface(in: RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
             if !pasted.isEmpty {
                 Button("Use this code") { take(pasted) }
                     .buttonStyle(.secondary)
@@ -142,7 +142,7 @@ struct PairScreen: View {
         }
         .padding(Spacing.card)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .surface(.card, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+        .surface(in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
         .padding(.horizontal, Spacing.gutter)
         GroupLabel("This phone's name")
         VStack(alignment: .leading, spacing: Spacing.tight) {
@@ -151,7 +151,7 @@ struct PairScreen: View {
                 .foregroundStyle(theme.ink)
                 .padding(.horizontal, Spacing.card)
                 .frame(minHeight: 50)
-                .surface(.card, in: RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
+                .surface(in: RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
             Text("The server shows this name and asks you to add the phone.")
                 .font(theme.body(.footnote))
                 .foregroundStyle(theme.muted)

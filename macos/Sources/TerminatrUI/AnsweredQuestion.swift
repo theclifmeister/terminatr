@@ -35,7 +35,7 @@ public struct AnsweredQuestionCard: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 9)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(theme.command, in: RoundedRectangle(cornerRadius: 9))
+        .background(theme.command, in: RoundedRectangle(cornerRadius: 6))
         .overlay(alignment: .leading) {
             // The answered look: a rule in the colour of done.
             if case .answered = outcome {
@@ -60,8 +60,8 @@ public struct AnsweredQuestionCard: View {
     private func question(_ a: AppAPI.TranscriptAnswer) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             if !a.header.isEmpty {
-                Text(a.header.uppercased())
-                    .font(theme.mono(.caption2, .medium))
+                Text(a.header)
+                    .font(theme.body(.caption))
                     .foregroundStyle(theme.muted)
             }
             Text(a.question)

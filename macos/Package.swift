@@ -39,7 +39,6 @@ let package = Package(
         .executableTarget(
             name: "Terminatr",
             dependencies: ["TerminatrKit", "TerminatrUI", "TerminatrPane", .product(name: "SwiftTerm", package: "SwiftTerm")],
-            resources: [.copy("Resources/Fonts")],
             swiftSettings: werror
         ),
         .testTarget(name: "TerminatrKitTests", dependencies: ["TerminatrKit"], swiftSettings: werror),

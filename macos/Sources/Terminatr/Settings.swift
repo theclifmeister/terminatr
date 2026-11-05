@@ -133,7 +133,7 @@ private struct NotificationSettings: View {
 /// Text Bigger ⌘+ and Smaller ⌘-).
 private struct AppearanceSettings: View {
     @AppStorage(Appearance.key) private var appearance = Appearance.system.rawValue
-    @AppStorage(ThemeName.key) private var theme = ThemeName.bloom.rawValue
+    @AppStorage(ThemeName.key) private var theme = ThemeName.carbon.rawValue
     @AppStorage(TextSize.key) private var scale = TextSize.standard
 
     var body: some View {

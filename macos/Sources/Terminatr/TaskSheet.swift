@@ -37,18 +37,18 @@ struct TaskSheet: View {
                 theme.line.frame(height: 1)
                 ScrollView {
                     content(detail)
-                        .padding(20)
+                        .padding(16)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .frame(maxHeight: 520)
                 .fixedSize(horizontal: false, vertical: true)
             } else if app.canGetTask && fetchError == nil {
                 ProgressView().controlSize(.small)
-                    .padding(20)
+                    .padding(16)
             } else {
                 Text("\(shown.task) isn't on \(shown.project)'s board any more: it was archived.")
                     .foregroundStyle(theme.muted)
-                    .padding(20)
+                    .padding(16)
             }
             theme.line.frame(height: 1)
             footer(detail)
@@ -78,8 +78,8 @@ struct TaskSheet: View {
                     .font(theme.mono(.caption, .medium))
                     .padding(.horizontal, 7)
                     .padding(.vertical, 2)
-                    .background(theme.cardTint, in: Capsule())
-                    .overlay(Capsule().strokeBorder(theme.edge, lineWidth: 1))
+                    .background(theme.pane, in: Capsule())
+                    .overlay(Capsule().strokeBorder(theme.line, lineWidth: 1))
             }
             Text(d.facts)
                 .font(theme.mono(.footnote))
@@ -91,7 +91,7 @@ struct TaskSheet: View {
             }
             TaskOutcome(project: d.project, task: d.task.ref)
         }
-        .padding(20)
+        .padding(16)
     }
 
     private func content(_ d: TaskDetail) -> some View {
@@ -133,8 +133,8 @@ struct TaskSheet: View {
                 TaskActs(project: d.project, task: d.task.ref, status: d.task.status)
             }
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 14)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
     }
 
     /// The TUI's c on a task: the project's coordinator, started when

@@ -1,38 +1,18 @@
 import SwiftUI
 import TerminatrKit
 
-/// The redesign's surfaces (T845, direction A "Glass deck"): what sits
-/// over the mesh, from the thinnest to the most lifted. Each is the
-/// frost (Frosted) under a theme tint and an edge; ThemeColours.checks
-/// measures the text on each.
-public enum Surface: Sendable {
-    /// A header's circle buttons, the pulse chips, a tile: the panel's
-    /// glass ("the glass").
-    case glass
-    /// A deck card: the deeper glass, so the mesh shows through ("a deck
-    /// card").
-    case card
-    /// A card lifted off the deck, the lead need: the deck card with a
-    /// deeper shadow.
-    case raised
-    /// A soft panel (T996), a group of rows or a project's tile: the deck
-    /// card's fill alone, spacing keeping it apart. Its edge only with
-    /// Increase Contrast.
-    case panel
-}
-
 /// Corner radii, by what they round.
 public enum Radius {
-    /// An option row, a command block.
-    public static let row: CGFloat = 14
-    /// A StateGlyph's squircle at 38 pt.
-    public static let glyph: CGFloat = 12
+    /// An option row, a command block, a button, a sidebar row.
+    public static let row: CGFloat = 6
+    /// A StateGlyph's square at 38 pt.
+    public static let glyph: CGFloat = 6
     /// A keycap at 24 pt.
-    public static let key: CGFloat = 8
-    /// A tile, a list's group.
-    public static let tile: CGFloat = 18
-    /// A deck card.
-    public static let card: CGFloat = 26
+    public static let key: CGFloat = 4
+    /// A list's group, a pane.
+    public static let tile: CGFloat = 8
+    /// A card.
+    public static let card: CGFloat = 8
 }
 
 /// Spacing, from a glyph's gap to a screen's gutter.
@@ -49,42 +29,36 @@ public enum Spacing {
 public let tapTarget: CGFloat = 44
 
 extension View {
-    /// The surface behind the content, in a shape: the frost, the
-    /// surface's tint, a hairline edge (not a panel's), and for a card its
-    /// shadow. With
-    /// Increase Contrast the tint is opaque and the edge the muted ink.
-    public func surface<S: InsettableShape>(_ s: Surface, in shape: S) -> some View {
-        modifier(SurfaceModifier(surface: s, shape: shape))
+    /// The flat look's one surface, in a shape: the pane's solid colour
+    /// and a hairline; with Increase Contrast a stronger one. No blur, no
+    /// shadow, nothing shows through.
+    public func surface<S: InsettableShape>(in shape: S) -> some View {
+        modifier(SurfaceModifier(shape: shape))
+    }
+
+    /// The pane's solid colour behind the content, with no line.
+    public func solid<S: Shape>(_ shape: S) -> some View {
+        modifier(Solid(shape: shape))
     }
 }
 
 private struct SurfaceModifier<S: InsettableShape>: ViewModifier {
     @Environment(\.theme) private var theme
-    let surface: Surface
     let shape: S
 
     func body(content: Content) -> some View {
         content
-            .background(tint, in: shape)
-            .frosted(shape)
-            .overlay {
-                if surface != .panel || theme.contrast {
-                    shape.strokeBorder(theme.edge, lineWidth: theme.contrast ? 1.5 : 1)
-                }
-            }
-            .shadow(color: .black.opacity(shadow), radius: surface == .raised ? 18 : 10, y: surface == .raised ? 10 : 5)
+            .background(theme.pane, in: shape)
+            .overlay { shape.strokeBorder(theme.line, lineWidth: theme.contrast ? 1.5 : 1) }
     }
+}
 
-    private var tint: Color {
-        surface == .glass ? theme.glass : theme.deck
-    }
+private struct Solid<S: Shape>: ViewModifier {
+    @Environment(\.theme) private var theme
+    let shape: S
 
-    private var shadow: Double {
-        switch surface {
-        case .glass, .panel: 0
-        case .card: 0.10
-        case .raised: 0.18
-        }
+    func body(content: Content) -> some View {
+        content.background(theme.pane, in: shape)
     }
 }
 

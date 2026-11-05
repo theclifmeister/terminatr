@@ -64,7 +64,7 @@ struct FirstRunSheet: View {
             }
         }
         .font(theme.body(.body))
-        .padding(24)
+        .padding(18)
         .frame(width: 600)
         .onDisappear { UserDefaults.standard.set(true, forKey: FirstRun.doneKey) }
     }
@@ -121,8 +121,8 @@ private struct Step<Content: View>: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(12)
-        .background(theme.cardTint, in: RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(theme.edge, lineWidth: 1))
+        .background(theme.pane, in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(theme.line, lineWidth: 1))
     }
 
     /// What VoiceOver says of the step's mark.
@@ -277,9 +277,8 @@ struct ConnectionBanner: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
-        .frosted(RoundedRectangle(cornerRadius: 12))
-        .background(theme.cardTint, in: RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(theme.edge, lineWidth: 1))
+        .solid(RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(theme.line, lineWidth: 1))
         .padding(.horizontal, 20)
         .padding(.top, 10)
         .accessibilityElement(children: .contain)

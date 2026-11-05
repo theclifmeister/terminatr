@@ -5,7 +5,7 @@ import SwiftUI
 enum Page {
     /// The side inset of a session's conversation, its cards, composer
     /// and terminal box, so the Conversation and Terminal tabs line up.
-    static let edge: CGFloat = 14
+    static let edge: CGFloat = 17
     /// A dashboard card's least width: its grid adds a column for each.
     static let card: CGFloat = 420
 }
@@ -16,8 +16,8 @@ struct CardGrid<Content: View>: View {
     @ViewBuilder var content: Content
 
     var body: some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: Page.card), spacing: 12, alignment: .top)],
-                  alignment: .leading, spacing: 10) {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: Page.card), spacing: 9, alignment: .top)],
+                  alignment: .leading, spacing: 8) {
             content
         }
     }

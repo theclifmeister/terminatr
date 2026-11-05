@@ -41,8 +41,8 @@ public struct ToolRunHeader: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 7)
-        .background(theme.command, in: RoundedRectangle(cornerRadius: 9))
-        .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(theme.edge, lineWidth: 1))
+        .background(theme.command, in: RoundedRectangle(cornerRadius: 6))
+        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(theme.line, lineWidth: 1))
         .contentShape(Rectangle())
     }
 
@@ -121,7 +121,7 @@ public struct ToolLine: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 7)
-        .background(theme.command, in: RoundedRectangle(cornerRadius: 9))
+        .background(theme.command, in: RoundedRectangle(cornerRadius: 6))
         .accessibilityElement(children: .combine)
     }
 

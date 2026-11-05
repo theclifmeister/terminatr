@@ -3,7 +3,7 @@ import TerminatrKit
 
 /// Pairing's camera (T850): what the camera sees (or, without one, what
 /// to do instead) on the terminal's dark, under a viewfinder whose four
-/// corners are the theme's mesh colours and a scan line in the mesh's
+/// corners are the action's colour and a scan line in its
 /// centre colour that sweeps up and down, still with Reduce Motion.
 /// Words inside it are the terminal's, which stays dark in every theme.
 public struct PairHero<Content: View>: View {
@@ -20,7 +20,7 @@ public struct PairHero<Content: View>: View {
     }
 
     public var body: some View {
-        let shape = RoundedRectangle(cornerRadius: 28, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
         ZStack {
             theme.terminalBackground
             content
@@ -30,9 +30,8 @@ public struct PairHero<Content: View>: View {
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
             if scanning {
-                LinearGradient(colors: [theme.mesh[4].opacity(0), theme.mesh[4], theme.mesh[4].opacity(0)], startPoint: .leading, endPoint: .trailing)
+                theme.action
                     .frame(height: 2)
-                    .shadow(color: theme.mesh[4], radius: 6)
                     .padding(.horizontal, 20)
                     .offset(y: still ? 0 : (sweep ? 70 : -70))
                     .allowsHitTesting(false)
@@ -46,11 +45,11 @@ public struct PairHero<Content: View>: View {
         .frame(maxWidth: .infinity)
         .frame(height: 260)
         .clipShape(shape)
-        .overlay(shape.strokeBorder(theme.edge, lineWidth: 1))
+        .overlay(shape.strokeBorder(theme.line, lineWidth: 1))
     }
 }
 
-/// The viewfinder's four corners, each in one of the mesh's colours.
+/// The viewfinder's four corners, each in the action's colour.
 private struct Viewfinder: View {
     @Environment(\.theme) private var theme
 
@@ -65,7 +64,7 @@ private struct Viewfinder: View {
 
     private func corner(_ i: Int, _ at: Alignment, _ turn: Double) -> some View {
         Corner()
-            .stroke(theme.mesh[i], style: StrokeStyle(lineWidth: 5, lineCap: .round))
+            .stroke(theme.action, style: StrokeStyle(lineWidth: 5, lineCap: .round))
             .frame(width: 40, height: 40)
             .rotationEffect(.degrees(turn))
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: at)
@@ -115,7 +114,7 @@ public struct NumberedSteps: View {
         }
         .padding(Spacing.card)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .surface(.card, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .surface(in: RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 }
 

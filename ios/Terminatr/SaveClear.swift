@@ -46,7 +46,7 @@ struct SaveClearButton: View {
     }
 }
 
-/// Where a Save & Clear is (T868), on glass: a spinner while it saves
+/// Where a Save & Clear is (T868), on a capsule: a spinner while it saves
 /// and clears, then what came of it, the context's drop. VoiceOver
 /// hears each step.
 struct SaveClearStatus: View {
@@ -70,7 +70,7 @@ struct SaveClearStatus: View {
         }
         .padding(.horizontal, Spacing.card)
         .padding(.vertical, Spacing.item)
-        .surface(.glass, in: Capsule())
+        .surface(in: Capsule())
         .accessibilityElement(children: .combine)
         .onChange(of: clear.words, initial: true) { _, w in
             AccessibilityNotification.Announcement(w).post()

@@ -91,9 +91,8 @@ struct Composer: View {
                 }
             }
             .padding(10)
-            .frosted(RoundedRectangle(cornerRadius: 14))
-            .background(theme.cardTint, in: RoundedRectangle(cornerRadius: 14))
-            .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(dropping ? theme.action : theme.edge, lineWidth: dropping ? 2 : 1))
+            .solid(RoundedRectangle(cornerRadius: 8))
+            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(dropping ? theme.action : theme.line, lineWidth: dropping ? 2 : 1))
             .onDrop(of: [.fileURL, .image], isTargeted: attaches ? $dropping : .constant(false)) { providers in
                 guard attaches else { return false }
                 drop(providers)
@@ -118,7 +117,7 @@ struct Composer: View {
                 }
                 Spacer()
                 Text(model.ref.isRemote ? "⇧↩ new line" : "⌥↩ steer · ⇧↩ new line")
-                    .font(theme.mono(.caption2))
+                    .font(theme.body(.caption))
                     .foregroundStyle(theme.muted)
             }
             .font(theme.body(.footnote))
@@ -244,7 +243,7 @@ struct Composer: View {
         .font(theme.body(.footnote))
         .padding(.horizontal, 8)
         .padding(.vertical, 5)
-        .background(theme.edge.opacity(0.35), in: RoundedRectangle(cornerRadius: 8))
+        .background(theme.line.opacity(0.35), in: RoundedRectangle(cornerRadius: 8))
         .help(f.failed ? f.detail : f.name)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(f.spoken)

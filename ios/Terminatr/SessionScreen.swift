@@ -106,7 +106,7 @@ struct SessionScreen: View {
                 .lineLimit(1)
                 .padding(.horizontal, Spacing.card)
                 .frame(minHeight: tapTarget)
-                .surface(.glass, in: Capsule())
+                .surface(in: Capsule())
                 .contentShape(Capsule())
         }
         .buttonStyle(.plain)

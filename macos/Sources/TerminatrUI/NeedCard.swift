@@ -106,7 +106,7 @@ public struct NeedCard<Link: View, Answers: View>: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .coordinateSpace(.named(cardSpace))
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { cardHeight = $0 }
-        .surface(lead ? .raised : .card, in: shape)
+        .surface(in: shape)
         .overlay {
             shape.strokeBorder(theme.colour(need.kind).opacity(ring || theme.contrast ? 1 : 0.35),
                                lineWidth: ring ? (theme.contrast ? 2.5 : 2) : 1)

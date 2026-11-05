@@ -53,7 +53,7 @@ struct TerminalTab: View {
                     if let closed = pane.controller.closed, app.bridge != nil {
                         Text(closed)
                             .padding(10)
-                            .frosted(RoundedRectangle(cornerRadius: 10))
+                            .solid(RoundedRectangle(cornerRadius: 6))
                             .padding(16)
                     }
                 }
