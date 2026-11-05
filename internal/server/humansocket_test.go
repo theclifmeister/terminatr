@@ -134,6 +134,9 @@ func TestHumanSocket(t *testing.T) {
 	if got := human.RemoteAddr().String(); got != p.HumanSocket() {
 		t.Fatalf("client.Dial connected to %q, want the human socket %q", got, p.HumanSocket())
 	}
+	if !human.OnHumanSocket {
+		t.Fatal("a connection on the human socket doesn't say so")
+	}
 
 	for _, m := range humanOnlyMethods {
 		if gateOf(m) != gateHuman {
@@ -316,6 +319,9 @@ func TestHumanSocketFallback(t *testing.T) {
 	defer c.Close()
 	if got := c.RemoteAddr().String(); got != p.Socket {
 		t.Fatalf("client.Dial connected to %q, want %q", got, p.Socket)
+	}
+	if c.OnHumanSocket {
+		t.Fatal("a connection on the server socket says it is on the human socket")
 	}
 	if err := c.Call(proto.MethodPing, nil, nil); err != nil {
 		t.Fatalf("ping: %v", err)
