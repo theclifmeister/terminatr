@@ -496,14 +496,14 @@ struct Sidebar: View {
                     spoken: l.dormant ? "inactive" : sleeps ? state.why.replacingOccurrences(of: " · ", with: ", ") : state.spoken,
                     dormant: l.dormant, context: ctx,
                     busy: l.dormant ? nil : app.busy(coordinator: p), menu: coordinator == nil ? nil : p,
-                    sleep: l.dormant ? .awake : sleep, indent: indent)
+                    sleep: l.dormant ? .awake : sleep, indent: CGFloat(SidebarGrid.contents(of: Double(indent))))
             }
             // Keyed with the project: thread ids repeat across projects,
             // and the List flattens every project's rows into one.
             ForEach(l.threads, id: \.record.id) { t in
                 row(.session(SessionRef(project: p.slug, thread: t.record.id)), label: t.record.title, ref: t.task?.ref,
                     tag: l.dormant ? nil : tag(t), dot: theme.colour(l.dormant ? .idle : app.attention(t).tone),
-                    spoken: l.dormant ? "inactive" : spoken(t), dormant: l.dormant, busy: l.dormant ? nil : app.busy(t), indent: indent)
+                    spoken: l.dormant ? "inactive" : spoken(t), dormant: l.dormant, busy: l.dormant ? nil : app.busy(t), indent: CGFloat(SidebarGrid.contents(of: Double(indent))))
             }
         }
     }
@@ -525,12 +525,15 @@ struct Sidebar: View {
         let on = app.nav.selection == sel
         let leads = role != nil && !dormant
         return HStack(spacing: 6) {
-            // The tile's column: a role's mark, a thread's empty.
+            // The tile's column: a role's mark, a thread's bubble.
             Group {
                 if let role {
                     RoleMark(role, slot: CGFloat(SidebarGrid.slot), colour: leads ? theme.ink : theme.muted)
                 } else {
-                    Color.clear
+                    Image(systemName: SidebarGrid.threadSymbol)
+                        .font(.system(size: 11 * theme.scale, weight: .medium))
+                        .foregroundStyle(theme.muted)
+                        .accessibilityHidden(true)
                 }
             }
             .frame(width: CGFloat(SidebarGrid.slot), height: 14)
@@ -662,7 +665,7 @@ struct Sidebar: View {
             ForEach(sessions(peer, p), id: \.ref) { s, r, task, title in
                 row(.session(r), label: r.role?.word ?? (title.isEmpty ? r.thread : title), ref: task.isEmpty ? nil : task, role: r.role,
                     tag: s.flatMap(tag), dot: theme.colour(s.map(tone) ?? .idle), spoken: s.map(spoken) ?? "not running",
-                    busy: peer.state == "up" ? Busy.of(peer: s) : nil, indent: indent)
+                    busy: peer.state == "up" ? Busy.of(peer: s) : nil, indent: CGFloat(SidebarGrid.contents(of: Double(indent))))
                     .opacity(dim)
             }
         }
@@ -696,7 +699,7 @@ struct Sidebar: View {
             if !filtering || SidebarTree.matches(app.filter, g.slug, "director") {
                 row(.session(dref), label: SessionRole.director.word, ref: nil, role: .director, tag: state.waits ? (state.word, state.tone) : nil,
                     dot: theme.colour(state.tone), spoken: state.spoken, context: ContextUse.of(director, hint: app.contextHint),
-                    busy: working, indent: CGFloat(SidebarGrid.step))
+                    busy: working, indent: CGFloat(SidebarGrid.contents(of: 0)))
             }
             ForEach(shownMembers(g), id: \.self) { m in
                 switch m {
