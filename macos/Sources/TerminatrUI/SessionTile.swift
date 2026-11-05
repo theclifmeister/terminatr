@@ -2,10 +2,11 @@ import SwiftUI
 import TerminatrKit
 
 /// A session's row in a TileGroup (T846), to the design page's list
-/// (T1001, T1008): its state's dot, its task ref in mono and its title on one
-/// line, and at the end what waits on the user as a Chip ("allow?", "asks",
-/// "review"), else Working, else a PR mark, before its context use when it
-/// is shown. A soft line over each
+/// (T1001, T1008): its state's dot, its task ref in mono and its title, the why
+/// line under them (the user's own, over the page), and at the end what waits
+/// on the user as a Chip ("allow?", "asks", "review"), else Working and how
+/// long its turn has run, else a PR mark, before its context use when it is
+/// shown. A soft line over each
 /// after the first (rule). At accessibility sizes the dot and the end go
 /// over the title, which keeps the row's width. Dormant: an inactive
 /// project's, all muted. A project's coordinator and a program's director
@@ -45,6 +46,9 @@ public struct SessionTile: View {
     public var body: some View {
         let busy = dormant ? nil : busy
         let tone: Attention.Tone = dormant ? .idle : state.tone
+        // Centred on its one line (`.list`); with a why, on the title's.
+        let lift = 4 * theme.scale
+        let two = !state.why.isEmpty && !dormant
         Group {
             if typeSize.isAccessibilitySize {
                 VStack(alignment: .leading, spacing: Spacing.hair) {
@@ -56,8 +60,9 @@ public struct SessionTile: View {
                     words
                 }
             } else {
-                HStack(spacing: Spacing.row) {
+                HStack(alignment: two ? .firstTextBaseline : .center, spacing: Spacing.row) {
                     FlatDot(tone)
+                        .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + lift }
                     words
                     Spacer(minLength: Spacing.hair)
                     end(busy)
@@ -81,6 +86,7 @@ public struct SessionTile: View {
     }
 
     private var words: some View {
+        VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .firstTextBaseline, spacing: Spacing.row) {
                 if let role {
                     RoleMark(role, points: 12, alignment: .leading, colour: dormant ? theme.muted : theme.ink)
@@ -95,6 +101,14 @@ public struct SessionTile: View {
                     .foregroundStyle(dormant ? theme.muted : theme.ink)
                     .lines(1)
             }
+            if !state.why.isEmpty, !dormant {
+                Text(state.why)
+                    .font(theme.sized(12.5))
+                    .foregroundStyle(quiet)
+                    .lines(1)
+                    .pageLeading(12.5)
+            }
+        }
     }
 
     /// What waits on the user, else the turn's time, else the PR; then
@@ -102,8 +116,11 @@ public struct SessionTile: View {
     @ViewBuilder private func end(_ busy: Busy?) -> some View {
         if !dormant, state.waits {
             Chip(state.word, colour: theme.colour(state.tone))
-        } else if busy != nil {
-            small("Working")
+        } else if let busy {
+            TimelineView(.periodic(from: .now, by: 1)) { tl in
+                small(busy.elapsed(now: tl.date).map { "Working · \($0)" } ?? "Working")
+            }
+            .fixedSize()
         } else if !dormant, pr > 0 {
             Chip("PR")
         }
@@ -115,6 +132,7 @@ public struct SessionTile: View {
     private func small(_ text: String) -> some View {
         Text(text)
             .font(theme.sized(12.5))
+            .monospacedDigit()
             .foregroundStyle(quiet)
             .lineLimit(1)
             .fixedSize()

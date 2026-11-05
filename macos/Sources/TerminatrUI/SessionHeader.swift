@@ -3,7 +3,8 @@ import TerminatrKit
 
 /// A session's title in its bar (T848, T1001, the design page's `.phbar`):
 /// a role's mark, its title at 14.5, a thread's ref in the same words before
-/// it, its project after a role's, in muted words; its context use at the end. VoiceOver reads it as one header; held, the large content
+/// it, its project after a role's, in muted words; its state's dot and context
+/// use at the end (the dot is the user's own, over the page). VoiceOver reads it as one header; held, the large content
 /// viewer shows it whole, as the bar's text grows only to a point.
 public struct SessionTitle: View {
     @Environment(\.theme) private var theme
@@ -45,6 +46,9 @@ public struct SessionTitle: View {
                     .lineLimit(1)
             }
             Spacer(minLength: 0)
+            if let state {
+                FlatDot(state.tone)
+            }
             if let context {
                 Text(context.word)
                     .font(t.sized(12.5))

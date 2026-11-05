@@ -1,9 +1,10 @@
 import SwiftUI
 import TerminatrKit
 
-/// A design's row (T864), to the design page's list (T1001, T1008): its title
-/// on one line, and at the end its build as a bar and "3 of 6", or its status
-/// in words; VoiceOver has its facts (design task, open questions, answers). Open
+/// A design's row (T864), to the design page's list (T1001, T1008): its title,
+/// its facts under it (design task, open questions, answers; the user's own,
+/// over the page), and at the end its build as a bar and "3 of 6", or its
+/// status in words. Open
 /// questions: a dot in their tone before the title. Rows sit in a
 /// TileGroup, a soft line over each after the first (rule).
 public struct DesignTile: View {
@@ -51,12 +52,22 @@ public struct DesignTile: View {
     }
 
     private var words: some View {
-        HStack(spacing: Spacing.row) {
-            if !design.questions.isEmpty { FlatDot(.question) }
-            Text(design.title)
-                .font(theme.sized(Flat.listText))
-                .foregroundStyle(theme.ink)
-                .lines(1)
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: Spacing.row) {
+                if !design.questions.isEmpty { FlatDot(.question) }
+                Text(design.title)
+                    .font(theme.sized(Flat.listText))
+                    .foregroundStyle(theme.ink)
+                    .lines(1)
+            }
+            let facts = Designs.facts(design).joined(separator: " · ")
+            if !facts.isEmpty {
+                Text(facts)
+                    .font(theme.sized(12.5))
+                    .foregroundStyle(quiet)
+                    .lines(1)
+                    .pageLeading(12.5)
+            }
         }
     }
 

@@ -332,13 +332,14 @@ struct ConversationScreen: View {
             ForEach(QuestionPlan.shown(q), id: \.self) { i in
                 let item = q.questions[i]
                 let word = "Asks · " + QuestionPlan.tag(q, index: i)
+                let line = Self.line("AskUserQuestion", since: q.since)
                 // Each card answers its own question (Need.answer), not
                 // only a menu's one open question: two questions left the
                 // first card's options untappable (T887).
                 if let need, need.kind == .question, let a = Need.answer(s.id, q, index: i, picks: Compatibility.answersPicks(model.hello)),
                    model.can(AppAPI.Methods.sessionAnswer.name) {
                     NeedActs(need: need, answer: a) { parts in
-                        HeroCard(word: word, title: item.question,
+                        HeroCard(word: word, line: line, title: item.question,
                                  note: parts.note) {
                             parts.buttons
                         }
@@ -348,7 +349,7 @@ struct ConversationScreen: View {
                     // types it (app API 39), is picked in its terminal: the
                     // card says so, its options only read.
                     let several = QuestionPlan(q, index: i, picks: Compatibility.answersPicks(model.hello)).paneOnly
-                    HeroCard(word: word, title: item.question,
+                    HeroCard(word: word, line: line, title: item.question,
                              note: several ? ("It takes several options: pick them in the terminal view.", false) : nil) {
                         VStack(spacing: Spacing.item) {
                             ForEach(Array(item.options.enumerated()), id: \.offset) { n, o in
@@ -362,10 +363,11 @@ struct ConversationScreen: View {
         if s.state == "blocked", s.reason == "permission" {
             let tool = transcript.pendingTool
             let word = s.escape ? "Approval · outside the sandbox" : "Approval"
+            let line = Self.line(tool?.tool ?? "", since: need?.since)
             let command = tool.map { $0.tool == "Bash" ? $0.text : "\($0.tool): \($0.text)" } ?? ""
             if let need, need.kind == .approval, model.can(AppAPI.Methods.sessionApprove.name) {
                 NeedActs(need: need) { parts in
-                    HeroCard(word: word, title: parts.command.isEmpty ? "The agent asks to go on." : parts.command,
+                    HeroCard(word: word, line: line, title: parts.command.isEmpty ? "The agent asks to go on." : parts.command,
                              command: command, note: parts.note) {
                         parts.buttons
                     }
@@ -377,6 +379,12 @@ struct ConversationScreen: View {
                          note: ("Approve it on your Mac.", false))
             }
         }
+    }
+
+    /// A card's line: the tool, and how long it has waited.
+    private static func line(_ tool: String, since: Date?) -> String {
+        let age = Need.age(since: since)
+        return [tool, age.isEmpty ? "" : age == "now" ? "waiting" : "waiting \(age)"].filter { !$0.isEmpty }.joined(separator: " · ")
     }
 
     private func watch(_ id: String?) async {
@@ -457,13 +465,10 @@ struct EntryLine: View {
         case .prompt:
             HStack {
                 Spacer(minLength: 0)
-                VStack(alignment: .trailing, spacing: 4) {
-                    // Only who isn't the user: the page's prompt has no line.
-                    if !entry.from.isEmpty {
-                        turn
-                            .onSurface()
-                            .onTapGesture { if entry.folds { unfolded = false } }
-                    }
+                VStack(alignment: .trailing, spacing: 2) {
+                    // Who and when, the user's own, over the page's prompt.
+                    turn
+                        .onTapGesture { if entry.folds { unfolded = false } }
                     bubble(entry.preview() ?? entry.text)
                     if !entry.files.isEmpty {
                         PhoneAttachments(files: entry.attachments, session: session, alignment: .trailing)
@@ -519,7 +524,7 @@ struct EntryLine: View {
     }
 
     private var turn: some View {
-        Text(entry.who(agent: agent))
+        Text([entry.who(agent: agent), entry.at?.formatted(date: .omitted, time: .shortened) ?? ""].filter { !$0.isEmpty }.joined(separator: " · "))
             .font(theme.sized(12))
             .foregroundStyle(theme.muted)
             .pageLeading(12)

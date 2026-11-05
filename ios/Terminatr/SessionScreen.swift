@@ -51,9 +51,6 @@ struct SessionScreen: View {
             VStack(spacing: 0) {
                 bar
                 tabs
-                // The chrome shows under the tabs, over the conversation
-                // (`.pconvo` starts at 138, the tabs end at 128).
-                if tab == .conversation { Color.clear.frame(height: 10) }
                 if ref.isCoordinator || ref.director, !ref.isRemote, let clear = model.clears[PhoneModel.clearKey(ref)] {
                     SaveClearStatus(clear: clear)
                         .padding(.horizontal, Spacing.gutter)
