@@ -334,9 +334,13 @@ struct Inspector: View {
                         .font(.system(size: 12.5 * theme.scale, weight: .medium, design: .monospaced))
                         .foregroundStyle(theme.action)
                 }
-                Text(ref.isCoordinator ? "coordinator" : ref.thread)
-                    .font(.system(size: 12.5 * theme.scale, design: .monospaced))
-                    .foregroundStyle(theme.muted)
+                if let role = ref.role {
+                    RoleLabel(role, points: 12.5)
+                } else {
+                    Text(ref.thread)
+                        .font(.system(size: 12.5 * theme.scale, design: .monospaced))
+                        .foregroundStyle(theme.muted)
+                }
             }
             Text(ref.project).font(theme.sized(15, .semibold))
             if let goal = project?.goal, !goal.isEmpty {
@@ -406,7 +410,9 @@ struct Inspector: View {
         if let s = session, !s.state.isEmpty {
             let blocked = s.state == "blocked"
             let word = blocked ? (s.reason == "permission" ? "needs approval" : s.reason.isEmpty ? "blocked" : s.reason) : s.state
-            StateLine(word: word, colour: blocked ? theme.approval : s.state == "working" ? theme.good : theme.idle)
+            StateLine(word: word, colour: blocked ? theme.approval : s.state == "working" ? theme.good : theme.idle, role: model.ref.role)
+        } else if let role = model.ref.role {
+            RoleLabel(role, points: 12.5)
         }
     }
 }
@@ -428,7 +434,7 @@ struct ProjectInspector: View {
                         help: "Save & Clear: the coordinator saves what it learned, then its conversation is cleared, as tm clear does") {
                             app.ask(.saveClear(project: project.slug))
                         } : nil) {
-            ProjectFacts(project: project, state: StateLine(word: "Coordinator \(state.word)", colour: theme.colour(state.tone)))
+            ProjectFacts(project: project, state: StateLine(word: state.word, colour: theme.colour(state.tone), role: .coordinator))
         }
     }
 }
@@ -527,7 +533,7 @@ struct ProgramInspector: View {
                         help: "Save & Clear: the director saves what it learned, then its conversation is cleared, as tm clear does") {
                             app.ask(.saveClearDirector(program: program.slug))
                         } : nil) {
-            ProgramFactsView(program: program, state: StateLine(word: "Director \(state.word)", colour: theme.colour(state.tone)))
+            ProgramFactsView(program: program, state: StateLine(word: state.word, colour: theme.colour(state.tone), role: .director))
         }
     }
 }
@@ -541,9 +547,6 @@ struct ProgramFactsView<State: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text("director")
-                .font(.system(size: 12.5 * theme.scale, design: .monospaced))
-                .foregroundStyle(theme.muted)
             Text(program.slug).font(theme.sized(15, .semibold))
             if !program.goal.isEmpty {
                 Text(program.goal)
@@ -573,9 +576,15 @@ struct StateLine: View {
     @Environment(\.theme) private var theme
     let word: String
     let colour: Color
+    /// The role whose state it is (T1003), named first.
+    var role: SessionRole?
 
     var body: some View {
         HStack(spacing: 6) {
+            if let role {
+                RoleLabel(role, points: 12.5)
+                    .padding(.trailing, 2)
+            }
             Dot(colour: colour)
             Text(word.prefix(1).uppercased() + word.dropFirst())
                 .font(theme.sized(12.5))

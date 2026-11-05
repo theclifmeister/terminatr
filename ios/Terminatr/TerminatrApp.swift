@@ -483,8 +483,8 @@ extension Root {
             Label {
                 Text(r.title)
             } icon: {
-                Image(systemName: r.tone.symbol)
-                    .foregroundStyle(theme.colour(r.tone))
+                Image(systemName: r.role?.symbol ?? r.tone.symbol)
+                    .foregroundStyle(r.role != nil && r.tone == .idle ? theme.ink : theme.colour(r.tone))
             }
         }
         .badge(r.badge.map { Text($0) })

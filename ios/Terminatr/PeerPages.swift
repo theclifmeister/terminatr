@@ -100,8 +100,8 @@ struct PeerProjectScreen: View {
             ForEach(Array(sessions.enumerated()), id: \.element.ref) { i, e in
                 let route = Route.session(e.ref)
                 PlainRouteLink(value: route) {
-                    SessionTile(e.ref.isCoordinator ? "Coordinator" : e.title.isEmpty ? e.ref.thread : e.title,
-                                ref: e.task.isEmpty ? nil : e.task, state: .of(peer: e.session), rule: i > 0,
+                    SessionTile(e.ref.role?.word ?? (e.title.isEmpty ? e.ref.thread : e.title),
+                                ref: e.task.isEmpty ? nil : e.task, role: e.ref.role, state: .of(peer: e.session), rule: i > 0,
                                 selected: navigate.opens(route, on: model))
                 }
                 .buttonStyle(.plain)

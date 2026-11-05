@@ -9,11 +9,16 @@ import TerminatrKit
 /// in a TileGroup, a hairline over each after the first (rule). At
 /// accessibility sizes the glyph and the badge go over the title, which
 /// keeps the row's width. Dormant: an inactive project's, all muted.
+/// A coordinator's or director's (role, T1003) has its RoleMark where a
+/// thread's ref starts and its word in medium ink; a thread stays quieter,
+/// its ref muted and its title regular. The context use ends the row, so
+/// it and the status before it keep their places as the state changes.
 public struct SessionTile: View {
     @Environment(\.theme) private var theme
     @Environment(\.dynamicTypeSize) private var typeSize
     let label: String
     let ref: String?
+    let role: SessionRole?
     let state: Attention
     let busy: Busy?
     let pr: Int
@@ -22,10 +27,11 @@ public struct SessionTile: View {
     let rule: Bool
     let selected: Bool
 
-    public init(_ label: String, ref: String? = nil, state: Attention, busy: Busy? = nil, pr: Int = 0, context: ContextUse? = nil,
+    public init(_ label: String, ref: String? = nil, role: SessionRole? = nil, state: Attention, busy: Busy? = nil, pr: Int = 0, context: ContextUse? = nil,
                 dormant: Bool = false, rule: Bool = false, selected: Bool = false) {
         self.label = label
         self.ref = ref
+        self.role = role
         self.state = state
         self.busy = busy
         self.pr = pr
@@ -81,13 +87,16 @@ public struct SessionTile: View {
     private var words: some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(alignment: .firstTextBaseline, spacing: Spacing.tight) {
+                if let role {
+                    RoleMark(role, points: CGFloat(TextStyle.body.points) * 0.9, alignment: .leading, colour: dormant ? theme.muted : theme.ink)
+                }
                 if let ref {
                     Text(ref)
                         .font(theme.mono(.subheadline, .medium))
-                        .foregroundStyle(dormant ? theme.muted : theme.action)
+                        .foregroundStyle(theme.muted)
                 }
                 Text(label)
-                    .font(theme.body(.body, .semibold))
+                    .font(theme.body(.body, role != nil ? .medium : .regular))
                     .foregroundStyle(dormant ? theme.muted : theme.ink)
                     .lines(1)
             }
@@ -100,12 +109,9 @@ public struct SessionTile: View {
         }
     }
 
-    /// The context use, then what waits on the user, else the turn's
-    /// time, else the PR.
+    /// What waits on the user, else the turn's time, else the PR; then
+    /// the context use.
     @ViewBuilder private func end(_ busy: Busy?) -> some View {
-        if !dormant, let context {
-            ContextGauge(context)
-        }
         if !dormant, state.waits {
             ToneBadge(state.word, tone: state.tone)
         } else if let busy {
@@ -115,6 +121,9 @@ public struct SessionTile: View {
             .fixedSize()
         } else if !dormant, pr > 0 {
             quiet("PR")
+        }
+        if !dormant, let context {
+            ContextGauge(context)
         }
     }
 

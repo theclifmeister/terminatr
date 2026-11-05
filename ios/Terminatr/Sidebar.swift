@@ -9,6 +9,9 @@ struct SidebarRow: Identifiable {
     let id: String
     let route: Route
     let title: String
+    /// A coordinator's or director's (T1003): its mark takes the icon's
+    /// place, in its state's colour, and its state's word the badge's.
+    var role: SessionRole?
     /// Its state; working too on a row folded over a session that works
     /// (T985): a Tab's label has its icon's place for a state, and its
     /// badge's only for words.
@@ -33,7 +36,7 @@ struct SidebarRow: Identifiable {
         // row its key has outside the program, kept apart by its id.
         if key.hasPrefix("g:"), let slash = key.firstIndex(of: "/") {
             guard let r = of(String(key[key.index(after: slash)...]), model: model) else { return nil }
-            return SidebarRow(id: model.key + " " + key, route: r.route, title: r.title, tone: r.tone, badge: r.badge)
+            return SidebarRow(id: model.key + " " + key, route: r.route, title: r.title, role: r.role, tone: r.tone, badge: r.badge)
         }
         if key.hasPrefix("r:"), key.dropFirst(2).split(separator: "/").count == 2 {
             // A paired server's project a program lists (as "g:<program>/r:...").
@@ -47,6 +50,10 @@ struct SidebarRow: Identifiable {
         func row(_ route: Route, _ title: String, _ a: Attention) -> SidebarRow {
             SidebarRow(id: id, route: route.on(model.key), title: title, tone: a.tone, badge: a.waits ? a.word : nil)
         }
+        func role(_ route: SessionRef, _ a: Attention) -> SidebarRow {
+            let says = a.waits || a.tone == .working || a.tone == .asleep
+            return SidebarRow(id: id, route: Route.session(route).on(model.key), title: route.role?.word ?? "", role: route.role, tone: a.tone, badge: says ? a.word : nil)
+        }
         switch (kind, parts.count) {
         case ("g", 1):
             // A program: its screen, what waits in it as the badge.
@@ -57,12 +64,12 @@ struct SidebarRow: Identifiable {
         case ("r", 1):
             // Its director: its session, as a coordinator's row (T973).
             guard let g = model.program(rest) else { return nil }
-            return row(.session(.director(rest)), "Director", .of(director: model.directorSession(g), questions: g.questions))
+            return role(.director(rest), .of(director: model.directorSession(g), questions: g.questions))
         case ("p", 1):
             return SidebarRow(id: id, route: Route.project(rest).on(model.key), title: rest, tone: .idle, badge: nil)
         case ("c", 1):
             guard let p = model.project(rest) else { return nil }
-            return row(.session(SessionRef(project: rest)), "Coordinator", model.coordinator(of: p))
+            return role(SessionRef(project: rest), model.coordinator(of: p))
         case ("t", 2):
             guard let t = model.project(parts[0])?.threads.first(where: { $0.record.id == parts[1] }) else { return nil }
             let title = [t.task?.ref, t.record.title].compactMap { $0 }.joined(separator: " ")
@@ -71,7 +78,8 @@ struct SidebarRow: Identifiable {
             let ref = SessionRef(project: parts[1], thread: kind == "rt" ? parts[2] : "", server: parts[0])
             guard let p = model.peers.first(where: { $0.alias == ref.server })?.projects.first(where: { $0.project == ref.project }),
                   let e = SidebarTree.sessions(of: p, alias: ref.server).first(where: { $0.ref == ref }) else { return nil }
-            let title = ref.isCoordinator ? "Coordinator" : [e.task, e.title.isEmpty ? ref.thread : e.title].filter { !$0.isEmpty }.joined(separator: " ")
+            if ref.isCoordinator { return role(ref, .of(peer: e.session)) }
+            let title = [e.task, e.title.isEmpty ? ref.thread : e.title].filter { !$0.isEmpty }.joined(separator: " ")
             return row(.session(ref), title, .of(peer: e.session))
         default:
             return nil

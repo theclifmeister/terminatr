@@ -45,7 +45,7 @@ struct SessionScreen: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .principal) {
-                SessionTitle(model.title(ref), place: model.place(ref), state: model.attention(ref), context: model.context(ref))
+                SessionTitle(model.title(ref), place: model.place(ref), role: ref.role, state: model.attention(ref), context: model.context(ref))
             }
             if ref.isCoordinator || ref.director, !ref.isRemote, model.clearsCoordinators, model.leadSession(ref) != nil {
                 ToolbarItem(placement: .topBarTrailing) {

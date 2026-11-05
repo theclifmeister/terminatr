@@ -136,8 +136,8 @@ struct ProgramPage: View {
         return Button { app.select(.session(.director(program.slug))) } label: {
             ListRow {
                 HStack(spacing: 10) {
+                    RoleLabel(.director, points: Flat.text)
                     Dot(colour: theme.colour(a.tone))
-                    Text("Director")
                     Text(a.why.isEmpty ? a.word : a.why)
                         .font(theme.sized(Flat.label))
                         .foregroundStyle(theme.muted)

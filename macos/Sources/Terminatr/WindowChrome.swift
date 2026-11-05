@@ -342,7 +342,7 @@ struct MainPane<Content: View>: View {
         let place = ref.isRemote ? "\(ref.server) › \(ref.project)" : ref.project
         switch tab {
         case .conversation:
-            return ("bubble.left", who, ref.isCoordinator || ref.director ? place : title.isEmpty ? place : title)
+            return (ref.role?.symbol ?? "bubble.left", who, ref.isCoordinator || ref.director ? place : title.isEmpty ? place : title)
         case .terminal:
             return ("terminal", agent.isEmpty ? who : agent, ref.isCoordinator || ref.director ? place : ref.thread)
         }
