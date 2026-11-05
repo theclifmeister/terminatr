@@ -490,7 +490,7 @@ struct Sidebar: View {
                 // Asleep (T980): the TUI's ☾ for its dot and its word;
                 // waking, a spinner until it runs.
                 let sleeps = !l.dormant && sleep != .awake
-                row(.session(SessionRef(project: p.slug)), label: "Coordinator", ref: nil,
+                row(.session(SessionRef(project: p.slug)), label: SessionRole.coordinator.word, ref: nil, role: .coordinator,
                     tag: state.waits && !l.dormant ? (state.word, state.tone) : sleeps ? (state.word, nil) : nil,
                     dot: theme.colour(l.dormant ? .idle : state.tone),
                     spoken: l.dormant ? "inactive" : sleeps ? state.why.replacingOccurrences(of: " · ", with: ", ") : state.spoken,
@@ -508,31 +508,41 @@ struct Sidebar: View {
         }
     }
 
-    /// A session's row: its dot, task ref and title, and its tag: a
-    /// filled pill in its tone's colour, or plain muted text (PR) when it
-    /// has none. A dormant one (an inactive project's) is muted.
-    /// A running coordinator's row has its context use, and Save & Clear
-    /// in its menu (menu, its project). A working one (busy) has the
-    /// activity mark for its dot and how long its turn has run.
-    private func row(_ sel: Selection, label: String, ref: String?, tag: (String, Attention.Tone?)?, dot: Color, spoken: String,
+    /// A session's row on the sidebar's grid (SidebarGrid): its text at
+    /// the depth's edge, after its role's mark in the tile's column for a
+    /// coordinator or director, which reads in medium ink where a thread
+    /// stays quiet; then its status words and tag: a filled pill in its
+    /// tone's colour, or plain muted text (PR) when it has none. A dormant
+    /// one (an inactive project's) is muted. A running coordinator's row
+    /// has its context use in the percent column, and Save & Clear in its
+    /// menu (menu, its project). A working one (busy) has the activity
+    /// mark for its dot and how long its turn has run. A role's row keeps
+    /// the percent column empty or not, and a thread's whenever it has
+    /// words there, so they end at one edge whatever its state.
+    private func row(_ sel: Selection, label: String, ref: String?, role: SessionRole? = nil, tag: (String, Attention.Tone?)?, dot: Color, spoken: String,
                      dormant: Bool = false, context: ContextUse? = nil, busy: Busy? = nil, menu: AppAPI.Project? = nil,
                      sleep: Sleep = .awake, indent: CGFloat = 0) -> some View {
         let on = app.nav.selection == sel
+        let leads = role != nil && !dormant
         return HStack(spacing: 6) {
+            // The tile's column: a role's mark, a thread's empty.
+            Group {
+                if let role {
+                    RoleMark(role, slot: CGFloat(SidebarGrid.slot), colour: leads ? theme.ink : theme.muted)
+                } else {
+                    Color.clear
+                }
+            }
+            .frame(width: CGFloat(SidebarGrid.slot), height: 14)
+            .padding(.trailing, CGFloat(SidebarGrid.gap) - 6)
             Text([ref, label].compactMap { $0 }.joined(separator: " "))
-                .font(theme.sized(13))
+                .font(theme.sized(13, leads ? .medium : .regular))
                 .lineLimit(1)
                 .truncationMode(.tail)
             Spacer(minLength: 4)
             if let busy {
                 BusyLabel(busy: busy, colour: on ? theme.ink : nil)
                     .fixedSize()
-            }
-            if let context {
-                Text(context.word)
-                    .font(theme.sized(12, context.tone == nil ? .regular : .semibold))
-                    .foregroundStyle(context.tone.map { theme.colour($0) } ?? theme.muted)
-                    .help(context.spoken)
             }
             if let (word, tone) = tag {
                 if let tone {
@@ -547,6 +557,21 @@ struct Sidebar: View {
                         .font(theme.sized(12))
                         .foregroundStyle(theme.muted)
                 }
+            }
+            if role != nil || busy != nil || tag != nil {
+                Group {
+                    if let context {
+                        Text(context.word)
+                            .font(theme.sized(12, context.tone == nil ? .regular : .semibold))
+                            .monospacedDigit()
+                            .foregroundStyle(context.tone.map { theme.colour($0) } ?? theme.muted)
+                            .fixedSize()
+                            .help(context.spoken)
+                    } else {
+                        Color.clear.frame(height: 1)
+                    }
+                }
+                .frame(width: CGFloat(SidebarGrid.percent) * theme.scale, alignment: .trailing)
             }
             // Its state at the row's end, the same slot whatever it shows.
             Group {
@@ -565,9 +590,9 @@ struct Sidebar: View {
             .frame(width: 7, height: 7)
             .accessibilityHidden(true)
         }
-        .padding(.leading, 37 + indent)
+        .padding(.leading, CGFloat(SidebarGrid.inset) + indent)
         .padding(.trailing, 8)
-        .foregroundStyle(on ? theme.ink : theme.muted)
+        .foregroundStyle(on || leads ? theme.ink : theme.muted)
         .help(sleep == .asleep ? Sleep.words : "")
         // One element that says the row and its state: "T6 Network popup
         // polish, needs approval".
@@ -613,7 +638,7 @@ struct Sidebar: View {
         let dim = peer.state == "up" && !p.stale ? 1.0 : 0.55
         // The coordinator's state, as this server's projects have it.
         let coordinator = p.sessions.first { SessionRef($0, of: peer.alias)?.isCoordinator == true }
-        let indent: CGFloat = g == nil ? 0 : 12
+        let indent: CGFloat = g == nil ? 0 : CGFloat(SidebarGrid.step)
         let open = g.map { SidebarTree.opens(member: peer.alias, p.project, of: $0, nav: app.nav) }
             ?? !app.nav.collapsed.contains(Navigation.sectionKey(server: peer.alias, project: p.project))
         let progTag = g == nil ? app.pairedMembers["\(peer.alias)/\(p.project)"].map { "· \($0)" } ?? "" : ""
@@ -635,7 +660,7 @@ struct Sidebar: View {
             }
         if open || filtering {
             ForEach(sessions(peer, p), id: \.ref) { s, r, task, title in
-                row(.session(r), label: r.isCoordinator ? "Coordinator" : title.isEmpty ? r.thread : title, ref: task.isEmpty ? nil : task,
+                row(.session(r), label: r.role?.word ?? (title.isEmpty ? r.thread : title), ref: task.isEmpty ? nil : task, role: r.role,
                     tag: s.flatMap(tag), dot: theme.colour(s.map(tone) ?? .idle), spoken: s.map(spoken) ?? "not running",
                     busy: peer.state == "up" ? Busy.of(peer: s) : nil, indent: indent)
                     .opacity(dim)
@@ -669,14 +694,14 @@ struct Sidebar: View {
         if open {
             let dref = SessionRef.director(g.slug)
             if !filtering || SidebarTree.matches(app.filter, g.slug, "director") {
-                row(.session(dref), label: "Director", ref: nil, tag: state.waits ? (state.word, state.tone) : nil,
+                row(.session(dref), label: SessionRole.director.word, ref: nil, role: .director, tag: state.waits ? (state.word, state.tone) : nil,
                     dot: theme.colour(state.tone), spoken: state.spoken, context: ContextUse.of(director, hint: app.contextHint),
-                    busy: working)
+                    busy: working, indent: CGFloat(SidebarGrid.step))
             }
             ForEach(shownMembers(g), id: \.self) { m in
                 switch m {
                 case .local(let p):
-                    project(p, indent: 12, member: true)
+                    project(p, indent: CGFloat(SidebarGrid.step), member: true)
                 case .paired(let alias, let slug, let peer, let p, let mstate):
                     if let peer, let p {
                         remote(peer, p, under: g)
@@ -685,7 +710,7 @@ struct Sidebar: View {
                         // shared with this server. Its row alone, dim.
                         ProjectRow(name: m.name, dot: theme.idle, state: "not shared", needs: 0, selected: false,
                                    tag: mstate == "invited" || mstate == "pending" ? "invited" : mstate == "declined" ? "declined" : "not shared")
-                            .padding(.leading, 12)
+                            .padding(.leading, CGFloat(SidebarGrid.step))
                             .frame(height: CGFloat(density.rowHeight(session: false)))
                             .padding(.leading, 8)
                             .padding(.trailing, 9)

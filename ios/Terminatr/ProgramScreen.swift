@@ -97,31 +97,7 @@ struct ProgramCard: View {
                         .foregroundStyle(theme.muted)
                 }
             }
-            HStack(spacing: Spacing.tight) {
-                if director.tone == .working {
-                    BusyMark(size: 6 * theme.scale)
-                } else {
-                    Image(systemName: director.tone.symbol)
-                        .foregroundStyle(director.tone == .idle ? theme.muted : theme.colour(director.tone))
-                }
-                let line = "Director · " + (director.why.isEmpty ? director.word : director.why)
-                Group {
-                    if typeSize.isAccessibilitySize {
-                        Text(line + " · " + Self.projects(program.members.count))
-                            .lines(1)
-                    } else {
-                        HStack(spacing: 0) {
-                            Text(line)
-                                .lines(1)
-                            Text(" · " + Self.projects(program.members.count))
-                                .lineLimit(1)
-                                .fixedSize()
-                        }
-                    }
-                }
-                .foregroundStyle(theme.muted)
-            }
-            .font(theme.body(.subheadline))
+            RoleLine(.director, state: director, after: " · " + Self.projects(program.members.count))
         }
     }
 
@@ -192,7 +168,7 @@ struct ProgramScreen: View {
                     let route = Route.session(.director(slug))
                     TileGroup {
                         PlainRouteLink(value: route) {
-                            SessionTile("Director", state: .of(director: director, questions: g.questions), busy: Busy.of(director),
+                            SessionTile(SessionRole.director.word, role: .director, state: .of(director: director, questions: g.questions), busy: Busy.of(director),
                                         context: model.context(.director(slug)), selected: navigate.opens(route, on: model))
                         }
                         .buttonStyle(.plain)

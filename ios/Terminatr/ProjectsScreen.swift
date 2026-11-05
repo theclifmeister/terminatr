@@ -220,7 +220,7 @@ struct ProjectScreen: View {
                         let c = model.coordinatorSession(slug)
                         let route = Route.session(SessionRef(project: slug))
                         PlainRouteLink(value: route) {
-                            SessionTile("Coordinator", state: model.coordinator(of: p), busy: Busy.of(coordinator: c, in: p),
+                            SessionTile(SessionRole.coordinator.word, role: .coordinator, state: model.coordinator(of: p), busy: Busy.of(coordinator: c, in: p),
                                         context: model.context(SessionRef(project: slug)), dormant: dormant,
                                         selected: navigate.opens(route, on: model))
                         }

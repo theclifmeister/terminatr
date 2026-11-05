@@ -303,8 +303,7 @@ struct CoordinatorRow: View {
             StateDot(tone: attention.tone, busy: busy != nil)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text("Coordinator")
-                        .font(theme.title(.headline, .bold))
+                    RoleLabel(.coordinator, points: 14)
                     if let busy {
                         BusyLabel(busy: busy, colour: theme.colour(.working))
                     } else {
@@ -761,8 +760,12 @@ private struct PeerSessionCard: View {
                     .font(theme.mono(.callout, .medium))
                     .foregroundStyle(theme.action)
             }
-            Text(ref.isCoordinator ? "Coordinator" : ref.thread)
-                .font(theme.title(.headline, .bold))
+            if let role = ref.role {
+                RoleLabel(role, points: 14)
+            } else {
+                Text(ref.thread)
+                    .font(theme.title(.headline, .bold))
+            }
             if !session.current.isEmpty {
                 Text(session.current)
                     .font(theme.body(.callout))
@@ -825,13 +828,22 @@ struct ProjectRow: View {
                 BusyMark(size: 6, colour: selected ? theme.ink : nil)
                     .frame(width: 11, height: 11)
             }
-            if needs > 0 {
-                Text("\(needs)")
-                    .font(theme.sized(12, .medium))
-                    .padding(.horizontal, 5)
-                    .background(theme.attention, in: RoundedRectangle(cornerRadius: 4))
-                    .foregroundStyle(theme.onAttention)
-                    .accessibilityLabel("\(needs) need you")
+            // The sidebar's percent column (SidebarGrid), ending at its rows'.
+            if needs > 0 || busy {
+                Group {
+                    if needs > 0 {
+                        Text("\(needs)")
+                            .font(theme.sized(12, .medium))
+                            .padding(.horizontal, 5)
+                            .background(theme.attention, in: RoundedRectangle(cornerRadius: 4))
+                            .foregroundStyle(theme.onAttention)
+                            .fixedSize()
+                            .accessibilityLabel("\(needs) need you")
+                    } else {
+                        Color.clear.frame(height: 1)
+                    }
+                }
+                .frame(width: CGFloat(SidebarGrid.percent) * theme.scale, alignment: .trailing)
             }
             Dot(colour: dot)
         }

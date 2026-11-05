@@ -161,40 +161,8 @@ public struct ProjectCard: View {
                         .foregroundStyle(theme.muted)
                 }
             }
-            HStack(spacing: Spacing.tight) {
-                if coordinator.tone == .working {
-                    BusyMark(size: 6 * theme.scale)
-                } else {
-                    Image(systemName: coordinator.tone.symbol)
-                        .foregroundStyle(coordinator.tone == .idle ? theme.muted : theme.colour(coordinator.tone))
-                }
-                // The state is cut before "no threads" is; at accessibility
-                // sizes one text, wrapped at its words.
-                Group {
-                    if typeSize.isAccessibilitySize {
-                        Text(line + (threads.isEmpty ? " · no threads" : ""))
-                            .lines(1)
-                    } else {
-                        HStack(spacing: 0) {
-                            Text(line)
-                                .lines(1)
-                            if threads.isEmpty {
-                                Text(" · no threads")
-                                    .lineLimit(1)
-                                    .fixedSize()
-                            }
-                        }
-                    }
-                }
-                .foregroundStyle(theme.muted)
-            }
-            .font(theme.body(.subheadline))
+            RoleLine(.coordinator, state: coordinator, after: threads.isEmpty ? " · no threads" : "")
         }
-    }
-
-    /// "Coordinator · reading T15's report", else its state.
-    private var line: String {
-        "Coordinator · " + (coordinator.why.isEmpty ? coordinator.word : coordinator.why)
     }
 
     private var spoken: String {

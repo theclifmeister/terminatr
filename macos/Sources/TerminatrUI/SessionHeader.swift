@@ -12,15 +12,18 @@ public struct SessionTitle: View {
     @Environment(\.theme) private var theme
     let title: String
     let place: String
+    /// A coordinator's or director's: its mark before the title (T1003).
+    let role: SessionRole?
     let state: Attention?
     let context: ContextUse?
 
     /// The most the bar's text grows.
     static let most: CGFloat = 1.3
 
-    public init(_ title: String, place: String, state: Attention? = nil, context: ContextUse? = nil) {
+    public init(_ title: String, place: String, role: SessionRole? = nil, state: Attention? = nil, context: ContextUse? = nil) {
         self.title = title
         self.place = place
+        self.role = role
         self.state = state
         self.context = context
     }
@@ -29,10 +32,15 @@ public struct SessionTitle: View {
         var t = theme
         t.scale = min(theme.scale, Self.most)
         return VStack(spacing: 1) {
-            Text(title)
-                .font(t.title(.headline, .bold))
-                .foregroundStyle(t.ink)
-                .lineLimit(1)
+            HStack(spacing: Spacing.tight) {
+                if let role {
+                    RoleMark(role, points: CGFloat(TextStyle.headline.points) * 0.9, colour: t.ink)
+                }
+                Text(title)
+                    .font(t.title(.headline, .bold))
+                    .foregroundStyle(t.ink)
+                    .lineLimit(1)
+            }
             HStack(spacing: Spacing.tight) {
                 if !place.isEmpty {
                     Text(place)
