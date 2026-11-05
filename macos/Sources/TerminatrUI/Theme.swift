@@ -117,6 +117,16 @@ public struct Theme: Sendable {
         .system(size: points * scale, weight: weight)
     }
 
+    /// A page's big title: the design page's weight 620, a little over
+    /// semibold, which a Font.Weight can't say.
+    public func display(_ points: CGFloat) -> Font {
+        #if canImport(UIKit)
+        Font(UIFont.systemFont(ofSize: points * scale, weight: UIFont.Weight(rawValue: 0.32)))
+        #else
+        sized(points, .semibold)
+        #endif
+    }
+
     /// A title: the system font, as all text is (T999).
     public func title(_ style: TextStyle, _ weight: Font.Weight = .bold) -> Font {
         .system(size: size(style), weight: weight)

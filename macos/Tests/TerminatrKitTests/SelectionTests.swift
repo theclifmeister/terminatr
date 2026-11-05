@@ -180,6 +180,18 @@ private func route(_ project: String?, _ session: String = "") -> Selection? {
     #expect(Navigation.restore(Data("garbage".utf8)) == Navigation())
 }
 
+@Test func needsFoldedByDefault() {
+    var n = Navigation()
+    #expect(!n.needsOpen)
+    n.needsOpen = true
+    #expect(Navigation.restore(n.encoded()).needsOpen)
+    n.needsOpen = false
+    #expect(!Navigation.restore(n.encoded()).needsOpen)
+    // A save from before it folded, with the old "needs" mark, is folded.
+    let old = Navigation.restore(Data(#"{"collapsed": ["needs"]}"#.utf8))
+    #expect(!old.needsOpen)
+}
+
 @Test func warmSet() {
     var w = WarmSet<String>(limit: 3)
     #expect(w.touch("a").isEmpty)

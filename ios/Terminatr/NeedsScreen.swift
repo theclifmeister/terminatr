@@ -23,6 +23,7 @@ struct NeedsScreen: View {
     /// -needs-filter GROUP opens on a chip, for screenshots.
     @State private var group = Need.Group(rawValue: UserDefaults.standard.string(forKey: "needs-filter") ?? "") ?? .all
     @Namespace private var rotor
+    @State private var above: CGFloat = 0
 
     var body: some View {
         let needs = phone.needs
@@ -31,13 +32,13 @@ struct NeedsScreen: View {
         let groups = Need.groups(needs.map(\.need))
         ScrollView {
             VStack(alignment: .leading, spacing: Spacing.row) {
-                ScreenHeader("Needs you", count: needs.count, subtitle: subtitle.text, symbol: subtitle.symbol) {
+                ScreenHeader("Needs you", count: needs.count, subtitle: subtitle.text, symbol: subtitle.symbol, gutter: Flat.listGutter, top: ScreenTop.margin(above: above), bottom: 0) {
                     SettingsButton()
                         .buttonStyle(.smallCircle)
                 }
                 if groups.count > 2 {
                     PulseChips(groups.map { PulseChip(id: $0.group, label: $0.group.label($0.count), tone: $0.group.tone) },
-                               selection: $group)
+                               selection: $group, gutter: Flat.listGutter)
                         // Kept off a side safe area: a closed iPhone Duo held
                         // sideways has its clock beside the list.
                         .clipped()
@@ -59,11 +60,12 @@ struct NeedsScreen: View {
                             .accessibilityRotorEntry(id: n.id, in: rotor)
                     }
                 }
-                .padding(.horizontal, Spacing.gutter)
+                .padding(.horizontal, Flat.listGutter)
                 .padding(.top, Spacing.tight)
             }
             .padding(.bottom, Spacing.gutter)
         }
+        .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.top } action: { above = $0 }
         .accessibilityRotor("Needs") {
             ForEach(shown) { n in
                 AccessibilityRotorEntry(Text(n.need.title), id: n.id, in: rotor)

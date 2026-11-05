@@ -147,8 +147,11 @@ private struct PeerBoardRow: View {
                     Text(task.ref)
                         .font(theme.mono(.subheadline))
                         .foregroundStyle(theme.muted)
+                        .lineLimit(1)
+                        .fixedSize()
                     Text(task.title)
                         .lineLimit(1)
+                        .frame(minWidth: ThreadCard.titleMin, alignment: .leading)
                     Spacer(minLength: 8)
                     if !task.steps.isEmpty {
                         Text("\(task.steps.filter(\.done).count)/\(task.steps.count)")

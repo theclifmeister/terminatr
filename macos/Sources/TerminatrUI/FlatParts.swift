@@ -1,5 +1,8 @@
 import SwiftUI
 import TerminatrKit
+#if canImport(UIKit)
+import UIKit
+#endif
 
 /// The flat look's measures for what stands in a pane (T1002), from the
 /// design page: rows 42 high in hairline lists, labels and status at 13,
@@ -17,6 +20,45 @@ public enum Flat {
     public static let text: CGFloat = 14
     /// A chip's size, as the inspector's header's.
     public static let chip: CGFloat = 11.5
+    /// A list column's side margin on the phone (`.colL`, `.pin`); what
+    /// stands beside it keeps Spacing.gutter (`.colR`).
+    public static let listGutter: CGFloat = 14
+    /// A row's size in a phone's `.list`.
+    public static let listText: CGFloat = 13.5
+    /// A `.list` row's least height on the phone.
+    public static let listRow: CGFloat = 42
+}
+
+extension View {
+    /// The design page's line height on the phone (1.45, T1008): points'
+    /// text gets its line boxes, between lines and at its top and bottom. The
+    /// Mac's text keeps the system's line height.
+    public func pageLeading(_ points: CGFloat) -> some View {
+        modifier(PageLeading(points: points))
+    }
+}
+
+private struct PageLeading: ViewModifier {
+    @Environment(\.theme) private var theme
+    let points: CGFloat
+
+    func body(content: Content) -> some View {
+        #if canImport(UIKit)
+        let size = points * theme.scale
+        let extra = max(size * 1.45 - UIFont.systemFont(ofSize: size).lineHeight, 0)
+        content
+            .lineSpacing(extra)
+            .padding(.vertical, extra / 2)
+        #else
+        content
+        #endif
+    }
+}
+
+extension EnvironmentValues {
+    /// An approval's answers as the design page's small `.opt` buttons, in a
+    /// conversation (NeedActs); Needs you's card keeps its large ones.
+    @Entry public var compactAnswers = false
 }
 
 /// A small word in a 4 round hairline, or filled when it says a state:
@@ -60,14 +102,16 @@ public struct FlatButtonStyle: ButtonStyle {
     /// How many lines its words may take where the width runs out: a
     /// long option in the inspector's narrow panel, say.
     let lines: Int
+    let radius: CGFloat
 
-    public init(primary: Bool = false, lines: Int = 1) {
+    public init(primary: Bool = false, lines: Int = 1, radius: CGFloat = Radius.row) {
         self.primary = primary
         self.lines = lines
+        self.radius = radius
     }
 
     public func makeBody(configuration: Configuration) -> some View {
-        FlatButton(primary: primary, lines: lines, configuration: configuration)
+        FlatButton(primary: primary, lines: lines, radius: radius, configuration: configuration)
     }
 }
 
@@ -82,12 +126,14 @@ private struct FlatButton: View {
     @Environment(\.isFocused) private var focused
     let primary: Bool
     let lines: Int
+    let radius: CGFloat
     let configuration: ButtonStyleConfiguration
 
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: Radius.row)
+        let shape = RoundedRectangle(cornerRadius: radius)
         configuration.label
             .font(theme.sized(Flat.label))
+            .pageLeading(Flat.label)
             .lineLimit(lines)
             .multilineTextAlignment(.leading)
             .foregroundStyle(!enabled ? theme.muted : primary ? theme.pane : theme.ink)
@@ -100,6 +146,12 @@ private struct FlatButton: View {
             }
             .opacity(configuration.isPressed ? 0.8 : 1)
             .contentShape(shape)
+            #if os(iOS)
+            // 44 pt to tap, the row keeps its height.
+            .padding(.vertical, 9)
+            .contentShape(Rectangle())
+            .padding(.vertical, -9)
+            #endif
     }
 }
 
@@ -296,6 +348,7 @@ public struct StatStrip: View {
         Text(s.word)
             .font(theme.sized(12.5))
             .foregroundStyle(theme.muted)
+            .pageLeading(12.5)
             .lineLimit(1)
             .fixedSize()
     }

@@ -3,7 +3,7 @@ import Testing
 @testable import TerminatrKit
 
 // The phone's list column (T849): on an open iPhone Duo it ends at the
-// hinge; elsewhere it is 360 pt, half the width at most.
+// hinge; elsewhere it is 371 pt and a hairline (the design page's 372), half the width at most.
 
 @Test func listEndsAtTheHinge() {
     let hinge = CGRect(x: 333, y: 0, width: 3, height: 951)
@@ -13,11 +13,11 @@ import Testing
 }
 
 @Test func listWithoutAHinge() {
-    #expect(PhoneColumns.split(1032, hinge: nil) == (360, 1))
+    #expect(PhoneColumns.split(1032, hinge: nil) == (371, 1))
     #expect(PhoneColumns.split(585, hinge: nil) == (292.5, 1))
     // Across the display (the Duo turned), or too near an edge for a
     // column beside it: the hinge doesn't decide.
-    #expect(PhoneColumns.split(951, hinge: CGRect(x: 0, y: 333, width: 951, height: 3)) == (360, 1))
+    #expect(PhoneColumns.split(951, hinge: CGRect(x: 0, y: 333, width: 951, height: 3)) == (371, 1))
     #expect(PhoneColumns.split(669, hinge: CGRect(x: 100, y: 0, width: 3, height: 951)) == (334.5, 1))
 }
 

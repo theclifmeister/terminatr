@@ -515,8 +515,11 @@ private struct BoardRow: View {
                             Text(task.ref)
                                 .font(theme.mono(.subheadline))
                                 .foregroundStyle(theme.muted)
+                                .lineLimit(1)
+                                .fixedSize()
                             Text(task.title)
                                 .lineLimit(1)
+                                .frame(minWidth: ThreadCard.titleMin, alignment: .leading)
                             Spacer(minLength: 8)
                         }
                         .contentShape(Rectangle())
@@ -891,19 +894,19 @@ struct ThreadCard: View {
                     Text(task.ref)
                         .font(theme.mono(.subheadline))
                         .foregroundStyle(theme.muted)
+                        .lineLimit(1)
+                        .fixedSize()
                 }
                 Text(r.title)
                     .lineLimit(1)
+                    .frame(minWidth: ThreadCard.titleMin, alignment: .leading)
+                    .layoutPriority(2)
                 Spacer(minLength: 8)
-                HStack(spacing: 4) {
-                    if let busy {
-                        BusyLabel(busy: busy, capital: true)
-                            .fixedSize()
-                    }
-                    Text(facts)
-                        .font(theme.sized(Flat.label))
-                        .foregroundStyle(attention.waits ? theme.ink : theme.muted)
-                        .lineLimit(1)
+                // Room runs out: the status words go first, then the time.
+                ViewThatFits(in: .horizontal) {
+                    ends(words: true, time: true)
+                    ends(words: false, time: true)
+                    ends(words: false, time: false)
                 }
                 .frame(maxWidth: 340, alignment: .trailing)
                 .layoutPriority(1)
@@ -912,9 +915,27 @@ struct ThreadCard: View {
         .accessibilityElement(children: .combine)
     }
 
+    /// The least a thread row keeps for its title.
+    static let titleMin: CGFloat = 140
+
+    private func ends(words: Bool, time: Bool) -> some View {
+        HStack(spacing: 4) {
+            if let busy, time {
+                BusyLabel(busy: busy, capital: true)
+                    .fixedSize()
+            }
+            Text(facts(words: words, time: time))
+                .font(theme.sized(Flat.label))
+                .foregroundStyle(attention.waits ? theme.ink : theme.muted)
+                .lineLimit(1)
+                .fixedSize()
+        }
+    }
+
     /// "Asks to run a command · 5 of 8 · PR #12".
-    private var facts: String {
-        var f = [busy == nil ? (attention.why.isEmpty ? attention.word : attention.why) : ""]
+    private func facts(words: Bool, time: Bool) -> String {
+        let shown = busy != nil && time
+        var f = [words && busy == nil ? (attention.why.isEmpty ? attention.word : attention.why) : ""]
         if let s = thread.status {
             f.append(s.stepsTotal > 0 ? "\(min(s.stepsDone, s.stepsTotal)) of \(s.stepsTotal)" : "\(s.percent)%")
         }
@@ -922,7 +943,7 @@ struct ThreadCard: View {
             f.append("PR #\(thread.pr)" + (thread.checks.isEmpty ? "" : " · \(thread.checks)"))
         }
         let words = f.filter { !$0.isEmpty }.joined(separator: " · ")
-        return busy != nil && !words.isEmpty ? "· \(words)" : words.prefix(1).uppercased() + words.dropFirst()
+        return shown && !words.isEmpty ? "· \(words)" : words.prefix(1).uppercased() + words.dropFirst()
     }
 }
 

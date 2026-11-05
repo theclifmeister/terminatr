@@ -2,6 +2,13 @@ import SwiftUI
 import TerminatrKit
 import TerminatrUI
 
+/// How far a screen's own title starts down (T1008): 6 under what's above it
+/// (`.pin`, the status bar) and 22 from the screen's top (`.colL`, `.colR`,
+/// where there is none).
+enum ScreenTop {
+    static func margin(above: CGFloat) -> CGFloat { max(Spacing.tight, 22 - above) }
+}
+
 /// A page of flat panels (T1001), in place of a List, whose grouped
 /// sections iOS rounds itself: rows in a PanelList under a SectionHeading.
 struct PanelPage<Content: View>: View {
