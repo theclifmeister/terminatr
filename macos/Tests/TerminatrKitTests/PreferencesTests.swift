@@ -12,8 +12,10 @@ import Testing
     #expect(Density.of(nil) == .regular)
     #expect(Density.of("roomy") == .roomy)
     #expect(Density.of("tight") == .regular)
-    #expect(Density.compact.minRowHeight != nil && Density.regular.minRowHeight == nil)
-    #expect(Density.roomy.rowPadding > Density.regular.rowPadding)
+    #expect(Density.regular.rowHeight(session: false) == 32)
+    #expect(Density.regular.rowHeight(session: true) == 28)
+    #expect(Density.compact.rowHeight(session: false) < 32)
+    #expect(Density.roomy.rowHeight(session: true) > 28)
 }
 
 @Test func textSizeSteps() {

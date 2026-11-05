@@ -2,9 +2,9 @@ import SwiftUI
 import TerminatrKit
 import TerminatrUI
 
-/// A paired server's shared project in the window's detail (T886): the
-/// same pages as one of this server's, picked above it. Its dashboard
-/// (its coordinator and threads, and its board when shared), Overview,
+/// A paired server's shared project in the main pane (T886): the same
+/// tabs as one of this server's, picked in the title row. Overview (its
+/// coordinator and threads, and what it shares of its overview), Board,
 /// Memory and Library, read through this server's link while that
 /// server's project pages switch for this one is on. A page it doesn't
 /// share shows "Not shared by <server>"; Memory always does. Nothing on
@@ -13,36 +13,16 @@ struct RemoteProjectPages: View {
     @Environment(AppModel.self) private var app
     let peer: AppAPI.Peer
     let project: AppAPI.PeerProject
-    @State private var page: ProjectPage = .dashboard
     @State private var pages: PeerPages.State<AppAPI.PeerPages> = .loading
 
     var body: some View {
-        VStack(spacing: 0) {
-            Picker("Page", selection: $page) {
-                // A paired server's mods are its own: never here.
-                ForEach(ProjectPage.allCases.filter { $0 != .mods }) { Text($0.rawValue).tag($0) }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .fixedSize()
-            .padding(.top, 10)
+        Group {
             let server = PeerPages.server(peer)
-            switch page {
+            switch app.projectTab {
             case .mods:
                 EmptyView()
-            case .dashboard:
-                RemoteProjectDashboard(peer: peer, project: project, pages: pages)
-            case .overview:
-                if case .shared(let p) = pages {
-                    ScrollView {
-                        OverviewView(ProjectOverview(p, project: project))
-                            .padding(28)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .scrollEdges()
-                } else {
-                    PeerPageEmpty(page: .overview, server: server, state: pages)
-                }
+            case .overview, .board:
+                RemoteProjectDashboard(peer: peer, project: project, pages: pages, board: app.projectTab == .board)
             case .memory:
                 PeerPageEmpty(page: .memory, server: server, state: PeerPages.State<AppAPI.PeerPages>.notShared)
             case .library:

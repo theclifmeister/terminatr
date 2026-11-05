@@ -16,6 +16,8 @@ struct ProjectDashboard: View {
     @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
     let project: AppAPI.Project
+    /// The Board tab: the tasks alone. Otherwise the Overview: all else.
+    var board = false
     /// The folded groups the user opened: "idle", "stopped", "backlog",
     /// "done".
     @State private var unfolded: Set<String> = []
@@ -31,6 +33,38 @@ struct ProjectDashboard: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
+                if board {
+                    boardPage
+                } else {
+                    overview
+                }
+            }
+            .padding(.horizontal, 24)
+            .padding(.top, 14)
+            .padding(.bottom, 22)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .scrollEdges()
+    }
+
+    /// The Board tab: the board's filter and its groups.
+    @ViewBuilder
+    private var boardPage: some View {
+        let deck = Dashboard.onDeck(project), backlog = Dashboard.backlog(project)
+        let doneCount = app.listsDone ? Dashboard.doneCount(project) : 0
+        if !deck.isEmpty || !backlog.isEmpty || doneCount > 0 {
+            BoardFilter(text: $filter)
+            boardGroups(deck: deck, backlog: backlog, doneCount: doneCount)
+        } else {
+            Text("Nothing on the board yet: + adds a task.")
+                .foregroundStyle(theme.muted)
+        }
+    }
+
+    /// The Overview tab: the dashboard, and under it what the TUI's
+    /// Overview says of the project.
+    @ViewBuilder
+    private var overview: some View {
                 header
                 let needs = app.needs(of: project.slug)
                 let running = app.coordinatorSession(project.slug) != nil
@@ -71,14 +105,6 @@ struct ProjectDashboard: View {
                         AdoptableSessions(project: project, sessions: outside)
                     }
                 }
-                let deck = Dashboard.onDeck(project), backlog = Dashboard.backlog(project)
-                let doneCount = app.listsDone ? Dashboard.doneCount(project) : 0
-                if !deck.isEmpty || !backlog.isEmpty || doneCount > 0 {
-                    section("Board") {
-                        BoardFilter(text: $filter)
-                        boardGroups(deck: deck, backlog: backlog, doneCount: doneCount)
-                    }
-                }
                 if app.listsDesigns {
                     DesignsSection(project: project)
                 }
@@ -95,13 +121,10 @@ struct ProjectDashboard: View {
                         }
                     }
                 }
-            }
-            .padding(.horizontal, 24)
-            .padding(.top, 14)
-            .padding(.bottom, 22)
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .scrollEdges()
+                section("Details") {
+                    OverviewView(ProjectOverview(project, coordinator: app.coordinatorSession(project.slug),
+                                                 needs: app.needs(of: project.slug).count))
+                }
     }
 
     static let inboxShown = 8
@@ -194,8 +217,8 @@ struct ProjectDashboard: View {
                     .foregroundStyle(theme.muted)
                     .lineLimit(2)
             }
-            if let board = board {
-                Text(board)
+            if let counts = boardCounts {
+                Text(counts)
                     .font(theme.body(.footnote))
                     .foregroundStyle(theme.muted)
             }
@@ -209,7 +232,7 @@ struct ProjectDashboard: View {
 
     /// "2 need you · 3 in motion · 5 on deck", as the TUI's row; what
     /// needs you is the needs list's count, as the sidebar's badge.
-    private var board: String? {
+    private var boardCounts: String? {
         let c = project.counts
         guard !c.isEmpty else { return nil }
         return "\(app.needs(of: project.slug).count) need you · \(c["in_motion"] ?? 0) in motion · \(c["on_deck"] ?? 0) on deck · \(c["backlog"] ?? 0) in the backlog"
@@ -632,10 +655,29 @@ struct RemoteProjectDashboard: View {
     /// Its pages (T886): the board shows under its sessions when that
     /// server shares them.
     var pages: PeerPages.State<AppAPI.PeerPages> = .notShared
+    /// The Board tab: the board alone. Otherwise the Overview.
+    var board = false
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
+                if board {
+                    boardPart
+                } else {
+                    overviewPart
+                }
+            }
+            .padding(.horizontal, 24)
+            .padding(.top, 14)
+            .padding(.bottom, 22)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .scrollEdges()
+        .opacity(project.stale ? 0.7 : 1)
+    }
+
+    @ViewBuilder
+    private var overviewPart: some View {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text(peer.name.isEmpty ? peer.alias : peer.name)
@@ -669,38 +711,32 @@ struct RemoteProjectDashboard: View {
                             .contextMenu { NewWindowButton(ref: ref) }
                     }
                 }
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Board")
-                        .font(theme.body(.caption))
-                        .foregroundStyle(theme.muted)
-                        .padding(.top, 6)
-                    switch pages {
-                    case .shared(let p):
-                        Text(PeerPages.stats(p).map { "\($0.0 ?? 0) \($0.1)" }.joined(separator: " · "))
-                            .font(theme.mono(.footnote))
-                            .foregroundStyle(theme.muted)
-                        PeerBoard(pages: p)
-                    case .loading:
-                        ProgressView().controlSize(.small)
-                    case .failed(let why):
-                        Text(why).foregroundStyle(theme.attention)
-                    case .notShared:
-                        Text(PeerPages.notShared(by: PeerPages.server(peer)))
-                            .foregroundStyle(theme.muted)
-                    }
-                }
                 // Its designs (T888), read-only, under the same switch.
                 if app.listsDesigns {
                     DesignsSection(peer: peer, project: project)
                 }
-            }
-            .padding(.horizontal, 24)
-            .padding(.top, 14)
-            .padding(.bottom, 22)
-            .frame(maxWidth: .infinity, alignment: .leading)
+                if case .shared(let p) = pages {
+                    OverviewView(ProjectOverview(p, project: project))
+                }
+    }
+
+    /// The Board tab: what it shares of its board.
+    @ViewBuilder
+    private var boardPart: some View {
+        switch pages {
+        case .shared(let p):
+            Text(PeerPages.stats(p).map { "\($0.0 ?? 0) \($0.1)" }.joined(separator: " · "))
+                .font(theme.mono(.footnote))
+                .foregroundStyle(theme.muted)
+            PeerBoard(pages: p)
+        case .loading:
+            ProgressView().controlSize(.small)
+        case .failed(let why):
+            Text(why).foregroundStyle(theme.attention)
+        case .notShared:
+            Text(PeerPages.notShared(by: PeerPages.server(peer)))
+                .foregroundStyle(theme.muted)
         }
-        .scrollEdges()
-        .opacity(project.stale ? 0.7 : 1)
     }
 
     private var facts: String {
@@ -767,52 +803,43 @@ struct ProjectRow: View {
     var busy = false
 
     var body: some View {
-        HStack(spacing: 8) {
-            if program {
-                Image(systemName: "diamond.fill")
-                    .font(.system(size: 8))
-                    .foregroundStyle(selected ? theme.ink : dot)
-                    .frame(width: 8, height: 8)
-                    .accessibilityHidden(true)
-            } else {
-                Circle()
-                    .fill(dot)
-                    .overlay(Circle().strokeBorder(selected ? theme.ink.opacity(0.8) : .clear, lineWidth: 1))
-                    .frame(width: 8, height: 8)
-                    .accessibilityHidden(true)
-            }
+        HStack(spacing: 9) {
+            Text(ProjectTile.letters(name.split(separator: "/").last.map(String.init) ?? name))
+                .font(theme.sized(10, .semibold))
+                .foregroundStyle(theme.onAction)
+                .frame(width: 20, height: 20)
+                .background(theme.action, in: RoundedRectangle(cornerRadius: 4))
+                .accessibilityHidden(true)
             Text(name)
-                .font(theme.body(.body, .semibold))
+                .font(theme.sized(13.5))
                 .lineLimit(1)
-            if !tag.isEmpty {
-                Text(tag)
-                    .font(theme.mono(.caption2))
-                    .foregroundStyle(selected ? theme.ink : theme.muted)
+            if program || !tag.isEmpty {
+                Text(program ? (tag.isEmpty ? "program" : "program · \(tag)") : tag)
+                    .font(theme.sized(12))
+                    .foregroundStyle(theme.muted)
                     .lineLimit(1)
                     .layoutPriority(-1)
             }
             Spacer(minLength: 4)
-            // Its slot is always there, so the mark moves nothing.
-            Color.clear
-                .frame(width: 11, height: 11)
-                .overlay {
-                    if busy { BusyMark(size: 6, colour: selected ? theme.ink : nil) }
-                }
+            if busy {
+                BusyMark(size: 6, colour: selected ? theme.ink : nil)
+                    .frame(width: 11, height: 11)
+            }
             if needs > 0 {
                 Text("\(needs)")
-                    .font(theme.mono(.caption, .medium))
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 1)
-                    .background(theme.attention, in: Capsule())
+                    .font(theme.sized(12, .medium))
+                    .padding(.horizontal, 5)
+                    .background(theme.attention, in: RoundedRectangle(cornerRadius: 4))
                     .foregroundStyle(theme.onAttention)
                     .accessibilityLabel("\(needs) need you")
             }
+            Dot(colour: dot)
         }
-        .padding(.vertical, 2)
-        .foregroundStyle(selected ? theme.ink : theme.ink)
+        .padding(.horizontal, 8)
+        .foregroundStyle(theme.ink)
         .help("\(program ? "Director" : "Coordinator"): \(state)\(busy ? " · working under it" : "")")
         .accessibilityElement(children: .combine)
-        .accessibilityValue("\(program ? "director" : "coordinator") \(state)\(busy ? ", working under it" : "")")
+        .accessibilityLabel("\(name), \(program ? "program, director" : "coordinator") \(state)\(busy ? ", working under it" : "")")
     }
 }
 
@@ -894,13 +921,15 @@ struct ThreadCard: View {
 struct Meter: View {
     @Environment(\.theme) private var theme
     let fraction: Double
+    /// Its fill: the action's colour unless given.
+    var colour: Color?
 
     var body: some View {
         GeometryReader { g in
             ZStack(alignment: .leading) {
                 Capsule().fill(theme.line)
                 Capsule()
-                    .fill(theme.action)
+                    .fill(colour ?? theme.action)
                     .frame(width: g.size.width * min(max(fraction, 0), 1))
             }
         }

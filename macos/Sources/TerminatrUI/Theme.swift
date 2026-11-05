@@ -116,6 +116,12 @@ public struct Theme: Sendable {
         return p > 20 ? p * (1 + (scale - 1) * titleGrowth) : p * scale
     }
 
+    /// The system font at the flat look's measured size (T1000), times
+    /// the text size.
+    public func sized(_ points: CGFloat, _ weight: Font.Weight = .regular) -> Font {
+        .system(size: points * scale, weight: weight)
+    }
+
     /// A title: the system font, as all text is (T999).
     public func title(_ style: TextStyle, _ weight: Font.Weight = .bold) -> Font {
         .system(size: size(style), weight: weight)

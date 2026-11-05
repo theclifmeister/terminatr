@@ -54,20 +54,6 @@ struct ProgramPage: View {
         .sheet(item: $asking) { a in
             ProgramAskSheet(program: program.slug, ask: a) { acted += 1 }
         }
-        .toolbar {
-            if app.controlsProjects {
-                ToolbarItem(placement: .primaryAction) {
-                    Menu {
-                        Button("Rename Program…") { asking = .rename }
-                        Button("Delete Program…", role: .destructive) { asking = .delete }
-                            .disabled(app.directorSession(program.slug) != nil)
-                    } label: {
-                        Label("Program", systemImage: "ellipsis.circle")
-                    }
-                    .help("Rename or delete \(program.slug); its members, authority and caps are set in tm's console")
-                }
-            }
-        }
     }
 
     private struct Reload: Equatable {
@@ -111,6 +97,18 @@ struct ProgramPage: View {
                     .background(theme.pane, in: Capsule())
                 Text(program.slug)
                     .font(theme.title(.display, .heavy))
+                Spacer()
+                if app.controlsProjects {
+                    Menu {
+                        Button("Rename Program…") { asking = .rename }
+                        Button("Delete Program…", role: .destructive) { asking = .delete }
+                            .disabled(app.directorSession(program.slug) != nil)
+                    } label: {
+                        Label("Program", systemImage: "ellipsis.circle")
+                    }
+                    .fixedSize()
+                    .help("Rename or delete \(program.slug); its members, authority and caps are set in tm's console")
+                }
             }
             if !program.goal.isEmpty {
                 Text(program.goal)

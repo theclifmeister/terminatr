@@ -5,39 +5,23 @@ import TerminatrKit
 import TerminatrUI
 import UniformTypeIdentifiers
 
-/// A project of this server in the window's detail: its dashboard, and
-/// beside it its pages, picked above it: Overview, Memory and Library
-/// (T794), read only, and Mods (T869), its mods on or off for it and
-/// their settings for it, as the TUI's project Mods tab.
+/// A project of this server in the main pane: the tab the title row picks.
+/// Overview, its dashboard and what the TUI's Overview says; Board, its
+/// tasks; Memory and Library (T794), read only; and Mods (T869), its mods
+/// on or off for it and their settings for it, as the TUI's project Mods
+/// tab.
 struct ProjectPages: View {
     @Environment(AppModel.self) private var app
-    @Environment(\.theme) private var theme
     let project: AppAPI.Project
-    @State private var page: ProjectPage = .dashboard
     /// The note a search hit opened (AppModel.noteShown), for Memory.
     @State private var note: String?
 
     var body: some View {
-        VStack(spacing: 0) {
-            let pages = app.projectPages
-            Picker("Page", selection: $page) {
-                ForEach(pages) { Text($0.rawValue).tag($0) }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .fixedSize()
-            .padding(.top, 10)
-            switch pages.contains(page) ? page : .dashboard {
-            case .dashboard:
-                ProjectDashboard(project: project)
-            case .overview:
-                ScrollView {
-                    OverviewView(ProjectOverview(project, coordinator: app.coordinatorSession(project.slug),
-                                                 needs: app.needs(of: project.slug).count))
-                        .padding(28)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .scrollEdges()
+        Group {
+            let tabs = app.projectTabs
+            switch tabs.contains(app.projectTab) ? app.projectTab : .overview {
+            case .overview, .board:
+                ProjectDashboard(project: project, board: app.projectTab == .board)
             case .memory:
                 MemoryPane(project: project.slug, note: note)
             case .library:
@@ -47,9 +31,9 @@ struct ProjectPages: View {
             }
         }
         .task(id: app.noteShown) {
-            if let path = app.takeNote(project.slug), app.projectPages.contains(.memory) {
+            if let path = app.takeNote(project.slug), app.projectTabs.contains(.memory) {
                 note = path
-                page = .memory
+                app.projectTab = .memory
             }
         }
     }
@@ -143,6 +127,8 @@ struct LibraryPane: View {
     /// The paired server whose project it is (T886); nil for this
     /// server's.
     var peer: String?
+    /// One thread's files alone: the title row's Files, on a thread.
+    var thread: String?
     @State private var files: [AppAPI.LibraryFile]?
     @State private var picked: String?
     @State private var looking: URL?
@@ -219,7 +205,8 @@ struct LibraryPane: View {
             if let peer {
                 files = try await app.peerLibrary(peer, project)
             } else {
-                files = try await app.library(project)
+                let all = try await app.library(project)
+                files = thread.map { t in all.filter { $0.thread == t } } ?? all
             }
             failure = nil
         } catch {
