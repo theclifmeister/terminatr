@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.80.0](https://github.com/theclifmeister/terminatr/compare/v0.79.1...v0.80.0) (2026-11-05)
+
+
+### Features
+
+* **app:** flat colours and surfaces, Carbon theme, system font ([#1097](https://github.com/theclifmeister/terminatr/issues/1097)) ([b6466b5](https://github.com/theclifmeister/terminatr/commit/b6466b578ed00bee3224114aaec627f86410846f))
+* **app:** new Mac window frame with the inspector in the right panel ([#1098](https://github.com/theclifmeister/terminatr/issues/1098)) ([6d66363](https://github.com/theclifmeister/terminatr/commit/6d66363d247f4e720bf3a117efda5ba406a5d441))
+* **app:** restyle the Mac's pane contents to the flat look ([#1099](https://github.com/theclifmeister/terminatr/issues/1099)) ([5400e02](https://github.com/theclifmeister/terminatr/commit/5400e02fff46afb2d1b14f78170581b554580443))
+* **ios:** flat look on the iPhone and iPad ([#1102](https://github.com/theclifmeister/terminatr/issues/1102)) ([61eb1e9](https://github.com/theclifmeister/terminatr/commit/61eb1e9f1a3f6825391d16db01ce2db4543c3035))
+
+
+### Bug Fixes
+
+* **app:** director and coordinator stand out and line up in the Mac and iPhone apps ([#1101](https://github.com/theclifmeister/terminatr/issues/1101)) ([3d7efa8](https://github.com/theclifmeister/terminatr/commit/3d7efa86dfb708e100ee544349bd7e2255ae0eef))
+* **app:** Mac Needs you matches the iPhone; guard refusals move to Settings ([#1095](https://github.com/theclifmeister/terminatr/issues/1095)) ([57c3ba4](https://github.com/theclifmeister/terminatr/commit/57c3ba428b74fa826fec76726521fdd24822f657))
+* **app:** remove the duplicate Needs you list from a coordinator's conversation ([#1100](https://github.com/theclifmeister/terminatr/issues/1100)) ([569999f](https://github.com/theclifmeister/terminatr/commit/569999f55a2c4dd55c750b82177fc633a7b3d237))
+
 ## [0.79.1](https://github.com/theclifmeister/terminatr/compare/v0.79.0...v0.79.1) (2026-11-04)
 
 
