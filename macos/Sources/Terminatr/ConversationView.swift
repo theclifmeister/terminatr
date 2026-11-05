@@ -7,8 +7,8 @@ import TerminatrUI
 /// waits on (a question, a permission dialog, a task in review), and
 /// the composer, always at the foot. A session's cards sit at the
 /// transcript's end, over the composer, as the page draws them, a
-/// coordinator's as a thread's; what else of a coordinator's project
-/// needs the user leads, above the transcript (CoordinatorPanel). While
+/// coordinator's as a thread's (what else of its project needs the
+/// user is the inspector's and the sidebar's). While
 /// a card is open and the transcript is scrolled up, Jump to the open
 /// card brings it back. ⌘F
 /// opens a find bar over it: the entries that show the words wear a
@@ -65,9 +65,6 @@ struct ConversationTab: View {
         VStack(spacing: 0) {
             if finding {
                 findBar(matches.count)
-            }
-            if coordinator && remote == nil {
-                CoordinatorPanel(model: model, session: session)
             }
             ScrollViewReader { proxy in
                 ScrollView {
