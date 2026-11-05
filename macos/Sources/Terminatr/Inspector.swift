@@ -42,7 +42,7 @@ struct InspectorPanel: View {
 }
 
 /// The panel's frame, to the reference's measure: 8 round with its line,
-/// a header of 47 with its chip and count, what scrolls, and a footer of
+/// a header of 33 (the pane header's) with its chip and count, what scrolls, and a footer of
 /// 59 with a context meter and one button, when it has them.
 struct InspectorFrame<Content: View>: View {
     @Environment(\.theme) private var theme
@@ -100,7 +100,7 @@ struct InspectorFrame<Content: View>: View {
             }
         }
         .padding(.horizontal, 15)
-        .frame(height: 46)
+        .frame(height: 33)
         .padding(.bottom, 1)
         .overlay(alignment: .bottom) { theme.line.frame(height: 1) }
         .accessibilityElement(children: .combine)
@@ -142,7 +142,8 @@ struct InspectorFrame<Content: View>: View {
 }
 
 /// The footer's button: Save & Clear on a coordinator, Open PR on a
-/// thread. 79 × 35, 6 round.
+/// thread. At least 79 wide with 14 of side padding, 34 high like the
+/// context box's border beside it, 6 round.
 struct InspectorFootButton: View {
     @Environment(\.theme) private var theme
     @Environment(\.isEnabled) private var enabled
@@ -160,7 +161,8 @@ struct InspectorFootButton: View {
                 .font(theme.sized(title.count > 8 ? 12 : 13))
                 .foregroundStyle(enabled ? theme.ink : theme.muted)
                 .lineLimit(1)
-                .frame(width: 79, height: 35)
+                .padding(.horizontal, 14)
+                .frame(minWidth: 79, minHeight: 34, maxHeight: 34)
                 .background(theme.tab, in: RoundedRectangle(cornerRadius: 6))
                 .contentShape(RoundedRectangle(cornerRadius: 6))
         }

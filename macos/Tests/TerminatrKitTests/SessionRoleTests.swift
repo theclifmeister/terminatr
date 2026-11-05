@@ -20,5 +20,8 @@ import TerminatrKit
     @Test func theGridHasOneTextEdgePerDepth() {
         #expect(SidebarGrid.textEdge(depth: 0) == 37)
         #expect(SidebarGrid.textEdge(depth: 1) == 49)
+        // A project's coordinator sits where a program's director does.
+        #expect(SidebarGrid.contents(of: 0) == SidebarGrid.step)
+        #expect(SidebarGrid.contents(of: SidebarGrid.step) == 2 * SidebarGrid.step)
     }
 }
