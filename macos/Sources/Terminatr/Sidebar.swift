@@ -74,7 +74,7 @@ struct Sidebar: View {
                 .frame(maxHeight: .infinity)
                 theme.lineSoft.frame(height: 1)
                 needsSection
-                    .frame(height: CGFloat(WindowColumns.needsHeight(sidebar: g.size.height)) - 1)
+                    .frame(height: needsOpen ? CGFloat(WindowColumns.needsHeight(sidebar: g.size.height)) - 1 : 36)
                 theme.lineSoft.frame(height: 1)
                 foot
             }
@@ -187,43 +187,94 @@ struct Sidebar: View {
 
     // MARK: the lower section
 
-    /// What needs the user, every one of it, the section scrolling if it
-    /// runs long.
+    /// One row, folded by default (T1017): "Needs you" and its count, a
+    /// click unfolds what needs the user under it, another folds it, and
+    /// the choice stays across launches. The count carries the attention
+    /// so nothing goes unnoticed while it is folded.
     private var needsSection: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 6) {
-                Text("Needs you")
-                    .font(theme.sized(13))
-                    .foregroundStyle(theme.muted)
-                    .accessibilityAddTraits(.isHeader)
-                Spacer(minLength: 0)
-                IconButton(symbol: "clock", name: "Next need", help: "Next need (⌥⌘↓)") { app.stepNeed(1) }
-                    .disabled(app.needs.isEmpty)
-                    .padding(.trailing, 16)
-            }
-            .padding(.leading, 17)
-            .padding(.top, 18)
-            .frame(height: 48, alignment: .top)
-            let needs = shownNeeds
-            if needs.isEmpty {
-                Text(filtering ? "No need matches." : "Nothing needs you. What waits for your answer shows here.")
-                    .font(theme.sized(13))
-                    .foregroundStyle(theme.muted)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, 13)
-                Spacer(minLength: 0)
-            } else {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 0) {
-                        ForEach(needs) { n in
-                            NeedLine(need: n) { app.open(project: n.project, session: n.session) }
-                                .accessibilityRotorEntry(id: n.id, in: needsRotor)
+            needsRow
+            if needsOpen {
+                let needs = shownNeeds
+                if needs.isEmpty {
+                    Text(filtering ? "No need matches." : "Nothing needs you. What waits for your answer shows here.")
+                        .font(theme.sized(13))
+                        .foregroundStyle(theme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 13)
+                    Spacer(minLength: 0)
+                } else {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 0) {
+                            ForEach(needs) { n in
+                                NeedLine(need: n) { app.open(project: n.project, session: n.session) }
+                                    .accessibilityRotorEntry(id: n.id, in: needsRotor)
+                            }
                         }
                     }
+                    .scrollEdges()
                 }
-                .scrollEdges()
             }
         }
+    }
+
+    private var needsOpen: Bool { app.nav.needsOpen }
+
+    /// The fold row, on the sidebar's grid: its chevron in the tile
+    /// column, its text at the text edge, the count at the right.
+    private var needsRow: some View {
+        let count = app.needs.count
+        return HStack(spacing: 0) {
+            Button {
+                app.nav.needsOpen.toggle()
+            } label: {
+                HStack(spacing: 0) {
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 9, weight: .semibold))
+                        .rotationEffect(.degrees(needsOpen ? 0 : -90))
+                        .frame(width: CGFloat(SidebarGrid.slot))
+                        .padding(.leading, CGFloat(SidebarGrid.inset))
+                        .accessibilityHidden(true)
+                    Text("Needs you")
+                        .font(theme.sized(13))
+                        .padding(.leading, CGFloat(SidebarGrid.gap))
+                    Spacer(minLength: 6)
+                    needsCount(count)
+                }
+                .foregroundStyle(theme.muted)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(needsOpen ? "Fold the list of what needs you" : "Show what needs you")
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Needs you, \(count == 0 ? "nothing waiting" : "\(count)")")
+            .accessibilityValue(needsOpen ? "expanded" : "collapsed")
+            .accessibilityAddTraits(.isHeader)
+            IconButton(symbol: "clock", name: "Next need", help: "Next need (⌥⌘↓)") { app.stepNeed(1) }
+                .disabled(app.needs.isEmpty)
+                .padding(.leading, 6)
+                .padding(.trailing, 16)
+        }
+        .frame(height: 36)
+    }
+
+    /// The count as the project rows' badge shows needs: the attention
+    /// chip in the percent column (SidebarGrid); nothing at 0.
+    private func needsCount(_ count: Int) -> some View {
+        Group {
+            if count > 0 {
+                Text("\(count)")
+                    .font(theme.sized(12, .medium))
+                    .padding(.horizontal, 5)
+                    .background(theme.attention, in: RoundedRectangle(cornerRadius: 4))
+                    .foregroundStyle(theme.onAttention)
+                    .fixedSize()
+            } else {
+                Color.clear.frame(height: 1)
+            }
+        }
+        .frame(width: CGFloat(SidebarGrid.percent) * theme.scale, alignment: .trailing)
     }
 
     // MARK: the foot
