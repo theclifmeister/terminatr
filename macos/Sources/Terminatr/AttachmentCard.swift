@@ -33,9 +33,8 @@ struct AttachmentCard: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .frosted(RoundedRectangle(cornerRadius: 14))
-        .background(theme.agentCard, in: RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(theme.edge, lineWidth: 1))
+        .solid(RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(theme.line, lineWidth: 1))
     }
 }
 
@@ -92,7 +91,7 @@ struct AttachmentView: View {
         switch state {
         case .loading:
             if file.inline {
-                RoundedRectangle(cornerRadius: 10)
+                RoundedRectangle(cornerRadius: 6)
                     .fill(theme.command)
                     .frame(width: 200, height: 140)
                     .overlay { ProgressView().controlSize(.small) }
@@ -106,8 +105,8 @@ struct AttachmentView: View {
                     .resizable()
                     .aspectRatio(contentMode: .fit)
                     .frame(maxWidth: Self.maxWidth, maxHeight: Self.maxHeight)
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                    .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(theme.edge, lineWidth: 1))
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                    .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(theme.line, lineWidth: 1))
             }
             .buttonStyle(.plain)
             .help("Open \(file.name)")
@@ -148,7 +147,7 @@ struct AttachmentView: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
         .frame(maxWidth: Self.maxWidth, alignment: .leading)
-        .background(theme.command, in: RoundedRectangle(cornerRadius: 9))
+        .background(theme.command, in: RoundedRectangle(cornerRadius: 6))
         .accessibilityElement(children: .contain)
     }
 
@@ -174,7 +173,7 @@ struct AttachmentView: View {
             .padding(.horizontal, 10)
             .padding(.vertical, 7)
             .frame(maxWidth: Self.maxWidth, alignment: .leading)
-            .background(theme.command.opacity(0.6), in: RoundedRectangle(cornerRadius: 9))
+            .background(theme.command.opacity(0.6), in: RoundedRectangle(cornerRadius: 6))
     }
 
     private func load() async {

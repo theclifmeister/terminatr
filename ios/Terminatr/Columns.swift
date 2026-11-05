@@ -190,7 +190,7 @@ struct Columns<Content: View>: View {
     private func beside(list: CGFloat, gap: CGFloat = 1) -> some View {
         HStack(spacing: 0) {
             lead.frame(width: list)
-            Rectangle().fill(theme.edge).frame(width: gap).ignoresSafeArea()
+            Rectangle().fill(theme.line).frame(width: gap).ignoresSafeArea()
             trail()
         }
     }
@@ -209,7 +209,7 @@ struct Columns<Content: View>: View {
                     .transition(.opacity)
                 HStack(spacing: 0) {
                     lead.frame(width: list)
-                    Rectangle().fill(theme.edge).frame(width: 1).ignoresSafeArea()
+                    Rectangle().fill(theme.line).frame(width: 1).ignoresSafeArea()
                 }
                 .shadow(color: .black.opacity(0.2), radius: 12)
                 .transition(.move(edge: .leading))

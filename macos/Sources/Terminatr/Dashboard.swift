@@ -96,9 +96,9 @@ struct ProjectDashboard: View {
                     }
                 }
             }
-            .padding(.horizontal, 28)
-            .padding(.top, 18)
-            .padding(.bottom, 28)
+            .padding(.horizontal, 24)
+            .padding(.top, 14)
+            .padding(.bottom, 22)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .scrollEdges()
@@ -168,7 +168,7 @@ struct ProjectDashboard: View {
         // A button, so Full Keyboard Access reaches it (Tab, Space).
         return Button { app.select(sel) } label: {
             ThreadCard(thread: t, attention: app.attention(t), busy: app.busy(t))
-                .contentShape(RoundedRectangle(cornerRadius: 14))
+                .contentShape(RoundedRectangle(cornerRadius: 8))
         }
         .buttonStyle(.plain)
             .help("Show \(t.task?.ref ?? t.record.id)")
@@ -196,7 +196,7 @@ struct ProjectDashboard: View {
             }
             if let board = board {
                 Text(board)
-                    .font(theme.mono(.footnote))
+                    .font(theme.body(.footnote))
                     .foregroundStyle(theme.muted)
             }
             if !project.error.isEmpty {
@@ -216,20 +216,18 @@ struct ProjectDashboard: View {
     }
 
     private func section<C: View>(_ title: String, @ViewBuilder _ content: () -> C) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(title.uppercased())
-                .font(theme.mono(.caption2, .medium))
-                .tracking(1)
+        VStack(alignment: .leading, spacing: 7) {
+            Text(title)
+                .font(theme.body(.caption))
                 .foregroundStyle(theme.muted)
-                .padding(.top, 6)
+                .padding(.top, 8)
             content()
         }
     }
 
     private func label(_ title: String) -> some View {
-        Text(title.uppercased())
-            .font(theme.mono(.label, .medium))
-            .tracking(1)
+        Text(title)
+            .font(theme.body(.caption))
             .foregroundStyle(theme.muted)
             .padding(.top, 2)
     }
@@ -247,9 +245,8 @@ struct ProjectDashboard: View {
                     Image(systemName: "chevron.right")
                         .rotationEffect(.degrees(open ? 90 : 0))
                         .font(theme.body(.glyph, .bold))
-                    Text("\(title) · \(n)".uppercased())
-                        .font(theme.mono(.label, .medium))
-                        .tracking(1)
+                    Text("\(title) · \(n)")
+                        .font(theme.body(.caption))
                 }
                 .foregroundStyle(theme.muted)
                 .contentShape(Rectangle())
@@ -289,12 +286,12 @@ struct CoordinatorRow: View {
                         BusyLabel(busy: busy, colour: theme.colour(.working))
                     } else {
                         Text(attention.word)
-                            .font(theme.mono(.caption))
+                            .font(theme.body(.caption))
                             .foregroundStyle(attention.waits ? theme.colour(attention.tone) : theme.muted)
                     }
                     if running, let ctx = ContextUse.of(app.coordinatorSession(project.slug), hint: app.contextHint) {
                         Text("context \(ctx.word)")
-                            .font(theme.mono(.caption, ctx.tone == nil ? .regular : .semibold))
+                            .font(theme.body(.caption, ctx.tone == nil ? .regular : .semibold))
                             .foregroundStyle(ctx.tone.map { theme.colour($0) } ?? theme.muted)
                             .help(ctx.spoken)
                     }
@@ -320,10 +317,9 @@ struct CoordinatorRow: View {
                 StartButton(project: project)
             }
         }
-        .padding(14)
-        .frosted(RoundedRectangle(cornerRadius: 14))
-        .background(theme.cardTint, in: RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(theme.edge, lineWidth: 1))
+        .padding(11)
+        .solid(RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(theme.line, lineWidth: 1))
         .contextMenu {
             NewWindowButton(ref: ref)
             ProjectMenu(project: project, coordinator: running)
@@ -476,8 +472,8 @@ private struct BoardFilter: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
         .frame(maxWidth: 320)
-        .background(theme.cardTint, in: RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(theme.edge, lineWidth: 1))
+        .background(theme.pane, in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(theme.line, lineWidth: 1))
         .help("Shows the tasks whose id or title has these words, the done ones too")
     }
 }
@@ -515,8 +511,8 @@ private struct BoardRow: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
-        .background(theme.cardTint, in: RoundedRectangle(cornerRadius: 9))
-        .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(theme.edge, lineWidth: 1))
+        .background(theme.pane, in: RoundedRectangle(cornerRadius: 6))
+        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(theme.line, lineWidth: 1))
         .accessibilityElement(children: .combine)
     }
 }
@@ -576,11 +572,10 @@ private struct NextStepCard: View {
                 }
             }
         }
-        .padding(18)
+        .padding(13)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .frosted(RoundedRectangle(cornerRadius: 14))
-        .background(theme.cardTint, in: RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(theme.edge, lineWidth: 1))
+        .solid(RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(theme.line, lineWidth: 1))
     }
 
     private var headline: String {
@@ -647,7 +642,7 @@ struct RemoteProjectDashboard: View {
                             .font(theme.mono(.subheadline, .medium))
                             .padding(.horizontal, 7)
                             .padding(.vertical, 1)
-                            .background(theme.cardTint, in: Capsule())
+                            .background(theme.pane, in: Capsule())
                         Text(project.project)
                             .font(theme.title(.display, .heavy))
                     }
@@ -668,16 +663,15 @@ struct RemoteProjectDashboard: View {
                     ForEach(project.sessions.compactMap { s in SessionRef(s, of: peer.alias).map { (s, $0) } }, id: \.0.id) { s, ref in
                         Button { app.select(.session(ref)) } label: {
                             PeerSessionCard(session: s, ref: ref)
-                                .contentShape(RoundedRectangle(cornerRadius: 14))
+                                .contentShape(RoundedRectangle(cornerRadius: 8))
                         }
                         .buttonStyle(.plain)
                             .contextMenu { NewWindowButton(ref: ref) }
                     }
                 }
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("BOARD")
-                        .font(theme.mono(.caption2, .medium))
-                        .tracking(1)
+                    Text("Board")
+                        .font(theme.body(.caption))
                         .foregroundStyle(theme.muted)
                         .padding(.top, 6)
                     switch pages {
@@ -700,9 +694,9 @@ struct RemoteProjectDashboard: View {
                     DesignsSection(peer: peer, project: project)
                 }
             }
-            .padding(.horizontal, 28)
-            .padding(.top, 18)
-            .padding(.bottom, 28)
+            .padding(.horizontal, 24)
+            .padding(.top, 14)
+            .padding(.bottom, 22)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .scrollEdges()
@@ -744,10 +738,9 @@ private struct PeerSessionCard: View {
                 .font(theme.mono(.caption))
                 .foregroundStyle(session.asking || session.state == "blocked" ? theme.approval : theme.muted)
         }
-        .padding(14)
-        .frosted(RoundedRectangle(cornerRadius: 14))
-        .background(theme.cardTint, in: RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(theme.edge, lineWidth: 1))
+        .padding(11)
+        .solid(RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(theme.line, lineWidth: 1))
         .accessibilityElement(children: .combine)
     }
 }
@@ -778,13 +771,13 @@ struct ProjectRow: View {
             if program {
                 Image(systemName: "diamond.fill")
                     .font(.system(size: 8))
-                    .foregroundStyle(selected ? theme.onAction : dot)
+                    .foregroundStyle(selected ? theme.ink : dot)
                     .frame(width: 8, height: 8)
                     .accessibilityHidden(true)
             } else {
                 Circle()
                     .fill(dot)
-                    .overlay(Circle().strokeBorder(selected ? theme.onAction.opacity(0.8) : .clear, lineWidth: 1))
+                    .overlay(Circle().strokeBorder(selected ? theme.ink.opacity(0.8) : .clear, lineWidth: 1))
                     .frame(width: 8, height: 8)
                     .accessibilityHidden(true)
             }
@@ -794,7 +787,7 @@ struct ProjectRow: View {
             if !tag.isEmpty {
                 Text(tag)
                     .font(theme.mono(.caption2))
-                    .foregroundStyle(selected ? theme.onAction : theme.muted)
+                    .foregroundStyle(selected ? theme.ink : theme.muted)
                     .lineLimit(1)
                     .layoutPriority(-1)
             }
@@ -803,7 +796,7 @@ struct ProjectRow: View {
             Color.clear
                 .frame(width: 11, height: 11)
                 .overlay {
-                    if busy { BusyMark(size: 6, colour: selected ? theme.onAction : nil) }
+                    if busy { BusyMark(size: 6, colour: selected ? theme.ink : nil) }
                 }
             if needs > 0 {
                 Text("\(needs)")
@@ -816,7 +809,7 @@ struct ProjectRow: View {
             }
         }
         .padding(.vertical, 2)
-        .foregroundStyle(selected ? theme.onAction : theme.ink)
+        .foregroundStyle(selected ? theme.ink : theme.ink)
         .help("\(program ? "Director" : "Coordinator"): \(state)\(busy ? " · working under it" : "")")
         .accessibilityElement(children: .combine)
         .accessibilityValue("\(program ? "director" : "coordinator") \(state)\(busy ? ", working under it" : "")")
@@ -879,10 +872,9 @@ struct ThreadCard: View {
                     .lineLimit(1)
             }
         }
-        .padding(14)
-        .frosted(RoundedRectangle(cornerRadius: 14))
-        .background(theme.cardTint, in: RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(theme.edge, lineWidth: 1))
+        .padding(11)
+        .solid(RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(theme.line, lineWidth: 1))
         .accessibilityElement(children: .combine)
     }
 
@@ -908,7 +900,7 @@ struct Meter: View {
             ZStack(alignment: .leading) {
                 Capsule().fill(theme.line)
                 Capsule()
-                    .fill(LinearGradient(colors: theme.meter, startPoint: .leading, endPoint: .trailing))
+                    .fill(theme.action)
                     .frame(width: g.size.width * min(max(fraction, 0), 1))
             }
         }
@@ -955,7 +947,7 @@ struct Placeholder: View {
             }
         }
         .padding(28)
-        .frosted(RoundedRectangle(cornerRadius: 18))
+        .solid(RoundedRectangle(cornerRadius: 8))
         .padding(40)
     }
 }

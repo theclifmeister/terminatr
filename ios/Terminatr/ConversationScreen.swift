@@ -176,9 +176,8 @@ struct ConversationScreen: View {
                             .font(theme.body(.subheadline, .semibold))
                             .padding(.horizontal, 14)
                             .padding(.vertical, 8)
-                            .frosted(Capsule())
-                            .overlay(Capsule().strokeBorder(theme.edge, lineWidth: 1))
-                            .shadow(color: .black.opacity(0.18), radius: 8, y: 3)
+                            .solid(Capsule())
+                            .overlay(Capsule().strokeBorder(theme.line, lineWidth: 1))
                     }
                     .buttonStyle(.plain)
                     .padding(.bottom, 10)
@@ -232,7 +231,7 @@ struct ConversationScreen: View {
                 .font(theme.body(.subheadline))
                 .foregroundStyle(theme.muted)
                 .multilineTextAlignment(.center)
-                .onGlass()
+                .onSurface()
                 .frame(maxWidth: .infinity)
                 .padding(.top, transcript.entries.isEmpty ? 40 : 0)
         }
@@ -460,14 +459,14 @@ struct EntryLine: View {
                 Spacer(minLength: 40)
                 VStack(alignment: .trailing, spacing: 4) {
                     turn
-                        .onGlass()
+                        .onSurface()
                         .onTapGesture { if entry.folds { unfolded = false } }
                     Text(entry.preview() ?? entry.text)
-                        .foregroundStyle(theme.onPrompt)
+                        .foregroundStyle(theme.ink)
                         .padding(.horizontal, 13)
                         .padding(.vertical, 9)
-                        .background(LinearGradient(colors: theme.prompt, startPoint: .topLeading, endPoint: .bottomTrailing),
-                                    in: RoundedRectangle(cornerRadius: 14))
+                        .background(theme.selection,
+                                    in: RoundedRectangle(cornerRadius: 8))
                     if !entry.files.isEmpty {
                         PhoneAttachments(files: entry.attachments, session: session, alignment: .trailing)
                     }
@@ -480,9 +479,8 @@ struct EntryLine: View {
             }
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .frosted(RoundedRectangle(cornerRadius: 14))
-            .background(theme.agentCard, in: RoundedRectangle(cornerRadius: 14))
-            .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(theme.edge, lineWidth: 1))
+            .solid(RoundedRectangle(cornerRadius: 8))
+            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(theme.line, lineWidth: 1))
         case .files:
             PhoneAttachmentCard(entry: entry, session: session,
                                 turn: [entry.who(agent: agent), entry.at?.formatted(date: .omitted, time: .shortened) ?? ""]
@@ -504,18 +502,18 @@ struct EntryLine: View {
                 }
                     .font(theme.mono(.footnote))
                     .lineLimit(1)
-                    .onGlass()
+                    .onSurface()
                     .padding(.leading, 12)
             }
         case .note:
             // A centred divider: "Conversation compacted", "Interrupted".
             HStack(spacing: 10) {
-                Rectangle().fill(theme.edge).frame(height: 1)
+                Rectangle().fill(theme.line).frame(height: 1)
                 Text(entry.text)
                     .font(theme.body(.footnote, .medium))
                     .foregroundStyle(theme.muted)
                     .fixedSize()
-                Rectangle().fill(theme.edge).frame(height: 1)
+                Rectangle().fill(theme.line).frame(height: 1)
             }
             .padding(.vertical, 6)
             .accessibilityElement(children: .combine)
@@ -530,12 +528,12 @@ struct EntryLine: View {
 }
 
 extension View {
-    /// A line over the mesh on a glass capsule: the mesh is no place for
+    /// A line on the backdrop on a capsule: the backdrop is no place for
     /// small or muted text (ThemeColours.checks, T851).
-    func onGlass() -> some View {
+    func onSurface() -> some View {
         padding(.horizontal, Spacing.item)
             .padding(.vertical, 2)
-            .surface(.glass, in: Capsule())
+            .surface(in: Capsule())
     }
 }
 

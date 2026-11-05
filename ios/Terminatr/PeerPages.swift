@@ -115,7 +115,7 @@ struct PeerProjectScreen: View {
             .foregroundStyle(theme.muted)
             .padding(Spacing.card)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .surface(.panel, in: RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
+            .surface(in: RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
     }
 
     private struct PagesRead: Equatable {

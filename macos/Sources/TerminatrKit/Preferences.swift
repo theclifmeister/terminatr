@@ -86,8 +86,10 @@ public enum TextSize {
 
 /// A role a text plays, which sets its size (T748 J1): views name one
 /// in place of a point size, and the theme scales it by the text size
-/// and, in the sidebar, the system's sidebar size. The sizes are
-/// Bloom's at 100%.
+/// and, in the sidebar, the system's sidebar size. On the Mac the sizes
+/// are the flat look's measured ones (T999): 15 the app's name, 14 rows,
+/// 13 labels, tabs and status. The phone keeps its own until its layout
+/// pass.
 public enum TextStyle: CaseIterable, Sendable {
     /// The phone's Welcome wordmark (T850).
     case wordmark
@@ -106,6 +108,27 @@ public enum TextStyle: CaseIterable, Sendable {
 
     /// The size in points at 100%.
     public var points: Double {
+        #if os(macOS)
+        switch self {
+        case .wordmark: 52
+        case .display: 21
+        case .sheetTitle: 20
+        case .largeTitle: 19
+        case .title: 18
+        case .title2: 17
+        case .title3: 16
+        case .headline: 15
+        case .heading: 14.5
+        case .body: 14
+        case .callout: 13.5
+        case .subheadline: 13
+        case .footnote: 12.5
+        case .caption: 12
+        case .caption2: 11.5
+        case .label: 11
+        case .glyph: 9
+        }
+        #else
         switch self {
         case .wordmark: 52
         case .display: 30
@@ -125,6 +148,7 @@ public enum TextStyle: CaseIterable, Sendable {
         case .label: 10
         case .glyph: 9
         }
+        #endif
     }
 }
 

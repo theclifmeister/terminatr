@@ -3,7 +3,7 @@ import TerminatrKit
 import TerminatrUI
 import UIKit
 
-/// Settings (T808; redesigned in T850): on the sheet's glass, each paired
+/// Settings (T808; redesigned in T850): on the sheet's ground, each paired
 /// server first (ServerCard) with its link's drops (Connection, T859; the
 /// demo's made up), in the order they were paired (T852), and Pair
 /// another server; then the themes as large live previews
@@ -18,7 +18,7 @@ struct SettingsScreen: View {
     @State private var pairing = false
     @Environment(\.dismiss) private var dismiss
     @Environment(\.theme) private var theme
-    @AppStorage(ThemeName.key) private var name = ThemeName.bloom.rawValue
+    @AppStorage(ThemeName.key) private var name = ThemeName.carbon.rawValue
     @AppStorage(Appearance.key) private var appearance = Appearance.system.rawValue
     @AppStorage(Haptics.key) private var haptics = true
 
@@ -66,7 +66,7 @@ struct SettingsScreen: View {
             .frame(maxWidth: .infinity)
             .padding(.bottom, 32)
         }
-        .sheetGlass()
+        .sheetGround()
         .sheet(isPresented: $pairing) { PairScreen() }
     }
 
@@ -85,7 +85,7 @@ struct SettingsScreen: View {
 /// does, the phone's text size standing in for Settings › Text size.
 /// Settings' Haptics switch reaches every screen from here (\.haptics).
 struct Themed: ViewModifier {
-    @AppStorage(ThemeName.key) private var name = ThemeName.bloom.rawValue
+    @AppStorage(ThemeName.key) private var name = ThemeName.carbon.rawValue
     @AppStorage(Appearance.key) private var appearance = Appearance.system.rawValue
     @AppStorage(Haptics.key) private var haptics = true
     @Environment(\.colorSchemeContrast) private var contrast
@@ -203,7 +203,7 @@ struct ConnectionSection: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, Spacing.card)
         .padding(.vertical, Spacing.row)
-        .surface(.card, in: RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
+        .surface(in: RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
         .padding(.horizontal, Spacing.gutter)
     }
 

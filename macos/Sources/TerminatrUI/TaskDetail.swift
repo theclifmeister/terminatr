@@ -108,9 +108,8 @@ public struct TaskDetailView<Missing: View>: View {
 
     private func section<C: View>(_ title: String, @ViewBuilder _ content: () -> C) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(title.uppercased())
-                .font(theme.mono(.caption2, .medium))
-                .tracking(1)
+            Text(title)
+                .font(theme.body(.caption))
                 .foregroundStyle(theme.muted)
             content()
         }

@@ -1,21 +1,22 @@
 import Foundation
 
-/// The app's themes (T770): Bloom, the first, and the others the user
+/// The app's themes (T770): Carbon, the default, and the others the user
 /// picks in Settings › Appearance, View › Theme or the palette. Each is
 /// a full set of colours for light and dark (ThemeColours); the app's
 /// Theme turns one into SwiftUI colours.
 public enum ThemeName: String, CaseIterable, Sendable {
-    case bloom, calm, graphite, dusk, aurora, sunset, solar
+    case carbon, bloom, calm, graphite, dusk, aurora, sunset, solar
 
     public static let key = "theme"
 
-    /// The stored choice; anything else is Bloom.
+    /// The stored choice; anything else is Carbon.
     public static func of(_ raw: String?) -> ThemeName {
-        raw.flatMap(ThemeName.init(rawValue:)) ?? .bloom
+        raw.flatMap(ThemeName.init(rawValue:)) ?? .carbon
     }
 
     public var label: String {
         switch self {
+        case .carbon: "Carbon"
         case .bloom: "Bloom"
         case .calm: "Calm"
         case .graphite: "Graphite"
@@ -29,7 +30,8 @@ public enum ThemeName: String, CaseIterable, Sendable {
     /// Its mood in a few words, under its swatch.
     public var mood: String {
         switch self {
-        case .bloom: "Vivid mesh, frosted glass"
+        case .carbon: "Neutral greys, one teal"
+        case .bloom: "Plum and vivid violet"
         case .calm: "Warm and easy on the eye"
         case .graphite: "Neutral and professional"
         case .dusk: "Dimmed, for night work"
@@ -41,6 +43,7 @@ public enum ThemeName: String, CaseIterable, Sendable {
 
     public var colours: ThemeColours {
         switch self {
+        case .carbon: .carbon
         case .bloom: .bloom
         case .calm: .calm
         case .graphite: .graphite
@@ -84,29 +87,29 @@ public struct TerminalColours: Hashable, Sendable {
     public var ansi: [Swatch]
 }
 
-/// What Increase Contrast puts in place of a theme's frost (T748 J):
-/// opaque panels, so no mesh shows through, stronger edges and muted
-/// ink, the rules drawn in ink at 45%.
-public struct OpaqueColours: Hashable, Sendable {
-    /// The sidebar, the inspector and the detail's glass.
-    public var panel: Swatch
-    public var bar: Swatch
-    public var card: Swatch
+/// What Increase Contrast changes in a theme besides its lines: stronger
+/// question and approval cards, and a stronger muted ink.
+public struct IncreasedColours: Hashable, Sendable {
     public var questionTint: Swatch
     public var approvalTint: Swatch
-    public var edge: Swatch
     public var muted: Swatch
 }
 
 /// A theme's colours, token by token: the app's Theme has a SwiftUI
-/// colour for each (see there what each is for).
+/// colour for each (see there what each is for). Flat: every surface is
+/// a solid colour, so what a text sits on is one colour too.
 public struct ThemeColours: Hashable, Sendable {
-    /// Four corners, then the centre.
-    public var mesh: [Swatch]
-    public var base: Swatch
+    public var chrome: Swatch
+    public var gutter: Swatch
+    public var pane: Swatch
+    public var line: Swatch
+    public var lineSoft: Swatch
+    public var selection: Swatch
+    public var tab: Swatch
+    public var focus: Swatch
     public var ink: Swatch
     public var muted: Swatch
-    public var line: Swatch
+    public var faint: Swatch
     public var action: Swatch
     public var onAction: Swatch
     public var good: Swatch
@@ -118,64 +121,13 @@ public struct ThemeColours: Hashable, Sendable {
     public var onQuestion: Swatch
     public var approval: Swatch
     public var onApproval: Swatch
-    public var sidebarTint: Swatch
-    public var glass: Swatch
-    public var bar: Swatch
-    public var cardTint: Swatch
-    public var edge: Swatch
-    public var meter: [Swatch]
-    public var prompt: [Swatch]
-    public var onPrompt: Swatch
-    public var agentCard: Swatch
     public var questionTint: Swatch
     public var approvalTint: Swatch
     public var command: Swatch
     public var terminal: TerminalColours
-    public var opaque: OpaqueColours
-    /// The titles' and mono texts' families; nil is the system's (SF
-    /// Pro, SF Mono).
-    public var titleFamily: String?
-    public var monoFamily: String?
+    public var increased: IncreasedColours
     /// Increase Contrast's: increasedContrast() made it.
     public var contrast = false
-
-    /// The redesign's deeper glass (T845): a card straight on the frost,
-    /// with no panel under it, its tint lighter than a card's in light and
-    /// the panel's smoke in dark, so the mesh shows through. Increase
-    /// Contrast's opaque card.
-    public var deck: Swatch {
-        if contrast { return opaque.card }
-        return Swatch(cardTint.light, glass.dark, alpha: cardTint.alpha * Self.deckLight, darkAlpha: glass.darkAlpha * Self.deckDark)
-    }
-
-    /// The deck's share of a card's tint in light, and of the panel's in
-    /// dark.
-    static let deckLight = 0.75
-    static let deckDark = 0.9
-
-    /// The phone's backdrop's veil (T996): the theme's base over its
-    /// gradient, as little of it as lets plain small text sit there
-    /// (checks, "the veil"). Themes whose text already reads have none.
-    public var veil: Swatch {
-        Swatch(base.light, base.dark, alpha: veilShare(dark: false), darkAlpha: veilShare(dark: true))
-    }
-
-    /// The spots of the phone's backdrop: its gradient runs from the
-    /// mesh's first colour through the base to its fourth.
-    private func backdropSpots(dark: Bool) -> [RGB] {
-        [mesh[0], base, mesh[3]].map { RGB(hex: $0.hex(dark: dark)) }
-    }
-
-    private func veilShare(dark: Bool) -> Double {
-        let spots = backdropSpots(dark: dark), texts = [ink, muted].map { RGB(hex: $0.hex(dark: dark)) }
-        for step in 0...20 {
-            let share = Double(step) / 20
-            let veil = Swatch(base.light, base.dark, alpha: share)
-            let least = spots.flatMap { s in texts.map { $0.contrast(s.under(veil, dark: dark)) } }.min()!
-            if least >= 4.5 { return share }
-        }
-        return 1
-    }
 
     /// A tone's wash: a soft StateGlyph's and a picked chip's, and an
     /// option picked before it is sent.
@@ -189,20 +141,15 @@ public struct ThemeColours: Hashable, Sendable {
         Swatch(tone.light, tone.dark, alpha: share)
     }
 
-    /// The colours as Increase Contrast wants them: the panels opaque,
-    /// their edges and rules in the muted ink.
+    /// The colours as Increase Contrast wants them: lines drawn in ink at
+    /// 45%, stronger cards and muted ink.
     public func increasedContrast() -> ThemeColours {
         var t = self
-        t.sidebarTint = opaque.panel
-        t.glass = opaque.panel
-        t.bar = opaque.bar
-        t.cardTint = opaque.card
-        t.agentCard = opaque.card
-        t.questionTint = opaque.questionTint
-        t.approvalTint = opaque.approvalTint
-        t.edge = opaque.edge
+        t.questionTint = increased.questionTint
+        t.approvalTint = increased.approvalTint
         t.line = Swatch(ink.light, ink.dark, alpha: 0.45)
-        t.muted = opaque.muted
+        t.lineSoft = t.line
+        t.muted = increased.muted
         t.contrast = true
         return t
     }
@@ -302,100 +249,74 @@ public struct ContrastCheck: Sendable, CustomStringConvertible {
 }
 
 extension ThemeColours {
-    /// The system material under the panels, as the sidebar measures in
-    /// the app (T752): 40% white in light, 40% #1e1e1e in dark.
-    static let material = Swatch(0xffffff, 0x1e1e1e, alpha: 0.4)
-
-    /// Every text colour against the surfaces it is drawn on, each over
-    /// its worst spot: the mesh's five colours and its base, under the
-    /// surface's layers (Bloom's measure, T752). No small text sits on the
-    /// raw mesh. With Increase Contrast the panels are opaque, so the mesh
-    /// no longer counts.
+    /// Every text colour against the surfaces it is drawn on. No surface
+    /// is translucent over anything but a solid pane, so each is one
+    /// colour.
     public func checks(dark: Bool) -> [ContrastCheck] {
-        let spots = (mesh + [base]).map { RGB(hex: $0.hex(dark: dark)) }
-        func layered(_ layers: [Swatch]) -> [RGB] {
-            spots.map { s in layers.reduce(s) { $0.under($1, dark: dark) } }
+        func solid(_ s: Swatch) -> RGB { RGB(hex: s.hex(dark: dark)) }
+        let paneRGB = solid(pane)
+        func on(_ layers: Swatch...) -> RGB {
+            layers.reduce(paneRGB) { $0.under($1, dark: dark) }
         }
-        let frost = contrast ? [Swatch]() : [Self.material]
-        let surfaces: [(String, [RGB])] = [
-            ("the sidebar", layered(frost + [sidebarTint])),
-            ("the glass", layered(frost + [glass])),
-            ("the title bar", layered(frost + [glass, bar])),
-            // The menu bar's panels too: glass under their tint.
-            ("a card", layered(frost + [glass, cardTint])),
-            ("a sidebar card", layered(frost + [sidebarTint, cardTint])),
-            ("an agent card", layered(frost + [glass, agentCard])),
-            ("a question card", layered(frost + [glass, questionTint])),
-            ("an approval card", layered(frost + [glass, approvalTint])),
-            ("a command", layered(frost + [glass, cardTint, command])),
-            // The redesign's surfaces (T845): a deck card on the frost,
-            // a tone's wash on it (a soft StateGlyph), an option picked
-            // before sending, and the command block in a deck card.
-            ("a deck card", layered(frost + [deck])),
-            ("a deck command", layered(frost + [deck, command])),
-            ("an option", layered(frost + [deck, wash(ink, Self.inkWash)])),
-            ("a picked option", layered(frost + [deck, wash(question, Self.pickedWash)])),
-            // The phone's sheets (T850): Settings and pairing on the
-            // glass, their deck cards over it, a fingerprint chip and the
-            // level chip on those.
-            ("a sheet card", layered(frost + [glass] + frost + [deck])),
-            ("a sheet chip", layered(frost + [glass] + frost + [deck, wash(ink, Self.inkWash)])),
-            ("a level chip", layered(frost + [glass] + frost + [deck, wash(good, Self.toneWash)])),
-            // The session's (T848): the header's title and a run chip on
-            // the glass, a key strip's cap (the glass with an ink wash),
-            // and the dock's Queue / Steer in its field.
-            ("a key", layered(frost + [glass, wash(ink, Self.inkWash)])),
-            ("a dock's modes", layered(frost + [deck, wash(ink, Self.inkWash)])),
-        ] + [
+        let grounds: [(String, RGB)] = [
+            ("the window", solid(chrome)), ("the gutter", solid(gutter)), ("a pane", paneRGB),
+        ]
+        let cards: [(String, RGB)] = [
+            ("a question card", on(questionTint)),
+            ("an approval card", on(approvalTint)),
+            ("a command", on(command)),
+            ("an option", on(wash(ink, Self.inkWash))),
+            ("a picked option", on(wash(question, Self.pickedWash))),
+        ]
+        // A soft StateGlyph's fill and a level chip, with ink on them.
+        let washes: [(String, RGB)] = [
             ("approval", approval), ("question", question), ("attention", attention),
             ("good", good), ("action", action), ("idle", idle),
-        ].map { ("a \($0.0) wash", layered(frost + [deck, wash($0.1, Self.toneWash)])) }
-        let washes = Set(["approval", "question", "attention", "good", "action", "idle"].map { "a \($0) wash" })
-        let texts: [(String, Swatch, Set<String>?)] = [
-            ("ink", ink, nil),
-            ("muted", muted, Set(surfaces.map(\.0)).subtracting(washes)),
-            ("action", action, ["the sidebar", "the glass", "a card", "a deck card"]),
-            ("attention", attention, ["the glass", "a card"]),
-            ("good", good, ["a card"]),
-            ("approval", approval, ["a card", "an approval card"]),
-            ("question", question, ["a card", "a question card"]),
+        ].map { ("a \($0.0) wash", on(wash($0.1, Self.toneWash))) }
+        // Selected rows, tabs and buttons: their text is ink, never muted
+        // (the reference's muted reads about 4.4:1 and 4.1:1 on them); a
+        // picked option's as well.
+        let raised: [(String, RGB)] = [("a selected row", solid(selection)), ("a tab", solid(tab))]
+        let groundNames = Set(grounds.map(\.0))
+        let surfaces = grounds + cards + washes + raised
+        let plain = Set((grounds + cards).map(\.0)).subtracting(["a picked option"])
+        let texts: [(String, Swatch, Set<String>)] = [
+            ("ink", ink, Set(surfaces.map(\.0))),
+            ("muted", muted, plain),
+            ("action", action, groundNames),
+            ("attention", attention, ["a pane"]),
+            ("good", good, ["a pane"]),
+            ("approval", approval, ["a pane", "an approval card"]),
+            ("question", question, ["a pane", "a question card"]),
         ]
         var out: [ContrastCheck] = []
-        for (name, colour, on) in texts {
-            let c = RGB(hex: colour.hex(dark: dark))
-            for (surface, rgbs) in surfaces where on?.contains(surface) ?? true {
-                out.append(ContrastCheck(text: name, surface: surface, ratio: rgbs.map(c.contrast).min()!, least: 4.5))
+        for (name, colour, where_) in texts {
+            let c = solid(colour)
+            for (surface, rgb) in surfaces where where_.contains(surface) {
+                out.append(ContrastCheck(text: name, surface: surface, ratio: c.contrast(rgb), least: 4.5))
             }
+        }
+        // Faint is for what isn't read closely: a placeholder, a key hint.
+        for (surface, rgb) in grounds {
+            out.append(ContrastCheck(text: "faint", surface: surface, ratio: solid(faint).contrast(rgb), least: 2.5))
         }
         let pills: [(String, Swatch, Swatch)] = [
             ("onAction", onAction, action), ("onGood", onGood, good), ("onAttention", onAttention, attention),
             ("onQuestion", onQuestion, question), ("onApproval", onApproval, approval),
-            // A picked chip: the base on ink; an idle pill: ink on idle.
-            ("base", base, ink), ("ink", ink, idle),
-        ] + prompt.enumerated().map { ("onPrompt", onPrompt, $0.element) }
+            // A picked chip: the pane on ink; an idle pill: ink on idle.
+            ("pane", pane, ink), ("ink", ink, idle),
+        ]
         for (name, text, fill) in pills {
-            let r = RGB(hex: text.hex(dark: dark)).contrast(RGB(hex: fill.hex(dark: dark)))
-            out.append(ContrastCheck(text: name, surface: "its fill", ratio: r, least: 4.5))
-        }
-        // The Mac's and Welcome's large titles sit on the raw mesh: large
-        // text, so 3:1 (WCAG AA).
-        let title = RGB(hex: ink.hex(dark: dark))
-        out.append(ContrastCheck(text: "a header's title", surface: "the mesh", ratio: spots.map(title.contrast).min()!, least: 3))
-        // The phone's plain text (T996): a screen's status line, section
-        // labels and a project's goal sit on its backdrop under the veil.
-        let veiled = backdropSpots(dark: dark).map { $0.under(veil, dark: dark) }
-        for (name, colour) in [("ink", ink), ("muted", muted)] {
-            let c = RGB(hex: colour.hex(dark: dark))
-            out.append(ContrastCheck(text: name, surface: "the veil", ratio: veiled.map(c.contrast).min()!, least: 4.5))
+            out.append(ContrastCheck(text: name, surface: "its fill", ratio: solid(text).contrast(solid(fill)), least: 4.5))
         }
         // A ThreadMeter's segments and a StateGlyph's fill (T846) are
-        // graphics on a deck card: 3:1 (WCAG 1.4.11). Its legend's
-        // words carry the states too.
-        let deckCard = layered(frost + [deck])
+        // graphics on a pane: 3:1 (WCAG 1.4.11). Its legend's words carry
+        // the states too.
         for (name, tone) in [("approval", approval), ("question", question), ("attention", attention), ("good", good), ("action", action)] {
-            let c = RGB(hex: tone.hex(dark: dark))
-            out.append(ContrastCheck(text: "a \(name) segment", surface: "a deck card", ratio: deckCard.map(c.contrast).min()!, least: 3))
+            out.append(ContrastCheck(text: "a \(name) segment", surface: "a pane", ratio: solid(tone).contrast(paneRGB), least: 3))
         }
+        // The focus line round a pane: a graphic too.
+        out.append(ContrastCheck(text: "the focus line", surface: "a pane", ratio: solid(focus).contrast(paneRGB), least: 3))
         let term = terminal, bg = RGB(hex: term.background.hex(dark: dark))
         out.append(ContrastCheck(text: "terminal text", surface: "the terminal", ratio: RGB(hex: term.foreground.hex(dark: dark)).contrast(bg), least: 7))
         out.append(ContrastCheck(text: "terminal text", surface: "the selection",

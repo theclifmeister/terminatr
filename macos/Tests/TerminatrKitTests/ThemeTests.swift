@@ -19,26 +19,28 @@ func themeContrast(_ name: ThemeName) {
     }
 }
 
-/// Bloom's numbers as T752 measured them in Theme.swift's table: the
-/// model the checks use is the one Bloom was tuned with.
-@Test func bloomMeasuresAsBefore() {
-    let checks = ThemeColours.bloom.checks(dark: false)
-    func ratio(_ text: String, _ surface: String) -> Double {
-        checks.first { $0.text == text && $0.surface == surface }!.ratio
+/// Carbon's dark is the reference window's, exactly (flat-look's table).
+@Test func carbonIsTheReference() {
+    let c = ThemeColours.carbon
+    let measured: [(Swatch, UInt32)] = [
+        (c.chrome, 0x101213), (c.gutter, 0x121418), (c.pane, 0x17181c), (c.selection, 0x262628), (c.tab, 0x2c2d31),
+        (c.line, 0x292b2f), (c.lineSoft, 0x202224), (c.focus, 0xa6aebe), (c.ink, 0xdddfe0), (c.muted, 0x8a8c90), (c.action, 0x22a89d),
+    ]
+    for (swatch, hex) in measured {
+        #expect(swatch.dark == hex)
+        #expect(swatch.darkAlpha == 1)
     }
-    #expect(abs(ratio("ink", "the sidebar") - 12.9) < 0.1)
-    #expect(abs(ratio("action", "the glass") - 5.0) < 0.1)
-    #expect(abs(ratio("muted", "a card") - 8.4) < 0.2)
 }
 
-/// The deck (T845) is deeper glass than a card on the panel: less of
-/// a card's tint, and no panel under it; Increase Contrast's is opaque.
+/// Flat: the window's surfaces are solid in every theme, in both modes,
+/// Increase Contrast's too.
 @Test(arguments: ThemeName.allCases)
-func deckIsDeeper(_ name: ThemeName) {
-    let c = name.colours
-    #expect(c.deck.alpha < c.cardTint.alpha)
-    #expect(c.deck.darkAlpha < c.glass.darkAlpha)
-    #expect(c.increasedContrast().deck == c.opaque.card)
+func surfacesAreSolid(_ name: ThemeName) {
+    for t in [name.colours, name.colours.increasedContrast()] {
+        for s in [t.chrome, t.gutter, t.pane, t.selection, t.tab] {
+            #expect(s.alpha == 1 && s.darkAlpha == 1)
+        }
+    }
 }
 
 @Test(arguments: ThemeName.allCases)
@@ -54,37 +56,27 @@ func themeDotsApart(_ name: ThemeName) {
 @Test func themeFullSets() {
     for n in ThemeName.allCases {
         let t = n.colours
-        #expect(t.mesh.count == 5, "\(n)")
         #expect(t.terminal.ansi.count == 16, "\(n)")
-        #expect(t.prompt.count >= 1 && t.meter.count >= 2, "\(n)")
     }
-    // Each its own: no two share a mesh.
-    #expect(Set(ThemeName.allCases.map(\.colours.mesh)).count == ThemeName.allCases.count)
+    // Each its own: no two share a pane.
+    #expect(Set(ThemeName.allCases.map(\.colours.pane)).count == ThemeName.allCases.count)
 }
 
 @Test func storedTheme() {
-    #expect(ThemeName.of(nil) == .bloom)
+    // New installs get Carbon; a stored choice stays.
+    #expect(ThemeName.of(nil) == .carbon)
+    #expect(ThemeName.of("bloom") == .bloom)
     #expect(ThemeName.of("dusk") == .dusk)
-    #expect(ThemeName.of("neon") == .bloom)
+    #expect(ThemeName.of("neon") == .carbon)
 }
 
 @Test func paletteThemes() {
     let rows = Palette.themes(current: .dusk)
-    #expect(rows.map(\.title).first == "Theme: Bloom")
+    #expect(rows.map(\.title).first == "Theme: Carbon")
     #expect(rows.count == ThemeName.allCases.count)
     #expect(rows.first { $0.command == .theme(.dusk) }?.detail.hasSuffix("in use") == true)
     // Found by a word, not listed on an empty query.
     #expect(Palette.search(rows, "").isEmpty)
     #expect(Palette.search(rows, "dusk").map(\.command) == [.theme(.dusk)])
     #expect(Palette.search(rows, "theme").count == min(rows.count, Palette.perGroup))
-}
-
-/// The phone's veil (T996) is as light as its text lets it be: none where
-/// the text already reads on the backdrop, some on the loudest gradients.
-@Test func veilOnlyWhereTextNeedsIt() {
-    #expect(ThemeName.graphite.colours.veil.alpha == 0)
-    #expect(ThemeName.graphite.colours.veil.darkAlpha == 0)
-    #expect(ThemeName.bloom.colours.veil.alpha > 0)
-    #expect(ThemeName.bloom.colours.veil.darkAlpha > 0)
-    #expect(ThemeName.bloom.colours.veil.alpha < 1)
 }

@@ -71,8 +71,8 @@ struct SearchSheet: View {
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 7)
-            .background(theme.cardTint, in: RoundedRectangle(cornerRadius: 8))
-            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(theme.edge, lineWidth: 1))
+            .background(theme.pane, in: RoundedRectangle(cornerRadius: 8))
+            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(theme.line, lineWidth: 1))
             Picker("Kind", selection: $model.kind) {
                 Text("All kinds").tag("")
                 Divider()
@@ -150,7 +150,7 @@ struct SearchSheet: View {
                         .fixedSize()
                     }
                 }
-                .padding(20)
+                .padding(16)
                 theme.line.frame(height: 1)
                 switch layer {
                 case .text: text
@@ -187,7 +187,7 @@ struct SearchSheet: View {
                     ProgressView().controlSize(.small)
                 }
             }
-            .padding(20)
+            .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .scrollEdges()
@@ -205,7 +205,7 @@ struct SearchSheet: View {
                             SearchHitRow(row.hit, at: row.at)
                         }
                         .buttonStyle(.plain)
-                        .listRowBackground(row.at ? theme.cardTint : Color.clear)
+                        .listRowBackground(row.at ? theme.pane : Color.clear)
                     }
                 } header: {
                     Text("Its task's and thread's history around it, in time order")
@@ -216,11 +216,11 @@ struct SearchSheet: View {
         } else if model.shownFailure != nil {
             Text("No timeline for this hit.")
                 .foregroundStyle(theme.muted)
-                .padding(20)
+                .padding(16)
             Spacer()
         } else {
             ProgressView().controlSize(.small)
-                .padding(20)
+                .padding(16)
             Spacer()
         }
     }

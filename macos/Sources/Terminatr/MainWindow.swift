@@ -36,7 +36,7 @@ struct MainWindow: View {
                 .safeAreaInset(edge: .top) {
                     if app.lost { ConnectionBanner() }
                 }
-                .background { Frost(\.glass, bar: true) }
+                .background { Ground(bar: true) }
                 .column(min: WindowColumns.detailMin)
                 // A project has no inspector: its hiding isn't the user's.
                 .inspector(isPresented: Binding(get: { app.inspector && app.selectedRef != nil },
@@ -44,7 +44,7 @@ struct MainWindow: View {
                     inspector
                         .column(min: InspectorColumn.min)
                         .inspectorColumnWidth(min: InspectorColumn.min, ideal: Self.inspectorWidth, max: InspectorColumn.max)
-                        .background { Frost() }
+                        .background { Ground(bar: true) }
                         .background(InspectorWidth(key: Self.inspectorWidthKey))
                 }
         }
@@ -64,9 +64,7 @@ struct MainWindow: View {
         .onChange(of: app.nav.selection) { _, s in app.opened(s) }
         .navigationTitle(app.title(app.nav.selection))
         .navigationSubtitle(app.subtitle(app.nav.selection))
-        // The detail's glass shows through: no opaque band (T752);
-        // on macOS 26 the scroll edge effect under it (T764).
-        .glassToolbar()
+        .solidToolbar()
         .toolbar {
             ToolbarItemGroup(placement: .navigation) {
                 Button { app.goBack() } label: { Label("Back", systemImage: "chevron.backward") }
@@ -201,7 +199,7 @@ struct NeedsMenu: View {
                 }
             }
         } label: {
-            // The count beside the flag, as Bloom's toolbar has it (⚑ 6).
+            // The count beside the flag, as the toolbar has it (⚑ 6).
             Label("\(app.needs.count)", systemImage: app.needs.isEmpty ? "flag" : "flag.fill")
                 .labelStyle(.titleAndIcon)
                 .monospacedDigit()
@@ -225,30 +223,27 @@ struct NewWindowButton: View {
     }
 }
 
-/// A panel's ground: the theme's mesh under the system's frost and a
-/// tint of the theme, as Bloom draws its panels. The sidebar and the
-/// inspector take sidebarTint; the detail takes glass (frost in light,
-/// smoked glass in dark) and, with bar, the title bar's band over it.
-struct Frost: View {
+/// A column's ground, solid: the pane's colour by default and, with bar,
+/// the title bar's band of the window's colour over it with its line (the
+/// flat look's title bar, T999).
+struct Ground: View {
     @Environment(\.theme) private var theme
-    let tint: KeyPath<Theme, Color>
+    let fill: KeyPath<Theme, Color>
     let bar: Bool
 
-    init(_ tint: KeyPath<Theme, Color> = \.sidebarTint, bar: Bool = false) {
-        self.tint = tint
+    init(_ fill: KeyPath<Theme, Color> = \.pane, bar: Bool = false) {
+        self.fill = fill
         self.bar = bar
     }
 
     var body: some View {
         GeometryReader { g in
             ZStack(alignment: .top) {
-                Backdrop()
-                Rectangle().fill(.ultraThinMaterial)
-                theme[keyPath: tint]
+                theme[keyPath: fill]
                 if bar {
-                    theme.bar
+                    theme.chrome
                         .frame(height: g.safeAreaInsets.top)
-                        .overlay(alignment: .bottom) { theme.line.frame(height: 1) }
+                        .overlay(alignment: .bottom) { theme.lineSoft.frame(height: 1) }
                 }
             }
             .ignoresSafeArea()

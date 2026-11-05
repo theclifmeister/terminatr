@@ -10,19 +10,31 @@ public typealias PlatformColor = UIColor
 #endif
 
 /// The app's look as named tokens. Views read only these, never a
-/// colour of their own, so a theme is one more ThemeColours (T770:
-/// Bloom, Calm, Graphite, Dusk, Aurora, Sunset, Solar). Each colour has
-/// a light and a dark value and follows the system appearance.
+/// colour of their own, so a theme is one more ThemeColours (T770). Each
+/// colour has a light and a dark value and follows the system appearance.
+/// Flat (T999): every surface is one solid colour.
 public struct Theme: Sendable {
-    /// The backdrop's mesh: four corners, then the centre.
-    public var mesh: [Color]
-    /// Under the mesh, and alone when Reduce Transparency is on.
-    public var base: Color
+    /// The window, the sidebar, the title bar and the status bar.
+    public var chrome: Color
+    /// Behind the panes.
+    public var gutter: Color
+    /// A pane and what stands on one: a card, a sheet's group.
+    public var pane: Color
+    public var line: Color
+    /// A line between rows in one group, under the title bar.
+    public var lineSoft: Color
+    /// A selected row, the user's prompts.
+    public var selection: Color
+    /// A selected tab, a button's fill.
+    public var tab: Color
+    /// The line round the focused pane.
+    public var focus: Color
 
     public var ink: Color
     public var muted: Color
-    public var line: Color
-    /// Actions and the selection (Bloom's ink violet).
+    /// What isn't read closely: a placeholder, a key hint.
+    public var faint: Color
+    /// Actions, a project's tile.
     public var action: Color
     public var onAction: Color
     public var good: Color
@@ -36,27 +48,7 @@ public struct Theme: Sendable {
     public var approval: Color
     public var onApproval: Color
 
-    /// Frost tints over the system material: the sidebar and the
-    /// inspector, the detail's panel (Bloom's window: frost in light,
-    /// smoked glass in dark), the title bar over it, and the cards.
-    public var sidebarTint: Color
-    public var glass: Color
-    public var bar: Color
-    public var cardTint: Color
-    public var edge: Color
-    /// The theme's base over the phone's backdrop, so plain small text
-    /// reads on it (T996, ThemeColours.veil).
-    public var veil: Color
-    /// The redesign's deeper glass (T845): a deck card on the frost.
-    public var deck: Color
-    public var meter: [Color]
-
-    /// The user's prompts in the conversation: a gradient, and its ink.
-    public var prompt: [Color]
-    public var onPrompt: Color
-    /// The agent's text cards.
-    public var agentCard: Color
-    /// The question and approval cards' wash, over the frost.
+    /// The question and approval cards' wash, over a pane.
     public var questionTint: Color
     public var approvalTint: Color
     /// A command or a path set in mono.
@@ -69,8 +61,7 @@ public struct Theme: Sendable {
     /// ANSI colours from there.
     public var name: ThemeName
     public var colours: ThemeColours
-    /// Increase Contrast is on: panels are opaque, and the system
-    /// material under them is left out.
+    /// Increase Contrast is on: stronger lines and muted ink.
     public var contrast: Bool
     /// Every font's size times this: Settings › Appearance › Text size,
     /// and in the sidebar the system's sidebar size as well.
@@ -85,11 +76,17 @@ public struct Theme: Sendable {
     public init(_ name: ThemeName, colours: ThemeColours? = nil) {
         let c = colours ?? name.colours
         func k(_ s: Swatch) -> Color { Color(s) }
-        mesh = c.mesh.map(k)
-        base = k(c.base)
+        chrome = k(c.chrome)
+        gutter = k(c.gutter)
+        pane = k(c.pane)
+        line = k(c.line)
+        lineSoft = k(c.lineSoft)
+        selection = k(c.selection)
+        tab = k(c.tab)
+        focus = k(c.focus)
         ink = k(c.ink)
         muted = k(c.muted)
-        line = k(c.line)
+        faint = k(c.faint)
         action = k(c.action)
         onAction = k(c.onAction)
         good = k(c.good)
@@ -101,17 +98,6 @@ public struct Theme: Sendable {
         onQuestion = k(c.onQuestion)
         approval = k(c.approval)
         onApproval = k(c.onApproval)
-        sidebarTint = k(c.sidebarTint)
-        glass = k(c.glass)
-        bar = k(c.bar)
-        cardTint = k(c.cardTint)
-        edge = k(c.edge)
-        veil = k(c.veil)
-        deck = k(c.deck)
-        meter = c.meter.map(k)
-        prompt = c.prompt.map(k)
-        onPrompt = k(c.onPrompt)
-        agentCard = k(c.agentCard)
         questionTint = k(c.questionTint)
         approvalTint = k(c.approvalTint)
         command = k(c.command)
@@ -123,34 +109,30 @@ public struct Theme: Sendable {
     }
 
     /// A style's size: its points times the scale, a display size's
-    /// times titleGrowth's share of it. The custom faces are fixed at
-    /// it, as SF is, so Dynamic Type (the phone's text size, in scale)
-    /// grows every font once.
+    /// times titleGrowth's share of it, so Dynamic Type (the phone's text
+    /// size, in scale) grows every font once.
     public func size(_ style: TextStyle) -> CGFloat {
         let p = CGFloat(style.points)
         return p > 20 ? p * (1 + (scale - 1) * titleGrowth) : p * scale
     }
 
-    /// The theme's display face (Bloom's Bricolage Grotesque), or SF Pro.
+    /// A title: the system font, as all text is (T999).
     public func title(_ style: TextStyle, _ weight: Font.Weight = .bold) -> Font {
-        guard let f = colours.titleFamily else { return .system(size: size(style), weight: weight) }
-        return .custom(f, fixedSize: size(style)).weight(weight)
+        .system(size: size(style), weight: weight)
     }
 
-    /// The theme's mono (Bloom's DM Mono), or SF Mono.
+    /// The system's mono, SF Mono.
     public func mono(_ style: TextStyle, _ weight: Font.Weight = .regular) -> Font {
-        guard let f = colours.monoFamily else { return .system(size: size(style), weight: weight, design: .monospaced) }
-        return .custom(f, fixedSize: size(style)).weight(weight)
+        .system(size: size(style), weight: weight, design: .monospaced)
     }
 
-    /// The body's font, SF Pro (Bloom: "body stays SF Pro").
+    /// The body's font, the system's.
     public func body(_ style: TextStyle, _ weight: Font.Weight = .regular) -> Font {
         .system(size: size(style), weight: weight)
     }
 
-    /// The theme as Increase Contrast wants it (T748 J): the panels
-    /// opaque, so no mesh shows through, and their edges and rules
-    /// drawn in the muted ink (ThemeColours.increasedContrast).
+    /// The theme as Increase Contrast wants it (T748 J): lines and muted
+    /// ink stronger (ThemeColours.increasedContrast).
     public func increasedContrast() -> Theme {
         var t = Theme(name, colours: colours.increasedContrast())
         t.scale = scale
@@ -158,19 +140,19 @@ public struct Theme: Sendable {
         return t
     }
 
-    /// Bloom (design T744, concept 02), the first theme and the default.
-    public static let bloom = Theme(.bloom)
+    /// Carbon, the default (T999).
+    public static let carbon = Theme(.carbon)
 
     private static let all = Dictionary(uniqueKeysWithValues: ThemeName.allCases.map { ($0, Theme($0)) })
 
     /// The theme by name, its colours made once.
     public static func named(_ n: ThemeName) -> Theme {
-        all[n] ?? bloom
+        all[n] ?? carbon
     }
 }
 
 private struct ThemeKey: EnvironmentKey {
-    public static let defaultValue = Theme.bloom
+    public static let defaultValue = Theme.carbon
 }
 
 extension EnvironmentValues {

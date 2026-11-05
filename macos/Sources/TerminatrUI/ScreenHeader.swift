@@ -96,7 +96,7 @@ public struct PulseChip<ID: Hashable>: Identifiable {
     }
 }
 
-/// A header's filter chips (T845): a row of glass capsules, the picked
+/// A header's filter chips (T845): a row of capsules, the picked
 /// one filled in ink. It scrolls sideways, and at accessibility sizes
 /// wraps instead. Picking one is a selection tap.
 public struct PulseChips<ID: Hashable>: View {
@@ -142,7 +142,7 @@ public struct PulseChips<ID: Hashable>: View {
                         .lineLimit(1)
                 }
                 .font(theme.body(.subheadline, .semibold))
-                .foregroundStyle(on ? theme.base : theme.ink)
+                .foregroundStyle(on ? theme.pane : theme.ink)
                 .padding(.horizontal, 12)
                 .frame(minHeight: tapTarget)
                 .background { chip(on) }
@@ -157,7 +157,7 @@ public struct PulseChips<ID: Hashable>: View {
         if on {
             Capsule().fill(theme.ink)
         } else {
-            Color.clear.surface(.glass, in: Capsule())
+            Color.clear.surface(in: Capsule())
         }
     }
 }

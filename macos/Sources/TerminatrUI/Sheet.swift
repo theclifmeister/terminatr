@@ -2,7 +2,7 @@ import SwiftUI
 
 /// A sheet's header on the phone (T850: Settings, pairing), in place of
 /// the inline navigation bar: an optional leading button, the title in
-/// the display face, and an optional trailing one. On the sheet's glass.
+/// the display face, and an optional trailing one. On the sheet's ground.
 /// At accessibility sizes the buttons go above the title, which then
 /// has the row to itself.
 public struct SheetHeader<Leading: View, Trailing: View>: View {
@@ -68,7 +68,7 @@ extension SheetHeader where Trailing == EmptyView {
     }
 }
 
-/// A group's label on a sheet: mono, upper case, muted, on the glass.
+/// A group's label on a sheet: muted, on the ground.
 public struct GroupLabel: View {
     @Environment(\.theme) private var theme
     let text: String
@@ -78,9 +78,8 @@ public struct GroupLabel: View {
     }
 
     public var body: some View {
-        Text(text.uppercased())
-            .font(theme.mono(.caption, .medium))
-            .tracking(0.8)
+        Text(text)
+            .font(theme.body(.caption))
             .foregroundStyle(theme.muted)
             .padding(.horizontal, Spacing.gutter + 6)
             .padding(.top, Spacing.item)
@@ -122,19 +121,22 @@ public struct SwitchCard: View {
         .padding(.horizontal, Spacing.card)
         .padding(.vertical, Spacing.row)
         .frame(minHeight: tapTarget)
-        .surface(.card, in: RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
+        .surface(in: RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
         .padding(.horizontal, Spacing.gutter)
     }
 }
 
 extension View {
-    /// A sheet's ground (T850): the theme's mesh under the glass, edge to
-    /// edge ("the glass" in ThemeColours.checks; its cards are "a sheet
-    /// card").
-    public func sheetGlass() -> some View {
-        background {
-            Backdrop()
-                .overlay { Color.clear.surface(.glass, in: Rectangle()).ignoresSafeArea() }
-        }
+    /// A sheet's ground (T850): the window's solid colour, edge to edge.
+    public func sheetGround() -> some View {
+        modifier(SheetGround())
+    }
+}
+
+private struct SheetGround: ViewModifier {
+    @Environment(\.theme) private var theme
+
+    func body(content: Content) -> some View {
+        content.background { theme.chrome.ignoresSafeArea() }
     }
 }

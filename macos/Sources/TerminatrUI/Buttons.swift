@@ -8,17 +8,17 @@ public struct RoleButtonStyle: ButtonStyle {
     public enum Role: Sendable {
         /// The answer: a tone's fill (the action's when nil), its ink.
         case primary(Attention.Tone?)
-        /// The other answer: a 5% ink wash with a hairline, in ink.
+        /// The other answer: the tab's fill, in ink.
         case secondary
         /// A quiet action: the action colour's text alone.
         case ghost
-        /// A header's button: a 44 pt glass circle round its symbol.
+        /// A header's button: a 44 pt square round its symbol.
         case circle
         /// A screen header's button beside its smaller title (T996): a
-        /// 32 pt glass circle, on its trailing edge in the same 44 pt to
+        /// 32 pt square, on its trailing edge in the same 44 pt to
         /// tap.
         case smallCircle
-        /// The composer dock's send (T848): a 44 pt circle of the action
+        /// The composer dock's send (T848): a 44 pt square of the action
         /// colour round its symbol, in its ink.
         case send
     }
@@ -61,7 +61,9 @@ private struct RoleButton: View {
             .animation(still ? nil : .spring(response: 0.25, dampingFraction: 0.7), value: pressed)
     }
 
-    private var shape: some Shape { Capsule() }
+    private var rounded: RoundedRectangle { RoundedRectangle(cornerRadius: Radius.row, style: .continuous) }
+
+    private var shape: some Shape { rounded }
 
     @ViewBuilder private var styled: some View {
         let label = configuration.label
@@ -75,15 +77,13 @@ private struct RoleButton: View {
                 .foregroundStyle(tone.map(theme.on) ?? theme.onAction)
                 .padding(.horizontal, 18)
                 .frame(maxWidth: .infinity, minHeight: tapTarget)
-                .background(fill, in: Capsule())
-                .shadow(color: fill.opacity(0.35), radius: 8, y: 4)
+                .background(fill, in: rounded)
         case .secondary:
             label
                 .foregroundStyle(theme.ink)
                 .padding(.horizontal, 18)
                 .frame(minWidth: 92, minHeight: tapTarget)
-                .background(theme.ink.opacity(0.05), in: Capsule())
-                .overlay(Capsule().strokeBorder(theme.line, lineWidth: 1))
+                .background(theme.tab, in: rounded)
         case .ghost:
             label
                 .foregroundStyle(theme.action)
@@ -95,14 +95,14 @@ private struct RoleButton: View {
                 .font(.system(size: 18 * theme.scale, weight: .medium))
                 .foregroundStyle(theme.ink)
                 .frame(width: theme.circle, height: theme.circle)
-                .surface(.glass, in: Circle())
+                .surface(in: rounded)
         case .smallCircle:
             configuration.label
                 .labelStyle(.iconOnly)
                 .font(.system(size: 14 * theme.scale, weight: .medium))
                 .foregroundStyle(theme.ink)
                 .frame(width: 32 * theme.scale, height: 32 * theme.scale)
-                .surface(.glass, in: Circle())
+                .surface(in: rounded)
                 .frame(width: max(tapTarget, 32 * theme.scale), height: max(tapTarget, 32 * theme.scale), alignment: .trailing)
         case .send:
             configuration.label
@@ -110,8 +110,7 @@ private struct RoleButton: View {
                 .font(.system(size: 18 * theme.scale, weight: .bold))
                 .foregroundStyle(theme.onAction)
                 .frame(width: theme.circle, height: theme.circle)
-                .background(theme.action, in: Circle())
-                .shadow(color: theme.action.opacity(0.35), radius: 8, y: 4)
+                .background(theme.action, in: rounded)
         }
     }
 }

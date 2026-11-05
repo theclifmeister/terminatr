@@ -19,7 +19,7 @@ struct NewProjectSheet: View {
     @FocusState private var nameFocused: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 11) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("New Project")
                     .font(theme.title(.title, .heavy))
@@ -66,7 +66,7 @@ struct NewProjectSheet: View {
                 }
             }
         }
-        .padding(24)
+        .padding(18)
         .frame(width: 480)
         .onAppear { nameFocused = true }
         .fileImporter(isPresented: $picking, allowedContentTypes: [.folder]) { result in
@@ -107,7 +107,7 @@ struct LinkMessageSheet: View {
 
     var body: some View {
         let links = app.project(project).map { LinkMessageForm.writable($0) } ?? []
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 11) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Write to a Linked Project")
                     .font(theme.title(.title, .heavy))
@@ -141,7 +141,7 @@ struct LinkMessageSheet: View {
                     .disabled(!form.canSend || busy)
             }
         }
-        .padding(24)
+        .padding(18)
         .frame(width: 480)
         .onAppear { textFocused = true }
     }

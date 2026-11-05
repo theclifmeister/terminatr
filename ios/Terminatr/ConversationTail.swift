@@ -27,7 +27,7 @@ struct ConversationTail: View {
                     Text(elsewhere == 1 ? "1 more prompt queued" : "\(elsewhere) more prompts queued")
                         .font(theme.body(.footnote, .medium))
                         .foregroundStyle(theme.muted)
-                        .onGlass()
+                        .onSurface()
                         .frame(maxWidth: .infinity, alignment: .trailing)
                 }
                 if let busy = Busy.of(session) {
@@ -54,19 +54,19 @@ struct QueuedBubble: View {
                 Label("queued", systemImage: "clock")
                     .font(theme.mono(.caption, .medium))
                     .foregroundStyle(theme.muted)
-                    .onGlass()
+                    .onSurface()
                 Text(prompt.text.isEmpty ? "\(prompt.files) files" : prompt.text)
-                    .foregroundStyle(theme.onPrompt)
+                    .foregroundStyle(theme.ink)
                     .padding(.horizontal, 13)
                     .padding(.vertical, 9)
-                    .background(LinearGradient(colors: theme.prompt, startPoint: .topLeading, endPoint: .bottomTrailing)
-                        .opacity(0.55), in: RoundedRectangle(cornerRadius: 14))
-                    .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(theme.edge, style: StrokeStyle(lineWidth: 1, dash: [4, 3])))
+                    .background(theme.selection
+                        .opacity(0.55), in: RoundedRectangle(cornerRadius: 8))
+                    .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(theme.line, style: StrokeStyle(lineWidth: 1, dash: [4, 3])))
                 if prompt.files > 0, !prompt.text.isEmpty {
                     Text(prompt.files == 1 ? "1 file" : "\(prompt.files) files")
                         .font(theme.body(.caption))
                         .foregroundStyle(theme.muted)
-                        .onGlass()
+                        .onSurface()
                 }
             }
         }
@@ -106,7 +106,7 @@ struct WorkingLine: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
             }
-            .onGlass()
+            .onSurface()
             // No leading inset: the pill's edge is the folds' and cards' (T920).
             .padding(.vertical, Spacing.hair)
             .frame(maxWidth: .infinity, alignment: .leading)

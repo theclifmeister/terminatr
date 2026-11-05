@@ -2,7 +2,7 @@ import SwiftUI
 import TerminatrKit
 
 /// A project's monogram (T846): its letters (Monogram.letters) in the
-/// display face, the prompt's ink on the prompt's gradient.
+/// display face, the action's ink on the action's colour.
 public struct ProjectMonogram: View {
     @Environment(\.theme) private var theme
     let name: String
@@ -18,11 +18,11 @@ public struct ProjectMonogram: View {
         let s = side * theme.scale
         Text(Monogram.letters(name))
             .font(theme.title(side >= 48 ? .sheetTitle : side >= 40 ? .title2 : .headline, .bold))
-            .foregroundStyle(theme.onPrompt)
+            .foregroundStyle(theme.onAction)
             .lineLimit(1)
             .frame(width: s, height: s)
             .background(
-                LinearGradient(colors: theme.prompt, startPoint: .topLeading, endPoint: .bottomTrailing),
+                theme.action,
                 in: RoundedRectangle(cornerRadius: Radius.glyph * side / 38, style: .continuous)
             )
             .accessibilityHidden(true)
@@ -217,7 +217,7 @@ public struct ProjectPanel<Content: View>: View {
     public var body: some View {
         VStack(spacing: 0) { content }
             .padding(Spacing.hair)
-            .surface(.panel, in: RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
+            .surface(in: RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
     }
 }
 

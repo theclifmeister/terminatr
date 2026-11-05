@@ -145,7 +145,7 @@ public struct TileGroup<Content: View>: View {
         let shape = RoundedRectangle(cornerRadius: Radius.tile, style: .continuous)
         VStack(spacing: 0) { content }
             .clipShape(shape)
-            .surface(.panel, in: shape)
+            .surface(in: shape)
     }
 }
 
@@ -184,7 +184,7 @@ public struct StatTile: View {
         .padding(.horizontal, Spacing.card - 2)
         .padding(.vertical, Spacing.row)
         .frame(maxWidth: .infinity, minHeight: tapTarget, alignment: .leading)
-        .surface(.panel, in: RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
+        .surface(in: RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
         .contentShape(RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(count.map { "\($0) \(label)" } ?? "\(label), not shared")
@@ -258,7 +258,7 @@ public struct PageRow<Content: View>: View {
             ? AnyLayout(VStackLayout(spacing: 0))
             : AnyLayout(HStackLayout(alignment: .top, spacing: 0))
         layout { content }
-            .surface(.panel, in: RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
+            .surface(in: RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
     }
 }
 
@@ -306,9 +306,7 @@ public struct SectionHeading: View {
     public var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: Spacing.item) {
             Text(title)
-                .font(theme.body(.caption, .semibold))
-                .tracking(0.8)
-                .textCase(.uppercase)
+                .font(theme.body(.caption))
                 .foregroundStyle(theme.muted)
                 .lines(1)
                 .accessibilityAddTraits(.isHeader)

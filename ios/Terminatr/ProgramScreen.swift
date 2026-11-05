@@ -60,7 +60,7 @@ struct ProgramCard: View {
                     .overlay(alignment: .bottomTrailing) {
                         Image(systemName: "square.stack.3d.up.fill")
                             .font(.system(size: 11 * theme.scale, weight: .bold))
-                            .foregroundStyle(theme.onPrompt)
+                            .foregroundStyle(theme.onAction)
                             .padding(2)
                             .background(theme.action, in: Circle())
                             .offset(x: 5, y: 5)
@@ -275,7 +275,7 @@ struct ProgramScreen: View {
             .foregroundStyle(theme.muted)
             .padding(Spacing.card)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .surface(.panel, in: RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
+            .surface(in: RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
     }
 }
 
@@ -419,7 +419,7 @@ private struct UmbrellaTile: View {
         }
         .padding(Spacing.card)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .surface(.card, in: RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
+        .surface(in: RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
         .alert("Send \(t.ref) back", isPresented: $sendingBack) {
             TextField("What's missing", text: $note, axis: .vertical)
             Button("Send Back") {
@@ -526,7 +526,7 @@ struct ProgramQuestionCard: View {
         }
         .padding(Spacing.card)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .surface(.card, in: RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
+        .surface(in: RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
     }
 
     @ViewBuilder
@@ -558,7 +558,7 @@ struct ProgramQuestionCard: View {
                     words
                 }
                 .padding(Spacing.row)
-                .surface(.glass, in: RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
+                .surface(in: RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
                 .contentShape(RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
             }
             .buttonStyle(.plain)
@@ -667,6 +667,6 @@ struct RecommendationCard: View {
         }
         .padding(Spacing.card)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .surface(.card, in: RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
+        .surface(in: RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
     }
 }

@@ -42,7 +42,7 @@ extension EnvironmentValues {
 /// Every window, the menu bar's dropdown and the terminal read the
 /// stored choice here, so a new one shows in all of them at once.
 struct Themed: ViewModifier {
-    @AppStorage(ThemeName.key) private var name = ThemeName.bloom.rawValue
+    @AppStorage(ThemeName.key) private var name = ThemeName.carbon.rawValue
     @AppStorage(TextSize.key) private var scale = TextSize.standard
     @AppStorage(Density.key) private var density = Density.regular.rawValue
     @Environment(\.colorSchemeContrast) private var contrast

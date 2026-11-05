@@ -73,11 +73,13 @@ import Testing
     #expect(log.text { _ in "t" } == "t  line 3\nt  line 4\nt  line 5")
 }
 
-// Accessibility (T748 J): text styles keep Bloom's sizes at 100%, run
-// from largest to smallest, and the sidebar follows the system's size.
+// Accessibility (T748 J): text styles keep the flat look's measured sizes
+// at 100% on the Mac (T999), run from largest to smallest, and the sidebar
+// follows the system's size.
 @Test func textStyles() {
-    #expect(TextStyle.body.points == 13)
-    #expect(TextStyle.display.points == 30)
+    #expect(TextStyle.headline.points == 15)
+    #expect(TextStyle.body.points == 14)
+    #expect(TextStyle.subheadline.points == 13)
     let sizes = TextStyle.allCases.map(\.points)
     #expect(sizes == sizes.sorted(by: >))
     #expect(Set(sizes).count == sizes.count)

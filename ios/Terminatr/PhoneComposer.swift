@@ -113,7 +113,7 @@ struct PhoneComposer: View {
         }
         .padding(Spacing.hair)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .surface(.card, in: shape)
+        .surface(in: shape)
         .overlay {
             if dropping {
                 shape.strokeBorder(theme.action, lineWidth: 2)
@@ -207,7 +207,7 @@ struct PhoneComposer: View {
                 Button(action: stop) {
                     Label("Stop", systemImage: "stop.fill")
                 }
-                .buttonStyle(ComposerCircle(fill: theme.ink, on: theme.base))
+                .buttonStyle(ComposerCircle(fill: theme.ink, on: theme.pane))
                 .disabled(busy)
                 .accessibilityHint("Stops the agent's turn; nothing is sent")
             } else {

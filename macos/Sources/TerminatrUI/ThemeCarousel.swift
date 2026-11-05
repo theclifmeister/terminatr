@@ -2,7 +2,7 @@ import SwiftUI
 import TerminatrKit
 
 /// The themes as large live previews in a row that scrolls (T850, the
-/// phone's Settings): each theme's own mesh with a little deck card on
+/// phone's Settings): each theme's own ground with a little card on
 /// it, its name under it, the picked one ringed in the action colour.
 /// It opens scrolled to the picked theme; picking is a selection tap.
 /// At accessibility sizes the previews wrap in a grid instead.
@@ -54,11 +54,11 @@ struct ThemeTile: View {
 
     var body: some View {
         let own = contrast == .increased ? Theme.named(name).increasedContrast() : Theme.named(name)
-        let shape = RoundedRectangle(cornerRadius: 20, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
         Button(action: pick) {
             VStack(spacing: Spacing.tight) {
                 ZStack(alignment: .bottom) {
-                    Backdrop()
+                    own.chrome
                     MiniCard().padding(Spacing.item)
                 }
                 .environment(\.theme, own)
@@ -66,7 +66,7 @@ struct ThemeTile: View {
                 .clipShape(shape)
                 .overlay(shape.strokeBorder(theme.line, lineWidth: 1))
                 .padding(3)
-                .overlay(RoundedRectangle(cornerRadius: 23, style: .continuous)
+                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .strokeBorder(selected ? theme.action : .clear, lineWidth: 2.5))
                 Text(name.label)
                     .font(theme.body(.subheadline, selected ? .bold : .semibold))
@@ -82,7 +82,7 @@ struct ThemeTile: View {
     }
 }
 
-/// A need in little, on a theme's mesh: an action pill and two lines.
+/// A need in little, on a theme's ground: an action pill and two lines.
 private struct MiniCard: View {
     @Environment(\.theme) private var theme
 
@@ -93,7 +93,7 @@ private struct MiniCard: View {
             Capsule().fill(theme.muted.opacity(0.6)).frame(width: 50, height: 5)
         }
         .padding(7)
-        .surface(.card, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .surface(in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         .accessibilityHidden(true)
     }
 }

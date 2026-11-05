@@ -23,18 +23,17 @@ public struct CardFrame<Content: View>: View {
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 9) {
-            Text(tag.uppercased())
-                .font(theme.mono(.caption2, .medium))
-                .tracking(1)
+            Text(tag)
+                .font(theme.body(.caption))
                 .foregroundStyle(colour)
             content
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .frosted(RoundedRectangle(cornerRadius: 14))
-        .background(tint, in: RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(colour.opacity(theme.contrast ? 1 : 0.4), lineWidth: 1))
-        .modifier(Glow(key: waiting, colour: colour, shape: RoundedRectangle(cornerRadius: 14)))
+        .solid(RoundedRectangle(cornerRadius: 8))
+        .background(tint, in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(colour.opacity(theme.contrast ? 1 : 0.4), lineWidth: 1))
+        .modifier(Glow(key: waiting, colour: colour, shape: RoundedRectangle(cornerRadius: 8)))
         // VoiceOver: a group named for the card, so its buttons are
         // heard as the approval's or the question's.
         .accessibilityElement(children: .contain)

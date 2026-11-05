@@ -20,7 +20,7 @@ import TerminatrUI
 /// the user (allow?, asks, …) as a filled pill (T752). The selection is
 /// the List's (T748 milestone E): ↑ ↓ move it, letters typed select the
 /// row they begin, ← folds a project (or goes up to it from its
-/// session) and → unfolds it. It is drawn as Bloom's violet pill, not
+/// session) and → unfolds it. It is drawn on the selection's fill, not
 /// the List's own (the system accent). The filter field on top (⌥⌘F)
 /// keeps the rows that match it, every one of them.
 struct Sidebar: View {
@@ -53,7 +53,7 @@ struct Sidebar: View {
                     HStack(spacing: 6) {
                         Text("Needs you")
                         Text("\(needs.count)")
-                            .font(theme.mono(.caption2, .medium))
+                            .font(theme.body(.caption, .medium))
                             .padding(.horizontal, 5)
                             .background(theme.attention, in: Capsule())
                             .foregroundStyle(theme.onAttention)
@@ -120,6 +120,7 @@ struct Sidebar: View {
         .environment(\.sidebarRowSize, density == .compact ? .small : density == .roomy ? .large : rowSize)
         .environment(\.defaultMinListRowHeight, density.minRowHeight ?? minRowHeight)
         .scrollContentBackground(.hidden)
+        .focusEffectDisabled()
         .focused($listFocused)
         .onAppear { listFocused = true }
         .onKeyPress(keys: [.leftArrow, .rightArrow]) { press in
@@ -128,7 +129,7 @@ struct Sidebar: View {
         .onKeyPress(characters: .alphanumerics, phases: .down) { press in
             typeSelect(press)
         }
-        .background { Frost() }
+        .background { Ground(\.chrome) }
         .safeAreaInset(edge: .top) {
             FilterField { listFocused = true }
                 .padding(.horizontal, 12)
@@ -419,54 +420,54 @@ struct Sidebar: View {
             } else if sleep == .asleep {
                 Image(systemName: "moon.zzz.fill")
                     .font(.system(size: 8, weight: .semibold))
-                    .foregroundStyle(on ? theme.onAction : theme.muted)
+                    .foregroundStyle(on ? theme.ink : theme.muted)
                     .frame(width: 6, height: 6)
                     .accessibilityHidden(true)
             } else if busy != nil {
-                BusyMark(size: 6, colour: on ? theme.onAction : nil)
+                BusyMark(size: 6, colour: on ? theme.ink : nil)
                     .frame(width: 6, height: 6)
             } else {
                 Circle()
-                    .fill(on ? theme.onAction : dot)
+                    .fill(on ? theme.ink : dot)
                     .frame(width: 6, height: 6)
                     .accessibilityHidden(true)
             }
             if let ref {
                 Text(ref)
                     .font(theme.mono(.footnote, .medium))
-                    .foregroundStyle(on ? theme.onAction : theme.action)
+                    .foregroundStyle(on ? theme.ink : theme.action)
             }
             Text(label)
                 .font(theme.body(.callout))
                 .lineLimit(1)
             Spacer(minLength: 4)
             if let busy {
-                BusyLabel(busy: busy, colour: on ? theme.onAction : nil)
+                BusyLabel(busy: busy, colour: on ? theme.ink : nil)
                     .fixedSize()
             }
             if let context {
                 Text(context.word)
-                    .font(theme.mono(.caption2, context.tone == nil ? .regular : .semibold))
-                    .foregroundStyle(on ? theme.onAction : context.tone.map { theme.colour($0) } ?? theme.muted)
+                    .font(theme.body(.caption, context.tone == nil ? .regular : .semibold))
+                    .foregroundStyle(on ? theme.ink : context.tone.map { theme.colour($0) } ?? theme.muted)
                     .help(context.spoken)
             }
             if let (word, tone) = tag {
                 if let tone {
                     Text(word)
-                        .font(theme.mono(.caption2, .medium))
+                        .font(theme.body(.caption, .medium))
                         .padding(.horizontal, 6)
                         .padding(.vertical, 1)
                         .background(theme.colour(tone), in: Capsule())
                         .foregroundStyle(theme.on(tone))
                 } else {
                     Text(word)
-                        .font(theme.mono(.caption2, .medium))
-                        .foregroundStyle(on ? theme.onAction : theme.muted)
+                        .font(theme.body(.caption, .medium))
+                        .foregroundStyle(on ? theme.ink : theme.muted)
                 }
             }
         }
         .padding(.leading, 14 + indent)
-        .foregroundStyle(on ? theme.onAction : dormant ? theme.muted : theme.ink)
+        .foregroundStyle(on ? theme.ink : dormant ? theme.muted : theme.ink)
         .help(sleep == .asleep ? Sleep.words : "")
         // One element that says the row and its state: "T6 Network popup
         // polish, needs approval".
@@ -696,9 +697,8 @@ private struct Selectable: ViewModifier {
             .contentShape(Rectangle())
             .tag(sel)
             .listRowBackground(
-                RoundedRectangle(cornerRadius: 9)
-                    .fill(on ? theme.action : .clear)
-                    .shadow(color: on ? theme.action.opacity(0.5) : .clear, radius: 7, y: 4)
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(on ? theme.selection : .clear)
                     .padding(.horizontal, 10)
             )
             .accessibilityAddTraits(on ? [.isButton, .isSelected] : .isButton)
@@ -754,15 +754,15 @@ private struct FilterField: View {
         }
         .padding(.horizontal, 9)
         .padding(.vertical, 6)
-        .background(theme.cardTint, in: RoundedRectangle(cornerRadius: 9))
-        .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(focused ? theme.action.opacity(0.7) : theme.edge, lineWidth: 1))
+        .background(theme.pane, in: RoundedRectangle(cornerRadius: 6))
+        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(focused ? theme.action.opacity(0.7) : theme.line, lineWidth: 1))
         .help("Filter the sidebar (⌥⌘F)")
         .onChange(of: app.filterFocus) { focused = true }
     }
 }
 
 /// A paired server's tag in its header: "offline" muted with a dot, else
-/// its panes' access as a quiet capsule with its icon (Bloom's pill,
+/// its panes' access as a quiet capsule with its icon (a pill,
 /// unfilled: nothing here waits on the user).
 struct PeerTagView: View {
     @Environment(\.theme) private var theme
@@ -779,7 +779,7 @@ struct PeerTagView: View {
                     .frame(width: 5, height: 5)
             }
             Text(tag.word)
-                .font(theme.mono(.caption2, .medium))
+                .font(theme.body(.caption))
         }
         .padding(.horizontal, 6)
         .padding(.vertical, 1)

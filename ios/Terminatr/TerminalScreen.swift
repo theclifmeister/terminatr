@@ -70,9 +70,8 @@ struct TerminalScreen: View {
                                 .font(theme.body(.subheadline, .semibold))
                                 .padding(.horizontal, 14)
                                 .padding(.vertical, 8)
-                                .frosted(Capsule())
-                                .overlay(Capsule().strokeBorder(theme.edge, lineWidth: 1))
-                                .shadow(color: .black.opacity(0.18), radius: 8, y: 3)
+                                .solid(Capsule())
+                                .overlay(Capsule().strokeBorder(theme.line, lineWidth: 1))
                         }
                         .buttonStyle(.plain)
                         .padding(.bottom, 10)
@@ -82,7 +81,7 @@ struct TerminalScreen: View {
                         Text(closed)
                             .font(theme.body(.subheadline))
                             .padding(10)
-                            .frosted(RoundedRectangle(cornerRadius: 10))
+                            .solid(RoundedRectangle(cornerRadius: 6))
                             .padding(16)
                     }
                 }

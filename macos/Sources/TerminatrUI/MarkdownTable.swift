@@ -19,7 +19,7 @@ struct MarkdownTable: View {
                 }
                 ForEach(Array(table.rows.enumerated()), id: \.offset) { _, row in
                     ForEach(Array(row.enumerated()), id: \.offset) { c, s in
-                        cell(s, c).font(theme.body(.subheadline)).background(theme.agentCard)
+                        cell(s, c).font(theme.body(.subheadline)).background(theme.pane)
                     }
                 }
             }

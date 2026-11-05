@@ -64,9 +64,8 @@ struct NeedCard: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 9)
-        .frosted(RoundedRectangle(cornerRadius: 10))
-        .background(theme.cardTint, in: RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(theme.colour(need.kind).opacity(theme.contrast ? 1 : 0.35), lineWidth: 1))
+        .solid(RoundedRectangle(cornerRadius: 6))
+        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(theme.colour(need.kind).opacity(theme.contrast ? 1 : 0.35), lineWidth: 1))
         .accessibilityElement(children: .contain)
         .accessibilityLabel(need.title)
         .task(id: need.id) { await check() }

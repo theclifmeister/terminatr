@@ -1,10 +1,10 @@
 import SwiftUI
 import TerminatrKit
 
-/// The paired server, first in the phone's Settings (T850): a gradient
+/// The paired server, first in the phone's Settings (T850): a solid
 /// monogram, the server's name in the display face, its link as a dot
 /// (or a spinner while it links) and words, and the device's level as a
-/// mono chip on a wash of good. A deck card on the sheet's glass
+/// mono chip on a wash of good. A deck card on the sheet's ground
 /// ("a sheet card" in ThemeColours.checks).
 public struct ServerCard: View {
     @Environment(\.theme) private var theme
@@ -68,7 +68,7 @@ public struct ServerCard: View {
         }
         .padding(Spacing.card)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .surface(.card, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+        .surface(in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
     }
 
     private var monogram: some View {
@@ -77,7 +77,7 @@ public struct ServerCard: View {
             .font(.system(size: s * 0.42, weight: .semibold))
             .foregroundStyle(theme.onAction)
             .frame(width: s, height: s)
-            .background(LinearGradient(colors: [theme.good, theme.action], startPoint: .topLeading, endPoint: .bottomTrailing),
+            .background(theme.action,
                         in: RoundedRectangle(cornerRadius: Radius.glyph * s / 38, style: .continuous))
             .accessibilityHidden(true)
     }

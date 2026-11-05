@@ -59,7 +59,7 @@ struct ProgramAskSheet: View {
                 if said == nil { actions }
             }
         }
-        .padding(20)
+        .padding(16)
         .frame(width: 440)
         .disabled(working)
     }

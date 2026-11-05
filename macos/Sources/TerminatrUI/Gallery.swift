@@ -51,7 +51,7 @@ public struct ComponentGallery: View {
             }
             .padding(.bottom, 40)
         }
-        .background(Backdrop())
+        .sheetGround()
     }
 
     private static let now = Date()
@@ -125,7 +125,7 @@ public struct ComponentGallery: View {
         }
         .padding(Spacing.card)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .surface(.card, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+        .surface(in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
     }
 
     private var buttons: some View {
@@ -147,7 +147,7 @@ public struct ComponentGallery: View {
             }
         }
         .padding(Spacing.card)
-        .surface(.card, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+        .surface(in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
     }
 }
 
@@ -188,11 +188,11 @@ extension ComponentGallery {
 }
 
 #Preview("Bloom light") {
-    ComponentGallery().environment(\.theme, .named(.bloom)).preferredColorScheme(.light)
+    ComponentGallery().environment(\.theme, .named(.carbon)).preferredColorScheme(.light)
 }
 
 #Preview("Bloom dark") {
-    ComponentGallery().environment(\.theme, .named(.bloom)).preferredColorScheme(.dark)
+    ComponentGallery().environment(\.theme, .named(.carbon)).preferredColorScheme(.dark)
 }
 
 #Preview("Graphite, Increase Contrast") {

@@ -1,10 +1,10 @@
 import SwiftUI
 import TerminatrKit
 
-/// A card's glow: still, as it always was, unless the card waits on the
-/// user (key set). Then it breathes, and the newest such card's edge
-/// runs round it. With Reduce Motion, or while the window is in the
-/// back, hidden or the card off screen, it stands still.
+/// A card that waits on the user (key set): the newest such card's edge
+/// runs round it, a flat line and no glow (T999). With Reduce Motion, or
+/// while the window is in the back, hidden or the card off screen, it
+/// stands still.
 struct Glow: ViewModifier {
     @Environment(\.theme) private var theme
     @Environment(\.accessibilityReduceMotion) private var still
@@ -18,8 +18,6 @@ struct Glow: ViewModifier {
     @State private var shown = false
     private var cards: WaitingCards { .shared }
 
-    /// One breath, in seconds.
-    static let breath = 3.6
     /// One lap of the edge, in seconds.
     static let lap = 5.0
     /// The laps a leading card runs in front of the user before it
@@ -30,15 +28,7 @@ struct Glow: ViewModifier {
         if let key, !still {
             let lead = cards.lead == key
             let paused = !shown || !front
-            // Breathing is slow: 15 frames a second is enough. The edge
-            // moves further each frame and takes 30, on its own clock
-            // over the shadow, so the card's shadow isn't drawn again
-            // for each of its frames.
-            TimelineView(.animation(minimumInterval: 1 / 15, paused: paused)) { tl in
-                let b = Self.swell(at: tl.date.timeIntervalSinceReferenceDate)
-                content
-                    .shadow(color: colour.opacity(0.2 + 0.3 * b), radius: 9 + 10 * b, y: 6)
-            }
+            content
             .overlay {
                 if lead {
                     TimelineView(.animation(minimumInterval: 1 / 30, paused: paused)) { tl in
@@ -57,7 +47,7 @@ struct Glow: ViewModifier {
             .onHover { if $0 { cards.see(key) } }
             #endif
         } else {
-            content.shadow(color: colour.opacity(0.25), radius: 12, y: 6)
+            content
         }
     }
 
@@ -107,12 +97,6 @@ struct Glow: ViewModifier {
     /// The band's pieces, and each one's share of the edge.
     static let tail = 6
     static let piece = 0.02
-
-    /// The breath at a time, 0 (out) to 1 (in), eased: every card
-    /// breathes together.
-    static func swell(at t: Double) -> Double {
-        (1 - cos(t.truncatingRemainder(dividingBy: breath) / breath * 2 * .pi)) / 2
-    }
 }
 
 /// A piece of a shape's outline, from one point to another as shares of

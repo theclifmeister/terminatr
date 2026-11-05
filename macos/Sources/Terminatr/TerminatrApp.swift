@@ -17,7 +17,6 @@ struct TerminatrApp: App {
     static let sessionWindow = "session"
 
     init() {
-        Fonts.register()
         // MetricKit's crash and hang reports of earlier runs, for this
         // computer's tm server only (T957, AppModel's bridge).
         CrashReporter.shared.start()
@@ -224,7 +223,7 @@ struct DensityPicker: View {
 
 /// View › Theme: the themes, the stored one checked.
 struct ThemeMenu: View {
-    @AppStorage(ThemeName.key) private var name = ThemeName.bloom.rawValue
+    @AppStorage(ThemeName.key) private var name = ThemeName.carbon.rawValue
 
     var body: some View {
         Picker("Theme", selection: $name) {

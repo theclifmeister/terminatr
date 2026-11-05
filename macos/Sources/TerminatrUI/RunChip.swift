@@ -4,7 +4,7 @@ import TerminatrKit
 /// A run of tool calls as a chip in the conversation (T848, direction
 /// A): up to three of its tools' symbols overlapped, its calls counted
 /// by tool ("Read ×1 · Bash ×1") and its state, a check and "done", a
-/// spinner, or a mark and "failed", on a glass capsule; a chevron turns
+/// spinner, or a mark and "failed", on a capsule; a chevron turns
 /// while it is open. The capsule hugs its words; its tap target is 44
 /// pt tall. The phone's conversation taps it open (the Mac's keeps
 /// ToolRunHeader).
@@ -26,9 +26,9 @@ public struct RunChip: View {
                         .font(.system(size: 10 * theme.scale, weight: .semibold))
                         .foregroundStyle(theme.action)
                         .frame(width: 22 * theme.scale, height: 22 * theme.scale)
-                        .background(Circle().fill(theme.glass))
+                        .background(Circle().fill(theme.pane))
                         .background(Circle().fill(theme.wash(.working)))
-                        .overlay(Circle().strokeBorder(theme.edge, lineWidth: 1))
+                        .overlay(Circle().strokeBorder(theme.line, lineWidth: 1))
                 }
             }
             Text(run.headline)
@@ -47,7 +47,7 @@ public struct RunChip: View {
         .padding(.leading, 5)
         .padding(.trailing, 12)
         .padding(.vertical, 4)
-        .surface(.glass, in: Capsule())
+        .surface(in: Capsule())
         .frame(minHeight: tapTarget)
         .contentShape(Rectangle())
     }

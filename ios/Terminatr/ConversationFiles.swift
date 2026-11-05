@@ -51,9 +51,8 @@ struct PhoneAttachmentCard: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .frosted(RoundedRectangle(cornerRadius: 14))
-        .background(theme.agentCard, in: RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(theme.edge, lineWidth: 1))
+        .solid(RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(theme.line, lineWidth: 1))
     }
 }
 
@@ -98,7 +97,7 @@ struct PhoneAttachment: View {
         switch state {
         case .loading:
             if file.inline {
-                RoundedRectangle(cornerRadius: 10)
+                RoundedRectangle(cornerRadius: 6)
                     .fill(theme.command)
                     .frame(width: 200, height: 140)
                     .overlay { ProgressView() }
@@ -111,9 +110,9 @@ struct PhoneAttachment: View {
                 .resizable()
                 .aspectRatio(contentMode: .fit)
                 .frame(maxWidth: Self.maxWidth, maxHeight: Self.maxHeight)
-                .clipShape(RoundedRectangle(cornerRadius: 10))
-                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(theme.edge, lineWidth: 1))
-                .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 10))
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(theme.line, lineWidth: 1))
+                .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 6))
                 .onTapGesture { if file.sendable { act(.open) } }
                 .acts(file.sendable, image: file.kind == .image) { act($0) }
                 .accessibilityElement()
@@ -150,8 +149,8 @@ struct PhoneAttachment: View {
         }
         .padding(.horizontal, Spacing.row)
         .frame(maxWidth: Self.maxWidth, minHeight: tapTarget, alignment: .leading)
-        .background(theme.command, in: RoundedRectangle(cornerRadius: 9))
-        .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 9))
+        .background(theme.command, in: RoundedRectangle(cornerRadius: 6))
+        .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 6))
         .acts(file.sendable, image: file.kind == .image) { act($0) }
         .accessibilityElement(children: .combine)
     }
@@ -164,7 +163,7 @@ struct PhoneAttachment: View {
             .padding(.horizontal, Spacing.row)
             .padding(.vertical, 7)
             .frame(maxWidth: Self.maxWidth, alignment: .leading)
-            .background(theme.command.opacity(0.6), in: RoundedRectangle(cornerRadius: 9))
+            .background(theme.command.opacity(0.6), in: RoundedRectangle(cornerRadius: 6))
     }
 
     private func load() async {

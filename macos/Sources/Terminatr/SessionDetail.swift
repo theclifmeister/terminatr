@@ -91,7 +91,7 @@ struct SessionDetail: View {
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(theme.cardTint, in: RoundedRectangle(cornerRadius: terminal ? TerminalTab.corner : 9))
+            .background(theme.pane, in: RoundedRectangle(cornerRadius: terminal ? TerminalTab.corner : 9))
             .accessibilityElement(children: .combine)
             // At the pages' edges: over the terminal, its box's.
             .padding(.horizontal, Page.edge)
@@ -127,13 +127,13 @@ struct SessionWindow: View {
                 Inspector(model: model, session: app.session(of: model))
                     .column(min: InspectorColumn.min)
                     .inspectorColumnWidth(min: InspectorColumn.min, ideal: InspectorColumn.min, max: InspectorColumn.max)
-                    .background { Frost() }
+                    .background { Ground(bar: true) }
             }
             .foregroundStyle(theme.ink)
-            .background { Frost(\.glass, bar: true) }
+            .background { Ground(bar: true) }
             .navigationTitle(app.title(ref))
             .navigationSubtitle(app.subtitle(ref))
-            .glassToolbar()
+            .solidToolbar()
             .onDisappear { model.stop() }
     }
 }
@@ -174,7 +174,7 @@ struct NotRunning: View {
             }
         }
         .padding(28)
-        .frosted(RoundedRectangle(cornerRadius: 18))
+        .solid(RoundedRectangle(cornerRadius: 8))
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 

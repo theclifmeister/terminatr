@@ -51,7 +51,7 @@ public struct SessionTitle: View {
         .environment(\.theme, t)
         .padding(.horizontal, Spacing.card)
         .padding(.vertical, 3)
-        .surface(.glass, in: Capsule())
+        .surface(in: Capsule())
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(spoken)
         .accessibilityAddTraits(.isHeader)
@@ -66,7 +66,7 @@ public struct SessionTitle: View {
     }
 }
 
-/// The Conversation / Terminal switch (T840) as the header's glass
+/// The Conversation / Terminal switch (T840) as the header's
 /// capsule (T848): two symbols, each a 44 pt target, the shown one
 /// filled in ink with the base's symbol (a picked chip's pairing). A
 /// switch is a selection tap. framed false leaves the capsule to what
@@ -91,7 +91,7 @@ public struct SessionToggle: View {
                 } label: {
                     Image(systemName: Self.symbol(t))
                         .font(.system(size: 16 * min(theme.scale, SessionTitle.most), weight: .semibold))
-                        .foregroundStyle(on ? theme.base : theme.ink)
+                        .foregroundStyle(on ? theme.pane : theme.ink)
                         .frame(width: 36, height: 36)
                         .background { if on { Circle().fill(theme.ink) } }
                         .frame(width: tapTarget, height: tapTarget)
@@ -103,7 +103,7 @@ public struct SessionToggle: View {
             }
         }
         .padding(.horizontal, framed ? 2 : 0)
-        .background { if framed { Color.clear.surface(.glass, in: Capsule()) } }
+        .background { if framed { Color.clear.surface(in: Capsule()) } }
         .feedback(.selection, trigger: selection)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("View")

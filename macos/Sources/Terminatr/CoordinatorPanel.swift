@@ -48,9 +48,8 @@ struct CoordinatorPanel: View {
             }
             if !needs.isEmpty || !settled.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Needs you in \(model.ref.project) · \(needs.count)".uppercased())
-                        .font(theme.mono(.label, .medium))
-                        .tracking(1)
+                    Text("Needs you in \(model.ref.project) · \(needs.count)")
+                        .font(theme.body(.caption))
                         .foregroundStyle(theme.muted)
                     ForEach(shown) { NeedCard(need: $0) }
                     ForEach(settled, id: \.id) { LinkOutcomeRow(outcome: $0.outcome, settled: true) }

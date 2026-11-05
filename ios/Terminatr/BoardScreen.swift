@@ -219,8 +219,8 @@ struct TaskScreen: View {
                     .font(theme.mono(.caption, .medium))
                     .padding(.horizontal, 7)
                     .padding(.vertical, 2)
-                    .background(theme.cardTint, in: Capsule())
-                    .overlay(Capsule().strokeBorder(theme.edge, lineWidth: 1))
+                    .background(theme.pane, in: Capsule())
+                    .overlay(Capsule().strokeBorder(theme.line, lineWidth: 1))
             }
             Text(d.task.title)
                 .font(theme.title(.title2, .heavy))

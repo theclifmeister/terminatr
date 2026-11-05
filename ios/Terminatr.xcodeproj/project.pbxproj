@@ -32,7 +32,6 @@
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		7E0000000000000000000401 /* Terminatr */ = {isa = PBXFileSystemSynchronizedRootGroup; path = Terminatr; sourceTree = "<group>"; };
-		7E0000000000000000000402 /* Fonts */ = {isa = PBXFileSystemSynchronizedRootGroup; name = Fonts; path = ../macos/Sources/Terminatr/Resources/Fonts; sourceTree = SOURCE_ROOT; };
 		7E0000000000000000000403 /* TerminatrUITests */ = {isa = PBXFileSystemSynchronizedRootGroup; path = TerminatrUITests; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
 
@@ -63,7 +62,6 @@
 			children = (
 				7E0000000000000000000401 /* Terminatr */,
 				7E0000000000000000000403 /* TerminatrUITests */,
-				7E0000000000000000000402 /* Fonts */,
 				7E0000000000000000000302 /* AppIcon.icon */,
 				7E0000000000000000000602 /* Products */,
 			);
@@ -95,7 +93,6 @@
 			);
 			fileSystemSynchronizedGroups = (
 				7E0000000000000000000401 /* Terminatr */,
-				7E0000000000000000000402 /* Fonts */,
 			);
 			name = TerminatrApp;
 			packageProductDependencies = (

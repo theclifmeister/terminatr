@@ -3,7 +3,7 @@ import TerminatrKit
 
 /// A need as the phone's Welcome shows it (T850): a deck card with its
 /// StateGlyph, kind, project and ref, title and two answers, drawn and
-/// never tapped. FloatingNeeds lays two over the mesh.
+/// never tapped. FloatingNeeds lays two on the ground.
 public struct SampleNeed: View {
     @Environment(\.theme) private var theme
     let tone: Attention.Tone
@@ -54,13 +54,13 @@ public struct SampleNeed: View {
             }
         }
         .padding(Spacing.card)
-        .surface(.raised, in: shape)
+        .surface(in: shape)
         .overlay(shape.strokeBorder(theme.colour(tone).opacity(0.6), lineWidth: 1.5))
         .allowsHitTesting(false)
     }
 }
 
-/// Two needs over the Welcome's mesh, tilted as if dropped there: an
+/// Two needs over the Welcome's ground, tilted as if dropped there: an
 /// approval and a review. Only a picture of what the app does, so
 /// VoiceOver skips it and the panel's words say it.
 public struct FloatingNeeds: View {
@@ -87,7 +87,7 @@ public struct FloatingNeeds: View {
 }
 
 /// The Welcome's panel (T850): the wordmark in the display face at
-/// 52 pt, a line of what the app does, and its buttons, on the glass at
+/// 52 pt, a line of what the app does, and its buttons, on a card at
 /// the foot of the screen.
 public struct WordmarkPanel<Actions: View>: View {
     @Environment(\.theme) private var theme
@@ -119,6 +119,6 @@ public struct WordmarkPanel<Actions: View>: View {
         .padding(.top, 26)
         .padding(.bottom, 24)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .surface(.glass, in: RoundedRectangle(cornerRadius: 44, style: .continuous))
+        .surface(in: RoundedRectangle(cornerRadius: 44, style: .continuous))
     }
 }

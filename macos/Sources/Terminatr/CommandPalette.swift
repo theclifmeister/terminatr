@@ -32,10 +32,8 @@ struct CommandPalette: View {
             }
         }
         .frame(width: 620)
-        .frosted(RoundedRectangle(cornerRadius: 16))
-        .background(theme.cardTint, in: RoundedRectangle(cornerRadius: 16))
-        .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(theme.edge, lineWidth: 1))
-        .shadow(color: .black.opacity(0.35), radius: 30, y: 14)
+        .solid(RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(theme.line, lineWidth: 1))
         .onChange(of: acting == nil) { _, searching in app.paletteActing = !searching }
         .onDisappear { app.paletteActing = false }
         .confirmationDialog(delegating.map { "Delegate \($0.title)?" } ?? "", isPresented: Binding(get: { delegating != nil }, set: { if !$0 { delegating = nil } }),
@@ -78,7 +76,7 @@ struct CommandPalette: View {
                     .font(theme.mono(.caption2))
                     .padding(.horizontal, 5)
                     .padding(.vertical, 1)
-                    .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(theme.edge, lineWidth: 1))
+                    .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(theme.line, lineWidth: 1))
                     .foregroundStyle(theme.muted)
             }
             .padding(.horizontal, 16)
@@ -89,9 +87,8 @@ struct CommandPalette: View {
                     LazyVStack(alignment: .leading, spacing: 1) {
                         ForEach(Array(rows.enumerated()), id: \.element.id) { i, r in
                             if i == 0 || rows[i - 1].group != r.group {
-                                Text(r.group.rawValue.uppercased())
-                                    .font(theme.mono(.label, .medium))
-                                    .tracking(1)
+                                Text(r.group.rawValue)
+                                    .font(theme.body(.caption))
                                     .foregroundStyle(theme.muted)
                                     .padding(.horizontal, 10)
                                     .padding(.top, i == 0 ? 4 : 10)
@@ -133,7 +130,7 @@ struct CommandPalette: View {
     private func row(_ r: PaletteItem, on: Bool) -> some View {
         HStack(spacing: 9) {
             Circle()
-                .fill(r.tone.map { on ? theme.onAction : theme.colour($0) } ?? .clear)
+                .fill(r.tone.map { on ? theme.ink : theme.colour($0) } ?? .clear)
                 .frame(width: 7, height: 7)
                 .accessibilityHidden(true)
             Text(r.title)
@@ -142,19 +139,19 @@ struct CommandPalette: View {
             if !r.detail.isEmpty {
                 Text(r.detail)
                     .font(theme.body(.subheadline))
-                    .foregroundStyle(on ? theme.onAction.opacity(0.8) : theme.muted)
+                    .foregroundStyle(on ? theme.ink.opacity(0.8) : theme.muted)
                     .lineLimit(1)
             }
             Spacer(minLength: 8)
             Text(hint(r, on: on))
                 .font(theme.mono(.caption))
-                .foregroundStyle(on ? theme.onAction : theme.muted)
+                .foregroundStyle(on ? theme.ink : theme.muted)
                 .fixedSize()
         }
-        .foregroundStyle(on ? theme.onAction : theme.ink)
+        .foregroundStyle(on ? theme.ink : theme.ink)
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
-        .background(on ? theme.action : .clear, in: RoundedRectangle(cornerRadius: 8))
+        .background(on ? theme.selection : .clear, in: RoundedRectangle(cornerRadius: 8))
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(on ? [.isButton, .isSelected] : .isButton)

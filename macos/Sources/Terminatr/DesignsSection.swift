@@ -58,9 +58,8 @@ struct DesignsSection: View {
             let listing = Designs.listing(designs, error: error)
             let shown = designs.map { Designs.shown($0, all: all) } ?? []
             let heading = if case .designs = listing, !notShared { "Designs · \(shown.count)" } else { "Designs" }
-            Text(heading.uppercased())
-                .font(theme.mono(.caption2, .medium))
-                .tracking(1)
+            Text(heading)
+                .font(theme.body(.caption))
                 .foregroundStyle(theme.muted)
                 .padding(.top, 6)
             if notShared, let peer {
@@ -149,8 +148,8 @@ private struct DesignCard: View {
             if open { detail }
         }
         .padding(12)
-        .background(theme.cardTint, in: RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(theme.edge, lineWidth: 1))
+        .background(theme.pane, in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(theme.line, lineWidth: 1))
     }
 
     private var summary: some View {
@@ -262,9 +261,8 @@ private struct DesignCard: View {
     }
 
     private func heading(_ s: String) -> some View {
-        Text(s.uppercased())
-            .font(theme.mono(.label, .medium))
-            .tracking(1)
+        Text(s)
+            .font(theme.body(.caption))
             .foregroundStyle(theme.muted)
             .padding(.top, 2)
     }

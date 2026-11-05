@@ -4,9 +4,9 @@ import TerminatrKit
 /// The composer dock's parts (T848, direction A with direction B's key
 /// strip): the dock floats over the conversation's end, with no bar
 /// under it, a circle to switch it between the prompt and the keys, the
-/// field on a deck card's glass, and a round send button.
+/// field on a card, and a round send button.
 extension View {
-    /// The dock's field: a deck card's glass in a capsule, as tall as the
+    /// The dock's field: a card in a rounded shape, as tall as the
     /// circles beside it (Theme.circle) at one line, its text inset alike
     /// on both sides (T857). With a control at its trailing end (Queue and
     /// Steer) that end's inset is the control's.
@@ -24,13 +24,13 @@ private struct DockField: ViewModifier {
             .padding(.leading, Spacing.card)
             .padding(.trailing, control ? Spacing.hair : Spacing.card)
             .frame(maxWidth: .infinity, minHeight: theme.circle, alignment: .leading)
-            .surface(.card, in: RoundedRectangle(cornerRadius: theme.circle / 2, style: .continuous))
+            .surface(in: RoundedRectangle(cornerRadius: theme.circle / 2, style: .continuous))
     }
 }
 
 /// The keys a terminal wants that a phone's keyboard hasn't, as a strip
 /// of keycaps that stays in view above the dock while keys mode is on,
-/// the keyboard up or not (T848): each a glass cap with an ink wash, its
+/// the keyboard up or not (T848): each a cap with an ink wash, its
 /// word in mono or its arrow, ⌃C filled in the attention colour. Each is
 /// 44 pt tall and shares the width; where they don't fit at 44 pt wide
 /// (accessibility sizes, a narrow column) the strip scrolls sideways. A
@@ -87,7 +87,7 @@ public struct KeyStrip: View {
             shape.fill(theme.attention)
         } else {
             shape.fill(theme.ink.opacity(ThemeColours.inkWash))
-                .surface(.glass, in: shape)
+                .surface(in: shape)
         }
     }
 }
@@ -113,7 +113,7 @@ public struct DockModes<ID: Hashable>: View {
                 Button { selection = item.id } label: {
                     Text(item.label)
                         .font(theme.body(.footnote, .semibold))
-                        .foregroundStyle(on ? theme.base : theme.ink)
+                        .foregroundStyle(on ? theme.pane : theme.ink)
                         .lineLimit(1)
                         .fixedSize()
                         .padding(.horizontal, 10)
@@ -133,7 +133,7 @@ public struct DockModes<ID: Hashable>: View {
 }
 
 /// A line over the dock: what the last send did, the queue, a held
-/// queue, a takeover's warning, on a glass capsule; a failure in ink
+/// queue, a takeover's warning, on a capsule; a failure in ink
 /// after the attention mark.
 public struct DockNote: View {
     @Environment(\.theme) private var theme
@@ -159,7 +159,7 @@ public struct DockNote: View {
         .font(theme.body(.footnote, .medium))
         .padding(.horizontal, Spacing.row)
         .padding(.vertical, Spacing.tight)
-        .surface(.glass, in: RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
+        .surface(in: RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
     }
 }
 
