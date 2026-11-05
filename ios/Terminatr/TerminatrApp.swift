@@ -237,13 +237,14 @@ enum RootTab: Hashable {
     /// A row of the iPad's sidebar (T849): a session or an inactive
     /// project, opened in the Projects tab's columns.
     case place(Route)
+    /// A program member's disclosure row (T978): chosen, it folds or
+    /// unfolds the member and leaves the columns as they are.
+    case fold(server: String, key: String)
 }
 
 struct Root: View {
     @Environment(Phone.self) private var phone
     @Environment(\.theme) private var theme
-    @Environment(\.haptics) private var haptics
-    @Environment(\.horizontalSizeClass) private var width
     @State private var tab = RootTab.needs
     @State private var needsPath: [Route] = []
     @State private var projectsPath: [Route] = []
@@ -252,12 +253,10 @@ struct Root: View {
     @State private var searchScope: SearchScope?
     @State private var settings = false
     @State private var gallery = false
-    /// The window's size without the keyboard: where the bar or rail goes.
+    /// The window's size, for the iPad's sidebar (folding).
     @State private var size = CGSize.zero
-    /// Whether the iPad's sidebar is open; opened as the app starts.
-    @State private var sidebarShown = false
-    /// Raised by a second tap of a tab at its root.
-    @State private var toTop = 0
+    /// Whether the iPad's sidebar was opened at launch (opening).
+    @State private var sidebarOpened = false
 
     var body: some View {
         content
@@ -279,127 +278,27 @@ struct Root: View {
     @ViewBuilder private var content: some View {
         if phone.isEmpty {
             Welcome()
+        } else if #available(iOS 18, *), Self.sidebar {
+            sidebarTabs
+                .onAppear(perform: openLaunched)
+                .onChange(of: projectsPath) { if tab != .needs, tab != .search { tab = Self.place(projectsPath, in: phone.sidebar) } }
+        } else if #available(iOS 18, *) {
+            phoneTabs
+                .onAppear(perform: openLaunched)
         } else {
-            shell
-                .onAppear {
-                    openLaunched()
-                    openSidebarAtLaunch()
-                }
-                .onChange(of: projectsPath) {
-                    if Self.sidebar, tab != .needs, tab != .search { tab = Self.place(projectsPath, in: phone.sidebar) }
-                }
-                .onChange(of: folding) { if $1 != nil { sidebarShown = false } }
-                .onChange(of: searches) { if !$1, tab == .search { tab = .needs } }
-        }
-    }
-
-    private var place: NavChrome.Place {
-        NavChrome.place(pad: Self.sidebar, regular: width == .regular, size: size)
-    }
-
-    /// The bar or rail gives way to a session at a phone's width: its
-    /// composer takes the bottom, as with the system's tab bar (T1005).
-    /// From the path, as the page's screens are behind a hosting controller.
-    private var barHidden: Bool {
-        guard width != .regular else { return false }
-        switch path(tab).last?.base {
-        case .session, .need: return true
-        default: return false
-        }
-    }
-
-    private var pages: [TabPage] {
-        searches ? [.needs, .projects, .search] : [.needs, .projects]
-    }
-
-    /// The places and the pages, always this one tree: an `if` around the
-    /// host would build it afresh, and every tab's stack with it, when a
-    /// Duo opens or turns.
-    private var shell: some View {
-        let count = phone.needs.count
-        let sidebarScale = min(theme.scale, Self.sidebarMost)
-        let lies = NavChrome.sidebarOverlays(size, sidebar: NavChrome.sidebarWidth(scale: sidebarScale))
-        let overlaid = place == .sidebar && sidebarShown && lies
-        return ZStack(alignment: .leading) {
-            HStack(spacing: 0) {
-                if place == .sidebar {
-                    if sidebarShown, !lies {
-                        sidebar(count).transition(.move(edge: .leading))
-                    } else {
-                        FlatRail(pages: pages, selected: page(tab), count: count, openSidebar: { showSidebar(true) }, choose: { choose($0.tab) })
-                            .navScale()
-                    }
-                    theme.line.frame(width: 1).ignoresSafeArea()
-                }
-                VStack(spacing: 0) {
-                    TabHost(showing: page(tab), toTop: toTop, page: pageView)
-                        .ignoresSafeArea()
-                    if place == .bar, !barHidden {
-                        FlatBar(pages: pages, selected: page(tab), count: count) { choose($0.tab) }
-                            .navScale()
-                    }
-                }
-                if place == .rail, !barHidden {
-                    theme.line.frame(width: 1).ignoresSafeArea()
-                    FlatRail(pages: pages, selected: page(tab), count: count) { choose($0.tab) }
-                        .navScale()
-                }
+            // .tabItem, not Tab: that one is iOS 18's. No Search tab:
+            // the project screen and the Projects header keep their
+            // Search buttons (Root.searchTab).
+            TabView(selection: $tab) {
+                needsStack
+                    .tabItem { Label("Needs you", systemImage: "exclamationmark.bubble") }
+                    .badge(phone.needs.count)
+                    .tag(RootTab.needs)
+                projectsStack
+                    .tabItem { Label("Projects", systemImage: "folder") }
+                    .tag(RootTab.projects)
             }
-            .accessibilityHidden(overlaid)
-            if overlaid {
-                Color.black.opacity(0.2)
-                    .ignoresSafeArea()
-                    .onTapGesture { showSidebar(false) }
-                    .accessibilityHidden(true)
-                    .transition(.opacity)
-                HStack(spacing: 0) {
-                    sidebar(count)
-                    theme.line.frame(width: 1).ignoresSafeArea()
-                }
-                .transition(.move(edge: .leading))
-                .gesture(DragGesture(minimumDistance: 20).onEnded { if $0.translation.width < -60 { showSidebar(false) } })
-                .accessibilityAddTraits(.isModal)
-                .accessibilityAction(.escape) { showSidebar(false) }
-            }
-        }
-        .background(theme.chrome.ignoresSafeArea())
-        .onGeometryChange(for: CGSize.self) { $0.size } action: { size = $0 }
-        // Under the keyboard, as the system's bar: only the page avoids it.
-        .ignoresSafeArea(.keyboard)
-    }
-
-    private func sidebar(_ count: Int) -> some View {
-        FlatSidebar(pages: pages, selected: tab, count: count, hide: { showSidebar(false) }, choose: choose)
-            .navScale(most: Self.sidebarMost)
-    }
-
-    /// The sidebar's limit on Dynamic Type: past it, its width would crowd
-    /// out the content.
-    private static let sidebarMost: CGFloat = 1.6
-
-    private func showSidebar(_ shown: Bool) {
-        withAnimation(.snappy) { sidebarShown = shown }
-    }
-
-    /// The tab's page. A hosting controller is the edge of SwiftUI's
-    /// environment, so what Root and Themed set goes across here.
-    private func pageView(_ p: TabPage) -> AnyView {
-        AnyView(
-            pageContent(p)
-                .environment(\.showSettings, ShowSettings { settings = true })
-                .environment(\.theme, theme)
-                .environment(\.haptics, haptics)
-                .tint(theme.action)
-                .environment(phone.primary)
-                .environment(phone)
-        )
-    }
-
-    @ViewBuilder private func pageContent(_ p: TabPage) -> some View {
-        switch p {
-        case .needs: needsStack
-        case .projects: projectsStack
-        case .search: searchStack
+            .onAppear(perform: openLaunched)
         }
     }
 
@@ -414,15 +313,31 @@ struct Root: View {
             ProjectsScreen()
         }
     }
+
+    /// The iPhone's tabs, the iPhone Duo's too (its rail on iOS 27.1):
+    /// Needs you, Projects and Search.
+    @available(iOS 18, *)
+    private var phoneTabs: some View {
+        TabView(selection: Binding(get: { tab }, set: choose)) {
+            Tab("Needs you", systemImage: "exclamationmark.bubble", value: RootTab.needs) { needsStack }
+                .badge(phone.needs.count)
+            Tab("Projects", systemImage: "folder", value: RootTab.projects) { projectsStack }
+            searchTab
+        }
+        // The picked tab in ink, as the design page's (what's in the tabs
+        // keeps the action's tint: TabBand).
+        .tint(theme.ink)
+    }
 }
 
 /// The Search tab (T929): the project search the project screen's
-/// Search button opened (SearchScreen), as a place of the app's own: in
-/// the bar, the rail and the sidebar (T1005). It is Root's, never a
-/// screen's bar item, so no page or column change leaves it behind
-/// (Columns builds each column's stack afresh, T928), and it takes the
-/// place of the buttons the project screen and the Projects header had:
-/// one Search on every screen. Chosen, it
+/// Search button opened (SearchScreen), as a tab of the app's own, role
+/// .search: on an iPhone the tab bar's search circle, on an open iPhone
+/// Duo in the rail, on an iPad the sidebar's first row. It is the
+/// TabView's, never a screen's bar item, so no page or column change
+/// leaves it behind (Columns builds each column's stack afresh, T928),
+/// and it takes the project screen's button's place (searchTab), as
+/// the Projects header's: one Search on every screen. Chosen, it
 /// searches the project in view (the last screen of the tab left that
 /// has one, this server's), else the first project of the first server
 /// that searches, as the Projects header's did; the screen's title
@@ -435,8 +350,22 @@ struct SearchScope: Hashable {
 }
 
 extension Root {
+    /// Whether the app has the Search tab (Tab's role is iOS 18's);
+    /// without it the screens keep their Search buttons.
+    static var searchTab: Bool {
+        if #available(iOS 18, *) { true } else { false }
+    }
+
     /// Whether any server searches (Compatibility.searches): else no tab.
     private var searches: Bool { phone.models.contains(where: \.searches) }
+
+    @available(iOS 18, *)
+    @TabContentBuilder<RootTab>
+    private var searchTab: some TabContent<RootTab> {
+        if searches {
+            Tab(value: RootTab.search, role: .search) { searchStack }
+        }
+    }
 
     @ViewBuilder
     private var searchStack: some View {
@@ -449,6 +378,7 @@ extension Root {
         } else {
             ContentUnavailableView("Nothing to search", systemImage: "magnifyingglass")
                 .backdrop()
+                .tabBand()
         }
     }
 
@@ -457,16 +387,7 @@ extension Root {
         switch t {
         case .needs: needsPath
         case .search: searchPath
-        case .projects, .place: projectsPath
-        }
-    }
-
-    /// The page tab t shows.
-    private func page(_ t: RootTab) -> TabPage {
-        switch t {
-        case .needs: .needs
-        case .search: .search
-        case .projects, .place: .projects
+        case .projects, .place, .fold: projectsPath
         }
     }
 
@@ -487,41 +408,115 @@ extension Root {
 
     /// A tab chosen. Search searches the project in view as it's
     /// chosen; a new project starts its search afresh. A row picked in
-    /// the sidebar opens its route in the columns. The tab showing chosen
-    /// again goes back to its root, and at its root to its top.
+    /// the sidebar opens its route in the columns.
     private func choose(_ t: RootTab) {
-        if case .place(let r) = t {
-            tab = t
-            projectsPath = r.path
+        if case .fold(let server, let key) = t {
+            if let m = phone.model(server) { m.nav.toggle(key, open: m.nav.unfolded.contains(key)) }
             return
         }
-        if page(t) == page(tab) {
-            switch page(t) {
-            case _ where path(t).isEmpty: toTop += 1
-            case .needs: needsPath = []
-            case .projects: projectsPath = []
-            case .search: searchPath = []
-            }
-        } else if t == .search, let s = scope(from: tab), s != searchScope {
+        if t == .search, tab != .search, let s = scope(from: tab), s != searchScope {
             searchScope = s
             searchPath = []
         }
         tab = t
+        if case .place(let r) = t { projectsPath = r.path }
     }
 }
 
-/// The iPad's sidebar (T849, FlatSidebar): a row opens its session in the
-/// Projects tab's columns, beside its project, and follows the columns as
-/// they move on. An iPhone and the Duo keep the bar and the rail.
+/// The iPad's sidebar (T849): Needs you and Projects, then each
+/// project's coordinator and threads in the TUI's order (Phone.sidebar, by server),
+/// each paired server's shared ones, and the inactive projects. A row
+/// opens its session in the Projects tab's columns, beside its
+/// project; the sidebar follows the columns as they move on. An iPhone
+/// and the Duo keep the tab bar (and the Duo's rail).
 extension Root {
     static var sidebar: Bool { UIDevice.current.userInterfaceIdiom == .pad }
 
-    /// Opens the sidebar as the app starts, unless a session has the whole
-    /// width. -sidebar NO leaves it closed (the App Store's portrait
+    @available(iOS 18, *)
+    private var sidebarTabs: some View {
+        TabView(selection: Binding(get: { tab }, set: choose)) {
+            Tab("Needs you", systemImage: "exclamationmark.bubble", value: RootTab.needs) { opening(needsStack) }
+                .badge(phone.needs.count)
+            Tab("Projects", systemImage: "folder", value: RootTab.projects) { opening(projectsStack) }
+            searchTab
+            ForEach(phone.sidebar) { s in
+                TabSection(s.title) {
+                    ForEach(SidebarChunk.of(s.rows)) { c in sidebarChunk(c) }
+                }
+                .defaultVisibility(.hidden, for: .tabBar)
+            }
+        }
+        .tabViewStyle(.sidebarAdaptable)
+        .tint(theme.ink)
+        // Given its models: laid out again on a rotation, its cell's
+        // host has no Phone from the scene, and reading it crashed (T895).
+        .tabViewSidebarHeader { SidebarHead().environment(phone).environment(phone.primary) }
+        .onGeometryChange(for: CGSize.self) { $0.size } action: { size = $0 }
+        .onChange(of: folding) { if $1 != nil { Self.setSidebar(hidden: true) } }
+    }
+
+    /// A run of rows: a program member's row, its disclosure row (T978,
+    /// the Mac's Fold/Unfold) and, while unfolded, its coordinator and
+    /// threads; any other row alone.
+    @available(iOS 18, *)
+    @TabContentBuilder<RootTab>
+    private func sidebarChunk(_ c: SidebarChunk) -> some TabContent<RootTab> {
+        ForEach(c.rows) { r in
+            sidebarTab(r)
+            if let f = r.fold { foldTab(f, of: r) }
+        }
+    }
+
+    @available(iOS 18, *)
+    private func foldTab(_ f: SidebarRow.Fold, of r: SidebarRow) -> some TabContent<RootTab> {
+        Tab(value: RootTab.fold(server: f.server, key: f.key)) {
+            EmptyView()
+        } label: {
+            Label(f.open ? "Hide threads" : "Show threads", systemImage: f.open ? "chevron.down" : "chevron.right")
+                .foregroundStyle(theme.muted)
+        }
+        .defaultVisibility(.hidden, for: .tabBar)
+    }
+
+    /// A row of the sidebar. A program member's own row has the Mac's
+    /// Fold/Unfold in its menu.
+    @available(iOS 18, *)
+    private func sidebarTab(_ r: SidebarRow) -> some TabContent<RootTab> {
+        Tab(value: RootTab.place(r.route)) {
+            opening(projectsStack)
+        } label: {
+            Label {
+                Text(r.title)
+            } icon: {
+                Image(systemName: r.role?.symbol ?? r.tone.symbol)
+                    .foregroundStyle(r.role != nil && r.tone == .idle ? theme.ink : theme.colour(r.tone))
+            }
+        }
+        .badge(r.badge.map { Text($0) })
+        .contextMenu {
+            if let f = r.fold { Button(f.open ? "Fold" : "Unfold", systemImage: f.open ? "chevron.up" : "chevron.down") { toggle(f) } }
+        }
+        .defaultVisibility(.hidden, for: .tabBar)
+    }
+
+    private func toggle(_ f: SidebarRow.Fold) {
+        phone.model(f.server)?.toggle(f)
+    }
+
+    /// A tab's content, which opens the sidebar as the app starts (T858):
+    /// as the first tab appears, its UITabBarController is there to ask.
+    /// From Root's onAppear it sometimes wasn't yet (1 portrait launch
+    /// in 10 to 20), and the sidebar stayed closed, its rows in the top
+    /// tab bar. -sidebar NO leaves it closed (the App Store's portrait
     /// screenshots, T911: open, it lies over the list).
-    private func openSidebarAtLaunch() {
-        let d = UserDefaults.standard
-        sidebarShown = folding == nil && (d.object(forKey: "sidebar") == nil || d.bool(forKey: "sidebar"))
+    @available(iOS 18, *)
+    private func opening(_ content: some View) -> some View {
+        content.background(TabBarHook { tabs in
+            guard !sidebarOpened else { return }
+            sidebarOpened = true
+            let launched = UserDefaults.standard.object(forKey: "sidebar") == nil || UserDefaults.standard.bool(forKey: "sidebar")
+            if folding == nil, launched { tabs.sidebar.isHidden = false }
+        })
     }
 
     /// The coordinator or thread the columns show across the whole
@@ -529,13 +524,28 @@ extension Root {
     /// else nil. There the sidebar folds away too (T862): in portrait
     /// it lies over the content, and covered the session's composer
     /// dock. It folds as such a session opens or the window turns to
-    /// fit one; the rail's button opens it again, over the session.
+    /// fit one; its button opens it again, over the session.
     private var folding: Route? {
         guard size != .zero else { return nil }
         let last = path(tab).last
         switch last?.base {
         case .session, .need: return PhoneColumns.foldsList(size) ? last : nil
         default: return nil
+        }
+    }
+
+    /// Opens or folds the sidebar: SwiftUI names no way to (in portrait
+    /// the TabView starts with it closed behind its button). Opened once
+    /// as the app starts (opening); the user opens and closes it as ever.
+    @available(iOS 18, *)
+    private static func setSidebar(hidden: Bool) {
+        func tabs(_ vc: UIViewController?) -> UITabBarController? {
+            guard let vc else { return nil }
+            if let t = vc as? UITabBarController { return t }
+            return vc.children.lazy.compactMap(tabs).first
+        }
+        for case let scene as UIWindowScene in UIApplication.shared.connectedScenes {
+            for w in scene.windows { tabs(w.rootViewController)?.sidebar.isHidden = hidden }
         }
     }
 
@@ -559,7 +569,7 @@ extension Root {
     /// with -gallery-lower YES at its states and buttons),
     /// "projects", "needs ROUTE" (a need's route
     /// opened from Needs you), "search:SLUG" or "search:SLUG/ID" in the
-    /// Search tab, or a route
+    /// Search tab (on iOS 17 from the project, as below), or a route
     /// opened from the Projects tab, on the path a tap would have taken
     /// (Route.path).
     private func openLaunched() {
@@ -573,9 +583,9 @@ extension Root {
         } else if open == "projects" {
             tab = .projects
         } else if let r = Route.parse(open) {
-            if case .search(let slug) = r {
+            if Self.searchTab, case .search(let slug) = r {
                 openSearch(slug)
-            } else if case .searchHit(let slug, _) = r {
+            } else if Self.searchTab, case .searchHit(let slug, _) = r {
                 openSearch(slug)
                 searchPath = [r]
             } else {
@@ -662,5 +672,82 @@ private struct BackdropModifier: ViewModifier {
         content
             .scrollContentBackground(.hidden)
             .background { (ground == .gutter ? theme.gutter : theme.chrome).ignoresSafeArea() }
+    }
+}
+
+/// The band the system's tab bar floats on (T1001): the window's solid
+/// colour across the width under it, with the line over it, so nothing
+/// scrolls behind the bar's glass. iOS draws the bar itself and keeps its
+/// glass capsule (ios/README.md, Flat look); on the solid band it shows the
+/// band's colour. Only under a bar: a screen that hides it (a session on a
+/// phone's width) has only the home indicator's inset, and its composer's
+/// colour. Not the keyboard's height: it covers the band.
+private struct TabBand: ViewModifier {
+    @Environment(\.theme) private var theme
+    @State private var inset: CGFloat = 0
+
+    /// Above this it is a bar's inset, not the home indicator's.
+    static let least: CGFloat = 45
+
+    func body(content: Content) -> some View {
+        content
+            .tint(theme.action)
+            .overlay(alignment: .bottom) {
+                if inset > Self.least {
+                    theme.chrome
+                        .frame(height: inset)
+                        .overlay(alignment: .top) { theme.line.frame(height: 1) }
+                        .ignoresSafeArea(.container, edges: .bottom)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
+            }
+            .background {
+                GeometryReader { g in
+                    Color.clear
+                        .onAppear { inset = g.safeAreaInsets.bottom }
+                        .onChange(of: g.safeAreaInsets.bottom) { _, now in inset = now }
+                }
+                .ignoresSafeArea(.keyboard)
+            }
+    }
+}
+
+extension View {
+    func tabBand() -> some View {
+        modifier(TabBand())
+    }
+}
+
+/// Hands found the UITabBarController a TabView shows its tabs in, each
+/// time the tab holding it appears: from inside a tab the controller is
+/// always reachable, where a walk of the window's controllers can run
+/// before SwiftUI has put it there (T858).
+struct TabBarHook: UIViewControllerRepresentable {
+    let found: (UITabBarController) -> Void
+
+    func makeUIViewController(context: Context) -> Hook { Hook(found: found) }
+    func updateUIViewController(_ hook: Hook, context: Context) { hook.found = found }
+
+    final class Hook: UIViewController {
+        var found: (UITabBarController) -> Void
+
+        init(found: @escaping (UITabBarController) -> Void) {
+            self.found = found
+            super.init(nibName: nil, bundle: nil)
+        }
+
+        @available(*, unavailable)
+        required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+        override func viewDidLoad() {
+            super.viewDidLoad()
+            view.isUserInteractionEnabled = false
+        }
+
+        override func viewWillAppear(_ animated: Bool) {
+            super.viewWillAppear(animated)
+            if let tabs = tabBarController { found(tabs) }
+        }
     }
 }

@@ -5,8 +5,9 @@ import TerminatrUI
 /// Search over a project's history (T924), as the Mac's Search Project…
 /// and the TUI's search popup: a project picked (this server's only),
 /// words, a kind, then the hits (kind, id, title, day), each opening its
-/// SearchHitScreen. The Search tab's (T929, Root.searchStack), on the
-/// project in view. -open search:SLUG opens it. The search stays
+/// SearchHitScreen. The Search tab's (T929, Root.searchTab), on the
+/// project in view; on iOS 17 from the Projects header and a project's
+/// screen (Route.search). -open search:SLUG opens it. The search stays
 /// while the screen is in the path, so Back from a hit comes back to
 /// its hits.
 struct SearchScreen: View {
