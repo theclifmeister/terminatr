@@ -31,6 +31,7 @@ struct TerminatrApp: App {
                 .background(WindowFrame(name: "main"))
                 .task { delegate.model.start() }
         }
+        .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 1280, height: 800)
         .commands {
             FileCommands(model: delegate.model)
@@ -48,6 +49,7 @@ struct TerminatrApp: App {
                     .task { delegate.model.start() }
             }
         }
+        .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 1100, height: 720)
         .commandsRemoved()
 
@@ -179,9 +181,11 @@ struct ViewCommands: Commands {
 
     var body: some Commands {
         CommandGroup(after: .sidebar) {
+            Button(model.sidebarShown ? "Hide Sidebar" : "Show Sidebar") { model.toggleSidebar() }
+                .keyboardShortcut("s", modifiers: [.command, .control])
             Button(model.inspector ? "Hide Inspector" : "Show Inspector") { model.inspector.toggle() }
                 .keyboardShortcut("i", modifiers: [.command, .option])
-                .disabled(model.selectedRef == nil)
+                .disabled(model.nav.selection == nil)
             Button("Conversation or Terminal") { model.switchTab() }
                 .keyboardShortcut("t", modifiers: [.command, .shift])
                 .disabled(model.selectedRef == nil)

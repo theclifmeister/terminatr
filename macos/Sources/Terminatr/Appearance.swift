@@ -144,58 +144,6 @@ struct WindowFrame: NSViewRepresentable {
     }
 }
 
-/// Saves the inspector's width under key as the user drags it, read
-/// from its split view item's view: measuring the inspector from
-/// SwiftUI (onGeometryChange) pins its column at one width.
-struct InspectorWidth: NSViewRepresentable {
-    let key: String
-
-    func makeNSView(context: Context) -> NSView {
-        Watcher(key: key)
-    }
-
-    func updateNSView(_ nsView: NSView, context: Context) {}
-
-    private final class Watcher: NSView {
-        let key: String
-        private var watching: NSObjectProtocol?
-
-        init(key: String) {
-            self.key = key
-            super.init(frame: .zero)
-        }
-
-        required init?(coder: NSCoder) { nil }
-
-        override func viewDidMoveToWindow() {
-            super.viewDidMoveToWindow()
-            if window == nil {
-                watching.map(NotificationCenter.default.removeObserver)
-                watching = nil
-                return
-            }
-            DispatchQueue.main.async { [weak self] in
-                self?.watch()
-            }
-        }
-
-        /// The view of the split view item this one is in: the column.
-        private func watch() {
-            guard watching == nil else { return }
-            var v: NSView? = superview
-            while let s = v, !(s.superview is NSSplitView) { v = s.superview }
-            guard let column = v else { return }
-            column.postsFrameChangedNotifications = true
-            watching = NotificationCenter.default.addObserver(forName: NSView.frameDidChangeNotification, object: column, queue: .main) { [key, weak column] _ in
-                MainActor.assumeIsolated {
-                    guard let w = column?.frame.width, let keep = InspectorColumn.saving(w) else { return }
-                    UserDefaults.standard.set(keep, forKey: key)
-                }
-            }
-        }
-    }
-}
-
 /// File › New Task… (⌘N, T748 G1): a task added to the shown project's
 /// board as tm task add adds it; the coordinator sees it there. With a
 /// tm of app API 20 it offers the templates of the project's mods (the

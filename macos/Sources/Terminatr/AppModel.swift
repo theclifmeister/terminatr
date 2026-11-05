@@ -96,6 +96,15 @@ final class AppModel {
     var inspector = UserDefaults.standard.object(forKey: AppModel.inspectorKey) as? Bool ?? true {
         didSet { UserDefaults.standard.set(inspector, forKey: Self.inspectorKey) }
     }
+    /// Whether the window shows its sidebar (⌃⌘S).
+    var sidebarShown = UserDefaults.standard.object(forKey: AppModel.sidebarKey) as? Bool ?? true {
+        didSet { UserDefaults.standard.set(sidebarShown, forKey: Self.sidebarKey) }
+    }
+    /// The tab each project shows, while the app runs: by the shown
+    /// project's selection (projectTab).
+    private var projectTabsShown: [Selection: ProjectTab] = [:]
+    /// The sidebar's Pair a server: its sheet, shown.
+    var pairServer = false
     /// Bumped by ⌘L: the shown composer takes the focus.
     private(set) var composerFocus = 0
     /// Text the coordinator's composer of a project takes as it shows,
@@ -192,6 +201,7 @@ final class AppModel {
     static let tmPathKey = "tmPath"
     static let navKey = "navigation"
     static let inspectorKey = "inspector"
+    static let sidebarKey = "sidebar"
 
     /// How often session.list and peer.list are read: neither streams.
     static let sessionsEvery = Duration.seconds(2)
@@ -782,16 +792,6 @@ final class AppModel {
         }
     }
 
-    /// The title bar's second line: a thread's id and its project.
-    func subtitle(_ sel: Selection?) -> String {
-        guard case .session(let ref) = sel else { return "" }
-        return subtitle(ref)
-    }
-
-    func subtitle(_ ref: SessionRef) -> String {
-        ref.isRemote || ref.thread.isEmpty ? "" : "\(ref.thread) · \(ref.project)"
-    }
-
     func title(_ ref: SessionRef) -> String {
         if ref.isRemote {
             let task = ref.session(in: peers)?.task ?? ""
@@ -962,6 +962,26 @@ final class AppModel {
     func peerLibraryData(_ alias: String, _ project: String, _ f: AppAPI.LibraryFile) async -> FileOutcome {
         guard let b = bridge else { return .unavailable("tm isn't connected") }
         return await PeerPages.read({ p in try await b.call(AppAPI.Methods.peerLibraryRead, p) }, alias: alias, project: project, file: f)
+    }
+
+    /// The project tabs this tm has (Memory and Library need app API 21).
+    var projectTabs: [ProjectTab] {
+        if case .connected(let h) = phase { return ProjectTab.tabs(h) }
+        return ProjectTab.tabs(nil)
+    }
+
+    /// The shown project's tab in the title row: Overview until the user
+    /// picks another.
+    var projectTab: ProjectTab {
+        get { nav.selection.flatMap { projectTabsShown[$0] } ?? .overview }
+        set {
+            if let s = nav.selection { projectTabsShown[s] = newValue }
+        }
+    }
+
+    /// ⌃⌘S: the sidebar folds away, or back.
+    func toggleSidebar() {
+        sidebarShown.toggle()
     }
 
     /// The project pages this tm has (Memory and Library need app API 21).

@@ -2,9 +2,8 @@ import SwiftUI
 import TerminatrKit
 import TerminatrUI
 
-/// A coordinator or thread in the window's detail (design T734 §6,
-/// T746): the tab, with its switch in the title bar beside the window's
-/// title (the session's, once, T752). It opens on the
+/// A coordinator or thread in the main pane (design T734 §6, T746): the
+/// tab, its switch in the window's title row (T1000). It opens on the
 /// conversation, and falls back to the terminal, saying why, when the
 /// conversation can't be shown (an old server, a Codex agent, a
 /// transcript tm can't read). A paired server's session opens the same
@@ -42,38 +41,6 @@ struct SessionDetail: View {
         // In the key window of the app in front: its needs don't notify.
         .onChange(of: active, initial: true) { _, a in app.shown(model.ref, inFront: a == .key) }
         .onDisappear { app.shown(model.ref, inFront: false) }
-        .toolbar {
-            // A running coordinator's or director's save and clear, as
-            // the TUI's prefix+C (app API 13; a director's 44); its
-            // context use says when.
-            if model.ref.isCoordinator || model.ref.director, !model.ref.isRemote, model.sessionID != nil, app.controlsProjects {
-                ToolbarItem(placement: .primaryAction) {
-                    let ctx = ContextUse.of(session, hint: app.contextHint)
-                    let who = model.ref.director ? "the director" : "the coordinator"
-                    Button {
-                        app.ask(model.ref.director ? .saveClearDirector(program: model.ref.project) : .saveClear(project: model.ref.project))
-                    } label: {
-                        Label("Save & Clear", systemImage: "eraser")
-                    }
-                    .help(["Save & Clear: \(who) saves what it learned, then its conversation is cleared, as tm clear does",
-                           ctx.map { "(\($0.spoken))" }].compactMap { $0 }.joined(separator: " "))
-                }
-            }
-            // At the title bar's end: beside the title (.principal) it
-            // cuts the title at the window's narrowest.
-            ToolbarItem(placement: .primaryAction) {
-                Picker("View", selection: Binding(get: { model.tab }, set: { model.pick($0) })) {
-                    ForEach(SessionTab.allCases, id: \.self) { t in
-                        Text(t.rawValue).tag(t)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .fixedSize()
-                .disabled(model.sessionID == nil)
-                .help("Conversation or Terminal (⌘⇧T)")
-            }
-        }
     }
 
     /// Why the conversation can't be shown, when it can't.
@@ -110,6 +77,7 @@ struct SessionWindow: View {
     let ref: SessionRef
     @State private var model: SessionModel
     @State private var inspector = true
+    @AppStorage("inspectorPanelWidth") private var panelWidth = InspectorColumn.ideal
 
     init(ref: SessionRef) {
         self.ref = ref
@@ -117,24 +85,27 @@ struct SessionWindow: View {
     }
 
     var body: some View {
-        SessionDetail(model: model)
-            .opacity(app.lost ? MainWindow.dimmed : 1)
-            .safeAreaInset(edge: .top) {
-                if app.lost { ConnectionBanner() }
-            }
-            .column(min: WindowColumns.detailMin)
-            .inspector(isPresented: $inspector) {
+        GeometryReader { g in
+            let f = WindowColumns.fit(window: g.size.width, sidebar: nil, inspector: inspector ? panelWidth : nil)
+            MainArea(selection: .session(ref), own: model, buttons: true, inspector: $inspector,
+                     panelWidth: f.inspector, panelWidthSaved: $panelWidth) {
+                VStack(spacing: 0) {
+                    if app.lost { ConnectionBanner() }
+                    SessionDetail(model: model)
+                        .opacity(app.lost ? MainWindow.dimmed : 1)
+                }
+            } panel: {
                 Inspector(model: model, session: app.session(of: model))
-                    .column(min: InspectorColumn.min)
-                    .inspectorColumnWidth(min: InspectorColumn.min, ideal: InspectorColumn.min, max: InspectorColumn.max)
-                    .background { Ground(bar: true) }
             }
-            .foregroundStyle(theme.ink)
-            .background { Ground(bar: true) }
-            .navigationTitle(app.title(ref))
-            .navigationSubtitle(app.subtitle(ref))
-            .solidToolbar()
-            .onDisappear { model.stop() }
+            .padding(CGFloat(WindowColumns.edge))
+        }
+        .background(theme.chrome)
+        .overlay { WindowEdge() }
+        .background { WindowButtons() }
+        .ignoresSafeArea()
+        .foregroundStyle(theme.ink)
+        .navigationTitle(app.title(ref))
+        .onDisappear { model.stop() }
     }
 }
 

@@ -2,76 +2,125 @@ import SwiftUI
 import TerminatrKit
 import TerminatrUI
 
-/// The window's sidebar (design T746, lean as T748 milestone A has it):
-/// what needs the user, cut to three rows and "+N more" (the app's own:
-/// the TUI has its ⚑ and W instead); then the rows of the TUI's sidebar
-/// (SidebarTree, T762): this server's active projects, pinned ones
-/// first, each with its coordinator's state as the dot and its needs as
-/// the badge, and under it its coordinator, running or not, and every
-/// unresolved thread, done ones too, in the dashboard's order, with
+/// The window's sidebar (design T746; edge to edge, to the flat look's
+/// reference since T1000): the app's name and its buttons; the rows of the
+/// TUI's sidebar (SidebarTree, T762): this server's active projects,
+/// pinned ones first, each with its coordinator's state as the dot and its
+/// needs as the badge, and under it its coordinator, running or not, and
+/// every unresolved thread, done ones too, in the dashboard's order, with
 /// [ui] needs_first the projects that need the user first; then each
 /// paired server's shared projects, its coordinator and its unresolved
-/// threads, running there or not (T768); and at the bottom the inactive ones
-/// folded under "Inactive (n)" (⇧⌘H unfolds them), each folded until →
-/// expands it, dormant. A project shows its dashboard, a coordinator or
-/// thread its session; a need shows what it names. Each section and
-/// project folds, and stays so across launches. Every
-/// project and session row has its state as a dot, and what waits on
-/// the user (allow?, asks, …) as a filled pill (T752). The selection is
-/// the List's (T748 milestone E): ↑ ↓ move it, letters typed select the
-/// row they begin, ← folds a project (or goes up to it from its
-/// session) and → unfolds it. It is drawn on the selection's fill, not
-/// the List's own (the system accent). The filter field on top (⌥⌘F)
-/// keeps the rows that match it, every one of them.
+/// threads, running there or not (T768); and at the bottom the inactive
+/// ones folded under "Inactive · n" (⇧⌘H unfolds them), each folded until
+/// → expands it, dormant. A project shows its pages, a coordinator or
+/// thread its session. Each section and project folds, and stays so across
+/// launches. Every project and session row has its state as a dot, and
+/// what waits on the user (allow?, asks, …) as a filled chip (T752).
+/// Under the rows, in a section of its own, what needs the user (the
+/// app's own: the TUI has its ⚑ and W instead); a need shows what it
+/// names. At the foot, Settings and Pair a server. The rows are plain
+/// views, not a List's, so they keep the reference's grid and no system
+/// selection ring: ↑ ↓ move the selection, letters typed select the row
+/// they begin, ← folds a project (or goes up to it from its session) and
+/// → unfolds it. ⌥⌘F opens a filter over the rows, which keeps those that
+/// match it, every one of them.
 struct Sidebar: View {
     @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
     @Environment(\.density) private var density
-    @Environment(\.sidebarRowSize) private var rowSize
-    @Environment(\.defaultMinListRowHeight) private var minRowHeight
     /// Where the window's needs rotor finds the need rows.
     let needsRotor: Namespace.ID
     @State private var typing = TypeSelect()
-    /// The List has the keys from launch, not the filter field.
+    /// The rows have the keys from launch, not the filter field.
     @FocusState private var listFocused: Bool
+    /// ⌥⌘F opened the filter; it stays while it has words.
+    @State private var filterOpen = false
 
     var body: some View {
-        List(selection: selection) {
-            let needs = shownNeeds
-            if !needs.isEmpty {
-                Section(isExpanded: expanded(Navigation.needsSection)) {
-                    let all = filtering || app.nav.unfolded.contains(Navigation.moreKey())
-                    let shown = all ? needs : Array(needs.prefix(SidebarTree.needsShown))
-                    ForEach(shown) { n in
-                        NeedLine(need: n) { app.open(project: n.project, session: n.session) }
-                            .accessibilityRotorEntry(id: n.id, in: needsRotor)
+        GeometryReader { g in
+            VStack(spacing: 0) {
+                head
+                if filterOpen || filtering {
+                    FilterField {
+                        filterOpen = false
+                        listFocused = true
                     }
-                    if !filtering, needs.count > SidebarTree.needsShown {
-                        more(Navigation.moreKey(), all ? "Show fewer" : SidebarTree.moreNeeds(Array(needs.dropFirst(SidebarTree.needsShown))), unfolded: all)
-                    }
-                } header: {
-                    HStack(spacing: 6) {
-                        Text("Needs you")
-                        Text("\(needs.count)")
-                            .font(theme.body(.caption, .medium))
-                            .padding(.horizontal, 5)
-                            .background(theme.attention, in: Capsule())
-                            .foregroundStyle(theme.onAttention)
-                    }
-                    .font(theme.body(.caption, .semibold))
-                    .accessibilityElement(children: .combine)
+                    .padding(.horizontal, 8)
+                    .padding(.bottom, 6)
                 }
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        tree
+                            .padding(.bottom, 8)
+                    }
+                    .scrollEdges()
+                    .focusable()
+                    .focusEffectDisabled()
+                    .focused($listFocused)
+                    .onAppear { listFocused = true }
+                    .onKeyPress(keys: [.upArrow, .downArrow]) { press in
+                        step(press.key == .downArrow ? 1 : -1) ? .handled : .ignored
+                    }
+                    .onKeyPress(keys: [.leftArrow, .rightArrow]) { press in
+                        fold(open: press.key == .rightArrow) ? .handled : .ignored
+                    }
+                    .onKeyPress(characters: .alphanumerics, phases: .down) { press in
+                        typeSelect(press)
+                    }
+                    .onChange(of: app.nav.selection) { _, s in
+                        if let s { proxy.scrollTo(s) }
+                    }
+                }
+                .frame(maxHeight: .infinity)
+                theme.lineSoft.frame(height: 1)
+                needsSection
+                    .frame(height: CGFloat(WindowColumns.needsHeight(sidebar: g.size.height)) - 1)
+                theme.lineSoft.frame(height: 1)
+                foot
             }
+        }
+        .background(theme.chrome)
+        .onChange(of: app.filterFocus) { filterOpen = true }
+    }
+
+    // MARK: the head
+
+    /// The app's mark and name, right of the window's buttons; Search
+    /// (⌘K) and the sidebar's fold.
+    private var head: some View {
+        ZStack(alignment: .topLeading) {
+            WindowDragArea()
+            HStack(spacing: 10) {
+                PromptMark(lineWidth: 2.2)
+                    .frame(width: 13, height: 13)
+                    .foregroundStyle(theme.onAction)
+                    .frame(width: 20, height: 20)
+                    .background(theme.action, in: RoundedRectangle(cornerRadius: 5))
+                    .accessibilityHidden(true)
+                Text("terminatr")
+                    .font(theme.sized(15, .medium))
+                    .lineLimit(1)
+                Spacer(minLength: 4)
+                IconButton(symbol: "magnifyingglass", name: "Search", help: "Search projects, threads, tasks and needs (⌘K)") { app.palette.toggle() }
+                    .padding(.trailing, 5)
+                IconButton(symbol: "sidebar.left", name: "Hide the sidebar", help: "Hide the sidebar (⌃⌘S)") { app.toggleSidebar() }
+                    .padding(.trailing, 16)
+            }
+            .padding(.leading, 84)
+            .padding(.top, 15)
+        }
+        .frame(height: 58, alignment: .top)
+    }
+
+    // MARK: the rows
+
+    private var tree: some View {
+        // Not lazy: a paired member lists under its program and under its
+        // server, one id twice, and a lazy stack drops one of them.
+        VStack(alignment: .leading, spacing: 0) {
             let active = shown(app.entries)
             if !filtering || !active.isEmpty {
-                Section(isExpanded: expanded(Navigation.sectionKey(server: ""))) {
-                    ForEach(active, id: \.slug) { e in
-                        switch e {
-                        case .project(let p): project(p)
-                        case .program(let g): program(g)
-                        }
-                    }
-                } header: {
+                SectionHead(first: true, open: expanded(Navigation.sectionKey(server: ""))) {
                     // "This server" only tells it from paired ones.
                     HStack(spacing: 6) {
                         Text(app.peers.isEmpty ? "Projects" : "This server")
@@ -80,69 +129,137 @@ struct Sidebar: View {
                             BusyMark(size: 6).frame(width: 6, height: 6)
                         }
                     }
-                    .font(theme.body(.caption, .semibold))
+                }
+                if expanded(Navigation.sectionKey(server: "")).wrappedValue {
+                    ForEach(active, id: \.slug) { e in
+                        switch e {
+                        case .project(let p): project(p)
+                        case .program(let g): program(g)
+                        }
+                    }
                 }
             }
             ForEach(app.peers, id: \.alias) { peer in
                 let projects = shown(peer)
+                let open = expanded(Navigation.sectionKey(server: peer.alias))
                 if !filtering || !projects.isEmpty {
-                    Section(isExpanded: expanded(Navigation.sectionKey(server: peer.alias))) {
+                    SectionHead(first: false, open: open) {
+                        remoteHeader(peer)
+                    }
+                    if open.wrappedValue {
                         ForEach(projects, id: \.project) { p in
                             remote(peer, p)
                         }
-                    } header: {
-                        remoteHeader(peer)
-                            .font(theme.body(.caption, .semibold))
                     }
                 }
             }
             // At the bottom, after the paired servers, as the TUI pins it.
             let inactive = shown(app.inactiveProjects)
             if !inactive.isEmpty {
-                Section(isExpanded: Binding(get: { filtering || app.nav.showInactive }, set: { app.nav.showInactive = $0 })) {
+                let open = filtering || app.nav.showInactive
+                Button {
+                    app.nav.showInactive.toggle()
+                } label: {
+                    Text("Inactive · \(inactive.count)")
+                        .font(theme.sized(13.5))
+                        .foregroundStyle(theme.muted)
+                        .padding(.leading, 16)
+                        .frame(maxWidth: .infinity, minHeight: 32, alignment: .leading)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("Projects set inactive: View › Show Inactive Projects (⇧⌘H)")
+                .accessibilityValue(open ? "expanded" : "collapsed")
+                if open {
                     ForEach(inactive, id: \.slug) { p in
                         project(p)
                     }
-                } header: {
-                    Text("Inactive (\(inactive.count))")
-                        .font(theme.body(.caption, .semibold))
-                        .help("Projects set inactive: View › Show Inactive Projects (⇧⌘H)")
                 }
             }
-            if filtering, rows.isEmpty, needs.isEmpty {
+            if filtering, rows.isEmpty, shownNeeds.isEmpty {
                 Text("Nothing matches “\(app.filter)”")
-                    .font(theme.body(.subheadline))
+                    .font(theme.sized(13))
                     .foregroundStyle(theme.muted)
+                    .padding(.horizontal, 17)
             }
-        }
-        .listStyle(.sidebar)
-        // Regular is the system's own (System Settings › Sidebar icon size).
-        .environment(\.sidebarRowSize, density == .compact ? .small : density == .roomy ? .large : rowSize)
-        .environment(\.defaultMinListRowHeight, density.minRowHeight ?? minRowHeight)
-        .scrollContentBackground(.hidden)
-        .focusEffectDisabled()
-        .focused($listFocused)
-        .onAppear { listFocused = true }
-        .onKeyPress(keys: [.leftArrow, .rightArrow]) { press in
-            fold(open: press.key == .rightArrow) ? .handled : .ignored
-        }
-        .onKeyPress(characters: .alphanumerics, phases: .down) { press in
-            typeSelect(press)
-        }
-        .background { Ground(\.chrome) }
-        .safeAreaInset(edge: .top) {
-            FilterField { listFocused = true }
-                .padding(.horizontal, 12)
-                .padding(.bottom, 4)
         }
     }
 
-    /// The List's selection is the window's: a row picked by click or
-    /// key shows its project or session.
-    private var selection: Binding<Selection?> {
-        Binding(get: { app.nav.selection }, set: { s in
-            if let s, s != app.nav.selection { app.select(s) }
-        })
+    // MARK: the lower section
+
+    /// What needs the user, every one of it, the section scrolling if it
+    /// runs long.
+    private var needsSection: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 6) {
+                Text("Needs you")
+                    .font(theme.sized(13))
+                    .foregroundStyle(theme.muted)
+                    .accessibilityAddTraits(.isHeader)
+                Spacer(minLength: 0)
+                IconButton(symbol: "clock", name: "Next need", help: "Next need (⌥⌘↓)") { app.stepNeed(1) }
+                    .disabled(app.needs.isEmpty)
+                    .padding(.trailing, 16)
+            }
+            .padding(.leading, 17)
+            .padding(.top, 18)
+            .frame(height: 48, alignment: .top)
+            let needs = shownNeeds
+            if needs.isEmpty {
+                Text(filtering ? "No need matches." : "Nothing needs you. What waits for your answer shows here.")
+                    .font(theme.sized(13))
+                    .foregroundStyle(theme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 13)
+                Spacer(minLength: 0)
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(needs) { n in
+                            NeedLine(need: n) { app.open(project: n.project, session: n.session) }
+                                .accessibilityRotorEntry(id: n.id, in: needsRotor)
+                        }
+                    }
+                }
+                .scrollEdges()
+            }
+        }
+    }
+
+    // MARK: the foot
+
+    private var foot: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            SettingsLink {
+                HStack(spacing: 9) {
+                    BarIcon(symbol: "gearshape")
+                        .foregroundStyle(theme.muted)
+                    Text("Settings")
+                        .foregroundStyle(theme.ink)
+                }
+                .frame(height: 20)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .padding(.top, 10)
+            Button { app.pairServer = true } label: {
+                HStack(spacing: 9) {
+                    BarIcon(symbol: "plus")
+                    Text("Pair a server")
+                }
+                .foregroundStyle(theme.muted)
+                .frame(height: 20)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Pair another server with this one: tm peer pair and join")
+            .padding(.top, 11)
+            Spacer(minLength: 0)
+        }
+        .font(theme.sized(14))
+        .padding(.leading, 24)
+        .frame(height: 74, alignment: .topLeading)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // MARK: the filter
@@ -284,6 +401,17 @@ struct Sidebar: View {
         return out
     }
 
+    /// ↑ ↓ move the selection through the rows.
+    private func step(_ by: Int) -> Bool {
+        let rows = rows
+        guard !rows.isEmpty else { return false }
+        let i = rows.firstIndex { $0.0 == app.nav.selection }
+        let to = i.map { $0 + by } ?? (by > 0 ? 0 : rows.count - 1)
+        guard rows.indices.contains(to) else { return true }
+        app.select(rows[to].0)
+        return true
+    }
+
     /// → unfolds the selected project, ← folds it, or from one of its
     /// sessions goes up to it.
     private func fold(open: Bool) -> Bool {
@@ -332,26 +460,6 @@ struct Sidebar: View {
         )
     }
 
-    /// A "N more" row: a click unfolds what it counts, or folds it again.
-    private func more(_ key: String, _ label: String, unfolded: Bool) -> some View {
-        Button {
-            if unfolded { app.nav.unfolded.remove(key) } else { app.nav.unfolded.insert(key) }
-        } label: {
-            HStack(spacing: 6) {
-                Text(label)
-                    .font(theme.body(.subheadline))
-                    .lineLimit(1)
-                Spacer(minLength: 4)
-                Image(systemName: unfolded ? "chevron.up" : "chevron.down")
-                    .font(theme.body(.glyph, .semibold))
-                    .accessibilityHidden(true)
-            }
-            .foregroundStyle(theme.muted)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-    }
-
     // MARK: this server's
 
     /// A project's line, and under it, unless it is folded (an inactive
@@ -372,7 +480,7 @@ struct Sidebar: View {
         ProjectRow(name: p.slug, dot: theme.colour(dot), state: state.word, needs: needs, selected: app.nav.selection == sel,
                    busy: !l.open && SidebarTree.busy(p, sessions: app.sessions))
             .padding(.leading, indent)
-            .selectable(sel)
+            .selectable(sel, session: false) { listFocused = true }
             .contextMenu { ProjectMenu(project: p, coordinator: coordinator != nil, divided: false) }
         if l.open {
             if l.coordinator {
@@ -396,7 +504,6 @@ struct Sidebar: View {
                 row(.session(SessionRef(project: p.slug, thread: t.record.id)), label: t.record.title, ref: t.task?.ref,
                     tag: l.dormant ? nil : tag(t), dot: theme.colour(l.dormant ? .idle : app.attention(t).tone),
                     spoken: l.dormant ? "inactive" : spoken(t), dormant: l.dormant, busy: l.dormant ? nil : app.busy(t), indent: indent)
-                    .id("\(p.slug)/\(t.record.id)")
             }
         }
     }
@@ -412,34 +519,10 @@ struct Sidebar: View {
                      sleep: Sleep = .awake, indent: CGFloat = 0) -> some View {
         let on = app.nav.selection == sel
         return HStack(spacing: 6) {
-            if sleep == .waking {
-                ProgressView()
-                    .controlSize(.mini)
-                    .frame(width: 6, height: 6)
-                    .accessibilityHidden(true)
-            } else if sleep == .asleep {
-                Image(systemName: "moon.zzz.fill")
-                    .font(.system(size: 8, weight: .semibold))
-                    .foregroundStyle(on ? theme.ink : theme.muted)
-                    .frame(width: 6, height: 6)
-                    .accessibilityHidden(true)
-            } else if busy != nil {
-                BusyMark(size: 6, colour: on ? theme.ink : nil)
-                    .frame(width: 6, height: 6)
-            } else {
-                Circle()
-                    .fill(on ? theme.ink : dot)
-                    .frame(width: 6, height: 6)
-                    .accessibilityHidden(true)
-            }
-            if let ref {
-                Text(ref)
-                    .font(theme.mono(.footnote, .medium))
-                    .foregroundStyle(on ? theme.ink : theme.action)
-            }
-            Text(label)
-                .font(theme.body(.callout))
+            Text([ref, label].compactMap { $0 }.joined(separator: " "))
+                .font(theme.sized(13))
                 .lineLimit(1)
+                .truncationMode(.tail)
             Spacer(minLength: 4)
             if let busy {
                 BusyLabel(busy: busy, colour: on ? theme.ink : nil)
@@ -447,34 +530,51 @@ struct Sidebar: View {
             }
             if let context {
                 Text(context.word)
-                    .font(theme.body(.caption, context.tone == nil ? .regular : .semibold))
-                    .foregroundStyle(on ? theme.ink : context.tone.map { theme.colour($0) } ?? theme.muted)
+                    .font(theme.sized(12, context.tone == nil ? .regular : .semibold))
+                    .foregroundStyle(context.tone.map { theme.colour($0) } ?? theme.muted)
                     .help(context.spoken)
             }
             if let (word, tone) = tag {
                 if let tone {
                     Text(word)
-                        .font(theme.body(.caption, .medium))
-                        .padding(.horizontal, 6)
+                        .font(theme.sized(11.5, .medium))
+                        .padding(.horizontal, 5)
                         .padding(.vertical, 1)
-                        .background(theme.colour(tone), in: Capsule())
+                        .background(theme.colour(tone), in: RoundedRectangle(cornerRadius: 4))
                         .foregroundStyle(theme.on(tone))
                 } else {
                     Text(word)
-                        .font(theme.body(.caption, .medium))
-                        .foregroundStyle(on ? theme.ink : theme.muted)
+                        .font(theme.sized(12))
+                        .foregroundStyle(theme.muted)
                 }
             }
+            // Its state at the row's end, the same slot whatever it shows.
+            Group {
+                if sleep == .waking {
+                    ProgressView().controlSize(.mini)
+                } else if sleep == .asleep {
+                    Image(systemName: "moon.zzz.fill")
+                        .font(.system(size: 8, weight: .semibold))
+                        .foregroundStyle(theme.muted)
+                } else if busy != nil {
+                    BusyMark(size: 7)
+                } else {
+                    Dot(colour: dot)
+                }
+            }
+            .frame(width: 7, height: 7)
+            .accessibilityHidden(true)
         }
-        .padding(.leading, 14 + indent)
-        .foregroundStyle(on ? theme.ink : dormant ? theme.muted : theme.ink)
+        .padding(.leading, 37 + indent)
+        .padding(.trailing, 8)
+        .foregroundStyle(on ? theme.ink : theme.muted)
         .help(sleep == .asleep ? Sleep.words : "")
         // One element that says the row and its state: "T6 Network popup
         // polish, needs approval".
         .accessibilityElement(children: .ignore)
         .accessibilityLabel([ref, label].compactMap { $0 }.joined(separator: " "))
         .accessibilityValue([busy.map { $0.spoken(now: Date()) } ?? spoken, context?.spoken].compactMap { $0 }.joined(separator: ", "))
-        .selectable(sel)
+        .selectable(sel, session: true) { listFocused = true }
         .contextMenu {
             if case .session(let r) = sel { NewWindowButton(ref: r) }
             if let menu { ProjectMenu(project: menu, coordinator: true) }
@@ -523,7 +623,7 @@ struct Sidebar: View {
                    selected: app.nav.selection == sel, tag: progTag,
                    busy: !open && !filtering && SidebarTree.busy(peer, p, watched: app.watched))
             .padding(.leading, indent)
-            .selectable(sel)
+            .selectable(sel, session: false) { listFocused = true }
             .opacity(dim)
             .contextMenu {
                 if let g {
@@ -561,7 +661,7 @@ struct Sidebar: View {
         ProjectRow(name: g.slug, dot: theme.colour(working == nil ? state.tone : .idle), state: state.word, needs: app.needs(of: g).count,
                    selected: app.nav.selection == sel, program: true, tag: g.paused ? "paused" : "",
                    busy: !open && SidebarTree.busy(g, projects: app.projects, sessions: app.sessions, peers: app.peers, watched: app.watched))
-            .selectable(sel)
+            .selectable(sel, session: false) { listFocused = true }
             .contextMenu {
                 Button("Show the Program") { app.select(sel) }
                 Button("Open the Director") { app.select(.session(.director(g.slug))) }
@@ -586,7 +686,9 @@ struct Sidebar: View {
                         ProjectRow(name: m.name, dot: theme.idle, state: "not shared", needs: 0, selected: false,
                                    tag: mstate == "invited" || mstate == "pending" ? "invited" : mstate == "declined" ? "declined" : "not shared")
                             .padding(.leading, 12)
-                            .padding(.vertical, density.rowPadding)
+                            .frame(height: CGFloat(density.rowHeight(session: false)))
+                            .padding(.leading, 8)
+                            .padding(.trailing, 9)
                             .opacity(0.55)
                             .help("\(slug) on \(alias) isn't shared with this server")
                     }
@@ -649,32 +751,66 @@ struct Sidebar: View {
     }
 }
 
-/// A need in the sidebar: a click shows what it names.
+/// A section's label: a click folds what's under it, its chevron showing
+/// while it is folded or the pointer is over it.
+private struct SectionHead<Label: View>: View {
+    @Environment(\.theme) private var theme
+    let first: Bool
+    let open: Binding<Bool>
+    @ViewBuilder var label: Label
+    @State private var over = false
+
+    var body: some View {
+        Button {
+            open.wrappedValue.toggle()
+        } label: {
+            HStack(spacing: 6) {
+                label
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 9, weight: .semibold))
+                    .rotationEffect(.degrees(open.wrappedValue ? 0 : -90))
+                    .opacity(over || !open.wrappedValue ? 1 : 0)
+                    .accessibilityHidden(true)
+            }
+            .font(theme.sized(13))
+            .foregroundStyle(theme.muted)
+            .padding(.leading, 17)
+            .padding(.trailing, 16)
+            .frame(height: 22, alignment: .top)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { over = $0 }
+        .padding(.top, first ? 0 : 8)
+        .accessibilityValue(open.wrappedValue ? "expanded" : "collapsed")
+        .accessibilityAddTraits(.isHeader)
+    }
+}
+
+/// A need in the lower section: a click shows what it names.
 private struct NeedLine: View {
     @Environment(\.theme) private var theme
-    @Environment(\.density) private var density
     let need: Need
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 6) {
-                Image(systemName: need.kind.symbol)
-                    .foregroundStyle(theme.colour(need.kind))
-                    .frame(width: 16)
-                    .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .firstTextBaseline, spacing: 9) {
+                Dot(colour: theme.colour(need.kind))
+                VStack(alignment: .leading, spacing: 2) {
                     Text(need.title)
-                        .font(theme.body(.callout, .medium))
+                        .font(theme.sized(13, .medium))
                         .lineLimit(1)
                     Text(need.detail)
-                        .font(theme.body(.caption))
+                        .font(theme.sized(12.5))
                         .foregroundStyle(theme.muted)
                         .lineLimit(1)
                 }
                 Spacer(minLength: 0)
             }
-            .padding(.vertical, density.rowPadding)
+            .padding(.horizontal, 13)
+            .frame(height: 48, alignment: .top)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -688,30 +824,53 @@ private struct Selectable: ViewModifier {
     @Environment(\.theme) private var theme
     @Environment(\.density) private var density
     let sel: Selection
+    let session: Bool
+    let tapped: () -> Void
 
     func body(content: Content) -> some View {
         let on = app.nav.selection == sel
+        let shape = RoundedRectangle(cornerRadius: 6)
         content
-            .padding(.vertical, density.rowPadding)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .contentShape(Rectangle())
-            .tag(sel)
-            .listRowBackground(
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(on ? theme.selection : .clear)
-                    .padding(.horizontal, 10)
-            )
+            .frame(height: CGFloat(density.rowHeight(session: session)))
+            .background(on ? theme.selection : .clear, in: shape)
+            .contentShape(shape)
+            .onTapGesture {
+                tapped()
+                app.select(sel)
+            }
+            .padding(.leading, 8)
+            .padding(.trailing, 9)
+            .id(sel)
             .accessibilityAddTraits(on ? [.isButton, .isSelected] : .isButton)
             .accessibilityAction { app.select(sel) }
     }
 }
 
 private extension View {
-    /// A sidebar row that shows sel in the window: the List selects it
-    /// (a click, ↑ ↓, a letter typed), and the selected one wears the
-    /// pill.
-    func selectable(_ sel: Selection) -> some View {
-        modifier(Selectable(sel: sel))
+    /// A sidebar row that shows sel in the window: a click, ↑ ↓ or a
+    /// letter typed selects it, and the selected one wears the fill.
+    func selectable(_ sel: Selection, session: Bool, tapped: @escaping () -> Void) -> some View {
+        modifier(Selectable(sel: sel, session: session, tapped: tapped))
+    }
+}
+
+/// The terminal prompt, the app's mark: a chevron and a line.
+struct PromptMark: View {
+    var lineWidth: CGFloat = 1.5
+
+    var body: some View {
+        Canvas { c, size in
+            let k = size.width / 24
+            var p = Path()
+            p.move(to: CGPoint(x: 4 * k, y: 7 * k))
+            p.addLine(to: CGPoint(x: 9 * k, y: 12 * k))
+            p.addLine(to: CGPoint(x: 4 * k, y: 17 * k))
+            p.move(to: CGPoint(x: 12 * k, y: 18 * k))
+            p.addLine(to: CGPoint(x: 20 * k, y: 18 * k))
+            c.stroke(p, with: .foreground, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round, lineJoin: .round))
+        }
+        .accessibilityHidden(true)
     }
 }
 
@@ -758,6 +917,7 @@ private struct FilterField: View {
         .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(focused ? theme.action.opacity(0.7) : theme.line, lineWidth: 1))
         .help("Filter the sidebar (⌥⌘F)")
         .onChange(of: app.filterFocus) { focused = true }
+        .onAppear { focused = true }
     }
 }
 
@@ -784,7 +944,7 @@ struct PeerTagView: View {
         .padding(.horizontal, 6)
         .padding(.vertical, 1)
         .foregroundStyle(theme.muted)
-        .background(theme.line.opacity(tag.offline ? 0.5 : 1), in: Capsule())
+        .background(theme.line.opacity(tag.offline ? 0.5 : 1), in: RoundedRectangle(cornerRadius: 4))
         .textCase(nil)
     }
 }

@@ -2,92 +2,72 @@ import SwiftUI
 import TerminatrKit
 import TerminatrUI
 
-/// The app's one window (design T746): the sidebar of servers, projects
-/// and their coordinators and threads; in the detail a project's
-/// dashboard or a session; the session's inspector in a trailing column
-/// (⌘⌥I); over them the command palette (⌘K). The menu bar,
-/// notifications and cards change what it shows, never open another
-/// window, unless the user asks for one (Open in New Window). The
-/// toolbar has Search (⌘K), Needs you with its count and the inspector's
-/// toggle (T748 milestone G); the inspector keeps the width it was left
-/// at.
+/// The app's one window (design T746, framed as the flat look's reference
+/// since T1000): the sidebar of servers, projects and their coordinators
+/// and threads; beside it the title row, the main pane with a project's
+/// pages or a session, the inspector's panel (⌘⌥I) and the status bar;
+/// over them the command palette (⌘K). The menu bar, notifications and
+/// cards change what it shows, never open another window, unless the user
+/// asks for one (Open in New Window). The sidebar and the inspector keep
+/// the widths they were left at.
 struct MainWindow: View {
     @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
-    /// The inspector's width as it was left (InspectorWidth saves it),
-    /// read once: its ideal stays put while the user drags it.
-    private static let inspectorWidth = InspectorColumn.ideal(saved: UserDefaults.standard.object(forKey: inspectorWidthKey) as? Double)
-    static let inspectorWidthKey = "inspectorWidth"
+    @AppStorage("sidebarWidth") private var sidebarWidth = WindowColumns.sidebarIdeal
+    @AppStorage("inspectorPanelWidth") private var panelWidth = InspectorColumn.ideal
     /// The needs rotor's entries are the sidebar's need rows.
     @Namespace private var needsRotor
 
     var body: some View {
         @Bindable var app = app
-        NavigationSplitView {
-            Sidebar(needsRotor: needsRotor)
-                .sidebarText()
-                .opacity(app.lost ? Self.dimmed : 1)
-                .column(min: WindowColumns.sidebarMin)
-                .navigationSplitViewColumnWidth(min: WindowColumns.sidebarMin, ideal: WindowColumns.sidebarIdeal, max: WindowColumns.sidebarMax)
-        } detail: {
-            detail
-                .opacity(app.lost ? Self.dimmed : 1)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .safeAreaInset(edge: .top) {
-                    if app.lost { ConnectionBanner() }
+        GeometryReader { g in
+            let shown = app.inspector && app.nav.selection != nil
+            let f = WindowColumns.fit(window: g.size.width, sidebar: app.sidebarShown ? sidebarWidth : nil, inspector: shown ? panelWidth : nil)
+            HStack(spacing: 0) {
+                if let s = f.sidebar {
+                    Sidebar(needsRotor: needsRotor)
+                        .sidebarText()
+                        .opacity(app.lost ? Self.dimmed : 1)
+                        .frame(width: CGFloat(s) - 1)
+                    theme.line
+                        .frame(width: 1)
+                        .overlay {
+                            SplitHandle(width: 7, value: $sidebarWidth, sign: 1, range: WindowColumns.sidebarMin...WindowColumns.sidebarMax, name: "Sidebar width")
+                        }
+                        .zIndex(1)
                 }
-                .background { Ground(bar: true) }
-                .column(min: WindowColumns.detailMin)
-                // A project has no inspector: its hiding isn't the user's.
-                .inspector(isPresented: Binding(get: { app.inspector && app.selectedRef != nil },
-                                                set: { if app.selectedRef != nil { app.inspector = $0 } })) {
-                    inspector
-                        .column(min: InspectorColumn.min)
-                        .inspectorColumnWidth(min: InspectorColumn.min, ideal: Self.inspectorWidth, max: InspectorColumn.max)
-                        .background { Ground(bar: true) }
-                        .background(InspectorWidth(key: Self.inspectorWidthKey))
+                MainArea(selection: app.nav.selection, buttons: f.sidebar == nil, inspector: $app.inspector,
+                         panelWidth: f.inspector, panelWidthSaved: $panelWidth) {
+                    VStack(spacing: 0) {
+                        if app.lost { ConnectionBanner() }
+                        detail.opacity(app.lost ? Self.dimmed : 1)
+                    }
+                } panel: {
+                    InspectorPanel(selection: app.nav.selection)
+                        .opacity(app.lost ? Self.dimmed : 1)
                 }
+            }
+            .padding(CGFloat(WindowColumns.edge))
+            .animation(.easeInOut(duration: 0.18), value: app.sidebarShown)
         }
+        .background(theme.chrome)
+        .overlay { WindowEdge() }
+        .background { WindowButtons() }
+        .ignoresSafeArea()
         .tint(theme.action)
         .foregroundStyle(theme.ink)
         // VoiceOver's rotor (VO-U) lists what needs the user, from anywhere
         // in the window; picking one unfolds the sidebar's list to it.
         .accessibilityRotor("Needs you") {
             ForEach(app.needs) { n in
-                AccessibilityRotorEntry(Text(n.title), id: n.id, in: needsRotor) {
-                    app.nav.collapsed.remove(Navigation.needsSection)
-                    app.nav.unfolded.insert(Navigation.moreKey())
-                }
+                AccessibilityRotorEntry(Text(n.title), id: n.id, in: needsRotor)
             }
         }
         // Opening a sleeping coordinator wakes it (T980).
         .onChange(of: app.nav.selection) { _, s in app.opened(s) }
+        // Hidden, for the Window menu, Mission Control and VoiceOver. No
+        // subtitle: one makes AppKit lay out the window's buttons afresh.
         .navigationTitle(app.title(app.nav.selection))
-        .navigationSubtitle(app.subtitle(app.nav.selection))
-        .solidToolbar()
-        .toolbar {
-            ToolbarItemGroup(placement: .navigation) {
-                Button { app.goBack() } label: { Label("Back", systemImage: "chevron.backward") }
-                    .disabled(!app.nav.canGoBack)
-                    .help("Back (⌘[)")
-                Button { app.goForward() } label: { Label("Forward", systemImage: "chevron.forward") }
-                    .disabled(!app.nav.canGoForward)
-                    .help("Forward (⌘])")
-            }
-            // Only when they don't fit: all well, it takes no room.
-            if app.isConnected, app.compatibility.message != nil {
-                ToolbarItem(placement: .primaryAction) { VersionBadge() }
-            }
-            ToolbarItemGroup(placement: .primaryAction) {
-                Button { app.palette.toggle() } label: { Label("Search", systemImage: "magnifyingglass") }
-                    .help("Search projects, threads, tasks and needs (⌘K)")
-                NeedsMenu()
-                Button { app.inspector.toggle() } label: { Label("Inspector", systemImage: "sidebar.right") }
-                    .disabled(app.selectedRef == nil)
-                    .help(app.selectedRef == nil ? "A session's inspector (⌘⌥I)"
-                        : app.inspector ? "Hide the inspector (⌘⌥I)" : "Show the inspector (⌘⌥I)")
-            }
-        }
         .overlay(alignment: .top) {
             if app.palette {
                 ZStack(alignment: .top) {
@@ -101,6 +81,7 @@ struct MainWindow: View {
         }
         .sheet(isPresented: $app.shortcuts) { ShortcutsSheet() }
         .sheet(isPresented: $app.welcome) { FirstRunSheet() }
+        .sheet(isPresented: $app.pairServer) { PairServerSheet() }
         .sheet(isPresented: Binding(get: { app.newTask != nil }, set: { if !$0 { app.newTask = nil } })) {
             if let p = app.newTask {
                 NewTaskSheet(project: p)
@@ -169,45 +150,6 @@ struct MainWindow: View {
             Placeholder(phase: app.phase, empty: app.projects.isEmpty)
         }
     }
-
-    @ViewBuilder
-    private var inspector: some View {
-        if let ref = app.selectedRef {
-            let m = app.model(ref)
-            Inspector(model: m, session: app.session(of: m))
-                .id(ref)
-        }
-    }
-}
-
-/// The toolbar's Needs you: its count on a flag, and a menu of the
-/// needs, each showing what it names; Next Need (⌥⌘↓) first.
-struct NeedsMenu: View {
-    @Environment(AppModel.self) private var app
-    @Environment(\.theme) private var theme
-
-    var body: some View {
-        Menu {
-            Button("Next Need") { app.stepNeed(1) }
-                .disabled(app.needs.isEmpty)
-            if !app.needs.isEmpty {
-                Divider()
-                ForEach(app.needs) { n in
-                    Button("\(n.title) · \(n.detail.isEmpty ? n.project : n.detail)") {
-                        app.open(project: n.project, session: n.session)
-                    }
-                }
-            }
-        } label: {
-            // The count beside the flag, as the toolbar has it (⚑ 6).
-            Label("\(app.needs.count)", systemImage: app.needs.isEmpty ? "flag" : "flag.fill")
-                .labelStyle(.titleAndIcon)
-                .monospacedDigit()
-        }
-        .menuIndicator(.hidden)
-        .help(app.needs.isEmpty ? "Nothing needs you" : "\(app.needs.count) need you: ⌥⌘↓ shows the next")
-        .accessibilityLabel("Needs you, \(app.needs.count)")
-    }
 }
 
 /// A context menu's Open in New Window: the session beside the main
@@ -219,34 +161,6 @@ struct NewWindowButton: View {
     var body: some View {
         Button("Open in New Window") {
             openWindow(id: TerminatrApp.sessionWindow, value: ref)
-        }
-    }
-}
-
-/// A column's ground, solid: the pane's colour by default and, with bar,
-/// the title bar's band of the window's colour over it with its line (the
-/// flat look's title bar, T999).
-struct Ground: View {
-    @Environment(\.theme) private var theme
-    let fill: KeyPath<Theme, Color>
-    let bar: Bool
-
-    init(_ fill: KeyPath<Theme, Color> = \.pane, bar: Bool = false) {
-        self.fill = fill
-        self.bar = bar
-    }
-
-    var body: some View {
-        GeometryReader { g in
-            ZStack(alignment: .top) {
-                theme[keyPath: fill]
-                if bar {
-                    theme.chrome
-                        .frame(height: g.safeAreaInsets.top)
-                        .overlay(alignment: .bottom) { theme.lineSoft.frame(height: 1) }
-                }
-            }
-            .ignoresSafeArea()
         }
     }
 }

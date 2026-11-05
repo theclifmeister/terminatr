@@ -42,18 +42,15 @@ public enum Density: String, CaseIterable, Sendable {
         }
     }
 
-    /// Points added above and below each row's content.
-    public var rowPadding: Double {
+    /// A sidebar row's height (T1000): the reference's 32 for a project,
+    /// 28 for a session under it, 4 less or more.
+    public func rowHeight(session: Bool) -> Double {
+        let base: Double = session ? 28 : 32
         switch self {
-        case .compact: 0
-        case .regular: 0
-        case .roomy: 4
+        case .compact: return base - 4
+        case .regular: return base
+        case .roomy: return base + 4
         }
-    }
-
-    /// The least height of a row; nil leaves the List's own.
-    public var minRowHeight: Double? {
-        self == .compact ? 20 : nil
     }
 }
 
