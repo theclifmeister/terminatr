@@ -3,8 +3,8 @@ import TerminatrKit
 import TerminatrUI
 
 /// A project in the window's detail (design T746, T748 milestone C, flat
-/// since T1002): its tile, name and goal; a slim strip of its board's
-/// counts; its coordinator, with Start when none runs; its threads, idle
+/// since T1002): its tile, name and goal; its coordinator as the main row,
+/// with Start when none runs; a slim strip of its board's counts; its threads, idle
 /// and stopped ones folded; its designs, each opening in place to its
 /// answers, questions and build (DesignsSection); the first of on deck,
 /// the Board tab having the rest; and the inbox items for the user. Under
@@ -63,16 +63,12 @@ struct ProjectDashboard: View {
     @ViewBuilder
     private var overview: some View {
         header
-        StatStrip(stats)
         let needs = app.needs(of: project.slug)
         let running = app.coordinatorSession(project.slug) != nil
+        CoordinatorRow(project: project, attention: app.coordinator(of: project), busy: app.busy(coordinator: project), running: running)
+        StatStrip(stats)
         if Dashboard.isEmpty(project, needs: needs.count) {
             NextStepCard(project: project, step: Dashboard.next(project, coordinatorRuns: running))
-        }
-        section("Coordinator") {
-            HairlineList {
-                CoordinatorRow(project: project, attention: app.coordinator(of: project), busy: app.busy(coordinator: project), running: running)
-            }
         }
         threads
         // The TUI's O: an outside agent session, adopted here.
@@ -316,13 +312,13 @@ struct ProjectDashboard: View {
     }
 }
 
-/// The project's coordinator as the dashboard's row: its state as the
-/// dot and word, what it does or waits on, its context, and Open while it
-/// runs, else Wake or Start (project.open, as tm project open). Save &
-/// Clear is the inspector's footer's, and this row's menu's.
+/// The project's coordinator as the dashboard's main row (T1006, the
+/// phone's LeadRow): its state, what it does or waits on, its context, and
+/// Open while it runs, which a click on the row does too, else Wake or Start
+/// (project.open, as tm project open). Save & Clear is the inspector's
+/// footer's, and this row's menu's.
 struct CoordinatorRow: View {
     @Environment(AppModel.self) private var app
-    @Environment(\.theme) private var theme
     let project: AppAPI.Project
     let attention: Attention
     /// Its turn while it works (the activity mark, working · 3m).
@@ -331,41 +327,18 @@ struct CoordinatorRow: View {
 
     var body: some View {
         let ref = SessionRef(project: project.slug)
-        ListRow {
-            HStack(spacing: 10) {
-                RoleLabel(.coordinator, points: Flat.text)
-                StateDot(tone: attention.tone, busy: busy != nil, size: 7)
-                if let busy {
-                    BusyLabel(busy: busy, capital: true)
-                } else {
-                    Text(attention.word.prefix(1).uppercased() + attention.word.dropFirst())
-                        .foregroundStyle(theme.ink)
-                }
-                if !attention.why.isEmpty {
-                    Text(attention.why)
-                        .font(theme.sized(Flat.label))
-                        .foregroundStyle(theme.muted)
-                        .lineLimit(1)
-                }
-                Spacer(minLength: 8)
-                if running, let ctx = ContextUse.of(app.coordinatorSession(project.slug), hint: app.contextHint) {
-                    Text("\(ctx.word) context")
-                        .font(theme.sized(Flat.label))
-                        .foregroundStyle(ctx.tone.map { theme.colour($0) } ?? theme.muted)
-                        .lineLimit(1)
-                        .fixedSize()
-                        .help(ctx.spoken)
-                }
-                if running {
-                    Button("Open") { app.select(.session(ref)) }
-                        .help("Show the coordinator")
-                } else if app.sleep(of: project.slug) != .awake {
-                    WakeButton(project: project.slug, title: "Wake")
-                } else {
-                    StartButton(project: project)
-                }
+        LeadRow(.coordinator, state: attention, busy: busy,
+                context: ContextUse.of(app.coordinatorSession(project.slug), hint: app.contextHint), dormant: !project.active) {
+            if running {
+                Button("Open") { app.select(.session(ref)) }
+                    .help("Show the coordinator")
+            } else if app.sleep(of: project.slug) != .awake {
+                WakeButton(project: project.slug, title: "Wake")
+            } else {
+                StartButton(project: project)
             }
         }
+        .onTapGesture { if running { app.select(.session(ref)) } }
         .contextMenu {
             NewWindowButton(ref: ref)
             ProjectMenu(project: project, coordinator: running)
@@ -718,23 +691,36 @@ struct RemoteProjectDashboard: View {
                 .font(theme.sized(Flat.label))
                 .foregroundStyle(theme.muted)
         }
+        let sessions = project.sessions.compactMap { s in SessionRef(s, of: peer.alias).map { (s, $0) } }
+        let others = sessions.filter { !$0.1.isCoordinator }
+        // Its coordinator as the main row, as this server's project's.
+        ForEach(sessions.filter(\.1.isCoordinator), id: \.0.id) { s, ref in
+            LeadRow(ref.role ?? .coordinator, state: .of(peer: s)) {
+                Button("Open") { app.select(.session(ref)) }
+                    .help("Show the coordinator")
+            }
+            .onTapGesture { app.select(.session(ref)) }
+            .contextMenu { NewWindowButton(ref: ref) }
+        }
         if case .shared(let p) = pages {
             StatStrip(PeerPages.stats(p).map { (value: "\($0.0 ?? 0)", word: $0.1) })
         }
-        VStack(alignment: .leading, spacing: 7) {
-            PaneLabel("Sessions · \(project.sessions.count)")
-            if project.sessions.isEmpty {
-                Text("Nothing runs there now.")
-                    .foregroundStyle(theme.muted)
-            } else {
-                HairlineList {
-                    ForEach(project.sessions.compactMap { s in SessionRef(s, of: peer.alias).map { (s, $0) } }, id: \.0.id) { s, ref in
-                        Button { app.select(.session(ref)) } label: {
-                            PeerSessionCard(session: s, ref: ref)
-                                .contentShape(Rectangle())
+        if !others.isEmpty || sessions.isEmpty {
+            VStack(alignment: .leading, spacing: 7) {
+                PaneLabel("Sessions · \(others.count)")
+                if others.isEmpty {
+                    Text("Nothing runs there now.")
+                        .foregroundStyle(theme.muted)
+                } else {
+                    HairlineList {
+                        ForEach(others, id: \.0.id) { s, ref in
+                            Button { app.select(.session(ref)) } label: {
+                                PeerSessionCard(session: s, ref: ref)
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .contextMenu { NewWindowButton(ref: ref) }
                         }
-                        .buttonStyle(.plain)
-                        .contextMenu { NewWindowButton(ref: ref) }
                     }
                 }
             }
