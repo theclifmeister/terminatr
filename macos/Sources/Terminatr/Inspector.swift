@@ -134,8 +134,7 @@ struct InspectorFrame<Content: View>: View {
                 }
                 .help(context.spoken)
                 .accessibilityElement(children: .ignore)
-                .accessibilityLabel("Context")
-                .accessibilityValue(context.spoken)
+                .accessibilityLabel(context.spoken)
             } else {
                 Spacer(minLength: 0)
             }
@@ -165,7 +164,7 @@ struct InspectorFootButton: View {
         Button(title) {
             if let url { openURL(url) } else { action?() }
         }
-        .buttonStyle(.flatText)
+        .buttonStyle(FlatTextButtonStyle(points: 12.5))
         .fixedSize()
         .disabled(url == nil && action == nil)
         .help(help)
@@ -218,7 +217,7 @@ struct InspectorFold<Content: View>: View {
             .buttonStyle(.plain)
             .help(open ? "Folds it" : summary)
             .accessibilityLabel(title)
-            .accessibilityValue(open ? "expanded" : summary.isEmpty ? "collapsed" : "collapsed, \(summary)")
+            .accessibilityValue(open ? "expanded" : summary.isEmpty ? "collapsed" : "collapsed, \(summary.replacingOccurrences(of: " · ", with: ", "))")
             .accessibilityHint(open ? "Folds it" : "Shows it")
             if open {
                 VStack(alignment: .leading, spacing: 5) {
@@ -368,14 +367,17 @@ struct Inspector: View {
     @ViewBuilder
     private func thread(_ head: InspectorHead) -> some View {
         let t = app.thread(model.ref)
-        Text(Need.plain(t?.task?.title ?? t?.record.title ?? model.ref.thread))
-            .font(theme.sized(15, .semibold))
-            .fixedSize(horizontal: false, vertical: true)
         let needs = t.map { Need.of(session: $0.record.session, task: $0.task?.ref ?? "", in: app.needs(of: model.ref.project)) } ?? []
-        if !needs.isEmpty {
+        // A need's card has the title already.
+        if needs.isEmpty {
+            Text(Need.plain(t?.task?.title ?? t?.record.title ?? model.ref.thread))
+                .font(theme.sized(15, .semibold))
+                .fixedSize(horizontal: false, vertical: true)
+            if let now = now(t) {
+                NowCard(label: now.label, text: now.text)
+            }
+        } else {
             NeedCards(needs: needs)
-        } else if let now = now(t) {
-            NowCard(label: now.label, text: now.text)
         }
         Folds {
             if let steps = t?.task?.steps, !steps.isEmpty {
@@ -461,7 +463,7 @@ struct Inspector: View {
                         FactRow("Agent", [s.agent, s.model].filter { !$0.isEmpty }.joined(separator: " · "))
                         if !s.current.isEmpty { FactRow("Now", s.current) }
                         if s.todosTotal > 0 { FactRow("Todos", "\(s.todosDone) of \(s.todosTotal)") }
-                        if s.queuedPrompts > 0 { FactRow("Queued", "\(s.queuedPrompts) prompts") }
+                        if s.queuedPrompts > 0 { FactRow("Queued", InspectorSummary.prompts(s.queuedPrompts)) }
                         FactRow("Started", s.created.formatted(date: .abbreviated, time: .shortened))
                         FactRow("Session", s.id, mono: true)
                     }
@@ -496,7 +498,7 @@ struct Inspector: View {
                             let word = Attention.session(state: s.state, reason: s.reason).word
                             if word != head.state?.word { FactRow("State", word) }
                         }
-                        if s.queuedPrompts > 0 { FactRow("Queued", "\(s.queuedPrompts) prompts") }
+                        if s.queuedPrompts > 0 { FactRow("Queued", InspectorSummary.prompts(s.queuedPrompts)) }
                         FactRow("Session", s.id, mono: true)
                     }
                     if let t {

@@ -77,6 +77,8 @@ private func session(_ id: String, state: String) -> AppAPI.Session {
     #expect(InspectorSummary.done(3, of: 4) == "3 of 4 done")
     #expect(InspectorSummary.agent("claude", model: "opus") == "claude · opus")
     #expect(InspectorSummary.agent("claude", model: "", queued: 2) == "claude · 2 queued prompts")
+    #expect(InspectorSummary.prompts(1) == "1 prompt")
+    #expect(InspectorSummary.prompts(2) == "2 prompts")
     #expect(InspectorSummary.paired(server: "mini", link: "online", stale: true) == "mini · online · stale")
 }
 

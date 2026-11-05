@@ -382,6 +382,9 @@ func thread(_ id: String, task: AppAPI.Task? = nil, session: String = "", checks
     // A paired server's says who it is after that server and project.
     #expect(card("mini › acme: T1 is ready to review", "Cache · for mini").line == "T1 · ready to review")
     #expect(card("mini › acme: 2 need you", "mini · paired server").line == "2 need you")
+    #expect(card("mini › acme: coordinator needs approval", "for mini", kind: .network).title == "For mini")
+    // A file's name stays as it is.
+    #expect(card("bob offers a file", "report.pdf · 2 KB", kind: .link).title == "report.pdf · 2 KB")
     // No title of its own: what of it is its title.
     let asks = card("coordinator has a question", "coordinator")
     #expect(asks.line == "coordinator")
@@ -400,6 +403,8 @@ func thread(_ id: String, task: AppAPI.Task? = nil, session: String = "", checks
     #expect(Need.plain("Cache: the layer") == "Cache: the layer")
     #expect(Need.plain("Fixes for the app") == "Fixes for the app")
     #expect(Need.plain("") == "")
+    // What isn't a commit's stays as it is.
+    #expect(Need.plain("report.pdf · 2 KB") == "report.pdf · 2 KB")
 }
 
 @Test func aThreadsNeedsAreItsSessionsAndItsTasks() {

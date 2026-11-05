@@ -106,10 +106,15 @@ private struct FlatButton: View {
 /// A plain button that's only its words (T1016): muted, ink under the
 /// pointer, no fill, for what shouldn't look like a main action.
 public struct FlatTextButtonStyle: ButtonStyle {
-    public init() {}
+    let points: CGFloat
+
+    /// At the small button's size and height by default, to sit beside one.
+    public init(points: CGFloat = Flat.label) {
+        self.points = points
+    }
 
     public func makeBody(configuration: Configuration) -> some View {
-        FlatTextButton(configuration: configuration)
+        FlatTextButton(points: points, configuration: configuration)
     }
 }
 
@@ -122,16 +127,17 @@ private struct FlatTextButton: View {
     @Environment(\.isEnabled) private var enabled
     @Environment(\.isFocused) private var focused
     @State private var hovering = false
+    let points: CGFloat
     let configuration: ButtonStyleConfiguration
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: Radius.row)
         configuration.label
-            .font(theme.sized(12.5))
+            .font(theme.sized(points))
             .lineLimit(1)
             .foregroundStyle(!enabled ? theme.faint : hovering || configuration.isPressed ? theme.ink : theme.muted)
             .padding(.horizontal, 4)
-            .padding(.vertical, 3)
+            .padding(.vertical, 4)
             .overlay {
                 if focused { shape.strokeBorder(theme.focus, lineWidth: 2) }
             }

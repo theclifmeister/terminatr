@@ -181,6 +181,11 @@ public enum InspectorSummary {
             .filter { !$0.isEmpty }.joined(separator: " · ")
     }
 
+    /// "1 prompt", "2 prompts": what waits in a session's queue.
+    public static func prompts(_ n: Int) -> String {
+        count(n, "prompt")
+    }
+
     /// "mini · online", a paired server's, with a stale read.
     public static func paired(server: String, link: String, stale: Bool = false) -> String {
         ([server, link] + (stale ? ["stale"] : [])).filter { !$0.isEmpty }.joined(separator: " · ")

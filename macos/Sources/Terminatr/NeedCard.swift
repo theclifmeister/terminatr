@@ -192,9 +192,14 @@ struct NeedCard: View {
                             .help("Goes to \(p.server) as your answer, the options ticked; it refuses it if the menu changed meanwhile")
                     }
                     ForEach(p.choices, id: \.self) { c in
-                        Button(c.title) { peerAct(c) }
+                        let button = Button(c.note ? "Send back" : c.title) { peerAct(c) }
                             .accessibilityLabel(named(c.title))
                             .help("Goes to \(p.server) as your answer; it refuses it if the need changed meanwhile")
+                        if leads(c, in: p) {
+                            button.buttonStyle(primary)
+                        } else {
+                            button
+                        }
                     }
                 } else {
                     open("Open")
@@ -215,6 +220,16 @@ struct NeedCard: View {
             button.buttonStyle(.flatText)
         } else {
             button
+        }
+    }
+
+    /// Whether a paired server's choice is the primary answer, as this
+    /// server's own are: Accept, Answer now, a dialog's first option.
+    private func leads(_ c: Need.PeerAct.Choice, in p: Need.PeerAct) -> Bool {
+        switch c.params.act {
+        case "accept", "questions": true
+        case "approve": c == p.choices.first
+        default: false
         }
     }
 
@@ -325,6 +340,7 @@ struct NeedCards: View {
                 Text("Needs you · \(needs.count)")
                     .font(theme.sized(12))
                     .foregroundStyle(theme.muted)
+                    .accessibilityLabel("Needs you, \(needs.count)")
                     .accessibilityAddTraits(.isHeader)
                 ForEach(needs) { n in
                     NeedCard(need: n, picked: picked == n.id, named: named,

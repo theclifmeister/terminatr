@@ -99,7 +99,10 @@ public struct Need: Identifiable, Hashable, Sendable {
             if state.hasPrefix("is ") { state.removeFirst(3) }
         }
         let bare = detail.isEmpty || detail == "coordinator" || detail == "director"
-        return bare ? Card(id: who, state: "", title: Self.plain(state)) : Card(id: who, state: state, title: Self.plain(detail))
+        func capital(_ s: String) -> String { s.prefix(1).uppercased() + s.dropFirst() }
+        if bare { return Card(id: who, state: "", title: capital(state)) }
+        // A paired server's may be only where it's answered: "for mini".
+        return Card(id: who, state: state, title: kind == .network ? capital(Self.plain(detail)) : Self.plain(detail))
     }
 
     public struct Card: Equatable, Sendable {
@@ -114,11 +117,12 @@ public struct Need: Identifiable, Hashable, Sendable {
     }
 
     /// A task's title for reading: no commit prefix ("fix(app): ",
-    /// "Design: "), which is for the release notes, and a capital.
+    /// "Design: "), which is for the release notes, and a capital where
+    /// one went. Anything else stays as it is: a file's name, say.
     public static func plain(_ title: String) -> String {
         let prefix = "^(feat|fix|chore|docs|refactor|tests?|perf|style|build|ci|revert|design)(\\([^)]*\\))?!?:\\s+"
-        var t = title
-        if let r = t.range(of: prefix, options: [.regularExpression, .caseInsensitive]) { t.removeSubrange(r) }
+        guard let r = title.range(of: prefix, options: [.regularExpression, .caseInsensitive]) else { return title }
+        let t = title[r.upperBound...]
         return t.prefix(1).uppercased() + t.dropFirst()
     }
 
