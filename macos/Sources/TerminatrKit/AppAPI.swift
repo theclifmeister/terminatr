@@ -6,7 +6,7 @@ import Foundation
 /// The terminatr app API (docs/SPEC.md §3.8): what tm app bridge answers.
 public enum AppAPI {
     /// The app API version this app was generated against.
-    public static let version = 48
+    public static let version = 49
 
     public struct AdoptRequestParams: Codable, Sendable, Hashable {
         public var id: String
@@ -680,6 +680,183 @@ public enum AppAPI {
         enum CodingKeys: String, CodingKey {
             case code
             case message
+        }
+    }
+
+    public struct FileEntry: Codable, Sendable, Hashable {
+        public var name: String
+        public var path: String
+        public var kind: String
+        public var size: Int
+        public var mtime: Date?
+        public var status: String
+        public var changed: Bool
+        public var ignored: Bool
+        public var link: Bool
+        public var linkOut: Bool
+
+        public init(name: String, path: String, kind: String, size: Int = 0, mtime: Date? = nil, status: String = "", changed: Bool = false, ignored: Bool = false, link: Bool = false, linkOut: Bool = false) {
+            self.name = name
+            self.path = path
+            self.kind = kind
+            self.size = size
+            self.mtime = mtime
+            self.status = status
+            self.changed = changed
+            self.ignored = ignored
+            self.link = link
+            self.linkOut = linkOut
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case name
+            case path
+            case kind
+            case size
+            case mtime
+            case status
+            case changed
+            case ignored
+            case link
+            case linkOut = "link_out"
+        }
+    }
+
+    public struct FilesChunk: Codable, Sendable, Hashable {
+        public var name: String
+        public var path: String
+        public var size: Int
+        public var mtime: Date?
+        public var offset: Int
+        public var binary: Bool
+        public var truncated: Bool
+        public var data: Data
+
+        public init(name: String, path: String, size: Int, mtime: Date? = nil, offset: Int, binary: Bool = false, truncated: Bool = false, data: Data = Data()) {
+            self.name = name
+            self.path = path
+            self.size = size
+            self.mtime = mtime
+            self.offset = offset
+            self.binary = binary
+            self.truncated = truncated
+            self.data = data
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case name
+            case path
+            case size
+            case mtime
+            case offset
+            case binary
+            case truncated
+            case data
+        }
+    }
+
+    public struct FilesList: Codable, Sendable, Hashable {
+        public var root: String
+        public var path: String
+        public var git: Bool
+        public var files: Int
+        public var added: Int
+        public var deleted: Int
+        public var entries: [FileEntry]
+        public var truncated: Bool
+
+        public init(root: String, path: String, git: Bool = false, files: Int = 0, added: Int = 0, deleted: Int = 0, entries: [FileEntry] = [], truncated: Bool = false) {
+            self.root = root
+            self.path = path
+            self.git = git
+            self.files = files
+            self.added = added
+            self.deleted = deleted
+            self.entries = entries
+            self.truncated = truncated
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case root
+            case path
+            case git
+            case files
+            case added
+            case deleted
+            case entries
+            case truncated
+        }
+    }
+
+    public struct FilesListParams: Codable, Sendable, Hashable {
+        public var session: String
+        public var path: String
+        public var ignored: Bool
+        public var query: String
+        public var changed: Bool
+
+        public init(session: String, path: String = "", ignored: Bool = false, query: String = "", changed: Bool = false) {
+            self.session = session
+            self.path = path
+            self.ignored = ignored
+            self.query = query
+            self.changed = changed
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case session
+            case path
+            case ignored
+            case query
+            case changed
+        }
+    }
+
+    public struct FilesReadParams: Codable, Sendable, Hashable {
+        public var session: String
+        public var path: String
+        public var offset: Int
+        public var ignored: Bool
+
+        public init(session: String, path: String, offset: Int = 0, ignored: Bool = false) {
+            self.session = session
+            self.path = path
+            self.offset = offset
+            self.ignored = ignored
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case session
+            case path
+            case offset
+            case ignored
+        }
+    }
+
+    public struct FilesStamp: Codable, Sendable, Hashable {
+        public var stamp: String
+
+        public init(stamp: String) {
+            self.stamp = stamp
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case stamp
+        }
+    }
+
+    public struct FilesStampParams: Codable, Sendable, Hashable {
+        public var session: String
+        public var folders: [String]
+
+        public init(session: String, folders: [String] = []) {
+            self.session = session
+            self.folders = folders
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case session
+            case folders
         }
     }
 
@@ -4549,6 +4726,9 @@ public enum AppAPI {
         public static let devicePairAnswer = Call<DevicePairAnswerParams, DevicePaired>("device.pair.answer", write: true)
         public static let devicePairWait = Call<DevicePairingParams, DeviceOffer>("device.pair.wait", write: true)
         public static let deviceRemove = Call<DeviceParams, Empty>("device.remove", write: true)
+        public static let filesList = Call<FilesListParams, FilesList>("files.list", write: false)
+        public static let filesRead = Call<FilesReadParams, FilesChunk>("files.read", write: false)
+        public static let filesStamp = Call<FilesStampParams, FilesStamp>("files.stamp", write: false)
         public static let guardDecide = Call<GuardDecideParams, GuardDecided>("guard.decide", write: true)
         public static let guardRefusals = Call<NoParams, GuardRefusals>("guard.refusals", write: false)
         public static let libraryList = Call<ProjectParams, Library>("library.list", write: false)
@@ -4946,6 +5126,86 @@ extension AppAPI.Error {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.code = try c.decode(String.self, forKey: .code)
         self.message = try c.decode(String.self, forKey: .message)
+    }
+}
+
+extension AppAPI.FileEntry {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.name = try c.decode(String.self, forKey: .name)
+        self.path = try c.decode(String.self, forKey: .path)
+        self.kind = try c.decode(String.self, forKey: .kind)
+        self.size = try c.decodeIfPresent(Int.self, forKey: .size) ?? 0
+        self.mtime = try c.decodeIfPresent(Date.self, forKey: .mtime)
+        self.status = try c.decodeIfPresent(String.self, forKey: .status) ?? ""
+        self.changed = try c.decodeIfPresent(Bool.self, forKey: .changed) ?? false
+        self.ignored = try c.decodeIfPresent(Bool.self, forKey: .ignored) ?? false
+        self.link = try c.decodeIfPresent(Bool.self, forKey: .link) ?? false
+        self.linkOut = try c.decodeIfPresent(Bool.self, forKey: .linkOut) ?? false
+    }
+}
+
+extension AppAPI.FilesChunk {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.name = try c.decode(String.self, forKey: .name)
+        self.path = try c.decode(String.self, forKey: .path)
+        self.size = try c.decode(Int.self, forKey: .size)
+        self.mtime = try c.decodeIfPresent(Date.self, forKey: .mtime)
+        self.offset = try c.decode(Int.self, forKey: .offset)
+        self.binary = try c.decodeIfPresent(Bool.self, forKey: .binary) ?? false
+        self.truncated = try c.decodeIfPresent(Bool.self, forKey: .truncated) ?? false
+        self.data = try c.decodeIfPresent(Data.self, forKey: .data) ?? Data()
+    }
+}
+
+extension AppAPI.FilesList {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.root = try c.decode(String.self, forKey: .root)
+        self.path = try c.decode(String.self, forKey: .path)
+        self.git = try c.decodeIfPresent(Bool.self, forKey: .git) ?? false
+        self.files = try c.decodeIfPresent(Int.self, forKey: .files) ?? 0
+        self.added = try c.decodeIfPresent(Int.self, forKey: .added) ?? 0
+        self.deleted = try c.decodeIfPresent(Int.self, forKey: .deleted) ?? 0
+        self.entries = try c.decodeIfPresent([AppAPI.FileEntry].self, forKey: .entries) ?? []
+        self.truncated = try c.decodeIfPresent(Bool.self, forKey: .truncated) ?? false
+    }
+}
+
+extension AppAPI.FilesListParams {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.session = try c.decode(String.self, forKey: .session)
+        self.path = try c.decodeIfPresent(String.self, forKey: .path) ?? ""
+        self.ignored = try c.decodeIfPresent(Bool.self, forKey: .ignored) ?? false
+        self.query = try c.decodeIfPresent(String.self, forKey: .query) ?? ""
+        self.changed = try c.decodeIfPresent(Bool.self, forKey: .changed) ?? false
+    }
+}
+
+extension AppAPI.FilesReadParams {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.session = try c.decode(String.self, forKey: .session)
+        self.path = try c.decode(String.self, forKey: .path)
+        self.offset = try c.decodeIfPresent(Int.self, forKey: .offset) ?? 0
+        self.ignored = try c.decodeIfPresent(Bool.self, forKey: .ignored) ?? false
+    }
+}
+
+extension AppAPI.FilesStamp {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.stamp = try c.decode(String.self, forKey: .stamp)
+    }
+}
+
+extension AppAPI.FilesStampParams {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.session = try c.decode(String.self, forKey: .session)
+        self.folders = try c.decodeIfPresent([String].self, forKey: .folders) ?? []
     }
 }
 

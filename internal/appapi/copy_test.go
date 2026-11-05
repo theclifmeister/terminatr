@@ -375,6 +375,9 @@ func TestCopies(t *testing.T) {
 	check("memory.read", homeOf(memoryTextOf), nil)
 	check("library.list", homeOf(libraryOf), nil)
 	check("library.read", homeOf(libraryChunkOf), nil)
+	check("files.list", homeOf(filesListOf), nil)
+	check("files.read", homeOf(filesChunkOf), nil)
+	check("files.stamp", homeOf(filesStampOf), nil)
 	// The session refused it is the bridge's to tell; an answered
 	// refusal isn't listed.
 	check("guard.refusals", homeOf(guardRefusalOf), []string{".Session", ".Decision"})
@@ -621,6 +624,7 @@ func TestAllowlist(t *testing.T) {
 		proto.MethodLinkAct, proto.MethodPeerShareAnswer, proto.MethodPeerNeedAct, MethodGuardRefusals, MethodGuardDecide, proto.MethodTranscriptPage,
 		proto.MethodProjectPin, proto.MethodProjectNew, proto.MethodSessionAdoptRequest, proto.MethodSessionRemote, proto.MethodLinkSend,
 		proto.MethodMemoryList, proto.MethodMemoryRead, proto.MethodLibraryList, proto.MethodLibraryRead, proto.MethodDesignList, proto.MethodSearchQuery, proto.MethodSearchTimeline, proto.MethodSearchShow, proto.MethodAppReportAdd,
+		proto.MethodFilesList, proto.MethodFilesRead, proto.MethodFilesStamp,
 		proto.MethodPeerPagesRead, proto.MethodPeerLibraryList, proto.MethodPeerLibraryRead, proto.MethodPeerDesignList,
 		MethodDeviceNonce, MethodDeviceBye, MethodDeviceList, MethodDevicePair, MethodDevicePairWait, MethodDevicePairAnswer, MethodDeviceAccess,
 		MethodDeviceName, MethodDeviceRemove, proto.MethodModsList, proto.MethodModsSet, proto.MethodModsSetting,
@@ -641,6 +645,11 @@ func TestAllowlist(t *testing.T) {
 			if tm, ok := Lookup(m.Target); !ok || !tm.Stream {
 				t.Errorf("%s: target %s is no stream", m.Name, m.Target)
 			}
+		}
+	}
+	for _, name := range []string{proto.MethodFilesList, proto.MethodFilesRead, proto.MethodFilesStamp} {
+		if m, _ := Lookup(name); !m.MacOnly() || m.Write {
+			t.Errorf("%s: mac-only %v, write %v", name, m.MacOnly(), m.Write)
 		}
 	}
 	for name, write := range map[string]bool{MethodPaneInput: true, proto.MethodPaneVT: false, proto.MethodTranscriptWatch: false,

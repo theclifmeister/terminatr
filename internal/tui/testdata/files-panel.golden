@@ -1,0 +1,75 @@
+the top (39 cells)
+│FILES  Worktree · Attached
+│4 changed +84 −12
+│▸ internal/                           •
+│▸ node_modules/                 ignored
+│▸ old/                                D
+│  Makefile
+│  README.md                           M
+│  evil[2J]52;c;xname                  A
+│  gone.go                             D
+│  out ↗
+│  here →
+
+a folder open, its file selected (39 cells)
+│FILES  Worktree · Attached
+│4 changed +84 −12
+│▾ internal/                           •
+│    types.go                          M
+│▸ node_modules/                 ignored
+│▸ old/                                D
+│  Makefile
+│  README.md                           M
+│  evil[2J]52;c;xname                  A
+│  gone.go                             D
+│  out ↗
+│  here →
+
+narrow (23 cells)
+│FILES  Worktree · Attached
+│4 changed +84 −12
+│▾ internal/           •
+│    types.go          M
+│▸ node_modules/ ignored
+│▸ old/                D
+│  Makefile
+│  README.md           M
+│  evil[2J]52;c;xname  A
+│  gone.go             D
+│  out ↗
+│  here →
+
+filtering, ignored too (39 cells)
+│FILES  Worktree · Attached
+│4 changed +84 −12
+│/ type▏
+│ignored too
+│  internal/types.go                   M
+
+changed only, cut (39 cells)
+│FILES  Worktree · Attached
+│4 changed +84 −12
+│changed only
+│  README.md                           M
+│… more files than show here
+
+a plain folder (39 cells)
+│FILES  Worktree · Attached
+│no repo here: no marks
+│  a.txt
+
+no folder (39 cells)
+│FILES  Worktree · Attached
+│a director has no repo
+
+Attached (39 cells)
+│FILES  Worktree · Attached
+│2 files
+│T5  Fix it · t-0005 · 2026-11-05
+│  notes.md                       3.1 KB
+│  shot.png                     412.0 KB
+
+Attached, none (39 cells)
+│FILES  Worktree · Attached
+│no files: a thread's report attaches them
+

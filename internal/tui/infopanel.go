@@ -128,6 +128,9 @@ const (
 	hitSaveClear            // the coordinator saves and clears (tm clear)
 	hitSection              // a mod section's header or body (panelsections.go)
 	hitProgramNeeds         // the program needs dialog over the pane (programneeds.go)
+	hitFiles                // the panel's Files view (filespanel.go)
+	hitFilesTab             // the Files view's Worktree and Attached
+	hitFileRow              // a row of the Files view (task: its index)
 )
 
 // prURL is the thread's PR's address: the ticker's, else its report's.
@@ -320,7 +323,9 @@ func threadInfo(d *infoData, w int, now time.Time) (*panel, []infoHit) {
 	pl.gap()
 	if rec := d.rec; rec != nil {
 		pl.field("branch", oneLine(rec.Branch))
+		from := len(pl.lines)
 		pl.field("worktree", oneLine(homeShort(rec.Worktree)))
+		hit(from, infoHit{kind: hitFiles})
 	}
 	if at := d.lastActive(); !at.IsZero() {
 		pl.field("active", age(now.Sub(at))+" ago")
@@ -442,4 +447,7 @@ type infoPanel struct {
 	sel                  string
 	cache                sectionCache
 	coordOrder, detOrder []string
+	// files is the Files view while it shows, nil for the panel's Info
+	// face (filespanel.go).
+	files *filesView
 }

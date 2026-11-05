@@ -97,6 +97,14 @@ func init() {
 		unary(proto.MethodLibraryList, false, libraryListParams, libraryOf),
 		unary(proto.MethodLibraryRead, false, libraryReadParams, libraryChunkOf),
 
+		// A session's folder, read only (app API 49; the server's caps
+		// say worktree-files): a thread's worktree or a coordinator's
+		// main checkout, listed with git's marks, read a chunk at a time,
+		// and a stamp to tell a change. The Mac app's alone (macOnly).
+		unary(proto.MethodFilesList, false, filesListParams, filesListOf),
+		unary(proto.MethodFilesRead, false, filesReadParams, filesChunkOf),
+		unary(proto.MethodFilesStamp, false, filesStampParams, filesStampOf),
+
 		// A project's designs, read only (app API 31; the server's caps
 		// say designs): designs.list's records of the mod API, each with
 		// its build in after order. This server's projects only.
@@ -584,6 +592,18 @@ func searchTimelineParams(p SearchTimelineParams) proto.SearchTimelineParams {
 
 func searchShowParams(p SearchShowParams) proto.SearchShowParams {
 	return proto.SearchShowParams{Project: p.Project, IDs: append([]string(nil), p.IDs...)}
+}
+
+func filesListParams(p FilesListParams) proto.FilesListParams {
+	return proto.FilesListParams{Session: p.Session, Path: p.Path, Ignored: p.Ignored, Query: p.Query, Changed: p.Changed}
+}
+
+func filesReadParams(p FilesReadParams) proto.FilesReadParams {
+	return proto.FilesReadParams{Session: p.Session, Path: p.Path, Offset: p.Offset, Ignored: p.Ignored}
+}
+
+func filesStampParams(p FilesStampParams) proto.FilesStampParams {
+	return proto.FilesStampParams{Session: p.Session, Folders: append([]string(nil), p.Folders...)}
 }
 
 func libraryReadParams(p LibraryReadParams) proto.LibraryReadParams {
