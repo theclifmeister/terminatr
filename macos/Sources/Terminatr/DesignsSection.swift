@@ -158,6 +158,8 @@ private struct DesignCard: View {
         HStack(spacing: 10) {
             Text(design.title)
                 .lineLimit(1)
+                .frame(minWidth: ThreadCard.titleMin, alignment: .leading)
+                .layoutPriority(2)
             Spacer(minLength: 8)
             if !design.questions.isEmpty {
                 Text(design.questions.count == 1 ? "1 open question" : "\(design.questions.count) open questions")
@@ -170,7 +172,8 @@ private struct DesignCard: View {
                 StatusTag(status: design.status)
             } else {
                 Meter(fraction: Designs.progress(design), colour: Designs.Status(design.status) == .done ? theme.good : theme.action)
-                    .frame(width: 90, height: 4)
+                    .frame(minWidth: 30, idealWidth: 90, maxWidth: 90)
+                    .frame(height: 4)
                 Text(Designs.built(design))
                     .font(theme.mono(.subheadline))
                     .foregroundStyle(theme.muted)
