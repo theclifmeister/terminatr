@@ -76,7 +76,8 @@ import Testing
 }
 
 // Accessibility (T748 J): text styles keep the flat look's measured sizes
-// at 100% on the Mac (T999), run from largest to smallest, and the sidebar
+// at 100% on the Mac (T999), one scale of 14 for rows and text and 13 for
+// labels and status (T1002), run from largest to smallest, and the sidebar
 // follows the system's size.
 @Test func textStyles() {
     #expect(TextStyle.headline.points == 15)
@@ -84,7 +85,9 @@ import Testing
     #expect(TextStyle.subheadline.points == 13)
     let sizes = TextStyle.allCases.map(\.points)
     #expect(sizes == sizes.sorted(by: >))
-    #expect(Set(sizes).count == sizes.count)
+    #expect(TextStyle.callout.points == 14)
+    #expect(TextStyle.footnote.points == 13)
+    #expect(TextStyle.caption.points == 13)
     #expect(SidebarSize.medium.scale == 1)
     #expect(SidebarSize.small.scale < 1 && SidebarSize.large.scale > 1)
 }

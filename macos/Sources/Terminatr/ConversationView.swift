@@ -5,10 +5,12 @@ import TerminatrUI
 
 /// The Conversation tab: the transcript, the cards for what the session
 /// waits on (a question, a permission dialog, a task in review), and
-/// the composer, always at the foot. A coordinator's open questions and
-/// its project's needs lead, above the transcript (CoordinatorPanel); a
-/// thread's cards sit over the composer, and while one is open and the
-/// transcript is scrolled up, Jump to the open card brings it back. ⌘F
+/// the composer, always at the foot. A session's cards sit at the
+/// transcript's end, over the composer, as the page draws them, a
+/// coordinator's as a thread's; what else of a coordinator's project
+/// needs the user leads, above the transcript (CoordinatorPanel). While
+/// a card is open and the transcript is scrolled up, Jump to the open
+/// card brings it back. ⌘F
 /// opens a find bar over it: the entries that show the words wear a
 /// ring, and ↩, ⌘G and ⇧⌘G scroll from one to the next. A long
 /// transcript draws its last turns (drawn), and more on a click, so
@@ -66,7 +68,6 @@ struct ConversationTab: View {
             }
             if coordinator && remote == nil {
                 CoordinatorPanel(model: model, session: session)
-                    .modifier(Flash(n: flash))
             }
             ScrollViewReader { proxy in
                 ScrollView {
@@ -92,9 +93,11 @@ struct ConversationTab: View {
                                 EntryView(entry: e, agent: session?.agent ?? peerSession?.agent ?? "agent", session: session?.id,
                                           answer: asking && e.id == pending ? { flash += 1 } : nil)
                                     .modifier(FoundRing(found: found.contains(e.id), current: e.id == current))
+                                    .modifier(Reading(on: e.kind != .prompt))
                                     .id(e.id)
                             case .tools(let run):
                                 ToolRunView(run: run, model: model, found: found, current: current)
+                                    .modifier(Reading(on: true))
                                     .id(run.id)
                             }
                         }
@@ -125,7 +128,7 @@ struct ConversationTab: View {
                         Color.clear.frame(height: 1).padding(.bottom, 14).id(Self.end)
                     }
                     .padding(.horizontal, Page.edge)
-                    .padding(.top, 14)
+                    .padding(.top, 18)
                 }
                 // Streamed text lands in place: no implicit animation.
                 .transaction { if reduceMotion { $0.animation = nil } }
@@ -157,27 +160,34 @@ struct ConversationTab: View {
                 // The cards and the composer at the foot: the transcript
                 // ends above them and scrolls behind them under the edge.
                 .footBar(
-                    VStack(spacing: 10) {
+                    VStack(spacing: 0) {
                         // While the agent has its turn: how long, and
                         // what it does now (T803).
                         if let busy = Busy.of(session) {
-                            WorkingBar(busy: busy, activity: Activity.of(model.transcript, current: session?.current ?? ""))
+                            WorkingBar(busy: busy, activity: Activity.of(model.transcript, current: session?.current ?? ""), plain: true)
                                 .padding(.horizontal, Page.edge)
+                                .padding(.bottom, 13)
                                 .transition(.opacity)
                         }
-                        VStack(spacing: 10) {
+                        VStack(alignment: .leading, spacing: 0) {
                             if let review, let task = review.task {
                                 ReviewCard(project: model.ref.project, thread: review, task: task)
-                                    .padding(.horizontal, Page.edge)
+                                    .modifier(FootCard())
                             }
                             if remote != nil {
                                 if peerSession?.asking == true {
                                     RemoteQuestionCard(model: model)
+                                        .modifier(FootCard())
                                 }
-                            } else if !coordinator {
+                            } else {
                                 Cards(model: model, session: session, firstChoice: app.firstChoice)
+                                if coordinator, !AppModel.waitsOnCard(session), let kept = app.project(model.ref.project)?.questions, kept > 0 {
+                                    QuestionsCard(project: model.ref.project, count: kept)
+                                        .modifier(FootCard())
+                                }
                             }
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                         .modifier(Flash(n: flash))
                         if let remote, !remote.sends {
                             ViewOnlyLine(server: model.ref.server)
@@ -187,8 +197,11 @@ struct ConversationTab: View {
                     }
                     .overlay(alignment: .top) {
                         if !follow.following {
+                            // What scrolls ends at a line while it isn't
+                            // at its end; at its end the cards follow on.
+                            theme.line.frame(height: 1)
                             // Above the bar, over the transcript's edge.
-                            jump(proxy, toCard: open && (!coordinator || remote != nil))
+                            jump(proxy, toCard: open)
                                 .padding(.bottom, 8)
                                 .frame(height: 0, alignment: .bottom)
                         }
@@ -231,11 +244,11 @@ struct ConversationTab: View {
             if toCard { flash += 1 }
         } label: {
             Label(toCard ? "Jump to the open card" : follow.label, systemImage: "arrow.down")
-                .font(theme.body(.subheadline, .semibold))
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .solid(Capsule())
-                .overlay(Capsule().strokeBorder(theme.line, lineWidth: 1))
+                .font(theme.body(.subheadline))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .solid(RoundedRectangle(cornerRadius: 6))
+                .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(theme.line, lineWidth: 1))
         }
         .buttonStyle(.plain)
         .help("Scrolls to the end, where the card waits")
@@ -305,15 +318,13 @@ struct RemoteQuestionCard: View {
     let model: SessionModel
 
     var body: some View {
-        CardFrame(tag: "Question on \(model.ref.server)", colour: theme.question, tint: theme.questionTint, waiting: "remote question \(model.ref.card)") {
+        CardFrame(tag: "Question on \(model.ref.server)", colour: theme.question) {
             Text("A question is open in this session. Its text stays on \(model.ref.server): it shows in the pane, where your keys answer it.")
                 .fixedSize(horizontal: false, vertical: true)
             Button("Answer in Terminal") { model.pick(.terminal) }
-                .buttonStyle(.borderedProminent)
-                .tint(theme.action)
+                .buttonStyle(.flatPrimary)
                 .help("Opens the session's pane")
         }
-        .padding(.horizontal, Page.edge)
     }
 }
 
@@ -328,9 +339,10 @@ struct ViewOnlyLine: View {
             .font(theme.body(.footnote))
             .foregroundStyle(theme.muted)
             .padding(.horizontal, Page.edge)
-            .padding(.top, 10)
-            .padding(.bottom, 14)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, 13)
+            .padding(.bottom, 11)
+            .frame(maxWidth: .infinity, minHeight: 59, alignment: .leading)
+            .overlay(alignment: .top) { theme.line.frame(height: 1) }
     }
 }
 
@@ -343,11 +355,38 @@ struct FoundRing: ViewModifier {
     func body(content: Content) -> some View {
         content.overlay {
             if found {
-                RoundedRectangle(cornerRadius: 8)
+                RoundedRectangle(cornerRadius: 6)
                     .strokeBorder(theme.action.opacity(current ? 1 : 0.4), lineWidth: current ? 2 : 1)
                     .padding(-3)
             }
         }
+    }
+}
+
+/// The conversation's text, tool rows and cards run 820 wide at most, at
+/// the pane's left.
+struct Reading: ViewModifier {
+    let on: Bool
+
+    func body(content: Content) -> some View {
+        if on {
+            content
+                .frame(maxWidth: Flat.reading, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            content
+        }
+    }
+}
+
+/// A card at the transcript's end: in the conversation's measure, 13 over
+/// what follows it.
+struct FootCard: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .frame(maxWidth: Flat.reading, alignment: .leading)
+            .padding(.horizontal, Page.edge)
+            .padding(.bottom, 13)
     }
 }
 
@@ -361,9 +400,12 @@ struct Flash: ViewModifier {
     func body(content: Content) -> some View {
         content
             .overlay {
-                RoundedRectangle(cornerRadius: 8)
+                RoundedRectangle(cornerRadius: 6)
                     .strokeBorder(theme.action, lineWidth: 2)
-                    .padding(.horizontal, 16)
+                    .padding(.horizontal, Page.edge - 1)
+                    .padding(.bottom, 12)
+                    .frame(maxWidth: Flat.reading + 2 * Page.edge - 2, alignment: .leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .opacity(on ? 1 : 0)
                     .allowsHitTesting(false)
             }
@@ -385,11 +427,11 @@ struct ReviewCard: View {
     let task: AppAPI.Task
 
     var body: some View {
-        CardFrame(tag: "Review", colour: theme.good, tint: theme.pane, waiting: "review \(project) \(task.ref)") {
+        CardFrame(tag: "Review", colour: theme.good) {
             HStack(alignment: .center, spacing: 10) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("\(task.ref) is ready to review")
-                        .font(theme.title(.headline, .bold))
+                        .font(theme.body(.body, .medium))
                     Text(facts)
                         .font(theme.body(.subheadline))
                         .foregroundStyle(theme.muted)
@@ -414,10 +456,12 @@ struct ReviewCard: View {
     }
 }
 
-/// One entry of the conversation: each turn says who and when ("you ·
-/// 20:45", "claude · 20:45"); tm's prompts fold to one line the user
-/// opens (the thread's kickoff, the server's notes), and long prompts to
-/// their first lines. Files sent or pasted show as attachments.
+/// One entry of the conversation: the agent's turn says who and when
+/// ("claude · 20:45"), the user's prompt says so in its tooltip and to
+/// VoiceOver; tm's prompts fold to one line the user opens (the thread's
+/// kickoff, the server's notes), and long prompts to their first lines,
+/// with Show less to fold them again. Files sent or pasted show as
+/// attachments.
 struct EntryView: View {
     @Environment(\.theme) private var theme
     let entry: Transcript.Entry
@@ -435,17 +479,18 @@ struct EntryView: View {
         case .prompt:
             let preview = unfolded ? nil : entry.preview()
             HStack {
-                Spacer(minLength: 80)
+                Spacer(minLength: 0)
                 VStack(alignment: .trailing, spacing: 4) {
-                    turn
-                        .onTapGesture { if entry.folds || entry.preview() != nil { unfolded = false } }
                     if !entry.text.isEmpty || entry.files.isEmpty {
                         Text(preview ?? entry.text)
+                            .lineSpacing(3)
                             .textSelection(.enabled)
                             .foregroundStyle(theme.ink)
                             .padding(.horizontal, 11)
                             .padding(.vertical, 7)
                             .background(theme.selection, in: RoundedRectangle(cornerRadius: Radius.row))
+                            .help(turnWords)
+                            .accessibilityLabel("\(turnWords): \(preview ?? entry.text)")
                     }
                     if !entry.files.isEmpty {
                         Attachments(files: entry.attachments, session: session, alignment: .trailing)
@@ -455,12 +500,18 @@ struct EntryView: View {
                             .buttonStyle(.borderless)
                             .font(theme.body(.footnote))
                             .accessibilityHint("Shows the whole prompt")
+                    } else if unfolded {
+                        Button("Show less") { unfolded = false }
+                            .buttonStyle(.borderless)
+                            .font(theme.body(.footnote))
+                            .accessibilityHint("Folds the prompt again")
                     }
                     if entry.truncated { cut }
                 }
+                .frame(maxWidth: Flat.prompt, alignment: .trailing)
             }
         case .text:
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 2) {
                 turn
                 MarkdownView(text: entry.text)
                 if entry.truncated { cut }
@@ -479,17 +530,17 @@ struct EntryView: View {
                     .font(theme.mono(.footnote))
                     .foregroundStyle(r.error ? theme.attention : theme.muted)
                     .lineLimit(1)
-                    .padding(.leading, 12)
+                    .padding(.leading, 15)
             }
         case .note:
             // A centred divider: "Conversation compacted", "Interrupted".
             HStack(spacing: 10) {
-                Rectangle().fill(theme.line).frame(height: 1)
+                Rectangle().fill(theme.lineSoft).frame(height: 1)
                 Text(entry.text)
-                    .font(theme.body(.footnote, .medium))
+                    .font(theme.body(.footnote))
                     .foregroundStyle(theme.muted)
                     .fixedSize()
-                Rectangle().fill(theme.line).frame(height: 1)
+                Rectangle().fill(theme.lineSoft).frame(height: 1)
             }
             .padding(.vertical, 6)
             .accessibilityElement(children: .combine)
@@ -497,8 +548,12 @@ struct EntryView: View {
     }
 
     /// Who wrote the turn, and when: "you · 20:45".
+    private var turnWords: String {
+        [entry.who(agent: agent), Self.clock(entry.at)].filter { !$0.isEmpty }.joined(separator: " · ")
+    }
+
     private var turn: some View {
-        Text([entry.who(agent: agent), Self.clock(entry.at)].filter { !$0.isEmpty }.joined(separator: " · "))
+        Text(turnWords)
             .font(theme.body(.caption))
             .foregroundStyle(theme.muted)
     }
@@ -521,7 +576,7 @@ struct EntryView: View {
     }
 }
 
-/// Consecutive tool calls as one box: a header that counts them by tool
+/// Consecutive tool calls as one line: a header that counts them by tool
 /// ("Read ×5 · Bash ×3") with their state, folded until the user opens
 /// it (a click, space, → and ←, VoiceOver's action) to their ToolLines.
 /// Folded, a last call still running shows under the header. A group
@@ -560,10 +615,10 @@ struct ToolRunView: View {
                     ToolLine(entry: c)
                         .modifier(FoundRing(found: found.contains(c.id), current: c.id == current))
                 }
-                .padding(.leading, 14)
+                .padding(.leading, 15)
             } else if let live = run.live {
                 ToolLine(entry: live)
-                    .padding(.leading, 14)
+                    .padding(.leading, 15)
             }
         }
     }

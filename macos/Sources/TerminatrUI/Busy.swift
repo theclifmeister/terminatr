@@ -89,15 +89,19 @@ public struct BusyLabel: View {
     @Environment(\.theme) private var theme
     let busy: Busy
     var colour: Color?
+    /// With a capital, leading a row's words.
+    var capital: Bool
 
-    public init(busy: Busy, colour: Color? = nil) {
+    public init(busy: Busy, colour: Color? = nil, capital: Bool = false) {
         self.busy = busy
         self.colour = colour
+        self.capital = capital
     }
 
     public var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { tl in
-            Text(busy.word(now: tl.date))
+            let word = busy.word(now: tl.date)
+            Text(capital ? word.prefix(1).uppercased() + word.dropFirst() : word)
                 .font(theme.body(.caption))
                 .foregroundStyle(colour ?? theme.muted)
                 .monospacedDigit()
@@ -115,10 +119,14 @@ public struct WorkingBar: View {
     @Environment(\.theme) private var theme
     let busy: Busy
     let activity: String
+    /// A flat line in the conversation's own flow (the Mac's, T1002), with
+    /// no chip round it.
+    let plain: Bool
 
-    public init(busy: Busy, activity: String) {
+    public init(busy: Busy, activity: String, plain: Bool = false) {
         self.busy = busy
         self.activity = activity
+        self.plain = plain
     }
 
     public var body: some View {
@@ -126,8 +134,8 @@ public struct WorkingBar: View {
             HStack(alignment: .center, spacing: 8) {
                 BusyMark(size: 8)
                 Text("Working…")
-                    .font(theme.body(.subheadline, .semibold))
-                    .foregroundStyle(theme.colour(.working))
+                    .font(theme.body(.subheadline, plain ? .regular : .semibold))
+                    .foregroundStyle(plain ? theme.muted : theme.colour(.working))
                     .fixedSize()
                 if let t = busy.clock(now: tl.date) {
                     Text(t)
@@ -143,11 +151,11 @@ public struct WorkingBar: View {
                     .truncationMode(.middle)
                 Spacer(minLength: 0)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 7)
+            .padding(.horizontal, plain ? 0 : 12)
+            .padding(.vertical, plain ? 0 : 7)
             // A card's fill: it floats over the transcript's end.
-            .solid(Capsule())
-            .overlay(Capsule().strokeBorder(theme.line, lineWidth: 1))
+            .background { if !plain { Color.clear.solid(Capsule()) } }
+            .overlay { if !plain { Capsule().strokeBorder(theme.line, lineWidth: 1) } }
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(busy.spoken(now: tl.date))
             .accessibilityValue(activity)

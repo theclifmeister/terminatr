@@ -1,8 +1,9 @@
 import SwiftUI
 import TerminatrKit
 
-/// A tool-run group's header: its calls counted by tool ("Read ×5 ·
-/// Bash ×3") with their state, and a chevron turned while open. The
+/// A tool-run group's header, one flat line: its calls counted by tool
+/// ("Read ×5 · Bash ×3") with their state, and a chevron turned while
+/// open. The
 /// Mac app's ToolRunView folds it; the phone's shows it as it is.
 public struct ToolRunHeader: View {
     @Environment(\.theme) private var theme
@@ -17,12 +18,12 @@ public struct ToolRunHeader: View {
     public var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Image(systemName: "chevron.right")
-                .font(theme.body(.glyph, .bold))
+                .font(theme.body(.glyph, .semibold))
                 .foregroundStyle(theme.muted)
                 .rotationEffect(.degrees(open ? 90 : 0))
             Text(run.headline)
-                .font(theme.mono(.subheadline, .medium))
-                .foregroundStyle(theme.action)
+                .font(theme.mono(.subheadline))
+                .foregroundStyle(theme.muted)
                 .lineLimit(1)
                 .truncationMode(.tail)
             switch run.state {
@@ -39,10 +40,6 @@ public struct ToolRunHeader: View {
             }
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 7)
-        .background(theme.command, in: RoundedRectangle(cornerRadius: 6))
-        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(theme.line, lineWidth: 1))
         .contentShape(Rectangle())
     }
 
@@ -56,7 +53,7 @@ public struct ToolRunHeader: View {
     }
 }
 
-/// A tool call folded to one line: the tool, its main argument and its
+/// A tool call as one flat muted line in mono: the tool, its main argument and its
 /// result's first line. An AskUserQuestion call without its answer
 /// waits on the user, not on a spinner: it says so, with a link that
 /// shows the question card; once answered or declined, it is its
@@ -81,15 +78,20 @@ public struct ToolLine: View {
 
     private var line: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Image(systemName: "chevron.right")
+                .font(theme.body(.glyph, .semibold))
+                .foregroundStyle(theme.muted)
+                .accessibilityHidden(true)
             // The tool's name keeps its line on a phone's width: the
             // argument truncates first.
             Text(entry.tool.isEmpty ? "tool" : entry.tool)
-                .font(theme.mono(.subheadline, .medium))
-                .foregroundStyle(theme.action)
+                .font(theme.mono(.subheadline))
+                .foregroundStyle(theme.muted)
                 .lineLimit(1)
                 .layoutPriority(1)
             Text(entry.text)
                 .font(theme.mono(.subheadline))
+                .foregroundStyle(theme.muted)
                 .lineLimit(1)
                 .truncationMode(.middle)
                 .textSelection(.enabled)
@@ -119,9 +121,6 @@ public struct ToolLine: View {
             }
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 7)
-        .background(theme.command, in: RoundedRectangle(cornerRadius: 6))
         .accessibilityElement(children: .combine)
     }
 

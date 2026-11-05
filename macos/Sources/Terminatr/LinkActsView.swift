@@ -49,8 +49,7 @@ struct LinkActs: View {
         switch act.kind {
         case .held, .file:
             Button(act.yes) { app.answerLink(need, yes: true) }
-                .buttonStyle(.borderedProminent)
-                .tint(theme.action)
+                .buttonStyle(.flatPrimary)
                 .help(act.kind == .held ? "Sends \(act.id) to \(act.other)" : "Takes \(act.file) from \(act.other)")
                 .accessibilityLabel("\(act.yes) \(need.what)")
         case .request:
@@ -117,8 +116,7 @@ struct LinkOutcomeRow: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(colour.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(colour.opacity(theme.contrast ? 1 : 0.3), lineWidth: 1))
+        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(colour.opacity(theme.contrast ? 1 : 0.5), lineWidth: theme.contrast ? 1.5 : 1))
         .accessibilityElement(children: .combine)
         .transition(reduceMotion ? .identity : .opacity.combined(with: .move(edge: .top)))
     }

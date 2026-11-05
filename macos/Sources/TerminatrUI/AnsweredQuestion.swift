@@ -32,18 +32,10 @@ public struct AnsweredQuestionCard: View {
                 }
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 9)
+        .padding(.horizontal, 13)
+        .padding(.vertical, 11)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(theme.command, in: RoundedRectangle(cornerRadius: 6))
-        .overlay(alignment: .leading) {
-            // The answered look: a rule in the colour of done.
-            if case .answered = outcome {
-                UnevenRoundedRectangle(topLeadingRadius: 9, bottomLeadingRadius: 9)
-                    .fill(theme.good)
-                    .frame(width: 3)
-            }
-        }
+        .overlay(RoundedRectangle(cornerRadius: Radius.row).strokeBorder(theme.line, lineWidth: theme.contrast ? 1.5 : 1))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(spoken)
     }

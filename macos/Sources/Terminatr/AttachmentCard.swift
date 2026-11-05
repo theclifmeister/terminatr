@@ -33,8 +33,8 @@ struct AttachmentCard: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .solid(RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(theme.line, lineWidth: 1))
+        .solid(RoundedRectangle(cornerRadius: 6))
+        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(theme.line, lineWidth: theme.contrast ? 1.5 : 1))
     }
 }
 
@@ -147,7 +147,7 @@ struct AttachmentView: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
         .frame(maxWidth: Self.maxWidth, alignment: .leading)
-        .background(theme.command, in: RoundedRectangle(cornerRadius: 6))
+        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(theme.line, lineWidth: theme.contrast ? 1.5 : 1))
         .accessibilityElement(children: .contain)
     }
 
@@ -173,7 +173,7 @@ struct AttachmentView: View {
             .padding(.horizontal, 10)
             .padding(.vertical, 7)
             .frame(maxWidth: Self.maxWidth, alignment: .leading)
-            .background(theme.command.opacity(0.6), in: RoundedRectangle(cornerRadius: 6))
+            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(theme.line, lineWidth: theme.contrast ? 1.5 : 1))
     }
 
     private func load() async {
@@ -224,7 +224,7 @@ struct FilePreview: View {
         VStack(spacing: 0) {
             HStack(spacing: 10) {
                 Text(file.name)
-                    .font(theme.title(.headline, .bold))
+                    .font(theme.title(.headline, .semibold))
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Spacer()

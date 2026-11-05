@@ -51,19 +51,26 @@ struct MemoryPane: View {
     @State private var picked: String?
     @State private var text: String?
     @State private var failure: String?
+    @AppStorage("memoryListWidth") private var listWidth = 260.0
 
     var body: some View {
-        HSplitView {
-            List(selection: $picked) {
-                if let files {
-                    let own = MemoryPage.project(files), notes = MemoryPage.notes(files)
+        PickSplit(width: $listWidth, range: 200...360) {
+            let own = MemoryPage.project(files ?? []), notes = MemoryPage.notes(files ?? [])
+            PickList(selection: $picked, order: (own + notes).map(\.path), name: "Memory files") {
+                if files != nil {
                     if !own.isEmpty {
-                        Section("Project") { ForEach(own, id: \.path) { MemoryFileRow($0).tag($0.path) } }
+                        PaneLabel("Project").padding(.horizontal, 8).padding(.vertical, 4)
+                        ForEach(own, id: \.path) { f in
+                            PickRow(id: f.path, selection: $picked) { MemoryFileRow(f) }
+                        }
                     }
-                    Section("Notes · \(notes.count)") { ForEach(notes, id: \.path) { MemoryFileRow($0).tag($0.path) } }
+                    PaneLabel("Notes · \(notes.count)").padding(.horizontal, 8).padding(.vertical, 4)
+                    ForEach(notes, id: \.path) { f in
+                        PickRow(id: f.path, selection: $picked) { MemoryFileRow(f) }
+                    }
                 }
             }
-            .frame(minWidth: 200, idealWidth: 240, maxWidth: 360)
+        } detail: {
             ScrollView {
                 Group {
                     if let failure {
@@ -77,11 +84,13 @@ struct MemoryPane: View {
                         ProgressView().controlSize(.small)
                     }
                 }
-                .padding(24)
+                .font(theme.sized(Flat.text))
+                .frame(maxWidth: Flat.reading, alignment: .leading)
+                .padding(.horizontal, 24)
+                .padding(.vertical, 22)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .scrollEdges()
-            .frame(minWidth: 320)
         }
         .task(id: project) { await list() }
         .task(id: picked) { await read() }
@@ -140,47 +149,50 @@ struct LibraryPane: View {
             if let failure {
                 Text(failure)
                     .foregroundStyle(theme.attention)
-                    .padding(.horizontal, 28)
+                    .padding(.horizontal, 16)
                     .padding(.vertical, 8)
             }
             if files?.isEmpty == true {
                 Text("No files: a thread's report attaches them (tm report --attach).")
+                    .font(theme.sized(Flat.text))
                     .foregroundStyle(theme.muted)
-                    .padding(28)
+                    .padding(.horizontal, 24)
+                    .padding(.vertical, 22)
                 Spacer()
             } else {
-                List(selection: $picked) {
-                    ForEach(LibraryPage.groups(files ?? [])) { g in
-                        Section {
-                            ForEach(g.files, id: \.self) { f in
-                                LibraryFileRow(f)
-                                    .tag(Self.key(f))
-                                    .contextMenu { actions(f) }
-                            }
-                        } header: {
-                            HStack {
-                                Text(g.title).lineLimit(1)
-                                Spacer()
-                                Text(g.detail).font(theme.mono(.caption)).foregroundStyle(theme.muted)
-                            }
+                let groups = LibraryPage.groups(files ?? [])
+                PickList(selection: $picked, order: groups.flatMap { $0.files.map(Self.key) }, name: "Files") {
+                    ForEach(groups) { g in
+                        HStack(alignment: .firstTextBaseline) {
+                            PaneLabel(g.title).lineLimit(1)
+                            Spacer()
+                            Text(g.detail).font(theme.sized(Flat.label)).foregroundStyle(theme.muted)
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.top, 8)
+                        .padding(.bottom, 2)
+                        ForEach(g.files, id: \.self) { f in
+                            PickRow(id: Self.key(f), selection: $picked, open: { look(f) }) { LibraryFileRow(f) }
+                                .contextMenu { actions(f) }
                         }
                     }
-                }
-                .contextMenu(forSelectionType: String.self) { _ in } primaryAction: { keys in
-                    if let f = file(keys.first) { look(f) }
                 }
                 .onKeyPress(.space) {
                     guard let f = file(picked) else { return .ignored }
                     look(f)
                     return .handled
                 }
-                HStack {
-                    if busy { ProgressView().controlSize(.small) }
-                    Spacer()
-                    if let f = file(picked) { actions(f) }
+                if busy || file(picked) != nil {
+                    HStack(spacing: 7) {
+                        if busy { ProgressView().controlSize(.small) }
+                        Spacer()
+                        if let f = file(picked) { actions(f) }
+                    }
+                    .buttonStyle(.flat)
+                    .padding(.horizontal, 12)
+                    .frame(minHeight: 44)
+                    .overlay(alignment: .top) { theme.line.frame(height: 1) }
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
             }
         }
         .quickLookPreview($looking)

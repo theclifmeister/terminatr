@@ -2,7 +2,8 @@ import SwiftUI
 import TerminatrKit
 import TerminatrUI
 
-/// A need on the dashboard that acts in place (T748 milestone C): an
+/// A need as a row of a hairline list (the inspector lists it too, but
+/// only this acts) that acts in place (T748 milestone C): an
 /// approval's dialog as the server reads it (Allow, the last option,
 /// Open), a question tm read with its options, the coordinator's open
 /// questions (Answer now), a task in review (Accept, Send back…) or
@@ -25,8 +26,9 @@ struct NeedCard: View {
     @State private var ticked: Set<Int> = []
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .center, spacing: 8) {
+        ListRow {
+          VStack(alignment: .leading, spacing: 7) {
+            HStack(alignment: .center, spacing: 10) {
                 if showsTask {
                     // A button, so Full Keyboard Access reaches it.
                     Button { app.showTask(project: need.project, task: need.task) } label: {
@@ -45,21 +47,18 @@ struct NeedCard: View {
                 Text(said.text)
                     .font(theme.body(.footnote))
                     .foregroundStyle(said.failed ? theme.attention : theme.muted)
-                    .padding(.leading, 24)
+                    .padding(.leading, 17)
             }
             if let o = app.linkOutcomes[need.id] {
                 LinkOutcomeRow(outcome: o)
-                    .padding(.leading, 24)
+                    .padding(.leading, 17)
             }
             if !need.task.isEmpty, need.kind == .review || need.kind == .blocked {
                 TaskOutcome(project: need.project, task: need.task)
-                    .padding(.leading, 24)
+                    .padding(.leading, 17)
             }
+          }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 9)
-        .solid(RoundedRectangle(cornerRadius: 6))
-        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(theme.colour(need.kind).opacity(theme.contrast ? 1 : 0.35), lineWidth: 1))
         .accessibilityElement(children: .contain)
         .accessibilityLabel(need.title)
         .task(id: need.id) { await check() }
@@ -98,8 +97,7 @@ struct NeedCard: View {
                 if let dialog, !dialog.escape, let first = dialog.options.first, once(dialog, 1) {
                     Button(first) { approve(1) }
                         .accessibilityLabel(named(first))
-                        .buttonStyle(.borderedProminent)
-                        .tint(theme.action)
+                        .buttonStyle(.flatPrimary)
                     if dialog.options.count > 1, let last = dialog.options.last, once(dialog, dialog.options.count) {
                         Button(last) { approve(dialog.options.count) }
                             .accessibilityLabel(named(last))
@@ -109,8 +107,7 @@ struct NeedCard: View {
             case .question where need.id.hasPrefix("questions:"):
                 Button("Answer now") { answerQuestions() }
                     .accessibilityLabel(named("Answer now"))
-                    .buttonStyle(.borderedProminent)
-                    .tint(theme.action)
+                    .buttonStyle(.flatPrimary)
                     .help("The coordinator puts its questions to you in its conversation")
             case .question:
                 if let a = need.answer {
@@ -127,7 +124,7 @@ struct NeedCard: View {
                 }
             case .review, .blocked:
                 if !need.task.isEmpty {
-                    TaskActs(project: need.project, task: need.task, status: need.kind == .review ? "review" : "blocked", compact: true)
+                    TaskActs(project: need.project, task: need.task, status: need.kind == .review ? "review" : "blocked")
                 }
                 if !need.session.isEmpty { open("Open") }
             case .link, .network:
@@ -161,7 +158,7 @@ struct NeedCard: View {
                 open("Open")
             }
         }
-        .controlSize(.small)
+        .fixedSize()
         .disabled(busy)
     }
 

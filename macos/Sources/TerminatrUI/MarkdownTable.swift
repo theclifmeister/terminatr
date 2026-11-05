@@ -1,8 +1,8 @@
 import SwiftUI
 import TerminatrKit
 
-/// A pipe table from an agent's Markdown: the header on the command
-/// tint, rules in the theme's line. It fits the width it has, wrapping
+/// A pipe table from an agent's Markdown, as the flat look's lists: a
+/// muted header, soft rules in a 6 round hairline. It fits the width it has, wrapping
 /// its widest columns first; past what wrapping can do (columns of
 /// TableLayout.floor) it scrolls sideways. VoiceOver reads it a row at
 /// a time, each cell after its column's header.
@@ -15,16 +15,17 @@ struct MarkdownTable: View {
         ScrollView(.horizontal) {
             TableLayout(columns: table.align.count, fit: width) {
                 ForEach(Array(table.header.enumerated()), id: \.offset) { c, s in
-                    cell(s, c).font(theme.body(.subheadline, .semibold)).background(theme.command)
+                    cell(s, c).font(theme.body(.subheadline)).foregroundStyle(theme.muted).background(theme.pane)
                 }
                 ForEach(Array(table.rows.enumerated()), id: \.offset) { _, row in
                     ForEach(Array(row.enumerated()), id: \.offset) { c, s in
-                        cell(s, c).font(theme.body(.subheadline)).background(theme.pane)
+                        cell(s, c).font(theme.body(.body)).background(theme.pane)
                     }
                 }
             }
-            .background(theme.line)
-            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .background(theme.lineSoft)
+            .clipShape(RoundedRectangle(cornerRadius: Radius.row))
+            .overlay(RoundedRectangle(cornerRadius: Radius.row).strokeBorder(theme.line, lineWidth: theme.contrast ? 1.5 : 1))
         }
         .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -36,8 +37,8 @@ struct MarkdownTable: View {
         Text(s)
             .multilineTextAlignment(textAlignment(column))
             .fixedSize(horizontal: false, vertical: true)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 5)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: alignment(column))
     }
 

@@ -17,22 +17,24 @@ struct Cards: View {
     var body: some View {
         let shown = session?.question.map(QuestionPlan.shown) ?? []
         let first = shown.first
-        VStack(spacing: 10) {
+        VStack(alignment: .leading, spacing: 0) {
             if let session, let q = session.question {
                 ForEach(shown, id: \.self) { i in
                     QuestionCard(model: model, menu: q, index: i, item: q.questions[i], firstChoice: i == first ? firstChoice : nil)
                         .id("\(session.id) \(q.since?.timeIntervalSince1970 ?? 0) \(i)")
+                        .modifier(FootCard())
                 }
                 if shown.isEmpty, let words = QuestionPlan.allAnswered(q) {
-                    AnsweredCard(model: model, words: words, screen: q.screen, waiting: "answered \(model.ref.card) \(q.since?.timeIntervalSince1970 ?? 0)")
+                    AnsweredCard(model: model, words: words, screen: q.screen)
+                        .modifier(FootCard())
                 }
             }
             if let session, session.state == "blocked", session.reason == "permission" {
                 ApprovalCard(model: model, session: session, firstChoice: first == nil ? firstChoice : nil)
                     .id(session.id + (model.transcript.pendingTool?.call ?? ""))
+                    .modifier(FootCard())
             }
         }
-        .padding(.horizontal, Page.edge)
     }
 }
 
@@ -68,9 +70,9 @@ struct QuestionCard: View {
     var body: some View {
         let plan = QuestionPlan(menu, index: index, picks: model.answersPicks)
         let tag = QuestionPlan.tag(menu, index: index)
-        CardFrame(tag: firstChoice == nil || plan.paneOnly ? tag : "\(tag) · ⌘↩ answer", colour: theme.question, tint: theme.questionTint, waiting: "question \(model.ref.card) \(menu.since?.timeIntervalSince1970 ?? 0) \(index)") {
+        CardFrame(tag: firstChoice == nil || plan.paneOnly ? tag : "\(tag) · ⌘↩ answer", colour: theme.question) {
             Text(item.question)
-                .font(theme.title(.headline, .bold))
+                .font(theme.body(.body))
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
             if plan.checkboxes {
@@ -84,8 +86,7 @@ struct QuestionCard: View {
                 }
                 if !plan.paneOnly {
                     Button("Submit") { submit(plan) }
-                        .buttonStyle(.borderedProminent)
-                        .tint(theme.action)
+                        .buttonStyle(.flatPrimary)
                         .disabled(picked.isEmpty || busy)
                         .accessibilityHint("Answers with the options checked")
                 }
@@ -99,7 +100,11 @@ struct QuestionCard: View {
                 if otherOpen {
                     HStack {
                         TextField("Your answer", text: $other)
-                            .textFieldStyle(.roundedBorder)
+                            .textFieldStyle(.plain)
+                            .font(theme.sized(13))
+                            .padding(.horizontal, 10)
+                            .frame(height: 26)
+                            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(theme.line, lineWidth: 1))
                             .onSubmit { sendOther() }
                             .accessibilityLabel("Your own answer to: \(item.question)")
                         Button("Send") { sendOther() }
@@ -107,8 +112,6 @@ struct QuestionCard: View {
                     }
                 } else {
                     Button("Other…") { otherOpen = true }
-                        .buttonStyle(.link)
-                        .foregroundStyle(theme.action)
                         .accessibilityHint("Answers in your own words")
                 }
             }
@@ -216,11 +219,9 @@ struct AnsweredCard: View {
     let model: SessionModel
     let words: String
     let screen: Bool
-    /// The card's name for its glow (CardFrame).
-    let waiting: String
 
     var body: some View {
-        CardFrame(tag: "Question · answered", colour: theme.question, tint: theme.questionTint, waiting: waiting) {
+        CardFrame(tag: "Question · answered", colour: theme.question) {
             HStack(alignment: .firstTextBaseline) {
                 Text(words)
                     .font(theme.body(.subheadline))
@@ -234,8 +235,9 @@ struct AnsweredCard: View {
     }
 }
 
-/// A question's options as buttons, one per line, each with its
-/// description; numbered (⌥⌘1–⌥⌘9) on the first card.
+/// A question's options as the page's small buttons, the first the
+/// primary one, in a row that wraps; with descriptions, one per line with
+/// its description beside it. Numbered (⌥⌘1–⌥⌘9) on the first card.
 struct FlowButtons: View {
     @Environment(\.theme) private var theme
     let item: AppAPI.QuestionItem
@@ -244,33 +246,50 @@ struct FlowButtons: View {
     let pick: (String) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            ForEach(Array(item.options.enumerated()), id: \.offset) { i, o in
-                Button {
-                    pick(o.label)
-                } label: {
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        if numbered && i < 9 {
-                            Text("\(i + 1)")
-                                .font(theme.mono(.caption, .medium))
-                                .foregroundStyle(theme.muted)
-                        }
-                        Text(o.label).fontWeight(.semibold)
+        if item.options.contains(where: { !$0.description.isEmpty }) {
+            VStack(alignment: .leading, spacing: 7) {
+                ForEach(Array(item.options.enumerated()), id: \.offset) { i, o in
+                    HStack(alignment: .firstTextBaseline, spacing: 9) {
+                        button(i, o)
                         if !o.description.isEmpty {
                             Text(o.description)
+                                .font(theme.sized(Flat.label))
                                 .foregroundStyle(theme.muted)
                                 .lineLimit(2)
+                                .accessibilityHidden(true)
                         }
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .buttonStyle(.bordered)
-                .disabled(busy)
-                .keyboardShortcut(numbered && i < 9 ? KeyboardShortcut(KeyEquivalent(Character("\(i + 1)")), modifiers: [.command, .option]) : nil)
-                .accessibilityLabel(QuestionPlan.spoken(item, option: i))
-                .help(numbered && i < 9 ? "Answers “\(o.label)” (⌥⌘\(i + 1))" : "Answers “\(o.label)”")
+            }
+        } else {
+            FlowRow {
+                ForEach(Array(item.options.enumerated()), id: \.offset) { i, o in
+                    button(i, o)
+                }
             }
         }
+    }
+
+    private func button(_ i: Int, _ o: AppAPI.QuestionOption) -> some View {
+        Button {
+            pick(o.label)
+        } label: {
+            HStack(spacing: 6) {
+                if numbered && i < 9 {
+                    // A quiet key, in what the button's words are on.
+                    Text("\(i + 1)")
+                        .font(.system(size: Flat.chip * theme.scale, design: .monospaced))
+                        .opacity(0.6)
+                }
+                Text(o.label)
+            }
+        }
+        .buttonStyle(FlatButtonStyle(primary: i == 0))
+        .fixedSize()
+        .disabled(busy)
+        .keyboardShortcut(numbered && i < 9 ? KeyboardShortcut(KeyEquivalent(Character("\(i + 1)")), modifiers: [.command, .option]) : nil)
+        .accessibilityLabel(QuestionPlan.spoken(item, option: i))
+        .help(numbered && i < 9 ? "Answers “\(o.label)” (⌥⌘\(i + 1))" : "Answers “\(o.label)”")
     }
 }
 
@@ -297,56 +316,56 @@ struct ApprovalCard: View {
     var body: some View {
         let tool = model.transcript.pendingTool
         let tag = session.escape ? "Approval · outside the sandbox" : "Approval"
-        CardFrame(tag: firstChoice == nil ? tag : "\(tag) · ⌘↩ allow", colour: theme.approval, tint: theme.approvalTint, waiting: "approval \(model.ref.card) \(tool?.call ?? "")") {
+        CardFrame(tag: firstChoice == nil ? tag : "\(tag) · ⌘↩ allow", colour: theme.approval) {
             Text(tool.map { "Run \($0.tool.isEmpty ? "a tool" : $0.tool)?" } ?? "The agent asks for permission")
-                .font(theme.title(.headline, .bold))
+                .font(theme.body(.body))
             if let tool, !tool.text.isEmpty {
                 Text(tool.text)
-                    .font(theme.mono(.callout))
+                    .font(theme.mono(.subheadline))
+                    .foregroundStyle(theme.muted)
                     .textSelection(.enabled)
-                    .padding(9)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(theme.command, in: RoundedRectangle(cornerRadius: 8))
             }
             if let dialog {
                 if !dialog.question.isEmpty {
                     Text(dialog.question)
                         .foregroundStyle(theme.muted)
                 }
-                HStack(spacing: 8) {
-                    ForEach(Array(dialog.options.enumerated()), id: \.offset) { i, o in
-                        if i == 0 {
+                HStack(alignment: .top, spacing: 7) {
+                    FlowRow {
+                        ForEach(Array(dialog.options.enumerated()), id: \.offset) { i, o in
                             Button(o) { pick(i + 1) }
-                                .buttonStyle(.borderedProminent)
-                                .tint(theme.action)
-                                .disabled(busy || !can(i + 1))
-                        } else {
-                            Button(o) { pick(i + 1) }
+                                .buttonStyle(FlatButtonStyle(primary: i == 0))
+                                .fixedSize()
                                 .disabled(busy || !can(i + 1))
                                 .help(help(i + 1))
                         }
                     }
+                    Spacer(minLength: 7)
+                    esc
                 }
-                .lineLimit(1)
                 if session.escape && command == nil {
                     Text("The conversation doesn't show the command: read it in the Terminal tab and answer there, or press Esc.")
                         .font(theme.body(.subheadline))
                         .foregroundStyle(theme.muted)
                 }
-            } else if error == nil {
-                ProgressView().controlSize(.small)
-            }
-            HStack {
-                if let error {
-                    Text(error)
-                        .font(theme.body(.subheadline))
-                        .foregroundStyle(theme.attention)
+            } else {
+                HStack {
+                    if let error {
+                        Text(error)
+                            .font(theme.body(.subheadline))
+                            .foregroundStyle(theme.attention)
+                    } else {
+                        ProgressView().controlSize(.small)
+                    }
+                    Spacer()
+                    esc
                 }
-                Spacer()
-                Button("Esc") { Task { try? await model.keys("\u{1b}") } }
-                    .help("Sends Esc to the agent: it dismisses the dialog")
-                    .accessibilityLabel("Dismiss the dialog (Esc)")
-                    .controlSize(.small)
+            }
+            if dialog != nil, let error {
+                Text(error)
+                    .font(theme.body(.subheadline))
+                    .foregroundStyle(theme.attention)
             }
         }
         .task(id: session.question == nil) { await check() }
@@ -369,6 +388,14 @@ struct ApprovalCard: View {
                   !(session.escape && command == nil) else { return }
             pick(1)
         }
+    }
+
+    private var esc: some View {
+        Button("Esc") { Task { try? await model.keys("\u{1b}") } }
+            .help("Sends Esc to the agent: it dismisses the dialog")
+            .buttonStyle(.flat)
+            .fixedSize()
+            .accessibilityLabel("Dismiss the dialog (Esc)")
     }
 
     /// The command the dialog asks about, as the conversation shows it.
@@ -460,9 +487,4 @@ struct ApprovalCard: View {
             busy = false
         }
     }
-}
-
-extension SessionRef {
-    /// The session's part of a waiting card's name (CardFrame).
-    var card: String { "\(server)/\(project)/\(thread)" }
 }

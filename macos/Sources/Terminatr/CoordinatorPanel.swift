@@ -2,13 +2,12 @@ import SwiftUI
 import TerminatrKit
 import TerminatrUI
 
-/// Over a coordinator's conversation (T748 milestone C): its open
-/// questions first, the question menu it shows answered by the cards
-/// (and, with none shown, the questions it keeps, tm ask, which Answer
-/// now has it put to the user, questions.open), its permission dialog,
-/// then what else of its project needs the user, as the dashboard's
-/// cards. It scrolls within a third of the window at most, so the
-/// composer under the conversation stays in reach.
+/// Over a coordinator's conversation (T748 milestone C): what else of its
+/// project needs the user, as the dashboard's rows, in a list that acts
+/// in place. Its own question menu, permission dialog and kept questions
+/// are cards at the transcript's end (ConversationTab). It scrolls within
+/// a third of the window at most, so the composer under the conversation
+/// stays in reach.
 struct CoordinatorPanel: View {
     @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
@@ -17,61 +16,50 @@ struct CoordinatorPanel: View {
     @State private var all = false
 
     var body: some View {
-        let project = app.project(model.ref.project)
-        let carded = AppModel.waitsOnCard(session)
-        let kept = carded ? 0 : project?.questions ?? 0
-        // Its own needs are the cards and the questions above.
+        // Its own needs are the cards and the questions at the foot.
         let needs = app.needs(of: model.ref.project).filter { n in
             !n.id.hasPrefix("questions:") && (n.session.isEmpty || n.session != session?.id)
         }
         let shown = all ? needs : Array(needs.prefix(Self.shown))
         let settled = app.settledLinks(model.ref.project)
-        if carded || kept > 0 || !needs.isEmpty || !settled.isEmpty {
+        if !needs.isEmpty || !settled.isEmpty {
             ViewThatFits(in: .vertical) {
-                content(kept: kept, needs: needs, shown: shown, settled: settled)
-                ScrollView { content(kept: kept, needs: needs, shown: shown, settled: settled) }
+                content(needs: needs, shown: shown, settled: settled)
+                ScrollView { content(needs: needs, shown: shown, settled: settled) }
                     .frame(maxHeight: 280)
             }
-            .padding(.top, 10)
+            .padding(.top, 13)
             .overlay(alignment: .bottom) { theme.line.frame(height: 1) }
         }
     }
 
     static let shown = 3
 
-    private func content(kept: Int, needs: [Need], shown: [Need], settled: [(id: String, outcome: LinkOutcome)]) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Cards(model: model, session: session, firstChoice: app.firstChoice)
-            if kept > 0 {
-                QuestionsCard(project: model.ref.project, count: kept)
-                    .padding(.horizontal, Page.edge)
+    private func content(needs: [Need], shown: [Need], settled: [(id: String, outcome: LinkOutcome)]) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            PaneLabel("Needs you in \(model.ref.project) · \(needs.count)")
+            if !shown.isEmpty {
+                HairlineList { ForEach(shown) { NeedCard(need: $0) } }
             }
-            if !needs.isEmpty || !settled.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Needs you in \(model.ref.project) · \(needs.count)")
-                        .font(theme.body(.caption))
-                        .foregroundStyle(theme.muted)
-                    ForEach(shown) { NeedCard(need: $0) }
-                    ForEach(settled, id: \.id) { LinkOutcomeRow(outcome: $0.outcome, settled: true) }
-                    if needs.count > shown.count || all && needs.count > Self.shown {
-                        Button(all ? "Fewer" : "\(needs.count - shown.count) more") { all.toggle() }
-                            .buttonStyle(.link)
-                            .foregroundStyle(theme.action)
-                            .font(theme.body(.subheadline))
-                    }
-                }
-                .padding(.horizontal, Page.edge)
+            ForEach(settled, id: \.id) { LinkOutcomeRow(outcome: $0.outcome, settled: true) }
+            if needs.count > shown.count || all && needs.count > Self.shown {
+                Button(all ? "Fewer" : "\(needs.count - shown.count) more") { all.toggle() }
+                    .buttonStyle(.link)
+                    .foregroundStyle(theme.action)
+                    .font(theme.body(.subheadline))
             }
         }
-        .padding(.bottom, 10)
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: Flat.reading, alignment: .leading)
+        .padding(.horizontal, Page.edge)
+        .padding(.bottom, 13)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
 /// The coordinator's kept questions (tm ask) while none is on its
 /// screen: Answer now has it put them to the user in its conversation
 /// (questions.open), where the question card answers them.
-private struct QuestionsCard: View {
+struct QuestionsCard: View {
     @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
     let project: String
@@ -80,19 +68,18 @@ private struct QuestionsCard: View {
     @State private var error: String?
 
     var body: some View {
-        CardFrame(tag: "Questions · \(count) open", colour: theme.question, tint: theme.questionTint, waiting: "questions \(project) \(count)") {
+        CardFrame(tag: "Questions · \(count) open", colour: theme.question) {
             HStack(alignment: .center, spacing: 10) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(count == 1 ? "The coordinator has a question for you" : "The coordinator has \(count) questions for you")
-                        .font(theme.title(.headline, .bold))
+                        .font(theme.body(.body))
                     Text(error ?? "It asks them here, one dialog at a time, when you answer now.")
                         .font(theme.body(.subheadline))
                         .foregroundStyle(error == nil ? theme.muted : theme.attention)
                 }
                 Spacer(minLength: 8)
                 Button("Answer Now") { open() }
-                    .buttonStyle(.borderedProminent)
-                    .tint(theme.action)
+                    .buttonStyle(.flatPrimary)
                     .disabled(busy)
             }
         }
