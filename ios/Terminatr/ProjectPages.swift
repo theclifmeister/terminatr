@@ -9,6 +9,7 @@ import UIKit
 /// and tasks. Read only.
 struct OverviewScreen: View {
     @Environment(PhoneModel.self) private var model
+    @Environment(\.theme) private var theme
     let slug: String
 
     var body: some View {
@@ -16,13 +17,13 @@ struct OverviewScreen: View {
             if let p = model.project(slug) {
                 OverviewView(ProjectOverview(p, coordinator: model.coordinatorSession(slug),
                                              needs: Need.count(model.needs, project: slug)))
-                    .padding(20)
+                    .font(theme.sized(Flat.text))
+                    .padding(Spacing.gutter)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .refreshable { await model.refresh() }
-        .navigationTitle("Overview")
-        .navigationBarTitleDisplayMode(.inline)
+        .pageBar("Overview")
         .backdrop()
     }
 }
@@ -37,19 +38,22 @@ struct MemoryScreen: View {
     @State private var failure: String?
 
     var body: some View {
-        List {
+        PanelPage {
             if let failure { Failure(text: failure) }
             if let files {
                 let own = MemoryPage.project(files), notes = MemoryPage.notes(files)
                 if files.isEmpty {
                     Text("No memory yet: the coordinator writes CONTEXT.md, MEMORY.md and its notes.")
+                        .font(theme.sized(Flat.text))
                         .foregroundStyle(theme.muted)
                 }
                 if !own.isEmpty {
-                    Section("Project") { rows(own) }
+                    SectionHeading("Project")
+                    PanelList { rows(own) }
                 }
                 if !notes.isEmpty {
-                    Section("Notes · \(notes.count)") { rows(notes) }
+                    SectionHeading("Notes · \(notes.count)")
+                    PanelList { rows(notes) }
                 }
             } else if failure == nil {
                 ProgressView()
@@ -58,13 +62,13 @@ struct MemoryScreen: View {
         .task(id: model.generation) { await list() }
         .refreshable { await list() }
         .keepsPlace(route: Route.memory(slug))
-        .navigationTitle("Memory")
+        .pageBar("Memory")
         .backdrop()
     }
 
     private func rows(_ fs: [AppAPI.MemoryFile]) -> some View {
         ForEach(fs, id: \.path) { f in
-            RouteLink(value: Route.memoryFile(slug, path: f.path)) { MemoryFileRow(f) }
+            RowLink(value: Route.memoryFile(slug, path: f.path)) { MemoryFileRow(f) }
         }
     }
 
@@ -94,17 +98,18 @@ struct MemoryFileScreen: View {
                     Failure(text: failure)
                 } else if let text {
                     MarkdownView(text: text)
+                        .font(theme.sized(Flat.text))
+                        .foregroundStyle(theme.ink)
                 } else {
                     ProgressView()
                 }
             }
-            .padding(20)
+            .padding(Spacing.gutter)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .task(id: model.generation) { await read() }
         .refreshable { await read() }
-        .navigationTitle((path as NSString).lastPathComponent)
-        .navigationBarTitleDisplayMode(.inline)
+        .pageBar((path as NSString).lastPathComponent)
         .backdrop()
     }
 
@@ -136,21 +141,23 @@ struct LibraryScreen: View {
     @State private var reading: AppAPI.LibraryFile?
 
     var body: some View {
-        List {
+        PanelPage {
             if let failure { Failure(text: failure) }
             if let files {
                 if files.isEmpty {
                     Text("No files: a thread's report attaches them (tm report --attach).")
+                        .font(theme.sized(Flat.text))
                         .foregroundStyle(theme.muted)
                 }
                 ForEach(LibraryPage.groups(files)) { g in
-                    Section {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(g.title).font(theme.sized(12)).lines(1)
+                        Text(g.detail).font(.system(size: 11 * theme.scale, design: .monospaced))
+                    }
+                    .foregroundStyle(theme.muted)
+                    .padding(.top, Spacing.item)
+                    PanelList {
                         ForEach(g.files, id: \.self) { row($0) }
-                    } header: {
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(g.title).lines(1)
-                            Text(g.detail).font(theme.mono(.caption2))
-                        }
                     }
                 }
             } else if failure == nil {
@@ -161,7 +168,7 @@ struct LibraryScreen: View {
         .refreshable { await list() }
         .quickLookPreview($looking)
         .sheet(item: $sharing) { ShareSheet(url: $0.url).presentationDetents([.medium, .large]) }
-        .navigationTitle("Library")
+        .pageBar("Library")
         .backdrop()
     }
 
@@ -169,9 +176,11 @@ struct LibraryScreen: View {
         Button {
             Task { if let url = await copy(f) { looking = url } }
         } label: {
-            HStack {
-                LibraryFileRow(f)
-                if reading == f { ProgressView().controlSize(.small) }
+            ListRow {
+                HStack {
+                    LibraryFileRow(f)
+                    if reading == f { ProgressView().controlSize(.small) }
+                }
             }
             .contentShape(Rectangle())
         }

@@ -120,53 +120,6 @@ extension Optional where Wrapped == Navigate {
     }
 }
 
-/// A link to a route: a NavigationLink in the stack, a button that
-/// opens it in the columns, its row marked while its route is open
-/// beside it, and lit under an iPad's pointer (T830), as a
-/// NavigationLink's row is. List rows keep the chevron either way.
-struct RouteLink<Label: View>: View {
-    @Environment(\.navigate) private var navigate
-    @Environment(\.theme) private var theme
-    @Environment(PhoneModel.self) private var model
-    let value: Route
-    @ViewBuilder let label: Label
-
-    init(value route: Route, @ViewBuilder label: () -> Label) {
-        value = route
-        self.label = label()
-    }
-
-    /// The route on the server of the screen it is in (T852).
-    private var route: Route { value.on(model.key) }
-
-    var body: some View {
-        if let navigate {
-            let on = navigate.shows(route)
-            Button {
-                navigate.go(route)
-            } label: {
-                HStack {
-                    label
-                    Spacer(minLength: 0)
-                    Image(systemName: "chevron.right")
-                        .font(theme.body(.footnote, .semibold))
-                        .foregroundStyle(theme.muted)
-                        .accessibilityHidden(true)
-                }
-                .contentShape([.interaction, .hoverEffect], Rectangle())
-            }
-            .buttonStyle(.plain)
-            .hoverEffect(.highlight)
-            .listRowBackground(on ? theme.action.opacity(0.16) : nil)
-            .accessibilityAddTraits(on ? .isSelected : [])
-            .id(route)
-        } else {
-            NavigationLink(value: route) { label }
-                .id(route)
-        }
-    }
-}
-
 /// A plain link, not a list row (a card, a button in a page): the same
 /// choice, without the chevron; lit under an iPad's pointer.
 struct PlainRouteLink<Label: View>: View {

@@ -1,12 +1,11 @@
 import SwiftUI
 import TerminatrKit
 
-/// A run of tool calls as a chip in the conversation (T848, direction
-/// A): up to three of its tools' symbols overlapped, its calls counted
-/// by tool ("Read ×1 · Bash ×1") and its state, a check and "done", a
-/// spinner, or a mark and "failed", on a capsule; a chevron turns
-/// while it is open. The capsule hugs its words; its tap target is 44
-/// pt tall. The phone's conversation taps it open (the Mac's keeps
+/// A run of tool calls in the conversation (T848, T1001), the design
+/// page's flat tool row: a chevron turned while it is open, its calls
+/// counted by tool ("Read ×1 · Bash ×1") in mono and its state, a check and
+/// "done", a spinner, or a mark and "failed". It hugs its words; 44 pt to
+/// tap. The phone's conversation taps it open (the Mac's keeps
 /// ToolRunHeader).
 public struct RunChip: View {
     @Environment(\.theme) private var theme
@@ -20,36 +19,22 @@ public struct RunChip: View {
 
     public var body: some View {
         HStack(spacing: Spacing.item) {
-            HStack(spacing: -6) {
-                ForEach(Array(run.counts.prefix(3).enumerated()), id: \.offset) { _, c in
-                    Image(systemName: Self.symbol(c.tool))
-                        .font(.system(size: 10 * theme.scale, weight: .semibold))
-                        .foregroundStyle(theme.action)
-                        .frame(width: 22 * theme.scale, height: 22 * theme.scale)
-                        .background(Circle().fill(theme.pane))
-                        .background(Circle().fill(theme.wash(.working)))
-                        .overlay(Circle().strokeBorder(theme.line, lineWidth: 1))
-                }
-            }
+            Image(systemName: "chevron.right")
+                .font(.system(size: 10 * theme.scale, weight: .semibold))
+                .foregroundStyle(theme.muted)
+                .rotationEffect(.degrees(open ? 90 : 0))
             Text(run.headline)
-                .font(theme.mono(.footnote, .medium))
-                .foregroundStyle(theme.ink)
+                .font(.system(size: 12.5 * theme.scale, design: .monospaced))
+                .foregroundStyle(theme.muted)
                 .lineLimit(1)
                 .truncationMode(.tail)
             state
-                .font(theme.mono(.footnote))
+                .font(.system(size: 12.5 * theme.scale, design: .monospaced))
                 .fixedSize()
-            Image(systemName: "chevron.right")
-                .font(theme.body(.caption2, .bold))
-                .foregroundStyle(theme.muted)
-                .rotationEffect(.degrees(open ? 90 : 0))
         }
-        .padding(.leading, 5)
-        .padding(.trailing, 12)
-        .padding(.vertical, 4)
-        .surface(in: Capsule())
-        .frame(minHeight: tapTarget)
+        .padding(.vertical, 12)
         .contentShape(Rectangle())
+        .padding(.vertical, -12)
     }
 
     @ViewBuilder private var state: some View {

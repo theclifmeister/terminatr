@@ -2,21 +2,19 @@ import SwiftUI
 import TerminatrKit
 import TerminatrUI
 
-/// The composer under a conversation, at the write level (T821, T840;
-/// the Claude app's look, T893), in the conversation's column (T882).
-/// Folded, it is one pill: + on its left (files, on this server's
-/// sessions), the prompt's placeholder, and the round send button on
-/// its right. With the field focused, the keyboard up, a file in or a
-/// draft, it opens into one card: the files' thumbnails at its top
-/// (ComposerThumbs), the text under them, and a row inside it at its
-/// foot: +, the "how it goes" chip while the agent works (Queue, after
+/// The composer under a conversation, at the write level (T821, T840),
+/// the design page's flat dock (T1001): on the window's colour under a
+/// line. Folded, it is one row: + (files, on this server's sessions), the
+/// field with the prompt's placeholder, and the Send button. With the field
+/// focused, the keyboard up, a file in or a draft, it opens: the files'
+/// thumbnails at its top (ComposerThumbs), the field the whole width, and
+/// under it +, the "how it goes" chip while the agent works (Queue, after
 /// the turn, or Steer, into it, session.prompt "now"; and Interrupt and
 /// Send), Paste for a file the keyboard's suggestion bar doesn't offer
-/// (PasteFiles), and send. Send is filled with the action colour when there is
-/// something to send, dimmed otherwise. While the agent works the
-/// placeholder says the prompt waits for the turn, and with nothing
-/// typed the send button is Stop (a filled square): the turn stops,
-/// nothing sent (PhoneModel.stop). Send held down has Interrupt and
+/// (PasteFiles), and Send. Send is filled in ink when there is something to
+/// send, quiet otherwise. While the agent works the placeholder says the
+/// prompt waits for the turn, and with nothing typed the button is Stop: the
+/// turn stops, nothing sent (PhoneModel.stop). Send held down has Interrupt and
 /// Send, after a confirmation. Not on a paired server's session, whose
 /// prompt is typed into its pane there. A prompt queued while the agent
 /// works shows at the conversation's end as the user's own bubble
@@ -70,9 +68,10 @@ struct PhoneComposer: View {
             take(providers, into: tray)
             return true
         }
-        // The conversation's column: its cards' edges (T882).
-        .padding(.horizontal, Spacing.gutter)
-        .padding(.bottom, Spacing.item)
+        .padding(.horizontal, 12)
+        .padding(.vertical, Spacing.row)
+        .background { theme.chrome.ignoresSafeArea(edges: .bottom) }
+        .overlay(alignment: .top) { theme.line.frame(height: 1) }
         .animation(reduceMotion ? nil : .snappy(duration: 0.25), value: open)
         .modifier(AttachPickers(tray: tray, pick: $pick))
         .feedback(.impact(weight: .light), trigger: sends)
@@ -90,48 +89,42 @@ struct PhoneComposer: View {
         }
     }
 
-    /// The pill, or open, the card. The field keeps its place in the
-    /// view tree either way, so it keeps the keyboard as the card opens.
+    /// The dock's rows. The field keeps its place in the view tree folded
+    /// or open, so it keeps the keyboard as it opens.
     private func card(_ tray: ComposerTray?) -> some View {
-        let shape = RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
-        return VStack(alignment: .leading, spacing: 0) {
+        let shape = RoundedRectangle(cornerRadius: Radius.row)
+        return VStack(alignment: .leading, spacing: Spacing.item) {
             if open, let tray, !tray.files.isEmpty {
                 ComposerThumbs(tray: tray)
-                    .padding(.horizontal, Spacing.item)
-                    .padding(.top, Spacing.item)
             }
-            HStack(alignment: .bottom, spacing: Spacing.hair) {
+            HStack(alignment: .bottom, spacing: 7) {
                 if !open, let tray { AttachMenu(tray: tray, pick: $pick) }
                 ComposerField(text: $text, focused: $focused, placeholder: placeholder,
                               files: tray.map { tray in { take($0, into: tray) } })
-                    .frame(minHeight: tapTarget)
-                    .padding(.leading, open || tray == nil ? Spacing.card - Spacing.hair : 0)
-                    .padding(.trailing, open ? Spacing.card - Spacing.hair : 0)
+                    .frame(minHeight: ComposerButton.height(theme))
+                    .padding(.horizontal, 11)
+                    .background(theme.pane, in: shape)
+                    .overlay {
+                        shape.strokeBorder(dropping ? theme.action : focused ? theme.focus : theme.line, lineWidth: dropping ? 2 : 1)
+                            .allowsHitTesting(false)
+                    }
+                    .contentShape(shape)
+                    // A tap on the field's free space starts typing.
+                    .onTapGesture { if !focused { focused = true } }
                 if !open { sendButton }
             }
             if open { bottomRow(tray) }
         }
-        .padding(Spacing.hair)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .surface(in: shape)
-        .overlay {
-            if dropping {
-                shape.strokeBorder(theme.action, lineWidth: 2)
-                    .allowsHitTesting(false)
-            }
-        }
-        .contentShape(shape)
-        // A tap on the pill's free space starts typing.
-        .onTapGesture { if !focused { focused = true } }
     }
 
-    /// The card's foot: + and the chip on the left, Paste and send on
-    /// the right; at accessibility sizes the chip takes a line of its own.
+    /// The foot, open: + and the chip on the left, Paste and Send on the
+    /// right; at accessibility sizes the chip takes a line of its own.
     @ViewBuilder private func bottomRow(_ tray: ComposerTray?) -> some View {
         let paste = focused && pasteable && tray.map { !$0.full } == true
         let chipLine = typeSize.isAccessibilitySize && working
         VStack(alignment: .leading, spacing: Spacing.hair) {
-            if chipLine { chip.padding(.leading, Spacing.hair) }
+            if chipLine { chip }
             HStack(spacing: Spacing.item) {
                 if let tray { AttachMenu(tray: tray, pick: $pick) }
                 if working, !chipLine { chip }
@@ -156,19 +149,19 @@ struct PhoneComposer: View {
         } label: {
             HStack(spacing: Spacing.hair) {
                 Text(steer ? "Steer" : "Queue")
-                    .font(theme.body(.subheadline, .semibold))
+                    .font(theme.sized(Flat.label))
                     .foregroundStyle(theme.ink)
                 Image(systemName: "chevron.up.chevron.down")
-                    .font(theme.body(.caption2, .semibold))
-                    .foregroundStyle(theme.muted)
+                    .font(.system(size: 9 * theme.scale, weight: .semibold))
+                    .foregroundStyle(theme.ink)
             }
             .lineLimit(1)
             .fixedSize()
-            .padding(.horizontal, Spacing.row + 2)
-            .frame(minHeight: ComposerCircle.side(theme))
-            .background(theme.ink.opacity(ThemeColours.inkWash), in: Capsule())
+            .padding(.horizontal, 10)
+            .frame(minHeight: ComposerButton.height(theme))
+            .background(theme.tab, in: RoundedRectangle(cornerRadius: Radius.row))
             .frame(minHeight: tapTarget)
-            .contentShape(Capsule())
+            .contentShape(Rectangle())
         }
         .menuStyle(.button)
         .buttonStyle(.plain)
@@ -204,19 +197,15 @@ struct PhoneComposer: View {
     private var sendButton: some View {
         Group {
             if stops {
-                Button(action: stop) {
-                    Label("Stop", systemImage: "stop.fill")
-                }
-                .buttonStyle(ComposerCircle(fill: theme.ink, on: theme.pane))
+                Button("Stop", action: stop)
+                    .buttonStyle(ComposerButton(kind: .word(primary: false)))
                 .disabled(busy)
                 .accessibilityHint("Stops the agent's turn; nothing is sent")
             } else {
-                Button {
+                Button(working && steer ? "Steer" : working ? "Queue" : "Send") {
                     send(mode: working && steer ? "now" : "")
-                } label: {
-                    Label(working && steer ? "Steer" : working ? "Queue" : "Send", systemImage: "arrow.up")
                 }
-                .buttonStyle(ComposerCircle(fill: theme.action, on: theme.onAction))
+                .buttonStyle(ComposerButton(kind: .word(primary: true)))
                 .disabled(empty || busy)
                 .accessibilityHint(working ? (steer ? "Sends it into the running turn" : "Queued: it goes once the turn ends") : "")
             }
@@ -311,31 +300,59 @@ struct PhoneComposer: View {
     }
 }
 
-/// A round button inside the composer (T893): + on an ink wash, send
-/// filled, dimmed while it can't. Its circle is 36 pt (growing with
-/// the text, to 56), its tap area at least 44.
-struct ComposerCircle: ButtonStyle {
-    @Environment(\.theme) private var theme
-    @Environment(\.isEnabled) private var enabled
-    /// The fill and the symbol's colour; nil fill: the ink wash.
-    var fill: Color?
-    var on: Color?
+/// The composer's flat buttons (T1001): 38 high, 6 round, growing with the
+/// text, at least 44 to tap. A word: Send and its like on the tab's fill,
+/// primary in ink while it can act, as an answer's primary button; quiet
+/// while it can't. A symbol: + in a 38 square with a line.
+struct ComposerButton: ButtonStyle {
+    enum Kind {
+        case word(primary: Bool)
+        case symbol
+    }
 
-    static func side(_ theme: Theme) -> CGFloat { min(56, max(36, 36 * theme.scale)) }
+    let kind: Kind
+
+    static func height(_ theme: Theme) -> CGFloat { min(56, 38 * theme.scale) }
 
     func makeBody(configuration: Configuration) -> some View {
-        let side = Self.side(theme)
-        configuration.label
-            .labelStyle(.iconOnly)
-            .font(.system(size: side * 0.45, weight: fill == nil ? .medium : .bold))
-            .foregroundStyle(enabled ? (on ?? theme.ink) : theme.muted)
-            .frame(width: side, height: side)
-            .background {
-                Circle().fill(fill.map { enabled ? $0 : theme.ink.opacity(ThemeColours.inkWash * 1.5) }
-                    ?? theme.ink.opacity(ThemeColours.inkWash))
+        Face(kind: kind, configuration: configuration)
+    }
+
+    private struct Face: View {
+        @Environment(\.theme) private var theme
+        @Environment(\.isEnabled) private var enabled
+        let kind: Kind
+        let configuration: ButtonStyleConfiguration
+
+        var body: some View {
+            let side = ComposerButton.height(theme)
+            let shape = RoundedRectangle(cornerRadius: Radius.row)
+            Group {
+                switch kind {
+                case .word(let primary):
+                    let lit = primary && enabled
+                    configuration.label
+                        .font(theme.sized(13.5))
+                        .foregroundStyle(lit ? theme.pane : enabled ? theme.ink : theme.muted)
+                        .lineLimit(1)
+                        .fixedSize()
+                        .padding(.horizontal, 12)
+                        .frame(minWidth: 58 * min(theme.scale, 1.3), minHeight: side)
+                        .background(lit ? theme.ink : theme.tab, in: shape)
+                case .symbol:
+                    configuration.label
+                        .labelStyle(.iconOnly)
+                        .font(.system(size: 14 * theme.scale, weight: .medium))
+                        .foregroundStyle(enabled ? theme.ink : theme.muted)
+                        .frame(width: side, height: side)
+                        .background(theme.pane, in: shape)
+                        .overlay { shape.strokeBorder(theme.line, lineWidth: theme.contrast ? 1.5 : 1) }
+                }
             }
             .opacity(configuration.isPressed ? 0.7 : 1)
-            .frame(minWidth: tapTarget, minHeight: tapTarget)
+            .padding(.vertical, 4)
             .contentShape(Rectangle())
+            .padding(.vertical, -4)
+        }
     }
 }

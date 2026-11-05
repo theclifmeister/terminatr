@@ -29,6 +29,7 @@ struct TabStack<Content: View>: View {
             }
         }
         .onChange(of: path, initial: true) { model.places.choose(path, root: key) }
+        .tabBand()
     }
 }
 
@@ -170,18 +171,12 @@ struct Columns<Content: View>: View {
                 }
             }
             .modifier(InnerEdge(edge: .leading))
-            .toolbar {
-                if folded {
-                    ToolbarItem(placement: .topBarLeading) {
-                        Button("List", systemImage: "list.bullet") { show(!listShown) }
-                            .accessibilityLabel(listShown ? "Hide the list" : "Show the list")
-                    }
-                }
-            }
             .destinations()
         }
         .environment(\.navigate, Navigate(open: nil) { path.append($0) })
         .environment(\.showParent, showParent(folded: folded))
+        .environment(\.showList, folded ? ShowList(shown: listShown) { show(!listShown) } : nil)
+        .environment(\.ground, .gutter)
         .id(detail)
     }
 

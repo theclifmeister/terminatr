@@ -12,11 +12,11 @@ public struct RoleButtonStyle: ButtonStyle {
         case secondary
         /// A quiet action: the action colour's text alone.
         case ghost
-        /// A header's button: a 44 pt square round its symbol.
+        /// A screen bar's button (T1001): a 30 pt square, 7 round with its
+        /// line, 44 pt to tap.
         case circle
-        /// A screen header's button beside its smaller title (T996): a
-        /// 32 pt square, on its trailing edge in the same 44 pt to
-        /// tap.
+        /// A screen header's button beside its title (T996): the same 30
+        /// pt square on its trailing edge.
         case smallCircle
         /// The composer dock's send (T848): a 44 pt square of the action
         /// colour round its symbol, in its ink.
@@ -90,20 +90,9 @@ private struct RoleButton: View {
                 .padding(.horizontal, 8)
                 .frame(minHeight: tapTarget)
         case .circle:
-            configuration.label
-                .labelStyle(.iconOnly)
-                .font(.system(size: 18 * theme.scale, weight: .medium))
-                .foregroundStyle(theme.ink)
-                .frame(width: theme.circle, height: theme.circle)
-                .surface(in: rounded)
+            square(configuration.label, alignment: .center)
         case .smallCircle:
-            configuration.label
-                .labelStyle(.iconOnly)
-                .font(.system(size: 14 * theme.scale, weight: .medium))
-                .foregroundStyle(theme.ink)
-                .frame(width: 32 * theme.scale, height: 32 * theme.scale)
-                .surface(in: rounded)
-                .frame(width: max(tapTarget, 32 * theme.scale), height: max(tapTarget, 32 * theme.scale), alignment: .trailing)
+            square(configuration.label, alignment: .trailing)
         case .send:
             configuration.label
                 .labelStyle(.iconOnly)
@@ -112,5 +101,23 @@ private struct RoleButton: View {
                 .frame(width: theme.circle, height: theme.circle)
                 .background(theme.action, in: rounded)
         }
+    }
+
+    /// A 30 pt square with its line, 44 pt to tap round it, taking only
+    /// the square's width in a row.
+    private func square(_ label: some View, alignment: Alignment) -> some View {
+        let side = 30 * theme.scale
+        let slack = max(tapTarget - side, 0) / 2
+        let shape = RoundedRectangle(cornerRadius: 7)
+        return label
+            .labelStyle(.iconOnly)
+            .font(.system(size: 14 * theme.scale, weight: .medium))
+            .foregroundStyle(theme.muted)
+            .frame(width: side, height: side)
+            .background(theme.pane, in: shape)
+            .overlay { shape.strokeBorder(theme.line, lineWidth: theme.contrast ? 1.5 : 1) }
+            .padding(slack)
+            .contentShape(Rectangle())
+            .padding(-slack)
     }
 }

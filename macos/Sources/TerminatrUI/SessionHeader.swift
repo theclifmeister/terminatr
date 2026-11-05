@@ -1,13 +1,11 @@
 import SwiftUI
 import TerminatrKit
 
-/// A session's title in its header (T848, direction A "Glass deck"): the
-/// thread's title in the display face, and under it where it is ("T14 ·
-/// acme-web") in mono with its state's pill (ToneBadge) and its context
-/// use (ContextGauge, T868), on a glass
-/// capsule, so no line of it sits on the raw mesh. The bar is short, so
-/// its text grows with Dynamic Type only to a point; held, the large
-/// content viewer shows it whole. VoiceOver reads it as one header.
+/// A session's title in its bar (T848, T1001, the design page's `.phbar`):
+/// a role's mark, its title at 14.5, a thread's ref in mono before it, its
+/// project after a role's, in muted words; its state's dot and context use
+/// at the end. VoiceOver reads it as one header; held, the large content
+/// viewer shows it whole, as the bar's text grows only to a point.
 public struct SessionTitle: View {
     @Environment(\.theme) private var theme
     let title: String
@@ -31,35 +29,41 @@ public struct SessionTitle: View {
     public var body: some View {
         var t = theme
         t.scale = min(theme.scale, Self.most)
-        return VStack(spacing: 1) {
-            HStack(spacing: Spacing.tight) {
-                if let role {
-                    RoleMark(role, points: CGFloat(TextStyle.headline.points) * 0.9, colour: t.ink)
-                }
-                Text(title)
-                    .font(t.title(.headline, .bold))
-                    .foregroundStyle(t.ink)
+        return HStack(spacing: Spacing.item) {
+            if let role {
+                RoleMark(role, points: 13, colour: t.ink)
+            }
+            if !lead.isEmpty {
+                Text(lead)
+                    .font(.system(size: 12.5 * t.scale, design: .monospaced))
+                    .foregroundStyle(t.muted)
+                    .lineLimit(1)
+                    .fixedSize()
+            }
+            Text(title)
+                .font(t.sized(14.5, .medium))
+                .foregroundStyle(t.ink)
+                .lineLimit(1)
+            if !rest.isEmpty {
+                Text(rest)
+                    .font(t.sized(12.5))
+                    .foregroundStyle(t.muted)
                     .lineLimit(1)
             }
-            HStack(spacing: Spacing.tight) {
-                if !place.isEmpty {
-                    Text(place)
-                        .font(t.mono(.caption, .medium))
-                        .foregroundStyle(t.muted)
-                        .lineLimit(1)
-                }
-                if let state {
-                    ToneBadge(state.word, tone: state.tone, compact: true)
-                }
-                if let context {
-                    ContextGauge(context, compact: true)
-                }
+            Spacer(minLength: 0)
+            if let state {
+                FlatDot(state.tone)
+            }
+            if let context {
+                Text(context.word)
+                    .font(t.sized(12.5))
+                    .monospacedDigit()
+                    .foregroundStyle(context.tone.map { t.colour($0) } ?? t.muted)
+                    .lineLimit(1)
+                    .fixedSize()
             }
         }
         .environment(\.theme, t)
-        .padding(.horizontal, Spacing.card)
-        .padding(.vertical, 3)
-        .surface(in: Capsule())
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(spoken)
         .accessibilityAddTraits(.isHeader)
@@ -68,56 +72,18 @@ public struct SessionTitle: View {
         }
     }
 
+    /// What goes before the title, a thread's ref: place's first word
+    /// ("T14 · acme-web"); a role's place is its project's, which goes after.
+    private var lead: String {
+        role != nil ? "" : place.components(separatedBy: " · ").first ?? ""
+    }
+
+    private var rest: String {
+        role != nil ? place : ""
+    }
+
     private var spoken: String {
         [title, place.replacingOccurrences(of: " · ", with: ", "), state?.word ?? "", context?.spoken ?? ""]
             .filter { !$0.isEmpty }.joined(separator: ", ")
-    }
-}
-
-/// The Conversation / Terminal switch (T840) as the header's
-/// capsule (T848): two symbols, each a 44 pt target, the shown one
-/// filled in ink with the base's symbol (a picked chip's pairing). A
-/// switch is a selection tap. framed false leaves the capsule to what
-/// holds it: iOS 26's bar draws its items' glass itself.
-public struct SessionToggle: View {
-    @Environment(\.theme) private var theme
-    @Environment(\.accessibilityReduceMotion) private var still
-    @Binding var selection: SessionTab
-    let framed: Bool
-
-    public init(selection: Binding<SessionTab>, framed: Bool = true) {
-        _selection = selection
-        self.framed = framed
-    }
-
-    public var body: some View {
-        HStack(spacing: 2) {
-            ForEach(SessionTab.allCases, id: \.self) { t in
-                let on = t == selection
-                Button {
-                    withAnimation(still ? nil : .snappy(duration: 0.2)) { selection = t }
-                } label: {
-                    Image(systemName: Self.symbol(t))
-                        .font(.system(size: 16 * min(theme.scale, SessionTitle.most), weight: .semibold))
-                        .foregroundStyle(on ? theme.pane : theme.ink)
-                        .frame(width: 36, height: 36)
-                        .background { if on { Circle().fill(theme.ink) } }
-                        .frame(width: tapTarget, height: tapTarget)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(t.rawValue)
-                .accessibilityAddTraits(on ? .isSelected : [])
-            }
-        }
-        .padding(.horizontal, framed ? 2 : 0)
-        .background { if framed { Color.clear.surface(in: Capsule()) } }
-        .feedback(.selection, trigger: selection)
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("View")
-    }
-
-    public static func symbol(_ t: SessionTab) -> String {
-        t == .conversation ? "text.bubble" : "terminal"
     }
 }

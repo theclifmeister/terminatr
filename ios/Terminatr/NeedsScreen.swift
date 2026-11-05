@@ -90,7 +90,7 @@ struct NeedsScreen: View {
         return ("\(model.serverName) · \(words)", icon)
     }
 
-    /// What n's card opens, on its server (RouteLink tags it).
+    /// What n's card opens, on its server (PlainRouteLink tags it).
     static func route(_ n: Need, in model: PhoneModel) -> Route {
         if !n.session.isEmpty, let s = model.sessions.first(where: { $0.id == n.session }), let ref = SessionRef(s) {
             return n.kind == .question || n.kind == .approval ? .need(ref) : .session(ref)

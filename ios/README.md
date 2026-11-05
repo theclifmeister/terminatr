@@ -20,6 +20,12 @@ With a hardware keyboard, Command-Return sends a prompt and Shift-Command-Return
 Check it in the Simulator on an iPad (iOS 27.0 runtime: 27.1 takes only iPhone Duo): `make run DEVICE="…"`. Resizing the window into compact width needs Stage Manager or Split View, by hand: `simctl` can't, and iPadOS refuses programmatic orientation and size changes to an app that joins multitasking.
 App Store submission (not TestFlight) needs iPad screenshots: 13-inch, 2064×2752 or 2048×2732 portrait (landscape the same, turned), which the iPad Pro 13-inch (M5) Simulator shoots as is; App Store Connect scales them down for the smaller iPads. `make store-shots` makes them (App Store screenshots, below).
 
+## Flat look
+
+Every screen draws its own flat bar (`ScreenBar.swift`, `SessionScreen.swift`) on the theme's solid colours and hides the navigation bar, whose glass buttons and, on an open iPhone Duo, whose rail placement can't be flattened; a swipe from the edge still goes back (`swipesBack`). A filter is a field in the screen (`FilterField`), as the system's search bar needs the navigation bar. Lists are flat panels (`PanelList`), not `List`, whose grouped sections iOS rounds itself.
+
+What stays iOS's own on iOS 27: the tab bar's glass capsule on an iPhone, the Duo's rail, an iPad's floating tab bar and sidebar, and sheets' system chrome. `TabBand` puts a solid band with a line under the capsule, so nothing shows through it. `UITabBarAppearance`, `.toolbarBackground` and `UIDesignRequiresCompatibility` don't change it (tried on the iOS 27.1 and 27.0 Simulators). Going further means replacing `TabView` with our own bar and rail.
+
 ## Terminal
 
 A session's screen switches between its conversation and its terminal (T840), as the Mac's session window does (`SessionScreen.swift`, the switch in the navigation bar, kept per session while the server is).

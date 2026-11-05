@@ -57,8 +57,8 @@ public struct CountBadge: View {
     }
 }
 
-/// What waits in a project, on its card: the count in a round orb of
-/// the attention colour with a soft halo.
+/// What waits in a project, on its row: the count in a 20 round badge of
+/// the attention colour (`.cnt`).
 public struct NeedsOrb: View {
     @Environment(\.theme) private var theme
     let count: Int
@@ -68,18 +68,17 @@ public struct NeedsOrb: View {
     }
 
     public var body: some View {
-        let s = 34 * theme.scale
+        let s = 20 * theme.scale
         Text(count, format: .number)
-            .font(theme.mono(.title3, .semibold))
+            .font(theme.sized(12, .semibold))
             .monospacedDigit()
             .contentTransition(.numericText(value: Double(count)))
             .foregroundStyle(theme.onAttention)
             .lineLimit(1)
             .fixedSize()
-            .padding(.horizontal, 6)
+            .padding(.horizontal, 5)
             .frame(minWidth: s, minHeight: s)
             .background(theme.attention, in: Capsule())
-            .background(theme.wash(.attention, 0.22), in: Capsule().inset(by: -4))
             .accessibilityElement()
             .accessibilityLabel(count == 1 ? "1 waits on you" : "\(count) wait on you")
     }

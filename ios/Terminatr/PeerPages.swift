@@ -26,13 +26,17 @@ struct PeerProjectScreen: View {
                 let peer = model.peers.first(where: { $0.alias == alias })
                 let p = peer?.projects.first(where: { $0.project == project })
                 ProjectHeader(project, goal: p?.goal ?? "")
+                let sessions = p.map { SidebarTree.sessions(of: $0, alias: alias) } ?? []
+                let threads = sessions.filter { !$0.ref.isCoordinator }
+                ForEach(sessions.filter(\.ref.isCoordinator), id: \.ref) { e in
+                    let route = Route.session(e.ref)
+                    PlainRouteLink(value: route) {
+                        LeadRow(e.ref.role ?? .coordinator, state: .of(peer: e.session), selected: navigate.opens(route, on: model))
+                    }
+                    .buttonStyle(.plain)
+                }
                 stats
                 if let peer, let p {
-                    let sessions = SidebarTree.sessions(of: p, alias: alias)
-                    let coordinator = sessions.filter(\.ref.isCoordinator), threads = sessions.filter { !$0.ref.isCoordinator }
-                    if !coordinator.isEmpty {
-                        tiles(coordinator)
-                    }
                     pageTiles(server: PeerPages.server(peer))
                     if model.listsDesigns {
                         DesignsTiles(alias: alias, project: p, generation: model.generation)
@@ -46,7 +50,7 @@ struct PeerProjectScreen: View {
                 }
             }
             .padding(.horizontal, Spacing.gutter)
-            .padding(.bottom, Spacing.gutter)
+            .padding(.vertical, Spacing.gutter)
         }
         .task(id: PagesRead(alias: alias, project: project, generation: model.generation, shared: shared)) {
             pages = await model.peerPagesState(alias, project)
@@ -57,7 +61,7 @@ struct PeerProjectScreen: View {
         }
         .keepsPlace(route: Route.peerProject(alias: alias, project: project))
         .navigationTitle(project)
-        .headerTitle()
+        .screenBar(bare: true) { EmptyView() }
         .backdrop()
     }
 
@@ -70,13 +74,11 @@ struct PeerProjectScreen: View {
     /// The board's counts, each opening the board; – while not shared.
     private var stats: some View {
         let counts: AppAPI.PeerPages? = if case .shared(let p) = pages { p } else { nil }
-        return TileRow {
-            ForEach(PeerPages.stats(counts), id: \.1) { n, word in
-                PlainRouteLink(value: Route.peerPage(alias: alias, project: project, page: .board)) { StatTile(n, word) }
-                    .buttonStyle(.plain)
-                    .accessibilityHint("Opens the board")
-            }
+        return PlainRouteLink(value: Route.peerPage(alias: alias, project: project, page: .board)) {
+            StatStrip(PeerPages.stats(counts).map { (value: $0.0.map { "\($0)" } ?? "–", word: $0.1) }, widest: .infinity, radius: Radius.tile)
         }
+        .buttonStyle(.plain)
+        .accessibilityHint("Opens the board")
     }
 
     /// The pages, as a project of this server's shows them: Memory and
@@ -111,11 +113,11 @@ struct PeerProjectScreen: View {
 
     private func notShared(_ text: String) -> some View {
         Text(text)
-            .font(theme.body(.subheadline))
+            .font(theme.sized(Flat.text))
             .foregroundStyle(theme.muted)
-            .padding(Spacing.card)
+            .padding(13)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .surface(in: RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
+            .surface(in: RoundedRectangle(cornerRadius: Radius.tile))
     }
 
     private struct PagesRead: Equatable {
@@ -167,8 +169,7 @@ struct PeerPageScreen: View {
             guard page.shareable, page != .designs else { return }
             pages = await model.peerPagesState(alias, project)
         }
-        .navigationTitle(page.rawValue)
-        .navigationBarTitleDisplayMode(.inline)
+        .pageBar(page.rawValue)
         .backdrop()
     }
 
@@ -194,6 +195,7 @@ struct PeerNotShared: View {
 /// tasks, and PROJECT.md.
 private struct PeerOverviewPage: View {
     @Environment(PhoneModel.self) private var model
+    @Environment(\.theme) private var theme
     let pages: AppAPI.PeerPages
     let alias: String
     let project: String
@@ -202,7 +204,8 @@ private struct PeerOverviewPage: View {
         ScrollView {
             if let p = model.peers.first(where: { $0.alias == alias })?.projects.first(where: { $0.project == project }) {
                 OverviewView(ProjectOverview(pages, project: p))
-                    .padding(20)
+                    .font(theme.sized(Flat.text))
+                    .padding(Spacing.gutter)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
@@ -220,26 +223,36 @@ private struct PeerBoardPage: View {
     @State private var open: AppAPI.Task?
 
     var body: some View {
-        List {
+        PanelPage {
             let filtering = !filter.trimmingCharacters(in: .whitespaces).isEmpty
             let deck = Dashboard.filtered(PeerPages.onDeck(pages), by: filter)
             let moving = Dashboard.filtered(PeerPages.moving(pages), by: filter)
             let backlog = Dashboard.filtered(PeerPages.backlog(pages), by: filter)
             let done = Dashboard.filtered(PeerPages.done(pages), by: filter)
-            if !deck.isEmpty { Section("On deck · \(deck.count)") { rows(deck) } }
-            if !moving.isEmpty { Section("In motion · \(moving.count)") { rows(moving) } }
+            if !deck.isEmpty {
+                SectionHeading("On deck · \(deck.count)")
+                PanelList { rows(deck) }
+            }
+            if !moving.isEmpty {
+                SectionHeading("In motion · \(moving.count)")
+                PanelList { rows(moving) }
+            }
             if !backlog.isEmpty || !done.isEmpty {
-                Section {
+                PanelList {
                     if !backlog.isEmpty {
-                        DisclosureGroup("Backlog · \(backlog.count)", isExpanded: fold("backlog", filtering)) { rows(backlog) }
+                        FoldRow(title: "Backlog · \(backlog.count)", open: fold("backlog", filtering))
+                        if fold("backlog", filtering).wrappedValue { rows(backlog) }
                     }
                     if !done.isEmpty {
-                        DisclosureGroup("Done · \(done.count)", isExpanded: fold("done", filtering)) { rows(done) }
+                        FoldRow(title: "Done · \(done.count)", open: fold("done", filtering))
+                        if fold("done", filtering).wrappedValue { rows(done) }
                     }
                 }
+                .padding(.top, Spacing.item)
             }
             if deck.isEmpty && moving.isEmpty && backlog.isEmpty && done.isEmpty {
                 Text(filtering ? "No task on the board matches “\(filter.trimmingCharacters(in: .whitespaces))”." : "Nothing on the board.")
+                    .font(theme.sized(Flat.text))
                     .foregroundStyle(theme.muted)
             }
             if pages.truncated {
@@ -248,11 +261,8 @@ private struct PeerBoardPage: View {
                     .foregroundStyle(theme.muted)
             }
         }
-        // In the screen, under its title (T928): left to the system, on
-        // iOS 27.1 an open iPhone Duo's column put it in the vertical
-        // bar (the rail), where it stayed once the column showed another
-        // screen, a magnifier that did nothing.
-        .searchable(text: $filter, placement: .navigationBarDrawer(displayMode: .always), prompt: "Filter by id or title")
+        // In the screen, under its title (T928, FilterField).
+        .safeAreaInset(edge: .top, spacing: 0) { FilterField(prompt: "Filter by id or title", text: $filter) }
         .sheet(item: $open) { t in PeerTaskSheet(task: t).presentationDetents([.medium, .large]) }
     }
 
@@ -267,20 +277,22 @@ private struct PeerBoardPage: View {
     private func rows(_ ts: [AppAPI.Task]) -> some View {
         ForEach(ts) { t in
             Button { open = t } label: {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(t.ref)
-                        .font(theme.mono(.subheadline, .medium))
-                        .foregroundStyle(theme.action)
-                        .frame(minWidth: 40, alignment: .leading)
-                    Text(t.title)
-                        .font(theme.body(.body))
-                        .foregroundStyle(theme.ink)
-                        .lines(2)
-                    Spacer(minLength: 4)
-                    if !t.steps.isEmpty {
-                        Text("\(t.steps.filter(\.done).count)/\(t.steps.count)")
-                            .font(theme.mono(.caption))
+                ListRow {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text(t.ref)
+                            .font(.system(size: 12.5 * theme.scale, design: .monospaced))
                             .foregroundStyle(theme.muted)
+                            .frame(minWidth: 34 * theme.scale, alignment: .leading)
+                        Text(t.title)
+                            .font(theme.sized(Flat.text))
+                            .foregroundStyle(theme.ink)
+                            .lines(2)
+                        Spacer(minLength: 4)
+                        if !t.steps.isEmpty {
+                            Text("\(t.steps.filter(\.done).count)/\(t.steps.count)")
+                                .font(.system(size: 12.5 * theme.scale, design: .monospaced))
+                                .foregroundStyle(theme.muted)
+                        }
                     }
                 }
                 .contentShape(Rectangle())

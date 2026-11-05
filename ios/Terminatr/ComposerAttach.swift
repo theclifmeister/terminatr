@@ -132,7 +132,7 @@ struct AttachMenu: View {
             Label("Attach", systemImage: "plus")
         }
         .menuStyle(.button)
-        .buttonStyle(ComposerCircle())
+        .buttonStyle(ComposerButton(kind: .symbol))
         .disabled(tray.full)
         .accessibilityLabel("Attach")
         .accessibilityHint(tray.full ? "A prompt takes at most \(ComposerFiles.maxFiles) files" : "Adds a photo or a file to the prompt: images, PDFs or text")

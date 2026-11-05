@@ -15,21 +15,24 @@ struct ModsScreen: View {
     @State private var failure: String?
 
     var body: some View {
-        List {
+        PanelPage {
             if let failure { Failure(text: failure) }
             if let mods {
                 if mods.isEmpty {
                     Text("No mods installed: the TUI's settings (, then 4) install one.")
+                        .font(theme.sized(Flat.text))
                         .foregroundStyle(theme.muted)
+                } else {
+                    PanelList {
+                        ForEach(mods) { m in
+                            RowLink(value: Route.mod(slug, id: m.id)) { ModLine(mod: m) }
+                        }
+                    }
                 }
-                Section {
-                    ForEach(mods) { m in
-                        RouteLink(value: Route.mod(slug, id: m.id)) { ModLine(mod: m) }
-                    }
-                } footer: {
-                    if !model.changesMods {
-                        Text("Turning a mod on or off here needs the write level: Settings › Devices on the Mac.")
-                    }
+                if !model.changesMods {
+                    Text("Turning a mod on or off here needs the write level: Settings › Devices on the Mac.")
+                        .font(theme.sized(12.5))
+                        .foregroundStyle(theme.muted)
                 }
             } else if failure == nil {
                 ProgressView()
@@ -38,8 +41,7 @@ struct ModsScreen: View {
         .task(id: model.generation) { await list() }
         .refreshable { await list() }
         .keepsPlace(Route.mods(slug).listKey)
-        .navigationTitle("Mods")
-        .navigationBarTitleDisplayMode(.inline)
+        .pageBar("Mods")
         .backdrop()
     }
 
@@ -99,10 +101,11 @@ struct ModScreen: View {
     @State private var asking = false
 
     var body: some View {
-        List {
+        PanelPage {
             if let failure { Failure(text: failure) }
             if let m = mod {
-                Section {
+                PanelList {
+                    ListRow {
                     VStack(alignment: .leading, spacing: 6) {
                         Text(m.kinds + (m.version.isEmpty ? "" : " · " + m.version))
                             .font(theme.body(.footnote))
@@ -115,42 +118,49 @@ struct ModScreen: View {
                             .foregroundStyle(ModConsentText.colour(m.whereTone, theme))
                     }
                     .padding(.vertical, 2)
+                    }
                     if model.changesMods, let words = ProjectMods.button(m) {
                         Button {
                             press(m)
                         } label: {
-                            HStack {
-                                Text(words)
-                                Spacer()
-                                if busy { ProgressView() }
+                            ListRow {
+                                HStack {
+                                    Text(words).foregroundStyle(theme.action)
+                                    Spacer()
+                                    if busy { ProgressView() }
+                                }
                             }
+                            .contentShape(Rectangle())
                         }
+                        .buttonStyle(.plain)
                         .disabled(busy)
                     }
                     if case .refused(let why) = ProjectMods.act(m) {
-                        Text(why).font(theme.body(.footnote)).foregroundStyle(theme.muted)
+                        ListRow { Text(why).font(theme.body(.footnote)).foregroundStyle(theme.muted) }
                     }
                     if let said {
-                        Text(said).font(theme.body(.footnote)).foregroundStyle(theme.muted)
+                        ListRow { Text(said).font(theme.body(.footnote)).foregroundStyle(theme.muted) }
                     }
                     ForEach(m.bad, id: \.self) { b in
-                        Text(b).font(theme.body(.footnote)).foregroundStyle(theme.question)
+                        ListRow { Text(b).font(theme.body(.footnote)).foregroundStyle(theme.question) }
                     }
                 }
-                Section {
+                SectionHeading("Settings for \(slug)")
+                PanelList {
                     if ProjectMods.hasSettings(m) {
                         ForEach(m.settings, id: \.key) { s in
-                            ModSettingRow(s, change: model.changesMods ? { v in Task { await setting(m, s.key, v) } } : nil)
+                            ListRow {
+                                ModSettingRow(s, change: model.changesMods ? { v in Task { await setting(m, s.key, v) } } : nil)
+                            }
                         }
                     } else {
-                        Text(m.settingsNote).foregroundStyle(theme.muted)
+                        ListRow { Text(m.settingsNote).foregroundStyle(theme.muted) }
                     }
-                } header: {
-                    Text("Settings for \(slug)")
-                } footer: {
-                    if ProjectMods.hasSettings(m) {
-                        Text("Each one this project doesn't set follows all projects.")
-                    }
+                }
+                if ProjectMods.hasSettings(m) {
+                    Text("Each one this project doesn't set follows all projects.")
+                        .font(theme.sized(12.5))
+                        .foregroundStyle(theme.muted)
                 }
             } else if failure == nil {
                 ProgressView()
@@ -158,8 +168,7 @@ struct ModScreen: View {
         }
         .task(id: model.generation) { await read() }
         .refreshable { await read() }
-        .navigationTitle(mod?.name ?? id)
-        .navigationBarTitleDisplayMode(.inline)
+        .pageBar(mod?.name ?? id)
         .backdrop()
         .sheet(item: $consenting) { m in
             PhoneConsentSheet(mod: m) {

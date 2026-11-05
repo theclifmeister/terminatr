@@ -1,18 +1,16 @@
 import SwiftUI
 import TerminatrKit
 
-/// A session's row (T846), in place of its dotted line: its StateGlyph,
-/// its task ref in mono and its title, the why line under them, and at
-/// the end what waits on the user as a ToneBadge ("allow?", "asks",
-/// "review"), else how long its turn has run, else a PR mark, after its
-/// context use as a ContextGauge when it reports one (T868). Rows sit
-/// in a TileGroup, a hairline over each after the first (rule). At
-/// accessibility sizes the glyph and the badge go over the title, which
-/// keeps the row's width. Dormant: an inactive project's, all muted.
-/// A coordinator's or director's (role, T1003) has its RoleMark where a
-/// thread's ref starts and its word in medium ink; a thread stays quieter,
-/// its ref muted and its title regular. The context use ends the row, so
-/// it and the status before it keep their places as the state changes.
+/// A session's row in a TileGroup (T846), to the design page's list
+/// (T1001): its state's dot, its task ref in mono and its title, the why
+/// line under them, and at the end what waits on the user as a Chip
+/// ("allow?", "asks", "review"), else how long its turn has run, else a PR
+/// mark, before its context use when it is shown. A soft line over each
+/// after the first (rule). At accessibility sizes the dot and the end go
+/// over the title, which keeps the row's width. Dormant: an inactive
+/// project's, all muted. A project's coordinator and a program's director
+/// have their own row (LeadRow); a role here (a paired server's list) has
+/// its RoleMark where a thread's ref starts and its word in medium ink.
 public struct SessionTile: View {
     @Environment(\.theme) private var theme
     @Environment(\.dynamicTypeSize) private var typeSize
@@ -41,39 +39,39 @@ public struct SessionTile: View {
         self.selected = selected
     }
 
+    /// What can't be read on the selection's fill is ink there (ThemeColours.checks).
+    private var quiet: Color { selected ? theme.ink : theme.muted }
+
     public var body: some View {
         let busy = dormant ? nil : busy
         let tone: Attention.Tone = dormant ? .idle : state.tone
+        let lift = 4 * theme.scale
         Group {
             if typeSize.isAccessibilitySize {
-                VStack(alignment: .leading, spacing: Spacing.item) {
+                VStack(alignment: .leading, spacing: Spacing.hair) {
                     HStack(spacing: Spacing.row) {
-                        StateGlyph(tone, filled: dormant ? false : nil, side: 32)
+                        FlatDot(tone)
                         Spacer(minLength: 0)
                         end(busy)
                     }
                     words
                 }
             } else {
-                HStack(spacing: Spacing.row + 2) {
-                    StateGlyph(tone, filled: dormant ? false : nil, side: 32)
+                HStack(alignment: .firstTextBaseline, spacing: Spacing.row) {
+                    FlatDot(tone)
+                        .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + lift }
                     words
                     Spacer(minLength: Spacing.hair)
                     end(busy)
                 }
             }
         }
-        .padding(.horizontal, Spacing.card)
-        .padding(.vertical, Spacing.row)
-        .frame(maxWidth: .infinity, minHeight: tapTarget, alignment: .leading)
-        .background(selected ? theme.wash(.working) : .clear)
+        .padding(.horizontal, 13)
+        .padding(.vertical, 7)
+        .frame(maxWidth: .infinity, minHeight: max(tapTarget, Flat.row * theme.scale), alignment: .leading)
+        .background(selected ? theme.selection : .clear)
         .overlay(alignment: .top) {
-            if rule {
-                Rectangle()
-                    .fill(theme.line)
-                    .frame(height: theme.contrast ? 1 : 0.5)
-                    .padding(.leading, Spacing.card)
-            }
+            if rule { SoftLine() }
         }
         .contentShape(Rectangle())
         .accessibilityElement(children: .ignore)
@@ -85,25 +83,25 @@ public struct SessionTile: View {
     }
 
     private var words: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            HStack(alignment: .firstTextBaseline, spacing: Spacing.tight) {
+        VStack(alignment: .leading, spacing: 1) {
+            HStack(alignment: .firstTextBaseline, spacing: Spacing.item) {
                 if let role {
-                    RoleMark(role, points: CGFloat(TextStyle.body.points) * 0.9, alignment: .leading, colour: dormant ? theme.muted : theme.ink)
+                    RoleMark(role, points: 12, alignment: .leading, colour: dormant ? theme.muted : theme.ink)
                 }
                 if let ref {
                     Text(ref)
-                        .font(theme.mono(.subheadline, .medium))
-                        .foregroundStyle(theme.muted)
+                        .font(.system(size: 12.5 * theme.scale, design: .monospaced))
+                        .foregroundStyle(quiet)
                 }
                 Text(label)
-                    .font(theme.body(.body, role != nil ? .medium : .regular))
+                    .font(theme.sized(Flat.text, role != nil ? .medium : .regular))
                     .foregroundStyle(dormant ? theme.muted : theme.ink)
                     .lines(1)
             }
             if !state.why.isEmpty, !dormant {
                 Text(state.why)
-                    .font(theme.body(.footnote))
-                    .foregroundStyle(theme.muted)
+                    .font(theme.sized(12.5))
+                    .foregroundStyle(quiet)
                     .lines(1)
             }
         }
@@ -113,36 +111,32 @@ public struct SessionTile: View {
     /// the context use.
     @ViewBuilder private func end(_ busy: Busy?) -> some View {
         if !dormant, state.waits {
-            ToneBadge(state.word, tone: state.tone)
+            Chip(state.word, colour: theme.colour(state.tone))
         } else if let busy {
             TimelineView(.periodic(from: .now, by: 1)) { tl in
-                if let t = busy.elapsed(now: tl.date) { quiet(t) }
+                if let t = busy.elapsed(now: tl.date) { small(t) }
             }
             .fixedSize()
         } else if !dormant, pr > 0 {
-            quiet("PR")
+            Chip("PR")
         }
         if !dormant, let context {
             ContextGauge(context)
         }
     }
 
-    /// A quiet pill: muted mono on a wash of ink.
-    private func quiet(_ text: String) -> some View {
+    private func small(_ text: String) -> some View {
         Text(text)
-            .font(theme.mono(.caption, .medium))
+            .font(.system(size: 12.5 * theme.scale, design: .monospaced))
             .monospacedDigit()
-            .foregroundStyle(theme.muted)
+            .foregroundStyle(quiet)
             .lineLimit(1)
             .fixedSize()
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(theme.ink.opacity(ThemeColours.inkWash), in: Capsule())
     }
 }
 
-/// A run of SessionTiles in one soft panel (T846, T996), clipped to its
-/// corners.
+/// A run of SessionTiles in one flat panel (T846, T996, T1001), clipped to
+/// its 8 round corners.
 public struct TileGroup<Content: View>: View {
     let content: Content
 
@@ -151,59 +145,17 @@ public struct TileGroup<Content: View>: View {
     }
 
     public var body: some View {
-        let shape = RoundedRectangle(cornerRadius: Radius.tile, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: Radius.tile)
         VStack(spacing: 0) { content }
             .clipShape(shape)
             .surface(in: shape)
     }
 }
 
-/// A count on a project's screen (T846): its numeral in the display
-/// face over its word, on a soft panel: "2 on deck".
-public struct StatTile: View {
-    @Environment(\.theme) private var theme
-    /// nil: a count not known here (a paired server's board it doesn't
-    /// share, T886), shown as –.
-    let count: Int?
-    let label: String
-
-    public init(_ count: Int?, _ label: String) {
-        self.count = count
-        self.label = label
-    }
-
-    public var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Group {
-                if let count {
-                    Text(count, format: .number)
-                        .contentTransition(.numericText(value: Double(count)))
-                } else {
-                    Text("–")
-                }
-            }
-                .font(theme.title(.sheetTitle, .bold))
-                .monospacedDigit()
-                .foregroundStyle(count == nil ? theme.muted : theme.ink)
-            Text(label)
-                .font(theme.body(.footnote, .medium))
-                .foregroundStyle(theme.muted)
-                .lines(1)
-        }
-        .padding(.horizontal, Spacing.card - 2)
-        .padding(.vertical, Spacing.row)
-        .frame(maxWidth: .infinity, minHeight: tapTarget, alignment: .leading)
-        .surface(in: RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
-        .contentShape(RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(count.map { "\($0) \(label)" } ?? "\(label), not shared")
-    }
-}
-
-/// One of a project's pages, a cell of a PageRow (T846, T996): its symbol
-/// in the ink over its name; at accessibility sizes beside it, a hairline
-/// over each after the first (rule). Open beside the list, ringed in the
-/// action colour.
+/// One of a project's pages, a cell of a PageRow (T846, T996, T1001): its
+/// symbol in ink over its name at 11.5; at accessibility sizes beside it, a
+/// soft line over each after the first (rule). Open beside the list, on the
+/// selection's fill.
 public struct PageTile: View {
     @Environment(\.theme) private var theme
     @Environment(\.dynamicTypeSize) private var typeSize
@@ -220,40 +172,37 @@ public struct PageTile: View {
     }
 
     public var body: some View {
-        let shape = RoundedRectangle(cornerRadius: Radius.row, style: .continuous)
         let wide = typeSize.isAccessibilitySize
-        let layout = wide ? AnyLayout(HStackLayout(spacing: Spacing.row)) : AnyLayout(VStackLayout(spacing: 2))
+        let layout = wide ? AnyLayout(HStackLayout(spacing: Spacing.row)) : AnyLayout(VStackLayout(spacing: 3))
         layout {
             Image(systemName: symbol)
-                .font(theme.body(.subheadline, .regular))
+                .font(.system(size: 16 * theme.scale))
                 .foregroundStyle(theme.ink)
                 // One height for every symbol, so the names line up.
-                .frame(height: theme.size(.subheadline) * 1.25)
+                .frame(height: 19 * theme.scale)
                 .accessibilityHidden(true)
             Text(title)
-                .font(theme.body(.caption, .medium))
-                .foregroundStyle(theme.muted)
+                .font(theme.sized(11.5))
+                .foregroundStyle(selected ? theme.ink : theme.muted)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
         }
         .padding(.horizontal, Spacing.hair)
-        .padding(.vertical, 3)
+        .padding(.vertical, 8)
         .frame(maxWidth: .infinity, minHeight: tapTarget, alignment: wide ? .leading : .center)
-        .padding(.leading, wide ? Spacing.card - Spacing.hair : 0)
-        .overlay {
-            if selected { shape.strokeBorder(theme.action, lineWidth: 2) }
-        }
+        .padding(.leading, wide ? 13 - Spacing.hair : 0)
+        .background(selected ? theme.selection : .clear)
         .overlay(alignment: .top) {
-            if rule, wide { Hairline().padding(.leading, Spacing.card) }
+            if rule, wide { SoftLine() }
         }
-        .contentShape(shape)
+        .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 
-/// A project's pages in one soft panel (T996): equal cells side by side,
-/// or a list at accessibility sizes.
+/// A project's pages in one flat panel (T996, T1001): equal cells side by
+/// side, or a list at accessibility sizes.
 public struct PageRow<Content: View>: View {
     @Environment(\.dynamicTypeSize) private var typeSize
     let content: Content
@@ -263,11 +212,24 @@ public struct PageRow<Content: View>: View {
     }
 
     public var body: some View {
+        let shape = RoundedRectangle(cornerRadius: Radius.tile)
         let layout = typeSize.isAccessibilitySize
             ? AnyLayout(VStackLayout(spacing: 0))
             : AnyLayout(HStackLayout(alignment: .top, spacing: 0))
         layout { content }
-            .surface(in: RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
+            .clipShape(shape)
+            .surface(in: shape)
+    }
+}
+
+/// The line between a list's rows, across the whole row (`.list`).
+struct SoftLine: View {
+    @Environment(\.theme) private var theme
+
+    var body: some View {
+        Rectangle()
+            .fill(theme.contrast ? theme.line : theme.lineSoft)
+            .frame(height: 1)
     }
 }
 
@@ -277,31 +239,14 @@ struct Hairline: View {
 
     var body: some View {
         Rectangle()
-            .fill(theme.line)
-            .frame(height: theme.contrast ? 1 : 0.5)
+            .fill(theme.contrast ? theme.line : theme.lineSoft)
+            .frame(height: 1)
     }
 }
 
-/// Tiles side by side, or one over another at accessibility sizes.
-public struct TileRow<Content: View>: View {
-    @Environment(\.dynamicTypeSize) private var typeSize
-    let content: Content
-
-    public init(@ViewBuilder content: () -> Content) {
-        self.content = content()
-    }
-
-    public var body: some View {
-        let layout = typeSize.isAccessibilitySize
-            ? AnyLayout(VStackLayout(spacing: Spacing.item))
-            : AnyLayout(HStackLayout(alignment: .top, spacing: Spacing.item))
-        layout { content }
-    }
-}
-
-/// A heading over a run of cards or tiles (T846, T996): a small, quiet
-/// uppercase label on the phone's veil, and a detail plain beside it:
-/// "THREADS", "5 · 3 wait on you".
+/// A heading over a run of cards or tiles (T846, T996, T1001): a 12 muted
+/// label in sentence case, and a detail plain beside it: "Threads",
+/// "5 · 3 wait on you".
 public struct SectionHeading: View {
     @Environment(\.theme) private var theme
     let title: String
@@ -315,18 +260,18 @@ public struct SectionHeading: View {
     public var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: Spacing.item) {
             Text(title)
-                .font(theme.body(.caption))
+                .font(theme.sized(12))
                 .foregroundStyle(theme.muted)
                 .lines(1)
                 .accessibilityAddTraits(.isHeader)
             Spacer(minLength: 0)
             if !detail.isEmpty {
                 Text(detail)
-                    .font(theme.mono(.caption, .medium))
+                    .font(theme.sized(12))
                     .foregroundStyle(theme.muted)
                     .lines(1)
             }
         }
-        .padding(.top, Spacing.row)
+        .padding(.top, Spacing.item)
     }
 }

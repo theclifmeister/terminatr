@@ -15,6 +15,8 @@ public struct PriorityTag: View {
             Text(priority)
                 .font(theme.mono(.caption2, .medium))
                 .foregroundStyle(colour)
+                .lineLimit(1)
+                .fixedSize()
                 .padding(.horizontal, 6)
                 .padding(.vertical, 1)
                 .overlay(RoundedRectangle(cornerRadius: Radius.chip).strokeBorder(colour.opacity(theme.contrast ? 1 : 0.5), lineWidth: 1))

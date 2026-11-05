@@ -41,3 +41,21 @@ public enum Monogram {
         return letters.lowercased()
     }
 }
+
+extension Attention.Tone {
+    /// A project's threads in words after its role's state (T1001): "no
+    /// threads", "1 working" when they all do one thing, else "3 threads".
+    public static func summary(_ tones: [Attention.Tone]) -> String {
+        let t = tally(tones)
+        if t.isEmpty { return "no threads" }
+        if t.count == 1, t[0].tone != .idle, t[0].tone != .done { return t[0].tone.counted(t[0].count) }
+        return tones.count == 1 ? "1 thread" : "\(tones.count) threads"
+    }
+
+    /// The dot of a row that speaks for a project: its strongest tone, in
+    /// the tally's order, what waits on the user before what works, an idle
+    /// role's dot taking its threads' work (T1001).
+    public static func strongest(_ own: Attention.Tone, _ tones: [Attention.Tone]) -> Attention.Tone {
+        tally([own] + tones).first?.tone ?? own
+    }
+}

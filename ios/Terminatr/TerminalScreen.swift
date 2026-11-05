@@ -67,11 +67,11 @@ struct TerminalScreen: View {
                     if let pane, pane.back {
                         Button { pane.host.jumpToBottom() } label: {
                             Label("Jump to bottom", systemImage: "arrow.down")
-                                .font(theme.body(.subheadline, .semibold))
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 8)
-                                .solid(Capsule())
-                                .overlay(Capsule().strokeBorder(theme.line, lineWidth: 1))
+                                .font(theme.sized(Flat.label))
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(theme.tab, in: RoundedRectangle(cornerRadius: Radius.row))
+                                .overlay(RoundedRectangle(cornerRadius: Radius.row).strokeBorder(theme.line, lineWidth: 1))
                         }
                         .buttonStyle(.plain)
                         .padding(.bottom, 10)
@@ -85,12 +85,11 @@ struct TerminalScreen: View {
                             .padding(16)
                     }
                 }
-                .background(theme.terminalBackground)
-                // A box on the screen's backdrop, as the Mac's tab draws
-                // it: the bars keep the theme's colours above it.
-                .clipShape(RoundedRectangle(cornerRadius: Self.corner))
-                .padding(.horizontal, 10)
-                .padding(.vertical, 8)
+                // The screen's whole pane, in the terminal's colour (the
+                // pane's in dark themes): the bars keep the theme's above it.
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+                .background { theme.terminalBackground.ignoresSafeArea(edges: .bottom) }
                 .safeAreaInset(edge: .bottom, spacing: 0) {
                     if let note {
                         Text(note)
@@ -99,7 +98,8 @@ struct TerminalScreen: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.horizontal, 16)
                             .padding(.vertical, 8)
-                            .background(.bar, ignoresSafeAreaEdges: .bottom)
+                            .background { theme.chrome.ignoresSafeArea(edges: .bottom) }
+                            .overlay(alignment: .top) { theme.line.frame(height: 1) }
                     }
                 }
             }
@@ -115,9 +115,6 @@ struct TerminalScreen: View {
         }
         .onChange(of: note == nil) { _, typing in pane?.typing = typing }
     }
-
-    /// The terminal box's corners.
-    static let corner: CGFloat = 12
 
     /// Why keys don't go in, when they don't: nil when they do.
     private func note(remote: RemotePane?, held: Bool) -> String? {
