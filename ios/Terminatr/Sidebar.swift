@@ -13,8 +13,7 @@ struct SidebarRow: Identifiable {
     /// place, in its state's colour, and its state's word the badge's.
     var role: SessionRole?
     /// Its state; working too on a row folded over a session that works
-    /// (T985): a Tab's label has its icon's place for a state, and its
-    /// badge's only for words.
+    /// (T985).
     var tone: Attention.Tone
     let badge: String?
     /// A program member's fold, which its chevron and Fold/Unfold write.
@@ -84,29 +83,6 @@ struct SidebarRow: Identifiable {
         default:
             return nil
         }
-    }
-}
-
-/// A section's rows in runs (T978): a program member's row with the
-/// rows of its coordinator and threads after it, which fold with it;
-/// the rows before the first member, and any other row, run alone.
-struct SidebarChunk: Identifiable {
-    let head: SidebarRow?
-    var rows: [SidebarRow]
-    var id: String { rows.first?.id ?? "" }
-
-    static func of(_ rows: [SidebarRow]) -> [SidebarChunk] {
-        var out: [SidebarChunk] = []
-        for r in rows {
-            if r.fold != nil {
-                out.append(SidebarChunk(head: r, rows: [r]))
-            } else if let last = out.last, last.head != nil {
-                out[out.count - 1].rows.append(r)
-            } else {
-                out.append(SidebarChunk(head: nil, rows: [r]))
-            }
-        }
-        return out
     }
 }
 
@@ -188,6 +164,8 @@ struct SidebarHead: View {
             Text("terminatr")
                 .font(theme.title(.title, .bold))
                 .foregroundStyle(theme.ink)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
             Text(model.source == .demo ? "Demo" : phone.several ? phone.models.map(\.serverName).joined(separator: ", ") : model.serverName)
                 .font(theme.body(.subheadline))
                 .foregroundStyle(theme.muted)
