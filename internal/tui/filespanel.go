@@ -538,7 +538,7 @@ func (c *client) filesToggle() {
 	case d == nil:
 		c.flash = "no files here"
 	case d.remote != nil:
-		c.flash = oneLine(d.remote.shown) + "'s files stay on it: its Library shows on its project's page"
+		c.flash = oneLine(d.remote.shown) + "'s files stay on it"
 	case d.prog != nil:
 		c.flash = "a director has no repo: its projects' threads have the files"
 	default:
