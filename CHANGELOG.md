@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.82.0](https://github.com/theclifmeister/terminatr/compare/v0.81.1...v0.82.0) (2026-11-05)
+
+
+### Features
+
+* **app:** check the signature of the tm the app runs ([#1122](https://github.com/theclifmeister/terminatr/issues/1122)) ([fcbd15b](https://github.com/theclifmeister/terminatr/commit/fcbd15b58ce4ab510bfe6102647d16366c42734e))
+* **app:** Files as the Mac's right panel, a proper file browser ([#1123](https://github.com/theclifmeister/terminatr/issues/1123)) ([42f31a7](https://github.com/theclifmeister/terminatr/commit/42f31a78d01dee40b8349f7e92f3961582a00dc4))
+* **app:** the Mac inspector's calmer look, action first ([#1118](https://github.com/theclifmeister/terminatr/issues/1118)) ([c11b4ae](https://github.com/theclifmeister/terminatr/commit/c11b4ae8c800c958ebfc12f77d3d62502272bb80))
+* read-only file browsing of a thread's worktree, in the server and the TUI ([#1117](https://github.com/theclifmeister/terminatr/issues/1117)) ([42de136](https://github.com/theclifmeister/terminatr/commit/42de1360d66bb2e6c75a4a3cde9e8cb283db06ac))
+
+
+### Bug Fixes
+
+* **appapi:** the bridge's own methods answer only on the human socket ([#1121](https://github.com/theclifmeister/terminatr/issues/1121)) ([85f694a](https://github.com/theclifmeister/terminatr/commit/85f694a20578d288857b886082d335f53148a8c1))
+* **app:** indent the Mac sidebar's Coordinator as the Director; thread marks ([#1111](https://github.com/theclifmeister/terminatr/issues/1111)) ([c5565cc](https://github.com/theclifmeister/terminatr/commit/c5565cce0e876396167f7a89942512cb1c6e67f4))
+* **app:** Needs you in the Mac sidebar folded away by default ([#1115](https://github.com/theclifmeister/terminatr/issues/1115)) ([03c71cd](https://github.com/theclifmeister/terminatr/commit/03c71cda97de0884561ce41484b1b46d67fb281c))
+* **app:** Save & Clear button padding and height, and the Inspector header at the pane header's height ([#1112](https://github.com/theclifmeister/terminatr/issues/1112)) ([1f16e12](https://github.com/theclifmeister/terminatr/commit/1f16e1232d0ee5a991ba80bc77b433228c6e6b2b))
+* **app:** thread rows on the Mac's Overview stay readable in a narrow pane ([#1116](https://github.com/theclifmeister/terminatr/issues/1116)) ([5dcb36d](https://github.com/theclifmeister/terminatr/commit/5dcb36d86ebefef0daeac80bcffe1d97c41e8d2a))
+* **guard:** refuse tm app bridge, tm peer and tm device writes on the floor ([#1119](https://github.com/theclifmeister/terminatr/issues/1119)) ([d10007b](https://github.com/theclifmeister/terminatr/commit/d10007b68b2dc2e3e991eaeff7b9c1a2535dcd77))
+* harden git runs and the worktree file read path ([#1120](https://github.com/theclifmeister/terminatr/issues/1120)) ([d2f4810](https://github.com/theclifmeister/terminatr/commit/d2f4810d14f847a0462bdbb2fc0b0f7bdd4ef6d7))
+* **ios:** match the flat-look design's iPhone and Duo screens ([#1114](https://github.com/theclifmeister/terminatr/issues/1114)) ([022c4c4](https://github.com/theclifmeister/terminatr/commit/022c4c416132ea34d95838b0fd3ed4b32b52e04d))
+
 ## [0.81.1](https://github.com/theclifmeister/terminatr/compare/v0.81.0...v0.81.1) (2026-11-05)
 
 
