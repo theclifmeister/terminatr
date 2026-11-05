@@ -3,9 +3,10 @@ import TerminatrKit
 import TerminatrUI
 
 /// The project dashboard's Designs (T864), as the TUI's Designs tab
-/// lists them (design.list, app API 31): each design a card with its
-/// status, title, build's progress, design task, open questions and
-/// answers, and its page; a card opens in place to its detail: the
+/// lists them (design.list, app API 31): each design a row of a hairline
+/// list with its title, open questions, a thin bar of its build and how
+/// much is built, or its status, its other facts in its tooltip; a row
+/// opens in place to its design task, answers and page, and the
 /// decided answers, the open questions (Answer… has the coordinator put
 /// them to the user, as the TUI's enter does) and the build tasks in
 /// after order, a board task's opening the task view. Read again
@@ -54,14 +55,11 @@ struct DesignsSection: View {
     var body: some View {
         // A stack, not a Group: a Group with nothing in it has nothing to
         // run its task on, so the designs were never read (T876).
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 7) {
             let listing = Designs.listing(designs, error: error)
             let shown = designs.map { Designs.shown($0, all: all) } ?? []
             let heading = if case .designs = listing, !notShared { "Designs · \(shown.count)" } else { "Designs" }
-            Text(heading)
-                .font(theme.body(.caption))
-                .foregroundStyle(theme.muted)
-                .padding(.top, 6)
+            PaneLabel(heading)
             if notShared, let peer {
                 Text(PeerPages.notShared(by: PeerPages.server(peer)))
                     .font(theme.body(.subheadline))
@@ -79,10 +77,14 @@ struct DesignsSection: View {
                         .font(theme.body(.subheadline))
                         .foregroundStyle(theme.attention)
                 case .designs(let designs):
-                    ForEach(Designs.ordered(shown), id: \.name) { d in
-                        DesignCard(project: slug, design: d, server: peer.map(PeerPages.server), open: Binding(
-                            get: { open.contains(d.name) },
-                            set: { if $0 { open.insert(d.name) } else { open.remove(d.name) } }))
+                    if !shown.isEmpty {
+                        HairlineList {
+                            ForEach(Designs.ordered(shown), id: \.name) { d in
+                                DesignCard(project: slug, design: d, server: peer.map(PeerPages.server), open: Binding(
+                                    get: { open.contains(d.name) },
+                                    set: { if $0 { open.insert(d.name) } else { open.remove(d.name) } }))
+                            }
+                        }
                     }
                     let words = Designs.toggle(designs, all: all)
                     if !words.isEmpty {
@@ -126,7 +128,7 @@ struct DesignsSection: View {
     }
 }
 
-/// One design: its card, opened in place to its detail.
+/// One design: its row, opened in place to its detail.
 private struct DesignCard: View {
     @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
@@ -140,47 +142,54 @@ private struct DesignCard: View {
     @State private var askError: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Button { open.toggle() } label: { summary.contentShape(Rectangle()) }
-                .buttonStyle(.plain)
-                .help(open ? "Folds \(design.title)" : "Shows \(design.title)'s answers, questions and build")
-                .accessibilityValue(open ? "open" : "folded")
-            if open { detail }
+        ListRow {
+            VStack(alignment: .leading, spacing: 10) {
+                Button { open.toggle() } label: { summary.contentShape(Rectangle()) }
+                    .buttonStyle(.plain)
+                    .help(open ? "Folds \(design.title)" : "Shows \(design.title)'s answers, questions and build")
+                    .accessibilityLabel(design.title)
+                    .accessibilityValue(([open ? "open" : "folded", design.status, Designs.built(design)] + Designs.facts(design)).joined(separator: ", "))
+                if open { detail }
+            }
         }
-        .padding(12)
-        .background(theme.pane, in: RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(theme.line, lineWidth: 1))
     }
 
     private var summary: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Image(systemName: "chevron.right")
-                    .rotationEffect(.degrees(open ? 90 : 0))
-                    .font(theme.body(.glyph, .bold))
-                    .foregroundStyle(theme.muted)
-                StatusTag(status: design.status)
-                Text(design.title)
-                    .font(theme.body(.body, .semibold))
+        HStack(spacing: 10) {
+            Text(design.title)
+                .lineLimit(1)
+            Spacer(minLength: 8)
+            if !design.questions.isEmpty {
+                Text(design.questions.count == 1 ? "1 open question" : "\(design.questions.count) open questions")
+                    .font(theme.sized(Flat.label))
+                    .foregroundStyle(theme.question)
                     .lineLimit(1)
-                Spacer(minLength: 8)
+                    .fixedSize()
+            }
+            if design.build.isEmpty && design.tasks.isEmpty {
+                StatusTag(status: design.status)
+            } else {
+                Meter(fraction: Designs.progress(design), colour: Designs.Status(design.status) == .done ? theme.good : theme.action)
+                    .frame(width: 90, height: 4)
                 Text(Designs.built(design))
-                    .font(theme.mono(.footnote))
+                    .font(theme.mono(.subheadline))
                     .foregroundStyle(theme.muted)
+                    .fixedSize()
             }
-            if !design.build.isEmpty {
-                ProgressView(value: Designs.progress(design))
-                    .tint(Designs.Status(design.status) == .done ? theme.good : theme.action)
-            }
-            Text(Designs.facts(design).joined(separator: " · "))
-                .font(theme.body(.subheadline))
-                .foregroundStyle(design.questions.isEmpty ? theme.muted : theme.question)
+            Image(systemName: "chevron.right")
+                .rotationEffect(.degrees(open ? 90 : 0))
+                .font(theme.body(.glyph, .semibold))
+                .foregroundStyle(theme.muted)
+                .accessibilityHidden(true)
         }
     }
 
     @ViewBuilder
     private var detail: some View {
         VStack(alignment: .leading, spacing: 10) {
+            Text(([design.status] + Designs.facts(design)).joined(separator: " · "))
+                .font(theme.sized(Flat.label))
+                .foregroundStyle(theme.muted)
             if let url = Designs.page(design) {
                 Link(destination: url) {
                     Label(design.artifact, systemImage: "link")
@@ -231,7 +240,6 @@ private struct DesignCard: View {
                 buildRow(t)
             }
         }
-        .padding(.leading, 20)
     }
 
     private func buildRow(_ t: AppAPI.DesignTask) -> some View {
@@ -239,9 +247,8 @@ private struct DesignCard: View {
             Button { app.showTask(project: project, task: t.id) } label: {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text(t.id)
-                        .font(theme.mono(.subheadline, .medium))
-                        .foregroundStyle(t.archived ? theme.muted : theme.action)
-                        .frame(minWidth: 44, alignment: .leading)
+                        .font(theme.mono(.subheadline))
+                        .foregroundStyle(theme.muted)
                     Text(t.title).lineLimit(1)
                 }
                 .contentShape(Rectangle())
@@ -252,18 +259,16 @@ private struct DesignCard: View {
             StatusTag(status: t.status)
             let after = Designs.after(t)
             if !after.isEmpty {
-                Text(after).font(theme.mono(.footnote)).foregroundStyle(theme.muted)
+                Text(after).font(theme.sized(Flat.label)).foregroundStyle(theme.muted)
             }
             if t.archived {
-                Text("archived").font(theme.mono(.footnote)).foregroundStyle(theme.muted)
+                Text("archived").font(theme.sized(Flat.label)).foregroundStyle(theme.muted)
             }
         }
     }
 
     private func heading(_ s: String) -> some View {
-        Text(s)
-            .font(theme.body(.caption))
-            .foregroundStyle(theme.muted)
+        PaneLabel(s)
             .padding(.top, 2)
     }
 
@@ -285,15 +290,17 @@ private struct DesignCard: View {
     }
 }
 
-/// A design's or a task's status as a small tag in its colour.
+/// A design's or a task's status as a small word in its colour.
 private struct StatusTag: View {
     @Environment(\.theme) private var theme
     let status: String
 
     var body: some View {
         Text(status)
-            .font(theme.mono(.label, .medium))
+            .font(theme.sized(Flat.label))
             .foregroundStyle(colour)
+            .lineLimit(1)
+            .fixedSize()
     }
 
     private var colour: Color {

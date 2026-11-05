@@ -80,3 +80,14 @@ func themeDotsApart(_ name: ThemeName) {
     #expect(Palette.search(rows, "dusk").map(\.command) == [.theme(.dusk)])
     #expect(Palette.search(rows, "theme").count == min(rows.count, Palette.perGroup))
 }
+
+// T1002: agents draw for a dark terminal, so it is dark in light too; in
+// dark it is the pane's colour.
+@Test func terminalGround() {
+    func luminance(_ hex: UInt32) -> Double { Double((hex >> 16) & 0xff) + Double((hex >> 8) & 0xff) + Double(hex & 0xff) }
+    for name in ThemeName.allCases {
+        let c = name.colours
+        #expect(c.terminal.background.dark == c.pane.dark, "\(name)")
+        #expect(luminance(c.terminal.background.light) < 3 * 64, "\(name)")
+    }
+}

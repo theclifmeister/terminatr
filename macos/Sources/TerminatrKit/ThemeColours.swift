@@ -75,7 +75,8 @@ public struct Swatch: Hashable, Sendable {
 }
 
 /// The terminal tab's colours. Agents draw their screens for a dark
-/// terminal, so every theme's terminal is dark, in light too.
+/// terminal, so every theme's terminal is dark, in light too: in dark its
+/// ground is the theme's pane, in light the theme's own dark (T1002).
 public struct TerminalColours: Hashable, Sendable {
     public var background: Swatch
     public var foreground: Swatch

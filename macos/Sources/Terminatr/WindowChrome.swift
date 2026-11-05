@@ -297,6 +297,8 @@ struct MainPane<Content: View>: View {
             }
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                // A pane's buttons are the page's small ones (T1002).
+                .buttonStyle(.flat)
         }
         .background(theme.pane)
         .clipShape(shape)

@@ -17,7 +17,7 @@ public struct PriorityTag: View {
                 .foregroundStyle(colour)
                 .padding(.horizontal, 6)
                 .padding(.vertical, 1)
-                .overlay(Capsule().strokeBorder(colour.opacity(theme.contrast ? 1 : 0.5), lineWidth: 1))
+                .overlay(RoundedRectangle(cornerRadius: Radius.chip).strokeBorder(colour.opacity(theme.contrast ? 1 : 0.5), lineWidth: 1))
                 .accessibilityLabel("priority \(priority)")
         }
     }

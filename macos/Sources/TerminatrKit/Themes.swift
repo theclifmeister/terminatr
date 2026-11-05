@@ -42,7 +42,7 @@ extension ThemeColours {
         approvalTint: Swatch(0xfcf1e8, 0xa84406, alpha: 1, darkAlpha: 0.18),
         command: Swatch(0x17181c, 0x000000, alpha: 0.05, darkAlpha: 0.25),
         terminal: TerminalColours(
-            background: Swatch(0x17181c), foreground: Swatch(0xdddfe0),
+            background: Swatch(0x17181c, 0x17181c), foreground: Swatch(0xdddfe0),
             cursor: Swatch(0xdddfe0), selection: Swatch(0xa6aebe, alpha: 0.28),
             ansi: ansi(0x2c2d31, 0xff6b6b, 0x55c88f, 0xe7c35a, 0x76a5ff, 0xc792ea, 0x4fc9be, 0xd6d8da,
                        0x6e7075, 0xff8a8a, 0x7ee2a4, 0xf2d47a, 0x93b8ff, 0xd6aef2, 0x7ad6cf, 0xf5f6f7)
@@ -78,7 +78,7 @@ extension ThemeColours {
         approvalTint: Swatch(0xfff1ec, 0xff6a4a, alpha: 1, darkAlpha: 0.22),
         command: Swatch(0x1c1433, 0x000000, alpha: 0.06, darkAlpha: 0.3),
         terminal: TerminalColours(
-            background: Swatch(0x1a1430), foreground: Swatch(0xefeaff),
+            background: Swatch(0x1a1430, 0x1e1733), foreground: Swatch(0xefeaff),
             cursor: Swatch(0xa58fff), selection: Swatch(0x7b5cff, alpha: 0.4),
             ansi: ansi(0x2a2148, 0xff7b7b, 0x9be15d, 0xffd166, 0x8fa8ff, 0xff7ad9, 0x4fe0d0, 0xe6e0f5,
                        0x7a72a0, 0xff9a9a, 0xb8f27c, 0xffe08a, 0xadc0ff, 0xffa3e8, 0x84f0e4, 0xffffff)
@@ -115,7 +115,7 @@ extension ThemeColours {
         approvalTint: Swatch(0xf7ebda, 0x8c4f0c, alpha: 1, darkAlpha: 0.26),
         command: Swatch(0x2e2924, 0x000000, alpha: 0.06, darkAlpha: 0.25),
         terminal: TerminalColours(
-            background: Swatch(0x23211d), foreground: Swatch(0xe6dfd2),
+            background: Swatch(0x23211d, 0x24221f), foreground: Swatch(0xe6dfd2),
             cursor: Swatch(0x9db8dc), selection: Swatch(0x9db8dc, alpha: 0.28),
             ansi: ansi(0x34302a, 0xe28e72, 0xa9c784, 0xe3c07a, 0x93b6cc, 0xcca3c3, 0x8fc5b5, 0xddd5c6,
                        0x857c6f, 0xeca68e, 0xbdd6a0, 0xeed39a, 0xabc8da, 0xdab8d2, 0xa8d7c9, 0xf4ede0)
@@ -151,7 +151,7 @@ extension ThemeColours {
         approvalTint: Swatch(0xfcf1e8, 0xa84406, alpha: 1, darkAlpha: 0.22),
         command: Swatch(0x16181d, 0x000000, alpha: 0.05, darkAlpha: 0.3),
         terminal: TerminalColours(
-            background: Swatch(0x111317), foreground: Swatch(0xd8dce2),
+            background: Swatch(0x111317, 0x1f2125), foreground: Swatch(0xd8dce2),
             cursor: Swatch(0x76a5ff), selection: Swatch(0x2357c4, alpha: 0.45),
             ansi: ansi(0x2a2e35, 0xff6b6b, 0x5fd38d, 0xe7c35a, 0x6ea0ff, 0xc792ea, 0x56c8d8, 0xd6dae0,
                        0x6b7280, 0xff8a8a, 0x7ee2a4, 0xf2d47a, 0x93b8ff, 0xd6aef2, 0x7ad6e3, 0xf5f7fa)
@@ -189,7 +189,7 @@ extension ThemeColours {
         approvalTint: Swatch(0xebe0d6, 0x7c4b14, alpha: 1, darkAlpha: 0.24),
         command: Swatch(0x221e2b, 0x000000, alpha: 0.06, darkAlpha: 0.3),
         terminal: TerminalColours(
-            background: Swatch(0x16141e, 0x111018), foreground: Swatch(0xc9c4d6, 0xbcb7c9),
+            background: Swatch(0x16141e, 0x16151b), foreground: Swatch(0xc9c4d6, 0xbcb7c9),
             cursor: Swatch(0xa596d6), selection: Swatch(0xa596d6, alpha: 0.25),
             ansi: ansi(0x26232f, 0xd98a8a, 0x8cbfa6, 0xd6b47c, 0x93a6d8, 0xb39ad6, 0x84bdc3, 0xc9c4d6,
                        0x6e6884, 0xe6a3a3, 0xa3cfb9, 0xe0c496, 0xa9b9e2, 0xc4b0e0, 0x9ecbd0, 0xe0dcea)
@@ -225,7 +225,7 @@ extension ThemeColours {
         approvalTint: Swatch(0xfff0e3, 0xff8a3a, alpha: 1, darkAlpha: 0.2),
         command: Swatch(0x0b1a3a, 0x000000, alpha: 0.06, darkAlpha: 0.3),
         terminal: TerminalColours(
-            background: Swatch(0x08122b), foreground: Swatch(0xe1ecff),
+            background: Swatch(0x08122b, 0x101a37), foreground: Swatch(0xe1ecff),
             cursor: Swatch(0x5ee6d0), selection: Swatch(0x3ec8ff, alpha: 0.3),
             ansi: ansi(0x1a2546, 0xff6b8f, 0x5ef2a0, 0xffd76b, 0x6fa8ff, 0xe07bff, 0x4fe6ff, 0xdce8ff,
                        0x63759f, 0xff8faa, 0x8affbd, 0xffe598, 0x94bfff, 0xea9dff, 0x85eeff, 0xffffff)
@@ -261,7 +261,7 @@ extension ThemeColours {
         approvalTint: Swatch(0xfff0e2, 0xff8a3a, alpha: 1, darkAlpha: 0.2),
         command: Swatch(0x2b1418, 0x000000, alpha: 0.06, darkAlpha: 0.3),
         terminal: TerminalColours(
-            background: Swatch(0x1f1216), foreground: Swatch(0xfbe9e1),
+            background: Swatch(0x1f1216, 0x26171c), foreground: Swatch(0xfbe9e1),
             cursor: Swatch(0xe78ae0), selection: Swatch(0xff6fa3, alpha: 0.3),
             ansi: ansi(0x33202a, 0xff7a6b, 0xa6e07a, 0xffc861, 0x8fb0ff, 0xff8fc8, 0x6fd8d0, 0xf3e2dc,
                        0x86666e, 0xff9a8c, 0xbdeb98, 0xffd88a, 0xadc4ff, 0xffaad6, 0x94e4de, 0xfff6f2)
@@ -298,7 +298,7 @@ extension ThemeColours {
         approvalTint: Swatch(0xfff1dc, 0xffaa4d, alpha: 1, darkAlpha: 0.16),
         command: Swatch(0x0b0b0b, 0x000000, alpha: 0.07, darkAlpha: 0.5),
         terminal: TerminalColours(
-            background: Swatch(0x0a0a0a), foreground: Swatch(0xf5f5f5),
+            background: Swatch(0x0a0a0a, 0x131313), foreground: Swatch(0xf5f5f5),
             cursor: Swatch(0xffd23f), selection: Swatch(0xffd23f, alpha: 0.3),
             ansi: ansi(0x262626, 0xff5f5f, 0x5fe08a, 0xffd23f, 0x6aa8ff, 0xff7ae0, 0x3fe0e0, 0xe8e8e8,
                        0x8a8a8a, 0xff8a8a, 0x8af0a8, 0xffe17a, 0x9cc4ff, 0xff9eea, 0x7aeeee, 0xffffff)

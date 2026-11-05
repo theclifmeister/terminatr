@@ -78,8 +78,8 @@ struct TaskSheet: View {
                     .font(theme.mono(.caption, .medium))
                     .padding(.horizontal, 7)
                     .padding(.vertical, 2)
-                    .background(theme.pane, in: Capsule())
-                    .overlay(Capsule().strokeBorder(theme.line, lineWidth: 1))
+                    .background(theme.pane, in: RoundedRectangle(cornerRadius: 4))
+                    .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(theme.line, lineWidth: 1))
             }
             Text(d.facts)
                 .font(theme.mono(.footnote))

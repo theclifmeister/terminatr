@@ -55,15 +55,11 @@ struct SessionDetail: View {
             }
             .font(theme.body(.subheadline))
             .foregroundStyle(theme.muted)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(theme.pane, in: RoundedRectangle(cornerRadius: terminal ? TerminalTab.corner : 9))
-            .accessibilityElement(children: .combine)
-            // At the pages' edges: over the terminal, its box's.
             .padding(.horizontal, Page.edge)
-            .padding(.top, 12)
-            .padding(.bottom, 4)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .overlay(alignment: .bottom) { theme.lineSoft.frame(height: 1) }
+            .accessibilityElement(children: .combine)
         }
     }
 }
@@ -121,7 +117,7 @@ struct NotRunning: View {
     var body: some View {
         VStack(spacing: 8) {
             Text(headline)
-                .font(theme.title(.title, .heavy))
+                .font(theme.title(.headline, .semibold))
             Text(detail)
                 .foregroundStyle(theme.muted)
                 .multilineTextAlignment(.center)
@@ -131,8 +127,7 @@ struct NotRunning: View {
                         .padding(.top, 4)
                 } else if !p.active, app.controlsProjects {
                     Button("Activate \(p.slug)") { app.ask(.activate(project: p.slug)) }
-                        .buttonStyle(.borderedProminent)
-                        .tint(theme.action)
+                        .buttonStyle(.flatPrimary)
                         .padding(.top, 4)
                 } else {
                     StartButton(project: p, title: "Start the Coordinator")
@@ -145,7 +140,6 @@ struct NotRunning: View {
             }
         }
         .padding(28)
-        .solid(RoundedRectangle(cornerRadius: 8))
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
@@ -214,8 +208,7 @@ struct WakeButton: View {
                     Label(title, systemImage: "sun.max")
                 }
             }
-            .buttonStyle(.borderedProminent)
-            .tint(theme.action)
+            .buttonStyle(.flatPrimary)
             .disabled(app.sleep(of: project) == .waking)
             .help("Resumes it with its conversation, as tm project open does")
             if let error {
@@ -260,8 +253,7 @@ struct StartDirectorButton: View {
                     Text("Start the Director")
                 }
             }
-            .buttonStyle(.borderedProminent)
-            .tint(theme.action)
+            .buttonStyle(.flatPrimary)
             .disabled(busy)
             .help("Starts the director with the program's director agent, as tm program open does")
             if let error {

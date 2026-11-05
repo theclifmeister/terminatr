@@ -26,9 +26,9 @@ struct ProgramPage: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 22) {
                 header
-                directorCard
+                HairlineList { directorCard }
                 section("Needs you", count: needs?.needs.count) { needsList }
                 section("Children", count: program.members.count) { children }
                 if let d = detail, !d.umbrellas.isEmpty {
@@ -39,13 +39,12 @@ struct ProgramPage: View {
                 }
                 if let failed {
                     Text(failed)
-                        .font(theme.body(.callout))
+                        .font(theme.sized(Flat.label))
                         .foregroundStyle(theme.attention)
                 }
             }
-            .padding(.horizontal, 28)
-            .padding(.top, 18)
-            .padding(.bottom, 28)
+            .padding(.horizontal, 24)
+            .padding(.vertical, 22)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .scrollEdges()
@@ -53,6 +52,7 @@ struct ProgramPage: View {
         .task(id: Reload(program: program, needs: app.needs(of: program).map(\.id), connected: app.bridge != nil, acted: acted)) { await read() }
         .sheet(item: $asking) { a in
             ProgramAskSheet(program: program.slug, ask: a) { acted += 1 }
+                .buttonStyle(.automatic)
         }
     }
 
@@ -88,15 +88,13 @@ struct ProgramPage: View {
     // MARK: the parts
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text("program")
-                    .font(theme.mono(.subheadline, .medium))
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 1)
-                    .background(theme.pane, in: Capsule())
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 12) {
+                NameTile(program.slug)
                 Text(program.slug)
-                    .font(theme.title(.display, .heavy))
+                    .font(theme.title(.display, .semibold))
+                    .lineLimit(1)
+                Chip("program")
                 Spacer()
                 if app.controlsProjects {
                     Menu {
@@ -105,7 +103,10 @@ struct ProgramPage: View {
                             .disabled(app.directorSession(program.slug) != nil)
                     } label: {
                         Label("Program", systemImage: "ellipsis.circle")
+                            .font(theme.sized(Flat.label))
+                            .foregroundStyle(theme.muted)
                     }
+                    .menuStyle(.borderlessButton)
                     .fixedSize()
                     .help("Rename or delete \(program.slug); its members, authority and caps are set in tm's console")
                 }
@@ -113,14 +114,16 @@ struct ProgramPage: View {
             if !program.goal.isEmpty {
                 Text(program.goal)
                     .foregroundStyle(theme.muted)
-                    .lineLimit(2)
+                    .lineSpacing(3)
+                    .frame(maxWidth: 560, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             Text(ProgramFacts.line(program, working: detail?.working))
-                .font(theme.mono(.footnote))
+                .font(theme.sized(Flat.label))
                 .foregroundStyle(theme.muted)
             if !program.error.isEmpty {
                 Text(program.error)
-                    .font(theme.body(.callout))
+                    .font(theme.sized(Flat.label))
                     .foregroundStyle(theme.attention)
             }
         }
@@ -131,31 +134,21 @@ struct ProgramPage: View {
         let s = app.directorSession(program.slug)
         let a = Attention.of(director: s, in: program)
         return Button { app.select(.session(.director(program.slug))) } label: {
-            HStack(spacing: 8) {
-                Circle()
-                    .fill(theme.colour(a.tone))
-                    .frame(width: 8, height: 8)
-                    .accessibilityHidden(true)
-                RoleLabel(.director, points: 14)
-                Text(a.why.isEmpty ? a.word : a.why)
-                    .font(theme.body(.callout))
-                    .foregroundStyle(theme.muted)
-                    .lineLimit(1)
-                Spacer(minLength: 8)
-                if a.waits {
-                    Text(a.word)
-                        .font(theme.mono(.caption2, .medium))
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 1)
-                        .background(theme.colour(a.tone), in: Capsule())
-                        .foregroundStyle(theme.on(a.tone))
+            ListRow {
+                HStack(spacing: 10) {
+                    RoleLabel(.director, points: Flat.text)
+                    Dot(colour: theme.colour(a.tone))
+                    Text(a.why.isEmpty ? a.word : a.why)
+                        .font(theme.sized(Flat.label))
+                        .foregroundStyle(theme.muted)
+                        .lineLimit(1)
+                    Spacer(minLength: 8)
+                    if a.waits {
+                        Chip(a.word, colour: theme.on(a.tone), fill: theme.colour(a.tone))
+                    }
                 }
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
-            .background(theme.pane, in: RoundedRectangle(cornerRadius: 8))
-            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(theme.line, lineWidth: 1))
-            .contentShape(RoundedRectangle(cornerRadius: 8))
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .ignore)
@@ -170,15 +163,18 @@ struct ProgramPage: View {
         if let needs {
             if needs.needs.isEmpty {
                 note("Nothing waits on you in \(program.slug).")
-            }
-            ForEach(Array(needs.needs.enumerated()), id: \.offset) { _, n in
-                Button { act(n) } label: {
-                    line(lead: n.priority, place: n.program ? "program" : ProgramFacts.place(n.project, server: n.server),
-                         text: ProgramFacts.need(n), tail: n.merged.isEmpty ? n.need.kind : "merged \(n.merged.count + 1)")
-                }
-                .buttonStyle(.plain)
-                if let r = n.recommend {
-                    recommendation(r)
+            } else {
+                HairlineList {
+                    ForEach(Array(needs.needs.enumerated()), id: \.offset) { _, n in
+                        Button { act(n) } label: {
+                            line(lead: n.priority, place: n.program ? "program" : ProgramFacts.place(n.project, server: n.server),
+                                 text: ProgramFacts.need(n), tail: n.merged.isEmpty ? n.need.kind : "merged \(n.merged.count + 1)")
+                        }
+                        .buttonStyle(.plain)
+                        if let r = n.recommend {
+                            recommendation(r)
+                        }
+                    }
                 }
             }
             if needs.quiet > 0 {
@@ -193,21 +189,21 @@ struct ProgramPage: View {
     /// Accept: the user's own answer, as program.recommend.accept gives
     /// it. Clicking the need picks another, as before.
     private func recommendation(_ r: AppAPI.Recommendation) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(ProgramFacts.recommends(r))
-                .font(theme.body(.callout))
-                .foregroundStyle(theme.muted)
-                .lineLimit(2)
-            Spacer(minLength: 8)
-            if app.acceptsRecommendations {
-                Button("Accept") { accept(r) }
-                    .controlSize(.small)
-                    .disabled(accepting == r.question)
-                    .help("Answer \(r.question) with \(ProgramFacts.answer(r)), as yours")
+        ListRow {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(ProgramFacts.recommends(r))
+                    .font(theme.sized(Flat.label))
+                    .foregroundStyle(theme.muted)
+                    .lineLimit(2)
+                Spacer(minLength: 8)
+                if app.acceptsRecommendations {
+                    Button("Accept") { accept(r) }
+                        .buttonStyle(.flat)
+                        .disabled(accepting == r.question)
+                        .help("Answer \(r.question) with \(ProgramFacts.answer(r)), as yours")
+                }
             }
         }
-        .padding(.leading, 64)
-        .padding(.trailing, 12)
     }
 
     private func accept(_ r: AppAPI.Recommendation) {
@@ -229,61 +225,64 @@ struct ProgramPage: View {
         let shown = Dictionary(needs?.members.map { (ProgramFacts.place($0.project, server: $0.server), $0) } ?? [], uniquingKeysWith: { a, _ in a })
         // program.get's members carry their invite state and words; the
         // sidebar's, until it reads.
-        ForEach(detail?.members ?? program.members, id: \.self) { m in
-            let place = ProgramFacts.place(m.project, server: m.server)
-            Button {
-                app.select(.project(m.project, server: m.server))
-            } label: {
-                line(lead: "", place: m.server.isEmpty ? m.project : "\(m.server)/\(m.project)",
-                     text: ProgramFacts.child(m, project: app.project(m.project), peer: app.peer(m.server), needs: shown[place]?.needs),
-                     tail: "")
+        HairlineList {
+            ForEach(detail?.members ?? program.members, id: \.self) { m in
+                let place = ProgramFacts.place(m.project, server: m.server)
+                Button {
+                    app.select(.project(m.project, server: m.server))
+                } label: {
+                    line(lead: "", place: m.server.isEmpty ? m.project : "\(m.server)/\(m.project)",
+                         text: ProgramFacts.child(m, project: app.project(m.project), peer: app.peer(m.server), needs: shown[place]?.needs),
+                         tail: "")
+                }
+                .buttonStyle(.plain)
+                .disabled(m.server.isEmpty ? app.project(m.project) == nil
+                          : app.peer(m.server)?.projects.contains { $0.project == m.project } != true)
             }
-            .buttonStyle(.plain)
-            .disabled(m.server.isEmpty ? app.project(m.project) == nil
-                      : app.peer(m.server)?.projects.contains { $0.project == m.project } != true)
         }
     }
 
     private func umbrellas(_ d: AppAPI.ProgramDetail) -> some View {
-        ForEach(d.umbrellas, id: \.task.ref) { u in
-            VStack(alignment: .leading, spacing: 4) {
+        HairlineList {
+            ForEach(d.umbrellas, id: \.task.ref) { u in
                 line(lead: u.task.priority, place: u.task.ref, text: u.task.title,
                      tail: "\(u.parts.filter { $0.state == "met" }.count)/\(u.parts.count)")
                 ForEach(u.parts, id: \.ref) { part in
-                    HStack(spacing: 8) {
-                        Text(part.ref)
-                            .font(theme.mono(.caption, .medium))
-                            .foregroundStyle(theme.action)
-                        Text(part.title)
-                            .font(theme.body(.caption))
-                            .lineLimit(1)
-                        Spacer(minLength: 4)
-                        Text(part.word.isEmpty ? part.state : part.word)
-                            .font(theme.mono(.caption2))
-                            .foregroundStyle(part.state == "met" ? theme.colour(.working) : theme.muted)
+                    ListRow {
+                        HStack(spacing: 10) {
+                            Text(part.ref)
+                                .font(theme.mono(.subheadline))
+                                .foregroundStyle(theme.muted)
+                            Text(part.title)
+                                .font(theme.sized(Flat.label))
+                                .lineLimit(1)
+                            Spacer(minLength: 4)
+                            Text(part.word.isEmpty ? part.state : part.word)
+                                .font(theme.sized(Flat.label))
+                                .foregroundStyle(part.state == "met" ? theme.colour(.working) : theme.muted)
+                        }
+                        .padding(.leading, 24)
                     }
-                    .padding(.leading, 70)
                 }
             }
         }
     }
 
     private func dependencies(_ d: AppAPI.ProgramDetail) -> some View {
-        ForEach(d.waits, id: \.self) { w in
-            let dep = d.deps[w.after]
-            line(lead: "", place: w.task, text: "\(w.title) ← \(w.after)",
-                 tail: dep.map { $0.word.isEmpty ? $0.state : $0.word } ?? "")
+        HairlineList {
+            ForEach(d.waits, id: \.self) { w in
+                let dep = d.deps[w.after]
+                line(lead: "", place: w.task, text: "\(w.title) ← \(w.after)",
+                     tail: dep.map { $0.word.isEmpty ? $0.state : $0.word } ?? "")
+            }
         }
     }
 
     // MARK: drawing
 
     private func section<C: View>(_ title: String, count: Int?, @ViewBuilder content: () -> C) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(count.map { "\(title) \($0)" } ?? title)
-                .font(theme.body(.caption))
-                .foregroundStyle(theme.muted)
-                .padding(.top, 6)
+        VStack(alignment: .leading, spacing: 7) {
+            PaneLabel(count.map { "\(title) · \($0)" } ?? title)
             content()
         }
     }
@@ -291,34 +290,34 @@ struct ProgramPage: View {
     /// A row of a part: its priority (or nothing), its place, its words
     /// and a quiet word at its end.
     private func line(lead: String, place: String, text: String, tail: String) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(lead)
-                .font(theme.mono(.caption, .medium))
-                .foregroundStyle(lead == "must" ? theme.attention : theme.muted)
-                .frame(width: 44, alignment: .leading)
-            Text(place)
-                .font(theme.mono(.subheadline, .medium))
-                .foregroundStyle(theme.action)
-                .lineLimit(1)
-            Text(text)
-                .font(theme.body(.body))
-                .lineLimit(1)
-            Spacer(minLength: 8)
-            Text(tail)
-                .font(theme.mono(.caption))
-                .foregroundStyle(theme.muted)
+        ListRow {
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Text(place)
+                    .font(theme.mono(.subheadline))
+                    .foregroundStyle(theme.muted)
+                    .lineLimit(1)
+                Text(text)
+                    .lineLimit(1)
+                Spacer(minLength: 8)
+                if !lead.isEmpty {
+                    PriorityTag(lead)
+                }
+                if !tail.isEmpty {
+                    Text(tail)
+                        .font(theme.sized(Flat.label))
+                        .foregroundStyle(theme.muted)
+                        .lineLimit(1)
+                        .fixedSize()
+                }
+            }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .background(theme.pane, in: RoundedRectangle(cornerRadius: 6))
-        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(theme.line, lineWidth: 1))
-        .contentShape(RoundedRectangle(cornerRadius: 6))
+        .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
     }
 
     private func note(_ s: String) -> some View {
         Text(s)
-            .font(theme.body(.callout))
+            .font(theme.sized(Flat.label))
             .foregroundStyle(theme.muted)
     }
 }

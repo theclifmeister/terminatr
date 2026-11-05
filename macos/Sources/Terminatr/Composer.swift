@@ -35,97 +35,33 @@ struct Composer: View {
     @FocusState private var focused: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            VStack(alignment: .leading, spacing: 8) {
-                if !tray.files.isEmpty {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 6) {
-                            ForEach(tray.files) { f in chip(f) }
-                        }
+        VStack(alignment: .leading, spacing: 8) {
+            if !tray.files.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(tray.files) { f in chip(f) }
                     }
                 }
-                HStack(alignment: .bottom, spacing: 8) {
-                    if attaches {
-                        Button { pick() } label: { Image(systemName: "paperclip") }
-                            .buttonStyle(.borderless)
-                            .disabled(tray.full)
-                            .help("Attach files: images, PDFs or text (you can also paste or drop them)")
-                            .accessibilityLabel("Attach files")
-                    }
-                    ZStack(alignment: .topLeading) {
-                        if text.isEmpty {
-                            Text(placeholder)
-                                .foregroundStyle(theme.muted)
-                                .padding(.leading, 5)
-                                .allowsHitTesting(false)
-                        }
-                        TextEditor(text: $text)
-                            .scrollContentBackground(.hidden)
-                            .font(theme.body(.body))
-                            .frame(minHeight: 20, maxHeight: 120)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .focused($focused)
-                            .onKeyPress(.return, phases: .down) { press in
-                                // ⌘↩ is the open card's first choice, not a send.
-                                if press.modifiers.contains(.shift) || press.modifiers.contains(.command) { return .ignored }
-                                send(mode: press.modifiers.contains(.option) && !model.ref.isRemote ? "now" : "")
-                                return .handled
-                            }
-                            .accessibilityLabel(placeholder)
-                            .modifier(NoWritingTools())
-                    }
-                    .padding(.vertical, 2)
-                    if running && !model.ref.isRemote {
-                        Button("Interrupt") { interrupting = true }
-                            .disabled(empty || busy)
-                            .help("Stops the agent's turn for this prompt")
-                        Button("Steer") { send(mode: "now") }
-                            .disabled(empty || busy)
-                            .help("Sends it into the running turn (⌥↩)")
-                    }
-                    Button("Send") { send(mode: "") }
-                        .buttonStyle(.borderedProminent)
-                        .tint(theme.action)
+            }
+            notes
+            HStack(alignment: .top, spacing: 8) {
+                field
+                if running && !model.ref.isRemote {
+                    InspectorFootButton(title: "Interrupt", help: "Stops the agent's turn for this prompt") { interrupting = true }
                         .disabled(empty || busy)
-                        .help(running ? "Queued: it goes once the turn ends (↩)" : "Sends it (↩)")
+                    InspectorFootButton(title: "Steer", help: "Sends it into the running turn (⌥↩)") { send(mode: "now") }
+                        .disabled(empty || busy)
                 }
+                InspectorFootButton(title: "Send", help: running ? "Queued: it goes once the turn ends (↩)" : "Sends it (↩)") { send(mode: "") }
+                    .disabled(empty || busy)
             }
-            .padding(10)
-            .solid(RoundedRectangle(cornerRadius: 8))
-            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(dropping ? theme.action : theme.line, lineWidth: dropping ? 2 : 1))
-            .onDrop(of: [.fileURL, .image], isTargeted: attaches ? $dropping : .constant(false)) { providers in
-                guard attaches else { return false }
-                drop(providers)
-                return true
-            }
-            HStack(spacing: 10) {
-                if let note = tray.note {
-                    Text(note)
-                        .foregroundStyle(theme.attention)
-                        .lineLimit(2)
-                } else if let said {
-                    Text(said)
-                        .foregroundStyle(failed ? theme.attention : theme.muted)
-                        .lineLimit(2)
-                } else if let q = session?.queuedPrompts, q > 0 {
-                    Text(q == 1 ? "1 prompt queued" : "\(q) prompts queued")
-                        .foregroundStyle(theme.muted)
-                }
-                if let held = session?.queueHeld, !held.isEmpty {
-                    Text("Queue held: \(held)")
-                        .foregroundStyle(theme.attention)
-                }
-                Spacer()
-                Text(model.ref.isRemote ? "⇧↩ new line" : "⌥↩ steer · ⇧↩ new line")
-                    .font(theme.body(.caption))
-                    .foregroundStyle(theme.muted)
-            }
-            .font(theme.body(.footnote))
-            .padding(.horizontal, 6)
         }
-        .padding(.horizontal, Page.edge)
-        .padding(.top, 10)
-        .padding(.bottom, 14)
+        // The inspector's footer's measure: 59 with its line at rest.
+        .padding(.horizontal, 12)
+        .padding(.top, 13)
+        .padding(.bottom, 11)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .overlay(alignment: .top) { theme.line.frame(height: 1) }
         .onChange(of: app.composerFocus) { focused = true }
         .onChange(of: app.draft) { takeDraft() }
         .onChange(of: [session?.queuedPrompts ?? 0, running ? 1 : 0]) { old, new in
@@ -149,6 +85,109 @@ struct Composer: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("The running turn stops and this prompt goes in its place. tm refuses while a draft or a dialog is on the agent's screen.")
+        }
+    }
+
+    /// The field: 34 high and 6 round at one line, growing as a prompt
+    /// does; attach at its start and the keys' hint, quiet, at its end
+    /// while it is empty.
+    private var field: some View {
+        let shape = RoundedRectangle(cornerRadius: 6)
+        return HStack(alignment: .top, spacing: 8) {
+            if attaches {
+                Button { pick() } label: {
+                    Image(systemName: "paperclip")
+                        .font(theme.sized(13))
+                        .foregroundStyle(tray.full ? theme.faint : theme.muted)
+                        .frame(height: 18)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(tray.full)
+                .help("Attach files: images, PDFs or text (you can also paste or drop them)")
+                .accessibilityLabel("Attach files")
+            }
+            ZStack(alignment: .topLeading) {
+                if text.isEmpty {
+                    Text(placeholder)
+                        .font(theme.sized(13))
+                        .foregroundStyle(theme.faint)
+                        .lineLimit(1)
+                        .frame(height: 18)
+                        .padding(.leading, 5)
+                        .allowsHitTesting(false)
+                }
+                TextEditor(text: $text)
+                    .scrollContentBackground(.hidden)
+                    .font(theme.sized(13))
+                    .frame(minHeight: 18, maxHeight: 120)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .focused($focused)
+                    .onKeyPress(.return, phases: .down) { press in
+                        // ⌘↩ is the open card's first choice, not a send.
+                        if press.modifiers.contains(.shift) || press.modifiers.contains(.command) { return .ignored }
+                        send(mode: press.modifiers.contains(.option) && !model.ref.isRemote ? "now" : "")
+                        return .handled
+                    }
+                    .accessibilityLabel(placeholder)
+                    .accessibilityHint(keys)
+                    .modifier(NoWritingTools())
+            }
+            if text.isEmpty {
+                Text(keys)
+                    .font(theme.sized(13))
+                    .foregroundStyle(theme.faint)
+                    .lineLimit(1)
+                    .fixedSize()
+                    .frame(height: 18)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
+        }
+        .padding(.leading, attaches ? 11 : 6)
+        .padding(.trailing, 11)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, minHeight: 34, alignment: .topLeading)
+        .contentShape(shape)
+        .overlay(shape.strokeBorder(dropping ? theme.action : theme.line, lineWidth: dropping ? 2 : theme.contrast ? 1.5 : 1))
+        .onDrop(of: [.fileURL, .image], isTargeted: attaches ? $dropping : .constant(false)) { providers in
+            guard attaches else { return false }
+            drop(providers)
+            return true
+        }
+    }
+
+    /// The keys, in words.
+    private var keys: String {
+        model.ref.isRemote ? "⇧↩ new line" : "⌥↩ steer · ⇧↩ new line"
+    }
+
+    /// What the last send did, the queue, a held queue: over the field,
+    /// only while there is something to say.
+    @ViewBuilder
+    private var notes: some View {
+        let held = session?.queueHeld ?? ""
+        let queued = session?.queuedPrompts ?? 0
+        if tray.note != nil || said != nil || queued > 0 || !held.isEmpty {
+            HStack(spacing: 10) {
+                if let note = tray.note {
+                    Text(note)
+                        .foregroundStyle(theme.attention)
+                        .lineLimit(2)
+                } else if let said {
+                    Text(said)
+                        .foregroundStyle(failed ? theme.attention : theme.muted)
+                        .lineLimit(2)
+                } else if queued > 0 {
+                    Text(queued == 1 ? "1 prompt queued" : "\(queued) prompts queued")
+                        .foregroundStyle(theme.muted)
+                }
+                if !held.isEmpty {
+                    Text("Queue held: \(held)")
+                        .foregroundStyle(theme.attention)
+                }
+            }
+            .font(theme.sized(13))
         }
     }
 
@@ -214,7 +253,7 @@ struct Composer: View {
             VStack(alignment: .leading, spacing: 0) {
                 Text(f.name).lineLimit(1).truncationMode(.middle)
                 Text(f.detail)
-                    .font(theme.body(.caption2))
+                    .font(theme.body(.footnote))
                     .foregroundStyle(f.failed ? theme.attention : theme.muted)
                     .lineLimit(1)
             }
@@ -243,7 +282,7 @@ struct Composer: View {
         .font(theme.body(.footnote))
         .padding(.horizontal, 8)
         .padding(.vertical, 5)
-        .background(theme.line.opacity(0.35), in: RoundedRectangle(cornerRadius: 8))
+        .background(theme.tab, in: RoundedRectangle(cornerRadius: 6))
         .help(f.failed ? f.detail : f.name)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(f.spoken)

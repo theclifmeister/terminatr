@@ -7,9 +7,9 @@ import TerminatrKit
 /// waited in mono ("AskUserQuestion · waiting 6m"), then the question
 /// (or what an approval asks) as its title, an approval's command as a
 /// block, and its answers: numbered AnswerOption rows, or the tone's
-/// buttons; a line of what the server said under them. While it waits
-/// its glow breathes (Glow, waiting). Its answers never take a
-/// keyboard's bare keys: the screen has a text field.
+/// buttons; a line of what the server said under them. Its outline is
+/// thin and still (T1002). Its answers never take a keyboard's bare keys:
+/// the screen has a text field.
 public struct HeroCard<Answers: View>: View {
     @Environment(\.theme) private var theme
     let tone: Attention.Tone
@@ -19,11 +19,10 @@ public struct HeroCard<Answers: View>: View {
     let title: String
     let command: String
     let note: (text: String, failed: Bool)?
-    let waiting: String?
     let answers: Answers
 
     public init(tone: Attention.Tone, symbol: String? = nil, word: String, line: String = "", title: String,
-                command: String = "", note: (text: String, failed: Bool)? = nil, waiting: String? = nil,
+                command: String = "", note: (text: String, failed: Bool)? = nil,
                 @ViewBuilder answers: () -> Answers) {
         self.tone = tone
         self.symbol = symbol
@@ -32,7 +31,6 @@ public struct HeroCard<Answers: View>: View {
         self.title = title
         self.command = command
         self.note = note
-        self.waiting = waiting
         self.answers = answers()
     }
 
@@ -94,8 +92,7 @@ public struct HeroCard<Answers: View>: View {
         .padding(Spacing.card + 2)
         .frame(maxWidth: .infinity, alignment: .leading)
         .surface(in: shape)
-        .overlay { shape.strokeBorder(theme.colour(tone), lineWidth: theme.contrast ? 2.5 : 2) }
-        .modifier(Glow(key: waiting, colour: theme.colour(tone), shape: RoundedRectangle(cornerRadius: Radius.card, style: .continuous)))
+        .overlay { shape.strokeBorder(theme.colour(tone), lineWidth: theme.contrast ? 1.5 : 1) }
         // VoiceOver: a group named for what it is, so its answers are
         // heard as the question's or the approval's.
         .accessibilityElement(children: .contain)
@@ -105,8 +102,7 @@ public struct HeroCard<Answers: View>: View {
 
 extension HeroCard where Answers == EmptyView {
     public init(tone: Attention.Tone, symbol: String? = nil, word: String, line: String = "", title: String,
-                command: String = "", note: (text: String, failed: Bool)? = nil, waiting: String? = nil) {
-        self.init(tone: tone, symbol: symbol, word: word, line: line, title: title, command: command, note: note,
-                  waiting: waiting) { EmptyView() }
+                command: String = "", note: (text: String, failed: Bool)? = nil) {
+        self.init(tone: tone, symbol: symbol, word: word, line: line, title: title, command: command, note: note) { EmptyView() }
     }
 }

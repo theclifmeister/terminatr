@@ -24,7 +24,7 @@ public struct ToneBadge: View {
             .fixedSize()
             .padding(.horizontal, compact ? 6 : 8)
             .padding(.vertical, compact ? 1 : 4)
-            .background(theme.colour(tone), in: Capsule())
+            .background(theme.colour(tone), in: RoundedRectangle(cornerRadius: Radius.chip))
     }
 }
 
@@ -125,7 +125,7 @@ public struct ContextGauge: View {
         .fixedSize()
         .padding(.horizontal, compact ? 5 : 8)
         .padding(.vertical, compact ? 1 : 4)
-        .background(use.tone.map { theme.wash($0) } ?? theme.ink.opacity(ThemeColours.inkWash), in: Capsule())
+        .background(use.tone.map { theme.wash($0) } ?? theme.ink.opacity(ThemeColours.inkWash), in: RoundedRectangle(cornerRadius: Radius.chip))
         .accessibilityElement()
         .accessibilityLabel(use.spoken)
     }

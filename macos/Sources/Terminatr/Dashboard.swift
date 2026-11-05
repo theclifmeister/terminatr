@@ -2,16 +2,15 @@ import SwiftUI
 import TerminatrKit
 import TerminatrUI
 
-/// A project in the window's detail (design T746, T748 milestone C):
-/// its goal; what needs the user, as cards that act in place (the
-/// project's share of the one needs list, the tasks in review as their
-/// own group); its coordinator, with Start when none runs; its threads
-/// grouped by state, idle and stopped ones folded; its board, on deck
-/// shown and the backlog folded (C2), each task with its action; and
-/// its designs, each opening in place to its answers, questions and
-/// build (DesignsSection); and the inbox items for the user. An empty
-/// project offers a next step.
-/// A thread's card shows its thread in the window.
+/// A project in the window's detail (design T746, T748 milestone C, flat
+/// since T1002): its tile, name and goal; a slim strip of its board's
+/// counts; its coordinator, with Start when none runs; its threads, idle
+/// and stopped ones folded; its designs, each opening in place to its
+/// answers, questions and build (DesignsSection); the first of on deck,
+/// the Board tab having the rest; and the inbox items for the user. Under
+/// them its repositories. What needs the user, and answering it, is the
+/// inspector's (ProjectFacts). An empty project offers a next step. A
+/// thread's row shows its thread in the window.
 struct ProjectDashboard: View {
     @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
@@ -32,7 +31,7 @@ struct ProjectDashboard: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 22) {
                 if board {
                     boardPage
                 } else {
@@ -40,8 +39,7 @@ struct ProjectDashboard: View {
                 }
             }
             .padding(.horizontal, 24)
-            .padding(.top, 14)
-            .padding(.bottom, 22)
+            .padding(.vertical, 22)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .scrollEdges()
@@ -61,73 +59,126 @@ struct ProjectDashboard: View {
         }
     }
 
-    /// The Overview tab: the dashboard, and under it what the TUI's
-    /// Overview says of the project.
+    /// The Overview tab: what the page draws, with what acts in place.
     @ViewBuilder
     private var overview: some View {
-                header
-                let needs = app.needs(of: project.slug)
-                let running = app.coordinatorSession(project.slug) != nil
-                if Dashboard.isEmpty(project, needs: needs.count) {
-                    NextStepCard(project: project, step: Dashboard.next(project, coordinatorRuns: running))
-                }
-                let settled = app.settledLinks(project.slug)
-                if !needs.isEmpty || !settled.isEmpty {
-                    section("Needs you · \(needs.count)") {
-                        CardGrid { ForEach(needs.filter { !$0.isReview }) { NeedCard(need: $0) } }
-                        ForEach(settled, id: \.id) { LinkOutcomeRow(outcome: $0.outcome, settled: true) }
-                        let review = needs.filter(\.isReview)
-                        if !review.isEmpty {
-                            label("Review · \(review.count)")
-                            CardGrid { ForEach(review) { NeedCard(need: $0) } }
-                        }
+        header
+        StatStrip(stats)
+        let needs = app.needs(of: project.slug)
+        let running = app.coordinatorSession(project.slug) != nil
+        if Dashboard.isEmpty(project, needs: needs.count) {
+            NextStepCard(project: project, step: Dashboard.next(project, coordinatorRuns: running))
+        }
+        section("Coordinator") {
+            HairlineList {
+                CoordinatorRow(project: project, attention: app.coordinator(of: project), busy: app.busy(coordinator: project), running: running)
+            }
+        }
+        threads
+        // The TUI's O: an outside agent session, adopted here.
+        let outside = app.actsOnSidebar && project.active ? ProjectAsk.adoptable(app.sessions) : []
+        if !outside.isEmpty {
+            section("Agent sessions outside the projects · \(outside.count)") {
+                AdoptableSessions(project: project, sessions: outside)
+            }
+        }
+        if app.listsDesigns {
+            DesignsSection(project: project)
+        }
+        onDeck
+        let inbox = project.items.filter(\.forYou)
+        if !inbox.isEmpty {
+            section("Inbox · \(inbox.count) for you") {
+                HairlineList {
+                    ForEach(inbox.prefix(Self.inboxShown)) { it in
+                        InboxLine(item: it)
                     }
                 }
-                section("Coordinator") {
-                    CardGrid { CoordinatorRow(project: project, attention: app.coordinator(of: project), busy: app.busy(coordinator: project), running: running) }
+                if inbox.count > Self.inboxShown {
+                    Text("\(inbox.count - Self.inboxShown) more in tm")
+                        .font(theme.sized(Flat.label))
+                        .foregroundStyle(theme.muted)
                 }
-                let groups = Dashboard.groups(project.threads, attention: app.attention) { t in
-                    !t.record.session.isEmpty && app.sessions.contains { $0.id == t.record.session }
-                }
-                if !groups.isEmpty {
-                    section("Threads · \(project.threads.count)") {
-                        ForEach(groups, id: \.group) { g in
-                            fold(g.group.rawValue, g.threads.count, key: g.group.folded ? "\(g.group)" : nil) {
-                                CardGrid { ForEach(g.threads, id: \.record.id) { threadCard($0) } }
+            }
+        }
+        let details = ProjectOverview(project, coordinator: app.coordinatorSession(project.slug), needs: needs.count)
+        if !details.repos.isEmpty {
+            section("Repositories · \(details.repos.count)") {
+                HairlineList {
+                    ForEach(details.repos, id: \.path) { r in
+                        ListRow {
+                            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                                Text(r.path)
+                                    .font(theme.mono(.subheadline))
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                                    .textSelection(.enabled)
+                                    .help(r.path)
+                                Spacer(minLength: 8)
+                                if !r.note.isEmpty {
+                                    Text(r.note)
+                                        .font(theme.sized(Flat.label))
+                                        .foregroundStyle(theme.attention)
+                                        .lineLimit(1)
+                                }
                             }
                         }
                     }
                 }
-                // The TUI's O: an outside agent session, adopted here.
-                let outside = app.actsOnSidebar && project.active ? ProjectAsk.adoptable(app.sessions) : []
-                if !outside.isEmpty {
-                    section("Agent sessions outside the projects · \(outside.count)") {
-                        AdoptableSessions(project: project, sessions: outside)
+            }
+        }
+    }
+
+    /// The strip's counts, as the inspector names them.
+    private var stats: [(value: String, word: String)] {
+        var s: [(value: String, word: String)] = [("\(Dashboard.onDeck(project).count)", "on deck"), ("\(Dashboard.backlog(project).count)", "backlog")]
+        if app.listsDone { s.append(("\(Dashboard.doneCount(project))", "done")) }
+        return s
+    }
+
+    /// Its threads in one list, by state in the groups' order, each
+    /// saying its own; the idle and the stopped folded under it.
+    @ViewBuilder
+    private var threads: some View {
+        let groups = Dashboard.groups(project.threads, attention: app.attention) { t in
+            !t.record.session.isEmpty && app.sessions.contains { $0.id == t.record.session }
+        }
+        if !groups.isEmpty {
+            section("Threads · \(project.threads.count)") {
+                let shown = groups.filter { !$0.group.folded }.flatMap(\.threads)
+                if !shown.isEmpty {
+                    HairlineList { ForEach(shown, id: \.record.id) { threadCard($0) } }
+                }
+                ForEach(groups.filter(\.group.folded), id: \.group) { g in
+                    fold(g.group.rawValue, g.threads.count, key: "\(g.group)") {
+                        HairlineList { ForEach(g.threads, id: \.record.id) { threadCard($0) } }
                     }
                 }
-                if app.listsDesigns {
-                    DesignsSection(project: project)
+            }
+        }
+    }
+
+    /// The first of on deck: the Board tab has them all, with their acts.
+    @ViewBuilder
+    private var onDeck: some View {
+        let deck = Dashboard.onDeck(project)
+        if !deck.isEmpty {
+            section("On deck · \(deck.count)") {
+                HairlineList {
+                    ForEach(deck.prefix(Self.deckShown)) { BoardRow(project: project.slug, task: $0, acts: false) }
                 }
-                let inbox = project.items.filter(\.forYou)
-                if !inbox.isEmpty {
-                    section("Inbox · \(inbox.count) for you") {
-                        ForEach(inbox.prefix(Self.inboxShown)) { it in
-                            InboxLine(item: it)
-                        }
-                        if inbox.count > Self.inboxShown {
-                            Text("\(inbox.count - Self.inboxShown) more in tm")
-                                .font(theme.body(.subheadline))
-                                .foregroundStyle(theme.muted)
-                        }
-                    }
+                if deck.count > Self.deckShown {
+                    Button("\(deck.count - Self.deckShown) more on the Board") { app.projectTab = .board }
+                        .buttonStyle(.link)
+                        .foregroundStyle(theme.action)
+                        .font(theme.sized(Flat.label))
                 }
-                section("Details") {
-                    OverviewView(ProjectOverview(project, coordinator: app.coordinatorSession(project.slug),
-                                                 needs: app.needs(of: project.slug).count))
-                }
+            }
+        }
     }
 
     static let inboxShown = 8
+    static let deckShown = 3
 
     /// The board's groups, as the filter finds their tasks: on deck
     /// shown; the backlog and the done tasks folded (the TUI's b lists
@@ -140,12 +191,12 @@ struct ProjectDashboard: View {
         let doneShown = Dashboard.filtered(done ?? [], by: filter)
         if !deck.isEmpty {
             fold("On deck", deck.count, key: nil) {
-                CardGrid { ForEach(deck) { BoardRow(project: project.slug, task: $0) } }
+                HairlineList { ForEach(deck) { BoardRow(project: project.slug, task: $0) } }
             }
         }
         if !backlog.isEmpty {
             fold("Backlog", backlog.count, key: filtering ? nil : "backlog") {
-                CardGrid { ForEach(backlog) { BoardRow(project: project.slug, task: $0) } }
+                HairlineList { ForEach(backlog) { BoardRow(project: project.slug, task: $0) } }
             }
         }
         if doneCount > 0 && (!filtering || !doneShown.isEmpty || done == nil) {
@@ -157,7 +208,7 @@ struct ProjectDashboard: View {
                 } else if done == nil {
                     ProgressView().controlSize(.small)
                 } else {
-                    CardGrid { ForEach(doneShown) { BoardRow(project: project.slug, task: $0) } }
+                    HairlineList { ForEach(doneShown) { BoardRow(project: project.slug, task: $0) } }
                 }
             }
         }
@@ -191,18 +242,20 @@ struct ProjectDashboard: View {
         // A button, so Full Keyboard Access reaches it (Tab, Space).
         return Button { app.select(sel) } label: {
             ThreadCard(thread: t, attention: app.attention(t), busy: app.busy(t))
-                .contentShape(RoundedRectangle(cornerRadius: 8))
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-            .help("Show \(t.task?.ref ?? t.record.id)")
+            .help("Show \(t.task?.ref ?? t.record.id) · \(t.record.id)\(t.record.agent.isEmpty ? "" : " · \(t.record.agent)")")
             .contextMenu { NewWindowButton(ref: SessionRef(project: project.slug, thread: t.record.id)) }
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .firstTextBaseline) {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 12) {
+                NameTile(project.slug)
                 Text(project.slug)
-                    .font(theme.title(.display, .heavy))
+                    .font(theme.title(.display, .semibold))
+                    .lineLimit(1)
                 Spacer()
                 // As S in the TUI's sidebar (app API 13).
                 if app.controlsProjects {
@@ -215,79 +268,58 @@ struct ProjectDashboard: View {
             if !project.goal.isEmpty {
                 Text(project.goal)
                     .foregroundStyle(theme.muted)
-                    .lineLimit(2)
-            }
-            if let counts = boardCounts {
-                Text(counts)
-                    .font(theme.body(.footnote))
-                    .foregroundStyle(theme.muted)
+                    .lineSpacing(3)
+                    .frame(maxWidth: 560, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             if !project.error.isEmpty {
                 Text(project.error)
                     .foregroundStyle(theme.attention)
             }
         }
-        .padding(.bottom, 4)
-    }
-
-    /// "2 need you · 3 in motion · 5 on deck", as the TUI's row; what
-    /// needs you is the needs list's count, as the sidebar's badge.
-    private var boardCounts: String? {
-        let c = project.counts
-        guard !c.isEmpty else { return nil }
-        return "\(app.needs(of: project.slug).count) need you · \(c["in_motion"] ?? 0) in motion · \(c["on_deck"] ?? 0) on deck · \(c["backlog"] ?? 0) in the backlog"
     }
 
     private func section<C: View>(_ title: String, @ViewBuilder _ content: () -> C) -> some View {
         VStack(alignment: .leading, spacing: 7) {
-            Text(title)
-                .font(theme.body(.caption))
-                .foregroundStyle(theme.muted)
-                .padding(.top, 8)
+            PaneLabel(title)
             content()
         }
     }
 
-    private func label(_ title: String) -> some View {
-        Text(title)
-            .font(theme.body(.caption))
-            .foregroundStyle(theme.muted)
-            .padding(.top, 2)
-    }
-
     /// A group under its label: with a key, folded until the user opens
     /// it (the key is kept while the dashboard shows).
-    @ViewBuilder
     private func fold<C: View>(_ title: String, _ n: Int, key: String?, @ViewBuilder _ content: () -> C) -> some View {
-        if let key {
-            let open = unfolded.contains(key)
-            Button {
-                if open { unfolded.remove(key) } else { unfolded.insert(key) }
-            } label: {
-                HStack(spacing: 5) {
-                    Image(systemName: "chevron.right")
-                        .rotationEffect(.degrees(open ? 90 : 0))
-                        .font(theme.body(.glyph, .bold))
-                    Text("\(title) · \(n)")
-                        .font(theme.body(.caption))
+        VStack(alignment: .leading, spacing: 7) {
+            if let key {
+                let open = unfolded.contains(key)
+                Button {
+                    if open { unfolded.remove(key) } else { unfolded.insert(key) }
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: "chevron.right")
+                            .rotationEffect(.degrees(open ? 90 : 0))
+                            .font(theme.body(.glyph, .semibold))
+                        Text("\(title) · \(n)")
+                            .font(theme.sized(Flat.label))
+                    }
+                    .foregroundStyle(theme.muted)
+                    .contentShape(Rectangle())
                 }
-                .foregroundStyle(theme.muted)
-                .contentShape(Rectangle())
+                .buttonStyle(.plain)
+                .accessibilityValue(open ? "open" : "folded")
+                if open { content() }
+            } else {
+                PaneLabel("\(title) · \(n)")
+                content()
             }
-            .buttonStyle(.plain)
-            .padding(.top, 2)
-            .accessibilityValue(open ? "open" : "folded")
-            if open { content() }
-        } else {
-            label("\(title) · \(n)")
-            content()
         }
     }
 }
 
 /// The project's coordinator as the dashboard's row: its state as the
-/// dot and tag, what it does or waits on, and Start when none runs
-/// (project.open, as tm project open) or Open when it does.
+/// dot and word, what it does or waits on, its context, and Open while it
+/// runs, else Wake or Start (project.open, as tm project open). Save &
+/// Clear is the inspector's footer's, and this row's menu's.
 struct CoordinatorRow: View {
     @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
@@ -299,49 +331,41 @@ struct CoordinatorRow: View {
 
     var body: some View {
         let ref = SessionRef(project: project.slug)
-        HStack(alignment: .center, spacing: 8) {
-            StateDot(tone: attention.tone, busy: busy != nil)
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    RoleLabel(.coordinator, points: 14)
-                    if let busy {
-                        BusyLabel(busy: busy, colour: theme.colour(.working))
-                    } else {
-                        Text(attention.word)
-                            .font(theme.body(.caption))
-                            .foregroundStyle(attention.waits ? theme.colour(attention.tone) : theme.muted)
-                    }
-                    if running, let ctx = ContextUse.of(app.coordinatorSession(project.slug), hint: app.contextHint) {
-                        Text("context \(ctx.word)")
-                            .font(theme.body(.caption, ctx.tone == nil ? .regular : .semibold))
-                            .foregroundStyle(ctx.tone.map { theme.colour($0) } ?? theme.muted)
-                            .help(ctx.spoken)
-                    }
+        ListRow {
+            HStack(spacing: 10) {
+                RoleLabel(.coordinator, points: Flat.text)
+                StateDot(tone: attention.tone, busy: busy != nil, size: 7)
+                if let busy {
+                    BusyLabel(busy: busy, capital: true)
+                } else {
+                    Text(attention.word.prefix(1).uppercased() + attention.word.dropFirst())
+                        .foregroundStyle(theme.ink)
                 }
                 if !attention.why.isEmpty {
                     Text(attention.why)
-                        .font(theme.body(.callout, attention.waits ? .medium : .regular))
-                        .foregroundStyle(attention.waits ? theme.colour(attention.tone) : theme.muted)
-                        .lineLimit(2)
+                        .font(theme.sized(Flat.label))
+                        .foregroundStyle(theme.muted)
+                        .lineLimit(1)
                 }
-            }
-            Spacer(minLength: 8)
-            if running {
-                if app.controlsProjects {
-                    Button("Save & Clear") { app.ask(.saveClear(project: project.slug)) }
-                        .help("Asks the coordinator to save what it learned, then clears its conversation, as tm clear does")
+                Spacer(minLength: 8)
+                if running, let ctx = ContextUse.of(app.coordinatorSession(project.slug), hint: app.contextHint) {
+                    Text("\(ctx.word) context")
+                        .font(theme.sized(Flat.label))
+                        .foregroundStyle(ctx.tone.map { theme.colour($0) } ?? theme.muted)
+                        .lineLimit(1)
+                        .fixedSize()
+                        .help(ctx.spoken)
                 }
-                Button("Open") { app.select(.session(ref)) }
-                    .help("Show the coordinator")
-            } else if app.sleep(of: project.slug) != .awake {
-                WakeButton(project: project.slug, title: "Wake")
-            } else {
-                StartButton(project: project)
+                if running {
+                    Button("Open") { app.select(.session(ref)) }
+                        .help("Show the coordinator")
+                } else if app.sleep(of: project.slug) != .awake {
+                    WakeButton(project: project.slug, title: "Wake")
+                } else {
+                    StartButton(project: project)
+                }
             }
         }
-        .padding(11)
-        .solid(RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(theme.line, lineWidth: 1))
         .contextMenu {
             NewWindowButton(ref: ref)
             ProjectMenu(project: project, coordinator: running)
@@ -398,15 +422,15 @@ struct AdoptableSessions: View {
     let sessions: [AppAPI.Session]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-                ForEach(sessions, id: \.id) { s in
-                    let a = ProjectAsk.adoptToggle(s, project: project.slug, items: project.items)
-                    HStack(spacing: 8) {
+        HairlineList {
+            ForEach(sessions, id: \.id) { s in
+                let a = ProjectAsk.adoptToggle(s, project: project.slug, items: project.items)
+                ListRow {
+                    HStack(spacing: 10) {
                         Text(s.id)
-                            .font(theme.mono(.footnote, .medium))
-                            .foregroundStyle(theme.action)
+                            .font(theme.mono(.subheadline))
+                            .foregroundStyle(theme.muted)
                         Text(ProjectAsk.adoptWhat(s))
-                            .font(theme.body(.callout))
                             .lineLimit(1)
                         Spacer(minLength: 4)
                         Button("\(a.verb)…") { app.ask(a) }
@@ -414,6 +438,7 @@ struct AdoptableSessions: View {
                     }
                     .accessibilityElement(children: .combine)
                 }
+            }
         }
     }
 }
@@ -439,8 +464,7 @@ struct StartButton: View {
                     Text(title)
                 }
             }
-            .buttonStyle(.borderedProminent)
-            .tint(theme.action)
+            .buttonStyle(.flatPrimary)
             .disabled(busy || !project.active)
             .help(project.active ? "Starts the coordinator with the project's agent and model, as tm project open does"
                                  : app.controlsProjects ? "The project is inactive: Activate turns it on"
@@ -491,50 +515,51 @@ private struct BoardFilter: View {
                     .accessibilityLabel("Clear the filter")
             }
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .frame(maxWidth: 320)
-        .background(theme.pane, in: RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(theme.line, lineWidth: 1))
+        .font(theme.sized(Flat.label))
+        .padding(.horizontal, 11)
+        .frame(maxWidth: 320, minHeight: 34)
+        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(theme.line, lineWidth: theme.contrast ? 1.5 : 1))
         .help("Shows the tasks whose id or title has these words, the done ones too")
     }
 }
 
-/// A task on the board: its id, priority, title and its action
+/// A task on the board: its id, title, priority and its action
 /// (Delegate…); its words show it in the task view.
 private struct BoardRow: View {
     @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
     let project: String
     let task: AppAPI.Task
+    /// With its action: the Board's, not the Overview's short list.
+    var acts = true
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .center, spacing: 8) {
-                Button { app.showTask(project: project, task: task.ref) } label: {
-                    HStack(alignment: .center, spacing: 8) {
-                        Text(task.ref)
-                            .font(theme.mono(.subheadline, .medium))
-                            .foregroundStyle(theme.action)
-                            .frame(minWidth: 44, alignment: .leading)
-                        PriorityTag(task.priority)
-                        Text(task.title)
-                            .font(theme.body(.body))
-                            .lineLimit(1)
+        ListRow {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .center, spacing: 10) {
+                    Button { app.showTask(project: project, task: task.ref) } label: {
+                        HStack(alignment: .center, spacing: 10) {
+                            Text(task.ref)
+                                .font(theme.mono(.subheadline))
+                                .foregroundStyle(theme.muted)
+                            Text(task.title)
+                                .lineLimit(1)
+                            Spacer(minLength: 8)
+                        }
+                        .contentShape(Rectangle())
                     }
-                    .contentShape(Rectangle())
+                    .buttonStyle(.plain)
+                    .help("Shows \(task.ref) in full: its steps and notes")
+                    PriorityTag(task.priority)
+                    if acts {
+                        TaskActs(project: project, task: task.ref, status: task.status)
+                    }
                 }
-                .buttonStyle(.plain)
-                .help("Shows \(task.ref) in full: its steps and notes")
-                Spacer(minLength: 8)
-                TaskActs(project: project, task: task.ref, status: task.status, compact: true)
+                if acts {
+                    TaskOutcome(project: project, task: task.ref)
+                }
             }
-            TaskOutcome(project: project, task: task.ref)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .background(theme.pane, in: RoundedRectangle(cornerRadius: 6))
-        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(theme.line, lineWidth: 1))
         .accessibilityElement(children: .combine)
     }
 }
@@ -550,7 +575,7 @@ private struct NextStepCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(headline)
-                .font(theme.title(.title2, .heavy))
+                .font(theme.title(.headline, .semibold))
             Text(detail)
                 .foregroundStyle(theme.muted)
                 .fixedSize(horizontal: false, vertical: true)
@@ -558,8 +583,7 @@ private struct NextStepCard: View {
             case .activate:
                 if app.controlsProjects {
                     Button("Activate") { app.ask(.activate(project: project.slug)) }
-                        .buttonStyle(.borderedProminent)
-                        .tint(theme.action)
+                        .buttonStyle(.flatPrimary)
                 } else {
                     CommandText("tm project activate \(project.slug)")
                 }
@@ -570,8 +594,7 @@ private struct NextStepCard: View {
                     app.select(.session(SessionRef(project: project.slug)))
                     app.focusComposer()
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(theme.action)
+                .buttonStyle(.flatPrimary)
             }
             if step != .activate {
                 // The New Task sheet with a tm that adds tasks (app API
@@ -579,7 +602,7 @@ private struct NextStepCard: View {
                 if app.canAddTask {
                     HStack(spacing: 8) {
                         Text("Or add a task to its board yourself, for the coordinator to start:")
-                            .font(theme.body(.callout))
+                            .font(theme.sized(Flat.label))
                             .foregroundStyle(theme.muted)
                         Button("New Task…") { app.showNewTask() }
                             .accessibilityLabel("New task for \(project.slug)")
@@ -594,10 +617,10 @@ private struct NextStepCard: View {
                 }
             }
         }
-        .padding(13)
+        .padding(.horizontal, 13)
+        .padding(.vertical, 11)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .solid(RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(theme.line, lineWidth: 1))
+        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(theme.line, lineWidth: theme.contrast ? 1.5 : 1))
     }
 
     private var headline: String {
@@ -623,22 +646,22 @@ private struct InboxLine: View {
     let item: AppAPI.Item
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Circle()
-                .fill(item.needsUser ? theme.attention : theme.idle)
-                .frame(width: 6, height: 6)
-                .accessibilityHidden(true)
-            Text(item.subject.isEmpty ? item.kind : item.subject)
-                .font(theme.body(.callout, .medium))
-                .lineLimit(1)
-            Text(item.shownSummary)
-                .font(theme.body(.subheadline))
-                .foregroundStyle(theme.muted)
-                .lineLimit(1)
-            Spacer(minLength: 6)
-            Text(item.created, format: .relative(presentation: .named))
-                .font(theme.mono(.caption))
-                .foregroundStyle(theme.muted)
+        ListRow {
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Dot(colour: item.needsUser ? theme.attention : theme.idle)
+                Text(item.subject.isEmpty ? item.kind : item.subject)
+                    .lineLimit(1)
+                Text(item.shownSummary)
+                    .font(theme.sized(Flat.label))
+                    .foregroundStyle(theme.muted)
+                    .lineLimit(1)
+                Spacer(minLength: 6)
+                Text(item.created, format: .relative(presentation: .named))
+                    .font(theme.sized(Flat.label))
+                    .foregroundStyle(theme.muted)
+                    .lineLimit(1)
+                    .fixedSize()
+            }
         }
         .accessibilityElement(children: .combine)
     }
@@ -659,7 +682,7 @@ struct RemoteProjectDashboard: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 22) {
                 if board {
                     boardPart
                 } else {
@@ -667,8 +690,7 @@ struct RemoteProjectDashboard: View {
                 }
             }
             .padding(.horizontal, 24)
-            .padding(.top, 14)
-            .padding(.bottom, 22)
+            .padding(.vertical, 22)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .scrollEdges()
@@ -677,46 +699,56 @@ struct RemoteProjectDashboard: View {
 
     @ViewBuilder
     private var overviewPart: some View {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Text(peer.name.isEmpty ? peer.alias : peer.name)
-                            .font(theme.mono(.subheadline, .medium))
-                            .padding(.horizontal, 7)
-                            .padding(.vertical, 1)
-                            .background(theme.pane, in: Capsule())
-                        Text(project.project)
-                            .font(theme.title(.display, .heavy))
-                    }
-                    if !project.goal.isEmpty {
-                        Text(project.goal)
-                            .foregroundStyle(theme.muted)
-                            .lineLimit(2)
-                    }
-                    Text(facts)
-                        .font(theme.mono(.footnote))
-                        .foregroundStyle(theme.muted)
-                }
-                if project.sessions.isEmpty {
-                    Text("Nothing runs there now.")
-                        .foregroundStyle(theme.muted)
-                }
-                CardGrid {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 12) {
+                NameTile(project.project)
+                Text(project.project)
+                    .font(theme.title(.display, .semibold))
+                    .lineLimit(1)
+                Chip(peer.name.isEmpty ? peer.alias : peer.name)
+            }
+            if !project.goal.isEmpty {
+                Text(project.goal)
+                    .foregroundStyle(theme.muted)
+                    .lineSpacing(3)
+                    .frame(maxWidth: 560, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Text(facts)
+                .font(theme.sized(Flat.label))
+                .foregroundStyle(theme.muted)
+        }
+        if case .shared(let p) = pages {
+            StatStrip(PeerPages.stats(p).map { (value: "\($0.0 ?? 0)", word: $0.1) })
+        }
+        VStack(alignment: .leading, spacing: 7) {
+            PaneLabel("Sessions · \(project.sessions.count)")
+            if project.sessions.isEmpty {
+                Text("Nothing runs there now.")
+                    .foregroundStyle(theme.muted)
+            } else {
+                HairlineList {
                     ForEach(project.sessions.compactMap { s in SessionRef(s, of: peer.alias).map { (s, $0) } }, id: \.0.id) { s, ref in
                         Button { app.select(.session(ref)) } label: {
                             PeerSessionCard(session: s, ref: ref)
-                                .contentShape(RoundedRectangle(cornerRadius: 8))
+                                .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
-                            .contextMenu { NewWindowButton(ref: ref) }
+                        .contextMenu { NewWindowButton(ref: ref) }
                     }
                 }
-                // Its designs (T888), read-only, under the same switch.
-                if app.listsDesigns {
-                    DesignsSection(peer: peer, project: project)
-                }
-                if case .shared(let p) = pages {
-                    OverviewView(ProjectOverview(p, project: project))
-                }
+            }
+        }
+        // Its designs (T888), read-only, under the same switch.
+        if app.listsDesigns {
+            DesignsSection(peer: peer, project: project)
+        }
+        if case .shared(let p) = pages {
+            VStack(alignment: .leading, spacing: 7) {
+                PaneLabel("Details")
+                OverviewView(ProjectOverview(p, project: project), showsGoal: false)
+            }
+        }
     }
 
     /// The Board tab: what it shares of its board.
@@ -724,9 +756,7 @@ struct RemoteProjectDashboard: View {
     private var boardPart: some View {
         switch pages {
         case .shared(let p):
-            Text(PeerPages.stats(p).map { "\($0.0 ?? 0) \($0.1)" }.joined(separator: " · "))
-                .font(theme.mono(.footnote))
-                .foregroundStyle(theme.muted)
+            StatStrip(PeerPages.stats(p).map { (value: "\($0.0 ?? 0)", word: $0.1) })
             PeerBoard(pages: p)
         case .loading:
             ProgressView().controlSize(.small)
@@ -754,32 +784,31 @@ private struct PeerSessionCard: View {
     let ref: SessionRef
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            if !session.task.isEmpty {
-                Text(session.task)
-                    .font(theme.mono(.callout, .medium))
-                    .foregroundStyle(theme.action)
+        ListRow {
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                if !session.task.isEmpty {
+                    Text(session.task)
+                        .font(theme.mono(.subheadline))
+                        .foregroundStyle(theme.muted)
+                }
+                if let role = ref.role {
+                    RoleLabel(role, points: Flat.text)
+                } else {
+                    Text(ref.thread)
+                        .lineLimit(1)
+                }
+                if !session.current.isEmpty {
+                    Text(session.current)
+                        .font(theme.sized(Flat.label))
+                        .foregroundStyle(theme.muted)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 8)
+                Text(session.asking ? "asks" : session.state)
+                    .font(theme.sized(Flat.label))
+                    .foregroundStyle(session.asking || session.state == "blocked" ? theme.approval : theme.muted)
             }
-            if let role = ref.role {
-                RoleLabel(role, points: 14)
-            } else {
-                Text(ref.thread)
-                    .font(theme.title(.headline, .bold))
-            }
-            if !session.current.isEmpty {
-                Text(session.current)
-                    .font(theme.body(.callout))
-                    .foregroundStyle(theme.muted)
-                    .lineLimit(1)
-            }
-            Spacer(minLength: 8)
-            Text(session.asking ? "asks" : session.state)
-                .font(theme.mono(.caption))
-                .foregroundStyle(session.asking || session.state == "blocked" ? theme.approval : theme.muted)
         }
-        .padding(11)
-        .solid(RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(theme.line, lineWidth: 1))
         .accessibilityElement(children: .combine)
     }
 }
@@ -855,8 +884,10 @@ struct ProjectRow: View {
     }
 }
 
-/// A thread on the dashboard: its dot, tag and one line of why come
-/// from its attention, so one that waits on you says so.
+/// A thread on the dashboard, one row: its dot, task, title and at its
+/// end what it does, how far along and its PR. Its dot and words come
+/// from its attention, so one that waits on you says so. Its id and agent
+/// are its tooltip's, and the inspector's.
 struct ThreadCard: View {
     @Environment(\.theme) private var theme
     let thread: AppAPI.Thread
@@ -866,67 +897,46 @@ struct ThreadCard: View {
     var busy: Busy?
 
     var body: some View {
-        let r = thread.record, s = thread.status
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                StateDot(tone: attention.tone, busy: busy != nil)
+        let r = thread.record
+        ListRow {
+            HStack(spacing: 10) {
+                StateDot(tone: attention.tone, busy: busy != nil, size: 7)
                 if let task = thread.task {
                     Text(task.ref)
-                        .font(theme.mono(.callout, .medium))
-                        .foregroundStyle(theme.action)
-                }
-                Text(r.title)
-                    .font(theme.title(.headline, .bold))
-                    .lineLimit(1)
-                Spacer(minLength: 8)
-                if let busy { BusyLabel(busy: busy, colour: theme.colour(.working)).fixedSize() }
-                Text(r.id)
-                    .font(theme.mono(.footnote))
-                    .foregroundStyle(theme.muted)
-                    .textSelection(.enabled)
-            }
-            if attention.waits {
-                Label(attention.why, systemImage: "exclamationmark.bubble")
-                    .font(theme.body(.callout, .medium))
-                    .foregroundStyle(theme.colour(attention.tone))
-                    .lineLimit(2)
-            } else if !attention.why.isEmpty {
-                Text(attention.why)
-                    .font(theme.body(.callout))
-                    .foregroundStyle(theme.muted)
-                    .lineLimit(2)
-            }
-            HStack(spacing: 10) {
-                if let s {
-                    Meter(fraction: Double(s.percent) / 100)
-                        .frame(width: 120, height: 5)
-                    Text(progress(s))
-                        .font(theme.mono(.caption))
+                        .font(theme.mono(.subheadline))
                         .foregroundStyle(theme.muted)
                 }
-                Spacer(minLength: 0)
-                Text(facts)
-                    .font(theme.mono(.caption))
-                    .foregroundStyle(theme.muted)
+                Text(r.title)
                     .lineLimit(1)
+                Spacer(minLength: 8)
+                HStack(spacing: 4) {
+                    if let busy {
+                        BusyLabel(busy: busy, capital: true)
+                            .fixedSize()
+                    }
+                    Text(facts)
+                        .font(theme.sized(Flat.label))
+                        .foregroundStyle(attention.waits ? theme.ink : theme.muted)
+                        .lineLimit(1)
+                }
+                .frame(maxWidth: 340, alignment: .trailing)
+                .layoutPriority(1)
             }
         }
-        .padding(11)
-        .solid(RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(theme.line, lineWidth: 1))
         .accessibilityElement(children: .combine)
     }
 
-    private func progress(_ s: AppAPI.ThreadStatus) -> String {
-        s.stepsTotal > 0 ? "\(s.percent)% · step \(min(s.stepsDone + 1, s.stepsTotal)) of \(s.stepsTotal)" : "\(s.percent)%"
-    }
-
+    /// "Asks to run a command · 5 of 8 · PR #12".
     private var facts: String {
-        var f = [busy == nil ? attention.word : "", thread.record.agent]
+        var f = [busy == nil ? (attention.why.isEmpty ? attention.word : attention.why) : ""]
+        if let s = thread.status {
+            f.append(s.stepsTotal > 0 ? "\(min(s.stepsDone, s.stepsTotal)) of \(s.stepsTotal)" : "\(s.percent)%")
+        }
         if thread.pr > 0 {
             f.append("PR #\(thread.pr)" + (thread.checks.isEmpty ? "" : " · \(thread.checks)"))
         }
-        return f.filter { !$0.isEmpty }.joined(separator: " · ")
+        let words = f.filter { !$0.isEmpty }.joined(separator: " · ")
+        return busy != nil && !words.isEmpty ? "· \(words)" : words.prefix(1).uppercased() + words.dropFirst()
     }
 }
 
@@ -965,7 +975,7 @@ struct Placeholder: View {
                 Text("Starting tm app bridge…").foregroundStyle(theme.muted)
             case .failed(let why):
                 Text("Can't reach terminatr")
-                    .font(theme.title(.largeTitle, .heavy))
+                    .font(theme.title(.headline, .semibold))
                 Text(why)
                     .multilineTextAlignment(.center)
                     .foregroundStyle(theme.muted)
@@ -974,8 +984,7 @@ struct Placeholder: View {
                 HStack {
                     Button("Retry") { model.connect() }
                     .accessibilityLabel("Retry the connection to terminatr")
-                        .buttonStyle(.borderedProminent)
-                        .tint(theme.action)
+                        .buttonStyle(.flatPrimary)
                     SettingsLink { Text("Settings…") }
                 }
             case .connected:
@@ -983,12 +992,10 @@ struct Placeholder: View {
                     NoProjects()
                 } else {
                     Text("Pick a project")
-                        .font(theme.title(.largeTitle, .heavy))
+                        .font(theme.title(.headline, .semibold))
                 }
             }
         }
         .padding(28)
-        .solid(RoundedRectangle(cornerRadius: 8))
-        .padding(40)
     }
 }

@@ -6,18 +6,23 @@ import TerminatrKit
 public struct OverviewView: View {
     @Environment(\.theme) private var theme
     let overview: ProjectOverview
+    /// Whether it says the goal: the Mac's Overview has it at its head.
+    let showsGoal: Bool
 
-    public init(_ overview: ProjectOverview) {
+    public init(_ overview: ProjectOverview, showsGoal: Bool = true) {
         self.overview = overview
+        self.showsGoal = showsGoal
     }
 
     public var body: some View {
         Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 16, verticalSpacing: 10) {
-            row("Goal") {
-                if overview.goal.isEmpty {
-                    Text("None set: ask the coordinator to set one").foregroundStyle(theme.muted)
-                } else {
-                    Text(overview.goal).fixedSize(horizontal: false, vertical: true)
+            if showsGoal {
+                row("Goal") {
+                    if overview.goal.isEmpty {
+                        Text("None set: ask the coordinator to set one").foregroundStyle(theme.muted)
+                    } else {
+                        Text(overview.goal).fixedSize(horizontal: false, vertical: true)
+                    }
                 }
             }
             row("Repositories") {
