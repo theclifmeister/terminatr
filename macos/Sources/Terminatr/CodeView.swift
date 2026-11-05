@@ -131,11 +131,15 @@ private final class LineNumbers: NSRulerView {
         }
         var i = glyphs.location
         var last = -1
+        var offset: CGFloat?
         while i < NSMaxRange(glyphs) {
             var range = NSRange()
             let fragment = layout.lineFragmentRect(forGlyphAt: i, effectiveRange: &range, withoutAdditionalLayout: false)
             let n = FileText.line(at: layout.characterIndexForGlyph(at: i), in: starts)
-            if n != last { draw(n, fragment.maxY + numberFont.descender) }
+            // An empty line's newline has no baseline of its own: the
+            // last line of text's offset gives it one.
+            if range.length > 1 { offset = layout.location(forGlyphAt: i).y }
+            if n != last { draw(n, fragment.minY + (offset ?? fragment.height + numberFont.descender)) }
             last = n
             i = NSMaxRange(range)
         }
