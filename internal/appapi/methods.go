@@ -599,7 +599,7 @@ func filesListParams(p FilesListParams) proto.FilesListParams {
 }
 
 func filesReadParams(p FilesReadParams) proto.FilesReadParams {
-	return proto.FilesReadParams{Session: p.Session, Path: p.Path, Offset: p.Offset, Ignored: p.Ignored}
+	return proto.FilesReadParams{Session: p.Session, Path: p.Path, Offset: p.Offset, Ignored: p.Ignored, Binary: p.Binary}
 }
 
 func filesStampParams(p FilesStampParams) proto.FilesStampParams {

@@ -570,6 +570,12 @@ func TestRead(t *testing.T) {
 	if res, err = s.Read(ctx, "pic.png", 0, false); err != nil || !res.Binary || res.Data != nil || res.Size != 6 || res.Name != "pic.png" {
 		t.Fatalf("binary: %+v %v", res, err)
 	}
+	if res, err = s.ReadBytes(ctx, "pic.png", 0, false); err != nil || !res.Binary || string(res.Data) != "\x89PNG\x00\x00" {
+		t.Fatalf("a binary file's bytes: %+v %v", res, err)
+	}
+	if _, err = s.ReadBytes(ctx, "debug.log", 0, false); !errors.Is(err, ErrIgnored) {
+		t.Fatalf("asking for bytes passes the ignore rule: %v", err)
+	}
 	write(t, s.Root, "latin.txt", "caf\xe9 au lait")
 	if res, err = s.Read(ctx, "latin.txt", 0, false); err != nil || !res.Binary {
 		t.Fatalf("not UTF-8: %+v %v", res, err)

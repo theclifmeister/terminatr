@@ -5,7 +5,7 @@ import TerminatrUI
 
 /// The flat look's frame round the main pane (T1000), to the reference's
 /// measure: a title row of 44 and its line over the panes, the gutter
-/// with the framed main pane and the inspector's panel, the status bar
+/// with the framed main pane and the right panel, the status bar
 /// of 30 under them. Replaces the window's toolbar and split view: their
 /// items and columns can't reach these places (the trial in T1000).
 struct MainArea<Detail: View, Panel: View>: View {
@@ -15,10 +15,15 @@ struct MainArea<Detail: View, Panel: View>: View {
     let selection: Selection?
     /// A session window's own model, else the app's for selection.
     var own: SessionModel?
+    /// The selection's Files model: the panel's, and the pane's file tabs.
+    var files: FilesModel?
     /// Room in the title row for the window's buttons, when no sidebar
     /// has them.
     var buttons = false
-    @Binding var inspector: Bool
+    /// What the right panel shows.
+    let shownPanel: RightPanel?
+    /// Files or Inspector pressed.
+    let press: (RightPanel) -> Void
     /// The panel's width, or nil while it hides.
     let panelWidth: Double?
     @Binding var panelWidthSaved: Double
@@ -27,14 +32,28 @@ struct MainArea<Detail: View, Panel: View>: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            TitleRow(selection: selection, own: own, buttons: buttons, inspector: $inspector)
+            TitleRow(selection: selection, own: own, files: files, buttons: buttons, shownPanel: shownPanel, press: press)
             HStack(spacing: 0) {
-                MainPane(selection: selection, own: own) { detail }
-                    .padding(.leading, CGFloat(WindowColumns.gap))
+                MainPane(selection: selection, own: own, file: files?.pane.current) {
+                    if let files, let f = files.pane.current {
+                        FilePane(model: files, file: f)
+                            .id(f.id)
+                    } else {
+                        detail
+                    }
+                }
+                .padding(.leading, CGFloat(WindowColumns.gap))
                 if let panelWidth {
-                    SplitHandle(width: CGFloat(WindowColumns.gap), value: $panelWidthSaved, sign: -1, range: InspectorColumn.min...InspectorColumn.max, name: "Inspector width")
-                    panel
-                        .frame(width: CGFloat(panelWidth))
+                    SplitHandle(width: CGFloat(WindowColumns.gap), value: $panelWidthSaved, sign: -1, range: InspectorColumn.min...InspectorColumn.max, name: "Panel width")
+                    Group {
+                        if shownPanel == .files, let files, let place = app.filesPlace(selection) {
+                            FilesPanel(model: files, place: place, own: own)
+                                .opacity(app.lost ? MainWindow.dimmed : 1)
+                        } else {
+                            panel
+                        }
+                    }
+                    .frame(width: CGFloat(panelWidth))
                 }
             }
             .padding(.trailing, CGFloat(WindowColumns.trailing))
@@ -42,6 +61,17 @@ struct MainArea<Detail: View, Panel: View>: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(theme.gutter)
             StatusBar()
+        }
+        // A tab of the session's or project's own, however it's picked,
+        // comes back from a file's.
+        .onChange(of: ownTab) { files?.pane.shown = nil }
+    }
+
+    private var ownTab: String {
+        switch selection {
+        case .session(let ref): (own ?? app.model(ref)).tab.rawValue
+        case .project: app.projectTab.rawValue
+        default: ""
         }
     }
 }
@@ -56,9 +86,10 @@ struct TitleRow: View {
     @Environment(\.theme) private var theme
     let selection: Selection?
     var own: SessionModel?
+    var files: FilesModel?
     var buttons = false
-    @Binding var inspector: Bool
-    @State private var files = false
+    let shownPanel: RightPanel?
+    let press: (RightPanel) -> Void
 
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
@@ -73,8 +104,10 @@ struct TitleRow: View {
             // The tabs lose their icons, then their room, before the
             // buttons at the row's end do.
             ViewThatFits(in: .horizontal) {
-                tabs(icons: true)
-                tabs(icons: false)
+                tabs(icons: true, files: files?.pane.tabs ?? [])
+                tabs(icons: false, files: files?.pane.tabs ?? [])
+                // Too many file tabs for the row: the one shown alone.
+                tabs(icons: false, files: files?.pane.current.map { [$0] } ?? [])
             }
             .padding(.leading, 11)
             .padding(.top, 6)
@@ -92,12 +125,12 @@ struct TitleRow: View {
                     .disabled(!app.canAddTask || app.boardProject == nil)
                     .padding(.top, 13)
                     .padding(.trailing, 11)
-                filesButton
-                    .padding(.top, 6)
-                    .padding(.trailing, 1)
             }
-            PillButton(symbol: "sidebar.right", title: "Inspector", on: inspector && selection != nil,
-                       help: inspector ? "Hide the inspector (⌘⌥I)" : "Show the inspector (⌘⌥I)") { inspector.toggle() }
+            filesButton
+                .padding(.top, 6)
+                .padding(.trailing, 1)
+            PillButton(symbol: "sidebar.right", title: "Inspector", on: shownPanel == .inspector,
+                       help: shownPanel == .inspector ? "Hide the inspector (⌘⌥I)" : "Show the inspector (⌘⌥I)") { press(.inspector) }
                 .disabled(selection == nil)
                 .padding(.top, 6)
                 .padding(.trailing, 10)
@@ -110,60 +143,56 @@ struct TitleRow: View {
         .overlay(alignment: .bottom) { theme.lineSoft.frame(height: 1) }
     }
 
-    @ViewBuilder
-    private func tabs(icons: Bool) -> some View {
-        switch selection {
-        case .session(let ref):
-            let m = own ?? app.model(ref)
-            HStack(spacing: 10) {
-                ForEach(SessionTab.allCases, id: \.self) { t in
-                    TabButton(title: t.rawValue, symbol: t == .conversation ? "bubble.left" : "terminal", icons: icons, on: m.tab == t) { m.pick(t) }
+    private func tabs(icons: Bool, files opened: [OpenedFile]) -> some View {
+        let reading = files?.pane.shown != nil
+        return HStack(spacing: 10) {
+            switch selection {
+            case .session(let ref):
+                let m = own ?? app.model(ref)
+                HStack(spacing: 10) {
+                    ForEach(SessionTab.allCases, id: \.self) { t in
+                        TabButton(title: t.rawValue, symbol: t == .conversation ? "bubble.left" : "terminal", icons: icons, on: !reading && m.tab == t) {
+                            files?.pane.shown = nil
+                            m.pick(t)
+                        }
+                    }
                 }
-            }
-            .disabled(m.sessionID == nil)
-            .help("Conversation or Terminal (⇧⌘T)")
-        case .project(_, let server):
-            let tabs = server.isEmpty ? app.projectTabs : ProjectTab.paired
-            HStack(spacing: 10) {
+                .disabled(m.sessionID == nil)
+                .help("Conversation or Terminal (⇧⌘T)")
+            case .project(_, let server):
+                let tabs = server.isEmpty ? app.projectTabs : ProjectTab.paired
                 ForEach(tabs) { t in
-                    TabButton(title: t.rawValue, symbol: t.symbol, icons: icons, on: app.projectTab == t) { app.projectTab = t }
+                    TabButton(title: t.rawValue, symbol: t.symbol, icons: icons, on: !reading && app.projectTab == t) {
+                        files?.pane.shown = nil
+                        app.projectTab = t
+                    }
+                }
+            case .program:
+                TabButton(title: "Program", symbol: "square.stack.3d.up", icons: icons, on: true) {}
+            case nil:
+                EmptyView()
+            }
+            ForEach(opened) { f in
+                FileTabButton(file: f, icons: icons, on: files?.pane.shown == f.id) {
+                    files?.pane.shown = f.id
+                } close: {
+                    files?.pane.close(f.id)
                 }
             }
-        case .program:
-            TabButton(title: "Program", symbol: "square.stack.3d.up", icons: icons, on: true) {}
-        case nil:
-            EmptyView()
         }
     }
 
-    /// On a project, its Library tab. On a session, what that session's
-    /// thread attached, or a coordinator's the whole project's, in a
-    /// popover. A paired server's session has none here.
-    @ViewBuilder
+    /// Shows or hides the right panel's Files view, everywhere a thread or
+    /// project has files. Off on a director and a program, which have no
+    /// repo.
     private var filesButton: some View {
-        let onLibrary = if case .project = selection { app.projectTab == .library } else { false }
-        PillButton(symbol: "doc", title: "Files", on: onLibrary || files, help: "Files threads attached to their reports") {
-            if case .project = selection {
-                app.projectTab = .library
-            } else {
-                files.toggle()
-            }
+        let has = app.filesPlace(selection) != nil
+        return PillButton(symbol: "doc", title: "Files", on: shownPanel == .files,
+                          help: !has ? "A director has no repo: its projects' threads have the files"
+                              : shownPanel == .files ? "Hide the files (⌘⌥E)" : "Show the files (⌘⌥E)") {
+            press(.files)
         }
-        .disabled(!filesAvailable)
-        .popover(isPresented: $files, arrowEdge: .bottom) {
-            if case .session(let ref) = selection {
-                LibraryPane(project: ref.project, thread: ref.thread.isEmpty ? nil : ref.thread)
-                    .frame(width: 440, height: 420)
-            }
-        }
-    }
-
-    private var filesAvailable: Bool {
-        switch selection {
-        case .project(_, let server): server.isEmpty ? app.projectTabs.contains(.library) : true
-        case .session(let ref): !ref.isRemote && !ref.director && app.projectTabs.contains(.library)
-        default: false
-        }
+        .disabled(!has)
     }
 }
 
@@ -207,6 +236,53 @@ private struct TabButton: View {
         .fixedSize()
         .accessibilityLabel(title)
         .accessibilityAddTraits(on ? .isSelected : [])
+    }
+}
+
+/// A file Open in pane added: a tab with its name and a way to close it.
+private struct FileTabButton: View {
+    @Environment(\.theme) private var theme
+    let file: OpenedFile
+    let icons: Bool
+    let on: Bool
+    let action: () -> Void
+    let close: () -> Void
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Button(action: action) {
+                HStack(spacing: 7) {
+                    if icons {
+                        BarIcon(symbol: "doc")
+                    }
+                    Text(file.name)
+                        .font(theme.sized(13))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .frame(maxWidth: 170)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(file.name)
+            .accessibilityAddTraits(on ? .isSelected : [])
+            Button(action: close) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 9, weight: .semibold))
+                    .frame(width: 14, height: 14)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Closes this tab")
+            .accessibilityLabel("Close \(file.name)")
+        }
+        .padding(.leading, 11)
+        .padding(.trailing, 7)
+        .frame(height: 31)
+        .foregroundStyle(on ? theme.ink : theme.muted)
+        .background(on ? theme.tab : .clear, in: RoundedRectangle(cornerRadius: 6))
+        .fixedSize()
+        .help(file.path)
     }
 }
 
@@ -286,6 +362,8 @@ struct MainPane<Content: View>: View {
     @Environment(\.controlActiveState) private var active
     let selection: Selection?
     var own: SessionModel?
+    /// The file tab it shows, for its header.
+    var file: OpenedFile?
     @ViewBuilder var content: Content
 
     var body: some View {
@@ -319,6 +397,10 @@ struct MainPane<Content: View>: View {
     }
 
     private var header: (symbol: String, title: String, detail: String)? {
+        if let file {
+            let who = app.filesPlace(selection)?.label ?? ""
+            return ("doc", file.path, who.isEmpty ? "read only" : "\(who) · read only")
+        }
         switch selection {
         case .session(let ref):
             let m = own ?? app.model(ref)

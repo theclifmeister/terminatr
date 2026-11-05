@@ -56,7 +56,6 @@ struct InspectorFrame<Content: View>: View {
     @ViewBuilder var content: Content
 
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: 8)
         VStack(spacing: 0) {
             header
             ScrollView {
@@ -74,13 +73,11 @@ struct InspectorFrame<Content: View>: View {
             }
         }
         .guardingLinks()
-        .background(theme.pane)
-        .clipShape(shape)
-        .overlay { shape.strokeBorder(theme.line, lineWidth: 1).allowsHitTesting(false) }
+        .modifier(PanelGround())
     }
 
     private var header: some View {
-        HStack(spacing: 8) {
+        PanelHead {
             switch head.name {
             case let .role(role, name):
                 RoleMark(role, points: 13)
@@ -111,10 +108,6 @@ struct InspectorFrame<Content: View>: View {
                     .fixedSize()
             }
         }
-        .padding(.horizontal, 13)
-        .frame(height: 33)
-        .padding(.bottom, 1)
-        .overlay(alignment: .bottom) { theme.line.frame(height: 1) }
         .help(head.who)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(head.spoken)
@@ -145,11 +138,51 @@ struct InspectorFrame<Content: View>: View {
         }
         .font(theme.sized(12.5))
         .foregroundStyle(theme.muted)
-        .padding(.horizontal, 15)
-        // Its line above and the panel's own below: centred between them.
-        .frame(height: 56)
-        .padding(.vertical, 1)
-        .overlay(alignment: .top) { theme.line.frame(height: 1) }
+        .modifier(PanelFootBar())
+    }
+}
+
+/// The panel's ground: 8 round with its line. Both its views.
+struct PanelGround: ViewModifier {
+    @Environment(\.theme) private var theme
+
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 8)
+        content
+            .background(theme.pane)
+            .clipShape(shape)
+            .overlay { shape.strokeBorder(theme.line, lineWidth: 1).allowsHitTesting(false) }
+    }
+}
+
+/// The panel's header, at the main pane's height with its line on the same
+/// row of pixels (T1011). Both its views.
+struct PanelHead<Content: View>: View {
+    @Environment(\.theme) private var theme
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        HStack(spacing: 8) {
+            content
+        }
+        .padding(.horizontal, 13)
+        .frame(height: 33)
+        .padding(.bottom, 1)
+        .overlay(alignment: .bottom) { theme.line.frame(height: 1) }
+    }
+}
+
+/// The panel's footer, at the composer's height at rest: its line above and
+/// the panel's own below, what's in it centred between them. Both its views.
+struct PanelFootBar: ViewModifier {
+    @Environment(\.theme) private var theme
+
+    func body(content: Content) -> some View {
+        content
+            .padding(.horizontal, 15)
+            .frame(height: 56)
+            .padding(.vertical, 1)
+            .overlay(alignment: .top) { theme.line.frame(height: 1) }
     }
 }
 

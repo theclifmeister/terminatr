@@ -6,7 +6,7 @@ import Foundation
 /// The terminatr app API (docs/SPEC.md §3.8): what tm app bridge answers.
 public enum AppAPI {
     /// The app API version this app was generated against.
-    public static let version = 49
+    public static let version = 50
 
     public struct AdoptRequestParams: Codable, Sendable, Hashable {
         public var id: String
@@ -817,12 +817,14 @@ public enum AppAPI {
         public var path: String
         public var offset: Int
         public var ignored: Bool
+        public var binary: Bool
 
-        public init(session: String, path: String, offset: Int = 0, ignored: Bool = false) {
+        public init(session: String, path: String, offset: Int = 0, ignored: Bool = false, binary: Bool = false) {
             self.session = session
             self.path = path
             self.offset = offset
             self.ignored = ignored
+            self.binary = binary
         }
 
         enum CodingKeys: String, CodingKey {
@@ -830,6 +832,7 @@ public enum AppAPI {
             case path
             case offset
             case ignored
+            case binary
         }
     }
 
@@ -5191,6 +5194,7 @@ extension AppAPI.FilesReadParams {
         self.path = try c.decode(String.self, forKey: .path)
         self.offset = try c.decodeIfPresent(Int.self, forKey: .offset) ?? 0
         self.ignored = try c.decodeIfPresent(Bool.self, forKey: .ignored) ?? false
+        self.binary = try c.decodeIfPresent(Bool.self, forKey: .binary) ?? false
     }
 }
 

@@ -110,17 +110,19 @@ type FilesListResult struct {
 }
 
 // FilesReadParams name a file of the session's, the chunk read is from
-// Offset. Ignored allows a git-ignored file.
+// Offset. Ignored allows a git-ignored file. Binary asks for the bytes of a
+// file that isn't text too: the Mac's Quick Look, Open and Save As.
 type FilesReadParams struct {
 	Session string `json:"session"`
 	Path    string `json:"path"`
 	Offset  int64  `json:"offset,omitempty"`
 	Ignored bool   `json:"ignored,omitempty"`
+	Binary  bool   `json:"binary,omitempty"`
 }
 
 // FilesReadResult is a file's chunk: Data from Offset (at most
 // LibraryChunk bytes) of Size bytes, last modified at MTime. Binary: not
-// text, no Data, name and size only. Truncated: Size is over MaxFilesRead,
+// text, name and size only, no Data unless asked for. Truncated: Size is over MaxFilesRead,
 // and no Data comes past it.
 type FilesReadResult struct {
 	Name      string    `json:"name"`

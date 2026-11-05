@@ -173,7 +173,7 @@ struct FileCommands: Commands {
     }
 }
 
-/// The View menu's own items, after the sidebar's: the inspector,
+/// The View menu's own items, after the sidebar's: Files, the inspector,
 /// Conversation or Terminal, Repaint Terminal, the inactive projects,
 /// the sidebar's density, the theme and the text size.
 struct ViewCommands: Commands {
@@ -183,7 +183,11 @@ struct ViewCommands: Commands {
         CommandGroup(after: .sidebar) {
             Button(model.sidebarShown ? "Hide Sidebar" : "Show Sidebar") { model.toggleSidebar() }
                 .keyboardShortcut("s", modifiers: [.command, .control])
-            Button(model.inspector ? "Hide Inspector" : "Show Inspector") { model.inspector.toggle() }
+            let shown = model.panelShown(model.nav.selection)
+            Button(shown == .files ? "Hide Files" : "Show Files") { model.press(.files) }
+                .keyboardShortcut("e", modifiers: [.command, .option])
+                .disabled(model.filesPlace(model.nav.selection) == nil)
+            Button(shown == .inspector ? "Hide Inspector" : "Show Inspector") { model.press(.inspector) }
                 .keyboardShortcut("i", modifiers: [.command, .option])
                 .disabled(model.nav.selection == nil)
             Button("Conversation or Terminal") { model.switchTab() }

@@ -138,7 +138,11 @@ func (s *Server) filesRead(p proto.FilesReadParams) (any, *proto.Error) {
 	if perr != nil {
 		return nil, perr
 	}
-	res, err := sc.Read(ctx, p.Path, p.Offset, p.Ignored)
+	read := sc.Read
+	if p.Binary {
+		read = sc.ReadBytes
+	}
+	res, err := read(ctx, p.Path, p.Offset, p.Ignored)
 	if err != nil {
 		return nil, filesError(err)
 	}
