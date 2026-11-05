@@ -57,13 +57,17 @@ public struct Chip: View {
 /// .bordered and .borderedProminent in a pane.
 public struct FlatButtonStyle: ButtonStyle {
     let primary: Bool
+    /// How many lines its words may take where the width runs out: a
+    /// long option in the inspector's narrow panel, say.
+    let lines: Int
 
-    public init(primary: Bool = false) {
+    public init(primary: Bool = false, lines: Int = 1) {
         self.primary = primary
+        self.lines = lines
     }
 
     public func makeBody(configuration: Configuration) -> some View {
-        FlatButton(primary: primary, configuration: configuration)
+        FlatButton(primary: primary, lines: lines, configuration: configuration)
     }
 }
 
@@ -77,13 +81,15 @@ private struct FlatButton: View {
     @Environment(\.isEnabled) private var enabled
     @Environment(\.isFocused) private var focused
     let primary: Bool
+    let lines: Int
     let configuration: ButtonStyleConfiguration
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: Radius.row)
         configuration.label
             .font(theme.sized(Flat.label))
-            .lineLimit(1)
+            .lineLimit(lines)
+            .multilineTextAlignment(.leading)
             .foregroundStyle(!enabled ? theme.muted : primary ? theme.pane : theme.ink)
             .padding(.horizontal, 10)
             .padding(.vertical, 4)
@@ -217,7 +223,8 @@ public struct NameTile: View {
 }
 
 /// Its children in rows that wrap at the width they have: a question's
-/// small buttons.
+/// small buttons. One wider than the whole width is offered that width,
+/// so its words wrap or truncate rather than run out of the row.
 public struct FlowRow: Layout {
     let spacing: CGFloat
 
@@ -233,15 +240,20 @@ public struct FlowRow: Layout {
     public func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
         let (spots, _) = place(subviews, width: bounds.width)
         for (v, p) in zip(subviews, spots) {
-            v.place(at: CGPoint(x: bounds.minX + p.x, y: bounds.minY + p.y), proposal: ProposedViewSize(v.sizeThatFits(.unspecified)))
+            v.place(at: CGPoint(x: bounds.minX + p.x, y: bounds.minY + p.y), proposal: ProposedViewSize(size(of: v, width: bounds.width)))
         }
+    }
+
+    private func size(of v: LayoutSubview, width: CGFloat) -> CGSize {
+        let s = v.sizeThatFits(.unspecified)
+        return s.width > width ? v.sizeThatFits(ProposedViewSize(width: width, height: nil)) : s
     }
 
     private func place(_ subviews: Subviews, width: CGFloat) -> ([CGPoint], CGSize) {
         var spots: [CGPoint] = []
         var x: CGFloat = 0, y: CGFloat = 0, line: CGFloat = 0, widest: CGFloat = 0
         for v in subviews {
-            let s = v.sizeThatFits(.unspecified)
+            let s = size(of: v, width: width)
             if x > 0, x + s.width > width {
                 x = 0
                 y += line + spacing

@@ -274,6 +274,8 @@ struct PaneTerminal: NSViewRepresentable {
 
     func makeNSView(context: Context) -> PaneHost {
         host.terminal.optionAsMetaKey = false
+        // Dark in light too, its scroller with it.
+        host.terminal.appearance = NSAppearance(named: .darkAqua)
         paint(host, context.coordinator)
         return host
     }

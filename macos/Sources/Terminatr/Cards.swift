@@ -251,6 +251,7 @@ struct FlowButtons: View {
                 ForEach(Array(item.options.enumerated()), id: \.offset) { i, o in
                     HStack(alignment: .firstTextBaseline, spacing: 9) {
                         button(i, o)
+                            .fixedSize()
                         if !o.description.isEmpty {
                             Text(o.description)
                                 .font(theme.sized(Flat.label))
@@ -284,8 +285,7 @@ struct FlowButtons: View {
                 Text(o.label)
             }
         }
-        .buttonStyle(FlatButtonStyle(primary: i == 0))
-        .fixedSize()
+        .buttonStyle(FlatButtonStyle(primary: i == 0, lines: 3))
         .disabled(busy)
         .keyboardShortcut(numbered && i < 9 ? KeyboardShortcut(KeyEquivalent(Character("\(i + 1)")), modifiers: [.command, .option]) : nil)
         .accessibilityLabel(QuestionPlan.spoken(item, option: i))
@@ -335,8 +335,7 @@ struct ApprovalCard: View {
                     FlowRow {
                         ForEach(Array(dialog.options.enumerated()), id: \.offset) { i, o in
                             Button(o) { pick(i + 1) }
-                                .buttonStyle(FlatButtonStyle(primary: i == 0))
-                                .fixedSize()
+                                .buttonStyle(FlatButtonStyle(primary: i == 0, lines: 3))
                                 .disabled(busy || !can(i + 1))
                                 .help(help(i + 1))
                         }

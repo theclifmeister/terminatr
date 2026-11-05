@@ -4,14 +4,13 @@ import TerminatrUI
 
 /// A project in the window's detail (design T746, T748 milestone C, flat
 /// since T1002): its tile, name and goal; a slim strip of its board's
-/// counts; what needs the user as rows that act in place (the inspector
-/// lists them but only shows them), the tasks in review as their own
-/// group; its coordinator, with Start when none runs; its threads, idle
+/// counts; its coordinator, with Start when none runs; its threads, idle
 /// and stopped ones folded; its designs, each opening in place to its
 /// answers, questions and build (DesignsSection); the first of on deck,
 /// the Board tab having the rest; and the inbox items for the user. Under
-/// them its repositories. An empty project offers a next step. A thread's
-/// row shows its thread in the window.
+/// them its repositories. What needs the user, and answering it, is the
+/// inspector's (ProjectFacts). An empty project offers a next step. A
+/// thread's row shows its thread in the window.
 struct ProjectDashboard: View {
     @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
@@ -69,21 +68,6 @@ struct ProjectDashboard: View {
         let running = app.coordinatorSession(project.slug) != nil
         if Dashboard.isEmpty(project, needs: needs.count) {
             NextStepCard(project: project, step: Dashboard.next(project, coordinatorRuns: running))
-        }
-        let settled = app.settledLinks(project.slug)
-        let open = needs.filter { !$0.isReview }, review = needs.filter(\.isReview)
-        if !open.isEmpty || !settled.isEmpty {
-            section("Needs you · \(open.count)") {
-                if !open.isEmpty {
-                    HairlineList { ForEach(open) { NeedCard(need: $0) } }
-                }
-                ForEach(settled, id: \.id) { LinkOutcomeRow(outcome: $0.outcome, settled: true) }
-            }
-        }
-        if !review.isEmpty {
-            section("Review · \(review.count)") {
-                HairlineList { ForEach(review) { NeedCard(need: $0) } }
-            }
         }
         section("Coordinator") {
             HairlineList {
