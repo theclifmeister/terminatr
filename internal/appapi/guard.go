@@ -57,7 +57,7 @@ type GuardRefusals struct {
 // Path) an allowance names. Floor: it is never allowed, only kept.
 // Fixed (app API 24): no allowance lifts it either (tm's files, a rule
 // none names, a write folder's), so keeping it refusing is all there is
-// (not guardlog.Entry.Actionable); Needs you leaves both out, the
+// (not guardlog.Entry.Actionable), and the app offers only that; the
 // guard's log keeps every one.
 type GuardRefusal struct {
 	ID      string    `json:"id"`

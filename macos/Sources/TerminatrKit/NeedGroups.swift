@@ -42,7 +42,7 @@ extension Need {
         case .approval: .approval
         case .question: .question
         case .review: .review
-        case .blocked, .checks, .held, .refusal: .blocked
+        case .blocked, .checks, .held: .blocked
         case .link: .link
         case .network: .paired
         }
@@ -94,7 +94,7 @@ extension Need.Kind {
         case .approval: .approval
         case .question: .question
         case .review: .review
-        case .blocked, .checks, .held, .refusal: .attention
+        case .blocked, .checks, .held: .attention
         case .link: .working
         case .network: .idle
         }
@@ -109,7 +109,6 @@ extension Need.Kind {
         case .blocked: "Blocked"
         case .checks: "Checks fail"
         case .held: "Held"
-        case .refusal: "Refused"
         case .link: "Link"
         case .network: "Paired"
         }

@@ -112,7 +112,6 @@ extension Need.Kind {
         case .held: "pause.circle"
         case .network: "point.3.connected.trianglepath.dotted"
         case .link: "envelope.badge"
-        case .refusal: "shield.lefthalf.filled"
         }
     }
 
@@ -122,7 +121,6 @@ extension Need.Kind {
         case .question: "Answer"
         case .approval: "Approve"
         case .review: "Review"
-        case .refusal: "Answer"
         case .blocked, .checks, .held, .network, .link: "Open"
         }
     }
@@ -135,7 +133,7 @@ extension Theme {
         case .question: question
         case .approval: approval
         case .review: good
-        case .blocked, .checks, .refusal: attention
+        case .blocked, .checks: attention
         case .held, .network: muted
         case .link: action
         }

@@ -6,11 +6,12 @@ import TerminatrUI
 
 /// Settings in tabs (T748 milestone G): General (where the app finds tm,
 /// where it shows, open at login), Notifications, Appearance (theme,
-/// sidebar density, text size), Devices (the paired iPhones, T790) and
-/// Advanced (the bridge's log, Reconnect).
+/// sidebar density, text size), Guard (the refused calls waiting on an
+/// answer, T998), Devices (the paired iPhones, T790) and Advanced (the
+/// bridge's log, Reconnect).
 struct SettingsView: View {
     enum Tab: String {
-        case general, notifications, appearance, devices, advanced
+        case general, notifications, appearance, guardRefusals = "guard", devices, advanced
     }
 
     @AppStorage("settingsTab") private var tab = Tab.general.rawValue
@@ -26,6 +27,9 @@ struct SettingsView: View {
             AppearanceSettings()
                 .tabItem { Label("Appearance", systemImage: "paintpalette") }
                 .tag(Tab.appearance.rawValue)
+            GuardSettings()
+                .tabItem { Label("Guard", systemImage: "shield.lefthalf.filled") }
+                .tag(Tab.guardRefusals.rawValue)
             DeviceSettings()
                 .tabItem { Label("Devices", systemImage: "iphone") }
                 .tag(Tab.devices.rawValue)
@@ -281,7 +285,6 @@ private struct KindToggle: View {
         case .held: "A prompt queue is held"
         case .network: "A paired server needs you"
         case .link: "A link waits for you (a held message, a file, a link request)"
-        case .refusal: "The guard refused a call"
         }
     }
 }

@@ -78,8 +78,8 @@ public enum Compatibility: Equatable, Sendable {
         takesFiles(hello) && (!ref.director || hello.appApi >= directorFilesAPI)
     }
 
-    /// The app API that has guard.refusals and guard.decide: the
-    /// refusals' cards under Needs you need it.
+    /// The app API that has guard.refusals and guard.decide: Settings ›
+    /// Guard needs it.
     public static let guardAPI = 18
 
     /// The app API that has project.pin, project.new,
