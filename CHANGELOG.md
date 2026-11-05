@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.81.1](https://github.com/theclifmeister/terminatr/compare/v0.81.0...v0.81.1) (2026-11-05)
+
+
+### Reverts
+
+* **ios:** back to the system tab bar and sidebar on the iPhone and iPad ([#1106](https://github.com/theclifmeister/terminatr/issues/1106)) ([39d89de](https://github.com/theclifmeister/terminatr/commit/39d89dec3ed383439b5e95895485294747f70d42))
+
 ## [0.81.0](https://github.com/theclifmeister/terminatr/compare/v0.80.0...v0.81.0) (2026-11-05)
 
 
