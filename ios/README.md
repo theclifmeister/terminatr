@@ -24,7 +24,7 @@ App Store submission (not TestFlight) needs iPad screenshots: 13-inch, 2064×275
 
 Every screen draws its own flat bar (`ScreenBar.swift`, `SessionScreen.swift`) on the theme's solid colours and hides the navigation bar, whose glass buttons and, on an open iPhone Duo, whose rail placement can't be flattened; a swipe from the edge still goes back (`swipesBack`). A filter is a field in the screen (`FilterField`), as the system's search bar needs the navigation bar. Lists are flat panels (`PanelList`), not `List`, whose grouped sections iOS rounds itself.
 
-What stays iOS's own on iOS 27: the tab bar's glass capsule on an iPhone, the Duo's rail, an iPad's floating tab bar and sidebar, and sheets' system chrome. `TabBand` puts a solid band with a line under the capsule, so nothing shows through it. `UITabBarAppearance`, `.toolbarBackground` and `UIDesignRequiresCompatibility` don't change it (tried on the iOS 27.1 and 27.0 Simulators). Going further means replacing `TabView` with our own bar and rail.
+The bar, the rail and the iPad's sidebar are ours too (`FlatNav.swift`), as iOS 27's tab bar, Duo rail and floating sidebar ignore `UITabBarAppearance`, `.toolbarBackground` and `UIDesignRequiresCompatibility`. `Root` has no `TabView`: `TabHost.swift` keeps each place's screens in its own hosting controller, built when first chosen, and only the one showing is in the window, so stacks, scroll places and `.task`s behave as they did in tabs. A hosting controller stops SwiftUI's environment: what `Root` and `Themed` set goes across in `Root.pageView`, and a new app-wide value has to be added there. `NavChrome` (TerminatrKit) says what goes where. What stays iOS's own: sheets' system chrome and the keyboard.
 
 ## Terminal
 

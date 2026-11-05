@@ -29,7 +29,6 @@ struct TabStack<Content: View>: View {
             }
         }
         .onChange(of: path, initial: true) { model.places.choose(path, root: key) }
-        .tabBand()
     }
 }
 
