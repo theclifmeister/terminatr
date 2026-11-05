@@ -10,6 +10,7 @@ import (
 	"strings"
 	"syscall"
 	"testing"
+	"time"
 
 	"github.com/theclifmeister/terminatr/internal/changes"
 	"github.com/theclifmeister/terminatr/internal/gittest"
@@ -225,6 +226,170 @@ func TestLinkSwapped(t *testing.T) {
 			}
 			t.Errorf("open through a link to %s: %v", to, err)
 		}
+	}
+}
+
+// TestSwapAfterGate: a link swapped in after the ignored check reads
+// nothing the check would have refused, with the kernel's answer and
+// without one; asked for, the ignored file opens.
+func TestSwapAfterGate(t *testing.T) {
+	for _, handle := range []bool{true, false} {
+		name := "HandlePath"
+		if !handle {
+			name = "no HandlePath"
+		}
+		t.Run(name, func(t *testing.T) {
+			if !handle {
+				was := handlePath
+				handlePath = func(*os.File) (string, bool) { return "", false }
+				t.Cleanup(func() { handlePath = was })
+			} else if _, ok := handlePathWorks(t); !ok {
+				t.Skip("this system has none")
+			}
+			s, _ := checkout(t)
+			ctx := context.Background()
+			write(t, s.Root, ".env", "SECRET=1\n")
+			link := filepath.Join(s.Root, "swap")
+			put := func(to string) {
+				t.Helper()
+				os.Remove(link)
+				if to == "" {
+					write(t, s.Root, "swap", "plain\n")
+				} else if err := os.Symlink(to, link); err != nil {
+					t.Fatal(err)
+				}
+			}
+			put("")
+			if res, err := s.Read(ctx, "swap", 0, false); err != nil || string(res.Data) != "plain\n" {
+				t.Fatalf("no swap: %q %v", res.Data, err)
+			}
+			s.beforeOpen = func() { put(".env") }
+			if res, err := s.Read(ctx, "swap", 0, false); err == nil {
+				t.Errorf("read an ignored file through a swapped link: %q", res.Data)
+			}
+			s.beforeOpen = nil
+			put(".env")
+			if res, err := s.Read(ctx, "swap", 0, true); err != nil || string(res.Data) != "SECRET=1\n" {
+				t.Errorf("asked for: %q %v", res.Data, err)
+			}
+			// A folder too: an ignored one swapped in isn't listed.
+			write(t, s.Root, "build/out.txt", "x")
+			os.Remove(link)
+			os.Mkdir(link, 0o755)
+			s.beforeOpen = func() { os.Remove(link); os.Symlink("build", link) }
+			if res, err := s.List(ctx, "swap", Options{}, nil); err == nil {
+				t.Errorf("listed an ignored folder through a swapped link: %s", names(res.Entries))
+			}
+			s.beforeOpen = nil
+			os.Remove(link)
+			// A file replaced outright: not the file the path leads to now.
+			if !handle {
+				write(t, s.Root, "plain.txt", "one\n")
+				s.beforeOpen = nil
+				f, fi, err := s.open("plain.txt")
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer f.Close()
+				os.Remove(filepath.Join(s.Root, "plain.txt"))
+				write(t, s.Root, "plain.txt", "two\n")
+				if _, err := s.openedAt(f, fi, "plain.txt"); !errors.Is(err, ErrGone) {
+					t.Errorf("a replaced file: %v", err)
+				}
+			}
+		})
+	}
+}
+
+func handlePathWorks(t *testing.T) (string, bool) {
+	t.Helper()
+	f, err := os.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	return handlePath(f)
+}
+
+// TestIgnoredInsideFolder: what's listed inside an ignored folder is marked
+// ignored too, for the viewer to say so.
+func TestIgnoredInsideFolder(t *testing.T) {
+	s, _ := checkout(t)
+	write(t, s.Root, "build/out.txt", "x")
+	res, err := s.List(context.Background(), "build", Options{Ignored: true}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := names(res.Entries); !strings.Contains(got, "build/out.txt!") {
+		t.Errorf("listed %s", got)
+	}
+}
+
+// TestSubmoduleInScope: a submodule's folder planted in the root runs
+// nothing it configures, for a listing, a read or a stamp.
+func TestSubmoduleInScope(t *testing.T) {
+	s, _ := checkout(t)
+	ctx := context.Background()
+	mark := filepath.Join(t.TempDir(), "ran")
+	sub := filepath.Join(s.Root, "sub")
+	write(t, sub, ".gitattributes", "* filter=evil\n")
+	write(t, sub, "f", "x\n")
+	g := gittest.In(t, sub)
+	g("init", "-q")
+	g("config", "user.email", "a@b.c")
+	g("config", "user.name", "a")
+	g("add", ".")
+	g("commit", "-qm", "s")
+	gittest.Run(t, s.Root, "update-index", "--add", "--cacheinfo", "160000,"+g("rev-parse", "HEAD")+",sub")
+	g("config", "filter.evil.clean", "touch "+mark+"; cat")
+	write(t, sub, "f", "y\n")
+	var c Cache
+	if _, err := c.Changes(ctx, s); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.List(ctx, "", Options{}, marksFor(t, s)); err != nil {
+		t.Fatal(err)
+	}
+	s.Stamp(ctx, []string{""})
+	if _, err := os.Stat(mark); err == nil {
+		t.Fatal("the submodule's filter ran")
+	}
+}
+
+// TestCacheStampPaced: a slow repo's git status is asked for no more than
+// its share of the time, while the folders' entries stay live; a quick
+// repo's every time.
+func TestCacheStampPaced(t *testing.T) {
+	s, _ := checkout(t)
+	ctx := context.Background()
+	var c Cache
+	first := c.Stamp(ctx, s, nil)
+	if first != s.Stamp(ctx, nil) {
+		t.Fatal("not the scope's stamp")
+	}
+	seen := c.stamps[s.Root]
+	seen.took = time.Hour // as slow as it gets
+	c.stamps[s.Root] = seen
+	write(t, s.Root, "src/main.go", "package main // edit\n")
+	if got := c.Stamp(ctx, s, nil); got != first {
+		t.Error("a slow repo's status was asked again at once")
+	}
+	if got := c.Stamp(ctx, s, []string{""}); got == s.stamp(seen.fp, nil) {
+		t.Error("the folders didn't count")
+	}
+	seen.at = time.Now().Add(-maxStampRest - time.Second)
+	c.stamps[s.Root] = seen
+	if got := c.Stamp(ctx, s, nil); got == first {
+		t.Error("the stamp never caught up")
+	}
+	// A quick one isn't held back: its time is well under filesEvery's.
+	seen = c.stamps[s.Root]
+	seen.took = time.Millisecond
+	seen.at = time.Now().Add(-time.Second)
+	c.stamps[s.Root] = seen
+	write(t, s.Root, "src/main.go", "package main // again\n")
+	if got := c.Stamp(ctx, s, nil); got != s.Stamp(ctx, nil) {
+		t.Error("a quick repo's stamp lagged")
 	}
 }
 

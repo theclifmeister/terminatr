@@ -98,6 +98,11 @@ func newChangesFixture(t *testing.T) changesFixture {
 	}
 	root, _ := filepath.EvalSymlinks(t.TempDir())
 	one, two := changesRepo(t, root, "one"), changesRepo(t, root, "two")
+	for _, r := range []string{one, two} {
+		if _, err := p.SetRepo(r, true); err != nil {
+			t.Fatal(err)
+		}
+	}
 	wts := filepath.Join(tmHome, "worktrees", "demo")
 	f := changesFixture{s: &Server{log: log.New(os.Stderr, "", 0), modEv: newModEvents()}, p: p, root: root}
 
@@ -290,5 +295,20 @@ func TestModThreadChangesEvent(t *testing.T) {
 	if len(got) != 2 || got[0].Thread != f.started.ID || !got[0].Dirty || got[0].Add != 3 || got[0].Files != 2 ||
 		got[1].Dirty || got[1].Ahead != 1 || got[1].Unpushed != 1 || got[1].Files != 2 {
 		t.Fatalf("events %+v", got)
+	}
+}
+
+// TestModThreadChangesOffList: a record naming a repo the project doesn't
+// list reads nothing, however its worktree checks out against that repo.
+func TestModThreadChangesOffList(t *testing.T) {
+	f := newChangesFixture(t)
+	if _, err := f.call(map[string]any{"project": "demo", "thread": f.started.ID}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.p.SetRepo(f.started.Repo, false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.call(map[string]any{"project": "demo", "thread": f.started.ID}); err == nil || !strings.Contains(err.Error(), "list") {
+		t.Errorf("off the list: %v", err)
 	}
 }
