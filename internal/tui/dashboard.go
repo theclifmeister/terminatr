@@ -861,6 +861,9 @@ func (m *dash) setData(d Data) tea.Cmd {
 		// The needs-you badge clicked in a session.
 		cmds = append(cmds, m.goNeeds())
 		m.then = ""
+	case first && m.over != nil && m.over.Viewer != nil:
+		// A file of the info panel's Files view.
+		m.push(m.over.Viewer)
 	case first && m.over != nil && m.over.View:
 		// The view a mod opened after a command in the session.
 		cmds = append(cmds, m.pollModViews())

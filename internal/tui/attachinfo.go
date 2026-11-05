@@ -37,7 +37,12 @@ var infoClock = time.Now
 // or its width changes, not with every frame. c.mu held.
 func (c *client) infoLayout() {
 	ip := c.info
-	ip.lay = infoLay(ip.data, max(c.infoW-1, 1), infoClock(), c.infoOpts())
+	if ip.files != nil {
+		lines, hits := filesLay(ip.files, max(c.infoW-1, 1), c.kb == areaInfo)
+		ip.lay = panelLay{lines: lines, hits: hits}
+	} else {
+		ip.lay = infoLay(ip.data, max(c.infoW-1, 1), infoClock(), c.infoOpts())
+	}
 	ip.lines, ip.hits = ip.lay.lines, ip.lay.hits
 	ip.top = min(ip.top, max(len(ip.lines)-c.infoRows(), 0))
 	if ip.sel != "" && !slices.ContainsFunc(ip.lay.secs, func(s *sideSection) bool { return s.id == ip.sel }) {
@@ -116,7 +121,7 @@ func (c *client) appendInfo(b []byte, wrote bool) ([]byte, bool) {
 // remoteHint beside a paired server's pane, whose task and questions are
 // that server's.
 const (
-	infoHint   = "info panel ▸ ↑ ↓ scroll · enter task · esc back to the pane"
+	infoHint   = "info panel ▸ ↑ ↓ scroll · enter task · F files · esc back to the pane"
 	remoteHint = "info panel ▸ ↑ ↓ scroll · esc back to the pane"
 )
 
@@ -130,7 +135,13 @@ func (c *client) infoHintNow() string {
 	if d := c.info.data; d != nil && d.remote != nil {
 		return remoteHint
 	}
+	if c.info.files != nil {
+		return filesHint(c.info.files)
+	}
 	hint := infoHint
+	if d := c.info.data; d != nil && d.prog != nil {
+		hint = strings.Replace(hint, " · F files", "", 1)
+	}
 	if keys := panelHintKeys(c.info.lay, c.info.sel); keys != "" {
 		enter := " · enter task"
 		if c.info.sel != "" {
@@ -202,7 +213,11 @@ func (c *client) infoToggle() {
 func (c *client) infoKeyboard(k uv.Key) {
 	c.flash = ""
 	ip := c.info
-	task, answer := false, false
+	if ip.files != nil {
+		c.filesKeyboard(k)
+		return
+	}
+	task, answer, files := false, false, false
 	var do *sideStep
 	name := keyName(k)
 	op, ok := panelOp(name)
@@ -212,6 +227,8 @@ func (c *client) infoKeyboard(k uv.Key) {
 		c.flash = ip.data.remote.shown + "'s: view-only here"
 	case name == "A":
 		answer = true
+	case name == "F":
+		files = true
 	case name == "tab":
 		c.kb = areaMain
 		c.infoLayout()
@@ -259,6 +276,9 @@ func (c *client) infoKeyboard(k uv.Key) {
 	}
 	if answer {
 		c.infoQuestions()
+	}
+	if files {
+		c.filesToggle()
 	}
 }
 
@@ -526,6 +546,10 @@ func (c *client) infoMouse(m emu.Mouse) {
 	}
 	// A click in the panel gives it the keyboard.
 	c.kb = areaInfo
+	if ip.files != nil {
+		c.filesClick(h)
+		return
+	}
 	var do *sideStep
 	if h.kind == hitSection {
 		// A click on a mod section selects its header and folds, unfolds
@@ -548,6 +572,8 @@ func (c *client) infoMouse(m emu.Mouse) {
 		c.infoSection(*do)
 	}
 	switch h.kind {
+	case hitFiles:
+		c.filesToggle()
 	case hitTask:
 		c.infoTask(h.task)
 	case hitSession:
@@ -607,6 +633,7 @@ func (c *client) pollInfo(ic *infoCache, sessions []proto.SessionInfo, peers []p
 	if d != nil && w > 0 {
 		shown = panelShown(prev, infoTarget(d), panelOpts{}, w)
 	}
+	c.filesPoll()
 	return d, shown
 }
 
@@ -632,7 +659,8 @@ func (c *client) showInfo(d *infoData) bool {
 	if d != nil && d.remote == nil {
 		d.sections = c.views
 	}
-	if reflect.DeepEqual(c.info.data, d) {
+	refold := c.filesFollow(d)
+	if !refold && reflect.DeepEqual(c.info.data, d) {
 		return false
 	}
 	c.info.data = d

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/theclifmeister/terminatr/internal/appreport"
+	"github.com/theclifmeister/terminatr/internal/filetree"
 	"github.com/theclifmeister/terminatr/internal/seat"
 	"log"
 	"net"
@@ -106,6 +107,9 @@ type Server struct {
 	started time.Time
 	stopReq chan struct{}
 	stopOne sync.Once
+
+	// filesSeen keeps the files methods' git answers (worktreefiles.go).
+	filesSeen filetree.Cache
 
 	// threadMu serialises the mirroring of thread state into files.
 	threadMu sync.Mutex
@@ -750,7 +754,7 @@ func (s *Server) hello() proto.Hello {
 		Build:    s.build,
 		Bin:      s.opts.Bin,
 		PID:      os.Getpid(),
-		Caps:     []string{proto.CapPaneVT, proto.CapTranscript, proto.CapPaneVTRemote, proto.CapSessionFile, proto.CapTranscriptRemote, proto.CapLinkAct, proto.CapTranscriptTail, proto.CapSideActs, proto.CapProjectFiles, proto.CapNeedAct, proto.CapDesigns, proto.CapSessionsWatch, proto.CapPeerPages, proto.CapPeerDesigns, proto.CapProjectMods, proto.CapAnswerPicks, proto.CapSearch, proto.CapTaskPriority, proto.CapAppReports},
+		Caps:     []string{proto.CapPaneVT, proto.CapTranscript, proto.CapPaneVTRemote, proto.CapSessionFile, proto.CapTranscriptRemote, proto.CapLinkAct, proto.CapTranscriptTail, proto.CapSideActs, proto.CapProjectFiles, proto.CapNeedAct, proto.CapDesigns, proto.CapSessionsWatch, proto.CapPeerPages, proto.CapPeerDesigns, proto.CapProjectMods, proto.CapAnswerPicks, proto.CapSearch, proto.CapTaskPriority, proto.CapAppReports, proto.CapWorktreeFiles},
 	}
 	if programsNow() {
 		// Only while the switch is on: the apps draw programs by it

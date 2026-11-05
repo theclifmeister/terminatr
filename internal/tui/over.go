@@ -101,4 +101,7 @@ type Over struct {
 	// mod's open requests after After.
 	View  bool
 	After uint64
+	// Viewer: a file to read (the Files view, filespanel.go): the popup is
+	// this viewer.
+	Viewer *textView
 }

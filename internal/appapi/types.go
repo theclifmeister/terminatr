@@ -1677,6 +1677,102 @@ func libraryChunkOf(r proto.LibraryReadResult) LibraryChunk {
 	return LibraryChunk{Name: r.Name, Size: r.Size, MTime: r.MTime, Offset: r.Offset, Data: r.Data}
 }
 
+// A session's folder, read only (app API 49; the server's caps say
+// worktree-files; the Mac app's alone). A path is relative to the folder,
+// with slashes, as an entry gives it: no parent, never .git, no link
+// leading out, a git-ignored file only when asked.
+type (
+	// FilesListParams are files.list's: folder Path ("" for the top), or
+	// with Query or Changed the files under it whose path holds Query, or
+	// that git marks, flat. Ignored lists git-ignored ones too.
+	FilesListParams struct {
+		Session string `json:"session"`
+		Path    string `json:"path,omitempty"`
+		Ignored bool   `json:"ignored,omitempty"`
+		Query   string `json:"query,omitempty"`
+		Changed bool   `json:"changed,omitempty"`
+	}
+	// FilesReadParams are files.read's: the chunk of file Path from Offset.
+	FilesReadParams struct {
+		Session string `json:"session"`
+		Path    string `json:"path"`
+		Offset  int64  `json:"offset,omitempty"`
+		Ignored bool   `json:"ignored,omitempty"`
+	}
+	// FilesStampParams are files.stamp's: the folders shown.
+	FilesStampParams struct {
+		Session string   `json:"session"`
+		Folders []string `json:"folders,omitempty"`
+	}
+)
+
+// FileEntry is a file or folder of a session's folder: Kind file, dir or
+// other; Status its mark, M, A or D; Changed: a folder holds marked files.
+// LinkOut: a symbolic link that doesn't open.
+type FileEntry struct {
+	Name    string    `json:"name"`
+	Path    string    `json:"path"`
+	Kind    string    `json:"kind"`
+	Size    int64     `json:"size,omitempty"`
+	MTime   time.Time `json:"mtime,omitzero"`
+	Status  string    `json:"status,omitempty"`
+	Changed bool      `json:"changed,omitempty"`
+	Ignored bool      `json:"ignored,omitempty"`
+	Link    bool      `json:"link,omitempty"`
+	LinkOut bool      `json:"link_out,omitempty"`
+}
+
+// FilesList is files.list's result. Root is the folder's absolute path;
+// Git says it is a checkout, and then Files, Added and Deleted are its
+// changed files and their lines since the base.
+type FilesList struct {
+	Root      string      `json:"root"`
+	Path      string      `json:"path"`
+	Git       bool        `json:"git,omitempty"`
+	Files     int         `json:"files,omitempty"`
+	Added     int         `json:"added,omitempty"`
+	Deleted   int         `json:"deleted,omitempty"`
+	Entries   []FileEntry `json:"entries"`
+	Truncated bool        `json:"truncated,omitempty"`
+}
+
+// FilesChunk is files.read's result: Data from Offset (at most 512 KiB)
+// of Size bytes. Binary: name and size only. Truncated: over the 25 MiB a
+// read gives.
+type FilesChunk struct {
+	Name      string    `json:"name"`
+	Path      string    `json:"path"`
+	Size      int64     `json:"size"`
+	MTime     time.Time `json:"mtime,omitzero"`
+	Offset    int64     `json:"offset"`
+	Binary    bool      `json:"binary,omitempty"`
+	Truncated bool      `json:"truncated,omitempty"`
+	Data      []byte    `json:"data,omitempty"`
+}
+
+// FilesStamp is files.stamp's result: while Stamp stays the same, the git
+// status and the folders named did.
+type FilesStamp struct {
+	Stamp string `json:"stamp"`
+}
+
+func filesListOf(r proto.FilesListResult) FilesList {
+	out := FilesList{Root: r.Root, Path: r.Path, Git: r.Git, Files: r.Files, Added: r.Added, Deleted: r.Deleted,
+		Entries: make([]FileEntry, 0, len(r.Entries)), Truncated: r.Truncated}
+	for _, e := range r.Entries {
+		out.Entries = append(out.Entries, FileEntry{Name: e.Name, Path: e.Path, Kind: e.Kind, Size: e.Size, MTime: e.MTime,
+			Status: e.Status, Changed: e.Changed, Ignored: e.Ignored, Link: e.Link, LinkOut: e.LinkOut})
+	}
+	return out
+}
+
+func filesChunkOf(r proto.FilesReadResult) FilesChunk {
+	return FilesChunk{Name: r.Name, Path: r.Path, Size: r.Size, MTime: r.MTime, Offset: r.Offset, Binary: r.Binary,
+		Truncated: r.Truncated, Data: r.Data}
+}
+
+func filesStampOf(r proto.FilesStampResult) FilesStamp { return FilesStamp{Stamp: r.Stamp} }
+
 // Designs is design.list's result: the project's designs by name (app
 // API 31).
 type Designs struct {

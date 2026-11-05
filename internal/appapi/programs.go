@@ -637,8 +637,10 @@ func programShowParams(p ProgramShowParams) proto.ProgramShowParams {
 // (as program settings, which stay the TUI's), and starting its
 // director (app API 45). A program's question is answered by the user's
 // own paired phone too, at write level (Q208): program.answer is an
-// ordinary write.
-var macOnly = []string{proto.MethodProgramRename, proto.MethodProgramDelete, proto.MethodProgramOpen}
+// ordinary write. A session's folder (app API 49) is read at this computer
+// too, until the iPhone's follow-up looks at what a device may read of it.
+var macOnly = []string{proto.MethodProgramRename, proto.MethodProgramDelete, proto.MethodProgramOpen,
+	proto.MethodFilesList, proto.MethodFilesRead, proto.MethodFilesStamp}
 
 // MacOnly says m is the Mac app's alone, at no device level (macOnly).
 func (m Method) MacOnly() bool { return slices.Contains(macOnly, m.Name) }

@@ -317,6 +317,16 @@ func init() {
 		proto.MethodLibraryRead: {gate: gateHuman, call: typed(func(s *Server, p proto.LibraryReadParams, _ callCtx) (any, *proto.Error) {
 			return s.libraryRead(p)
 		})},
+		// A session's folder, read only (CapWorktreeFiles).
+		proto.MethodFilesList: {gate: gateHuman, call: typed(func(s *Server, p proto.FilesListParams, _ callCtx) (any, *proto.Error) {
+			return s.filesList(p)
+		})},
+		proto.MethodFilesRead: {gate: gateHuman, call: typed(func(s *Server, p proto.FilesReadParams, _ callCtx) (any, *proto.Error) {
+			return s.filesRead(p)
+		})},
+		proto.MethodFilesStamp: {gate: gateHuman, call: typed(func(s *Server, p proto.FilesStampParams, _ callCtx) (any, *proto.Error) {
+			return s.filesStamp(p)
+		})},
 		proto.MethodTaskAdd: {gate: gateHuman, call: typed(func(s *Server, p proto.TaskAddParams, c callCtx) (any, *proto.Error) {
 			return s.taskAdd(p, c)
 		})},

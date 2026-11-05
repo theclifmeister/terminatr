@@ -34,7 +34,7 @@ var wantIDs = []string{
 	"panel.section-next", "panel.section-prev", "panel.unfold", "panel.fold", "panel.enter", "panel.back",
 	"popup.close", "repo.add", "repo.remove", "task.new", "task.show", "task.delegate", "task.accept", "task.send-back",
 	"task.priority", "task.coordinator", "tasks.done", "library.read", "library.delete", "library.delete-thread", "message.open-file",
-	"session.attach", "session.clear", "question.answer", "memory.edit", "memory.new", "memory.rm", "info.questions", "session.dashboard", "session.remote", "side.save-clear", "panel.save-clear", "prefix.send",
+	"session.attach", "session.clear", "question.answer", "memory.edit", "memory.new", "memory.rm", "info.questions", "info.files", "session.dashboard", "session.remote", "side.save-clear", "panel.save-clear", "prefix.send",
 }
 
 // keyless are the old ids kept bindable with no default key.
