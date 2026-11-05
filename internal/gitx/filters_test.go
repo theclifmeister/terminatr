@@ -4,15 +4,24 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/theclifmeister/terminatr/internal/gittest"
 )
 
+func noShellOnWindows(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("a shell command filter")
+	}
+}
+
 // planted is a clean filter that leaves a mark when it runs, and the mark's
 // check, which forgets it.
 func planted(t *testing.T) (clean string, ran func() bool) {
 	t.Helper()
+	noShellOnWindows(t)
 	marker := filepath.Join(t.TempDir(), "ran")
 	return "touch " + marker + "; cat", func() bool {
 		_, err := os.Stat(marker)
@@ -103,6 +112,7 @@ func TestPinnedRunSubmoduleFilter(t *testing.T) {
 // make a read start the transport the repository's config names. A
 // checkout still may.
 func TestPinnedRunFetchesNothing(t *testing.T) {
+	noShellOnWindows(t)
 	repo, wt := worktreeOf(t)
 	marker := filepath.Join(t.TempDir(), "ran")
 	gittest.Run(t, repo, "config", "core.repositoryformatversion", "1")
