@@ -6,9 +6,11 @@
 // the root. A path is relative, with slashes, and names no parent and no
 // .git. A symbolic link opens only when what it leads to is inside the
 // root and outside any .git; the files are opened through an os.Root, so
-// a link swapped in after the check can't lead out, and the open file
-// says where it is (fsx.HandlePath), so one leading to .git is caught
-// too. Special files don't open, nor block. Git runs pinned to the root
+// a link swapped in after the check can't lead out. The open file then
+// says where it is (fsx.HandlePath) and that place answers to the rules
+// again, .git and git-ignored both, so a link swapped in reads nothing it
+// couldn't. Where the system can't say, the path is looked at again.
+// Special files don't open, nor block. Git runs pinned to the root
 // (gitx.Pin), never looking its repository up from the folder and
 // starting no program on its behalf. A git-ignored path answers only
 // when asked for, and an answer git couldn't give refuses.
@@ -28,6 +30,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 	"unicode/utf8"
 
 	"github.com/theclifmeister/terminatr/internal/changes"
@@ -64,7 +67,13 @@ type Scope struct {
 	repo string
 	base string
 	tree *gitx.Tree
+	// beforeOpen stands in a test for a link swapped after the gate.
+	beforeOpen func()
 }
+
+// handlePath is fsx.HandlePath; a test takes it away, as on a system with
+// none.
+var handlePath = fsx.HandlePath
 
 // Open checks root: a folder, and with repo a checkout of it by the
 // repository's own records; without, a plain folder, which has no marks
@@ -233,10 +242,7 @@ func (s *Scope) Read(ctx context.Context, rel string, offset int64, ignored bool
 	if err != nil {
 		return res, err
 	}
-	if err := s.gate(ctx, real, ignored); err != nil {
-		return res, err
-	}
-	f, fi, err := s.open(real)
+	f, fi, err := s.openGated(ctx, real, ignored)
 	if err != nil {
 		return res, err
 	}
@@ -284,6 +290,56 @@ func IsBinary(head []byte) bool {
 	return !utf8.Valid(head)
 }
 
+// openGated opens real path rel, git-ignored or not as allowed, and holds
+// what it opened to the same rules: rel was the real path a moment ago.
+func (s *Scope) openGated(ctx context.Context, rel string, ignored bool) (*os.File, fs.FileInfo, error) {
+	if err := s.gate(ctx, rel, ignored); err != nil {
+		return nil, nil, err
+	}
+	if s.beforeOpen != nil {
+		s.beforeOpen()
+	}
+	f, fi, err := s.open(rel)
+	if err != nil {
+		return nil, nil, err
+	}
+	at, err := s.openedAt(f, fi, rel)
+	if err == nil && at != rel {
+		err = s.gate(ctx, at, ignored)
+	}
+	if err != nil {
+		f.Close()
+		return nil, nil, err
+	}
+	return f, fi, nil
+}
+
+// openedAt is where the file opened as rel is, relative to the root. A
+// system that can't say from the file is asked for the path again, which
+// must still lead to that file.
+func (s *Scope) openedAt(f *os.File, fi fs.FileInfo, rel string) (string, error) {
+	if got, ok := handlePath(f); ok {
+		return s.inside(got)
+	}
+	at, err := s.resolve(rel)
+	if err != nil {
+		return "", err
+	}
+	r, err := os.OpenRoot(s.Root)
+	if err != nil {
+		return "", fmt.Errorf("%w: %v", ErrNoRoot, err)
+	}
+	defer r.Close()
+	name := filepath.FromSlash(at)
+	if at == "" {
+		name = "."
+	}
+	if now, err := r.Stat(name); err != nil || !os.SameFile(fi, now) {
+		return "", fmt.Errorf("%w: %s", ErrGone, rel)
+	}
+	return at, nil
+}
+
 // open opens real path rel by the root, without blocking on a FIFO: the
 // os.Root refuses a link leading out, and the open file is asked where it
 // is, for one leading to .git swapped in since it was resolved.
@@ -306,7 +362,7 @@ func (s *Scope) open(rel string) (*os.File, fs.FileInfo, error) {
 	case err != nil:
 		return nil, nil, fmt.Errorf("%w: %v", ErrNotFile, err)
 	}
-	if got, ok := fsx.HandlePath(f); ok {
+	if got, ok := handlePath(f); ok {
 		if _, err := s.inside(got); err != nil {
 			f.Close()
 			return nil, nil, fmt.Errorf("%w: %s", err, rel)
@@ -399,10 +455,7 @@ func (s *Scope) folder(ctx context.Context, rel string, o Options, m marks, res 
 	}
 	seen := map[string]bool{}
 	if !missing {
-		if err := s.gate(ctx, real, o.Ignored); err != nil {
-			return err
-		}
-		f, fi, err := s.open(real)
+		f, fi, err := s.openGated(ctx, real, o.Ignored)
 		if err != nil {
 			return err
 		}
@@ -431,7 +484,8 @@ func (s *Scope) folder(ctx context.Context, rel string, o Options, m marks, res 
 			}
 			realChild := path.Join(real, e.Name())
 			seen[realChild] = true
-			isIgn := ign[realChild]
+			// Inside an ignored folder, git names the folder alone.
+			isIgn := underIgnored(ign, realChild)
 			if isIgn && !o.Ignored {
 				continue
 			}
@@ -639,9 +693,18 @@ func (s *Scope) allPaths(ctx context.Context, ignored bool, res *proto.FilesList
 // reading no file: see proto.FilesStampResult. A folder that doesn't
 // answer counts as such.
 func (s *Scope) Stamp(ctx context.Context, folders []string) string {
+	fp := ""
+	if s.tree != nil {
+		fp = changes.FingerprintTree(ctx, s.tree)
+	}
+	return s.stamp(fp, folders)
+}
+
+// stamp is the digest of fingerprint fp and folders' entries.
+func (s *Scope) stamp(fp string, folders []string) string {
 	h := sha256.New()
 	if s.tree != nil {
-		io.WriteString(h, changes.Fingerprint(ctx, s.Root, s.repo))
+		io.WriteString(h, fp)
 	}
 	for _, d := range folders {
 		fmt.Fprintf(h, "\x00%s\x00", d)
@@ -685,8 +748,48 @@ func (s *Scope) stampFolder(w io.Writer, rel string) {
 // a tree relisting its open folders reads git in full once. Its zero
 // value is ready.
 type Cache struct {
-	mu   sync.Mutex
-	seen map[string]seenChanges
+	mu     sync.Mutex
+	seen   map[string]seenChanges
+	stamps map[string]stampSeen
+}
+
+// stampSeen is a root's last fingerprint for a stamp and what it took.
+type stampSeen struct {
+	fp   string
+	at   time.Time
+	took time.Duration
+}
+
+const (
+	// stampShare keeps stamps to about 1/stampShare of the time spent in
+	// git, however often they're asked for and by however many clients: a
+	// repo whose status takes a second answers a stamp from git every 10 s.
+	stampShare = 10
+	// maxStampRest bounds how old a stamp's fingerprint gets.
+	maxStampRest = time.Minute
+)
+
+// Stamp is s's stamp (Scope.Stamp), its git status at most as often as
+// stampShare allows; the folders' entries are always read.
+func (c *Cache) Stamp(ctx context.Context, s *Scope, folders []string) string {
+	if s.tree == nil {
+		return s.stamp("", folders)
+	}
+	start := time.Now()
+	c.mu.Lock()
+	had, ok := c.stamps[s.Root]
+	c.mu.Unlock()
+	if ok && had.fp != "" && start.Sub(had.at) < min(had.took*stampShare, maxStampRest) {
+		return s.stamp(had.fp, folders)
+	}
+	fp := changes.FingerprintTree(ctx, s.tree)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.stamps == nil || len(c.stamps) >= maxCached {
+		c.stamps = map[string]stampSeen{}
+	}
+	c.stamps[s.Root] = stampSeen{fp: fp, at: start, took: time.Since(start)}
+	return s.stamp(fp, folders)
 }
 
 type seenChanges struct {
@@ -702,7 +805,7 @@ func (c *Cache) Changes(ctx context.Context, s *Scope) (*changes.Changeset, erro
 	if s.tree == nil {
 		return nil, nil
 	}
-	fp := changes.Fingerprint(ctx, s.Root, s.repo)
+	fp := changes.FingerprintTree(ctx, s.tree)
 	c.mu.Lock()
 	had, ok := c.seen[s.Root]
 	c.mu.Unlock()

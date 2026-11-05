@@ -133,3 +133,83 @@ func TestFilesScope(t *testing.T) {
 		t.Errorf("too many folders: %v", perr)
 	}
 }
+
+// TestFilesRepoListed: a thread's record names a repo that must be on the
+// project's list, whichever folder it says, and thread.changes holds to it.
+func TestFilesRepoListed(t *testing.T) {
+	testPaths(t)
+	listed := filepath.Join(t.TempDir(), "listed")
+	gittest.Run(t, filepath.Dir(listed), "init", "-q", "-b", "main", listed)
+	other := filepath.Join(t.TempDir(), "other")
+	gittest.Run(t, filepath.Dir(other), "init", "-q", "-b", "main", other)
+	for _, r := range []string{listed, other} {
+		os.WriteFile(filepath.Join(r, "f"), []byte("x"), 0o644)
+		gittest.Run(t, r, "add", ".")
+		gittest.Run(t, r, "commit", "-q", "-m", "c")
+	}
+	wt := filepath.Join(t.TempDir(), "wt")
+	gittest.Run(t, other, "worktree", "add", "-q", "-b", "tm/x", wt)
+	p, err := project.New(project.Options{Slug: "demo", Repos: []string{listed}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := thread.Create(p, thread.Record{Title: "x", Agent: "claude", Repo: other, Base: "main", Branch: "tm/x", Worktree: wt, State: thread.Running})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := &Server{log: log.New(os.Stderr, "", 0), sessions: map[string]*session.Session{}, records: map[string]SessionRecord{}}
+	sess, err := session.Start(session.Config{ID: "s-t", Role: proto.RoleThread, Project: "demo", Thread: r.ID, Argv: []string{testSh(t), "-c", "exec cat"},
+		Cwd: t.TempDir(), Env: []string{"PATH=/usr/bin:/bin"}, Cols: 80, Rows: 24, Logf: t.Logf})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { sess.Stop(time.Second) })
+	s.sessions["s-t"] = sess
+	_, perr := s.filesRead(proto.FilesReadParams{Session: "s-t", Path: "f"})
+	if perr == nil || perr.Code != proto.ErrNoFiles {
+		t.Fatalf("a repo off the list: %v", perr)
+	}
+	if !p.ListsRepo(listed) || p.ListsRepo(other) || p.ListsRepo(wt) {
+		t.Errorf("ListsRepo: %v %v %v", p.ListsRepo(listed), p.ListsRepo(other), p.ListsRepo(wt))
+	}
+	// Adopted from a repo off the list: its live session vouches, while it
+	// is that thread's and works in that worktree.
+	vouched := func(f func(x *thread.Record)) bool {
+		x := *r
+		x.Adopted, x.Session = true, "s-t"
+		f(&x)
+		return s.repoVouched(p, &x)
+	}
+	if vouched(func(*thread.Record) {}) {
+		t.Error("a session whose folder is elsewhere vouched")
+	}
+	sub := filepath.Join(wt, "pkg")
+	os.MkdirAll(sub, 0o755)
+	in, err := session.Start(session.Config{ID: "s-a", Role: proto.RoleThread, Project: "demo", Thread: r.ID, Argv: []string{testSh(t), "-c", "exec cat"},
+		Cwd: sub, Env: []string{"PATH=/usr/bin:/bin"}, Cols: 80, Rows: 24, Logf: t.Logf})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { in.Stop(time.Second) })
+	s.sessions["s-a"] = in
+	if !vouched(func(x *thread.Record) { x.Session = "s-a" }) {
+		t.Error("the adopted session in its worktree didn't vouch")
+	}
+	if vouched(func(x *thread.Record) { x.Session = "s-a"; x.Adopted = false }) {
+		t.Error("a thread not adopted was vouched for by a session")
+	}
+	if vouched(func(x *thread.Record) { x.Session = "s-a"; x.ID = "t-9999" }) {
+		t.Error("another thread's session vouched")
+	}
+	if vouched(func(x *thread.Record) { x.Session = "s-gone" }) {
+		t.Error("a session that's gone vouched")
+	}
+	// Through a link: the same repo.
+	alias := filepath.Join(t.TempDir(), "alias")
+	if err := os.Symlink(listed, alias); err != nil {
+		t.Skip(err)
+	}
+	if !p.ListsRepo(alias) {
+		t.Error("a link to a listed repo")
+	}
+}

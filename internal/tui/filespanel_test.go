@@ -405,10 +405,21 @@ func TestFilesViewerOver(t *testing.T) {
 	if tv.body != "all:" || !strings.Contains(tv.title, "Makefile") {
 		t.Errorf("viewer %+v", tv)
 	}
+	if strings.Contains(tv.title, "secrets") {
+		t.Errorf("a plain file's title: %q", tv.title)
+	}
+	tv = worktreeViewer(tmclient.Paths{}, "s-4", proto.FileEntry{Name: "Makefile", Path: "Makefile", Ignored: true}, true)
+	if tv.body != "all:" || !strings.Contains(tv.title, "git-ignored: may hold secrets") {
+		t.Errorf("an ignored file's viewer %+v", tv)
+	}
 	f.texts["pic.png"] = proto.FilesReadResult{Name: "pic.png", Path: "pic.png", Size: 9, Binary: true}
 	tv = worktreeViewer(tmclient.Paths{}, "s-4", proto.FileEntry{Name: "pic.png", Path: "pic.png"}, false)
 	if tv.body != "" || !strings.Contains(tv.note, "not text") {
 		t.Errorf("binary viewer %+v", tv)
+	}
+	tv = worktreeViewer(tmclient.Paths{}, "s-4", proto.FileEntry{Name: "pic.png", Path: "pic.png", Ignored: true}, true)
+	if strings.Contains(tv.title, "secrets") {
+		t.Errorf("no text shows, nothing to warn of: %q", tv.title)
 	}
 	tv = worktreeViewer(tmclient.Paths{}, "s-4", proto.FileEntry{Name: "nope", Path: "nope"}, false)
 	if !strings.Contains(tv.note, "can't read it") {
@@ -469,5 +480,31 @@ func TestFilesDashViewer(t *testing.T) {
 	m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 	if !m.overDone() || m.result.Attach != "s-4" {
 		t.Fatalf("closed: done %v, attach %q", m.overDone(), m.result.Attach)
+	}
+}
+
+// TestFileCaution: the viewer's title says so of an ignored file and of a
+// tracked one named like a secret; other files, and what shows no text, say
+// nothing.
+func TestFileCaution(t *testing.T) {
+	for _, c := range []struct {
+		e    proto.FileEntry
+		want string
+	}{
+		{proto.FileEntry{Name: "out.log", Ignored: true}, "git-ignored: may hold secrets"},
+		{proto.FileEntry{Name: ".env", Ignored: true}, "git-ignored: may hold secrets"},
+		{proto.FileEntry{Name: ".env"}, "its name says it may hold secrets"},
+		{proto.FileEntry{Name: ".env.production"}, "its name says it may hold secrets"},
+		{proto.FileEntry{Name: "server.PEM"}, "its name says it may hold secrets"},
+		{proto.FileEntry{Name: "id_ed25519"}, "its name says it may hold secrets"},
+		{proto.FileEntry{Name: "secrets.yaml"}, "its name says it may hold secrets"},
+		{proto.FileEntry{Name: ".env.example"}, ""},
+		{proto.FileEntry{Name: "id_ed25519.pub"}, ""},
+		{proto.FileEntry{Name: "keyboard.go"}, ""},
+		{proto.FileEntry{Name: "README.md"}, ""},
+	} {
+		if got := fileCaution(c.e); got != c.want {
+			t.Errorf("%s: %q, want %q", c.e.Name, got, c.want)
+		}
 	}
 }

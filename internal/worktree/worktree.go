@@ -14,6 +14,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/codehost"
 	"github.com/theclifmeister/terminatr/internal/gitx"
+	"github.com/theclifmeister/terminatr/internal/textsafe"
 )
 
 // gitTimeout bounds a git run: a fetch or a checkout of a big repo
@@ -124,7 +125,7 @@ func addWorktree(repo, dir string, args ...string) error {
 	}
 	t, err := gitx.Pin(ctx, repo, dir)
 	if err == nil {
-		_, err = gitx.Run(ctx, "", gitx.Opts{Timeout: gitTimeout, Tree: t}, "read-tree", "--reset", "-u", "HEAD")
+		_, err = gitx.Run(ctx, "", gitx.Opts{Timeout: gitTimeout, Tree: t, Checkout: true}, "read-tree", "--reset", "-u", "HEAD")
 	}
 	if err != nil {
 		if _, rerr := removeWorktree(repo, dir, "--force"); rerr != nil {
@@ -228,24 +229,58 @@ func Dirty(repo, dir string) (bool, error) {
 		return false, err
 	}
 	out, err := gitx.Run(ctx, "", gitx.Opts{Tree: t}, statusArgs...)
-	return out != "", err
+	if err != nil || out != "" {
+		return out != "", err
+	}
+	sub, err := submoduleCheckedOut(ctx, t)
+	return sub != "", err
 }
 
 // statusArgs is the check for changes of Dirty and Unsaved: every
-// untracked file, and submodules' changes whatever .gitmodules says
-// (its ignore setting is the worktree's to write).
-var statusArgs = []string{"status", "--porcelain", "--ignore-submodules=none", "--untracked-files=all"}
+// untracked file. A submodule isn't asked (gitx: its folder's configuration
+// could run a program), see submoduleCheckedOut.
+var statusArgs = []string{"status", "--porcelain", "--untracked-files=all"}
+
+// submoduleCheckedOut is the first submodule with a checkout in t, as a
+// path; "" for none. Nothing can ask one if it has changes without
+// running what its folder configures, so a checkout counts as changes, as
+// it does for git worktree remove. An index too long to read is an error,
+// so kept too.
+func submoduleCheckedOut(ctx context.Context, t *gitx.Tree) (string, error) {
+	out, err := gitx.Run(ctx, "", gitx.Opts{Tree: t, Max: 1 << 30}, "ls-files", "--stage", "-z")
+	if err != nil {
+		return "", err
+	}
+	for rec := range strings.SplitSeq(out, "\x00") {
+		if !strings.HasPrefix(rec, "160000 ") {
+			continue
+		}
+		_, p, ok := strings.Cut(rec, "\t")
+		if !ok {
+			continue
+		}
+		if _, err := os.Lstat(filepath.Join(t.Dir, filepath.FromSlash(p), ".git")); err == nil {
+			return p, nil
+		}
+	}
+	return "", nil
+}
 
 // removeWorktree is git worktree remove of dir. Its own check for
 // changes runs git status in dir: it is given the repo's git dir, not
-// the one dir's git dir names, and no monitor or hooks.
+// the one dir's git dir names, no monitor or hooks, and none of the
+// repository's filters.
 func removeWorktree(repo, dir string, flags ...string) (string, error) {
 	common, err := gitx.CommonDir(context.Background(), repo)
 	if err != nil {
 		return "", err
 	}
+	off, err := gitx.NoRepoFilters(context.Background(), common)
+	if err != nil {
+		return "", err
+	}
 	return gitx.Run(context.Background(), repo, gitx.Opts{Timeout: gitTimeout, Untrusted: true,
-		Env: []string{"GIT_COMMON_DIR=" + common}},
+		Env: append(off, "GIT_COMMON_DIR="+common)},
 		append(append([]string{"worktree", "remove"}, flags...), "--", dir)...)
 }
 
@@ -413,6 +448,11 @@ func Unsaved(repo, dir, pushed string) (string, error) {
 	}
 	if out != "" {
 		return "uncommitted changes", nil
+	}
+	if sub, err := submoduleCheckedOut(ctx, t); err != nil {
+		return "", err
+	} else if sub != "" {
+		return "a checkout of submodule " + textsafe.Line(sub, 100) + ", which tm can't check for changes", nil
 	}
 	if remotes, err := git("remote"); err != nil || remotes == "" {
 		return "", err

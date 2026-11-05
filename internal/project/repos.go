@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -146,4 +147,17 @@ func moveRepos(slug string) (bool, error) {
 		return mdfile.Join(m, body)
 	})
 	return moved, err
+}
+
+// ListsRepo says repo is on the project's list, by its real path: a
+// thread's record names a repo, and only the list says it's the project's.
+func (p *Project) ListsRepo(repo string) bool {
+	real := func(s string) string {
+		if r, err := filepath.EvalSymlinks(s); err == nil {
+			return r
+		}
+		return filepath.Clean(s)
+	}
+	want := real(repo)
+	return slices.ContainsFunc(p.Repos, func(r string) bool { return real(r) == want })
 }
