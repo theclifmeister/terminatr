@@ -2,8 +2,8 @@ import Foundation
 import Testing
 @testable import TerminatrKit
 
-// A project's card (T846): its ThreadMeter's segments and legend in the
-// tones' order, and its monogram.
+// A project's tones (T846): their tally in order, the legend's words, and
+// its monogram.
 
 @Test func tallyInOrder() {
     let t = Attention.Tone.tally([.working, .idle, .approval, .working, .review, .question])
@@ -26,4 +26,23 @@ import Testing
     #expect(Monogram.letters("terminatr") == "te")
     #expect(Monogram.letters("x") == "x")
     #expect(Monogram.letters("") == "")
+}
+
+// A project's row (T1001): its threads in words, and the dot of what it
+// speaks for.
+
+@Test func threadSummaries() {
+    #expect(Attention.Tone.summary([]) == "no threads")
+    #expect(Attention.Tone.summary([.working]) == "1 working")
+    #expect(Attention.Tone.summary([.working, .working]) == "2 working")
+    #expect(Attention.Tone.summary([.idle]) == "1 thread")
+    #expect(Attention.Tone.summary([.idle, .done]) == "2 threads")
+    #expect(Attention.Tone.summary([.working, .approval, .idle]) == "3 threads")
+}
+
+@Test func strongestDot() {
+    #expect(Attention.Tone.strongest(.idle, []) == .idle)
+    #expect(Attention.Tone.strongest(.idle, [.working]) == .working)
+    #expect(Attention.Tone.strongest(.working, [.approval, .idle]) == .approval)
+    #expect(Attention.Tone.strongest(.question, [.working]) == .question)
 }

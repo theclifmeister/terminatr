@@ -1,8 +1,9 @@
 import SwiftUI
 import TerminatrKit
 
-/// A project's monogram (T846): its letters (Monogram.letters) in the
-/// display face, the action's ink on the action's colour.
+/// A project's monogram (T846): its letters (Monogram.letters), the
+/// action's ink on the action's colour, 5 round at 24, as the design page's
+/// tile.
 public struct ProjectMonogram: View {
     @Environment(\.theme) private var theme
     let name: String
@@ -17,83 +18,22 @@ public struct ProjectMonogram: View {
     public var body: some View {
         let s = side * theme.scale
         Text(Monogram.letters(name))
-            .font(theme.title(side >= 48 ? .sheetTitle : side >= 40 ? .title2 : .headline, .bold))
+            .font(theme.sized(side * 11 / 24, .semibold))
             .foregroundStyle(theme.onAction)
             .lineLimit(1)
             .frame(width: s, height: s)
-            .background(
-                theme.action,
-                in: RoundedRectangle(cornerRadius: Radius.glyph * side / 38, style: .continuous)
-            )
+            .background(theme.action, in: RoundedRectangle(cornerRadius: side >= 30 ? Radius.row : 5))
             .accessibilityHidden(true)
     }
 }
 
-/// A project's threads at a glance (T846): one segment per thread in
-/// its tone, sorted as Attention.Tone.order, and under it a legend of
-/// the counts with a dot of each tone, so the words carry the state and
-/// not colour alone. The segments slide as states change (still with
-/// Reduce Motion). At accessibility sizes the legend is a list.
-public struct ThreadMeter: View {
-    @Environment(\.theme) private var theme
-    @Environment(\.dynamicTypeSize) private var typeSize
-    @Environment(\.accessibilityReduceMotion) private var still
-    let tones: [Attention.Tone]
-
-    public init(_ tones: [Attention.Tone]) {
-        self.tones = tones
-    }
-
-    public var body: some View {
-        let tally = Attention.Tone.tally(tones)
-        VStack(alignment: .leading, spacing: Spacing.item) {
-            if tones.isEmpty {
-                Text("No threads")
-                    .font(theme.body(.footnote))
-                    .foregroundStyle(theme.muted)
-            } else {
-                HStack(spacing: 3) {
-                    ForEach(Array(tally.flatMap { t in Array(repeating: t.tone, count: t.count) }.enumerated()), id: \.offset) { _, t in
-                        Capsule()
-                            .fill(theme.colour(t))
-                            .frame(maxWidth: .infinity)
-                    }
-                }
-                .frame(height: 6 * theme.scale)
-                .animation(still ? nil : .spring(response: 0.4, dampingFraction: 0.85), value: tones)
-                let legend = typeSize.isAccessibilitySize
-                    ? AnyLayout(VStackLayout(alignment: .leading, spacing: Spacing.hair))
-                    : AnyLayout(Flow(spacing: Spacing.row))
-                legend {
-                    ForEach(tally, id: \.tone) { t in
-                        HStack(spacing: 5) {
-                            Circle()
-                                .fill(theme.colour(t.tone))
-                                .frame(width: 7 * theme.scale, height: 7 * theme.scale)
-                            Text(t.tone.counted(t.count))
-                                .lineLimit(1)
-                        }
-                        .font(theme.body(.footnote, .medium))
-                        .foregroundStyle(theme.muted)
-                    }
-                }
-            }
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Threads")
-        .accessibilityValue(tones.isEmpty ? "none" : tally.map { "\($0.count) \($0.tone.spoken)" }.joined(separator: ", "))
-    }
-}
-
 /// A project on the Projects screen (T846), a row of a ProjectPanel
-/// (T996): its monogram, its name in the display face (a pin when
-/// pinned), its coordinator's state with the glyph's symbol or, working,
-/// the turning mark, what waits on the user as a NeedsOrb, and its
-/// threads' ThreadMeter. Compact (T881): the monogram two lines tall,
-/// and without threads no meter, "no threads" ending the coordinator's
-/// line instead. Dim: a paired server's project it can't reach, or an
-/// inactive one. Selected: open beside the list, ringed in the action
-/// colour (projectRow). At accessibility sizes the orb goes over the name.
+/// (T996), to the design page's measure (T1001): its monogram, its name (a
+/// pin when pinned), its coordinator's line (RoleLine) with its threads in
+/// words, and what waits on the user as a NeedsOrb. Dim: a paired server's
+/// project it can't reach, or an inactive one. Selected: open beside the
+/// list, on the selection's fill. At accessibility sizes the monogram and
+/// the orb go over the words.
 public struct ProjectCard: View {
     @Environment(\.theme) private var theme
     @Environment(\.dynamicTypeSize) private var typeSize
@@ -125,14 +65,13 @@ public struct ProjectCard: View {
     public var body: some View {
         let stacked = typeSize.isAccessibilitySize
         VStack(alignment: .leading, spacing: Spacing.item) {
-            HStack(alignment: stacked ? .top : .center, spacing: Spacing.row) {
-                ProjectMonogram(name, side: 32)
+            HStack(spacing: Spacing.row) {
+                ProjectMonogram(name, side: 24)
                 if !stacked { title }
                 Spacer(minLength: 0)
                 if needs > 0 { NeedsOrb(needs) }
             }
             if stacked { title }
-            if !threads.isEmpty { ThreadMeter(threads) }
         }
         .opacity(dim ? 0.55 : 1)
         .projectRow(selected: selected, rule: rule)
@@ -145,23 +84,24 @@ public struct ProjectCard: View {
         VStack(alignment: .leading, spacing: 1) {
             HStack(spacing: Spacing.tight) {
                 Text(name)
-                    .font(theme.title(.title3, .bold))
+                    .font(theme.sized(14.5, .medium))
                     .foregroundStyle(theme.ink)
                     .lines(1)
                 if !tag.isEmpty {
-                    Text("· " + tag)
-                        .font(theme.body(.subheadline, .medium))
-                        .foregroundStyle(theme.muted)
+                    Text(tag)
+                        .font(theme.sized(12.5))
+                        .foregroundStyle(selected ? theme.ink : theme.muted)
                         .lineLimit(1)
                         .fixedSize()
                 }
                 if pinned {
                     Image(systemName: "pin.fill")
-                        .font(theme.body(.footnote))
-                        .foregroundStyle(theme.muted)
+                        .font(.system(size: 10 * theme.scale))
+                        .foregroundStyle(selected ? theme.ink : theme.muted)
                 }
             }
-            RoleLine(.coordinator, state: coordinator, after: threads.isEmpty ? " · no threads" : "")
+            RoleLine(.coordinator, state: coordinator, dot: .strongest(coordinator.tone, threads),
+                     after: " · " + Attention.Tone.summary(threads), selected: selected)
         }
     }
 
@@ -174,7 +114,7 @@ public struct ProjectCard: View {
 }
 
 /// The rows of a group on the Projects screen and a program's page, in
-/// one soft panel (T996).
+/// one flat panel (T996, T1001), clipped to its 8 round corners.
 public struct ProjectPanel<Content: View>: View {
     let content: Content
 
@@ -183,16 +123,17 @@ public struct ProjectPanel<Content: View>: View {
     }
 
     public var body: some View {
+        let shape = RoundedRectangle(cornerRadius: Radius.tile)
         VStack(spacing: 0) { content }
-            .padding(Spacing.hair)
-            .surface(in: RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
+            .clipShape(shape)
+            .surface(in: shape)
     }
 }
 
 extension View {
-    /// A ProjectPanel's row: its padding and tap target, the ring when
-    /// selected, inside the panel's corners, and an inset hairline over it
-    /// (rule) lined up with the row's words.
+    /// A ProjectPanel's row: 50 high at least, the selection's fill when
+    /// selected, and a soft line over it (rule) lined up with the row's
+    /// words.
     public func projectRow(selected: Bool, rule: Bool) -> some View {
         modifier(ProjectRow(selected: selected, rule: rule))
     }
@@ -205,29 +146,26 @@ private struct ProjectRow: ViewModifier {
     let rule: Bool
 
     func body(content: Content) -> some View {
-        let shape = RoundedRectangle(cornerRadius: Radius.row, style: .continuous)
         // The monogram's side and its gap; stacked, the words start at the edge.
-        let words = typeSize.isAccessibilitySize ? 0 : 32 * theme.scale + Spacing.row
+        let words = typeSize.isAccessibilitySize ? 0 : 24 * theme.scale + Spacing.row
         content
-            .padding(Spacing.row)
-            .frame(maxWidth: .infinity, minHeight: tapTarget, alignment: .leading)
+            .padding(.horizontal, 11)
+            .padding(.vertical, 7)
+            .frame(maxWidth: .infinity, minHeight: 50 * theme.scale, alignment: .leading)
+            .background(selected ? theme.selection : .clear)
             .overlay(alignment: .top) {
-                if rule, !selected {
+                if rule {
                     Hairline()
-                        .padding(.leading, Spacing.row + words)
-                        .padding(.trailing, Spacing.row)
+                        .padding(.leading, 11 + words)
                 }
             }
-            .overlay {
-                if selected { shape.strokeBorder(theme.action, lineWidth: 2.5) }
-            }
-            .contentShape(shape)
+            .contentShape(Rectangle())
     }
 }
 
 /// A project's screen's header (T846), in place of its title bar's
-/// title: its monogram and name in the display face, the screen's one big
-/// title (T996), and its goal as plain text under it (GoalLine).
+/// title: its monogram and name, the screen's one big title (T996), and
+/// its goal as plain text under it (GoalLine).
 public struct ProjectHeader: View {
     @Environment(\.theme) private var theme
     @Environment(\.dynamicTypeSize) private var typeSize
@@ -245,9 +183,9 @@ public struct ProjectHeader: View {
                 ? AnyLayout(VStackLayout(alignment: .leading, spacing: Spacing.item))
                 : AnyLayout(HStackLayout(alignment: .center, spacing: Spacing.row + 2))
             head {
-                ProjectMonogram(name, side: 40)
+                ProjectMonogram(name, side: 30)
                 Text(name)
-                    .font(theme.title(.display, .bold))
+                    .font(theme.sized(24, .semibold))
                     .foregroundStyle(theme.ink)
                     .lines(1)
                     .minimumScaleFactor(0.7)
@@ -285,7 +223,7 @@ private struct GoalLine: View {
                 if lead.hasMore { more(lead.sentence) } else { text(lead.whole) }
             } else {
                 // 3 × the size is between two lines' height and three's.
-                LimitedHeight(limit: theme.size(.subheadline) * 3) {
+                LimitedHeight(limit: 13.5 * theme.scale * 3) {
                     ViewThatFits(in: .vertical) {
                         text(lead.whole)
                         if lead.hasMore { more(lead.sentence) }
@@ -294,7 +232,7 @@ private struct GoalLine: View {
                 }
             }
         }
-        .font(theme.body(.subheadline, .medium))
+        .font(theme.sized(13.5))
         .foregroundStyle(theme.muted)
     }
 

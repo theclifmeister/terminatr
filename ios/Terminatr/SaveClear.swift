@@ -70,7 +70,7 @@ struct SaveClearStatus: View {
         }
         .padding(.horizontal, Spacing.card)
         .padding(.vertical, Spacing.item)
-        .surface(in: Capsule())
+        .surface(in: RoundedRectangle(cornerRadius: Radius.row))
         .accessibilityElement(children: .combine)
         .onChange(of: clear.words, initial: true) { _, w in
             AccessibilityNotification.Announcement(w).post()

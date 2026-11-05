@@ -38,13 +38,13 @@ struct ComposerField: UIViewRepresentable {
 
     func updateUIView(_ v: FieldView, context: Context) {
         context.coordinator.parent = self
-        let font = UIFont.systemFont(ofSize: theme.size(.body))
+        let font = UIFont.systemFont(ofSize: Flat.text * theme.scale)
         if v.font != font { v.font = font }
         v.textColor = UIColor(theme.ink)
         v.tintColor = UIColor(theme.action)
         v.placeholder.text = placeholder
         v.placeholder.font = font
-        v.placeholder.textColor = UIColor(theme.muted)
+        v.placeholder.textColor = UIColor(theme.faint)
         v.accessibilityLabel = placeholder
         v.files = files
         if v.text != text {

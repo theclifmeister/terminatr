@@ -11,6 +11,7 @@ import TerminatrUI
 struct BoardScreen: View {
     @Environment(PhoneModel.self) private var model
     @Environment(\.theme) private var theme
+    @Environment(\.dynamicTypeSize) private var typeSize
     let slug: String
     @State private var filter = UserDefaults.standard.string(forKey: "filter") ?? ""
     @State private var unfolded: Set<String> = []
@@ -21,19 +22,15 @@ struct BoardScreen: View {
     @State private var adding = UserDefaults.standard.bool(forKey: "newtask")
 
     var body: some View {
-        List {
+        PanelPage {
             if let p = model.project(slug) {
                 groups(p)
             }
         }
-        // In the screen, under its title (T928): left to the system, on
-        // iOS 27.1 an open iPhone Duo's column put it in the vertical
-        // bar (the rail), where it stayed once the column showed another
-        // screen, a magnifier that did nothing.
-        .searchable(text: $filter, placement: .navigationBarDrawer(displayMode: .always), prompt: "Filter by id or title")
+        // In the screen, under its title (T928, FilterField).
+        .safeAreaInset(edge: .top, spacing: 0) { FilterField(prompt: "Filter by id or title", text: $filter) }
         .refreshable { await model.refresh() }
-        .navigationTitle("Board")
-        .toolbar {
+        .pageBar("Board") {
             if model.can(AppAPI.Methods.taskAdd.name) {
                 Button("New Task", systemImage: "plus") { adding = true }
             }
@@ -55,26 +52,20 @@ struct BoardScreen: View {
         let doneOpen = doneCount > 0 && (filtering || unfolded.contains("done"))
         let doneShown = Dashboard.filtered(done ?? [], by: filter)
         if !deck.isEmpty {
-            Section("On deck · \(deck.count)") { rows(deck) }
+            SectionHeading("On deck · \(deck.count)")
+            PanelList { rows(deck) }
         }
         // The two folds share a section: they read as a pair, a row
         // apart, not a section's gap (T856).
         let doneFold = doneCount > 0 && (!filtering || !doneShown.isEmpty || done == nil)
         if !backlog.isEmpty || doneFold {
-            Section {
+            PanelList {
                 if !backlog.isEmpty {
-                    DisclosureGroup("Backlog · \(backlog.count)", isExpanded: open("backlog", filtering)) { rows(backlog) }
+                    FoldRow(title: "Backlog · \(backlog.count)", open: open("backlog", filtering))
+                    if open("backlog", filtering).wrappedValue { rows(backlog) }
                 }
                 if doneFold {
-                    DisclosureGroup("Done · \(filtering && done != nil ? doneShown.count : doneCount)", isExpanded: open("done", filtering)) {
-                        if let doneError {
-                            Failure(text: doneError)
-                        } else if done == nil {
-                            ProgressView()
-                        } else {
-                            rows(doneShown)
-                        }
-                    }
+                    FoldRow(title: "Done · \(filtering && done != nil ? doneShown.count : doneCount)", open: open("done", filtering))
                     .task(id: DoneRead(project: slug, open: doneOpen, count: doneCount, generation: model.generation)) {
                         guard doneOpen else { return }
                         do {
@@ -84,14 +75,26 @@ struct BoardScreen: View {
                             doneError = Dashboard.words(error)
                         }
                     }
+                    if open("done", filtering).wrappedValue {
+                        if let doneError {
+                            ListRow { Failure(text: doneError) }
+                        } else if done == nil {
+                            ListRow { ProgressView() }
+                        } else {
+                            rows(doneShown)
+                        }
+                    }
                 }
             }
+            .padding(.top, Spacing.item)
         }
         if filtering && deck.isEmpty && backlog.isEmpty && (doneCount == 0 || (done != nil && doneShown.isEmpty)) {
             Text("No task on the board matches “\(filter.trimmingCharacters(in: .whitespaces))”.")
+                .font(theme.sized(Flat.text))
                 .foregroundStyle(theme.muted)
         } else if !filtering && deck.isEmpty && backlog.isEmpty && doneCount == 0 {
             Text("Nothing on the board: on deck, backlog and done tasks show here.")
+                .font(theme.sized(Flat.text))
                 .foregroundStyle(theme.muted)
         }
     }
@@ -108,15 +111,21 @@ struct BoardScreen: View {
 
     private func rows(_ ts: [AppAPI.Task]) -> some View {
         ForEach(ts) { t in
-            RouteLink(value: Route.task(slug, ref: t.ref)) {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(t.ref)
-                        .font(theme.mono(.subheadline, .medium))
-                        .foregroundStyle(theme.action)
-                        .frame(minWidth: 40, alignment: .leading)
-                    PriorityTag(t.priority)
+            RowLink(value: Route.task(slug, ref: t.ref)) {
+                let line = typeSize.isAccessibilitySize
+                    ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
+                    : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 8))
+                line {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text(t.ref)
+                            .font(.system(size: 12.5 * theme.scale, design: .monospaced))
+                            .foregroundStyle(theme.muted)
+                            .frame(minWidth: 34 * theme.scale, alignment: .leading)
+                        PriorityTag(t.priority)
+                    }
                     Text(t.title)
-                        .font(theme.body(.body))
+                        .font(theme.sized(Flat.text))
+                        .foregroundStyle(theme.ink)
                         .lines(2)
                 }
                 .accessibilityElement(children: .combine)
@@ -171,7 +180,7 @@ struct TaskScreen: View {
                     if model.setsPriority, Priority.settable(detail.task.status) {
                         PriorityMenu(task: ref, current: detail.task.priority, busy: prioritizing) { setPriority($0) }
                             .font(theme.body(.body, .medium))
-                            .buttonStyle(.bordered)
+                            .buttonStyle(.secondary)
                         if let priorityError {
                             Failure(text: priorityError)
                         }
@@ -202,8 +211,7 @@ struct TaskScreen: View {
             await fetch(watched)
         }
         .refreshable { await model.refresh() }
-        .navigationTitle(ref)
-        .navigationBarTitleDisplayMode(.inline)
+        .pageBar(ref)
         .backdrop()
     }
 
@@ -219,8 +227,7 @@ struct TaskScreen: View {
                     .font(theme.mono(.caption, .medium))
                     .padding(.horizontal, 7)
                     .padding(.vertical, 2)
-                    .background(theme.pane, in: Capsule())
-                    .overlay(Capsule().strokeBorder(theme.line, lineWidth: 1))
+                    .overlay(RoundedRectangle(cornerRadius: Radius.chip).strokeBorder(theme.line, lineWidth: 1))
             }
             Text(d.task.title)
                 .font(theme.title(.title2, .heavy))

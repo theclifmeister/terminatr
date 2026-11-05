@@ -1,8 +1,8 @@
 import SwiftUI
 
-/// A few choices side by side in a capsule (T850, the phone's
-/// Settings › Appearance), the picked one filled in ink with the base
-/// for its words, as a picked PulseChip. Each is at least 44 pt tall;
+/// A few choices side by side (T850, the phone's Settings › Appearance),
+/// the picked one filled in ink with the pane's colour for its words, as a
+/// picked PulseChip. Each is at least 44 pt tall;
 /// when the words don't fit in a row (accessibility sizes) they stack.
 /// Picking is a selection tap.
 public struct Segments<ID: Hashable>: View {
@@ -30,14 +30,14 @@ public struct Segments<ID: Hashable>: View {
             let on = item.id == selection
             Button { selection = item.id } label: {
                 Text(item.label)
-                    .font(theme.body(.headline, .semibold))
+                    .font(theme.sized(Flat.label))
                     .foregroundStyle(on ? theme.pane : theme.ink)
                     .lineLimit(1)
                     .fixedSize()
                     .padding(.horizontal, 14)
                     .frame(maxWidth: .infinity, minHeight: tapTarget)
-                    .background { if on { Capsule().fill(theme.ink) } }
-                    .contentShape(Capsule())
+                    .background { if on { RoundedRectangle(cornerRadius: Radius.row).fill(theme.ink) } }
+                    .contentShape(Rectangle())
             }
             .buttonStyle(Pressable())
             .accessibilityAddTraits(on ? .isSelected : [])

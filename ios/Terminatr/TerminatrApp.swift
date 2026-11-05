@@ -324,6 +324,9 @@ struct Root: View {
             Tab("Projects", systemImage: "folder", value: RootTab.projects) { projectsStack }
             searchTab
         }
+        // The picked tab in ink, as the design page's (what's in the tabs
+        // keeps the action's tint: TabBand).
+        .tint(theme.ink)
     }
 }
 
@@ -375,6 +378,7 @@ extension Root {
         } else {
             ContentUnavailableView("Nothing to search", systemImage: "magnifyingglass")
                 .backdrop()
+                .tabBand()
         }
     }
 
@@ -443,6 +447,7 @@ extension Root {
             }
         }
         .tabViewStyle(.sidebarAdaptable)
+        .tint(theme.ink)
         // Given its models: laid out again on a rotation, its cell's
         // host has no Phone from the scene, and reading it crashed (T895).
         .tabViewSidebarHeader { SidebarHead().environment(phone).environment(phone.primary) }
@@ -657,14 +662,60 @@ private struct BaseRouteScreen: View {
     }
 }
 
-/// A screen's solid ground: the window's colour (T999).
+/// A screen's solid ground: the window's colour, or behind the panes in
+/// the columns' detail (T999, T1001).
 private struct BackdropModifier: ViewModifier {
     @Environment(\.theme) private var theme
+    @Environment(\.ground) private var ground
 
     func body(content: Content) -> some View {
         content
             .scrollContentBackground(.hidden)
-            .background { theme.chrome.ignoresSafeArea() }
+            .background { (ground == .gutter ? theme.gutter : theme.chrome).ignoresSafeArea() }
+    }
+}
+
+/// The band the system's tab bar floats on (T1001): the window's solid
+/// colour across the width under it, with the line over it, so nothing
+/// scrolls behind the bar's glass. iOS draws the bar itself and keeps its
+/// glass capsule (ios/README.md, Flat look); on the solid band it shows the
+/// band's colour. Only under a bar: a screen that hides it (a session on a
+/// phone's width) has only the home indicator's inset, and its composer's
+/// colour. Not the keyboard's height: it covers the band.
+private struct TabBand: ViewModifier {
+    @Environment(\.theme) private var theme
+    @State private var inset: CGFloat = 0
+
+    /// Above this it is a bar's inset, not the home indicator's.
+    static let least: CGFloat = 45
+
+    func body(content: Content) -> some View {
+        content
+            .tint(theme.action)
+            .overlay(alignment: .bottom) {
+                if inset > Self.least {
+                    theme.chrome
+                        .frame(height: inset)
+                        .overlay(alignment: .top) { theme.line.frame(height: 1) }
+                        .ignoresSafeArea(.container, edges: .bottom)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
+            }
+            .background {
+                GeometryReader { g in
+                    Color.clear
+                        .onAppear { inset = g.safeAreaInsets.bottom }
+                        .onChange(of: g.safeAreaInsets.bottom) { _, now in inset = now }
+                }
+                .ignoresSafeArea(.keyboard)
+            }
+    }
+}
+
+extension View {
+    func tabBand() -> some View {
+        modifier(TabBand())
     }
 }
 

@@ -125,7 +125,7 @@ struct DelegateButton: View {
                     Label("Delegate…", systemImage: "person.badge.plus")
                         .font(theme.body(.body, .medium))
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.secondary)
                 .accessibilityLabel("Delegate \(task)…")
             }
         }

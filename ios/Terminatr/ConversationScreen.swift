@@ -118,7 +118,9 @@ struct ConversationScreen: View {
                     // over the composer, and no more (T882).
                     Color.clear.frame(height: 0).id("end")
                 }
-                .padding([.horizontal, .top], 16)
+                .padding(.horizontal, 14)
+                .padding(.top, 13)
+                .padding(.bottom, 12)
                 .scrollTargetLayout()
             }
             .accessibilityIdentifier("conversation")
@@ -173,11 +175,11 @@ struct ConversationScreen: View {
                         jump(scroll)
                     } label: {
                         Label(follow.label, systemImage: "arrow.down")
-                            .font(theme.body(.subheadline, .semibold))
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 8)
-                            .solid(Capsule())
-                            .overlay(Capsule().strokeBorder(theme.line, lineWidth: 1))
+                            .font(theme.sized(Flat.label))
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(theme.tab, in: RoundedRectangle(cornerRadius: Radius.row))
+                            .overlay(RoundedRectangle(cornerRadius: Radius.row).strokeBorder(theme.line, lineWidth: 1))
                     }
                     .buttonStyle(.plain)
                     .padding(.bottom, 10)
@@ -189,11 +191,12 @@ struct ConversationScreen: View {
             // the agent's turn shows at the conversation's end (T893).
             if model.writes, let id {
                 PhoneComposer(ref: ref, session: id, running: session?.state == "working", held: session?.queueHeld ?? "")
-                    .padding(.top, 12)
             }
         }
         .refreshable { await model.refresh() }
-        .backdrop()
+        .scrollContentBackground(.hidden)
+        // The pane's colour, as the design page's conversation.
+        .background { theme.pane.ignoresSafeArea() }
         // A redial is a new bridge: the stream opens again on it.
         .task(id: "\(id ?? "")/\(model.generation)") { await watch(id) }
         .kept($unfolded, "runs \(ref)")
@@ -270,7 +273,7 @@ struct ConversationScreen: View {
             .font(theme.body(.footnote, .semibold))
             .frame(maxWidth: .infinity)
         }
-        .buttonStyle(.bordered)
+        .buttonStyle(.secondary)
         .disabled(paging)
     }
 
@@ -460,24 +463,23 @@ struct EntryLine: View {
                         .onTapGesture { if entry.folds { unfolded = false } }
                     Text(entry.preview() ?? entry.text)
                         .foregroundStyle(theme.ink)
-                        .padding(.horizontal, 13)
-                        .padding(.vertical, 9)
-                        .background(theme.selection,
-                                    in: RoundedRectangle(cornerRadius: 8))
+                        .font(theme.sized(Flat.text))
+                        .padding(.horizontal, 11)
+                        .padding(.vertical, 7)
+                        .background(theme.selection, in: RoundedRectangle(cornerRadius: Radius.row))
                     if !entry.files.isEmpty {
                         PhoneAttachments(files: entry.attachments, session: session, alignment: .trailing)
                     }
                 }
             }
         case .text:
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 2) {
                 turn
                 MarkdownView(text: entry.text)
+                    .font(theme.sized(Flat.text))
+                    .foregroundStyle(theme.ink)
             }
-            .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .solid(RoundedRectangle(cornerRadius: 8))
-            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(theme.line, lineWidth: 1))
         case .files:
             PhoneAttachmentCard(entry: entry, session: session,
                                 turn: [entry.who(agent: agent), entry.at?.formatted(date: .omitted, time: .shortened) ?? ""]
@@ -519,18 +521,16 @@ struct EntryLine: View {
 
     private var turn: some View {
         Text([entry.who(agent: agent), entry.at?.formatted(date: .omitted, time: .shortened) ?? ""].filter { !$0.isEmpty }.joined(separator: " · "))
-            .font(theme.mono(.caption, .medium))
+            .font(theme.sized(12))
             .foregroundStyle(theme.muted)
     }
 }
 
 extension View {
-    /// A line on the backdrop on a capsule: the backdrop is no place for
-    /// small or muted text (ThemeColours.checks, T851).
+    /// A small line on the conversation's pane: it is solid, so the words
+    /// need nothing round them (T1001).
     func onSurface() -> some View {
-        padding(.horizontal, Spacing.item)
-            .padding(.vertical, 2)
-            .surface(in: Capsule())
+        padding(.vertical, 2)
     }
 }
 

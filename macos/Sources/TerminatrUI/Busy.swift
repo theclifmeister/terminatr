@@ -154,8 +154,8 @@ public struct WorkingBar: View {
             .padding(.horizontal, plain ? 0 : 12)
             .padding(.vertical, plain ? 0 : 7)
             // A card's fill: it floats over the transcript's end.
-            .background { if !plain { Color.clear.solid(Capsule()) } }
-            .overlay { if !plain { Capsule().strokeBorder(theme.line, lineWidth: 1) } }
+            .background { if !plain { Color.clear.solid(RoundedRectangle(cornerRadius: Radius.row)) } }
+            .overlay { if !plain { RoundedRectangle(cornerRadius: Radius.row).strokeBorder(theme.line, lineWidth: 1) } }
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(busy.spoken(now: tl.date))
             .accessibilityValue(activity)

@@ -32,7 +32,7 @@ public struct ScreenHeader<Trailing: View>: View {
                     : AnyLayout(HStackLayout(alignment: .center, spacing: Spacing.row))
                 head {
                     Text(title)
-                        .font(theme.title(.sheetTitle, .bold))
+                        .font(theme.sized(22, .semibold))
                         .foregroundStyle(theme.ink)
                         .lines(1)
                         .accessibilityAddTraits(.isHeader)
@@ -42,7 +42,7 @@ public struct ScreenHeader<Trailing: View>: View {
                             (d.height - (d[.lastTextBaseline] - d[.firstTextBaseline])) / 2
                         }
                     if count > 0 {
-                        CountBadge(count, style: .title3)
+                        CountBadge(count, style: .caption)
                             .accessibilityLabel(count == 1 ? "1 waits" : "\(count) wait")
                     }
                 }
@@ -57,7 +57,7 @@ public struct ScreenHeader<Trailing: View>: View {
                 } icon: {
                     if let symbol { Image(systemName: symbol) }
                 }
-                .font(theme.body(.subheadline, .medium))
+                .font(theme.sized(13))
                 .foregroundStyle(theme.muted)
             }
         }
@@ -96,8 +96,8 @@ public struct PulseChip<ID: Hashable>: Identifiable {
     }
 }
 
-/// A header's filter chips (T845): a row of capsules, the picked
-/// one filled in ink. It scrolls sideways, and at accessibility sizes
+/// A header's filter chips (T845, T1001): a row of 6 round chips, the
+/// picked one filled in ink, 44 pt to tap. It scrolls sideways, and at accessibility sizes
 /// wraps instead. Picking one is a selection tap.
 public struct PulseChips<ID: Hashable>: View {
     @Environment(\.theme) private var theme
@@ -131,22 +131,17 @@ public struct PulseChips<ID: Hashable>: View {
             let on = c.id == selection
             Button { selection = c.id } label: {
                 HStack(spacing: 7) {
-                    if let t = c.tone {
-                        Circle()
-                            .fill(theme.colour(t))
-                            .frame(width: 8 * theme.scale, height: 8 * theme.scale)
-                            .padding(3)
-                            .background(theme.wash(t, 0.25), in: Circle())
-                    }
+                    if let t = c.tone { FlatDot(t) }
                     Text(c.label)
                         .lineLimit(1)
                 }
-                .font(theme.body(.subheadline, .semibold))
+                .font(theme.sized(Flat.label))
                 .foregroundStyle(on ? theme.pane : theme.ink)
-                .padding(.horizontal, 12)
-                .frame(minHeight: tapTarget)
+                .padding(.horizontal, 10)
+                .frame(minHeight: 30 * theme.scale)
                 .background { chip(on) }
-                .contentShape(Capsule())
+                .padding(.vertical, 7)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityAddTraits(on ? .isSelected : [])
@@ -154,10 +149,11 @@ public struct PulseChips<ID: Hashable>: View {
     }
 
     @ViewBuilder private func chip(_ on: Bool) -> some View {
+        let shape = RoundedRectangle(cornerRadius: Radius.row)
         if on {
-            Capsule().fill(theme.ink)
+            shape.fill(theme.ink)
         } else {
-            Color.clear.surface(in: Capsule())
+            Color.clear.surface(in: shape)
         }
     }
 }

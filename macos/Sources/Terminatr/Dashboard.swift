@@ -940,25 +940,6 @@ struct ThreadCard: View {
     }
 }
 
-struct Meter: View {
-    @Environment(\.theme) private var theme
-    let fraction: Double
-    /// Its fill: the action's colour unless given.
-    var colour: Color?
-
-    var body: some View {
-        GeometryReader { g in
-            ZStack(alignment: .leading) {
-                Capsule().fill(theme.line)
-                Capsule()
-                    .fill(colour ?? theme.action)
-                    .frame(width: g.size.width * min(max(fraction, 0), 1))
-            }
-        }
-        .accessibilityHidden(true)
-    }
-}
-
 /// The detail pane with no project to show: connecting, failed (with
 /// why), or a server with none.
 struct Placeholder: View {

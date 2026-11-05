@@ -1,12 +1,11 @@
 import SwiftUI
 import TerminatrKit
 
-/// A design's row (T864), as a SessionTile: its StateGlyph in its tone
-/// (Designs.tone), a still hammer while it is built but no thread runs
-/// a turn on it (Designs.symbol), its title, its facts under it (design task, open
-/// questions, answers), and at the end its status as a ToneBadge over
-/// its build ("1/4 built"). Rows sit in a TileGroup, a hairline over
-/// each after the first (rule).
+/// A design's row (T864), to the design page's list (T1001): its title,
+/// its facts under it (design task, open questions, answers), and at the
+/// end its build as a bar and "3 of 6", or its status in words. Open
+/// questions: a dot in their tone before the title. Rows sit in a
+/// TileGroup, a soft line over each after the first (rule).
 public struct DesignTile: View {
     @Environment(\.theme) private var theme
     @Environment(\.dynamicTypeSize) private var typeSize
@@ -20,38 +19,29 @@ public struct DesignTile: View {
         self.selected = selected
     }
 
+    private var quiet: Color { selected ? theme.ink : theme.muted }
+
     public var body: some View {
-        let tone = Designs.tone(design)
         Group {
             if typeSize.isAccessibilitySize {
-                VStack(alignment: .leading, spacing: Spacing.item) {
-                    HStack(spacing: Spacing.row) {
-                        StateGlyph(tone, side: 32, symbol: Designs.symbol(design))
-                        Spacer(minLength: 0)
-                        end(tone)
-                    }
+                VStack(alignment: .leading, spacing: Spacing.hair) {
                     words
+                    end
                 }
             } else {
-                HStack(spacing: Spacing.row + 2) {
-                    StateGlyph(tone, side: 32, symbol: Designs.symbol(design))
+                HStack(spacing: Spacing.row) {
                     words
                     Spacer(minLength: Spacing.hair)
-                    end(tone)
+                    end
                 }
             }
         }
-        .padding(.horizontal, Spacing.card)
-        .padding(.vertical, Spacing.row)
-        .frame(maxWidth: .infinity, minHeight: tapTarget, alignment: .leading)
-        .background(selected ? theme.wash(.working) : .clear)
+        .padding(.horizontal, 13)
+        .padding(.vertical, 7)
+        .frame(maxWidth: .infinity, minHeight: max(tapTarget, Flat.row * theme.scale), alignment: .leading)
+        .background(selected ? theme.selection : .clear)
         .overlay(alignment: .top) {
-            if rule {
-                Rectangle()
-                    .fill(theme.line)
-                    .frame(height: theme.contrast ? 1 : 0.5)
-                    .padding(.leading, Spacing.card)
-            }
+            if rule { SoftLine() }
         }
         .contentShape(Rectangle())
         .accessibilityElement(children: .ignore)
@@ -61,25 +51,40 @@ public struct DesignTile: View {
     }
 
     private var words: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(design.title)
-                .font(theme.body(.body, .semibold))
-                .foregroundStyle(theme.ink)
-                .lines(1)
-            Text(Designs.facts(design).joined(separator: " · "))
-                .font(theme.body(.footnote))
-                .foregroundStyle(theme.muted)
-                .lines(1)
+        VStack(alignment: .leading, spacing: 1) {
+            HStack(spacing: Spacing.item) {
+                if !design.questions.isEmpty { FlatDot(.question) }
+                Text(design.title)
+                    .font(theme.sized(Flat.text))
+                    .foregroundStyle(theme.ink)
+                    .lines(1)
+            }
+            let facts = Designs.facts(design).joined(separator: " · ")
+            if !facts.isEmpty {
+                Text(facts)
+                    .font(theme.sized(12.5))
+                    .foregroundStyle(quiet)
+                    .lines(1)
+            }
         }
     }
 
-    private func end(_ tone: Attention.Tone) -> some View {
-        VStack(alignment: .trailing, spacing: 3) {
-            ToneBadge(design.status, tone: tone, compact: true)
-            Text(Designs.built(design))
-                .font(theme.mono(.caption, .medium))
-                .monospacedDigit()
-                .foregroundStyle(theme.muted)
+    @ViewBuilder private var end: some View {
+        if Designs.Status(design.status) == .building {
+            HStack(spacing: Spacing.item) {
+                Meter(fraction: Designs.progress(design))
+                    .frame(width: 60 * theme.scale, height: 4)
+                Text("\(design.tasksDone) of \(max(design.build.count, design.tasks.count))")
+                    .font(.system(size: 12.5 * theme.scale, design: .monospaced))
+                    .monospacedDigit()
+                    .foregroundStyle(quiet)
+                    .lineLimit(1)
+                    .fixedSize()
+            }
+        } else {
+            Text(design.status)
+                .font(theme.sized(12.5))
+                .foregroundStyle(quiet)
                 .lineLimit(1)
                 .fixedSize()
         }

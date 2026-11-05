@@ -24,8 +24,7 @@ struct SearchScreen: View {
                 // that section's rounded clip cut the chips short at both
                 // ends (T931). Here they scroll to the screen's edges.
                 query(search)
-                List { results(search) }
-                    .listStyle(.insetGrouped)
+                PanelPage { results(search) }
             } else {
                 Spacer(minLength: 0)
             }
@@ -43,8 +42,7 @@ struct SearchScreen: View {
                 }
             }
         }
-        .navigationTitle("Search")
-        .navigationBarTitleDisplayMode(.inline)
+        .pageBar("Search")
         .backdrop()
     }
 
@@ -63,7 +61,7 @@ struct SearchScreen: View {
         } label: {
             HStack(spacing: 4) {
                 Text(search?.project ?? slug)
-                    .font(theme.title(.headline, .bold))
+                    .font(theme.sized(14.5, .medium))
                 Image(systemName: "chevron.down")
                     .font(theme.body(.caption, .semibold))
             }
@@ -77,12 +75,12 @@ struct SearchScreen: View {
         @Bindable var s = s
         return VStack(alignment: .leading, spacing: 10) {
             projectMenu
-                .padding(.horizontal, Spacing.gutter + 4)
+                .padding(.horizontal, Spacing.gutter)
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
                     .foregroundStyle(theme.muted)
                 TextField("Search \(s.project)'s history", text: $s.words)
-                    .font(theme.body(.body))
+                    .font(theme.sized(Flat.text))
                     .focused($focused)
                     .submitLabel(.search)
                     .autocorrectionDisabled()
@@ -92,7 +90,7 @@ struct SearchScreen: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
-            .surface(in: RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
+            .surface(in: RoundedRectangle(cornerRadius: Radius.row))
             .padding(.horizontal, Spacing.gutter)
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 6) {
@@ -116,8 +114,8 @@ struct SearchScreen: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
                 .foregroundStyle(on ? theme.onAction : theme.ink)
-                .background(on ? theme.action : theme.pane, in: Capsule())
-                .overlay(Capsule().strokeBorder(theme.line, lineWidth: on ? 0 : 1))
+                .background(on ? theme.action : theme.pane, in: RoundedRectangle(cornerRadius: Radius.row))
+                .overlay(RoundedRectangle(cornerRadius: Radius.row).strokeBorder(theme.line, lineWidth: on ? 0 : 1))
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(on ? .isSelected : [])
@@ -126,25 +124,24 @@ struct SearchScreen: View {
     @ViewBuilder
     private func results(_ s: SearchModel) -> some View {
         if let failure = s.failure {
-            Section { Failure(text: failure) }
+            Failure(text: failure)
         } else if let r = s.result {
-            Section {
-                ForEach(r.hits) { h in
-                    PlainRouteLink(value: Route.searchHit(s.project, id: h.id)) {
-                        SearchHitRow(h)
+            SectionHeading(Search.summary(r))
+            if !r.hits.isEmpty {
+                PanelList {
+                    ForEach(r.hits) { h in
+                        RowLink(value: Route.searchHit(s.project, id: h.id)) {
+                            SearchHitRow(h)
+                        }
                     }
-                    .buttonStyle(.plain)
                 }
-            } header: {
-                Text(Search.summary(r))
             }
         } else if !s.searching {
-            Section {
+            Group {
                 Text("Notes, tasks, threads' briefs and reports, the journal, designs, the library and the inbox. A first search builds the project's index: it can take a few seconds.")
                     .font(theme.body(.footnote))
                     .foregroundStyle(theme.muted)
             }
-            .listRowBackground(Color.clear)
         }
     }
 }
@@ -162,38 +159,27 @@ struct SearchHitScreen: View {
     @State private var layer = UserDefaults.standard.integer(forKey: "searchLayer")
 
     var body: some View {
-        List {
+        PanelPage {
             if let s = search {
                 if let hit = s.hit, !hit.kind.isEmpty {
-                    Section {
-                        SearchHitHeader(hit)
-                            .padding(.vertical, 4)
+                    PanelList {
+                        ListRow { SearchHitHeader(hit) }
                         ForEach(Search.targets(hit)) { t in
                             target(t)
                         }
                     }
                 }
-                Section {
-                    Picker("Show", selection: $layer) {
-                        Text("Text").tag(0)
-                        Text("Timeline").tag(1)
-                    }
-                    .pickerStyle(.segmented)
-                    .listRowBackground(Color.clear)
-                    .listRowInsets(EdgeInsets())
-                }
+                MiniTabs([(id: 0, title: "Text"), (id: 1, title: "Timeline")], selection: $layer)
                 if layer == 0 { text(s) } else { timeline(s) }
             }
         }
-        .listStyle(.insetGrouped)
         .task(id: model.generation) {
             let s = search ?? SearchModel(project: slug, calls: model.searchCalls)
             search = s
             await s.show(id: id)
         }
         .refreshable { await search?.show(id: id) }
-        .navigationTitle(id)
-        .navigationBarTitleDisplayMode(.inline)
+        .pageBar(id)
         .backdrop()
     }
 
@@ -201,61 +187,61 @@ struct SearchHitScreen: View {
     private func target(_ t: Search.Target) -> some View {
         switch t {
         case .task(let ref):
-            PlainRouteLink(value: Route.task(slug, ref: ref)) { Label(t.label, systemImage: t.symbol) }
+            RowLink(value: Route.task(slug, ref: ref)) { Label(t.label, systemImage: t.symbol) }
         case .thread(let th):
             if model.project(slug)?.threads.contains(where: { $0.record.id == th }) == true {
-                PlainRouteLink(value: Route.session(SessionRef(project: slug, thread: th))) { Label(t.label, systemImage: t.symbol) }
+                RowLink(value: Route.session(SessionRef(project: slug, thread: th))) { Label(t.label, systemImage: t.symbol) }
             } else {
-                Label("\(th) is resolved", systemImage: t.symbol)
-                    .foregroundStyle(theme.muted)
+                ListRow {
+                    Label("\(th) is resolved", systemImage: t.symbol)
+                        .foregroundStyle(theme.muted)
+                }
             }
         case .note(let path):
             if model.pages.contains(.memory) {
-                PlainRouteLink(value: Route.memoryFile(slug, path: path)) { Label(t.label, systemImage: t.symbol) }
+                RowLink(value: Route.memoryFile(slug, path: path)) { Label(t.label, systemImage: t.symbol) }
             }
         }
     }
 
     @ViewBuilder
     private func text(_ s: SearchModel) -> some View {
-        Section {
-            if let failure = s.shownFailure {
-                Failure(text: failure)
-            } else if let t = s.text {
-                MarkdownView(text: t.text)
-                    .textSelection(.enabled)
-                    .padding(.vertical, 6)
-                if t.cut {
-                    Text("Cut at \(t.text.utf8.count) of \(t.bytes) bytes: open it for the rest.")
-                        .font(theme.body(.footnote))
-                        .foregroundStyle(theme.muted)
-                }
-            } else {
-                ProgressView()
+        if let failure = s.shownFailure {
+            Failure(text: failure)
+        } else if let t = s.text {
+            MarkdownView(text: t.text)
+                .font(theme.sized(Flat.text))
+                .foregroundStyle(theme.ink)
+                .textSelection(.enabled)
+            if t.cut {
+                Text("Cut at \(t.text.utf8.count) of \(t.bytes) bytes: open it for the rest.")
+                    .font(theme.sized(12.5))
+                    .foregroundStyle(theme.muted)
             }
+        } else {
+            ProgressView()
         }
     }
 
     @ViewBuilder
     private func timeline(_ s: SearchModel) -> some View {
         if let tl = s.timeline {
-            Section {
+            SectionHeading("Its task's and thread's history around it")
+            PanelList {
                 ForEach(Search.rows(tl)) { row in
                     if row.at {
-                        SearchHitRow(row.hit, at: true)
-                            .listRowBackground(theme.pane)
+                        ListRow(selected: true) { SearchHitRow(row.hit, at: true) }
                     } else {
-                        PlainRouteLink(value: Route.searchHit(slug, id: row.hit.id)) { SearchHitRow(row.hit) }
-                            .buttonStyle(.plain)
+                        RowLink(value: Route.searchHit(slug, id: row.hit.id)) { SearchHitRow(row.hit) }
                     }
                 }
-            } header: {
-                Text("Its task's and thread's history around it")
             }
         } else if s.shownFailure != nil {
-            Section { Text("No timeline for this hit.").foregroundStyle(theme.muted) }
+            Text("No timeline for this hit.")
+                .font(theme.sized(Flat.text))
+                .foregroundStyle(theme.muted)
         } else {
-            Section { ProgressView() }
+            ProgressView()
         }
     }
 }

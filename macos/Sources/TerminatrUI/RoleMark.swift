@@ -62,64 +62,68 @@ public struct RoleLabel: View {
     }
 }
 
-/// A project's or program's line on its card (T1003): the role, its
-/// state's symbol in a slot of its own, or the turning mark while it
-/// works, then what it does and after it what stays (" · no threads"):
-/// the state's words are cut before after is. Nothing before the words
-/// moves as the state changes. At accessibility sizes one text, wrapped
-/// at its words. The card says it all to VoiceOver.
+/// A project's or program's line on its row (T1003, T1001): the role's
+/// mark and word, a dot in its slot (the strongest of what it speaks for),
+/// then its state's word and after it what stays (" · no threads"). Nothing before the words moves as
+/// the state changes. At accessibility sizes the role over its state.
+/// The card says it all to VoiceOver.
 public struct RoleLine: View {
     @Environment(\.theme) private var theme
     @Environment(\.dynamicTypeSize) private var typeSize
     let role: SessionRole
     let state: Attention
+    let dot: Attention.Tone?
     let after: String
+    let selected: Bool
 
-    public init(_ role: SessionRole, state: Attention, after: String = "") {
+    public init(_ role: SessionRole, state: Attention, dot: Attention.Tone? = nil, after: String = "", selected: Bool = false) {
         self.role = role
         self.state = state
+        self.dot = dot
         self.after = after
+        self.selected = selected
     }
 
     public var body: some View {
-        let points = CGFloat(TextStyle.subheadline.points)
-        let words = state.why.isEmpty ? state.word : state.why
-        HStack(spacing: Spacing.hair) {
-            RoleMark(role, points: points * 0.92, alignment: .leading)
-            Text(role.word)
-                .font(theme.body(.subheadline, .medium))
-                .foregroundStyle(theme.ink)
-                .lineLimit(1)
-                .fixedSize()
-            mark
-                .frame(width: points * theme.scale * 1.15)
-            Group {
-                if typeSize.isAccessibilitySize {
-                    Text(words + after)
-                        .lines(1)
-                } else {
-                    HStack(spacing: 0) {
-                        Text(words)
-                            .lines(1)
-                        Text(after)
-                            .lineLimit(1)
-                            .fixedSize()
-                    }
+        if typeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 1) {
+                roleWord
+                HStack(spacing: Spacing.tight) {
+                    FlatDot(dot ?? state.tone)
+                    Text(state.word + after)
+                        .lines(2)
                 }
+                .font(theme.sized(12.5))
+                .foregroundStyle(selected ? theme.ink : theme.muted)
             }
-            .font(theme.body(.subheadline))
-            .foregroundStyle(theme.muted)
+        } else {
+            HStack(spacing: Spacing.hair) {
+                roleWord
+                FlatDot(dot ?? state.tone)
+                    .padding(.horizontal, 2)
+                // After it where it fits, never pushing the row out of its
+                // panel; in a narrow column the state's word alone.
+                ViewThatFits(in: .horizontal) {
+                    Text(state.word + after)
+                        .lineLimit(1)
+                        .fixedSize()
+                    Text(state.word)
+                        .lineLimit(1)
+                }
+                .font(theme.sized(12.5))
+                .foregroundStyle(selected ? theme.ink : theme.muted)
+            }
         }
     }
 
-    @ViewBuilder private var mark: some View {
-        if state.tone == .working {
-            BusyMark(size: 6 * theme.scale)
-        } else {
-            Image(systemName: state.tone.symbol)
-                .font(theme.body(.footnote))
-                .foregroundStyle(state.tone == .idle ? theme.muted : theme.colour(state.tone))
-                .accessibilityHidden(true)
+    private var roleWord: some View {
+        HStack(spacing: Spacing.hair) {
+            RoleMark(role, points: 11.5, alignment: .leading)
+            Text(role.word)
+                .font(theme.sized(12.5, .medium))
+                .foregroundStyle(theme.ink)
+                .lineLimit(1)
+                .fixedSize()
         }
     }
 }

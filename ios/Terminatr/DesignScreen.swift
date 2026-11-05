@@ -210,8 +210,7 @@ struct DesignScreen: View {
             loaded = true
         }
         .refreshable { await model.refresh() }
-        .navigationTitle(design?.title ?? name)
-        .headerTitle()
+        .pageBar("Design")
         .backdrop()
     }
 

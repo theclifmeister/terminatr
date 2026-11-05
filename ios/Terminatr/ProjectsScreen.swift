@@ -173,7 +173,7 @@ private struct InactiveFold: View {
         } label: {
             HStack {
                 Text("Inactive · " + (count == 1 ? names[0] : "\(count)"))
-                    .font(theme.body(.subheadline, .medium))
+                    .font(theme.sized(Flat.label))
                     .foregroundStyle(theme.muted)
                     .lines(1)
                 Spacer(minLength: Spacing.item)
@@ -183,7 +183,7 @@ private struct InactiveFold: View {
                     .rotationEffect(.degrees(open ? 90 : 0))
             }
             .frame(minHeight: tapTarget)
-            .contentShape(RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .hoverEffect()
@@ -194,13 +194,13 @@ private struct InactiveFold: View {
 }
 
 /// One of this server's projects (T846): its monogram, name and goal,
-/// its board's counts as StatTiles, its coordinator, running or not,
-/// with its context use (at the write level Start Coordinator under it;
-/// held, Save & Clear, T868), its pages as one PageRow, its designs as
-/// DesignTiles (DesignsTiles), then every unresolved thread, done ones
-/// too, in the TUI's order (SidebarTree.threads), as SessionTiles, a
-/// thread's context use only when nearly full. An inactive project's
-/// rows are dormant.
+/// its coordinator as the screen's main row (LeadRow, T1001), running or
+/// not, with its context use (held, Save & Clear, T868), its board's counts
+/// as a StatStrip (at the write level Start Coordinator under them), its
+/// pages as one PageRow, its designs as DesignTiles (DesignsTiles), then
+/// every unresolved thread, done ones too, in the TUI's order
+/// (SidebarTree.threads), as SessionTiles, a thread's context use only when
+/// nearly full. An inactive project's rows are dormant.
 struct ProjectScreen: View {
     @Environment(PhoneModel.self) private var model
     @Environment(\.theme) private var theme
@@ -215,19 +215,17 @@ struct ProjectScreen: View {
                 let threads = SidebarTree.threads(of: p) { model.session($0) }
                 LazyVStack(alignment: .leading, spacing: Spacing.row + 2) {
                     ProjectHeader(slug, goal: p.goal)
-                    stats(p)
-                    TileGroup {
-                        let c = model.coordinatorSession(slug)
-                        let route = Route.session(SessionRef(project: slug))
-                        PlainRouteLink(value: route) {
-                            SessionTile(SessionRole.coordinator.word, role: .coordinator, state: model.coordinator(of: p), busy: Busy.of(coordinator: c, in: p),
-                                        context: model.context(SessionRef(project: slug)), dormant: dormant,
-                                        selected: navigate.opens(route, on: model))
-                        }
-                        .buttonStyle(.plain)
-                        .contextMenu { SaveClearButton(ref: SessionRef(project: slug), asking: $clearing) }
+                    let c = model.coordinatorSession(slug)
+                    let route = Route.session(SessionRef(project: slug))
+                    PlainRouteLink(value: route) {
+                        LeadRow(.coordinator, state: model.coordinator(of: p), busy: Busy.of(coordinator: c, in: p),
+                                context: model.context(SessionRef(project: slug)), dormant: dormant,
+                                selected: navigate.opens(route, on: model))
                     }
+                    .buttonStyle(.plain)
+                    .contextMenu { SaveClearButton(ref: SessionRef(project: slug), asking: $clearing) }
                     .asksSaveClear(SessionRef(project: slug), isPresented: $clearing)
+                    stats(p)
                     if let clear = model.clears[slug] { SaveClearStatus(clear: clear) }
                     if p.active, model.coordinatorSession(slug) == nil, model.sleep(of: slug) == .awake, model.can(AppAPI.Methods.projectOpen.name) {
                         StartCoordinatorButton(project: slug)
@@ -240,11 +238,11 @@ struct ProjectScreen: View {
                     SectionHeading("Threads", detail: threads.isEmpty ? "" : "\(threads.count)" + (waiting > 0 ? " · \(waiting) wait on you" : ""))
                     if threads.isEmpty {
                         Text("No threads")
-                            .font(theme.body(.subheadline))
+                            .font(theme.sized(Flat.text))
                             .foregroundStyle(theme.muted)
-                            .padding(Spacing.card)
+                            .padding(13)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .surface(in: RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
+                            .surface(in: RoundedRectangle(cornerRadius: Radius.tile))
                     } else {
                         TileGroup {
                             ForEach(Array(threads.enumerated()), id: \.element.record.id) { i, t in
@@ -260,7 +258,7 @@ struct ProjectScreen: View {
                     }
                 }
                 .padding(.horizontal, Spacing.gutter)
-                .padding(.bottom, Spacing.gutter)
+                .padding(.vertical, Spacing.gutter)
             } else {
                 ContentUnavailableView("No project \(slug)", systemImage: "folder.badge.questionmark")
                     .padding(.top, 60)
@@ -271,7 +269,7 @@ struct ProjectScreen: View {
         .navigationTitle(slug)
         // Back and Search on the screen's own bar, in line with the
         // content's edges (T925).
-        .screenBar {
+        .screenBar(bare: !model.searches || Root.searchTab) {
             // Search (T924): the project's history; with the Search tab
             // (T929), that instead, which searches the project in view.
             if model.searches, !Root.searchTab {
@@ -281,16 +279,14 @@ struct ProjectScreen: View {
         .backdrop()
     }
 
-    /// The board's counts, each opening the board: done only once the
-    /// lists carry it.
+    /// The board's counts, opening the board: done only once the lists
+    /// carry it.
     private func stats(_ p: AppAPI.Project) -> some View {
-        TileRow {
-            ForEach(Self.stats(p, done: model.listsDone), id: \.1) { n, word in
-                PlainRouteLink(value: Route.board(slug)) { StatTile(n, word) }
-                    .buttonStyle(.plain)
-                    .accessibilityHint("Opens the board")
-            }
+        PlainRouteLink(value: Route.board(slug)) {
+            StatStrip(Self.stats(p, done: model.listsDone).map { (value: "\($0.0)", word: $0.1) }, widest: .infinity, radius: Radius.tile)
         }
+        .buttonStyle(.plain)
+        .accessibilityHint("Opens the board")
     }
 
     static func stats(_ p: AppAPI.Project, done: Bool) -> [(Int, String)] {

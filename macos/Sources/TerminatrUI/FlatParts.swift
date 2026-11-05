@@ -125,14 +125,16 @@ public struct PaneLabel: View {
 /// view on the pane's colour (ListRow).
 public struct HairlineList<Content: View>: View {
     @Environment(\.theme) private var theme
+    let radius: CGFloat
     let content: Content
 
-    public init(@ViewBuilder content: () -> Content) {
+    public init(radius: CGFloat = Radius.row, @ViewBuilder content: () -> Content) {
+        self.radius = radius
         self.content = content()
     }
 
     public var body: some View {
-        let shape = RoundedRectangle(cornerRadius: Radius.row)
+        let shape = RoundedRectangle(cornerRadius: radius)
         LazyVStack(alignment: .leading, spacing: 1) {
             content
         }
@@ -145,9 +147,11 @@ public struct HairlineList<Content: View>: View {
 /// A HairlineList's row: 42 high at least, 13 at its sides, at 14.
 public struct ListRow<Content: View>: View {
     @Environment(\.theme) private var theme
+    let selected: Bool
     let content: Content
 
-    public init(@ViewBuilder content: () -> Content) {
+    public init(selected: Bool = false, @ViewBuilder content: () -> Content) {
+        self.selected = selected
         self.content = content()
     }
 
@@ -157,44 +161,100 @@ public struct ListRow<Content: View>: View {
             .padding(.horizontal, 13)
             .padding(.vertical, 7)
             .frame(maxWidth: .infinity, minHeight: Flat.row * theme.scale, alignment: .leading)
-            .background(theme.pane)
+            .background(selected ? theme.selection : theme.pane)
+    }
+}
+
+/// A share as a thin bar: 4 high, on the line's colour.
+public struct Meter: View {
+    @Environment(\.theme) private var theme
+    let fraction: Double
+    /// Its fill: the action's colour unless given.
+    var colour: Color?
+
+    public init(fraction: Double, colour: Color? = nil) {
+        self.fraction = fraction
+        self.colour = colour
+    }
+
+    public var body: some View {
+        GeometryReader { g in
+            ZStack(alignment: .leading) {
+                Capsule().fill(theme.line)
+                Capsule()
+                    .fill(colour ?? theme.action)
+                    .frame(width: g.size.width * min(max(fraction, 0), 1))
+            }
+        }
+        .accessibilityHidden(true)
     }
 }
 
 /// The slim stat strip: numbers in mono beside their words, a line
-/// between them, 560 wide at most.
+/// between them, 560 wide at most on the Mac, the whole width on the
+/// phone, where it is an 8 round panel (T1001), its cells one over another
+/// at accessibility sizes.
 public struct StatStrip: View {
     @Environment(\.theme) private var theme
+    @Environment(\.dynamicTypeSize) private var typeSize
     let stats: [(value: String, word: String)]
+    let widest: CGFloat
+    let radius: CGFloat
 
-    public init(_ stats: [(value: String, word: String)]) {
+    public init(_ stats: [(value: String, word: String)], widest: CGFloat = 560, radius: CGFloat = Radius.row) {
         self.stats = stats
+        self.widest = widest
+        self.radius = radius
     }
 
     public var body: some View {
-        let shape = RoundedRectangle(cornerRadius: Radius.row)
-        HStack(spacing: 1) {
-            ForEach(Array(stats.enumerated()), id: \.offset) { _, s in
-                HStack(alignment: .firstTextBaseline, spacing: 7) {
-                    Text(s.value)
-                        .font(.system(size: 15 * theme.scale, weight: .medium, design: .monospaced))
-                    Text(s.word)
-                        .font(theme.sized(Flat.label))
-                        .foregroundStyle(theme.muted)
-                        .lineLimit(1)
+        let shape = RoundedRectangle(cornerRadius: radius)
+        Group {
+            if typeSize.isAccessibilitySize {
+                VStack(spacing: 1) { cells(stacked: false) }
+            } else {
+                // Number and word side by side where every cell has room,
+                // else over one another, in all the cells alike.
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 1) { cells(stacked: false) }
+                    HStack(spacing: 1) { cells(stacked: true) }
                 }
-                .padding(.horizontal, 13)
-                .padding(.vertical, 8)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(theme.pane)
-                .accessibilityElement(children: .combine)
             }
         }
         .fixedSize(horizontal: false, vertical: true)
         .background(theme.line)
         .clipShape(shape)
         .overlay { shape.strokeBorder(theme.line, lineWidth: theme.contrast ? 1.5 : 1) }
-        .frame(maxWidth: 560, alignment: .leading)
+        .frame(maxWidth: widest, alignment: .leading)
+    }
+
+    private func cells(stacked: Bool) -> some View {
+        ForEach(Array(stats.enumerated()), id: \.offset) { _, s in
+            Group {
+                if stacked {
+                    VStack(alignment: .leading, spacing: 0) { cell(s) }
+                } else {
+                    HStack(alignment: .firstTextBaseline, spacing: 7) { cell(s) }
+                }
+            }
+            .padding(.horizontal, stacked ? 10 : 13)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            .background(theme.pane)
+            .accessibilityElement(children: .combine)
+        }
+    }
+
+    @ViewBuilder private func cell(_ s: (value: String, word: String)) -> some View {
+        Text(s.value)
+            .font(.system(size: 15 * theme.scale, weight: .medium, design: .monospaced))
+            .lineLimit(1)
+            .fixedSize()
+        Text(s.word)
+            .font(theme.sized(12.5))
+            .foregroundStyle(theme.muted)
+            .lineLimit(1)
+            .fixedSize()
     }
 }
 

@@ -39,9 +39,9 @@ extension PhoneModel {
     }
 }
 
-/// A program's card on the Projects screen: its monogram and name, its
-/// director's state and how many projects it holds, its rolled-up needs
-/// as one count, and its members' threads.
+/// A program's row on the Projects screen (T1001): its monogram and name,
+/// its director's line with how many projects it holds, its rolled-up needs
+/// as one count.
 struct ProgramCard: View {
     @Environment(\.theme) private var theme
     @Environment(\.dynamicTypeSize) private var typeSize
@@ -55,23 +55,13 @@ struct ProgramCard: View {
     var body: some View {
         let stacked = typeSize.isAccessibilitySize
         VStack(alignment: .leading, spacing: Spacing.item) {
-            HStack(alignment: stacked ? .top : .center, spacing: Spacing.row) {
-                ProjectMonogram(program.slug, side: 32)
-                    .overlay(alignment: .bottomTrailing) {
-                        Image(systemName: "square.stack.3d.up.fill")
-                            .font(.system(size: 11 * theme.scale, weight: .bold))
-                            .foregroundStyle(theme.onAction)
-                            .padding(2)
-                            .background(theme.action, in: Circle())
-                            .offset(x: 5, y: 5)
-                            .accessibilityHidden(true)
-                    }
+            HStack(spacing: Spacing.row) {
+                ProjectMonogram(program.slug, side: 24)
                 if !stacked { title }
                 Spacer(minLength: 0)
                 if needs > 0 { NeedsOrb(needs) }
             }
             if stacked { title }
-            if !threads.isEmpty { ThreadMeter(threads) }
         }
         .projectRow(selected: selected, rule: rule)
         .accessibilityElement(children: .ignore)
@@ -83,21 +73,22 @@ struct ProgramCard: View {
         VStack(alignment: .leading, spacing: 1) {
             HStack(spacing: Spacing.tight) {
                 Text(program.slug)
-                    .font(theme.title(.title3, .bold))
+                    .font(theme.sized(14.5, .medium))
                     .foregroundStyle(theme.ink)
                     .lines(1)
-                Text("· program")
-                    .font(theme.body(.subheadline, .medium))
-                    .foregroundStyle(theme.muted)
+                Text("program")
+                    .font(theme.sized(12.5))
+                    .foregroundStyle(selected ? theme.ink : theme.muted)
                     .lineLimit(1)
                     .fixedSize()
                 if program.paused {
                     Image(systemName: "pause.fill")
-                        .font(theme.body(.footnote))
-                        .foregroundStyle(theme.muted)
+                        .font(.system(size: 10 * theme.scale))
+                        .foregroundStyle(selected ? theme.ink : theme.muted)
                 }
             }
-            RoleLine(.director, state: director, after: " · " + Self.projects(program.members.count))
+            RoleLine(.director, state: director, dot: .strongest(director.tone, threads),
+                     after: " · " + Self.projects(program.members.count), selected: selected)
         }
     }
 
@@ -110,11 +101,12 @@ struct ProgramCard: View {
     }
 }
 
-/// A program's screen (B19): its name and goal, then its rolled-up
-/// Needs you first, its director's and its members' (the same list
-/// Needs you and the badge count, so each need shows once), each card
-/// answerable at the phone's level as on Needs you; then its director (a tap opens its session, T973),
-/// its projects (this server's, and a paired server's as that server's
+/// A program's screen (B19): its name and goal, its director as the
+/// screen's main row (LeadRow, T1001; a tap opens its session, T973), its
+/// counts, then its rolled-up Needs you, its director's and its members'
+/// (the same list Needs you and the badge count, so each need shows once),
+/// each card answerable at the phone's level as on Needs you; then its
+/// projects (this server's, and a paired server's as that server's
 /// mirror lists it, opening the same screen as under that server), and
 /// its open umbrella tasks with their parts (program.get), which the
 /// write level accepts or sends back while in review. The program's
@@ -141,6 +133,20 @@ struct ProgramScreen: View {
                 let needs = model.programNeeds(g)
                 LazyVStack(alignment: .leading, spacing: Spacing.row + 2) {
                     ProjectHeader(slug, goal: g.goal)
+                    // Its director opens as a coordinator does (T973): its
+                    // conversation, the composer at the write level, its
+                    // questions; starting it stays the Mac's (Q209).
+                    let director = model.directorSession(g)
+                    let route = Route.session(.director(slug))
+                    PlainRouteLink(value: route) {
+                        LeadRow(.director, state: .of(director: director, questions: g.questions), busy: Busy.of(director),
+                                context: model.context(.director(slug)), selected: navigate.opens(route, on: model))
+                    }
+                    .buttonStyle(.plain)
+                    .contextMenu { SaveClearButton(ref: .director(slug), asking: $clearing) }
+                    .asksSaveClear(.director(slug), isPresented: $clearing)
+                    if let clear = model.clears[PhoneModel.clearKey(.director(slug))] { SaveClearStatus(clear: clear) }
+                    if director == nil { DirectorStart() }
                     stats(g, needs: needs.count)
                     if !g.error.isEmpty { Failure(text: g.error) }
                     if let failure { Failure(text: failure) }
@@ -161,22 +167,6 @@ struct ProgramScreen: View {
                             NeedTile(need: n, route: NeedsScreen.route(n, in: model), lead: false)
                         }
                     }
-                    // Its director opens as a coordinator does (T973): its
-                    // conversation, the composer at the write level, its
-                    // questions; starting it stays the Mac's (Q209).
-                    let director = model.directorSession(g)
-                    let route = Route.session(.director(slug))
-                    TileGroup {
-                        PlainRouteLink(value: route) {
-                            SessionTile(SessionRole.director.word, role: .director, state: .of(director: director, questions: g.questions), busy: Busy.of(director),
-                                        context: model.context(.director(slug)), selected: navigate.opens(route, on: model))
-                        }
-                        .buttonStyle(.plain)
-                        .contextMenu { SaveClearButton(ref: .director(slug), asking: $clearing) }
-                    }
-                    .asksSaveClear(.director(slug), isPresented: $clearing)
-                    if let clear = model.clears[PhoneModel.clearKey(.director(slug))] { SaveClearStatus(clear: clear) }
-                    if director == nil { DirectorStart() }
                     SectionHeading("Projects", detail: "\(g.members.count)")
                     if g.members.isEmpty { quiet("No projects yet") }
                     if !g.members.isEmpty {
@@ -189,7 +179,7 @@ struct ProgramScreen: View {
                     umbrellas
                 }
                 .padding(.horizontal, Spacing.gutter)
-                .padding(.bottom, Spacing.gutter)
+                .padding(.vertical, Spacing.gutter)
             } else {
                 ContentUnavailableView("No program \(slug)", systemImage: "square.stack.3d.up.slash")
                     .padding(.top, 60)
@@ -202,7 +192,7 @@ struct ProgramScreen: View {
         }
         .keepsPlace(route: Route.program(slug))
         .navigationTitle(slug)
-        .screenBar { EmptyView() }
+        .screenBar(bare: true) { EmptyView() }
         .backdrop()
     }
 
@@ -226,11 +216,11 @@ struct ProgramScreen: View {
 
     /// Needs, projects and the threads working against its cap.
     private func stats(_ g: AppAPI.Program, needs: Int) -> some View {
-        TileRow {
-            StatTile(needs, needs == 1 ? "needs you" : "need you")
-            StatTile(g.members.count, g.members.count == 1 ? "project" : "projects")
-            StatTile(detail?.working, g.parallelThreads > 0 ? "of \(g.parallelThreads) working" : "working")
-        }
+        StatStrip([
+            (value: "\(needs)", word: needs == 1 ? "needs you" : "need you"),
+            (value: "\(g.members.count)", word: g.members.count == 1 ? "project" : "projects"),
+            (value: detail.map { "\($0.working)" } ?? "–", word: g.parallelThreads > 0 ? "of \(g.parallelThreads) working" : "working"),
+        ], widest: .infinity, radius: Radius.tile)
         .accessibilityElement(children: .contain)
         .accessibilityHint(g.authority == "delegate" ? "The director starts work itself" : "The director proposes, you start")
     }
@@ -247,11 +237,11 @@ struct ProgramScreen: View {
 
     private func quiet(_ text: String) -> some View {
         Text(text)
-            .font(theme.body(.subheadline))
+            .font(theme.sized(Flat.text))
             .foregroundStyle(theme.muted)
-            .padding(Spacing.card)
+            .padding(13)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .surface(in: RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
+            .surface(in: RoundedRectangle(cornerRadius: Radius.tile))
     }
 }
 
