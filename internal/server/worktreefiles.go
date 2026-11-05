@@ -7,6 +7,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/changes"
 	"github.com/theclifmeister/terminatr/internal/filetree"
+	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/thread"
@@ -47,6 +48,9 @@ func (s *Server) filesScope(ctx context.Context, id string) (*filetree.Scope, *p
 				return nil, proto.Errorf(proto.ErrNoFiles, "%v", err)
 			}
 		}
+		if !s.repoVouched(p, r) {
+			return nil, proto.Errorf(proto.ErrNoFiles, "%s's repo isn't on %s's list", r.ID, p.Slug)
+		}
 		root, repo, base = r.Worktree, r.Repo, r.Base
 	case proto.RoleCoordinator:
 		p, err := project.Open(info.Project)
@@ -67,6 +71,30 @@ func (s *Server) filesScope(ctx context.Context, id string) (*filetree.Scope, *p
 		return nil, proto.Errorf(proto.ErrNoFiles, "%v", err)
 	}
 	return sc, nil
+}
+
+// repoVouched says something other than thread record r vouches for the
+// repo it names: the project's list, or, since a session adopted from any
+// repo on disk keeps that repo off the list, the adopted session itself,
+// live on this server with its folder in the recorded worktree. A record
+// with no repo has none to vouch for.
+func (s *Server) repoVouched(p *project.Project, r *thread.Record) bool {
+	if r.Repo == "" || p.ListsRepo(r.Repo) {
+		return true
+	}
+	if !r.Adopted || r.Session == "" {
+		return false
+	}
+	sess, perr := s.session(r.Session)
+	if perr != nil {
+		return false
+	}
+	info := sess.Info()
+	if info.Project != p.Slug || info.Thread != r.ID {
+		return false
+	}
+	_, ok := fsx.Rel(realPath(r.Worktree), realPath(info.Cwd))
+	return ok
 }
 
 // filesError is a read's refusal, by its code.
@@ -131,5 +159,5 @@ func (s *Server) filesStamp(p proto.FilesStampParams) (any, *proto.Error) {
 	if perr != nil {
 		return nil, perr
 	}
-	return proto.FilesStampResult{Stamp: sc.Stamp(ctx, slices.Clone(p.Folders))}, nil
+	return proto.FilesStampResult{Stamp: s.filesSeen.Stamp(ctx, sc, slices.Clone(p.Folders))}, nil
 }

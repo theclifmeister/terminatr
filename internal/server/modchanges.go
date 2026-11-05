@@ -55,6 +55,9 @@ func (s *Server) modThreadChanges(ctx context.Context, c *modbroker.Call) (any, 
 	if err != nil {
 		return nil, modbroker.NotFound("%s has no thread %q", p.Slug, a.Thread)
 	}
+	if !s.repoVouched(p, r) {
+		return nil, modbroker.Failed("thread.changes: %s's repo isn't on %s's list", r.ID, p.Slug)
+	}
 	o := changes.Options{Repo: r.Repo, Base: r.Base, Mode: mode}
 	path := ""
 	if a.Path != "" {
@@ -180,5 +183,10 @@ func (s *Server) liveChanges(p *project.Project) func(r *thread.Record) *modbus.
 	if e.changes.now != nil {
 		now = e.changes.now()
 	}
-	return func(r *thread.Record) *modbus.Changes { return e.changes.of(p.Slug, r, now) }
+	return func(r *thread.Record) *modbus.Changes {
+		if !s.repoVouched(p, r) {
+			return nil
+		}
+		return e.changes.of(p.Slug, r, now)
+	}
 }

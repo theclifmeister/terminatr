@@ -172,7 +172,9 @@ type Method struct {
 	toStream func(json.RawMessage) (int64, any, error)
 	// local answers a method the bridge answers itself, without the
 	// server (the guard's, guard.go), from the app's params as toServer
-	// decoded them; its error is an *Error.
+	// decoded them; its error is an *Error. The bridge calls it only for
+	// the human on the human socket (bridge.human), or for a method only
+	// a device's bridge has.
 	local func(b *bridge, params any) (any, error)
 	// device: only a device's bridge has it, at the levels that sign
 	// (device.nonce).

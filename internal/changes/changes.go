@@ -282,6 +282,11 @@ func Fingerprint(ctx context.Context, dir, repo string) string {
 	if err != nil {
 		return ""
 	}
+	return FingerprintTree(ctx, t)
+}
+
+// FingerprintTree is Fingerprint of a checkout already pinned.
+func FingerprintTree(ctx context.Context, t *gitx.Tree) string {
 	g := &git{ctx: ctx, tree: t}
 	st, _ := g.out(MaxOutput, "status", "--porcelain=v2", "--branch", "-z", "--untracked-files=all")
 	if st == "" {
@@ -307,7 +312,7 @@ func Fingerprint(ctx context.Context, dir, repo string) string {
 			continue
 		}
 		stats++
-		if fi, err := os.Lstat(filepath.Join(dir, filepath.FromSlash(p))); err == nil {
+		if fi, err := os.Lstat(filepath.Join(t.Dir, filepath.FromSlash(p))); err == nil {
 			fmt.Fprintf(h, "\x00%d %d", fi.Size(), fi.ModTime().UnixNano())
 		}
 	}

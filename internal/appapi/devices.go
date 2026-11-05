@@ -19,7 +19,7 @@ import (
 // and access staying out of the app API (docs/SPEC.md §3.8). The paired
 // devices are the user's own pairing, so the bridge lists, pairs,
 // renames, removes and sets the level of them itself, in its own
-// process as tm device does, only when the caller is the human
+// process as tm device does, only for the human on the human socket
 // (bridge.human), and never on a device's link (Allowed: no level has
 // a method the bridge answers locally). Each change has a running
 // server read the devices again (device.reload).
@@ -196,10 +196,6 @@ var (
 	pairWait     = device.PairWindow + 3*time.Minute
 )
 
-func devicesHumanOnly() *Error {
-	return &Error{Code: ErrHumanOnly, Message: "the paired devices are the user's: only they pair and change them"}
-}
-
 // deviceDirs are the devices' and the peers' folders.
 func (b *bridge) deviceDirs() (devDir, peerDir string) {
 	return device.DirIn(b.o.Paths.Home), peer.DirIn(b.o.Paths.Home)
@@ -207,9 +203,6 @@ func (b *bridge) deviceDirs() (devDir, peerDir string) {
 
 // deviceList answers device.list.
 func deviceList(b *bridge, _ struct{}) (Devices, error) {
-	if !b.human() {
-		return Devices{}, devicesHumanOnly()
-	}
 	dir, peerDir := b.deviceDirs()
 	ds, err := device.Load(dir)
 	if err != nil {
@@ -276,9 +269,6 @@ func (b *bridge) devicesChanged() {
 
 // deviceAccess answers device.access, with tm device access's checks.
 func deviceAccess(b *bridge, p DeviceAccessParams) (Device, error) {
-	if !b.human() {
-		return Device{}, devicesHumanOnly()
-	}
 	if !device.ValidLevel(p.Level) {
 		return Device{}, &Error{Code: ErrBadParams, Message: `device.access: level is "view", "answer" or "write"`}
 	}
@@ -296,9 +286,6 @@ func deviceAccess(b *bridge, p DeviceAccessParams) (Device, error) {
 
 // deviceName answers device.name.
 func deviceName(b *bridge, p DeviceNameParams) (Device, error) {
-	if !b.human() {
-		return Device{}, devicesHumanOnly()
-	}
 	if err := device.CheckName(p.Name); err != nil {
 		return Device{}, &Error{Code: ErrBadParams, Message: err.Error()}
 	}
@@ -314,9 +301,6 @@ func deviceName(b *bridge, p DeviceNameParams) (Device, error) {
 // deviceRemove answers device.remove: its link closes and its key is
 // no longer taken.
 func deviceRemove(b *bridge, p DeviceParams) (Empty, error) {
-	if !b.human() {
-		return Empty{}, devicesHumanOnly()
-	}
 	dir, _ := b.deviceDirs()
 	if _, err := device.Remove(dir, p.Device); err != nil {
 		return Empty{}, devicesError(err)
@@ -328,9 +312,6 @@ func deviceRemove(b *bridge, p DeviceParams) (Empty, error) {
 // devicePair answers device.pair: it ends the bridge's open pairing,
 // if any, starts a new one and answers once the code works.
 func devicePair(b *bridge, p DevicePairParams) (DevicePairing, error) {
-	if !b.human() {
-		return DevicePairing{}, devicesHumanOnly()
-	}
 	dir, peerDir := b.deviceDirs()
 	relayURL := ""
 	if p.Relay != "" {
@@ -455,9 +436,6 @@ func (b *bridge) openPairing(id string) (*pairing, *Error) {
 // devicePairWait answers device.pair.wait: the phone's offer once it
 // joined, or how the pairing ended before.
 func devicePairWait(b *bridge, p DevicePairingParams) (DeviceOffer, error) {
-	if !b.human() {
-		return DeviceOffer{}, devicesHumanOnly()
-	}
 	pg, e := b.openPairing(p.Pairing)
 	if e != nil {
 		return DeviceOffer{}, e
@@ -487,9 +465,6 @@ func (pg *pairing) ended() *Error {
 // a name the devices don't have, waits for the pairing to end and
 // answers the device added; a no ends the pairing, offer or not.
 func devicePairAnswer(b *bridge, p DevicePairAnswerParams) (DevicePaired, error) {
-	if !b.human() {
-		return DevicePaired{}, devicesHumanOnly()
-	}
 	pg, e := b.openPairing(p.Pairing)
 	if e != nil {
 		return DevicePaired{}, e

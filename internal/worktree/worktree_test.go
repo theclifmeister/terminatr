@@ -307,8 +307,9 @@ func TestRemoveRedirectedCommonDir(t *testing.T) {
 	}
 }
 
-// TestDirtySubmodule: a submodule's changes count, whatever the
-// worktree's .gitmodules says to ignore.
+// TestDirtySubmodule: a submodule with a checkout counts as changes,
+// whatever the worktree's .gitmodules says to ignore: nothing can ask it
+// without running what its folder configures.
 func TestDirtySubmodule(t *testing.T) {
 	sub, _ := gittest.Repo(t)
 	repo, _ := gittest.Repo(t)
@@ -321,18 +322,71 @@ func TestDirtySubmodule(t *testing.T) {
 	run("config", "--file", ".gitmodules", "submodule.sub.ignore", "all")
 	run("add", ".gitmodules")
 	run("commit", "-q", "-m", "sub")
-	if dirty, err := Dirty(repo, dir); err != nil || dirty {
-		t.Fatalf("clean: %v %v", dirty, err)
+	if dirty, err := Dirty(repo, dir); err != nil || !dirty {
+		t.Fatalf("a checked out submodule: %v %v", dirty, err)
+	}
+	if why, err := Unsaved(repo, dir, ""); err != nil || !strings.Contains(why, "submodule sub") {
+		t.Fatalf("unsaved: %q %v", why, err)
 	}
 	os.WriteFile(filepath.Join(dir, "sub", "a"), []byte("changed"), 0o644)
-	if out := run("status", "--porcelain"); out != "" {
-		t.Logf("plain status sees it anyway: %q", out)
-	}
 	if dirty, err := Dirty(repo, dir); err != nil || !dirty {
 		t.Fatalf("dirty submodule: %v %v", dirty, err)
 	}
 	if err := Remove(repo, dir); !errors.Is(err, ErrDirty) {
 		t.Fatalf("remove: %v", err)
+	}
+	// Its folder gone, what's left is a commit named: nothing to lose.
+	os.RemoveAll(filepath.Join(dir, "sub"))
+	os.MkdirAll(filepath.Join(dir, "sub"), 0o755)
+	if dirty, err := Dirty(repo, dir); err != nil || dirty {
+		t.Fatalf("no checkout: %v %v", dirty, err)
+	}
+}
+
+// TestChecksRunNoFilter: neither the check for changes nor the remove runs
+// a filter of the repository's or of a submodule folder's, and a new
+// worktree still gets the repository's smudge.
+func TestChecksRunNoFilter(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("a shell command filter")
+	}
+	marker := filepath.Join(t.TempDir(), "ran")
+	ran := func() bool {
+		_, err := os.Stat(marker)
+		os.Remove(marker)
+		return err == nil
+	}
+	repo, run := gittest.Repo(t)
+	os.WriteFile(filepath.Join(repo, ".gitattributes"), []byte("* filter=x\n"), 0o644)
+	run("add", ".")
+	run("commit", "-q", "-m", "attrs")
+	run("config", "filter.x.smudge", "touch "+marker+"; cat")
+	dir := filepath.Join(t.TempDir(), "wt")
+	if _, err := Create(repo, dir, "tm/x", "HEAD"); err != nil {
+		t.Fatal(err)
+	}
+	if !ran() {
+		t.Error("a new worktree didn't get the repository's smudge")
+	}
+	run("config", "filter.x.clean", "touch "+marker+"; cat")
+	// Rewritten in place at the same size: git hashes it to tell.
+	os.WriteFile(filepath.Join(dir, "a"), []byte("a"), 0o644)
+	if dirty, err := Dirty(repo, dir); err != nil {
+		t.Fatal(err)
+	} else if ran() {
+		t.Fatalf("the check for changes ran the filter (dirty %v)", dirty)
+	}
+	if _, err := Unsaved(repo, dir, ""); err != nil {
+		t.Fatal(err)
+	}
+	if ran() {
+		t.Fatal("Unsaved ran the filter")
+	}
+	if err := Remove(repo, dir); err != nil {
+		t.Fatal(err)
+	}
+	if ran() {
+		t.Fatal("the remove ran the filter")
 	}
 }
 

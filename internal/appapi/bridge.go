@@ -12,6 +12,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/client"
+	"github.com/theclifmeister/terminatr/internal/plat/ipc"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/version"
 )
@@ -62,9 +63,9 @@ type Options struct {
 	Logf func(format string, a ...any)
 	// onBye is given the reason of a device's device.bye (ServeDevice).
 	onBye func(reason string)
-	// Caller is who the environment says runs the bridge. The guard's
-	// methods answer only the human, by it and as the server places the
-	// bridge (caller.who): the guard's log is the human's.
+	// Caller is who the environment says runs the bridge. The bridge's
+	// own methods answer only the human, by it, on the human socket and
+	// as the server places the bridge (bridge.human).
 	Caller caller.Caller
 }
 
@@ -192,8 +193,8 @@ type bridge struct {
 	idle chan *client.Client
 	// server is the server the hello said.
 	server *Server
-	// whoKnown: the server placed the bridge's caller, whoHuman as the
-	// human (human).
+	// whoKnown: the server placed the bridge's caller, reached on the
+	// human socket, whoHuman as the human (human).
 	whoKnown, whoHuman bool
 	// nonces are the ones device.nonce gave out.
 	nonces nonces
@@ -445,6 +446,12 @@ func (b *bridge) release(c *client.Client, broken bool) {
 // a write may have reached the server before its connection broke.
 func (b *bridge) call(id int64, m Method, params any) {
 	if m.local != nil {
+		// A device's own methods act only on its link's nonces and close
+		// reason, and only a device's bridge has them (Allowed).
+		if !m.device && !b.human() {
+			b.fail(id, ErrHumanOnly, "%s answers only the human, on the human socket (%s)", m.Name, ipc.HumanName)
+			return
+		}
 		res, err := m.local(b, params)
 		if e, ok := err.(*Error); ok {
 			b.fail(id, e.Code, "%s", e.Message)
@@ -474,8 +481,15 @@ func (b *bridge) call(id int64, m Method, params any) {
 	b.answer(id, res)
 }
 
-// human: the bridge's caller is the human, by Options.Caller and as
-// the server places it, asked once it answers.
+// human: the bridge's caller is the human, by Options.Caller, on the
+// human socket and as the server places it there. Every method the
+// bridge answers itself but a device's goes through it (call).
+//
+// It dials afresh, since an idle connection says only what the bridge
+// could reach when it was made. A connection on the server socket isn't
+// remembered as a refusal: the human socket may just not be up yet, as
+// the server binds it second. Where the server said who the caller is,
+// that holds for the bridge's life.
 func (b *bridge) human() bool {
 	// A device's bridge runs in the server, as the device: never the
 	// human at a computer (Allowed already keeps it from the local
@@ -489,8 +503,16 @@ func (b *bridge) human() bool {
 	if known {
 		return human
 	}
+	c, err := b.dial()
+	if err != nil {
+		return false
+	}
+	defer c.Close()
+	if !c.OnHumanSocket {
+		return false
+	}
 	var info proto.CallerInfo
-	if b.serverCall(proto.MethodCallerWho, nil, &info) != nil {
+	if c.Call(proto.MethodCallerWho, nil, &info) != nil {
 		return false
 	}
 	human = !caller.Caller{Kind: caller.Kind(info.Kind)}.IsAgent()
