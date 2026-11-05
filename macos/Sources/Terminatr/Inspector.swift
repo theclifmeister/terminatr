@@ -43,8 +43,9 @@ struct InspectorPanel: View {
 }
 
 /// The panel's frame: 8 round with its line, a header at the main pane's
-/// height, what scrolls, and a thin footer of 44 with the context and one
-/// plain button, when it has them.
+/// height, what scrolls, and a footer at the composer's height at rest (58
+/// with its line, so their top lines meet) with the context and one plain
+/// button centred in it, when it has them.
 struct InspectorFrame<Content: View>: View {
     @Environment(\.theme) private var theme
     let head: InspectorHead
@@ -145,8 +146,9 @@ struct InspectorFrame<Content: View>: View {
         .font(theme.sized(12.5))
         .foregroundStyle(theme.muted)
         .padding(.horizontal, 15)
-        .frame(height: 43)
-        .padding(.top, 1)
+        // Its line above and the panel's own below: centred between them.
+        .frame(height: 56)
+        .padding(.vertical, 1)
         .overlay(alignment: .top) { theme.line.frame(height: 1) }
     }
 }

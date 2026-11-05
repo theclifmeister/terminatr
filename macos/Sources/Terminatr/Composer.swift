@@ -56,7 +56,7 @@ struct Composer: View {
                     .disabled(empty || busy)
             }
         }
-        // 59 with its line at rest.
+        // 58 with its line at rest, as the inspector's footer (13 + 34 + 11).
         .padding(.horizontal, 12)
         .padding(.top, 13)
         .padding(.bottom, 11)
