@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.81.0](https://github.com/theclifmeister/terminatr/compare/v0.80.0...v0.81.0) (2026-11-05)
+
+
+### Features
+
+* **app:** the Coordinator and Director as the main row on the Mac's pages ([#1103](https://github.com/theclifmeister/terminatr/issues/1103)) ([9a1b097](https://github.com/theclifmeister/terminatr/commit/9a1b097380f1ed31a7331b93d85460f1cb6b249a))
+* **ios:** our own flat tab bar, rail and sidebar ([#1106](https://github.com/theclifmeister/terminatr/issues/1106)) ([c98542e](https://github.com/theclifmeister/terminatr/commit/c98542ef821d63fc6618918109b8e447400ff6d0))
+
 ## [0.80.0](https://github.com/theclifmeister/terminatr/compare/v0.79.1...v0.80.0) (2026-11-05)
 
 
