@@ -33,7 +33,7 @@ public struct RoleMark: View {
     }
 
     /// The width that holds either symbol at size.
-    static func slot(_ size: CGFloat) -> CGFloat { size * 1.25 }
+    static func slot(_ size: CGFloat) -> CGFloat { size * 1.45 }
 }
 
 /// A role's mark and word in medium ink (T1003): how a dashboard, an
