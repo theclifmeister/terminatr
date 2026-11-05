@@ -84,14 +84,14 @@ struct PeerProjectScreen: View {
     /// The pages, as a project of this server's shows them: Memory and
     /// Library as its tm reads those.
     private func pageTiles(server: String) -> some View {
-        let tiles: [(PeerPages.Page, String)] = [
-            (.overview, "info.circle"), (.board, "list.bullet.rectangle"), (.memory, "bookmark"), (.library, "books.vertical"),
+        let tiles: [(PeerPages.Page, FlatGlyph)] = [
+            (.overview, .info), (.board, .board), (.memory, .mark), (.library, .books),
         ]
         return PageRow {
             ForEach(Array(tiles.enumerated()), id: \.element.0) { i, tile in
-                let (page, symbol) = tile
+                let (page, glyph) = tile
                 let route = Route.peerPage(alias: alias, project: project, page: page)
-                PlainRouteLink(value: route) { PageTile(page.rawValue, symbol: symbol, selected: navigate.opens(route, on: model), rule: i > 0) }
+                PlainRouteLink(value: route) { PageTile(page.rawValue, glyph: glyph, selected: navigate.opens(route, on: model), rule: i > 0) }
                     .buttonStyle(.plain)
             }
         }

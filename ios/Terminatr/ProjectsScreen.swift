@@ -16,14 +16,15 @@ struct ProjectsScreen: View {
     @Environment(\.theme) private var theme
     /// The servers whose inactive projects are shown, by key.
     @State private var showInactive: Set<String> = []
+    @State private var above: CGFloat = 0
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                ScreenHeader("Projects", subtitle: subtitle, symbol: symbol) {
+                ScreenHeader("Projects", subtitle: subtitle, symbol: symbol, gutter: Flat.listGutter, top: ScreenTop.margin(above: above), bottom: 9) {
                     SettingsButton().buttonStyle(.smallCircle)
                 }
-                LazyVStack(alignment: .leading, spacing: Spacing.item) {
+                LazyVStack(alignment: .leading, spacing: 9) {
                     ForEach(phone.models, id: \.key) { m in
                         ServerProjects(several: phone.several, showInactive: Binding {
                             showInactive.contains(m.key)
@@ -33,10 +34,11 @@ struct ProjectsScreen: View {
                         .environment(m)
                     }
                 }
-                .padding(.horizontal, Spacing.gutter)
+                .padding(.horizontal, Flat.listGutter)
                 .padding(.bottom, Spacing.gutter)
             }
         }
+        .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.top } action: { above = $0 }
         .refreshable { await phone.refresh() }
         .keepsPlace("projects")
         .kept($showInactive, "inactive")
@@ -55,10 +57,10 @@ struct ProjectsScreen: View {
             .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
     }
 
-    private var symbol: String {
-        if model.source == .demo { return "sparkles" }
-        if phone.several { return phone.models.allSatisfy { $0.link == .up } ? "checkmark.circle.fill" : "antenna.radiowaves.left.and.right" }
-        return model.linkWords.0
+    /// Plain words while all is well (`.sub`); a mark when a link isn't up.
+    private var symbol: String? {
+        if model.source == .demo || phone.models.allSatisfy({ $0.link == .up }) { return nil }
+        return phone.several ? "antenna.radiowaves.left.and.right" : model.linkWords.0
     }
 }
 
@@ -76,7 +78,6 @@ private struct ServerProjects: View {
         let peers = model.shownPeers
         if several {
             SectionHeading(model.serverName, detail: model.link == .up ? "" : model.linkWords.1)
-                .padding(.top, Spacing.tight)
         }
         if let f = model.failure { Failure(text: f) }
         if !several, !peers.isEmpty { SectionHeading("This server") }
@@ -196,6 +197,7 @@ struct ProjectScreen: View {
     @Environment(\.navigate) private var navigate
     let slug: String
     @State private var clearing = false
+    @State private var above: CGFloat = 0
 
     var body: some View {
         ScrollView {
@@ -247,12 +249,14 @@ struct ProjectScreen: View {
                     }
                 }
                 .padding(.horizontal, Spacing.gutter)
-                .padding(.vertical, Spacing.gutter)
+                .padding(.top, ScreenTop.margin(above: above))
+                .padding(.bottom, Spacing.gutter)
             } else {
                 ContentUnavailableView("No project \(slug)", systemImage: "folder.badge.questionmark")
                     .padding(.top, 60)
             }
         }
+        .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.top } action: { above = $0 }
         .refreshable { await model.refresh() }
         .keepsPlace(route: Route.project(slug))
         .navigationTitle(slug)
@@ -280,16 +284,16 @@ struct ProjectScreen: View {
     /// Library with a tm that reads them, Mods with one that lists them.
     private var pages: some View {
         let pages = model.pages
-        let tiles: [(Route, String, String)] = [
-            (.overview(slug), "Overview", "info.circle"),
-            (.board(slug), "Board", "list.bullet.rectangle"),
-        ] + (pages.contains(.memory) ? [(.memory(slug), "Memory", "bookmark")] : [])
-            + (pages.contains(.library) ? [(.library(slug), "Library", "books.vertical")] : [])
-            + (pages.contains(.mods) ? [(.mods(slug), "Mods", "puzzlepiece.extension")] : [])
+        let tiles: [(Route, String, FlatGlyph)] = [
+            (.overview(slug), "Overview", .info),
+            (.board(slug), "Board", .board),
+        ] + (pages.contains(.memory) ? [(.memory(slug), "Memory", .mark)] : [])
+            + (pages.contains(.library) ? [(.library(slug), "Library", .books)] : [])
+            + (pages.contains(.mods) ? [(.mods(slug), "Mods", .mod)] : [])
         return PageRow {
             ForEach(Array(tiles.enumerated()), id: \.element.1) { i, tile in
-                let (route, title, symbol) = tile
-                PlainRouteLink(value: route) { PageTile(title, symbol: symbol, selected: navigate.opens(route, on: model), rule: i > 0) }
+                let (route, title, glyph) = tile
+                PlainRouteLink(value: route) { PageTile(title, glyph: glyph, selected: navigate.opens(route, on: model), rule: i > 0) }
                     .buttonStyle(.plain)
             }
         }

@@ -3,12 +3,12 @@ import CoreGraphics
 /// The phone's two columns side by side (T849): how wide the list is.
 public enum PhoneColumns {
     /// The list's width when nothing else decides it.
-    public static let listIdeal: CGFloat = 360
+    public static let listIdeal: CGFloat = 371
     /// The least either column may be beside a hinge: a SessionTile's
     /// and a conversation card's.
     public static let least: CGFloat = 240
     /// The least width that keeps a session beside the list (T855): the
-    /// list's 360 and 440 for the conversation, its cards and composer.
+    /// list and about 430 for the conversation, its cards and composer.
     public static let sessionBeside: CGFloat = 800
 
     /// The list column's width in a space width wide, and the gap after

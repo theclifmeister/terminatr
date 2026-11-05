@@ -1,33 +1,23 @@
 import SwiftUI
 import TerminatrKit
 
-/// What a session waits on, as the hero of its conversation (T848,
-/// direction A): a lifted deck card ringed in the tone, its StateGlyph,
-/// its word and tag ("Asks · Ranking"), the tool and how long it has
-/// waited in mono ("AskUserQuestion · waiting 6m"), then the question
-/// (or what an approval asks) as its title, an approval's command as a
-/// block, and its answers: numbered AnswerOption rows, or the tone's
-/// buttons; a line of what the server said under them. Its outline is
-/// thin and still (T1002). Its answers never take a keyboard's bare keys:
-/// the screen has a text field.
+/// What a session waits on, in its conversation (T848), as the design
+/// page's `.ask` (T1008): a 6 round line round the question (or what an
+/// approval asks), an approval's command in mono under it, and its answers:
+/// numbered AnswerOption rows, or small buttons (compactAnswers); a line of
+/// what the server said under them. VoiceOver calls it word ("Approval").
+/// Its answers never take a keyboard's bare keys: the screen has a text field.
 public struct HeroCard<Answers: View>: View {
     @Environment(\.theme) private var theme
-    let tone: Attention.Tone
-    let symbol: String?
     let word: String
-    let line: String
     let title: String
     let command: String
     let note: (text: String, failed: Bool)?
     let answers: Answers
 
-    public init(tone: Attention.Tone, symbol: String? = nil, word: String, line: String = "", title: String,
-                command: String = "", note: (text: String, failed: Bool)? = nil,
+    public init(word: String, title: String, command: String = "", note: (text: String, failed: Bool)? = nil,
                 @ViewBuilder answers: () -> Answers) {
-        self.tone = tone
-        self.symbol = symbol
         self.word = word
-        self.line = line
         self.title = title
         self.command = command
         self.note = note
@@ -35,42 +25,22 @@ public struct HeroCard<Answers: View>: View {
     }
 
     public var body: some View {
-        let shape = RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
-        VStack(alignment: .leading, spacing: 11) {
-            HStack(spacing: 11) {
-                StateGlyph(tone, symbol: symbol)
-                    .symbolVariant(.fill)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(word)
-                        .font(theme.body(.headline, .bold))
-                        .foregroundStyle(theme.ink)
-                        .lines(1)
-                    if !line.isEmpty {
-                        Text(line)
-                            .font(theme.mono(.footnote, .medium))
-                            .foregroundStyle(theme.muted)
-                            .lines(1)
-                    }
-                }
-                Spacer(minLength: 0)
-            }
-            .accessibilityElement(children: .combine)
+        let shape = RoundedRectangle(cornerRadius: Radius.row)
+        VStack(alignment: .leading, spacing: 9) {
             if !title.isEmpty {
                 Text(title)
-                    .font(theme.title(.title3, .bold))
+                    .font(theme.sized(Flat.text))
                     .foregroundStyle(theme.ink)
+                    .pageLeading(Flat.text)
                     .fixedSize(horizontal: false, vertical: true)
                     .textSelection(.enabled)
             }
             if !command.isEmpty {
                 Text(command)
-                    .font(theme.mono(.callout))
-                    .foregroundStyle(theme.ink)
+                    .font(.system(size: 12 * theme.scale, design: .monospaced))
+                    .foregroundStyle(theme.muted)
                     .lines(6)
-                    .padding(.horizontal, Spacing.row)
-                    .padding(.vertical, Spacing.item)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(theme.command, in: RoundedRectangle(cornerRadius: Radius.row - 4, style: .continuous))
             }
             answers
                 .environment(\.answerKeys, false)
@@ -86,13 +56,13 @@ public struct HeroCard<Answers: View>: View {
                         .foregroundStyle(note.failed ? theme.ink : theme.muted)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                .font(theme.body(.footnote))
+                .font(theme.sized(12.5))
             }
         }
-        .padding(Spacing.card + 2)
+        .padding(.horizontal, 13)
+        .padding(.vertical, 11)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .surface(in: shape)
-        .overlay { shape.strokeBorder(theme.colour(tone), lineWidth: theme.contrast ? 1.5 : 1) }
+        .overlay { shape.strokeBorder(theme.line, lineWidth: theme.contrast ? 1.5 : 1) }
         // VoiceOver: a group named for what it is, so its answers are
         // heard as the question's or the approval's.
         .accessibilityElement(children: .contain)
@@ -101,8 +71,7 @@ public struct HeroCard<Answers: View>: View {
 }
 
 extension HeroCard where Answers == EmptyView {
-    public init(tone: Attention.Tone, symbol: String? = nil, word: String, line: String = "", title: String,
-                command: String = "", note: (text: String, failed: Bool)? = nil) {
-        self.init(tone: tone, symbol: symbol, word: word, line: line, title: title, command: command, note: note) { EmptyView() }
+    public init(word: String, title: String, command: String = "", note: (text: String, failed: Bool)? = nil) {
+        self.init(word: word, title: title, command: command, note: note) { EmptyView() }
     }
 }

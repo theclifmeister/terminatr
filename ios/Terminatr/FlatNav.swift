@@ -38,9 +38,9 @@ private struct NavCount: View {
             .foregroundStyle(theme.onAttention)
             .lineLimit(1)
             .fixedSize()
-            .padding(.horizontal, 4)
+            .padding(.horizontal, 5)
             .frame(minWidth: size * theme.scale, minHeight: size * theme.scale)
-            .background(theme.attention, in: Capsule())
+            .background(theme.attention, in: Ellipse())
     }
 }
 
@@ -65,19 +65,22 @@ struct FlatBar: View {
     let selected: TabPage?
     let count: Int
     let choose: (TabPage) -> Void
+    /// What the bar leaves below it: the home indicator's.
+    @State private var below: CGFloat = 0
 
     var body: some View {
-        HStack(spacing: Spacing.hair) {
+        HStack(spacing: 0) {
             ForEach(pages, id: \.self) { p in
                 Button { choose(p) } label: { item(p) }
                     .buttonStyle(.plain)
                     .navItem(p, selected: p == selected, count: p == .needs ? count : 0)
             }
         }
-        .padding(.horizontal, Spacing.item)
-        .padding(.top, Spacing.tight)
-        .padding(.bottom, Spacing.hair)
+        .padding(.top, 5)
+        // 78 with a 34 home indicator (`.tabbar`): the words run 10 into it.
+        .padding(.bottom, below >= 10 ? -10 : 0)
         .frame(maxWidth: .infinity)
+        .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.bottom } action: { below = $0 }
         // Past the safe area both ways: a closed Duo keeps a band beside
         // the sensor, and the bar's colour and line run under it.
         .background(alignment: .top) {
@@ -90,24 +93,27 @@ struct FlatBar: View {
     private func item(_ p: TabPage) -> some View {
         let on = p == selected
         return VStack(spacing: 3) {
-            Image(systemName: p.symbol)
-                .font(theme.sized(19))
-                .frame(height: 22 * theme.scale)
+            FlatIcon(p.glyph, side: 20)
                 .overlay(alignment: .topLeading) {
                     if p == .needs, count > 0 {
                         NavCount(count: count, size: 16, font: 10)
-                            .offset(x: 18 * theme.scale, y: -4)
+                            .fixedSize()
+                            .offset(x: 16 * theme.scale, y: -4)
                     }
                 }
             Text(p.title)
-                .font(theme.sized(11, on ? .medium : .regular))
+                .font(theme.sized(11))
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
+                .pageLeading(11)
         }
         .foregroundStyle(on ? theme.ink : theme.muted)
         .padding(.vertical, 5)
         .frame(maxWidth: .infinity)
+        // The selection's fill is the user's own, over the page's plain
+        // item; each place keeps the page's third of the width.
         .background(on ? theme.selection : .clear, in: RoundedRectangle(cornerRadius: Radius.card))
+        .padding(.horizontal, Spacing.hair)
         .contentShape(Rectangle())
     }
 }
@@ -124,6 +130,8 @@ struct FlatRail: View {
     /// Opens the iPad's sidebar.
     var openSidebar: (() -> Void)?
     let choose: (TabPage) -> Void
+    /// What the rail leaves below it: the home indicator's.
+    @State private var below: CGFloat = 0
 
     var body: some View {
         VStack(spacing: Spacing.tight) {
@@ -148,16 +156,17 @@ struct FlatRail: View {
             }
             if openSidebar != nil { Spacer(minLength: 0) }
         }
-        .padding(.bottom, openSidebar == nil ? Spacing.row : 0)
-        .frame(width: NavChrome.railWidth)
+        // 26 from the screen's foot, 64 wide with its line (`.rail`).
+        .padding(.bottom, openSidebar == nil ? max(26 - below, 0) : 0)
+        .frame(width: NavChrome.railWidth - 1)
         .frame(maxHeight: .infinity)
         .background(theme.chrome.ignoresSafeArea())
+        .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.bottom } action: { below = $0 }
     }
 
     private func item(_ p: TabPage) -> some View {
         let on = p == selected
-        return Image(systemName: p.symbol)
-            .font(theme.sized(18))
+        return FlatIcon(p.glyph, side: 19)
             .foregroundStyle(on ? theme.ink : theme.muted)
             .frame(width: 40, height: 40)
             .background(on ? theme.selection : .clear, in: RoundedRectangle(cornerRadius: Radius.card))
@@ -233,7 +242,7 @@ struct FlatSidebar: View {
         let on = selected == p.tab
         return Button { choose(p.tab) } label: {
             rowBody(on: on) {
-                Image(systemName: p.symbol).foregroundStyle(on ? theme.ink : theme.muted)
+                FlatIcon(p.glyph, side: 18).foregroundStyle(on ? theme.ink : theme.muted)
             } title: {
                 Text(p.title)
             } trailing: {

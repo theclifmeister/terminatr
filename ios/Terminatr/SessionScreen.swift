@@ -50,6 +50,9 @@ struct SessionScreen: View {
             VStack(spacing: 0) {
                 bar
                 tabs
+                // The chrome shows under the tabs, over the conversation
+                // (`.pconvo` starts at 138, the tabs end at 128).
+                if tab == .conversation { Color.clear.frame(height: 10) }
                 if ref.isCoordinator || ref.director, !ref.isRemote, let clear = model.clears[PhoneModel.clearKey(ref)] {
                     SaveClearStatus(clear: clear)
                         .padding(.horizontal, Spacing.gutter)
@@ -76,12 +79,21 @@ struct SessionScreen: View {
 
     /// The bar: `.phbar`, Back or the list, the title, its buttons.
     private var bar: some View {
-        HStack(spacing: Spacing.tight) {
+        HStack(spacing: 9) {
             if let showList {
                 icon("List", "list.bullet", label: showList.shown ? "Hide the list" : "Show the list", action: showList.toggle)
             } else if let go = back?.action ?? (pushed ? { dismiss() } : nil) {
-                icon("Back", "chevron.left", action: go)
-                    .accessibilityIdentifier("BackButton")
+                Button(action: go) {
+                    FlatIcon(.back)
+                        .foregroundStyle(theme.muted)
+                        .padding(14)
+                        .contentShape(Rectangle())
+                        .padding(-14)
+                }
+                .buttonStyle(.plain)
+                .hoverEffect()
+                .accessibilityLabel("Back")
+                .accessibilityIdentifier("BackButton")
             }
             SessionTitle(model.title(ref), place: model.place(ref), role: ref.role, state: model.attention(ref), context: model.context(ref))
             if ref.isCoordinator || ref.director, !ref.isRemote, model.clearsCoordinators, model.leadSession(ref) != nil {
@@ -98,9 +110,10 @@ struct SessionScreen: View {
                 icon("Repaint", "arrow.clockwise", hint: "Draws its terminal afresh") { repaints += 1 }
             }
         }
-        .padding(.leading, Spacing.gutter - 8)
-        .padding(.trailing, Spacing.gutter - 2)
-        .frame(minHeight: tapTarget)
+        // `.phbar`: 8 over, 9 under and its line.
+        .padding(.horizontal, Flat.listGutter)
+        .padding(.top, Spacing.item)
+        .padding(.bottom, Spacing.row)
         .overlay(alignment: .bottom) { theme.line.frame(height: 1) }
     }
 
@@ -118,8 +131,9 @@ struct SessionScreen: View {
             if !typeSize.isAccessibilitySize { Spacer(minLength: 0) }
             if let showParent { parentChip(showParent) }
         }
-        .padding(.horizontal, Spacing.gutter - 2)
-        .padding(.vertical, 7)
+        .padding(.horizontal, Flat.listGutter)
+        .padding(.top, 7)
+        .padding(.bottom, Spacing.item)
         .frame(maxWidth: .infinity, alignment: .leading)
         .overlay(alignment: .bottom) { theme.line.frame(height: 1) }
     }
@@ -128,8 +142,12 @@ struct SessionScreen: View {
         Image(systemName: symbol)
             .font(.system(size: 15 * min(theme.scale, 1.3), weight: .medium))
             .foregroundStyle(theme.muted)
-            .frame(width: tapTarget - 12, height: tapTarget)
+            .frame(width: 18, height: 21)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 12)
             .contentShape(Rectangle())
+            .padding(.horizontal, -7)
+            .padding(.vertical, -12)
     }
 
     private func icon(_ title: String, _ symbol: String, label: String? = nil, hint: String = "", action: @escaping () -> Void) -> some View {

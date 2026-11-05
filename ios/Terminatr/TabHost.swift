@@ -1,4 +1,5 @@
 import SwiftUI
+import TerminatrUI
 import UIKit
 
 /// The three places' screens, which a TabView held (T1005): each in its
@@ -89,6 +90,16 @@ enum TabPage: Hashable, CaseIterable {
         case .needs: "exclamationmark.bubble"
         case .projects: "folder"
         case .search: "magnifyingglass"
+        }
+    }
+
+    /// Its icon in the bar, rail and sidebar; symbol is the large content
+    /// viewer's.
+    var glyph: FlatGlyph {
+        switch self {
+        case .needs: .alert
+        case .projects: .folder
+        case .search: .search
         }
     }
 

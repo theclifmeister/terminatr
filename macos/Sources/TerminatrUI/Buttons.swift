@@ -114,7 +114,6 @@ private struct RoleButton: View {
             .font(.system(size: 14 * theme.scale, weight: .medium))
             .foregroundStyle(theme.muted)
             .frame(width: side, height: side)
-            .background(theme.pane, in: shape)
             .overlay { shape.strokeBorder(theme.line, lineWidth: theme.contrast ? 1.5 : 1) }
             .padding(slack)
             .contentShape(Rectangle())

@@ -160,7 +160,7 @@ extension ComponentGallery {
             SessionTitle("Product search ranking", place: "T14 · acme-web", state: Attention(word: "asks", tone: .question, why: "", waits: true),
                          context: ContextUse(percent: 72, level: .hint))
             MiniTabs(SessionTab.allCases.map { (id: $0, title: $0.rawValue) }, selection: $tab)
-            HeroCard(tone: .question, symbol: Need.Kind.question.symbol, word: "Asks · Ranking", line: "AskUserQuestion · waiting 6m",
+            HeroCard(word: "Asks · Ranking",
                      title: "Which ranking should search use for products with no sales yet?") {
                 VStack(spacing: Spacing.item) {
                     ForEach(Array(Self.options.enumerated()), id: \.offset) { i, o in

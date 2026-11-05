@@ -2,10 +2,10 @@ import SwiftUI
 import TerminatrKit
 
 /// A session's row in a TileGroup (T846), to the design page's list
-/// (T1001): its state's dot, its task ref in mono and its title, the why
-/// line under them, and at the end what waits on the user as a Chip
-/// ("allow?", "asks", "review"), else how long its turn has run, else a PR
-/// mark, before its context use when it is shown. A soft line over each
+/// (T1001, T1008): its state's dot, its task ref in mono and its title on one
+/// line, and at the end what waits on the user as a Chip ("allow?", "asks",
+/// "review"), else Working, else a PR mark, before its context use when it
+/// is shown. A soft line over each
 /// after the first (rule). At accessibility sizes the dot and the end go
 /// over the title, which keeps the row's width. Dormant: an inactive
 /// project's, all muted. A project's coordinator and a program's director
@@ -45,7 +45,6 @@ public struct SessionTile: View {
     public var body: some View {
         let busy = dormant ? nil : busy
         let tone: Attention.Tone = dormant ? .idle : state.tone
-        let lift = 4 * theme.scale
         Group {
             if typeSize.isAccessibilitySize {
                 VStack(alignment: .leading, spacing: Spacing.hair) {
@@ -57,9 +56,8 @@ public struct SessionTile: View {
                     words
                 }
             } else {
-                HStack(alignment: .firstTextBaseline, spacing: Spacing.row) {
+                HStack(spacing: Spacing.row) {
                     FlatDot(tone)
-                        .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + lift }
                     words
                     Spacer(minLength: Spacing.hair)
                     end(busy)
@@ -68,7 +66,7 @@ public struct SessionTile: View {
         }
         .padding(.horizontal, 13)
         .padding(.vertical, 7)
-        .frame(maxWidth: .infinity, minHeight: max(tapTarget, Flat.row * theme.scale), alignment: .leading)
+        .frame(maxWidth: .infinity, minHeight: Flat.listRow * theme.scale, alignment: .leading)
         .background(selected ? theme.selection : .clear)
         .overlay(alignment: .top) {
             if rule { SoftLine() }
@@ -83,8 +81,7 @@ public struct SessionTile: View {
     }
 
     private var words: some View {
-        VStack(alignment: .leading, spacing: 1) {
-            HStack(alignment: .firstTextBaseline, spacing: Spacing.item) {
+            HStack(alignment: .firstTextBaseline, spacing: Spacing.row) {
                 if let role {
                     RoleMark(role, points: 12, alignment: .leading, colour: dormant ? theme.muted : theme.ink)
                 }
@@ -94,17 +91,10 @@ public struct SessionTile: View {
                         .foregroundStyle(quiet)
                 }
                 Text(label)
-                    .font(theme.sized(Flat.text, role != nil ? .medium : .regular))
+                    .font(theme.sized(Flat.listText, role != nil ? .medium : .regular))
                     .foregroundStyle(dormant ? theme.muted : theme.ink)
                     .lines(1)
             }
-            if !state.why.isEmpty, !dormant {
-                Text(state.why)
-                    .font(theme.sized(12.5))
-                    .foregroundStyle(quiet)
-                    .lines(1)
-            }
-        }
     }
 
     /// What waits on the user, else the turn's time, else the PR; then
@@ -112,11 +102,8 @@ public struct SessionTile: View {
     @ViewBuilder private func end(_ busy: Busy?) -> some View {
         if !dormant, state.waits {
             Chip(state.word, colour: theme.colour(state.tone))
-        } else if let busy {
-            TimelineView(.periodic(from: .now, by: 1)) { tl in
-                if let t = busy.elapsed(now: tl.date) { small(t) }
-            }
-            .fixedSize()
+        } else if busy != nil {
+            small("Working")
         } else if !dormant, pr > 0 {
             Chip("PR")
         }
@@ -127,8 +114,7 @@ public struct SessionTile: View {
 
     private func small(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: 12.5 * theme.scale, design: .monospaced))
-            .monospacedDigit()
+            .font(theme.sized(12.5))
             .foregroundStyle(quiet)
             .lineLimit(1)
             .fixedSize()
@@ -145,10 +131,8 @@ public struct TileGroup<Content: View>: View {
     }
 
     public var body: some View {
-        let shape = RoundedRectangle(cornerRadius: Radius.tile)
         VStack(spacing: 0) { content }
-            .clipShape(shape)
-            .surface(in: shape)
+            .panelGround()
     }
 }
 
@@ -160,13 +144,13 @@ public struct PageTile: View {
     @Environment(\.theme) private var theme
     @Environment(\.dynamicTypeSize) private var typeSize
     let title: String
-    let symbol: String
+    let glyph: FlatGlyph
     let selected: Bool
     let rule: Bool
 
-    public init(_ title: String, symbol: String, selected: Bool = false, rule: Bool = false) {
+    public init(_ title: String, glyph: FlatGlyph, selected: Bool = false, rule: Bool = false) {
         self.title = title
-        self.symbol = symbol
+        self.glyph = glyph
         self.selected = selected
         self.rule = rule
     }
@@ -175,17 +159,14 @@ public struct PageTile: View {
         let wide = typeSize.isAccessibilitySize
         let layout = wide ? AnyLayout(HStackLayout(spacing: Spacing.row)) : AnyLayout(VStackLayout(spacing: 3))
         layout {
-            Image(systemName: symbol)
-                .font(.system(size: 16 * theme.scale))
+            FlatIcon(glyph, side: 17)
                 .foregroundStyle(theme.ink)
-                // One height for every symbol, so the names line up.
-                .frame(height: 19 * theme.scale)
-                .accessibilityHidden(true)
             Text(title)
                 .font(theme.sized(11.5))
                 .foregroundStyle(selected ? theme.ink : theme.muted)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
+                .pageLeading(11.5)
         }
         .padding(.horizontal, Spacing.hair)
         .padding(.vertical, 8)
@@ -212,13 +193,11 @@ public struct PageRow<Content: View>: View {
     }
 
     public var body: some View {
-        let shape = RoundedRectangle(cornerRadius: Radius.tile)
         let layout = typeSize.isAccessibilitySize
             ? AnyLayout(VStackLayout(spacing: 0))
             : AnyLayout(HStackLayout(alignment: .top, spacing: 0))
         layout { content }
-            .clipShape(shape)
-            .surface(in: shape)
+            .panelGround()
     }
 }
 
@@ -245,8 +224,8 @@ struct Hairline: View {
 }
 
 /// A heading over a run of cards or tiles (T846, T996, T1001): a 12 muted
-/// label in sentence case, and a detail plain beside it: "Threads",
-/// "5 · 3 wait on you".
+/// label in sentence case, its detail after it on the one line:
+/// "Threads · 5 · 3 wait on you".
 public struct SectionHeading: View {
     @Environment(\.theme) private var theme
     let title: String
@@ -258,20 +237,13 @@ public struct SectionHeading: View {
     }
 
     public var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: Spacing.item) {
-            Text(title)
-                .font(theme.sized(12))
-                .foregroundStyle(theme.muted)
-                .lines(1)
-                .accessibilityAddTraits(.isHeader)
-            Spacer(minLength: 0)
-            if !detail.isEmpty {
-                Text(detail)
-                    .font(theme.sized(12))
-                    .foregroundStyle(theme.muted)
-                    .lines(1)
-            }
-        }
-        .padding(.top, Spacing.item)
+        Text(detail.isEmpty ? title : "\(title) · \(detail)")
+            .font(theme.sized(12))
+            .foregroundStyle(theme.muted)
+            .lines(1)
+            .pageLeading(12)
+            .accessibilityAddTraits(.isHeader)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, Spacing.item)
     }
 }

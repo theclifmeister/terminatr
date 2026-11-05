@@ -18,7 +18,7 @@ public struct ProjectMonogram: View {
     public var body: some View {
         let s = side * theme.scale
         Text(Monogram.letters(name))
-            .font(theme.sized(side * 11 / 24, .semibold))
+            .font(theme.sized(side >= 30 ? side * 13 / 30 : side * 11 / 24, .semibold))
             .foregroundStyle(theme.onAction)
             .lineLimit(1)
             .frame(width: s, height: s)
@@ -81,12 +81,13 @@ public struct ProjectCard: View {
     }
 
     private var title: some View {
-        VStack(alignment: .leading, spacing: 1) {
-            HStack(spacing: Spacing.tight) {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .firstTextBaseline, spacing: Spacing.hair) {
                 Text(name)
                     .font(theme.sized(14.5, .medium))
                     .foregroundStyle(theme.ink)
                     .lines(1)
+                    .pageLeading(14.5)
                 if !tag.isEmpty {
                     Text(tag)
                         .font(theme.sized(12.5))
@@ -123,19 +124,40 @@ public struct ProjectPanel<Content: View>: View {
     }
 
     public var body: some View {
-        let shape = RoundedRectangle(cornerRadius: Radius.tile)
         VStack(spacing: 0) { content }
-            .clipShape(shape)
-            .surface(in: shape)
+            .panelGround()
     }
 }
 
 extension View {
+    /// A panel's ground, 8 round: the pane's colour and its line behind its
+    /// rows, as the design page's inset shadow, so a selected row's fill
+    /// reaches the panel's edge over it.
+    func panelGround() -> some View {
+        modifier(PanelGround())
+    }
+
     /// A ProjectPanel's row: 50 high at least, the selection's fill when
     /// selected, and a soft line over it (rule) lined up with the row's
     /// words.
     public func projectRow(selected: Bool, rule: Bool) -> some View {
         modifier(ProjectRow(selected: selected, rule: rule))
+    }
+}
+
+private struct PanelGround: ViewModifier {
+    @Environment(\.theme) private var theme
+
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: Radius.tile)
+        content
+            .background {
+                ZStack {
+                    shape.fill(theme.pane)
+                    shape.strokeBorder(theme.line, lineWidth: theme.contrast ? 1.5 : 1)
+                }
+            }
+            .clipShape(shape)
     }
 }
 
@@ -146,8 +168,9 @@ private struct ProjectRow: ViewModifier {
     let rule: Bool
 
     func body(content: Content) -> some View {
-        // The monogram's side and its gap; stacked, the words start at the edge.
-        let words = typeSize.isAccessibilitySize ? 0 : 24 * theme.scale + Spacing.row
+        // The line starts 2 before the words (`.irow::before`, at 43); stacked,
+        // the words start at the edge.
+        let words = typeSize.isAccessibilitySize ? 0 : 24 * theme.scale + Spacing.row - 2
         content
             .padding(.horizontal, 11)
             .padding(.vertical, 7)
@@ -185,10 +208,11 @@ public struct ProjectHeader: View {
             head {
                 ProjectMonogram(name, side: 30)
                 Text(name)
-                    .font(theme.sized(24, .semibold))
+                    .font(theme.display(24))
                     .foregroundStyle(theme.ink)
                     .lines(1)
                     .minimumScaleFactor(0.7)
+                    .pageLeading(24)
                     .accessibilityAddTraits(.isHeader)
             }
             if !goal.isEmpty {
@@ -234,6 +258,7 @@ private struct GoalLine: View {
         }
         .font(theme.sized(13.5))
         .foregroundStyle(theme.muted)
+        .pageLeading(13.5)
     }
 
     private func text(_ s: String) -> some View {
@@ -246,7 +271,7 @@ private struct GoalLine: View {
         Button {
             withAnimation(still ? nil : .snappy) { open = true }
         } label: {
-            Text("\(Text(verbatim: s)) \(Text("More").fontWeight(.semibold).foregroundStyle(theme.ink))")
+            Text("\(Text(verbatim: s)) \(Text("More").foregroundStyle(theme.action))")
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.vertical, Self.reach)

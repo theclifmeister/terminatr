@@ -78,7 +78,7 @@ public struct NeedsOrb: View {
             .fixedSize()
             .padding(.horizontal, 5)
             .frame(minWidth: s, minHeight: s)
-            .background(theme.attention, in: Capsule())
+            .background(theme.attention, in: Ellipse())
             .accessibilityElement()
             .accessibilityLabel(count == 1 ? "1 waits on you" : "\(count) wait on you")
     }

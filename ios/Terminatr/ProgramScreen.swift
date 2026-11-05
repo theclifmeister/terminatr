@@ -70,12 +70,13 @@ struct ProgramCard: View {
     }
 
     private var title: some View {
-        VStack(alignment: .leading, spacing: 1) {
-            HStack(spacing: Spacing.tight) {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .firstTextBaseline, spacing: Spacing.hair) {
                 Text(program.slug)
                     .font(theme.sized(14.5, .medium))
                     .foregroundStyle(theme.ink)
                     .lines(1)
+                    .pageLeading(14.5)
                 Text("program")
                     .font(theme.sized(12.5))
                     .foregroundStyle(selected ? theme.ink : theme.muted)

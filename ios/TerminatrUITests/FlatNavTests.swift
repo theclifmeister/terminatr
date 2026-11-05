@@ -100,10 +100,13 @@ final class FlatNavTests: XCTestCase {
     }
 
     /// Each place keeps its stack and its scroll place while another shows;
-    /// the place showing, chosen again, goes back to its root.
+    /// the place showing, chosen again, goes back to its root. Large text
+    /// makes the project's page long enough to scroll.
     @MainActor func testPlacesKeepTheirStackAndScroll() throws {
         try phoneOnly()
-        let app = launch("project:acme-web")
+        let app = XCUIApplication()
+        app.launchArguments += ["-demo", "YES", "-open", "project:acme-web", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityM"]
+        app.launch()
         let row = app.buttons["Overview"].firstMatch
         XCTAssertTrue(row.waitForExistence(timeout: 10))
         let top = row.frame.minY

@@ -72,9 +72,49 @@ public struct ToolLine: View {
         if let outcome = entry.questionOutcome {
             AnsweredQuestionCard(outcome: outcome)
         } else {
+            #if os(iOS)
+            phoneLine
+            #else
             line
+            #endif
         }
     }
+
+    #if os(iOS)
+    /// The phone's, the design page's `.tool` (T1008): a shell command's
+    /// words alone, another tool's after its name; a failure and the spinner
+    /// after them, a result that went well says nothing.
+    private var phoneLine: some View {
+        HStack(spacing: Spacing.item) {
+            FlatIcon(.tool, side: 13)
+                .foregroundStyle(theme.muted)
+            Text(entry.tool == "Bash" ? entry.text : "\(entry.tool.isEmpty ? "tool" : entry.tool) \(entry.text)")
+                .font(.system(size: 12.5 * theme.scale, design: .monospaced))
+                .foregroundStyle(theme.muted)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .textSelection(.enabled)
+                .frame(minHeight: 18.75 * theme.scale)
+            if let r = entry.result {
+                if r.error {
+                    Text(summary(r))
+                        .font(.system(size: 12.5 * theme.scale, design: .monospaced))
+                        .foregroundStyle(theme.attention)
+                        .lineLimit(1)
+                }
+            } else if entry.asksUser {
+                Text("· Waiting for your answer")
+                    .font(.system(size: 12.5 * theme.scale, design: .monospaced))
+                    .foregroundStyle(theme.question)
+                    .lineLimit(1)
+            } else {
+                WorkingSpinner()
+            }
+            Spacer(minLength: 0)
+        }
+        .accessibilityElement(children: .combine)
+    }
+    #endif
 
     private var line: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
