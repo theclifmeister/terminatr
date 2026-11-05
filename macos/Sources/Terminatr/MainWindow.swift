@@ -57,9 +57,11 @@ struct MainWindow: View {
         .tint(theme.action)
         .foregroundStyle(theme.ink)
         // VoiceOver's rotor (VO-U) lists what needs the user, from anywhere
-        // in the window; picking one unfolds the sidebar's list to it.
+        // in the window; picking one lands on its row in the sidebar's list.
         .accessibilityRotor("Needs you") {
-            ForEach(app.needs) { n in
+            // Only while the list is unfolded: folded, no row is there to
+            // land on (the fold row says the count).
+            ForEach(app.nav.needsOpen ? app.needs : []) { n in
                 AccessibilityRotorEntry(Text(n.title), id: n.id, in: needsRotor)
             }
         }

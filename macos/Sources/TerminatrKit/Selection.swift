@@ -121,6 +121,12 @@ public struct Navigation: Codable, Equatable, Sendable {
     /// the TUI's view.Tree has them.
     public var unfolded: Set<String> = []
 
+    /// Whether the sidebar lists what needs the user (folded by default).
+    public var needsOpen: Bool {
+        get { unfolded.contains(Self.needsOpenKey) }
+        set { if newValue { unfolded.insert(Self.needsOpenKey) } else { unfolded.remove(Self.needsOpenKey) } }
+    }
+
     /// How many steps back are kept.
     public static let historyLimit = 50
 
@@ -213,6 +219,11 @@ public struct Navigation: Codable, Equatable, Sendable {
     }
 
     public static let needsSection = "needs"
+
+    /// The sidebar's Needs you list, folded unless this is in `unfolded`
+    /// (T1017): folded is the default for everyone, and a save from
+    /// before reads folded.
+    public static let needsOpenKey = "needs-you"
 
     /// The needs' "+N more" row of the sidebar.
     public static func moreKey() -> String { "more:needs" }
