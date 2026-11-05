@@ -248,8 +248,9 @@ public struct MiniTabs<ID: Hashable>: View {
                         .font(theme.sized(12.5))
                         .foregroundStyle(on ? theme.ink : theme.muted)
                         .lineLimit(1)
+                        .pageLeading(12.5)
                         .padding(.horizontal, 10)
-                        .padding(.vertical, 4)
+                        .padding(.vertical, 3)
                         .background { if on { RoundedRectangle(cornerRadius: 5).fill(theme.tab) } }
                         // 44 pt to tap, the row keeps its height.
                         .padding(.vertical, 8)

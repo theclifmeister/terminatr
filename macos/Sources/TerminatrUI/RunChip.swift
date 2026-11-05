@@ -3,9 +3,8 @@ import TerminatrKit
 
 /// A run of tool calls in the conversation (T848, T1001), the design
 /// page's flat tool row: a chevron turned while it is open, its calls
-/// counted by tool ("Read ×1 · Bash ×1") in mono and its state, a check and
-/// "done", a spinner, or a mark and "failed". It hugs its words; 44 pt to
-/// tap. The phone's conversation taps it open (the Mac's keeps
+/// counted by tool ("Read ×1 · Bash ×1") in mono, and while it isn't done its state, a spinner, or a mark and "failed". It hugs
+/// its words; 44 pt to tap. The phone's conversation taps it open (the Mac's keeps
 /// ToolRunHeader).
 public struct RunChip: View {
     @Environment(\.theme) private var theme
@@ -19,8 +18,7 @@ public struct RunChip: View {
 
     public var body: some View {
         HStack(spacing: Spacing.item) {
-            Image(systemName: "chevron.right")
-                .font(.system(size: 10 * theme.scale, weight: .semibold))
+            FlatIcon(.tool, side: 13)
                 .foregroundStyle(theme.muted)
                 .rotationEffect(.degrees(open ? 90 : 0))
             Text(run.headline)
@@ -28,6 +26,7 @@ public struct RunChip: View {
                 .foregroundStyle(theme.muted)
                 .lineLimit(1)
                 .truncationMode(.tail)
+                .frame(minHeight: 18.75 * theme.scale)
             state
                 .font(.system(size: 12.5 * theme.scale, design: .monospaced))
                 .fixedSize()
@@ -46,9 +45,7 @@ public struct RunChip: View {
                 .labelStyle(Tight())
                 .foregroundStyle(theme.attention)
         case .done:
-            Label("done", systemImage: "checkmark")
-                .labelStyle(Tight())
-                .foregroundStyle(theme.muted)
+            EmptyView()
         }
     }
 

@@ -113,6 +113,7 @@ public struct RoleLine: View {
                 .font(theme.sized(12.5))
                 .foregroundStyle(selected ? theme.ink : theme.muted)
             }
+            .pageLeading(12.5)
         }
     }
 

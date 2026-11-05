@@ -57,6 +57,12 @@ struct ConversationScreen: View {
     /// The entries drawn at first, and added by each Earlier messages.
     static let page = 60
 
+    /// Who speaks in the conversation, over its words (`.who`): the thread
+    /// or the role.
+    static func who(_ s: AppAPI.Session) -> String {
+        s.thread.isEmpty ? (s.role.prefix(1).uppercased() + s.role.dropFirst()) : s.thread
+    }
+
     /// What changes as output comes: the entries' count, and the last
     /// one's text and result as it streams.
     static func tail(_ t: Transcript) -> [Int] {
@@ -68,8 +74,10 @@ struct ConversationScreen: View {
         let session = id.flatMap { id in model.sessions.first { $0.id == id } }
         let entries = transcript.tail(drawn, keeping: head)
         let earlier = transcript.entries.count - entries.count
-        let rows = Transcript.rows(entries)
-        let moment = moment(rows, session)
+        // The command an approval asks about is in its card, not a row too.
+        let asked = session?.state == "blocked" && session?.reason == "permission" ? transcript.pendingTool?.id : nil
+        let rows = Transcript.rows(entries.filter { $0.id != asked })
+        let moment = moment(Transcript.rows(entries), session)
         let waits = need ?? model.needs.first { $0.session == id && ($0.kind == .question || $0.kind == .approval) }
         ScrollViewReader { scroll in
             ScrollView {
@@ -95,7 +103,7 @@ struct ConversationScreen: View {
                             switch row {
                             // The question it waits on is the hero, at the end.
                             case .entry(let e) where e.asksUser && e.result == nil && session?.question != nil: EmptyView()
-                            case .entry(let e): EntryLine(entry: e, agent: session?.agent ?? "", session: id)
+                            case .entry(let e): EntryLine(entry: e, agent: session.map(Self.who) ?? "", session: id)
                             case .tools(let run): runView(run)
                             }
                         }
@@ -331,7 +339,7 @@ struct ConversationScreen: View {
                 if let need, need.kind == .question, let a = Need.answer(s.id, q, index: i, picks: Compatibility.answersPicks(model.hello)),
                    model.can(AppAPI.Methods.sessionAnswer.name) {
                     NeedActs(need: need, answer: a) { parts in
-                        HeroCard(tone: .question, symbol: Need.Kind.question.symbol, word: word, line: line, title: item.question,
+                        HeroCard(word: word, line: line, title: item.question,
                                  note: parts.note) {
                             parts.buttons
                         }
@@ -341,7 +349,7 @@ struct ConversationScreen: View {
                     // types it (app API 39), is picked in its terminal: the
                     // card says so, its options only read.
                     let several = QuestionPlan(q, index: i, picks: Compatibility.answersPicks(model.hello)).paneOnly
-                    HeroCard(tone: .question, symbol: Need.Kind.question.symbol, word: word, line: line, title: item.question,
+                    HeroCard(word: word, line: line, title: item.question,
                              note: several ? ("It takes several options: pick them in the terminal view.", false) : nil) {
                         VStack(spacing: Spacing.item) {
                             ForEach(Array(item.options.enumerated()), id: \.offset) { n, o in
@@ -356,24 +364,24 @@ struct ConversationScreen: View {
             let tool = transcript.pendingTool
             let word = s.escape ? "Approval · outside the sandbox" : "Approval"
             let line = Self.line(tool?.tool ?? "", since: need?.since)
-            let command = tool.map { "\($0.tool): \($0.text)" } ?? ""
+            let command = tool.map { $0.tool == "Bash" ? $0.text : "\($0.tool): \($0.text)" } ?? ""
             if let need, need.kind == .approval, model.can(AppAPI.Methods.sessionApprove.name) {
                 NeedActs(need: need) { parts in
-                    HeroCard(tone: .approval, symbol: Need.Kind.approval.symbol, word: word, line: line,
-                             title: parts.command.isEmpty ? "The agent asks to go on." : parts.command,
+                    HeroCard(word: word, line: line, title: parts.command.isEmpty ? "The agent asks to go on." : parts.command,
                              command: command, note: parts.note) {
                         parts.buttons
                     }
                 }
+                .environment(\.compactAnswers, true)
             } else {
-                HeroCard(tone: .approval, symbol: Need.Kind.approval.symbol, word: word, line: line,
+                HeroCard(word: word,
                          title: "The agent asks to go on.", command: command,
                          note: ("Approve it on your Mac.", false))
             }
         }
     }
 
-    /// A hero's line: the tool, and how long it has waited.
+    /// A card's line: the tool, and how long it has waited.
     private static func line(_ tool: String, since: Date?) -> String {
         let age = Need.age(since: since)
         return [tool, age.isEmpty ? "" : age == "now" ? "waiting" : "waiting \(age)"].filter { !$0.isEmpty }.joined(separator: " · ")
@@ -456,17 +464,12 @@ struct EntryLine: View {
             FoldedPrompt(entry: entry, when: entry.at?.formatted(date: .omitted, time: .shortened) ?? "") { unfolded = true }
         case .prompt:
             HStack {
-                Spacer(minLength: 40)
-                VStack(alignment: .trailing, spacing: 4) {
+                Spacer(minLength: 0)
+                VStack(alignment: .trailing, spacing: 2) {
+                    // Who and when, the user's own, over the page's prompt.
                     turn
-                        .onSurface()
                         .onTapGesture { if entry.folds { unfolded = false } }
-                    Text(entry.preview() ?? entry.text)
-                        .foregroundStyle(theme.ink)
-                        .font(theme.sized(Flat.text))
-                        .padding(.horizontal, 11)
-                        .padding(.vertical, 7)
-                        .background(theme.selection, in: RoundedRectangle(cornerRadius: Radius.row))
+                    bubble(entry.preview() ?? entry.text)
                     if !entry.files.isEmpty {
                         PhoneAttachments(files: entry.attachments, session: session, alignment: .trailing)
                     }
@@ -478,6 +481,7 @@ struct EntryLine: View {
                 MarkdownView(text: entry.text)
                     .font(theme.sized(Flat.text))
                     .foregroundStyle(theme.ink)
+                    .pageLeading(Flat.text)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         case .files:
@@ -523,6 +527,28 @@ struct EntryLine: View {
         Text([entry.who(agent: agent), entry.at?.formatted(date: .omitted, time: .shortened) ?? ""].filter { !$0.isEmpty }.joined(separator: " · "))
             .font(theme.sized(12))
             .foregroundStyle(theme.muted)
+            .pageLeading(12)
+    }
+
+    /// The user's prompt: 300 wide at most (`.me`), that whole width once
+    /// its words wrap, else as wide as they are.
+    private func bubble(_ words: String) -> some View {
+        let text = Text(words)
+            .foregroundStyle(theme.ink)
+            .font(theme.sized(Flat.text))
+            .pageLeading(Flat.text)
+        return ViewThatFits(in: .horizontal) {
+            bubbled(text.fixedSize())
+            bubbled(text.frame(maxWidth: .infinity, alignment: .leading))
+        }
+        .frame(maxWidth: 300 * theme.scale, alignment: .trailing)
+    }
+
+    private func bubbled(_ words: some View) -> some View {
+        words
+            .padding(.horizontal, 11)
+            .padding(.vertical, 7)
+            .background(theme.selection, in: RoundedRectangle(cornerRadius: Radius.row))
     }
 }
 

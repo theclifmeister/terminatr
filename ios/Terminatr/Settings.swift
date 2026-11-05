@@ -295,7 +295,7 @@ struct SettingsButton: View {
 
     var body: some View {
         Button { showSettings() } label: {
-            Label("Settings", systemImage: "gearshape")
+            Label { Text("Settings") } icon: { FlatIcon(.gear) }
         }
     }
 }

@@ -29,6 +29,7 @@ struct NeedActs: View {
     @Environment(\.theme) private var theme
     @Environment(\.showTerminal) private var showTerminal
     @Environment(\.dynamicTypeSize) private var typeSize
+    @Environment(\.compactAnswers) private var compact
     let need: Need
     /// The question its options answer.
     let answering: Need.Answer?
@@ -80,7 +81,21 @@ struct NeedActs: View {
     private var buttons: some View {
         switch need.kind {
         case .approval where model.can(AppAPI.Methods.sessionApprove.name):
-            if let d = dialog, !d.escape, let first = d.options.first, once(d, 1) {
+            if compact, let d = dialog, !d.escape, let first = d.options.first, once(d, 1) {
+                // `.opt`: small, side by side, the first in ink.
+                FlowRow {
+                    Button(first) { approve(1) }
+                        .buttonStyle(FlatButtonStyle(primary: true, radius: 5))
+                        .answerKey("y")
+                        .accessibilityLabel(named(first))
+                    if d.options.count > 1, let last = d.options.last, once(d, d.options.count) {
+                        Button(last) { approve(d.options.count) }
+                            .buttonStyle(FlatButtonStyle(radius: 5))
+                            .answerKey("n")
+                            .accessibilityLabel(named(last))
+                    }
+                }
+            } else if let d = dialog, !d.escape, let first = d.options.first, once(d, 1) {
                 pair {
                     Button { approve(1) } label: { keyed("Y", first, inverted: true) }
                         .buttonStyle(.primary(.approval))

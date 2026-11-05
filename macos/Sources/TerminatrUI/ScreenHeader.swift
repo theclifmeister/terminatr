@@ -14,9 +14,16 @@ public struct ScreenHeader<Trailing: View>: View {
     let count: Int
     let subtitle: String
     let symbol: String?
+    let gutter: CGFloat
+    let top: CGFloat
+    let bottom: CGFloat
     let trailing: Trailing
 
-    public init(_ title: String, count: Int = 0, subtitle: String = "", symbol: String? = nil, @ViewBuilder trailing: () -> Trailing) {
+    public init(_ title: String, count: Int = 0, subtitle: String = "", symbol: String? = nil, gutter: CGFloat = Spacing.gutter,
+                top: CGFloat = Spacing.row, bottom: CGFloat = Spacing.row, @ViewBuilder trailing: () -> Trailing) {
+        self.gutter = gutter
+        self.top = top
+        self.bottom = bottom
         self.title = title
         self.count = count
         self.subtitle = subtitle
@@ -32,9 +39,10 @@ public struct ScreenHeader<Trailing: View>: View {
                     : AnyLayout(HStackLayout(alignment: .center, spacing: Spacing.row))
                 head {
                     Text(title)
-                        .font(theme.sized(22, .semibold))
+                        .font(theme.display(22))
                         .foregroundStyle(theme.ink)
                         .lines(1)
+                        .pageLeading(22)
                         .accessibilityAddTraits(.isHeader)
                         // Its first line's middle: wrapped at accessibility
                         // sizes, the lines below add what the baselines span.
@@ -52,17 +60,20 @@ public struct ScreenHeader<Trailing: View>: View {
                     .alignmentGuide(.titleLine) { $0[VerticalAlignment.center] }
             }
             if !subtitle.isEmpty {
-                Label {
-                    Text(subtitle).lines(1)
-                } icon: {
+                // The title's line and this one's are 4 apart (`.sub`).
+                HStack(spacing: Spacing.tight) {
                     if let symbol { Image(systemName: symbol) }
+                    Text(subtitle).lines(1)
                 }
                 .font(theme.sized(13))
                 .foregroundStyle(theme.muted)
+                .pageLeading(13)
+                .padding(.top, Spacing.hair)
             }
         }
-        .padding(.horizontal, Spacing.gutter)
-        .padding(.vertical, Spacing.row)
+        .padding(.horizontal, gutter)
+        .padding(.top, top)
+        .padding(.bottom, bottom)
     }
 }
 
@@ -104,9 +115,11 @@ public struct PulseChips<ID: Hashable>: View {
     @Environment(\.dynamicTypeSize) private var typeSize
     let chips: [PulseChip<ID>]
     @Binding var selection: ID
+    let gutter: CGFloat
 
-    public init(_ chips: [PulseChip<ID>], selection: Binding<ID>) {
+    public init(_ chips: [PulseChip<ID>], selection: Binding<ID>, gutter: CGFloat = Spacing.gutter) {
         self.chips = chips
+        self.gutter = gutter
         _selection = selection
     }
 
@@ -114,11 +127,11 @@ public struct PulseChips<ID: Hashable>: View {
         Group {
             if typeSize.isAccessibilitySize {
                 Flow(spacing: Spacing.item) { row }
-                    .padding(.horizontal, Spacing.gutter)
+                    .padding(.horizontal, gutter)
             } else {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: Spacing.item) { row }
-                        .padding(.horizontal, Spacing.gutter)
+                        .padding(.horizontal, gutter)
                         .padding(.vertical, 2)
                 }
             }
