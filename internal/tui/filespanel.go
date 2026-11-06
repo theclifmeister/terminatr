@@ -22,7 +22,10 @@ import (
 // The Files view of the info panel (docs/SPEC.md §4): the panel's other
 // face, F from its Info face, on a thread or a coordinator. Worktree is
 // the session's folder as a tree (files.list, read only), with git's
-// marks, a filter by name, and it refreshes while it shows (files.stamp);
+// marks, a filter by name, Changed only (a tree built here from the changed
+// result), and it refreshes while it shows (files.stamp);
+// beside a coordinator that folder is a repo's main checkout, which the
+// view says, with a picker when the project has more than one;
 // Attached is the Library's files of that thread, of the whole project
 // beside a coordinator. Enter reads a file in the Library's viewer,
 // drawn over the session, with its changes since the base marked
@@ -68,6 +71,11 @@ type filesView struct {
 	slug    string
 	thread  string // "" beside a coordinator: the whole project's files
 
+	repos   []proto.FileRepo // a coordinator's choices (files.repos)
+	repo    string           // the one chosen, "" for the first
+	picking bool             // the repo picker shows, and has the keyboard
+	pickSel int              // its selected row
+
 	attached bool   // the Attached tab
 	filter   string // by name
 	typing   bool   // the keyboard is in the filter
@@ -77,6 +85,8 @@ type filesView struct {
 	open   map[string]bool              // the unfolded folders
 	dirs   map[string][]proto.FileEntry // the folders as last listed
 	found  []proto.FileEntry            // a filter's or changed's files
+	tree   map[string][]proto.FileEntry // changed's files by folder
+	shut   map[string]bool              // the folders changed's tree has folded
 	sum    proto.FilesListResult        // the top's totals
 	cut    bool                         // a listing was cut
 	err    string                       // why the worktree doesn't show
@@ -100,8 +110,97 @@ func newFilesView(d *infoData) *filesView {
 	return fv
 }
 
-// searching says the worktree shows a flat list.
+// repoShown is the index in repos of the repo the view shows, -1 for none
+// to name: a thread's, or a server that lists none.
+func (fv *filesView) repoShown() int {
+	if len(fv.repos) == 0 {
+		return -1
+	}
+	return max(slices.IndexFunc(fv.repos, func(r proto.FileRepo) bool { return r.Path == fv.repo }), 0)
+}
+
+// choose shows repo: nothing of the last one's tree stays. The next fetch
+// fills it in.
+func (fv *filesView) choose(repo string) {
+	fv.repo, fv.picking = repo, false
+	fv.open, fv.dirs, fv.found, fv.tree, fv.shut = map[string]bool{}, map[string][]proto.FileEntry{}, nil, nil, nil
+	fv.sum, fv.cut, fv.err, fv.stamp = proto.FilesListResult{}, false, "", ""
+	fv.sel, fv.selPath, fv.loaded = 0, "", false
+}
+
+// searching says the worktree comes from one search of the whole folder,
+// not from the folders' listings.
 func (fv *filesView) searching() bool { return fv.filter != "" || fv.changed }
+
+// flat says the worktree shows a filter's flat list. Changed only stays a
+// tree, with a filter too: of the changed files it matches.
+func (fv *filesView) flat() bool { return fv.filter != "" && !fv.changed }
+
+// unfolded says folder p shows what's in it. Changed only's folders start
+// open, so the changes show at once, and a new filter opens them again;
+// they don't touch the tree's own.
+func (fv *filesView) unfolded(p string) bool {
+	if fv.changed {
+		return len(fv.tree[p]) > 0 && !fv.shut[p]
+	}
+	return fv.open[p]
+}
+
+// fold folds or unfolds folder p, and says whether it has to be listed.
+func (fv *filesView) fold(p string) bool {
+	switch {
+	case fv.changed && fv.unfolded(p):
+		if fv.shut == nil {
+			fv.shut = map[string]bool{}
+		}
+		fv.shut[p] = true
+	case fv.changed:
+		delete(fv.shut, p)
+	case fv.open[p]:
+		delete(fv.open, p)
+	default:
+		fv.open[p] = true
+		return true
+	}
+	return false
+}
+
+// changedTree is files.list's changed result as folders, each listed as
+// a folder is: folders first, by name. The folders come from the paths, not
+// the disk, so a deleted file sits under a folder that's gone. A row the
+// result has itself keeps its own marks: it comes before what's under it.
+func changedTree(found []proto.FileEntry) map[string][]proto.FileEntry {
+	tree := map[string][]proto.FileEntry{}
+	seen := map[string]bool{}
+	add := func(dir string, e proto.FileEntry) {
+		if !seen[e.Path] {
+			seen[e.Path] = true
+			tree[dir] = append(tree[dir], e)
+		}
+	}
+	for _, e := range found {
+		names := strings.Split(e.Path, "/")
+		dir := ""
+		for _, name := range names[:len(names)-1] {
+			p := path.Join(dir, name)
+			add(dir, proto.FileEntry{Name: name, Path: p, Kind: proto.FileKindDir, Changed: true})
+			dir = p
+		}
+		add(dir, e)
+	}
+	for _, list := range tree {
+		slices.SortFunc(list, func(a, b proto.FileEntry) int {
+			if ad, bd := a.Kind == proto.FileKindDir, b.Kind == proto.FileKindDir; ad != bd {
+				if ad {
+					return -1
+				}
+				return 1
+			}
+			return strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name))
+		})
+	}
+	return tree
+}
 
 // fileRow is a row of the view: a worktree entry at depth, or an attached
 // file.
@@ -129,17 +228,21 @@ func (fv *filesView) rows() []fileRow {
 		}
 		return out
 	}
-	if fv.searching() {
+	if fv.flat() {
 		for _, e := range fv.found {
 			out = append(out, fileRow{e: e})
 		}
 		return out
 	}
+	dirs := fv.dirs
+	if fv.changed {
+		dirs = fv.tree
+	}
 	var walk func(dir string, depth int)
 	walk = func(dir string, depth int) {
-		for _, e := range fv.dirs[dir] {
+		for _, e := range dirs[dir] {
 			out = append(out, fileRow{e: e, depth: depth})
-			if e.Kind == proto.FileKindDir && fv.open[e.Path] {
+			if fv.unfolded(e.Path) {
 				walk(e.Path, depth+1)
 			}
 		}
@@ -181,6 +284,36 @@ func filesLay(fv *filesView, w int, focused bool) ([]string, []infoHit) {
 	add := func(l string) {
 		lines = append(lines, l)
 		hits = append(hits, infoHit{})
+	}
+	if shown := fv.repoShown(); !fv.attached && shown >= 0 {
+		const says = " · main checkout"
+		many := len(fv.repos) > 1
+		room := w - ansi.StringWidth(says)
+		if many {
+			room -= 2
+		}
+		l := strings.TrimRight(fit(oneLine(fv.repos[shown].Name), max(room, 4)), " ") + th().Faint.Render(says)
+		h := infoHit{}
+		if many {
+			l += th().Accent.Render(" ▾")
+			h.kind = hitFilesRepo
+		}
+		lines, hits = append(lines, l), append(hits, h)
+		if fv.picking {
+			for i, r := range fv.repos {
+				mark := "  "
+				if i == shown {
+					mark = "✓ "
+				}
+				l := fit(mark+oneLine(r.Name), w)
+				if i == fv.pickSel && focused {
+					l = th().Sel.Render(l)
+				}
+				lines, hits = append(lines, l), append(hits, infoHit{kind: hitFilesRepoRow, task: i})
+			}
+			fv.lineOf = nil
+			return lines, hits
+		}
 	}
 	rows := fv.rows()
 	fv.settle(rows)
@@ -229,7 +362,7 @@ func filesLay(fv *filesView, w int, focused bool) ([]string, []infoHit) {
 			add(libGroup(*r.lib, groups[group], w))
 		}
 		fv.lineOf[i] = len(lines)
-		l := fileRowLine(r, w, fv.open[r.e.Path])
+		l := fileRowLine(r, w, fv.unfolded(r.e.Path))
 		if i == fv.sel && focused {
 			l = th().Sel.Render(fit(ansi.Strip(l), w))
 		}
@@ -317,6 +450,8 @@ type filesFetched struct {
 	err     string
 	noFiles bool
 	lib     []thread.LibFile
+	repos   []proto.FileRepo // nil: not asked, or the server has no list
+	offList bool             // the chosen repo left the project's list
 }
 
 // fetchFiles asks the server for what the view shows. The stamp comes
@@ -324,13 +459,23 @@ type filesFetched struct {
 func fetchFiles(paths tmclient.Paths, fv filesView, folders []string) filesFetched {
 	var out filesFetched
 	out.lib, _ = attachedFiles(fv.slug, fv.thread)
+	if fv.thread == "" {
+		// A server without the method leaves the first repo, unnamed.
+		var rs proto.FilesReposResult
+		if filesCall(paths, proto.MethodFilesRepos, proto.FilesReposParams{Session: fv.session}, &rs) == nil {
+			out.repos = rs.Repos
+			if fv.repo != "" && !slices.ContainsFunc(rs.Repos, func(r proto.FileRepo) bool { return r.Path == fv.repo }) {
+				fv.repo, out.offList = "", true
+			}
+		}
+	}
 	var st proto.FilesStampResult
-	if filesCall(paths, proto.MethodFilesStamp, proto.FilesStampParams{Session: fv.session, Folders: folders}, &st) == nil {
+	if filesCall(paths, proto.MethodFilesStamp, proto.FilesStampParams{Session: fv.session, Repo: fv.repo, Folders: folders}, &st) == nil {
 		out.stamp = st.Stamp
 	}
 	list := func(p proto.FilesListParams) (proto.FilesListResult, error) {
 		var res proto.FilesListResult
-		p.Session, p.Ignored = fv.session, fv.ignored
+		p.Session, p.Repo, p.Ignored = fv.session, fv.repo, fv.ignored
 		err := filesCall(paths, proto.MethodFilesList, p, &res)
 		return res, err
 	}
@@ -444,18 +589,25 @@ func (c *client) filesFetch() {
 }
 
 // take shows what a fetch brought. With no folder at all, the view opens
-// on Attached, and Worktree says why. c.mu held.
+// on Attached, and Worktree says why; a repo the user chose that can't
+// open only says why. c.mu held.
 func (fv *filesView) take(got filesFetched) {
 	first := !fv.loaded
 	fv.loaded = true
 	fv.lib = got.lib
+	if got.repos != nil {
+		fv.repos = got.repos
+	}
+	if got.offList {
+		fv.repo = ""
+	}
 	if got.stamp != "" {
 		fv.stamp = got.stamp
 	}
 	fv.err = got.err
 	if got.err != "" {
-		fv.dirs, fv.found = map[string][]proto.FileEntry{}, nil
-		if got.noFiles && first {
+		fv.dirs, fv.found, fv.tree = map[string][]proto.FileEntry{}, nil, nil
+		if got.noFiles && first && fv.repo == "" {
 			fv.attached = true // a then shows why the worktree doesn't
 		}
 		return
@@ -469,7 +621,7 @@ func (fv *filesView) take(got filesFetched) {
 			}
 		}
 	}
-	fv.found = got.found
+	fv.found, fv.tree = got.found, changedTree(got.found)
 }
 
 // filesPoll is the panel's poll: while the view shows, every filesEvery,
@@ -484,14 +636,23 @@ func (c *client) filesPoll() {
 		return
 	}
 	fv.polled = time.Now()
-	session, folders, paths, attached, had := fv.session, fv.filesFolders(), c.paths, fv.attached, fv.stamp
+	session, repo, folders, paths, attached, had := fv.session, fv.repo, fv.filesFolders(), c.paths, fv.attached, fv.stamp
+	coordinator, repos := fv.thread == "", fv.repos
 	c.mu.Unlock()
 	if attached {
 		c.filesFetch() // the Library's, a few stats
 		return
 	}
+	if coordinator {
+		// The project's list moves without the folder's stamp moving.
+		var rs proto.FilesReposResult
+		if filesCall(paths, proto.MethodFilesRepos, proto.FilesReposParams{Session: session}, &rs) == nil && !slices.Equal(rs.Repos, repos) {
+			c.filesFetch()
+			return
+		}
+	}
 	var st proto.FilesStampResult
-	if filesCall(paths, proto.MethodFilesStamp, proto.FilesStampParams{Session: session, Folders: folders}, &st) != nil {
+	if filesCall(paths, proto.MethodFilesStamp, proto.FilesStampParams{Session: session, Repo: repo, Folders: folders}, &st) != nil {
 		return
 	}
 	if st.Stamp != had {
@@ -563,8 +724,12 @@ func filesHint(fv *filesView) string {
 	switch {
 	case fv.typing:
 		return "filter ▸ type a name · enter keep · esc clear"
+	case fv.picking:
+		return "repo ▸ ↑ ↓ · enter show · esc back"
 	case fv.attached:
 		return "files ▸ ↑ ↓ · enter read · / filter · a worktree · F info · esc back"
+	case len(fv.repos) > 1:
+		return "files ▸ ↑ ↓ ← → · enter read · r repo · / filter · c changed · i ignored · a attached · F info · esc back"
 	}
 	return "files ▸ ↑ ↓ ← → · enter read · / filter · c changed · i ignored · a attached · F info · esc back"
 }
@@ -577,7 +742,7 @@ func (c *client) filesKeyboard(k uv.Key) {
 	fv := ip.files
 	rows := fv.rows()
 	name := keyName(k)
-	refetch, toggle := false, false
+	refetch, toggle, filter := false, false, fv.filter
 	var read *fileRow
 	move := func(to int) {
 		fv.sel = min(max(to, 0), max(len(rows)-1, 0))
@@ -605,6 +770,19 @@ func (c *client) filesKeyboard(k uv.Key) {
 		c.kb = areaMain
 	case name == "F":
 		toggle = true
+	case fv.picking:
+		switch {
+		case name == "r" || (isOp && op == panelBack):
+			fv.picking = false
+		case isOp && op == panelUp:
+			fv.pickSel = max(fv.pickSel-1, 0)
+		case isOp && op == panelDown:
+			fv.pickSel = min(fv.pickSel+1, len(fv.repos)-1)
+		case isOp && op == panelEnter:
+			refetch = fv.pickRepo(fv.pickSel)
+		}
+	case name == "r" && !fv.attached && len(fv.repos) > 1:
+		fv.picking, fv.pickSel, ip.top = true, fv.repoShown(), 0
 	case name == "/":
 		fv.typing = true
 	case name == "a":
@@ -613,7 +791,7 @@ func (c *client) filesKeyboard(k uv.Key) {
 	case name == "i" && !fv.attached:
 		fv.ignored, refetch = !fv.ignored, true
 	case name == "c" && !fv.attached:
-		fv.changed, fv.sel, refetch = !fv.changed, 0, true
+		fv.changed, fv.shut, fv.sel, refetch = !fv.changed, nil, 0, true
 	case !isOp:
 	case op == panelUp:
 		move(fv.sel - 1)
@@ -633,20 +811,20 @@ func (c *client) filesKeyboard(k uv.Key) {
 		c.kb = areaMain
 	case fv.sel >= len(rows):
 	case op == panelUnfold:
-		if e := rows[fv.sel].e; e.Kind == proto.FileKindDir && !fv.searching() && rows[fv.sel].lib == nil {
-			if fv.open[e.Path] {
+		if e := rows[fv.sel].e; e.Kind == proto.FileKindDir && !fv.flat() && rows[fv.sel].lib == nil {
+			if fv.unfolded(e.Path) {
 				move(fv.sel + 1)
 			} else {
-				fv.open[e.Path], refetch = true, true
+				refetch = fv.fold(e.Path)
 			}
 		}
 	case op == panelFold:
-		if rows[fv.sel].lib != nil || fv.searching() {
+		if rows[fv.sel].lib != nil || fv.flat() {
 			break
 		}
 		e := rows[fv.sel].e
-		if e.Kind == proto.FileKindDir && fv.open[e.Path] {
-			delete(fv.open, e.Path)
+		if e.Kind == proto.FileKindDir && fv.unfolded(e.Path) {
+			fv.fold(e.Path)
 			break
 		}
 		for i, r := range rows {
@@ -658,17 +836,16 @@ func (c *client) filesKeyboard(k uv.Key) {
 	case op == panelEnter:
 		r := rows[fv.sel]
 		switch {
-		case r.lib == nil && r.e.Kind == proto.FileKindDir && !fv.searching():
-			if fv.open[r.e.Path] {
-				delete(fv.open, r.e.Path)
-			} else {
-				fv.open[r.e.Path], refetch = true, true
-			}
+		case r.lib == nil && r.e.Kind == proto.FileKindDir && !fv.flat():
+			refetch = fv.fold(r.e.Path)
 		case r.lib == nil && r.e.Kind == proto.FileKindDir:
 			c.flash = "clear the filter to open a folder"
 		default:
 			read = &r
 		}
+	}
+	if fv.filter != filter {
+		fv.shut = nil // what it finds shows, not inside a folded folder
 	}
 	c.infoLayout()
 	c.filesReveal()
@@ -684,6 +861,17 @@ func (c *client) filesKeyboard(k uv.Key) {
 	if read != nil {
 		c.filesRead(*read)
 	}
+}
+
+// pickRepo closes the picker on repos[i], and says whether that changed
+// what the view shows.
+func (fv *filesView) pickRepo(i int) bool {
+	fv.picking = false
+	if i < 0 || i >= len(fv.repos) || i == fv.repoShown() {
+		return false
+	}
+	fv.choose(fv.repos[i].Path)
+	return true
 }
 
 // filesReveal scrolls the panel so the selected row shows. c.mu held.
@@ -713,7 +901,11 @@ func (c *client) filesClick(h infoHit) {
 	var read *fileRow
 	switch h.kind {
 	case hitFilesTab:
-		fv.attached, fv.sel, refetch = !fv.attached, 0, true
+		fv.attached, fv.sel, fv.picking, refetch = !fv.attached, 0, false, true
+	case hitFilesRepo:
+		fv.picking, fv.pickSel = !fv.picking, fv.repoShown()
+	case hitFilesRepoRow:
+		refetch = fv.pickRepo(h.task)
 	case hitFileRow:
 		rows := fv.rows()
 		if h.task < len(rows) {
@@ -722,12 +914,8 @@ func (c *client) filesClick(h infoHit) {
 			fv.sel = h.task
 			fv.note(rows)
 			switch {
-			case r.lib == nil && r.e.Kind == proto.FileKindDir && !fv.searching():
-				if fv.open[r.e.Path] {
-					delete(fv.open, r.e.Path)
-				} else {
-					fv.open[r.e.Path], refetch = true, true
-				}
+			case r.lib == nil && r.e.Kind == proto.FileKindDir && !fv.flat():
+				refetch = fv.fold(r.e.Path)
 			case again:
 				read = &r
 			}
@@ -774,13 +962,13 @@ func (c *client) filesRead(r fileRow) {
 		c.poke()
 		return
 	}
-	session, slug, ignored, paths := fv.session, fv.slug, fv.ignored, c.paths
+	session, repo, slug, ignored, paths := fv.session, fv.repo, fv.slug, fv.ignored, c.paths
 	c.mu.Unlock()
 	var tv *textView
 	if r.lib != nil {
 		tv = attachedViewer(slug, *r.lib)
 	} else {
-		tv = worktreeViewer(paths, session, r.e, ignored)
+		tv = worktreeViewer(paths, session, repo, r.e, ignored)
 	}
 	if !c.lock() {
 		return
@@ -812,17 +1000,17 @@ func attachedViewer(slug string, f thread.LibFile) *textView {
 
 // worktreeViewer is the viewer on a file of the session's folder, its
 // changes marked; a deleted file shows what it held.
-func worktreeViewer(paths tmclient.Paths, session string, e proto.FileEntry, ignored bool) *textView {
+func worktreeViewer(paths tmclient.Paths, session, repo string, e proto.FileEntry, ignored bool) *textView {
 	tv := &textView{title: oneLine(e.Path)}
 	if e.Status == proto.FileDeleted {
-		deletedViewer(tv, paths, session, e, ignored)
+		deletedViewer(tv, paths, session, repo, e, ignored)
 		return tv
 	}
 	var data []byte
 	truncated := false
 	for {
 		var res proto.FilesReadResult
-		err := filesCall(paths, proto.MethodFilesRead, proto.FilesReadParams{Session: session, Path: e.Path, Offset: int64(len(data)), Ignored: ignored}, &res)
+		err := filesCall(paths, proto.MethodFilesRead, proto.FilesReadParams{Session: session, Repo: repo, Path: e.Path, Offset: int64(len(data)), Ignored: ignored}, &res)
 		if err != nil {
 			msg, _ := filesErrText(err)
 			tv.note = "can't read it: " + oneLine(msg)
@@ -831,7 +1019,7 @@ func worktreeViewer(paths tmclient.Paths, session string, e proto.FileEntry, ign
 		tv.title = oneLine(e.Path) + " · " + sizeWords(res.Size)
 		if res.Binary {
 			tv.note = "not text: only its name and size show"
-			if d := fileDiff(paths, session, e.Path, ignored); d.Status != "" {
+			if d := fileDiff(paths, session, repo, e.Path, ignored); d.Status != "" {
 				tv.title += " · " + changeWords(d)
 			}
 			return tv
@@ -845,7 +1033,7 @@ func worktreeViewer(paths tmclient.Paths, session string, e proto.FileEntry, ign
 			break
 		}
 	}
-	d := fileDiff(paths, session, e.Path, ignored)
+	d := fileDiff(paths, session, repo, e.Path, ignored)
 	name := e.Name
 	if len(d.Hunks) > 0 {
 		name = "" // as it is: its lines are what the hunks count

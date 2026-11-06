@@ -56,6 +56,7 @@ struct QueuedBubble: View {
                     .foregroundStyle(theme.muted)
                     .onSurface()
                 Text(prompt.text.isEmpty ? "\(prompt.files) files" : prompt.text)
+                    .font(theme.conversation)
                     .foregroundStyle(theme.ink)
                     .padding(.horizontal, 13)
                     .padding(.vertical, 9)

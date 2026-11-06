@@ -125,7 +125,7 @@ enum LinkConfirm {
 /// The mirror, pinned to the pane's size at the top left of whatever
 /// room the window gives it.
 final class PaneHost: NSView {
-    let terminal = MirrorTerminalView(frame: .zero, font: NSFont.monospacedSystemFont(ofSize: 12.5, weight: .regular))
+    let terminal = MirrorTerminalView(frame: .zero, font: JetBrainsMono.font(size: 12.5))
 
     override init(frame: NSRect) {
         super.init(frame: frame)

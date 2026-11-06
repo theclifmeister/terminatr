@@ -117,6 +117,58 @@ private let tree: [String: [AppAPI.FileEntry]] = [
     #expect(FileTree.fold(e, at: "void", right: true, open: ["void"]) == .nothing)
 }
 
+private func marked(_ path: String, _ status: String) -> AppAPI.FileEntry {
+    AppAPI.FileEntry(name: (path as NSString).lastPathComponent, path: path, kind: "file", status: status)
+}
+
+/// A changed result as the server sends it: whole paths, sorted, a deleted
+/// file under a folder that's gone.
+private let changedFound = [
+    marked("README.md", "M"),
+    marked("internal/tui/a.go", "M"),
+    marked("internal/tui/widgets/z.go", "A"),
+    marked("old/only.go", "D"),
+]
+
+@Test func changedFilesMakeATreeOfTheFoldersThatHoldThem() throws {
+    let tree = FileTree.changedDirs(changedFound)
+    func names(_ dir: String) -> [String] { (tree[dir] ?? []).map { "\($0.path):\($0.kind):\($0.status)" } }
+    #expect(names("") == ["internal:dir:", "old:dir:", "README.md:file:M"])
+    #expect(names("internal") == ["internal/tui:dir:"])
+    #expect(names("internal/tui") == ["internal/tui/widgets:dir:", "internal/tui/a.go:file:M"])
+    #expect(names("internal/tui/widgets") == ["internal/tui/widgets/z.go:file:A"])
+    #expect(names("old") == ["old/only.go:file:D"])
+    let made = try #require(tree[""]?.first)
+    #expect(made.changed)
+    #expect(made.name == "internal")
+    // All open: every folder holding changes shows, as deep as it goes.
+    let rows = FileTree.rows(dirs: tree, open: Set(tree.keys))
+    #expect(rows.map(\.id) == ["internal", "internal/tui", "internal/tui/widgets", "internal/tui/widgets/z.go", "internal/tui/a.go", "old", "old/only.go", "README.md"])
+    #expect(rows.map(\.depth) == [0, 1, 2, 3, 2, 0, 1, 0])
+}
+
+@Test func aChangedTreeFoldsAndStepsAsTheTreeDoes() {
+    let tree = FileTree.changedDirs(changedFound)
+    let open = Set(tree.keys).subtracting(["internal/tui", "old"])
+    let rows = FileTree.rows(dirs: tree, open: open)
+    #expect(rows.map(\.id) == ["internal", "internal/tui", "old", "README.md"])
+    #expect(FileTree.fold(rows, at: "internal", right: true, open: open) == .pick("internal/tui"))
+    #expect(FileTree.fold(rows, at: "internal/tui", right: true, open: open) == .open("internal/tui"))
+    #expect(FileTree.fold(rows, at: "internal", right: false, open: open) == .close("internal"))
+    #expect(FileTree.fold(rows, at: "internal/tui", right: false, open: open) == .pick("internal"))
+}
+
+@Test func aChangedRowTheResultHasKeepsItsMarksAndWhatsUnderItShows() {
+    let tree = FileTree.changedDirs([
+        AppAPI.FileEntry(name: "both", path: "both", kind: "dir", status: "D", changed: true),
+        marked("both/new.go", "A"),
+        AppAPI.FileEntry(name: "was", path: "was", kind: "file", status: "A", changed: true),
+        marked("was/dir.go", "D"),
+    ])
+    #expect((tree[""] ?? []).map { "\($0.path):\($0.kind):\($0.status)" } == ["both:dir:D", "was:file:A"])
+    #expect(FileTree.rows(dirs: tree, open: Set(tree.keys)).map(\.id) == ["both", "both/new.go", "was", "was/dir.go"])
+}
+
 @Test func aFilesIDKeepsTabsApart() {
     let w = OpenedFile(.worktree(file("a/b.txt"), ignored: false))
     let a = OpenedFile(.attached(AppAPI.LibraryFile(thread: "t-1", title: "x", state: "open", name: "b.txt", size: 1, time: Date())))
@@ -296,6 +348,48 @@ private final class Chunks: @unchecked Sendable {
     #expect(FileMention.text(.worktree(e, ignored: false), root: "/w", relative: false) == "/w/macos/a.swift")
     let f = AppAPI.LibraryFile(thread: "t-1", title: "x", state: "open", name: "n.md", size: 1, time: Date())
     #expect(FileMention.text(.attached(f), root: "", relative: false) == "n.md (attached by t-1)")
+}
+
+/// A coordinator's file names its repo in every read, and is its own tab:
+/// two repos can hold the same path.
+@Test func anOpenedFileStaysOnItsRepo() async throws {
+    let e = AppAPI.FileEntry(name: "a.txt", path: "d/a.txt", kind: "file")
+    let first = OpenedFile(.worktree(e, ignored: false))
+    let second = OpenedFile(.worktree(e, ignored: false), repo: AppAPI.FilesRepoRef(path: "/r/two"))
+    #expect(first.id == "w:d/a.txt")
+    #expect(second.id != first.id)
+    var pane = PaneFiles()
+    pane.open(first)
+    pane.open(second)
+    #expect(pane.tabs.count == 2)
+}
+
+/// No repo chosen leaves the field out, so a bridge before app API 52,
+/// which decodes strictly, still answers; one chosen goes as its path.
+@Test func noRepoChosenIsLeftOutOfTheParams() throws {
+    let plain = try AppAPI.encoder().encode(AppAPI.FilesListParams(session: "s-1"))
+    #expect(!String(decoding: plain, as: UTF8.self).contains("repo"))
+    let read = try AppAPI.encoder().encode(AppAPI.FilesReadParams(session: "s-1", path: "a"))
+    #expect(!String(decoding: read, as: UTF8.self).contains("repo"))
+    let stamp = try AppAPI.encoder().encode(AppAPI.FilesStampParams(session: "s-1"))
+    #expect(!String(decoding: stamp, as: UTF8.self).contains("repo"))
+    let chosen = try AppAPI.encoder().encode(AppAPI.FilesListParams(session: "s-1", repo: AppAPI.FilesRepoRef(path: "/r/two")))
+    #expect(String(decoding: chosen, as: UTF8.self).contains(#""repo":{"path":"/r/two"}"#))
+}
+
+/// Every read of a chosen repo's file names that repo: the text, the bytes
+/// and the refresh's look at it.
+@Test func aReadNamesItsRepo() async {
+    let repo = AppAPI.FilesRepoRef(path: "/r/two")
+    let c = Chunks(Data("text".utf8))
+    _ = await WorktreeRead.body(c.fetch, session: "s", repo: repo, path: "f", ignored: false)
+    _ = await WorktreeRead.bytes(c.fetch, session: "s", repo: repo, path: "f", ignored: false)
+    _ = await WorktreeRead.stat(c.fetch, session: "s", repo: repo, path: "f", ignored: false)
+    #expect(!c.asked.isEmpty)
+    #expect(c.asked.allSatisfy { $0.repo == repo })
+    let plain = Chunks(Data("text".utf8))
+    _ = await WorktreeRead.body(plain.fetch, session: "s", path: "f", ignored: false)
+    #expect(plain.asked.allSatisfy { $0.repo == nil })
 }
 
 private func diff(_ status: String, hunks: [AppAPI.FilesHunk] = []) -> AppAPI.FilesDiff {

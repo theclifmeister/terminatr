@@ -42,6 +42,8 @@ struct MainArea<Detail: View, Panel: View>: View {
                         detail
                     }
                 }
+                .windowSection(.main, anchor: true)
+                .focusBorder(.main)
                 .padding(.leading, CGFloat(WindowColumns.gap))
                 if let panelWidth {
                     SplitHandle(width: CGFloat(WindowColumns.gap), value: $panelWidthSaved, sign: -1, range: InspectorColumn.min...InspectorColumn.max, name: "Panel width")
@@ -49,8 +51,12 @@ struct MainArea<Detail: View, Panel: View>: View {
                         if shownPanel == .files, let files, let place = app.filesPlace(selection) {
                             FilesPanel(model: files, place: place, own: own)
                                 .opacity(app.lost ? MainWindow.dimmed : 1)
+                                .windowSection(.files)
+                                .focusBorder(.files)
                         } else {
                             panel
+                                .windowSection(.inspector, anchor: true)
+                                .focusBorder(.inspector)
                         }
                     }
                     .frame(width: CGFloat(panelWidth))
@@ -354,12 +360,11 @@ struct BarIcon: View {
 
 // MARK: the main pane
 
-/// The main pane: 8 round, its focus line and soft glow while the window
-/// has the keys, and a header naming what's open.
+/// The main pane: 8 round with its line, and a header naming what's open.
+/// MainArea marks it as a section, which gives it the focus line.
 struct MainPane<Content: View>: View {
     @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
-    @Environment(\.controlActiveState) private var active
     let selection: Selection?
     var own: SessionModel?
     /// The file tab it shows, for its header.
@@ -368,7 +373,6 @@ struct MainPane<Content: View>: View {
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: 8)
-        let line = active == .key ? theme.focus : theme.line
         VStack(spacing: 0) {
             if let h = header {
                 PaneHeader(symbol: h.symbol, title: h.title, detail: h.detail)
@@ -380,20 +384,7 @@ struct MainPane<Content: View>: View {
         }
         .background(theme.pane)
         .clipShape(shape)
-        .overlay {
-            // The glow inside the line, kept to the pane.
-            shape.strokeBorder(line.opacity(active == .key ? 0.1 : 0), lineWidth: 2)
-                .blur(radius: 0.5)
-                .clipShape(shape)
-                .allowsHitTesting(false)
-        }
-        .overlay { shape.strokeBorder(line, lineWidth: 1).allowsHitTesting(false) }
-        .background {
-            // And outside it, into the gutter.
-            shape.stroke(line.opacity(active == .key ? 0.1 : 0), lineWidth: 1)
-                .blur(radius: 0.5)
-                .allowsHitTesting(false)
-        }
+        .overlay { shape.strokeBorder(theme.line, lineWidth: 1).allowsHitTesting(false) }
     }
 
     private var header: (symbol: String, title: String, detail: String)? {

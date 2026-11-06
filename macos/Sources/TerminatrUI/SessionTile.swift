@@ -93,7 +93,7 @@ public struct SessionTile: View {
                 }
                 if let ref {
                     Text(ref)
-                        .font(.system(size: 12.5 * theme.scale, design: .monospaced))
+                        .font(theme.monoSized(12.5))
                         .foregroundStyle(quiet)
                 }
                 Text(label)

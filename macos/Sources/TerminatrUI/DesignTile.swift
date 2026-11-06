@@ -77,7 +77,7 @@ public struct DesignTile: View {
                 Meter(fraction: Designs.progress(design))
                     .frame(width: 60 * theme.scale, height: 4)
                 Text("\(design.tasksDone) of \(max(design.build.count, design.tasks.count))")
-                    .font(.system(size: 12.5 * theme.scale, design: .monospaced))
+                    .font(theme.monoSized(12.5))
                     .monospacedDigit()
                     .foregroundStyle(quiet)
                     .lineLimit(1)

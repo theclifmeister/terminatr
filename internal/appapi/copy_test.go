@@ -378,6 +378,7 @@ func TestCopies(t *testing.T) {
 	check("files.list", homeOf(filesListOf), nil)
 	check("files.read", homeOf(filesChunkOf), nil)
 	check("files.stamp", homeOf(filesStampOf), nil)
+	check("files.repos", homeOf(filesReposOf), nil)
 	check("files.diff", homeOf(filesDiffOf), nil)
 	// The session refused it is the bridge's to tell; an answered
 	// refusal isn't listed.
@@ -429,9 +430,34 @@ func TestParamsCopies(t *testing.T) {
 		t.Errorf("approve params %+v %v", p, err)
 	}
 	m, _ = Lookup(proto.MethodFilesRead)
-	p, err = m.toServer(json.RawMessage(`{"session":"s-1","path":"pic.png","offset":9,"ignored":true,"binary":true}`))
-	if want := (proto.FilesReadParams{Session: "s-1", Path: "pic.png", Offset: 9, Ignored: true, Binary: true}); err != nil || p != want {
+	p, err = m.toServer(json.RawMessage(`{"session":"s-1","repo":{"path":"/r/two"},"path":"pic.png","offset":9,"ignored":true,"binary":true}`))
+	if want := (proto.FilesReadParams{Session: "s-1", Repo: "/r/two", Path: "pic.png", Offset: 9, Ignored: true, Binary: true}); err != nil || p != want {
 		t.Errorf("files.read params %+v %v", p, err)
+	}
+	m, _ = Lookup(proto.MethodFilesList)
+	p, err = m.toServer(json.RawMessage(`{"session":"s-1","repo":{"path":"/r/two"},"path":"d"}`))
+	if want := (proto.FilesListParams{Session: "s-1", Repo: "/r/two", Path: "d"}); err != nil || p != want {
+		t.Errorf("files.list params %+v %v", p, err)
+	}
+	// An older app sends no repo: the first's.
+	p, err = m.toServer(json.RawMessage(`{"session":"s-1"}`))
+	if want := (proto.FilesListParams{Session: "s-1"}); err != nil || p != want {
+		t.Errorf("files.list params without a repo %+v %v", p, err)
+	}
+	m, _ = Lookup(proto.MethodFilesStamp)
+	p, err = m.toServer(json.RawMessage(`{"session":"s-1","repo":{"path":"/r/two"},"folders":[""]}`))
+	if s, ok := p.(proto.FilesStampParams); err != nil || !ok || s.Repo != "/r/two" {
+		t.Errorf("files.stamp params %+v %v", p, err)
+	}
+	m, _ = Lookup(proto.MethodFilesDiff)
+	p, err = m.toServer(json.RawMessage(`{"session":"s-1","repo":{"path":"/r/two"},"path":"a.go"}`))
+	if want := (proto.FilesDiffParams{Session: "s-1", Repo: "/r/two", Path: "a.go"}); err != nil || p != want {
+		t.Errorf("files.diff params with a repo %+v %v", p, err)
+	}
+	m, _ = Lookup(proto.MethodFilesRepos)
+	p, err = m.toServer(json.RawMessage(`{"session":"s-1"}`))
+	if want := (proto.FilesReposParams{Session: "s-1"}); err != nil || p != want {
+		t.Errorf("files.repos params %+v %v", p, err)
 	}
 	m, _ = Lookup(proto.MethodFilesDiff)
 	p, err = m.toServer(json.RawMessage(`{"session":"s-1","path":"a.go","ignored":true}`))
@@ -635,7 +661,7 @@ func TestAllowlist(t *testing.T) {
 		proto.MethodLinkAct, proto.MethodPeerShareAnswer, proto.MethodPeerNeedAct, MethodGuardRefusals, MethodGuardDecide, proto.MethodTranscriptPage,
 		proto.MethodProjectPin, proto.MethodProjectNew, proto.MethodSessionAdoptRequest, proto.MethodSessionRemote, proto.MethodLinkSend,
 		proto.MethodMemoryList, proto.MethodMemoryRead, proto.MethodLibraryList, proto.MethodLibraryRead, proto.MethodDesignList, proto.MethodSearchQuery, proto.MethodSearchTimeline, proto.MethodSearchShow, proto.MethodAppReportAdd,
-		proto.MethodFilesList, proto.MethodFilesRead, proto.MethodFilesStamp, proto.MethodFilesDiff,
+		proto.MethodFilesList, proto.MethodFilesRead, proto.MethodFilesStamp, proto.MethodFilesDiff, proto.MethodFilesRepos,
 		proto.MethodPeerPagesRead, proto.MethodPeerLibraryList, proto.MethodPeerLibraryRead, proto.MethodPeerDesignList,
 		MethodDeviceNonce, MethodDeviceBye, MethodDeviceList, MethodDevicePair, MethodDevicePairWait, MethodDevicePairAnswer, MethodDeviceAccess,
 		MethodDeviceName, MethodDeviceRemove, proto.MethodModsList, proto.MethodModsSet, proto.MethodModsSetting,
@@ -658,7 +684,7 @@ func TestAllowlist(t *testing.T) {
 			}
 		}
 	}
-	for _, name := range []string{proto.MethodFilesList, proto.MethodFilesRead, proto.MethodFilesStamp, proto.MethodFilesDiff} {
+	for _, name := range []string{proto.MethodFilesList, proto.MethodFilesRead, proto.MethodFilesStamp, proto.MethodFilesDiff, proto.MethodFilesRepos} {
 		if m, _ := Lookup(name); !m.MacOnly() || m.Write {
 			t.Errorf("%s: mac-only %v, write %v", name, m.MacOnly(), m.Write)
 		}

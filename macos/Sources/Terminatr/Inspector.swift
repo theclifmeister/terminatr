@@ -88,13 +88,13 @@ struct InspectorFrame<Content: View>: View {
             case let .ids(task, thread):
                 if !task.isEmpty {
                     Text(task)
-                        .font(.system(size: 13 * theme.scale, weight: .medium, design: .monospaced))
+                        .font(theme.monoSized(13, .medium))
                         .foregroundStyle(theme.action)
                         .lineLimit(1)
                         .layoutPriority(1)
                 }
                 Text(thread)
-                    .font(.system(size: 13 * theme.scale, design: .monospaced))
+                    .font(theme.monoSized(13))
                     .foregroundStyle(theme.muted)
                     .lineLimit(1)
                     .truncationMode(.middle)
@@ -288,7 +288,7 @@ private struct NowCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(label)
-                .font(.system(size: 12 * theme.scale, design: .monospaced))
+                .font(theme.monoSized(12))
                 .foregroundStyle(theme.muted)
             Text(text)
                 .font(theme.sized(14, .medium))

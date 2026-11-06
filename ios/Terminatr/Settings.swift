@@ -90,12 +90,14 @@ struct Themed: ViewModifier {
     @AppStorage(Haptics.key) private var haptics = true
     @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.dynamicTypeSize) private var typeSize
+    @Environment(\.legibilityWeight) private var legibility
 
     func body(content: Content) -> some View {
         let picked = Theme.named(ThemeName.of(name))
         var theme = contrast == .increased ? picked.increasedContrast() : picked
         theme.scale = Self.scale(typeSize)
         theme.titleGrowth = 0.35
+        theme.boldText = legibility == .bold
         return content
             .environment(\.theme, theme)
             .environment(\.haptics, haptics)

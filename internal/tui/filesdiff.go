@@ -32,9 +32,9 @@ type diffLine struct {
 
 // fileDiff is what the server says changed in a file. A server that can't
 // say answers no change: the text shows as it is.
-func fileDiff(paths tmclient.Paths, session, path string, ignored bool) proto.FilesDiffResult {
+func fileDiff(paths tmclient.Paths, session, repo, path string, ignored bool) proto.FilesDiffResult {
 	var res proto.FilesDiffResult
-	if filesCall(paths, proto.MethodFilesDiff, proto.FilesDiffParams{Session: session, Path: path, Ignored: ignored}, &res) != nil {
+	if filesCall(paths, proto.MethodFilesDiff, proto.FilesDiffParams{Session: session, Repo: repo, Path: path, Ignored: ignored}, &res) != nil {
 		return proto.FilesDiffResult{}
 	}
 	return res
@@ -171,9 +171,9 @@ func (tv *textView) addNote(s string) {
 
 // deletedViewer fills tv with what deleted file e held, as far as the
 // server shows it.
-func deletedViewer(tv *textView, paths tmclient.Paths, session string, e proto.FileEntry, ignored bool) {
+func deletedViewer(tv *textView, paths tmclient.Paths, session, repo string, e proto.FileEntry, ignored bool) {
 	var d proto.FilesDiffResult
-	if err := filesCall(paths, proto.MethodFilesDiff, proto.FilesDiffParams{Session: session, Path: e.Path, Ignored: ignored}, &d); err != nil {
+	if err := filesCall(paths, proto.MethodFilesDiff, proto.FilesDiffParams{Session: session, Repo: repo, Path: e.Path, Ignored: ignored}, &d); err != nil {
 		msg, _ := filesErrText(err)
 		tv.note = "deleted, and can't read what it held: " + oneLine(msg)
 		return

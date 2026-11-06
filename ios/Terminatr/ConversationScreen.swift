@@ -478,10 +478,10 @@ struct EntryLine: View {
         case .text:
             VStack(alignment: .leading, spacing: 2) {
                 turn
-                MarkdownView(text: entry.text)
-                    .font(theme.sized(Flat.text))
+                MarkdownView(text: entry.text, conversation: true)
+                    .font(theme.conversation)
                     .foregroundStyle(theme.ink)
-                    .pageLeading(Flat.text)
+                    .pageLeading(Flat.conversation, mono: true)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         case .files:
@@ -535,8 +535,8 @@ struct EntryLine: View {
     private func bubble(_ words: String) -> some View {
         let text = Text(words)
             .foregroundStyle(theme.ink)
-            .font(theme.sized(Flat.text))
-            .pageLeading(Flat.text)
+            .font(theme.conversation)
+            .pageLeading(Flat.conversation, mono: true)
         return ViewThatFits(in: .horizontal) {
             bubbled(text.fixedSize())
             bubbled(text.frame(maxWidth: .infinity, alignment: .leading))
