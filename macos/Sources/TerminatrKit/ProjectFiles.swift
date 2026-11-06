@@ -208,6 +208,10 @@ public enum LibraryPage {
         /// Before and after open side by side; dark and light switch.
         public var opensSideBySide: Bool { words.contains("before") }
 
+        /// Whether each of its files is within what tm reads: before and
+        /// after need both.
+        public var readable: Bool { files.allSatisfy { FileImage.overLimit($0.size) == nil } }
+
         /// Before on the left, whichever is newer.
         public var sideBySide: [(word: String, file: AppAPI.LibraryFile)] {
             let pairs = Array(zip(words, files))
@@ -541,6 +545,8 @@ public enum LibraryPage {
     /// when it changed between chunks.
     /// With program, a director's own file of that program.
     public static func read(_ fetch: Fetch, project: String, program: String? = nil, file f: AppAPI.LibraryFile) async -> FileOutcome {
+        // The server would refuse it: no need to ask.
+        if let why = FileImage.unreadable(name: f.name, size: f.size) { return .unavailable(why) }
         let ref = program.map { AppAPI.LibraryProgram(slug: $0) }
         let params = { (off: Int) in AppAPI.LibraryReadParams(project: project, program: ref, id: id(f), name: f.name, offset: off) }
         for _ in 0..<2 {

@@ -60,16 +60,32 @@ public enum FileImage {
         size > maxBytes ? "it's over the \(Attachment.size(maxBytes)) tm reads" : nil
     }
 
+    /// The size of a file over what tm reads against that bound, for a line
+    /// beside its acts; nil when it may be read.
+    public static func overLimit(_ size: Int, maxBytes: Int = maxBytes) -> String? {
+        size > maxBytes ? "\(Attachment.size(size)), over the \(Attachment.size(maxBytes)) tm reads" : nil
+    }
+
+    /// Why Quick Look, Open and Save As can't have a file of size, which all
+    /// read its bytes through tm; nil when they can. A worktree file's path
+    /// (hasPath) still finds it, as an attached file's stays with the server.
+    public static func unreadable(name: String, size: Int, hasPath: Bool = false, maxBytes: Int = maxBytes) -> String? {
+        guard let over = overLimit(size, maxBytes: maxBytes) else { return nil }
+        let then = hasPath ? "Copy Path and Reveal in Finder still find it." : "It can't open or save from here."
+        return "\((name as NSString).lastPathComponent) is \(over). \(then)"
+    }
+
     /// What shows for a file with no text and no image, and why not an image
     /// when it was meant to be one. Quick Look and Open read through the same
-    /// cap, so an image over it is told only what still works: a worktree
+    /// cap, so a file over it is told only what still works: a worktree
     /// file's path (hasPath), as an attached file's stays with the server.
     public static func message(name: String, size: Int, why: String? = nil, hasPath: Bool = false, maxBytes: Int = maxBytes) -> String {
         let lead = "\(name) · \(Attachment.size(size)) has no text to show here."
         let reason = why.map { " Its image doesn't show: \($0.hasSuffix(".") ? String($0.dropLast()) : $0)." } ?? ""
-        guard why != nil, size > maxBytes else { return lead + reason + " Space opens Quick Look, and Open uses its app." }
+        guard size > maxBytes else { return lead + reason + " Space opens Quick Look, and Open uses its app." }
         let then = hasPath ? "Copy Path and Reveal in Finder, in its menu, find the file." : "It can't open from here."
-        return lead + reason + " Quick Look and Open stop at the same limit. " + then
+        let limit = why == nil ? "the \(Attachment.size(maxBytes)) tm reads" : "the same limit"
+        return lead + reason + " Quick Look and Open stop at \(limit). " + then
     }
 
     /// The image in d, from bytes that are data: a file's header is believed
