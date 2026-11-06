@@ -151,7 +151,7 @@ func TestModBroker(t *testing.T) {
 		len(d.Questions) != 1 || d.Questions[0].Header != "Colour" || d.Questions[0].Question != "Red?" {
 		t.Fatalf("designs.list = %+v", d)
 	}
-	// history.get (mod API 1.16): the numbers, for a project it runs in.
+	// history.get (mod API 1.17): the numbers, for a project it runs in.
 	got, err = call("history.get", map[string]string{"slug": "demo"})
 	if err != nil {
 		t.Fatal(err)

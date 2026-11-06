@@ -20,7 +20,7 @@ public enum Compatibility: Equatable, Sendable {
 
     /// The app API that has project.history and peer.history: a project's
     /// daily numbers need it.
-    public static let historyAPI = 57
+    public static let historyAPI = 58
 
     /// Whether hello's tm answers a project's daily numbers, its server
     /// too (project.history, caps history): else whatever draws them
