@@ -117,6 +117,58 @@ private let tree: [String: [AppAPI.FileEntry]] = [
     #expect(FileTree.fold(e, at: "void", right: true, open: ["void"]) == .nothing)
 }
 
+private func marked(_ path: String, _ status: String) -> AppAPI.FileEntry {
+    AppAPI.FileEntry(name: (path as NSString).lastPathComponent, path: path, kind: "file", status: status)
+}
+
+/// A changed result as the server sends it: whole paths, sorted, a deleted
+/// file under a folder that's gone.
+private let changedFound = [
+    marked("README.md", "M"),
+    marked("internal/tui/a.go", "M"),
+    marked("internal/tui/widgets/z.go", "A"),
+    marked("old/only.go", "D"),
+]
+
+@Test func changedFilesMakeATreeOfTheFoldersThatHoldThem() throws {
+    let tree = FileTree.changedDirs(changedFound)
+    func names(_ dir: String) -> [String] { (tree[dir] ?? []).map { "\($0.path):\($0.kind):\($0.status)" } }
+    #expect(names("") == ["internal:dir:", "old:dir:", "README.md:file:M"])
+    #expect(names("internal") == ["internal/tui:dir:"])
+    #expect(names("internal/tui") == ["internal/tui/widgets:dir:", "internal/tui/a.go:file:M"])
+    #expect(names("internal/tui/widgets") == ["internal/tui/widgets/z.go:file:A"])
+    #expect(names("old") == ["old/only.go:file:D"])
+    let made = try #require(tree[""]?.first)
+    #expect(made.changed)
+    #expect(made.name == "internal")
+    // All open: every folder holding changes shows, as deep as it goes.
+    let rows = FileTree.rows(dirs: tree, open: Set(tree.keys))
+    #expect(rows.map(\.id) == ["internal", "internal/tui", "internal/tui/widgets", "internal/tui/widgets/z.go", "internal/tui/a.go", "old", "old/only.go", "README.md"])
+    #expect(rows.map(\.depth) == [0, 1, 2, 3, 2, 0, 1, 0])
+}
+
+@Test func aChangedTreeFoldsAndStepsAsTheTreeDoes() {
+    let tree = FileTree.changedDirs(changedFound)
+    let open = Set(tree.keys).subtracting(["internal/tui", "old"])
+    let rows = FileTree.rows(dirs: tree, open: open)
+    #expect(rows.map(\.id) == ["internal", "internal/tui", "old", "README.md"])
+    #expect(FileTree.fold(rows, at: "internal", right: true, open: open) == .pick("internal/tui"))
+    #expect(FileTree.fold(rows, at: "internal/tui", right: true, open: open) == .open("internal/tui"))
+    #expect(FileTree.fold(rows, at: "internal", right: false, open: open) == .close("internal"))
+    #expect(FileTree.fold(rows, at: "internal/tui", right: false, open: open) == .pick("internal"))
+}
+
+@Test func aChangedRowTheResultHasKeepsItsMarksAndWhatsUnderItShows() {
+    let tree = FileTree.changedDirs([
+        AppAPI.FileEntry(name: "both", path: "both", kind: "dir", status: "D", changed: true),
+        marked("both/new.go", "A"),
+        AppAPI.FileEntry(name: "was", path: "was", kind: "file", status: "A", changed: true),
+        marked("was/dir.go", "D"),
+    ])
+    #expect((tree[""] ?? []).map { "\($0.path):\($0.kind):\($0.status)" } == ["both:dir:D", "was:file:A"])
+    #expect(FileTree.rows(dirs: tree, open: Set(tree.keys)).map(\.id) == ["both", "both/new.go", "was", "was/dir.go"])
+}
+
 @Test func aFilesIDKeepsTabsApart() {
     let w = OpenedFile(.worktree(file("a/b.txt"), ignored: false))
     let a = OpenedFile(.attached(AppAPI.LibraryFile(thread: "t-1", title: "x", state: "open", name: "b.txt", size: 1, time: Date())))

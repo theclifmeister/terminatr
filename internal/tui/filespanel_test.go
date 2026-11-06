@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -191,8 +192,15 @@ func TestFilesPanelGolden(t *testing.T) {
 	write("filtering, ignored too", fv, 39)
 	fv = base()
 	fv.changed, fv.cut = true, true
-	fv.found = []proto.FileEntry{{Name: "README.md", Path: "README.md", Kind: proto.FileKindFile, Status: proto.FileModified}}
+	fv.found = []proto.FileEntry{
+		{Name: "README.md", Path: "README.md", Kind: proto.FileKindFile, Status: proto.FileModified},
+		{Name: "types.go", Path: "internal/tui/types.go", Kind: proto.FileKindFile, Status: proto.FileAdded},
+		{Name: "only.go", Path: "old/only.go", Kind: proto.FileKindFile, Status: proto.FileDeleted},
+	}
+	fv.tree = changedTree(fv.found)
 	write("changed only, cut", fv, 39)
+	fv.shut = map[string]bool{"internal/tui": true, "old": true}
+	write("changed only, folders folded", fv, 39)
 	fv = base()
 	fv.sum.Git = false
 	fv.dirs = map[string][]proto.FileEntry{"": {{Name: "a.txt", Path: "a.txt", Kind: proto.FileKindFile}}}
@@ -314,6 +322,177 @@ func TestFilesKeys(t *testing.T) {
 	filesPress(c, "F")
 	if c.info.files != nil || !strings.Contains(infoText(c), "thread") {
 		t.Fatalf("F: back to the Info face:\n%s", infoText(c))
+	}
+}
+
+// changedFound is a changed result as the server sends it: whole paths,
+// sorted, a deleted file under a folder that's gone.
+func changedFound() []proto.FileEntry {
+	return []proto.FileEntry{
+		{Name: "README.md", Path: "README.md", Kind: proto.FileKindFile, Status: proto.FileModified},
+		{Name: "a.go", Path: "internal/tui/a.go", Kind: proto.FileKindFile, Status: proto.FileModified},
+		{Name: "z.go", Path: "internal/tui/widgets/z.go", Kind: proto.FileKindFile, Status: proto.FileAdded},
+		{Name: "only.go", Path: "old/only.go", Kind: proto.FileKindFile, Status: proto.FileDeleted},
+	}
+}
+
+// TestChangedTree: the changed files as folders, listed as a folder is;
+// the folders that hold them come from the paths, a gone one too.
+func TestChangedTree(t *testing.T) {
+	tree := changedTree(changedFound())
+	names := func(dir string) []string {
+		var out []string
+		for _, e := range tree[dir] {
+			out = append(out, e.Path+":"+e.Kind+":"+e.Status)
+		}
+		return out
+	}
+	for dir, want := range map[string][]string{
+		"":                     {"internal:dir:", "old:dir:", "README.md:file:M"},
+		"internal":             {"internal/tui:dir:"},
+		"internal/tui":         {"internal/tui/widgets:dir:", "internal/tui/a.go:file:M"},
+		"internal/tui/widgets": {"internal/tui/widgets/z.go:file:A"},
+		"old":                  {"old/only.go:file:D"},
+	} {
+		if got := names(dir); !slices.Equal(got, want) {
+			t.Errorf("%q: %v, want %v", dir, got, want)
+		}
+	}
+	for _, e := range tree[""] {
+		if e.Kind == proto.FileKindDir && (!e.Changed || e.Name == "" || strings.Contains(e.Name, "/")) {
+			t.Errorf("a made folder: %+v", e)
+		}
+	}
+	// A row the result has itself keeps its mark: a file deleted where a
+	// folder now is. And what git says is under a file still shows under it.
+	tree = changedTree([]proto.FileEntry{
+		{Name: "both", Path: "both", Kind: proto.FileKindDir, Status: proto.FileDeleted, Changed: true},
+		{Name: "new.go", Path: "both/new.go", Kind: proto.FileKindFile, Status: proto.FileAdded},
+		{Name: "was", Path: "was", Kind: proto.FileKindFile, Status: proto.FileAdded, Changed: true},
+		{Name: "dir.go", Path: "was/dir.go", Kind: proto.FileKindFile, Status: proto.FileDeleted},
+	})
+	if got := names(""); !slices.Equal(got, []string{"both:dir:D", "was:file:A"}) {
+		t.Errorf("top: %v", got)
+	}
+	fv := &filesView{changed: true, tree: tree}
+	var ids []string
+	for _, r := range fv.rows() {
+		ids = append(ids, r.id())
+	}
+	if want := []string{"both", "both/new.go", "was", "was/dir.go"}; !slices.Equal(ids, want) {
+		t.Errorf("rows %v, want %v", ids, want)
+	}
+}
+
+// TestFilesChangedKeys: Changed only is a tree whose folders start open;
+// the keys and a click fold it as in the tree, without listing anything or
+// touching the tree's own folding, and a refresh keeps both. A filter alone
+// stays flat; with Changed only it stays a tree of what it matches.
+func TestFilesChangedKeys(t *testing.T) {
+	c, f := filesClient(t)
+	f.found = map[string][]proto.FileEntry{"": changedFound(), "a.go": changedFound()[1:2]}
+	filesPress(c, "right") // the tree's own: internal, unfolded
+	fv := c.info.files
+	sel := func() string { return fv.selPath }
+	ids := func() []string {
+		var out []string
+		for _, r := range fv.rows() {
+			out = append(out, strings.Repeat(" ", r.depth)+r.id())
+		}
+		return out
+	}
+	all := []string{"internal", " internal/tui", "  internal/tui/widgets", "   internal/tui/widgets/z.go", "  internal/tui/a.go", "old", " old/only.go", "README.md"}
+	filesPress(c, "c")
+	if got := ids(); !slices.Equal(got, all) {
+		t.Fatalf("changed only: %q", got)
+	}
+	if got := infoText(c); !strings.Contains(got, "▾ internal/") || !strings.Contains(got, "only.go") || strings.Contains(got, "internal/tui/a.go") {
+		t.Fatalf("changed only, as a tree of names:\n%s", got)
+	}
+	n := f.lists.Load()
+	filesPress(c, "right") // on internal, open: steps in
+	if sel() != "internal/tui" {
+		t.Fatalf("→ on an open folder: %q", sel())
+	}
+	filesPress(c, "left") // folds it
+	if got := ids(); !slices.Equal(got, []string{"internal", " internal/tui", "old", " old/only.go", "README.md"}) {
+		t.Fatalf("← folded: %q", got)
+	}
+	filesPress(c, "left")
+	if sel() != "internal" {
+		t.Fatalf("← up: %q", sel())
+	}
+	filesPress(c, "down", "right") // unfolds again
+	if got := ids(); !slices.Equal(got, all) {
+		t.Fatalf("→ unfolded: %q", got)
+	}
+	filesPress(c, "enter") // folds, as in the tree
+	if strings.Contains(infoText(c), "a.go") {
+		t.Fatalf("enter folded nothing:\n%s", infoText(c))
+	}
+	if f.lists.Load() != n {
+		t.Fatal("folding a changed tree listed folders")
+	}
+	if !fv.open["internal"] || len(fv.open) != 1 {
+		t.Fatalf("the tree's own folding moved: %v", fv.open)
+	}
+
+	// A refresh keeps the folded folder and the selection.
+	c.filesFetch()
+	if strings.Contains(infoText(c), "a.go") || sel() != "internal/tui" {
+		t.Fatalf("refresh: %q\n%s", sel(), infoText(c))
+	}
+
+	// With a filter too: a tree of what it matches, opened again so what it
+	// finds shows.
+	filesPress(c, "/", "a", ".", "g", "o", "enter")
+	if got := f.seen[len(f.seen)-1]; !got.Changed || got.Query != "a.go" {
+		t.Fatalf("both: %+v", got)
+	}
+	if got := ids(); !slices.Equal(got, []string{"internal", " internal/tui", "  internal/tui/a.go"}) {
+		t.Fatalf("both: %q", got)
+	}
+	filesPress(c, "esc")
+
+	// Off and on: the folders start open again, and the tree's are back.
+	filesPress(c, "left") // shuts something
+	filesPress(c, "c")
+	if !fv.open["internal"] || fv.shut != nil || !slices.Contains(ids(), " internal/types.go") {
+		t.Fatalf("off: %v %v %q", fv.open, fv.shut, ids())
+	}
+	filesPress(c, "c")
+	if got := ids(); !slices.Equal(got, all) {
+		t.Fatalf("on again: %q", got)
+	}
+	filesPress(c, "c")
+
+	// A filter alone stays the flat search.
+	f.found["a.go"] = changedFound()[1:2]
+	filesPress(c, "/", "a", ".", "g", "o", "enter")
+	if rows := fv.rows(); len(rows) != 1 || rows[0].depth != 0 || !strings.Contains(infoText(c), "internal/tui/a.go") {
+		t.Fatalf("a filter: %+v\n%s", rows, infoText(c))
+	}
+}
+
+// TestFilesChangedClick: a click folds a changed tree's folder, and a
+// deleted file under a gone folder selects and reads as a file does.
+func TestFilesChangedClick(t *testing.T) {
+	c, f := filesClient(t)
+	f.found = map[string][]proto.FileEntry{"": changedFound()}
+	filesPress(c, "c")
+	fv := c.info.files
+	at := func(id string) int {
+		return slices.IndexFunc(fv.rows(), func(r fileRow) bool { return r.id() == id })
+	}
+	c.mu.Lock()
+	c.filesClick(infoHit{kind: hitFileRow, task: at("internal")})
+	if strings.Contains(infoText(c), "a.go") || !fv.shut["internal"] {
+		t.Fatalf("a click folded nothing:\n%s", infoText(c))
+	}
+	c.mu.Lock()
+	c.filesClick(infoHit{kind: hitFileRow, task: at("old/only.go")})
+	if fv.selPath != "old/only.go" {
+		t.Fatalf("a click selects: %q", fv.selPath)
 	}
 }
 

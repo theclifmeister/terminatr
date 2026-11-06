@@ -114,11 +114,40 @@ public enum FileTree {
         func walk(_ dir: String, _ depth: Int) {
             for e in dirs[dir] ?? [] {
                 out.append(FileRow(entry: e, depth: depth))
-                if e.kind == "dir", open.contains(e.path) { walk(e.path, depth + 1) }
+                if open.contains(e.path) { walk(e.path, depth + 1) }
             }
         }
         walk("", 0)
         return out
+    }
+
+    /// Files.list's changed result as folders, each listed as a folder is:
+    /// folders first, by name, as changedTree in the TUI. The folders come
+    /// from the paths, not the disk, so a deleted file sits under a folder
+    /// that's gone. A row the result has itself keeps its own marks: it
+    /// comes before what's under it. A key is a folder with rows under it.
+    public static func changedDirs(_ found: [AppAPI.FileEntry]) -> [String: [AppAPI.FileEntry]] {
+        var tree: [String: [AppAPI.FileEntry]] = [:]
+        var seen: Set<String> = []
+        func add(_ dir: String, _ e: AppAPI.FileEntry) {
+            if seen.insert(e.path).inserted { tree[dir, default: []].append(e) }
+        }
+        for e in found {
+            let names = e.path.split(separator: "/", omittingEmptySubsequences: false).map(String.init)
+            var dir = ""
+            for name in names.dropLast() {
+                let p = dir.isEmpty ? name : dir + "/" + name
+                add(dir, AppAPI.FileEntry(name: name, path: p, kind: "dir", changed: true))
+                dir = p
+            }
+            add(dir, e)
+        }
+        return tree.mapValues { list in
+            list.sorted { a, b in
+                if (a.kind == "dir") != (b.kind == "dir") { return a.kind == "dir" }
+                return Array(a.name.lowercased().utf8).lexicographicallyPrecedes(Array(b.name.lowercased().utf8))
+            }
+        }
     }
 
     /// The folders to list: the top first, then the unfolded ones that

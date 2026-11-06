@@ -13,6 +13,7 @@ import TerminatrUI
 struct FilesPanel: View {
     @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
+    @Environment(SectionFocusOwner.self) private var sections
     let model: FilesModel
     let place: FilesPlace
     /// A session window's own session model.
@@ -60,6 +61,9 @@ struct FilesPanel: View {
                 model.wantsFocus = false
                 treeFocused = true
             }
+        }
+        .onChange(of: sections.ask?.id) {
+            if sections.ask?.section == .files { treeFocused = true }
         }
     }
 
@@ -264,7 +268,7 @@ struct FilesPanel: View {
             if let c = model.cursor { proxy.scrollTo(c) }
         case .return:
             guard let c = model.cursor else { return .ignored }
-            if model.scope == .worktree, model.rows.first(where: { $0.id == c })?.isFolder == true, !model.searching {
+            if model.scope == .worktree, model.rows.first(where: { $0.id == c })?.isFolder == true, !model.flat {
                 model.toggle(folder: c, app)
             } else if let f = model.picked {
                 openInPane(f)
@@ -281,6 +285,7 @@ struct FilesPanel: View {
     @ViewBuilder
     private var worktree: some View {
         let rows = model.rows
+        let unfolded = model.unfolded
         if rows.isEmpty, model.problem == nil, model.loaded {
             Text(model.searching ? "Nothing matches." : "Nothing here.")
                 .font(theme.sized(12.5))
@@ -288,7 +293,7 @@ struct FilesPanel: View {
                 .padding(8)
         }
         ForEach(rows) { r in
-            FileNode(row: r, flat: model.searching, unfolded: model.open.contains(r.id), on: model.cursor == r.id) {
+            FileNode(row: r, flat: model.flat, unfolded: unfolded.contains(r.id), on: model.cursor == r.id) {
                 click(r)
             } twice: {
                 if !r.isFolder { openInPane(model.file(r.entry)) }
@@ -307,7 +312,7 @@ struct FilesPanel: View {
     private func click(_ r: FileRow) {
         treeFocused = true
         model.moveCursor(to: r.id)
-        if r.isFolder, !model.searching { model.toggle(folder: r.id, app) }
+        if r.isFolder, !model.flat { model.toggle(folder: r.id, app) }
     }
 
     @ViewBuilder
