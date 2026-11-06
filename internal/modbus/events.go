@@ -36,6 +36,7 @@ const (
 	UIClick    = "ui.click"
 	UIKey      = "ui.key"
 	UICursor   = "ui.cursor"
+	UIFilter   = "ui.filter"
 	ActionDone = "action.done"
 	ViewOpened = "view.opened"
 	ViewClosed = "view.closed"
@@ -256,14 +257,17 @@ type Target struct {
 
 // Input is ui.click and ui.key: the human clicked, or pressed Key on, one
 // of the mod's own columns, views or widgets; and ui.cursor: the row
-// under the cursor of a view's focused list is now Row ("" for none).
+// under the cursor of a view's focused list is now Row ("" for none); and
+// ui.filter (mod API 1.20): the filter of a view's focused list now says
+// Filter ("" for none).
 type Input struct {
 	Column string `json:"column,omitempty"`
 	View   string `json:"view,omitempty"`
 	Widget string `json:"widget,omitempty"`
 	// Row is the id of the row under the widget's cursor, or clicked.
 	Row    string  `json:"row,omitempty"`
-	Key    string  `json:"key,omitempty"` // ui.key only
+	Key    string  `json:"key,omitempty"`    // ui.key only
+	Filter string  `json:"filter,omitempty"` // ui.filter only
 	Target *Target `json:"target,omitempty"`
 }
 

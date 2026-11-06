@@ -34,6 +34,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/textsafe"
 	"github.com/theclifmeister/terminatr/internal/thread"
+	"github.com/theclifmeister/terminatr/internal/widget"
 )
 
 // modRegistryAge is how long the broker trusts the registry without
@@ -613,6 +614,9 @@ func modDone(p *project.Project, o modapi.DoneOptions, now time.Time) (modapi.Do
 		return out
 	}
 	if !o.Groups {
+		if o.Query != "" {
+			done = slices.DeleteFunc(done, func(t *tasks.Task) bool { return !widget.Matches(t.Ref()+" "+t.Title, o.Query) })
+		}
 		page, total, next := tasks.PageDone(done, now.Location(), o.From, o.To, o.Offset, o.Limit)
 		out.Tasks, out.Total, out.Next = rows(page), total, next
 		return out, nil

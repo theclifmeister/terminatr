@@ -1,0 +1,390 @@
+{
+  "name": "while the filter has words, Done is every task they find, the archive's too, without b, each row found by its id and title, read a page at a time; with no words it folds again",
+  "answers": [
+    {
+      "method": "tasks.list",
+      "params": {
+        "slug": "demo"
+      },
+      "result": [
+        {
+          "id": "T5",
+          "title": "Idea for login",
+          "status": "open",
+          "steps_done": 0,
+          "steps_total": 0,
+          "steps": []
+        },
+        {
+          "id": "T2",
+          "title": "Login done on board",
+          "status": "done",
+          "steps_done": 0,
+          "steps_total": 0,
+          "steps": [],
+          "done_at": "2026-11-05T10:00:00Z",
+          "done_label": "5 Nov 10:00"
+        }
+      ]
+    },
+    {
+      "method": "tasks.list",
+      "params": {
+        "slug": "demo"
+      },
+      "result": [
+        {
+          "id": "T5",
+          "title": "Idea for login",
+          "status": "open",
+          "steps_done": 0,
+          "steps_total": 0,
+          "steps": []
+        },
+        {
+          "id": "T2",
+          "title": "Login done on board",
+          "status": "done",
+          "steps_done": 0,
+          "steps_total": 0,
+          "steps": [],
+          "done_at": "2026-11-05T10:00:00Z",
+          "done_label": "5 Nov 10:00"
+        }
+      ]
+    },
+    {
+      "method": "tasks.done",
+      "params": {
+        "slug": "demo",
+        "options": {
+          "query": "login",
+          "archived": true,
+          "offset": 1,
+          "limit": 50
+        }
+      },
+      "result": {
+        "tasks": [
+          {
+            "id": "T1",
+            "title": "Old café login",
+            "status": "done",
+            "steps_done": 0,
+            "steps_total": 0,
+            "steps": [],
+            "archived": true,
+            "done_at": "2026-08-01",
+            "done_label": "1 Aug"
+          }
+        ],
+        "groups": [],
+        "total": 2,
+        "next": 0
+      }
+    },
+    {
+      "method": "tasks.done",
+      "params": {
+        "slug": "demo",
+        "options": {
+          "query": "login",
+          "archived": true,
+          "limit": 50
+        }
+      },
+      "result": {
+        "tasks": [
+          {
+            "id": "T2",
+            "title": "Login done on board",
+            "status": "done",
+            "steps_done": 0,
+            "steps_total": 0,
+            "steps": [],
+            "done_at": "2026-11-05T10:00:00Z",
+            "done_label": "5 Nov 10:00"
+          }
+        ],
+        "groups": [],
+        "total": 2,
+        "next": 1
+      }
+    },
+    {
+      "method": "tasks.list",
+      "params": {
+        "slug": "demo"
+      },
+      "result": [
+        {
+          "id": "T5",
+          "title": "Idea for login",
+          "status": "open",
+          "steps_done": 0,
+          "steps_total": 0,
+          "steps": []
+        },
+        {
+          "id": "T2",
+          "title": "Login done on board",
+          "status": "done",
+          "steps_done": 0,
+          "steps_total": 0,
+          "steps": [],
+          "done_at": "2026-11-05T10:00:00Z",
+          "done_label": "5 Nov 10:00"
+        }
+      ]
+    }
+  ],
+  "events": [
+    {
+      "name": "view.opened",
+      "project": "demo",
+      "data": {
+        "view": "tasks",
+        "slot": "project.tab",
+        "project": "demo",
+        "width": 70,
+        "height": 20
+      }
+    },
+    {
+      "name": "ui.filter",
+      "project": "demo",
+      "data": {
+        "view": "tasks",
+        "widget": "tasks",
+        "target": {
+          "project": "demo"
+        },
+        "filter": "login "
+      }
+    },
+    {
+      "name": "ui.key",
+      "project": "demo",
+      "data": {
+        "view": "tasks",
+        "widget": "tasks",
+        "target": {
+          "project": "demo"
+        },
+        "key": "enter",
+        "row": "m:found"
+      }
+    },
+    {
+      "name": "ui.filter",
+      "project": "demo",
+      "data": {
+        "view": "tasks",
+        "widget": "tasks",
+        "target": {
+          "project": "demo"
+        }
+      }
+    }
+  ],
+  "expect": {
+    "calls": [
+      {
+        "method": "tasks.list",
+        "params": {
+          "slug": "demo"
+        }
+      },
+      {
+        "method": "ui.view.set",
+        "params": {
+          "view": "tasks",
+          "widget": {
+            "kind": "stack",
+            "children": [
+              {
+                "kind": "table",
+                "rows": [
+                  {
+                    "id": "g:backlog"
+                  },
+                  {
+                    "id": "T5",
+                    "find": "T5 Idea for login"
+                  },
+                  {
+                    "id": "g:done",
+                    "head": true
+                  }
+                ]
+              },
+              {
+                "kind": "text",
+                "text": "… 1 done (b shows them)"
+              },
+              {
+                "kind": "keys"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "method": "tasks.list",
+        "params": {
+          "slug": "demo"
+        }
+      },
+      {
+        "method": "tasks.done",
+        "params": {
+          "slug": "demo",
+          "options": {
+            "query": "login",
+            "archived": true,
+            "limit": 50
+          }
+        }
+      },
+      {
+        "method": "ui.view.set",
+        "params": {
+          "view": "tasks",
+          "widget": {
+            "kind": "stack",
+            "children": [
+              {
+                "kind": "table",
+                "rows": [
+                  {
+                    "id": "g:backlog"
+                  },
+                  {
+                    "id": "T5"
+                  },
+                  {
+                    "id": "g:done",
+                    "head": true
+                  },
+                  {
+                    "id": "T2",
+                    "find": "T2 Login done on board"
+                  },
+                  {
+                    "id": "m:found",
+                    "find": "login",
+                    "spans": [
+                      {
+                        "text": "  … 1 more",
+                        "role": "faint"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "kind": "keys"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "method": "tasks.done",
+        "params": {
+          "slug": "demo",
+          "options": {
+            "query": "login",
+            "archived": true,
+            "offset": 1,
+            "limit": 50
+          }
+        }
+      },
+      {
+        "method": "ui.view.set",
+        "params": {
+          "view": "tasks",
+          "widget": {
+            "kind": "stack",
+            "children": [
+              {
+                "kind": "table",
+                "rows": [
+                  {
+                    "id": "g:backlog"
+                  },
+                  {
+                    "id": "T5"
+                  },
+                  {
+                    "id": "g:done",
+                    "head": true
+                  },
+                  {
+                    "id": "T2"
+                  },
+                  {
+                    "id": "T1",
+                    "find": "T1 Old café login",
+                    "actions": [
+                      {
+                        "id": "task.show",
+                        "target": {
+                          "project": "demo",
+                          "task": "T1"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "kind": "keys"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "method": "tasks.list",
+        "params": {
+          "slug": "demo"
+        }
+      },
+      {
+        "method": "ui.view.set",
+        "params": {
+          "view": "tasks",
+          "widget": {
+            "kind": "stack",
+            "children": [
+              {
+                "kind": "table",
+                "rows": [
+                  {
+                    "id": "g:backlog"
+                  },
+                  {
+                    "id": "T5"
+                  },
+                  {
+                    "id": "g:done",
+                    "head": true
+                  }
+                ]
+              },
+              {
+                "kind": "text",
+                "text": "… 1 done (b shows them)"
+              },
+              {
+                "kind": "keys"
+              }
+            ]
+          }
+        }
+      }
+    ]
+  }
+}

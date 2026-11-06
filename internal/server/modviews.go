@@ -292,7 +292,7 @@ func (s *Server) modViewsRestarted(id string) {
 
 // modViewInput is mod.view.input: a human's declared key or click in a
 // mod's view, to the mod as ui.key or ui.click, or where its cursor
-// went, as ui.cursor. A key or a click lets the mod open a
+// went, as ui.cursor, or what its filter says, as ui.filter. A key or a click lets the mod open a
 // view on this console for a while (modview.InputWindow).
 func (s *Server) modViewInput(p proto.ModViewInputParams, pid int, c caller.Caller) (any, *proto.Error) {
 	if c.IsAgent() {
@@ -313,28 +313,30 @@ func (s *Server) modViewInput(p proto.ModViewInputParams, pid int, c caller.Call
 	case widget.EventClick:
 	case widget.EventCursor:
 		name = modbus.UICursor
+	case widget.EventFilter:
+		name = modbus.UIFilter
 	case widget.EventKey:
 		name = modbus.UIKey
 		if p.Key == "" || len(p.Key) > 16 {
 			return nil, proto.Errorf(proto.ErrBadParams, "no key")
 		}
 	default:
-		return nil, proto.Errorf(proto.ErrBadParams, "kind %q is not key, click or cursor", p.Kind)
+		return nil, proto.Errorf(proto.ErrBadParams, "kind %q is not key, click, cursor or filter", p.Kind)
 	}
-	if len(p.Widget) > 64 || len(p.Row) > 256 {
-		return nil, proto.Errorf(proto.ErrBadParams, "widget or row id too long")
+	if len(p.Widget) > 64 || len(p.Row) > 256 || len(p.Filter) > 1024 {
+		return nil, proto.Errorf(proto.ErrBadParams, "widget or row id, or filter, too long")
 	}
-	in := modbus.Input{View: p.View, Widget: p.Widget, Row: p.Row}
+	in := modbus.Input{View: p.View, Widget: p.Widget, Row: p.Row, Filter: p.Filter}
 	if name == modbus.UIKey {
 		in.Key = p.Key
 	}
 	if p.Project != "" {
 		in.Target = &modbus.Target{Project: p.Project}
 	}
-	// The cursor moves with a publish too: only a key or a click lets
-	// the mod open a view.
+	// The cursor moves with a publish too, and a filter isn't a press:
+	// only a key or a click lets the mod open a view.
 	var res proto.ModViewInputResult
-	if name != modbus.UICursor {
+	if name != modbus.UICursor && name != modbus.UIFilter {
 		res.After = s.modViewStore().Input(p.Mod, pid, p.Project)
 	}
 	if s.modEv != nil {
