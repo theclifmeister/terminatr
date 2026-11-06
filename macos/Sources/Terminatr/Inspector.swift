@@ -435,6 +435,13 @@ struct Inspector: View {
                 }
             }
             agent(head)
+            if let t, let short = t.record.usage.short {
+                InspectorFold("Usage", summary: short) {
+                    FactList {
+                        ForEach(t.record.usage.factRows, id: \.label) { FactRow($0.label, $0.value) }
+                    }
+                }
+            }
         }
     }
 
@@ -538,7 +545,6 @@ struct Inspector: View {
                     }
                     if let t {
                         FactRow("Started", t.record.created.formatted(date: .abbreviated, time: .shortened))
-                        if t.record.usage.costUsd > 0 { FactRow("Cost", String(format: "$%.2f", t.record.usage.costUsd)) }
                     }
                 }
             }
