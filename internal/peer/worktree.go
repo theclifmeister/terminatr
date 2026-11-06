@@ -98,6 +98,9 @@ func worktreeHandler[P, R any](d *dispatcher, project func(P) string, read func(
 		if err != nil {
 			return nil, worktreeRefusal(err)
 		}
+		if d.worktreeRead != nil {
+			d.worktreeRead()
+		}
 		return res, nil
 	}
 }
@@ -121,4 +124,15 @@ func (m *Manager) filesOn(id ID, project string) bool {
 	}
 	i := slices.IndexFunc(peers, func(q Peer) bool { return q.ID() == id })
 	return i >= 0 && peers[i].FilesOn(project)
+}
+
+// noteFilesRead remembers when peer id last read a folder here, for the
+// Network popup: the link's own record, not in a file, and no path.
+func (m *Manager) noteFilesRead(id ID) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.filesRead == nil {
+		m.filesRead = map[ID]time.Time{}
+	}
+	m.filesRead[id] = time.Now()
 }

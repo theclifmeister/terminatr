@@ -1,6 +1,7 @@
 package ticker
 
 import (
+	"crypto/ed25519"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,8 +10,11 @@ import (
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
+	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/gittest"
 	"github.com/theclifmeister/terminatr/internal/home"
+	"github.com/theclifmeister/terminatr/internal/peer"
+	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/thread"
 )
@@ -219,5 +223,48 @@ func TestReportPRLineOfAnotherBranch(t *testing.T) {
 	}
 	if guessed != 1 {
 		t.Fatalf("asked about the report's PR %d times", guessed)
+	}
+}
+
+// TestSweepPeerFiles: the sweep turns the files switch off for what lost it
+// by any road (here a hand-edited config) and leaves the rest.
+func TestSweepPeerFiles(t *testing.T) {
+	r := newRig(t)
+	dir, err := peer.Dir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	key, _, _ := ed25519.GenerateKey(nil)
+	slug := r.p.Slug
+	if err := peer.SavePeers(dir, []peer.Peer{{Alias: "mini", Key: key, Relay: "wss://relay.example", Files: []string{slug, "gone-project"}}}); err != nil {
+		t.Fatal(err)
+	}
+	r.setConfig(fmt.Sprintf("[projects.%s]\nactive = true\nshare = true\n", slug))
+	files := func() []string {
+		peers, err := peer.LoadPeers(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return peers[0].Files
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	list := []project.Summary{{Slug: slug}}
+	r.tk.sweepPeerFiles(cfg, list)
+	if got := files(); len(got) != 1 || got[0] != slug {
+		t.Fatalf("after a sweep with it shared: %v", got)
+	}
+	r.setConfig(fmt.Sprintf("[projects.%s]\nactive = true\nshare = false\n", slug))
+	if cfg, err = config.Load(); err != nil {
+		t.Fatal(err)
+	}
+	r.tk.sweepPeerFiles(cfg, list)
+	if got := files(); len(got) != 0 {
+		t.Fatalf("after a sweep with it not shared: %v", got)
+	}
+	if j, _ := os.ReadFile(filepath.Join(r.p.Dir, "JOURNAL.md")); !strings.Contains(string(j), "peer.files") {
+		t.Errorf("journal:\n%s", j)
 	}
 }

@@ -3,6 +3,7 @@ package tui
 import (
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/x/ansi"
 
@@ -32,6 +33,8 @@ import (
 //	"  ○ types in them"
 //	"  panes (V)   off · [view] · write"
 //	"  needs (N)   [off] · view · answer"
+//	"  pages       off · [on] acme-api"
+//	"  files       off · [on] acme-api"
 //	"AND THE OTHER WAY"
 //	"  work lets you watch its panes · its popup read-only"
 //	"  it shares acme-api, acme-docs"
@@ -51,6 +54,8 @@ const (
 	// itemPages+i is the project pages switch of the i-th shared project
 	// (sharedSlugs): ← →, enter or space.
 	itemPages = 100
+	// itemPeerFiles+i is the files switch of the same project: the same keys.
+	itemPeerFiles = 300
 )
 
 // panelLine is one line of the panel: its text, the item it belongs to
@@ -182,6 +187,11 @@ func (nv *networkView) panelLines(m *dash, r netRow, ok bool, w int) []panelLine
 		rung(lv >= 2, "types in them")
 		rung(lv >= 1 && !e.ConversationsOff, "reads their conversations, in its Mac app")
 		rung(proto.NeedsShown(needsLevel(e)), "sees what your projects ask you, in full")
+		if s := sharedFiles(m, e); len(s) > 0 {
+			rung(true, "reads files of "+strings.Join(s, ", "))
+		} else {
+			rung(false, "reads no files of yours")
+		}
 		out = append(out, panelLine{text: "  " + fit(th().Faint.Render("panes (V)"), panelLabel-2) + panesChoices(level, true), item: itemPanes, x: panelLabel})
 		under(panesWhat(level))
 		out = append(out, panelLine{text: "  " + fit(th().Faint.Render("chats (C)"), panelLabel-2) + convChoices(!e.ConversationsOff), item: itemConv, x: panelLabel})
@@ -199,6 +209,11 @@ func (nv *networkView) panelLines(m *dash, r netRow, ok bool, w int) []panelLine
 		}
 		if len(sharedSlugs(m)) > 0 {
 			under("pages: the board, overview and library it reads, never the memory")
+			for i, slug := range sharedSlugs(m) {
+				on := slices.Contains(e.Files, slug)
+				out = append(out, panelLine{text: "  " + fit(th().Faint.Render("files"), panelLabel-2) + pagesChoices(on) + th().Faint.Render(" "+slug), item: itemPeerFiles + i, x: panelLabel})
+			}
+			under(filesWhat(e, time.Now()))
 		}
 		add(itemNone, th().Faint.Render("AND THE OTHER WAY"))
 		for _, l := range wrapLines(theirWords(mirror(m, e), name), max(w-2, 8)) {
@@ -218,7 +233,7 @@ func (nv *networkView) panelLines(m *dash, r netRow, ok bool, w int) []panelLine
 		if shared(m, r.slug) {
 			out = append(out, panelLine{text: fit(th().Faint.Render("shared"), panelLabel) + th().Accent.Render("[x]") + " with every paired server", item: itemShare, x: panelLabel})
 			if len(nv.list.Peers) > 0 {
-				under("seen by " + nv.pairedNames() + ": its state, never its files")
+				under("seen by " + nv.pairedNames() + ": its state · files: " + nv.filesReaders(r.slug))
 			}
 		} else {
 			out = append(out, panelLine{text: fit(th().Faint.Render("shared"), panelLabel) + th().Accent.Render("[ ]") + th().Faint.Render(" not shared"), item: itemShare, x: panelLabel})
@@ -226,7 +241,7 @@ func (nv *networkView) panelLines(m *dash, r netRow, ok bool, w int) []panelLine
 		add(itemNone, "")
 		add(itemNone, nv.linkMap(m, r.slug, w)...)
 		add(itemNone, "")
-		add(itemNone, faintLines("A shared project shows, read-only, in the sidebar of every paired server: what waits for you, the inbox, threads, tasks on deck and its sessions' states; never its files. Sharing asks first; it is the project's own Shared with paired servers setting.", w)...)
+		add(itemNone, faintLines("A shared project shows, read-only, in the sidebar of every paired server: what waits for you, the inbox, threads, tasks on deck and its sessions' states. Its files stay here unless you turn on files for a server, in its details. Sharing asks first; it is the project's own Shared with paired servers setting.", w)...)
 	case netTheirs:
 		e := nv.list.Peers[r.peer]
 		p := r.project
@@ -285,6 +300,43 @@ func pagesChoices(on bool) string {
 		off, onw = th().Faint.Render("off"), th().Accent.Render("[on]")
 	}
 	return off + th().Faint.Render(" · ") + onw
+}
+
+// sharedFiles are the shared projects server e may read the files of. A slug
+// that isn't shared any more reads nothing, so it doesn't show.
+func sharedFiles(m *dash, e PeerEntry) []string {
+	var out []string
+	for _, slug := range sharedSlugs(m) {
+		if slices.Contains(e.Files, slug) {
+			out = append(out, slug)
+		}
+	}
+	return out
+}
+
+// filesWhat is the line under the files switches: what they let e read, and
+// when it last did.
+func filesWhat(e PeerEntry, now time.Time) string {
+	words := "files: its worktrees and repos, read-only"
+	if e.Link != nil && !e.Link.FilesRead.IsZero() {
+		words += "; last read " + age(now.Sub(e.Link.FilesRead)) + " ago"
+	}
+	return words + ". Ignored files stay here."
+}
+
+// filesReaders names the paired servers that may read project slug's files,
+// "none" for none.
+func (nv *networkView) filesReaders(slug string) string {
+	var names []string
+	for _, e := range nv.list.Peers {
+		if slices.Contains(e.Files, slug) {
+			names = append(names, netName(e))
+		}
+	}
+	if len(names) == 0 {
+		return "none"
+	}
+	return strings.Join(names, ", ")
 }
 
 // panelItems are the items the panel's keyboard stops on, in order.

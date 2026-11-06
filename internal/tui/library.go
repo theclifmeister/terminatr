@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	tea "charm.land/bubbletea/v2"
@@ -428,6 +429,41 @@ type textView struct {
 	// switchWord says which that is.
 	switchTo   func(m *dash) tea.Cmd
 	switchWord string
+
+	// keep, on a paired server's file, looks whether it may still show: ""
+	// while it may, else the words to put in its place. kept is when it
+	// last looked. Nil for all else (viewerWatch).
+	keep func() string
+	kept time.Time
+}
+
+// viewerGoneMsg says tv's file may no longer show.
+type viewerGoneMsg struct {
+	tv    *textView
+	words string
+}
+
+// viewerWatch looks, on the dashboard's tick, whether the file on top may
+// still show; nil when nothing is to be looked at yet.
+func (m *dash) viewerWatch() tea.Cmd {
+	tv, ok := m.top().(*textView)
+	if !ok || tv.keep == nil || time.Since(tv.kept) < filesFarEvery {
+		return nil
+	}
+	tv.kept = time.Now()
+	keep := tv.keep
+	return func() tea.Msg {
+		if words := keep(); words != "" {
+			return viewerGoneMsg{tv: tv, words: words}
+		}
+		return nil
+	}
+}
+
+// goes empties the viewer: what showed left, and why stays.
+func (tv *textView) goes(words string) {
+	tv.body, tv.note, tv.diff, tv.wrapped, tv.wrapOf, tv.wrapW, tv.keep, tv.scroll = "", words, nil, nil, "", 0, nil, 0
+	tv.title, _, _ = strings.Cut(tv.title, " · ")
 }
 
 // scrollKey scrolls *scroll for key k over n lines; it says whether k

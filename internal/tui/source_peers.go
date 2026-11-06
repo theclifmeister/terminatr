@@ -52,6 +52,9 @@ type PeerEntry struct {
 	// Pages are the projects whose pages it may read, this server's
 	// project pages switch for it (§16.17).
 	Pages []string
+	// Files are the projects whose folders it may read, this server's
+	// files switch for it (§16.18).
+	Files []string
 }
 
 func (s *ServerSource) Peers() (PeerList, error) {
@@ -84,7 +87,7 @@ func (s *ServerSource) Peers() (PeerList, error) {
 	}
 	for _, p := range peers {
 		e := PeerEntry{Alias: p.Alias, Name: p.Name, Told: p.Told, ID: p.ID().String(), Short: p.ID().Short(), Relay: p.Relay, Panes: p.PanesLevel(),
-			ConversationsOff: !p.ConversationsOn(), Needs: p.NeedsLevel(), Pages: slices.Clone(p.Pages)}
+			ConversationsOff: !p.ConversationsOn(), Needs: p.NeedsLevel(), Pages: slices.Clone(p.Pages), Files: slices.Clone(p.Files)}
 		if pl, ok := links[e.ID]; ok {
 			e.Link = &pl
 		}
@@ -159,6 +162,29 @@ func (s *ServerSource) SetPeerPages(alias, project string, on bool) error {
 		return errHumanOnly
 	}
 	found, err := peer.SetPages(peer.DirIn(s.Paths.Home), alias, project, on)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return fmt.Errorf("no paired server %s (tm peer list)", alias)
+	}
+	var st *proto.LinkStatus
+	if err := s.call(proto.MethodPeerReload, nil, &st); err != nil && !errors.Is(err, tmclient.ErrNotRunning) {
+		return fmt.Errorf("set, but the server didn't read the peers again (%v); tm server restart does", err)
+	}
+	return nil
+}
+
+func (s *ServerSource) SetPeerFiles(alias, slug string, on bool) error {
+	if s.Caller.IsAgent() {
+		return errHumanOnly
+	}
+	dir := peer.DirIn(s.Paths.Home)
+	p, err := project.Open(slug)
+	if err != nil {
+		return err
+	}
+	found, err := p.SetPeerFiles(s.Caller, dir, alias, on)
 	if err != nil {
 		return err
 	}

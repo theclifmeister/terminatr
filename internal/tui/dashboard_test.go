@@ -460,6 +460,19 @@ func (f *fakeSource) SetPeerNeeds(alias, level string) error {
 	}
 	return nil
 }
+func (f *fakeSource) SetPeerFiles(alias, project string, on bool) error {
+	for i := range f.peers.Peers {
+		if f.peers.Peers[i].Alias != alias {
+			continue
+		}
+		f.peers.Peers[i].Files = slices.DeleteFunc(f.peers.Peers[i].Files, func(s string) bool { return s == project })
+		if on {
+			f.peers.Peers[i].Files = append(f.peers.Peers[i].Files, project)
+		}
+	}
+	return nil
+}
+
 func (f *fakeSource) SetPeerPages(alias, project string, on bool) error {
 	f.pagesSet = append(f.pagesSet, fmt.Sprintf("%s %s %v", alias, project, on))
 	for i := range f.peers.Peers {

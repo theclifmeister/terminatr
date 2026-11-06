@@ -317,7 +317,14 @@ func (nv *networkView) panelKey(m *dash, r netRow, ok bool, s string) (tea.Cmd, 
 			i %= len(needsLevels)
 		}
 		return nv.setNeeds(m, e, needsLevels[min(max(i, 0), len(needsLevels)-1)]), true
-	case item >= itemPages && item-itemPages < len(sharedSlugs(m)) && (s == "left" || s == "right" || s == "enter" || s == "space" || s == " "):
+	case item >= itemPeerFiles && item-itemPeerFiles < len(sharedSlugs(m)) && (s == "left" || s == "right" || s == "enter" || s == "space" || s == " "):
+		e, slug := nv.list.Peers[r.peer], sharedSlugs(m)[item-itemPeerFiles]
+		on := map[string]bool{"left": false, "right": true}[s]
+		if s == "enter" || s == "space" || s == " " {
+			on = !slices.Contains(e.Files, slug)
+		}
+		return nv.setFiles(m, e, slug, on), true
+	case item >= itemPages && item < itemPeerFiles && item-itemPages < len(sharedSlugs(m)) && (s == "left" || s == "right" || s == "enter" || s == "space" || s == " "):
 		e, slug := nv.list.Peers[r.peer], sharedSlugs(m)[item-itemPages]
 		on := map[string]bool{"left": false, "right": true}[s]
 		if s == "enter" || s == "space" || s == " " {
@@ -722,6 +729,29 @@ func (nv *networkView) setPages(m *dash, e PeerEntry, slug string, on bool) tea.
 	}
 	m.confirmNo("Pages for "+name, fmt.Sprintf("Let %s read %s's board (task titles, statuses and steps), its overview (goal and PROJECT.md) and its threads' library files? Never its memory, its tasks' notes or its repositories' paths, and nothing it does writes here.", name, slug),
 		"pages unchanged for "+name, set)
+	return nil
+}
+
+// setFiles turns server e's files switch for slug on or off: asking first
+// when on, saying what crosses and what can't be called back; at once when off.
+func (nv *networkView) setFiles(m *dash, e PeerEntry, slug string, on bool) tea.Cmd {
+	if on == slices.Contains(e.Files, slug) {
+		return nil
+	}
+	name := netName(e)
+	word := map[bool]string{true: "on", false: "off"}[on]
+	set := func() tea.Cmd {
+		src, alias := m.src, e.Alias
+		return m.act(func() actionMsg {
+			err := src.SetPeerFiles(alias, slug, on)
+			return actionMsg{err: err, msg: "files " + word + " for " + name + " on " + slug, then: nv.reload}
+		})
+	}
+	if !on {
+		return set()
+	}
+	m.confirmNo("Let "+name+" read "+slug+"'s files?", "It can then read this project's code: every thread's worktree and every repo on the project's list at its main checkout, uncommitted work included, now and as the list grows.\n\nGit-ignored files and files named like secrets stay here. A secret committed under another name does not. It can't change anything, and what it has read can't be called back.",
+		"files unchanged for "+name, set)
 	return nil
 }
 
