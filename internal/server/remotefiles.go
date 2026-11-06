@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"time"
 
 	"github.com/theclifmeister/terminatr/internal/peer"
 	"github.com/theclifmeister/terminatr/internal/proto"
@@ -71,12 +72,39 @@ func remoteFilesError(alias, slug string, err error) *proto.Error {
 	return proto.PeerWorktreeRefusal(pe.Code)
 }
 
+// remoteFilesTries and remoteFilesRest are how a files method bears with the
+// owning server's rate: a view that lists a few folders at once, or two
+// consoles' stamps, go over it for a moment, and nothing is wrong. A refusal
+// comes back at once, so a client waits no longer than this for the view to
+// say it is slow.
+const (
+	remoteFilesTries = 4
+	remoteFilesRest  = 300 * time.Millisecond
+)
+
+// remoteBear is ask again while the owning server says it is over its rate,
+// for a moment.
+func remoteBear[R any](ask func() (R, error)) (R, error) {
+	r, err := ask()
+	for i := 1; i < remoteFilesTries && overRate(err); i++ {
+		time.Sleep(remoteFilesRest)
+		r, err = ask()
+	}
+	return r, err
+}
+
+// overRate says the owning server answered that it is over its rate.
+func overRate(err error) bool {
+	var pe *proto.Error
+	return errors.As(err, &pe) && pe.Code == proto.ErrRateLimited
+}
+
 func (s *Server) remoteFilesRepos(p proto.FilesReposParams) (any, *proto.Error) {
 	alias, at, perr := s.remoteFolder(p.Session)
 	if perr != nil {
 		return nil, perr
 	}
-	res, err := s.peers.WorktreeRepos(context.Background(), alias, at)
+	res, err := remoteBear(func() (proto.FilesReposResult, error) { return s.peers.WorktreeRepos(context.Background(), alias, at) })
 	if err != nil {
 		return nil, remoteFilesError(alias, at.Project, err)
 	}
@@ -88,8 +116,10 @@ func (s *Server) remoteFilesList(p proto.FilesListParams) (any, *proto.Error) {
 	if perr != nil {
 		return nil, perr
 	}
-	res, err := s.peers.WorktreeList(context.Background(), alias, proto.PeerWorktreeListParams{Project: at.Project, Session: at.Session,
-		Repo: p.Repo, Path: p.Path, Query: p.Query, Changed: p.Changed})
+	res, err := remoteBear(func() (proto.FilesListResult, error) {
+		return s.peers.WorktreeList(context.Background(), alias, proto.PeerWorktreeListParams{Project: at.Project, Session: at.Session,
+			Repo: p.Repo, Path: p.Path, Query: p.Query, Changed: p.Changed})
+	})
 	if err != nil {
 		return nil, remoteFilesError(alias, at.Project, err)
 	}
@@ -101,8 +131,10 @@ func (s *Server) remoteFilesRead(p proto.FilesReadParams) (any, *proto.Error) {
 	if perr != nil {
 		return nil, perr
 	}
-	res, err := s.peers.WorktreeRead(context.Background(), alias, proto.PeerWorktreeReadParams{Project: at.Project, Session: at.Session,
-		Repo: p.Repo, Path: p.Path, Offset: p.Offset})
+	res, err := remoteBear(func() (proto.FilesReadResult, error) {
+		return s.peers.WorktreeRead(context.Background(), alias, proto.PeerWorktreeReadParams{Project: at.Project, Session: at.Session,
+			Repo: p.Repo, Path: p.Path, Offset: p.Offset})
+	})
 	if err != nil {
 		return nil, remoteFilesError(alias, at.Project, err)
 	}
@@ -114,8 +146,10 @@ func (s *Server) remoteFilesDiff(p proto.FilesDiffParams) (any, *proto.Error) {
 	if perr != nil {
 		return nil, perr
 	}
-	res, err := s.peers.WorktreeDiff(context.Background(), alias, proto.PeerWorktreeDiffParams{Project: at.Project, Session: at.Session,
-		Repo: p.Repo, Path: p.Path})
+	res, err := remoteBear(func() (proto.FilesDiffResult, error) {
+		return s.peers.WorktreeDiff(context.Background(), alias, proto.PeerWorktreeDiffParams{Project: at.Project, Session: at.Session,
+			Repo: p.Repo, Path: p.Path})
+	})
 	if err != nil {
 		return nil, remoteFilesError(alias, at.Project, err)
 	}
@@ -127,8 +161,10 @@ func (s *Server) remoteFilesStamp(p proto.FilesStampParams) (any, *proto.Error) 
 	if perr != nil {
 		return nil, perr
 	}
-	res, err := s.peers.WorktreeStamp(context.Background(), alias, proto.PeerWorktreeStampParams{Project: at.Project, Session: at.Session,
-		Repo: p.Repo, Folders: p.Folders})
+	res, err := remoteBear(func() (proto.FilesStampResult, error) {
+		return s.peers.WorktreeStamp(context.Background(), alias, proto.PeerWorktreeStampParams{Project: at.Project, Session: at.Session,
+			Repo: p.Repo, Folders: p.Folders})
+	})
 	if err != nil {
 		return nil, remoteFilesError(alias, at.Project, err)
 	}

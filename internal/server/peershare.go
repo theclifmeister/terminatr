@@ -17,8 +17,15 @@ import (
 func (s *Server) peerList() proto.PeerList {
 	l := s.mirror.List()
 	shares, rev := link.ShareState()
+	var pinned []peer.Peer
+	if dir, err := peer.Dir(); err == nil {
+		pinned, _ = peer.LoadPeers(dir)
+	}
 	for i := range l.Peers {
 		l.Peers[i].Shares = shares[l.Peers[i].Alias]
+		if j := slices.IndexFunc(pinned, func(p peer.Peer) bool { return p.Alias == l.Peers[i].Alias }); j >= 0 {
+			l.Peers[i].FilesHere = pinned[j].Files
+		}
 	}
 	l.Gen += uint64(rev)
 	return l

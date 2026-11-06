@@ -217,3 +217,44 @@ func TestSetPages(t *testing.T) {
 		t.Error("a bad slug passed the check")
 	}
 }
+
+// TestSetFilesAndClearFiles: the files switch is set per project, and it
+// clears for what drop names, saying for whom, without writing when nothing
+// changes.
+func TestSetFilesAndClearFiles(t *testing.T) {
+	dir := hometest.PrivateDir(t)
+	k1, _, _ := ed25519.GenerateKey(nil)
+	k2, _, _ := ed25519.GenerateKey(nil)
+	if err := SavePeers(dir, []Peer{{Alias: "mini", Key: k1, Relay: "wss://relay.example"}, {Alias: "nas", Key: k2, Relay: "wss://relay.example"}}); err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range []struct {
+		alias, slug string
+		on          bool
+	}{{"mini", "web", true}, {"mini", "api", true}, {"mini", "web", true}, {"nas", "web", true}} {
+		if found, err := SetFiles(dir, a.alias, a.slug, a.on); !found || err != nil {
+			t.Fatalf("%v: %v %v", a, found, err)
+		}
+	}
+	peers, _ := LoadPeers(dir)
+	if !slices.Equal(peers[0].Files, []string{"api", "web"}) || !peers[0].FilesOn("api") || peers[0].PagesOn("api") {
+		t.Fatalf("files: %+v", peers[0])
+	}
+	if _, err := SetFiles(dir, "mini", "../etc", true); err == nil {
+		t.Error("a path was taken for a project")
+	}
+	if found, _ := SetFiles(dir, "nobody", "web", true); found {
+		t.Error("found a peer that isn't")
+	}
+	cleared, err := ClearFiles(dir, func(s string) bool { return s == "web" })
+	if err != nil || !slices.Equal(cleared, [][2]string{{"mini", "web"}, {"nas", "web"}}) {
+		t.Fatalf("cleared %v %v", cleared, err)
+	}
+	peers, _ = LoadPeers(dir)
+	if !slices.Equal(peers[0].Files, []string{"api"}) || peers[1].Files != nil {
+		t.Fatalf("after clearing: %+v", peers)
+	}
+	if cleared, err := ClearFiles(dir, func(s string) bool { return s == "web" }); err != nil || cleared != nil {
+		t.Errorf("nothing left to clear: %v %v", cleared, err)
+	}
+}

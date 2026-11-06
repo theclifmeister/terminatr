@@ -130,7 +130,7 @@ func keyGroups(mods []keyHelp) []keyGroup {
 	dash = append([]keyHelp{{"type", "on a running coordinator's row: typing writes to the coordinator. The first printable key (a letter of either case, a digit, space, / and the other symbols) attaches it and lands in its prompt with every key after it; the keys below are prefix+key there. Arrows, enter, tab, esc, pgup pgdown, home end and ctrl keys keep their meaning. A thread's row takes enter first"}}, dash...)
 	side = append([]keyHelp{{"type", "on a running coordinator's row: typing writes to it, as on the list (its pane gets the keyboard and every key); the sidebar's letter keys work on the other rows"}}, side...)
 	panel = append(panel, keyHelp{"A", "the info panel beside a coordinator with questions waiting: have it open them in its question dialog (info.questions)"})
-	panel = append(panel, keyHelp{"F", "the info panel: its Files view, the thread's worktree or the coordinator's main checkout as a tree with git's marks, and the files attached (/ filter by name, c changed only, i ignored files too, a Worktree or Attached, enter reads a file), and back; beside a director its files and its members', with t kinds (info.files)"})
+	panel = append(panel, keyHelp{"F", "the info panel: its Files view, the thread's worktree or the coordinator's main checkout as a tree with git's marks, and the files attached (/ filter by name, c changed only, i ignored files too, a Worktree or Attached, enter reads a file; on a paired server's session, read only, where it shares the files), and back; beside a director its files and its members', with t kinds (info.files)"})
 	groups := []keyGroup{
 		{"On the dashboard", dash},
 		{"With the mouse", mouseKeys},

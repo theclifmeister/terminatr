@@ -556,7 +556,7 @@ func TestFilesNoFolder(t *testing.T) {
 	filesPress(c, "F")
 	c.info.data = &infoData{slug: "@pal/x", session: proto.SessionInfo{ID: "pal/s-1"}, remote: &remoteData{shown: "pal\x1b[2J"}}
 	filesPress(c, "F")
-	if c.info.files != nil || !strings.Contains(c.flash, "can't be browsed from here") || strings.Contains(c.flash, "\x1b") {
+	if c.info.files != nil || !strings.Contains(c.flash, "isn't paired") || strings.Contains(c.flash, "\x1b") {
 		t.Fatalf("paired: %v %q", c.info.files, c.flash)
 	}
 	// A director has no folder, but has its Attached.
@@ -1008,6 +1008,155 @@ func TestFilesRepoListMoves(t *testing.T) {
 	c.filesPoll()
 	if f.lists.Load() != lists {
 		t.Error("a poll with nothing changed listed the folder again")
+	}
+}
+
+// farClient is filesClient's view of a paired server's session: F opens it
+// where the switch is on, and says why not otherwise.
+func farClient(t *testing.T) (*client, *fakeFiles) {
+	t.Helper()
+	f := &fakeFiles{dirs: map[string][]proto.FileEntry{"": {
+		{Name: "internal", Path: "internal", Kind: proto.FileKindDir, Changed: true},
+		{Name: ".env", Path: ".env", Kind: proto.FileKindFile, Status: proto.FileAdded, Withheld: true},
+		{Name: "Makefile", Path: "Makefile", Kind: proto.FileKindFile},
+		{Name: "logo.png", Path: "logo.png", Kind: proto.FileKindFile, Size: 9},
+	}, "internal": {{Name: "types.go", Path: "internal/types.go", Kind: proto.FileKindFile, Status: proto.FileModified}}}}
+	f.install(t)
+	old := filesCall
+	t.Cleanup(func() { filesCall = old })
+	filesCall = func(paths tmclient.Paths, method string, params, res any) error {
+		if method == proto.MethodPeerLibraryList {
+			return proto.Errorf(proto.ErrPagesOff, "studio doesn't share this project's pages")
+		}
+		return old(paths, method, params, res)
+	}
+	c := infoClient(t, 140)
+	c.kb = areaInfo
+	pm := proto.PeerMirror{Alias: "studio", State: proto.LinkUp, Worktree: true}
+	pr := proto.PeerMirrorProject{PeerProject: proto.PeerProject{Project: "acme", Files: true}}
+	c.info.data = &infoData{slug: "@studio/acme", session: proto.SessionInfo{ID: "studio/s-1", Project: "acme", Thread: "t-0301"},
+		remote: &remoteData{alias: "studio", shown: "studio", peer: &pm, project: &pr, sess: proto.PeerSession{ID: "s-1", Project: "acme", Thread: "t-0301"}, found: true}}
+	return c, f
+}
+
+// TestFilesFarRefused: a session whose server can't or won't share says so
+// and opens nothing.
+func TestFilesFarRefused(t *testing.T) {
+	c, _ := farClient(t)
+	r := c.info.data.remote
+	r.project.Files = false
+	filesPress(c, "F")
+	if c.info.files != nil || c.flash != "studio doesn't share acme's files" {
+		t.Fatalf("off: %v %q", c.info.files, c.flash)
+	}
+	r.project.Files, r.peer.Worktree = true, false
+	filesPress(c, "F")
+	if c.info.files != nil || !strings.Contains(c.flash, "older tm") {
+		t.Fatalf("older: %v %q", c.info.files, c.flash)
+	}
+}
+
+// TestFilesFar: the view on a paired server's session: on that server, read
+// only, withheld rows that don't open, no ignored files to ask for, no
+// bytes of what isn't text; off clears it, offline keeps it, marked.
+func TestFilesFar(t *testing.T) {
+	c, f := farClient(t)
+	filesPress(c, "F")
+	fv := c.info.files
+	if fv == nil || fv.far != "studio" || fv.slug != "acme" || fv.thread != "t-0301" {
+		t.Fatalf("view: %+v", fv)
+	}
+	out := infoText(c)
+	for _, want := range []string{"on studio · read only", ".env", "stays on studio", "logo.png", "not text", "Makefile"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("no %q:\n%s", want, out)
+		}
+	}
+	if strings.Contains(filesHint(fv), "ignored") {
+		t.Errorf("hint offers ignored: %q", filesHint(fv))
+	}
+	n := len(f.seen)
+	filesPress(c, "i")
+	if fv.ignored || len(f.seen) != n {
+		t.Errorf("i asked for ignored files: %v", f.seen[n:])
+	}
+	// The withheld row says why, and enter doesn't read it.
+	filesPress(c, "down")
+	if !strings.Contains(infoText(c), "its name says it may hold secrets") {
+		t.Fatalf("no reason under .env:\n%s", infoText(c))
+	}
+	filesPress(c, "enter")
+	if len(f.read) != 0 || !strings.Contains(c.flash, "stays on studio") {
+		t.Fatalf("read %v, flash %q", f.read, c.flash)
+	}
+	// Offline: what shows stays, marked, and no new read.
+	f.refusal = proto.Errorf(proto.ErrPeerOffline, "studio is offline")
+	c.filesFetch()
+	out = infoText(c)
+	if !fv.offline || !strings.Contains(out, "studio is offline: as of") || !strings.Contains(out, "Makefile") {
+		t.Fatalf("offline: %+v\n%s", fv, out)
+	}
+	// Slow: it keeps what it has.
+	f.refusal = proto.Errorf(proto.ErrRateLimited, "studio is slow to answer")
+	c.filesFetch()
+	if out = infoText(c); !strings.Contains(out, "studio is slow to answer") || !strings.Contains(out, "Makefile") {
+		t.Fatalf("slow:\n%s", out)
+	}
+	// Off: tree and all go, and it says so.
+	f.refusal = proto.Errorf(proto.ErrFilesOff, "studio doesn't share acme's files")
+	c.filesFetch()
+	out = infoText(c)
+	if !strings.Contains(out, "studio stopped sharing acme's") || strings.Contains(out, "Makefile") || strings.Contains(out, ".env") {
+		t.Fatalf("off:\n%s", out)
+	}
+	if len(fv.dirs) != 0 || fv.stamp != "" {
+		t.Errorf("kept: %+v", fv)
+	}
+	// On again: it comes back at the next look.
+	f.refusal = nil
+	fv.polled = time.Time{}
+	c.filesPoll()
+	if out = infoText(c); fv.gone != "" || !strings.Contains(out, "Makefile") {
+		t.Fatalf("back on: %q\n%s", fv.gone, out)
+	}
+	// A session that stopped says so, in the design's words.
+	f.refusal = proto.Errorf(proto.ErrUnknownSession, "studio isn't running a session s-1")
+	c.filesFetch()
+	if out = infoText(c); !strings.Contains(out, "agent isn't running on") {
+		t.Fatalf("stopped:\n%s", out)
+	}
+}
+
+// TestFilesFarViewer: a far file has no bytes to open elsewhere, and what
+// shows goes when the switch does.
+func TestFilesFarViewer(t *testing.T) {
+	f := &fakeFiles{texts: map[string]proto.FilesReadResult{
+		"a.go":  {Name: "a.go", Path: "a.go", Size: 5, Data: []byte("hello")},
+		"p.png": {Name: "p.png", Path: "p.png", Size: 9, Binary: true},
+	}}
+	f.install(t)
+	tv := farViewer(tmclient.Paths{}, "studio/s-1", "", proto.FileEntry{Name: "p.png", Path: "p.png"}, "gone")
+	if tv.open != nil || tv.image != nil || tv.note != noTextNote {
+		t.Fatalf("binary: %+v", tv)
+	}
+	for _, r := range f.read {
+		if r.Binary {
+			t.Fatalf("asked for bytes: %+v", r)
+		}
+	}
+	tv = farViewer(tmclient.Paths{}, "studio/s-1", "", proto.FileEntry{Name: "a.go", Path: "a.go"}, "it went")
+	if !strings.Contains(tv.body, "hello") || tv.keep == nil || tv.keep() != "" {
+		t.Fatalf("text: %+v", tv)
+	}
+	old := filesCall
+	defer func() { filesCall = old }()
+	filesCall = func(tmclient.Paths, string, any, any) error { return proto.Errorf(proto.ErrFilesOff, "off") }
+	if w := tv.keep(); w != "it went" {
+		t.Fatalf("keep says %q", w)
+	}
+	tv.goes("it went")
+	if tv.body != "" || tv.note != "it went" || tv.keep != nil {
+		t.Fatalf("after: %+v", tv)
 	}
 }
 

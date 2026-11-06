@@ -26,11 +26,56 @@ public enum RightPanel: String, Sendable, CaseIterable {
     }
 }
 
+/// What a paired server's project may show of its files here (the paired
+/// files design): that server holds every rule, this only picks the words.
+public struct FarFiles: Hashable, Sendable {
+    /// What the panel calls the server.
+    public let name: String
+    /// Its files switch for this server is on for the project.
+    public let on: Bool
+    /// Its tm can't share files. It was never asked.
+    public let older: Bool
+
+    public init(name: String, on: Bool, older: Bool = false) {
+        self.name = name
+        self.on = on
+        self.older = older
+    }
+
+    /// What this server knows of it, nil for a tm that can't read a paired
+    /// server's files.
+    public static func of(_ peer: AppAPI.Peer?, project: String, caps: [String]) -> FarFiles? {
+        guard let peer, caps.contains("peer-worktrees") else { return nil }
+        let name = peer.name.isEmpty ? peer.alias : peer.name
+        let p = peer.projects.first { $0.project == project }
+        return FarFiles(name: name, on: p?.files == true, older: !peer.worktree && peer.state == "up")
+    }
+
+    /// The Inspector's line: what this server may read of that one's.
+    public var fact: String {
+        if older { return "its tm can't share them" }
+        return on ? "you can read them" : "\(name) doesn't share them"
+    }
+
+    /// The Inspector's line the other way: what that server may read here.
+    public static func yours(_ peer: AppAPI.Peer) -> String {
+        peer.filesHere.isEmpty ? "it can't read this server's files" : "it can read the files of \(peer.filesHere.joined(separator: ", "))"
+    }
+}
+
 /// What Files can browse for what the window shows.
 public struct FilesPlace: Hashable, Sendable {
     public let project: String
     /// The paired server whose project it is, "" for this server's.
     public let server: String
+    /// That server as the panel calls it while its files can be read from
+    /// here: the panel is then read only, and has no ignored files, no
+    /// bytes and nothing to open elsewhere. "" for this server's project, and
+    /// for a paired server's that shares no files.
+    public let far: String
+    /// A paired server's files switch is off for this project: a view that
+    /// read it clears, in its own words.
+    public let farOff: Bool
     /// One thread's attached files; nil for the whole project's.
     public let thread: String?
     /// The session whose folder the Worktree tab lists, nil when none
@@ -56,12 +101,12 @@ public struct FilesPlace: Hashable, Sendable {
     /// What the selection may browse, or nil when Files stays off: nothing
     /// selected, a tm without a Library, or a program or a director with a
     /// tm that has no program form of it.
-    public static func of(_ selection: Selection?, sessionID: String?, threadDone: Bool, task: String? = nil, readsWorktree: Bool, hasLibrary: Bool, readsProgramLibrary: Bool = false) -> FilesPlace? {
+    public static func of(_ selection: Selection?, sessionID: String?, threadDone: Bool, task: String? = nil, readsWorktree: Bool, hasLibrary: Bool, readsProgramLibrary: Bool = false, far: FarFiles? = nil) -> FilesPlace? {
         guard let selection, hasLibrary else { return nil }
         let project = selection.project, server = selection.server
         if selection.isProgram {
             guard readsProgramLibrary else { return nil }
-            return FilesPlace(project: project, server: "", thread: nil, session: nil, why: nil, stopped: "", label: "",
+            return FilesPlace(project: project, server: "", far: "", farOff: false, thread: nil, session: nil, why: nil, stopped: "", label: "",
                               mentions: nil, relativeMention: false, isProgram: true)
         }
         var thread: String?
@@ -73,18 +118,29 @@ public struct FilesPlace: Hashable, Sendable {
         let mentions: SessionRef? = server.isEmpty ? SessionRef(project: project, thread: thread ?? "") : nil
         let whole = thread == nil
         let keeps = whole ? "What threads attached stays here." : "What it attached stays here."
-        let stopped = whole ? "The coordinator isn't running, so tm can't read the project's repo. \(keeps)"
+        var stopped = whole ? "The coordinator isn't running, so tm can't read the project's repo. \(keeps)"
             : threadDone ? "This thread is done, so its worktree is gone. \(keeps)"
             : "This thread's agent isn't running, so tm can't read its worktree. \(keeps)"
         var why: String?
-        if !server.isEmpty {
+        let reading = far?.on == true && far?.older == false && !server.isEmpty
+        if let far, reading {
+            let name = far.name
+            let attached = "The Attached tab shows what \(whole ? "threads" : "this thread") attached, when \(name) shares the project's pages."
+            stopped = whole ? "\(name)'s coordinator isn't running, so its repos can't be read from here. \(attached)"
+                : threadDone ? "This thread is done, so its worktree is gone from \(name). \(attached)"
+                : "This thread's agent isn't running on \(name), so its worktree can't be read from here. \(attached)"
+            if sessionID == nil { why = stopped }
+        } else if let far, far.older, !server.isEmpty {
+            why = "\(far.name) runs an older tm, which can't share files. The Attached tab shows what \(whole ? "threads" : "this thread") attached, when \(far.name) shares the project's pages."
+        } else if !server.isEmpty {
             why = "\(server)'s worktrees can't be browsed from here. The Attached tab shows what \(whole ? "threads" : "this thread") attached, when \(server) shares the project's pages."
         } else if !readsWorktree {
             why = "This tm can't read a worktree: update it. \(keeps)"
         } else if sessionID == nil {
             why = stopped
         }
-        return FilesPlace(project: project, server: server, thread: thread, session: why == nil ? sessionID : nil, why: why, stopped: stopped,
+        return FilesPlace(project: project, server: server, far: reading ? far?.name ?? "" : "", farOff: !server.isEmpty && far?.on == false,
+                          thread: thread, session: why == nil ? sessionID : nil, why: why, stopped: stopped,
                           label: label, mentions: mentions, relativeMention: !whole)
     }
 }
