@@ -3,19 +3,18 @@ import Foundation
 /// What a prompt's composer says once session.prompt answered, the
 /// Mac's and the phone's alike.
 public enum PromptSent {
-    /// How the prompt went in, in the window's words.
-    public static func words(_ r: AppAPI.PromptResult) -> String {
-        var s: String
-        switch r.via {
-        case "queued": s = r.running ? "Queued: it goes once the turn ends." : "Queued: it goes once the agent is idle."
-        case "steered": s = "Steered into the running turn."
-        case "interrupted": s = "The turn stopped for it."
-        case "channel": s = "Sent."
-        case "typed": s = "Typed into its pane."
-        default: s = r.via.isEmpty ? "Sent." : "Sent (\(r.via))."
+    /// What the composer says about a send, or nil when the prompt just
+    /// went in as asked (T1040): typed, sent, steered or interrupted are
+    /// the user's own choice and show in the conversation. Said: a
+    /// prompt that really waits (its note clears when it goes in), and
+    /// any why, a prompt that went another way than asked.
+    public static func words(_ r: AppAPI.PromptResult) -> String? {
+        var s = ""
+        if r.via == "queued" {
+            s = r.running ? "Queued: it goes once the turn ends." : "Queued: it goes once the agent is idle."
         }
-        if !r.why.isEmpty { s += " " + r.why }
-        return s
+        if !r.why.isEmpty { s += (s.isEmpty ? "" : " ") + r.why }
+        return s.isEmpty ? nil : s
     }
 
     /// Whether a queued prompt went in since its note showed (T857): the
