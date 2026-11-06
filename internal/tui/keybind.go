@@ -451,6 +451,7 @@ var coreActions = []struct {
 	{"popup", bindable{id: "tasks.done", keys: []string{"b"}, fixed: true, help: "list the done tasks, or collapse them"}},
 	{"popup", bindable{id: "library.filter", keys: []string{"/"}, fixed: true, help: "filter the library by file name, task, thread or repository (from 7 files; esc clears)"}},
 	{"popup", bindable{id: "library.kinds", keys: []string{"t"}, fixed: true, help: "step through the library's kinds: images, pages, notes and so on (with two kinds or more)"}},
+	{"popup", bindable{id: "library.sort", keys: []string{"s"}, fixed: true, help: "list the library biggest first, flat with each file's task title, or newest first again (with two files or more)"}},
 	{"popup", bindable{id: "library.switch", keys: []string{"v"}, fixed: true, help: "switch a stack in the library between its two files: dark and light, before and after"}},
 	{"popup", bindable{id: "library.read", keys: []string{"enter"}, fixed: true, help: "read the library file, or open or fold its group on +N more"}},
 	{"popup", bindable{id: "library.open", keys: []string{"o"}, fixed: true, help: "open the library file in this computer's viewer"}},

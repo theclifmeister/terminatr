@@ -2,6 +2,7 @@ package widget
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
@@ -455,5 +456,69 @@ func TestHeadsAndMore(t *testing.T) {
 		if _, err := Decode([]byte(bad)); err == nil || !strings.Contains(err.Error(), "head row") {
 			t.Errorf("%s: %v", bad, err)
 		}
+	}
+}
+
+// TestRowFind: a row with find passes the filter by that alone, each of
+// the filter's words anywhere in it, whatever their case and accents; a
+// row without keeps the drawn text and the whole filter. Filtered reports
+// the filter's changes once each.
+func TestRowFind(t *testing.T) {
+	for _, c := range []struct {
+		text, filter string
+		want         bool
+	}{
+		{"T12 Fix the login", "t12", true},
+		{"T12 Fix the login", "login fix", true},
+		{"T12 Fix the login", "  LOGIN  ", true},
+		{"T12 Fix the login", "login docs", false},
+		{"T12 Le café", "cafe", true},
+		{"T12 Le cafe", "café", true},
+		{"T12 Fix", " ", true},
+	} {
+		if got := Matches(c.text, c.filter); got != c.want {
+			t.Errorf("Matches(%q, %q) = %v", c.text, c.filter, got)
+		}
+	}
+	w := &Widget{Kind: KindTable, ID: "t", Columns: make([]Column, 2), Rows: []Row{
+		{ID: "T1", Find: "T1 Fix the login", Cells: [][]Span{{{Text: "T1"}}, {{Text: "done"}}}},
+		{ID: "x", Spans: []Span{{Text: "fix the login"}}},
+	}}
+	v := NewView()
+	v.Set(w)
+	if v.Filtered() != nil {
+		t.Error("no filter was reported")
+	}
+	shown := func(filter string) []string {
+		l := v.lists["t"]
+		v.setFilter(l, filter)
+		var out []string
+		for _, i := range l.shown {
+			out = append(out, l.w.Rows[i].ID)
+		}
+		return out
+	}
+	if got := shown("login fix"); !slices.Equal(got, []string{"T1"}) {
+		t.Errorf("words: %q", got)
+	}
+	if e := v.Filtered(); e == nil || e.Kind != EventFilter || e.Widget != "t" || e.Filter != "login fix" {
+		t.Errorf("filtered: %+v", e)
+	}
+	if v.Filtered() != nil {
+		t.Error("reported twice")
+	}
+	if got := shown("done"); len(got) != 0 {
+		t.Errorf("a drawn word of a row with find: %q", got)
+	}
+	if got := shown("the login"); !slices.Equal(got, []string{"T1", "x"}) {
+		t.Errorf("both: %q", got)
+	}
+	shown("")
+	if e := v.Filtered(); e == nil || e.Filter != "" {
+		t.Errorf("dropped: %+v", e)
+	}
+	v.Forget()
+	if v.Filtered() != nil {
+		t.Error("forgotten with no filter")
 	}
 }

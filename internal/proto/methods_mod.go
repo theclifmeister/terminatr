@@ -199,8 +199,9 @@ type ModTarget struct {
 const MethodModViewInput = "mod.view.input"
 
 // ModViewInputParams are the params of mod.view.input: Kind is
-// widget.EventKey, widget.EventClick or widget.EventCursor, Widget the
-// focused (or clicked) list or keys widget, Row the row under its cursor.
+// widget.EventKey, widget.EventClick, widget.EventCursor or
+// widget.EventFilter, Widget the focused (or clicked) list or keys
+// widget, Row the row under its cursor, Filter what its filter says.
 type ModViewInputParams struct {
 	Mod     string `json:"mod"`
 	View    string `json:"view"`
@@ -209,6 +210,7 @@ type ModViewInputParams struct {
 	Widget  string `json:"widget,omitempty"`
 	Row     string `json:"row,omitempty"`
 	Key     string `json:"key,omitempty"`
+	Filter  string `json:"filter,omitempty"`
 }
 
 // ModViewInputResult is mod.view.input's answer to a key or a click:

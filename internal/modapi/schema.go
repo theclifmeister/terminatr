@@ -179,13 +179,15 @@ type Task struct {
 // Done's headings, reveal (a task, "T12") opening the one that holds it;
 // otherwise from and to narrow the list to days (YYYY-MM-DD, both
 // inclusive, "none" for what nothing dates), archived reads the archive
-// too, and offset and limit take a page (limit 0: all).
+// too, query (mod API 1.20) keeps the tasks with each of its words in their
+// id, title or status, and offset and limit take a page (limit 0: all).
 type DoneOptions struct {
 	Groups   bool   `json:"groups,omitempty"`
 	Reveal   string `json:"reveal,omitempty"`
 	From     string `json:"from,omitempty"`
 	To       string `json:"to,omitempty"`
 	Archived bool   `json:"archived,omitempty"`
+	Query    string `json:"query,omitempty"`
 	Offset   int    `json:"offset,omitempty"`
 	Limit    int    `json:"limit,omitempty"`
 }
@@ -387,6 +389,7 @@ var Events = []Event{
 	{Name: modbus.UIClick, Data: typ[modbus.Input](), Doc: "The human clicked one of the mod's columns, views or widgets, or pressed enter on (or clicked) the header of a section whose manifest names a companion view (opens, mod API 1.7): target.project is the section's project (the panel's for a coordinator.section or details.section), and the mod may then open its companion with $.ui.view.open."},
 	{Name: modbus.UIKey, Data: typ[modbus.Input](), Doc: "The human pressed a key on one of the mod's views or widgets."},
 	{Name: modbus.UICursor, Data: typ[modbus.Input](), Doc: "The row under the cursor of a view's focused list (widget) is now row (\"\": none), moved by a key, a click, the filter or a publish; sent when the view shows, and again on each change. To follow the selection."},
+	{Name: modbus.UIFilter, Data: typ[modbus.Input](), Doc: "The filter of a view's focused list (widget) now says filter (mod API 1.20; none: no filter), as the human types it, one send at a time; sent when the view shows with one, and again on each change. The core filters the rows it has by itself: this is for rows the mod doesn't draw until they are looked for. Draw them with find set, and the filter passes them by that."},
 	{Name: modbus.ActionDone, Data: typ[modbus.Done](), Doc: "A human ran a core action bound in the mod's row, view or notification."},
 	{Name: modbus.ViewOpened, Data: typ[modbus.View](), Needs: mod.PermViews, Doc: "One of the mod's views is shown: publish it with $.ui.view.set. A details.section names the task or thread the details panel shows, on the dashboard or beside that thread's pane: publish for that one, and clear it on view.closed. A project.tab opened to show a task picked elsewhere names it (mod API 1.4): list its row, and the console puts the cursor on the row that binds an action on it. A sidebar.section is for the project the sidebar's tree is for; a sidebar.project.section opens once for each project whose rows show (mod API 1.7): publish for each, or one tree for all, and a null tree for a project shows no section under it."},
 	{Name: modbus.ViewClosed, Data: typ[modbus.View](), Needs: mod.PermViews, Doc: "One of the mod's views is no longer shown."},
@@ -404,7 +407,7 @@ var Methods = []Method{
 	{Name: "tasks.list", Params: []Param{{Name: "slug", Type: typ[string]()}}, Result: typ[[]Task](), Needs: mod.PermProjectRead,
 		Doc: "A project's tasks, in board order."},
 	{Name: "tasks.done", Params: []Param{{Name: "slug", Type: typ[string]()}, {Name: "options", Type: typ[DoneOptions](), Optional: true}}, Result: typ[DoneTasks](), Needs: mod.PermProjectRead,
-		Doc: "A project's done tasks, newest first (mod API 1.16), from tm's task records only, no git, in the server's time zone: with options.groups Done's headings, the newest 7 days with work (at most 30 rows open), then older work by week, then by month, the archive's tasks counted; empty spans have no heading; and mark (mod API 1.21), the line at the human's last action in the journal, when work has finished since. Otherwise a page of the tasks, by days from options.from to options.to, the archive's too with options.archived."},
+		Doc: "A project's done tasks, newest first (mod API 1.16), from tm's task records only, no git, in the server's time zone: with options.groups Done's headings, the newest 7 days with work (at most 30 rows open), then older work by week, then by month, the archive's tasks counted; empty spans have no heading; and mark (mod API 1.21), the line at the human's last action in the journal, when work has finished since. Otherwise a page of the tasks, by days from options.from to options.to, the archive's too with options.archived, only those with each word of options.query in their id, title or status (mod API 1.20), whatever its case and accents."},
 	{Name: "designs.list", Params: []Param{{Name: "slug", Type: typ[string]()}}, Result: typ[[]Design](), Needs: mod.PermProjectRead,
 		Doc: "A project's designs (mod API 1.10), by name: those tm design set recorded and those a task names (archived tasks too), each with its status from its build tasks, its design task, page, decided answers and open questions. A task's design and after (tasks.list) say which tasks build which."},
 	{Name: "history.get", Params: []Param{{Name: "slug", Type: typ[string]()}}, Result: typ[proto.History](), Needs: mod.PermProjectRead,
