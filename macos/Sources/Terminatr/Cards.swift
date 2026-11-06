@@ -279,7 +279,7 @@ struct FlowButtons: View {
                 if numbered && i < 9 {
                     // A quiet key, in what the button's words are on.
                     Text("\(i + 1)")
-                        .font(.system(size: Flat.chip * theme.scale, design: .monospaced))
+                        .font(theme.monoSized(Flat.chip))
                         .opacity(0.6)
                 }
                 Text(o.label)
