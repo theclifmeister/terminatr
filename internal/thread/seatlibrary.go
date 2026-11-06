@@ -62,7 +62,8 @@ func SeatLibrary(f *project.Folder) []LibFile {
 		if err != nil {
 			continue
 		}
-		out = append(out, LibFile{Thread: SeatID, Title: SeatTitle(f), State: seatState, Name: e.Name(), Size: fi.Size(), Time: fi.ModTime()})
+		out = append(out, LibFile{Thread: SeatID, Title: SeatTitle(f), State: seatState, Name: e.Name(),
+			DocTitle: FileDocTitle(f.Path("library", e.Name()), e.Name()), Size: fi.Size(), Time: fi.ModTime()})
 	}
 	sort.SliceStable(out, func(i, j int) bool {
 		if !out[i].Time.Equal(out[j].Time) {
@@ -113,7 +114,7 @@ func AddSeatFile(f *project.Folder, c caller.Caller, source string, open func(st
 	if err := f.Journal(c, "library.add", SeatID, name); err != nil {
 		return LibFile{}, err
 	}
-	return LibFile{Thread: SeatID, Title: SeatTitle(f), State: seatState, Name: name, Size: out.Size(), Time: out.ModTime()}, nil
+	return LibFile{Thread: SeatID, Title: SeatTitle(f), State: seatState, Name: name, DocTitle: FileDocTitle(dst, name), Size: out.Size(), Time: out.ModTime()}, nil
 }
 
 // seatFile opens folder f's own library file, never through a link.

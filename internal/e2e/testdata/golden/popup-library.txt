@@ -9,7 +9,7 @@
       │ T1  Research the options  ● started                                                                      │
       │   t-0001 · 7 Oct · 1 note · 1 data file · 41 B                                                           │
       │   data.json                                                                                         11 B │
-      │   options.md                                                                                        30 B │
+      │   Options  options.md                                                                               30 B │
       │                                                                                                          │
       │                                                                                                          │
       │                                                                                                          │

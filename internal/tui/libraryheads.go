@@ -122,6 +122,42 @@ func libHeading(files []thread.LibFile, w int) (title, meta string) {
 	return title, th().Faint.Render(ansi.Truncate(text, max(w, 8), "…"))
 }
 
+// libFileLabel is a file's row for w cells: its name, or its own title with
+// the name beside it, faint when it may be styled, and "· published" for a
+// page with a published copy. Both stay readable in a tight row: the title
+// gives way down to three fifths, then the name to what's left.
+func libFileLabel(f thread.LibFile, w int, styled bool) string {
+	name, tag := oneLine(f.Name), ""
+	if f.Published != "" {
+		tag = " · published"
+	}
+	nameW := ansi.StringWidth(name) + ansi.StringWidth(tag)
+	if f.DocTitle == "" {
+		if nameW > w {
+			if room := w - ansi.StringWidth(tag); room >= 8 {
+				return ansi.Truncate(name, room, "…") + tag
+			}
+			return fit(name, w)
+		}
+		return name + tag
+	}
+	title := oneLine(f.DocTitle)
+	titleW := min(ansi.StringWidth(title), max(w-2-min(nameW, max(w*2/5, 8)), 0))
+	nameRoom := w - 2 - titleW
+	if titleW < 4 {
+		return fit(title, w)
+	}
+	if room := nameRoom - ansi.StringWidth(tag); room >= 8 {
+		name = ansi.Truncate(name, room, "…") + tag
+	} else {
+		name = ansi.Truncate(name, nameRoom, "…")
+	}
+	if styled {
+		name = th().Faint.Render(name)
+	}
+	return ansi.Truncate(title, titleW, "…") + "  " + name
+}
+
 // libRow is a row under a heading: a file, or a fold's. f is the file, or
 // for a fold's row the group's first.
 type libRow struct {

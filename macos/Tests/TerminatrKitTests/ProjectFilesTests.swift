@@ -60,10 +60,12 @@ private struct LibraryFixture: Decodable {
         var project: String?
         var server: String?
         var name: String
+        var doc_title: String?
+        var published: String?
         var size: Int?
 
         var file: AppAPI.LibraryFile {
-            AppAPI.LibraryFile(thread: thread ?? "", task: task ?? "", taskStatus: task_status ?? "", title: title, repo: repo ?? "", state: state ?? "running", name: name, size: size ?? 0,
+            AppAPI.LibraryFile(thread: thread ?? "", task: task ?? "", taskStatus: task_status ?? "", title: title, repo: repo ?? "", state: state ?? "running", name: name, docTitle: doc_title ?? "", published: published ?? "", size: size ?? 0,
                                time: Date(timeIntervalSince1970: 0), peer: peer ?? "", message: message ?? "", project: project ?? "", server: server ?? "")
         }
     }
@@ -447,6 +449,18 @@ private actor Thumbs {
     #expect(peer == nil)
     let names = await t.names
     #expect(names == ["corrupt.png", "corrupt.png"])
+}
+
+/// A published link opens only as an https address: nothing else is handed
+/// to the system (T1061).
+@Test func libraryPublishedIsHTTPSOnly() {
+    func link(_ s: String) -> String? {
+        LibraryPage.published(AppAPI.LibraryFile(title: "", state: "", name: "a.html", published: s, size: 0, time: Date(timeIntervalSince1970: 0)))?.absoluteString
+    }
+    #expect(link("https://claude.ai/artifact/abc") == "https://claude.ai/artifact/abc")
+    for bad in ["", "http://claude.ai/a", "file:///etc/passwd", "javascript:alert(1)", "tm://x", "/tmp/a.html", "https://"] {
+        #expect(link(bad) == nil, "\(bad)")
+    }
 }
 
 /// The stack rule (T1057), on the table the TUI's test reads too.

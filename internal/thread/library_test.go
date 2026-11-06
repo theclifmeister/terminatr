@@ -250,3 +250,138 @@ func TestReadLibraryChunk(t *testing.T) {
 		t.Errorf("read through a link: %q", data)
 	}
 }
+
+func TestDocTitle(t *testing.T) {
+	long := strings.Repeat("x", 500)
+	for _, c := range []struct{ what, name, head, want string }{
+		{"html title", "design.html", "<!doctype html><html><head><meta charset=utf-8><title>Who May Run tm</title></head>", "Who May Run tm"},
+		{"case, attributes, entities", "a.HTM", "<TITLE lang=en>\n  Fish &amp; chips\n</TITLE>", "Fish & chips"},
+		{"no title", "a.html", "<html><head></head><body><h1>Not it</h1></body></html>", ""},
+		{"empty title", "a.html", "<title>  </title>", ""},
+		{"title in a comment", "a.html", "<!-- <title>old</title> --><head></head>", ""},
+		{"an SVG's title in the body", "a.html", "<body><svg><title>icon</title></svg></body>", ""},
+		{"script before the title", "a.html", `<script>var s="<title>no</title>"</script><title>Yes</title>`, "Yes"},
+		{"never closed", "a.html", "<title>the rest of the page", ""},
+		{"control characters", "a.html", "<title>a\x1b[31mb\x07\tc\u202ed</title>", "a[31mb cd"},
+		{"very long", "a.html", "<title>" + long + "</title>", strings.Repeat("x", DocTitleMax-1) + "…"},
+		{"hostile tags stay text", "a.html", "<title><script>alert(1)</script></title>", "<script>alert(1)</script>"},
+		{"says only its name", "a.html", "<title>a.html</title>", ""},
+		{"markdown heading", "REPORT.md", "intro\n\n## Report\n\n# Later\n", "Report"},
+		{"closing hashes", "a.markdown", "# Title ##\n", "Title"},
+		{"crlf and bom", "a.md", "\xef\xbb\xbf# Title\r\nmore\r\n", "Title"},
+		{"front matter", "a.md", "---\ntitle: no\n# not this\n---\n\n# Yes\n", "Yes"},
+		{"code fence", "a.md", "```sh\n# comment\n```\n# Yes\n", "Yes"},
+		{"underlined", "a.md", "\nA title\n=====\n", "A title"},
+		{"not a heading", "a.md", "#hashtag\n#!/bin/sh\n####### seven\n", ""},
+		{"no heading", "a.md", "just text\n", ""},
+		{"markdown control characters", "a.md", "# a\x1b]0;evil\x07b\n", "a]0;evilb"},
+		{"binary", "a.md", "# a\x00b\n", ""},
+		{"invalid utf-8", "a.md", "# a\xffb\n", "ab"},
+		{"a kind with no title", "a.txt", "# Not read\n", ""},
+		{"an image", "a.png", "<title>no</title>", ""},
+	} {
+		if got := DocTitle(c.name, []byte(c.head)); got != c.want {
+			t.Errorf("%s: %q, want %q", c.what, got, c.want)
+		}
+	}
+	// Only the first 8 KB count, and a line the cut ends in isn't a heading.
+	pad := strings.Repeat("text\n", docTitleHead/5)
+	if got := DocTitle("a.md", []byte(pad+"# Too late\n")); got != "" {
+		t.Errorf("past 8 KB: %q", got)
+	}
+	cut := strings.Repeat("a", docTitleHead-20) + "\n# Cut off in the middle of the heading\n"
+	if got := DocTitle("a.md", []byte(cut)); got != "" {
+		t.Errorf("cut line: %q", got)
+	}
+	if got := DocTitle("a.html", []byte("<title>"+strings.Repeat("x", docTitleHead)+"</title>")); got != "" {
+		t.Errorf("a title 8 KB doesn't close: %q", got)
+	}
+}
+
+func TestLibraryDocTitleAndPublished(t *testing.T) {
+	p := libFixture(t)
+	const url = "https://claude.ai/artifact/abc"
+	at := time.Unix(1_700_000_000, 0)
+	rec, err := Create(p, Record{Title: "A design", Task: "T1", State: Resolved, ResolvedAt: at})
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, err := Create(p, Record{Title: "Other", Task: "T2", State: Running})
+	if err != nil {
+		t.Fatal(err)
+	}
+	design, plain := rec.ID, other.ID
+	addLib(t, p, design, "design.html", "<title>Who May Run tm</title>", at)
+	addLib(t, p, design, "REPORT.md", "# Report\n", at)
+	addLib(t, p, design, "shot.png", "<title>not read</title>", at)
+	addLib(t, p, plain, "other.html", "<p>no title</p>", at)
+	byName := func() map[string]LibFile {
+		files, err := Library(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		out := map[string]LibFile{}
+		for _, f := range files {
+			out[f.Name] = f
+		}
+		return out
+	}
+
+	// A project with no designs: titles, no link.
+	got := byName()
+	if f := got["design.html"]; f.DocTitle != "Who May Run tm" || f.Published != "" {
+		t.Errorf("no designs: %+v", f)
+	}
+	if f := got["REPORT.md"]; f.DocTitle != "Report" {
+		t.Errorf("note: %+v", f)
+	}
+	if f := got["shot.png"]; f.DocTitle != "" {
+		t.Errorf("image: %+v", f)
+	}
+	if f := got["other.html"]; f.DocTitle != "" {
+		t.Errorf("no title: %+v", f)
+	}
+
+	task := "T1"
+	if _, _, err := p.SetDesign("page", project.DesignEdit{Task: &task, Artifact: new(string)}); err != nil {
+		t.Fatal(err)
+	}
+	if f := byName()["design.html"]; f.Published != "" {
+		t.Errorf("a design with no page: %+v", f)
+	}
+	art := url
+	if _, _, err := p.SetDesign("page", project.DesignEdit{Artifact: &art}); err != nil {
+		t.Fatal(err)
+	}
+	got = byName()
+	if f := got["design.html"]; f.Published != url {
+		t.Errorf("page of the design task: %+v", f)
+	}
+	for _, name := range []string{"REPORT.md", "shot.png", "other.html"} {
+		if f := got[name]; f.Published != "" {
+			t.Errorf("%s has a link: %+v", name, f)
+		}
+	}
+
+	// Packed: the same, from the tarball.
+	if err := Archive(p, rec); err != nil {
+		t.Fatal(err)
+	}
+	if f := byName()["design.html"]; f.State != "archived" || f.DocTitle != "Who May Run tm" || f.Published != url {
+		t.Errorf("archived: %+v", f)
+	}
+}
+
+// TestSeatLibraryDocTitle: a coordinator's own file has its title too, and
+// no link: it has no task.
+func TestSeatLibraryDocTitle(t *testing.T) {
+	p := libFixture(t)
+	os.MkdirAll(p.Path("library"), 0o755)
+	if err := os.WriteFile(p.Path("library", "plan.md"), []byte("# The plan\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := SeatLibrary(&p.Folder)
+	if len(got) != 1 || got[0].DocTitle != "The plan" || got[0].Published != "" {
+		t.Errorf("seat file: %+v", got)
+	}
+}
