@@ -27,6 +27,10 @@ struct MainArea<Detail: View, Panel: View>: View {
     /// The panel's width, or nil while it hides.
     let panelWidth: Double?
     @Binding var panelWidthSaved: Double
+    /// The most a drag takes the panel to (WindowColumns.limit).
+    var panelLimit: Double = .greatestFiniteMagnitude
+    /// The panel was dragged: it's the last sized, so the last to give way.
+    var panelSized: () -> Void = {}
     @ViewBuilder var detail: Detail
     @ViewBuilder var panel: Panel
 
@@ -46,7 +50,7 @@ struct MainArea<Detail: View, Panel: View>: View {
                 .focusBorder(.main)
                 .padding(.leading, CGFloat(WindowColumns.gap))
                 if let panelWidth {
-                    SplitHandle(width: CGFloat(WindowColumns.gap), value: $panelWidthSaved, sign: -1, range: InspectorColumn.min...InspectorColumn.max, name: "Panel width")
+                    SplitHandle(width: CGFloat(WindowColumns.gap), value: $panelWidthSaved, shown: panelWidth, sign: -1, range: InspectorColumn.min...Swift.max(InspectorColumn.min, panelLimit), name: "Panel width", sized: panelSized)
                     Group {
                         if shownPanel == .files, let files, let place = app.filesPlace(selection) {
                             FilesPanel(model: files, place: place, own: own)
@@ -165,9 +169,8 @@ struct TitleRow: View {
                 }
                 .disabled(m.sessionID == nil)
                 .help("Conversation or Terminal (⇧⌘T)")
-            case .project(_, let server):
-                let tabs = server.isEmpty ? app.projectTabs : ProjectTab.paired
-                ForEach(tabs) { t in
+            case .project:
+                ForEach(selection.map(app.projectTabs) ?? []) { t in
                     TabButton(title: t.rawValue, symbol: t.symbol, icons: icons, on: !reading && app.projectTab == t) {
                         files?.pane.shown = nil
                         app.projectTab = t
@@ -209,6 +212,7 @@ extension ProjectTab {
         case .board: "list.bullet.rectangle"
         case .memory: "bookmark"
         case .library: "books.vertical"
+        case .designs: "square.on.square"
         case .mods: "puzzlepiece.extension"
         }
     }
@@ -395,9 +399,9 @@ struct MainPane<Content: View>: View {
         switch selection {
         case .session(let ref):
             let m = own ?? app.model(ref)
+            let named = ref.naming(in: app.projects, peers: app.peers)
             return Self.head(ref, tab: m.tab, agent: app.session(of: m)?.agent ?? ref.session(in: app.peers)?.agent ?? "",
-                             task: ref.isRemote ? ref.session(in: app.peers)?.task : app.thread(ref)?.task?.ref,
-                             title: app.thread(ref).map { $0.task?.title ?? $0.record.title } ?? "")
+                             task: named.task, title: named.title)
         case .project(let slug, let server):
             let tab = app.projectTab
             return (tab.symbol, tab.rawValue, server.isEmpty ? slug : "\(server) › \(slug)")
@@ -456,9 +460,8 @@ private struct PaneHeader: View {
 
 // MARK: the status bar
 
-/// The status bar: the server, threads at work and what needs the user
-/// (a menu of it, as the toolbar's flag was), a version that doesn't fit
-/// when one doesn't, and ⌘K.
+/// The status bar: the servers, threads at work and what needs the user,
+/// each a menu of them, a version that doesn't fit when one doesn't, and ⌘K.
 struct StatusBar: View {
     @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
@@ -466,19 +469,8 @@ struct StatusBar: View {
     var body: some View {
         let f = StatusFacts.of(projects: app.projects, sessions: app.sessions, peers: app.peers, needs: app.needs.count)
         HStack(spacing: 17) {
-            HStack(spacing: 6) {
-                BarIcon(symbol: "display")
-                Text(app.isConnected ? f.server : "Not connected")
-            }
-            .accessibilityElement(children: .combine)
-            .help(app.isConnected ? "This server and the ones paired with it" : "The bridge to tm is down")
-            HStack(spacing: 6) {
-                Dot(colour: f.working > 0 ? theme.good : theme.faint)
-                Text(f.workingWord)
-                    .monospacedDigit()
-            }
-            .accessibilityElement(children: .combine)
-            .help("Threads whose agents are working")
+            ServersMenu(facts: f)
+            WorkingMenu(facts: f)
             NeedsMenu(facts: f)
             Spacer(minLength: 8)
             if app.isConnected, app.compatibility.message != nil {
@@ -518,29 +510,31 @@ struct Dot: View {
     }
 }
 
-/// The status bar's needs: its count, and a menu of the needs, each
-/// showing what it names; Next Need (⌥⌘↓) first.
-struct NeedsMenu: View {
-    @Environment(AppModel.self) private var app
-    @Environment(\.theme) private var theme
-    let facts: StatusFacts
+/// A count of the status bar that opens a menu: the one look, keys and
+/// VoiceOver of its three (a native menu: arrows, return, escape). Its rows
+/// hold still while it is open, as a row that changes closes an open menu
+/// (a server's ping does every few seconds), and read the time afresh every
+/// few seconds while it is shut, as nothing else draws them while the model
+/// is quiet.
+struct StatusMenu<Rows, Mark: View, Items: View>: View {
+    let word: String
+    let help: String
+    let spoken: String
+    let rows: (Date) -> Rows
+    @ViewBuilder let mark: Mark
+    @ViewBuilder let items: (Rows) -> Items
+    @State private var now = Date()
+    /// The rows while a menu is open.
+    @State private var held: Rows?
 
     var body: some View {
+        let current = rows(now)
         Menu {
-            Button("Next Need") { app.stepNeed(1) }
-                .disabled(app.needs.isEmpty)
-            if !app.needs.isEmpty {
-                Divider()
-                ForEach(app.needs) { n in
-                    Button("\(n.title) · \(n.detail.isEmpty ? n.project : n.detail)") {
-                        app.open(project: n.project, session: n.session)
-                    }
-                }
-            }
+            items(held ?? current)
         } label: {
             HStack(spacing: 6) {
-                Dot(colour: app.needs.first.map { theme.colour($0.kind) } ?? theme.faint)
-                Text(facts.needsWord)
+                mark
+                Text(word)
                     .monospacedDigit()
             }
             .contentShape(Rectangle())
@@ -549,8 +543,109 @@ struct NeedsMenu: View {
         .buttonStyle(.plain)
         .menuIndicator(.hidden)
         .fixedSize()
-        .help(app.needs.isEmpty ? "Nothing needs you" : "\(facts.needsWord): ⌥⌘↓ shows the next")
-        .accessibilityLabel("Needs you, \(app.needs.count)")
+        .help(help)
+        .accessibilityLabel(spoken)
+        .task {
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(15))
+                if held == nil { now = Date() }
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSMenu.didBeginTrackingNotification)) { _ in
+            held = current
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSMenu.didEndTrackingNotification)) { _ in
+            held = nil
+            now = Date()
+        }
+    }
+}
+
+/// The status bar's servers: this Mac and the paired ones, each with its
+/// connection and tm; choosing one goes to it in the sidebar. Pair a
+/// server last, as in the sidebar's foot.
+struct ServersMenu: View {
+    @Environment(AppModel.self) private var app
+    let facts: StatusFacts
+
+    var body: some View {
+        StatusMenu(word: app.isConnected ? facts.server : "Not connected",
+                   help: app.isConnected ? "This server and the ones paired with it" : "The bridge to tm is down",
+                   spoken: "Servers, \(facts.servers)",
+                   rows: { now in ServerList.of(connected: app.isConnected, version: app.hello?.tm ?? "", peers: app.peers, rtt: app.peerRTT, now: now) }) {
+            BarIcon(symbol: "display")
+        } items: { servers in
+            ForEach(servers) { s in
+                Button(s.text) { app.go(toServer: s.alias) }
+            }
+            if servers.count == 1 {
+                Button("No paired servers") {}
+                    .disabled(true)
+            }
+            Divider()
+            Button("Pair a server") { app.pairServer = true }
+        }
+    }
+}
+
+/// The status bar's threads at work: its count, and a menu of them by
+/// project, each with how long its turn has run, then the coordinators and
+/// directors at work, which the count leaves out.
+struct WorkingMenu: View {
+    @Environment(AppModel.self) private var app
+    @Environment(\.theme) private var theme
+    let facts: StatusFacts
+
+    var body: some View {
+        StatusMenu(word: facts.workingWord, help: "Threads whose agents are working", spoken: "Working, \(facts.working)",
+                   rows: { now in (list: WorkingList.of(projects: app.projects, sessions: app.sessions, peers: app.peers, programs: app.programs), now: now) }) {
+            Dot(colour: facts.working > 0 ? theme.good : theme.faint)
+        } items: { r in
+            if r.list.isEmpty {
+                Button("Nothing is working") {}
+                    .disabled(true)
+            }
+            ForEach(r.list.threads) { g in
+                Section(g.name) { rows(g.rows, r.now) }
+            }
+            if !r.list.roles.isEmpty {
+                Section("Coordinators and directors") { rows(r.list.roles, r.now) }
+            }
+        }
+    }
+
+    private func rows(_ rows: [WorkingRow], _ now: Date) -> some View {
+        ForEach(rows) { r in
+            Button(r.text(now: now)) { app.select(r.selection) }
+        }
+    }
+}
+
+/// The status bar's needs: its count, and a menu of the needs, each
+/// showing what it names; Next Need (⌥⌘↓) first.
+struct NeedsMenu: View {
+    @Environment(AppModel.self) private var app
+    @Environment(\.theme) private var theme
+    let facts: StatusFacts
+
+    var body: some View {
+        StatusMenu(word: facts.needsWord,
+                   help: app.needs.isEmpty ? "Nothing needs you" : "\(facts.needsWord): ⌥⌘↓ shows the next",
+                   spoken: "Needs you, \(app.needs.count)",
+                   rows: { _ in app.needs }) {
+            Dot(colour: app.needs.first.map { theme.colour($0.kind) } ?? theme.faint)
+        } items: { needs in
+            Button("Next Need") { app.stepNeed(1) }
+                .disabled(needs.isEmpty)
+            if !needs.isEmpty {
+                Divider()
+                ForEach(needs) { n in
+                    Button("\(n.title) · \(n.detail.isEmpty ? n.project : n.detail)") {
+                        app.open(project: n.project, session: n.session)
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -560,10 +655,15 @@ struct NeedsMenu: View {
 struct SplitHandle: View {
     let width: CGFloat
     @Binding var value: Double
+    /// The width on screen now: the drag starts from it, not from the
+    /// saved one, which a narrow window may have kept wider.
+    var shown: Double?
     /// -1 for a column to the handle's right.
     let sign: Double
     let range: ClosedRange<Double>
     let name: String
+    /// Called as a drag begins to change the width.
+    var sized: () -> Void = {}
     @State private var start: Double?
 
     var body: some View {
@@ -577,7 +677,8 @@ struct SplitHandle: View {
             .gesture(
                 DragGesture(minimumDistance: 1, coordinateSpace: .global)
                     .onChanged { d in
-                        let from = start ?? value
+                        let from = start ?? shown ?? value
+                        if start == nil { sized() }
                         start = from
                         value = min(range.upperBound, max(range.lowerBound, from + sign * d.translation.width)).rounded()
                     }

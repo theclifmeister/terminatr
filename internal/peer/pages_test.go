@@ -39,6 +39,10 @@ func (f *pagesExport) LibraryRead(c caller.Caller, p proto.PeerLibraryReadParams
 	return proto.LibraryReadResult{Name: p.Name, Size: 2, Data: []byte("hi")}, nil
 }
 
+func (f *pagesExport) LibraryThumbnail(c caller.Caller, p proto.PeerLibraryThumbnailParams) (proto.LibraryThumbnailResult, error) {
+	return proto.LibraryThumbnailResult{Name: p.Name, Width: 1, Height: 1, Data: []byte("x")}, nil
+}
+
 // pagesPair is a session to a dispatcher whose pages switch is on for
 // the projects in *on.
 func pagesPair(t *testing.T, ex Exporter, on *[]string) *session {
@@ -77,6 +81,7 @@ func TestPeerPagesGate(t *testing.T) {
 		{proto.MethodPeerPages, proto.PeerPagesParams{Project: "web"}},
 		{proto.MethodPeerPagesLibrary, proto.PeerPagesParams{Project: "web"}},
 		{proto.MethodPeerPagesLibraryRead, proto.PeerLibraryReadParams{Project: "web", Thread: "t-0001", Name: "a.md"}},
+		{proto.MethodPeerPagesLibraryThumbnail, proto.PeerLibraryThumbnailParams{Project: "web", Thread: "t-0001", Name: "a.png"}},
 	}
 	for _, c := range calls {
 		if err := a.call(ctx, c.method, c.params, nil); code(err) != proto.ErrPagesOff {
@@ -106,7 +111,7 @@ func TestPeerPagesGate(t *testing.T) {
 	}
 	// None of them writes, and the memory has no method.
 	plain := pagesPair(t, newFakeExport(), &on)
-	for _, m := range []string{proto.MethodPeerPages, proto.MethodPeerPagesLibrary, proto.MethodPeerPagesLibraryRead, proto.MethodMemoryList, proto.MethodMemoryRead} {
+	for _, m := range []string{proto.MethodPeerPages, proto.MethodPeerPagesLibrary, proto.MethodPeerPagesLibraryRead, proto.MethodPeerPagesLibraryThumbnail, proto.MethodMemoryList, proto.MethodMemoryRead} {
 		if err := plain.call(ctx, m, proto.PeerPagesParams{Project: "web"}, nil); code(err) != proto.ErrUnknownMethod {
 			t.Errorf("%s without pages: %v", m, err)
 		}

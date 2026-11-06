@@ -87,6 +87,33 @@ public struct SessionRef: Codable, Hashable, Sendable, CustomStringConvertible {
         return sessions.first { isCoordinator ? $0.role == "coordinator" : $0.role == "thread" && $0.thread == thread }
     }
 
+    /// The thread it names on this server; nil for a paired server's ref:
+    /// a project of the same name here holds other threads, under the
+    /// same ids (T1037).
+    public func ownThread(in projects: [AppAPI.Project]) -> AppAPI.Thread? {
+        guard !isRemote, !thread.isEmpty else { return nil }
+        return projects.first { $0.slug == project }?.threads.first { $0.record.id == thread }
+    }
+
+    /// The thread it names on its paired server, as that server last
+    /// said; nil for this server's ref.
+    public func peerThread(in peers: [AppAPI.Peer]) -> AppAPI.PeerThread? {
+        guard isRemote, !thread.isEmpty, let peer = peers.first(where: { $0.alias == server }) else { return nil }
+        return peer.projects.first { $0.project == project }?.watched.first { $0.id == thread }
+    }
+
+    /// Its thread's task and title, from the server it lives on, as its
+    /// sidebar row names it; empty when that server doesn't say.
+    public func naming(in projects: [AppAPI.Project], peers: [AppAPI.Peer]) -> (task: String, title: String) {
+        if isRemote {
+            let t = peerThread(in: peers)
+            let task = t?.task ?? ""
+            return (task.isEmpty ? session(in: peers)?.task ?? "" : task, t?.title ?? "")
+        }
+        let t = ownThread(in: projects)
+        return (t?.task?.ref ?? "", t.map { $0.task?.title ?? $0.record.title } ?? "")
+    }
+
     /// The window of session s: its project's coordinator or one of its
     /// threads; nil for any other session (a plain shell, one outside
     /// the projects).

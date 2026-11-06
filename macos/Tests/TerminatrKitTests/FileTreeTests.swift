@@ -70,7 +70,7 @@ private let tree: [String: [AppAPI.FileEntry]] = [
 @Test func aPairedServersFilesAreAttachedOnly() throws {
     let p = try #require(FilesPlace.of(.session(SessionRef(project: "web", thread: "t-1", server: "mini")), sessionID: "mini/s-1", threadDone: false, readsWorktree: true, hasLibrary: true))
     #expect(p.session == nil)
-    #expect(p.why?.contains("mini's worktrees stay on mini") == true)
+    #expect(p.why == "mini's worktrees can't be browsed from here. The Attached tab shows what this thread attached, when mini shares the project's pages.")
     #expect(p.mentions == nil)
 }
 
@@ -311,6 +311,8 @@ private final class Chunks: @unchecked Sendable {
     let f: WorktreeRead.Fetch = { p in AppAPI.FilesChunk(name: "f", path: p.path, size: 30 << 20, offset: 0, truncated: true, data: Data([1])) }
     guard case .unavailable(let why) = await WorktreeRead.bytes(f, session: "s", path: "f", ignored: false) else { Issue.record("no refusal"); return }
     #expect(why.contains("Reveal in Finder"))
+    #expect(why.contains(Attachment.size(FileImage.maxBytes)), "names the cap")
+    #expect(!why.contains(Attachment.size(30 << 20)), "not the file's size")
 }
 
 @Test func bytesReadAgainWhenTheFileChangesBetweenChunks() async {

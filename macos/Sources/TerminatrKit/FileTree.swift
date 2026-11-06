@@ -78,7 +78,7 @@ public struct FilesPlace: Hashable, Sendable {
             : "This thread's agent isn't running, so tm can't read its worktree. \(keeps)"
         var why: String?
         if !server.isEmpty {
-            why = "\(server)'s worktrees stay on \(server). \(keeps)"
+            why = "\(server)'s worktrees can't be browsed from here. The Attached tab shows what \(whole ? "threads" : "this thread") attached, when \(server) shares the project's pages."
         } else if !readsWorktree {
             why = "This tm can't read a worktree: update it. \(keeps)"
         } else if sessionID == nil {
@@ -537,8 +537,9 @@ public enum WorktreeRead {
             var changed = false
             do {
                 repeat {
+                    try Task.checkCancellation()
                     let c = try await fetch(AppAPI.FilesReadParams(session: session, repo: repo, path: path, offset: out.count, ignored: ignored, binary: true))
-                    if c.truncated { return .unavailable("It's over the \(Attachment.size(c.size)) tm reads. Reveal in Finder shows it.") }
+                    if c.truncated { return .unavailable("It's over the \(Attachment.size(FileImage.maxBytes)) tm reads. Reveal in Finder shows it.") }
                     if c.binary, c.data.isEmpty, c.size > 0 { return .unavailable("This tm doesn't send a binary file's bytes: update it.") }
                     if size >= 0, c.size != size || c.mtime != mtime {
                         changed = true

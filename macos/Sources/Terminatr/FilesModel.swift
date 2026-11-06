@@ -27,6 +27,8 @@ final class FilesModel {
         var diff: AppAPI.FilesDiff?
         /// Its lines with that change laid over them, when there are any.
         var marks: FileMarks?
+        /// An image file's picture, or why it has none; nil for any other.
+        var picture: FileImage.Outcome?
     }
 
     private(set) var scope = Scope.worktree
@@ -73,6 +75,8 @@ final class FilesModel {
     var pane = PaneFiles()
     var place: FilesPlace?
 
+    @ObservationIgnored private var reading: Set<String> = []
+    @ObservationIgnored private var keep = FileImageKeep()
     @ObservationIgnored private var stamp = ""
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private var opened = false
@@ -343,19 +347,48 @@ final class FilesModel {
         await read(f, app)
     }
 
+    /// One read of a file at a time: the preview and a pane's tab of the same
+    /// image would each hold its bytes. Whoever stops wanting it drops what it
+    /// read; a shown file's next look reads it again for whoever still does.
     private func read(_ f: OpenedFile, _ app: AppModel) async {
+        guard reading.insert(f.id).inserted else { return }
+        defer { reading.remove(f.id) }
+        var s: Shown
         switch f.source {
         case .worktree(let e, let ignored):
             if e.linkOut || e.kind == "other" {
-                shown[f.id] = Shown(body: .unavailable("\(e.name) is a link that doesn't open: it leads out of the worktree, or nowhere."))
+                s = Shown(body: .unavailable("\(e.name) is a link that doesn't open: it leads out of the worktree, or nowhere."))
             } else if let session = place?.session, let b = app.bridge {
-                shown[f.id] = await worktreeFile(e, ignored: ignored, repo: f.repo, session: session, b)
+                s = await worktreeFile(e, ignored: ignored, repo: f.repo, session: session, b)
             } else {
-                shown[f.id] = Shown(body: .unavailable(place?.why ?? "Not connected to terminatr."))
+                s = Shown(body: .unavailable(place?.why ?? "Not connected to terminatr."))
             }
         case .attached(let a):
-            shown[f.id] = Shown(body: WorktreeRead.body(attached: await attachedBytes(a, app)))
+            s = await attachedFile(a, app)
         }
+        guard !Task.isCancelled else { return }
+        shown[f.id] = s
+        guard case .drawn(let p) = s.picture else {
+            keep.remove(f.id)
+            return
+        }
+        let showing = Set(pane.tabs.map(\.id) + (picked.map { [$0.id] } ?? []))
+        for id in keep.add(f.id, pixels: p.image.width * p.image.height, showing: showing) { shown[id] = nil }
+    }
+
+    /// An attached file, as its bytes say. An image over what tm reads isn't
+    /// asked for: only the size in the list is needed to know.
+    private func attachedFile(_ a: AppAPI.LibraryFile, _ app: AppModel) async -> Shown {
+        let image = FileImage.named(a.name)
+        if image, let why = FileImage.tooBig(a.size) {
+            return Shown(body: .binary(size: a.size, mtime: nil), picture: .notDrawn(why))
+        }
+        let outcome = await attachedBytes(a, app)
+        var s = Shown(body: WorktreeRead.body(attached: outcome))
+        if image, case .binary = s.body, case .data(let d, _) = outcome {
+            s.picture = await FileImageDecoder.shared.decode(d)
+        }
+        return s
     }
 
     /// A worktree file's text and what changed in it. The change is asked
@@ -371,18 +404,42 @@ final class FilesModel {
         let body = await WorktreeRead.body({ p in try await b.call(AppAPI.Methods.filesRead, p) }, session: session, repo: repo, path: e.path, ignored: ignored)
         var marks: FileMarks?
         if case .text(let text, _, _, _) = body, let diff { marks = FileMarks.of(text, diff) }
-        return Shown(body: body, diff: diff, marks: marks)
+        var s = Shown(body: body, diff: diff, marks: marks)
+        guard case .binary(let size, _) = body, FileImage.named(e.name) else { return s }
+        if let why = FileImage.tooBig(size) {
+            s.picture = .notDrawn(why)
+            return s
+        }
+        switch await WorktreeRead.bytes({ p in try await b.call(AppAPI.Methods.filesRead, p) }, session: session, repo: repo, path: e.path, ignored: ignored) {
+        case .data(let d, let mtime):
+            s.body = .binary(size: d.count, mtime: mtime)
+            s.picture = await FileImageDecoder.shared.decode(d)
+        case .gone:
+            s.body = .gone
+        case .unavailable(let why):
+            s.picture = .notDrawn(why)
+        }
+        return s
     }
 
     /// A shown file again, when it changed; what's gone stays and says so.
-    /// An unreadable moment (the session stopped) leaves what shows.
+    /// An unreadable moment (the session stopped) leaves what shows. One not
+    /// read yet, as its first read was dropped or its image let go, is read.
     func reread(_ f: OpenedFile, _ app: AppModel) async {
+        if shown[f.id] == nil {
+            await load(f, app)
+            return
+        }
         guard case .worktree(let e, let ignored) = f.source, let session = place?.session, let b = app.bridge,
               let old = shown[f.id]?.body else { return }
         let stat = await WorktreeRead.stat({ p in try await b.call(AppAPI.Methods.filesRead, p) }, session: session, repo: f.repo, path: e.path, ignored: ignored)
         switch stat {
         case .gone:
-            if case .text = old { shown[f.id]?.deleted = true }
+            if case .text = old {
+                shown[f.id]?.deleted = true
+            } else if case .drawn = shown[f.id]?.picture {
+                shown[f.id]?.deleted = true
+            }
         case .binary(let size, let mtime):
             var same = false
             switch old {

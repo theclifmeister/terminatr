@@ -547,7 +547,7 @@ func TestFilesNoFolder(t *testing.T) {
 	filesPress(c, "F")
 	c.info.data = &infoData{slug: "@pal/x", session: proto.SessionInfo{ID: "pal/s-1"}, remote: &remoteData{shown: "pal\x1b[2J"}}
 	filesPress(c, "F")
-	if c.info.files != nil || !strings.Contains(c.flash, "stay on it") || strings.Contains(c.flash, "\x1b") {
+	if c.info.files != nil || !strings.Contains(c.flash, "can't be browsed from here") || strings.Contains(c.flash, "\x1b") {
 		t.Fatalf("paired: %v %q", c.info.files, c.flash)
 	}
 	c.info.data = &infoData{slug: "prog", session: proto.SessionInfo{ID: "s-9"}, prog: &programInfo{}}

@@ -6,7 +6,7 @@ import Foundation
 /// The terminatr app API (docs/SPEC.md §3.8): what tm app bridge answers.
 public enum AppAPI {
     /// The app API version this app was generated against.
-    public static let version = 53
+    public static let version = 54
 
     public struct AdoptRequestParams: Codable, Sendable, Hashable {
         public var id: String
@@ -1277,6 +1277,45 @@ public enum AppAPI {
         }
     }
 
+    public struct LibraryThumbnail: Codable, Sendable, Hashable {
+        public var name: String
+        public var width: Int
+        public var height: Int
+        public var data: Data
+
+        public init(name: String, width: Int, height: Int, data: Data) {
+            self.name = name
+            self.width = width
+            self.height = height
+            self.data = data
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case name
+            case width
+            case height
+            case data
+        }
+    }
+
+    public struct LibraryThumbnailParams: Codable, Sendable, Hashable {
+        public var project: String
+        public var id: String
+        public var name: String
+
+        public init(project: String, id: String, name: String) {
+            self.project = project
+            self.id = id
+            self.name = name
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case project
+            case id
+            case name
+        }
+    }
+
     public struct Link: Codable, Sendable, Hashable {
         public var peer: String
         public var shown: String
@@ -1857,8 +1896,10 @@ public enum AppAPI {
         public var conversations: String
         public var needs: String
         public var picks: Bool
+        public var version: String
+        public var rttMs: Double
 
-        public init(alias: String, name: String = "", id: String = "", state: String, reason: String = "", since: Date? = nil, projects: [PeerProject] = [], shareWaits: Int = 0, shareRequests: [ShareRequest] = [], pane: Bool = false, panes: String = "", transcript: Bool = false, conversations: String = "", needs: String = "", picks: Bool = false) {
+        public init(alias: String, name: String = "", id: String = "", state: String, reason: String = "", since: Date? = nil, projects: [PeerProject] = [], shareWaits: Int = 0, shareRequests: [ShareRequest] = [], pane: Bool = false, panes: String = "", transcript: Bool = false, conversations: String = "", needs: String = "", picks: Bool = false, version: String = "", rttMs: Double = 0) {
             self.alias = alias
             self.name = name
             self.id = id
@@ -1874,6 +1915,8 @@ public enum AppAPI {
             self.conversations = conversations
             self.needs = needs
             self.picks = picks
+            self.version = version
+            self.rttMs = rttMs
         }
 
         enum CodingKeys: String, CodingKey {
@@ -1892,6 +1935,8 @@ public enum AppAPI {
             case conversations
             case needs
             case picks
+            case version
+            case rttMs = "rtt_ms"
         }
     }
 
@@ -1934,6 +1979,27 @@ public enum AppAPI {
             case id
             case name
             case offset
+        }
+    }
+
+    public struct PeerLibraryThumbnailParams: Codable, Sendable, Hashable {
+        public var alias: String
+        public var project: String
+        public var id: String
+        public var name: String
+
+        public init(alias: String, project: String, id: String, name: String) {
+            self.alias = alias
+            self.project = project
+            self.id = id
+            self.name = name
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case alias
+            case project
+            case id
+            case name
         }
     }
 
@@ -2199,8 +2265,9 @@ public enum AppAPI {
         public var asking: Bool
         public var context: Int
         public var contextWindow: Int
+        public var turnSince: Date?
 
-        public init(id: String, role: String, agent: String = "", project: String, thread: String = "", task: String = "", created: Date, state: String = "", reason: String = "", todosDone: Int = 0, todosTotal: Int = 0, current: String = "", queuedPrompts: Int = 0, remoteControl: Bool = false, model: String = "", asking: Bool = false, context: Int = 0, contextWindow: Int = 0) {
+        public init(id: String, role: String, agent: String = "", project: String, thread: String = "", task: String = "", created: Date, state: String = "", reason: String = "", todosDone: Int = 0, todosTotal: Int = 0, current: String = "", queuedPrompts: Int = 0, remoteControl: Bool = false, model: String = "", asking: Bool = false, context: Int = 0, contextWindow: Int = 0, turnSince: Date? = nil) {
             self.id = id
             self.role = role
             self.agent = agent
@@ -2219,6 +2286,7 @@ public enum AppAPI {
             self.asking = asking
             self.context = context
             self.contextWindow = contextWindow
+            self.turnSince = turnSince
         }
 
         enum CodingKeys: String, CodingKey {
@@ -2240,6 +2308,7 @@ public enum AppAPI {
             case asking
             case context
             case contextWindow = "context_window"
+            case turnSince = "turn_since"
         }
     }
 
@@ -4894,6 +4963,7 @@ public enum AppAPI {
         public static let guardRefusals = Call<NoParams, GuardRefusals>("guard.refusals", write: false)
         public static let libraryList = Call<ProjectParams, Library>("library.list", write: false)
         public static let libraryRead = Call<LibraryReadParams, LibraryChunk>("library.read", write: false)
+        public static let libraryThumbnail = Call<LibraryThumbnailParams, LibraryThumbnail>("library.thumbnail", write: false)
         public static let linkAct = Call<LinkActParams, LinkActResult>("link.act", write: true)
         public static let linkSend = Call<LinkSendParams, LinkActResult>("link.send", write: true)
         public static let memoryList = Call<ProjectParams, MemoryFiles>("memory.list", write: false)
@@ -4908,6 +4978,7 @@ public enum AppAPI {
         public static let peerDesignList = Call<PeerPagesParams, Designs>("peer.design-list", write: false)
         public static let peerLibraryList = Call<PeerPagesParams, Library>("peer.library-list", write: false)
         public static let peerLibraryRead = Call<PeerLibraryReadParams, LibraryChunk>("peer.library-read", write: false)
+        public static let peerLibraryThumbnail = Call<PeerLibraryThumbnailParams, LibraryThumbnail>("peer.library-thumbnail", write: false)
         public static let peerList = Call<NoParams, PeerList>("peer.list", write: false)
         public static let peerNeedAct = Call<PeerNeedActParams, PeerNeedActResult>("peer.need-act", write: true)
         public static let peerPagesRead = Call<PeerPagesParams, PeerPages>("peer.pages-read", write: false)
@@ -5563,6 +5634,25 @@ extension AppAPI.LibraryReadParams {
     }
 }
 
+extension AppAPI.LibraryThumbnail {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.name = try c.decode(String.self, forKey: .name)
+        self.width = try c.decode(Int.self, forKey: .width)
+        self.height = try c.decode(Int.self, forKey: .height)
+        self.data = try c.decode(Data.self, forKey: .data)
+    }
+}
+
+extension AppAPI.LibraryThumbnailParams {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.project = try c.decode(String.self, forKey: .project)
+        self.id = try c.decode(String.self, forKey: .id)
+        self.name = try c.decode(String.self, forKey: .name)
+    }
+}
+
 extension AppAPI.Link {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -5847,6 +5937,8 @@ extension AppAPI.Peer {
         self.conversations = try c.decodeIfPresent(String.self, forKey: .conversations) ?? ""
         self.needs = try c.decodeIfPresent(String.self, forKey: .needs) ?? ""
         self.picks = try c.decodeIfPresent(Bool.self, forKey: .picks) ?? false
+        self.version = try c.decodeIfPresent(String.self, forKey: .version) ?? ""
+        self.rttMs = try c.decodeIfPresent(Double.self, forKey: .rttMs) ?? 0
     }
 }
 
@@ -5867,6 +5959,16 @@ extension AppAPI.PeerLibraryReadParams {
         self.id = try c.decode(String.self, forKey: .id)
         self.name = try c.decode(String.self, forKey: .name)
         self.offset = try c.decodeIfPresent(Int.self, forKey: .offset) ?? 0
+    }
+}
+
+extension AppAPI.PeerLibraryThumbnailParams {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.alias = try c.decode(String.self, forKey: .alias)
+        self.project = try c.decode(String.self, forKey: .project)
+        self.id = try c.decode(String.self, forKey: .id)
+        self.name = try c.decode(String.self, forKey: .name)
     }
 }
 
@@ -5993,6 +6095,7 @@ extension AppAPI.PeerSession {
         self.asking = try c.decodeIfPresent(Bool.self, forKey: .asking) ?? false
         self.context = try c.decodeIfPresent(Int.self, forKey: .context) ?? 0
         self.contextWindow = try c.decodeIfPresent(Int.self, forKey: .contextWindow) ?? 0
+        self.turnSince = try c.decodeIfPresent(Date.self, forKey: .turnSince)
     }
 }
 

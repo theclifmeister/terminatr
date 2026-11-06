@@ -93,6 +93,23 @@ public enum LibraryPage {
         f.thread.isEmpty ? f.message : f.thread
     }
 
+    /// Whether the server makes a thumbnail of a file of this name: PNG,
+    /// JPEG and GIF (internal/thumb Supported). Anything else stays a row
+    /// and asks nothing, so a library with no images makes no call.
+    public static func hasThumbnail(_ f: AppAPI.LibraryFile) -> Bool {
+        let name = f.name.lowercased()
+        return [".png", ".jpg", ".jpeg", ".gif"].contains { name.hasSuffix($0) }
+    }
+
+    /// The file's thumbnail, or nil for a plain row: a file that isn't an
+    /// image, without asking; one that makes none, a server too old, a
+    /// link down, whatever the answer was.
+    public static func thumbnail(_ fetch: @Sendable (AppAPI.LibraryThumbnailParams) async throws -> AppAPI.LibraryThumbnail,
+                                 project: String, file f: AppAPI.LibraryFile) async -> AppAPI.LibraryThumbnail? {
+        guard hasThumbnail(f) else { return nil }
+        return try? await fetch(AppAPI.LibraryThumbnailParams(project: project, id: id(f), name: f.name))
+    }
+
     /// library.read, as the bridge answers it.
     public typealias Fetch = @Sendable (AppAPI.LibraryReadParams) async throws -> AppAPI.LibraryChunk
 
@@ -107,6 +124,7 @@ public enum LibraryPage {
             var changed = false
             do {
                 repeat {
+                    try Task.checkCancellation()
                     let c = try await fetch(params(out.count))
                     if size >= 0, c.size != size || c.mtime != mtime {
                         changed = true

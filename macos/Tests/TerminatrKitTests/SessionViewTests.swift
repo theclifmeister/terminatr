@@ -171,3 +171,39 @@ private func item(_ kind: String, _ text: String = "", tool: String = "", call: 
     #expect(t.skipped == 4)
     #expect(Set(t.entries.map(\.id)).count == 3)
 }
+
+/// T1037: both servers have project "demo" and a t-0001, each its own.
+@Test func sameIdOnTwoServersNamesItsOwnThread() throws {
+    let created = Date(timeIntervalSince1970: 0)
+    let usage = AppAPI.Usage(turns: 0, input: 0, output: 0, cacheRead: 0, cacheCreation: 0, costUsd: 0)
+    let record = AppAPI.ThreadRecord(id: "t-0001", title: "Fix the login", agent: "claude", worktree: "/w", state: "working", created: created, reports: 0, reportAcked: 0, usage: usage)
+    let own = AppAPI.Project(slug: "demo", active: true, threads: [AppAPI.Thread(record: record)], usage: usage)
+    let session = AppAPI.PeerSession(id: "mini/s2", role: "thread", project: "demo", thread: "t-0001", task: "T9", created: created)
+    let mirrored = AppAPI.PeerProject(project: "demo", needsYou: 0, threads: 1, ready: 0, sessions: [session],
+                                      watched: [AppAPI.PeerThread(id: "t-0001", title: "Port the billing job", task: "T7", session: "mini/s2")])
+    let peers = [AppAPI.Peer(alias: "mini", state: "up", projects: [mirrored])]
+    let local = SessionRef(project: "demo", thread: "t-0001")
+    let paired = SessionRef(project: "demo", thread: "t-0001", server: "mini")
+
+    #expect(local.ownThread(in: [own])?.record.title == "Fix the login")
+    #expect(local.peerThread(in: peers) == nil)
+    #expect(paired.ownThread(in: [own]) == nil)
+    #expect(paired.peerThread(in: peers)?.title == "Port the billing job")
+    #expect(SessionRef(project: "demo", thread: "t-0001", server: "studio").peerThread(in: peers) == nil)
+
+    #expect(local.naming(in: [own], peers: peers).title == "Fix the login")
+    let named = paired.naming(in: [own], peers: peers)
+    #expect(named.title == "Port the billing job")
+    #expect(named.task == "T7")
+
+    // As its sidebar row names it.
+    let row = try #require(SidebarTree.sessions(of: mirrored, alias: "mini").first { $0.ref == paired })
+    #expect(row.title == named.title)
+    #expect(row.task == named.task)
+
+    // A server that doesn't say: never the local thread's title.
+    let unsaid = [AppAPI.Peer(alias: "mini", state: "up", projects: [AppAPI.PeerProject(project: "demo", needsYou: 0, threads: 1, ready: 0, sessions: [session])])]
+    let bare = paired.naming(in: [own], peers: unsaid)
+    #expect(bare.title.isEmpty)
+    #expect(bare.task == "T9")
+}

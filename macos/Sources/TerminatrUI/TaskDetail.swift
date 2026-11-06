@@ -57,6 +57,9 @@ public struct TaskDetailView<Missing: View>: View {
                     }
                 }
             }
+            if let used = d.usage?.line {
+                section("Used") { Text(used).textSelection(.enabled) }
+            }
             if !d.notes.isEmpty {
                 section("Notes") { MarkdownView(text: d.notes) }
             } else if d.partial {

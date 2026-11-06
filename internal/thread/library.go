@@ -19,6 +19,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/mdfile"
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 	"github.com/theclifmeister/terminatr/internal/project"
+	"github.com/theclifmeister/terminatr/internal/thumb"
 )
 
 // The library (docs/SPEC.md §7.2, §4 Project popup): the files threads
@@ -229,6 +230,34 @@ func ReadLibraryFile(p *project.Project, id, name string, max int64) (data []byt
 	return data, truncated, err
 }
 
+// LibraryFileInfo says a library file's size and modification time, from
+// the folder (never through a link) or, for an archived thread, from the
+// tarball's listing, kept while the tarball is unchanged, so it doesn't
+// unpack the thread.
+func LibraryFileInfo(p *project.Project, id, name string) (size int64, mod time.Time, err error) {
+	if !ValidID(id) {
+		return 0, time.Time{}, refuse("unknown-thread", "%q is not a thread id like t-0003", id)
+	}
+	if err := checkLibName(name); err != nil {
+		return 0, time.Time{}, err
+	}
+	fi, err := os.Lstat(Path(p, id, "library", name))
+	switch {
+	case err == nil && fi.Mode().IsRegular():
+		return fi.Size(), fi.ModTime(), nil
+	case err == nil:
+		return 0, time.Time{}, refuse("unknown-file", "thread %s has no library file %s", id, name)
+	case !errors.Is(err, fs.ErrNotExist):
+		return 0, time.Time{}, err
+	}
+	for _, f := range archivedLibrary(p, id) {
+		if f.Name == name {
+			return f.Size, f.Time, nil
+		}
+	}
+	return 0, time.Time{}, refuse("unknown-file", "thread %s has no library file %s", id, name)
+}
+
 // ReadLibraryChunk reads at most n bytes of a library file from off,
 // from the folder (never through a link) or, for an archived thread,
 // from the tarball, and says the file's size and modification time.
@@ -328,6 +357,7 @@ func RemoveLibrary(p *project.Project, c caller.Caller, id, name string) (int, e
 		return 0, refuse("unknown-file", "thread %s has no library file %s", id, name)
 	}
 	for _, g := range gone {
+		_ = thumb.Forget(p.Slug, id, g)
 		if err := p.Journal(c, "library.rm", id, g); err != nil {
 			return len(gone), err
 		}

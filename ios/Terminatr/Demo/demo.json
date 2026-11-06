@@ -2777,7 +2777,7 @@
   }
  },
  "hello": {
-  "app_api": 53,
+  "app_api": 54,
   "build": "demo",
   "capabilities": [
    "read",
@@ -2946,12 +2946,12 @@
          "task": "T12",
          "title": "Checkout: Apple Pay button",
          "usage": {
-          "cache_creation": 0,
-          "cache_read": 0,
-          "cost_usd": 0,
-          "input": 0,
-          "output": 0,
-          "turns": 0
+          "cache_creation": 48000,
+          "cache_read": 900000,
+          "cost_usd": 3.41,
+          "input": 12000,
+          "output": 240000,
+          "turns": 14
          },
          "worktree": "~/src/t-0101"
         },
@@ -2990,12 +2990,12 @@
          "task": "T14",
          "title": "Product search ranking",
          "usage": {
-          "cache_creation": 0,
-          "cache_read": 0,
+          "cache_creation": 40000,
+          "cache_read": 18574000,
           "cost_usd": 0,
-          "input": 0,
-          "output": 0,
-          "turns": 0
+          "input": 6000,
+          "output": 80000,
+          "turns": 3
          },
          "worktree": "~/src/t-0102"
         },
@@ -3035,11 +3035,13 @@
          "title": "Image CDN migration",
          "usage": {
           "cache_creation": 0,
-          "cache_read": 0,
+          "cache_read": 700000,
           "cost_usd": 0,
-          "input": 0,
-          "output": 0,
-          "turns": 0
+          "has_plan": true,
+          "input": 1000,
+          "output": 4000,
+          "plan_pct": 12,
+          "turns": 1
          },
          "worktree": "~/src/t-0103"
         },
@@ -3179,7 +3181,35 @@
        "output": 0,
        "turns": 0
       },
-      "program": "acme"
+      "program": "acme",
+      "task_usage": {
+       "T12": {
+        "cache_creation": 48000,
+        "cache_read": 900000,
+        "cost_usd": 3.41,
+        "input": 12000,
+        "output": 240000,
+        "turns": 14
+       },
+       "T14": {
+        "cache_creation": 40000,
+        "cache_read": 18574000,
+        "cost_usd": 0,
+        "input": 6000,
+        "output": 80000,
+        "turns": 3
+       },
+       "T15": {
+        "cache_creation": 0,
+        "cache_read": 700000,
+        "cost_usd": 0,
+        "has_plan": true,
+        "input": 1000,
+        "output": 4000,
+        "plan_pct": 12,
+        "turns": 1
+       }
+      }
      },
      {
       "active": true,
