@@ -79,6 +79,41 @@ func TestLibrary(t *testing.T) {
 // TestRemoveLibrary: a live thread's file, an archived thread's file and
 // then all of a thread's files go, each journaled; a missing file is
 // refused and nothing else is touched.
+// TestLibraryRepo: a project with several repositories names each file's
+// by its folder, live and archived, and never its path; with one, none.
+func TestLibraryRepo(t *testing.T) {
+	p := libFixture(t)
+	day := time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
+	a, _ := Create(p, Record{Title: "Old", State: Resolved, ResolvedAt: day, Repo: "/work/api"})
+	b, _ := Create(p, Record{Title: "New", State: Running, Repo: "/work/site/"})
+	c, _ := Create(p, Record{Title: "Plain", State: Running})
+	addLib(t, p, a.ID, "old.md", "x", day)
+	addLib(t, p, b.ID, "new.md", "x", day.Add(time.Hour))
+	addLib(t, p, c.ID, "plain.md", "x", day.Add(2*time.Hour))
+	if err := Archive(p, a); err != nil {
+		t.Fatal(err)
+	}
+	repos := func() map[string]string {
+		files, err := Library(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		out := map[string]string{}
+		for _, f := range files {
+			out[f.Name] = f.Repo
+		}
+		return out
+	}
+	p.Repos = []string{"/work/api"}
+	if got := repos(); got["old.md"] != "" || got["new.md"] != "" {
+		t.Errorf("one repo: %v", got)
+	}
+	p.Repos = []string{"/work/api", "/work/site"}
+	if got := repos(); got["old.md"] != "api" || got["new.md"] != "site" || got["plain.md"] != "" {
+		t.Errorf("several repos: %v", got)
+	}
+}
+
 func TestRemoveLibrary(t *testing.T) {
 	p := libFixture(t)
 	at := time.Date(2026, 10, 2, 0, 0, 0, 0, time.UTC)

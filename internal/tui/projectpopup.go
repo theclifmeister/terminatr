@@ -76,6 +76,12 @@ type projectView struct {
 	library []thread.LibFile
 	libOK   bool
 	libErr  error
+	// libFilter and libPick narrow the Library tab (libraryfilter.go): the
+	// filter's words and the kind ("" for all); libTyping says the keyboard
+	// is in the filter.
+	libFilter string
+	libPick   string
+	libTyping bool
 	// msgs are the Messages tab's messages, newest first.
 	msgs msgList
 	// designs are the Designs tab's designs, by name, desOK once
@@ -200,6 +206,10 @@ func (pv *projectView) data(m *dash) ProjectData {
 }
 
 func (pv *projectView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
+	if pv.tab == tabLibrary && pv.libTyping {
+		pv.libraryTyping(k)
+		return nil
+	}
 	v, modded := pv.modTab(m)
 	if modded {
 		// The mod's view moves, scrolls and filters first; what it
@@ -210,6 +220,10 @@ func (pv *projectView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	}
 	switch s := k.String(); s {
 	case "esc":
+		if pv.tab == tabLibrary && (pv.libFilter != "" || pv.libPick != "") {
+			pv.narrowLib("", "")
+			return nil
+		}
 		m.pop()
 		return nil
 	case "right":
@@ -401,7 +415,7 @@ func (pv *projectView) count(m *dash) int {
 	case tabInbox:
 		return len(project.Rows(pv.data(m).Items))
 	case tabLibrary:
-		return len(pv.library)
+		return len(pv.libFiles())
 	case tabMessages:
 		needs, es := pv.messages(m)
 		return len(needs) + min(len(es), msgShown)
@@ -472,7 +486,8 @@ func (pv *projectView) box(m *dash) box {
 		return pv.modTabBox(m, p, v)
 	}
 	var body []string
-	var hits []int
+	var hits, libHits []int
+	var libHead []string
 	sel := -1
 	keys := "← → tabs · esc close"
 	switch pv.tab {
@@ -506,7 +521,11 @@ func (pv *projectView) box(m *dash) box {
 		keys = "↑ ↓ scroll · " + keys
 	case tabLibrary:
 		body, sel, hits = pv.libraryLines(w)
-		if len(pv.library) > 0 {
+		libHead, libHits = pv.libraryHead(w)
+		switch {
+		case pv.libTyping:
+			keys = "filter ▸ type a name, task, thread or repo · enter keep · esc clear"
+		case len(pv.libFiles()) > 0:
 			keys = "enter read · X delete · D delete the thread's · " + keys
 		}
 	case tabDesigns:
@@ -551,8 +570,8 @@ func (pv *projectView) box(m *dash) box {
 		body, sel, hits = pv.modsLines(m, w)
 		keys = pv.modsKeys(m) + keys
 	}
-	head := []string{pv.tabBar(m, p), ""}
-	all := append([]int{tabHit, noHit}, hits...)
+	head := append([]string{pv.tabBar(m, p), ""}, libHead...)
+	all := append(append([]int{tabHit, noHit}, libHits...), hits...)
 	for len(all) < len(head)+len(body) {
 		all = append(all, noHit)
 	}
@@ -608,6 +627,15 @@ const tabHit = -2
 // click picks a tab on the tab bar, else the clicked line's repository,
 // inbox item, task or setting (which it changes, as enter does).
 func (pv *projectView) click(m *dash, item, col int, double bool) tea.Cmd {
+	pv.libTyping = false
+	if item == libFilterHit {
+		pv.libTyping = true
+		return nil
+	}
+	if item <= libChipHit {
+		pv.clickLibChip(m.inner(viewWidth), libChipHit-item, col)
+		return nil
+	}
 	if item == tabHit {
 		if t := pv.tabAt(m, pv.data(m), col); t >= 0 {
 			pv.tab = t
