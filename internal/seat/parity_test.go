@@ -32,6 +32,7 @@ var coordinatorOnly = map[string]string{
 	"cli/forward.go RunInServer":          "safety: only a coordinator's access writes run in the server",
 	"cli/forward.go forwardedAccess":      "safety: same",
 	"cli/threadanswer.go relay":           "safety: a director answers no thread's menu",
+	"cli/update.go updateAllowed":         "safety: installing a release is the human's and a coordinator's; a director is refused on purpose",
 	"server/approve.go approve":           "safety: a director answers no thread's menu",
 	"server/server.go answer":             "safety: same (mayAnswer)",
 	"server/server.go keys":               "safety: same (Relay is the coordinator's)",

@@ -893,7 +893,7 @@ Each group prints as soon as it is checked. The code-host checks are the slow on
 
 It exits 1 only when a check fails; warnings don't count. `--json` prints the results for scripts.
 
-`tm doctor --fix` lists what it would remove or restart and asks before doing anything. `--yes` skips the question, and you need it when you're not on a terminal. Worktrees with uncommitted changes and unmerged branches are always kept. A branch whose PR was squash-merged looks unmerged to git; delete it yourself with `git branch -D`.
+`tm doctor --fix` is yours: run it in your own terminal, since tm refuses it from an agent's session. It lists what it would remove or restart and asks before doing anything. `--yes` skips the question, and you need it when you're not on a terminal. Worktrees with uncommitted changes and unmerged branches are always kept. A branch whose PR was squash-merged looks unmerged to git; delete it yourself with `git branch -D`.
 
 ## Logs
 
