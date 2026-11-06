@@ -128,9 +128,9 @@ func (s *Scope) holdBack(ctx context.Context, res *proto.FilesListResult) {
 	res.Entries = kept
 }
 
-// chunkBinary says a chunk from anywhere in a file isn't text: IsBinary, but
+// ChunkBinary says a chunk from anywhere in a file isn't text: IsBinary, but
 // for a character cut at its start.
-func chunkBinary(b []byte) bool {
+func ChunkBinary(b []byte) bool {
 	for i := 0; i < utf8.UTFMax-1 && len(b) > 0 && !utf8.RuneStart(b[0]); i++ {
 		b = b[1:]
 	}

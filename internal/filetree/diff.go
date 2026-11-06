@@ -220,7 +220,7 @@ func parseHunks(patch string, over bool, most int) (hunks []proto.FilesHunk, bin
 			case text == "", text[0] == '\\':
 				continue // no newline at the file's end
 			case text[0] == '-':
-				removed := cleanRemoved(text[1:])
+				removed := CleanRemoved(text[1:])
 				enc, _ := json.Marshal(removed)
 				if wire += len(enc) + 1; wire > most {
 					return append(hunks, h), false, true
@@ -269,9 +269,9 @@ func hunkHead(l string) (oldAt, oldN, newAt, newN int, ok bool) {
 	return oldAt, oldN, newAt, newN, oldOK && newOK
 }
 
-// cleanRemoved is a removed line as text to draw: data from the repository,
+// CleanRemoved is a removed line as text to draw: data from the repository,
 // so nothing unsafe, as a console cleans a file's lines. A line's own end
 // goes.
-func cleanRemoved(l string) string {
+func CleanRemoved(l string) string {
 	return textsafe.Text(strings.ToValidUTF8(strings.TrimSuffix(l, "\r"), "?"))
 }

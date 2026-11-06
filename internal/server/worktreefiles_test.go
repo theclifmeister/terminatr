@@ -19,8 +19,8 @@ import (
 )
 
 // TestFilesScope: what a session's folder is, by its role: a thread's
-// worktree, a coordinator's main checkout; a director, a shell and a
-// paired server's session have none and say so.
+// worktree, a coordinator's main checkout; a director and a shell have none
+// and say so.
 func TestFilesScope(t *testing.T) {
 	testPaths(t) // a home of its own
 	repo := filepath.Join(t.TempDir(), "repo")
@@ -87,7 +87,6 @@ func TestFilesScope(t *testing.T) {
 		{"s-d", proto.ErrNoFiles}, {"s-x", proto.ErrNoFiles},
 		{"s-p", proto.ErrNoFiles}, // a project without a repo
 		{"s-s", proto.ErrNoFiles}, // a plain folder tm didn't make
-		{"pal/s-1", proto.ErrNoFiles},
 		{"s-none", proto.ErrUnknownSession},
 	} {
 		if _, perr := s.filesScope(context.Background(), c.id, ""); code(perr) != c.want {
@@ -288,11 +287,8 @@ func TestFilesRepoChoice(t *testing.T) {
 	if rs := got.(proto.FilesReposResult).Repos; !slices.Equal(rs, []proto.FileRepo{{Name: "one", Path: one}, {Name: "two", Path: two}}) {
 		t.Errorf("the choices: %+v", rs)
 	}
-	for _, id := range []string{"s-t", "pal/s-1"} {
-		got, perr := s.filesRepos(proto.FilesReposParams{Session: id})
-		if perr != nil || len(got.(proto.FilesReposResult).Repos) != 0 {
-			t.Errorf("%s has a choice: %+v %v", id, got, perr)
-		}
+	if got, perr := s.filesRepos(proto.FilesReposParams{Session: "s-t"}); perr != nil || len(got.(proto.FilesReposResult).Repos) != 0 {
+		t.Errorf("a thread has a choice: %+v %v", got, perr)
 	}
 	if _, perr := s.filesRepos(proto.FilesReposParams{Session: "s-none"}); perr == nil || perr.Code != proto.ErrUnknownSession {
 		t.Errorf("no such session: %v", perr)

@@ -76,6 +76,9 @@ type Manager struct {
 	onPanes func(id ID, p proto.PeerPanesParams)
 	// fileSlots bounds the file streams served over all links.
 	fileSlots chan struct{}
+	// stamps are the paired servers' folders' stamps this server's
+	// consoles share (WorktreeStamp).
+	stamps stampShare
 }
 
 type running struct {
@@ -203,6 +206,9 @@ func (m *Manager) add(id *Identity, cert tls.Certificate, p Peer) {
 	if _, ok := m.opts.Export.(WorktreeExporter); ok {
 		d.worktrees = func(project string) bool { return m.filesOn(p.ID(), project) }
 	}
+	if _, ok := m.opts.Export.(UploadExporter); ok && m.opts.Panes != nil {
+		d.uploads = func() bool { return m.panesWrite(p.ID()) }
+	}
 	if m.opts.noPaneLevel {
 		d.panesHere = nil
 	}
@@ -264,10 +270,15 @@ func (m *Manager) caps() []string {
 	if m.opts.Transcripts != nil && m.opts.Panes != nil {
 		caps = append(caps, CapTranscript)
 	}
-	if m.opts.noPaneLevel {
-		return caps
+	if !m.opts.noPaneLevel {
+		caps = append(caps, CapPaneLevel)
 	}
-	return append(caps, CapPaneLevel)
+	// After the older ones: a tm that keeps 16 of a hello's capabilities
+	// cuts this one, which it doesn't know, and no other.
+	if _, ok := m.opts.Export.(UploadExporter); ok && m.opts.Panes != nil {
+		caps = append(caps, CapSessionUpload)
+	}
+	return caps
 }
 
 // told keeps name, the one the paired server id gives itself, as its

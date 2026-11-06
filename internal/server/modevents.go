@@ -276,7 +276,7 @@ func projectState(p *project.Project, sessions []proto.SessionInfo, tickerState 
 				StepsDone: t.StepsDone(), StepsTotal: len(t.Steps), Thread: t.Thread}
 		}
 		// What $.tasks.list shows, as a digest (tasks.changed).
-		js, _ := json.Marshal(modTasks(b, items))
+		js, _ := json.Marshal(modTasks(p.Slug, b, items))
 		sum := sha256.Sum256(js)
 		st.Board = string(sum[:])
 	}

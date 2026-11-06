@@ -105,7 +105,8 @@ func TestDispatcherOnlyPeerMethods(t *testing.T) {
 	ctx := context.Background()
 	for _, m := range []string{"session.list", "session.start", "session.send", "project.watch", "server.status", "server.stop",
 		"peer.reload", "cli.run", "config.set", "tasks.add", "inbox.add", "link.send", "peer.send", "peer.attach", "peer.list",
-		proto.MethodPeerWorktreeRepos, proto.MethodPeerWorktreeList, proto.MethodPeerWorktreeRead, proto.MethodPeerWorktreeStamp, proto.MethodPeerWorktreeDiff} {
+		proto.MethodPeerWorktreeRepos, proto.MethodPeerWorktreeList, proto.MethodPeerWorktreeRead, proto.MethodPeerWorktreeStamp, proto.MethodPeerWorktreeDiff,
+		proto.MethodPeerSessionUpload, proto.MethodPeerSessionFiles} {
 		if err := a.call(ctx, m, map[string]string{"project": "web"}, nil); code(err) != proto.ErrUnknownMethod {
 			t.Errorf("%s: %v, want unknown-method", m, err)
 		}

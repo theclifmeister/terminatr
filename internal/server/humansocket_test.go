@@ -84,6 +84,7 @@ var notControl = map[string]bool{
 	proto.MethodPeerNeeds: true, proto.MethodPeerNonce: true, proto.MethodPeerAct: true,
 	proto.MethodPeerPages: true, proto.MethodPeerPagesLibrary: true, proto.MethodPeerPagesLibraryRead: true, proto.MethodPeerPagesLibraryThumbnail: true, proto.MethodPeerPagesDesigns: true,
 	proto.MethodPeerWorktreeRepos: true, proto.MethodPeerWorktreeList: true, proto.MethodPeerWorktreeRead: true, proto.MethodPeerWorktreeStamp: true, proto.MethodPeerWorktreeDiff: true,
+	proto.MethodPeerSessionUpload: true, proto.MethodPeerSessionFiles: true,
 }
 
 // gateOf is method m's gate, an attach connection's among them.
