@@ -252,6 +252,9 @@ func TestSmokeTickerCompleteOnMerge(t *testing.T) {
 	w.Type("T")
 	w.WaitFor("1 done (b shows them)", wait)
 	w.Type("b")
+	// Done by day: the cursor starts on the day's heading, the task under it.
+	w.WaitFor("Today · 1", wait)
+	w.Key(keyDown)
 	w.WaitFor("X send back", wait)
 	// T1's row just came: a press counts once it was still for 300 ms.
 	time.Sleep(400 * time.Millisecond)
