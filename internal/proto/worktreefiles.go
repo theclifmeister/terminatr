@@ -6,11 +6,14 @@ import "time"
 // of the thread's info panel browses, and the Mac's panel after it. The
 // human's. A thread's folder is its worktree, a coordinator's a repo of
 // the project's list at its main checkout, the first unless Repo names
-// another (MethodFilesRepos lists them); a director, a shell and a paired
-// server's session have none ("no-files"). A path is relative to
-// that folder, with slashes: no parent, never .git, no link leading out,
-// and a git-ignored file or folder only when asked (package filetree).
-// The server's hello lists CapWorktreeFiles.
+// another (MethodFilesRepos lists them); a director and a shell have none
+// ("no-files"). A path is relative to that folder, with slashes: no parent,
+// never .git, no link leading out, and a git-ignored file or folder only when
+// asked (package filetree). A paired server's session is read over the link,
+// while that server's files switch for this one is on for its project (see
+// peerworktree.go): text only, never an ignored file, whatever is asked, and
+// Root says nothing. The server's hello lists CapWorktreeFiles, and
+// CapPeerWorktrees for a paired server's.
 const (
 	// MethodFilesList lists a folder, or finds files under it (FilesListParams):
 	// a FilesListResult.
@@ -182,7 +185,8 @@ type FilesReposResult struct {
 }
 
 // FileRepo is a repo of a project's list: Name is what it's called, its
-// parent folder too when two share a name; Path is what Repo names.
+// parent folder too when two share a name; Path is what Repo names, which
+// for a paired server's session is its Name: the folder's path stays there.
 type FileRepo struct {
 	Name string `json:"name"`
 	Path string `json:"path"`

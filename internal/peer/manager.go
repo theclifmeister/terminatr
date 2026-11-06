@@ -76,6 +76,9 @@ type Manager struct {
 	onPanes func(id ID, p proto.PeerPanesParams)
 	// fileSlots bounds the file streams served over all links.
 	fileSlots chan struct{}
+	// stamps are the paired servers' folders' stamps this server's
+	// consoles share (WorktreeStamp).
+	stamps stampShare
 }
 
 type running struct {

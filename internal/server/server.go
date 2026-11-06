@@ -755,7 +755,7 @@ func (s *Server) hello() proto.Hello {
 		Build:    s.build,
 		Bin:      s.opts.Bin,
 		PID:      os.Getpid(),
-		Caps:     []string{proto.CapPaneVT, proto.CapTranscript, proto.CapPaneVTRemote, proto.CapSessionFile, proto.CapTranscriptRemote, proto.CapLinkAct, proto.CapTranscriptTail, proto.CapSideActs, proto.CapProjectFiles, proto.CapNeedAct, proto.CapDesigns, proto.CapSessionsWatch, proto.CapPeerPages, proto.CapPeerDesigns, proto.CapProjectMods, proto.CapAnswerPicks, proto.CapSearch, proto.CapTaskPriority, proto.CapAppReports, proto.CapWorktreeFiles, proto.CapLibraryThumbnails},
+		Caps:     []string{proto.CapPaneVT, proto.CapTranscript, proto.CapPaneVTRemote, proto.CapSessionFile, proto.CapTranscriptRemote, proto.CapLinkAct, proto.CapTranscriptTail, proto.CapSideActs, proto.CapProjectFiles, proto.CapNeedAct, proto.CapDesigns, proto.CapSessionsWatch, proto.CapPeerPages, proto.CapPeerDesigns, proto.CapProjectMods, proto.CapAnswerPicks, proto.CapSearch, proto.CapTaskPriority, proto.CapAppReports, proto.CapWorktreeFiles, proto.CapPeerWorktrees, proto.CapLibraryThumbnails},
 	}
 	if programsNow() {
 		// Only while the switch is on: the apps draw programs by it

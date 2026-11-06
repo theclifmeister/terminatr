@@ -67,6 +67,10 @@ type PeerMirror struct {
 	// projects can be invited into a program here (the programs design
 	// §9.1).
 	Program bool `json:"program,omitempty"`
+	// Worktree: the peer can share its folders (its hello lists worktree):
+	// a project's Files then says whether it does, with this server. A tm
+	// without it can't, and is never asked.
+	Worktree bool `json:"worktree,omitempty"`
 	// Offset is the peer's clock minus this server's, in milliseconds,
 	// as last measured; the peer's times (a session's created, the
 	// ticker's) less Offset are this server's. Unset (and 0) until a
