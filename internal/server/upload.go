@@ -12,6 +12,7 @@ package server
 // or a PDF so).
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
@@ -24,6 +25,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 	"github.com/theclifmeister/terminatr/internal/proto"
 )
@@ -36,6 +38,21 @@ const (
 	uploadIdle      = 10 * time.Minute
 	// maxUploadName bounds a stored file's name, less its time stamp.
 	maxUploadName = 80
+)
+
+// Bounds of what paired servers upload (docs/SPEC.md §16.12), within those
+// above: one holds at most half the bytes and half the uploads, so another
+// has room; together they leave room for a file and an upload of this
+// server's own human; and one stores at most peerUploadBudget an hour. Theirs
+// wait less for a next chunk, and a dropped link drops them at once.
+const (
+	maxPeerUploads        = maxUploads / 2
+	maxPeerUploadsBytes   = maxUploadsBytes / 2
+	maxPeersUploads       = maxUploads - 1
+	maxPeersUploadsBytes  = maxUploadsBytes - proto.MaxUpload
+	peerUploadIdle        = 2 * time.Minute
+	peerUploadBudget      = 1 << 30
+	peerUploadBudgetEvery = time.Hour
 )
 
 // uploadTypes are the types session.upload takes, by extension: the
@@ -102,6 +119,14 @@ func sniffs(typ string, data []byte) bool {
 type uploads struct {
 	mu sync.Mutex
 	m  map[string]*upload
+	// budgets are what each paired server declared this hour.
+	budgets map[string]*uploadBudget
+}
+
+// uploadBudget is the bytes a paired server has declared since at.
+type uploadBudget struct {
+	at    time.Time
+	bytes int64
 }
 
 // upload is a file being taken: for session of project, stored as
@@ -113,13 +138,63 @@ type upload struct {
 	size                    int64
 	data                    []byte
 	at                      time.Time
+	// peer is the paired server's alias whose upload it is, "" for this
+	// server's own human; unwatch stops watching its link.
+	peer    string
+	unwatch func() bool
+}
+
+// idle is how long up waits for its next chunk.
+func (up *upload) idle() time.Duration {
+	if up.peer != "" {
+		return peerUploadIdle
+	}
+	return uploadIdle
+}
+
+// watchLink drops upload id when gone ends.
+func (u *uploads) watchLink(id string, gone context.Context) {
+	stop := context.AfterFunc(gone, func() { u.drop(id) })
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if up := u.m[id]; up != nil {
+		up.unwatch = stop
+	} else {
+		stop()
+	}
+}
+
+// remove takes upload id out; under u.mu.
+func (u *uploads) remove(id string) {
+	if up := u.m[id]; up != nil && up.unwatch != nil {
+		up.unwatch()
+	}
+	delete(u.m, id)
+}
+
+// drop forgets upload id: its link dropped.
+func (u *uploads) drop(id string) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.remove(id)
+}
+
+// dropPeer forgets the uploads of the paired server alias.
+func (u *uploads) dropPeer(alias string) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	for id, up := range u.m {
+		if up.peer == alias {
+			u.remove(id)
+		}
+	}
 }
 
 // sweep drops the uploads idle past uploadIdle; under u.mu.
 func (u *uploads) sweep(now time.Time) {
 	for id, up := range u.m {
-		if now.Sub(up.at) > uploadIdle {
-			delete(u.m, id)
+		if now.Sub(up.at) > up.idle() {
+			u.remove(id)
 		}
 	}
 }
@@ -129,12 +204,40 @@ func (u *uploads) begin(up *upload) (string, *proto.Error) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	u.sweep(up.at)
-	var held int64
+	var held, peersHeld, peerHeld int64
+	peers, peer := 0, 0
 	for _, o := range u.m {
 		held += o.size
+		if o.peer != "" {
+			peersHeld += o.size
+			peers++
+		}
+		if up.peer != "" && o.peer == up.peer {
+			peerHeld += o.size
+			peer++
+		}
 	}
-	if len(u.m) >= maxUploads || held+up.size > maxUploadsBytes {
+	full := len(u.m) >= maxUploads || held+up.size > maxUploadsBytes
+	if up.peer != "" {
+		full = full || peers >= maxPeersUploads || peersHeld+up.size > maxPeersUploadsBytes ||
+			peer >= maxPeerUploads || peerHeld+up.size > maxPeerUploadsBytes
+	}
+	if full {
 		return "", proto.Errorf(proto.ErrRefused, "too many files uploading at once; try again when they are in")
+	}
+	if up.peer != "" {
+		b := u.budgets[up.peer]
+		if b == nil || up.at.Sub(b.at) > peerUploadBudgetEvery {
+			b = &uploadBudget{at: up.at}
+			if u.budgets == nil {
+				u.budgets = map[string]*uploadBudget{}
+			}
+			u.budgets[up.peer] = b
+		}
+		if b.bytes+up.size > peerUploadBudget {
+			return "", proto.Errorf(proto.ErrRefused, "too many files from your server this hour; try again later")
+		}
+		b.bytes += up.size
 	}
 	var b [12]byte
 	_, _ = rand.Read(b[:])
@@ -146,21 +249,21 @@ func (u *uploads) begin(up *upload) (string, *proto.Error) {
 	return id, nil
 }
 
-// add appends data at offset to upload id of session, and hands the
-// upload back, removed, once all its bytes are in.
-func (u *uploads) add(id, session string, offset int64, data []byte, now time.Time) (int64, *upload, *proto.Error) {
+// add appends data at offset to upload id of session, peer's ("" for this
+// server's own human), and hands the upload back, removed, once all its bytes are in.
+func (u *uploads) add(id, session, peer string, offset int64, data []byte, now time.Time) (int64, *upload, *proto.Error) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	u.sweep(now)
 	up := u.m[id]
-	if up == nil || up.session != session {
+	if up == nil || up.session != session || up.peer != peer {
 		return 0, nil, proto.Errorf(proto.ErrBadParams, "session.upload: no upload %q of session %s (it waited too long?): send the file again", id, session)
 	}
 	if offset != int64(len(up.data)) {
 		return 0, nil, proto.Errorf(proto.ErrBadParams, "session.upload: chunk at %d, but %d bytes are in", offset, len(up.data))
 	}
 	if int64(len(up.data)+len(data)) > up.size {
-		delete(u.m, id)
+		u.remove(id)
 		return 0, nil, proto.Errorf(proto.ErrBadParams, "session.upload: more than the %d bytes it said", up.size)
 	}
 	up.data = append(up.data, data...)
@@ -169,66 +272,86 @@ func (u *uploads) add(id, session string, offset int64, data []byte, now time.Ti
 	if got < up.size {
 		return got, nil, nil
 	}
-	delete(u.m, id)
+	u.remove(id)
 	return got, up, nil
 }
 
-// upload is session.upload's answer.
+// upload is session.upload's answer. A paired server's session goes to that
+// server, which holds the checks.
 func (s *Server) upload(p proto.SessionUploadParams, cc callCtx) (any, *proto.Error) {
-	if _, _, ok := remoteID(p.Session); ok {
-		return nil, proto.Errorf(proto.ErrRefused, "a paired server's session takes no files")
-	}
 	if len(p.Data) > proto.UploadChunk {
 		return nil, proto.Errorf(proto.ErrBadParams, "session.upload: a chunk is at most %d bytes", proto.UploadChunk)
+	}
+	if _, _, ok := remoteID(p.Session); ok {
+		return s.remotes.upload(s.remoteCanon(p.Session), p)
 	}
 	sess, perr := s.session(p.Session)
 	if perr != nil {
 		return nil, perr
 	}
-	info := sess.Info()
+	return s.takeChunk(sess.Info(), p, cc.who(), "", nil)
+}
+
+// takeChunk takes a chunk of a file for session info's prompt, stores the
+// file once its bytes are in, and answers where the upload stands. who is
+// journaled; peer is the paired server's alias, "" for this server's human,
+// and gone, with one, ends with its link.
+func (s *Server) takeChunk(info proto.SessionInfo, p proto.SessionUploadParams, who caller.Caller, peer string, gone context.Context) (proto.SessionUploadResult, *proto.Error) {
+	var none proto.SessionUploadResult
 	now := time.Now()
 	id := p.Upload
 	if id == "" {
 		if p.Offset != 0 {
-			return nil, proto.Errorf(proto.ErrBadParams, "session.upload: a new upload starts at 0")
+			return none, proto.Errorf(proto.ErrBadParams, "session.upload: a new upload starts at 0")
 		}
 		if info.Project == "" {
-			return nil, proto.Errorf(proto.ErrRefused, "session %s is in no project: files go to a project's uploads/", p.Session)
+			return none, proto.Errorf(proto.ErrRefused, "session %s is in no project: files go to a project's uploads/", p.Session)
 		}
 		name := uploadName(p.Name)
 		typ := uploadType(name)
 		if typ == "" {
-			return nil, proto.Errorf(proto.ErrBadParams, "%s: tm takes images (PNG, JPEG, GIF, WebP), PDFs and text files", shownName(p.Name))
+			return none, proto.Errorf(proto.ErrBadParams, "%s: tm takes images (PNG, JPEG, GIF, WebP), PDFs and text files", shownName(p.Name))
 		}
 		if p.Size <= 0 || p.Size > proto.MaxUpload {
-			return nil, proto.Errorf(proto.ErrBadParams, "%s: a file is 1 byte to %d MB", name, proto.MaxUpload>>20)
+			return none, proto.Errorf(proto.ErrBadParams, "%s: a file is 1 byte to %d MB", name, proto.MaxUpload>>20)
 		}
 		dir, err := sessionDir(info)
 		if err != nil {
-			return nil, proto.Errorf(proto.ErrRefused, "session %s: %v", p.Session, err)
+			if peer != "" {
+				return none, proto.Errorf(proto.ErrRefused, "session %s takes no files", p.Session)
+			}
+			return none, proto.Errorf(proto.ErrRefused, "session %s: %v", p.Session, err)
 		}
-		id, perr = s.uploads.begin(&upload{session: p.Session, dir: dir, name: name, typ: typ, size: p.Size, at: now})
+		var perr *proto.Error
+		id, perr = s.uploads.begin(&upload{session: p.Session, dir: dir, name: name, typ: typ, size: p.Size, at: now, peer: peer})
 		if perr != nil {
-			return nil, perr
+			return none, perr
+		}
+		if gone != nil {
+			s.uploads.watchLink(id, gone)
 		}
 	}
-	got, up, perr := s.uploads.add(id, p.Session, p.Offset, p.Data, now)
+	got, up, perr := s.uploads.add(id, p.Session, peer, p.Offset, p.Data, now)
 	if perr != nil {
-		return nil, perr
+		return none, perr
 	}
 	res := proto.SessionUploadResult{Upload: id, Received: got}
 	if up == nil {
 		return res, nil
 	}
 	if !sniffs(up.typ, up.data) {
-		return nil, proto.Errorf(proto.ErrBadParams, "%s isn't a %s file", up.name, up.typ)
+		return none, proto.Errorf(proto.ErrBadParams, "%s isn't a %s file", up.name, up.typ)
 	}
 	ref, err := storeUpload(filepath.Join(up.dir, "uploads"), up.name, up.data, now)
 	if err != nil {
 		s.log.Printf("session.upload %s: %v", p.Session, err)
-		return nil, proto.Errorf(proto.ErrInternal, "storing %s: %v", up.name, err)
+		// A path stays here: a paired server reads these words.
+		if peer != "" {
+			return none, proto.Errorf(proto.ErrInternal, "storing %s failed", up.name)
+		}
+		return none, proto.Errorf(proto.ErrInternal, "storing %s: %v", up.name, err)
 	}
-	s.journalSession(info, cc.who(), "session.upload", sessionRef(info), ref+" ("+strconv.FormatInt(up.size, 10)+" bytes)")
+	s.journalSession(info, who, "session.upload", sessionRef(info), ref+" ("+strconv.FormatInt(up.size, 10)+" bytes)")
 	res.Ref, res.Name, res.Type, res.Size = ref, ref, up.typ, up.size
 	return res, nil
 }
@@ -277,34 +400,50 @@ func storeUpload(dir, name string, data []byte, now time.Time) (string, error) {
 
 // promptFiles is text with the uploads refs name in folder's uploads/
 // (the session's project's, sessionDir), each on an "Attached: <path>" line after it: what an agent
-// reads them by. A ref is a file's name there, as session.upload
-// answered it: no folder, no link, a type it takes.
+// reads them by.
 func promptFiles(folder, text string, refs []string) (string, *proto.Error) {
+	paths, perr := promptPaths(folder, refs)
+	if perr != nil {
+		return "", perr
+	}
+	return attachedText(text, paths), nil
+}
+
+// promptPaths are the paths of the uploads refs name in folder's uploads/. A
+// ref is a file's name there, as session.upload answered it: no folder, no
+// link, a type it takes.
+func promptPaths(folder string, refs []string) ([]string, *proto.Error) {
 	if len(refs) > proto.MaxPromptFiles {
-		return "", proto.Errorf(proto.ErrBadParams, "a prompt takes at most %d files", proto.MaxPromptFiles)
+		return nil, proto.Errorf(proto.ErrBadParams, "a prompt takes at most %d files", proto.MaxPromptFiles)
 	}
 	if folder == "" {
-		return "", proto.Errorf(proto.ErrRefused, "the session is in no project: it takes no files")
+		return nil, proto.Errorf(proto.ErrRefused, "the session is in no project: it takes no files")
 	}
 	dir := filepath.Join(folder, "uploads")
-	lines := make([]string, 0, len(refs))
+	paths := make([]string, 0, len(refs))
 	for _, ref := range refs {
 		if ref == "" || ref != filepath.Base(ref) || strings.ContainsAny(ref, `/\`) || uploadName(ref) != ref || uploadType(ref) == "" {
-			return "", proto.Errorf(proto.ErrBadParams, "bad file ref %q", ref)
+			return nil, proto.Errorf(proto.ErrBadParams, "bad file ref %q", ref)
 		}
 		path := filepath.Join(dir, ref)
 		fi, err := os.Lstat(path)
 		if err != nil || !fi.Mode().IsRegular() {
-			return "", proto.Errorf(proto.ErrFileGone, "%s is no longer in the project's uploads: attach it again", ref)
+			return nil, proto.Errorf(proto.ErrFileGone, "%s is no longer in the project's uploads: attach it again", ref)
 		}
-		lines = append(lines, "Attached: "+path)
+		paths = append(paths, path)
 	}
+	return paths, nil
+}
+
+// attachedText is text with each of paths on an "Attached: <path>" line after
+// it.
+func attachedText(text string, paths []string) string {
 	text = strings.TrimRight(text, " \t\r\n")
-	if len(lines) == 0 {
-		return text, nil
+	if len(paths) == 0 {
+		return text
 	}
 	if text != "" {
 		text += "\n\n"
 	}
-	return text + strings.Join(lines, "\n"), nil
+	return text + "Attached: " + strings.Join(paths, "\nAttached: ")
 }
