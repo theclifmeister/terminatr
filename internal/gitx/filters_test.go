@@ -18,7 +18,8 @@ func noShellOnWindows(t *testing.T) {
 }
 
 // planted is a clean filter that leaves a mark when it runs, and the mark's
-// check, which forgets it.
+// check, which forgets it. A test needs a same-size edit, which git hashes
+// through the filter to tell, and a control: the filter running for plain git.
 func planted(t *testing.T) (clean string, ran func() bool) {
 	t.Helper()
 	noShellOnWindows(t)
