@@ -74,6 +74,42 @@ private let tree: [String: [AppAPI.FileEntry]] = [
     #expect(p.mentions == nil)
 }
 
+@Test func aPairedServersFilesWhenItSharesThem() throws {
+    let ref = SessionRef(project: "web", thread: "t-1", server: "mini")
+    let on = FarFiles(name: "studio", on: true)
+    let p = try #require(FilesPlace.of(.session(ref), sessionID: "mini/s-1", threadDone: false, readsWorktree: true, hasLibrary: true, far: on))
+    #expect(p.session == "mini/s-1")
+    #expect(p.why == nil)
+    #expect(p.far == "studio")
+    #expect(p.mentions == nil)
+    let stopped = try #require(FilesPlace.of(.session(ref), sessionID: nil, threadDone: false, readsWorktree: true, hasLibrary: true, far: on))
+    #expect(stopped.session == nil)
+    #expect(stopped.why?.hasPrefix("This thread's agent isn't running on studio, so its worktree can't be read from here.") == true)
+    let done = try #require(FilesPlace.of(.session(ref), sessionID: nil, threadDone: true, readsWorktree: true, hasLibrary: true, far: on))
+    #expect(done.why?.hasPrefix("This thread is done, so its worktree is gone from studio.") == true)
+    let coord = try #require(FilesPlace.of(.project("web", server: "mini"), sessionID: nil, threadDone: false, readsWorktree: true, hasLibrary: true, far: on))
+    #expect(coord.why?.hasPrefix("studio's coordinator isn't running, so its repos can't be read from here.") == true)
+
+    let off = try #require(FilesPlace.of(.session(ref), sessionID: "mini/s-1", threadDone: false, readsWorktree: true, hasLibrary: true, far: FarFiles(name: "studio", on: false)))
+    #expect(off.session == nil && off.far.isEmpty && off.farOff)
+    let older = try #require(FilesPlace.of(.session(ref), sessionID: "mini/s-1", threadDone: false, readsWorktree: true, hasLibrary: true, far: FarFiles(name: "studio", on: true, older: true)))
+    #expect(older.session == nil && older.far.isEmpty)
+    #expect(older.why?.hasPrefix("studio runs an older tm") == true)
+}
+
+@Test func farFilesFacts() {
+    var peer = AppAPI.Peer(alias: "mini", name: "studio", state: "up", projects: [AppAPI.PeerProject(project: "web", needsYou: 0, threads: 0, ready: 0, files: true)], worktree: true)
+    #expect(FarFiles.of(peer, project: "web", caps: []) == nil)
+    #expect(FarFiles.of(peer, project: "web", caps: ["peer-worktrees"]) == FarFiles(name: "studio", on: true))
+    #expect(FarFiles.of(peer, project: "web", caps: ["peer-worktrees"])?.fact == "you can read them")
+    #expect(FarFiles.of(peer, project: "api", caps: ["peer-worktrees"])?.fact == "studio doesn't share them")
+    #expect(FarFiles.yours(peer) == "it can't read this server's files")
+    peer.filesHere = ["acme", "web"]
+    #expect(FarFiles.yours(peer) == "it can read the files of acme, web")
+    peer.worktree = false
+    #expect(FarFiles.of(peer, project: "web", caps: ["peer-worktrees"])?.older == true)
+}
+
 @Test func aDirectorAndAProgramHaveNoFiles() {
     var director = SessionRef(project: "launch")
     director.director = true

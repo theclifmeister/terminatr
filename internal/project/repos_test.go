@@ -1,6 +1,7 @@
 package project
 
 import (
+	"crypto/ed25519"
 	"os"
 	"path/filepath"
 	"slices"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/home"
+	"github.com/theclifmeister/terminatr/internal/peer"
 )
 
 // writeFront replaces PROJECT.md's front matter with front, as a
@@ -229,4 +231,59 @@ func TestTrashForgetsThumbs(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(d, "other", "t-0001", "x.jpg")); err != nil {
 		t.Errorf("another project's: %v", err)
 	}
+}
+
+// TestPeerFilesClear: archiving or deleting a project turns its files switch
+// off for every paired server and journals it, so a new project under the
+// old name can't be read without being asked for again; deactivating doesn't.
+func TestPeerFilesClear(t *testing.T) {
+	setup(t)
+	dir, err := peer.Dir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	key, _, _ := ed25519.GenerateKey(nil)
+	if err := peer.SavePeers(dir, []peer.Peer{{Alias: "mini", Key: key, Relay: "wss://relay.example"}}); err != nil {
+		t.Fatal(err)
+	}
+	p, err := New(Options{Slug: "demo"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	on := func(want bool) {
+		t.Helper()
+		peers, _ := peer.LoadPeers(dir)
+		if peers[0].FilesOn("demo") != want {
+			t.Fatalf("files on is %v, want %v: %+v", !want, want, peers[0])
+		}
+	}
+	if found, err := p.SetPeerFiles(human, dir, "mini", true); !found || err != nil {
+		t.Fatal(found, err)
+	}
+	on(true)
+	if j, _ := os.ReadFile(filepath.Join(p.Dir, "JOURNAL.md")); !strings.Contains(string(j), "peer.files") {
+		t.Errorf("journal:\n%s", j)
+	}
+	if _, err := p.SetFlag(human, "active", false); err != nil {
+		t.Fatal(err)
+	}
+	on(true)
+	if _, err := p.SetFlag(human, "archived", true); err != nil {
+		t.Fatal(err)
+	}
+	on(false)
+	if j, _ := os.ReadFile(filepath.Join(p.Dir, "JOURNAL.md")); !strings.Contains(string(j), "off: the project was archived") {
+		t.Errorf("journal:\n%s", j)
+	}
+	if _, err := p.SetFlag(human, "archived", false); err != nil {
+		t.Fatal(err)
+	}
+	on(false) // unarchiving doesn't bring it back
+	if _, err := p.SetPeerFiles(human, dir, "mini", true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.Trash(human, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	on(false)
 }

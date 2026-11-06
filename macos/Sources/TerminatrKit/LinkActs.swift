@@ -115,7 +115,7 @@ public struct LinkAct: Hashable, Sendable {
     public func shareMessage(_ slug: String) -> String {
         let asked = forProject.isEmpty ? "" : ", for its \(forProject)"
         return "Share \(slug) with every paired server? \(other) asked for a project (\(id)\(asked)). "
-            + "They see its state read-only (what waits for you, the inbox, threads, tasks on deck), never its files."
+            + "They see its state read-only (what waits for you, the inbox, threads, tasks on deck), not its files."
     }
 
     /// The projects Share… offers: this server's active ones that aren't

@@ -115,18 +115,24 @@ type (
 		// Needs is this server's needs switch for it (off, view,
 		// answer; §16.16); TheirNeeds its switch for this one, as it
 		// last said ("" unknown).
-		Needs      string               `json:"needs"`
-		TheirNeeds string               `json:"their_needs,omitempty"`
-		Listed     bool                 `json:"listed,omitempty"`
-		Projects   []networkTheirs      `json:"projects"`
-		Shares     []proto.ShareRequest `json:"shares,omitempty"`
+		Needs      string `json:"needs"`
+		TheirNeeds string `json:"their_needs,omitempty"`
+		// Files are the projects whose folders it may read here, this
+		// server's files switch for it (§16.18).
+		Files    []string             `json:"files,omitempty"`
+		Listed   bool                 `json:"listed,omitempty"`
+		Projects []networkTheirs      `json:"projects"`
+		Shares   []proto.ShareRequest `json:"shares,omitempty"`
 	}
 	// networkTheirs is a project a paired server shares: from the
 	// mirror (stale while it is offline), and this server's projects
 	// linked to it.
 	networkTheirs struct {
-		Project     string   `json:"project"`
-		Stale       bool     `json:"stale,omitempty"`
+		Project string `json:"project"`
+		Stale   bool   `json:"stale,omitempty"`
+		// Files: that server's files switch for this one is on, as it last
+		// said.
+		Files       bool     `json:"files,omitempty"`
 		Paused      bool     `json:"paused,omitempty"`
 		NeedsYou    int      `json:"needs_you"`
 		Threads     int      `json:"threads"`
@@ -286,7 +292,7 @@ func readNetwork() (*networkTree, error) {
 	}
 	for _, p := range peers {
 		np := networkPeer{Alias: p.Alias, Name: p.Name, Told: p.Told, ID: p.ID().String(), Short: p.ID().Short(), Relay: p.Relay,
-			Panes: proto.PanesWord(p.PanesLevel()), Conversations: convWord(p.ConversationsOn()), Needs: p.NeedsLevel(), Projects: []networkTheirs{}, Shares: shares[p.Alias]}
+			Panes: proto.PanesWord(p.PanesLevel()), Conversations: convWord(p.ConversationsOn()), Needs: p.NeedsLevel(), Files: p.Files, Projects: []networkTheirs{}, Shares: shares[p.Alias]}
 		if c, ok := conns[np.ID]; ok {
 			np.Connection = &c
 			np.Version = c.Version
@@ -403,7 +409,7 @@ func cliSide(l config.Link, has bool) string {
 // theirProject is a paired server's shared project mp: its coordinator,
 // and the projects here linked to it (from projects' links).
 func theirProject(projects []networkProject, alias string, mp proto.PeerMirrorProject) networkTheirs {
-	nt := networkTheirs{Project: mp.Project, Stale: mp.Stale, Paused: mp.Paused, NeedsYou: mp.NeedsYou, Threads: mp.Threads}
+	nt := networkTheirs{Project: mp.Project, Stale: mp.Stale, Files: mp.Files, Paused: mp.Paused, NeedsYou: mp.NeedsYou, Threads: mp.Threads}
 	if i := slices.IndexFunc(mp.Sessions, func(s proto.PeerSession) bool { return s.Role == proto.RoleCoordinator }); i >= 0 {
 		nt.Coordinator = cmp.Or(mp.Sessions[i].State, "running")
 	} else if mp.Watch != nil {
@@ -502,6 +508,9 @@ func (e *Env) printNetwork(t *networkTree, now time.Time) {
 				panes += ", it gives you " + pe.TheirNeeds
 			}
 		}
+		if len(pe.Files) > 0 {
+			panes += " · reads files of " + strings.Join(pe.Files, ", ")
+		}
 		fmt.Fprintf(w, "%s · %s · %s · %s\n", peer.Both(cmp.Or(pe.Name, pe.Told), pe.Alias), pe.Short, conn, panes)
 		switch {
 		case len(pe.Projects) == 0 && !t.Running:
@@ -522,6 +531,9 @@ func (e *Env) printNetwork(t *networkTree, now time.Time) {
 			}
 			if p.Paused {
 				bits = append(bits, "paused")
+			}
+			if p.Files {
+				bits = append(bits, "you can read its files")
 			}
 			if len(p.Linked) > 0 {
 				bits = append(bits, "linked from "+strings.Join(p.Linked, ", "))

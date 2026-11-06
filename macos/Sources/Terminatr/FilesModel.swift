@@ -81,6 +81,13 @@ final class FilesModel {
         // A program has only Attached.
         didSet { if place?.isProgram == true { scope = .attached } }
     }
+    /// A paired server's link is down: what shows is as of this. Nothing new
+    /// can be read.
+    private(set) var offlineAsOf: Date?
+    /// A paired server didn't answer in time: the view keeps what it has.
+    private(set) var slow = false
+    /// The files a read found aren't text, on a paired server.
+    private(set) var notText: Set<String> = []
 
     @ObservationIgnored private var reading: Set<String> = []
     @ObservationIgnored private var keep = FileImageKeep()
@@ -92,8 +99,28 @@ final class FilesModel {
     /// brings it back to Worktree.
     @ObservationIgnored private var fellBack = false
     @ObservationIgnored private var beats = 0
-    /// How often the panel asks whether what it shows changed, as the TUI.
-    private static let every = Duration.seconds(2)
+    /// When a paired server last answered, for what offline shows.
+    @ObservationIgnored private var readAt: Date?
+    /// What showed of a paired server's left, and the words stay until it
+    /// shares again.
+    @ObservationIgnored private var forgotten = false
+    /// How often the panel asks whether what it shows changed, as the TUI:
+    /// slower on a paired server, where each is a request to the other machine.
+    var every: Duration { far ? .seconds(5) : .seconds(2) }
+
+    /// It shows a paired server's files, read only.
+    var far: Bool { place?.far.isEmpty == false }
+
+    /// Why the row under the cursor shows and doesn't open.
+    var withheldNote: String? {
+        guard scope == .worktree, let c = cursor, let e = rows.first(where: { $0.id == c })?.entry, e.withheld else { return nil }
+        return Self.withheldWords(e, far: place?.far ?? "")
+    }
+
+    private static func withheldWords(_ e: AppAPI.FileEntry, far: String) -> String {
+        e.kind == "dir" ? "\(e.name) may hold secrets, or be a checkout of its own, so it stays on \(far)."
+            : "Its name says it may hold secrets, so it stays on \(far)."
+    }
 
     /// What shows comes from one search of the whole folder, not from the
     /// folders' listings.
@@ -180,6 +207,7 @@ final class FilesModel {
     }
 
     func toggle(folder path: String, _ app: AppModel) {
+        if rows.first(where: { $0.id == path })?.entry.withheld == true { return }
         if changedOnly {
             shut.formSymmetricDifference([path])
         } else if open.contains(path) {
@@ -195,7 +223,7 @@ final class FilesModel {
         cursor = id
         if scope == .worktree {
             guard let r = rows.first(where: { $0.id == id }) else { return }
-            picked = r.isFolder ? nil : file(r.entry)
+            picked = r.isFolder || r.entry.withheld ? nil : file(r.entry)
         } else {
             picked = (library ?? []).map { OpenedFile(.attached($0)) }.first { $0.id == id }
         }
@@ -222,7 +250,7 @@ final class FilesModel {
     func watch(_ app: AppModel) async {
         await refresh(app)
         while !Task.isCancelled {
-            try? await Task.sleep(for: Self.every)
+            try? await Task.sleep(for: every)
             if Task.isCancelled { return }
             beats += 1
             if scope == .attached {
@@ -250,7 +278,11 @@ final class FilesModel {
             return
         }
         guard let session = place?.session, let b = app.bridge else {
-            noFolder(place?.why ?? "Not connected to terminatr.")
+            if place?.farOff == true, readAt != nil {
+                stoppedSharing()
+            } else if !forgotten {
+                noFolder(place?.why ?? "Not connected to terminatr.")
+            }
             return
         }
         if fellBack {
@@ -280,7 +312,7 @@ final class FilesModel {
                         if i == 0 { top = r }
                         out[d] = r.entries
                         over = over || r.truncated
-                    } catch where i > 0 {
+                    } catch where i > 0 && !Self.farHolds(error) {
                         continue // gone since: it drops off the tree
                     }
                 }
@@ -294,10 +326,30 @@ final class FilesModel {
             problem = nil
             loaded = true
             opened = true
+            if far {
+                readAt = .now
+                slow = false
+                forgotten = false
+                if offlineAsOf != nil {
+                    offlineAsOf = nil
+                    // What couldn't be read may be read now.
+                    shown = shown.filter { if case .unavailable = $0.value.body { false } else { true } }
+                }
+            }
         } catch {
             guard g == generation else { return }
             let e = error as? AppAPI.Error
-            if e?.code == "unknown-session" {
+            if far, e?.code == "files-off" || e?.code == "not-shared" {
+                stoppedSharing()
+            } else if far, e?.code == "peer-offline" {
+                offlineAsOf = readAt
+                slow = false
+                if readAt == nil { problem = e?.errorDescription }
+                loaded = true
+            } else if far, e?.code == "rate-limited" {
+                slow = true
+                loaded = true
+            } else if e?.code == "unknown-session" {
                 noFolder(place?.stopped ?? "")
             } else if e?.code == "no-files" {
                 noFolder(e?.errorDescription ?? error.localizedDescription)
@@ -308,6 +360,32 @@ final class FilesModel {
                 loaded = true
             }
         }
+    }
+
+    /// A paired server's refusal that says nothing of the folder asked for:
+    /// the rest of the tree mustn't drop for it.
+    private static func farHolds(_ error: Error) -> Bool {
+        guard let code = (error as? AppAPI.Error)?.code else { return false }
+        return ["peer-offline", "rate-limited", "files-off", "not-shared", "no-peer-files", "unknown-session"].contains(code)
+    }
+
+    /// The paired server stopped sharing: tree, preview and the pane's tabs
+    /// of its files all go. Nothing of them is on disk here. Attached stays.
+    private func stoppedSharing() {
+        let name = place?.far.isEmpty == false ? place?.far ?? "" : place?.server ?? "That server"
+        resetTree()
+        repos = []
+        chosen = nil
+        offlineAsOf = nil
+        slow = false
+        readAt = nil
+        notText = []
+        problem = "\(name) stopped sharing \(place?.project ?? "the project")'s files. What showed here is gone."
+        loaded = true
+        for t in pane.tabs { if case .worktree = t.source { pane.close(t.id) } }
+        shown = shown.filter { $0.key.hasPrefix("a:") }
+        keep = FileImageKeep()
+        forgotten = true
     }
 
     /// The coordinator's repos. A tm without the list leaves none, and the
@@ -375,7 +453,9 @@ final class FilesModel {
         var s: Shown
         switch f.source {
         case .worktree(let e, let ignored):
-            if e.linkOut || e.kind == "other" {
+            if e.withheld {
+                s = Shown(body: .unavailable(Self.withheldWords(e, far: place?.far ?? "")))
+            } else if e.linkOut || e.kind == "other" {
                 s = Shown(body: .unavailable("\(e.name) is a link that doesn't open: it leads out of the worktree, or nowhere."))
             } else if let session = place?.session, let b = app.bridge {
                 s = await worktreeFile(e, ignored: ignored, repo: f.repo, session: session, b)
@@ -424,6 +504,11 @@ final class FilesModel {
         var marks: FileMarks?
         if case .text(let text, _, _, _) = body, let diff { marks = FileMarks.of(text, diff) }
         var s = Shown(body: body, diff: diff, marks: marks)
+        if far, case .binary = body {
+            // Its bytes don't cross.
+            notText.insert(e.path)
+            return Shown(body: .unavailable("\(e.name) isn't text, so only its name and size show."), diff: diff)
+        }
         guard case .binary(let size, _) = body, FileImage.named(e.name) else { return s }
         if let why = FileImage.tooBig(size) {
             s.picture = .notDrawn(why)
@@ -451,6 +536,7 @@ final class FilesModel {
         }
         guard case .worktree(let e, let ignored) = f.source, let session = place?.session, let b = app.bridge,
               let old = shown[f.id]?.body else { return }
+        if far, case .unavailable = old { return }
         let stat = await WorktreeRead.stat({ p in try await b.call(AppAPI.Methods.filesRead, p) }, session: session, repo: f.repo, path: e.path, ignored: ignored)
         switch stat {
         case .gone:
@@ -480,6 +566,11 @@ final class FilesModel {
         let outcome: FileOutcome
         switch f.source {
         case .worktree(let e, let ignored):
+            // Nothing of a paired server's is written to this Mac.
+            if far {
+                actionProblem = "It stays on \(place?.far ?? "that server"): only its text reads here."
+                return nil
+            }
             guard let session = place?.session, let b = app.bridge else {
                 actionProblem = place?.why ?? "Not connected to terminatr."
                 return nil
