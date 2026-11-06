@@ -443,15 +443,12 @@ func TestFilesChangedKeys(t *testing.T) {
 		t.Fatalf("refresh: %q\n%s", sel(), infoText(c))
 	}
 
-	// With a filter too: a tree of what it matches, and folds are kept.
+	// With a filter too: a tree of what it matches, opened again so what it
+	// finds shows.
 	filesPress(c, "/", "a", ".", "g", "o", "enter")
 	if got := f.seen[len(f.seen)-1]; !got.Changed || got.Query != "a.go" {
 		t.Fatalf("both: %+v", got)
 	}
-	delete(fv.shut, "internal/tui")
-	c.mu.Lock()
-	c.infoLayout()
-	c.mu.Unlock()
 	if got := ids(); !slices.Equal(got, []string{"internal", " internal/tui", "  internal/tui/a.go"}) {
 		t.Fatalf("both: %q", got)
 	}

@@ -30,7 +30,10 @@ final class FilesModel {
     }
 
     private(set) var scope = Scope.worktree
-    var filter = ""
+    var filter = "" {
+        // What it finds shows, not inside a folded folder.
+        didSet { if filter != oldValue { shut = [] } }
+    }
     private(set) var changedOnly = false
     private(set) var showIgnored = false
     private(set) var open: Set<String> = []

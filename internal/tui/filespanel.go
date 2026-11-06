@@ -137,7 +137,8 @@ func (fv *filesView) searching() bool { return fv.filter != "" || fv.changed }
 func (fv *filesView) flat() bool { return fv.filter != "" && !fv.changed }
 
 // unfolded says folder p shows what's in it. Changed only's folders start
-// open, so the changes show at once, and don't touch the tree's own.
+// open, so the changes show at once, and a new filter opens them again;
+// they don't touch the tree's own.
 func (fv *filesView) unfolded(p string) bool {
 	if fv.changed {
 		return len(fv.tree[p]) > 0 && !fv.shut[p]
@@ -741,7 +742,7 @@ func (c *client) filesKeyboard(k uv.Key) {
 	fv := ip.files
 	rows := fv.rows()
 	name := keyName(k)
-	refetch, toggle := false, false
+	refetch, toggle, filter := false, false, fv.filter
 	var read *fileRow
 	move := func(to int) {
 		fv.sel = min(max(to, 0), max(len(rows)-1, 0))
@@ -842,6 +843,9 @@ func (c *client) filesKeyboard(k uv.Key) {
 		default:
 			read = &r
 		}
+	}
+	if fv.filter != filter {
+		fv.shut = nil // what it finds shows, not inside a folded folder
 	}
 	c.infoLayout()
 	c.filesReveal()
