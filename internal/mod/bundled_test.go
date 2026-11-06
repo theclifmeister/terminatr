@@ -58,7 +58,7 @@ func TestBundled(t *testing.T) {
 			t.Errorf("template %+v", tpl)
 		}
 	}
-	if len(errs) > 0 || !slices.Equal(names, []string{"bug", "chore", "spike"}) {
+	if len(errs) > 0 || !slices.Equal(names, []string{"bug", "chore", "spike", "week-in-review"}) {
 		t.Errorf("templates %q %v", names, errs)
 	}
 	for _, role := range []string{"coordinator", "thread"} {
