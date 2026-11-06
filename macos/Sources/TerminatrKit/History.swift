@@ -36,6 +36,45 @@ public enum ReleaseCounts {
     }
 }
 
+/// The Pulse as a board draws it (app API 69; design board-library, B5 and
+/// B16): tm decides the bars and their words, so every surface shows the
+/// same. No band before tm says it appears, or from an older tm.
+public struct PulseBand: Equatable, Sendable {
+    public let done: Int
+    public let unit: String
+    public let bars: [AppAPI.PulseBar]
+    /// What stands under the count: how long the work has run, by what
+    /// when it isn't days, the releases if any, and from weeks up the
+    /// typical time, as the TUI's stat line says them.
+    public let facts: String
+    /// A row of dots, only with a release to show.
+    public let hasDots: Bool
+
+    public init?(_ history: AppAPI.History?) {
+        guard let history, let p = history.pulse, !p.bars.isEmpty else { return nil }
+        done = history.done
+        unit = p.unit
+        bars = p.bars
+        hasDots = p.bars.contains(where: \.released)
+        var words = [p.unit == "day" ? p.span : "\(p.span), by \(p.unit)"]
+        if !p.releases.isEmpty { words.append(p.releases) }
+        if p.unit != "day" && !history.typical.isEmpty { words.append("typical \(history.typical)") }
+        facts = words.joined(separator: " · ")
+    }
+
+    /// The bar that starts on from, one with work: what a filter can show.
+    public func bar(from: String?) -> AppAPI.PulseBar? {
+        bars.first { $0.from == from && $0.done > 0 }
+    }
+
+    /// How tall bar is, of a height: the tallest fills it, one with work is
+    /// never lost, and none draws nothing.
+    public func height(_ bar: AppAPI.PulseBar, of full: Double) -> Double {
+        guard bar.done > 0, let top = bars.map(\.done).max() else { return 0 }
+        return max(full * Double(bar.done) / Double(top), 2)
+    }
+}
+
 /// The Release Tags sheet: which of a project's tags count (release.tags,
 /// app API 65), as the TUI's Release tags row sets them.
 public struct ReleaseTagsForm: Equatable, Sendable {

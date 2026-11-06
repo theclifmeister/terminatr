@@ -1,5 +1,5 @@
 // Package widget is the widget set a mod draws with (mods design §6): a
-// small tree of text, list, table, kv, progress, steps, bars and keys,
+// small tree of text, list, table, kv, progress, steps, bars, band and keys,
 // stacked, that the mod publishes as JSON and terminatr draws with its own
 // theme, icons, widths, scrolling and mouse hits. A mod never writes
 // terminal bytes: span text has its control characters stripped and its
@@ -39,11 +39,12 @@ const (
 	KindProgress = "progress" // Value out of Max, with a Label
 	KindSteps    = "steps"    // Steps, each done, now or open
 	KindBars     = "bars"     // Values as a bar chart, or a sparkline
+	KindBand     = "band"     // Values as one line along a time axis (mod API 1.23)
 	KindKeys     = "keys"     // Keys the mod handles, drawn as hints
 )
 
 // Kinds are the widget kinds, as the API names them.
-var Kinds = []string{KindStack, KindText, KindList, KindTable, KindKV, KindProgress, KindSteps, KindBars, KindKeys}
+var Kinds = []string{KindStack, KindText, KindList, KindTable, KindKV, KindProgress, KindSteps, KindBars, KindBand, KindKeys}
 
 // Roles are the theme roles a span may name (mods design §6, Spans).
 var Roles = []string{"accent", "good", "warn", "bad", "info", "faint", "head"}
@@ -88,6 +89,13 @@ type Widget struct {
 	Values []float64 `json:"values,omitempty"` // bars
 	Labels []string  `json:"labels,omitempty"` // bars: one per value, for a chart
 	Spark  bool      `json:"spark,omitempty"`  // bars: one line, ▁▂▃▅▇
+
+	// A band (mod API 1.23) is Values, oldest first, as one line of bars
+	// with a blank for a zero, and its first and last Labels under them;
+	// where the width is short it keeps the newest (and Pick).
+	Dots   []bool   `json:"dots,omitempty"`   // band: a line under the bars, a dot for each true; none if none is
+	Pick   int      `json:"pick,omitempty"`   // band: the value picked, from 1, marked and named under the bars
+	Beside [][]Span `json:"beside,omitempty"` // band: lines beside the bars and the dots, or under them where any doesn't fit
 
 	Keys []Key `json:"keys,omitempty"` // keys
 	// Actions are core actions bound in the whole view, whatever row
@@ -155,6 +163,11 @@ func (w *Widget) Timed() bool {
 	for i := range w.Rows {
 		r := &w.Rows[i]
 		if timed(r.Spans) || slices.ContainsFunc(r.Cells, timed) || slices.ContainsFunc(r.More, timed) {
+			return true
+		}
+	}
+	for _, ss := range w.Beside {
+		if timed(ss) {
 			return true
 		}
 	}
@@ -240,6 +253,7 @@ const (
 	MaxSpans    = 16   // in a row, a cell, a line or a value
 	MaxColumns  = 12
 	MaxValues   = 512
+	MaxBeside   = 4 // lines beside a band
 	MaxKeys     = 12
 	MaxActions  = 8        // bound on one row
 	MaxMore     = 64       // lines under one row
@@ -377,6 +391,20 @@ func (c *checker) widget(w *Widget, at string, depth int) {
 		c.steps(w, at)
 	case KindBars:
 		c.bars(w, at)
+	case KindBand:
+		c.bars(w, at)
+		if len(w.Dots) > 0 && len(w.Dots) != len(w.Values) {
+			c.bad(join(at, "dots"), "%d dots for %d values", len(w.Dots), len(w.Values))
+		}
+		if w.Pick < 0 || w.Pick > len(w.Values) {
+			c.bad(join(at, "pick"), "%d is not 0 to %d", w.Pick, len(w.Values))
+		}
+		if len(w.Beside) > MaxBeside {
+			c.bad(join(at, "beside"), "%d lines, over %d", len(w.Beside), MaxBeside)
+		}
+		for i, ss := range w.Beside {
+			c.spans(ss, fmt.Sprintf("%s[%d]", join(at, "beside"), i))
+		}
 	case KindKeys:
 		c.keys(w, at)
 		c.actions(w.Actions, join(at, "actions"))

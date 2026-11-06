@@ -1300,6 +1300,32 @@ type History struct {
 	Truncated      bool         `json:"truncated,omitempty"`
 	// Releases are each repo's releases, never summed (app API 65).
 	Releases []HistoryRepo `json:"releases,omitempty"`
+	// Pulse is the band at the top of the board (app API 69): what its
+	// bars stand for, how long the work has run, the releases in words,
+	// each repo's with several, and the bars. Nil before it appears (10
+	// done across 7 days), and from an older tm.
+	Pulse *HistoryPulse `json:"pulse,omitempty"`
+}
+
+// HistoryPulse is the Pulse; Unit is "day", "week" or "month".
+type HistoryPulse struct {
+	Unit     string     `json:"unit"`
+	Span     string     `json:"span"`
+	Releases string     `json:"releases,omitempty"`
+	Bars     []PulseBar `json:"bars"`
+}
+
+// PulseBar is one bar of the Pulse: the days it covers, in the server's
+// time zone (task.done's from and to, with no tz), its name on the axis,
+// how many tasks finished, whether any repo released, and what it says
+// of itself.
+type PulseBar struct {
+	From     string `json:"from"`
+	To       string `json:"to"`
+	Label    string `json:"label"`
+	Done     int    `json:"done"`
+	Released bool   `json:"released,omitempty"`
+	Tip      string `json:"tip"`
 }
 
 // HistoryRepo is one repo's releases, since the project's first record:
@@ -1371,6 +1397,12 @@ func historyOf(r proto.History) History {
 			c.Releases = append(c.Releases, HistoryRelease{Tag: x.Tag, Part: x.Part, Version: x.Version, At: x.At})
 		}
 		out.Releases = append(out.Releases, c)
+	}
+	if r.Pulse != nil {
+		out.Pulse = &HistoryPulse{Unit: r.Pulse.Unit, Span: r.Pulse.Span, Releases: r.Pulse.Releases, Bars: make([]PulseBar, 0, len(r.Pulse.Bars))}
+		for _, b := range r.Pulse.Bars {
+			out.Pulse.Bars = append(out.Pulse.Bars, PulseBar{From: b.From, To: b.To, Label: b.Label, Done: b.Done, Released: b.Released, Tip: b.Tip})
+		}
 	}
 	return out
 }

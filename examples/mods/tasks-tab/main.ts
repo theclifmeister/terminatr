@@ -16,7 +16,9 @@
 // its row is listed. Shown with b, Done is by day: the newest 7 days with
 // work open (at most 30 rows), older work folded by week, then by month
 // (tasks.done), and enter on a heading opens or folds it, on "… more" reads
-// on. The mod draws what tm groups, so an empty week has no heading.
+// on. The mod draws what tm groups, so an empty week has no heading. The
+// Pulse (history.get) tops the list once tm says it appears, and [ and ]
+// filter it to one of its bars: the tasks that finished then, nothing else.
 import type { TM } from "./types/tm";
 declare const $: TM;
 
@@ -60,6 +62,12 @@ interface Tab {
   rows: Map<string, Fold>;
   toggled: Set<string>;
   reveal: string;
+  // The project's numbers and what they were read at; the bar [ and ]
+  // picked, by its first day ("" for none), and its rows as far as read.
+  history: TM.History | null;
+  historyAt: string;
+  pick: string;
+  picked: Fold;
 }
 
 // Fold is the rows read of a group that opened.
@@ -245,16 +253,54 @@ function num(id: string): number {
   return Number(id.slice(1)) || 0;
 }
 
+// pickedBar is the bar [ and ] picked, while there is one.
+function pickedBar(t: Tab): TM.PulseBar | undefined {
+  return t.pick ? t.history?.pulse?.bars.find((b) => b.from === t.pick) : undefined;
+}
+
+// band is the Pulse: the bars, the dots when there are releases, and what
+// they add up to in words. Without releases the dots and their words are
+// left out. Reading wider than the tab, tm draws the words under the bars.
+function band(t: Tab): TM.Widget | null {
+  const h = t.history;
+  const p = h?.pulse;
+  if (!h || !p) return null;
+  const facts = [`${h.done} done in ${p.span}${p.unit === "day" ? "" : `, by ${p.unit}`}`];
+  if (p.releases) facts.push(p.releases);
+  if (p.unit !== "day" && h.typical) facts.push(`typical ${h.typical}`);
+  const dots = p.bars.some((b) => b.released);
+  const pick = p.bars.findIndex((b) => b.from === t.pick) + 1;
+  return {
+    kind: "band",
+    values: p.bars.map((b) => b.done),
+    labels: p.bars.map((b) => b.label),
+    ...(dots ? { dots: p.bars.map((b) => !!b.released) } : {}),
+    ...(pick > 0 ? { pick } : {}),
+    beside: [[{ text: facts.join(" · ") }], ...(dots ? [[{ text: `releases, each dot a ${p.unit}`, role: "faint" as TM.Role }]] : [])],
+  };
+}
+
+// pickedRows are the tasks of the bar picked, with what reads on.
+function pickedRows(project: string, t: Tab, bar: TM.PulseBar): TM.Value[] {
+  const list = t.picked.tasks.filter((x) => wanted(t, x));
+  const rows: TM.Value[] = [{ id: "g:done", head: true, spans: [{ text: `DONE · ${bar.done}`, role: "head" }, { text: `  ${bar.tip.split(":")[0]}`, role: "faint" }] }];
+  for (const task of list) rows.push(row(project, task, false, t.history?.pulse?.unit === "day"));
+  if (t.picked.next > 0) rows.push({ id: "m:pick", spans: [{ text: `  … ${bar.done - t.picked.tasks.length} more`, role: "faint" }] });
+  return rows;
+}
+
 function tree(project: string, t: Tab): TM.Widget {
   if (t.error) {
     return { kind: "text", text: `error: ${t.error}`, role: "bad" };
   }
-  const rows: TM.Value[] = [];
+  const bar = pickedBar(t);
+  const pulse = band(t);
+  const rows: TM.Value[] = bar ? pickedRows(project, t, bar) : [];
   let group = "";
-  const list = shown(t);
+  const list = bar ? [] : shown(t);
   // The priority column, only while a listed task shows one.
   const prio = list.some((x) => !!x.priority && x.status !== "done");
-  const days = byDay(t) && t.groups.length > 0;
+  const days = !bar && byDay(t) && t.groups.length > 0;
   for (const task of list) {
     const g = groupOf(task.status);
     if (g !== group) {
@@ -269,12 +315,15 @@ function tree(project: string, t: Tab): TM.Widget {
   if (days && group !== "dropped") rows.push(...doneRows(project, t, prio));
   // The board's, or with no filter and none left there, the archive's.
   const onBoard = t.tasks.filter((x) => x.status === "done" && wanted(t, x)).length;
-  const done = onBoard === 0 && t.prio === "" ? t.total : onBoard;
+  // Under the band, all of them, as it says.
+  const all = t.history?.pulse ? t.history.done : onBoard === 0 ? t.total : onBoard;
+  const done = t.prio === "" ? all : onBoard;
   const dropped = t.tasks.filter((x) => x.status === "dropped" && wanted(t, x)).length;
-  const folded = !t.doneAll && done + dropped > 0;
+  const folded = !bar && !t.doneAll && done + dropped > 0;
   if (folded && done > 0) rows.push({ id: "g:done", head: true, spans: [{ text: "DONE", role: "head" }] });
   if (folded && dropped > 0) rows.push({ id: "g:dropped", head: true, spans: [{ text: "DROPPED", role: "head" }] });
   const children: TM.Value[] = [
+    ...(pulse ? [pulse, { kind: "text", lines: [[]] }] : []),
     {
       kind: "table",
       id: TABLE,
@@ -287,17 +336,26 @@ function tree(project: string, t: Tab): TM.Widget {
     const counts = [done > 0 ? `${done} done` : "", dropped > 0 ? `${dropped} dropped` : ""].filter((s) => s !== "").join(", ");
     children.push({ kind: "text", text: `… ${counts} (b shows them)`, role: "faint" });
   }
+  if (bar) children.push({ kind: "text", text: bar.tip, role: "faint" });
   if (t.prio) {
     const which = t.prio === "none" ? "the tasks without a priority" : `the ${t.prio} tasks`;
     children.push({ kind: "text", text: `only ${which} (p for the next)`, role: "faint" });
   }
   // b and p are the mod's own keys; + runs tm's new task, from a template or none.
-  const keys: { key: string; label: string }[] = t.doneAll || done + dropped > 0 ? [{ key: "b", label: t.doneAll ? "hide done" : "done" }] : [];
+  const keys: { key: string; label: string }[] = [];
+  if (bar) keys.push({ key: "b", label: "all tasks" });
+  else if (t.doneAll || done + dropped > 0) keys.push({ key: "b", label: t.doneAll ? "hide done" : "done" });
   // enter is the core's on a task's row; on a heading of Done it is this.
   if (days) keys.push({ key: "enter", label: "open or fold" });
   // p's label says what the next press lists.
   const next = PRIOS[(PRIOS.indexOf(t.prio) + 1) % PRIOS.length];
   keys.push({ key: "p", label: next === "" ? "all priorities" : next === "none" ? "no priority only" : `${next} only` });
+  // [ and ] step through the bars with work; ] past the newest ends it.
+  const unit = t.history?.pulse?.unit;
+  if (unit) {
+    keys.push({ key: "[", label: bar ? "earlier" : `filter by ${unit}` });
+    if (bar) keys.push({ key: "]", label: "later" });
+  }
   children.push({ kind: "keys", id: "keys", keys, actions: [{ id: "task.new", target: { project } }] });
   return { kind: "stack", children };
 }
@@ -306,7 +364,9 @@ async function load(project: string, t: Tab): Promise<void> {
   t.error = "";
   try {
     t.tasks = await $.tasks.list(project);
+    await loadHistory(project, t);
     await loadDone(project, t);
+    await loadPicked(project, t);
     // No done task left on the board: is there one in the archive?
     if (!t.doneAll && !t.tasks.some((x) => x.status === "done")) {
       t.total = (await $.tasks.done(project, { groups: true }))?.total ?? 0;
@@ -314,6 +374,50 @@ async function load(project: string, t: Tab): Promise<void> {
   } catch (e: any) {
     t.error = String(e?.message ?? e);
   }
+}
+
+// loadHistory reads the project's numbers when the done count or the day
+// changed, as nothing the band shows moves otherwise. Failing, the board
+// has no band, and nothing else changes.
+async function loadHistory(project: string, t: Tab): Promise<void> {
+  const at = `${t.tasks.filter((x) => x.status === "done").length} ${new Date().toDateString()}`;
+  if (t.history && t.historyAt === at) return;
+  try {
+    t.history = await $.history.get(project);
+    t.historyAt = at;
+  } catch {
+    t.history = null;
+  }
+}
+
+// loadPicked reads the bar picked again, as far as it was read, and ends
+// the pick when tm has no such bar with work any more. The numbers are in
+// tm's time zone, as tasks.done reads.
+async function loadPicked(project: string, t: Tab): Promise<void> {
+  if (!t.pick) return;
+  const bar = pickedBar(t);
+  if (!bar || bar.done === 0) {
+    t.pick = "";
+    t.picked = { tasks: [], next: 0 };
+    return;
+  }
+  t.picked = await readBar(project, bar, 0, Math.max(t.picked.tasks.length, PAGE));
+}
+
+// readBar reads limit of bar's rows from offset, the archive's too.
+async function readBar(project: string, bar: TM.PulseBar, offset: number, limit: number): Promise<Fold> {
+  const res = await $.tasks.done(project, { from: bar.from, to: bar.to, archived: true, offset, limit });
+  return { tasks: res.tasks, next: res.next };
+}
+
+// step moves the pick: [ to the bar with work before it (from none, the
+// newest), ] to the one after it, past the newest to none.
+function step(t: Tab, k: string): void {
+  const bars = (t.history?.pulse?.bars ?? []).filter((b) => b.done > 0);
+  const at = bars.findIndex((b) => b.from === t.pick);
+  if (k === "[") t.pick = (at < 0 ? bars[bars.length - 1] : bars[Math.max(at - 1, 0)])?.from ?? "";
+  else t.pick = at < 0 ? "" : (bars[at + 1]?.from ?? "");
+  t.picked = { tasks: [], next: 0 };
 }
 
 // loadDone reads Done's groups while they show, and again each fold that
@@ -346,6 +450,19 @@ async function readFold(project: string, g: TM.DoneGroup, offset: number, limit:
 // press handles enter or a click on a row of Done: a heading opens or
 // folds, "… more" reads on. It says whether row was one of those.
 async function press(project: string, t: Tab, row: string): Promise<boolean> {
+  if (row === "m:pick") {
+    const bar = pickedBar(t);
+    try {
+      t.error = "";
+      if (bar && t.picked.next > 0) {
+        const more = await readBar(project, bar, t.picked.next, PAGE);
+        t.picked = { tasks: [...t.picked.tasks, ...more.tasks], next: more.next };
+      }
+    } catch (e: any) {
+      t.error = String(e?.message ?? e);
+    }
+    return true;
+  }
   const fold = row.startsWith("f:");
   if (!fold && !row.startsWith("m:")) return false;
   const k = row.slice(2);
@@ -394,8 +511,10 @@ async function refresh(project: string | undefined): Promise<void> {
 // done or dropped, those are listed, so its row is there for the cursor.
 $.on("view.opened", async (e) => {
   if (e.view !== VIEW || !e.project) return;
-  const t: Tab = tabs.get(e.project) ?? { tasks: [], doneAll: false, prio: "", error: "", groups: [], total: 0, rows: new Map(), toggled: new Set(), reveal: "" };
+  const t: Tab = tabs.get(e.project) ?? { tasks: [], doneAll: false, prio: "", error: "", groups: [], total: 0, rows: new Map(), toggled: new Set(), reveal: "", history: null, historyAt: "", pick: "", picked: { tasks: [], next: 0 } };
   tabs.set(e.project, t);
+  // A task shown from elsewhere needs its row, whatever day is picked.
+  if (e.task) t.pick = "";
   await load(e.project, t);
   if (e.task && t.tasks.some((x) => x.id === e.task && closed(groupOf(x.status)))) {
     t.doneAll = true;
@@ -425,8 +544,16 @@ $.on("ui.key", async (e) => {
     if (await press(project, t, e.row ?? "")) await publish(project, t);
     return;
   }
+  if (e.key === "[" || e.key === "]") {
+    step(t, e.key);
+    await load(project, t);
+    await publish(project, t);
+    return;
+  }
   if (e.key !== "b" && e.key !== "p") return;
-  if (e.key === "b") t.doneAll = !t.doneAll;
+  // b ends a pick, the board as it was.
+  if (e.key === "b" && t.pick) t.pick = "";
+  else if (e.key === "b") t.doneAll = !t.doneAll;
   else t.prio = PRIOS[(PRIOS.indexOf(t.prio) + 1) % PRIOS.length];
   await load(project, t);
   await publish(project, t);

@@ -2,7 +2,6 @@ package cli
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/theclifmeister/terminatr/internal/history"
 	"github.com/theclifmeister/terminatr/internal/proto"
@@ -66,25 +65,10 @@ func printHistory(e *Env, h proto.History) {
 	} else {
 		fmt.Fprintf(e.Stdout, "typical       shows from %d timed tasks; %d so far\n", proto.TypicalFrom, h.Timed)
 	}
-	if words := releaseWords(h.Releases); words != "" {
+	if words := history.ReleaseWords(h.Releases); words != "" {
 		fmt.Fprintf(e.Stdout, "releases      %s\n", words)
 	}
 	for _, d := range h.Days {
 		fmt.Fprintf(e.Stdout, "%s  %d\n", d.Day, d.Done)
 	}
-}
-
-// releaseWords lists each repo's count, a monorepo's by part, never a
-// total: "terminatr 128 · site 6", "mono api 3 · mono web 2".
-func releaseWords(repos []proto.HistoryRepo) string {
-	var words []string
-	for _, r := range repos {
-		if len(r.Parts) == 0 {
-			words = append(words, fmt.Sprintf("%s %d", r.Repo, r.Count))
-		}
-		for _, p := range r.Parts {
-			words = append(words, strings.TrimSpace(fmt.Sprintf("%s %s", r.Repo, p.Part))+fmt.Sprintf(" %d", p.Count))
-		}
-	}
-	return strings.Join(words, " · ")
 }
