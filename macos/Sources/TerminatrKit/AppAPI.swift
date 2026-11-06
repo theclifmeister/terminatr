@@ -1899,11 +1899,12 @@ public enum AppAPI {
         public var conversations: String
         public var needs: String
         public var picks: Bool
+        public var uploads: Bool
         public var version: String
         public var rttMs: Double
         public var worktree: Bool
 
-        public init(alias: String, name: String = "", id: String = "", state: String, reason: String = "", since: Date? = nil, projects: [PeerProject] = [], shareWaits: Int = 0, shareRequests: [ShareRequest] = [], pane: Bool = false, panes: String = "", transcript: Bool = false, conversations: String = "", needs: String = "", picks: Bool = false, version: String = "", rttMs: Double = 0, worktree: Bool = false) {
+        public init(alias: String, name: String = "", id: String = "", state: String, reason: String = "", since: Date? = nil, projects: [PeerProject] = [], shareWaits: Int = 0, shareRequests: [ShareRequest] = [], pane: Bool = false, panes: String = "", transcript: Bool = false, conversations: String = "", needs: String = "", picks: Bool = false, uploads: Bool = false, version: String = "", rttMs: Double = 0, worktree: Bool = false) {
             self.alias = alias
             self.name = name
             self.id = id
@@ -1919,6 +1920,7 @@ public enum AppAPI {
             self.conversations = conversations
             self.needs = needs
             self.picks = picks
+            self.uploads = uploads
             self.version = version
             self.rttMs = rttMs
             self.worktree = worktree
@@ -1940,6 +1942,7 @@ public enum AppAPI {
             case conversations
             case needs
             case picks
+            case uploads
             case version
             case rttMs = "rtt_ms"
             case worktree
@@ -5950,6 +5953,7 @@ extension AppAPI.Peer {
         self.conversations = try c.decodeIfPresent(String.self, forKey: .conversations) ?? ""
         self.needs = try c.decodeIfPresent(String.self, forKey: .needs) ?? ""
         self.picks = try c.decodeIfPresent(Bool.self, forKey: .picks) ?? false
+        self.uploads = try c.decodeIfPresent(Bool.self, forKey: .uploads) ?? false
         self.version = try c.decodeIfPresent(String.self, forKey: .version) ?? ""
         self.rttMs = try c.decodeIfPresent(Double.self, forKey: .rttMs) ?? 0
         self.worktree = try c.decodeIfPresent(Bool.self, forKey: .worktree) ?? false

@@ -952,10 +952,15 @@ func (s *Server) keysBy(p proto.SessionKeysParams, cc callCtx) (any, *proto.Erro
 // and is journaled.
 func (s *Server) promptBy(p proto.SessionPromptParams, cc callCtx) (any, *proto.Error) {
 	if _, _, ok := remoteID(p.ID); ok {
+		id := s.remoteCanon(p.ID)
 		if len(p.Files) > 0 {
-			return nil, proto.Errorf(proto.ErrRefused, "a paired server's session takes no files")
+			text, perr := s.remotes.promptFiles(id, p.Text, p.Files)
+			if perr != nil {
+				return nil, perr
+			}
+			p.Text, p.Files = text, nil
 		}
-		return s.remotes.prompt(s.remoteCanon(p.ID), p)
+		return s.remotes.prompt(id, p)
 	}
 	if len(p.Files) > 0 {
 		sess, perr := s.session(p.ID)

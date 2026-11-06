@@ -64,7 +64,7 @@ func (h Hello) clean() Hello {
 
 const (
 	maxVersionRunes = 40
-	maxCaps         = 16
+	maxCaps         = 32
 )
 
 var capPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,31}$`)
