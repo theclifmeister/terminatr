@@ -706,6 +706,10 @@ type Peer struct {
 	// (PeerNeedActParams.Picks); without, such a question is answered
 	// in its pane there.
 	Picks bool `json:"picks,omitempty"`
+	// Uploads: its sessions take files for a prompt (session.upload,
+	// session.prompt's files) while Panes is write; without, the composer
+	// offers none. An older tm here doesn't say it either.
+	Uploads bool `json:"uploads,omitempty"`
 	// Version and RTT (T1032) are its tm's release, as far as known, and
 	// the link's last ping in milliseconds while up; a change of RTT
 	// alone doesn't change Gen.
@@ -1039,7 +1043,7 @@ func peerListOf(l proto.PeerList) PeerList {
 	for _, p := range l.Peers {
 		peer := Peer{Alias: p.Alias, Name: p.Name, ID: p.ID, State: p.State, Reason: p.Reason, Since: p.Since,
 			Projects: make([]PeerProject, 0, len(p.Projects)), ShareWaits: proto.ShareWaits([]proto.PeerMirror{p}),
-			Pane: p.Pane, Panes: p.Panes, Transcript: p.Transcript, Conversations: p.Conversations, Needs: p.Needs, Picks: p.NeedPicks,
+			Pane: p.Pane, Panes: p.Panes, Transcript: p.Transcript, Conversations: p.Conversations, Needs: p.Needs, Picks: p.NeedPicks, Uploads: p.Uploads,
 			Version: textsafe.Line(p.Version, 40), RTT: p.RTT}
 		for _, q := range p.Shares {
 			if !q.Out && q.Pending() {

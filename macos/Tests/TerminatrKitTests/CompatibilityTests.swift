@@ -61,6 +61,32 @@ private func hello(_ api: Int, _ tm: String) -> AppAPI.Hello {
     #expect(!Compatibility.takesFiles(h, for: .director("acme")))
 }
 
+/// A paired server's session takes files while that server's tm says so, its
+/// pane switch for this server is write and its link is up; an older tm on
+/// either side says nothing, so no paperclip.
+@Test func pairedSessionTakesFiles() {
+    var h = hello(AppAPI.version, "v0.54.0")
+    h.methods = [AppAPI.Methods.sessionUpload.name]
+    let ref = SessionRef(project: "demo", server: "mini")
+    var p = AppAPI.Peer(alias: "mini", state: "up", panes: "type", uploads: true)
+    #expect(Compatibility.takesFiles(h, for: ref, peer: p))
+    #expect(!Compatibility.takesFiles(h, for: ref, peer: nil))
+    p.panes = "view"
+    #expect(!Compatibility.takesFiles(h, for: ref, peer: p))
+    p.panes = "type"
+    p.state = "offline"
+    #expect(!Compatibility.takesFiles(h, for: ref, peer: p))
+    p.state = "up"
+    p.uploads = false
+    #expect(!Compatibility.takesFiles(h, for: ref, peer: p))
+    p.uploads = true
+    h.methods = []
+    #expect(!Compatibility.takesFiles(h, for: ref, peer: p))
+    #expect(!Compatibility.takesFiles(h, for: SessionRef(project: "demo"), peer: nil))
+    h.methods = [AppAPI.Methods.sessionUpload.name]
+    #expect(Compatibility.takesFiles(h, for: SessionRef(project: "demo"), peer: nil))
+}
+
 @Test func compatibilityByRelease() {
     let api = AppAPI.version
     #expect(Compatibility.check(hello(api, "v0.54.0"), appVersion: "0.54.0") == .ok)

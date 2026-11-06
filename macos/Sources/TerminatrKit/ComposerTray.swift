@@ -25,7 +25,10 @@ public final class ComposerTray {
     /// Whether an error is the link dropping: such a file waits for
     /// resumeDropped instead of saying Retry alone.
     @ObservationIgnored public var dropped: @MainActor (any Error) -> Bool = { _ in false }
+    /// How many files go at once; those past it wait their turn at 0%.
+    @ObservationIgnored public var atOnce = Int.max
     @ObservationIgnored private let chunk: Int
+    @ObservationIgnored private var waiting: [UUID] = []
     @ObservationIgnored private var payloads: [UUID: Payload] = [:]
     @ObservationIgnored private var tasks: [UUID: Task<Void, Never>] = [:]
 
@@ -92,10 +95,12 @@ public final class ComposerTray {
     /// Takes the file off the prompt, stopping its upload.
     public func remove(_ id: UUID) {
         tasks.removeValue(forKey: id)?.cancel()
+        waiting.removeAll { $0 == id }
         payloads[id] = nil
         previews[id] = nil
         files.removeAll { $0.id == id }
         note = nil
+        nextWaiting()
     }
 
     /// Sends a failed file again, from where tm has it to.
@@ -114,6 +119,7 @@ public final class ComposerTray {
     public func clear() {
         for t in tasks.values { t.cancel() }
         tasks = [:]
+        waiting = []
         payloads = [:]
         previews = [:]
         files = []
@@ -123,9 +129,19 @@ public final class ComposerTray {
     private func start(_ id: UUID) {
         guard let p = payloads[id], let name = files.first(where: { $0.id == id })?.name else { return }
         set(id, .uploading(p.resume.offset), canRetry: false)
+        guard tasks.count < atOnce else {
+            waiting.append(id)
+            return
+        }
         tasks[id] = Task { [weak self] in
             await self?.send(id, name: name, payload: p)
         }
+    }
+
+    /// Starts the next file waiting, if one has its place now.
+    private func nextWaiting() {
+        guard tasks.count < atOnce, !waiting.isEmpty else { return }
+        start(waiting.removeFirst())
     }
 
     private func send(_ id: UUID, name: String, payload p: Payload) async {
@@ -167,6 +183,7 @@ public final class ComposerTray {
     private func finish(_ id: UUID, _ state: ComposerFile.State, retry: Bool) {
         tasks[id] = nil
         set(id, state, canRetry: retry && payloads[id] != nil)
+        nextWaiting()
     }
 
     private func set(_ id: UUID, _ state: ComposerFile.State, canRetry: Bool? = nil) {

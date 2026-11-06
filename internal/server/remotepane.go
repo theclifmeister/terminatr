@@ -604,3 +604,96 @@ func remoteRefusal(id string) *proto.Error {
 	alias, _, _ := remoteID(id)
 	return proto.Errorf(proto.ErrRefused, "not on %s's panes: open it on %s", alias, alias)
 }
+
+// uploadTarget is the session of the paired server of pane id as it is now,
+// for a file: that the link's up and takes files.
+func (r *remotes) uploadTarget(id string) (alias string, rs remoteSession, perr *proto.Error) {
+	alias, sid, ok := remoteID(id)
+	if !ok {
+		return "", rs, proto.Errorf(proto.ErrUnknownSession, "no session %q", id)
+	}
+	project, role, thread := "", "", ""
+	r.mu.Lock()
+	rp := r.byID[id]
+	r.mu.Unlock()
+	if rp != nil {
+		rp.mu.Lock()
+		sid, project, role, thread = rp.sid, rp.project, rp.role, rp.thread
+		rp.mu.Unlock()
+	}
+	pm, rs, peerOK, ok := r.find(alias, sid, project, role, thread)
+	switch {
+	case !peerOK:
+		return alias, rs, proto.Errorf(proto.ErrRefused, "no paired server %q", alias)
+	case pm.State != proto.LinkUp:
+		return alias, rs, proto.Errorf(proto.ErrRefused, "%s is offline", alias)
+	case !pm.Uploads:
+		return alias, rs, errNoRemoteUploads(alias)
+	case !ok:
+		return alias, rs, proto.Errorf(proto.ErrUnknownSession, "no session %s on %s", sid, alias)
+	}
+	return alias, rs, nil
+}
+
+func errNoRemoteUploads(alias string) *proto.Error {
+	return proto.Errorf(proto.ErrRefused, "%s's tm takes no files: update tm there", alias)
+}
+
+// remoteUploadError is err of a paired server's upload as the app reads it: a
+// refusal as that server said it, else the link's drop, and with it the bytes
+// that server held.
+func remoteUploadError(alias string, err error) *proto.Error {
+	var pe *proto.Error
+	switch {
+	case errors.As(err, &pe) && pe.Code == proto.ErrPanesOff:
+		return proto.Errorf(proto.ErrPanesOff, "%s doesn't let this server write to its sessions", alias)
+	case errors.As(err, &pe):
+		return pe
+	case errors.Is(err, peer.ErrNoUploads):
+		return errNoRemoteUploads(alias)
+	}
+	return proto.Errorf(proto.ErrRefused, "the link to %s dropped", alias)
+}
+
+// upload sends a chunk of a file for the paired server's session id: that
+// server holds every check (internal/server/peerupload.go) and stores it.
+func (r *remotes) upload(id string, p proto.SessionUploadParams) (any, *proto.Error) {
+	alias, rs, perr := r.uploadTarget(id)
+	if perr != nil {
+		return nil, perr
+	}
+	res, err := r.s.peers.SessionUpload(context.Background(), alias, proto.PeerSessionUploadParams{
+		Project: rs.project, Session: rs.s.ID, Upload: p.Upload, Name: p.Name, Size: p.Size, Offset: p.Offset, Data: p.Data})
+	if err != nil {
+		return nil, remoteUploadError(alias, err)
+	}
+	out := proto.SessionUploadResult{Upload: res.Upload, Received: res.Received}
+	if res.Ref != "" {
+		// A ref names a file as this tm would: nothing else is sent on.
+		typ := uploadType(res.Ref)
+		if uploadName(res.Ref) != res.Ref || typ == "" {
+			return nil, proto.Errorf(proto.ErrRefused, "%s: its tm answered oddly: attach the file again", alias)
+		}
+		out.Ref, out.Name, out.Type, out.Size = res.Ref, res.Ref, typ, res.Size
+		r.s.log.Printf("remote pane %s: the app attached a file (%d bytes)", id, res.Size)
+	}
+	return out, nil
+}
+
+// promptFiles is text with the files refs name on the paired server's session
+// id, each on an "Attached: <path>" line after it, that server's path: what
+// its agent reads them by.
+func (r *remotes) promptFiles(id, text string, refs []string) (string, *proto.Error) {
+	if len(refs) > proto.MaxPromptFiles {
+		return "", proto.Errorf(proto.ErrBadParams, "a prompt takes at most %d files", proto.MaxPromptFiles)
+	}
+	alias, rs, perr := r.uploadTarget(id)
+	if perr != nil {
+		return "", perr
+	}
+	paths, err := r.s.peers.SessionFiles(context.Background(), alias, proto.PeerSessionFilesParams{Project: rs.project, Session: rs.s.ID, Files: refs})
+	if err != nil {
+		return "", remoteUploadError(alias, err)
+	}
+	return attachedText(text, paths), nil
+}

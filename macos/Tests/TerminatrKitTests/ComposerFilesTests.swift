@@ -174,6 +174,33 @@ private struct Dropped: Error {}
     #expect(t.files.isEmpty && t.refs.isEmpty)
 }
 
+/// A paired server's tray sends two files at once: the rest wait at 0%, go as
+/// one is in or is taken off, and waiting ones leave with a clear.
+@Test @MainActor func traySendsAtOnceWhatItMay() async {
+    var began: [String] = []
+    var open: [CheckedContinuation<Void, Never>] = []
+    let t = ComposerTray(chunk: 4 << 10) { p in
+        began.append(p.name)
+        await withCheckedContinuation { open.append($0) }
+        return AppAPI.Upload(upload: "u", received: p.offset + p.data.count, ref: "ref-\(p.name)", name: p.name, type: "text/plain", size: p.size)
+    }
+    t.atOnce = 2
+    for n in ["a.txt", "b.txt", "c.txt", "d.txt"] { t.add(name: n, data: Data("x".utf8)) }
+    while open.count < 2 { await Task.yield() }
+    #expect(began.sorted() == ["a.txt", "b.txt"])
+    #expect(t.files.allSatisfy { $0.uploading })
+    t.remove(t.files[2].id)
+    open.removeFirst().resume()
+    while open.count < 2 { await Task.yield() }
+    #expect(began.contains("d.txt") && !began.contains("c.txt"))
+    while let c = open.popLast() { c.resume() }
+    while !open.isEmpty || t.uploading {
+        while let c = open.popLast() { c.resume() }
+        await Task.yield()
+    }
+    #expect(t.refs.count == 3)
+}
+
 @Test @MainActor func trayTakesTenFiles() {
     let t = ComposerTray()
     for i in 0..<ComposerFiles.maxFiles { #expect(t.refuse(name: "\(i).zip", why: "no")) }
