@@ -204,3 +204,12 @@ private func route(_ project: String?, _ session: String = "") -> Selection? {
     #expect(removed && !again)
     #expect(w.touch("e").isEmpty)
 }
+
+@Test func aProjectsTabComesBackAfterARelaunch() {
+    var n = Navigation(selection: .project("site"))
+    n.projectTabs[.project("site")] = ProjectTab.designs.rawValue
+    n.projectTabs[.project("site", server: "mini")] = ProjectTab.library.rawValue
+    let back = Navigation.restore(n.encoded())
+    #expect(back.projectTabs[.project("site")] == "Designs")
+    #expect(back.projectTabs[.project("site", server: "mini")] == "Library")
+}

@@ -2,22 +2,9 @@ import SwiftUI
 import TerminatrKit
 import TerminatrUI
 
-/// The project dashboard's Designs (T864), as the TUI's Designs tab
-/// lists them (design.list, app API 31): each design a row of a hairline
-/// list with its title, open questions, a thin bar of its build and how
-/// much is built, or its status, its other facts in its tooltip; a row
-/// opens in place to its design task, answers and page, and the
-/// decided answers, the open questions (Answer… has the coordinator put
-/// them to the user, as the TUI's enter does) and the build tasks in
-/// after order, a board task's opening the task view. Read again
-/// whenever the board changes. A project without designs says so, and
-/// a read that failed says why (Designs.listing). Nothing here changes
-/// a design. A paired server's project's designs (T888) show the same,
-/// read-only: no task opens, a design's page stays on that server, and
-/// they carry no open questions.
-struct DesignsSection: View {
-    @Environment(AppModel.self) private var app
-    @Environment(\.theme) private var theme
+/// Where a project's designs read from (T864, T888), and what reads them
+/// again when it changes: the Designs tab and the Overview's line alike.
+struct DesignsSource {
     let slug: String
     /// The paired server whose project this is (T888): its designs read
     /// through peer.design-list, read-only, without their pages or open
@@ -25,16 +12,8 @@ struct DesignsSection: View {
     let peer: AppAPI.Peer?
     /// What reads them again when it changes.
     let key: [String]
-    @State private var designs: [AppAPI.Design]?
-    @State private var error: String?
-    /// That server doesn't share them (pages-off, no-pages, …).
-    @State private var notShared = false
-    /// The designs opened to their detail, by name.
-    @State private var open: Set<String> = []
-    /// Whether the done and archived designs show too.
-    @State private var all = false
 
-    /// A project of this server's: read again when its board, its
+    /// A project of this server: read again when its board, its
     /// counts (a task's status, a done one) or its open questions
     /// change.
     init(project: AppAPI.Project) {
@@ -52,6 +31,119 @@ struct DesignsSection: View {
         key = [peer.alias, "\(project.pages)"] + project.sessions.map { "\($0.id) \($0.state) \($0.task)" }
     }
 
+    enum Read {
+        case designs([AppAPI.Design])
+        case failed(String)
+        /// That server doesn't share them (pages-off, no-pages, …).
+        case notShared
+    }
+
+    @MainActor
+    func read(_ app: AppModel) async -> Read {
+        guard let peer else {
+            do {
+                return .designs(try await app.designs(slug))
+            } catch {
+                return .failed(Dashboard.words(error))
+            }
+        }
+        guard app.readsPeerDesigns else { return .notShared }
+        do {
+            return .designs(try await app.peerDesigns(peer.alias, slug))
+        } catch {
+            let state: PeerPages.State<Int> = PeerPages.state(error)
+            return state == .notShared ? .notShared : .failed(Dashboard.words(error))
+        }
+    }
+}
+
+/// The Designs tab's page: the section, scrolling as the dashboard does.
+struct DesignsPane<Content: View>: View {
+    @ViewBuilder let section: () -> Content
+
+    var body: some View {
+        ScrollView {
+            section()
+                .padding(.horizontal, 24)
+                .padding(.vertical, 22)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .scrollEdges()
+    }
+}
+
+extension View {
+    /// This view with the Overview's line of designs under way below it.
+    func designsLine(_ source: DesignsSource) -> some View {
+        modifier(DesignsLine(source: source))
+    }
+}
+
+/// One small line, "2 designs: 1 building, 1 waiting for you", which opens
+/// the Designs tab; nothing with neither, or while they can't be read.
+/// A modifier, so a project with no line leaves no gap in the page.
+private struct DesignsLine: ViewModifier {
+    @Environment(AppModel.self) private var app
+    @Environment(\.theme) private var theme
+    let source: DesignsSource
+    @State private var line: String?
+
+    func body(content: Content) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            content
+            if let line {
+                Button(line) { app.projectTab = .designs }
+                    .buttonStyle(.link)
+                    .foregroundStyle(theme.action)
+                    .font(theme.sized(Flat.label))
+                    .help("Shows the project's designs")
+            }
+        }
+        .task(id: source.key) {
+            guard app.listsDesigns else { return }
+            if case .designs(let designs) = await source.read(app) {
+                line = Designs.underWay(designs)
+            } else {
+                line = nil
+            }
+        }
+    }
+}
+
+/// A project's Designs tab (T864), as the TUI's Designs tab
+/// lists them (design.list, app API 31): each design a row of a hairline
+/// list with its title, open questions, a thin bar of its build and how
+/// much is built, or its status, its other facts in its tooltip; a row
+/// opens in place to its design task, answers and page, and the
+/// decided answers, the open questions (Answer… has the coordinator put
+/// them to the user, as the TUI's enter does) and the build tasks in
+/// after order, a board task's opening the task view. Read again
+/// whenever the board changes. A project without designs says so, and
+/// a read that failed says why (Designs.listing). Nothing here changes
+/// a design. A paired server's project's designs (T888) show the same,
+/// read-only: no task opens, a design's page stays on that server, and
+/// they carry no open questions.
+struct DesignsSection: View {
+    @Environment(AppModel.self) private var app
+    @Environment(\.theme) private var theme
+    let source: DesignsSource
+    @State private var designs: [AppAPI.Design]?
+    @State private var error: String?
+    /// That server doesn't share them (pages-off, no-pages, …).
+    @State private var notShared = false
+    /// The designs opened to their detail, by name.
+    @State private var open: Set<String> = []
+    /// Whether the done and archived designs show too.
+    @State private var all = false
+
+    init(project: AppAPI.Project) {
+        source = DesignsSource(project: project)
+    }
+
+    init(peer: AppAPI.Peer, project: AppAPI.PeerProject) {
+        source = DesignsSource(peer: peer, project: project)
+    }
+
     var body: some View {
         // A stack, not a Group: a Group with nothing in it has nothing to
         // run its task on, so the designs were never read (T876).
@@ -60,7 +152,7 @@ struct DesignsSection: View {
             let shown = designs.map { Designs.shown($0, all: all) } ?? []
             let heading = if case .designs = listing, !notShared { "Designs · \(shown.count)" } else { "Designs" }
             PaneLabel(heading)
-            if notShared, let peer {
+            if notShared, let peer = source.peer {
                 Text(PeerPages.notShared(by: PeerPages.server(peer)))
                     .font(theme.body(.subheadline))
                     .foregroundStyle(theme.muted)
@@ -80,7 +172,7 @@ struct DesignsSection: View {
                     if !shown.isEmpty {
                         HairlineList {
                             ForEach(Designs.ordered(shown), id: \.name) { d in
-                                DesignCard(project: slug, design: d, server: peer.map(PeerPages.server), open: Binding(
+                                DesignCard(project: source.slug, design: d, server: source.peer.map(PeerPages.server), open: Binding(
                                     get: { open.contains(d.name) },
                                     set: { if $0 { open.insert(d.name) } else { open.remove(d.name) } }))
                             }
@@ -96,33 +188,16 @@ struct DesignsSection: View {
             }
         }
         .guardingLinks()
-        .task(id: key) { await read() }
-    }
-
-    private func read() async {
-        guard let peer else {
-            do {
-                designs = try await app.designs(slug)
+        .task(id: source.key) {
+            switch await source.read(app) {
+            case .designs(let read):
+                designs = read
                 error = nil
-            } catch {
-                self.error = Dashboard.words(error)
-            }
-            return
-        }
-        guard app.readsPeerDesigns else {
-            notShared = true
-            return
-        }
-        do {
-            designs = try await app.peerDesigns(peer.alias, slug)
-            error = nil
-            notShared = false
-        } catch {
-            let state: PeerPages.State<Int> = PeerPages.state(error)
-            if state == .notShared {
+                notShared = false
+            case .failed(let why):
+                error = why
+            case .notShared:
                 notShared = true
-            } else {
-                self.error = Dashboard.words(error)
             }
         }
     }

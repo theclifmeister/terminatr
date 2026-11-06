@@ -169,9 +169,8 @@ struct TitleRow: View {
                 }
                 .disabled(m.sessionID == nil)
                 .help("Conversation or Terminal (⇧⌘T)")
-            case .project(_, let server):
-                let tabs = server.isEmpty ? app.projectTabs : ProjectTab.paired
-                ForEach(tabs) { t in
+            case .project:
+                ForEach(selection.map(app.projectTabs) ?? []) { t in
                     TabButton(title: t.rawValue, symbol: t.symbol, icons: icons, on: !reading && app.projectTab == t) {
                         files?.pane.shown = nil
                         app.projectTab = t
@@ -213,6 +212,7 @@ extension ProjectTab {
         case .board: "list.bullet.rectangle"
         case .memory: "bookmark"
         case .library: "books.vertical"
+        case .designs: "square.on.square"
         case .mods: "puzzlepiece.extension"
         }
     }

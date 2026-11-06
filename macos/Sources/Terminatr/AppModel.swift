@@ -106,9 +106,6 @@ final class AppModel {
     var sidebarShown = UserDefaults.standard.object(forKey: AppModel.sidebarKey) as? Bool ?? true {
         didSet { UserDefaults.standard.set(sidebarShown, forKey: Self.sidebarKey) }
     }
-    /// The tab each project shows, while the app runs: by the shown
-    /// project's selection (projectTab).
-    private var projectTabsShown: [Selection: ProjectTab] = [:]
     /// The sidebar's Pair a server: its sheet, shown.
     var pairServer = false
     /// The server the sidebar should scroll to, each time anew.
@@ -1085,12 +1082,23 @@ final class AppModel {
         return ProjectTab.tabs(nil)
     }
 
-    /// The shown project's tab in the title row: Overview until the user
-    /// picks another.
+    /// The tabs of the project s shows, this server's or a paired one's.
+    func projectTabs(_ s: Selection) -> [ProjectTab] {
+        guard !s.server.isEmpty else { return projectTabs }
+        if case .connected(let h) = phase { return ProjectTab.paired(h) }
+        return ProjectTab.paired(nil)
+    }
+
+    /// The shown project's tab in the title row: the one it was left on,
+    /// across a relaunch too (nav), while this tm has it; else Overview.
     var projectTab: ProjectTab {
-        get { nav.selection.flatMap { projectTabsShown[$0] } ?? .overview }
+        get {
+            guard let s = nav.selection, let t = nav.projectTabs[s].flatMap(ProjectTab.init(rawValue:)),
+                  projectTabs(s).contains(t) else { return .overview }
+            return t
+        }
         set {
-            if let s = nav.selection { projectTabsShown[s] = newValue }
+            if let s = nav.selection { nav.projectTabs[s] = newValue.rawValue }
         }
     }
 
