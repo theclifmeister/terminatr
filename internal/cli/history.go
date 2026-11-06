@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/theclifmeister/terminatr/internal/history"
 	"github.com/theclifmeister/terminatr/internal/proto"
@@ -10,10 +11,12 @@ import (
 const historyUsage = `usage: tm history [--project <slug>] [--json]
 
 A project's daily numbers, from tm's own records (the task list, its
-archive and the journal), never git: the first record, the counts of
-done, open and dropped tasks, the best day, the typical time from start
-to done (the median, from 10 timed tasks), then done per day, only
-the days with work, in this machine's time zone.`
+archive and the journal): the first record, the counts of done, open and
+dropped tasks, the best day, the typical time from start to done (the
+median, from 10 timed tasks), then done per day, only the days with work,
+in this machine's time zone. Git adds only each repo's releases, from its
+local tags (the setting release_tags says which count), never added up
+across repos.`
 
 // runHistory is tm history (docs/SPEC.md §5.1, History). Forwarded, it
 // runs in the server, on the server's index; with no server it reads the
@@ -63,7 +66,25 @@ func printHistory(e *Env, h proto.History) {
 	} else {
 		fmt.Fprintf(e.Stdout, "typical       shows from %d timed tasks; %d so far\n", proto.TypicalFrom, h.Timed)
 	}
+	if words := releaseWords(h.Releases); words != "" {
+		fmt.Fprintf(e.Stdout, "releases      %s\n", words)
+	}
 	for _, d := range h.Days {
 		fmt.Fprintf(e.Stdout, "%s  %d\n", d.Day, d.Done)
 	}
+}
+
+// releaseWords lists each repo's count, a monorepo's by part, never a
+// total: "terminatr 128 · site 6", "mono api 3 · mono web 2".
+func releaseWords(repos []proto.HistoryRepo) string {
+	var words []string
+	for _, r := range repos {
+		if len(r.Parts) == 0 {
+			words = append(words, fmt.Sprintf("%s %d", r.Repo, r.Count))
+		}
+		for _, p := range r.Parts {
+			words = append(words, strings.TrimSpace(fmt.Sprintf("%s %s", r.Repo, p.Part))+fmt.Sprintf(" %d", p.Count))
+		}
+	}
+	return strings.Join(words, " · ")
 }

@@ -464,6 +464,9 @@ struct ProjectMenu: View {
         if app.actsOnSidebar, !LinkMessageForm.writable(project).isEmpty {
             Button("Write to Linked Project…") { app.showLinkMessage(project) }
         }
+        if app.setsReleaseTags {
+            Button("Release Tags…") { app.showReleaseTags(project) }
+        }
     }
 }
 

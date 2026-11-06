@@ -327,6 +327,7 @@ func TestCopies(t *testing.T) {
 	check("task.get", homeOf(taskOf), nil)
 	check("task.done", homeOf(doneTasksOf), nil)
 	check("project.history", homeOf(historyOf), nil)
+	check("release.tags", homeOf(releaseTagsOf), nil)
 	// Programs (app API 44): the members' read splits them into
 	// (server, project); a task's after refs, and the
 	// paths of a renamed or deleted program's folder, stay home.
@@ -504,6 +505,11 @@ func TestParamsCopies(t *testing.T) {
 	}
 	if _, err := m.toServer(json.RawMessage(`{"project":"web","mod":"ci","on":true,"grants":["net"]}`)); err == nil {
 		t.Error("mods.set took grants")
+	}
+	m, _ = Lookup(proto.MethodReleaseTagsSet)
+	p, err = m.toServer(json.RawMessage(`{"project":"web","mode":"patterns","patterns":["prod-*"]}`))
+	if sp, ok := p.(proto.ReleaseTagsSetParams); err != nil || !ok || sp.Project != "web" || sp.Mode != "patterns" || len(sp.Patterns) != 1 {
+		t.Errorf("release.tags.set params %+v %v", p, err)
 	}
 	m, _ = Lookup(proto.MethodModsSetting)
 	p, err = m.toServer(json.RawMessage(`{"project":"web","mod":"ci","key":"n","value":{"type":"int","int":3}}`))
@@ -684,6 +690,7 @@ func TestAllowlist(t *testing.T) {
 		proto.MethodPeerPagesRead, proto.MethodPeerLibraryList, proto.MethodPeerLibraryRead, proto.MethodPeerLibraryThumbnail, proto.MethodPeerDesignList, proto.MethodPeerHistory,
 		MethodDeviceNonce, MethodDeviceBye, MethodDeviceList, MethodDevicePair, MethodDevicePairWait, MethodDevicePairAnswer, MethodDeviceAccess,
 		MethodDeviceName, MethodDeviceRemove, proto.MethodModsList, proto.MethodModsSet, proto.MethodModsSetting,
+		proto.MethodReleaseTags, proto.MethodReleaseTagsSet,
 		proto.MethodProgramGet, proto.MethodProgramNeeds, proto.MethodProgramRead, proto.MethodProgramSearch, proto.MethodProgramSearchTimeline,
 		proto.MethodProgramSearchShow, proto.MethodProgramRoute, proto.MethodProgramTaskEdit, proto.MethodProgramSend, proto.MethodProgramAnswer,
 		proto.MethodProgramUmbrellaAccept, proto.MethodProgramUmbrellaSendBack, proto.MethodProgramRename, proto.MethodProgramDelete, proto.MethodProgramOpen,
@@ -703,6 +710,11 @@ func TestAllowlist(t *testing.T) {
 			}
 		}
 	}
+	for _, name := range []string{proto.MethodReleaseTags, proto.MethodReleaseTagsSet} {
+		if m, _ := Lookup(name); !m.MacOnly() {
+			t.Errorf("%s reaches a device", name)
+		}
+	}
 	for _, name := range []string{proto.MethodFilesList, proto.MethodFilesRead, proto.MethodFilesStamp, proto.MethodFilesDiff, proto.MethodFilesRepos} {
 		if m, _ := Lookup(name); !m.MacOnly() || m.Write {
 			t.Errorf("%s: mac-only %v, write %v", name, m.MacOnly(), m.Write)
@@ -715,6 +727,7 @@ func TestAllowlist(t *testing.T) {
 		MethodDeviceList: false, MethodDevicePair: true, MethodDevicePairWait: true, MethodDevicePairAnswer: true,
 		MethodDeviceAccess: true, MethodDeviceName: true, MethodDeviceRemove: true,
 		proto.MethodModsList: false, proto.MethodModsSet: true, proto.MethodModsSetting: true,
+		proto.MethodReleaseTags: false, proto.MethodReleaseTagsSet: true,
 		proto.MethodProgramGet: false, proto.MethodProgramNeeds: false, proto.MethodProgramRead: false, proto.MethodProgramSearch: false,
 		proto.MethodProgramRoute: true, proto.MethodProgramTaskEdit: true, proto.MethodProgramSend: true, proto.MethodProgramAnswer: true,
 		proto.MethodProgramUmbrellaAccept: true, proto.MethodProgramUmbrellaSendBack: true, proto.MethodProgramRename: true, proto.MethodProgramDelete: true, proto.MethodProgramOpen: true,
