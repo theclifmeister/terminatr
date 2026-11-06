@@ -146,6 +146,11 @@ type SideTask struct {
 	// After are the tasks it comes after, with their states (task.get
 	// only; programs design §6.3).
 	After []SideAfter `json:"after,omitempty"`
+	// WaitsFor are the tasks it still comes after, and Waiters how many
+	// open tasks come after it (the board's list only: waits-for on a
+	// row, boardWaits).
+	WaitsFor []string `json:"waits_for,omitempty"`
+	Waiters  int      `json:"waiters,omitempty"`
 }
 
 // sideTask is t on the wire.
@@ -526,10 +531,12 @@ func (sn *projectSnap) detail(sp SideProject, own []string) SideProject {
 	sp.Goal, sp.Repos, sp.Own = sn.p.Meta.Goal, sn.p.Repos, own
 	if sn.board != nil {
 		sp.Counts = project.Counts(sn.board)
+		waits := boardWaits(nil, sn.p.Slug, sn.board)
 		for _, t := range sn.board.Tasks {
 			if g := tasks.GroupOf(t.Status); g == tasks.OnDeck || g == tasks.Backlog {
 				st := sideTask(t)
 				st.Notes, st.Steps = "", nil
+				st.WaitsFor, st.Waiters = waits.After[t.ID], waits.Waiters[t.ID]
 				sp.Board = append(sp.Board, st)
 			}
 		}

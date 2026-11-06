@@ -355,7 +355,7 @@ func (s *Server) modMethods(b *modbroker.Broker) {
 			return nil, err
 		}
 		items, _ := p.Inbox()
-		return modTasks(board, items), nil
+		return modTasks(p.Slug, board, items), nil
 	})
 	b.Handle("designs.list", mod.PermProjectRead, func(_ context.Context, c *modbroker.Call) (any, error) {
 		p, err := modProject(c, &struct{}{})
@@ -558,8 +558,9 @@ func (s *Server) modRaise(_ context.Context, c *modbroker.Call) (any, error) {
 
 // modTasks is $.tasks.list's answer: board's tasks, in board order, with
 // what the unhandled items ask about each.
-func modTasks(board *tasks.Board, items []project.Item) []ModTask {
+func modTasks(slug string, board *tasks.Board, items []project.Item) []ModTask {
 	out := []ModTask{}
+	waits := boardWaits(nil, slug, board)
 	for _, t := range board.Tasks {
 		steps := make([]modapi.TaskStep, 0, len(t.Steps))
 		for _, st := range t.Steps {
@@ -568,7 +569,8 @@ func modTasks(board *tasks.Board, items []project.Item) []ModTask {
 		out = append(out, ModTask{ID: t.Ref(), Title: t.Title, Status: string(t.Status),
 			StepsDone: t.StepsDone(), StepsTotal: len(t.Steps), Thread: t.Thread,
 			Steps: steps, Updated: t.Updated, Asked: project.TaskAsked(items, t.Ref()),
-			Design: t.Design, After: taskRefs(t.After), Priority: string(t.Priority)})
+			Design: t.Design, After: taskRefs(t.After), Priority: string(t.Priority),
+			WaitsFor: waits.After[t.ID], Waiters: waits.Waiters[t.ID]})
 	}
 	return out
 }

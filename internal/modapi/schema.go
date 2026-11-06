@@ -157,6 +157,11 @@ type Task struct {
 	// Mod API 1.13: its priority, must, should or could; none while it
 	// has none. The list is in board order: by group, then priority.
 	Priority string `json:"priority,omitempty"`
+	// Mod API 1.14: the tasks it still comes after ("T10", or another
+	// project's "acme-api/T12"), none once they are done or dropped, and
+	// how many open tasks of the board come after it.
+	WaitsFor []string `json:"waits_for,omitempty"`
+	Waiters  int      `json:"waiters,omitempty"`
 }
 
 // TaskStep is one step of a task (mod API 1.2).

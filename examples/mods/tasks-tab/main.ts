@@ -106,10 +106,24 @@ function priority(p: string | undefined): TM.Span[] {
   return [{ text: p, role: role[p] }];
 }
 
+// waitWords is what a row says of the after links, tm's WaitWords: the
+// first two unmet links and "+N" for more, then how many tasks wait for it.
+function waitWords(t: TM.Task): string {
+  const refs = t.waits_for ?? [];
+  const out: string[] = [];
+  if (refs.length > 0) out.push("after " + refs.slice(0, 2).join(", ") + (refs.length > 2 ? ` +${refs.length - 2}` : ""));
+  if ((t.waiters ?? 0) > 0) out.push(`${t.waiters} wait`);
+  return out.join(" · ");
+}
+
 // row is task t's row; prio says the list has a priority column.
 function row(project: string, t: TM.Task, prio: boolean): TM.Value {
   const rest: TM.Span[] = [];
   if (t.asked) rest.push({ text: "asked the coordinator", role: "warn" });
+  // Waits-for (mod API 1.14): "after T9" while a link is unmet, "2 wait"
+  // on the task they wait for; nothing once the link is met.
+  const waits = waitWords(t);
+  if (waits) rest.push({ text: (rest.length > 0 ? "  " : "") + waits, role: "faint" });
   const more = [t.steps_total > 0 ? `${t.steps_done}/${t.steps_total}` : "", t.thread ?? ""].filter((s) => s !== "").join(" ");
   if (more) rest.push({ text: (rest.length > 0 ? "  " : "") + more, role: "faint" });
   const r: Record<string, TM.Value> = {

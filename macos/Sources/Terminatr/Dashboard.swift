@@ -531,6 +531,15 @@ private struct BoardRow: View {
                         TaskActs(project: project, task: task.ref, status: task.status)
                     }
                 }
+                let waits = Waits.words(task)
+                if !waits.isEmpty {
+                    Text(waits)
+                        .font(theme.sized(Flat.label))
+                        .foregroundStyle(theme.muted)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .help(Waits.spoken(task))
+                }
                 if acts {
                     TaskOutcome(project: project, task: task.ref)
                 }
