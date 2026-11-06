@@ -300,9 +300,6 @@ func TestCopies(t *testing.T) {
 		// A need filled whole is an escape's, whose menu and dialog
 		// never cross (checked below, without Escape).
 		".Peers[].NeedsCap", ".Peers[].Projects[].Needs[].Approval", ".Peers[].Projects[].Needs[].Question",
-		// Whether a paired server's files can be read: no console says
-		// so yet.
-		".Peers[].Projects[].PeerProject.Files",
 	})
 	check("peer.list needs", homeOf(func(n proto.PeerNeed) PeerNeed {
 		n.Escape = false

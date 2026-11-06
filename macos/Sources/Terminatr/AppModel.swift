@@ -1403,13 +1403,13 @@ final class AppModel {
         try await connected().call(AppAPI.Methods.taskDone, AppAPI.ProjectParams(project: project)).tasks
     }
 
-    /// Whether this tm answers a project's daily numbers (app API 56).
+    /// Whether this tm answers a project's daily numbers (app API 57).
     var readsHistory: Bool {
         if case .connected(let h) = phase { return Compatibility.readsHistory(h) }
         return false
     }
 
-    /// Whether this tm asks a paired server for its numbers (app API 56).
+    /// Whether this tm asks a paired server for its numbers (app API 57).
     var readsPeerHistory: Bool {
         if case .connected(let h) = phase { return Compatibility.readsPeerHistory(h) }
         return false

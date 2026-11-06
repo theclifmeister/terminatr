@@ -320,7 +320,7 @@ func TestBridgeTaskActions(t *testing.T) {
 	if err := c.Call(proto.MethodTaskDone, appapi.ProjectParams{Project: "web"}, &done); err != nil || done.Tasks == nil || len(done.Tasks) != 0 {
 		t.Fatalf("task.done: %+v %v", done, err)
 	}
-	// project.history (app API 56): the numbers, an empty list and not null.
+	// project.history (app API 57): the numbers, an empty list and not null.
 	var hist appapi.History
 	if err := c.Call(proto.MethodProjectHistory, appapi.ProjectParams{Project: "web"}, &hist); err != nil || hist.Days == nil {
 		t.Fatalf("project.history: %+v %v", hist, err)

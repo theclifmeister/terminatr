@@ -41,7 +41,9 @@ type PeerProjects struct {
 // PeerProject is one shared project as the list shows it: its goal line,
 // whether it is paused, and its counts. Pages: the answering server's
 // project pages switch for the caller is on for it (§16.17), from a
-// server whose hello lists pages.
+// server whose hello lists pages. Files: its files switch for the caller
+// is on for it, from a server whose hello lists worktree: only what the
+// last list said, since every read asks that server again.
 type PeerProject struct {
 	Project  string `json:"project"`
 	Goal     string `json:"goal,omitempty"`

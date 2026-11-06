@@ -715,6 +715,10 @@ type Peer struct {
 	// alone doesn't change Gen.
 	Version string  `json:"version,omitempty"`
 	RTT     float64 `json:"rtt_ms,omitempty"`
+	// Worktree (app API 56): its tm can share its folders; a project's
+	// Files says whether it does with this server. Without, it runs an
+	// older tm, and is never asked.
+	Worktree bool `json:"worktree,omitempty"`
 }
 
 // PeerProject is a project a paired server shares: its goal line,
@@ -748,6 +752,11 @@ type PeerProject struct {
 	// board, overview and library read through peer.pages-read and
 	// peer.library-list.
 	Pages bool `json:"pages,omitempty"`
+	// Files (app API 56): that server's files switch for this one is on
+	// for the project, as its last project list said: its sessions' folders
+	// read through the files methods, which ask it each time. Only a flag:
+	// a device reaches none of those methods.
+	Files bool `json:"files,omitempty"`
 	// Program (app API 44) is the program on this server the project is
 	// a member of, while programs are on: the "· acme" tag. It is listed
 	// both under its program and under this server.
@@ -1044,7 +1053,7 @@ func peerListOf(l proto.PeerList) PeerList {
 		peer := Peer{Alias: p.Alias, Name: p.Name, ID: p.ID, State: p.State, Reason: p.Reason, Since: p.Since,
 			Projects: make([]PeerProject, 0, len(p.Projects)), ShareWaits: proto.ShareWaits([]proto.PeerMirror{p}),
 			Pane: p.Pane, Panes: p.Panes, Transcript: p.Transcript, Conversations: p.Conversations, Needs: p.Needs, Picks: p.NeedPicks, Uploads: p.Uploads,
-			Version: textsafe.Line(p.Version, 40), RTT: p.RTT}
+			Version: textsafe.Line(p.Version, 40), RTT: p.RTT, Worktree: p.Worktree}
 		for _, q := range p.Shares {
 			if !q.Out && q.Pending() {
 				peer.ShareRequests = append(peer.ShareRequests, shareRequestOf(q))
@@ -1053,7 +1062,7 @@ func peerListOf(l proto.PeerList) PeerList {
 		offset := time.Duration(p.Offset) * time.Millisecond
 		for _, pp := range p.Projects {
 			pr := PeerProject{Project: pp.Project, Goal: pp.Goal, Paused: pp.Paused, NeedsYou: pp.NeedsYou,
-				Threads: pp.Threads, Ready: pp.Ready, Stale: pp.Stale, Synced: pp.Synced, Sessions: []PeerSession{}, Pages: pp.Pages,
+				Threads: pp.Threads, Ready: pp.Ready, Stale: pp.Stale, Synced: pp.Synced, Sessions: []PeerSession{}, Pages: pp.Pages, Files: pp.Files,
 				Watched: []PeerThread{}, Needs: []PeerNeed{}, Program: progs[p.Alias+"/"+pp.Project]}
 			if pp.Watch != nil {
 				for _, w := range pp.Watch.Threads {

@@ -1,6 +1,6 @@
 import Foundation
 
-/// When to read a project's daily numbers (project.history, app API 56)
+/// When to read a project's daily numbers (project.history, app API 57)
 /// again: when the board's done count changed, as the Done fold reads
 /// task.done, never on a timer. The server keeps the numbers in memory,
 /// but a project's journal moves every few seconds while agents work, and

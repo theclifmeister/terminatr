@@ -2,17 +2,17 @@ import Foundation
 import Testing
 @testable import TerminatrKit
 
-// A project's daily numbers (app API 56): gated on the hello, so a tm or
+// A project's daily numbers (app API 57): gated on the hello, so a tm or
 // a server without them hides what draws them; read again only when the
 // done count moves.
 
-@Test func historyNeedsAPI56AndTheCap() {
+@Test func historyNeedsAPI57AndTheCap() {
     let caps = AppAPI.Server(version: "0.83.0", protocol: 39, caps: ["history", "peer-history"])
-    var h = AppAPI.Hello(appApi: 56, tm: "0.83.0", build: "", methods: ["project.history", "peer.history"], server: caps)
+    var h = AppAPI.Hello(appApi: 57, tm: "0.83.0", build: "", methods: ["project.history", "peer.history"], server: caps)
     #expect(Compatibility.readsHistory(h) && Compatibility.readsPeerHistory(h))
-    h.appApi = 55
-    #expect(!Compatibility.readsHistory(h) && !Compatibility.readsPeerHistory(h))
     h.appApi = 56
+    #expect(!Compatibility.readsHistory(h) && !Compatibility.readsPeerHistory(h))
+    h.appApi = 57
     h.server = AppAPI.Server(version: "0.82.0", protocol: 38, caps: [])
     #expect(!Compatibility.readsHistory(h) && !Compatibility.readsPeerHistory(h))
     h.server = caps
