@@ -54,7 +54,10 @@ struct TabStack<Content: View>: View {
 /// A session opened from outside its project (Needs you, a program's
 /// Needs you) has neither project nor program on the path: its bar's
 /// button puts it there (showParent), in the list column beside the
-/// session, as if opened from it (T994).
+/// session, as if opened from it (T994). Each column's screen has Back
+/// (T1071): whichever is tapped, the path drops its last route, so the pair
+/// moves back, and with one route left the detail empties beside the tab's
+/// own list, which has none.
 struct Columns<Content: View>: View {
     @Environment(\.theme) private var theme
     @Binding var path: [Route]
@@ -114,6 +117,10 @@ struct Columns<Content: View>: View {
         }
     }
 
+    private func goBack() {
+        if !path.isEmpty { path.removeLast() }
+    }
+
     /// The bar's way to the detail's project or program while the path
     /// holds neither: it goes in just before the detail, which stays as
     /// it is, so Back then leads from the project to the tab's list.
@@ -142,19 +149,11 @@ struct Columns<Content: View>: View {
                 if let list { RouteScreen(route: list) } else { root() }
             }
             .modifier(InnerEdge(edge: .trailing))
-            .toolbar {
-                if n >= 2 {
-                    ToolbarItem(placement: .topBarLeading) {
-                        Button("Back", systemImage: "chevron.left") { path.removeLast() }
-                            .accessibilityHint("Shows the list before this one")
-                    }
-                }
-            }
             .destinations()
         }
         .environment(\.navigate, Navigate(open: path.last) { r in path = Array(path.prefix(max(n - 1, 0))) + [r] })
         // The Back of a screen with its own bar (ScreenBar).
-        .environment(\.back, n >= 2 ? GoBack { path.removeLast() } : nil)
+        .environment(\.back, n >= 2 ? GoBack(action: goBack) : nil)
         .id(list)
     }
 
@@ -174,6 +173,7 @@ struct Columns<Content: View>: View {
             .destinations()
         }
         .environment(\.navigate, Navigate(open: nil) { path.append($0) })
+        .environment(\.back, detail != nil ? GoBack(action: goBack) : nil)
         .environment(\.showParent, showParent(folded: folded))
         .environment(\.showList, folded ? ShowList(shown: listShown) { show(!listShown) } : nil)
         .environment(\.ground, .gutter)

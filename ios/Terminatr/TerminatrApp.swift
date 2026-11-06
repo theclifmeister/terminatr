@@ -626,6 +626,7 @@ struct RouteScreen: View {
             } else {
                 ContentUnavailableView("Not paired with this server now", systemImage: "iphone.slash")
                     .backdrop()
+                    .screenBar(bare: true) { EmptyView() }
             }
         } else {
             BaseRouteScreen(route: route)
@@ -679,9 +680,9 @@ private struct BackdropModifier: ViewModifier {
 /// colour across the width under it, with the line over it, so nothing
 /// scrolls behind the bar's glass. iOS draws the bar itself and keeps its
 /// glass capsule (ios/README.md, Flat look); on the solid band it shows the
-/// band's colour. Only under a bar: a screen that hides it (a session on a
-/// phone's width) has only the home indicator's inset, and its composer's
-/// colour. Not the keyboard's height: it covers the band.
+/// band's colour. Only under a bar: a Duo's rail is beside the screen, which
+/// has only the home indicator's inset below it, and its composer's colour.
+/// Not the keyboard's height: it covers the band.
 private struct TabBand: ViewModifier {
     @Environment(\.theme) private var theme
     @State private var inset: CGFloat = 0
@@ -697,7 +698,8 @@ private struct TabBand: ViewModifier {
                     theme.chrome
                         .frame(height: inset)
                         .overlay(alignment: .top) { theme.line.frame(height: 1) }
-                        .ignoresSafeArea(.container, edges: .bottom)
+                        // Behind the keyboard, not over what stands on it.
+                        .ignoresSafeArea(edges: .bottom)
                         .allowsHitTesting(false)
                         .accessibilityHidden(true)
                 }

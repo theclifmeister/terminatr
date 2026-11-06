@@ -3,7 +3,7 @@ import TerminatrUI
 import UIKit
 
 /// A screen's own bar (T925, T1001), in place of the navigation bar and
-/// its glass buttons: Back, when there is somewhere to go back to, and the
+/// its glass buttons: Back on every screen reached by navigation, and the
 /// screen's trailing buttons, pinned over its top on the screen's solid
 /// colour, laid out by the screen's gutter as its content is. The
 /// navigation bar keeps its own margins whatever the screen's: 16 pt on an
@@ -26,8 +26,9 @@ struct ScreenBar<Trailing: View>: ViewModifier {
     var bare = false
     @ViewBuilder let trailing: () -> Trailing
 
-    /// Back to the list before this one in the columns (Columns sets it),
-    /// else out of the stack it was pushed on; at the root of a column, none.
+    /// Back along the path in the columns (Columns sets it), else out of
+    /// the stack it was pushed on, to the tab's root if it opened straight
+    /// there; a tab's root has nowhere to go back to, so none.
     private var go: (() -> Void)? {
         back?.action ?? (pushed ? { dismiss() } : nil)
     }
@@ -44,9 +45,7 @@ struct ScreenBar<Trailing: View>: ViewModifier {
     private var row: some View {
         HStack(spacing: Spacing.item) {
             if let go {
-                Button("Back", systemImage: "chevron.left", action: go)
-                    .buttonStyle(.circle)
-                    .accessibilityIdentifier("BackButton")
+                BackButton(action: go)
             }
             if let title {
                 Text(title)
@@ -66,6 +65,18 @@ struct ScreenBar<Trailing: View>: ViewModifier {
         .overlay(alignment: .bottom) {
             if title != nil { theme.line.frame(height: 1) }
         }
+    }
+}
+
+/// The one Back of every screen (T1071): ScreenBar's and the session's bar.
+struct BackButton: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button("Back", systemImage: "chevron.left", action: action)
+            .buttonStyle(.circle)
+            .hoverEffect()
+            .accessibilityIdentifier("BackButton")
     }
 }
 
@@ -118,7 +129,7 @@ extension View {
     }
 }
 
-/// Goes back to the list before this one in the columns (Columns).
+/// Goes back one screen along the columns' path (Columns).
 struct GoBack {
     let action: () -> Void
 }
@@ -130,7 +141,7 @@ struct ShowList {
 }
 
 extension EnvironmentValues {
-    /// The columns' Back, nil outside them or with no list before.
+    /// The columns' Back, nil outside them or at the tab's own list.
     @Entry var back: GoBack?
     /// The list button of a session that folds the list away.
     @Entry var showList: ShowList?
