@@ -297,3 +297,73 @@ private final class Chunks: @unchecked Sendable {
     let f = AppAPI.LibraryFile(thread: "t-1", title: "x", state: "open", name: "n.md", size: 1, time: Date())
     #expect(FileMention.text(.attached(f), root: "", relative: false) == "n.md (attached by t-1)")
 }
+
+private func diff(_ status: String, hunks: [AppAPI.FilesHunk] = []) -> AppAPI.FilesDiff {
+    AppAPI.FilesDiff(name: "f", path: "f", status: status, hunks: hunks)
+}
+
+@Test func aChangedFilesMarksPutRemovedLinesWhereTheyWent() throws {
+    let d = diff("M", hunks: [
+        AppAPI.FilesHunk(old: 1, new: 1, removed: ["gone"]),
+        AppAPI.FilesHunk(old: 3, new: 2, added: 1),
+        AppAPI.FilesHunk(old: 9, new: 9, added: 2, removed: ["past"]),
+    ])
+    let m = try #require(FileMarks.of("a\nb\nc\n", d))
+    #expect(m.text == "gone\na\nb\nc\npast")
+    #expect(m.kinds == [.removed, .same, .added, .same, .removed])
+    #expect(m.numbers == [1, 1, 2, 3, 9])
+    #expect(m.firstChange == 0)
+}
+
+@Test func marksSayNothingOfAFileWithNoLinesToMark() {
+    #expect(FileMarks.of("a\n", diff("")) == nil)
+    #expect(FileMarks.of("a\n", diff("M")) == nil)
+    #expect(FileMarks.of("", diff("A")) == nil)
+    var big = diff("M", hunks: [AppAPI.FilesHunk(old: 1, new: 1, added: 1)])
+    big.tooBig = true
+    #expect(FileMarks.of("a\n", big) == nil)
+}
+
+@Test func aNewFileIsAllAddedAndADeletedOneAllRemoved() throws {
+    let new = try #require(FileMarks.of("a\n\nb", diff("A")))
+    #expect(new.kinds == [.added, .added, .added])
+    #expect(new.numbers == [1, 2, 3])
+    let gone = try #require(FileMarks.of("", diff("D", hunks: [AppAPI.FilesHunk(old: 1, new: 1, removed: ["x", "y"])])))
+    #expect(gone.text == "x\ny")
+    #expect(gone.kinds == [.removed, .removed])
+    #expect(gone.numbers == [1, 2])
+}
+
+@Test func aFileOpensAtItsFirstChange() throws {
+    let m = try #require(FileMarks.of("a\nb\nc\n", diff("M", hunks: [AppAPI.FilesHunk(old: 3, new: 3, added: 1)])))
+    #expect(m.firstChange == 2)
+}
+
+@Test func theChangeLineSaysWhatChanged() {
+    var d = diff("M")
+    #expect(FileChange.words(diff("")) == nil)
+    #expect(FileChange.words(d) == .init(lead: "Changed", added: nil, deleted: nil, since: nil))
+    d.added = 2
+    d.deleted = 3
+    d.base = "origin/main"
+    #expect(FileChange.words(d) == .init(lead: nil, added: 2, deleted: 3, since: "since origin/main"))
+    d.from = "old.go"
+    #expect(FileChange.words(d)?.lead == "Renamed from old.go")
+    var new = diff("A")
+    new.added = 4
+    #expect(FileChange.words(new) == .init(lead: "New", added: 4, deleted: nil, since: nil))
+    var gone = diff("D")
+    gone.deleted = 4
+    #expect(FileChange.words(gone) == .init(lead: "Deleted", added: nil, deleted: 4, since: nil))
+}
+
+@Test func aDeletedFileWithNoLinesSaysWhy() {
+    var d = diff("D")
+    #expect(FileChange.deleted("f", d) == nil)
+    d.binary = true
+    d.size = 900
+    #expect(FileChange.deleted("f", d)?.contains("wasn't text") == true)
+    d.binary = false
+    d.tooBig = true
+    #expect(FileChange.deleted("f", d)?.contains("too big") == true)
+}

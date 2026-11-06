@@ -1,0 +1,65 @@
+no changes: same.go · 6 B
+│a
+│b
+│c
+opens at row 0
+
+modified: edit.go · 69 B · +2 −3 since origin/main
+│  one
+│− two
+│+ TWO
+│  three
+│− four
+│− five
+│  six
+│+ yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy
+│  yyyyyyyyyyyy
+opens at row 1
+
+renamed: moved.go · 4 B · renamed from old.go +1 −1 since origin/main
+│  a
+│− b
+│+ B
+opens at row 1
+
+new: new.go · 25 B · new +3 since origin/main
+│+ package new
+│+
+│+ func N() {}
+opens at row 0
+
+deleted: gone.go · 20 B · deleted −2 since origin/main
+│− package gone
+│− func G() {}
+│
+│deleted from the worktree: this is what it held
+opens at row 0
+
+deleted, binary: gone.png · 900 B · deleted since origin/main
+│not text: only its name and size show
+opens at row 0
+
+deleted, over-size: gone.log · 3.1 MB · deleted −9000 since origin/main
+│too big to show what it held
+opens at row 0
+
+binary: pic.png · 900 B · changed since origin/main
+│not text: only its name and size show
+opens at row 0
+
+over-size: big.go · 3.1 MB · +12 −3 since origin/main
+│big
+│big
+│big
+│big
+│big
+│big
+│big
+│big
+│big
+│big
+│big
+│big
+│… shows the first 1.0 MB · too big to mark its changes
+opens at row 0
+

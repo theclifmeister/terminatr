@@ -94,6 +94,9 @@ type Changeset struct {
 	Branch string `json:"branch,omitempty"`
 	Base   string `json:"base,omitempty"`
 	Head   string `json:"head,omitempty"`
+	// From is the commit the changes count from: the merge base in
+	// ModeBase, else HEAD, else the empty tree.
+	From string `json:"-"`
 	// Ahead is how many commits HEAD has since the base, Unpushed how
 	// many of them origin/<branch> lacks, Pushed whether origin/<branch>
 	// exists.
@@ -198,6 +201,7 @@ func Read(ctx context.Context, dir string, o Options) (*Changeset, error) {
 	if o.Mode == ModeBase && mb != "" {
 		from = mb
 	}
+	cs.From = from
 
 	status, _ := g.out(MaxOutput, "status", "--porcelain=v1", "-z", "--untracked-files=all")
 	dirty, untracked := parseStatus(status)
