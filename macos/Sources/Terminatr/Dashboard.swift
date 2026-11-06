@@ -35,6 +35,13 @@ struct ProjectDashboard: View {
     /// The groups with a read on its way.
     @State private var reading: Set<String> = []
     @State private var doneError: String?
+    /// The project's numbers, read for the Pulse, again when the board's
+    /// done count or the day changes; nil before, or on a tm without them.
+    @State private var history: AppAPI.History?
+    /// The Pulse's bar the board is filtered to, by its first day, and its
+    /// tasks once read.
+    @State private var pick: String?
+    @State private var picked: [AppAPI.Task]?
 
     var body: some View {
         ScrollView {
@@ -56,11 +63,25 @@ struct ProjectDashboard: View {
     @ViewBuilder
     private var boardPage: some View {
         let deck = Dashboard.onDeck(project), backlog = Dashboard.backlog(project)
-        let doneCount = app.listsDone ? max(Dashboard.doneCount(project), ledger.total) : 0
+        // With the numbers read, the archive's too, as the Pulse above it says.
+        let doneCount = app.listsDone ? max(Dashboard.doneCount(project), ledger.total, history?.done ?? 0) : 0
         if !deck.isEmpty || !backlog.isEmpty || doneCount > 0 {
             PaneFilter(prompt: "Filter tasks", label: "Filter the board's tasks",
                        help: "Shows the tasks whose id or title has these words, the done ones too", text: $filter)
-            boardGroups(deck: deck, backlog: backlog, doneCount: doneCount)
+            let band = PulseBand(history)
+            if let band {
+                PulseBandView(band: band, pick: $pick)
+            }
+            if let band, let bar = band.bar(from: pick) {
+                pickedTasks(bar, unit: band.unit)
+            } else {
+                boardGroups(deck: deck, backlog: backlog, doneCount: doneCount)
+            }
+            Color.clear.frame(height: 0)
+                .task(id: PulseRead(project: project.slug, count: Dashboard.doneCount(project), day: Calendar.current.startOfDay(for: .now))) {
+                    let read = try? await app.history(project.slug)
+                    if !Task.isCancelled { history = read }
+                }
         } else {
             Text("Nothing on the board yet: + adds a task.")
                 .foregroundStyle(theme.muted)
@@ -179,6 +200,50 @@ struct ProjectDashboard: View {
 
     static let inboxShown = 8
     static let deckShown = 3
+
+    /// The board filtered to a bar of the Pulse: what finished then, and
+    /// nothing else, as open tasks finished on no day.
+    private func pickedTasks(_ bar: AppAPI.PulseBar, unit: String) -> some View {
+        let shown = Dashboard.filtered(picked ?? [], by: filter)
+        return VStack(alignment: .leading, spacing: 7) {
+            HStack(spacing: 8) {
+                PaneLabel(bar.tip)
+                Button("Show All") { pick = nil }
+                    .buttonStyle(.link)
+                    .foregroundStyle(theme.action)
+                    .font(theme.sized(Flat.label))
+            }
+            if let doneError {
+                Text(doneError)
+                    .font(theme.body(.subheadline))
+                    .foregroundStyle(theme.attention)
+            } else if picked == nil {
+                ProgressView().controlSize(.small)
+            } else if shown.isEmpty {
+                Text("No task of these matches “\(filter.trimmingCharacters(in: .whitespaces))”.")
+                    .font(theme.body(.subheadline))
+                    .foregroundStyle(theme.muted)
+            } else {
+                HairlineList { ForEach(shown) { BoardRow(project: project.slug, task: $0, timeOnly: unit == "day") } }
+            }
+        }
+        .task(id: bar) {
+            picked = nil
+            do {
+                picked = try await app.doneTasks(project.slug, in: bar)
+                doneError = nil
+            } catch {
+                doneError = Dashboard.words(error)
+            }
+        }
+    }
+
+    /// When the Pulse's numbers are read again.
+    private struct PulseRead: Equatable {
+        let project: String
+        let count: Int
+        let day: Date
+    }
 
     /// The board's groups, as the filter finds their tasks: on deck
     /// shown; the backlog and the done tasks folded (the TUI's b lists
@@ -638,6 +703,120 @@ struct PaneFilter: View {
         .frame(maxWidth: 320, minHeight: 34)
         .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(theme.line, lineWidth: theme.contrast ? 1.5 : 1))
         .help(help)
+    }
+}
+
+/// The Pulse (design board-library, B5 and B16): tasks done per day, week
+/// or month, and dots for when any repo released, at the top of the Board.
+/// A bar filters the board to its tasks; pressed again, it ends the filter.
+/// Hovering says what a bar holds. Narrow, the count stands above the bars.
+private struct PulseBandView: View {
+    @Environment(\.theme) private var theme
+    let band: PulseBand
+    @Binding var pick: String?
+    @State private var hovered: String?
+
+    private static let chart: CGFloat = 46
+    private static let barsHigh: CGFloat = 36
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .bottom, spacing: 14) {
+                stat.fixedSize()
+                chart.frame(minWidth: 260)
+            }
+            VStack(alignment: .leading, spacing: 7) {
+                stat
+                chart
+            }
+        }
+        .padding(.horizontal, 11)
+        .padding(.vertical, 9)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(theme.lineSoft, lineWidth: theme.contrast ? 1.5 : 1))
+    }
+
+    private var stat: some View {
+        VStack(alignment: .leading, spacing: 1) {
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Text("\(band.done)")
+                    .font(theme.sized(19, .semibold))
+                    .monospacedDigit()
+                Text("done").font(theme.sized(Flat.label))
+            }
+            Text(band.facts)
+                .font(theme.sized(Flat.chip))
+                .foregroundStyle(theme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var chart: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            GeometryReader { box in
+                // Under about 3 points a bar, the gap would take it.
+                let gap: CGFloat = box.size.width / CGFloat(band.bars.count) < 3 ? 0.5 : 2
+                HStack(alignment: .bottom, spacing: gap) {
+                    ForEach(band.bars, id: \.from) { barButton($0) }
+                }
+            }
+            .frame(height: band.hasDots ? Self.chart : Self.barsHigh)
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel("Tasks done per \(band.unit)\(band.hasDots ? ", with releases" : "")")
+            axis
+        }
+    }
+
+    private func barButton(_ bar: AppAPI.PulseBar) -> some View {
+        Button {
+            pick = pick == bar.from ? nil : bar.from
+        } label: {
+            VStack(spacing: 0) {
+                Spacer(minLength: 0)
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(theme.action.opacity(opacity(bar)))
+                    .frame(height: band.height(bar, of: Self.barsHigh))
+                if band.hasDots {
+                    Circle()
+                        .fill(bar.released ? theme.muted : .clear)
+                        .frame(width: 5, height: 5)
+                        .padding(.top, 2.5)
+                        .padding(.bottom, 0.5)
+                        .frame(height: Self.chart - Self.barsHigh)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        // Nothing to list: a release alone still says so on hover.
+        .disabled(bar.done == 0)
+        .onHover { hovered = $0 ? bar.from : (hovered == bar.from ? nil : hovered) }
+        .help(bar.tip)
+        .accessibilityLabel(bar.tip)
+        .accessibilityAddTraits(pick == bar.from ? .isSelected : [])
+        .accessibilityHidden(bar.done == 0 && !bar.released)
+    }
+
+    /// Today's stands out, as does the bar picked over the rest.
+    private func opacity(_ bar: AppAPI.PulseBar) -> Double {
+        if let pick, band.bar(from: pick) != nil { return pick == bar.from ? 1 : 0.25 }
+        return bar.from == band.bars.last?.from || hovered == bar.from ? 1 : 0.62
+    }
+
+    /// The ends' names, with what the bar under the pointer holds between.
+    private var axis: some View {
+        HStack(spacing: 8) {
+            Text(band.bars.first?.label ?? "")
+            Spacer(minLength: 0)
+            if let tip = band.bars.first(where: { $0.from == hovered })?.tip {
+                Text(tip).lineLimit(1).foregroundStyle(theme.ink)
+                Spacer(minLength: 0)
+            }
+            Text(band.bars.last?.label ?? "")
+        }
+        .font(theme.sized(10.5))
+        .foregroundStyle(theme.muted)
     }
 }
 

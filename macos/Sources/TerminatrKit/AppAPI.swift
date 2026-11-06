@@ -6,7 +6,7 @@ import Foundation
 /// The terminatr app API (docs/SPEC.md §3.8): what tm app bridge answers.
 public enum AppAPI {
     /// The app API version this app was generated against.
-    public static let version = 68
+    public static let version = 69
 
     public struct AdoptRequestParams: Codable, Sendable, Hashable {
         public var id: String
@@ -1280,8 +1280,9 @@ public enum AppAPI {
         public var typical: String
         public var truncated: Bool
         public var releases: [HistoryRepo]
+        public var pulse: HistoryPulse?
 
-        public init(firstRecord: String = "", done: Int, open: Int, dropped: Int, days: [HistoryDay] = [], bestDay: HistoryDay? = nil, timed: Int, typicalSeconds: Int = 0, typical: String = "", truncated: Bool = false, releases: [HistoryRepo] = []) {
+        public init(firstRecord: String = "", done: Int, open: Int, dropped: Int, days: [HistoryDay] = [], bestDay: HistoryDay? = nil, timed: Int, typicalSeconds: Int = 0, typical: String = "", truncated: Bool = false, releases: [HistoryRepo] = [], pulse: HistoryPulse? = nil) {
             self.firstRecord = firstRecord
             self.done = done
             self.open = open
@@ -1293,6 +1294,7 @@ public enum AppAPI {
             self.typical = typical
             self.truncated = truncated
             self.releases = releases
+            self.pulse = pulse
         }
 
         enum CodingKeys: String, CodingKey {
@@ -1307,6 +1309,7 @@ public enum AppAPI {
             case typical
             case truncated
             case releases
+            case pulse
         }
     }
 
@@ -1337,6 +1340,27 @@ public enum AppAPI {
         enum CodingKeys: String, CodingKey {
             case part
             case count
+        }
+    }
+
+    public struct HistoryPulse: Codable, Sendable, Hashable {
+        public var unit: String
+        public var span: String
+        public var releases: String
+        public var bars: [PulseBar]
+
+        public init(unit: String, span: String, releases: String = "", bars: [PulseBar] = []) {
+            self.unit = unit
+            self.span = span
+            self.releases = releases
+            self.bars = bars
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case unit
+            case span
+            case releases
+            case bars
         }
     }
 
@@ -3674,6 +3698,33 @@ public enum AppAPI {
             case via
             case why
             case running
+        }
+    }
+
+    public struct PulseBar: Codable, Sendable, Hashable {
+        public var from: String
+        public var to: String
+        public var label: String
+        public var done: Int
+        public var released: Bool
+        public var tip: String
+
+        public init(from: String, to: String, label: String, done: Int, released: Bool = false, tip: String) {
+            self.from = from
+            self.to = to
+            self.label = label
+            self.done = done
+            self.released = released
+            self.tip = tip
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case from
+            case to
+            case label
+            case done
+            case released
+            case tip
         }
     }
 
@@ -6039,6 +6090,7 @@ extension AppAPI.History {
         self.typical = try c.decodeIfPresent(String.self, forKey: .typical) ?? ""
         self.truncated = try c.decodeIfPresent(Bool.self, forKey: .truncated) ?? false
         self.releases = try c.decodeIfPresent([AppAPI.HistoryRepo].self, forKey: .releases) ?? []
+        self.pulse = try c.decodeIfPresent(AppAPI.HistoryPulse.self, forKey: .pulse)
     }
 }
 
@@ -6055,6 +6107,16 @@ extension AppAPI.HistoryPart {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.part = try c.decodeIfPresent(String.self, forKey: .part) ?? ""
         self.count = try c.decode(Int.self, forKey: .count)
+    }
+}
+
+extension AppAPI.HistoryPulse {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.unit = try c.decode(String.self, forKey: .unit)
+        self.span = try c.decode(String.self, forKey: .span)
+        self.releases = try c.decodeIfPresent(String.self, forKey: .releases) ?? ""
+        self.bars = try c.decodeIfPresent([AppAPI.PulseBar].self, forKey: .bars) ?? []
     }
 }
 
@@ -7128,6 +7190,18 @@ extension AppAPI.PromptResult {
         self.via = try c.decode(String.self, forKey: .via)
         self.why = try c.decodeIfPresent(String.self, forKey: .why) ?? ""
         self.running = try c.decodeIfPresent(Bool.self, forKey: .running) ?? false
+    }
+}
+
+extension AppAPI.PulseBar {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.from = try c.decode(String.self, forKey: .from)
+        self.to = try c.decode(String.self, forKey: .to)
+        self.label = try c.decode(String.self, forKey: .label)
+        self.done = try c.decode(Int.self, forKey: .done)
+        self.released = try c.decodeIfPresent(Bool.self, forKey: .released) ?? false
+        self.tip = try c.decode(String.self, forKey: .tip)
     }
 }
 

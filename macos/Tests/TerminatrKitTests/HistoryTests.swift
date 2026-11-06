@@ -101,3 +101,54 @@ import Testing
     #expect(f.canSave && none.mode == "none" && none.patterns.isEmpty)
     #expect(f.title(.follow) == "As all projects (version tags)")
 }
+
+// The Pulse (app API 69): tm decides the bars, the Kit says them.
+
+private func bar(_ from: String, done: Int, released: Bool = false) -> AppAPI.PulseBar {
+    AppAPI.PulseBar(from: from, to: from, label: from, done: done, released: released, tip: "\(from): \(done) done")
+}
+
+@Test func noPulseNoBand() throws {
+    #expect(PulseBand(nil) == nil)
+    // 9 done tasks, or an older tm: the field isn't there.
+    let old = #"{"done":9,"open":0,"dropped":0,"days":[],"timed":0}"#
+    let h = try JSONDecoder().decode(AppAPI.History.self, from: Data(old.utf8))
+    #expect(h.pulse == nil && PulseBand(h) == nil)
+    var empty = h
+    empty.pulse = AppAPI.HistoryPulse(unit: "day", span: "7 days")
+    #expect(PulseBand(empty) == nil)
+}
+
+@Test func pulseFactsLeaveOutWhatIsNotThere() throws {
+    var h = AppAPI.History(done: 957, open: 0, dropped: 0, timed: 20, typical: "34 minutes")
+    h.pulse = AppAPI.HistoryPulse(unit: "day", span: "33 days", releases: "128 releases", bars: [bar("a", done: 1, released: true)])
+    var b = try #require(PulseBand(h))
+    #expect(b.facts == "33 days · 128 releases" && b.hasDots && b.done == 957)
+    // A plain folder or no tags: bars only, no empty dot row, no words.
+    h.pulse = AppAPI.HistoryPulse(unit: "day", span: "33 days", bars: [bar("a", done: 1)])
+    b = try #require(PulseBand(h))
+    #expect(b.facts == "33 days" && !b.hasDots)
+    // Slow: weeks, with the typical time, as the TUI says it.
+    h.typical = "2 days"
+    h.pulse = AppAPI.HistoryPulse(unit: "week", span: "5 months", bars: [bar("a", done: 1)])
+    b = try #require(PulseBand(h))
+    #expect(b.facts == "5 months, by week · typical 2 days")
+    // Several repos: tm's words, each repo's, never a total.
+    h.typical = ""
+    h.pulse = AppAPI.HistoryPulse(unit: "day", span: "33 days", releases: "terminatr 128 · site 6 releases", bars: [bar("a", done: 1, released: true)])
+    #expect(try #require(PulseBand(h)).facts == "33 days · terminatr 128 · site 6 releases")
+}
+
+@Test func pulseBarsFilterAndScale() throws {
+    var h = AppAPI.History(done: 11, open: 0, dropped: 0, timed: 0)
+    h.pulse = AppAPI.HistoryPulse(unit: "day", span: "7 days", bars: [bar("a", done: 1), bar("b", done: 0, released: true), bar("c", done: 10)])
+    let b = try #require(PulseBand(h))
+    #expect(b.bar(from: "a")?.done == 1)
+    // No tasks to list on a day with none, and a bar gone ends the filter.
+    #expect(b.bar(from: "b") == nil && b.bar(from: "z") == nil && b.bar(from: nil) == nil)
+    #expect(b.height(b.bars[2], of: 36) == 36 && b.height(b.bars[1], of: 36) == 0)
+    #expect(b.height(b.bars[0], of: 36) == 3.6)
+    var small = h
+    small.pulse?.bars[2].done = 1000
+    #expect(try #require(PulseBand(small)).height(small.pulse!.bars[0], of: 36) == 2)
+}

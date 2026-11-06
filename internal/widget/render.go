@@ -174,6 +174,8 @@ func (lo *layer) widget(w *Widget) {
 		}
 	case KindBars:
 		lo.bars(w)
+	case KindBand:
+		lo.band(w)
 	case KindKeys:
 		lo.keys(w.Keys)
 	}
@@ -430,6 +432,98 @@ func (lo *layer) bars(w *Widget) {
 		s += lo.look.Style("accent", strings.Repeat(block, n)) + strings.Repeat(" ", room-n) + " " + pad(nums[i], nw, true)
 		lo.add(s)
 	}
+}
+
+// bandIndent is where a band's bars start.
+const bandIndent = 2
+
+// band draws Values as one line of bars, a blank for a zero, the dots under
+// them if any, then the ends' labels, or the picked value's. Beside lines go
+// to the right of the bars and the dots, all of them under the band where
+// any doesn't fit. Where the width is short, the newest values show, and
+// the picked one.
+func (lo *layer) band(w *Widget) {
+	if len(w.Values) == 0 {
+		return
+	}
+	cells, dot, nodot, mark := sparkUnicode, "•", "·", "▲"
+	if lo.look.ASCII() {
+		cells, dot, nodot, mark = sparkASCII, "*", ".", "^"
+	}
+	room := max(lo.w-bandIndent, 1)
+	start := max(len(w.Values)-room, 0)
+	if w.Pick > 0 && w.Pick-1 < start {
+		start = w.Pick - 1
+	}
+	end := min(start+room, len(w.Values))
+	top := slices.Max(w.Values)
+	margin := strings.Repeat(" ", bandIndent)
+
+	rows := []string{margin}
+	for i := start; i < end; i++ {
+		c := " "
+		if x := w.Values[i]; x > 0 {
+			c = cells[min(int(x/top*float64(len(cells)-1)+0.5), len(cells)-1)]
+		}
+		role := "accent"
+		if i == w.Pick-1 {
+			role = "warn"
+		}
+		rows[0] += lo.look.Style(role, c)
+	}
+	if slices.Contains(w.Dots, true) {
+		row := margin
+		for i := start; i < end; i++ {
+			if w.Dots[i] {
+				row += dot
+			} else {
+				row += lo.look.Style("faint", nodot)
+			}
+		}
+		rows = append(rows, row)
+	}
+
+	drawn := end - start
+	fits := len(w.Beside) <= len(rows)
+	for _, ss := range w.Beside {
+		fits = fits && bandIndent+drawn+2+ansi.StringWidth(lo.plainSpans(ss)) <= lo.w
+	}
+	for i, row := range rows {
+		if fits && i < len(w.Beside) {
+			row += "  " + lo.spans(w.Beside[i])
+		}
+		lo.add(row)
+	}
+	if s := lo.bandAxis(w, start, end, mark); s != "" {
+		lo.add(margin + lo.look.Style("faint", s))
+	}
+	if !fits {
+		for _, ss := range w.Beside {
+			lo.add(margin + lo.spans(ss))
+		}
+	}
+}
+
+// bandAxis is the line under a band: the mark under the picked value with
+// its label, else the first and the last shown value's labels at the ends
+// of the bars, or the last alone where they don't both fit.
+func (lo *layer) bandAxis(w *Widget, start, end int, mark string) string {
+	if len(w.Labels) == 0 {
+		return ""
+	}
+	if w.Pick > 0 {
+		col, label := w.Pick-1-start, w.Labels[w.Pick-1]
+		if col+2+ansi.StringWidth(label) <= lo.w-bandIndent {
+			return strings.Repeat(" ", col) + mark + " " + label
+		}
+		return strings.Repeat(" ", max(col-ansi.StringWidth(label)-1, 0)) + label + " " + mark
+	}
+	first, last := w.Labels[start], w.Labels[end-1]
+	gap := end - start - ansi.StringWidth(first) - ansi.StringWidth(last)
+	if gap < 1 {
+		return last
+	}
+	return first + strings.Repeat(" ", gap) + last
 }
 
 // number is a value as a chart labels it: whole numbers without a point.

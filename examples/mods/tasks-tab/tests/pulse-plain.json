@@ -1,0 +1,29 @@
+{
+  "name": "without releases (a plain folder, no tags) the Pulse has bars and no dots or words of them; by week it says so, with the typical time",
+  "answers": [
+    { "method": "tasks.list", "params": { "slug": "demo" }, "result": [] },
+    { "method": "history.get", "params": { "slug": "demo" },
+      "result": { "done": 14, "open": 0, "dropped": 0, "days": [], "timed": 12, "typical": "2 days",
+        "pulse": { "unit": "week", "span": "5 months", "bars": [
+          { "from": "2026-06-08", "to": "2026-06-14", "label": "8 Jun", "done": 4, "tip": "8–14 Jun: 4 done" },
+          { "from": "2026-06-15", "to": "2026-06-21", "label": "today", "done": 10, "tip": "15–21 Jun: 10 done" }
+        ] } } },
+    { "method": "tasks.done", "params": { "slug": "demo", "options": { "groups": true } },
+      "result": { "total": 14, "next": 0, "groups": [], "tasks": [] } }
+  ],
+  "events": [
+    { "name": "view.opened", "project": "demo",
+      "data": { "view": "tasks", "slot": "project.tab", "project": "demo", "width": 70, "height": 20 } }
+  ],
+  "expect": {
+    "calls": [
+      { "method": "ui.view.set", "params": { "view": "tasks",
+          "widget": { "kind": "stack", "children": [
+            { "kind": "band", "values": [4, 10], "dots": null,
+              "beside": [[{ "text": "14 done in 5 months, by week · typical 2 days" }]] },
+            { "kind": "text" }, { "kind": "table" }, { "kind": "text" },
+            { "kind": "keys", "keys": [ { "key": "b" }, { "key": "p" }, { "key": "[", "label": "filter by week" } ] }
+          ] } } }
+    ]
+  }
+}

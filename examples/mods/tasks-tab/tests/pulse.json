@@ -1,0 +1,74 @@
+{
+  "name": "the Pulse tops the tab; [ picks the newest bar with work and lists its tasks alone, [ again the one before, ] past the newest ends it",
+  "answers": [
+    { "method": "tasks.list", "params": { "slug": "demo" },
+      "result": [ { "id": "T1", "title": "Open", "status": "ready", "steps_done": 0, "steps_total": 0, "steps": [] } ] },
+    { "method": "history.get", "params": { "slug": "demo" },
+      "result": { "done": 12, "open": 1, "dropped": 0, "days": [], "timed": 0,
+        "pulse": { "unit": "day", "span": "3 days", "releases": "2 releases", "bars": [
+          { "from": "2026-11-04", "to": "2026-11-04", "label": "4 Nov", "done": 2, "released": true, "tip": "Wed 4 Nov: 2 done, 1 release" },
+          { "from": "2026-11-05", "to": "2026-11-05", "label": "5 Nov", "done": 0, "tip": "Thu 5 Nov: nothing done" },
+          { "from": "2026-11-06", "to": "2026-11-06", "label": "today", "done": 10, "released": true, "tip": "Fri 6 Nov: 10 done, 1 release" }
+        ] } } },
+    { "method": "tasks.done", "params": { "slug": "demo", "options": { "from": "2026-11-06", "to": "2026-11-06", "archived": true, "offset": 0, "limit": 50 } },
+      "result": { "total": 10, "next": 1, "groups": [], "tasks": [ { "id": "T9", "title": "Today's", "status": "done", "done_label": "6 Nov 10:10", "steps_done": 0, "steps_total": 0, "steps": [] } ] } },
+    { "method": "tasks.done", "params": { "slug": "demo", "options": { "from": "2026-11-04", "to": "2026-11-04", "archived": true, "offset": 0, "limit": 50 } },
+      "result": { "total": 2, "next": 0, "groups": [], "tasks": [ { "id": "T5", "title": "Wednesday's", "status": "done", "done_label": "4 Nov 09:00", "steps_done": 0, "steps_total": 0, "steps": [] } ] } },
+    { "method": "tasks.done", "params": { "slug": "demo", "options": { "groups": true } },
+      "result": { "total": 12, "next": 0, "groups": [], "tasks": [] } }
+  ],
+  "events": [
+    { "name": "view.opened", "project": "demo",
+      "data": { "view": "tasks", "slot": "project.tab", "project": "demo", "width": 70, "height": 20 } },
+    { "name": "ui.key", "project": "demo", "data": { "view": "tasks", "widget": "keys", "key": "[", "target": { "project": "demo" } } },
+    { "name": "ui.key", "project": "demo", "data": { "view": "tasks", "widget": "keys", "key": "[", "target": { "project": "demo" } } },
+    { "name": "ui.key", "project": "demo", "data": { "view": "tasks", "widget": "keys", "key": "]", "target": { "project": "demo" } } },
+    { "name": "ui.key", "project": "demo", "data": { "view": "tasks", "widget": "keys", "key": "]", "target": { "project": "demo" } } }
+  ],
+  "expect": {
+    "calls": [
+      { "method": "history.get", "params": { "slug": "demo" } },
+      { "method": "ui.view.set", "params": { "view": "tasks",
+          "widget": { "kind": "stack", "children": [
+            { "kind": "band", "values": [2, 0, 10], "labels": ["4 Nov", "5 Nov", "today"], "dots": [true, false, true], "pick": null,
+              "beside": [[{ "text": "12 done in 3 days · 2 releases" }], [{ "text": "releases, each dot a day", "role": "faint" }]] },
+            { "kind": "text", "lines": [[]] },
+            { "kind": "table", "rows": [ { "id": "g:on-deck", "head": true }, { "id": "T1" }, { "id": "g:done", "head": true } ] },
+            { "kind": "text", "text": "… 12 done (b shows them)" },
+            { "kind": "keys", "keys": [ { "key": "b", "label": "done" }, { "key": "p" }, { "key": "[", "label": "filter by day" } ] }
+          ] } } },
+      { "method": "ui.view.set", "params": { "view": "tasks",
+          "widget": { "kind": "stack", "children": [
+            { "kind": "band", "pick": 3 },
+            { "kind": "text" },
+            { "kind": "table", "rows": [
+              { "id": "g:done", "head": true, "spans": [{ "text": "DONE · 10" }, { "text": "  Fri 6 Nov" }] },
+              { "id": "T9", "cells": [[{ "text": "T9" }], [{ "text": "Today's" }], [{ "icon": "done" }, { "text": " 10:10" }], []] },
+              { "id": "m:pick", "spans": [{ "text": "  … 9 more" }] }
+            ] },
+            { "kind": "text", "text": "Fri 6 Nov: 10 done, 1 release" },
+            { "kind": "keys", "keys": [ { "key": "b", "label": "all tasks" }, { "key": "p" }, { "key": "[", "label": "earlier" }, { "key": "]", "label": "later" } ] }
+          ] } } },
+      { "method": "ui.view.set", "params": { "view": "tasks",
+          "widget": { "kind": "stack", "children": [
+            { "kind": "band", "pick": 1 },
+            { "kind": "text" },
+            { "kind": "table", "rows": [ { "id": "g:done" }, { "id": "T5" } ] },
+            { "kind": "text", "text": "Wed 4 Nov: 2 done, 1 release" },
+            { "kind": "keys" }
+          ] } } },
+      { "method": "ui.view.set", "params": { "view": "tasks",
+          "widget": { "kind": "stack", "children": [
+            { "kind": "band", "pick": 3 },
+            { "kind": "text" }, { "kind": "table" }, { "kind": "text" }, { "kind": "keys" }
+          ] } } },
+      { "method": "ui.view.set", "params": { "view": "tasks",
+          "widget": { "kind": "stack", "children": [
+            { "kind": "band", "pick": null },
+            { "kind": "text" },
+            { "kind": "table", "rows": [ { "id": "g:on-deck" }, { "id": "T1" }, { "id": "g:done" } ] },
+            { "kind": "text" }, { "kind": "keys" }
+          ] } } }
+    ]
+  }
+}

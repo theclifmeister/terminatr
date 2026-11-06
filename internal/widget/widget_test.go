@@ -483,6 +483,89 @@ func TestTightHead(t *testing.T) {
 	}
 }
 
+func bandLines(t *testing.T, w, h int, ascii bool, js string) []string {
+	t.Helper()
+	v := NewView()
+	v.Set(mustDecode(t, js))
+	var out []string
+	for _, s := range v.Render(w, h, plainLook{ascii: ascii}) {
+		out = append(out, strings.TrimRight(ansi.Strip(s), " "))
+	}
+	for len(out) > 0 && out[len(out)-1] == "" {
+		out = out[:len(out)-1]
+	}
+	return out
+}
+
+func TestBandDrawsBarsDotsAndEnds(t *testing.T) {
+	const js = `{"kind":"band","values":[1,0,4,8],"labels":["5 Oct","6 Oct","7 Oct","today"],"dots":[true,false,false,true],
+		"beside":[[{"text":"13 done in 4 days"}],[{"text":"each dot a day"}]]}`
+	got := bandLines(t, 40, 10, false, js)
+	want := []string{"  ▂ ▅█  13 done in 4 days", "  •··•  each dot a day", "  today"}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("got %q, want %q", got, want)
+	}
+	got = bandLines(t, 40, 10, true, js)
+	if got[0] != "  . =#  13 done in 4 days" || got[1] != "  *..*  each dot a day" {
+		t.Errorf("ascii: %q", got)
+	}
+}
+
+func TestBandWithNoDotsHasNoDotRow(t *testing.T) {
+	got := bandLines(t, 40, 10, false, `{"kind":"band","values":[1,2],"dots":[false,false],"beside":[[{"text":"3 done"}]]}`)
+	if len(got) != 1 || got[0] != "  ▅█  3 done" {
+		t.Errorf("%q", got)
+	}
+}
+
+func TestBandWordsGoUnderWhereTheyDontFit(t *testing.T) {
+	var vs, ls []string
+	for i := 1; i <= 60; i++ {
+		vs = append(vs, fmt.Sprint(i))
+		ls = append(ls, fmt.Sprintf("%q", fmt.Sprintf("d%d", i)))
+	}
+	js := `{"kind":"band","values":[` + strings.Join(vs, ",") + `],"labels":[` + strings.Join(ls, ",") + `],"beside":[[{"text":"957 done in 60 days · terminatr 128 · site 6 releases"}]]}`
+	got := bandLines(t, 76, 10, false, js)
+	if len(got) != 3 || len([]rune(got[0])) != 62 || got[1] != "  d1"+strings.Repeat(" ", 55)+"d60" || got[2] != "  957 done in 60 days · terminatr 128 · site 6 releases" {
+		t.Errorf("%q", got)
+	}
+}
+
+func TestBandKeepsTheNewestAndThePick(t *testing.T) {
+	var vs, ls []string
+	for i := 0; i < 100; i++ {
+		vs = append(vs, "1")
+		ls = append(ls, fmt.Sprintf("%q", fmt.Sprintf("d%d", i)))
+	}
+	arr := "[" + strings.Join(vs, ",") + `],"labels":[` + strings.Join(ls, ",") + "]"
+	got := bandLines(t, 40, 10, false, `{"kind":"band","values":`+arr+`}`)
+	if !strings.HasPrefix(got[1], "  d62 ") || !strings.HasSuffix(got[1], "d99") {
+		t.Errorf("newest: %q", got)
+	}
+	got = bandLines(t, 40, 10, false, `{"kind":"band","pick":3,"values":`+arr+`}`)
+	if got[1] != "  ▲ d2" {
+		t.Errorf("a pick before them: %q", got)
+	}
+	// The mark's label goes before it at the right edge.
+	got = bandLines(t, 40, 10, false, `{"kind":"band","pick":100,"values":`+arr+`}`)
+	if !strings.HasSuffix(got[1], "d99 ▲") || len([]rune(got[1])) != 40 {
+		t.Errorf("a pick at the edge: %q", got)
+	}
+}
+
+func TestBandRefuses(t *testing.T) {
+	for _, tc := range []struct{ js, want string }{
+		{`{"kind":"band","values":[1],"dots":[true,false]}`, "2 dots for 1 values"},
+		{`{"kind":"band","values":[1],"pick":2}`, "not 0 to 1"},
+		{`{"kind":"band","values":[1],"labels":["a","b"]}`, "2 labels for 1 values"},
+		{`{"kind":"band","values":[-1]}`, "not a number"},
+	} {
+		if _, err := Decode([]byte(tc.js)); err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("%s: %v", tc.js, err)
+		}
+	}
+}
+
 // TestRowFind: a row with find passes the filter by that alone, each of
 // the filter's words anywhere in it, whatever their case and accents; a
 // row without keeps the drawn text and the whole filter. Filtered reports

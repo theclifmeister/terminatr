@@ -1554,6 +1554,20 @@ final class AppModel {
         try await callDone(AppAPI.TaskDoneParams(project: project, from: group.from, to: group.to, archived: group.archived > 0, offset: offset, limit: limit, tz: TimeZone.current.identifier, repo: repo))
     }
 
+    /// The done tasks of a Pulse's bar, all of them, the archive's too, in
+    /// the server's time zone as the bar's days are (no tz).
+    func doneTasks(_ project: String, in bar: AppAPI.PulseBar) async throws -> [AppAPI.Task] {
+        let bridge = try connected()
+        var out: [AppAPI.Task] = []
+        var offset = 0
+        repeat {
+            let page = try await bridge.call(AppAPI.Methods.taskDone, AppAPI.TaskDoneParams(project: project, from: bar.from, to: bar.to, archived: true, offset: offset, limit: 500))
+            out += page.tasks
+            offset = page.next
+        } while offset > 0
+        return out
+    }
+
     /// Whether this tm answers a project's daily numbers (app API 58).
     var readsHistory: Bool {
         if case .connected(let h) = phase { return Compatibility.readsHistory(h) }

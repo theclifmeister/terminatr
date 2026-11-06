@@ -1,0 +1,23 @@
+{
+  "name": "before the Pulse appears (no pulse in the numbers), or when the numbers fail to read, no band and no [ key",
+  "answers": [
+    { "method": "tasks.list", "params": { "slug": "demo" },
+      "result": [ { "id": "T1", "title": "Open", "status": "ready", "steps_done": 0, "steps_total": 0, "steps": [] } ] },
+    { "method": "history.get", "params": { "slug": "demo" }, "result": { "done": 9, "open": 1, "dropped": 0, "days": [], "timed": 0 } },
+    { "method": "tasks.done", "params": { "slug": "demo", "options": { "groups": true } },
+      "result": { "total": 9, "next": 0, "groups": [], "tasks": [] } }
+  ],
+  "events": [
+    { "name": "view.opened", "project": "demo",
+      "data": { "view": "tasks", "slot": "project.tab", "project": "demo", "width": 70, "height": 20 } }
+  ],
+  "expect": {
+    "calls": [
+      { "method": "ui.view.set", "params": { "view": "tasks",
+          "widget": { "kind": "stack", "children": [
+            { "kind": "table" }, { "kind": "text" },
+            { "kind": "keys", "keys": [ { "key": "b" }, { "key": "p" } ] }
+          ] } } }
+    ]
+  }
+}

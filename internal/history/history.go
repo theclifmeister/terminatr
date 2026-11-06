@@ -55,6 +55,7 @@ func ReadIn(p *project.Project, loc *time.Location) (proto.History, error) {
 		return h, err
 	}
 	h.Releases = x.releases(p, h.FirstRecord, loc)
+	h.Pulse = PulseOf(h, len(p.Repos) > 1, time.Now().In(loc))
 	return h, nil
 }
 

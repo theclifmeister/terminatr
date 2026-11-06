@@ -227,16 +227,48 @@
   function num(id) {
     return Number(id.slice(1)) || 0;
   }
+  function pickedBar(t) {
+    var _a, _b;
+    return t.pick ? (_b = (_a = t.history) == null ? void 0 : _a.pulse) == null ? void 0 : _b.bars.find((b) => b.from === t.pick) : void 0;
+  }
+  function band(t) {
+    const h = t.history;
+    const p = h == null ? void 0 : h.pulse;
+    if (!h || !p) return null;
+    const facts = [`${h.done} done in ${p.span}${p.unit === "day" ? "" : `, by ${p.unit}`}`];
+    if (p.releases) facts.push(p.releases);
+    if (p.unit !== "day" && h.typical) facts.push(`typical ${h.typical}`);
+    const dots = p.bars.some((b) => b.released);
+    const pick = p.bars.findIndex((b) => b.from === t.pick) + 1;
+    return __spreadProps(__spreadValues(__spreadValues({
+      kind: "band",
+      values: p.bars.map((b) => b.done),
+      labels: p.bars.map((b) => b.label)
+    }, dots ? { dots: p.bars.map((b) => !!b.released) } : {}), pick > 0 ? { pick } : {}), {
+      beside: [[{ text: facts.join(" · ") }], ...dots ? [[{ text: `releases, each dot a ${p.unit}`, role: "faint" }]] : []]
+    });
+  }
+  function pickedRows(project, t, bar) {
+    var _a, _b;
+    const list = t.picked.tasks.filter((x) => wanted(t, x));
+    const rows = [{ id: "g:done", head: true, spans: [{ text: `DONE · ${bar.done}`, role: "head" }, { text: `  ${bar.tip.split(":")[0]}`, role: "faint" }] }];
+    for (const task of list) rows.push(row(project, task, false, ((_b = (_a = t.history) == null ? void 0 : _a.pulse) == null ? void 0 : _b.unit) === "day"));
+    if (t.picked.next > 0) rows.push({ id: "m:pick", find: t.query, spans: [{ text: `  … ${bar.done - t.picked.tasks.length} more`, role: "faint" }] });
+    return rows;
+  }
   function tree(project, t) {
+    var _a, _b, _c;
     if (t.error) {
       return { kind: "text", text: `error: ${t.error}`, role: "bad" };
     }
-    const rows = [];
+    const bar = pickedBar(t);
+    const pulse = band(t);
+    const rows = bar ? pickedRows(project, t, bar) : [];
     let group = "";
-    const list = shown(t);
+    const list = bar ? [] : shown(t);
     const prio = list.some((x) => !!x.priority && x.status !== "done");
-    const days = !t.query && byDay(t) && (t.groups.length > 0 || t.repo !== "");
-    const lists = days || !!t.query;
+    const days = !bar && !t.query && byDay(t) && (t.groups.length > 0 || t.repo !== "");
+    const lists = days || !bar && !!t.query;
     const closedRows = () => t.query ? foundRows(project, t, prio) : doneRows(project, t, prio);
     for (const task of list) {
       const g = groupOf(task.status);
@@ -250,12 +282,14 @@
     }
     if (lists && group !== "dropped") rows.push(...closedRows());
     const onBoard = t.tasks.filter((x) => x.status === "done" && wanted(t, x)).length;
-    const done = t.query ? 0 : onBoard === 0 && t.prio === "" ? t.total : onBoard;
+    const all = ((_a = t.history) == null ? void 0 : _a.pulse) ? t.history.done : onBoard === 0 ? t.total : onBoard;
+    const done = t.query ? 0 : t.prio === "" ? all : onBoard;
     const dropped = t.tasks.filter((x) => x.status === "dropped" && wanted(t, x)).length;
-    const folded = !t.doneAll && done + dropped > 0;
+    const folded = !bar && !t.doneAll && done + dropped > 0;
     if (folded && done > 0) rows.push({ id: "g:done", head: true, spans: [{ text: "DONE", role: "head" }] });
     if (folded && dropped > 0) rows.push({ id: "g:dropped", head: true, spans: [{ text: "DROPPED", role: "head" }] });
     const children = [
+      ...pulse ? [pulse, { kind: "text", lines: [[]] }] : [],
       {
         kind: "table",
         id: TABLE,
@@ -268,11 +302,14 @@
       const counts = [done > 0 ? `${done} done` : "", dropped > 0 ? `${dropped} dropped` : ""].filter((s) => s !== "").join(", ");
       children.push({ kind: "text", text: `… ${counts} (b shows them)`, role: "faint" });
     }
+    if (bar) children.push({ kind: "text", text: bar.tip, role: "faint" });
     if (t.prio) {
       const which = t.prio === "none" ? "the tasks without a priority" : `the ${t.prio} tasks`;
       children.push({ kind: "text", text: `only ${which} (p for the next)`, role: "faint" });
     }
-    const keys = t.doneAll || done + dropped > 0 ? [{ key: "b", label: t.doneAll ? "hide done" : "done" }] : [];
+    const keys = [];
+    if (bar) keys.push({ key: "b", label: "all tasks" });
+    else if (t.doneAll || done + dropped > 0) keys.push({ key: "b", label: t.doneAll ? "hide done" : "done" });
     if (days) keys.push({ key: "enter", label: "open or fold" });
     if (days && t.repos.length > 0) {
       const after = nextRepo(t);
@@ -280,6 +317,11 @@
     }
     const next = PRIOS[(PRIOS.indexOf(t.prio) + 1) % PRIOS.length];
     keys.push({ key: "p", label: next === "" ? "all priorities" : next === "none" ? "no priority only" : `${next} only` });
+    const unit = (_c = (_b = t.history) == null ? void 0 : _b.pulse) == null ? void 0 : _c.unit;
+    if (unit) {
+      keys.push({ key: "[", label: bar ? "earlier" : `filter by ${unit}` });
+      if (bar) keys.push({ key: "]", label: "later" });
+    }
     children.push({ kind: "keys", id: "keys", keys, actions: [{ id: "task.new", target: { project } }] });
     return { kind: "stack", children };
   }
@@ -295,14 +337,48 @@
     t.error = "";
     try {
       t.tasks = await $.tasks.list(project);
+      await loadHistory(project, t);
       await loadDone(project, t);
       await loadFound(project, t);
+      await loadPicked(project, t);
       if (!t.doneAll && !t.tasks.some((x) => x.status === "done")) {
         t.total = (_b = (_a = await $.tasks.done(project, { groups: true })) == null ? void 0 : _a.total) != null ? _b : 0;
       }
     } catch (e) {
       t.error = String((_c = e == null ? void 0 : e.message) != null ? _c : e);
     }
+  }
+  async function loadHistory(project, t) {
+    const at = `${t.tasks.filter((x) => x.status === "done").length} ${(/* @__PURE__ */ new Date()).toDateString()}`;
+    if (t.history && t.historyAt === at) return;
+    try {
+      t.history = await $.history.get(project);
+      t.historyAt = at;
+    } catch (e) {
+      t.history = null;
+    }
+  }
+  async function loadPicked(project, t) {
+    if (!t.pick) return;
+    const bar = pickedBar(t);
+    if (!bar || bar.done === 0) {
+      t.pick = "";
+      t.picked = { tasks: [], next: 0 };
+      return;
+    }
+    t.picked = await readBar(project, bar, 0, Math.max(t.picked.tasks.length, PAGE));
+  }
+  async function readBar(project, bar, offset, limit) {
+    const res = await $.tasks.done(project, { from: bar.from, to: bar.to, archived: true, offset, limit });
+    return { tasks: res.tasks, next: res.next };
+  }
+  function step(t, k) {
+    var _a, _b, _c, _d, _e, _f, _g;
+    const bars = ((_c = (_b = (_a = t.history) == null ? void 0 : _a.pulse) == null ? void 0 : _b.bars) != null ? _c : []).filter((b) => b.done > 0);
+    const at = bars.findIndex((b) => b.from === t.pick);
+    if (k === "[") t.pick = (_e = (_d = at < 0 ? bars[bars.length - 1] : bars[Math.max(at - 1, 0)]) == null ? void 0 : _d.from) != null ? _e : "";
+    else t.pick = at < 0 ? "" : (_g = (_f = bars[at + 1]) == null ? void 0 : _f.from) != null ? _g : "";
+    t.picked = { tasks: [], next: 0 };
   }
   async function loadDone(project, t) {
     var _a, _b, _c, _d, _e;
@@ -344,7 +420,7 @@
     return { tasks: res.tasks, next: res.next };
   }
   async function press(project, t, row2) {
-    var _a, _b, _c;
+    var _a, _b, _c, _d;
     if (row2 === "m:found") {
       const f = t.found;
       if (!f) return true;
@@ -354,6 +430,19 @@
         if (t.found === f) t.found = __spreadProps(__spreadValues({}, f), { tasks: [...f.tasks, ...more.tasks], next: more.next, total: more.total });
       } catch (e) {
         t.error = String((_a = e == null ? void 0 : e.message) != null ? _a : e);
+      }
+      return true;
+    }
+    if (row2 === "m:pick") {
+      const bar = pickedBar(t);
+      try {
+        t.error = "";
+        if (bar && t.picked.next > 0) {
+          const more = await readBar(project, bar, t.picked.next, PAGE);
+          t.picked = { tasks: [...t.picked.tasks, ...more.tasks], next: more.next };
+        }
+      } catch (e) {
+        t.error = String((_b = e == null ? void 0 : e.message) != null ? _b : e);
       }
       return true;
     }
@@ -368,7 +457,7 @@
         if (t.toggled.has(k)) t.toggled.delete(k);
         else t.toggled.add(k);
         if (isOpen(t, g) && !t.rows.has(k)) {
-          t.rows.set(k, g.open ? { tasks: (_b = g.tasks) != null ? _b : [], next: g.next } : await readFold(project, t, g, 0, PAGE));
+          t.rows.set(k, g.open ? { tasks: (_c = g.tasks) != null ? _c : [], next: g.next } : await readFold(project, t, g, 0, PAGE));
         }
       } else {
         const f = t.rows.get(k);
@@ -378,7 +467,7 @@
         }
       }
     } catch (e) {
-      t.error = String((_c = e == null ? void 0 : e.message) != null ? _c : e);
+      t.error = String((_d = e == null ? void 0 : e.message) != null ? _d : e);
     }
     return true;
   }
@@ -401,8 +490,9 @@
   $.on("view.opened", async (e) => {
     var _a;
     if (e.view !== VIEW || !e.project) return;
-    const t = (_a = tabs.get(e.project)) != null ? _a : { tasks: [], doneAll: false, prio: "", error: "", groups: [], total: 0, rows: /* @__PURE__ */ new Map(), toggled: /* @__PURE__ */ new Set(), reveal: "", repos: [], repo: "", query: "", found: null };
+    const t = (_a = tabs.get(e.project)) != null ? _a : { tasks: [], doneAll: false, prio: "", error: "", groups: [], total: 0, rows: /* @__PURE__ */ new Map(), toggled: /* @__PURE__ */ new Set(), reveal: "", repos: [], repo: "", query: "", found: null, history: null, historyAt: "", pick: "", picked: { tasks: [], next: 0 } };
     tabs.set(e.project, t);
+    if (e.task) t.pick = "";
     await load(e.project, t);
     if (e.task && t.tasks.some((x) => x.id === e.task && closed(groupOf(x.status)))) {
       t.doneAll = true;
@@ -428,8 +518,15 @@
       if (await press(project, t, (_b = e.row) != null ? _b : "")) await publish(project, t);
       return;
     }
+    if (e.key === "[" || e.key === "]") {
+      step(t, e.key);
+      await load(project, t);
+      await publish(project, t);
+      return;
+    }
     if (e.key !== "b" && e.key !== "p" && e.key !== "g") return;
-    if (e.key === "b") t.doneAll = !t.doneAll;
+    if (e.key === "b" && t.pick) t.pick = "";
+    else if (e.key === "b") t.doneAll = !t.doneAll;
     else if (e.key === "g") {
       t.repo = nextRepo(t);
       t.rows = /* @__PURE__ */ new Map();

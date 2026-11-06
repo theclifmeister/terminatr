@@ -107,6 +107,48 @@ type History struct {
 	// repo's versions say nothing of another's. None in a plain folder,
 	// with no tags, when git fails, and from a paired server.
 	Releases []HistoryRepo `json:"releases,omitempty"`
+	// Pulse is the band at the top of the board, from the days and the
+	// releases; none before it appears, and none from a paired server.
+	Pulse *HistoryPulse `json:"pulse,omitempty"`
+}
+
+// What a Pulse's bars stand for (HistoryPulse.Unit).
+const (
+	PulseDay   = "day"
+	PulseWeek  = "week"
+	PulseMonth = "month"
+)
+
+// HistoryPulse is the Pulse (design board-library, B5 and B16): tasks done
+// and releases per day, then week, then month, decided here so that every
+// surface shows the same bars in the same words. It appears at 10 done
+// tasks across 7 days.
+type HistoryPulse struct {
+	// Unit is what a bar stands for: PulseDay, PulseWeek or PulseMonth.
+	Unit string `json:"unit"`
+	// Span says how long the work has run: "33 days", "5 months".
+	Span string `json:"span"`
+	// Releases is the count in words, each repo's when the project has
+	// several: "128 releases", "terminatr 128 · site 6 releases". "" with
+	// none, where the words are left out.
+	Releases string `json:"releases,omitempty"`
+	// Bars run from the first with work to the one holding today, one for
+	// every span, oldest first: a span with no work has Done 0.
+	Bars []PulseBar `json:"bars"`
+}
+
+// PulseBar is one bar: the days it covers, both inclusive and in the
+// answering server's time zone (task.done's from and to read its tasks,
+// with no tz), its name on the axis ("5 Oct", "today"), how many tasks
+// finished, whether any repo released (a dot), and what it says of itself
+// ("Mon 5 Oct: 28 done, 8 releases").
+type PulseBar struct {
+	From     string `json:"from"`
+	To       string `json:"to"`
+	Label    string `json:"label"`
+	Done     int    `json:"done"`
+	Released bool   `json:"released,omitempty"`
+	Tip      string `json:"tip"`
 }
 
 // HistoryRepo is one repo's releases: tags that count, since the
