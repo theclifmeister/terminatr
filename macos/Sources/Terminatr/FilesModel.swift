@@ -35,7 +35,14 @@ final class FilesModel {
     private(set) var showIgnored = false
     private(set) var open: Set<String> = []
     private(set) var dirs: [String: [AppAPI.FileEntry]] = [:]
-    private(set) var found: [AppAPI.FileEntry] = []
+    private(set) var found: [AppAPI.FileEntry] = [] {
+        didSet { changedDirs = FileTree.changedDirs(found) }
+    }
+    /// Changed only's tree of what was found.
+    private(set) var changedDirs: [String: [AppAPI.FileEntry]] = [:]
+    /// The folders Changed only's tree has folded: its folders start open,
+    /// and don't touch the tree's own.
+    private(set) var shut: Set<String> = []
     /// The top's answer: its root and totals.
     private(set) var summary: AppAPI.FilesList?
     private(set) var cut = false
@@ -74,7 +81,18 @@ final class FilesModel {
     /// How often the panel asks whether what it shows changed, as the TUI.
     private static let every = Duration.seconds(2)
 
+    /// What shows comes from one search of the whole folder, not from the
+    /// folders' listings.
     var searching: Bool { !filter.isEmpty || changedOnly }
+
+    /// A filter's flat list. Changed only stays a tree, with a filter too:
+    /// of the changed files it matches.
+    var flat: Bool { !filter.isEmpty && !changedOnly }
+
+    /// The folders that show what's in them.
+    var unfolded: Set<String> {
+        changedOnly ? Set(changedDirs.keys).subtracting(shut) : open
+    }
 
     /// The repo the Worktree tab shows, to name it.
     var repo: AppAPI.FilesRepo? {
@@ -82,7 +100,7 @@ final class FilesModel {
     }
 
     var rows: [FileRow] {
-        searching ? found.map { FileRow(entry: $0, depth: 0) } : FileTree.rows(dirs: dirs, open: open)
+        flat ? found.map { FileRow(entry: $0, depth: 0) } : FileTree.rows(dirs: changedOnly ? changedDirs : dirs, open: unfolded)
     }
 
     var attached: [AppAPI.LibraryFile] {
@@ -123,6 +141,7 @@ final class FilesModel {
     private func resetTree() {
         stamp = ""
         open = []
+        shut = []
         dirs = [:]
         found = []
         summary = nil
@@ -135,6 +154,7 @@ final class FilesModel {
 
     func setChangedOnly(_ on: Bool, _ app: AppModel) {
         changedOnly = on
+        shut = []
         cursor = nil
         Task { await refresh(app) }
     }
@@ -145,7 +165,9 @@ final class FilesModel {
     }
 
     func toggle(folder path: String, _ app: AppModel) {
-        if open.contains(path) {
+        if changedOnly {
+            shut.formSymmetricDifference([path])
+        } else if open.contains(path) {
             open.remove(path)
         } else {
             open.insert(path)
@@ -170,8 +192,8 @@ final class FilesModel {
 
     /// ← and →.
     func fold(right: Bool, _ app: AppModel) {
-        guard scope == .worktree, !searching else { return }
-        switch FileTree.fold(rows, at: cursor, right: right, open: open) {
+        guard scope == .worktree, !flat else { return }
+        switch FileTree.fold(rows, at: cursor, right: right, open: unfolded) {
         case .open(let p), .close(let p): toggle(folder: p, app)
         case .pick(let p): moveCursor(to: p)
         case .nothing: break

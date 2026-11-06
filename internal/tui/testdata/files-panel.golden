@@ -50,6 +50,21 @@ changed only, cut (39 cells)
 │FILES  Worktree · Attached
 │4 changed +84 −12
 │changed only
+│▾ internal/                           •
+│  ▾ tui/                              •
+│      types.go                        A
+│▾ old/                                •
+│    only.go                           D
+│  README.md                           M
+│… more files than show here
+
+changed only, folders folded (39 cells)
+│FILES  Worktree · Attached
+│4 changed +84 −12
+│changed only
+│▾ internal/                           •
+│  ▸ tui/                              •
+│▸ old/                                •
 │  README.md                           M
 │… more files than show here
 

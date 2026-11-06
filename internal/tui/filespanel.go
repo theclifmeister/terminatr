@@ -22,7 +22,8 @@ import (
 // The Files view of the info panel (docs/SPEC.md §4): the panel's other
 // face, F from its Info face, on a thread or a coordinator. Worktree is
 // the session's folder as a tree (files.list, read only), with git's
-// marks, a filter by name, and it refreshes while it shows (files.stamp);
+// marks, a filter by name, Changed only (a tree built here from the changed
+// result), and it refreshes while it shows (files.stamp);
 // beside a coordinator that folder is a repo's main checkout, which the
 // view says, with a picker when the project has more than one;
 // Attached is the Library's files of that thread, of the whole project
@@ -84,6 +85,8 @@ type filesView struct {
 	open   map[string]bool              // the unfolded folders
 	dirs   map[string][]proto.FileEntry // the folders as last listed
 	found  []proto.FileEntry            // a filter's or changed's files
+	tree   map[string][]proto.FileEntry // changed's files by folder
+	shut   map[string]bool              // the folders changed's tree has folded
 	sum    proto.FilesListResult        // the top's totals
 	cut    bool                         // a listing was cut
 	err    string                       // why the worktree doesn't show
@@ -120,13 +123,83 @@ func (fv *filesView) repoShown() int {
 // fills it in.
 func (fv *filesView) choose(repo string) {
 	fv.repo, fv.picking = repo, false
-	fv.open, fv.dirs, fv.found = map[string]bool{}, map[string][]proto.FileEntry{}, nil
+	fv.open, fv.dirs, fv.found, fv.tree, fv.shut = map[string]bool{}, map[string][]proto.FileEntry{}, nil, nil, nil
 	fv.sum, fv.cut, fv.err, fv.stamp = proto.FilesListResult{}, false, "", ""
 	fv.sel, fv.selPath, fv.loaded = 0, "", false
 }
 
-// searching says the worktree shows a flat list.
+// searching says the worktree comes from one search of the whole folder,
+// not from the folders' listings.
 func (fv *filesView) searching() bool { return fv.filter != "" || fv.changed }
+
+// flat says the worktree shows a filter's flat list. Changed only stays a
+// tree, with a filter too: of the changed files it matches.
+func (fv *filesView) flat() bool { return fv.filter != "" && !fv.changed }
+
+// unfolded says folder p shows what's in it. Changed only's folders start
+// open, so the changes show at once, and don't touch the tree's own.
+func (fv *filesView) unfolded(p string) bool {
+	if fv.changed {
+		return len(fv.tree[p]) > 0 && !fv.shut[p]
+	}
+	return fv.open[p]
+}
+
+// fold folds or unfolds folder p, and says whether it has to be listed.
+func (fv *filesView) fold(p string) bool {
+	switch {
+	case fv.changed && fv.unfolded(p):
+		if fv.shut == nil {
+			fv.shut = map[string]bool{}
+		}
+		fv.shut[p] = true
+	case fv.changed:
+		delete(fv.shut, p)
+	case fv.open[p]:
+		delete(fv.open, p)
+	default:
+		fv.open[p] = true
+		return true
+	}
+	return false
+}
+
+// changedTree is files.list's changed result as folders, each listed as
+// a folder is: folders first, by name. The folders come from the paths, not
+// the disk, so a deleted file sits under a folder that's gone. A row the
+// result has itself keeps its own marks: it comes before what's under it.
+func changedTree(found []proto.FileEntry) map[string][]proto.FileEntry {
+	tree := map[string][]proto.FileEntry{}
+	seen := map[string]bool{}
+	add := func(dir string, e proto.FileEntry) {
+		if !seen[e.Path] {
+			seen[e.Path] = true
+			tree[dir] = append(tree[dir], e)
+		}
+	}
+	for _, e := range found {
+		names := strings.Split(e.Path, "/")
+		dir := ""
+		for _, name := range names[:len(names)-1] {
+			p := path.Join(dir, name)
+			add(dir, proto.FileEntry{Name: name, Path: p, Kind: proto.FileKindDir, Changed: true})
+			dir = p
+		}
+		add(dir, e)
+	}
+	for _, list := range tree {
+		slices.SortFunc(list, func(a, b proto.FileEntry) int {
+			if ad, bd := a.Kind == proto.FileKindDir, b.Kind == proto.FileKindDir; ad != bd {
+				if ad {
+					return -1
+				}
+				return 1
+			}
+			return strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name))
+		})
+	}
+	return tree
+}
 
 // fileRow is a row of the view: a worktree entry at depth, or an attached
 // file.
@@ -154,17 +227,21 @@ func (fv *filesView) rows() []fileRow {
 		}
 		return out
 	}
-	if fv.searching() {
+	if fv.flat() {
 		for _, e := range fv.found {
 			out = append(out, fileRow{e: e})
 		}
 		return out
 	}
+	dirs := fv.dirs
+	if fv.changed {
+		dirs = fv.tree
+	}
 	var walk func(dir string, depth int)
 	walk = func(dir string, depth int) {
-		for _, e := range fv.dirs[dir] {
+		for _, e := range dirs[dir] {
 			out = append(out, fileRow{e: e, depth: depth})
-			if e.Kind == proto.FileKindDir && fv.open[e.Path] {
+			if fv.unfolded(e.Path) {
 				walk(e.Path, depth+1)
 			}
 		}
@@ -284,7 +361,7 @@ func filesLay(fv *filesView, w int, focused bool) ([]string, []infoHit) {
 			add(libGroup(*r.lib, groups[group], w))
 		}
 		fv.lineOf[i] = len(lines)
-		l := fileRowLine(r, w, fv.open[r.e.Path])
+		l := fileRowLine(r, w, fv.unfolded(r.e.Path))
 		if i == fv.sel && focused {
 			l = th().Sel.Render(fit(ansi.Strip(l), w))
 		}
@@ -528,7 +605,7 @@ func (fv *filesView) take(got filesFetched) {
 	}
 	fv.err = got.err
 	if got.err != "" {
-		fv.dirs, fv.found = map[string][]proto.FileEntry{}, nil
+		fv.dirs, fv.found, fv.tree = map[string][]proto.FileEntry{}, nil, nil
 		if got.noFiles && first && fv.repo == "" {
 			fv.attached = true // a then shows why the worktree doesn't
 		}
@@ -543,7 +620,7 @@ func (fv *filesView) take(got filesFetched) {
 			}
 		}
 	}
-	fv.found = got.found
+	fv.found, fv.tree = got.found, changedTree(got.found)
 }
 
 // filesPoll is the panel's poll: while the view shows, every filesEvery,
@@ -713,7 +790,7 @@ func (c *client) filesKeyboard(k uv.Key) {
 	case name == "i" && !fv.attached:
 		fv.ignored, refetch = !fv.ignored, true
 	case name == "c" && !fv.attached:
-		fv.changed, fv.sel, refetch = !fv.changed, 0, true
+		fv.changed, fv.shut, fv.sel, refetch = !fv.changed, nil, 0, true
 	case !isOp:
 	case op == panelUp:
 		move(fv.sel - 1)
@@ -733,20 +810,20 @@ func (c *client) filesKeyboard(k uv.Key) {
 		c.kb = areaMain
 	case fv.sel >= len(rows):
 	case op == panelUnfold:
-		if e := rows[fv.sel].e; e.Kind == proto.FileKindDir && !fv.searching() && rows[fv.sel].lib == nil {
-			if fv.open[e.Path] {
+		if e := rows[fv.sel].e; e.Kind == proto.FileKindDir && !fv.flat() && rows[fv.sel].lib == nil {
+			if fv.unfolded(e.Path) {
 				move(fv.sel + 1)
 			} else {
-				fv.open[e.Path], refetch = true, true
+				refetch = fv.fold(e.Path)
 			}
 		}
 	case op == panelFold:
-		if rows[fv.sel].lib != nil || fv.searching() {
+		if rows[fv.sel].lib != nil || fv.flat() {
 			break
 		}
 		e := rows[fv.sel].e
-		if e.Kind == proto.FileKindDir && fv.open[e.Path] {
-			delete(fv.open, e.Path)
+		if e.Kind == proto.FileKindDir && fv.unfolded(e.Path) {
+			fv.fold(e.Path)
 			break
 		}
 		for i, r := range rows {
@@ -758,12 +835,8 @@ func (c *client) filesKeyboard(k uv.Key) {
 	case op == panelEnter:
 		r := rows[fv.sel]
 		switch {
-		case r.lib == nil && r.e.Kind == proto.FileKindDir && !fv.searching():
-			if fv.open[r.e.Path] {
-				delete(fv.open, r.e.Path)
-			} else {
-				fv.open[r.e.Path], refetch = true, true
-			}
+		case r.lib == nil && r.e.Kind == proto.FileKindDir && !fv.flat():
+			refetch = fv.fold(r.e.Path)
 		case r.lib == nil && r.e.Kind == proto.FileKindDir:
 			c.flash = "clear the filter to open a folder"
 		default:
@@ -837,12 +910,8 @@ func (c *client) filesClick(h infoHit) {
 			fv.sel = h.task
 			fv.note(rows)
 			switch {
-			case r.lib == nil && r.e.Kind == proto.FileKindDir && !fv.searching():
-				if fv.open[r.e.Path] {
-					delete(fv.open, r.e.Path)
-				} else {
-					fv.open[r.e.Path], refetch = true, true
-				}
+			case r.lib == nil && r.e.Kind == proto.FileKindDir && !fv.flat():
+				refetch = fv.fold(r.e.Path)
 			case again:
 				read = &r
 			}
