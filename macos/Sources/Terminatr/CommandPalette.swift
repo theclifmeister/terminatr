@@ -39,6 +39,14 @@ struct CommandPalette: View {
         // Before the field's focus lands, which is after this pass.
         .onAppear { sections.cover() }
         .onDisappear { app.paletteActing = false }
+        // Paired boards: on opening and now and then while open, and when
+        // one becomes readable. Typing only reads what these brought.
+        .task(id: PaletteBoards.readable(peers: app.peers, reads: app.readsPeerPages)) {
+            while !Task.isCancelled {
+                app.readPaletteBoards()
+                try? await Task.sleep(for: .seconds(PaletteBoards.readEvery))
+            }
+        }
         .confirmationDialog(delegating.map { "Delegate \($0.title)?" } ?? "", isPresented: Binding(get: { delegating != nil }, set: { if !$0 { delegating = nil } }),
                             presenting: delegating) { item in
             Button("Ask to Delegate") { delegate(item) }
@@ -50,8 +58,10 @@ struct CommandPalette: View {
 
     // MARK: searching
 
-    private var rows: [PaletteItem] {
-        Palette.search(Palette.items(projects: app.projects, sessions: app.sessions, peers: app.peers, needs: app.needs) + actions, query)
+    private var rows: [PaletteItem] { found(app.paletteBoards) }
+
+    private func found(_ boards: PaletteBoards) -> [PaletteItem] {
+        Palette.search(Palette.items(projects: app.projects, sessions: app.sessions, peers: app.peers, needs: app.needs, boards: boards) + actions, query)
     }
 
     private var search: some View {
@@ -128,6 +138,10 @@ struct CommandPalette: View {
         }
         .onAppear { focused = true }
         .onChange(of: query) { at = 0 }
+        // A board landing doesn't move the row ↩ is about to take.
+        .onChange(of: app.paletteBoards) { old, new in
+            at = Palette.held(at: at, from: found(old).map(\.id), to: found(new).map(\.id))
+        }
     }
 
     private func row(_ r: PaletteItem, on: Bool) -> some View {
@@ -185,7 +199,11 @@ struct CommandPalette: View {
             }
             run(c)
         } else if let t = r.task {
-            app.showTask(project: t.project, task: t.task)
+            if t.server.isEmpty {
+                app.showTask(project: t.project, task: t.task)
+            } else {
+                app.showPeerTask(alias: t.server, project: t.project, task: t.task)
+            }
         } else if let s = r.go {
             app.select(s)
         }
